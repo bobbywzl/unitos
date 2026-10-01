@@ -1,5 +1,7 @@
+import type { BlockType, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { followOrders } from "@/lib/block-order";
 import { bumpDocument, documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { insertAtOrder, nodeForBlock } from "@/lib/docs/ops";
@@ -8,6 +10,9 @@ import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
 
 const restoreSchema = z.object({ editId: z.string().min(1) });
+
+// The kinds a removal can take (lib/block-takes.ts), each restored as itself.
+const RESTORABLE = new Set(["PARAGRAPH", "HEADING", "LIST", "CODE", "EQUATION", "SEPARATOR", "TRANSCRIPT", "PAGE", "TABLE"]);
 
 // Restore a removed block from its BLOCK_REMOVE edit: same id, same text, same
 // format, same position. Anchors on the block heal on the next render because
@@ -35,10 +40,19 @@ export async function POST(req: Request) {
     html?: string | null;
     originalText?: string | null;
     mediaId?: string | null;
+    // A page's number, a transcript line's times and voice, the words' styles.
+    page?: number | null;
+    startTime?: number | null;
+    endTime?: number | null;
+    speaker?: string | null;
+    styles?: Prisma.InputJsonValue;
+    links?: Prisma.InputJsonValue;
+    citations?: Prisma.InputJsonValue;
   };
   const order = typeof meta.order === "number" ? meta.order : 0;
   const type = meta.type === "HEADING" || meta.type === "LIST" ? meta.type : "PARAGRAPH";
   const text = edit.before;
+  const number = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : null);
 
   // A document with rich text is edited through it (SPEC.md §29): the
   // paragraph goes back in its place with its own id, so anchors on it heal;
@@ -59,19 +73,34 @@ export async function POST(req: Request) {
   }
 
   const block = await db.$transaction(async (tx) => {
-    await tx.block.updateMany({
-      where: { documentId: edit.documentId, order: { gte: order } },
-      data: { order: { increment: 1 } },
-    });
+    // Its place is free while nothing took it since (a removal leaves a gap):
+    // the block goes back into it and nothing moves. Else the blocks from
+    // its place on shift down by one.
+    const taken = await tx.block.findFirst({ where: { documentId: edit.documentId, order }, select: { id: true } });
+    if (taken) {
+      await tx.block.updateMany({
+        where: { documentId: edit.documentId, order: { gte: order } },
+        data: { order: { increment: 1 } },
+      });
+      // A link to the removed block points at it again; the rest follow their blocks.
+      await followOrders(tx, edit.documentId, (at) => (at > order ? at + 1 : at));
+    }
     const created = await tx.block.create({
       data: {
         id: edit.blockId!,
         documentId: edit.documentId,
         order,
-        type,
+        type: meta.type && RESTORABLE.has(meta.type) ? (meta.type as BlockType) : type,
         html: meta.html ?? null,
         text,
         originalText: meta.originalText !== undefined ? meta.originalText : text,
+        page: number(meta.page),
+        startTime: number(meta.startTime),
+        endTime: number(meta.endTime),
+        speaker: typeof meta.speaker === "string" ? meta.speaker : null,
+        ...(meta.styles !== undefined ? { styles: meta.styles } : {}),
+        ...(meta.links !== undefined ? { links: meta.links } : {}),
+        ...(meta.citations !== undefined ? { citations: meta.citations } : {}),
       },
     });
     await tx.blockEdit.create({

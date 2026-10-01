@@ -4,9 +4,11 @@ import type { EditorView } from "@tiptap/pm/view";
 import katex from "katex";
 import { insertContext, insertT, toast } from "@/components/docs/insert/context";
 import { figureImageUrl, importedOf } from "@/components/docs/insert/figure";
+import { footnoteNumbers } from "@/components/docs/insert/footnotes";
 import { levelsOf, styleOf, tocEntries } from "@/components/docs/insert/toc";
 import { flushDocument } from "@/components/docs/layer/flush";
 import { PX_PER_PT } from "@/components/docs/page/geometry";
+import { listSheet, markersAsWords } from "@/components/docs/toolbar/lists";
 import { namedStyleSheet } from "@/components/docs/toolbar/styles";
 import { fragmentToMarkdown } from "@/components/docs/typing/markdown";
 import { deriveBlocks, withoutSuggestions } from "@/lib/docs/blocks";
@@ -141,11 +143,12 @@ function imageSrcs(doc: PMNode): string[] {
 }
 
 /** Plain text: one line per paragraph of the paragraph index (a figure's
-    line is its caption), a footnote's number as [n], and each footnote at
-    the end after its number. */
+    line is its caption), a list line after its marker as the page draws it
+    ("(a) ", "☑ "), a footnote's number or symbol as [n], and each footnote
+    at the end after it. */
 function plainText(doc: PMNode): string {
-  const numbers = new Map<string, number>();
-  const cite = (id: unknown) => `[${numbers.get(String(id)) ?? numbers.set(String(id), numbers.size + 1).size}]`;
+  const numbers = footnoteNumbers(doc);
+  const cite = (id: unknown) => `[${numbers.get(String(id)) ?? ""}]`;
   const walk = (node: RichNode): RichNode => {
     if (node.type === "footnoteReference") return { type: "text", text: cite(node.attrs?.footnoteId) };
     const content = node.content?.map(walk);
@@ -155,7 +158,7 @@ function plainText(doc: PMNode): string {
     }
     return { ...node, content };
   };
-  return deriveBlocks(walk(doc.toJSON() as RichNode))
+  return deriveBlocks(walk(markersAsWords(doc.toJSON() as RichNode)))
     .filter((b) => b.type !== "FIGURE" || b.text.trim() !== "")
     .map((b) => b.text)
     .join("\n");
@@ -184,8 +187,6 @@ table { border-collapse: collapse; }
 td, th { border: 1pt solid #000; padding: 5pt; vertical-align: top; text-align: left; }
 [data-valign="middle"] { vertical-align: middle; }
 [data-valign="bottom"] { vertical-align: bottom; }
-ol ol { list-style-type: lower-alpha; }
-ol ol ol { list-style-type: lower-roman; }
 ul[data-type="taskList"] { list-style: none; padding-left: 0; }
 ul[data-type="taskList"] li { display: flex; gap: 8px; }
 ul:not([data-list-style="CHECKLIST_NO_STRIKETHROUGH"]) > li[data-checked="true"] p { text-decoration: line-through; color: #666; }
@@ -194,10 +195,14 @@ pre { padding: 8pt 10pt; background: #f1f3f4; font: 10pt/1.45 "Courier New", mon
 blockquote { margin: 0 0 0 36pt; padding-left: 12pt; border-left: 3px solid #dadce0; }
 sup[data-footnote-ref] { counter-increment: footnote; }
 sup[data-footnote-ref]::after { content: counter(footnote); }
+sup[data-footnote-ref][data-symbol] { counter-increment: none; }
+sup[data-footnote-ref][data-symbol]::after { content: attr(data-symbol); }
 [data-footnotes] { margin-top: 24pt; padding-top: 6pt; border-top: 1px solid #000; }
 [data-footnotes] p { font-size: 10pt; }
 [data-footnote] { counter-increment: footnote-text; }
 [data-footnote] > p:first-child::before { content: counter(footnote-text) " "; }
+[data-footnote][data-symbol] { counter-increment: none; }
+[data-footnote][data-symbol] > p:first-child::before { content: attr(data-symbol) " "; }
 [data-page-break] { break-after: page; }
 .docs-figure { margin: 9pt 0; }
 .docs-figure .reader-figure > figure { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: center; column-gap: 2%; row-gap: 8px; max-width: 100%; margin: 0; }
@@ -219,6 +224,10 @@ async function webPage(editor: Editor, doc: PMNode, title: string, setup: PageSe
   const body = page.body;
   // A page start adds no words: nothing of it goes in the file.
   for (const el of body.querySelectorAll(".docs-page-start")) el.remove();
+  // A footnote with a symbol draws it before its words too.
+  for (const ref of body.querySelectorAll<HTMLElement>("sup[data-footnote-ref][data-symbol]")) {
+    body.querySelector(`[data-footnote="${CSS.escape(ref.dataset.footnoteRef ?? "")}"]`)?.setAttribute("data-symbol", ref.dataset.symbol ?? "");
+  }
   // A figure's video plays from its own controls (the app plays it in view).
   for (const video of body.querySelectorAll("video")) video.setAttribute("controls", "");
   for (const el of body.querySelectorAll<HTMLElement>("[data-latex]")) {
@@ -262,7 +271,7 @@ async function webPage(editor: Editor, doc: PMNode, title: string, setup: PageSe
   const meta = page.createElement("meta");
   meta.setAttribute("charset", "utf-8");
   const css = page.createElement("style");
-  css.textContent = [PAGE_CSS, width, namedStyleSheet(doc, "body", true)].join("\n");
+  css.textContent = [PAGE_CSS, listSheet("body"), width, namedStyleSheet(doc, "body", true)].join("\n");
   page.head.prepend(meta);
   page.head.append(css);
   return `<!DOCTYPE html>\n${page.documentElement.outerHTML}\n`;

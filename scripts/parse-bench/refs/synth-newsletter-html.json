@@ -11,7 +11,8 @@
         {
           "text": "The Riverside Ledger"
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -20,7 +21,11 @@
           "text": "News from the Riverside Community Garden · Autumn 2026 · Issue 14"
         }
       ],
-      "align": "center"
+      "align": "center",
+      "font": {
+        "shape": "sans",
+        "size": 10
+      }
     },
     {
       "kind": "heading",
@@ -38,7 +43,9 @@
           "text": "By Tomás Reyes",
           "italic": true
         }
-      ]
+      ],
+      "align": "justify",
+      "spaceAfter": 7
     },
     {
       "kind": "paragraph",
@@ -46,7 +53,9 @@
         {
           "text": "More than 900 neighbors came to the garden on September 13 for the eighth harvest festival, almost twice last year’s count. Volunteers weighed 1,340 pounds of produce at the market table, and the soup kitchen on Alder Street took home everything that was left at closing."
         }
-      ]
+      ],
+      "align": "justify",
+      "spaceAfter": 7
     },
     {
       "kind": "paragraph",
@@ -54,13 +63,15 @@
         {
           "text": "The busiest stall was the seed library, where children traded bean seeds for stickers. “We grew more food this year than in the garden’s first five years combined,” said coordinator Joan Whitfield. She credited the new drip lines on the east beds, which kept the tomatoes alive through a dry August."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "figure",
       "caption": [
         {
-          "text": "Volunteers sort winter squash at the market table."
+          "text": "Volunteers sort winter squash at the market table.",
+          "italic": true
         }
       ]
     },
@@ -70,13 +81,15 @@
         {
           "text": "The festival also raised $4,210 for next year’s greenhouse. The board will choose a builder in November and hopes to plant the first seedlings in March."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "quote",
       "spans": [
         {
-          "text": "“We grew more food this year than in the garden’s first five years combined.”"
+          "text": "“We grew more food this year than in the garden’s first five years combined.”",
+          "italic": true
         }
       ]
     },
@@ -96,7 +109,9 @@
           "text": "By Dana Okonkwo",
           "italic": true
         }
-      ]
+      ],
+      "align": "justify",
+      "spaceAfter": 7
     },
     {
       "kind": "paragraph",
@@ -104,7 +119,9 @@
         {
           "text": "Two rain gardens planted along the north fence in May are now soaking up the runoff that used to flood the tool shed. Each garden is a shallow basin of native plants, deep-rooted asters, sedges, and swamp milkweed, that holds water after a storm and lets it sink into the ground over a day or two."
         }
-      ]
+      ],
+      "align": "justify",
+      "spaceAfter": 7
     },
     {
       "kind": "paragraph",
@@ -112,7 +129,8 @@
         {
           "text": "City engineers measured the flow at the storm drain on Pine Street after the heavy rain of August 21. It carried about 40% less water than after a storm of the same size last year. The city has offered to fund two more basins if the garden’s volunteers will maintain them."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "heading",
@@ -178,7 +196,8 @@
             }
           ]
         }
-      ]
+      ],
+      "itemSpace": 0
     },
     {
       "kind": "heading",
@@ -196,7 +215,9 @@
           "text": "By Ruth Albers",
           "italic": true
         }
-      ]
+      ],
+      "align": "justify",
+      "spaceAfter": 7
     },
     {
       "kind": "paragraph",
@@ -204,13 +225,15 @@
         {
           "text": "Our three compost bays turned out 6 cubic yards of finished compost this season. The trick, as always, is balance: roughly two parts brown material, such as dry leaves and straw, to one part green material, such as kitchen scraps and fresh clippings. Too much green and the pile smells; too much brown and it barely heats up."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "figure",
       "caption": [
         {
-          "text": "The new three-bay compost system, built from reclaimed pallets."
+          "text": "The new three-bay compost system, built from reclaimed pallets.",
+          "italic": true
         }
       ]
     },
@@ -220,7 +243,8 @@
         {
           "text": "Please keep meat, dairy, and oily food out of the bins. They attract rats, and the neighbors on Birch Lane have noticed. Coffee grounds, eggshells, and tea leaves are all welcome."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "quote",
@@ -237,6 +261,31 @@
     "Page 1",
     "Page 2"
   ],
+  "fonts": {
+    "body": {
+      "shape": "serif",
+      "size": 10.5
+    },
+    "title": {
+      "shape": "serif",
+      "size": 34,
+      "bold": true
+    },
+    "h2": {
+      "shape": "sans",
+      "size": 15,
+      "bold": true
+    },
+    "caption": {
+      "shape": "sans",
+      "size": 8.5
+    },
+    "h3": {
+      "shape": "sans",
+      "size": 11,
+      "bold": true
+    }
+  },
   "license": "open",
   "provenance": "generated",
   "notes": "The pull quote repeats a sentence of its article, as pull quotes do; both stand in the reference. The photos are pixels with no words. The sidebar's list sits inside the second column."

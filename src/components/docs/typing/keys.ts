@@ -9,6 +9,7 @@ import { isSuggesting } from "@/components/docs/ext/suggest";
 import { atMenuState } from "@/components/docs/insert/at-plugin";
 import { blockText, previousTextblock, runAutocorrect, runCodeFence } from "@/components/docs/typing/autocorrect";
 import { firstGraphemeLength, lastGraphemeLength, wordEndAfter, wordStartBefore } from "@/components/docs/typing/chars";
+import { sameFormat } from "@/components/docs/toolbar/lists";
 import { isList, isListItem } from "@/components/docs/typing/lists";
 
 // Google Docs' Enter, Backspace, Delete, Tab, move paragraph, and word and
@@ -696,7 +697,7 @@ export function moveParagraphs(editor: Editor, dir: -1 | 1): boolean {
 /** Two lists that read as one: the same kind and style, and a numbered
     list's second part numbered on from the first. */
 function listsJoin(a: PMNode, b: PMNode): boolean {
-  if (!isList(a) || a.type !== b.type || (a.attrs.listStyle ?? null) !== (b.attrs.listStyle ?? null)) return false;
+  if (!isList(a) || a.type !== b.type || !sameFormat(a, b)) return false;
   if (a.type.name !== "orderedList") return true;
   return (Number(b.attrs.start) || 1) === (Number(a.attrs.start) || 1) + a.childCount;
 }

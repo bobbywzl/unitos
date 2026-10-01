@@ -17,6 +17,10 @@ import {
 import { stripSimplifyMarkers } from "@/lib/sentences";
 import { db } from "@/lib/db";
 import { MAX_OUTPUT_TOKENS, SUGGEST_MAX_NEW_CHARS } from "@/lib/derive/config";
+
+// A revise action reads its windows within the route's time: those not
+// started by then are reported (lib/assistant/revise.ts).
+const REVISE_DEADLINE_MS = 150_000;
 import { runSuggest, suggestDocument } from "@/lib/derive/suggest";
 import { svgChartCall } from "@/lib/derive/svg-chart";
 import type { SuggestResult } from "@/lib/docs/assistant-suggestions";
@@ -36,14 +40,18 @@ import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { WEB_SEARCH_MAX_USES, WEB_SEARCH_TOOL, webSearchTool, webSearchUsd } from "@/lib/kimi";
 import type { TFunc } from "@/lib/i18n/dictionaries";
-import { actionsSchema, enrichActions, type DocumentEdits, type RawAction } from "@/lib/assistant/plan";
+import { actionsSchema, enrichActions, fitActions, planShape, type DocumentEdits, type ReadActions } from "@/lib/assistant/plan";
+import { runRevise } from "@/lib/assistant/revise";
 import { actPrompt, textSelectionBlock } from "@/lib/prompts/act";
+import { transcriptContext } from "@/lib/assistant/transcript";
+import { pageLines } from "@/lib/assistant/pages";
+import { sheetKeepLines } from "@/lib/replica";
 import { SUGGEST_COMMANDS, type SuggestCommand } from "@/lib/prompts/suggest";
 import { parseBody } from "@/lib/validate";
 import { ultraActive } from "@/lib/tiers";
 import { formatTimeRange, regionSchema } from "@/lib/video/types";
 import type { AssistantAction, AssistantPlan } from "@/lib/types";
-import { featureCall, featureConfigured } from "@/lib/feature-models";
+import { featureCall, featureConfigured, pictureFeature } from "@/lib/feature-models";
 
 export const maxDuration = 180;
 
@@ -156,6 +164,7 @@ export async function POST(req: Request) {
 }
 
 async function handle(req: Request, t: TFunc) {
+  const started = Date.now();
   const { data, error } = await parseBody(req, requestSchema);
   if (error) return error;
   const chip = data.suggestCommand;
@@ -185,7 +194,7 @@ async function handle(req: Request, t: TFunc) {
   const document = await db.document.findUnique({
     where: { id: data.documentId },
     include: {
-      blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, startTime: true, endTime: true, cell: true, page: true } },
+      blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true, html: true, startTime: true, endTime: true, speaker: true, cell: true, page: true } },
     },
     // An import's rich text runs to megabytes, and so does a PDF's file:
     // only a core anchor and the assistant's suggestions read the rich text
@@ -375,6 +384,8 @@ async function handle(req: Request, t: TFunc) {
   const svgChart = svgSource ? await svgChartCall() : null;
   const web = data.web === true && !attachedImage && !svgChart;
   const lang = await currentLang();
+  // A video's or an audio's voices, chapters, and anchored words (SPEC.md §11).
+  const transcript = await transcriptContext(document.id);
   const userPrompt = actPrompt({
     profile,
     lang,
@@ -390,6 +401,9 @@ async function handle(req: Request, t: TFunc) {
     history,
     command: data.command,
     edits,
+    sheets: document.format === "sheets" ? sheetKeepLines(document.blocks) : undefined,
+    pages: pageLines(document.blocks),
+    transcript: transcript?.lines ?? null,
   });
 
   const messages: ModelMessage[] = [
@@ -408,14 +422,18 @@ async function handle(req: Request, t: TFunc) {
       : { role: "user", content: userPrompt },
   ];
 
-  // A video frame goes to the model that reads images (SPEC.md §2); an SVG
+  // A video frame goes to a model that reads images (SPEC.md §2): the act's
+  // own when it reads them (Gemini), else Kimi K3 (pictureFeature); an SVG
   // chart to Claude Opus 5.5, which reads the source whole (lib/derive/svg-chart.ts);
   // a turn with the web on to WEB_SEARCH_MODEL, with its provider's search.
-  const chatCall = await featureCall(web ? "web" : attachedImage ? "vision" : "act", thinkingEffort(data.thinking));
+  const chatCall = await featureCall(
+    web ? "web" : attachedImage ? await pictureFeature("act") : "act",
+    thinkingEffort(data.thinking),
+  );
   const chat = svgChart ?? chatCall;
   // A chip asks the chat model nothing: its command is fixed.
   const result = chip
-    ? { ok: true as const, data: { reply: null, actions: [] as RawAction[] } }
+    ? { ok: true as const, data: { reply: null, actions: { actions: [], unreadable: [] } as ReadActions } }
     : await callForJson({
         model: chat.model,
         messages,
@@ -441,14 +459,48 @@ async function handle(req: Request, t: TFunc) {
 
   // Validate and enrich every action against the real document
   // (lib/assistant/plan.ts): the sidebar assistant's plan takes the same path.
-  const { actions, warnings } = enrichActions(result.data.actions, {
+  const planContext = {
     documentId: data.documentId,
     edits,
+    format: document.format,
     blocks: document.blocks,
+    transcript,
     attachedIds: new Set(attachedDocs.map((nd) => nd.documentId)),
     sectionIds: new Set(sections.map((s) => s.id)),
     t,
-  });
+  };
+  const enriched = enrichActions(fitActions(result.data.actions, edits), planContext);
+  let actions = enriched.actions;
+  const warnings = enriched.warnings;
+
+  // A revise action (a document without rich text, SPEC.md §7) is read part
+  // by part now, as the sidebar's is: the plan carries the block actions it
+  // finds in its place. It covers the selected blocks when it names none.
+  const revise = actions.find((a): a is Extract<AssistantAction, { type: "revise" }> => a.type === "revise");
+  if (revise) {
+    const selected = [...new Set(passage.map((segment) => segment.blockId))];
+    const deadline = AbortSignal.timeout(Math.max(1_000, started + REVISE_DEADLINE_MS - Date.now()));
+    const revised = await runRevise({
+      userId: user.id,
+      document: { title: document.title, references: document.references, blocks: document.blocks },
+      shape: planShape(planContext),
+      profile,
+      lang,
+      t,
+      command: data.command,
+      instruction: revise.instruction,
+      material: result.data.reply,
+      history,
+      blockIds: revise.blockIds ?? (selected.length > 0 ? selected : undefined),
+      caretBlockId: null,
+      thinking: data.thinking ?? "deep",
+      signal: AbortSignal.any([req.signal, deadline]),
+      deadline,
+    });
+    const at = actions.indexOf(revise);
+    actions = [...actions.slice(0, at), ...revised.actions, ...actions.slice(at + 1)];
+    warnings.push(...revised.warnings);
+  }
 
   // The assistant's suggestions (SPEC.md §29): a chip, or the plan's suggest
   // action, runs here once and the page lands its ops; the other actions
@@ -505,13 +557,16 @@ async function handle(req: Request, t: TFunc) {
     (suggestions
       ? suggestions.summary || t(suggestions.ops.length > 0 ? "api.suggestMade" : "api.suggestNoChange")
       : actions.length > 0
-        ? `Applied ${actions.length} action${actions.length === 1 ? "" : "s"}.`
+        ? `Proposed ${actions.length} action${actions.length === 1 ? "" : "s"} for approval.`
         : "No actions proposed.");
   const replyText = answer;
+  // The stored turn names the actions it proposed, so a later "implement"
+  // reads which change it confirms.
+  const proposed = actions.map((a) => a.description).filter(Boolean);
   const turns: ChatTurn[] = [
     ...priorTurns,
     { role: "user", content: data.command },
-    { role: "assistant", content: replyText },
+    { role: "assistant", content: proposed.length > 0 ? `${replyText}\n\nProposed actions: ${proposed.join("; ")}` : replyText },
   ];
   if (data.sideChatOf) {
     // A side chat persists like the conversation it came from, on a note that

@@ -10,18 +10,27 @@
 // a backtick, and ≠ as "6=" (memo P0-F §1.2). The character code names the
 // symbol whatever the producer, and a formula's layout needs each glyph's
 // box. The walk mirrors pdf.js's own drawing of text (canvas.js showText):
-// on the owner's notes, a legal packet from Word, a Google Docs export, and
-// a pdfLaTeX file, every text item's origin is a glyph origin here.
+// on amsbook notes, a Word form, a Google Docs export, and a pdfLaTeX
+// paper, every text item's origin is a glyph origin here.
 
-import { mathFamily, type MathFamily } from "@/lib/parse/pdf/glyphs";
+import { mathFamily, unicodeMath, type MathFamily, type MathVariant } from "@/lib/parse/pdf/glyphs";
 import type { Box } from "@/lib/parse/pdf/types";
 
 export type Glyph = {
   font: string; // pdf.js's id of the font, as on a text item (Item.font)
   base: string; // the font's name without its subset prefix ("CMMI10")
   family: MathFamily | null;
-  code: number; // the character code in the font
+  // The character code in the font; for a math font set in Unicode (KaTeX's,
+  // an OpenType math font), the code of the same symbol in TeX's font of
+  // its family (glyphs.ts unicodeMath).
+  code: number;
   unicode: string; // what pdf.js reads the code as
+  // A math font set in Unicode: the glyph's height and depth in em where
+  // its font draws it otherwise than TeX's (a KaTeX_Size ∑ stands on the
+  // baseline, TeX's extension font hangs its ∑ from it), and the alphabet
+  // where the font's name does not say it (𝐱 is \mathbf{x}).
+  box?: [number, number];
+  variant?: MathVariant;
   x: number; // the origin, in PDF points (y grows upward)
   y: number;
   w: number; // the advance
@@ -38,14 +47,19 @@ export type Glyph = {
   // Drawn outside the clip in effect or outside the page box: the glyph
   // shows nothing (a figure's labels past its crop, arXiv 2411.19946 p4).
   hidden?: true;
+  // Its fill color as it shows over white (#rrggbb); absent where no plain
+  // color fills it (a pattern).
+  color?: string;
 };
 // A drawn line: a stroked segment, or a filled box at most 2 pt thick.
 // Horizontal: y1 = y2. Vertical: x1 = x2.
 export type Rule = { dir: "h" | "v"; x1: number; y1: number; x2: number; y2: number; thickness: number };
-export type Fill = Box; // a filled box: cell shading, a frame, a highlight
+// A filled box: cell shading, a frame, a highlight; its color as it shows
+// over white, absent for a pattern.
+export type Fill = Box & { color?: string };
 // A path's box; clip marks a path that only clips and paints nothing.
 export type PathBox = Box & { clip?: true };
-export type PageDrawing = { glyphs: Glyph[]; rules: Rule[]; fills: Fill[]; images: Box[]; paths: PathBox[] };
+export type PageDrawing = { glyphs: Glyph[]; rules: Rule[]; fills: Fill[]; images: Box[]; paths: PathBox[]; shades: Box[] };
 // A font by pdf.js's id: its name, font matrix, and writing direction.
 export type FontLookup = (id: string) => { name: string; fontMatrix?: ArrayLike<number>; vertical?: boolean } | null;
 
@@ -91,9 +105,14 @@ const OP = {
   imageRepeat: 88,
   solidColorImageMask: 90,
   constructPath: 91,
+  setFillColorN: 55,
+  setFillRGBColor: 59,
+  setFillTransparent: 93,
+  shadingFill: 62,
 } as const;
 const STROKES = new Set<number>([OP.stroke, OP.closeStroke, OP.fillStroke, OP.eoFillStroke, OP.closeFillStroke, OP.closeEOFillStroke]);
 const FILLS = new Set<number>([OP.fill, OP.eoFill, OP.fillStroke, OP.eoFillStroke, OP.closeFillStroke, OP.closeEOFillStroke]);
+const EVEN_ODD = new Set<number>([OP.eoFill, OP.eoFillStroke, OP.closeEOFillStroke]);
 // Path codes inside constructPath's data (pdf.js DrawOPS).
 const MOVE_TO = 0;
 const LINE_TO = 1;
@@ -147,6 +166,10 @@ type State = {
   // The clip in effect, as a box; null is the whole page. An image shows
   // only inside it (a slide crops each photo of a grid to its frame).
   clip: Box | null;
+  // The fill color (#rrggbb; null for a pattern or none) and its opacity:
+  // pdf.js turns every color space's fill into one RGB color.
+  fill: string | null;
+  alpha: number;
 };
 
 type PdfGlyph = { originalCharCode?: number; unicode?: string; width?: number; isSpace?: boolean };
@@ -164,6 +187,7 @@ export function readDrawing(
   const fills: Fill[] = [];
   const images: Box[] = [];
   const paths: PathBox[] = [];
+  const shades: Box[] = [];
   let state: State = {
     ctm: IDENTITY,
     tm: IDENTITY,
@@ -178,6 +202,8 @@ export function readDrawing(
     rise: 0,
     mode: 0,
     clip: null,
+    fill: "#000000",
+    alpha: 1,
   };
   const stack: State[] = [];
   const forms: State[] = [];
@@ -254,6 +280,7 @@ export function readDrawing(
           if (!Array.isArray(entry)) continue;
           const [key, value] = entry as [string, unknown];
           if (key === "LW" && typeof value === "number") state.lineWidth = value;
+          if (key === "ca" && typeof value === "number") state.alpha = value;
           if (key === "Font" && Array.isArray(value)) {
             state.font = String(value[0]);
             state.fontSize = Number(value[1]) || 0;
@@ -282,6 +309,13 @@ export function readDrawing(
         break;
       case OP.setTextRenderingMode:
         state.mode = Number(args?.[0]) || 0;
+        break;
+      case OP.setFillRGBColor:
+        state.fill = typeof args?.[0] === "string" && /^#[0-9a-f]{6}$/i.test(args[0]) ? args[0].toLowerCase() : null;
+        break;
+      case OP.setFillColorN:
+      case OP.setFillTransparent:
+        state.fill = null;
         break;
       case OP.setTextRise:
         state.rise = Number(args?.[0]) || 0;
@@ -316,8 +350,10 @@ export function readDrawing(
         const trm = multiply(state.tm, state.ctm);
         const size = Math.abs(fontSize) * Math.hypot(trm[2], trm[3]);
         // What shows: the page box, and in it the clip in effect. A glyph
-        // whose box falls outside it is hidden.
+        // whose box falls outside it is hidden, and so is one whose middle
+        // is off the page box (a scan's OCR read the paper's edge as "—").
         const shown = state.clip ? intersect(state.clip, view) : view;
+        const color = paint(state);
         let x = 0; // the advance in text space, before the horizontal scale
         for (const g of list as (number | PdfGlyph | null)[]) {
           if (typeof g === "number") {
@@ -345,11 +381,16 @@ export function readDrawing(
               size,
               mode: state.mode,
             };
+            if (color) glyph.color = color;
             if (
               Math.max(px, ex) <= shown.x1 - 0.5 ||
               Math.min(px, ex) >= shown.x2 + 0.5 ||
               py + size * 0.75 <= shown.y1 - 0.5 ||
-              py - size * 0.25 >= shown.y2 + 0.5
+              py - size * 0.25 >= shown.y2 + 0.5 ||
+              (px + ex) / 2 < view.x1 ||
+              (px + ex) / 2 > view.x2 ||
+              py + size * 0.25 < view.y1 ||
+              py + size * 0.25 > view.y2
             ) {
               glyph.hidden = true;
             }
@@ -365,8 +406,12 @@ export function readDrawing(
         const box = pathBox(args, state.ctm);
         if (clipping && box) state.clip = state.clip ? intersect(state.clip, box) : box;
         clipping = false;
+        // A painted path shows only inside the clip in effect, as an image
+        // does: a chart's white ground ran 30 pt past its clip, and its
+        // figure reached across the page's gutter (arXiv 2502.02648 p5).
         if (box && (box.x2 - box.x1 < pageWidth * 0.9 || box.y2 - box.y1 < pageHeight * 0.9)) {
-          paths.push(args?.[0] === OP.endPath ? { ...box, clip: true } : box);
+          const shown = args?.[0] === OP.endPath ? { ...box, clip: true as const } : shownPart(box, state.clip);
+          if (shown) paths.push(shown);
         }
         if (annotation === 0) readPath(args, state, rules, fills);
         break;
@@ -378,8 +423,15 @@ export function readDrawing(
         // The image fills the unit square under the current transform; what
         // shows is its part inside the clip.
         const box = boxOf([apply(state.ctm, 0, 0), apply(state.ctm, 1, 0), apply(state.ctm, 0, 1), apply(state.ctm, 1, 1)]);
-        const shown = state.clip ? intersect(state.clip, box) : box;
-        if (shown.x2 > shown.x1 && shown.y2 > shown.y1) images.push(shown);
+        const shown = shownPart(box, state.clip);
+        if (shown) images.push(shown);
+        break;
+      }
+      case OP.shadingFill: {
+        // A shading paints the clip in effect: Beamer draws its item
+        // bullets so, a ball in its form's box (synth-slides-tex: read as
+        // no bullet at all).
+        if (annotation === 0 && state.clip) shades.push({ ...state.clip });
         break;
       }
       case OP.solidColorImageMask: {
@@ -387,19 +439,32 @@ export function readDrawing(
         // dvips draws every rule so — Grinstead–Snell's fraction bars (9 on
         // its p. 26, and no rule read) and its tables' \hline.
         if (annotation > 0) break;
-        const box = boxOf([apply(state.ctm, 0, 0), apply(state.ctm, 1, 0), apply(state.ctm, 0, 1), apply(state.ctm, 1, 1)]);
-        const shown = state.clip ? intersect(state.clip, box) : box;
-        if (shown.x2 > shown.x1 && shown.y2 > shown.y1) addFilledBox(shown, rules, fills);
+        const box = shownPart(boxOf([apply(state.ctm, 0, 0), apply(state.ctm, 1, 0), apply(state.ctm, 0, 1), apply(state.ctm, 1, 1)]), state.clip);
+        if (box) addFilledBox(box, null, rules, fills, paint(state));
         break;
       }
     }
   }
-  return { glyphs, rules, fills, images, paths };
+  return { glyphs: unicodeMath(glyphs), rules, fills, images, paths, shades };
 }
 
 // Two boxes' overlap; empty (x2 ≤ x1 or y2 ≤ y1) when they do not meet.
 function intersect(a: Box, b: Box): Box {
   return { x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1), x2: Math.min(a.x2, b.x2), y2: Math.min(a.y2, b.y2) };
+}
+
+// What of a box the clip in effect shows: its part inside, or null when none
+// of it shows. Images and rules are cut alike: KaTeX draws a \sqrt's bar
+// 400 em long and clips it to its formula (synth-math-html read rules
+// 5,300 pt long). A line has no extent across it: it shows when it lies
+// inside. slack lets a rule on the clip's very edge (a table's outer
+// border, a hairline) stay whole.
+const RULE_SLACK = 0.5;
+function shownPart(box: Box, clip: Box | null, slack = 0): Box | null {
+  if (!clip) return box;
+  const out = intersect({ x1: clip.x1 - slack, y1: clip.y1 - slack, x2: clip.x2 + slack, y2: clip.y2 + slack }, box);
+  const shows = (lo: number, hi: number, from: number, to: number) => (hi > lo ? to > from : to >= from);
+  return shows(box.x1, box.x2, out.x1, out.x2) && shows(box.y1, box.y2, out.y1, out.y2) ? out : null;
 }
 
 function boxOf(points: [number, number][]): Box {
@@ -427,10 +492,10 @@ function pathBox(args: unknown[] | null, ctm: Matrix): Box | null {
 // axis is a rule as thick as the line width; a filled rectangle at most 2 pt
 // thick is a rule; any other filled rectangle is a filled box.
 function readPath(args: unknown[] | null, state: State, rules: Rule[], fills: Fill[]) {
-  const paint = args?.[0] as number;
+  const op = args?.[0] as number;
   const data = (args?.[1] as unknown[] | undefined)?.[0] as ArrayLike<number> | null | undefined;
-  const stroke = STROKES.has(paint);
-  const fill = FILLS.has(paint);
+  const stroke = STROKES.has(op);
+  const fill = FILLS.has(op);
   if (!data || (!stroke && !fill)) return;
   const ctm = state.ctm;
   // Subpaths as point lists; a curve makes its subpath no rule and no box.
@@ -466,7 +531,13 @@ function readPath(args: unknown[] | null, state: State, rules: Rule[], fills: Fi
     }
   }
   const scale = Math.hypot(ctm[0], ctm[1]);
-  for (const sub of subpaths) {
+  // What the fill paints of each subpath: its box, or the bands around the
+  // holes cut out of it (paintedBoxes).
+  const painted = paintedBoxes(
+    subpaths.map((sub) => (fill && !sub.curved ? filledBox(sub.points) : null)),
+    EVEN_ODD.has(op),
+  );
+  for (const [k, sub] of subpaths.entries()) {
     if (sub.curved) continue;
     const pts = sub.points;
     if (stroke) {
@@ -477,34 +548,109 @@ function readPath(args: unknown[] | null, state: State, rules: Rule[], fills: Fi
         const [x1, y1] = pts[(i + 1) % pts.length];
         if (Math.abs(y0 - y1) < 0.1 && Math.abs(x0 - x1) >= 0.1) {
           const y = (y0 + y1) / 2;
-          rules.push({ dir: "h", x1: Math.min(x0, x1), y1: y, x2: Math.max(x0, x1), y2: y, thickness });
+          const shown = shownPart({ x1: Math.min(x0, x1), y1: y, x2: Math.max(x0, x1), y2: y }, state.clip, RULE_SLACK);
+          if (shown) rules.push({ dir: "h", x1: shown.x1, y1: y, x2: shown.x2, y2: y, thickness });
         } else if (Math.abs(x0 - x1) < 0.1 && Math.abs(y0 - y1) >= 0.1) {
           const x = (x0 + x1) / 2;
-          rules.push({ dir: "v", x1: x, y1: Math.min(y0, y1), x2: x, y2: Math.max(y0, y1), thickness });
+          const shown = shownPart({ x1: x, y1: Math.min(y0, y1), x2: x, y2: Math.max(y0, y1) }, state.clip, RULE_SLACK);
+          if (shown) rules.push({ dir: "v", x1: x, y1: shown.y1, x2: x, y2: shown.y2, thickness });
         }
       }
     }
-    if (fill && pts.length >= 4 && pts.length <= 5) {
-      const box = boxOf(pts);
-      const onEdge = (v: number, a: number, b: number) => Math.abs(v - a) < 0.1 || Math.abs(v - b) < 0.1;
-      if (!pts.every(([x, y]) => onEdge(x, box.x1, box.x2) && onEdge(y, box.y1, box.y2))) continue;
-      addFilledBox(box, rules, fills);
-    }
+    for (const box of painted[k]) addFilledBox(box, state.clip, rules, fills, paint(state));
   }
 }
 
+// A subpath the fill paints as a box: a rectangle, or a sliver 2 pt thin or
+// less that fills its box, whatever its corners (OpenStax draws a grid's
+// lines as pieces with one corner cut 0.75 pt in: its Tables 6.3 and 6.4
+// read as one cell, or as paragraphs). turn: the sign of its area, the way
+// it winds.
+type FilledBox = { box: Box; turn: number };
+function filledBox(pts: [number, number][]): FilledBox | null {
+  if (pts.length < 4 || pts.length > 5) return null;
+  const box = boxOf(pts);
+  const onEdge = (v: number, a: number, b: number) => Math.abs(v - a) < 0.1 || Math.abs(v - b) < 0.1;
+  const area = pts.reduce((sum, [x, y], k) => sum + x * pts[(k + 1) % pts.length][1] - pts[(k + 1) % pts.length][0] * y, 0) / 2;
+  const sliver = Math.min(box.x2 - box.x1, box.y2 - box.y1) <= 2 && Math.abs(area) >= (box.x2 - box.x1) * (box.y2 - box.y1) * 0.8;
+  if (!sliver && !pts.every(([x, y]) => onEdge(x, box.x1, box.x2) && onEdge(y, box.y1, box.y2))) return null;
+  return { box, turn: Math.sign(area) };
+}
+
+// What a path's filled boxes paint, subpath by subpath. A box inside other
+// boxes of the path is a hole when the fill rule leaves it empty: inside an
+// odd count of them under the even-odd rule, or its turn and theirs summing
+// to zero under the nonzero rule. A hole paints nothing, and the box right
+// around it paints only the bands around the hole. OpenStax draws each
+// table's border so: a box with a box 0.75 pt smaller cut out of it, filled
+// even-odd, whose hole read as a black box under every cell of the table.
+// A path of more than 1,000 boxes (a chart's marks) is read box by box: the
+// search looks at every pair.
+function paintedBoxes(boxes: (FilledBox | null)[], evenOdd: boolean): Box[][] {
+  const drawn = boxes.filter((b) => b !== null);
+  if (drawn.length < 2 || drawn.length > 1000) return boxes.map((b) => (b ? [b.box] : []));
+  const area = (b: Box) => (b.x2 - b.x1) * (b.y2 - b.y1);
+  const inside = (a: Box, b: Box) => a.x1 >= b.x1 - 0.01 && a.x2 <= b.x2 + 0.01 && a.y1 >= b.y1 - 0.01 && a.y2 <= b.y2 + 0.01 && area(a) < area(b);
+  const around = new Map(drawn.map((b) => [b, drawn.filter((o) => inside(b.box, o.box))]));
+  const holes = new Set(
+    drawn.filter((b) => {
+      const out = around.get(b) ?? [];
+      return b.turn !== 0 && (evenOdd ? out.length % 2 === 1 : out.reduce((sum, o) => sum + o.turn, b.turn) === 0);
+    }),
+  );
+  return boxes.map((b) => {
+    if (!b || holes.has(b)) return [];
+    const depth = around.get(b)?.length ?? 0;
+    const own = [...holes].filter((h) => around.get(h)?.length === depth + 1 && around.get(h)?.includes(b));
+    return own.length > 0 ? bands(b.box, own.map((h) => h.box)) : [b.box];
+  });
+}
+
+// A box less the holes cut out of it, as boxes: the rows between the holes'
+// lower and upper edges, each less the holes across it. A frame's sides are
+// four bands: under its hole, over it, and one on each side of it.
+function bands(box: Box, holes: Box[]): Box[] {
+  const ys = [...new Set([box.y1, box.y2, ...holes.flatMap((h) => [h.y1, h.y2])])].sort((a, b) => a - b);
+  const out: Box[] = [];
+  for (let k = 0; k + 1 < ys.length; k++) {
+    const [y1, y2] = [ys[k], ys[k + 1]];
+    let x = box.x1;
+    for (const h of holes.filter((h) => h.y1 <= y1 && h.y2 >= y2).sort((a, b) => a.x1 - b.x1)) {
+      if (h.x1 > x) out.push({ x1: x, y1, x2: h.x1, y2 });
+      x = Math.max(x, h.x2);
+    }
+    if (box.x2 > x) out.push({ x1: x, y1, x2: box.x2, y2 });
+  }
+  return out.filter((b) => b.x2 - b.x1 > 0.01 && b.y2 - b.y1 > 0.01);
+}
+
+// The fill color as it shows over white: a see-through fill (a highlight
+// Chrome draws at an opacity) is mixed with the white under it.
+function paint(state: State): string | undefined {
+  if (state.fill === null || state.alpha <= 0) return undefined;
+  if (state.alpha >= 1) return state.fill;
+  const mix = (at: number) => Math.round(parseInt(state.fill!.slice(at, at + 2), 16) * state.alpha + 255 * (1 - state.alpha));
+  return `#${[1, 3, 5].map((at) => mix(at).toString(16).padStart(2, "0")).join("")}`;
+}
+
 // A filled box at most 2 pt thick is a rule; any other is a filled box.
-function addFilledBox(box: Box, rules: Rule[], fills: Fill[]) {
+// Each is what the clip shows of it.
+// A rule is what the clip shows of it; a filled box stays as drawn (cut to
+// its clip, a figure's clipped background read as a lone box in a figure and
+// took its labels: arXiv 2411.19946 p. 1).
+function addFilledBox(box: Box, clip: Box | null, rules: Rule[], fills: Fill[], color?: string) {
   const w = box.x2 - box.x1;
   const h = box.y2 - box.y1;
   if (h <= 2 && w > h) {
+    const shown = shownPart(box, clip, RULE_SLACK);
     const y = (box.y1 + box.y2) / 2;
-    rules.push({ dir: "h", x1: box.x1, y1: y, x2: box.x2, y2: y, thickness: h });
+    if (shown) rules.push({ dir: "h", x1: shown.x1, y1: y, x2: shown.x2, y2: y, thickness: h });
   } else if (w <= 2 && h > w) {
+    const shown = shownPart(box, clip, RULE_SLACK);
     const x = (box.x1 + box.x2) / 2;
-    rules.push({ dir: "v", x1: x, y1: box.y1, x2: x, y2: box.y2, thickness: w });
+    if (shown) rules.push({ dir: "v", x1: x, y1: shown.y1, x2: x, y2: shown.y2, thickness: w });
   } else {
-    fills.push(box);
+    fills.push(color ? { ...box, color } : box);
   }
 }
 
@@ -580,7 +726,10 @@ export function itemGlyphs(items: TextOrigin[], glyphs: Glyph[]): (Glyph[] | und
     const end = item.x + item.w + shift[n] + 0.01;
     for (let i = start + 1; i < glyphs.length; i++) {
       const g = glyphs[i];
-      if (g.font !== item.font || taken.has(i) || g.x > end || Math.abs(g.y - item.y) > item.size) break;
+      // pdf.js runs two fonts of one embedded file into one item (a T1 and
+      // an OT1 LMRoman10-Regular: "ExactlyOne(mp", arXiv 2506.06752 p. 6):
+      // the glyphs of either are the item's.
+      if ((g.font !== item.font && g.base !== glyphs[start].base) || taken.has(i) || g.x > end || Math.abs(g.y - item.y) > item.size) break;
       if (g.family === null && g.unicode.trim() === "") continue;
       run.push(g);
     }

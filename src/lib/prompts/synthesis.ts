@@ -1,4 +1,4 @@
-import { actionLines, type DocumentEdits } from "@/lib/assistant/plan";
+import { actionLines, TRANSCRIPT_RULE, type DocumentEdits } from "@/lib/assistant/plan";
 import type { Lang } from "@/lib/i18n/config";
 import {
   answerLanguage,
@@ -54,7 +54,7 @@ export function synthesisAskPrompt(params: {
     ...(params.continued
       ? [
           "",
-          "This message continues the conversation above. Answer it in the conversation's context. Never repeat what an earlier answer already said; add to it.",
+          "This message continues the conversation above. Answer it in the conversation's context. Never repeat what an earlier answer already said; add to it. A message that confirms a change an earlier answer proposed is the exception: write that change's actions in full.",
         ]
       : []),
     ...(files.length > 0
@@ -109,6 +109,14 @@ type PageActions = {
   otherDocuments: { id: string; title: string }[];
   edits?: DocumentEdits;
   caretBlockId?: string | null;
+  // What each sheet of the document keeps as it is (sheetKeepLines).
+  sheets?: string[];
+  // A handwritten document's pages and the blocks that hold each page's
+  // words (lib/assistant/pages.ts).
+  pages?: string[];
+  // A video's or an audio's document: its voices and who speaks from which
+  // line (lib/assistant/transcript.ts); null for any other document.
+  transcript?: string[] | null;
 };
 
 // This page scope: the actions the assistant may propose, and the fence the
@@ -123,24 +131,33 @@ function actLines(act: PageActions): string[] {
     "You can propose changes to the open document and the notes. The reader approves every action before it runs.",
     `Sections in the project (id — title):\n${act.sections.length > 0 ? act.sections.map((s) => `${s.id} — ${s.parentTitle ? `${s.parentTitle} / ` : ""}${s.title}`).join("\n") : "none yet"}`,
     `Other attached documents (id — title):\n${act.otherDocuments.length > 0 ? act.otherDocuments.map((d) => `${d.id} — ${d.title}`).join("\n") : "none"}`,
+    ...(act.sheets?.length ? [`Sheets (what each keeps as it is):\n${act.sheets.join("\n")}`] : []),
+    ...(act.pages?.length ? [`Pages (each page's picture, then the blocks that hold its words):\n${act.pages.join("\n")}`] : []),
+    ...(act.transcript ?? []),
     ...(act.caretBlockId ? [`The caret stands in [block ${act.caretBlockId}]. "Here" means right after it.`] : []),
     "Action types:",
-    ...actionLines(act.edits ?? "blocks"),
+    ...actionLines(act.edits ?? "blocks", Boolean(act.transcript)),
     "Rules for actions:",
-    "1. A message that asks for a change to the document or the notes: write the answer, then end with a fenced block whose info string is actions, holding a JSON array of the actions. Nothing after the block.",
-    "2. A message that asks for analysis, an answer, or a summary, and no change: no block.",
+    "1. A message that asks for a change to the document or the notes: write the answer, then end with a fenced block that opens with the line ```actions and holds a JSON array of the actions, one action too. Every action has its \"type\". Nothing after the block. To reorganize, format, restructure, rewrite, fix, shorten, simplify, or translate the open document is a change to it, and so is a change to \"my notes\" or \"these notes\" when the open document holds the reader's own notes. Example of the block's shape:\n```actions\n[{\"type\": \"comment\", \"blockId\": \"<id>\", \"quote\": \"<exact words>\", \"comment\": \"<note>\", \"description\": \"<one sentence>\"}]\n```",
+    "1a. A message that confirms a change an earlier answer proposed (\"implement\", \"ok do it\", \"go ahead\", \"yes\", \"apply it\") asks for that change: answer in one sentence, then end with the actions block for it, written in full again. Never answer a confirmation with words alone.",
+    "2. A message that asks for analysis, an answer, or a summary, and no change: no block. Never write the actions as JSON anywhere but the actions block.",
     "3. Use block ids exactly as given in the [block <id>] tags. Every quote must be an exact substring of the named block's text.",
     "4. Use the smallest set of actions that fulfils the message. Never change text the message did not ask to change.",
     "5. description: one plain sentence of what the action does, for the reader's approval list.",
-    "6. TABLE and FIGURE blocks cannot be edited or removed.",
+    "5a. When one of the reader's tools does the job better than an action (Simplify, Explain, Visualize, Define, Extract, Stitch), name the tool in the answer and say in one sentence what it will do.",
+    "6. FIGURE and VIDEO blocks cannot be edited or removed. A TABLE block's words change with edit_block within its cells: the new text is the whole table, a line per row and a tab between cells, and keeps every line and every tab. In a document of handwritten pages a TABLE is the conversion's: there edit_block writes its text anew, the first line its header row, and may add or remove rows and columns, and remove_block removes it. There a PAGE block is its page's picture and keeps its text; a page's words are the blocks listed under Pages: edit_block changes them, and a new block after one of them joins its page. A SLIDE block changes with edit_block: the new text is the whole slide, a line per line of its text; an edit changes words within lines and adds or removes lines of its text boxes and of its speaker notes. A new line opens with the bullet of the lines beside it; every bullet, a table's rows, and the line Speaker notes: stay, and speaker notes a slide lacks come at its end, under the line Speaker notes:. A SHEET block changes with edit_block: the new text is the whole sheet, a line per row and a tab between cells, every row with as many cells as the first; an edit changes words in cells and adds or removes rows or columns, never rows and columns both. A line break in a cell's words stays in its cell. A formula's cell follows the cells it reads: leave its value as it is, and the sheet computes it. What a sheet keeps as it is (its frozen rows and columns, the cells formulas compute, its merged cells, a chart's data) is listed under Sheets. A SLIDE, a SHEET, or any other TABLE block is never removed, and the HEADING before a SHEET is its sheet's name and stays. A document of slides or sheets, or with a VIDEO block, takes no new block, and no block moves in it.",
     act.edits === "suggestions"
       ? "7. A change to the document's words or styles is one suggest action, whatever its size: the whole document, a section, or a paragraph. The answer is one sentence on what will change; never write the changed text in the answer: the suggestions carry it."
-      : "7. In the answer, say what each action changes and why. The answer stands on its own; the reader reads the actions in the plan card.",
+      : act.edits === "blocks"
+        ? "7. A change to the words of more than five blocks (the spelling or grammar across the document, its register, a section rewritten) is one revise action, whatever its size; never more than five edit_block actions. In the answer, say what the actions change and why; for a revise action, one sentence on what will change: the plan card carries the edits."
+        : "7. In the answer, say what each action changes and why. The answer stands on its own; the reader reads the actions in the plan card.",
     ...(act.edits === "none"
       ? [
           "8. The document's words and styles cannot be changed: a project of another account holds the document too. When the message asks to change them, say so in one sentence, and propose no action for the change.",
         ]
-      : []),
+      : act.transcript
+        ? [`8. ${TRANSCRIPT_RULE}`]
+        : []),
   ];
 }
 

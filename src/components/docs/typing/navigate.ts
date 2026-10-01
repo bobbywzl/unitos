@@ -8,7 +8,7 @@ import { insertT, toast } from "@/components/docs/insert/context";
 import { isMac, matchesCombo } from "@/components/docs/keys";
 import { posInBlock, wordAtCaret } from "@/components/docs/layer/anchor";
 import { DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
-import { loadChecker, misspelledWords } from "@/components/docs/typing/spelling";
+import { acceptedIn, loadChecker, misspelledWords } from "@/components/docs/typing/spelling";
 import { SUGGESTION_MARK_TYPES } from "@/lib/docs/schema";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
@@ -131,7 +131,7 @@ async function misspelling(editor: Editor, dir: 1 | -1): Promise<void> {
   // Typing while the dictionary loads keeps the caret where it is.
   if (!editor.state.selection.eq(selection)) return;
   const { doc } = editor.state;
-  const words = misspelledWords(doc, spell).map((w) => TextSelection.create(doc, w.from, w.to));
+  const words = misspelledWords(doc, spell, acceptedIn(editor.state)).map((w) => TextSelection.create(doc, w.from, w.to));
   jump(editor, words, dir, insertT(editor)("docsTyping.navMisspelling"));
 }
 

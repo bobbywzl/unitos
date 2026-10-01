@@ -293,8 +293,11 @@ class Measure {
     return i < 0 ? lines.length - 1 : i;
   }
   /** The position where line `line` of a textblock starts: the first
-      position drawn at or below the line's top. Null when there is none
-      inside the textblock. */
+      position whose middle is drawn at or below the line's top. Null when
+      there is none inside the textblock. The middle, not the top: an
+      equation's box rises above its line's letters, so by its top an
+      equation opening a line sat on the line before, and the page broke
+      between it and its period. */
   lineStart(u: Unit, line: Line): number | null {
     const from = u.pos + 1;
     const to = u.pos + u.node.nodeSize - 1;
@@ -303,13 +306,14 @@ class Measure {
     let found = -1;
     while (lo <= hi) {
       const mid = (lo + hi) >> 1;
-      let top: number;
+      let middle: number;
       try {
-        top = this.view.coordsAtPos(mid, 1).top;
+        const c = this.view.coordsAtPos(mid, 1);
+        middle = (c.top + c.bottom) / 2;
       } catch {
         return null;
       }
-      if (top >= line.clientTop - 0.5) {
+      if (middle >= line.clientTop - 0.5) {
         found = mid;
         hi = mid - 1;
       } else {

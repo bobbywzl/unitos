@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { requestDriveToken } from "@/lib/drive/request-token";
-import { classifyDriveFile } from "@/lib/drive/types";
+import { classifyDriveFile, type DriveAccess } from "@/lib/drive/types";
 import {
   driveDownloadUrl,
   driveFetchUrl,
@@ -17,7 +17,8 @@ import {
 import { runConversion } from "@/lib/handwritten/convert";
 import { renderPageImages, renderSlidePictures } from "@/lib/handwritten/page-images";
 import { renderUploadedSlidePictures } from "@/lib/handwritten/slide-pictures";
-import { SHEETS_MIME_TYPE, SLIDES_MIME_TYPE } from "@/lib/office-file";
+import { SHEETS_MIME_TYPE, SLIDES_MIME_TYPE, WORD_MIME_TYPE } from "@/lib/office-file";
+import type { TFunc } from "@/lib/i18n/dictionaries";
 import { serverT } from "@/lib/i18n/server";
 import { progressResponse } from "@/lib/ingest-response";
 import { attachDocument } from "@/lib/parse/attach";
@@ -26,6 +27,7 @@ import { describeIngestError } from "@/lib/parse/ingest-error";
 import { ingestMediaUrl } from "@/lib/video/ingest-media-url";
 import { runTranscription } from "@/lib/video/transcription-job";
 import { parseBody } from "@/lib/validate";
+import { pageRangesSchema } from "@/lib/pdf-pages";
 
 // Google Drive upload (SPEC.md §14): the client holds a short-lived Drive
 // OAuth token (per-visit grant, or minted from the linked account's refresh
@@ -40,14 +42,17 @@ export const maxDuration = 120;
 // name and mimeType come from the picker; a pasted link sends the fileId
 // alone and the facts come from Drive metadata. instructions, pages, and
 // convert are the upload assistant's check output (SPEC.md §15, §16), same as
-// every other PDF add path.
+// every other PDF add path. pdfPages: a PDF's pages the reader chose (§15).
 const bodySchema = z.object({
+  // The folder of the project the new document lands in (SPEC.md §6).
+  folderId: z.string().min(1).nullable().optional(),
   notebookId: z.string().min(1),
   fileId: z.string().min(1),
   name: z.string().min(1).optional(),
   mimeType: z.string().min(1).optional(),
   pages: z.boolean().default(false),
   convert: z.boolean().default(true),
+  pdfPages: pageRangesSchema.optional(),
 });
 
 export async function POST(req: Request) {
@@ -93,7 +98,7 @@ export async function POST(req: Request) {
         // chunked video upload path titles a document (/api/uploads/complete).
         title: mediaName.replace(/\.[a-z0-9]+$/i, ""),
       });
-      await attachDocument(data.notebookId, document.id);
+      await attachDocument(data.notebookId, document.id, data.folderId);
       await bumpNotebook(data.notebookId);
       // Transcription starts on its own — the transcript is the point. The
       // recommended-links scan follows it, so it reads the transcript.
@@ -145,7 +150,7 @@ export async function POST(req: Request) {
             { picture },
             user?.id ?? null,
           );
-          await attachDocument(data.notebookId, document.id);
+          await attachDocument(data.notebookId, document.id, data.folderId);
           await bumpNotebook(data.notebookId);
           if (!deduped) {
             const pdf = picture;
@@ -171,34 +176,60 @@ export async function POST(req: Request) {
           {},
           user?.id ?? null,
         );
-        await attachDocument(data.notebookId, document.id);
+        await attachDocument(data.notebookId, document.id, data.folderId);
         await bumpNotebook(data.notebookId);
         if (!deduped) after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
         return { id: document.id, title: document.title, deduped };
       } catch (err) {
         console.error("Drive slides/sheets ingest failed:", err);
-        throw new Error(describeIngestError(err, t, "pdf"));
+        throw new Error(describeIngestError(err, t, "file"));
       }
     });
   }
 
-  // kind is "pdf" or "export" — both end up as PDF bytes, ingested the one
-  // way this app reads a PDF.
-  const pdfName = name;
+  // kind is "docx", "docx-file", "pdf", or "export".
+  const fileName = name;
   return progressResponse(async (onProgress) => {
     onProgress("fetch");
-    const bytes =
-      kind === "export"
-        ? await fetchExportedPdf(data.fileId, token, grant, t)
-        : await fetchDrivePdf(data.fileId, token, grant, t);
-    const filename = kind === "export" ? `${pdfName}.pdf` : pdfName;
+    // A Word file (SPEC.md §30): a .docx in Drive downloads as it is, and a
+    // Google Doc arrives as Drive's .docx export; the Word parser reads
+    // either from the file's own structure. A Google Doc whose .docx export
+    // fails — Drive refuses it, or the parser cannot read it — reads from
+    // Drive's PDF export below.
+    if (kind === "docx" || kind === "docx-file") {
+      const word = await driveWordFile(kind, data.fileId, token, grant, t, parse);
+      let ingested: Awaited<ReturnType<typeof parse.ingestDocx>> | null = null;
+      if (word) {
+        try {
+          ingested = await parse.ingestDocx(word, kind === "docx" ? `${fileName}.docx` : fileName, onProgress, {}, user?.id ?? null);
+        } catch (err) {
+          if (kind === "docx-file") {
+            console.error("Drive Word ingest failed:", err);
+            throw new Error(describeIngestError(err, t, "file"));
+          }
+          console.warn("[drive] Google Doc's .docx export did not parse, reading its PDF export:", err);
+        }
+      }
+      if (ingested) {
+        const { document, deduped } = ingested;
+        await attachDocument(data.notebookId, document.id, data.folderId);
+        await bumpNotebook(data.notebookId);
+        // The skeleton builds after the response (SPEC.md §22).
+        if (!deduped) after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
+        return { id: document.id, title: document.title, deduped };
+      }
+    }
+    // A PDF, a Google Drawing, or a Google Doc read from its PDF export:
+    // PDF bytes, ingested the one way this app reads a PDF.
+    const bytes = kind === "pdf" ? await fetchDrivePdf(data.fileId, token, grant, t) : await fetchExportedPdf(data.fileId, token, grant, t);
+    const filename = kind === "pdf" ? fileName : `${fileName}.pdf`;
     let ingested: Awaited<ReturnType<typeof parse.ingestPdf>>;
     try {
       ingested = await parse.ingestPdf(
         bytes,
         filename,
         onProgress,
-        { pages: data.pages, convert: data.convert },
+        { pages: data.pages, convert: data.convert, pdfPages: kind === "pdf" ? data.pdfPages : undefined },
         user?.id ?? null,
       );
     } catch (err) {
@@ -206,7 +237,7 @@ export async function POST(req: Request) {
       throw new Error(describeIngestError(err, t, "pdf"));
     }
     const { document, deduped } = ingested;
-    await attachDocument(data.notebookId, document.id);
+    await attachDocument(data.notebookId, document.id, data.folderId);
     await bumpNotebook(data.notebookId);
     // The skeleton builds after the response (SPEC.md §22); a handwritten
     // document's waits for its conversion.
@@ -226,4 +257,31 @@ export async function POST(req: Request) {
     }
     return { id: document.id, title: document.title, deduped };
   });
+}
+
+/** A Word file's bytes from Drive: a .docx sitting in Drive as it is, or a
+    Google Doc's .docx export. A .docx that is no Word file fails the add; a
+    Google Doc whose export Drive refuses, or whose export is no Word file,
+    gives null, and the add reads its PDF export instead. */
+async function driveWordFile(
+  kind: "docx" | "docx-file",
+  fileId: string,
+  token: string,
+  grant: DriveAccess,
+  t: TFunc,
+  parse: typeof import("@/lib/parse/ingest"),
+): Promise<Uint8Array<ArrayBuffer> | null> {
+  if (kind === "docx-file") {
+    const bytes = await fetchDriveFile(fileId, token, grant, t);
+    if (parse.sniffOfficeFile(bytes) !== "docx") throw new Error(t("api.notPdf"));
+    return bytes;
+  }
+  try {
+    const bytes = await fetchExported(fileId, token, grant, t, WORD_MIME_TYPE);
+    if (parse.sniffOfficeFile(bytes) === "docx") return bytes;
+    console.warn("[drive] Google Doc's .docx export is no Word file, reading its PDF export");
+  } catch (err) {
+    console.warn("[drive] Google Doc's .docx export failed, reading its PDF export:", err);
+  }
+  return null;
 }

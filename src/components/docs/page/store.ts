@@ -22,6 +22,8 @@ export const PAGE_EVENT = {
   editHeader: "docs:page-edit-header",
   /** Put the page count at the caret of the header or footer being edited. */
   pageCount: "docs:page-count",
+  /** View > Full screen: the page alone, the header hidden (docs-editor.tsx). */
+  fullScreen: "docs:full-screen",
 } as const;
 
 export type EditHeaderDetail = { area: HeaderArea };
@@ -41,7 +43,7 @@ type PageState = {
   outlineOpen: boolean;
   outlineWidth: number;
   textWidth: TextWidth;
-  dialog: "setup" | "pageNumbers" | "headerFormat" | "copy" | null;
+  dialog: "setup" | "pageNumbers" | "headerFormat" | "copy" | "compare" | "watermark" | "details" | "lineNumbers" | "translate" | null;
   /** The header or footer being edited, and on which page. */
   editing: { area: HeaderArea; page: number } | null;
   /** The page setup's save, for the title row's status. */

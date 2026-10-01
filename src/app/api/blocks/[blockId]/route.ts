@@ -1,19 +1,23 @@
+import { Prisma } from "@prisma/client";
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
-import { blockKind } from "@/lib/block-kind";
+import { formatKind, stripListMarkers, withListMarkers, type FormatKind } from "@/lib/block-kind";
+import { blockTakes, documentShape } from "@/lib/block-takes";
 import { diffSegments, remapAnchor, remapRange } from "@/lib/anchors/remap";
 import { bumpDocument, documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { removeBlock, replaceBlockText, setBlockKind } from "@/lib/docs/ops";
 import { editRichText, importSharedResponse, isRichTextDocument } from "@/lib/docs/server";
 import { refreshSkeleton } from "@/lib/graph/skeleton";
+import { REPLICA_REFUSAL, replicaEdit, sheetCutSchema, slidePicture, type SheetCut } from "@/lib/replica";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
 
 const patchSchema = z
   .object({
     text: z.string().max(50_000).optional(),
-    kind: z.enum(["paragraph", "h1", "h2", "h3", "list", "numbered"]).optional(),
+    // code: a code block again (Undo of a code block's format change).
+    kind: z.enum(["paragraph", "h1", "h2", "h3", "list", "numbered", "code"]).optional(),
   })
   .refine((d) => d.text !== undefined || d.kind !== undefined, {
     message: "text or kind is required",
@@ -21,7 +25,7 @@ const patchSchema = z
 
 const KIND_TO_BLOCK: Record<
   string,
-  { type: "PARAGRAPH" | "HEADING" | "LIST"; html: string | null }
+  { type: "PARAGRAPH" | "HEADING" | "LIST" | "CODE"; html: string | null }
 > = {
   paragraph: { type: "PARAGRAPH", html: null },
   h1: { type: "HEADING", html: "<h1>" },
@@ -30,9 +34,38 @@ const KIND_TO_BLOCK: Record<
   // Both list kinds store as LIST; the numbering lives in the text markers.
   list: { type: "LIST", html: null },
   numbered: { type: "LIST", html: null },
+  code: { type: "CODE", html: null },
 };
 
 type StyleSpan = { start: number; end: number; style: string; quotedText: string };
+
+// What a replica's edit keeps for its Undo: the rows or columns a sheet
+// edit took out, and the html before an edit that, run backwards, would
+// not give it back (words that emptied a run, a character the page wrote
+// as an entity). Past this size they are not kept, and Undo builds the
+// replica anew.
+const KEPT_MAX = 100_000;
+
+/** What the block's last edit kept, when this edit takes that one back:
+    the text goes back to the text before it. */
+async function keptForUndo(block: { id: string; documentId: string; text: string }, text: string): Promise<{ cut: SheetCut | null; html: string | null }> {
+  const last = await db.blockEdit.findFirst({
+    where: { documentId: block.documentId, blockId: block.id, kind: "TEXT_EDIT" },
+    orderBy: { createdAt: "desc" },
+    select: { before: true, after: true, meta: true },
+  });
+  if (!last || last.before !== text || last.after !== block.text) return { cut: null, html: null };
+  const meta = (last.meta as Record<string, unknown> | null) ?? {};
+  const cut = sheetCutSchema.safeParse(meta.cut);
+  return { cut: cut.success ? cut.data : null, html: typeof meta.html === "string" ? meta.html : null };
+}
+
+/** A list conversion's text, as the reader's edit toolbar writes it: into a
+    list, every line takes its marker; out of one, the markers go. */
+function convertedText(text: string, from: FormatKind, to: FormatKind): string {
+  if (to === "list" || to === "numbered") return withListMarkers(text, to);
+  return from === "list" || from === "numbered" ? stripListMarkers(text) : text;
+}
 
 // Edit a block's text. TABLE and FIGURE content is sanitized html, not text, so they are
 // not editable. block.html is left untouched — for HEADING it stores the level tag.
@@ -48,16 +81,21 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
   const access = await documentAccess(block.documentId, "editor");
   if (access instanceof NextResponse) return access;
 
-  if (block.type === "TABLE" || block.type === "FIGURE" || block.type === "SLIDE" || block.type === "SHEET") {
+  // A figure's html is its content; a slide's, a sheet's, and a converted
+  // table's replica takes new words through its text (below), never a kind,
+  // and any other table keeps its html (the rule, below).
+  const replica = block.type === "SLIDE" || block.type === "SHEET" || block.type === "TABLE";
+  if (block.type === "FIGURE" || (replica && data.kind !== undefined)) {
     return NextResponse.json({ error: t("api.onlyTextBlocksEdited") }, { status: 400 });
   }
 
   // A blank document is edited through its rich text (SPEC.md §29).
   if (await isRichTextDocument(block.documentId)) {
+    if (block.type === "TABLE") return NextResponse.json({ error: t("api.onlyTextBlocksEdited") }, { status: 400 });
     const result = await editRichText(block.documentId, access.user.id, (doc) => {
       let next: typeof doc | null = doc;
       if (data.text !== undefined) next = replaceBlockText(next, blockId, data.text);
-      if (next && data.kind !== undefined) next = setBlockKind(next, blockId, data.kind) ?? next;
+      if (next && data.kind !== undefined && data.kind !== "code") next = setBlockKind(next, blockId, data.kind) ?? next;
       return next;
     });
     if (!result.ok) {
@@ -67,12 +105,25 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
   }
 
   const target = data.kind !== undefined ? KIND_TO_BLOCK[data.kind] : null;
-  const fromKind = blockKind(block.type, block.html, block.text);
+  const fromKind = formatKind(block.type, block.html, block.text);
   const kindChanges = data.kind !== undefined && fromKind !== data.kind;
+  // Only an edit that cannot corrupt the document (lib/block-takes.ts): a
+  // page, a video's player, or a sheet's name keeps its words, and a page,
+  // a transcript line, or an equation keeps its kind.
+  const shape = await documentShape(block.documentId);
+  if (data.text !== undefined && data.text !== block.text && !blockTakes.words(block.type, shape)) {
+    // A page's words are the blocks converted from it; its text names it.
+    return NextResponse.json({ error: t(block.type === "PAGE" ? "api.pageWords" : "api.onlyTextBlocksEdited") }, { status: 400 });
+  }
+  if (kindChanges && !blockTakes.kind(block.type, shape)) {
+    return NextResponse.json({ error: t("api.blockKindFixed") }, { status: 400 });
+  }
+  // A list conversion sent without text re-marks the stored text.
+  const text = data.text ?? (kindChanges ? convertedText(block.text, fromKind, data.kind!) : undefined);
 
   // Format change without a text change: heading level, paragraph, or list kind,
-  // recorded as FORMAT. List conversions send text too and take the path below.
-  if (data.text === undefined || data.text === block.text) {
+  // recorded as FORMAT. List conversions change the text too and take the path below.
+  if (text === undefined || text === block.text) {
     if (!kindChanges || !target) return NextResponse.json(block);
     const [formatted] = await db.$transaction([
       db.block.update({
@@ -95,7 +146,31 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
     return NextResponse.json(formatted);
   }
 
-  const newText = data.text;
+  let newText = text;
+  // A slide's, a sheet's, or a table's replica takes the new words in place
+  // (SPEC.md §27: its DOM text stays the block's text), a sheet its rows and
+  // columns too, and a converted table is drawn anew from its text (§16); a
+  // slide whose words are not its words as parsed shows its replica, its
+  // picture held. A sheet computes its formulas again: the text stored is
+  // the one its replica reads. An edit taken back puts back what the edit
+  // kept.
+  let replicaHtml: string | null = null;
+  const kept: { cut?: SheetCut; html?: string } = {};
+  if (replica && block.html !== null) {
+    const parsed = block.originalText ?? block.text;
+    const drawn = (html: string, words: string) => (block.type === "SLIDE" ? slidePicture(html, words, parsed) : html);
+    const back = await keptForUndo(block, newText);
+    if (back.html !== null) replicaHtml = back.html;
+    else {
+      const edited = replicaEdit(block.type, block.html, block.text, newText, back.cut);
+      if ("refused" in edited) return NextResponse.json({ error: t(REPLICA_REFUSAL[edited.refused]) }, { status: 400 });
+      if (edited.text !== undefined) newText = edited.text;
+      replicaHtml = drawn(edited.html, newText);
+      if (edited.cut && JSON.stringify(edited.cut).length <= KEPT_MAX) kept.cut = edited.cut;
+      const undone = replicaEdit(block.type, replicaHtml, newText, block.text, edited.cut);
+      if ((!("html" in undone) || drawn(undone.html, block.text) !== block.html) && block.html.length <= KEPT_MAX) kept.html = block.html;
+    }
+  }
 
   // Remap every anchor on this block through the edit, the way Google Docs
   // moves highlights while you type: shift, grow, shrink, or orphan visibly.
@@ -128,12 +203,15 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
       where: { id: blockId },
       // First edit freezes the original, so edited-vs-original coloring always
       // diffs against the text as parsed.
+      // An edit back to the text as parsed makes the block unedited again, so
+      // Undo gives it back as it was; a block with no styles keeps none.
       data: {
         text: newText,
-        styles: nextSpans,
+        ...(spans.length > 0 ? { styles: nextSpans.length > 0 ? nextSpans : Prisma.DbNull } : {}),
         ...(citations.length > 0 ? { citations: nextCitations } : {}),
         ...(kindChanges && target ? { type: target.type, html: target.html } : {}),
-        ...(block.originalText === null ? { originalText: block.text } : {}),
+        ...(replicaHtml !== null ? { html: replicaHtml } : {}),
+        ...(block.originalText === null ? { originalText: block.text } : newText === block.originalText ? { originalText: null } : {}),
       },
     });
     // The search vector no longer matches the text; the next search re-embeds.
@@ -145,6 +223,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ blockId: stri
         kind: "TEXT_EDIT",
         before: block.text,
         after: newText,
+        ...(kept.cut || kept.html ? { meta: kept } : {}),
         userId: access.user.id,
       },
     });
@@ -240,17 +319,23 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ blockId: st
   if (!block) return NextResponse.json({ error: t("api.blockNotFound") }, { status: 404 });
   const access = await documentAccess(block.documentId, "editor");
   if (access instanceof NextResponse) return access;
-  if (block.type === "TABLE" || block.type === "FIGURE" || block.type === "SLIDE" || block.type === "SHEET") {
+  const richText = await isRichTextDocument(block.documentId);
+  if ((block.type === "TABLE" && richText) || block.type === "FIGURE" || block.type === "SLIDE" || block.type === "SHEET") {
     return NextResponse.json({ error: t("api.onlyTextBlocksRemoved") }, { status: 400 });
   }
 
   // A blank document is edited through its rich text (SPEC.md §29).
-  if (await isRichTextDocument(block.documentId)) {
+  if (richText) {
     const result = await editRichText(block.documentId, access.user.id, (doc) => removeBlock(doc, blockId));
     if (!result.ok) {
       return result.reason === "shared" ? importSharedResponse(t) : NextResponse.json({ error: t("api.blockNotFound") }, { status: 404 });
     }
     return NextResponse.json({ ok: true, editId: result.removedEdits[blockId] ?? null });
+  }
+  // A video's player, a sheet's name, a table other than a converted one,
+  // and a handwritten document's last page stay (lib/block-takes.ts).
+  if (!blockTakes.removal(block.type, await documentShape(block.documentId))) {
+    return NextResponse.json({ error: t(block.type === "PAGE" ? "api.lastPageStays" : "api.onlyTextBlocksRemoved") }, { status: 400 });
   }
 
   const [, , , , removal] = await db.$transaction([
@@ -264,11 +349,20 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ blockId: st
         blockId: block.id,
         kind: "BLOCK_REMOVE",
         before: block.text,
+        // What restore needs to bring the block back whole: a page its
+        // number, a transcript line its times and voice, words their styles.
         meta: {
           order: block.order,
           type: block.type,
           html: block.html,
           originalText: block.originalText,
+          page: block.page,
+          startTime: block.startTime,
+          endTime: block.endTime,
+          speaker: block.speaker,
+          styles: block.styles ?? undefined,
+          links: block.links ?? undefined,
+          citations: block.citations ?? undefined,
         },
         userId: access.user.id,
       },

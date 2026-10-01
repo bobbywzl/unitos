@@ -1,0 +1,1079 @@
+{
+ "id": "real-openstax-introstat-ch6-p2",
+ "category": "textbook",
+ "source": {
+  "pdf": ".bench/real/openstax-introstat-ch6.pdf",
+  "url": "https://assets.openstax.org/oscms-prodcms/media/documents/IntroductoryStatistics-OP_i6tAI7e.pdf"
+ },
+ "pages": [
+  2,
+  3
+ ],
+ "license": "open",
+ "provenance": "hand",
+ "notes": "OpenStax, Introductory Statistics (Illowsky and Dean, CC BY 4.0), chapter 6 'The Normal Distribution': book pages 365-398, the PDF's pages 373-406, cut out with PyMuPDF; made by Prince 11 from DocBook HTML (Liberation fonts, MathML set in STIX). Scored: the chapter's pages 2-3 (book pp. 366-367): a paragraph ending from p. 365, italic variables in the body font (plain italic, not math), a figure whose labels are pixels with its 'Figure 6.2' caption, a display equation (a fraction whose denominator holds a radical, e with a fractional exponent and a big parenthesis), inline and display fractions in STIX (the minus drawn as an en dash), a section heading '6.1 | ...' (h1), a subheading with an italic Z (h2), the white 'Example 6.x' titles on blue bars (h3), a 'Solution 6.2' label (h4), feature banners drawn as vector art ('Collaborative Exercise', 'Try It': figures, their words are paths), a numbered exercise ('6.1', a list item), lettered parts a./b. (list items), fill-in blanks of underscores, running heads that alternate sides, a grey running foot on even pages. The line 'x = μ + (z)(σ) = 5 + (3)(2) = 11' is set in the body font on its own line: a paragraph. The b. item continues on p. 368: only its words on p. 367 are here.",
+ "furniture": [
+  "366",
+  "Chapter 6 | The Normal Distribution",
+  "This OpenStax book is available for free at http://cnx.org/content/col11562/1.18",
+  "367"
+ ],
+ "blocks": [
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "them."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The normal distribution has two parameters (two numerical descriptive measures): the mean ("
+    },
+    {
+     "text": "μ",
+     "italic": true
+    },
+    {
+     "text": ") and the standard deviation ("
+    },
+    {
+     "text": "σ",
+     "italic": true
+    },
+    {
+     "text": "). If "
+    },
+    {
+     "text": "X",
+     "italic": true
+    },
+    {
+     "text": " is a quantity to be measured that has a normal distribution with mean ("
+    },
+    {
+     "text": "μ",
+     "italic": true
+    },
+    {
+     "text": ") and standard deviation ("
+    },
+    {
+     "text": "σ",
+     "italic": true
+    },
+    {
+     "text": "), we designate this by writing"
+    }
+   ]
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "Figure 6.2",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The probability density function is a rather complicated function. "
+    },
+    {
+     "text": "Do not memorize it",
+     "bold": true
+    },
+    {
+     "text": ". It is not necessary."
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "f(x) = \\frac{1}{\\sigma \\cdot \\sqrt{2 \\cdot \\pi}} \\cdot \\mathrm{e}^{-\\frac{1}{2} \\cdot \\left(\\frac{x - \\mu}{\\sigma}\\right)^{2}}"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The cumulative distribution function is "
+    },
+    {
+     "text": "P",
+     "italic": true
+    },
+    {
+     "text": "("
+    },
+    {
+     "text": "X",
+     "italic": true
+    },
+    {
+     "text": " < "
+    },
+    {
+     "text": "x",
+     "italic": true
+    },
+    {
+     "text": "). It is calculated either by a calculator or a computer, or it is looked up in a table. Technology has made the tables virtually obsolete. For that reason, as well as the fact that there are various table formats, we are not including table instructions."
+    }
+   ],
+   "spaceAfter": 5
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The curve is symmetric about a vertical line drawn through the mean, "
+    },
+    {
+     "text": "μ",
+     "italic": true
+    },
+    {
+     "text": ". In theory, the mean is the same as the median, because the graph is symmetric about "
+    },
+    {
+     "text": "μ",
+     "italic": true
+    },
+    {
+     "text": ". As the notation indicates, the normal distribution depends only on the mean and the standard deviation. Since the area under the curve must equal one, a change in the standard deviation, "
+    },
+    {
+     "text": "σ",
+     "italic": true
+    },
+    {
+     "text": ", causes a change in the shape of the curve; the curve becomes fatter or skinnier depending on "
+    },
+    {
+     "text": "σ",
+     "italic": true
+    },
+    {
+     "text": ". A change in "
+    },
+    {
+     "text": "μ",
+     "italic": true
+    },
+    {
+     "text": " causes the graph to shift to the left or right. This means there are an infinite number of normal probability distributions. One of special interest is called the "
+    },
+    {
+     "text": "standard normal distribution",
+     "bold": true
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "figure"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Your instructor will record the heights of both men and women in your class, separately. Draw histograms of your data. Then draw a smooth curve through each histogram. Is each curve somewhat bell-shaped? Do you think that if you had recorded 200 data values for men and 200 for women that the curves would look bell-shaped? Calculate the mean for each data set. Write the means on the "
+    },
+    {
+     "text": "x",
+     "italic": true
+    },
+    {
+     "text": "-axis of the appropriate graph below the peak. Shade the approximate area that represents the probability that one randomly chosen male is taller than 72 inches. Shade the approximate area that represents the probability that one randomly chosen female is shorter than 60 inches. If the total area under each curve is one, does either probability appear to be more than 0.5?"
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 1,
+   "spans": [
+    {
+     "text": "6.1 | The Standard Normal Distribution",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The "
+    },
+    {
+     "text": "standard normal distribution",
+     "bold": true
+    },
+    {
+     "text": " is a normal distribution of "
+    },
+    {
+     "text": "standardized values called ",
+     "bold": true
+    },
+    {
+     "text": "z",
+     "bold": true,
+     "italic": true
+    },
+    {
+     "text": "-scores",
+     "bold": true
+    },
+    {
+     "text": ". "
+    },
+    {
+     "text": "A ",
+     "bold": true
+    },
+    {
+     "text": "z",
+     "bold": true,
+     "italic": true
+    },
+    {
+     "text": "-score is measured in units of the standard deviation.",
+     "bold": true
+    },
+    {
+     "text": " For example, if the mean of a normal distribution is five and the standard deviation is two, the value 11 is three standard deviations above (or to the right of) the mean. The calculation is as follows:"
+    }
+   ],
+   "spaceAfter": 5
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "x",
+     "italic": true
+    },
+    {
+     "text": " = "
+    },
+    {
+     "text": "μ",
+     "italic": true
+    },
+    {
+     "text": " + ("
+    },
+    {
+     "text": "z",
+     "italic": true
+    },
+    {
+     "text": ")("
+    },
+    {
+     "text": "σ",
+     "italic": true
+    },
+    {
+     "text": ") = 5 + (3)(2) = 11"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The "
+    },
+    {
+     "text": "z",
+     "italic": true
+    },
+    {
+     "text": "-score is three."
+    }
+   ],
+   "spaceAfter": 8
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The mean for the standard normal distribution is zero, and the standard deviation is one. The transformation "
+    },
+    {
+     "text": "z",
+     "italic": true
+    },
+    {
+     "text": " = "
+    },
+    {
+     "text": "x−µσ",
+     "latex": "\\frac{x - \\mu}{\\sigma}"
+    },
+    {
+     "text": " produces the distribution "
+    },
+    {
+     "text": "Z",
+     "italic": true
+    },
+    {
+     "text": " ~ "
+    },
+    {
+     "text": "N",
+     "italic": true
+    },
+    {
+     "text": "(0, 1). The value "
+    },
+    {
+     "text": "x",
+     "italic": true
+    },
+    {
+     "text": " in the given equation comes from a normal distribution with mean "
+    },
+    {
+     "text": "μ",
+     "italic": true
+    },
+    {
+     "text": " and standard deviation "
+    },
+    {
+     "text": "σ",
+     "italic": true
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "Z",
+     "bold": true,
+     "italic": true
+    },
+    {
+     "text": "-Scores",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "If "
+    },
+    {
+     "text": "X",
+     "italic": true
+    },
+    {
+     "text": " is a normally distributed random variable and "
+    },
+    {
+     "text": "X",
+     "italic": true
+    },
+    {
+     "text": " ~ "
+    },
+    {
+     "text": "N(μ, σ)",
+     "italic": true
+    },
+    {
+     "text": ", then the "
+    },
+    {
+     "text": "z",
+     "italic": true
+    },
+    {
+     "text": "-score is:"
+    }
+   ]
+  },
+  {
+   "kind": "equation",
+   "latex": "z = \\frac{x - \\mu}{\\sigma}"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The ",
+     "bold": true
+    },
+    {
+     "text": "z",
+     "bold": true,
+     "italic": true
+    },
+    {
+     "text": "-score tells you how many standard deviations the value ",
+     "bold": true
+    },
+    {
+     "text": "x",
+     "bold": true,
+     "italic": true
+    },
+    {
+     "text": " is above (to the right of) or below (to the left of) the mean, ",
+     "bold": true
+    },
+    {
+     "text": "μ",
+     "bold": true,
+     "italic": true
+    },
+    {
+     "text": ".",
+     "bold": true
+    },
+    {
+     "text": " Values of "
+    },
+    {
+     "text": "x",
+     "italic": true
+    },
+    {
+     "text": " that are larger than the mean have positive "
+    },
+    {
+     "text": "z",
+     "italic": true
+    },
+    {
+     "text": "-scores, and values of "
+    },
+    {
+     "text": "x",
+     "italic": true
+    },
+    {
+     "text": " that are smaller than the mean have negative "
+    },
+    {
+     "text": "z",
+     "italic": true
+    },
+    {
+     "text": "-scores. If "
+    },
+    {
+     "text": "x",
+     "italic": true
+    },
+    {
+     "text": " equals the mean, then "
+    },
+    {
+     "text": "x",
+     "italic": true
+    },
+    {
+     "text": " has a "
+    },
+    {
+     "text": "z",
+     "italic": true
+    },
+    {
+     "text": "-score of zero."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "Example 6.1"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Suppose "
+    },
+    {
+     "text": "X",
+     "italic": true
+    },
+    {
+     "text": " ~ "
+    },
+    {
+     "text": "N(5, 6)",
+     "italic": true
+    },
+    {
+     "text": ". This says that "
+    },
+    {
+     "text": "X",
+     "italic": true
+    },
+    {
+     "text": " is a normally distributed random variable with mean "
+    },
+    {
+     "text": "μ",
+     "italic": true
+    },
+    {
+     "text": " = 5 and standard deviation "
+    },
+    {
+     "text": "σ",
+     "italic": true
+    },
+    {
+     "text": " = 6. Suppose "
+    },
+    {
+     "text": "x",
+     "italic": true
+    },
+    {
+     "text": " = 17. Then:"
+    }
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 20
+   }
+  },
+  {
+   "kind": "equation",
+   "latex": "z = \\frac{x - \\mu}{\\sigma} = \\frac{17 - 5}{6} = 2"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "This means that "
+    },
+    {
+     "text": "x",
+     "italic": true
+    },
+    {
+     "text": " = 17 is "
+    },
+    {
+     "text": "two standard deviations",
+     "bold": true
+    },
+    {
+     "text": " (2"
+    },
+    {
+     "text": "σ",
+     "italic": true
+    },
+    {
+     "text": ") above or to the right of the mean "
+    },
+    {
+     "text": "μ",
+     "italic": true
+    },
+    {
+     "text": " = 5."
+    }
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 20
+   },
+   "spaceAfter": 5
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Notice that: 5 + (2)(6) = 17 (The pattern is "
+    },
+    {
+     "text": "μ",
+     "italic": true
+    },
+    {
+     "text": " + "
+    },
+    {
+     "text": "zσ",
+     "italic": true
+    },
+    {
+     "text": " = "
+    },
+    {
+     "text": "x",
+     "italic": true
+    },
+    {
+     "text": ")"
+    }
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 20
+   },
+   "spaceAfter": 8
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Now suppose "
+    },
+    {
+     "text": "x",
+     "italic": true
+    },
+    {
+     "text": " = 1. Then: "
+    },
+    {
+     "text": "z",
+     "italic": true
+    },
+    {
+     "text": " = "
+    },
+    {
+     "text": "x−µσ",
+     "latex": "\\frac{x - \\mu}{\\sigma}"
+    },
+    {
+     "text": " = "
+    },
+    {
+     "text": "1−56",
+     "latex": "\\frac{1 - 5}{6}"
+    },
+    {
+     "text": " = –0.67 (rounded to two decimal places)"
+    }
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 20
+   },
+   "spaceAfter": 13
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "This means that ",
+     "bold": true
+    },
+    {
+     "text": "x",
+     "bold": true,
+     "italic": true
+    },
+    {
+     "text": " = 1 is 0.67 standard deviations (–0.67",
+     "bold": true
+    },
+    {
+     "text": "σ",
+     "bold": true,
+     "italic": true
+    },
+    {
+     "text": ") below or to the left of the mean ",
+     "bold": true
+    },
+    {
+     "text": "μ",
+     "bold": true,
+     "italic": true
+    },
+    {
+     "text": " = 5. Notice that:",
+     "bold": true
+    },
+    {
+     "text": " 5 + (–0.67)(6) is approximately equal to one (This has the pattern "
+    },
+    {
+     "text": "μ",
+     "italic": true
+    },
+    {
+     "text": " + (–0.67)σ = 1)"
+    }
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 20
+   },
+   "spaceAfter": 5
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Summarizing, when "
+    },
+    {
+     "text": "z",
+     "italic": true
+    },
+    {
+     "text": " is positive, "
+    },
+    {
+     "text": "x",
+     "italic": true
+    },
+    {
+     "text": " is above or to the right of "
+    },
+    {
+     "text": "μ",
+     "italic": true
+    },
+    {
+     "text": " and when "
+    },
+    {
+     "text": "z",
+     "italic": true
+    },
+    {
+     "text": " is negative, "
+    },
+    {
+     "text": "x",
+     "italic": true
+    },
+    {
+     "text": " is to the left of or below "
+    },
+    {
+     "text": "μ",
+     "italic": true
+    },
+    {
+     "text": ". Or, when "
+    },
+    {
+     "text": "z",
+     "italic": true
+    },
+    {
+     "text": " is positive, "
+    },
+    {
+     "text": "x",
+     "italic": true
+    },
+    {
+     "text": " is greater than "
+    },
+    {
+     "text": "μ",
+     "italic": true
+    },
+    {
+     "text": ", and when "
+    },
+    {
+     "text": "z",
+     "italic": true
+    },
+    {
+     "text": " is negative "
+    },
+    {
+     "text": "x",
+     "italic": true
+    },
+    {
+     "text": " is less than "
+    },
+    {
+     "text": "μ",
+     "italic": true
+    },
+    {
+     "text": "."
+    }
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 20
+   }
+  },
+  {
+   "kind": "figure"
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "6.1",
+     "spans": [
+      {
+       "text": "What is the "
+      },
+      {
+       "text": "z",
+       "italic": true
+      },
+      {
+       "text": "-score of "
+      },
+      {
+       "text": "x",
+       "italic": true
+      },
+      {
+       "text": ", when "
+      },
+      {
+       "text": "x",
+       "italic": true
+      },
+      {
+       "text": " = 1 and "
+      },
+      {
+       "text": "X",
+       "italic": true
+      },
+      {
+       "text": " ~ "
+      },
+      {
+       "text": "N",
+       "italic": true
+      },
+      {
+       "text": "(12,3)?"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "Example 6.2"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Some doctors believe that a person can lose five pounds, on the average, in a month by reducing his or her fat intake and by exercising consistently. Suppose weight loss has a normal distribution. Let "
+    },
+    {
+     "text": "X",
+     "italic": true
+    },
+    {
+     "text": " = the amount of weight lost (in pounds) by a person in a month. Use a standard deviation of two pounds. "
+    },
+    {
+     "text": "X",
+     "italic": true
+    },
+    {
+     "text": " ~ "
+    },
+    {
+     "text": "N",
+     "italic": true
+    },
+    {
+     "text": "(5, 2). Fill in the blanks."
+    }
+   ],
+   "spaceAfter": 16
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "a.",
+     "spans": [
+      {
+       "text": "Suppose a person "
+      },
+      {
+       "text": "lost",
+       "bold": true
+      },
+      {
+       "text": " ten pounds in a month. The "
+      },
+      {
+       "text": "z",
+       "italic": true
+      },
+      {
+       "text": "-score when "
+      },
+      {
+       "text": "x",
+       "italic": true
+      },
+      {
+       "text": " = 10 pounds is "
+      },
+      {
+       "text": "z",
+       "italic": true
+      },
+      {
+       "text": " = 2.5 (verify). This "
+      },
+      {
+       "text": "z",
+       "italic": true
+      },
+      {
+       "text": "-score tells you that "
+      },
+      {
+       "text": "x",
+       "italic": true
+      },
+      {
+       "text": " = 10 is ________ standard deviations to the ________ (right or left) of the mean _____ (What is the mean?)."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 4,
+   "spans": [
+    {
+     "text": "Solution 6.2",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "a.",
+     "spans": [
+      {
+       "text": "This "
+      },
+      {
+       "text": "z",
+       "italic": true
+      },
+      {
+       "text": "-score tells you that "
+      },
+      {
+       "text": "x",
+       "italic": true
+      },
+      {
+       "text": " = 10 is "
+      },
+      {
+       "text": "2.5",
+       "bold": true
+      },
+      {
+       "text": " standard deviations to the "
+      },
+      {
+       "text": "right",
+       "bold": true
+      },
+      {
+       "text": " of the mean "
+      },
+      {
+       "text": "five",
+       "bold": true
+      },
+      {
+       "text": "."
+      }
+     ]
+    }
+   ],
+   "spaceAfter": 16
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "b.",
+     "spans": [
+      {
+       "text": "Suppose a person "
+      },
+      {
+       "text": "gained",
+       "bold": true
+      },
+      {
+       "text": " three pounds (a negative weight loss). Then "
+      },
+      {
+       "text": "z",
+       "italic": true
+      },
+      {
+       "text": " = __________. This "
+      },
+      {
+       "text": "z",
+       "italic": true
+      },
+      {
+       "text": "-score tells you"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

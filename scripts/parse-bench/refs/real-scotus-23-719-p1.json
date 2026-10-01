@@ -11,7 +11,7 @@
  ],
  "license": "public-domain",
  "provenance": "hand",
- "notes": "Trump v. Anderson, 601 U. S. ___ (2024), per curiam slip opinion; a work of the United States government. Scored: the caption page and the start of the opinion: slip-opinion running heads that alternate (\"Cite as\" on odd pages, the case name on even pages) over a \"Per Curiam\" line, a notice paragraph, the court's name as the title, centered caption lines, a part numeral \"I\" as a heading, a block quotation, soft hyphens at line ends. The decorative rules made of underscores are no block. The last paragraph of page 3 continues on page 4.",
+ "notes": "Trump v. Anderson, 601 U. S. ___ (2024), per curiam slip opinion; a work of the United States government. Scored: the caption page and the start of the opinion: slip-opinion running heads that alternate (\"Cite as\" on odd pages, the case name on even pages) over a \"Per Curiam\" line, a notice paragraph, the court's name as the title, centered caption lines, a part numeral \"I\" as a heading, a block quotation, soft hyphens at line ends. The decorative rules made of underscores are no block. The last paragraph of page 3 continues on page 4. Alignment (round 2, measured with PyMuPDF): blocks 9 are centered: each line's middle lies within 4 pt of its column's middle and both its ends stand more than 8 pt inside the column's margins (a column's margin is where three or more of its lines end, or its furthest line end).",
  "furniture": [
   "(Slip Opinion)",
   "Cite as: 601 U. S. ____ (2024)",
@@ -48,7 +48,8 @@
      "text": "No. 23–719"
     }
    ],
-   "align": "center"
+   "align": "center",
+   "spaceAfter": 16
   },
   {
    "kind": "paragraph",
@@ -68,7 +69,8 @@
      "text": "ET AL."
     }
    ],
-   "align": "center"
+   "align": "center",
+   "spaceAfter": 8
   },
   {
    "kind": "paragraph",
@@ -77,7 +79,8 @@
      "text": "ON WRIT OF CERTIORARI TO THE SUPREME COURT OF COLORADO"
     }
    ],
-   "align": "center"
+   "align": "center",
+   "spaceAfter": 6
   },
   {
    "kind": "paragraph",
@@ -86,7 +89,8 @@
      "text": "[March 4, 2024]"
     }
    ],
-   "align": "center"
+   "align": "center",
+   "spaceAfter": 11
   },
   {
    "kind": "paragraph",
@@ -95,7 +99,12 @@
      "smallCaps": true,
      "text": "PER CURIAM."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 11
+   },
+   "spaceAfter": 4
   },
   {
    "kind": "paragraph",
@@ -103,7 +112,12 @@
     {
      "text": "A group of Colorado voters contends that Section 3 of the Fourteenth Amendment to the Constitution prohibits former President Donald J. Trump, who seeks the Presidential nomination of the Republican Party in this year’s election, from becoming President again. The Colorado Supreme Court agreed with that contention. It ordered the Colorado secretary of state to exclude the former President from the Republican primary ballot in the State and to disregard any write-in votes that Colorado voters might cast for him."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 11
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -111,7 +125,11 @@
     {
      "text": "Former President Trump challenges that decision on several grounds. Because the Constitution makes Congress, rather than the States, responsible for enforcing Section 3 against federal officeholders and candidates, we reverse."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 11
+   }
   },
   {
    "kind": "heading",
@@ -120,7 +138,8 @@
     {
      "text": "I"
     }
-   ]
+   ],
+   "align": "center"
   },
   {
    "kind": "paragraph",
@@ -136,7 +155,11 @@
     {
      "text": "Their theory turns on Section 3 of the Fourteenth Amendment. Section 3 provides:"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 11
+   }
   },
   {
    "kind": "quote",
@@ -152,7 +175,11 @@
     {
      "text": "According to the respondents, Section 3 applies to the former President because after taking the Presidential oath in 2017, he intentionally incited the breaching of the Capitol on January 6 in order to retain power. They claim that he is therefore not a qualified candidate, and that as a result, the Colorado secretary of state may not place him on the primary ballot. See Colo. Rev. Stat. §§1–1–113(1), 1–4–1101(1), 1–4–1201, 1–4–1203(2)(a), 1–4–1204 (2023)."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 11
+   }
   },
   {
    "kind": "paragraph",
@@ -175,7 +202,12 @@
     {
      "text": ", at 1a–114a."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 11
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -197,7 +229,12 @@
     {
      "text": ", at 115a–124a, 125a–161a, 162a–183a."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 11
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -212,7 +249,11 @@
     {
      "text": ", at 114a. We granted former President Trump’s petition for certiorari, which raised a single question: “Did the Colorado Supreme Court err in ordering President Trump excluded from the 2024 presidential primary ballot?” See 601 U. S. ___ (2024). Concluding that it"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 11
+   }
   }
  ]
 }

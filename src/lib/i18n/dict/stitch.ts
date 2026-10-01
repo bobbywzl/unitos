@@ -12,7 +12,7 @@ const en = {
   blockCount: "{n} blocks",
   deleteGenerated: "Delete",
   deleteGeneratedTitle: "Delete this generated document",
-  confirmDeleteGenerated: "Delete this generated document?",
+  confirmDeleteGenerated: "Delete this generated document? Its annotations go with it. Notes that quote it keep their quotes.",
 
   // The Stitch box (stitch-box.tsx)
   stitch: "Stitch",
@@ -75,7 +75,7 @@ const zh: Record<keyof typeof en, string> = {
   blockCount: "{n} 个块",
   deleteGenerated: "删除",
   deleteGeneratedTitle: "删除此生成文档",
-  confirmDeleteGenerated: "删除此生成文档？",
+  confirmDeleteGenerated: "删除此生成文档？其批注一并删除。引用它的笔记保留引文。",
 
   stitch: "缝合",
   stitchTitle: "缝合：助手在项目的文档之间工作——汇集片段、绘制链接、找出矛盾、写新页面",

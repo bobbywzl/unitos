@@ -20,6 +20,7 @@ import { MAX_VIDEO_BYTES, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 import { parseBody } from "@/lib/validate";
 import { isMarkdownFile } from "@/lib/markdown-file";
 import { isSheetsFile } from "@/lib/office-file";
+import { pageRangesSchema } from "@/lib/pdf-pages";
 import { refreshSkeleton } from "@/lib/graph/skeleton";
 
 // Media uploads kick off transcription in after(); a long audio's chunked run
@@ -29,6 +30,8 @@ export const maxDuration = 300;
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
 
 const bodySchema = z.object({
+  // The folder of the project the new document lands in (SPEC.md §6).
+  folderId: z.string().min(1).nullable().optional(),
   uploadId: z.string().regex(/^[a-zA-Z0-9-]{8,64}$/),
   filename: z.string().min(1),
   notebookId: z.string().min(1),
@@ -37,6 +40,8 @@ const bodySchema = z.object({
   // upload assistant's import pick; video ignores them.
   pages: z.boolean().default(false),
   convert: z.boolean().default(true),
+  // The PDF's pages the reader chose (SPEC.md §15); absent, every page. PDF only.
+  pdfPages: pageRangesSchema.optional(),
   // The part of a recording to import (SPEC.md §15), seconds: the range the
   // reader picked in the upload box. Absent = the whole recording. Video only.
   clipStart: z.number().min(0).optional(),
@@ -121,13 +126,13 @@ export async function POST(req: Request) {
     return progressResponse(async (onProgress) => {
       try {
         const { document, deduped } = await parse.ingestDocx(bytes, filename, onProgress, {}, user?.id ?? null);
-        await attachDocument(data.notebookId, document.id);
+        await attachDocument(data.notebookId, document.id, data.folderId);
         await bumpNotebook(data.notebookId);
         if (!deduped) after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
         return { id: document.id, title: document.title, deduped };
       } catch (err) {
         console.error("Word ingest failed:", err);
-        throw new Error(describeIngestError(err, t, "pdf"));
+        throw new Error(describeIngestError(err, t, "file"));
       }
     });
   } else if (parse.sniffOfficeFile(bytes) !== null || (!parse.isZipBytes(bytes) && isSheetsFile({ type: "", name: filename }))) {
@@ -140,7 +145,7 @@ export async function POST(req: Request) {
           format === "slides"
             ? await parse.ingestSlides(bytes, filename, onProgress, {}, user?.id ?? null)
             : await parse.ingestSheets(bytes, filename, onProgress, {}, user?.id ?? null);
-        await attachDocument(data.notebookId, document.id);
+        await attachDocument(data.notebookId, document.id, data.folderId);
         await bumpNotebook(data.notebookId);
         if (!deduped) after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
         // An uploaded deck's pictures render after the response (SPEC.md §27).
@@ -151,7 +156,7 @@ export async function POST(req: Request) {
         return { id: document.id, title: document.title, deduped };
       } catch (err) {
         console.error("Slides/sheets ingest failed:", err);
-        throw new Error(describeIngestError(err, t, "pdf"));
+        throw new Error(describeIngestError(err, t, "file"));
       }
     });
   } else if (isMarkdownFile({ type: "", name: filename })) {
@@ -159,12 +164,12 @@ export async function POST(req: Request) {
     return progressResponse(async (onProgress) => {
       try {
         const { document, deduped } = await parse.ingestMarkdown(bytes, filename, onProgress, {}, user?.id ?? null);
-        await attachDocument(data.notebookId, document.id);
+        await attachDocument(data.notebookId, document.id, data.folderId);
         await bumpNotebook(data.notebookId);
         return { id: document.id, title: document.title, deduped };
       } catch (err) {
         console.error("Markdown ingest failed:", err);
-        throw new Error(describeIngestError(err, t, "pdf"));
+        throw new Error(describeIngestError(err, t, "file"));
       }
     });
   } else if (!parse.isPdfBytes(bytes)) {
@@ -177,10 +182,10 @@ export async function POST(req: Request) {
         bytes,
         filename,
         onProgress,
-        { pages, convert: data.convert },
+        { pages, convert: data.convert, pdfPages: data.pdfPages },
         user?.id ?? null,
       );
-      await attachDocument(data.notebookId, document.id);
+      await attachDocument(data.notebookId, document.id, data.folderId);
       await bumpNotebook(data.notebookId);
       if (!deduped && document.handwritten) {
         // The pages render and store after the response (SPEC.md §16); the
@@ -251,7 +256,7 @@ async function completeVideo(data: Body, userId: string | null, t: TFunc) {
   const existing = await db.document.findFirst({ where: { fileHash }, orderBy: { createdAt: "asc" } });
   if (existing) {
     await db.uploadChunk.deleteMany({ where: { uploadId: data.uploadId } });
-    await attachDocument(data.notebookId, existing.id);
+    await attachDocument(data.notebookId, existing.id, data.folderId);
     await bumpNotebook(data.notebookId);
     return progressResponse(async () => ({
       id: existing.id,
@@ -298,7 +303,7 @@ async function completeVideo(data: Body, userId: string | null, t: TFunc) {
         throw new Error(t("api.videoCopyIncomplete"));
       }
       await db.uploadChunk.deleteMany({ where: { uploadId: data.uploadId } });
-      await attachDocument(data.notebookId, document.id);
+      await attachDocument(data.notebookId, document.id, data.folderId);
       await bumpNotebook(data.notebookId);
       // Transcription starts on its own — the transcript is the point. The
       // recommended-links scan follows it, so it reads the transcript.

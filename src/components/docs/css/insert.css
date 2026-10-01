@@ -941,6 +941,19 @@ textarea.docs-field:focus {
   text-indent: 0;
   cursor: pointer;
 }
+/* An import's long formula breaks after a relation or an operator, as TeX
+   breaks one (insert/math.ts): drawn inline, KaTeX's parts wrap. A blank
+   document's equation stays whole, as Google Docs draws one. */
+.docs-shell[data-import] .docs-prose .docs-math.docs-math-breaks {
+  display: inline;
+}
+/* A formula at its words' size, as Google Docs draws an equation. KaTeX's
+   own sheet sets 1.21em, which matches its face to a web font's letters:
+   an import set in Computer Modern drew every formula 21% larger than the
+   words around it. */
+.docs-prose .docs-math .katex {
+  font-size: 1em;
+}
 .docs-prose .docs-math:hover,
 .docs-prose .docs-math.is-selected,
 .docs-prose .docs-math.is-empty {

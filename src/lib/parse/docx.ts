@@ -1,7 +1,10 @@
 import { ommlLatex, ommlText } from "@/lib/parse/docx-math";
 import { texError } from "@/lib/katex";
+import { faceOf } from "@/lib/parse/pdf/faces";
+import { isInk, takeBodyFont } from "@/lib/parse/pdf/look";
 import {
   attr,
+  boolAttr,
   child,
   children,
   cleanText,
@@ -18,7 +21,8 @@ import {
   type OfficeZip,
   type Relationship,
 } from "@/lib/parse/office";
-import type { FootnoteRef, LinkSpan, MathSpan, ParsedBlock, ParsedDocument, StyleSpan } from "@/lib/parse/types";
+import type { FootnoteRef, LinkSpan, MathSpan, ParsedBlock, ParsedDocument, StyleSpan, TabStop, TextFont } from "@/lib/parse/types";
+import type { HexColor } from "@/lib/text-style";
 
 // The Word parser: a .docx read part by part into blocks, the way a Markdown
 // file becomes blocks (SPEC.md §30: an import while the switch is on, else a
@@ -26,8 +30,11 @@ import type { FootnoteRef, LinkSpan, MathSpan, ParsedBlock, ParsedDocument, Styl
 // from the look of a page:
 //   - headings by their style (Heading 1–6, or a style whose outline level
 //     makes it one), the document's title by the Title style;
-//   - paragraphs with their runs: bold, italic, underline, small caps,
-//     raised and lowered runs, monospace runs as code, links;
+//   - paragraphs with their runs: bold, italic, underline, strikethrough,
+//     small caps, raised and lowered runs, monospace runs as code, links,
+//     and their look — face, size, color, highlight — as the PDF parse
+//     writes it (lib/parse/types.ts StyleSpan, ParsedBlock.font): the file
+//     says exactly what a PDF's drawing only shows;
 //   - lists from numbering.xml, each item's marker as Word draws it ("1.",
 //     "1.1", "(a)", "(i)", "•") at its level, two spaces a level, as the PDF
 //     parse writes them; a box or a marker typed before a tab is a list
@@ -151,6 +158,8 @@ type StyleDef = {
   rPr: Element | null;
   /** A table style that sets its first row apart (tblStylePr firstRow). */
   firstRow: boolean;
+  /** A table style's table properties (its borders). */
+  tblPr: Element | null;
 };
 
 type Styles = {
@@ -166,12 +175,17 @@ function readStyles(zip: OfficeZip, rels: Map<string, Relationship>): Styles {
   const theme = relsOfType(rels, "theme")[0];
   const { major, minor } = theme ? parseTheme(zip, theme.target) : { major: "", minor: "" };
   const byId = new Map<string, StyleDef>();
+  const typeOf = new Map<string, string>();
   let defaultParagraph: string | null = null;
   for (const style of descendants(doc, "style")) {
     const id = attr(style, "styleId");
-    if (!id || byId.has(id)) continue;
+    const type = attr(style, "type") ?? "paragraph";
+    // A style defined twice (a generator's own after its defaults): the
+    // later definition is the one Word and LibreOffice draw.
+    if (!id || (typeOf.has(id) && typeOf.get(id) !== type)) continue;
+    typeOf.set(id, type);
     const isDefault = attr(style, "default") === "1" || attr(style, "default") === "true";
-    if (isDefault && (attr(style, "type") ?? "paragraph") === "paragraph") defaultParagraph ??= id;
+    if (isDefault && type === "paragraph") defaultParagraph ??= id;
     byId.set(id, {
       id,
       name: (attr(child(style, "name"), "val") ?? id).toLowerCase(),
@@ -179,6 +193,7 @@ function readStyles(zip: OfficeZip, rels: Map<string, Relationship>): Styles {
       pPr: child(style, "pPr"),
       rPr: child(style, "rPr"),
       firstRow: children(style, "tblStylePr").some((c) => attr(c, "type") === "firstRow"),
+      tblPr: child(style, "tblPr"),
     });
   }
   const defaults = descendants(doc, "docDefaults")[0];
@@ -211,17 +226,58 @@ type Look = {
   bold: boolean;
   italic: boolean;
   underline: boolean;
+  strike: boolean;
   smallCaps: boolean;
   vert: "sup" | "sub" | null;
   hidden: boolean;
   font: string;
   /** Half-points. */
   size: number;
+  /** The words' color and the highlight behind them (#rrggbb), null for
+      none: Word's highlight, else the run's shading, which Google Docs
+      writes for its highlights. */
+  color: HexColor | null;
+  highlight: HexColor | null;
+  shade: HexColor | null;
   /** Set in a monospace face the body is not set in: code. */
   code: boolean;
 };
 
-const PLAIN_LOOK: Look = { bold: false, italic: false, underline: false, smallCaps: false, vert: null, hidden: false, font: "", size: 20, code: false };
+const PLAIN_LOOK: Look = {
+  bold: false,
+  italic: false,
+  underline: false,
+  strike: false,
+  smallCaps: false,
+  vert: null,
+  hidden: false,
+  font: "",
+  size: 20,
+  color: null,
+  highlight: null,
+  shade: null,
+  code: false,
+};
+
+/** A color the file names, as #rrggbb: six hex digits and nothing else
+    ("auto", a theme's name, and a stray value are none). */
+function hexColor(value: string | null): HexColor | null {
+  return value && /^[0-9a-f]{6}$/i.test(value) ? `#${value.toLowerCase()}` : null;
+}
+
+// Word's highlight colors by name (w:highlight, ST_HighlightColor).
+const HIGHLIGHTS: Record<string, HexColor> = {
+  yellow: "#ffff00", green: "#00ff00", cyan: "#00ffff", magenta: "#ff00ff", blue: "#0000ff", red: "#ff0000",
+  darkBlue: "#000080", darkCyan: "#008080", darkGreen: "#008000", darkMagenta: "#800080", darkRed: "#800000",
+  darkYellow: "#808000", darkGray: "#808080", lightGray: "#c0c0c0", black: "#000000", white: "#ffffff",
+};
+
+/** A shading's color (w:shd): its fill, or its pattern color when the
+    pattern is solid; white is no color. */
+function shadeColor(shd: Element | null): HexColor | null {
+  const color = attr(shd, "val") === "solid" ? hexColor(attr(shd, "color")) : hexColor(attr(shd, "fill"));
+  return color === "#ffffff" ? null : color;
+}
 
 /** A look with one run-properties element applied over it. */
 function applyRPr(look: Look, rPr: Element | null, styles: Styles): Look {
@@ -237,6 +293,19 @@ function applyRPr(look: Look, rPr: Element | null, styles: Styles): Look {
         break;
       case "u":
         out.underline = flag(el) ?? out.underline;
+        break;
+      case "strike":
+      case "dstrike":
+        out.strike = flag(el) ?? out.strike;
+        break;
+      case "color":
+        out.color = hexColor(attr(el, "val"));
+        break;
+      case "highlight":
+        out.highlight = HIGHLIGHTS[attr(el, "val") ?? ""] ?? null;
+        break;
+      case "shd":
+        out.shade = shadeColor(el);
         break;
       case "smallCaps":
         out.smallCaps = flag(el) ?? out.smallCaps;
@@ -277,16 +346,48 @@ type ParaProps = {
   toc: number | null;
   numId: string | null;
   ilvl: number;
-  align: "center" | "right" | null;
-  border: { top: boolean; bottom: boolean; left: boolean; right: boolean };
+  align: "center" | "right" | "justify" | null;
+  /** Each side's border (w:pBdr) as the page editor stores a paragraph's
+      side (borderSide); null for none. */
+  border: Record<BorderSideName, string | null>;
+  /** The line between this paragraph and the next of the same box
+      (w:pBdr w:between), as a side; null for none. */
+  between: string | null;
+  /** The paragraph's background (w:pPr w:shd); null for none. */
+  shading: HexColor | null;
   /** The left indent in twips: the style's, or the paragraph's own. */
   left: number;
-  /** The paragraph's own left indent, which wins over its list level's. */
+  /** The first line's indent against the left indent in twips (w:ind
+      firstLine; a hanging indent negative). */
+  first: number;
+  /** The right indent in twips: the style's, or the paragraph's own. */
+  right: number;
+  /** The paragraph's own left and first-line indents, which win over its
+      list level's. */
   ownLeft: number | null;
+  ownFirst: number | null;
   /** The look every run of the paragraph starts from. */
   base: Look;
   /** The paragraph mark is a tracked deletion: the words join the next paragraph. */
   markDeleted: boolean;
+  /** The outline level the paragraph's style or its own properties set (9:
+      body text, as the TOC Heading style sets it), null for none. */
+  outline: number | null;
+  /** The space before and after the paragraph in twips (w:spacing through
+      the layers; none set is none), whether it leaves them out beside a
+      paragraph of its own style (w:contextualSpacing), its style, and its
+      line spacing (w:line: 240ths of a line when the rule is auto, twips
+      when it is exact or at least). */
+  before: number;
+  after: number;
+  contextual: boolean;
+  styleId: string | null;
+  line: { value: number; rule: "auto" | "exact" | "atLeast" };
+  /** The paragraph starts a page (w:pageBreakBefore). */
+  pageBefore: boolean;
+  /** The tab stops (w:tabs), its style's and its own, in points from the
+      margin; none, and Word's every half inch go on. */
+  tabs: TabStop[];
 };
 
 const ROLE_BY_NAME: Record<string, Role> = {
@@ -332,17 +433,31 @@ function paraProps(pPr: Element | null, styles: Styles, table: StyleDef[]): Para
     numId: null,
     ilvl: 0,
     align: null,
-    border: { top: false, bottom: false, left: false, right: false },
+    border: { top: null, bottom: null, left: null, right: null },
+    between: null,
+    shading: null,
     left: 0,
+    first: 0,
+    right: 0,
     ownLeft: indentOf(child(pPr, "ind")),
+    ownFirst: firstOf(child(pPr, "ind")),
     base,
     markDeleted: child(child(pPr, "rPr"), "del") !== null,
+    outline: null,
+    before: 0,
+    after: 0,
+    contextual: false,
+    styleId,
+    line: { value: 240, rule: "auto" },
+    pageBefore: false,
+    tabs: [],
   };
   let outline: number | null = null;
+  const tabs = new Map<number, TabStop["align"]>();
   for (const layer of [styles.docPPr, ...table.map((s) => s.pPr), ...chain.map((s) => s.pPr), pPr]) {
     if (!layer) continue;
     const jc = attr(child(layer, "jc"), "val");
-    if (jc) out.align = jc === "center" ? "center" : jc === "right" || jc === "end" ? "right" : null;
+    if (jc) out.align = jc === "center" ? "center" : jc === "right" || jc === "end" ? "right" : jc === "both" || jc === "distribute" ? "justify" : null;
     const numPr = child(layer, "numPr");
     if (numPr) {
       const numId = attr(child(numPr, "numId"), "val");
@@ -353,15 +468,35 @@ function paraProps(pPr: Element | null, styles: Styles, table: StyleDef[]): Para
     const lvl = intAttr(child(layer, "outlineLvl"), "val");
     if (lvl !== null) outline = lvl;
     const bdr = child(layer, "pBdr");
-    for (const side of ["top", "bottom", "left", "right"] as const) {
-      const b = child(bdr, side);
-      if (b) out.border[side] = !["none", "nil"].includes(attr(b, "val") ?? "none");
+    for (const side of BORDER_SIDES) {
+      const b = child(bdr, side) ?? (side === "left" ? child(bdr, "start") : side === "right" ? child(bdr, "end") : null);
+      if (b) out.border[side] = borderSide(b);
     }
-    out.left = indentOf(child(layer, "ind")) ?? out.left;
+    const between = child(bdr, "between");
+    if (between) out.between = borderSide(between);
+    const shd = child(layer, "shd");
+    if (shd) out.shading = shadeColor(shd);
+    const ind = child(layer, "ind");
+    out.left = indentOf(ind) ?? out.left;
+    out.first = firstOf(ind) ?? out.first;
+    out.right = rightOf(ind) ?? out.right;
+    const spacing = child(layer, "spacing");
+    out.before = spaceOf(spacing, "before") ?? out.before;
+    out.after = spaceOf(spacing, "after") ?? out.after;
+    const line = spaceOf(spacing, "line");
+    if (line !== null && line > 0) {
+      const rule = attr(spacing, "lineRule");
+      out.line = { value: line, rule: rule === "exact" ? "exact" : rule === "atLeast" ? "atLeast" : "auto" };
+    }
+    out.contextual = flag(child(layer, "contextualSpacing")) ?? out.contextual;
+    out.pageBefore = flag(child(layer, "pageBreakBefore")) ?? out.pageBefore;
+    tabStopsOf(layer, tabs);
   }
+  out.tabs = [...tabs].filter(([pos]) => pos >= 0 && pos < 100_000).sort((a, b) => a[0] - b[0]).map(([pos, align]) => ({ at: points(pos), align }));
   // An outline level makes a heading of a style Word does not name one (a
   // "Chapter" style at level 1).
   if (out.heading === null && out.role === null && outline !== null && outline < 9) out.heading = outline + 1;
+  out.outline = outline;
   return out;
 }
 
@@ -370,9 +505,114 @@ function indentOf(ind: Element | null): number | null {
   return intAttr(ind, "left") ?? intAttr(ind, "start");
 }
 
+/** A right indent (w:ind right, or end), in twips. */
+function rightOf(ind: Element | null): number | null {
+  return intAttr(ind, "right") ?? intAttr(ind, "end");
+}
+
+/** A first line's indent against the left indent (w:ind firstLine; a
+    hanging indent negative), in twips. */
+function firstOf(ind: Element | null): number | null {
+  const hanging = intAttr(ind, "hanging");
+  return hanging !== null ? -hanging : intAttr(ind, "firstLine");
+}
+
+/** A layer's tab stops (w:tabs w:tab) over the ones before it, by their
+    place in twips: a stop the layer clears goes. A decimal stop takes its
+    number's end, as a right stop; a bar draws a rule and holds no tab. */
+function tabStopsOf(layer: Element, stops: Map<number, TabStop["align"]>) {
+  for (const tab of children(child(layer, "tabs"), "tab")) {
+    const pos = intAttr(tab, "pos");
+    const val = attr(tab, "val") ?? "left";
+    if (pos === null) continue;
+    if (val === "clear") stops.delete(pos);
+    else if (val === "center") stops.set(pos, "center");
+    else if (val === "right" || val === "end" || val === "decimal") stops.set(pos, "right");
+    else if (val !== "bar") stops.set(pos, "left");
+  }
+}
+
+// ── Borders ─────────────────────────────────────────────────────────────────
+
+type BorderSideName = "top" | "right" | "bottom" | "left";
+const BORDER_SIDES: BorderSideName[] = ["top", "right", "bottom", "left"];
+
+/** A border side (a w:pBdr, w:tcBorders, or w:tblBorders child) as the page
+    editor stores one: "<width pt> <solid|dotted|dashed> #rrggbb" and, for
+    a paragraph, the room between the line and the words (w:space, points);
+    null for none. Word's width is eighths of a point; "auto" is black. */
+function borderSide(el: Element, withSpace = true): string | null {
+  const val = attr(el, "val") ?? "none";
+  if (val === "none" || val === "nil") return null;
+  const dash = /^dot/.test(val) && !/dash/i.test(val) ? "dotted" : /dash/i.test(val) ? "dashed" : "solid";
+  const width = Math.min(12, Math.max(0.13, Math.round(((intAttr(el, "sz") ?? 4) / 8) * 100) / 100));
+  const color = hexColor(attr(el, "color")) ?? "#000000";
+  const space = Math.min(31, Math.max(0, intAttr(el, "space") ?? 0));
+  return `${width} ${dash} ${color}${withSpace ? ` ${space}` : ""}`;
+}
+
+/** The most space the page editor sets before or after a paragraph, 1584
+    pt, in twips. */
+const MAX_SPACE_TWIPS = 31_680;
+/** Word's auto spacing (w:beforeAutospacing, a web page's paragraphs): 14 pt. */
+const AUTO_SPACE_TWIPS = 280;
+/** A single line's height over its size (Arial and Times New Roman 1.15,
+    Calibri 1.22). */
+const SINGLE_LINE = 1.15;
+
+/** A space w:spacing sets, in twips: Word's auto spacing, else the length,
+    else a count of lines (hundredths of a 12 pt line; Word writes the
+    length beside it). A value past the page editor's most is none. */
+function spaceOf(spacing: Element | null, side: "before" | "after" | "line"): number | null {
+  if (!spacing) return null;
+  if (side !== "line" && boolAttr(spacing, `${side}Autospacing`)) return AUTO_SPACE_TWIPS;
+  const lines = side === "line" ? null : intAttr(spacing, `${side}Lines`);
+  const value = intAttr(spacing, side) ?? (lines === null ? null : lines * 2.4);
+  return value !== null && value >= 0 && value <= MAX_SPACE_TWIPS ? Math.round(value) : null;
+}
+
+/** The space between two paragraphs in twips, as Word sets it: the larger
+    of the upper one's space after and the lower one's space before (HTML's
+    rule, Word's own since Word 2000), their sum where the file turns Word's
+    HTML spacing off (w:doNotUseHTMLParagraphAutoSpacing: `add`). Each is
+    left out beside a paragraph of its own style when it says so
+    (w:contextualSpacing). */
+function spaceBetween(above: ParaProps, below: ParaProps, add: boolean): number {
+  const same = above.styleId === below.styleId;
+  const [after, before] = [same && above.contextual ? 0 : above.after, same && below.contextual ? 0 : below.before];
+  return add ? after + before : Math.max(after, before);
+}
+
+/** A paragraph's line spacing as a multiple of single spacing (w:line in
+    240ths under the auto rule); none under an exact or at-least rule. */
+function lineMultiple(props: ParaProps): number | undefined {
+  return props.line.rule === "auto" ? Math.round((props.line.value / 240) * 100) / 100 : undefined;
+}
+
+/** A blank paragraph's height in twips: one line at its mark's size (half
+    points) and its line spacing. */
+function blankTwips(props: ParaProps, size: number): number {
+  const single = size * 10 * SINGLE_LINE;
+  const { value, rule } = props.line;
+  return Math.round(rule === "exact" ? value : rule === "atLeast" ? Math.max(value, single) : (single * value) / 240);
+}
+
 // ── Numbering ───────────────────────────────────────────────────────────────
 
-type Level = { fmt: string; text: string; start: number; restart: number | null; legal: boolean; font: string; left: number | null };
+/** A numbering level: its number format and text, its counter's start and
+    restart, its font, its indent, and what follows its number (w:suff:
+    "tab", the default, "space", or "nothing"). */
+type Level = {
+  fmt: string;
+  text: string;
+  start: number;
+  restart: number | null;
+  legal: boolean;
+  font: string;
+  left: number | null;
+  first: number | null;
+  suffix: string;
+};
 
 function readLevel(lvl: Element): Level {
   const rFonts = child(child(lvl, "rPr"), "rFonts");
@@ -383,7 +623,9 @@ function readLevel(lvl: Element): Level {
     restart: intAttr(child(lvl, "lvlRestart"), "val"),
     legal: flag(child(lvl, "isLgl")) ?? false,
     left: indentOf(child(child(lvl, "pPr"), "ind")),
+    first: firstOf(child(child(lvl, "pPr"), "ind")),
     font: attr(rFonts, "ascii") ?? attr(rFonts, "hAnsi") ?? "",
+    suffix: attr(child(lvl, "suff"), "val") ?? "tab",
   };
 }
 
@@ -446,11 +688,14 @@ function formatNumber(fmt: string, n: number): string {
 }
 
 /** A bullet level's character as the character it draws: a symbol font's
-    code mapped, and Courier New's "o" — Word's hollow second-level bullet —
-    as the hollow bullet ◦. */
+    code mapped (Symbol's U+F0B7 "•", Wingdings' U+F0A7 "▪"), Courier New's
+    "o" — Word's hollow second-level bullet — as the hollow bullet ◦, any
+    other character as it is. A bullet with no character we can name is the
+    default dot, so the line stays a list line (the converter draws the
+    LIST text's bullets, lib/docs/import.ts). */
 function bulletChar(level: Level): string {
   const text = level.text.trim();
-  if (!text) return "";
+  if (!text) return "•";
   if (text === "o") return "◦";
   const drawn = [...text].map((ch) => symbolChar(level.font, ch) ?? (/[\uf000-\uf0ff]/.test(ch) ? (symbolChar("Symbol", ch) ?? "") : ch)).join("");
   return drawn || "•";
@@ -526,10 +771,10 @@ class Numbering {
   }
 
   /** The marker of the next item of list `numId` at level `ilvl`, as Word
-      draws it ("1.", "1.1", "(a)", "•"; "" when the level draws none), and
-      the level's indent; null when the list is not defined. The counters
-      move on. */
-  next(numId: string, ilvl: number): { marker: string; left: number | null } | null {
+      draws it ("1.", "1.1", "(a)", "•"; "" when a number format draws none), and
+      the level's indent and suffix; null when the list is not defined. The
+      counters move on. */
+  next(numId: string, ilvl: number): { marker: string; left: number | null; first: number | null; suffix: string } | null {
     const found = this.levels(numId);
     const level = found?.levels[ilvl];
     if (!found || !level) return null;
@@ -557,7 +802,7 @@ class Numbering {
               return formatNumber(level.legal ? "decimal" : (lv?.fmt ?? "decimal"), counters[at] ?? lv?.start ?? 1);
             })
             .trim();
-    return { marker, left: level.left };
+    return { marker, left: level.left, first: level.first, suffix: level.suffix };
   }
 }
 
@@ -589,8 +834,14 @@ class Line {
   /** Every run with words is code (Look.code). */
   mono = true;
 
+  /** No words, and no underlined tab (a line to fill in). */
   get empty(): boolean {
-    return this.text.trim() === "";
+    return this.text.trim() === "" && !this.lined(0, this.text.length);
+  }
+
+  /** Whether an underlined tab stands from `from` to `to`. */
+  lined(from: number, to: number): boolean {
+    return this.marks.some((m) => m.style === "underline" && m.start < to && m.end > from && this.text.slice(Math.max(from, m.start), Math.min(to, m.end)).includes("\t"));
   }
 
   add(text: string, look: Look, link: LinkTarget | null) {
@@ -607,11 +858,20 @@ class Line {
     const marks: Mark[] = [];
     if (look.bold) marks.push("bold");
     if (look.italic) marks.push("italic");
-    // A link's underline is the link's look, not emphasis.
+    // A link's underline and color are the link's look, not the words'.
     if (look.underline && !link) marks.push("underline");
+    if (look.strike) marks.push("strike");
     if (look.smallCaps) marks.push("smallCaps");
     if (look.vert) marks.push(look.vert);
     if (look.code) marks.push("code");
+    // Black and near-black are the page's ink, no color (lib/parse/pdf/look.ts).
+    if (look.color && !link && !isInk(look.color)) marks.push(`color:${look.color}`);
+    const highlight = look.highlight ?? look.shade;
+    if (highlight) marks.push(`highlight:${highlight}`);
+    // Every run's face and size: the block keeps them only where a run of
+    // words differs from the block's own look (lookOf).
+    if (look.font) marks.push(`font:${faceOf(look.font)}`);
+    marks.push(`size:${look.size / 2}`);
     for (const style of marks) {
       const last = this.marks.findLast((m) => m.style === style);
       if (last && last.end === start) last.end = end;
@@ -658,8 +918,9 @@ class Line {
     this.notes = moveSpans(this.notes, words.length);
   }
 
-  /** The words tidied — a tab or a run of spaces one space, none at a line's
-      ends or the paragraph's — or kept exactly (code). */
+  /** The words tidied — a run of spaces one space, none at a line's ends
+      or the paragraph's; a tab stays a tab, and one at the end stays when
+      it is underlined (a line to fill in) — or kept exactly (code). */
   finish(exact: boolean): Words {
     const raw = this.text;
     const map = new Int32Array(raw.length + 1);
@@ -668,17 +929,20 @@ class Line {
       for (let i = 0; i <= raw.length; i++) map[i] = i;
       out = raw;
     } else {
+      // Where the last underlined tab stands in the words.
+      let lined = -1;
       for (let i = 0; i < raw.length; i++) {
         let ch = raw[i];
-        if (ch === "\t" || ch === "\u00a0") ch = " ";
+        if (ch === "\u00a0") ch = " ";
         if (ch === "\n" && out.endsWith(" ")) out = out.slice(0, -1);
         map[i] = out.length;
         if (ch === " " && (out.length === 0 || out.endsWith(" ") || out.endsWith("\n"))) continue;
+        if (ch === "\t" && this.lined(i, i + 1)) lined = out.length;
         out += ch;
       }
       map[raw.length] = out.length;
-      const end = out.replace(/\s+$/, "").length;
-      const lead = out.length - out.replace(/^\s+/, "").length;
+      const end = Math.max(out.replace(/\s+$/, "").length, lined + 1);
+      const lead = out.length - out.replace(/^[^\S\t]+/, "").length;
       out = out.slice(lead, Math.max(lead, end));
       for (let i = 0; i <= raw.length; i++) map[i] = Math.max(0, Math.min(end, map[i]) - lead);
     }
@@ -725,28 +989,107 @@ class Joined implements Words {
   }
 }
 
+// ── A block's look ──────────────────────────────────────────────────────────
+
+const LETTER = /[\p{L}\p{N}]/u;
+
+/** The look most of a block's letters take (ParsedBlock.font), as the PDF
+    parse reads a page's (lib/parse/pdf/text.ts): the face and the size of
+    the most letters (a raised or lowered run, code, and a formula aside),
+    bold and italic when most letters are, and the color most letters take.
+    The face and size marks then stay only over a run of words that differs
+    from it; a list's markers and a heading's number, no run's words, count
+    for nothing. */
+function lookOf(words: Words): { font?: TextFont; marks: Words["marks"] } {
+  const { text } = words;
+  const n = text.length;
+  const face: string[] = new Array<string>(n).fill("");
+  const size = new Float64Array(n);
+  const color: string[] = new Array<string>(n).fill("");
+  const on = { bold: new Uint8Array(n), italic: new Uint8Array(n), code: new Uint8Array(n), raised: new Uint8Array(n), math: new Uint8Array(n) };
+  for (const m of words.marks) {
+    const style = m.style;
+    for (let i = m.start; i < m.end; i++) {
+      if (style.startsWith("font:")) face[i] = style.slice(5);
+      else if (style.startsWith("size:")) size[i] = Number(style.slice(5));
+      else if (style.startsWith("color:")) color[i] = style.slice(6);
+      else if (style === "bold" || style === "italic" || style === "code") on[style][i] = 1;
+      else if (style === "sup" || style === "sub") on.raised[i] = 1;
+    }
+  }
+  for (const m of words.math) on.math.fill(1, m.start, m.end);
+  const counted = (i: number) => size[i] > 0 && !on.math[i] && LETTER.test(text[i]);
+  let prose = false;
+  for (let i = 0; i < n && !prose; i++) prose = counted(i) && !on.code[i];
+  const faces = new Map<string, number>();
+  const sizes = new Map<number, number>();
+  const colors = new Map<string, number>();
+  const tally = <K>(map: Map<K, number>, key: K) => map.set(key, (map.get(key) ?? 0) + 1);
+  let letters = 0;
+  let bold = 0;
+  let italic = 0;
+  for (let i = 0; i < n; i++) {
+    if (!counted(i)) continue;
+    letters++;
+    if (face[i] && (!prose || !on.code[i])) tally(faces, face[i]);
+    if (!on.raised[i]) tally(sizes, size[i]);
+    tally(colors, color[i]);
+    bold += on.bold[i];
+    italic += on.italic[i];
+  }
+  const top = <K>(map: Map<K, number>): K | undefined => [...map].sort((a, b) => b[1] - a[1])[0]?.[0];
+  const family = top(faces);
+  const pt = top(sizes);
+  if (!family || pt === undefined) return { marks: words.marks.filter((m) => !m.style.startsWith("font:") && !m.style.startsWith("size:")) };
+  const hue = top(colors);
+  const font: TextFont = {
+    family,
+    size: pt,
+    ...(bold * 2 > letters ? { bold: true as const } : {}),
+    ...(italic * 2 > letters ? { italic: true as const } : {}),
+    ...(hue ? { color: hue } : {}),
+  };
+  const hasWords = (m: Span, aside: Uint8Array) => {
+    for (let i = m.start; i < m.end; i++) if (counted(i) && !aside[i]) return true;
+    return false;
+  };
+  const marks = words.marks.filter((m) => {
+    if (m.style.startsWith("font:")) return m.style.slice(5) !== family && hasWords(m, on.code);
+    if (m.style.startsWith("size:")) return Math.abs(Number(m.style.slice(5)) - pt) >= 0.5 && hasWords(m, on.raised);
+    return true;
+  });
+  return { font, marks };
+}
+
 // ── Inline html (table cells, captions) ─────────────────────────────────────
 
-const TAG_OF: Partial<Record<Mark, string>> = { bold: "strong", italic: "em", underline: "u", code: "code", sub: "sub", sup: "sup" };
+const TAG_OF: Partial<Record<Mark, string>> = { bold: "strong", italic: "em", underline: "u", strike: "s", code: "code", sub: "sub", sup: "sup" };
 
-/** Words as html with their marks and links, the html's DOM text exactly
-    the words (a table's cells, a caption). */
-function inlineHtml(words: Pick<Words, "text" | "marks" | "links">): string {
+/** Words as html with their marks, formulas, and links, the html's DOM text
+    exactly the words (a table's cells, a caption): a color and a highlight
+    as a span's style (their values are #rrggbb, hexColor), an inline
+    formula as a span that carries its TeX over its readable characters. A
+    face and a size stay out: a table's text size is the table's. */
+function inlineHtml(words: Pick<Words, "text" | "marks" | "links" | "math">): string {
   const cuts = new Set<number>([0, words.text.length]);
-  for (const s of [...words.marks, ...words.links]) {
+  for (const s of [...words.marks, ...words.links, ...words.math]) {
     cuts.add(s.start);
     cuts.add(s.end);
   }
-  const points = [...cuts].sort((a, b) => a - b);
+  const points = [...cuts].filter((at) => !words.math.some((m) => at > m.start && at < m.end)).sort((a, b) => a - b);
   let html = "";
   for (let k = 0; k + 1 < points.length; k++) {
     const [a, b] = [points[k], points[k + 1]];
     let piece = escapeHtml(words.text.slice(a, b));
+    const formula = words.math.find((m) => m.start === a && m.end === b);
+    if (formula) piece = `<span data-type="inline-math" data-latex="${escapeHtml(formula.latex)}">${piece}</span>`;
     for (const m of words.marks) {
       if (m.start > a || m.end < b) continue;
       const tag = TAG_OF[m.style];
       if (tag) piece = `<${tag}>${piece}</${tag}>`;
       else if (m.style === "smallCaps") piece = `<span class="small-caps-mark">${piece}</span>`;
+      else if (m.style.startsWith("color:")) piece = `<span style="color:${m.style.slice(6)}">${piece}</span>`;
+      else if (m.style.startsWith("highlight:")) piece = `<span style="background-color:${m.style.slice(10)}">${piece}</span>`;
     }
     const link = words.links.find((l) => l.start <= a && l.end >= b);
     html += link && "href" in link.target ? `<a href="${escapeHtml(link.target.href)}">${piece}</a>` : piece;
@@ -760,7 +1103,18 @@ function inlineHtml(words: Pick<Words, "text" | "marks" | "links">): string {
     notes part's (links, pictures). */
 type Rels = Map<string, Relationship>;
 
-type Field = { code: string; result: boolean; link: LinkTarget | null; hide: boolean; toc: boolean; box: string | null };
+type Field = {
+  code: string;
+  result: boolean;
+  link: LinkTarget | null;
+  hide: boolean;
+  toc: boolean;
+  box: string | null;
+  /** A contents field: the heading levels it lists (\o "1-3"), and the
+      contents entries read before its result began. */
+  levels?: [number, number];
+  entriesBefore?: number;
+};
 
 type Picture = { url: string; alt: string; widthEmu: number };
 
@@ -772,16 +1126,92 @@ type Piece =
   | { kind: "figure"; pictures: Picture[]; icon: boolean }
   | { kind: "rule" };
 
-/** Where a run's content goes while a paragraph is read. */
-type Sink = { line: () => Line; cut: (piece: Piece) => void; floating: Picture[] };
+/** Where a run's content goes while a paragraph is read, and a page break
+    met in it. */
+type Sink = { line: () => Line; cut: (piece: Piece) => void; floating: Picture[]; page?: () => void };
 
 /** A list line: its left indent in twips (its depth is the indent's rank in
     the list), its marker, its words. */
-type ListLine = { indent: number; marker: string; words: Words };
-type OpenList = { lines: ListLine[]; contents: boolean; notes: Note[] };
-/** A table cell: its html, its words, the columns and rows it spans, and
-    the note marks in its words (offsets into them). */
-type TableCell = { html: string; text: string; colspan: number; rowspan: number; notes?: (Span & { note: Note })[] };
+type ListLine = {
+  indent: number;
+  /** The marker's place against the indent, in twips (w:ind hanging
+      negative), where the page sets one. */
+  first?: number | null;
+  marker: string;
+  words: Words;
+  /** The space above the line in twips when a line of its list stands
+      right above it (spaceBetween and the blank paragraphs between), and
+      the line's alignment. */
+  gap?: number;
+  align: ParaProps["align"];
+  /** The line's paragraph's tab stops. */
+  tabs?: TabStop[];
+};
+/** A list being read: its lines, whether it is a contents list, the notes
+    its lines cite, its first line's paragraph (the space above the list),
+    and the gap running on from its last line. */
+type OpenList = { lines: ListLine[]; contents: boolean; notes: Note[]; first?: ParaProps; trail?: Spacing };
+/** The gap under a text block so far: the paragraph it runs on from (the
+    block's last, or a blank paragraph under it), the twips the blank
+    paragraphs under the block add, and whether a page ends in it. */
+type Spacing = { props: ParaProps; blank: number; pageEnd?: boolean };
+/** A table cell: its html, its words, the columns and rows it spans, the
+    note marks in its words (offsets into them), and its fill. */
+type TableCell = {
+  html: string;
+  text: string;
+  colspan: number;
+  rowspan: number;
+  notes?: (Span & { note: Note })[];
+  fill?: HexColor | null;
+  /** The cell's own borders (w:tcBorders): a side it sets, null for none. */
+  borders?: Partial<Record<BorderSideName, string | null>>;
+  /** The cell's margins in points, "top right bottom left" (cellMargins). */
+  margins?: string;
+};
+
+/** A table's borders: its style's, then its own (w:tblBorders), each edge
+    a side's value or null for none; an edge no layer sets is absent. */
+type TableBorders = Partial<Record<BorderSideName | "insideH" | "insideV", string | null>>;
+
+function tableBorders(layers: (Element | null)[]): TableBorders {
+  const out: TableBorders = {};
+  for (const layer of layers) {
+    const borders = child(layer, "tblBorders");
+    for (const edge of ["top", "right", "bottom", "left", "insideH", "insideV"] as const) {
+      const el = child(borders, edge) ?? (edge === "left" ? child(borders, "start") : edge === "right" ? child(borders, "end") : null);
+      if (el) out[edge] = borderSide(el, false);
+    }
+  }
+  return out;
+}
+
+/** A cell's own borders (w:tcBorders). */
+function cellBorders(tc: Element): TableCell["borders"] {
+  const borders = child(child(tc, "tcPr"), "tcBorders");
+  if (!borders) return undefined;
+  const out: NonNullable<TableCell["borders"]> = {};
+  for (const side of BORDER_SIDES) {
+    const el = child(borders, side) ?? (side === "left" ? child(borders, "start") : side === "right" ? child(borders, "end") : null);
+    if (el) out[side] = borderSide(el, false);
+  }
+  return out;
+}
+
+/** Letters by the size they are set in (half points as points), into a
+    table's tally: the table's text size is the size most of them take. */
+function tallySizes(words: Words, into: Map<number, number>) {
+  for (const m of words.marks) {
+    if (!m.style.startsWith("size:")) continue;
+    let n = 0;
+    for (const ch of words.text.slice(m.start, m.end)) if (LETTER.test(ch)) n++;
+    const size = Number(m.style.slice(5));
+    if (n > 0) into.set(size, (into.get(size) ?? 0) + n);
+  }
+}
+
+/** Twips as points, to a half point. */
+const points = (twips: number) => Math.round(twips / 10) / 2;
 
 class DocxReader {
   readonly blocks: ParsedBlock[] = [];
@@ -793,6 +1223,14 @@ class DocxReader {
   readonly bookmarkBlocks = new Map<string, ParsedBlock>();
   readonly anchorLinks: { block: ParsedBlock; link: LinkSpan; anchor: string }[] = [];
   readonly contentsLines: { block: ParsedBlock; start: number; end: number }[] = [];
+  /** Contents fields with no entries, each a contents list to build from the
+      headings at its levels once every block is read (parseDocx), and the
+      headings a contents field leaves out: the ones set at the outline's
+      body level (the TOC Heading style's "Contents"). */
+  readonly unfilledContents: { block: ParsedBlock; levels: [number, number] }[] = [];
+  readonly unlisted = new Set<ParsedBlock>();
+  private contentsEntries = 0;
+  private unfilled: { levels: [number, number]; entriesBefore: number } | null = null;
   readonly noteRefs = new Map<ParsedBlock, (Span & { note: Note })[]>();
   private readonly numbering: Numbering;
   private readonly fields: Field[] = [];
@@ -800,6 +1238,12 @@ class DocxReader {
   private code: string[] | null = null;
   /** A paragraph whose mark is a tracked deletion: its words join the next. */
   private carry: Line | null = null;
+  /** The last text block read, and the gap under it so far (spaced). */
+  private lastSpaced: (Spacing & { block: ParsedBlock }) | null = null;
+  /** Where the page breaks of the paragraph last read fall (pieces), and
+      whether a page ends after the paragraph before this one. */
+  private pageBreaks = { before: false, after: false };
+  private pageEndAfter = false;
   private pendingBookmarks: string[] = [];
   /** Text boxes met in a paragraph, read after it. */
   private boxes: Element[] = [];
@@ -813,6 +1257,9 @@ class DocxReader {
   private readonly textWidthEmu: number;
   /** The body (the default paragraph style) is set in a monospace face. */
   private readonly bodyMono: boolean;
+  /** Paragraph spacing adds up: the file turns Word's HTML spacing off
+      (spaceBetween). */
+  private readonly addSpacing: boolean;
 
   constructor(
     zip: OfficeZip,
@@ -844,6 +1291,7 @@ class DocxReader {
     const width = (intAttr(child(sectPr, "pgSz"), "w") ?? 12240) - (intAttr(child(sectPr, "pgMar"), "left") ?? 1440) - (intAttr(child(sectPr, "pgMar"), "right") ?? 1440);
     this.textWidthEmu = (width > 1000 ? width : DEFAULT_TEXT_TWIPS) * EMU_PER_TWIP;
     this.bodyMono = MONO_FONT.test(paraProps(null, styles, []).base.font);
+    this.addSpacing = flag(child(settings?.documentElement, "compat", "doNotUseHTMLParagraphAutoSpacing")) === true;
   }
 
   // ── Blocks out ──
@@ -857,10 +1305,14 @@ class DocxReader {
   }
 
   /** A block of words with the spans the parse keeps. */
-  private textBlock(type: ParsedBlock["type"], words: Words, html?: string): ParsedBlock {
+  private textBlock(type: ParsedBlock["type"], words: Words, html?: string, opts: { headingBold?: boolean } = {}): ParsedBlock {
     const block: ParsedBlock = { type, text: words.text };
     if (html) block.html = html;
-    const styles: StyleSpan[] = words.marks.map((m) => ({ start: m.start, end: m.end, style: m.style, quotedText: words.text.slice(m.start, m.end) }));
+    const look = lookOf(words);
+    if (look.font) block.font = look.font;
+    // A heading's bold is the heading's look (its font), not emphasis.
+    const marks = opts.headingBold ? look.marks.filter((m) => m.style !== "bold") : look.marks;
+    const styles: StyleSpan[] = marks.map((m) => ({ start: m.start, end: m.end, style: m.style, quotedText: words.text.slice(m.start, m.end) }));
     if (styles.length > 0) block.styles = styles;
     const links: LinkSpan[] = [];
     for (const l of words.links) {
@@ -897,9 +1349,38 @@ class DocxReader {
       entries.push({ start: joined.text.length, end: joined.text.length + line.words.text.length });
       joined.add(line.words);
     });
-    const block = this.textBlock("LIST", joined, list.contents ? '<ul class="contents"></ul>' : undefined);
+    // The list's alignment, when its lines share one (justified items),
+    // and the space between its items: the gap most of them leave.
+    const align = list.lines.every((l) => l.align === list.lines[0].align) ? list.lines[0].align : null;
+    const tokens = [...(list.contents ? ["contents"] : []), ...(align ? [align] : [])];
+    const block = this.textBlock("LIST", joined, tokens.length > 0 ? `<ul class="${tokens.join(" ")}"></ul>` : undefined);
+    const gaps = new Map<number, number>();
+    for (const line of list.lines) if (line.gap !== undefined) gaps.set(line.gap, (gaps.get(line.gap) ?? 0) + 1);
+    const gap = [...gaps].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? 0;
+    if (gap > 0) block.itemSpace = points(gap);
+    // The tab stops of the lines that hold a tab, one to a place.
+    const stops = new Map<number, TabStop>();
+    for (const line of list.lines) if (line.words.text.includes("\t")) for (const stop of line.tabs ?? []) stops.set(stop.at, stop);
+    if (stops.size > 0) block.tabStops = [...stops.values()].sort((a, b) => a.at - b.at);
+    // Each depth's indent as Word sets it: its first line's words and marker.
+    if (!list.contents) {
+      const indents = steps.map((step, d) => {
+        const line = list.lines.find((l) => depthOf(l.indent) === d);
+        const left = Math.max(0, Math.min(100_000, line?.indent ?? step));
+        return { left: points(left), first: points(Math.max(-left, Math.min(100_000, line?.first ?? 0))) };
+      });
+      if (indents.length > 0) block.listIndents = indents.slice(0, 9);
+    }
+    if (list.first && list.trail) this.spaced(block, list.first, list.trail);
     if (list.contents) for (const entry of entries) this.contentsLines.push({ block, ...entry });
     this.push(block, list.notes);
+  }
+
+  /** The space above a list line that follows a line of its list, in
+      twips; undefined for a list's first line or across a page's end. */
+  private listGap(props: ParaProps): number | undefined {
+    const trail = this.list?.trail;
+    return trail && !trail.pageEnd ? trail.blank + spaceBetween(trail.props, props, this.addSpacing) : undefined;
   }
 
   private closeCode() {
@@ -921,6 +1402,17 @@ class DocxReader {
       switch (node.localName) {
         case "p":
           this.paragraph(node, table);
+          // A contents field that ended with no entries, the paragraph it
+          // ended in read (Word fills the field on update; LibreOffice
+          // leaves it empty): a contents list stands here, built from the
+          // headings once every block is read (parseDocx).
+          if (this.unfilled?.entriesBefore === this.contentsEntries) {
+            this.close();
+            const block: ParsedBlock = { type: "LIST", text: "", html: '<ul class="contents"></ul>' };
+            this.push(block);
+            this.unfilledContents.push({ block, levels: this.unfilled.levels });
+          }
+          this.unfilled = null;
           break;
         case "tbl":
           this.close();
@@ -956,6 +1448,12 @@ class DocxReader {
     const props = paraProps(child(p, "pPr"), this.styles, table);
     const tocBefore = this.fields.some((f) => f.toc);
     const pieces = this.pieces(p, props.base, this.rels);
+    // A page ends in the gap above the paragraph: after the paragraph before
+    // it, or at a page break before its words. One ends after it at a page
+    // break after its words, or at a section break that starts a new page.
+    if (this.pageEndAfter || this.pageBreaks.before || props.pageBefore) this.pageEnd();
+    const section = child(child(p, "pPr"), "sectPr");
+    this.pageEndAfter = this.pageBreaks.after || (section !== null && !["continuous", "nextColumn"].includes(attr(child(section, "type"), "val") ?? "nextPage"));
     const inToc = tocBefore || this.fields.some((f) => f.toc);
     // A deleted paragraph mark (a tracked change, accepted): the words run
     // on into the next paragraph.
@@ -991,23 +1489,35 @@ class DocxReader {
         this.closeList();
         this.list = { lines: [], contents: true, notes: [] };
       }
-      this.list.lines.push({ indent: (props.toc ?? 1) * INDENT_STEP_TWIPS, marker: "", words });
+      this.list.lines.push({ indent: (props.toc ?? 1) * INDENT_STEP_TWIPS, marker: "", words, gap: this.listGap(props), align: props.align });
+      this.list.first ??= props;
+      this.list.trail = { props, blank: 0 };
+      this.contentsEntries += 1;
       return;
     }
 
     // A list item: Word's numbering, or a marker typed before a tab. Its
-    // indent: the paragraph's own, else its level's, else its style's.
+    // indent: the paragraph's own, else its level's, else its style's. A
+    // level whose number format draws none ("none") is a list line with no
+    // marker, as Google Docs reads it (the page editor's empty bullet).
     if (only && props.heading === null && props.role !== "title") {
       const numbered = props.numId ? this.numbering.next(props.numId, props.ilvl) : null;
       let marker = numbered?.marker ?? null;
       let indent = props.ownLeft ?? numbered?.left ?? props.left + props.ilvl * INDENT_STEP_TWIPS;
+      let first = props.ownFirst ?? numbered?.first ?? props.first;
       if (!marker) {
         const typed = TYPED_MARKER.exec(only.text) ?? BOX_LINE.exec(only.text);
-        marker = typed ? typed[1] : null;
-        indent = props.left;
-        if (typed) only.keep(typed[0].length);
+        if (typed) {
+          marker = typed[1];
+          indent = props.left;
+          first = props.first;
+          only.keep(typed[0].length);
+        }
       }
-      if (marker) {
+      // After no marker, the number's tab takes the first line's words to
+      // the hanging indent's stop: they stand at the indent.
+      if (marker === "" && numbered?.suffix === "tab" && first < 0) first = 0;
+      if (marker !== null) {
         const words = only.finish(false);
         this.closeCode();
         if (!this.list || this.list.contents) {
@@ -1015,7 +1525,17 @@ class DocxReader {
           this.list = { lines: [], contents: false, notes: [] };
         }
         // A list line is one line: a line break inside an item is a space.
-        this.list.lines.push({ indent, marker: marker === "□" ? "☐" : marker, words: { ...words, text: words.text.replace(/\n/g, " ") } });
+        this.list.lines.push({
+          indent,
+          first,
+          marker: marker === "□" ? "☐" : marker,
+          words: { ...words, text: words.text.replace(/\n/g, " ") },
+          gap: this.listGap(props),
+          align: props.align,
+          tabs: props.tabs,
+        });
+        this.list.first ??= props;
+        this.list.trail = { props, blank: 0 };
         this.list.notes.push(...words.notes.map((n) => n.note));
         return;
       }
@@ -1028,7 +1548,8 @@ class DocxReader {
       this.code.push("");
       return;
     }
-    if (only && props.heading === null && props.role !== "title" && (props.role === "code" || only.mono)) {
+    // A line of underlined tabs alone (a line to fill in) holds no words: no code.
+    if (only && props.heading === null && props.role !== "title" && (props.role === "code" || (only.mono && only.text.trim() !== ""))) {
       this.closeList();
       (this.code ??= []).push(only.finish(true).text.replace(/\s+$/, ""));
       return;
@@ -1041,6 +1562,13 @@ class DocxReader {
       if ((props.border.bottom || props.border.top) && !props.border.left && !props.border.right) {
         this.close();
         this.push({ type: "SEPARATOR", text: "---" });
+        return;
+      }
+      // Else it is space in the gap it stands in: one line at its mark's size.
+      const gap = this.list?.trail ?? this.lastSpaced;
+      if (gap) {
+        gap.blank += spaceBetween(gap.props, props, this.addSpacing) + blankTwips(props, applyRPr(props.base, child(child(p, "pPr"), "rPr"), this.styles).size);
+        gap.props = props;
       }
       return;
     }
@@ -1061,7 +1589,10 @@ class DocxReader {
         // equation: Word draws it so, in or out of an m:oMathPara.
         const [formula] = words.math;
         if (props.heading === null && props.role !== "title" && words.math.length === 1 && formula.start === 0 && formula.end === words.text.length) {
-          this.push({ type: "EQUATION", text: formula.latex });
+          // Its paragraph's space before and after are the display's.
+          const display: ParsedBlock = { type: "EQUATION", text: formula.latex };
+          this.spaced(display, props, { props, blank: 0 });
+          this.push(display);
           continue;
         }
         const block = this.wordsBlock(words, props);
@@ -1077,9 +1608,12 @@ class DocxReader {
     const align = props.align ? ` class="${props.align}"` : "";
     if (props.heading !== null || props.role === "title") {
       const level = Math.min(6, props.heading ?? 1);
-      // A heading's bold is the heading's look, not emphasis.
-      const block = this.textBlock("HEADING", { ...words, marks: words.marks.filter((m) => m.style !== "bold") }, `<h${level}${align}>${escapeHtml(words.text)}</h${level}>`);
+      const block = this.textBlock("HEADING", words, `<h${level}${align}>${escapeHtml(words.text)}</h${level}>`, { headingBold: true });
+      if (props.tabs.length > 0 && words.text.includes("\t")) block.tabStops = props.tabs;
       if (props.role === "title") this.titles.add(block);
+      if (props.outline === 9) this.unlisted.add(block);
+      this.bordered(block, props);
+      this.spaced(block, props, { props, blank: 0 });
       return block;
     }
     const tokens: string[] = [];
@@ -1089,7 +1623,62 @@ class DocxReader {
     // down its left side.
     else if (props.role === "quote" || (props.border.left && props.left > 0 && !props.border.right)) tokens.push("quote");
     if (props.align) tokens.push(props.align);
-    return this.textBlock("PARAGRAPH", words, tokens.length > 0 ? `<p class="${tokens.join(" ")}">${escapeHtml(words.text)}</p>` : undefined);
+    const block = this.textBlock("PARAGRAPH", words, tokens.length > 0 ? `<p class="${tokens.join(" ")}">${escapeHtml(words.text)}</p>` : undefined);
+    if (props.tabs.length > 0 && words.text.includes("\t")) block.tabStops = props.tabs;
+    this.bordered(block, props);
+    // The paragraph's indent as Word sets it. A quotation's inset is the
+    // page editor's quote, unless the quotation draws its own bar; its
+    // right indent is its own either way.
+    const inset = !tokens.includes("quote") || props.border.left;
+    const left = inset && props.left > 0 && props.left < 100_000 ? points(props.left) : 0;
+    const first = inset && Math.abs(props.first) < 100_000 ? points(props.first) : 0;
+    const right = props.right > 0 && props.right < 100_000 ? points(props.right) : 0;
+    if (left || first || right) block.indent = { left, first, ...(right ? { right } : {}) };
+    const lines = lineMultiple(props);
+    if (lines !== undefined) block.lineSpacing = lines;
+    this.spaced(block, props, { props, blank: 0 });
+    return block;
+  }
+
+  /** A paragraph's borders (w:pBdr) and background (w:shd), the style's
+      and its own: a rule under a heading, a bar beside a quote, a box. */
+  private bordered(block: ParsedBlock, props: ParaProps) {
+    const borders: NonNullable<ParsedBlock["borders"]> = {};
+    for (const side of BORDER_SIDES) {
+      const value = props.border[side];
+      if (value) borders[side] = value;
+    }
+    if (props.between) borders.between = props.between;
+    if (Object.keys(borders).length > 0) block.borders = borders;
+    // The background reaches the lines, as in Word: its padding is the most
+    // room a side leaves between its line and the words.
+    if (props.shading) {
+      const room = Math.max(0, ...BORDER_SIDES.map((side) => Number(props.border[side]?.split(" ")[3] ?? 0)));
+      block.shading = room > 0 ? `${props.shading} ${room}` : props.shading;
+    }
+  }
+
+  /** A text block (a heading, a paragraph, a list) or a paragraph that is
+      one display equation into the document's spacing, before it is
+      pushed: the block right above it (no table, figure, other equation, or
+      rule between; its notes aside) takes its space after
+      (ParsedBlock.spaceAfter) in points — the space between their
+      paragraphs and the blank paragraphs between them. A heading's space
+      before is so the space after of the block above it. The block starts
+      the next gap; a block with no text block under it has none. */
+  private spaced(block: ParsedBlock, first: ParaProps, trail: Spacing) {
+    const above = this.lastSpaced;
+    if (above && !above.pageEnd && this.blocks.findLast((b) => !b.footnote) === above.block) {
+      above.block.spaceAfter = points(Math.min(MAX_SPACE_TWIPS, above.blank + spaceBetween(above.props, first, this.addSpacing)));
+    }
+    this.lastSpaced = { ...trail, block };
+  }
+
+  /** A page ends in the gap open now: the block above it has no space
+      after, as where a page ends in a PDF. */
+  private pageEnd() {
+    const gap = this.list?.trail ?? this.lastSpaced;
+    if (gap) gap.pageEnd = true;
   }
 
   /** Pictures as a figure: each at its width in the text column. */
@@ -1109,6 +1698,8 @@ class DocxReader {
   private pieces(p: Element, base: Look, rels: Rels): Piece[] {
     const pieces: Piece[] = [];
     let line = new Line();
+    // A page break: the words piece it falls in, and where in its words.
+    const breaks: { piece: number; at: number }[] = [];
     const sink: Sink = {
       line: () => line,
       cut: (piece) => {
@@ -1116,9 +1707,19 @@ class DocxReader {
         line = new Line();
       },
       floating: [],
+      page: () => breaks.push({ piece: pieces.length, at: line.text.length }),
     };
     this.inline(p, base, null, rels, sink);
     pieces.push({ kind: "words", line });
+    const wordsIn = (list: Piece[]) => list.some((piece) => piece.kind === "words" && !piece.line.empty);
+    const textOf = (k: number) => {
+      const piece = pieces[k];
+      return piece.kind === "words" ? piece.line.text : "";
+    };
+    this.pageBreaks = {
+      before: breaks.some((b) => !wordsIn(pieces.slice(0, b.piece)) && !textOf(b.piece).slice(0, b.at).trim()),
+      after: breaks.some((b) => !wordsIn(pieces.slice(b.piece + 1)) && !textOf(b.piece).slice(b.at).trim()),
+    };
     if (sink.floating.length > 0) pieces.push({ kind: "figure", pictures: sink.floating, icon: false });
     const words = pieces.some((piece) => piece.kind === "words" && !piece.line.empty);
     return pieces.filter((piece) => (piece.kind === "words" ? !piece.line.empty || piece.line.bookmarks.length > 0 || pieces.length === 1 : !(piece.kind === "figure" && piece.icon && words)));
@@ -1219,8 +1820,13 @@ class DocxReader {
     } else if (kind === "REF" && /\\h\b/.test(code)) {
       const name = /^REF\s+(\S+)/i.exec(code)?.[1];
       if (name) field.link = { anchor: name };
-    } else if (kind === "TOC") field.toc = true;
-    else if (kind === "PAGEREF") field.hide = this.fields.some((f) => f.toc);
+    } else if (kind === "TOC") {
+      field.toc = true;
+      // The levels a contents field lists: \o "1-3", Word's own when none.
+      const o = /\\o\s+"(\d)-(\d)"/i.exec(code);
+      field.levels = o ? [Number(o[1]), Math.max(Number(o[1]), Number(o[2]))] : [1, 3];
+      field.entriesBefore = this.contentsEntries;
+    } else if (kind === "PAGEREF") field.hide = this.fields.some((f) => f.toc);
   }
 
   private fieldChar(el: Element, look: Look, sink: Sink) {
@@ -1242,7 +1848,10 @@ class DocxReader {
       sink.line().add(field.box, look, null);
       field.box = null;
     }
-    if (type === "end") this.fields.pop();
+    if (type === "end") {
+      const ended = this.fields.pop();
+      if (ended?.levels && ended.entriesBefore !== undefined) this.unfilled = { levels: ended.levels, entriesBefore: ended.entriesBefore };
+    }
   }
 
   // ── One run ──
@@ -1278,6 +1887,7 @@ class DocxReader {
           // break is a line break.
           const type = attr(node, "type");
           if (shown && (!type || type === "textWrapping")) line.add("\n", look, target);
+          if (shown && type === "page") sink.page?.();
           break;
         }
         case "noBreakHyphen":
@@ -1444,8 +2054,17 @@ class DocxReader {
     const rows = children(tbl, "tr").filter((tr) => !child(child(tr, "trPr"), "del"));
     const spanOf = (tc: Element) => Math.max(1, intAttr(child(child(tc, "tcPr"), "gridSpan"), "val") ?? 1);
     // A table of one cell a row is a box around paragraphs (a callout, a
-    // framed note): its content reads as the document's own.
-    if (rows.every((tr) => cellsOf(tr).length <= 1)) {
+    // framed note): its content reads as the document's own. One shaded cell
+    // of one paragraph is a label bar, a table with its fill (white words on
+    // a navy bar read as a plain paragraph).
+    const only = rows.length === 1 && cellsOf(rows[0]).length === 1 ? cellsOf(rows[0])[0] : null;
+    const bar =
+      only !== null &&
+      shadeColor(child(child(only, "tcPr"), "shd")) !== null &&
+      children(only, "tbl").length === 0 &&
+      children(only, "p").length === 1 &&
+      paraProps(child(children(only, "p")[0], "pPr"), this.styles, style).heading === null;
+    if (!bar && rows.every((tr) => cellsOf(tr).length <= 1)) {
       for (const tr of rows) for (const tc of cellsOf(tr)) this.body(tc, style);
       this.close();
       return;
@@ -1454,8 +2073,10 @@ class DocxReader {
     // every slot it covers, its own first.
     const grid: { cell: TableCell; origin: boolean }[][] = [];
     const notes: Note[] = [];
+    const sizes = new Map<number, number>();
     const header: boolean[] = [];
     const firstRow = style.some((s) => s.firstRow) && tableLooksFirstRow(tblPr);
+    const outer = [...style.map((s) => child(s.tblPr, "tblCellMar")), child(tblPr, "tblCellMar")];
     rows.forEach((tr, r) => {
       const trPr = child(tr, "trPr");
       header.push(flag(child(trPr, "tblHeader")) === true || (r === 0 && firstRow));
@@ -1472,8 +2093,9 @@ class DocxReader {
           cell.rowspan += 1;
           row.push({ cell, origin: false });
         } else {
-          cell = this.cell(tc, style, notes);
+          cell = this.cell(tc, style, notes, sizes);
           cell.colspan = span;
+          cell.margins = cellMargins([...outer, child(child(tc, "tcPr"), "tcMar")]).map(points).join(" ");
           row.push({ cell, origin: true });
         }
         for (let k = 1; k < span; k++) row.push({ cell, origin: false });
@@ -1488,6 +2110,24 @@ class DocxReader {
     // gap, and a covered slot's gap rides in the last cell drawn before it,
     // in its row or the row above.
     const heads = header.indexOf(false) === -1 ? rows.length : header.indexOf(false);
+    // Each cell's sides: its own, else the table's edge or inside line
+    // where it stands (a hairline colored grid drew as one-point black
+    // lines).
+    const edges = tableBorders([...style.map((s) => s.tblPr), tblPr]);
+    const sidesOf = (cell: TableCell, r: number, c: number): string => {
+      const at: Record<BorderSideName, string | null | undefined> = {
+        top: cell.borders?.top !== undefined ? cell.borders.top : r === 0 ? edges.top : edges.insideH,
+        bottom: cell.borders?.bottom !== undefined ? cell.borders.bottom : r + cell.rowspan >= grid.length ? edges.bottom : edges.insideH,
+        left: cell.borders?.left !== undefined ? cell.borders.left : c === 0 ? edges.left : edges.insideV,
+        right: cell.borders?.right !== undefined ? cell.borders.right : c + cell.colspan >= cols ? edges.right : edges.insideV,
+      };
+      return BORDER_SIDES.flatMap((side) => {
+        const value = at[side];
+        if (value === undefined) return [];
+        const [width, dash, color] = (value ?? "0 solid #000000").split(" ");
+        return [`border-${side}:${width}pt ${dash} ${color}`];
+      }).join(";");
+    };
     const drawn: string[][] = [];
     const rowCells = grid.map((row, r) => {
       const tag = r < heads ? "th" : "td";
@@ -1499,7 +2139,8 @@ class DocxReader {
           return;
         }
         const { cell } = slot;
-        const spans = `${cell.colspan > 1 ? ` colspan="${cell.colspan}"` : ""}${cell.rowspan > 1 ? ` rowspan="${cell.rowspan}"` : ""}`;
+        const css = [cell.fill ? `background-color:${cell.fill}` : "", sidesOf(cell, r, c)].filter(Boolean).join(";");
+        const spans = `${cell.colspan > 1 ? ` colspan="${cell.colspan}"` : ""}${cell.rowspan > 1 ? ` rowspan="${cell.rowspan}"` : ""}${css ? ` style="${css}"` : ""}`;
         const parts = [`<${tag}${spans}>`, cell.html, gap];
         cells.push(parts);
         drawn.push(parts);
@@ -1511,7 +2152,25 @@ class DocxReader {
     const texts = grid.map((row) => row.map((slot) => (slot.origin ? slot.cell.text : "")).join("\t"));
     const head = heads > 0 ? `<thead>${htmlRows.slice(0, heads).join("")}</thead>` : "";
     const body = heads < htmlRows.length ? `<tbody>${htmlRows.slice(heads).join("")}</tbody>` : "";
-    const block: ParsedBlock = { type: "TABLE", text: texts.join("\n"), html: `<table>${head}${body}</table>` };
+    // The table's text size (the size most of its letters take) and its
+    // columns' widths (w:tblGrid), in points, when the grid is the table's.
+    const size = [...sizes].sort((a, b) => b[1] - a[1])[0]?.[0];
+    const widths = children(child(tbl, "tblGrid"), "gridCol").map((col) => intAttr(col, "w") ?? 0);
+    const colgroup =
+      widths.length === cols && widths.every((w) => w > 0 && w < 100_000)
+        ? `<colgroup>${widths.map((w) => `<col style="width:${points(w)}pt">`).join("")}</colgroup>`
+        : "";
+    // The cells' margins (the ones most cells take), in points, as the
+    // page editor pads an import's cells (css/import.css).
+    const margins = new Map<string, number>();
+    for (const row of grid) {
+      for (const slot of row) {
+        if (slot.origin && slot.cell.margins) margins.set(slot.cell.margins, (margins.get(slot.cell.margins) ?? 0) + 1);
+      }
+    }
+    const padding = [...margins].sort((a, b) => b[1] - a[1])[0]?.[0];
+    const open = `<table${size !== undefined && size > 0 && size < 1000 ? ` style="font-size:${size}pt"` : ""}${padding ? ` data-cell-padding="${padding}"` : ""}>`;
+    const block: ParsedBlock = { type: "TABLE", text: texts.join("\n"), html: `${open}${colgroup}${head}${body}</table>` };
     // The note marks in the cells, at their places in the table's text: the
     // references a table's footnotes are cited from.
     const refs: (Span & { note: Note })[] = [];
@@ -1524,18 +2183,25 @@ class DocxReader {
     }
     if (refs.length > 0) this.noteRefs.set(block, refs);
     this.push(block, notes);
+    // The gap under the table opens: a table has no space of its own, so
+    // the text block under it keeps its space before whole, and a blank
+    // paragraph between adds its line (the room under the table).
+    this.lastSpaced = { props: { ...paraProps(null, this.styles, []), before: 0, after: 0, contextual: false, styleId: null }, blank: 0, block };
   }
 
   /** A cell's words and html: one paragraph each (a list item keeps its
       marker as words), a nested table's cells as more paragraphs, a
-      picture as an image. Its notes wait for the table's end. */
-  private cell(tc: Element, table: StyleDef[], notes: Note[]): TableCell {
-    const paragraphs: { text: string; html: string }[] = [];
+      picture as an image; a paragraph set centered, flush right, or in
+      from the cell's edge keeps it; the cell keeps its fill. Its notes wait
+      for the table's end, and its letters' sizes go to the table's tally. */
+  private cell(tc: Element, table: StyleDef[], notes: Note[], sizes: Map<number, number>): TableCell {
+    type Paragraph = { text: string; html: string; align?: "center" | "right" | null; indent?: number };
+    const paragraphs: Paragraph[] = [];
     const marks: (Span & { note: Note })[] = [];
     // The cell's text is its paragraphs with words, a space between two:
     // where each paragraph's words start in it.
     let length = 0;
-    const add = (paragraph: { text: string; html: string }): number => {
+    const add = (paragraph: Paragraph): number => {
       paragraphs.push(paragraph);
       if (!paragraph.text) return length;
       const start = length > 0 ? length + 1 : 0;
@@ -1551,7 +2217,11 @@ class DocxReader {
         if (node.localName === "sdt") read(child(node, "sdtContent") ?? node);
         if (node.localName !== "p") continue;
         const props = paraProps(child(node, "pPr"), this.styles, table);
-        let marker = props.numId ? (this.numbering.next(props.numId, props.ilvl)?.marker ?? null) : null;
+        const numbered = props.numId ? this.numbering.next(props.numId, props.ilvl) : null;
+        let marker = numbered?.marker ?? null;
+        const align = props.align === "center" || props.align === "right" ? props.align : null;
+        const left = props.ownLeft ?? numbered?.left ?? props.left;
+        const indent = left > 0 && left < 100_000 ? points(left) : 0;
         for (const piece of this.pieces(node, props.base, this.rels)) {
           if (piece.kind === "figure") {
             const images = piece.pictures.map((pic) => `<img src="${escapeHtml(pic.url)}" alt="${escapeHtml(pic.alt)}" width="${Math.max(1, Math.min(4000, Math.round(pic.widthEmu / EMU_PER_PX)))}">`);
@@ -1564,26 +2234,33 @@ class DocxReader {
             const words = piece.line.finish(false);
             const flat = { ...words, text: words.text.replace(/\n/g, " ") };
             notes.push(...words.notes.map((n) => n.note));
-            const start = add({ text: flat.text, html: inlineHtml(flat) });
+            tallySizes(words, sizes);
+            const start = add({ text: flat.text, html: inlineHtml(flat), align, indent });
             marks.push(...moveSpans(words.notes, start));
           }
         }
       }
     };
     read(tc);
-    // One paragraph is the cell's words; more are paragraphs, a space
-    // between two with words so the words stay apart in the text.
+    // One plain paragraph is the cell's words; more, or one set centered,
+    // flush right, or in, are paragraphs, a space between two with words so
+    // the words stay apart in the text.
     const text = paragraphs.map((p) => p.text).filter(Boolean).join(" ");
-    if (paragraphs.length === 1) return { html: paragraphs[0].html, text, colspan: 1, rowspan: 1, notes: marks };
+    const fill = shadeColor(child(child(tc, "tcPr"), "shd"));
+    const plain = paragraphs.length === 1 && !paragraphs[0].align && !paragraphs[0].indent;
+    const borders = cellBorders(tc);
+    if (plain) return { html: paragraphs[0].html, text, colspan: 1, rowspan: 1, notes: marks, fill, borders };
     let seen = false;
     const html = paragraphs
       .map((p) => {
         const gap = p.text && seen ? `<span class="cell-gap"> </span>` : "";
         seen ||= Boolean(p.text);
-        return `${gap}<p>${p.html}</p>`;
+        const css = [p.indent ? `margin-left:${p.indent}pt` : "", p.align ? `text-align:${p.align}` : ""].filter(Boolean).join(";");
+        const attrs = `${p.indent ? ` data-indent-left="${p.indent}"` : ""}${css ? ` style="${css}"` : ""}`;
+        return `${gap}<p${attrs}>${p.html}</p>`;
       })
       .join("");
-    return { html, text, colspan: 1, rowspan: 1, notes: marks };
+    return { html, text, colspan: 1, rowspan: 1, notes: marks, fill, borders };
   }
 }
 
@@ -1594,6 +2271,22 @@ function cellsOf(tr: Element): Element[] {
     if (c.localName === "tc") out.push(c);
     else if (c.localName === "sdt") out.push(...cellsOf(child(c, "sdtContent") ?? c));
     else if (c.localName === "customXml") out.push(...cellsOf(c));
+  }
+  return out;
+}
+
+/** A cell's margins in twips, top, right, bottom, left: its own (w:tcMar)
+    over its table's and its table style's (w:tblCellMar) over Word's, none
+    over and under the words and 108 twips at the sides. */
+function cellMargins(layers: (Element | null)[]): number[] {
+  const out = [0, 108, 0, 108];
+  for (const margins of layers) {
+    (["top", "right", "bottom", "left"] as const).forEach((side, k) => {
+      const el = child(margins, side) ?? (side === "left" ? child(margins, "start") : side === "right" ? child(margins, "end") : null);
+      const w = intAttr(el, "w");
+      const type = attr(el, "type");
+      if (w !== null && w >= 0 && w <= 2880 && (type === null || type === "dxa")) out[k] = w;
+    });
   }
   return out;
 }
@@ -1613,6 +2306,8 @@ function tableLooksFirstRow(tblPr: Element | null): boolean {
 
 const FIGURE_LABEL = /^(?:figure|fig\.?|chart|graph|diagram|image|photo|picture|illustration|plate|exhibit|scheme|图)\s*\d/i;
 const TABLE_LABEL = /^(?:table|tab\.|表)\s*\d/i;
+/** A face a caption's html may name (the import reads the same). */
+const CSS_FACE = /^[A-Za-z0-9][A-Za-z0-9 -]{0,39}$/;
 
 /** Is the block a caption for a figure or a table: a paragraph in the
     Caption style, or one that opens with the kind's label ("Figure 3",
@@ -1638,15 +2333,31 @@ function attachCaptions(blocks: ParsedBlock[], noteRefs: DocxReader["noteRefs"])
       if (!caption) return;
       taken.add(caption);
       block.text = caption.text;
-      block.html = (block.html ?? "<figure></figure>").replace(/<\/figure>$/, `<figcaption>${escapeHtml(caption.text)}</figcaption></figure>`);
+      // The figure's words are its caption's, and so is its font.
+      if (caption.font) block.font = caption.font;
+      // The caption keeps its look: its size, its color (not the ink's), and
+      // its runs' marks (a bold label), as the page sets them.
+      const words = { text: caption.text, marks: (caption.styles ?? []).map((s) => ({ start: s.start, end: s.end, style: s.style })), links: [], math: caption.math ?? [] };
+      const look = [caption.font ? `font-size:${caption.font.size}pt` : "", caption.font?.color && !isInk(caption.font.color) ? `color:${caption.font.color}` : ""].filter(Boolean).join(";");
+      block.html = (block.html ?? "<figure></figure>").replace(/<\/figure>$/, `<figcaption${look ? ` style="${look}"` : ""}>${inlineHtml(words)}</figcaption></figure>`);
       const refs = noteRefs.get(caption);
       if (refs) noteRefs.set(block, refs);
-    } else if (block.type === "TABLE" && block.html && !block.html.includes("<caption>")) {
+    } else if (block.type === "TABLE" && block.html?.startsWith("<table") && !block.html.includes("<caption>")) {
       const caption = [blocks[i - 1], blocks[i + 1]].find((b) => b && !taken.has(b) && isCaption(b, "table"));
       if (!caption) return;
       taken.add(caption);
-      const words = { text: caption.text, marks: (caption.styles ?? []).map((s) => ({ start: s.start, end: s.end, style: s.style })), links: [] };
-      block.html = block.html.replace(/^<table>/, `<table><caption>${inlineHtml(words)}${textGap("\n")}</caption>`);
+      // A caption under the table gives the table the room under it.
+      if (caption === blocks[i + 1]) {
+        if (caption.spaceAfter !== undefined) block.spaceAfter = caption.spaceAfter;
+        else delete block.spaceAfter;
+      }
+      const words = { text: caption.text, marks: (caption.styles ?? []).map((s) => ({ start: s.start, end: s.end, style: s.style })), links: [], math: caption.math ?? [] };
+      // The caption's words keep the face and the size the page sets them
+      // in, on a span, as a PDF's table caption does (pdf/tables.ts): the
+      // import draws them at that size where it is under the body's.
+      const look = caption.font ? [`font-size:${caption.font.size}pt`, CSS_FACE.test(caption.font.family) ? `font-family:${caption.font.family}` : ""].filter(Boolean).join(";") : "";
+      const html = look ? `<span style="${look}">${inlineHtml(words)}</span>` : inlineHtml(words);
+      block.html = block.html.replace(/^<table([^>]*)>/, `<table$1><caption>${html}${textGap("\n")}</caption>`);
       block.text = `${caption.text}\n${block.text}`;
       const refs = [...(noteRefs.get(caption) ?? []), ...moveSpans(noteRefs.get(block) ?? [], caption.text.length + 1)];
       if (refs.length > 0) noteRefs.set(block, refs);
@@ -1736,6 +2447,38 @@ export async function parseDocx(bytes: Uint8Array, filename: string, opts: DocxP
   const titleBlock = titleOf(reader, blocks);
   if (titleBlock) blocks = blocks.filter((b) => b !== titleBlock);
 
+  // A contents field with no entries lists the headings at its levels, each
+  // linked to its heading, as Word draws it on update; with no heading to
+  // list it stands for nothing. The heading right over the field is its
+  // title ("Contents"), no entry of it: the list opened with its own title.
+  const levelOf = (b: ParsedBlock) => (b.type === "HEADING" ? Number(/^<h([1-6])/.exec(b.html ?? "")?.[1] ?? 0) : 0);
+  const titles = new Set(reader.unfilledContents.map(({ block }) => blocks[blocks.indexOf(block) - 1]).filter((b) => b?.type === "HEADING"));
+  const listed = ([lo, hi]: [number, number]) => (b: ParsedBlock) => levelOf(b) >= lo && levelOf(b) <= hi && !reader.unlisted.has(b) && !titles.has(b);
+  for (const { block, levels } of reader.unfilledContents) if (!blocks.some(listed(levels))) blocks = blocks.filter((b) => b !== block);
+  for (const { block, levels } of reader.unfilledContents) {
+    const lines: string[] = [];
+    const links: LinkSpan[] = [];
+    let at = 0;
+    blocks.forEach((b, i) => {
+      if (!listed(levels)(b)) return;
+      const indent = "  ".repeat(levelOf(b) - levels[0]);
+      const words = b.text.replace(/\s+/g, " ").trim();
+      links.push({ start: at + indent.length, end: at + indent.length + words.length, quotedText: words, targetOrder: i });
+      lines.push(indent + words);
+      at += indent.length + words.length + 1;
+    });
+    block.text = lines.join("\n");
+    if (links.length > 0) block.links = links;
+  }
+  // A space after is the gap to the text block under the block (its notes
+  // aside): none where a caption joined the table or figure under it.
+  let under: ParsedBlock | undefined;
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    const b = blocks[i];
+    if (b.spaceAfter !== undefined && !(under && (under.type === "PARAGRAPH" || under.type === "HEADING" || under.type === "LIST"))) delete b.spaceAfter;
+    if (!b.footnote) under = b;
+  }
+
   // Links to places in the document point at the blocks those places are
   // in; a contents entry with no link names its heading by its words.
   const order = new Map(blocks.map((b, i) => [b, i]));
@@ -1766,5 +2509,19 @@ export async function parseDocx(bytes: Uint8Array, filename: string, opts: DocxP
   }
 
   const own = titleBlock ? titleBlock.text.replace(/\s+/g, " ").trim() : null;
-  return { title: own ?? coreTitle(zip) ?? filename.replace(/\.docx$/i, ""), blocks, titleFromFile: own === null };
+  const parsed: DocxParse = { title: own ?? coreTitle(zip) ?? filename.replace(/\.docx$/i, ""), blocks, titleFromFile: own === null };
+  // The look the import's named styles take (decision 2 of the parse loop's
+  // round 2): Normal text is the look most of the body's words take, the
+  // PDF parse's rule (lib/parse/pdf/look.ts), and the Title the title
+  // paragraph's own.
+  const bodyFont = takeBodyFont(blocks);
+  if (bodyFont) parsed.bodyFont = bodyFont;
+  // A table's text size stays only where it differs from the body's.
+  const bodySize = bodyFont ? `<table style="font-size:${bodyFont.size}pt">` : null;
+  for (const b of blocks) if (bodySize && b.type === "TABLE" && b.html?.startsWith(bodySize)) b.html = `<table>${b.html.slice(bodySize.length)}`;
+  if (titleBlock?.font) parsed.titleFont = titleBlock.font;
+  const tokens = /^<[a-z0-9]+ class="([^"]*)"/.exec(titleBlock?.html ?? "")?.[1].split(" ") ?? [];
+  const titleAlign = tokens.find((t): t is "center" | "right" => t === "center" || t === "right");
+  if (titleAlign) parsed.titleAlign = titleAlign;
+  return parsed;
 }

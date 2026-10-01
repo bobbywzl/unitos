@@ -17,6 +17,8 @@ const SIDES = ["borderTop", "borderRight", "borderBottom", "borderLeft"] as cons
 type Side = (typeof SIDES)[number];
 const CSS_SIDE: Record<Side, string> = { borderTop: "top", borderRight: "right", borderBottom: "bottom", borderLeft: "left" };
 const BORDER = /^(\d{1,2}(?:\.\d{1,2})?) (solid|dotted|dashed) (#[0-9a-fA-F]{6})$/;
+/** A table's cellPadding: four sides in points, top right bottom left. */
+const CELL_PADDING = /^(\d{1,2}(?:\.\d)?) (\d{1,2}(?:\.\d)?) (\d{1,2}(?:\.\d)?) (\d{1,2}(?:\.\d)?)$/;
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
 function parseBorder(value: unknown): BorderSpec | null {
@@ -196,7 +198,18 @@ function tableDecorations(doc: PMNode): DecorationSet {
     const align = ["center", "right"].includes(node.attrs.tableAlign as string) ? (node.attrs.tableAlign as string) : "left";
     const indent = typeof node.attrs.tableIndent === "number" && node.attrs.tableIndent > 0 ? node.attrs.tableIndent : 0;
     const attrs: Record<string, string> = { "data-align": align };
-    if (indent && align === "left") attrs.style = `--docs-table-indent: ${Math.min(indent, 400)}pt`;
+    const style: string[] = [];
+    if (indent && align === "left") style.push(`--docs-table-indent: ${Math.min(indent, 400)}pt`);
+    const padding = typeof node.attrs.cellPadding === "string" ? CELL_PADDING.exec(node.attrs.cellPadding) : null;
+    if (padding) style.push(`--docs-cell-padding: ${padding.slice(1).map((v) => `${v}pt`).join(" ")}`);
+    const size = node.attrs.cellSize;
+    if (typeof size === "number" && size >= 4 && size <= 72) {
+      attrs["data-cell-size"] = "";
+      style.push(`--docs-cell-size: ${size}pt`);
+    }
+    const after = node.attrs.spaceAfter;
+    if (typeof after === "number" && after >= 0 && after <= 1584) style.push(`margin-bottom: ${after}pt`);
+    if (style.length > 0) attrs.style = style.join("; ");
     decorations.push(Decoration.node(pos, pos + node.nodeSize, attrs));
     return false;
   });
@@ -279,6 +292,16 @@ export const DocsTable = Extension.create({
         attributes: {
           tableAlign: { default: null, rendered: false },
           tableIndent: { default: null, rendered: false },
+          // Every cell's padding as the page sets it, "top right bottom
+          // left" in points (an import's Word cell margins); a cell's own
+          // padding wins.
+          cellPadding: { default: null, rendered: false },
+          // The table's text size in points (an import's): its cells'
+          // paragraphs take it, so a line is as tall as its words.
+          cellSize: { default: null, rendered: false },
+          // The room the page leaves under the table in points (an
+          // import's): the wrapper's margin under it, in place of 6 pt.
+          spaceAfter: { default: null, rendered: false },
         },
       },
     ];

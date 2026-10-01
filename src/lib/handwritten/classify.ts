@@ -43,12 +43,15 @@ export function junkTextLayer(blocks: ParsedBlock[]): boolean {
 
 const classifyOutputSchema = z.object({ kind: z.enum(["article", "handwritten"]) });
 
+// pages: the PDF's pages the document holds, 1-based: every page, or the
+// pages the reader chose at the add (SPEC.md §15). blocks are theirs.
 export async function classifyPdf(
   bytes: Uint8Array,
   blocks: ParsedBlock[],
-  pageCount: number,
+  pages: number[],
   userId: string | null,
 ): Promise<PdfKind> {
+  const pageCount = pages.length;
   const textChars = blocks.reduce((n, b) => n + b.text.length, 0);
   const perPage = textChars / Math.max(1, pageCount);
   const junk = junkTextLayer(blocks);
@@ -56,10 +59,10 @@ export async function classifyPdf(
 
   const fallback: PdfKind =
     junk || perPage < FALLBACK_HANDWRITTEN_CHARS_PER_PAGE ? "handwritten" : "article";
-  if (!(await featureConfigured("classify"))) return fallback;
+  if (!(await featureConfigured("classify")) || pageCount === 0) return fallback;
 
   // Sample pages: first, middle, last.
-  const samples = [...new Set([1, Math.max(1, Math.ceil(pageCount / 2)), pageCount])].slice(
+  const samples = [...new Set([pages[0], pages[Math.max(0, Math.ceil(pageCount / 2) - 1)], pages[pageCount - 1]])].slice(
     0,
     SAMPLE_PAGES,
   );

@@ -39,6 +39,8 @@ const SKIPPED: Record<ServerSkip, TKey> = {
   notText: "api.suggestSkipNotText",
   object: "api.suggestSkipFigure",
   limit: "api.suggestSkipLimit",
+  unreadable: "api.suggestSkipUnreadable",
+  tex: "api.suggestSkipTex",
 };
 
 /** A document with rich text as the suggestions read it: its paragraph index
@@ -50,7 +52,9 @@ export type SuggestDocument = {
   pageName: PageName | null;
   rows: Pick<Block, "id" | "type" | "text">[];
   places: Map<string, BlockPlace>;
-  richText: RichNode;
+  /** Null for a document without rich text: its edits go to the plan card
+      (lib/assistant/revise.ts), and it holds no suggestions. */
+  richText: RichNode | null;
 };
 
 export function suggestDocument(document: {
@@ -90,6 +94,8 @@ export type SuggestRun = {
   // The new text the command has left (SUGGEST_MAX_NEW_CHARS), shared by its windows.
   budget: { chars: number };
   signal?: AbortSignal;
+  // Where the ops land (lib/prompts/suggest.ts); absent = the page editor.
+  target?: "plan";
 };
 
 /** The scope's blocks as runs of consecutive rows. */
@@ -127,8 +133,9 @@ export async function runSuggest(run: SuggestRun): Promise<SuggestResult> {
       return place && (place.style || code) ? [{ blockId, style: place.style ?? "code", where: place.where }] : [];
     }),
     caretBlockId: run.caretBlockId,
-    pending: assistantSuggestionsIn(document.richText, run.userId, new Set(blockIds)),
+    pending: document.richText ? assistantSuggestionsIn(document.richText, run.userId, new Set(blockIds)) : [],
     history: run.history,
+    target: run.target ?? "page",
   });
   // The document is the cached system prefix: every window and every command
   // on the same document reads it from the cache.
@@ -147,15 +154,22 @@ export async function runSuggest(run: SuggestRun): Promise<SuggestResult> {
     maxOutputTokens: SUGGEST_MAX_OUTPUT_TOKENS,
     providerOptions: call.providerOptions,
     schema: suggestAnswerSchema,
-    label: run.window && run.window.of > 1 ? `SUGGEST ${run.window.n}/${run.window.of}` : "SUGGEST",
+    label: `${run.target === "plan" ? "REVISE" : "SUGGEST"}${run.window && run.window.of > 1 ? ` ${run.window.n}/${run.window.of}` : ""}`,
     usage: { userId: run.userId, feature: "suggest", model: call.modelId },
     abortSignal: run.signal,
   });
   if (!result.ok) throw new Error(run.t("api.suggestFailed", { reason: result.error }));
-  const { ops, skipped } = resolveOps(result.data.ops, { rows: document.rows, places: document.places, scope, budget: run.budget });
+  // An op that did not read is skipped with its why; ops past the cap say
+  // the command covered too much for one run.
+  const read = result.data.ops;
+  const { ops, skipped } = resolveOps(read.ops, { rows: document.rows, places: document.places, scope, budget: run.budget });
   return {
     ops,
-    warnings: skipped.map((s) => run.t(SKIPPED[s.reason], { why: s.why })),
-    summary: result.data.summary.trim(),
+    warnings: [
+      ...read.unreadable.map((why) => run.t(SKIPPED.unreadable, { why })),
+      ...skipped.map((s) => run.t(SKIPPED[s.reason], { why: s.why })),
+      ...(read.over > 0 ? [run.t("api.suggestTooLong")] : []),
+    ],
+    summary: result.data.summary,
   };
 }

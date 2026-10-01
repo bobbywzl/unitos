@@ -5,19 +5,20 @@
  * renderers' walk and the reference (`referenceBlocks`, the hints dropped).
  */
 import katex from "katex";
-import type { Category, RefBlock, Span } from "../model";
+import type { Align as LineAlign, Category, Font, FontRole, Fonts, RefBlock, Span } from "../model";
 import type { DocxLayout } from "./render-docx";
 import type { HtmlLayout } from "./render-html";
 import type { TexLayout } from "./render-tex";
 
 export type Renderer = "tex" | "html" | "docx";
 
-/** A span as a spec writes it: the reference's span plus layout hints. */
+/** A span as a spec writes it: the reference's span (its color and highlight
+    as the page draws them, "#rrggbb") plus layout hints. */
 export type SpecSpan = Span & {
   /** Upright inside a theorem's italic body. */
   up?: true;
-  /** A background color behind the words (HTML, Word). */
-  highlight?: string;
+  /** The words' size in points, set on the run (Word). */
+  size?: number;
   /** A footnote mark: `text` is the mark as printed, `footnote` the footnote's words. */
   footnote?: SpecSpan[];
   /** The box a proof ends with; LaTeX's proof environment prints it itself. */
@@ -34,7 +35,7 @@ export type Role = "author" | "affiliation" | "date" | "abstract" | "keywords" |
 export type Align = "l" | "c" | "r";
 
 export type SpecItem = { depth: number; marker: string; spans: SpecSpan[]; checked?: boolean };
-export type SpecCell = { spans: SpecSpan[]; header?: true; colspan?: number; rowspan?: number; align?: Align };
+export type SpecCell = { spans: SpecSpan[]; header?: true; colspan?: number; rowspan?: number; align?: Align; shade?: string };
 export type SpecRow = { cells: SpecCell[]; shade?: string; rule?: true };
 export type TableLayout = {
   /** booktabs: top, middle, and bottom rules; grid: every line; none: no lines. */
@@ -50,6 +51,8 @@ export type TableLayout = {
   /** Background of the header rows. */
   shadeHeader?: string;
   small?: true;
+  /** The table's text size in points (Word), past `small`. */
+  size?: number;
   /** Across both columns of a two-column page. */
   wide?: true;
 };
@@ -62,10 +65,15 @@ export type Picture =
 export type DiagramBox = { id: string; label: string; x: number; y: number; w: number; h: number; round?: true };
 
 export type SpecBlock =
-  | { kind: "title"; spans: SpecSpan[] }
+  /** `direct`: a cover line set by its runs' own size, not the Title style (Word). */
+  | { kind: "title"; spans: SpecSpan[]; direct?: true }
   | { kind: "heading"; level: HeadingLevel; spans: SpecSpan[]; runIn?: true; frame?: true }
-  | { kind: "paragraph"; spans: SpecSpan[]; align?: "center" | "right"; indent?: "first" | "hanging" | "block"; role?: Role; small?: true }
+  | { kind: "paragraph"; spans: SpecSpan[]; align?: "center" | "right" | "justify"; indent?: "first" | "hanging" | "block"; role?: Role; small?: true }
   | { kind: "list"; items: SpecItem[]; flush?: true }
+  /** A contents field no one updated (Word): it prints no entries until Word
+      fills it on open; the reference holds the entries the page editor
+      draws, the headings at the levels but the one right over the field. */
+  | { kind: "contents"; levels: [number, number] }
   | { kind: "equation"; latex: string; label?: string }
   | { kind: "table"; label?: string; caption?: SpecSpan[]; rows: SpecRow[]; layout?: TableLayout }
   | { kind: "figure"; label?: string; caption?: SpecSpan[]; picture: Picture; width?: number }
@@ -105,6 +113,10 @@ export const b = (...parts: Part[]) => styled(parts, { bold: true });
 export const i = (...parts: Part[]) => styled(parts, { italic: true });
 export const bi = (...parts: Part[]) => styled(parts, { bold: true, italic: true });
 export const u = (...parts: Part[]) => styled(parts, { underline: true });
+/** Words struck through. */
+export const strike = (...parts: Part[]) => styled(parts, { strike: true });
+/** Words in a color ("#rrggbb"). */
+export const colored = (color: string, ...parts: Part[]) => styled(parts, { color });
 export const sc = (...parts: Part[]) => styled(parts, { smallCaps: true });
 /** Upright words inside a theorem's italic body. */
 export const up = (...parts: Part[]) => styled(parts, { up: true });
@@ -117,6 +129,8 @@ export const m = (latex: string): SpecSpan => ({ text: plainReading(latex), late
 export const fn = (mark: string, ...parts: Part[]): SpecSpan => ({ text: mark, footnote: spans(parts) });
 
 export const title = (...parts: Part[]): SpecBlock => ({ kind: "title", spans: spans(parts) });
+/** A cover's first line as the title: a centered Normal paragraph its runs' size sets apart (Word). */
+export const cover = (...parts: Part[]): SpecBlock => ({ kind: "title", spans: spans(parts), direct: true });
 export const h = (level: HeadingLevel, ...parts: Part[]): SpecBlock => ({ kind: "heading", level, spans: spans(parts) });
 /** A heading printed at the start of its paragraph's first line ("1.1.1. Title. The text…"). */
 export const runIn = (level: HeadingLevel, ...parts: Part[]): SpecBlock => ({ kind: "heading", level, spans: spans(parts), runIn: true });
@@ -128,6 +142,13 @@ export const p = (...parts: Part[]): SpecBlock => ({ kind: "paragraph", spans: s
 /** A paragraph with a first-line indent. */
 export const pi = (...parts: Part[]): SpecBlock => ({ kind: "paragraph", spans: spans(parts), indent: "first" });
 export const center = (...parts: Part[]): SpecBlock => ({ kind: "paragraph", spans: spans(parts), align: "center" });
+/** A paragraph set justified. */
+export const justify = (...parts: Part[]): SpecBlock => ({ kind: "paragraph", spans: spans(parts), align: "justify" });
+/** Words in a color (#rrggbb) and a size in points (Word). */
+export const look = (color: string | undefined, size: number | undefined, ...parts: Part[]) =>
+  styled(parts, { ...(color ? { color } : {}), ...(size ? { size } : {}) });
+/** A contents field that lists the headings at levels lo to hi (Word's \o "lo-hi"). */
+export const contents = (lo: number, hi: number): SpecBlock => ({ kind: "contents", levels: [lo, hi] });
 /** A paragraph a class prints from its own command; title-page lines are centered, an abstract is a block. */
 export const role = (name: Role, ...parts: Part[]): SpecBlock =>
   name === "abstract" || name === "keywords" ? { kind: "paragraph", spans: spans(parts), role: name } : { kind: "paragraph", spans: spans(parts), role: name, align: "center" };
@@ -150,7 +171,7 @@ export const li3 = item(3);
 /** A task item of a checklist: the box as printed is the marker. */
 export const task = (checked: boolean, ...parts: Part[]): SpecItem => ({ depth: 0, marker: checked ? "☑" : "☐", spans: spans(parts), checked });
 
-type CellOptions = { colspan?: number; rowspan?: number; align?: Align };
+type CellOptions = { colspan?: number; rowspan?: number; align?: Align; shade?: string };
 type CellInput = Part | { cell: CellOptions; parts: Part[] };
 function toCell(input: CellInput, header: boolean): SpecCell {
   const withOptions = typeof input === "object" && !Array.isArray(input) && "cell" in input;
@@ -160,6 +181,7 @@ function toCell(input: CellInput, header: boolean): SpecCell {
   if (opts.colspan && opts.colspan > 1) out.colspan = opts.colspan;
   if (opts.rowspan && opts.rowspan > 1) out.rowspan = opts.rowspan;
   if (opts.align) out.align = opts.align;
+  if (opts.shade) out.shade = opts.shade;
   return out;
 }
 export const row = (...cells: CellInput[]): SpecRow => ({ cells: cells.map((c) => toCell(c, false)) });
@@ -244,12 +266,12 @@ export type Group = { id: number; kind: "theorem"; style: TheoremStyle; head: st
 
 /** A reference block with its layout hints, as the renderers draw it. */
 export type RenderBlock =
-  | { kind: "title"; spans: SpecSpan[] }
+  | { kind: "title"; spans: SpecSpan[]; direct?: true }
   | { kind: "heading"; level: HeadingLevel; spans: SpecSpan[]; runIn?: true; frame?: true; chapter?: number }
   | {
       kind: "paragraph";
       spans: SpecSpan[];
-      align?: "center" | "right";
+      align?: "center" | "right" | "justify";
       indent?: "first" | "hanging" | "block";
       role?: Role;
       small?: true;
@@ -261,6 +283,7 @@ export type RenderBlock =
       continues?: true;
     }
   | { kind: "list"; items: SpecItem[]; flush?: true }
+  | { kind: "contents"; levels: [number, number] }
   | { kind: "equation"; latex: string; label?: string }
   | { kind: "table"; caption?: SpecSpan[]; label?: string; captionText?: SpecSpan[]; rows: SpecRow[]; layout?: TableLayout }
   | { kind: "figure"; caption?: SpecSpan[]; label?: string; captionText?: SpecSpan[]; picture: Picture; width?: number }
@@ -275,7 +298,8 @@ export type Leaf = { block: RenderBlock; groups: Group[] };
 export type FlattenOptions = {
   /** Where footnote blocks stand: after the block with the mark (the page's foot), or at the document's end. */
   footnotes: "after" | "end";
-  /** The text a small-caps span shows in the PDF's text layer: its own letters, or capitals (fake small caps). */
+  /** The text a small-caps span shows in the PDF's text layer: its own letters, or capitals (fake small caps,
+      which draw the capitals at full size: the page shows no small caps). */
   smallCaps: "keep" | "upper";
   /** How a renderer prints a caption's label before the caption ("Table 1." then the caption, one space between). */
   captionJoin?: string;
@@ -288,7 +312,7 @@ export function flatten(spec: Spec, opts: FlattenOptions): Leaf[] {
   let groupId = 0;
 
   const caseOf = (list: SpecSpan[]): SpecSpan[] =>
-    opts.smallCaps === "upper" ? list.map((s) => (s.smallCaps && !s.latex ? { ...s, text: s.text.toUpperCase() } : s)) : list;
+    opts.smallCaps === "upper" ? list.map((s) => (s.smallCaps && !s.latex ? { ...s, text: s.text.toUpperCase(), smallCaps: undefined } : s)) : list;
   // In an italic body every span but math, upright words, and footnote marks is italic.
   const bodyStyle = (list: SpecSpan[], italic: boolean): SpecSpan[] =>
     italic ? list.map((s) => (s.latex || s.up || s.footnote ? s : { ...s, italic: true })) : list;
@@ -400,65 +424,167 @@ export function flatten(spec: Spec, opts: FlattenOptions): Leaf[] {
 
 // ---------------------------------------------------------------- reference
 
+/** A reference span from a spec span. A link's color and underline are the link's, not the words'; a color
+    is kept as ink() keeps it. */
 const cleanSpan = (s: SpecSpan): Span => {
   const out: Span = { text: s.text };
   if (s.latex) out.latex = s.latex;
   if (s.bold) out.bold = true;
   if (s.italic) out.italic = true;
-  if (s.underline) out.underline = true;
+  if (s.underline && !s.href) out.underline = true;
+  if (s.strike) out.strike = true;
   if (s.code) out.code = true;
   if (s.smallCaps) out.smallCaps = true;
   // A footnote's mark prints raised in every rendering.
   if (s.footnote && s.text) out.sup = true;
   if (s.href) out.href = s.href;
+  const color = s.href ? undefined : ink(s.color);
+  if (color) out.color = color;
+  if (s.highlight) out.highlight = s.highlight.toLowerCase();
   return out;
 };
 
 /** Adjacent spans with the same styles become one span, so the reference reads as the page does. */
 function cleanSpans(list: SpecSpan[]): Span[] {
   const out: Span[] = [];
+  const keys = ["bold", "italic", "underline", "strike", "code", "smallCaps", "sup", "href", "color", "highlight"] as const;
   for (const span of list.map(cleanSpan)) {
     const last = out[out.length - 1];
-    const same = (a: Span, b2: Span) =>
-      !a.latex &&
-      !b2.latex &&
-      a.bold === b2.bold &&
-      a.italic === b2.italic &&
-      a.underline === b2.underline &&
-      a.code === b2.code &&
-      a.smallCaps === b2.smallCaps &&
-      a.sup === b2.sup &&
-      a.href === b2.href;
-    if (last && same(last, span)) last.text += span.text;
+    if (last && !last.latex && !span.latex && keys.every((k) => last[k] === span[k])) last.text += span.text;
     else if (span.text || span.latex) out.push(span);
   }
   return out;
 }
 
-/** The reference blocks of a rendering: the leaves without layout hints. */
-export function referenceBlocks(leaves: Leaf[]): RefBlock[] {
+/** What a rendering shows of a leaf beyond its spec: the font most of its
+    words take, and its alignment. */
+export type LeafLook = { font?: Font; align?: LineAlign };
+
+/** A color as the reference keeps it ("#rrggbb"): none for black and
+    near-black, every channel at most 0x50 (adapt.ts inkOf). */
+export function ink(hex: string | null | undefined): string | undefined {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex ?? "");
+  if (!m) return undefined;
+  const value = `#${m[1].toLowerCase()}`;
+  return [1, 3, 5].some((k) => Number.parseInt(value.slice(k, k + 2), 16) > 0x50) ? value : undefined;
+}
+
+/** The words a leaf's font is read from: a table's or a figure's caption, a list's items, else its spans. */
+function leafWords(block: RenderBlock): SpecSpan[] {
+  if (block.kind === "list") return block.items.flatMap((it) => it.spans);
+  if (block.kind === "table" || block.kind === "figure") return block.caption ?? [];
+  return "spans" in block ? block.spans : [];
+}
+
+/** A leaf's font from the font its rendering sets for its role: bold where
+    most of its words' characters are, and in the color and the size most of
+    them take (math, footnote marks, and links aside). */
+export function leafFont(font: Font | undefined, block: RenderBlock): Font | undefined {
+  if (!font) return undefined;
+  const words = leafWords(block).filter((s) => !s.latex && !s.footnote && !s.qed);
+  const total = words.reduce((n, s) => n + s.text.length, 0);
+  const bold = total > 0 && words.reduce((n, s) => n + (s.bold ? s.text.length : 0), 0) * 2 > total;
+  const colors = new Map<string, number>();
+  for (const s of words) if (s.color && !s.href) colors.set(s.color, (colors.get(s.color) ?? 0) + s.text.length);
+  const [top, n] = [...colors].sort((a, b2) => b2[1] - a[1])[0] ?? ["", 0];
+  const color = n * 2 > total ? ink(top) : font.color;
+  // A run's own size (Word) wins over its role's.
+  const sizes = new Map<number, number>();
+  for (const s of words) sizes.set(s.size ?? font.size, (sizes.get(s.size ?? font.size) ?? 0) + s.text.length);
+  const size = [...sizes].sort((a, b2) => b2[1] - a[1])[0]?.[0] ?? font.size;
+  return { shape: font.shape, size, ...(font.bold || bold ? { bold: true } : {}), ...(color ? { color } : {}) };
+}
+
+/** The role a leaf's font is scored by (model.ts FontRole). */
+function fontRoleOf(block: RenderBlock): FontRole | null {
+  switch (block.kind) {
+    case "title":
+      return "title";
+    case "heading":
+      return `h${block.level}`;
+    case "paragraph":
+    case "list":
+      return "body";
+    case "footnote":
+      return "footnote";
+    case "figure":
+    case "table":
+      return block.caption ? "caption" : null;
+    default:
+      return null;
+  }
+}
+
+export const sameFont = (a: Font, b: Font) => a.shape === b.shape && Math.abs(a.size - b.size) < 0.26 && Boolean(a.bold) === Boolean(b.bold) && a.color === b.color;
+
+/** Each role's font: the one most of its leaves take (the first of those that tie). */
+function roleFonts(leaves: Leaf[], looks: LeafLook[]): Fonts | undefined {
+  const byRole = new Map<FontRole, Font[]>();
+  leaves.forEach(({ block }, k) => {
+    const role = fontRoleOf(block);
+    const font = looks[k]?.font;
+    if (role && font) byRole.set(role, [...(byRole.get(role) ?? []), font]);
+  });
+  const most = (fonts: Font[]) => fonts.map((f) => ({ f, n: fonts.filter((g) => sameFont(f, g)).length })).sort((a, b2) => b2.n - a.n)[0].f;
+  const body = byRole.get("body");
+  if (!body) return undefined;
+  const out: Fonts = { body: most(body) };
+  for (const [role, fonts] of byRole) if (role !== "body") out[role] = most(fonts);
+  return out;
+}
+
+/** The reference blocks of a rendering, the leaves without layout hints, and
+    its fonts: each role's font, and a block's own where the rendering sets
+    it otherwise. `looks` (one per leaf) give each leaf's font and
+    alignment as the rendering draws them. */
+export function referenceBlocks(leaves: Leaf[], looks: LeafLook[] = []): { blocks: RefBlock[]; fonts?: Fonts } {
+  const fonts = roleFonts(leaves, looks);
   const out: RefBlock[] = [];
-  for (const { block } of leaves) {
+  leaves.forEach(({ block }, k) => {
+    const look = looks[k] ?? {};
+    const role = fontRoleOf(block);
+    const own = look.font && fonts && role && !(fonts[role] && sameFont(look.font, fonts[role])) ? { font: look.font } : {};
+    const align = look.align ? { align: look.align } : {};
+  const headings = leaves.flatMap(({ block }) => (block.kind === "heading" ? [block] : []));
     switch (block.kind) {
       case "title":
-        out.push({ kind: "title", spans: cleanSpans(block.spans) });
+        out.push({ kind: "title", spans: cleanSpans(block.spans), ...align, ...own });
         break;
       case "heading":
-        out.push({ kind: "heading", level: block.level, spans: cleanSpans(block.spans) });
+        out.push({ kind: "heading", level: block.level, spans: cleanSpans(block.spans), ...align, ...own });
         break;
       case "paragraph": {
         const para: RefBlock = { kind: "paragraph", spans: cleanSpans(block.spans) };
-        if (block.align) para.align = block.align;
+        const alignment = look.align ?? block.align;
+        if (alignment) para.align = alignment;
         if (block.indent) para.indent = block.indent;
-        out.push(para);
+        out.push({ ...para, ...own });
         break;
       }
       case "list":
         out.push({
           kind: "list",
           items: block.items.map((it) => ({ depth: it.depth, marker: it.marker, spans: cleanSpans(it.spans), ...(it.checked === undefined ? {} : { checked: it.checked }) })),
+          ...own,
         });
         break;
+      case "contents": {
+        // The entries the page editor draws for the field: the headings at its levels, by level, a
+        // heading's number its entry's marker (the references' contents lists: "1.1", then the words).
+        // The heading right over the field is its title ("Contents"), no entry.
+        const [lo, hi] = block.levels;
+        const title = leaves[k - 1]?.block;
+        const items = headings
+          .filter((h) => h !== title && h.level >= lo && h.level <= hi)
+          .map((h) => {
+            const spans = cleanSpans(h.spans);
+            const number = /^(\d+(?:\.\d+)*\.?)\s+/.exec(spans[0]?.text ?? "");
+            if (number) spans[0] = { ...spans[0], text: spans[0].text.slice(number[0].length) };
+            return { depth: h.level - lo, marker: number?.[1] ?? "", spans };
+          });
+        if (items.length > 0) out.push({ kind: "list", items });
+        break;
+      }
       case "equation":
         out.push(block.label ? { kind: "equation", latex: block.latex, label: block.label } : { kind: "equation", latex: block.latex });
         break;
@@ -474,10 +600,11 @@ export function referenceBlocks(leaves: Leaf[]): RefBlock[] {
               ...(c.rowspan ? { rowspan: c.rowspan } : {}),
             })),
           })),
+          ...own,
         });
         break;
       case "figure":
-        out.push(block.caption ? { kind: "figure", caption: cleanSpans(block.caption) } : { kind: "figure" });
+        out.push(block.caption ? { kind: "figure", caption: cleanSpans(block.caption), ...own } : { kind: "figure" });
         break;
       case "code":
         out.push({ kind: "code", text: block.text });
@@ -486,7 +613,7 @@ export function referenceBlocks(leaves: Leaf[]): RefBlock[] {
         out.push({ kind: "quote", spans: cleanSpans(block.spans) });
         break;
       case "footnote":
-        out.push({ kind: "footnote", label: block.label, spans: cleanSpans(block.spans) });
+        out.push({ kind: "footnote", label: block.label, spans: cleanSpans(block.spans), ...own });
         break;
       case "separator":
         out.push({ kind: "separator" });
@@ -494,8 +621,8 @@ export function referenceBlocks(leaves: Leaf[]): RefBlock[] {
       case "pagebreak":
         break;
     }
-  }
-  return out;
+  });
+  return fonts ? { blocks: out, fonts } : { blocks: out };
 }
 
 /** The words a picture draws as text (a vector picture's labels); a photo has none. */

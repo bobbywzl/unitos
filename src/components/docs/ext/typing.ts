@@ -1,15 +1,9 @@
 import { Extension, type AnyExtension } from "@tiptap/core";
-import {
-  HardBreakNode,
-  InvisibleCharacter,
-  InvisibleCharacters,
-  ParagraphNode,
-  SpaceCharacter,
-} from "@tiptap/extension-invisible-characters";
 import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import { insertContext } from "@/components/docs/insert/context";
 import { isMac } from "@/components/docs/keys";
 import { viewingCopy } from "@/components/docs/page/download";
+import { indentStyle, levelStyle, listSheet, presetNamed } from "@/components/docs/toolbar/lists";
 import { blockText, runAutocorrect } from "@/components/docs/typing/autocorrect";
 import { wordAt } from "@/components/docs/typing/chars";
 import { findPlugin } from "@/components/docs/typing/find";
@@ -29,10 +23,13 @@ import {
   tab,
 } from "@/components/docs/typing/keys";
 import { markStylePlugin, TYPING_RESTORE_META, validMarkStyle } from "@/components/docs/typing/mark-style";
-import { armPlainPaste, imageFiles, insertImageFiles, notePaste, pastedHtml, plainTextSlice } from "@/components/docs/typing/paste";
+import { NonPrinting } from "@/components/docs/typing/non-printing";
+import { armPlainPaste, imageFiles, insertImageFiles, notePaste, pastedHtml, plainTextSlice, uploadsPlugin } from "@/components/docs/typing/paste";
+import { spellingExceptions } from "@/components/docs/typing/spelling";
 import { repeatLastAction, repeatPlugin } from "@/components/docs/typing/repeat";
 import { tracePlugin } from "@/components/docs/typing/trace";
 import { replaceWithChip, urlChipPlugin } from "@/components/docs/typing/url-chip";
+import { listIndentsOf, listLevelsOf } from "@/lib/docs/schema";
 
 // The page editor's typing (SPEC.md §29): Google Docs' keys, autocorrect,
 // paste, and find. It runs first (priority 1001), so its keys win over
@@ -48,14 +45,44 @@ const DocsTyping = Extension.create({
   addGlobalAttributes() {
     return [
       {
-        // A list's preset, as the Google Docs API names it (typing/lists.ts),
-        // on the outermost list. The toolbar area draws each preset's glyphs.
+        // The outermost list's preset, as the Google Docs API names it, or
+        // its own levels (toolbar/lists.ts): its inline style sets each
+        // level's bullet or number, which the list sheet draws (listSheet).
         types: ["bulletList", "orderedList", "taskList"],
         attributes: {
           listStyle: {
             default: null,
             parseHTML: (el) => el.getAttribute("data-list-style"),
-            renderHTML: (attrs) => (attrs.listStyle ? { "data-list-style": attrs.listStyle } : {}),
+            renderHTML: (attrs) => {
+              if (!attrs.listStyle) return {};
+              const preset = presetNamed(attrs.listStyle);
+              return preset ? { "data-list-style": attrs.listStyle, style: levelStyle(preset.levels) } : { "data-list-style": attrs.listStyle };
+            },
+          },
+          listLevels: {
+            default: null,
+            parseHTML: (el) => {
+              const levels = listLevelsOf(el.getAttribute("data-list-levels"));
+              return levels ? JSON.stringify(levels) : null;
+            },
+            renderHTML: (attrs) => {
+              const levels = listLevelsOf(attrs.listLevels);
+              return levels ? { "data-list-levels": attrs.listLevels, style: levelStyle(levels) } : {};
+            },
+          },
+          // Where its depths stand as its page sets them (an import's):
+          // the list sheet draws each depth's words there, its first line,
+          // and its marker before the words (listSheet).
+          listIndents: {
+            default: null,
+            parseHTML: (el) => {
+              const indents = listIndentsOf(el.getAttribute("data-list-indents"));
+              return indents ? JSON.stringify(indents) : null;
+            },
+            renderHTML: (attrs) => {
+              const indents = listIndentsOf(attrs.listIndents);
+              return indents ? { "data-list-indents": attrs.listIndents, style: indentStyle(indents) } : {};
+            },
           },
         },
       },
@@ -172,6 +199,14 @@ const DocsTyping = Extension.create({
     const editor = this.editor;
     const plugin = new Plugin({
       key: typingKey,
+      // The lists' rules (toolbar/lists.ts listSheet), one sheet for every
+      // page editor.
+      view: () => {
+        const sheet = document.getElementById("docs-list-sheet") ?? document.head.appendChild(document.createElement("style"));
+        sheet.id = "docs-list-sheet";
+        sheet.textContent = listSheet(".docs-prose");
+        return {};
+      },
       props: {
         // Typed text goes in as one undo step with the typing around it;
         // then the autocorrect rules for the character run, each its own step.
@@ -197,13 +232,9 @@ const DocsTyping = Extension.create({
           void insertImageFiles(editor, images);
           return true;
         },
-        handleDrop(view, event, _slice, moved) {
-          const images = imageFiles(event.dataTransfer?.files);
-          if (moved || !images.length || !view.editable) return false;
-          event.preventDefault();
-          void insertImageFiles(editor, images, view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos);
-          return true;
-        },
+        // A file or a picture from another page dropped on the page is
+        // typing/drop.ts's, anywhere on the page; ProseMirror drops words
+        // and moves what is dragged inside the page.
         handleDOMEvents: {
           // A paste, a cut, or a drop is its own undo step.
           paste(view) {
@@ -253,20 +284,8 @@ const DocsTyping = Extension.create({
           .setMeta(TYPING_RESTORE_META, true);
       },
     });
-    return [plugin, findPlugin(), tracePlugin(), repeatPlugin(), markStylePlugin(), urlChipPlugin(editor)];
+    return [plugin, findPlugin(), tracePlugin(), repeatPlugin(), markStylePlugin(), urlChipPlugin(editor), uploadsPlugin(), spellingExceptions()];
   },
-});
-
-/** Non-printing characters (Ctrl+Shift+P): ¶ at a paragraph's end, ↵ at a
-    line break, → for a tab, · for a space. Hidden until asked for. */
-const NonPrinting = InvisibleCharacters.configure({
-  visible: false,
-  builders: [
-    new SpaceCharacter(),
-    new InvisibleCharacter({ type: "tab", predicate: (ch) => ch === "\t" }),
-    new ParagraphNode(),
-    new HardBreakNode(),
-  ],
 });
 
 export const typingExtensions: AnyExtension[] = [DocsTyping, NonPrinting, ListToggles];

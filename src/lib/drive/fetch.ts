@@ -82,10 +82,10 @@ export async function fetchDriveMetadata(
 }
 
 // A Google file exported — Drive's own conversion — in the format asked
-// for: PDF for Docs and Drawings (then ingested exactly like an uploaded
-// PDF), .pptx for Slides and .xlsx for Sheets (SPEC.md §27; then ingested
-// exactly like the uploaded file), and PDF again for a Slides file's
-// pictures. Drive caps an export at 10 MB.
+// for: .docx for Docs, .pptx for Slides, and .xlsx for Sheets (SPEC.md §14,
+// §27; then ingested exactly like the uploaded file); PDF for Drawings, for
+// a Doc whose .docx export failed (then ingested exactly like an uploaded
+// PDF), and for a Slides file's pictures. Drive caps an export at 10 MB.
 export async function fetchExported(
   fileId: string,
   token: string,
@@ -111,8 +111,8 @@ export function fetchExportedPdf(
   return fetchExported(fileId, token, grant, t, "application/pdf");
 }
 
-// A file sitting in Drive as it is — a .pptx, a .xlsx, a .csv — the same
-// bytes a direct upload would send.
+// A file sitting in Drive as it is — a .docx, a .pptx, a .xlsx, a .csv —
+// the same bytes a direct upload would send.
 export async function fetchDriveFile(
   fileId: string,
   token: string,

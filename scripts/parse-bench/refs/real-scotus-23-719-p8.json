@@ -27,7 +27,8 @@
     {
      "text": "provisions of the Amendment against the States. It would be incongruous to read this particular Amendment as granting the States the power—silently no less—to disqualify a candidate for federal office."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -42,7 +43,11 @@
     {
      "text": " But there is little reason to think that these Clauses implicitly authorize the States to enforce Section 3 against federal officeholders and candidates. Granting the States that authority would invert the Fourteenth Amendment’s rebalancing of federal and state power."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 11
+   }
   },
   {
    "kind": "footnote",
@@ -153,7 +158,11 @@
     {
      "text": ", 514"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 11
+   }
   },
   {
    "kind": "footnote",

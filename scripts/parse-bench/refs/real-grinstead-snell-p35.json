@@ -25,7 +25,11 @@
     {
      "text": "We see that these two mathematicians arrived at two very different ways to solve the problem of points. Pascal’s method was to develop an algorithm and use it to calculate the fair division. This method is easy to implement on a computer and easy to generalize. Fermat’s method, on the other hand, was to change the problem into an equivalent problem for which he could use counting or combinatorial methods. We will see in Chapter 3 that, in fact, Fermat used what has become known as Pascal’s triangle! In our study of probability today we shall find that both the algorithmic approach and the combinatorial approach share equal billing, just as they did 300 years ago when probability got its start."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 15
+   }
   },
   {
    "kind": "heading",
@@ -162,7 +166,9 @@
       }
      ]
     }
-   ]
+   ],
+   "align": "justify",
+   "itemSpace": 6
   },
   {
    "kind": "equation",
@@ -174,7 +180,12 @@
     {
      "text": "(see Example 1.6)."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 25
+   },
+   "spaceAfter": 8
   },
   {
    "kind": "list",
@@ -300,7 +311,9 @@
       }
      ]
     }
-   ]
+   ],
+   "align": "justify",
+   "itemSpace": 6
   },
   {
    "kind": "list",
@@ -409,7 +422,9 @@
       }
      ]
     }
-   ]
+   ],
+   "align": "justify",
+   "itemSpace": 8
   },
   {
    "kind": "equation",
@@ -510,7 +525,9 @@
       }
      ]
     }
-   ]
+   ],
+   "align": "justify",
+   "itemSpace": 8
   }
  ]
 }

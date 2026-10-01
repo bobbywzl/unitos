@@ -1,0 +1,361 @@
+{
+ "id": "real-earth-observer-2024-01-p7",
+ "category": "newsletter",
+ "source": {
+  "pdf": ".bench/real/newsletter-earth-observer-2024-01.pdf",
+  "url": "https://assets.science.nasa.gov/content/dam/science/esd/earth-observer/2024/EO%20Jan-Feb%202024-Digital%20508.pdf"
+ },
+ "pages": [
+  7,
+  8
+ ],
+ "license": "public-domain",
+ "provenance": "hand",
+ "notes": "NASA's The Earth Observer, vol. 35 issue 7 (the final PDF issue, 2024), a work of the United States government, made in InDesign (Adobe Garamond, Helvetica). Scored: pages 7-8, the start of the feature 'NASA's Earth Science Technology Office Celebrates 25 Years': the article title (h1) and an italic byline with a mail link, bold run-in-sized section heads (h2) and an italic one (h3), a text column beside a sidebar that holds a pull quote (a quote; the source's 'heitages' stays) and figure captions (each caption with its figure: the two figures are images, their labels pixels), bold blue links, a raised note mark and its footnote under a short rule (the footnote follows the paragraph that cites it), InDesign's line-end hyphens to drop (summa-rizes, occa-sionally, technolo-gies, require-ments, strate-gic, tech-nologies, delib-erate, institu-tions, differ-ent, instru-ment, observa-tions, organi-zation) and the compound 'Hyper-Angular' cut at its hyphen, which stays. The running head (title, issue, volume), the page numbers, and the rotated section tab 'feature articles' in the right margin are furniture. The last paragraph continues on page 9: only its words on page 8 are here.",
+ "furniture": [
+  "The Earth Observer",
+  "FINAL PDF ISSUE",
+  "Volume 35, Issue 7",
+  "07",
+  "08",
+  "feature articles"
+ ],
+ "blocks": [
+  {
+   "kind": "heading",
+   "level": 1,
+   "spans": [
+    {
+     "text": "NASA’s Earth Science Technology Office Celebrates 25 Years"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Philip Larkin, Earth Science Technology Office, ",
+     "italic": true
+    },
+    {
+     "text": "Philip.larkin@nasa.gov",
+     "italic": true,
+     "href": "mailto:Philip.larkin@nasa.gov"
+    }
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 14
+   }
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "Introduction",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Many Earth science missions, both airborne and on orbit, can trace their origins to the early technology developments that produced the groundbreaking instruments, instrument "
+    },
+    {
+     "text": "components",
+     "italic": true
+    },
+    {
+     "text": " (the parts or subsystems that make up an instrument), and information systems that enabled these missions. To give one recent example, NASA’s "
+    },
+    {
+     "text": "Plankton, Aerosol, Cloud, ocean Ecosystem mission (PACE)",
+     "bold": true,
+     "href": "https://pace.oceansciences.org/home.htm"
+    },
+    {
+     "text": " mission, launched on February 8, includes two instruments – the "
+    },
+    {
+     "text": "Ocean Color Instrument",
+     "bold": true,
+     "href": "https://pace.oceansciences.org/oci.htm"
+    },
+    {
+     "text": " and the "
+    },
+    {
+     "text": "Hyper-Angular Rainbow Polarimeter #2",
+     "bold": true,
+     "href": "https://pace.oceansciences.org/harp2.htm"
+    },
+    {
+     "text": " – that were directly derived from technology development efforts."
+    }
+   ]
+  },
+  {
+   "kind": "quote",
+   "spans": [
+    {
+     "text": "Many Earth science missions, both airborne and on orbit, can trace their heitages to the early technology developments that produced the groundbreaking instruments, instrument components ... and information systems that enabled these missions.",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Since 1998, NASA’s "
+    },
+    {
+     "text": "Earth Science Technology Office",
+     "bold": true,
+     "href": "https://esto.nasa.gov/"
+    },
+    {
+     "text": " (ESTO) has been the entity the fullfills this technology testing and development function within NASA’s Earth Science Division."
+    },
+    {
+     "text": "1",
+     "sup": true
+    },
+    {
+     "text": " March 15, 2023, marked the twenty-fifth anniversary of ESTO. As with many organizations, the quarter-century milestone is a natural time to reflect on the past and look toward the future."
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "1",
+   "spans": [
+    {
+     "text": "To learn more about the components of ESTO, see "
+    },
+    {
+     "text": "ESTO: Benfitting Earth Science Through Technology",
+     "bold": true,
+     "href": "https://eospso.nasa.gov/sites/default/files/eo_pdfs/May_June_2013_508_color.pdf#page=22"
+    },
+    {
+     "text": ", in the May–June 2013 issue of "
+    },
+    {
+     "text": "The Earth Observer",
+     "italic": true
+    },
+    {
+     "text": " ["
+    },
+    {
+     "text": "Volume 25",
+     "bold": true
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "Issue 3",
+     "bold": true
+    },
+    {
+     "text": ", pp. 22–29]."
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Following an opening historical overview of ESTO, the majority of the article summarizes a 2023 analysis of the ESTO portfolio of investments, taking a retrospective look at the accomplishments from the first 25 years."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "Overview of ESTO History",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "By the 1990s, NASA Earth Science recognized that untested and underdeveloped technologies had the potential to stall the progress of mission implementation, occasionally idling large mission teams while bugs were worked out. (For context, this would be around the time the first missions of the Earth Observing System (EOS) were preparing to launch.) ESTO was formed to help manage and nurture technologies outside of the framework of flight missions, to allow new ideas to incubate and mature fully before being picked up for operational use."
+    }
+   ],
+   "spaceAfter": 9
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Since its inception, ESTO has employed an open, flexible, science-driven strategy that relies on competition and peer review to select promising technologies for Earth science. While early efforts focused on remote sensing instruments and data systems, solicitation topic areas gradually expanded to span the diversity of needs and requirements, from lidar and sensor webs to efforts that focus on a particular science theme, e.g., wildfire science and mitigation."
+    }
+   ],
+   "spaceAfter": 9
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Over the last 25 years, ESTO has awarded and managed more than 1100 technology projects for future science measurements. This forward-looking portfolio has enabled new Earth-observing capabilities, informed Earth Science Decadal Surveys and strategic planning, and generated numerous infusions and spinoffs."
+    }
+   ],
+   "spaceAfter": 9
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "While every technology project has a story to tell, ESTO has assembled a series of 30 highlights focusing on some of the more notable impacts. Visit the dedicated "
+    },
+    {
+     "text": "25th Anniversary Project webpage",
+     "bold": true,
+     "href": "https://esto.nasa.gov/25years/"
+    },
+    {
+     "text": " to learn about some of the most notable ESTO technologies that have been infused into Earth science missions, science campaigns, or other operational or commercial activities over the past quarter century."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "Twenty-fifth Anniversary Analysis",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In 2023, ESTO undertook a review of its portfolio to catalog past achievements. The results compiled to date are summarized in the subsections that follow. Taken together, they clearly show the remarkable impact of ESTO’s 25 years of early, deliberate technology development to Earth science as well as other space science and commercialization activities."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 3,
+   "spans": [
+    {
+     "text": "A Diversified Portfolio",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "ESTO technology projects find their origins in a wide range of people and institutions across the country. Principal Investigators (PIs) hail from more than 200 different organizations – from colleges and universities to corporations and non-profits to NASA field centers and Federal labs – in 42 states. More than 2000 collaborators, co-investigators, and other partners also contribute their expertise, from over 400 organizations in 44 states – see "
+    },
+    {
+     "text": "Figure 1",
+     "bold": true
+    },
+    {
+     "text": "."
+    }
+   ]
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "Figure 1.",
+     "bold": true
+    },
+    {
+     "text": " Breakdown of organization affiliations of ESTO PIs and Co-PIs. "
+    },
+    {
+     "text": "Image credit:",
+     "bold": true
+    },
+    {
+     "text": " Philip Larkin/GSFC"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In response to the 44 solicitations ESTO has released since 1998, this community of technologists, engineers, and scientists has supplied an abundance of new ideas and methods for NASA Earth science endeavors. The ESTO portfolio addresses the full breadth of Earth science measurements, from remote sensing instruments and instrument subsystems to advanced information systems, machine learning, and modeling to highly targeted areas such as quantum sensing, wildfire technologies, and Earth digital twins. New technologies on orbit, in the air, and on the ground are helping to improve Earth System science measurement processes, from predictions to observations and initial data collection to analysis and information access."
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "spans": [
+    {
+     "text": "Measuring Advancements",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "ESTO makes regular assessments of Technology Readiness Levels (TRLs) for most projects in the portfolio, including at the outset of the project, at the final review, and at least annually during the period of funding. (Some projects, particularly studies and operational transition efforts, are not assigned TRLs). The TRL scales – see "
+    },
+    {
+     "text": "Figure 2",
+     "bold": true
+    },
+    {
+     "text": " – provide a useful framework to evaluate the current state of a technology as well as track development progress over time."
+    }
+   ]
+  },
+  {
+   "kind": "figure",
+   "caption": [
+    {
+     "text": "Figure 2.",
+     "bold": true
+    },
+    {
+     "text": " The ESTO Technology Readiness Level (TRL) scale helps track the development of most projects in its portfolio. ESTO has been successful in advancing many of its projects by one or more TRLs throughout their lifetime – see "
+    },
+    {
+     "text": "Figure 3",
+     "bold": true
+    },
+    {
+     "text": " on page 9. For example, 31% of projects active in 2023 advanced by at least one TRL. "
+    },
+    {
+     "text": "Image credit:",
+     "bold": true
+    },
+    {
+     "text": " Philip Larkin"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "In 1998, the NASA Earth Science Division set a goal for ESTO to annually advance 25% of currently funded technology projects at least one TRL. This metric has been surpassed every year since. For example, in Fiscal Year 2023 (FY23), 31% of active ESTO projects advanced at least one TRL. An analysis of all the TRL-reportable"
+    }
+   ]
+  }
+ ]
+}

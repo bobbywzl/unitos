@@ -83,6 +83,9 @@ export type Highlight = {
   // The stored AI annotation's tool symbol renders at the end of the span, in
   // every view; the symbol opens the card. Kind "anchor" only.
   tool?: "explain" | "simplify" | "analyze" | "visualize" | "assistant";
+  // Another block of a passage across blocks: it paints as the tool's mark
+  // and opens its card, and the symbol stays on the passage's first block.
+  chipless?: boolean;
   // The stored AI annotation's card is open: the mark keeps the clay fill.
   // Closed, a stored AI annotation is its underline and its symbol alone,
   // so it never reads as the live selection (globals.css .tool-mark).
@@ -166,18 +169,33 @@ export function ToolSymbol({ tool, plus, size }: { tool: ToolKind; plus?: boolea
   );
 }
 
-function headingLevel(html: string | null): 1 | 2 | 3 {
-  const m = html?.match(/^<h([1-3])/);
-  return m ? (Number(m[1]) as 1 | 2 | 3) : 2;
+function headingLevel(html: string | null): 1 | 2 | 3 | 4 | 5 | 6 {
+  const m = html?.match(/^<h([1-6])/);
+  return m ? (Number(m[1]) as 1 | 2 | 3 | 4 | 5 | 6) : 2;
 }
+
+// Each heading level's margins and size, h1 first. A PDF whose numbering
+// runs four levels deep ("1) Implementation:" under "A." under "III.")
+// gives h4, and each step down is smaller, down to the body's 17px.
+const HEADING_CLASSES = [
+  "mt-10 mb-3 text-[26px]",
+  "mt-8 mb-2.5 text-[22px]",
+  "mt-6 mb-2.5 text-[20px]",
+  "mt-5 mb-2 text-[18px]",
+  "mt-5 mb-2 text-[17px]",
+  "mt-4 mb-2 text-[17px]",
+];
 
 // Layout tokens: the class tokens on a text block's first tag. The parser
 // stores `<p class="kicker center">`, `<h2 class="center">`,
 // `<ol class="contents">` for a page's masthead, contents list, pull quote,
 // or caption; the reader lays the block out by them (SPEC.md §6). One token
-// decides a block's look, in the order below; center only aligns.
+// decides a block's look, in the order below; center, right, and justify
+// (a PDF's alignment) only align.
 export type LayoutToken =
   | "center"
+  | "right"
+  | "justify"
   | "kicker"
   | "meta"
   | "label"
@@ -188,6 +206,8 @@ export type LayoutToken =
   | "footnote";
 const LAYOUT_TOKENS = new Set<string>([
   "center",
+  "right",
+  "justify",
   "kicker",
   "meta",
   "label",
@@ -212,7 +232,7 @@ const MONO_LINE = "font-mono text-[12px] text-sand-600 uppercase";
 
 /** The block's classes for its layout tokens; base is the plain block's. */
 export function layoutClass(tokens: Set<LayoutToken>, base: string): string {
-  const center = tokens.has("center") ? " text-center" : "";
+  const center = tokens.has("center") ? " text-center" : tokens.has("right") ? " text-right" : tokens.has("justify") ? " text-justify" : "";
   if (tokens.has("kicker")) return `${MONO_LINE} tracking-[0.22em] mt-0 mb-4${center}`;
   if (tokens.has("meta")) return `${MONO_LINE} tracking-[0.14em] my-3${center}`;
   if (tokens.has("label")) {
@@ -513,7 +533,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
       // A stored AI annotation's tool symbol sits at the end of its span —
       // explain, simplify, or assistant — and opens the card.
       const toolEnding = covering.find(
-        (h) => h.kind === "anchor" && h.tool && h.sourceId && h.end === to,
+        (h) => h.kind === "anchor" && h.tool && !h.chipless && h.sourceId && h.end === to,
       );
       if (toolEnding?.tool) {
         const tip = t((toolEnding.plus ? TOOL_PLUS_KEY : TOOL_KEY)[toolEnding.tool]);
@@ -850,17 +870,9 @@ export function BlockView({
   switch (block.type) {
     case "HEADING": {
       const level = headingLevel(block.html);
-      const cls = layoutClass(
-        layoutTokens(block.html),
-        level === 1
-          ? "mt-10 mb-3 text-[26px]"
-          : level === 2
-            ? "mt-8 mb-2.5 text-[22px]"
-            : "mt-6 mb-2.5 text-[20px]",
-      );
-      if (level === 1) return <h1 data-block-id={block.id} className={`${shared} ${cls}`}>{content}</h1>;
-      if (level === 2) return <h2 data-block-id={block.id} className={`${shared} ${cls}`}>{content}</h2>;
-      return <h3 data-block-id={block.id} className={`${shared} ${cls}`}>{content}</h3>;
+      const cls = layoutClass(layoutTokens(block.html), HEADING_CLASSES[level - 1]);
+      const Heading = `h${level}` as const;
+      return <Heading data-block-id={block.id} className={`${shared} ${cls}`}>{content}</Heading>;
     }
     case "PARAGRAPH":
       // An empty paragraph (a blank document's first block, an inserted one

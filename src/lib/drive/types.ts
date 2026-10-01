@@ -1,5 +1,12 @@
 import { MEDIA_EXTENSIONS } from "@/lib/video/types";
-import { SHEETS_EXTENSIONS, SHEETS_MIME_TYPE, SLIDES_EXTENSIONS, SLIDES_MIME_TYPE } from "@/lib/office-file";
+import {
+  SHEETS_EXTENSIONS,
+  SHEETS_MIME_TYPE,
+  SLIDES_EXTENSIONS,
+  SLIDES_MIME_TYPE,
+  WORD_MIME_TYPE,
+  isWordFile,
+} from "@/lib/office-file";
 
 // Google Drive upload (SPEC.md §14): a new way to add a document, picked from
 // Drive instead of the local disk. This file is imported by both the client
@@ -42,32 +49,37 @@ export function driveAppId(clientId: string): string | null {
   return /^(\d+)-/.exec(clientId)?.[1] ?? null;
 }
 
-// Google Docs and Drawings have no reader of their own here; Drive exports
-// them to PDF first (lib/drive/fetch.ts), then they ingest exactly like an
-// uploaded PDF. Google Slides exports as a .pptx and Google Sheets as a
-// .xlsx (SPEC.md §27): the slides and sheets parsers read those, the
-// same as an uploaded file.
-const EXPORTABLE_MIME_TYPES = new Set([
-  "application/vnd.google-apps.document",
-  "application/vnd.google-apps.drawing",
-]);
+// A Google Doc exports as a .docx (Drive's own conversion, lib/drive/fetch.ts)
+// and the Word parser reads it as it reads an uploaded Word file: headings,
+// lists, tables, equations, and footnotes from the file's own structure,
+// where Drive's PDF export left them to be guessed from the page. The PDF
+// export stays the fallback when the .docx export fails. A Google Drawing
+// has no reader of its own here: Drive exports it to PDF, which ingests
+// exactly like an uploaded PDF. Google Slides exports as a .pptx and Google
+// Sheets as a .xlsx (SPEC.md §27): the slides and sheets parsers read those,
+// the same as an uploaded file.
+const GOOGLE_DOCS_MIME_TYPE = "application/vnd.google-apps.document";
+const GOOGLE_DRAWINGS_MIME_TYPE = "application/vnd.google-apps.drawing";
 export const GOOGLE_SLIDES_MIME_TYPE = "application/vnd.google-apps.presentation";
 export const GOOGLE_SHEETS_MIME_TYPE = "application/vnd.google-apps.spreadsheet";
 
 const MEDIA_MIME_RX = /^(?:video|audio)\//i;
 const SHEETS_FILE_MIME_TYPES = new Set([SHEETS_MIME_TYPE, "text/csv", "text/tab-separated-values"]);
 
-// What a picked file becomes: "export" asks Drive to convert it to PDF first;
-// "slides" and "sheets" ask Drive for the .pptx or .xlsx of a Google Slides
-// or Sheets file; "slides-file" and "sheets-file" are a .pptx or a
-// .xlsx/.csv/.tsv sitting in Drive; "pdf" and "media" download the bytes
-// directly. Every kind ingests exactly like the same file uploaded
-// (SPEC.md §4 discipline extended to ingest — Drive is a new source, never
-// a new parser).
+// What a picked file becomes: "docx" asks Drive for the .docx of a Google
+// Doc (its PDF export the fallback); "export" asks Drive to convert a
+// Google Drawing to PDF; "slides" and "sheets" ask Drive for the .pptx or
+// .xlsx of a Google Slides or Sheets file; "docx-file", "slides-file", and
+// "sheets-file" are a .docx, a .pptx, or a .xlsx/.csv/.tsv sitting in
+// Drive; "pdf" and "media" download the bytes directly. Every kind ingests
+// exactly like the same file uploaded (SPEC.md §4 discipline extended to
+// ingest — Drive is a new source, never a new parser).
 export type DriveFileKind =
+  | "docx"
   | "export"
   | "slides"
   | "sheets"
+  | "docx-file"
   | "slides-file"
   | "sheets-file"
   | "pdf"
@@ -75,9 +87,11 @@ export type DriveFileKind =
   | "unsupported";
 
 export function classifyDriveFile(mimeType: string, name: string): DriveFileKind {
-  if (EXPORTABLE_MIME_TYPES.has(mimeType)) return "export";
+  if (mimeType === GOOGLE_DOCS_MIME_TYPE) return "docx";
+  if (mimeType === GOOGLE_DRAWINGS_MIME_TYPE) return "export";
   if (mimeType === GOOGLE_SLIDES_MIME_TYPE) return "slides";
   if (mimeType === GOOGLE_SHEETS_MIME_TYPE) return "sheets";
+  if (isWordFile({ type: mimeType, name })) return "docx-file";
   if (mimeType === SLIDES_MIME_TYPE || SLIDES_EXTENSIONS.test(name)) return "slides-file";
   if (SHEETS_FILE_MIME_TYPES.has(mimeType) || SHEETS_EXTENSIONS.test(name)) return "sheets-file";
   if (mimeType === "application/pdf") return "pdf";
@@ -93,12 +107,14 @@ export function classifyDriveFile(mimeType: string, name: string): DriveFileKind
 // unsupported.
 export const DRIVE_FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
 
-// The picker's own filter: images, Forms, raw .docx, plain text, and
-// everything else stay greyed out before the reader ever selects them.
-export const DRIVE_PICKER_MIME_TYPES = [
-  ...EXPORTABLE_MIME_TYPES,
+// The picker's own filter: images, Forms, plain text, and everything else
+// stay greyed out before the reader ever selects them.
+const PICKER_MIME_TYPES = [
+  GOOGLE_DOCS_MIME_TYPE,
+  GOOGLE_DRAWINGS_MIME_TYPE,
   GOOGLE_SLIDES_MIME_TYPE,
   GOOGLE_SHEETS_MIME_TYPE,
+  WORD_MIME_TYPE,
   SLIDES_MIME_TYPE,
   ...SHEETS_FILE_MIME_TYPES,
   DRIVE_FOLDER_MIME_TYPE,
@@ -114,13 +130,15 @@ export const DRIVE_PICKER_MIME_TYPES = [
   "audio/x-wav",
   "audio/flac",
   "audio/ogg",
-].join(",");
+];
+export const DRIVE_PICKER_MIME_TYPES = PICKER_MIME_TYPES.join(",");
 
 // The assistant's own picker filter (SPEC.md §7): what an attachment takes —
 // the exportable formats and PDF (text), video and audio (transcribed),
-// images (shown to the model), and plain text.
+// images (shown to the model), and plain text. A raw .docx stays greyed
+// out: an attachment has no text rendering of it (classifyDriveAttachment).
 export const DRIVE_ASSISTANT_MIME_TYPES = [
-  DRIVE_PICKER_MIME_TYPES,
+  ...PICKER_MIME_TYPES.filter((type) => type !== WORD_MIME_TYPE),
   "image/png",
   "image/jpeg",
   "image/gif",
@@ -138,11 +156,11 @@ export type DriveAttachmentKind = DriveFileKind | "image" | "text";
 
 export function classifyDriveAttachment(mimeType: string, name: string): DriveAttachmentKind {
   const kind = classifyDriveFile(mimeType, name);
-  // An attachment reads as text: a Google Slides or Sheets file rides as
-  // Drive's PDF export, as every Google file does; a raw .pptx or .xlsx has
-  // no text rendering for the assistant and stays out.
-  if (kind === "slides" || kind === "sheets") return "export";
-  if (kind === "slides-file" || kind === "sheets-file") return "unsupported";
+  // An attachment reads as text: a Google Doc, Slides, or Sheets file rides
+  // as Drive's PDF export, as every Google file does; a raw .docx, .pptx,
+  // or .xlsx has no text rendering for the assistant and stays out.
+  if (kind === "docx" || kind === "slides" || kind === "sheets") return "export";
+  if (kind === "docx-file" || kind === "slides-file" || kind === "sheets-file") return "unsupported";
   if (kind !== "unsupported") return kind;
   if (/^image\//i.test(mimeType)) return "image";
   if (/^text\//i.test(mimeType) || /\.(txt|md|markdown|csv|tsv)$/i.test(name)) return "text";

@@ -1,7 +1,8 @@
 "use client";
 
 import type { Editor } from "@tiptap/react";
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import type { DocsAreaProps } from "@/components/docs/areas/types";
 import { registerDocsCommands, type DocsCommand } from "@/components/docs/commands";
@@ -14,17 +15,23 @@ import { findState, searchFrom, setFind, stepResult } from "@/components/docs/ty
 import { FindBar, FindReplaceDialog, type FindMode } from "@/components/docs/typing/find-ui";
 import { setCase, toggleSmallCaps, type TextCase } from "@/components/docs/typing/format";
 import { listenNavigation, lookUpWord } from "@/components/docs/typing/navigate";
-import { copyMarkdown, pasteMarkdown } from "@/components/docs/typing/paste";
-import { typingPrefs } from "@/components/docs/typing/prefs";
+import { listenImageDrop, type DropState } from "@/components/docs/typing/drop";
+import { copyMarkdown, pasteMarkdown, setImagePremium } from "@/components/docs/typing/paste";
+import { DictionaryDialog } from "@/components/docs/typing/dictionary-dialog";
+import { subscribeTypingPrefs, typingPrefs } from "@/components/docs/typing/prefs";
 import { PreferencesDialog } from "@/components/docs/typing/preferences-dialog";
+import { acceptedWords, setAcceptedWords } from "@/components/docs/typing/spelling";
 import { ShortcutsDialog } from "@/components/docs/typing/shortcuts-dialog";
 import { VoiceTyping } from "@/components/docs/typing/voice-typing";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // The typing area (SPEC.md §29): find and find and replace, Tools >
-// Preferences, the keyboard shortcuts, voice typing, and the spelling
-// switch; in Search the menus also Format > Text, View > Show non-printing
-// characters, and Edit's clipboard items. Their keys answer when the page
+// Preferences, the keyboard shortcuts, voice typing, the spelling switch,
+// the personal dictionary and the words ignored in the document
+// (typing/spelling.ts), and images dropped anywhere on the page
+// (typing/drop.ts); in Search the
+// menus also Format > Text, View > Show non-printing characters, and Edit's
+// clipboard items. Their keys answer when the page
 // editor has the focus, or when nothing else does — never in the notes
 // tray or any other text box. The word count (word-count.tsx) mounts
 // beside this layer.
@@ -109,6 +116,13 @@ registerDocsCommands([
     enabled: (editor) => typingPrefs().markdown && !editor.state.selection.empty,
   },
   {
+    id: "typing:personal-dictionary",
+    label: "docsTyping.personalDictionary",
+    menu: "tools",
+    keywords: ["personal dictionary", "add to dictionary", "spelling", "custom words", "个人词典", "拼写"],
+    run: (editor) => fireDocs(editor, TYPING_EVENT.personalDictionary),
+  },
+  {
     id: "typing:shortcuts",
     label: "docsTyping.keyboardShortcuts",
     menu: "tools",
@@ -164,13 +178,31 @@ function docsActive(editor: Editor): boolean {
   return false;
 }
 
-export function TypingLayer({ editor }: DocsAreaProps) {
+export function TypingLayer({ editor, documentId, canEdit, projectEditor, editing }: DocsAreaProps) {
   const t = useT();
+  const { premium } = useCollab();
   const [findMode, setFindMode] = useState<FindMode>(null);
+
+  // Images dropped on the page, and the images' tier rule (typing/paste.ts).
+  const dropState = useRef<DropState>({ canEdit, projectEditor, editing, t });
+  useEffect(() => {
+    dropState.current = { canEdit, projectEditor, editing, t };
+    setImagePremium(editor, premium);
+  });
+  useEffect(() => listenImageDrop(editor, () => dropState.current), [editor]);
   const [focusToken, setFocusToken] = useState(0);
   const [prefsOpen, setPrefsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
+  const [dictionaryOpen, setDictionaryOpen] = useState(false);
+
+  // The reader's own words, the personal dictionary's and this document's
+  // ignored ones: the page's spelling check passes them (typing/spelling.ts).
+  useEffect(() => {
+    const send = () => setAcceptedWords(editor, acceptedWords(documentId));
+    send();
+    return subscribeTypingPrefs(send);
+  }, [editor, documentId]);
 
   // Google Docs' navigation keys: the chords, the misspellings, Dictionary.
   // A layout effect: the chords' listener is the window's first, so the key
@@ -224,6 +256,7 @@ export function TypingLayer({ editor }: DocsAreaProps) {
       [TYPING_EVENT.shortcuts, () => setShortcutsOpen(true)],
       [TYPING_EVENT.voice, () => setVoiceOpen(true)],
       [TYPING_EVENT.spelling, toggleSpelling],
+      [TYPING_EVENT.personalDictionary, () => setDictionaryOpen(true)],
     ];
     window.addEventListener("keydown", onKey);
     for (const [name, on] of events) view.dom.addEventListener(name, on);
@@ -254,6 +287,14 @@ export function TypingLayer({ editor }: DocsAreaProps) {
         <PreferencesDialog
           onClose={() => {
             setPrefsOpen(false);
+            editor.commands.focus();
+          }}
+        />
+      )}
+      {dictionaryOpen && (
+        <DictionaryDialog
+          onClose={() => {
+            setDictionaryOpen(false);
             editor.commands.focus();
           }}
         />

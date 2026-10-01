@@ -52,7 +52,8 @@
         },
         {
           "text": "99.2%",
-          "bold": true
+          "bold": true,
+          "highlight": "#ffff00"
         },
         {
           "text": ", above the "
@@ -62,7 +63,14 @@
           "href": "https://example.com/aurora/slo"
         },
         {
-          "text": " of 99%. The main complaint in feedback was slow sync on hotel and airport Wi-Fi, which the offline mode below addresses."
+          "text": " of 99%. The main complaint in feedback was "
+        },
+        {
+          "text": "slow sync on hotel and airport Wi-Fi",
+          "color": "#cc0000"
+        },
+        {
+          "text": ", which the offline mode below addresses."
         }
       ]
     },
@@ -131,6 +139,13 @@
               "text": "Keep the weekly beta build on "
             },
             {
+              "text": "Tuesdays",
+              "strike": true
+            },
+            {
+              "text": " "
+            },
+            {
               "text": "Thursdays",
               "bold": true
             },
@@ -139,7 +154,8 @@
             }
           ]
         }
-      ]
+      ],
+      "itemSpace": 0
     },
     {
       "kind": "heading",
@@ -178,7 +194,14 @@
           "marker": "☐",
           "spans": [
             {
-              "text": "Book the design review for October 2 (Priya)"
+              "text": "Book the design review for "
+            },
+            {
+              "text": "October 2",
+              "underline": true
+            },
+            {
+              "text": " (Priya)"
             }
           ],
           "checked": false
@@ -193,7 +216,8 @@
           ],
           "checked": false
         }
-      ]
+      ],
+      "itemSpace": 0
     },
     {
       "kind": "heading",
@@ -381,7 +405,14 @@
       "kind": "paragraph",
       "spans": [
         {
-          "text": "Median sync time is still above target. Wei will add a breakdown by network type so we can see whether the slow cases are all on public Wi-Fi."
+          "text": "Median sync time is still above target. "
+        },
+        {
+          "text": "Wei will add a breakdown by network type",
+          "highlight": "#ffff00"
+        },
+        {
+          "text": " so we can see whether the slow cases are all on public Wi-Fi."
         }
       ]
     },
@@ -477,10 +508,29 @@
             }
           ]
         }
-      ]
+      ],
+      "itemSpace": 0
     }
   ],
   "furniture": [],
+  "fonts": {
+    "body": {
+      "shape": "sans",
+      "size": 11
+    },
+    "title": {
+      "shape": "sans",
+      "size": 26
+    },
+    "h1": {
+      "shape": "sans",
+      "size": 20
+    },
+    "h2": {
+      "shape": "sans",
+      "size": 16
+    }
+  },
   "license": "open",
   "provenance": "generated",
   "notes": "Bullet glyphs change with depth (● ○ ■) and are text in the PDF. In HTML the diagram's box and arrow labels are text in the PDF but belong to the figure; in Word the diagram is a picture. The Chinese paragraph is set in WenQuanYi Zen Hei."

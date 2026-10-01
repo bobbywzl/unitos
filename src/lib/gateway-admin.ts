@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { GEMINI_3_8_FLASH } from "@/lib/derive/config";
 import { gatewayAdminKey, gatewayBaseUrl, gatewayKey } from "@/lib/gateway";
-import { isClaudeId } from "@/lib/model-call";
+import { isClaudeId, isGeminiId } from "@/lib/model-call";
 import { currentModelId, isGlmModel, MODEL_ROLES, resolveModelId, ROLE_ORDER, type ModelRole } from "@/lib/models";
 import { outboundFetch } from "@/lib/outbound-fetch";
 import { providerOf } from "@/lib/usage";
@@ -513,8 +514,10 @@ export async function appGatewayModels(): Promise<string[]> {
   // provider's prefix; a role's default id is already listed by its role.
   for (const row of await db.featureModel.findMany({ select: { modelId: true } })) {
     const id = await resolveModelId(row.modelId);
-    names.add(`${isClaudeId(id) ? "anthropic" : isGlmModel(id) ? "zai" : "moonshot"}/${id}`);
+    names.add(`${isClaudeId(id) ? "anthropic" : isGeminiId(id) ? "gemini" : isGlmModel(id) ? "zai" : "moonshot"}/${id}`);
   }
+  // The assistant's model, called as written rather than as a role's default.
+  names.add(`gemini/${GEMINI_3_8_FLASH}`);
   names.add("gemini/gemini-flash-latest");
   names.add("groq/whisper-large-v3-turbo");
   return [...names];

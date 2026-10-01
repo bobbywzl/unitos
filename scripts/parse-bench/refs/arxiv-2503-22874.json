@@ -52,7 +52,12 @@
     {
      "text": " §,"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 4
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -74,7 +79,8 @@
     {
      "text": " ∥,"
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -84,17 +90,52 @@
      "sup": true
     },
     {
-     "text": "Instituto de Ciencias Nucleares, Universidad Nacional Autónoma de México, Circuito Exterior S/N, C.U., A.P. 70-543,"
+     "text": "Instituto "
+    },
+    {
+     "text": "de Ciencias Nucleares, Universidad Nacional",
+     "italic": true
+    },
+    {
+     "text": " Autónoma "
+    },
+    {
+     "text": "de",
+     "italic": true
+    },
+    {
+     "text": " México, "
+    },
+    {
+     "text": "Circuito Exterior S/N, C.U., A.P. 70-543",
+     "italic": true
+    },
+    {
+     "text": ","
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 3
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
    "spans": [
     {
-     "text": "CDMX 04510, México."
+     "text": "CDMX 04510",
+     "italic": true
+    },
+    {
+     "text": ", México."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 3
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -104,17 +145,62 @@
      "sup": true
     },
     {
-     "text": "Departamento de Fı́sica Aplicada, Centro de Investigación y de Estudios Avanzados del IPN, Unidad Mérida. A.P. 73, Cordemex,"
+     "text": "Departamento "
+    },
+    {
+     "text": "de",
+     "italic": true
+    },
+    {
+     "text": " Fı́sica "
+    },
+    {
+     "text": "Aplicada, Centro de",
+     "italic": true
+    },
+    {
+     "text": " Investigación "
+    },
+    {
+     "text": "y de Estudios Avanzados del IPN, Unidad",
+     "italic": true
+    },
+    {
+     "text": " Mérida. "
+    },
+    {
+     "text": "A.P. 73, Cordemex",
+     "italic": true
+    },
+    {
+     "text": ","
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 3
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
    "spans": [
     {
-     "text": "Mérida, Yucatán 97310, México."
+     "text": "Mérida, Yucatán "
+    },
+    {
+     "text": "97310",
+     "italic": true
+    },
+    {
+     "text": ", México."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 3
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -124,9 +210,20 @@
      "sup": true
     },
     {
-     "text": "Department of Physics and Astronomy, California State University, 1250 Bellflower Boulevard, Long Beach, CA 90840, USA."
+     "text": "Department "
+    },
+    {
+     "text": "of Physics and Astronomy, California State University, 1250 Bellflower Boulevard, Long Beach, CA 90840, USA",
+     "italic": true
+    },
+    {
+     "text": "."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 3
+   }
   },
   {
    "kind": "footnote",
@@ -251,7 +348,11 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "Key words: BL Lacertae objects: individual: PG 1553+113, galaxies: distances and redshifts, methods: statistical"
+     "text": "Key words",
+     "bold": true
+    },
+    {
+     "text": ": BL Lacertae objects: individual: PG 1553+113, galaxies: distances and redshifts, methods: statistical"
     }
    ]
   },
@@ -278,7 +379,12 @@
     {
      "text": "In BL Lac objects, the non-thermal radiation significantly overshadows the stellar light emitted by their host galaxies, making it challenging to determine accurately the redshifts. This limitation creates uncertainties in studying the cosmic evolution, deciphering the source’s characteristics, and analysing its intrinsic VHE spectrum. Given that VHE photons are absorbed by the EBL, obtaining precise redshift measurements is essential for understanding the EBL’s influence on VHE photons."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   },
+   "spaceAfter": 1
   },
   {
    "kind": "paragraph",
@@ -286,7 +392,12 @@
     {
      "text": "PG 1553+113, a well-known blazar, was first identified in a photographic survey (Green et al. 1986). Its spectral properties have been thoroughly examined, leading to its classification as a high-frequency synchrotron peaked BL Lac (HBL) (Chang et al. 2019). Over the years, multiple VHE observations have been carried out using different instruments. The HESS telescope array first detected this blazar in gamma-rays in 2005 (Aharonian et al. 2006), and it was later monitored by MAGIC and VERITAS in various campaigns between 2005 and 2015, especially during periods of heightened activity. PG 1553+113 is a prime target for high-energy astrophysics due to its extreme variability and emission mechanisms. However, its redshift remains unconfirmed via spectroscopy, making indirect estimation methods critical for interpreting its emission properties and cosmological impact."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -302,7 +413,11 @@
     {
      "text": "), as measured on Earth, can be expressed as (Hauser & Dwek 2001):"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   }
   },
   {
    "kind": "equation",
@@ -460,7 +575,11 @@
     {
      "text": ". Our study aims to estimate the redshift of PG 1553+113 using the photohadronic model, employing a statistical approach and a comprehensive dataset."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   }
   },
   {
    "kind": "paragraph",
@@ -484,7 +603,11 @@
     {
      "text": "The structure of this paper is organized as follows. Section 2 provides an overview of the seventeen independent observations of PG 1553+113 used in the analysis. Section 3 offers a concise review of the photohadronic model and its relevance to this study. Section 4 presents the analysis and results, while Section 5 concludes with a summary and discussion of the findings."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   }
   },
   {
    "kind": "heading",
@@ -518,7 +641,8 @@
     {
      "text": "In reference Aharonian et al. (2008), a re-analysis of the 2005 HESS data (7.6 hours) for PG 1553+113 (Aharonian et al. 2006) is presented, incorporating an improved calibration of the detector’s absolute energy scale. Additionally, results from 17.2 hours of HESS observations conducted in 2006 are reported."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -526,7 +650,12 @@
     {
      "text": "The HESS system observed PG 1553+113 in the VHE gamma-ray regime during observational campaigns in 2005 and 2006. Over the two-year period, HESS accumulated 24.8 hours of live time, resulting in the detection of a VHE gamma-ray signal with a statistical significance of approximately 10 standard deviations. The emission displayed remarkable stability, with no significant flux variability or spectral changes observed across any timescale."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -550,7 +679,12 @@
     {
      "text": "m) were conducted in March 2006 using the Spectrograph for INtegral Field Observations in the Near Infrared (SINFONI) on the European Southern Observatory’s Very Large Telescope (VLT) in Chile. Despite the exceptional sensitivity of the SINFONI integral field spectrometer, producing one of the highest-resolution near-infrared spectra of PG 1553+113 to date, the data revealed no detectable absorption or emission features. This absence of spectral lines precluded any direct constraints on the source’s redshift, leaving its cosmological distance uncertain."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -566,7 +700,11 @@
     {
      "text": " from the position of PG 1553+113 during these observations. After applying data-quality selection criteria, the useful exposure time amounted to 24.8 hours of live time, with 9 of the 66 runs excluded. The 2005 observation, referred to as H05, had a live time of 7.6 hours, while the 2006 observation, labelled H06, had a live time of 17.2 hours."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   }
   },
   {
    "kind": "heading",
@@ -599,7 +737,8 @@
     {
      "text": " (Abramowski et al. 2015)."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -607,7 +746,11 @@
     {
      "text": "As discussed previously, the observations H05 and H06 showed no signs of variability and are collectively termed as the \"pre-flare\" data set. This pre-flare data set comprises 26.4 hours of high-quality live time observations. During the 2012 flaring period (referred here as H12), eight observational runs, each lasting approximately 28 minutes were conducted on April 26 and 27, totalling 3.5 hours of live time. All observations were performed in wobble mode, where the source is positioned at an offset of 0.5∘ from the centre of the instrument’s field of view. This method resulted in acceptance-corrected live times of 24.8 hours for the pre-flare data and 3.2 hours for the flare data."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   }
   },
   {
    "kind": "heading",
@@ -673,7 +816,8 @@
     {
      "text": "The MAGIC telescope detected VHE gamma-ray emissions from the HBL PG 1553+113 during observations conducted in 2005 and 2006. The signal achieved an overall significance of 8.8 standard deviations over a total observation time of 18.8 hours. The spectrum did not exhibit significant daily flux variations and the flux levels in 2005 were notably higher than those recorded in 2006. The combined differential energy spectrum for PG 1553+113 from these two years is presented in reference Albert et al. (2007) and is referred to as M0506 in this work. Observations of PG 1553+113 with the MAGIC telescope took place in two main periods: 8.9 hours in April and May 2005, coinciding with HESS observations (Aharonian et al. 2008), and 19 hours from January to April 2006."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -681,7 +825,11 @@
     {
      "text": "To ensure data quality, observations affected by poor weather conditions or hardware issues were excluded from the analysis. Additionally, only data collected at small zenith angles (< 30°), which correspond to a lower energy threshold suitable for studying steep energy spectra, were included. Although measurements extended up to zenith angles of 53°, the final analysis retained 7.0 hours of high-quality data from 2005 and 11.8 hours from 2006 after applying these selection criteria."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   }
   },
   {
    "kind": "heading",
@@ -722,7 +870,8 @@
     {
      "text": " from the camera’s centre, allowing simultaneous measurement of both the source and the background. Approximately one hour of data was discarded due to technical issues."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -730,7 +879,11 @@
     {
      "text": "The quality of the data set was impacted by calima, a phenomenon involving Saharan sand-dust in the atmosphere, which caused nightly atmospheric absorption levels to vary between 5 and 40 per cent. To address the attenuation of Cherenkov light, correction factors were computed and applied to the affected data. After these adjustments, a signal with a significance of 5.0 standard deviations was detected in 8.5 hours of observation."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   }
   },
   {
    "kind": "heading",
@@ -747,7 +900,8 @@
     {
      "text": "Following its initial detection, PG 1553+113 became a regular target for observations with the MAGIC telescope. As reported in reference Aleksić et al. (2012), new data collected in 2007, 2008, and 2009 were analysed, and here we refer to these observations as M07, M08, and M09, respectively. Since the autumn of 2009, MAGIC has operated as a stereo system consisting of two IACTs located on La Palma in the Canary Islands, Spain. However, the data discussed here were acquired before this upgrade, using only the single MAGIC I telescope."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -755,7 +909,12 @@
     {
      "text": "As mentioned previously, PG 1553+113 was observed by MAGIC for approximately 19 hours in 2005 and 2006 (Albert et al. 2007) and was also the focus of a multiwavelength campaign in July 2006 involving optical, X-ray, and TeV gamma-ray (Albert et al. 2009). Reference Aleksić et al. (2012) presents the results of follow-up observations conducted for 14 hours in March–April 2007, nearly 26 hours in March–May 2008 (some of which were simultaneous with observations by other instruments (Aleksić et al. 2010)), and about 24 hours in March–July 2009, with some of the latter taken under moderate moonlight conditions. Unfortunately, the 2008 and 2009 observations were significantly impacted by adverse weather, including calima (Saharan sand dust in the atmosphere), which reduced the usable data and increased the energy threshold."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -763,7 +922,11 @@
     {
      "text": "Rigorous quality cuts based on event rates after night sky background suppression were applied to the data. After these cuts, 28.7 hours of high-quality data remained, comprising 11.5 hours from 2007, 8.7 hours from 2008, and 8.5 hours from 2009. Combining the results from these three years, the 28.7 hours of observations yielded a signal with an overall significance of 8.8 standard deviations. The individual significances were 5.8 standard deviations for 2007, 8.1 for 2008, and 4.2 for 2009."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   }
   },
   {
    "kind": "heading",
@@ -780,7 +943,8 @@
     {
      "text": "A comprehensive simultaneous multi-frequency observational campaign was conducted between March and April 2008, involving data collection across optical, X-ray, high-energy (HE) gamma-ray, and VHE gamma-ray bands (Aleksić et al. 2010). The average VHE differential spectrum of PG 1553+113 derived from these observations is reported and labelled as M08II in this work."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -788,7 +952,12 @@
     {
      "text": "The MAGIC observations for this campaign took place on March 16–18 and April 13, 28–30, 2008, with zenith angles ranging from 18 to 36 degrees. Observations were conducted in wobble mode, where the source was positioned at a 0.4-degree offset from the camera centre, alternating directions every 20 minutes. After applying standard quality cuts and filtering based on trigger rates, a total of 7.18 hours of effective observation time was retained for analysis."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -796,7 +965,12 @@
     {
      "text": "To reconstruct the gamma-ray spectrum, looser selection criteria were employed to ensure that over 90 per cent of simulated gamma photons were preserved. The impact of varying cut efficiencies, ranging from 50 to 95 per cent across the energy spectrum, was examined to assess systematic effects on the spectral shape. Corrections were applied to data affected by calima."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -804,7 +978,11 @@
     {
      "text": "Analysis of the MAGIC data revealed an excess of 415 gamma-like events compared to 1835 normalized background events, resulting in a detection significance of 8.0 standard deviations."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   }
   },
   {
    "kind": "heading",
@@ -821,7 +999,8 @@
     {
      "text": "In early 2012, PG 1553+113 entered a high state, and by April of that year, it reached its highest recorded VHE flux level to date. A comprehensive multiwavelength observation campaign was conducted from February to June 2012, aimed at characterizing the SED and studying the variability of the source across different frequency bands with observations spanned from VHE gamma-rays to radio wavelengths."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -829,7 +1008,11 @@
     {
      "text": "Reference Aleksić et al. (2015) details the analysis of flux variability in the VHE, HE, and X-ray bands. MAGIC observed PG 1553+113 from February 26 (MJD 55983) to April 26 (MJD 56043), 2012. After applying quality cuts, the data set comprised 18.3 hours of observations with zenith angles ranging from 17 to 34 degrees. Observations were conducted in wobble mode, with the source positioned 0.4 degrees from the camera centre. The standard MAGIC analysis chain was used to process the data, yielding an energy threshold of approximately 70 GeV. The source was detected with a high statistical significance (> 70 standard deviations) during the February–April 2012 period, with the emission consistent with a point-like source at the location of PG 1553+113. Based on the flux levels, the data were divided into two subsets: MJD 55983–MJD 56016 (high state) and MJD 56037–MJD 56043 (flare state). During the flare, the VHE flux nearly doubled compared to the high state. The analysis of the VHE spectrum focuses on the April flare state, which is referred to as M12 in this work."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   }
   },
   {
    "kind": "heading",
@@ -846,7 +1029,8 @@
     {
      "text": "In reference Acciari et al. (2019), a total of 32 MAGIC spectra were utilized to derive constraints on the EBL through a joint likelihood analysis of 12 blazars observed during extensive campaigns, amounting to over 300 hours of exposure. All data included in this study were collected during dark nights under optimal weather conditions."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -854,7 +1038,11 @@
     {
      "text": "Among these, five data sets correspond to the BL Lac object PG 1553+113, covering observations from 2012 to 2015 with a combined observation time of 66.36 hours. These data sets, as reported in reference Acciari et al. (2019), are labelled as PG1553+113_0202 (referred to here as M12II), PG1553+113_0203 (M12III), PG1553+113_0302 (M13), PG1553+113_0303 (M14), and PG1553+113_0306 (M15)."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   }
   },
   {
    "kind": "heading",
@@ -871,7 +1059,8 @@
     {
      "text": "The time-averaged VERITAS spectrum for the BL Lac object PG 1553+113, covering observations from 2010 to 2012 (referred to in this work as V1012), is analyzed in reference Aliu et al. (2015)."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -879,7 +1068,12 @@
     {
      "text": "VERITAS, an IACTs array, can detect PG 1553+113 at energies above 100 GeV with a significance of 5 standard deviations in approximately 43 minutes of observation, based on its average flux."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -887,7 +1081,12 @@
     {
      "text": "Observations of PG 1553+113 were conducted by VERITAS from May 2010 to June 2012, totalling 95 hours of observation time. Data were collected in wobble mode, with the source positioned at a 0.5-degree offset from the telescope’s pointing direction to enable simultaneous background estimation. The zenith angles for these observations ranged from 20 to 30 degrees, with an average of 23 degrees. The combination of low zenith angles and event selection cuts optimized for soft-spectrum sources resulted in an analysis energy threshold (the energy at which the photon rate peaks after cuts) of 180 GeV."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -895,7 +1094,11 @@
     {
      "text": "The analysis used a circular signal region centred on the source’s nominal position, extending radially outward by 0.14 degrees. After applying quality selection criteria based on weather conditions and instrument stability, and accounting for instrument read-out dead time, a total of 80 hours of live time were retained. These observations yielded an overall detection significance of 53 standard deviations, with the excess consistent with a point-like source at the location of PG 1553+113."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   }
   },
   {
    "kind": "heading",
@@ -1008,7 +1211,11 @@
     {
      "text": "."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   }
   },
   {
    "kind": "paragraph",
@@ -1128,7 +1335,11 @@
     {
      "text": " are related by the condition (Sahu 2019; Sahu et al. 2019)"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   }
   },
   {
    "kind": "equation",
@@ -1164,7 +1375,8 @@
     {
      "text": "where the left-hand side represents the unknown photon density ratio in the inner jet region, and the right-hand side corresponds to the known ratio in the outer jet region. This equation allows the unknown photon density in the inner region to be expressed in terms of the measurable photon density in the outer region."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -1180,7 +1392,11 @@
     {
      "text": " particles is derived as"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   }
   },
   {
    "kind": "equation",
@@ -1286,7 +1502,8 @@
     {
      "text": " serves as the sole free parameter in the photohadronic model (Sahu et al. 2019). As evident from Eq. (6), any curvature in the spectrum can be attributed to the exponential absorption term (Acciari et al. 2019)."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -1302,7 +1519,11 @@
     {
      "text": " GeV. At lower energies, leptonic processes such as electron synchrotron radiation and the SSC mechanism dominate the multiwavelength SED."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   }
   },
   {
    "kind": "heading",
@@ -1391,7 +1612,12 @@
     {
      "text": " is treated as a constrained but adjustable parameter during the fitting process."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -1455,7 +1681,11 @@
     {
      "text": ". Confidence level intervals for the statistical errors of the redshift at 68, 90, and 95 per cent of coverage probability are then calculated for each EBL model."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   }
   },
   {
    "kind": "paragraph",
@@ -1640,7 +1870,11 @@
     {
      "text": " for each case. Using these best-fitting parameters, CL intervals for the redshift at 68, 90, and 95 per cent are computed for each EBL model."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   }
   },
   {
    "kind": "paragraph",
@@ -1688,7 +1922,11 @@
     {
      "text": "The photohadronic model, combined with EBL corrections, provides a reliable method for estimating the redshift of PG 1553+113. The results highlight the effectiveness of the photohadronic model in interpreting the VHE gamma-ray spectra and its potential application to other HBLs with unknown redshifts."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   }
   },
   {
    "kind": "heading",
@@ -1728,7 +1966,11 @@
    "kind": "table",
    "caption": [
     {
-     "text": "Table 1. Details of the seventeen PG 1553+113 observations used in this study are provided. The first and second columns list the observation name and the instrument used, respectively. The third, fourth, fifth, and sixth columns include the start date, end date, period span (in MJD), and live observation duration (in hours), respectively. The seventh column references the work where the data for each observation period is originally reported."
+     "text": "Table 1",
+     "bold": true
+    },
+    {
+     "text": ". Details of the seventeen PG 1553+113 observations used in this study are provided. The first and second columns list the observation name and the instrument used, respectively. The third, fourth, fifth, and sixth columns include the start date, end date, period span (in MJD), and live observation duration (in hours), respectively. The seventh column references the work where the data for each observation period is originally reported."
     }
    ],
    "rows": [
@@ -2699,7 +2941,11 @@
    "kind": "table",
    "caption": [
     {
-     "text": "Table 2. The best-fitting values for the normalization constant "
+     "text": "Table 2",
+     "bold": true
+    },
+    {
+     "text": ". The best-fitting values for the normalization constant "
     },
     {
      "text": "F0",
@@ -4813,7 +5059,11 @@
    "kind": "table",
    "caption": [
     {
-     "text": "Table 3. The redshift values derived from the photohadronic model, based on a global "
+     "text": "Table 3",
+     "bold": true
+    },
+    {
+     "text": ". The redshift values derived from the photohadronic model, based on a global "
     },
     {
      "text": "χ2",
@@ -5072,7 +5322,11 @@
    "kind": "figure",
    "caption": [
     {
-     "text": "Figure 1. The photohadronic model, combined with the Saldana EBL model, is applied to fit the seventeen observed VHE gamma-ray spectra of PG 1553+113. The corresponding redshift is fixed at "
+     "text": "Figure 1",
+     "bold": true
+    },
+    {
+     "text": ". The photohadronic model, combined with the Saldana EBL model, is applied to fit the seventeen observed VHE gamma-ray spectra of PG 1553+113. The corresponding redshift is fixed at "
     },
     {
      "text": "z=0.518",
@@ -5757,7 +6011,8 @@
       }
      ]
     }
-   ]
+   ],
+   "itemSpace": 0
   }
  ],
  "furniture": [
@@ -5778,5 +6033,5 @@
  ],
  "license": "open",
  "provenance": "latexml",
- "notes": "arXiv 2503.22874v2 (astronomy; MNRAS, two columns, tables), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words."
+ "notes": "arXiv 2503.22874v2 (astronomy; MNRAS, two columns, tables), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words. Bold and italic set from the page's faces where LaTeXML's HTML has none or another (front matter labels and affiliations, caption labels, run-in heads, cross-references)."
 }

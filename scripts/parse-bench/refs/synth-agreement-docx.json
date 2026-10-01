@@ -23,7 +23,13 @@
           "bold": true
         }
       ],
-      "align": "center"
+      "align": "center",
+      "font": {
+        "shape": "serif",
+        "size": 11,
+        "bold": true
+      },
+      "spaceAfter": 8
     },
     {
       "kind": "paragraph",
@@ -32,7 +38,8 @@
           "text": "(a Delaware limited partnership)"
         }
       ],
-      "align": "center"
+      "align": "center",
+      "spaceAfter": 8
     },
     {
       "kind": "paragraph",
@@ -90,7 +97,8 @@
         {
           "text": "”);"
         }
-      ]
+      ],
+      "spaceAfter": 8
     },
     {
       "kind": "paragraph",
@@ -106,7 +114,8 @@
         {
           "text": "”);"
         }
-      ]
+      ],
+      "spaceAfter": 8
     },
     {
       "kind": "paragraph",
@@ -114,7 +123,8 @@
         {
           "text": "NOW, THEREFORE, in consideration of the mutual covenants set forth below, the parties agree as follows:"
         }
-      ]
+      ],
+      "spaceAfter": 8
     },
     {
       "kind": "list",
@@ -372,7 +382,8 @@
             }
           ]
         }
-      ]
+      ],
+      "itemSpace": 2
     },
     {
       "kind": "footnote",
@@ -562,7 +573,8 @@
           ],
           "checked": false
         }
-      ]
+      ],
+      "itemSpace": 2
     },
     {
       "kind": "heading",
@@ -584,7 +596,8 @@
         {
           "text": " How did the Subscriber learn of the Partnership?"
         }
-      ]
+      ],
+      "spaceAfter": 8
     },
     {
       "kind": "list",
@@ -625,7 +638,9 @@
             }
           ]
         }
-      ]
+      ],
+      "itemSpace": 2,
+      "spaceAfter": 8
     },
     {
       "kind": "paragraph",
@@ -657,7 +672,8 @@
         {
           "text": " What is the source of the funds for the Capital Commitment? Check all that apply."
         }
-      ]
+      ],
+      "spaceAfter": 8
     },
     {
       "kind": "list",
@@ -702,7 +718,8 @@
           ],
           "checked": false
         }
-      ]
+      ],
+      "itemSpace": 2
     },
     {
       "kind": "heading",
@@ -848,6 +865,31 @@
     "Page 3 of 4",
     "Page 4 of 4"
   ],
+  "fonts": {
+    "body": {
+      "shape": "serif",
+      "size": 11
+    },
+    "title": {
+      "shape": "serif",
+      "size": 16,
+      "bold": true
+    },
+    "h2": {
+      "shape": "serif",
+      "size": 12,
+      "bold": true
+    },
+    "footnote": {
+      "shape": "serif",
+      "size": 9
+    },
+    "h3": {
+      "shape": "serif",
+      "size": 11,
+      "bold": true
+    }
+  },
   "license": "open",
   "provenance": "generated",
   "notes": "In Word the clause numbers are Word numbering, so a parser reads them from the PDF's text only; in HTML they are text. The signature block is a table without lines; its first row is a header row. Blank lines to fill in are underscores. The footnote stands at the page's foot in Word and at the end in HTML."

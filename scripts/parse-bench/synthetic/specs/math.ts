@@ -155,6 +155,16 @@ export const math: Spec = {
       front: "maketitle",
       smallCaps: "keep",
       bands: { top: 106, bottom: 90 },
+      // amsart's 11pt sizes in Computer Modern as pdflatex prints them.
+      fonts: {
+        body: { shape: "serif", size: 10.91 },
+        title: { shape: "serif", size: 10.91, bold: true },
+        author: { shape: "serif", size: 8.97 },
+        abstract: { shape: "serif", size: 8.97 },
+        h2: { shape: "serif", size: 10.91 },
+      },
+      centered: [2],
+      justified: true,
     },
     html: {
       css: `

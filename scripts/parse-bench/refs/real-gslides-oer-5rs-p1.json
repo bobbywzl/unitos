@@ -1,0 +1,172 @@
+{
+ "id": "real-gslides-oer-5rs-p1",
+ "category": "slides",
+ "source": {
+  "pdf": ".bench/real/gslides-oer-5rs.pdf",
+  "url": "https://docs.google.com/presentation/d/15DhTr6A5i6PYWtUriyvxGJYCriobgm_BxvxdL2yoI9g/export/pdf"
+ },
+ "pages": [
+  1,
+  3
+ ],
+ "license": "open",
+ "provenance": "hand",
+ "notes": "David Wiley (Lumen Learning), 'OER, the 5Rs, and Creative Commons: The Shortest Possible Introduction', a public Google Slides deck licensed CC BY (its own title slide says so), exported with Google Slides' PDF export (720 x 405 pt, Roboto, grey text). Scored: slides 1-3: a slide title (h1) over a numbered list whose first item holds two '-' items at depth 1 with an unmarked 'or' line between them (kept in the first '-' item), the last item highlighted yellow (a highlight: the model has no field for it yet), the title slide (the deck's title, a centered subtitle and two centered credit lines, 'CC BY' underlined and linked), and a slide title over three '●' items with wrapped lines. Arrows '→' come from Arial inside Roboto lines. Alignment (round 2, measured with PyMuPDF): blocks 2 are centered: each line's middle lies within 4 pt of its column's middle and both its ends stand more than 8 pt inside the column's margins (a column's margin is where three or more of its lines end, or its furthest line end).",
+ "furniture": [],
+ "blocks": [
+  {
+   "kind": "heading",
+   "level": 1,
+   "spans": [
+    {
+     "text": "Using This Presentation"
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "1.",
+     "spans": [
+      {
+       "text": "Make a copy by clicking at the top left:"
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "-",
+     "spans": [
+      {
+       "text": "File → Make a Copy or"
+      }
+     ]
+    },
+    {
+     "depth": 1,
+     "marker": "-",
+     "spans": [
+      {
+       "text": "File → Download"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "2.",
+     "spans": [
+      {
+       "text": "Add visual styling and make other changes to suit your needs"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "3.",
+     "spans": [
+      {
+       "text": "Check the speaker notes on each slide for additional info"
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "4.",
+     "spans": [
+      {
+       "text": "Delete this slide"
+      }
+     ]
+    }
+   ],
+   "itemSpace": 16
+  },
+  {
+   "kind": "title",
+   "spans": [
+    {
+     "text": "OER, the 5Rs, and Creative Commons"
+    }
+   ],
+   "align": "center"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "The Shortest Possible Introduction"
+    }
+   ],
+   "align": "center",
+   "spaceAfter": 65
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "David Wiley, Lumen Learning"
+    }
+   ],
+   "align": "center",
+   "spaceAfter": 0
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "This presentation is licensed "
+    },
+    {
+     "text": "CC BY",
+     "underline": true,
+     "href": "https://creativecommons.org/licenses/by/4.0/legalcode"
+    }
+   ],
+   "align": "center"
+  },
+  {
+   "kind": "heading",
+   "level": 1,
+   "spans": [
+    {
+     "text": "Overview"
+    }
+   ]
+  },
+  {
+   "kind": "list",
+   "items": [
+    {
+     "depth": 0,
+     "marker": "●",
+     "spans": [
+      {
+       "text": "Open Educational Resources are materials that are either (1) in the public domain or (2) licensed in a manner that provides everyone with free and perpetual permission to engage in the 5R activities."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "●",
+     "spans": [
+      {
+       "text": "The 5R activities are retain, revise, remix, reuse, and redistribute."
+      }
+     ]
+    },
+    {
+     "depth": 0,
+     "marker": "●",
+     "spans": [
+      {
+       "text": "Creative Commons licenses help copyright holders grant others free and perpetual permission to engage in the 5R activities with their work, under certain conditions."
+      }
+     ]
+    }
+   ],
+   "itemSpace": 0
+  }
+ ]
+}

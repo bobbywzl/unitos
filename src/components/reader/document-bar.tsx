@@ -30,6 +30,7 @@ import {
 import {
   DocumentTree,
   FolderPicker,
+  folderPath,
   type DocumentFolderView,
 } from "@/components/reader/document-folders";
 import {
@@ -47,6 +48,7 @@ import {
 } from "@/components/reader/figure-capture";
 import { setRevealFlag } from "@/components/reader/reveal";
 import {
+  blockDocumentLine,
   keptBlockDocument,
   UploadAssistant,
   uploadItemTitle,
@@ -233,6 +235,15 @@ export function DocumentBar({
   const searchParams = useSearchParams();
   const [phase, setPhase] = useState<IngestPhase | null>(null);
   const [dialog, setDialog] = useState(false);
+  // The folder the add-document dialog adds to (SPEC.md §6): the + of a
+  // folder's list sets it; the header's + and a page drop add to the
+  // project itself.
+  const [addFolder, setAddFolder] = useState<string | null>(null);
+  function openAddDialog(folderId: string | null) {
+    setError(null);
+    setAddFolder(folderId);
+    setDialog(true);
+  }
   // The document list: opens on hover or click, closes on leave (after a
   // grace period), outside click, Escape, or opening a document.
   const listRef = useRef<HTMLDivElement>(null);
@@ -338,6 +349,7 @@ export function DocumentBar({
       const created = await api<{ id: string; title: string }>("/api/documents/blank", "POST", {
         notebookId,
         title: t("panes.untitledDocument"),
+        ...(addFolder ? { folderId: addFolder } : {}),
       });
       setDialog(false);
       const params = new URLSearchParams();
@@ -454,7 +466,7 @@ export function DocumentBar({
         }),
       );
       router.refresh();
-      if (result.blockDocument) showNotice(t("panes.uploadBlockDocument"), 8000);
+      if (result.blockDocument) showNotice(t(result.blockDocument), 8000);
       if (figures) setFigureCapture(null);
     } catch (err) {
       if (err instanceof EditedImportAnswer) {
@@ -574,12 +586,12 @@ export function DocumentBar({
   // send gets an emit callback so a chunked upload can report progress before the
   // server response starts streaming.
   // blockDocument: the size guard kept the document out of the page editor
-  // (SPEC.md §29); the bar says so once the document opens.
+  // (SPEC.md §29): its line, which the bar shows once the document opens.
   async function runIngest(
     fileLabel: string,
     kind: "pdf" | "url" | "video" | "youtube" | "media" | "drive",
     send: (emit: (stage: string, detail?: string) => void) => Promise<Response>,
-  ): Promise<{ id: string; title: string; deduped: boolean; blockDocument: boolean }> {
+  ): Promise<{ id: string; title: string; deduped: boolean; blockDocument: ReturnType<typeof blockDocumentLine> | null }> {
     setPhase({ fileLabel, steps: initialIngestSteps(kind) });
     const emit = (stage: string, detail?: string) =>
       setPhase((p) => (p ? { ...p, steps: advanceIngestSteps(p.steps, stage, detail) } : p));
@@ -590,11 +602,11 @@ export function DocumentBar({
       throw new Error(detail?.error ?? statusMessage(t, res.status));
     }
     let result: IngestEvent | null = null;
-    let blockDocument = false;
+    let blockDocument: ReturnType<typeof blockDocumentLine> | null = null;
     for await (const event of readNdjson<IngestEvent>(res)) {
       if ("stage" in event) {
         emit(event.stage, event.detail);
-        if (event.stage === "save" && event.detail) blockDocument = keptBlockDocument(event.detail);
+        if (event.stage === "save" && event.detail) blockDocument = keptBlockDocument(event.detail) ? blockDocumentLine(event.detail) : null;
       } else {
         result = event;
       }
@@ -671,7 +683,7 @@ export function DocumentBar({
             ? queueUpload(item.file, notebookId)
             : item.kind === "drive-file"
               ? Promise.resolve()
-              : queueWrite("/api/documents", "POST", { url: item.url, notebookId }),
+              : queueWrite("/api/documents", "POST", { url: item.url, notebookId, ...(request.folderId ? { folderId: request.folderId } : {}) }),
         ),
       ).then(() => items.length);
       void queued.then((n) => {
@@ -716,12 +728,12 @@ export function DocumentBar({
         fetch("/api/drive/import", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ notebookId, fileId }),
+          body: JSON.stringify({ notebookId, fileId, ...(addFolder ? { folderId: addFolder } : {}) }),
         }),
       );
       setDialog(false);
       openAdded(result.id);
-      if (result.blockDocument) showNotice(t("panes.uploadBlockDocument"), 8000);
+      if (result.blockDocument) showNotice(t(result.blockDocument), 8000);
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : t("panes.uploadFailed"));
@@ -776,7 +788,7 @@ export function DocumentBar({
   // go straight to the box (the dialog's queue is gone with the page load).
   async function importFromDrive() {
     const picked = await pickFromDrive();
-    if (picked) openAssistant({ kind: "drive", token: picked.token, files: picked.files });
+    if (picked) openAssistant({ kind: "drive", token: picked.token, files: picked.files, folderId: addFolder });
   }
 
   // Back from Link Google Drive: the callback returns here with ?drive=linked
@@ -861,12 +873,12 @@ export function DocumentBar({
         fetch("/api/documents", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: trimmed, notebookId }),
+          body: JSON.stringify({ url: trimmed, notebookId, ...(addFolder ? { folderId: addFolder } : {}) }),
         }),
       );
       setDialog(false);
       openAdded(result.id);
-      if (result.blockDocument) showNotice(t("panes.uploadBlockDocument"), 8000);
+      if (result.blockDocument) showNotice(t(result.blockDocument), 8000);
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : t("panes.ingestFailed"));
@@ -898,17 +910,18 @@ export function DocumentBar({
   }
 
   async function attach(documentId: string) {
-    await api(`/api/notebooks/${notebookId}/documents`, "POST", { documentId });
+    await api(`/api/notebooks/${notebookId}/documents`, "POST", { documentId, ...(addFolder ? { folderId: addFolder } : {}) });
     setDialog(false);
     open(documentId);
     router.refresh();
   }
 
   // Delete document: the document leaves the project and the library
-  // (DELETE /api/documents/[documentId]; refused while notes cite it).
+  // (DELETE /api/documents/[documentId]; its annotations go with it, and
+  // notes that quote it keep their quotes).
   async function deleteDocument(documentId: string) {
     closeList();
-    if (!confirm(t("panes.confirmDeleteDocument"))) return;
+    if (!confirm(await deleteMessage(documentId))) return;
     setError(null);
     try {
       await api(`/api/documents/${documentId}`, "DELETE");
@@ -916,6 +929,24 @@ export function DocumentBar({
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("panes.deleteFailed"));
+    }
+  }
+
+  // The delete's confirm names what it reaches: how many annotations go and
+  // how many notes stay, or that a shared document only leaves the reader's
+  // projects. Offline, or when the count fails, the plain message stands.
+  async function deleteMessage(
+    documentId: string,
+    fallback: "panes.confirmDeleteDocument" | "panes.confirmDeleteFromLibrary" = "panes.confirmDeleteDocument",
+  ): Promise<string> {
+    try {
+      const res = await fetch(`/api/documents/${documentId}/footprint`);
+      if (!res.ok) return t(fallback);
+      const reach = (await res.json()) as { annotations: number; notes: number; shared: boolean };
+      if (reach.shared) return t("panes.confirmDeleteDocumentShared");
+      return t("panes.confirmDeleteDocumentCounts", { annotations: reach.annotations, notes: reach.notes });
+    } catch {
+      return t(fallback);
     }
   }
 
@@ -933,7 +964,7 @@ export function DocumentBar({
   }
 
   async function removeFromLibrary(documentId: string) {
-    if (!confirm(t("panes.confirmDeleteFromLibrary"))) return;
+    if (!confirm(await deleteMessage(documentId, "panes.confirmDeleteFromLibrary"))) return;
     setError(null);
     try {
       await api(`/api/documents/${documentId}`, "DELETE");
@@ -1206,6 +1237,10 @@ export function DocumentBar({
                 canEdit={canEdit}
                 panelEl={listEl}
                 renderDocument={renderDocumentRow}
+                onAddIn={(folderId) => {
+                  closeList();
+                  openAddDialog(folderId);
+                }}
               />
             </div>
           )}
@@ -1215,10 +1250,7 @@ export function DocumentBar({
 
       <div className={`shrink-0 ${canEdit ? "" : "hidden"}`}>
         <button
-          onClick={() => {
-            setError(null);
-            setDialog(true);
-          }}
+          onClick={() => openAddDialog(null)}
           data-track="add-document"
           // The onboarding nudge on + waits for the first document: a new
           // project opens on the dialog, so the nudge would sit behind it.
@@ -1252,7 +1284,7 @@ export function DocumentBar({
         phase={phase}
         error={error}
         onError={setError}
-        onSubmit={openAssistant}
+        onSubmit={(request) => openAssistant({ ...request, folderId: addFolder })}
         onCreateBlank={() => void createBlank()}
         fileAccept={UPLOAD_FILE_ACCEPT}
         projectTitle={
@@ -1278,6 +1310,7 @@ export function DocumentBar({
         attachedIds={attachedIds}
         onOpenLibrary={() => void openLibrary()}
         onAttach={(id) => void attach(id)}
+        folderPath={addFolder ? folderPath(folders, addFolder).map((id) => folders.find((f) => f.id === id)?.title ?? "") : null}
         onRemoveFromLibrary={(id) => void removeFromLibrary(id)}
       />
 

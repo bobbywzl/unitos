@@ -141,12 +141,14 @@ async function cacheHolding(url) {
 async function cachedPage(url) {
   const exact = await caches.match(url.href, { ignoreVary: true });
   if (exact) return exact;
-  // A project URL with no document named opens the project's first document,
-  // which the bare URL holds.
-  if (url.search && !url.searchParams.has("doc")) {
-    return caches.match(url.origin + url.pathname, { ignoreVary: true });
-  }
-  return undefined;
+  // A copy holds each page by the project and the document alone. A URL with
+  // more (a jump to a passage, ?src=) opens the document's page; one with no
+  // document named opens the project's first document, which the bare URL
+  // holds.
+  if (!url.search) return undefined;
+  const doc = url.searchParams.get("doc");
+  const base = url.origin + url.pathname;
+  return caches.match(doc ? `${base}?doc=${encodeURIComponent(doc)}` : base, { ignoreVary: true });
 }
 
 async function cacheFirst(request) {

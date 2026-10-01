@@ -394,8 +394,10 @@ model Source {
   id          String   @id @default(cuid())
   noteId      String
   note        Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
-  documentId  String
-  document    Document @relation(fields: [documentId], references: [id])
+  // The document the source quotes. Null once that document is deleted: the
+  // note keeps the quote, orphaned (SPEC.md §5).
+  documentId  String?
+  document    Document? @relation(fields: [documentId], references: [id], onDelete: SetNull)
   // Anchor: dual strategy (see SPEC.md §5)
   blockId     String
   startOffset Int
@@ -559,6 +561,12 @@ model Document {
   // A PDF's own names for its pages ("xii", "1043"), in page order, when it
   // names them otherwise than 1..n; a page start draws pageLabels[page - 1].
   pageLabels    Json?
+  // The PDF's pages the reader chose at the add (SPEC.md §15), and the PDF's
+  // page count: {ranges: [[45, 60]], count: 409}, each range 1-based,
+  // sorted, apart. The document holds those pages alone, a re-parse reads
+  // them again, and dedupe tells the same file with other pages apart
+  // (lib/pdf-pages.ts). Null = every page.
+  pdfPages      Json?
   figureMedia   FigureMedia[]
   createdAt     DateTime           @default(now())
 

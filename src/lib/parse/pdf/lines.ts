@@ -3,8 +3,9 @@
 // caps collapse; a wide gap starts a new cell.
 
 import { median } from "@/lib/parse/pdf/geometry";
-import { OPERATOR_GLYPH_RE, SPACING_ACCENTS, charCount, sameFlags } from "@/lib/parse/pdf/glyphs";
+import { OPERATOR_GLYPH_RE, SPACING_ACCENTS, charCount, isUnicodeMathFont, sameFlags } from "@/lib/parse/pdf/glyphs";
 import { hangingBox } from "@/lib/parse/pdf/math/layout";
+import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
 import { splitZones } from "@/lib/parse/pdf/math/zones";
 import type { Cell, Item, Line, Run } from "@/lib/parse/pdf/types";
 
@@ -26,9 +27,13 @@ function collapseSpacedStr(str: string): string {
 }
 
 // Across items: one glyph per item with small uniform gaps → merge into words.
+// A gap a quarter of the size past the letters' own spacing is a word space:
+// small capitals set one glyph per item, their letters touching, ran their
+// words together ("FRACTIONSANDROOTS", synth-math-html).
 function mergeSpacedItems(items: Item[]): Item[] {
   const singles = items.filter((i) => charCount(i.str) === 1).length;
   if (singles < 6 || singles < items.length * 0.6) return items;
+  const letterGap = median(items.slice(1).map((item, k) => item.x - (items[k].x + items[k].w)).filter((g) => g >= 0));
   const out: Item[] = [];
   for (const item of items) {
     const last = out[out.length - 1];
@@ -39,6 +44,7 @@ function mergeSpacedItems(items: Item[]): Item[] {
       charCount(item.str) === 1 &&
       gap >= 0 &&
       gap < item.size * 0.45 &&
+      (gap < letterGap + item.size * 0.25 || item.math || last.math) &&
       sameFlags(last, item)
     ) {
       last.str += item.str;
@@ -93,8 +99,18 @@ function dropCaps(items: Item[]): { items: Item[]; starts: { item: Item; x: numb
     const first = lines[0];
     if (!first || Math.abs(first.y + first.size * 0.7 - top) > first.size * 0.5) continue;
     if (lines.filter((l) => l.y >= cap.y - l.size * 0.5).length < 2) continue;
-    // Stretched to the first word, it takes no space before it.
-    const lead: Item = { ...cap, str: cap.str.trim(), y: first.y, size: first.size, w: first.x - cap.x, bold: first.bold, italic: first.italic, mono: first.mono, smallCaps: first.smallCaps, href: first.href, font: first.font };
+    // Stretched to the first word, it takes no space before it, unless the
+    // page sets one: a letter that is a word of its own ("A", "I") stands a
+    // word space from the next word, a drop cap's first letter none
+    // (lettrine: "A" 3.6 pt from "long", "T" 0 pt from "he"). Its str then
+    // ends in the space. A float's lines all start at one x, the first line
+    // too, and say nothing: the letter joins.
+    // A word space stays under 0.7 em however a justified line stretches
+    // it: a CSS float's first line is set in by the paragraph's indent, 1.2
+    // em from the letter ("S" + "CIENTIFIC", synth-paper-html).
+    const gap = first.x - (cap.x + cap.w);
+    const spaced = gap >= first.size * 0.3 && gap <= first.size * 0.7 && lines.some((l) => Math.abs(l.x - first.x) > first.size * 0.1);
+    const lead: Item = { ...cap, str: cap.str.trim() + (spaced ? " " : ""), y: first.y, size: first.size, w: first.x - cap.x, bold: first.bold, italic: first.italic, mono: first.mono, smallCaps: first.smallCaps, href: first.href, font: first.font, look: first.look };
     out = out.map((i) => (i === cap ? lead : i));
     // The other lines beside it start where the paragraph's next line does,
     // or where the cap does when none follows: set in by its width, they
@@ -109,7 +125,59 @@ function dropCaps(items: Item[]): { items: Item[]; starts: { item: Item; x: numb
   return { items: out, starts };
 }
 
+// ── OCR layers ──────────────────────────────────────────────────────────────
+
+/** An OCR layer's words as the scan shows them. A letter or two read out
+    of a picture, over four times the page's text size, is no word (a
+    rocket's drawing read as a 73 pt "i" took a chapter's title as its
+    scripts). From one word's start to the next on its line is the word's
+    width and a space (a quarter em): when the median ratio of that advance
+    to the text layer's width and a space is off by a tenth or more, each
+    word with a next one on its line takes that scale, a space short of the
+    next word (a justified line's spaces stretch, so the median runs high).
+    A line's last word keeps its width: the page's notes, set smaller than
+    its body at the same size, run past the column at the body's scale.
+    Two words are two words: a word whose box runs into the next word's
+    ends a space short of it (NASA SP-4408's scan boxes overlap, "Igor"
+    ending at 170.7 and "Lissov" starting at 167.0: 228 blocks on 161 pages
+    read runs of words with no space, 49 on 47 now, where the text layer
+    itself sets none). The layer's stock font is no face of the page: a
+    scan set in Courier is no listing (a 1922 report read as code, its words
+    run together at the font's character widths). */
+export function fitOcrItems(items: Item[]) {
+  for (const item of items) item.mono = false;
+  const text = median(items.map((i) => i.size));
+  for (let k = items.length - 1; k >= 0; k--) if (charCount(items[k].str) <= 2 && items[k].size > text * 4) items.splice(k, 1);
+  const words = items.filter((i) => i.str.trim()).sort((a, b) => b.y - a.y || a.x - b.x);
+  const next = (k: number) => {
+    const [a, b] = [words[k], words[k + 1]];
+    return b && Math.abs(a.y - b.y) <= a.size * 0.2 && a.w > 0 ? b : undefined;
+  };
+  const ratios: number[] = [];
+  words.forEach((a, k) => {
+    const b = next(k);
+    // A column's gutter or a table's cell gap is no word space.
+    const ratio = b ? (b.x - a.x) / (a.w + a.size * 0.25) : 0;
+    if (ratio > 0.5 && ratio < 2.5) ratios.push(ratio);
+  });
+  const scale = ratios.length >= 20 ? median(ratios) : 1;
+  words.forEach((a, k) => {
+    const b = next(k);
+    if (!b) return;
+    if (Math.abs(scale - 1) >= 0.1 && b.x - a.x < (a.w + a.size * 0.25) * 2.5) a.w = Math.max(a.w, Math.min(a.w * scale, b.x - a.x - a.size * 0.2));
+    if (a.x + a.w > b.x - a.size * 0.15 && b.x - a.x > a.size * 0.5 && /[\p{L}\p{N}]$/u.test(a.str) && /^[\p{L}\p{N}]/u.test(b.str)) a.w = b.x - a.x - a.size * 0.2;
+  });
+}
+
 // ── Line building ───────────────────────────────────────────────────────────
+
+// A letter and its accent as one character. TeX sets an accented i on a
+// dotless ı (\'{\i}), which Unicode composes with no accent: "Domı́nguez"
+// read apart from "Domínguez" (arxiv-2503-22874).
+function withAccent(letter: string, mark: string): string {
+  const base = letter === "ı" ? "i" : letter === "ȷ" ? "j" : letter;
+  return (base + mark).normalize("NFC");
+}
 
 function composeAccents(items: Item[]): Item[] {
   const out: Item[] = [];
@@ -126,7 +194,7 @@ function composeAccents(items: Item[]): Item[] {
       out.push({ ...item, str: item.str.slice(0, -1), glyphs: accent ? item.glyphs!.slice(0, -1) : item.glyphs });
       items[k + 1] = {
         ...after,
-        str: (letter + trailing).normalize("NFC") + rest.join(""),
+        str: withAccent(letter, trailing) + rest.join(""),
         glyphs: accent && after.glyphs ? [...after.glyphs, accent] : after.glyphs,
       };
       continue;
@@ -150,7 +218,7 @@ function composeAccents(items: Item[]): Item[] {
         const chars = Array.from(base.str);
         return {
           ...base,
-          str: chars.slice(0, idx).join("") + (chars[idx] + mark).normalize("NFC") + chars.slice(idx + 1).join(""),
+          str: chars.slice(0, idx).join("") + withAccent(chars[idx], mark) + chars.slice(idx + 1).join(""),
           glyphs: base.glyphs && item.glyphs ? [...base.glyphs, ...item.glyphs] : base.glyphs,
         };
       };
@@ -174,6 +242,27 @@ function composeAccents(items: Item[]): Item[] {
 }
 
 const QED_RE = /^[□■∎]$/;
+
+/** The least gap between two items of a line, in points, that reads as a
+    space: 0.12 of the line's size, or 0.2 after a script (an item set at
+    0.85 of the size or less, a tenth of the size or more off the next
+    item's baseline). TeX leaves \scriptspace (0.5 pt) after a script, and
+    a word space is 0.22 em or more, justified too: "hk(z)" read "hk (z)".
+    size: the line's text size. */
+export function spaceGap(prev: Item, next: Item, size: number): number {
+  return prev.size <= size * 0.85 && Math.abs(prev.y - next.y) >= size * 0.1 ? size * 0.2 : size * 0.12;
+}
+
+// Two runs of words a line apart that one line took, the later starting
+// left of the earlier's end: no gap tells their space. A form's title lines
+// beside its 24 pt number read "CertificationRequest"
+// (real-irs-fw9-2024-p1). A script stacked over another sits less than its
+// size apart, and a formula's letters make no word of four.
+function crossesBack(prev: Item, next: Item): boolean {
+  const size = Math.min(prev.size, next.size);
+  const words = (i: Item) => !i.math && /[A-Za-z]{4}/.test(i.str);
+  return next.x < prev.x + prev.w - size * 0.3 && Math.abs(prev.y - next.y) >= size * 0.95 && words(prev) && words(next);
+}
 
 // A cell boundary: a wide gap, or an em between two numbers — number
 // columns sit closer than the word gap rule allows (a table of Brier
@@ -214,7 +303,15 @@ function buildLine(rawItems: Item[], page: number): Line {
         .sort((a, b) => a.x - b.x),
     ),
   );
-  const size = Math.max(...merged.map((i) => i.size));
+  // A line's size is its text's: KaTeX sets a formula 1.21 times its prose,
+  // so a sentence with inline math took the math's size and read as a
+  // heading (synth-paper-html: seven invented headings). A glyph of a math
+  // font set in Unicode counts only on a line with no other text.
+  const textSizes = merged.flatMap((i) => {
+    const text = i.glyphs?.filter((g) => !isUnicodeMathFont(g.base));
+    return !i.glyphs?.length || text?.length === i.glyphs.length ? [i.size] : (text ?? []).map((g) => g.size);
+  });
+  const size = Math.max(...(textSizes.length > 0 ? textSizes : merged.map((i) => i.size)));
   // Raises are read per cell: a table cell set smaller on its own baseline
   // is no superscript of the cell beside it (a slide's table of primers read
   // as runs of superscripts).
@@ -238,12 +335,14 @@ function buildLine(rawItems: Item[], page: number): Line {
     // head into a table).
     const proofEnd = item === items[items.length - 1] && QED_RE.test(item.str.trim());
     const wide = prevItem !== null && !proofEnd && opensCell(prevItem, item, size);
+    const least = prevItem !== null ? spaceGap(prevItem, item, size) : size * 0.12;
+    const crossed = prevItem !== null && crossesBack(prevItem, item);
     prevItem = item;
     let cell = cells[cells.length - 1];
     if (!cell || wide) {
       cell = { x: item.x, text: "", runs: [] };
       cells.push(cell);
-    } else if (gap > size * 0.12 && !cell.text.endsWith(" ")) {
+    } else if ((gap > least || crossed) && !cell.text.endsWith(" ")) {
       // Punctuation that attaches left ("PRESS" chip then ".") takes no space.
       const attach = ATTACH_PUNCT_RE.test(item.str) && gap < size * 0.7;
       if (!attach) cell.text += " ";
@@ -265,6 +364,7 @@ function buildLine(rawItems: Item[], page: number): Line {
         sup: item.sup,
         sub: item.sub,
         zone: item.zone,
+        look: item.look,
       });
     }
     prevEnd = item.x + item.w;
@@ -293,15 +393,6 @@ function buildLine(rawItems: Item[], page: number): Line {
   const firstWordWidth =
     first.str.length > 0 ? first.w * Math.min(1, firstWord.length / first.str.length) : size;
   const last = items[items.length - 1];
-  // The baseline is where the line's text sits: the median baseline of its
-  // full-size glyphs. The highest glyph was the baseline before, so a line
-  // with a superscript sat too high — its gap to the line above shrank and
-  // its gap to the line below grew, splitting paragraphs and fusing others
-  // (import compare loop finding).
-  // A big operator's or delimiter's origin is its top (math/layout.ts
-  // hangingBox): no baseline.
-  const onBase = items.filter((i) => !hangingBox(i));
-  const large = (onBase.length > 0 ? onBase : items).filter((i) => i.size >= size * 0.75);
   const ys = items.map((i) => i.y);
   return {
     cells,
@@ -310,7 +401,7 @@ function buildLine(rawItems: Item[], page: number): Line {
     items,
     x: first.x,
     xEnd: Math.max(...items.map((i) => i.x + i.w), last.x + last.w),
-    y: median(large.map((i) => i.y)),
+    y: baselineOf(items, (i) => hangingBox(i) !== null),
     size,
     page,
     firstWordWidth,
@@ -318,6 +409,22 @@ function buildLine(rawItems: Item[], page: number): Line {
     yMin: Math.min(...ys),
     yMax: Math.max(...ys),
   };
+}
+
+// The baseline is where a line's text sits: the median baseline of its
+// full-size glyphs. The highest glyph was the baseline before, so a line
+// with a superscript sat too high — its gap to the line above shrank and
+// its gap to the line below grew, splitting paragraphs and fusing others
+// (import compare loop finding). A big operator's or delimiter's origin is
+// its top (math/layout.ts hangingBox): no baseline. The full size is the
+// size of the glyphs on the baseline: a line of tall delimiters and their
+// scripts (closing ‖s and their subscripts, arXiv 2506.08494) had none at
+// the delimiters' size, and the median of none put it at the page's foot.
+function baselineOf(items: Item[], hangs: (i: Item) => boolean): number {
+  const onBase = items.filter((i) => !hangs(i));
+  const pool = onBase.length > 0 ? onBase : items;
+  const size = Math.max(...pool.map((i) => i.size));
+  return median(pool.filter((i) => i.size >= size * 0.75).map((i) => i.y));
 }
 
 export function buildLines(items: Item[], page: number): Line[] {
@@ -360,12 +467,22 @@ export function buildLines(items: Item[], page: number): Line[] {
     });
   const grouped: Item[][] = [];
   const anchors: Item[] = [];
+  // A line whose largest item is half again the size of the text beside it
+  // reaches no second baseline of that text: the IRS W-9's 24 pt "W-9" took
+  // the two lines of the title beside it, and the side box's, into one line.
+  // A formula's scripts stand on baselines of their own around its tall
+  // delimiters.
+  const ownBaseline = (group: Item[], anchor: Item, item: Item) => {
+    if (anchor.size < item.size * 1.5 || anchor.math || item.math) return true;
+    const kin = group.filter((i) => Math.abs(i.size - item.size) <= item.size * 0.25);
+    return kin.length === 0 || kin.some((i) => Math.abs(i.y - item.y) < item.size * 0.5);
+  };
   for (const item of sorted) {
     if (hangs(item)) continue;
     const last = grouped[grouped.length - 1];
     const anchor = anchors[anchors.length - 1];
     const tolerance = anchor ? Math.max(2, Math.max(anchor.size, item.size) * 0.5) : 0;
-    if (last && Math.abs(anchor.y - item.y) < tolerance) {
+    if (last && Math.abs(anchor.y - item.y) < tolerance && ownBaseline(last, anchor, item)) {
       last.push(item);
       if (item.size > anchor.size) anchors[anchors.length - 1] = item;
     } else {
@@ -412,11 +529,91 @@ export function buildLines(items: Item[], page: number): Line[] {
   // near, never the prose beside it. (A glyph already on the right line
   // stayed put before only by luck: a footnote mark moved to the line above
   // and subscripts to the line below — import compare loop finding.)
+  // A script touches the glyph it is set on: it is its line's, never a
+  // label or a limit of another line's (arXiv 2502.02648's c_k, over the
+  // next line's ">", read "c^α" and "γ >k 1").
+  const all = grouped.flat();
+  const touches = (i: Item, item: Item) => item.x - (i.x + i.w) > -0.05 * i.size && item.x - (i.x + i.w) < 0.15 * i.size;
+  const scripted = (item: Item) =>
+    all.some((i) => i !== item && i.size > item.size * 1.1 && Math.abs(i.y - item.y) < i.size * 0.6 && touches(i, item)) ||
+    operators.some((op) => {
+      const box = boxes.get(op);
+      return box !== undefined && op.size > item.size * 1.1 && item.y > box.bottom - op.size * 0.5 && item.y < box.top + op.size * 0.5 && touches(op, item);
+    });
+  // The small glyphs on an item's baseline set on with it: a label's or a
+  // limit's whole run ("k=1" under a sum).
+  const runOf = (item: Item) => {
+    const run = [item];
+    for (let grew = true; grew; ) {
+      grew = false;
+      for (const i of all) {
+        if (run.includes(i) || i.size > item.size * 1.1 || Math.abs(i.y - item.y) > item.size * 0.1) continue;
+        if (run.some((r) => i.x < r.x + r.w + item.size * 0.3 && i.x + i.w > r.x - item.size * 0.3)) {
+          run.push(i);
+          grew = true;
+        }
+      }
+    }
+    return { items: run, x1: Math.min(...run.map((i) => i.x)), x2: Math.max(...run.map((i) => i.x + i.w)) };
+  };
+  // A label stacked over a relation of the line under it (\overset{p}{\to},
+  // a word over an arrow) is that line's, however near the line above: it
+  // joined the line above as a stray letter. The whole label stands over
+  // the relation: a sum's "=1" (of "k=1") over the next line's "<" is the
+  // sum's.
+  const labelOf = (item: Item, n: number) => {
+    if (stats[n].y >= item.y || item.size > stats[n].size * 0.8) return false;
+    const run = runOf(item);
+    if (run.items.some(scripted)) return false;
+    const center = (run.x1 + run.x2) / 2;
+    return grouped[n].some((i) =>
+      (i.glyphs ?? []).some((g) => {
+        if (g.family === null || g.size < stats[n].size * 0.9 || mathGlyph(g.family, g.code)?.cls !== "rel") return false;
+        const rise = (item.y - g.y) / g.size;
+        return rise > 0.45 && rise < 0.95 && center > g.x - g.size * 0.1 && center < g.x + g.w + g.size * 0.1;
+      }),
+    );
+  };
+  // The limits of a text-size operator set over and under it (\sum\limits
+  // in a sentence) go where the operator goes: the upper one ended the line
+  // above as a stray letter, the lower one ran into the end of the line
+  // below. An integral's are scripts beside it.
+  const inlineOps = [...boxes].filter(([op, box]) => {
+    const g = op.glyphs?.length === 1 ? op.glyphs[0] : null;
+    return !box.display && g !== null && g.family !== null && mathGlyph(g.family, g.code)?.cls === "op" && !/[∫∮]/.test(op.str);
+  });
+  // A limit is centered on its operator, with the glyphs on its baseline
+  // beside it (a subscript of the line above, "sup_n", over a sentence's
+  // sum is that line's).
+  const inlineLimitOf = (item: Item) =>
+    inlineOps.find(([op, box]) => {
+      if (item.size > op.size * 0.8 || item.x + item.w < op.x - op.size || item.x > op.x + op.w + op.size) return false;
+      const above = item.y >= box.top - item.size * 0.2 && item.y - box.top < op.size * 0.7;
+      const below = item.y <= box.bottom && box.bottom - item.y < op.size;
+      if (!above && !below) return false;
+      const run = all.filter((i) => i.size <= op.size * 0.8 && Math.abs(i.y - item.y) < item.size * 0.1 && i.x + i.w > op.x - op.size && i.x < op.x + op.w + op.size);
+      const center = (Math.min(...run.map((i) => i.x)) + Math.max(...run.map((i) => i.x + i.w))) / 2;
+      if (Math.abs(center - (op.x + op.w / 2)) > op.size * 0.25 || scripted(item)) return false;
+      const reach = Math.max(0, above ? item.y - box.top : box.bottom - item.y);
+      return !stats.some((l) => l.size >= item.size / 0.8 && Math.abs(l.y - item.y) < Math.min(reach, l.size * 0.45));
+    })?.[0];
+  const inlineLimits = new Map<Item, Item[]>();
   for (let k = 0; k < grouped.length; k++) {
     for (const item of grouped[k]) {
       const glyph = item.str.trim();
       const accent = glyph.length === 1 && SPACING_ACCENTS[glyph] !== undefined;
       if (limitOf(item, stats)) continue;
+      const op = inlineLimitOf(item);
+      if (op) {
+        inlineLimits.set(op, [...(inlineLimits.get(op) ?? []), item]);
+        kept[k] = kept[k].filter((i) => i !== item);
+        continue;
+      }
+      if (k + 1 < grouped.length && labelOf(item, k + 1)) {
+        moved[k + 1].push(item);
+        kept[k] = kept[k].filter((i) => i !== item);
+        continue;
+      }
       // An accent belongs over a letter of about its own size: a line of
       // subscripts beside it is no candidate (import compare loop finding).
       const candidates = neighbors(k).filter(
@@ -443,6 +640,11 @@ export function buildLines(items: Item[], page: number): Line[] {
         ? grouped[k].some((i) => i !== item && i.size >= stats[k].size * 0.75)
         : item.size < stats[k].size * 0.75;
       if (hasBase && cost(item, pool[0]) >= gapTo(item, k)) continue;
+      // A group of prose is a line of its own, whatever its size against the
+      // line beside it: an 11 pt author line under a 24 pt title took the
+      // title's line as its scripts ("…DocumentsAda Lovelace",
+      // synth-paper-tex).
+      if (!hasBase && stats[k].prose) continue;
       moved[pool[0]].push(item);
       kept[k] = kept[k].filter((i) => i !== item);
     }
@@ -461,40 +663,66 @@ export function buildLines(items: Item[], page: number): Line[] {
   // radical or integral inside prose joins the prose line; anything else
   // stands alone for the equation region to take.
   const standalone: Item[][] = [];
-  for (const op of operators) {
+  // A display operator reaches as wide as its limits ("t′ ∈ {t, t−1, t−2}"
+  // under a ⋀ is wider than it), and one set beside another
+  // (\bigwedge\bigwedge) reaches its line through the one placed before it:
+  // a line takes in the operators it holds (arXiv 2506.06752: the first ⋀
+  // of each display stood alone, and the display failed).
+  const extentOf = (op: Item) => {
     const box = boxes.get(op);
-    const center = box ? (box.top + box.bottom) / 2 : op.y - op.size * 0.6;
-    const near = (n: number, factor: number) =>
-      Math.abs(center - stats[n].y) <= stats[n].size * factor &&
-      op.x < stats[n].x2 + stats[n].size * 2 &&
-      op.x + op.w > stats[n].x1 - stats[n].size * 2;
-    const byDistance = (a: number, b: number) => Math.abs(center - stats[a].y) - Math.abs(center - stats[b].y);
-    // A group emptied by pass 1 is no line: an inline integral's limit that
-    // moved into its sentence must not draw the integral after it.
-    const all = stats.map((_, n) => n).filter((n) => kept[n].length > 0);
-    const mathy = all.filter((n) => stats[n].mathy && near(n, 1.5)).sort(byDistance);
-    const prose = all.filter((n) => stats[n].prose && near(n, 1.05)).sort(byDistance);
-    // A glyph whose box the font's metrics give sits exactly: centered on
-    // its line's math axis, a quarter em over the baseline, whatever else
-    // the line holds (a list item's "2. ∑ m(ω) = 1" is neither prose nor an
-    // equation's line). Else the nearest line of an equation or of prose
-    // takes it (a sentence's inline sum is its own, never the display line
-    // under it). An estimated one goes to an equation's line first.
-    const axis = (n: number) => Math.abs(center - (stats[n].y + stats[n].size * 0.25));
-    const onAxis = box
-      ? all.filter((n) => stats[n].size >= op.size * 0.8 && axis(n) <= stats[n].size * 0.35 && near(n, 1.5)).sort((a, b) => axis(a) - axis(b))
-      : [];
-    const target = onAxis[0] ?? (box ? [...mathy, ...prose].sort(byDistance)[0] : (mathy[0] ?? prose[0]));
-    if (target !== undefined) moved[target].push(op);
-    else standalone.push([op]);
-  }
-  const regrouped = [...kept.map((g, k) => [...g, ...moved[k]]), ...standalone].filter((g) => g.length > 0);
-  const baseline = (g: Item[]) => {
-    const size = Math.max(...g.map((i) => i.size));
-    const onBase = g.filter((i) => !boxes.has(i));
-    return median((onBase.length > 0 ? onBase : g).filter((i) => i.size >= size * 0.75).map((i) => i.y));
+    let x1 = op.x;
+    let x2 = op.x + op.w;
+    if (!box?.display) return { x1, x2 };
+    for (const item of all) {
+      if (item.size >= op.size * 0.9 || item.x >= op.x + op.w + op.size * 0.5 || item.x + item.w <= op.x - op.size * 0.5) continue;
+      const above = item.y >= box.top - item.size * 0.2 && item.y - box.top < op.size * 0.8;
+      const below = item.y <= box.bottom && box.bottom - item.y < op.size * 1.1;
+      if (!above && !below) continue;
+      const run = runOf(item);
+      x1 = Math.min(x1, run.x1);
+      x2 = Math.max(x2, run.x2);
+    }
+    return { x1, x2 };
   };
-  regrouped.sort((a, b) => baseline(b) - baseline(a));
+  const pending = [...operators];
+  for (let placed = true; placed; ) {
+    placed = false;
+    for (const op of [...pending]) {
+      const box = boxes.get(op);
+      const center = box ? (box.top + box.bottom) / 2 : op.y - op.size * 0.6;
+      const extent = extentOf(op);
+      const near = (n: number, factor: number) =>
+        Math.abs(center - stats[n].y) <= stats[n].size * factor &&
+        extent.x1 < stats[n].x2 + stats[n].size * 2 &&
+        extent.x2 > stats[n].x1 - stats[n].size * 2;
+      const byDistance = (a: number, b: number) => Math.abs(center - stats[a].y) - Math.abs(center - stats[b].y);
+      // A group emptied by pass 1 is no line: an inline integral's limit that
+      // moved into its sentence must not draw the integral after it.
+      const all = stats.map((_, n) => n).filter((n) => kept[n].length > 0);
+      const mathy = all.filter((n) => stats[n].mathy && near(n, 1.5)).sort(byDistance);
+      const prose = all.filter((n) => stats[n].prose && near(n, 1.05)).sort(byDistance);
+      // A glyph whose box the font's metrics give sits exactly: centered on
+      // its line's math axis, a quarter em over the baseline, whatever else
+      // the line holds (a list item's "2. ∑ m(ω) = 1" is neither prose nor an
+      // equation's line). Else the nearest line of an equation or of prose
+      // takes it (a sentence's inline sum is its own, never the display line
+      // under it). An estimated one goes to an equation's line first.
+      const axis = (n: number) => Math.abs(center - (stats[n].y + stats[n].size * 0.25));
+      const onAxis = box
+        ? all.filter((n) => stats[n].size >= op.size * 0.8 && axis(n) <= stats[n].size * 0.35 && near(n, 1.5)).sort((a, b) => axis(a) - axis(b))
+        : [];
+      const target = onAxis[0] ?? (box ? [...mathy, ...prose].sort(byDistance)[0] : (mathy[0] ?? prose[0]));
+      if (target === undefined) continue;
+      moved[target].push(op, ...(inlineLimits.get(op) ?? []));
+      stats[target].x1 = Math.min(stats[target].x1, extent.x1);
+      stats[target].x2 = Math.max(stats[target].x2, extent.x2);
+      pending.splice(pending.indexOf(op), 1);
+      placed = true;
+    }
+  }
+  for (const op of pending) standalone.push([op, ...(inlineLimits.get(op) ?? [])]);
+  const regrouped = [...kept.map((g, k) => [...g, ...moved[k]]), ...standalone].filter((g) => g.length > 0);
+  regrouped.sort((a, b) => baselineOf(b, (i) => boxes.has(i)) - baselineOf(a, (i) => boxes.has(i)));
   const lines = regrouped.map((g) => buildLine(g, page)).filter((l) => l.text.length > 0);
   // The lines beside a drop cap start where its paragraph's lines do.
   for (const { item, x } of starts) {

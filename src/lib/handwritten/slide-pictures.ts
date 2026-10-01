@@ -89,14 +89,15 @@ export async function renderUploadedSlidePictures(documentId: string, bytes: Uin
 }
 
 /** The slide frames of the document marked data-picture, for every SLIDE
-    block with a stored picture. */
+    block with a stored picture. A frame whose picture waits for its words
+    to come back (data-picture-held, lib/replica.ts) stays as it is. */
 async function markSlidePictures(documentId: string): Promise<void> {
   const blocks = await db.block.findMany({
     where: { documentId, type: "SLIDE", pageImage: { data: { not: null } } },
     select: { id: true, html: true },
   });
   for (const block of blocks) {
-    if (!block.html || block.html.includes('data-picture="1"')) continue;
+    if (!block.html || block.html.includes("data-picture")) continue;
     await db.block.update({
       where: { id: block.id },
       data: { html: block.html.replace('<div class="slide-frame"', '<div class="slide-frame" data-picture="1"') },

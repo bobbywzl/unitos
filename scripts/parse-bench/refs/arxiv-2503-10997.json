@@ -14,8 +14,7 @@
    "kind": "title",
    "spans": [
     {
-     "text": "RONA",
-     "smallCaps": true
+     "text": "RONA"
     },
     {
      "text": ": Pragmatically Diverse Image Captioning with Coherence Relations"
@@ -26,27 +25,35 @@
    "kind": "paragraph",
    "spans": [
     {
-     "text": "Aashish Anantha Ramakrishnan"
+     "text": "Aashish Anantha Ramakrishnan",
+     "bold": true
     },
     {
      "text": "1",
      "sup": true
     },
     {
-     "text": ", Aadarsh Anantha Ramakrishnan"
+     "text": ", Aadarsh Anantha Ramakrishnan",
+     "bold": true
     },
     {
      "text": "2",
      "sup": true
     },
     {
-     "text": ", Dongwon Lee"
+     "text": ", Dongwon Lee",
+     "bold": true
     },
     {
      "text": "1",
      "sup": true
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 12
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -65,7 +72,12 @@
     {
      "text": "National Institute of Technology, Tiruchirappalli"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 21
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -102,8 +114,7 @@
      "text": "Writing Assistants (e.g., Grammarly, Microsoft Copilot) traditionally generate diverse image captions by employing syntactic and semantic variations to describe image components. However, human-written captions prioritize conveying a central message alongside visual descriptions using pragmatic cues. To enhance caption diversity, it is essential to explore alternative ways of communicating these messages in conjunction with visual content. We propose "
     },
     {
-     "text": "RONA",
-     "smallCaps": true
+     "text": "RONA"
     },
     {
      "text": ", a novel prompting strategy for Multi-modal Large Language Models (MLLM) that leverages "
@@ -116,8 +127,7 @@
      "text": " as a controllable axis for pragmatic variations. We demonstrate that "
     },
     {
-     "text": "RONA",
-     "smallCaps": true
+     "text": "RONA"
     },
     {
      "text": " generates captions with better overall "
@@ -150,8 +160,7 @@
      "text": "Figure 1: An overview of "
     },
     {
-     "text": "RONA",
-     "smallCaps": true
+     "text": "RONA"
     },
     {
      "text": ". The CRs used are Insertion (Ins), Concretization (Con), Projection (Proj), Restatement (Rstt) and Extension (Ext). These relations provide a finite but flexible axis of variation for diverse caption generation compared to instruction-based prompts."
@@ -208,7 +217,8 @@
     {
      "text": ", limiting the utility of WAs."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -230,7 +240,12 @@
     {
      "text": "semantic variations) (Bugliarello and Elliott, 2021; Li et al., 2022). Although these methods have shown promise, they often fail to capture the nuanced ways in which humans communicate through captions as shown in Figure 1. Pragmatic variations, such as multi-modal implicatures and metaphors (Genovesi, 2020), which utilize meanings or connotations beyond the literal description of the image, are often employed by caption writers to make their messages more engaging and relatable (Weiland et al., 2015)."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 11
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -239,8 +254,7 @@
      "text": "To address this challenge, in this work, we propose "
     },
     {
-     "text": "RONA",
-     "smallCaps": true
+     "text": "RONA"
     },
     {
      "text": " (Relation-based cOhereNce-aware cAptioning), a novel prompting strategy for MLLMs inspired by the concept of "
@@ -252,7 +266,12 @@
     {
      "text": " (CRs). Based on the principles of Discourse Theory, CRs provide a structured overview of image-text relationships (Hobbs, 1978; Kress, 2009; O’Halloran et al., 2014), modeling both contextual and pragmatics aspects of language (Ma et al., 2025; Mavridou et al., 2015)."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 11
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -264,7 +283,12 @@
      "text": "using CRs as guidelines for generating captions that fulfill specific communicative functions while preserving semantic coherence.",
      "italic": true
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 11
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -280,13 +304,16 @@
      "text": "news captions (ANNA) and social media captions (Tweet Subtitles). These datasets contain a wide range of visual objects and abstractive captions (Anantha Ramakrishnan et al., 2024), making this a challenging task for MLLMs. We demonstrate that "
     },
     {
-     "text": "RONA",
-     "smallCaps": true
+     "text": "RONA"
     },
     {
      "text": " outperforms existing baselines on caption diversity while retaining ground truth similarity. Our contributions are as follows:"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 11
+   }
   },
   {
    "kind": "list",
@@ -299,8 +326,7 @@
        "text": "We propose "
       },
       {
-       "text": "RONA",
-       "smallCaps": true
+       "text": "RONA"
       },
       {
        "text": ", a novel prompting strategy that leverages Coherence Relations (CRs) to generate pragmatically diverse image captions."
@@ -315,8 +341,7 @@
        "text": "We demonstrate that "
       },
       {
-       "text": "RONA",
-       "smallCaps": true
+       "text": "RONA"
       },
       {
        "text": " outperforms existing MLLM baselines in terms of diversity and ground-truth similarity on news and social media captioning datasets."
@@ -332,7 +357,8 @@
       }
      ]
     }
-   ]
+   ],
+   "itemSpace": 4
   },
   {
    "kind": "heading",
@@ -384,8 +410,7 @@
      "bold": true
     },
     {
-     "text": "RONA",
-     "smallCaps": true
+     "text": "RONA"
     },
     {
      "text": " leverages in-context explanations of Coherence Relations (CRs) as guidance for generating pragmatically diverse captions. We utilize CRs that characterize both entity-level and scene-level linkages between an image and its expected caption (Xu et al., 2022). Entity-level relations describe the relationships between specific objects in the image and their corresponding elaboration in the caption. Scene-level relations, on the other hand, capture the overall context and narrative of the image, providing a broader understanding of the visual content. The selection of these relations are motivated by their generalizability across different domains. Overall, the 5 types of relations that we utilize are:"
@@ -502,7 +527,9 @@
       }
      ]
     }
-   ]
+   ],
+   "align": "justify",
+   "itemSpace": 8
   },
   {
    "kind": "table",
@@ -511,8 +538,7 @@
      "text": "Table 1: Results for Diverse Image Captioning with "
     },
     {
-     "text": "RONA",
-     "smallCaps": true
+     "text": "RONA"
     },
     {
      "text": " on the Tweet Subtitles Dataset."
@@ -629,8 +655,7 @@
       {
        "spans": [
         {
-         "text": "RONA",
-         "smallCaps": true
+         "text": "RONA"
         },
         {
          "text": " + Claude"
@@ -725,8 +750,7 @@
       {
        "spans": [
         {
-         "text": "RONA",
-         "smallCaps": true
+         "text": "RONA"
         },
         {
          "text": " + GPT-4o"
@@ -817,8 +841,7 @@
       {
        "spans": [
         {
-         "text": "RONA",
-         "smallCaps": true
+         "text": "RONA"
         },
         {
          "text": " + Claude"
@@ -912,8 +935,7 @@
       {
        "spans": [
         {
-         "text": "RONA",
-         "smallCaps": true
+         "text": "RONA"
         },
         {
          "text": " + GPT-4o"
@@ -962,8 +984,7 @@
      "text": "Table 2: Results for Diverse Image Captioning with "
     },
     {
-     "text": "RONA",
-     "smallCaps": true
+     "text": "RONA"
     },
     {
      "text": " on the ANNA Dataset."
@@ -1081,8 +1102,7 @@
       {
        "spans": [
         {
-         "text": "RONA",
-         "smallCaps": true
+         "text": "RONA"
         },
         {
          "text": " + Claude"
@@ -1175,8 +1195,7 @@
       {
        "spans": [
         {
-         "text": "RONA",
-         "smallCaps": true
+         "text": "RONA"
         },
         {
          "text": " + GPT-4o"
@@ -1269,8 +1288,7 @@
       {
        "spans": [
         {
-         "text": "RONA",
-         "smallCaps": true
+         "text": "RONA"
         },
         {
          "text": " + Claude"
@@ -1363,8 +1381,7 @@
       {
        "spans": [
         {
-         "text": "RONA",
-         "smallCaps": true
+         "text": "RONA"
         },
         {
          "text": " + GPT-4o"
@@ -1438,8 +1455,7 @@
      "text": "For our analysis of the effectiveness of "
     },
     {
-     "text": "RONA",
-     "smallCaps": true
+     "text": "RONA"
     },
     {
      "text": ", we define 2 task types: "
@@ -1473,15 +1489,13 @@
      "text": " task, we provide the model with both the image and a ground-truth caption as input. Since both of these components are part of understanding the overall meaning of an image-caption pair, we wish to understand how MLLMs utilize both modalities to generate diverse captions without the divergence of meaning. This is similar to the prompt-guided image captioning task for MLLMs (Hu et al., 2023). In both tasks, the baseline MLLM is prompted to use the inputs to generate captions with “as much diversity as possible while retaining their original meaning and message.\" "
     },
     {
-     "text": "RONA",
-     "smallCaps": true
+     "text": "RONA"
     },
     {
      "text": " utilizes in-context learning where simplified definitions of CRs are provided as system prompts. We generate 5 captions per input for each type of task, with "
     },
     {
-     "text": "RONA",
-     "smallCaps": true
+     "text": "RONA"
     },
     {
      "text": " generating one caption per CR. Additional generated caption examples are presented in Appendix Section E."
@@ -1514,8 +1528,7 @@
    "spans": [
     {
      "text": "RONA",
-     "bold": true,
-     "smallCaps": true
+     "bold": true
     },
     {
      "text": " Improves Relevance and Diversity ",
@@ -1525,22 +1538,19 @@
      "text": "We present our evaluation of MLLMs on the task of Diverse Image Captioning in Tables 1 and 2. Our assessment spans 8 different settings: 2 tasks per dataset, 2 models per task and 2 different dataset domains. From our results, both GPT-4o and Claude combined with "
     },
     {
-     "text": "RONA",
-     "smallCaps": true
+     "text": "RONA"
     },
     {
      "text": " outperforms their respective baselines in 7/8 settings on both ground truth similarity and diversity metrics. Particularly, we see a positive agreement between Div-2 and Self-BLEURT, as they rate captions from "
     },
     {
-     "text": "RONA",
-     "smallCaps": true
+     "text": "RONA"
     },
     {
      "text": "-based models as more diverse over 5/8 baselines. With image & text similarity metrics such as BLEURT and CLIPScore preferring "
     },
     {
-     "text": "RONA",
-     "smallCaps": true
+     "text": "RONA"
     },
     {
      "text": "-based models 7/8 and 6/8 times over baselines respectively, we can conclude that our observed diversity has not come at the cost of contextual relevance."
@@ -1575,22 +1585,19 @@
      "text": "We propose "
     },
     {
-     "text": "RONA",
-     "smallCaps": true
+     "text": "RONA"
     },
     {
      "text": ", a Coherence Relation-based prompting strategy, providing a framework for expressive and diverse image caption generation. Our study presents a holistic evaluation of top MLLMs on their ability to utilize these relationships through in-context learning. Our results show that "
     },
     {
-     "text": "RONA",
-     "smallCaps": true
+     "text": "RONA"
     },
     {
      "text": " enables the generation of a greater variety of captions while improving their overall semantic and contextual relevance across domains. "
     },
     {
-     "text": "RONA",
-     "smallCaps": true
+     "text": "RONA"
     },
     {
      "text": " serves as a new baseline for future work leveraging image-text relationships for improving the quality of Multi-modal Writing Assistants."
@@ -1613,8 +1620,7 @@
      "text": "Our current analysis of "
     },
     {
-     "text": "RONA",
-     "smallCaps": true
+     "text": "RONA"
     },
     {
      "text": " is limited to a couple of top-performing MLLM architectures. Evaluating how open-source MLLMs can leverage CRs for image captioning is a part of our future work. Additionally, our evaluation strategy does not validate the prompt following accuracy of MLLMs in adhering to specific CRs, which would be a significant challenge for smaller, low-resource models. These inaccuracies may lead to hallucinations, harming the factual accuracy of generated captions. Incorporating Factual Consistency metrics and Human preference ratings to identify potential types of hallucinations in diverse captioning tasks is a direction of future work we wish to pursue."
@@ -1637,8 +1643,7 @@
      "text": "We acknowledge the potential for alternate prompting strategies like "
     },
     {
-     "text": "RONA",
-     "smallCaps": true
+     "text": "RONA"
     },
     {
      "text": " to be used for generating misleading content, especially from specific domains such as news media. However, from our evaluation, we find that MLLM safety filters are robust in capturing potentially harmful content in either the input images or captions as described in Appendix Section D. With CRs leveraging pragmatic and common-sense knowledge of MLLMs to generate diverse captions, there exists a possibility of model biases and stereotypes clouding the quality of our generations. This is especially a problem in cases where culturally sensitive material is present in our input samples. We advocate for the responsible use of Writing Assistants with adequate human oversight to prevent such situations."
@@ -2341,7 +2346,8 @@
       }
      ]
     }
-   ]
+   ],
+   "itemSpace": 9
   }
  ],
  "furniture": [
@@ -2357,5 +2363,5 @@
  ],
  "license": "open",
  "provenance": "latexml",
- "notes": "arXiv 2503.10997v2 (natural language processing; ACL, two columns), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words."
+ "notes": "arXiv 2503.10997v2 (natural language processing; ACL, two columns), CC BY 4.0. Built by scripts/parse-bench/arxiv/build.mts from the LaTeXML HTML; the author area is the PDF's own words. The author names are set bold on the page (the PDF's font is a bold face); round 2 marks them, by hand: the builder reads the author area from pdftotext, which gives no weight."
 }

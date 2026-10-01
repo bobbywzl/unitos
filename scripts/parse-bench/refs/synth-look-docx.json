@@ -1,0 +1,619 @@
+{
+  "id": "synth-look-docx",
+  "category": "word",
+  "source": {
+    "pdf": ".bench/synthetic/synth-look-docx.pdf",
+    "docx": ".bench/synthetic/synth-look-docx.docx"
+  },
+  "blocks": [
+    {
+      "kind": "title",
+      "spans": [
+        {
+          "text": "HARBOR LIGHT UTILITIES",
+          "bold": true,
+          "color": "#1f3864"
+        }
+      ],
+      "align": "center"
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "OTC: HLU",
+          "color": "#595959"
+        }
+      ],
+      "align": "center",
+      "font": {
+        "shape": "sans",
+        "size": 12,
+        "color": "#595959"
+      },
+      "spaceAfter": 6
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A Field Review of Grid Assets",
+          "color": "#2e75b6"
+        }
+      ],
+      "align": "center",
+      "font": {
+        "shape": "sans",
+        "size": 15,
+        "color": "#2e75b6"
+      },
+      "spaceAfter": 6
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Substations · Lines · Storage · Crews · Budget",
+          "italic": true,
+          "color": "#595959"
+        }
+      ],
+      "align": "center",
+      "font": {
+        "shape": "sans",
+        "size": 11,
+        "color": "#595959"
+      }
+    },
+    {
+      "kind": "quote",
+      "spans": [
+        {
+          "text": "“A pole checked in spring is a pole standing in winter.”",
+          "italic": true
+        },
+        {
+          "text": " — Saying of the line crews",
+          "color": "#595959"
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Winter inspections · Amounts in thousands of dollars",
+          "color": "#595959"
+        }
+      ],
+      "align": "center",
+      "font": {
+        "shape": "sans",
+        "size": 9.5,
+        "color": "#595959"
+      }
+    },
+    {
+      "kind": "heading",
+      "level": 1,
+      "spans": [
+        {
+          "text": "Contents"
+        }
+      ]
+    },
+    {
+      "kind": "list",
+      "items": [
+        {
+          "depth": 0,
+          "marker": "1.",
+          "spans": [
+            {
+              "text": "Summary"
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "",
+          "spans": [
+            {
+              "text": "Scorecard"
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "marker": "",
+          "spans": [
+            {
+              "text": "Budget"
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "2.",
+          "spans": [
+            {
+              "text": "Field notes"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 1,
+      "spans": [
+        {
+          "text": "1. Summary"
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "Main finding. ",
+          "bold": true
+        },
+        {
+          "text": "The grid is sound where crews kept to the schedule, and weakest where new equipment arrived late. Poles and crews took the largest share of the spending, and storage spending rose quickest."
+        }
+      ],
+      "align": "justify",
+      "spaceAfter": 6
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The storage yard doubled its budget but not its output, so the review looks at it first"
+        },
+        {
+          "text": "1",
+          "sup": true
+        },
+        {
+          "text": ". The other areas met their plans within a few percent."
+        }
+      ],
+      "align": "justify"
+    },
+    {
+      "kind": "footnote",
+      "label": "1",
+      "spans": [
+        {
+          "text": "Storage figures are nameplate, not measured."
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "Scorecard"
+        }
+      ]
+    },
+    {
+      "kind": "table",
+      "rows": [
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Area",
+                  "bold": true,
+                  "color": "#ffffff"
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "Grade",
+                  "bold": true,
+                  "color": "#ffffff"
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "Note",
+                  "bold": true,
+                  "color": "#ffffff"
+                }
+              ],
+              "header": true
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Substations"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "A",
+                  "bold": true,
+                  "color": "#00b050"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Transformers were tested on schedule."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Lines"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "B",
+                  "bold": true,
+                  "color": "#ed7d31"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "Two feeders still wait for new poles."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Storage"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "C",
+                  "bold": true,
+                  "color": "#c00000"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "The battery yard missed its target."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "A letter shows how the area kept to its plan.",
+          "italic": true,
+          "color": "#595959"
+        }
+      ],
+      "font": {
+        "shape": "sans",
+        "size": 9.5,
+        "color": "#595959"
+      }
+    },
+    {
+      "kind": "heading",
+      "level": 2,
+      "spans": [
+        {
+          "text": "Budget"
+        }
+      ]
+    },
+    {
+      "kind": "table",
+      "rows": [
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Item",
+                  "bold": true,
+                  "color": "#ffffff"
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "Plan",
+                  "bold": true,
+                  "color": "#ffffff"
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "Actual",
+                  "bold": true,
+                  "color": "#ffffff"
+                }
+              ],
+              "header": true
+            },
+            {
+              "spans": [
+                {
+                  "text": "Change",
+                  "bold": true,
+                  "color": "#ffffff"
+                }
+              ],
+              "header": true
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Poles"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "4,120"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "4,480"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "+8.7%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Storage"
+                },
+                {
+                  "text": "2",
+                  "sup": true
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "1,305"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "2,210"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "+69.3%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "Crews"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "6,940"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "7,015"
+                }
+              ]
+            },
+            {
+              "spans": [
+                {
+                  "text": "+1.1%"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "footnote",
+      "label": "2",
+      "spans": [
+        {
+          "text": "Storage began halfway through the year."
+        }
+      ]
+    },
+    {
+      "kind": "table",
+      "rows": [
+        {
+          "cells": [
+            {
+              "spans": [
+                {
+                  "text": "What the crews asked for",
+                  "bold": true,
+                  "color": "#ffffff"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "list",
+      "items": [
+        {
+          "depth": 0,
+          "marker": "•",
+          "spans": [
+            {
+              "text": "Test transformers before the summer load."
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "•",
+          "spans": [
+            {
+              "text": "Order long-lead parts a year ahead."
+            }
+          ]
+        },
+        {
+          "depth": 0,
+          "marker": "•",
+          "spans": [
+            {
+              "text": "Count storage by the energy it returns."
+            }
+          ]
+        }
+      ],
+      "itemSpace": 2
+    },
+    {
+      "kind": "heading",
+      "level": 1,
+      "spans": [
+        {
+          "text": "2. Field notes"
+        }
+      ]
+    },
+    {
+      "kind": "heading",
+      "level": 3,
+      "spans": [
+        {
+          "text": "2.1 North yard"
+        }
+      ]
+    },
+    {
+      "kind": "paragraph",
+      "spans": [
+        {
+          "text": "The north yard replaced four breakers in the autumn. The work finished two weeks early, and no outage was longer than an hour."
+        }
+      ],
+      "align": "justify"
+    }
+  ],
+  "furniture": [],
+  "fonts": {
+    "body": {
+      "shape": "sans",
+      "size": 10.5
+    },
+    "title": {
+      "shape": "sans",
+      "size": 19,
+      "bold": true,
+      "color": "#1f3864"
+    },
+    "h1": {
+      "shape": "sans",
+      "size": 16,
+      "color": "#2e74b5"
+    },
+    "footnote": {
+      "shape": "sans",
+      "size": 8.5
+    },
+    "h2": {
+      "shape": "sans",
+      "size": 13,
+      "color": "#2e74b5"
+    },
+    "h3": {
+      "shape": "sans",
+      "size": 12,
+      "color": "#1f4d78"
+    }
+  },
+  "license": "open",
+  "provenance": "generated",
+  "notes": "The cover's first line is the title by its size (direct formatting on a Normal paragraph). The Word file and LibreOffice's PDF both leave the contents field empty; the reference holds the entries the page editor draws for the field (the headings at its levels, the \"Contents\" heading over it left out), so the Word file's parse is scored against it and the PDF is there for the reference-free check."
+}

@@ -20,6 +20,8 @@ import { parseBody } from "@/lib/validate";
 
 const createSchema = z.object({
   notebookId: z.string().min(1),
+  // The folder of the project the new document lands in (SPEC.md §6).
+  folderId: z.string().min(1).nullable().optional(),
   title: z.string().trim().min(1).max(200),
   // File > Make a copy: the blank document or import to copy, and whether
   // its suggestions come with it.
@@ -167,7 +169,7 @@ export async function POST(req: Request) {
     },
     { timeout: 60_000, maxWait: 15_000 },
   );
-  await attachDocument(data.notebookId, document.id);
+  await attachDocument(data.notebookId, document.id, data.folderId);
   if (folderId) {
     await db.notebookDocument.update({
       where: { notebookId_documentId: { notebookId: data.notebookId, documentId: document.id } },

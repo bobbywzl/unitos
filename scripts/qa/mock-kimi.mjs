@@ -9,6 +9,7 @@
 // at it with
 //   MOONSHOT_API_KEY=mock MOONSHOT_BASE_URL=http://localhost:3399/v1
 //   ANTHROPIC_API_KEY=mock ANTHROPIC_BASE_URL=http://localhost:3399/v1
+import { readFileSync } from "node:fs";
 import http from "node:http";
 
 const PORT = 3399;
@@ -75,7 +76,34 @@ function suggestOps(all) {
 // panel's question) on a document with rich text becomes one suggest action.
 const CHANGE_RX = /\b(make|rewrite|rephrase|shorten|shorter|fix|change|edit|turn|formal|casual|add|remove|delete)\b/i;
 
+// Scripted answers, for a QA run that needs a given answer (a model's
+// realistic output, a malformed one): .qa/mock-answers.json, or the file
+// MOCK_ANSWERS names, read on every call, holds [{match, text}]; the first
+// entry whose match, a regular expression, finds the prompt answers with
+// its text. No file, no entry that matches: the sniffing below answers.
+function scripted(all) {
+  let entries;
+  try {
+    entries = JSON.parse(readFileSync(process.env.MOCK_ANSWERS ?? ".qa/mock-answers.json", "utf8"));
+  } catch {
+    return null;
+  }
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    try {
+      if (new RegExp(entry.match).test(all)) {
+        console.log("[mock scripted]", entry.match);
+        return String(entry.text);
+      }
+    } catch {
+      // A match that is no regular expression answers nothing.
+    }
+  }
+  return null;
+}
+
 function buildResponse(all) {
+  const script = scripted(all);
+  if (script !== null) return script;
   if (all.includes("Suggest edits to the document above.")) return suggestOps(all);
   // The panel at This page scope: the answer, then the actions fence.
   if (all.includes("Rules for actions:") && all.includes("- suggest {") && CHANGE_RX.test(all.match(/^Question: (.*)$/m)?.[1] ?? "")) {

@@ -81,6 +81,15 @@ registerDocsCommands([
     enabled: (editor) => !pageless(editor),
   },
   {
+    // Google Docs' View > Full screen: the title row, the toolbar, and the
+    // rulers hide; Esc brings them back.
+    id: "page:full-screen",
+    label: "docsPage.fullScreen",
+    menu: "view",
+    keywords: ["full screen", "fullscreen", "distraction free", "focus", "hide toolbar", "全屏"],
+    run: (editor) => fireDocs(editor, PAGE_EVENT.fullScreen),
+  },
+  {
     id: "page:outline",
     label: "docsPage.showOutline",
     menu: "view",
@@ -154,6 +163,16 @@ registerDocsCommands([
     run: (editor) => fireDocs(editor, PAGE_EVENT.pageCount),
     enabled: (editor) => store(editor)?.get().editing != null,
   },
+  {
+    // Insert > Watermark: words or an image behind the text of every page
+    // (page/watermark-dialog.tsx).
+    id: "page:watermark",
+    label: "docsPage.watermark",
+    menu: "insert",
+    keywords: ["watermark", "draft", "confidential", "stamp", "background text", "background image", "page elements", "水印"],
+    run: (editor) => store(editor)?.set({ dialog: "watermark" }),
+    enabled: paged,
+  },
   ...NUMBER_PRESETS.map(([area, onFirst, label]) => ({
     id: `page:numbers-${area}-${onFirst ? "all" : "not-first"}`,
     label,
@@ -201,5 +220,44 @@ registerDocsCommands([
     // In any mode, and on an import that may not be edited: the copy is the
     // reader's own document (SPEC.md §29).
     enabled: (editor) => insertContext(editor)?.projectEditor === true,
+  },
+  {
+    // File > Details: where the document sits, its owner, when it was
+    // modified and made (page/details-dialog.tsx). A viewer may read them.
+    id: "page:details",
+    label: "docsPage.details",
+    menu: "file",
+    keywords: ["details", "document details", "info", "information", "owner", "location", "created", "modified", "详细信息"],
+    run: (editor) => store(editor)?.set({ dialog: "details" }),
+  },
+  {
+    // Tools > Compare documents: a copy with another document's differences
+    // as suggestions (page/compare-dialog.tsx), made as Make a copy is.
+    id: "page:compare",
+    label: "docsPage.compareDocuments",
+    menu: "tools",
+    keywords: ["compare", "comparison", "difference", "diff", "versions", "比较", "对比"],
+    run: (editor) => store(editor)?.set({ dialog: "compare" }),
+    enabled: (editor) => insertContext(editor)?.projectEditor === true,
+  },
+  {
+    // Tools > Translate document: a translated copy, made as Make a copy
+    // is, through the Translate bar's service (page/translate-dialog.tsx).
+    id: "page:translate",
+    label: "docsPage.translateDocument",
+    menu: "tools",
+    keywords: ["translate", "translation", "translated copy", "language", "chinese", "english", "翻译"],
+    run: (editor) => store(editor)?.set({ dialog: "translate" }),
+    enabled: (editor) => insertContext(editor)?.projectEditor === true,
+  },
+  {
+    // Tools > Line numbers: each line numbered in the left margin
+    // (page/line-numbers.tsx); pages format only, as in Google Docs.
+    id: "page:line-numbers",
+    label: "docsPage.lineNumbers",
+    menu: "tools",
+    keywords: ["line numbers", "line numbering", "number lines", "suppress line numbers", "行号"],
+    run: (editor) => store(editor)?.set({ dialog: "lineNumbers" }),
+    enabled: paged,
   },
 ]);

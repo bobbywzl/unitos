@@ -42,9 +42,11 @@ export type CollapseBlock = {
   cell?: unknown;
 };
 
-const windowSchema = z.object({
+/** One window's answer: a core per listed block. */
+export const collapseWindowSchema = z.object({
   cores: z.array(z.object({ blockId: z.string().min(1), text: z.string().trim().min(1).max(CORE_MAX) })).max(2000),
 });
+export type CollapseAnswer = z.infer<typeof collapseWindowSchema>;
 
 // The blocks that collapse: text, a figure with a caption, a table, an
 // equation, a list, code, a transcript line, a slide, a sheet. Never a
@@ -90,20 +92,23 @@ export function coreCeiling(words: number): number {
 }
 
 // A core past its ceiling is cut at the last sentence end under it, else at
-// the ceiling with an ellipsis: a core is never longer than the block.
+// the ceiling with an ellipsis: a core is never longer than the block. The
+// cut steps a word at a time, and a CJK character at a time: a Chinese core
+// has no spaces to cut at.
 function fitCore(text: string, ceiling: number): string {
   const core = text.replace(/\s+/g, " ").trim();
   if (wordCount(core) <= ceiling) return core;
-  const words = core.split(" ");
+  const steps = core.match(/[぀-ヿ㐀-鿿豈-﫿]|[^\s぀-ヿ㐀-鿿豈-﫿]+\s?|\s/g) ?? [];
   let cut = "";
-  for (let i = 0; i < words.length; i++) {
-    const next = cut ? `${cut} ${words[i]}` : words[i];
-    if (wordCount(next) > ceiling) break;
-    cut = next;
+  for (const step of steps) {
+    if (wordCount(cut + step) > ceiling) break;
+    cut += step;
   }
-  const sentence = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("。"), cut.lastIndexOf("! "), cut.lastIndexOf("? "));
+  cut = cut.trim();
+  if (/[.!?。！？]$/.test(cut)) return cut;
+  const sentence = Math.max(...[". ", "! ", "? ", "。", "！", "？"].map((end) => cut.lastIndexOf(end)));
   if (sentence > cut.length / 2) return cut.slice(0, sentence + 1).trim();
-  return `${cut.replace(/[\s,;:—–-]+$/, "")}…`;
+  return `${cut.replace(/[\s,;:—–\-，、；：]+$/, "")}…`;
 }
 
 /** The cores the reader shows now: one per collapsible block (a unit of the
@@ -130,6 +135,64 @@ export function currentCores(
     else missing.push(block);
   }
   return { cores, missing };
+}
+
+/** The calls that write the missing cores: the missing blocks in order, cut
+    into windows at a block boundary past COLLAPSE_WINDOW_CHARS of text, one
+    call per window — the document prefix, then the window's prompt, each
+    block listed with its words and its ceiling. The eval runs the same
+    calls (scripts/eval/run.ts). */
+export function collapseRequests(
+  prefix: string,
+  missing: CollapseUnit[],
+): { label: string; messages: ModelMessage[] }[] {
+  const windows: CollapseUnit[][] = [];
+  let current: CollapseUnit[] = [];
+  let used = 0;
+  for (const block of missing) {
+    if (current.length > 0 && used + block.text.length > COLLAPSE_WINDOW_CHARS) {
+      windows.push(current);
+      current = [];
+      used = 0;
+    }
+    current.push(block);
+    used += block.text.length;
+  }
+  if (current.length > 0) windows.push(current);
+  return windows.map((blocks, i) => {
+    const listed: CollapseBlockCtx[] = blocks.map((b) => ({
+      blockId: b.id,
+      type: b.type,
+      lastBlockId: b.rows.length > 1 ? b.rows[b.rows.length - 1] : undefined,
+      words: wordCount(b.text),
+      maxWords: coreCeiling(wordCount(b.text)),
+    }));
+    return {
+      label: windows.length > 1 ? `COLLAPSE ${i + 1}/${windows.length}` : "COLLAPSE",
+      messages: [
+        { role: "system", content: prefix },
+        { role: "user", content: collapsePrompt({ blocks: listed, window: i + 1, windows: windows.length }) },
+      ],
+    };
+  });
+}
+
+/** Every core against the blocks it was asked for: the model's core where
+    it named a missing block, the first one only, fitted under the block's
+    ceiling; a block the model skipped stays without one and shows as it
+    is. */
+export function fittedCores(answers: CollapseAnswer[], missing: CollapseUnit[]): Map<string, Core> {
+  const missingById = new Map(missing.map((b) => [b.id, b]));
+  const written = new Map<string, Core>();
+  for (const answer of answers) {
+    for (const c of answer.cores) {
+      const block = missingById.get(c.blockId);
+      if (!block || written.has(c.blockId)) continue;
+      const text = fitCore(c.text, coreCeiling(wordCount(block.text)));
+      if (text) written.set(c.blockId, { blockId: c.blockId, hash: blockHash(block.text), text });
+    }
+  }
+  return written;
 }
 
 /** Build the cores the document lacks: one call per window of the missing
@@ -162,46 +225,18 @@ export async function buildCollapse(
   if (missing.length === 0) return cores;
   if (!(await featureConfigured("collapse"))) throw new Error("No model is configured for Collapse");
 
-  // Windows: the missing blocks in order, cut at a block boundary past the
-  // window's chars.
-  const windows: CollapseUnit[][] = [];
-  let current: CollapseUnit[] = [];
-  let used = 0;
-  for (const block of missing) {
-    if (current.length > 0 && used + block.text.length > COLLAPSE_WINDOW_CHARS) {
-      windows.push(current);
-      current = [];
-      used = 0;
-    }
-    current.push(block);
-    used += block.text.length;
-  }
-  if (current.length > 0) windows.push(current);
-
   const prefix = documentPrefix(document.title, document.blocks, document.references, pageNames(document));
   const collapseCall = await featureCall("collapse", COLLAPSE_EFFORT);
   const usage = { userId, feature: "collapse", model: collapseCall.modelId } satisfies UsageMeta;
-  const ceilingOf = new Map(missing.map((b) => [b.id, coreCeiling(wordCount(b.text))]));
   const results = await Promise.all(
-    windows.map(async (blocks, i) => {
-      const listed: CollapseBlockCtx[] = blocks.map((b) => ({
-        blockId: b.id,
-        type: b.type,
-        lastBlockId: b.rows.length > 1 ? b.rows[b.rows.length - 1] : undefined,
-        words: wordCount(b.text),
-        maxWords: ceilingOf.get(b.id) ?? 8,
-      }));
-      const messages: ModelMessage[] = [
-        { role: "system", content: prefix },
-        { role: "user", content: collapsePrompt({ blocks: listed, window: i + 1, windows: windows.length }) },
-      ];
+    collapseRequests(prefix, missing).map(async ({ label, messages }) => {
       const result = await callForJson({
         model: collapseCall.model,
         messages,
         maxOutputTokens: COLLAPSE_MAX_OUTPUT_TOKENS,
         providerOptions: collapseCall.providerOptions,
-        schema: windowSchema,
-        label: windows.length > 1 ? `COLLAPSE ${i + 1}/${windows.length}` : "COLLAPSE",
+        schema: collapseWindowSchema,
+        label,
         usage,
         abortSignal: signal,
       });
@@ -209,20 +244,7 @@ export async function buildCollapse(
       return result.data;
     }),
   );
-
-  // Every core against the blocks it was asked for: the model's core where
-  // it named a missing block, fitted under the block's ceiling; a block the
-  // model skipped stays without one and shows as it is.
-  const missingById = new Map(missing.map((b) => [b.id, b]));
-  const written = new Map<string, Core>();
-  for (const r of results) {
-    for (const c of r.cores) {
-      const block = missingById.get(c.blockId);
-      if (!block || written.has(c.blockId)) continue;
-      const text = fitCore(c.text, ceilingOf.get(c.blockId) ?? 8);
-      if (text) written.set(c.blockId, { blockId: c.blockId, hash: blockHash(block.text), text });
-    }
-  }
+  const written = fittedCores(results, missing);
   // The stored cores that still stand — by id and hash, or by hash alone —
   // plus the new ones; the rest is dropped, so the row never grows past
   // the document.

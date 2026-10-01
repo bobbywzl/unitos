@@ -1,4 +1,4 @@
-import "@/lib/pdf-runtime";
+import { PDF_CMAPS } from "@/lib/pdf-runtime";
 import type { Region } from "@/lib/video/types";
 import { cropBox } from "@/lib/figure-crop";
 
@@ -23,7 +23,7 @@ export type PageSize = { width: number; height: number };
 /** The PDF's page count, from a copy of the bytes (pdf.js detaches its buffer). */
 export async function pdfPageCount(bytes: Uint8Array): Promise<number> {
   const { getDocumentProxy } = await import("unpdf");
-  const pdf = await getDocumentProxy(new Uint8Array(bytes));
+  const pdf = await getDocumentProxy(new Uint8Array(bytes), PDF_CMAPS);
   return pdf.numPages;
 }
 
@@ -33,14 +33,20 @@ export async function renderPdfPage(
   page: number,
   width: number = PAGE_IMAGE_WIDTH,
 ): Promise<Uint8Array<ArrayBuffer>> {
-  const { renderPageAsImage } = await import("unpdf");
-  const png = await renderPageAsImage(new Uint8Array(bytes), page, {
-    canvasImport: () => import("@napi-rs/canvas"),
-    width,
-  });
-  // Copy into a fresh ArrayBuffer-backed array: Response and the model SDK
-  // both want Uint8Array<ArrayBuffer>.
-  return new Uint8Array(png instanceof Uint8Array ? png : new Uint8Array(png as ArrayBuffer));
+  const { createIsomorphicCanvasFactory, getDocumentProxy, renderPageAsImage } = await import("unpdf");
+  const canvasImport = () => import("@napi-rs/canvas");
+  // renderPageAsImage opens a document without the CMaps (lib/pdf-runtime.ts):
+  // open it here, with the canvas factory it would use, and hand it over.
+  const CanvasFactory = await createIsomorphicCanvasFactory(canvasImport);
+  const pdf = await getDocumentProxy(new Uint8Array(bytes), { ...PDF_CMAPS, CanvasFactory });
+  try {
+    const png = await renderPageAsImage(pdf, page, { canvasImport, width });
+    // Copy into a fresh ArrayBuffer-backed array: Response and the model SDK
+    // both want Uint8Array<ArrayBuffer>.
+    return new Uint8Array(png instanceof Uint8Array ? png : new Uint8Array(png as ArrayBuffer));
+  } finally {
+    await pdf.loadingTask.destroy();
+  }
 }
 
 /** Every page's size in pixels when rendered at width, in page order
@@ -50,7 +56,7 @@ export async function pdfPageSizes(
   width: number = PAGE_IMAGE_WIDTH,
 ): Promise<PageSize[]> {
   const { getDocumentProxy } = await import("unpdf");
-  const pdf = await getDocumentProxy(new Uint8Array(bytes));
+  const pdf = await getDocumentProxy(new Uint8Array(bytes), PDF_CMAPS);
   try {
     const sizes: PageSize[] = [];
     for (let n = 1; n <= pdf.numPages; n++) {
@@ -82,7 +88,7 @@ export async function renderPdfPagesJpeg(
 ): Promise<void> {
   const { getDocumentProxy, createIsomorphicCanvasFactory } = await import("unpdf");
   const CanvasFactory = await createIsomorphicCanvasFactory(() => import("@napi-rs/canvas"));
-  const pdf = await getDocumentProxy(new Uint8Array(bytes), { CanvasFactory });
+  const pdf = await getDocumentProxy(new Uint8Array(bytes), { ...PDF_CMAPS, CanvasFactory });
   try {
     for (const n of pages) {
       if (n < 1 || n > pdf.numPages) continue;

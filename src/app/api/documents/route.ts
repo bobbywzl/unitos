@@ -22,6 +22,7 @@ import { parseYouTubeId } from "@/lib/video/youtube";
 import { parseBody } from "@/lib/validate";
 import { isMarkdownFile } from "@/lib/markdown-file";
 import { isSheetsFile } from "@/lib/office-file";
+import { pageRangesSchema } from "@/lib/pdf-pages";
 
 // A split add parses one very long page and saves several documents; the AI
 // passes on such a page need the headroom.
@@ -70,19 +71,36 @@ export async function GET() {
 // (SPEC.md §15). Conversion and transcription keep their own chains.
 
 const urlSchema = z.object({
+  // The folder of the project the new document lands in (SPEC.md §6).
+  folderId: z.string().min(1).nullable().optional(),
   url: z.url(),
   notebookId: z.string().min(1),
   split: z.boolean().default(false),
 });
 
 // pages and convert are the PDF directives (SPEC.md §16), set by the upload
-// assistant's import pick, "1"/"0" as form fields.
+// assistant's import pick, "1"/"0" as form fields. pdfPages: the PDF's pages
+// the reader chose (SPEC.md §15), the ranges as JSON; absent, every page.
 const fileFieldsSchema = z.object({
+  // The folder of the project the new document lands in (SPEC.md §6).
+  folderId: z.string().min(1).nullable().optional(),
   notebookId: z.string().min(1),
   filename: z.string().min(1),
   pages: z.enum(["0", "1"]).default("0"),
   convert: z.enum(["0", "1"]).default("1"),
+  pdfPages: z.preprocess(jsonField, pageRangesSchema.optional()),
 });
+
+// A form field that holds JSON, read; not JSON, it stays text and fails
+// its schema.
+function jsonField(value: unknown): unknown {
+  if (typeof value !== "string") return value ?? undefined;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
 
 // Which of the slides and sheets formats an uploaded file is (SPEC.md §27):
 // a .pptx or .xlsx by its zip's parts, a .csv/.tsv by its name or type
@@ -129,9 +147,11 @@ export async function POST(req: Request) {
     }
     const fields = fileFieldsSchema.safeParse({
       notebookId: form.get("notebookId"),
+      folderId: form.get("folderId") || undefined,
       filename: file instanceof File ? file.name : "document.pdf",
       pages: form.get("pages") ?? "0",
       convert: form.get("convert") ?? "1",
+      pdfPages: form.get("pdfPages"),
     });
     if (!fields.success) {
       return NextResponse.json({ error: t("api.validationFailed"), issues: fields.error.issues }, { status: 400 });
@@ -163,14 +183,14 @@ export async function POST(req: Request) {
       return progressResponse(async (onProgress) => {
         try {
           const { document, deduped } = await parse.ingestDocx(bytes, filename, onProgress, {}, user?.id ?? null);
-          await attachDocument(fields.data.notebookId, document.id);
+          await attachDocument(fields.data.notebookId, document.id, fields.data.folderId);
           await bumpNotebook(fields.data.notebookId);
           // The skeleton builds after the response (SPEC.md §22).
           if (!deduped) after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
           return { id: document.id, title: document.title, deduped };
         } catch (err) {
           console.error("Word ingest failed:", err);
-          throw new Error(describeIngestError(err, t, "pdf"));
+          throw new Error(describeIngestError(err, t, "file"));
         }
       });
     } else if (officeFormat(parse, bytes, { type: file.type, name: filename })) {
@@ -183,7 +203,7 @@ export async function POST(req: Request) {
             format === "slides"
               ? await parse.ingestSlides(bytes, filename, onProgress, {}, user?.id ?? null)
               : await parse.ingestSheets(bytes, filename, onProgress, {}, user?.id ?? null);
-          await attachDocument(fields.data.notebookId, document.id);
+          await attachDocument(fields.data.notebookId, document.id, fields.data.folderId);
           await bumpNotebook(fields.data.notebookId);
           // The skeleton builds after the response (SPEC.md §22); an
           // uploaded deck's pictures render after it too (SPEC.md §27).
@@ -195,7 +215,7 @@ export async function POST(req: Request) {
           return { id: document.id, title: document.title, deduped };
         } catch (err) {
           console.error("Slides/sheets ingest failed:", err);
-          throw new Error(describeIngestError(err, t, "pdf"));
+          throw new Error(describeIngestError(err, t, "file"));
         }
       });
     } else if (isMarkdownFile({ type: file.type, name: filename })) {
@@ -203,14 +223,14 @@ export async function POST(req: Request) {
       return progressResponse(async (onProgress) => {
         try {
           const { document, deduped } = await parse.ingestMarkdown(bytes, filename, onProgress, {}, user?.id ?? null);
-          await attachDocument(fields.data.notebookId, document.id);
+          await attachDocument(fields.data.notebookId, document.id, fields.data.folderId);
           await bumpNotebook(fields.data.notebookId);
           // The skeleton builds after the response (SPEC.md §22).
           if (!deduped) after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
           return { id: document.id, title: document.title, deduped };
         } catch (err) {
           console.error("Markdown ingest failed:", err);
-          throw new Error(describeIngestError(err, t, "pdf"));
+          throw new Error(describeIngestError(err, t, "file"));
         }
       });
     } else if (!parse.isPdfBytes(bytes)) {
@@ -222,10 +242,10 @@ export async function POST(req: Request) {
           bytes,
           filename,
           onProgress,
-          { pages, convert: fields.data.convert === "1" },
+          { pages, convert: fields.data.convert === "1", pdfPages: fields.data.pdfPages },
           user?.id ?? null,
         );
-        await attachDocument(fields.data.notebookId, document.id);
+        await attachDocument(fields.data.notebookId, document.id, fields.data.folderId);
         await bumpNotebook(fields.data.notebookId);
         // The skeleton builds after the response (SPEC.md §22); a
         // handwritten document's waits for its conversion.
@@ -277,7 +297,7 @@ export async function POST(req: Request) {
         throw new Error(t("api.youtubeUnavailable"));
       }
       const { document, deduped } = ingested;
-      await attachDocument(data.notebookId, document.id);
+      await attachDocument(data.notebookId, document.id, data.folderId);
       await bumpNotebook(data.notebookId);
       // Transcription starts on its own — the transcript is the point.
       // after() keeps it alive past the response on serverless; the pane
@@ -300,7 +320,7 @@ export async function POST(req: Request) {
         throw err instanceof Error ? err : new Error(t("api.mediaUnavailable"));
       }
       const { document, deduped } = ingested;
-      await attachDocument(data.notebookId, document.id);
+      await attachDocument(data.notebookId, document.id, data.folderId);
       await bumpNotebook(data.notebookId);
       // Transcription starts on its own — the transcript is the point.
       // after() keeps it alive past the response on serverless; the pane
@@ -329,7 +349,7 @@ export async function POST(req: Request) {
       // when the reader asks for them, so nothing else starts here.
       const documents = [document, ...(extra ?? [])];
       for (const doc of documents) {
-        await attachDocument(data.notebookId, doc.id);
+        await attachDocument(data.notebookId, doc.id, data.folderId);
       }
       await bumpNotebook(data.notebookId);
       // The skeletons build after the response (SPEC.md §22).

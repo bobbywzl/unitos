@@ -3,7 +3,7 @@
 
 import type { Glyph, PageDrawing, Rule } from "@/lib/parse/pdf/drawing";
 import type { Grid } from "@/lib/parse/pdf/lattice";
-import type { ParsedBlock } from "@/lib/parse/types";
+import type { ParsedBlock, TabStop } from "@/lib/parse/types";
 
 // sup and sub: set smaller than its line and raised or lowered off the line's
 // baseline (a footnote reference, "1st", H₂O). The line decides (lines.ts
@@ -17,7 +17,15 @@ export type Flags = {
   sup?: boolean;
   sub?: boolean;
   zone?: MathZone;
+  look?: Look;
 };
+// What the drawing shows of a run beyond its font's flags (look.ts): the
+// face as the page editor names it, the size in points to a half point, its
+// glyphs' fill color, the filled box behind it, and a rule under it or
+// through it; for small capitals drawn as capitals set small, the
+// capitals' size. One object per look, so runs compare it by reference, as
+// a zone.
+export type Look = { face: string; size: number; capitals?: number; color?: string; highlight?: string; underline?: true; strike?: true };
 // An inline formula (math/zones.ts): its glyphs, the size of the text it
 // sits in, and its LaTeX once read. Items and runs inside it point to it;
 // ok when the LaTeX passed the check against the glyphs. open: it ends in a
@@ -39,7 +47,9 @@ export type Item = Flags & {
   glyphs?: Glyph[];
   table?: TableRegion; // a ruled table's place in the text flow (ruled.ts takeTables)
 };
-export type Run = Flags & { start: number; end: number };
+// A run over a tab (text.ts) carries its stop, and fill when the page
+// draws a fill-in rule under it (an underlined tab).
+export type Run = Flags & { start: number; end: number; tab?: TabStop & { fill?: true } };
 export type Cell = { x: number; text: string; runs: Run[] };
 export type Line = {
   cells: Cell[];
@@ -64,8 +74,9 @@ export type Box = { x1: number; y1: number; x2: number; y2: number };
 // A table the page's rules draw, taken out of the text flow before the
 // column split: its box, its text and the text's lines, the grid of a fully
 // ruled table (none when only horizontal rules bound it: rows and columns
-// come from the text), and the horizontal rules inside it.
-export type TableRegion = { box: Box; items: Item[]; lines: Line[]; grid: Grid | null; rules: Rule[] };
+// come from the text), the horizontal rules inside it, and the page's
+// drawing (a cell's formulas read their glyphs and rules from it).
+export type TableRegion = { box: Box; items: Item[]; lines: Line[]; grid: Grid | null; rules: Rule[]; drawing: PageDrawing };
 
 // A page start inside a joined segment: where a later page's words begin in
 // the text. page is 0-based, like Segment.page.
@@ -85,6 +96,9 @@ export type Segment = ParsedBlock & {
   captionBox?: Box; // a captioned FIGURE: where its caption sits (outside box)
   lineSize?: number; // the lines' median font size
   mathShare?: number; // share of glyphs from math fonts
+  lineBox?: Box; // the lines' extent at their own baselines, their scripts left out: a display's space is measured to it
+  glyphBox?: Box; // an EQUATION: its glyphs' drawn box (math/display.ts), which its space above and below is measured to
+  align?: "center" | "right"; // a heading's alignment (a paragraph's is a token of its html)
 };
 
 export type PageContext = {

@@ -1,4 +1,5 @@
 import type { BlockType } from "@prisma/client";
+import type { CustomColor, HighlightStyle } from "@/lib/text-style";
 import type { Region } from "@/lib/video/types";
 
 // One entry in the document's reference list. Formal entries come from the
@@ -25,14 +26,47 @@ export type CitationSpan = {
 // runs (identifiers, badges) inside prose. "smallCaps" marks words set in a
 // small-caps font (a theorem label, a legal defined term). "sub" and "sup"
 // mark lowered and raised runs outside math (H₂O, 10³, "1st", a footnote
-// mark). Stored on Block.styles; quotedText re-resolves the span after edits
-// and re-parses, like every other anchor.
+// mark). A PDF's drawing gives "underline" (a rule under the run's
+// baseline), "strike" (a rule through its middle), "color:#rrggbb" (its
+// glyphs' fill; black, near-black, and a link's blue are none), and
+// "highlight:#rrggbb" (a filled box behind it), in the vocabulary of
+// lib/text-style.ts. "font:<face>" and "size:<points>" mark a run set in
+// another face or size than its block's (ParsedBlock.font). Stored on
+// Block.styles; quotedText re-resolves the span after edits and re-parses,
+// like every other anchor.
 export type StyleSpan = {
   start: number;
   end: number;
-  style: "bold" | "italic" | "underline" | "code" | "smallCaps" | "sub" | "sup";
+  style:
+    | "bold"
+    | "italic"
+    | "underline"
+    | "strike"
+    | "code"
+    | "smallCaps"
+    | "sub"
+    | "sup"
+    | CustomColor
+    | HighlightStyle
+    | `font:${string}`
+    | `size:${number}`;
   quotedText: string;
 };
+
+// The look of words as the page sets them (a PDF parse): the face as the
+// page editor names it (lib/parse/pdf/faces.ts), the size in points to a
+// half point, bold, italic, and the color (#rrggbb; none for black).
+export type TextFont = { family: string; size: number; bold?: true; italic?: true; color?: string };
+
+// An indent as the page sets it, in points, the way the page editor stores a
+// paragraph's (indentLeft, indentFirstLine, indentRight): left, how far in
+// from the column's left edge the lines start; first, where the first line
+// starts against them (a first-line indent; negative, a hanging indent);
+// right, how far in from the column's right edge the lines end (a Word
+// paragraph's w:ind right). A list depth whose words follow its marker on
+// the first line (first ≥ 0) also says where they start, from the marker's
+// start (hang).
+export type Indent = { left: number; first: number; hang?: number; right?: number };
 
 // One inline formula over block plain text: the text keeps the formula's
 // readable characters (σ(𝒜α)), latex is the formula (\sigma(\mathcal{A}_\alpha)).
@@ -68,6 +102,11 @@ export type LinkSpan = {
 // its marker included; in a table, at the row.
 export type PageStart = { offset: number; page: number };
 
+// A tab stop: where a "\t" in a block's text goes, in points from the
+// column's left edge: the words after the tab start at a left stop, center
+// on a center stop, and end at a right stop.
+export type TabStop = { at: number; align: "left" | "center" | "right" };
+
 export type ParsedBlock = {
   type: BlockType;
   text: string;
@@ -93,6 +132,48 @@ export type ParsedBlock = {
   footnote?: { label: string };
   // PDF blocks: the footnote references in the text, in order.
   footnoteRefs?: FootnoteRef[];
+  // PDF text blocks: the look most of the block's characters take. The
+  // import reads it for the named styles, and for a block set in another
+  // face, size, or color than its named style.
+  font?: TextFont;
+  // PDF and Word text blocks and tables: the space between the block and
+  // the next text block in its column on the same page, beyond the text's
+  // line pitch, in points (a blank line, a Word paragraph's space after;
+  // under a table, from its bottom edge); absent where a figure, a table,
+  // or the page's end follows. The import's space after.
+  spaceAfter?: number;
+  // PDF and Word paragraphs, headings, and lists: the tab stops of the
+  // tabs in the text, in order (a form's fields, a pair set flush right, a
+  // proof's box). A PDF sets a right stop only at its column's right edge,
+  // and an underlined tab is a fill-in rule.
+  tabStops?: TabStop[];
+  // Word paragraphs: the line spacing Word sets (w:spacing w:line under
+  // the auto rule); PDF paragraphs of two lines or more: the page's line
+  // pitch over 1.15 of their size. A multiple of single spacing, as Docs
+  // sets one.
+  lineSpacing?: number;
+  // PDF paragraphs: the indent the page sets; absent where every line starts
+  // at the column's edge. The html's indent token names its kind.
+  indent?: Indent;
+  // PDF lists: each depth's indent (an item's marker stands at left + first,
+  // its wrapped lines at left), and the space the page leaves between two
+  // items beyond the line pitch, in points (absent: none). A list's
+  // alignment is a token of its html, as a paragraph's.
+  listIndents?: Indent[];
+  itemSpace?: number;
+  // Word paragraphs: the borders the paragraph's style and its own
+  // properties draw (w:pBdr: a rule under a heading, a bar beside a quote,
+  // a box), each side as the page editor stores a paragraph's: "<width pt>
+  // <solid|dotted|dashed> #rrggbb <padding pt>". between: the line between
+  // two paragraphs of one box (w:between).
+  borders?: { top?: string; right?: string; bottom?: string; left?: string; between?: string };
+  // Word paragraphs: the background (w:shd) as the page editor stores a
+  // paragraph's shading: "#rrggbb <padding pt>".
+  shading?: string;
+  // PDF FIGUREs: the crop of a display equation that failed the glyph check.
+  // Its text is the display's glyphs as the text layer reads them (often
+  // garbled), so the import shows it with no caption.
+  mathCrop?: true;
   // URL blocks, in memory only: the id of the element the block came from
   // (its own id, or the id of a wrapper whose first block it is), the target
   // a contents entry's targetFragment resolves against. Stripped before save.
@@ -136,8 +217,26 @@ export type ParsedDocument = {
   pageSize?: { width: number; height: number };
   // PDF parses: the PDF's own page labels, one per page ("xii", "1043"),
   // only when the PDF names its pages otherwise than 1..n. A page the PDF
-  // leaves unnamed reads as its number. Stored on Document.pageLabels.
+  // leaves unnamed among named ones has the number its neighbors imply, or
+  // none (""). Stored on Document.pageLabels.
   pageLabels?: string[];
+  // PDF parses: the body's look (the import's Normal text), and the title's
+  // look and alignment when the title came from the page (the import's
+  // Title).
+  bodyFont?: TextFont;
+  titleFont?: TextFont;
+  titleAlign?: "center" | "right";
+  // PDF parses: the title's plain styles (italic, sub, sup, small caps) over
+  // the title's characters; the import's Title keeps them.
+  titleStyles?: StyleSpan[];
+  // PDF parses: the title's lines where the writer broke it (a title set as
+  // two centered lines), when it has more than one. `title` stays one line:
+  // it is the document's name.
+  titleLines?: string[];
+  // PDF parses: the PDF's page the title stands on, when words of an
+  // earlier page come before it (an archive's notice page, a deck's first
+  // slide). The import's Title opens that page.
+  titlePage?: number;
 };
 
 /** Document.references as stored Json → typed entries. Defensive: bad rows drop. */
@@ -263,7 +362,86 @@ export type UrlParseProgress = (stage: "extract", detail?: string) => void;
 //     blocks, linked to their marks; small caps, sub, and sup are styles;
 //     reading order is a recursive XY-cut; list markers are read by family;
 //     a drop cap joins its word. A Word file parses from its own structure.
+// 21: the parse loop's round 2 (SPEC.md §30, §31) — PDF: the page's look
+//     travels: each block's font (face, size, weight, color), the body's and
+//     the title's font and the title's alignment, and a run in another face,
+//     size, or color; underline, strikethrough, highlight, and text color
+//     come from the drawing; a line centered, flush right, or justified says
+//     so. Math set in KaTeX's fonts or an OpenType math font reads as TeX, as
+//     TeX's own fonts do; an array keeps its rules, and a label over a
+//     relation or under a brace joins its formula. A table's header cell
+//     spans the columns under it, a cell keeps its scripts, styles, and
+//     formulas, and a caption keeps its face and size. A figure's caption
+//     takes its panels' captions and its note or source line. A scan's
+//     footnotes, author notes, title notes, and notes in table cells link to
+//     their marks. Headings go to level six, a slide ranks its own sizes,
+//     running heads may mirror on facing pages, and an OCR layer's widths are
+//     fitted. A CID font reads through pdf.js's CMaps (Japanese, Chinese).
+//     The import draws the page's list markers at every level. Word: the
+//     same look, space after paragraphs, notes in table cells, and a contents
+//     field built from its headings.
+// 22: the parse loop's round 3 (SPEC.md §30, §31) — PDF: columns with a
+//     narrow gutter, and three columns, split; blocks side by side read in
+//     order; a scan's overlapping word boxes keep their spaces. A paragraph's
+//     indent is measured in points; a list keeps each depth's indents, the
+//     space between its items, and its justified items; an algorithm's lines
+//     and a references list with no markers are lists with no marker; a
+//     bullet the page draws opens an item, and no bullet is invented.
+//     Division labels, a statement's title, and a centered title on the
+//     first page are headings; a page number with a period and a roman one
+//     drop; a first page's notes are footnotes; a pull quote is a quote. More
+//     math fonts read as TeX's; a formula that fails its check keeps its
+//     scripts; an equation number keeps its side; a display crop carries no
+//     caption; a list's bullet never joins a formula. A figure's crop never
+//     takes in a running head, a running foot, a page number, or a footnote.
+//     Word: paragraph borders, indents, the space between list items, and
+//     cell borders.
+// 23: the parse loop's round 4 (SPEC.md §30, §31) — PDF: a page no single
+//     cut reads may still hold one band of columns, and a side column reads
+//     beside the paragraph it stands by; a paragraph cut by a page or column
+//     break joins its other half past the floats and short lines between
+//     them, and "et al." ends no sentence; a double-spaced page reads at its
+//     own leading. A symbol font with no Unicode map reads by its codes, a
+//     face by the shape its name says, and capitals drawn at 0.8 of their
+//     size are small caps. A banner is a graphic, a caption in a side column
+//     is its graphic's, and a chart's tick labels are in its crop. A title
+//     wraps onto lines of its size and look and stands on the title page,
+//     the lines before it paragraphs; heading levels follow the numbered
+//     headings' sizes; a run-in lead is a run-in heading. A box to tick
+//     reads ☐; a grid open at one side closes; a grid the page does not show
+//     is no table; a merged cell whose words stand in columns is those
+//     columns' cells; a ruled row keeps its height; a scan's printer's mark
+//     drops. STIX's size fonts read; a lone italic letter is a formula where
+//     the page sets math, and small tight letters after a formula are its
+//     script; rows aligned at a relation join one display, and a label on a
+//     row of its own is the display's. Word: the right indent, a display's
+//     spacing, the cells' margins, and a paragraph's shading and the line
+//     between the paragraphs of a box.
+// 24: the parse loop's round 5 (SPEC.md §30, §31) — PDF: the masthead over
+//     the title drops or stands over it as its kicker, a note the title's
+//     page leaves unmarked stays a paragraph at the front matter's end, a
+//     run-in head keeps the page's indent, and a contents entry may be a
+//     title with its page number. A paragraph's halves join over a float or
+//     a page only where they are set alike, the space after a block is
+//     measured from its lines' own boxes and a display's glyphs, a gap a
+//     drawing reaches into is no blank, a rule across a gutter ends a band
+//     of columns, and the English dictionary decides a line-end hyphen. A
+//     gap at a stop reads as a tab, a fill-in rule as an underlined tab, and
+//     a proof's box as a right tab to the column's edge. A table's caption
+//     stands on the side the page sets it, a grid's cells keep the room the
+//     page leaves around their words, a column rule parts two words, and
+//     prose side by side is one paragraph. Photos, maps, and charts take
+//     their captions, pictures that touch are one figure, and a table drawn
+//     as glyph outlines is one drawing. A display's pieces join (a tall
+//     integral and its limits, a label on one row), a formula built wrong is
+//     a crop, and TeX's bold and sans letters in Times text are formulas.
+//     Word: each paragraph's line spacing, its tab stops, and captions at
+//     their own size.
+// 25: a box a filled path's fill rule cuts out of another box (even-odd,
+//     or turns summing to zero) is a hole and paints nothing: a table's
+//     border drawn as a ring no longer reads as a black box under every
+//     cell (SPEC.md §31 step 1).
 // Slides and sheets (SPEC.md §27) parse with their own parsers
 // (lib/parse/slides.ts, lib/parse/sheets.ts) and re-parse only on request:
 // they carry no version of their own.
-export const PARSER_VERSION = 20;
+export const PARSER_VERSION = 25;

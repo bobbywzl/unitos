@@ -5,13 +5,15 @@ import { isImeKey, useImeGuard } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
 import { BlankDocumentIcon, DriveLogo, LibraryIcon } from "@/components/icons";
 import { Presence } from "@/components/presence";
-import { parseDriveFileId, type DriveAccess, type DrivePickedFile } from "@/lib/drive/types";
+import { classifyDriveFile, parseDriveFileId, type DriveAccess, type DrivePickedFile } from "@/lib/drive/types";
 import { IngestProgress, type IngestStep } from "@/components/reader/ingest-progress";
 import {
   uploadItemTitle,
   type UploadItem,
   type UploadRequest,
 } from "@/components/reader/upload-assistant";
+import { readPageCount } from "@/lib/pdf-page-count";
+import { readPageRanges } from "@/lib/pdf-pages";
 import { isMediaUrl } from "@/lib/video/types";
 import { parseYouTubeId } from "@/lib/video/youtube";
 
@@ -35,14 +37,17 @@ function parseLinks(raw: string): string[] {
 }
 
 // One request for the queue (SPEC.md §22): a lone link, files alone, or
-// Drive picks alone go to the box as before; everything else is a batch.
+// Drive picks alone go to the box as before; everything else is a batch,
+// and so is a queue with a PDF's chosen pages, which ride on its item.
 function requestFor(items: UploadItem[]): UploadRequest {
   if (items.length === 1 && (items[0].kind === "url" || items[0].kind === "video-url")) return items[0];
-  if (items.every((item) => item.kind === "file")) {
+  const chosen = items.some((item) => (item.kind === "file" || item.kind === "drive-file") && item.pdfPages);
+  if (!chosen && items.every((item) => item.kind === "file")) {
     return { kind: "files", files: items.flatMap((item) => (item.kind === "file" ? [item.file] : [])) };
   }
   const first = items[0];
   if (
+    !chosen &&
     first.kind === "drive-file" &&
     items.every((item) => item.kind === "drive-file" && item.token === first.token)
   ) {
@@ -55,6 +60,13 @@ function requestFor(items: UploadItem[]): UploadRequest {
   return { kind: "batch", items };
 }
 
+/** A queued PDF: a PDF file, or a PDF picked in Google Drive. Its queue row
+    carries the Pages field (SPEC.md §15). */
+function isPdfItem(item: UploadItem): item is Extract<UploadItem, { kind: "file" | "drive-file" }> {
+  if (item.kind === "file") return item.file.type === "application/pdf" || /\.pdf$/i.test(item.file.name);
+  return item.kind === "drive-file" && classifyDriveFile(item.file.mimeType, item.file.name) === "pdf";
+}
+
 // The add-document dialog: one centered window for everything that adds a
 // document, opened by the dashed +. Files and a URL are the only two ways
 // in — a big drop-or-choose space for files, a box for a URL beneath it —
@@ -62,9 +74,12 @@ function requestFor(items: UploadItem[]): UploadRequest {
 // and Drive picks queue together (SPEC.md §22): Enter after a link queues
 // it, dropping or choosing files queues them, picking in Google Drive queues
 // the picks, and Continue hands the queue to the upload box, which imports
-// it. Under the queue one row holds Blank document, Add from Google Drive,
-// and Library, each a button with its symbol, and Continue at its end. A new
-// project (no document yet) asks for its title at the top.
+// it. A PDF in the queue has a Pages field (SPEC.md §15): empty imports every
+// page, "45–60" or "3, 7–9" those pages alone; the PDF's page count stands
+// after it once the file's bytes say it. Under the queue one row holds Blank
+// document, Add from Google Drive, and Library, each a button with its
+// symbol, and Continue at its end. A new project (no document yet) asks for
+// its title at the top.
 export function AddDocumentDialog({
   open,
   onClose,
@@ -84,6 +99,7 @@ export function AddDocumentDialog({
   onOpenLibrary,
   onAttach,
   onRemoveFromLibrary,
+  folderPath,
 }: {
   open: boolean;
   onClose: () => void;
@@ -117,6 +133,9 @@ export function AddDocumentDialog({
   onOpenLibrary: () => void;
   onAttach: (documentId: string) => void;
   onRemoveFromLibrary: (documentId: string) => void;
+  // The folder the documents land in (SPEC.md §6), as its path of titles;
+  // null = the project itself.
+  folderPath?: string[] | null;
 }) {
   const t = useT();
   const ime = useImeGuard();
@@ -125,6 +144,13 @@ export function AddDocumentDialog({
   const [libraryOpen, setLibraryOpen] = useState(false);
   // The queue: what Continue hands to the box, in the order it was added.
   const [items, setItems] = useState<UploadItem[]>([]);
+  // Each queued PDF's Pages field, and each queued PDF file's page count
+  // once its bytes are read (null: they do not say).
+  const [pageText, setPageText] = useState<Map<UploadItem, string>>(new Map());
+  const [pageCounts, setPageCounts] = useState<Map<File, number | null>>(new Map());
+  const countOf = (item: UploadItem) => (item.kind === "file" ? (pageCounts.get(item.file) ?? null) : null);
+  const pagesOf = (item: UploadItem) => readPageRanges(pageText.get(item) ?? "", countOf(item));
+  const pagesInvalid = items.some((item) => isPdfItem(item) && "error" in pagesOf(item));
   const fileInputRef = useRef<HTMLInputElement>(null);
   // The project title field: empty while the project carries the default
   // title, which stands as the placeholder.
@@ -153,6 +179,8 @@ export function AddDocumentDialog({
     if (open) {
       setUrl("");
       setItems([]);
+      setPageText(new Map());
+      setPageCounts(new Map());
       setLibraryOpen(false);
       setTitleDraft(titleOf(projectTitle));
     }
@@ -185,7 +213,13 @@ export function AddDocumentDialog({
   }
 
   function queueFiles(files: File[]) {
-    queue(files.map((file) => ({ kind: "file" as const, file })));
+    const next = files.map((file) => ({ kind: "file" as const, file }));
+    queue(next);
+    // A PDF's page count, read from its bytes: the Pages field says it.
+    for (const item of next) {
+      if (!isPdfItem(item) || pageCounts.has(item.file)) continue;
+      void readPageCount(item.file).then((count) => setPageCounts((current) => new Map(current).set(item.file, count)));
+    }
   }
 
   // Enter after a link queues it (several links at once queue each). A
@@ -212,9 +246,18 @@ export function AddDocumentDialog({
   }
 
   async function submit() {
-    if (items.length === 0) return;
+    if (items.length === 0 || pagesInvalid) return;
     await saveTitle();
-    onSubmit(requestFor(items));
+    // A PDF goes with its chosen pages; every page needs none.
+    onSubmit(
+      requestFor(
+        items.map((item) => {
+          if (!isPdfItem(item)) return item;
+          const read = pagesOf(item);
+          return "ranges" in read && read.ranges ? { ...item, pdfPages: read.ranges } : item;
+        }),
+      ),
+    );
     setItems([]);
     setUrl("");
   }
@@ -256,8 +299,13 @@ export function AddDocumentDialog({
         onClick={(e) => e.stopPropagation()}
         className="flex max-h-[85vh] w-[600px] max-w-full flex-col gap-4 overflow-y-auto rounded-[24px] bg-card p-6 shadow-float"
       >
-        <div className="flex items-center">
+        <div className="flex items-center gap-2">
           <span className="font-display text-[20px]">{t("panes.addDocument")}</span>
+          {folderPath && folderPath.length > 0 && (
+            <span className="min-w-0 truncate rounded-full bg-clay-100 px-2.5 py-0.5 text-[12px] font-semibold text-clay-800">
+              {t("panes.addInFolder", { folder: folderPath.join(" / ") })}
+            </span>
+          )}
           <button
             onClick={onClose}
             data-track="add-dialog-close"
@@ -359,22 +407,55 @@ export function AddDocumentDialog({
                   {t("panes.queuedCount", { n: items.length })}
                 </span>
                 <ul className="flex max-h-40 flex-col gap-0.5 overflow-y-auto rounded-2xl bg-sand-100 p-2">
-                  {items.map((item, i) => (
-                    <li key={i} className="flex items-center gap-2 px-2 py-1 text-[13px] text-sand-800">
-                      <span className="min-w-0 flex-1 truncate">{uploadItemTitle(item)}</span>
-                      <button
-                        onClick={() => removeItem(i)}
-                        data-track="add-queue-remove"
-                        aria-label={t("common.remove")}
-                        data-tip={t("common.remove")}
-                        className="shrink-0 rounded-full px-2 py-0.5 text-xs text-sand-400 hover:text-red-500"
-                      >
-                        ✕
-                      </button>
-                    </li>
-                  ))}
+                  {items.map((item, i) => {
+                    const pdf = isPdfItem(item);
+                    const count = countOf(item);
+                    const read = pdf ? pagesOf(item) : null;
+                    const problem = read && "error" in read ? read.error : null;
+                    return (
+                      <li key={i} className="flex flex-wrap items-center gap-x-2 gap-y-1 px-2 py-1 text-[13px] text-sand-800">
+                        <span className="min-w-0 grow basis-40 truncate">{uploadItemTitle(item)}</span>
+                        {/* A PDF's Pages field (SPEC.md §15): empty is every page. */}
+                        {pdf && (
+                          <label className="flex shrink-0 items-center gap-1.5 text-xs text-sand-600">
+                            {t("panes.pdfPages")}
+                            <input
+                              value={pageText.get(item) ?? ""}
+                              onChange={(e) => {
+                                const text = e.target.value;
+                                setPageText((current) => new Map(current).set(item, text));
+                              }}
+                              placeholder={t("panes.pdfPagesAll")}
+                              data-track="add-queue-pages"
+                              aria-invalid={problem !== null}
+                              maxLength={200}
+                              className={`h-7 w-24 rounded-full border bg-card px-3 text-xs text-sand-800 outline-none placeholder:text-sand-500 ${
+                                problem ? "border-red-400" : "border-line focus:border-clay"
+                              }`}
+                            />
+                            {count !== null && <span>{t("panes.pdfPagesOf", { n: count })}</span>}
+                          </label>
+                        )}
+                        <button
+                          onClick={() => removeItem(i)}
+                          data-track="add-queue-remove"
+                          aria-label={t("common.remove")}
+                          data-tip={t("common.remove")}
+                          className="shrink-0 rounded-full px-2 py-0.5 text-xs text-sand-400 hover:text-red-500"
+                        >
+                          ✕
+                        </button>
+                        {problem && (
+                          <p role="alert" className="basis-full text-[11px] text-red-500">
+                            {problem === "past" ? t("panes.pdfPagesPast", { n: count ?? 0 }) : t("panes.pdfPagesFormat")}
+                          </p>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
                 <span className="text-[11px] text-sand-500">{t("panes.queueHint")}</span>
+                {items.some(isPdfItem) && <span className="-mt-1 text-[11px] text-sand-500">{t("panes.pdfPagesHint")}</span>}
               </div>
             )}
 
@@ -420,7 +501,7 @@ export function AddDocumentDialog({
               <button
                 onClick={() => void submit()}
                 data-track="add-continue"
-                disabled={busy || items.length === 0}
+                disabled={busy || items.length === 0 || pagesInvalid}
                 className={`ml-auto ${submitButton}`}
               >
                 {items.length > 1 ? t("panes.continueWithCount", { n: items.length }) : t("panes.continue")}

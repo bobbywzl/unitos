@@ -90,7 +90,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ documentId: s
   // The header and the footer are rich text: each goes through the
   // sanitizer a save runs, so no setup can carry markup into the page.
   const pageSetup = { ...data.pageSetup };
-  for (const key of ["header", "footer", "firstHeader", "firstFooter"] as const) {
+  for (const key of ["header", "footer", "firstHeader", "firstFooter", "evenHeader", "evenFooter"] as const) {
     const value = pageSetup[key];
     if (value) pageSetup[key] = sanitizeRichText(value);
   }

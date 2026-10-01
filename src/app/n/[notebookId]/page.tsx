@@ -72,6 +72,7 @@ import { linkScanRunsLeft } from "@/lib/connect";
 import { isTextStyle, type TextStyle } from "@/lib/text-style";
 import { coreBlocks } from "@/lib/anchors/layer";
 import { READING_LINE_PX, type BlockPosition } from "@/lib/reading-position";
+import { storedPdfPages } from "@/lib/pdf-pages";
 
 export const dynamic = "force-dynamic";
 
@@ -260,10 +261,14 @@ export default async function NotebookPage(props: {
         const zip = document.fileData;
         const word = zip !== null && zip[0] === 0x50 && zip[1] === 0x4b && zip[2] === 0x03 && zip[3] === 0x04;
         const lastPage = document.blocks.reduce((n, b) => Math.max(n, b.page ?? 0), 0);
+        // A PDF's pages the reader chose at the add (SPEC.md §15), and the
+        // PDF's page count with them.
+        const chosen = pdf ? storedPdfPages(document) : null;
         imported = {
           kind: pdf ? "pdf" : word ? "docx" : document.fileHash !== null ? "markdown" : "url",
           origin: document.sourceUrl?.replace(SPLIT_PART, "") ?? "",
-          pages: pdf ? (pageLabels?.length ?? (lastPage || null)) : null,
+          pages: pdf ? (chosen?.count ?? pageLabels?.length ?? (lastPage || null)) : null,
+          pdfPages: chosen?.ranges ?? null,
           importRev: document.importRev,
           edited: editedSinceImport(document),
           shared,
@@ -494,6 +499,21 @@ export default async function NotebookPage(props: {
       })
       .filter((a): a is AnnotationItem => a !== null);
 
+    // A passage across blocks is one note with one source per block. The
+    // tab lists the note once, by its first source here; every other source
+    // here carries the same card, so each block of the passage paints in
+    // the kind's color and a click on any of them opens the card. Only the
+    // first carries the tool's symbol (chipless).
+    const otherSourcesByNote = new Map<string, string[]>();
+    for (const n of notebook!.sections.filter((s) => s.hidden).flatMap((s) => s.notes)) {
+      const here = n.sources.filter((src) => src.documentId === document.id).map((src) => src.id);
+      if (here.length > 1) otherSourcesByNote.set(n.id, here.slice(1));
+    }
+    const everySource = <T,>(a: AnnotationItem, value: T): [string, T][] => [
+      [a.sourceId as string, value],
+      ...(otherSourcesByNote.get(a.id) ?? []).map((id): [string, T] => [id, { ...value, chipless: true }]),
+    ];
+
     // Stored EXPLAIN, SIMPLIFY, ANALYZE, VISUALIZE, comment, and assistant
     // conversation content by source id: clicking the mark reopens the card
     // with this content.
@@ -509,15 +529,15 @@ export default async function NotebookPage(props: {
               a.kind === "assistant") &&
             a.sourceId,
         )
-        .map((a) => [
-          a.sourceId as string,
-          {
+        .flatMap((a) =>
+          everySource(a, {
             kind: a.kind as "explain" | "simplify" | "analyze" | "visualize" | "comment" | "assistant",
             content: a.content,
             noteId: a.id,
             conversation: a.conversation,
-          },
-        ]),
+            chipless: false,
+          }),
+        ),
     );
 
     // Highlights and comments by source id, for the on-mark edit controls.
@@ -534,7 +554,7 @@ export default async function NotebookPage(props: {
     > = {};
     for (const a of annotations) {
       if ((a.kind === "highlight" || a.kind === "comment") && a.sourceId) {
-        annotationsBySource[a.sourceId] = {
+        const value = {
           noteId: a.id,
           kind: a.kind,
           color: a.color,
@@ -542,6 +562,7 @@ export default async function NotebookPage(props: {
           quotedText: a.quotedText,
           createdById: a.createdById,
         };
+        for (const [id] of everySource(a, value)) annotationsBySource[id] = value;
       }
     }
 
@@ -999,11 +1020,12 @@ export default async function NotebookPage(props: {
       order: n.order,
       createdById: n.createdById,
       updatedAt: n.updatedAt.toISOString(),
+      createdAt: n.createdAt.toISOString(),
       documentId: n.documentId,
       sources: n.sources.map((src) => ({
         id: src.id,
-        documentId: src.documentId,
-        documentTitle: src.document.title,
+        documentId: src.documentId ?? "",
+        documentTitle: src.document?.title ?? "",
         quotedText: src.quotedText,
         orphaned: resolutionById.get(src.id)?.orphaned ?? src.orphaned,
       })),

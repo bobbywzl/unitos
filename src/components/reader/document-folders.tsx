@@ -15,7 +15,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { api } from "@/lib/api";
-import { CheckIcon, ChevronDownIcon, ChevronRightIcon, FolderIcon, MoreIcon } from "@/components/icons";
+import { CheckIcon, ChevronDownIcon, ChevronRightIcon, FolderIcon, MoreIcon, PlusIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Collapse } from "@/components/presence";
 import { isImeKey, useImeGuard } from "@/lib/ime";
@@ -28,7 +28,11 @@ import { clipWords } from "@/lib/markdown-preview";
 // beside it (a fly-out, one per level, so the tree reads as a menu); on a
 // narrow screen, a press opens the folder's list under the row. The rows of
 // the documents themselves are the document bar's: it renders each one
-// (renderDocument) and this file places them.
+// (renderDocument) and this file places them. A folder's list ends with New
+// file here, whose + adds a document straight into the folder. A document or
+// a folder drags onto a folder to move into it, or onto Move to the project
+// at the top of the list; held over a folder, the drag opens its list. The
+// rows of a list fall in one after another as it opens (tree-row-in).
 
 // One folder of a project (DocumentFolder).
 export type DocumentFolderView = { id: string; title: string; parentId: string | null };
@@ -277,6 +281,16 @@ function FolderNameInput({
 
 type TreeRow = { id: string; folderId: string | null; node: ReactNode };
 type TreeError = { at: string; message: string } | null;
+// What is being dragged: a document from its folder, or a folder from its
+// parent (null = the project itself).
+type TreeDrag = { kind: "document" | "folder"; id: string; from: string | null };
+// The drop target under the pointer: a folder's id, or ROOT_TARGET.
+const ROOT_TARGET = "root";
+// How long a drag held over a folder waits before its list opens.
+const DRAG_OPEN_MS = 450;
+
+// A row's place in its level, for the falling-in delay (tree-row-in).
+const rowStyle = (index: number): CSSProperties => ({ ["--row" as string]: index }) as CSSProperties;
 
 // Everything a row needs, shared down the tree so the row components stay
 // module-level (a component made inside another remounts on every render).
@@ -306,6 +320,18 @@ type Tree = {
   renameFolder: (folder: DocumentFolderView, title: string) => void;
   moveFolder: (folder: DocumentFolderView, parentId: string | null) => void;
   deleteFolder: (folder: DocumentFolderView) => void;
+  // The + of New file here: the document bar's add dialog, set to this
+  // folder. null: the tree offers no New file here.
+  addIn: ((folderId: string) => void) | null;
+  drag: TreeDrag | null;
+  dragOver: string | null;
+  startDrag: (drag: TreeDrag) => void;
+  endDrag: () => void;
+  setDragOver: Dispatch<SetStateAction<string | null>>;
+  // The drag may land on this target (a folder id, or null = the project):
+  // never where it sits now, and a folder never into itself.
+  canDropOn: (target: string | null) => boolean;
+  dropOn: (target: string | null) => void;
 };
 const TreeContext = createContext<Tree | null>(null);
 function useTree(): Tree {
@@ -359,6 +385,54 @@ function NewFolderRow({ parentId }: { parentId: string | null }) {
   );
 }
 
+// New file here, at the foot of a folder's list: the + bubble opens the add
+// dialog, and what it adds lands in this folder (SPEC.md §6).
+function NewFileRow({ folderId }: { folderId: string }) {
+  const { t, pending, addIn } = useTree();
+  if (!addIn) return null;
+  return (
+    <button
+      onClick={() => addIn(folderId)}
+      data-track="folder-new-file"
+      disabled={pending}
+      className="group/new flex items-center gap-2 px-4 py-2 text-left text-[12.5px] text-sand-600 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+      data-tip={t("panes.newFileHereTitle")}
+    >
+      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-clay-100 text-clay-700 shadow-soft transition-transform group-hover/new:scale-110 group-hover/new:bg-clay group-hover/new:text-clay-fg">
+        <PlusIcon size={12} />
+      </span>
+      <span>{t("panes.newFileHere")}</span>
+    </button>
+  );
+}
+
+// Move to the project, at the top of the root list while something in a
+// folder is dragged: the drop target for the project itself.
+function RootDropRow() {
+  const tree = useTree();
+  if (!tree.drag || !tree.canDropOn(null)) return null;
+  const over = tree.dragOver === ROOT_TARGET;
+  return (
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        if (!over) tree.setDragOver(ROOT_TARGET);
+      }}
+      onDragLeave={() => over && tree.setDragOver(null)}
+      onDrop={(e) => {
+        e.preventDefault();
+        tree.dropOn(null);
+      }}
+      className={`mx-2 my-1 rounded-lg border border-dashed px-3 py-2 text-[12.5px] ${
+        over ? "border-clay bg-clay-100 text-clay-800" : "border-line text-sand-500"
+      }`}
+    >
+      {tree.t("panes.moveToProject")}
+    </div>
+  );
+}
+
 // A folder's row: its name and count, the chevron that says how its list
 // opens, and its actions. The open list follows: beside the row on a wide
 // screen, under it on a narrow one.
@@ -374,11 +448,45 @@ function FolderRow({ folder, depth }: { folder: DocumentFolderView; depth: numbe
   // A name box open anywhere holds the fly-outs still: a hover that swapped
   // the list would take the box, and the typed name, with it.
   const typing = tree.creatingIn !== null || tree.renaming !== null;
+  // A drag held over the row opens its list, so a document can go deeper.
+  const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearOpenTimer = () => {
+    if (openTimer.current) clearTimeout(openTimer.current);
+    openTimer.current = null;
+  };
+  const droppable = tree.drag !== null && tree.canDropOn(folder.id);
+  const over = tree.dragOver === folder.id && droppable;
   return (
     <div ref={setRowEl} className="flex flex-col">
       <div
-        className="flex items-center"
+        className={`flex items-center ${over ? "bg-clay-200 ring-1 ring-clay ring-inset" : ""}`}
         onMouseEnter={flyout && !typing ? () => tree.openFolder(folder) : undefined}
+        draggable={canEdit && tree.renaming !== folder.id && !pending}
+        onDragStart={(e) => {
+          e.stopPropagation();
+          e.dataTransfer.setData("text/plain", folder.title);
+          e.dataTransfer.effectAllowed = "move";
+          tree.startDrag({ kind: "folder", id: folder.id, from: folder.parentId });
+        }}
+        onDragEnd={tree.endDrag}
+        onDragOver={(e) => {
+          if (!droppable) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          if (tree.dragOver !== folder.id) tree.setDragOver(folder.id);
+          if (!openTimer.current && !open) openTimer.current = setTimeout(() => tree.openFolder(folder), DRAG_OPEN_MS);
+        }}
+        onDragLeave={(e) => {
+          if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+          clearOpenTimer();
+          if (tree.dragOver === folder.id) tree.setDragOver(null);
+        }}
+        onDrop={(e) => {
+          clearOpenTimer();
+          if (!droppable) return;
+          e.preventDefault();
+          tree.dropOn(folder.id);
+        }}
       >
         {tree.renaming === folder.id ? (
           <div className="flex min-w-0 flex-1 flex-col">
@@ -506,25 +614,58 @@ function FolderRow({ folder, depth }: { folder: DocumentFolderView; depth: numbe
   );
 }
 
-// One level of the tree: its folders, then its documents, then New folder.
+// One level of the tree: its folders, then its documents, then New file
+// here (a folder's list) and New folder. Each row falls in after the one
+// above it (tree-row-in), and a document's row drags.
 function Level({ parentId, depth }: { parentId: string | null; depth: number }) {
-  const { t, canEdit, folders, rows } = useTree();
+  const tree = useTree();
+  const { t, canEdit, folders, rows, pending } = tree;
   const subfolders = childFolders(folders, parentId);
   const own = rows.filter((row) => row.folderId === parentId);
   const empty = subfolders.length === 0 && own.length === 0;
+  let index = 0;
   return (
     <>
+      {parentId === null && <RootDropRow />}
+      {parentId === null && <ErrorLine at="drag" />}
       {subfolders.map((folder) => (
-        <FolderRow key={folder.id} folder={folder} depth={depth} />
+        <div key={folder.id} className="tree-row-in" style={rowStyle(index++)}>
+          <FolderRow folder={folder} depth={depth} />
+        </div>
       ))}
       {own.map((row) => (
-        <div key={row.id}>{row.node}</div>
+        <div
+          key={row.id}
+          className={`tree-row-in ${tree.drag?.id === row.id ? "opacity-50" : ""}`}
+          style={rowStyle(index++)}
+          draggable={canEdit && !pending}
+          aria-roledescription={canEdit ? t("panes.dragDocumentTitle") : undefined}
+          onDragStart={(e) => {
+            e.dataTransfer.setData("text/plain", row.id);
+            e.dataTransfer.effectAllowed = "move";
+            tree.startDrag({ kind: "document", id: row.id, from: row.folderId });
+          }}
+          onDragEnd={tree.endDrag}
+        >
+          {row.node}
+        </div>
       ))}
       {parentId !== null && empty && (
-        <p className="px-4 py-2 text-[12.5px] text-sand-500">{t("panes.folderEmpty")}</p>
+        <p className="tree-row-in px-4 py-2 text-[12.5px] text-sand-500" style={rowStyle(index++)}>
+          {t("panes.folderEmpty")}
+        </p>
       )}
       {canEdit && !empty && <div className="mx-3 my-1 border-t border-line" />}
-      {canEdit && <NewFolderRow parentId={parentId} />}
+      {canEdit && parentId !== null && (
+        <div className="tree-row-in" style={rowStyle(index++)}>
+          <NewFileRow folderId={parentId} />
+        </div>
+      )}
+      {canEdit && (
+        <div className="tree-row-in" style={rowStyle(index++)}>
+          <NewFolderRow parentId={parentId} />
+        </div>
+      )}
     </>
   );
 }
@@ -541,6 +682,7 @@ export function DocumentTree<T extends { id: string; folderId: string | null }>(
   canEdit,
   panelEl,
   renderDocument,
+  onAddIn,
 }: {
   notebookId: string;
   folders: DocumentFolderView[];
@@ -549,6 +691,8 @@ export function DocumentTree<T extends { id: string; folderId: string | null }>(
   canEdit: boolean;
   panelEl: HTMLElement | null;
   renderDocument: (document: T) => ReactNode;
+  /** New file here: open the add dialog set to this folder. */
+  onAddIn?: (folderId: string) => void;
 }) {
   const t = useT();
   const router = useRouter();
@@ -582,6 +726,8 @@ export function DocumentTree<T extends { id: string; folderId: string | null }>(
   // The last failure, under the row it came from: a folder's actions, or a
   // level's New folder row.
   const [error, setError] = useState<TreeError>(null);
+  const [drag, setDrag] = useState<TreeDrag | null>(null);
+  const [dragOver, setDragOver] = useState<string | null>(null);
 
   // The screen crossed the width: the fly-outs close, or the open
   // document's path opens under its rows. Adjust-during-render, the same
@@ -655,6 +801,43 @@ export function DocumentTree<T extends { id: string; folderId: string | null }>(
           setMenu(null);
         },
       );
+    },
+    addIn: canEdit && onAddIn ? onAddIn : null,
+    drag,
+    dragOver,
+    startDrag: (next) => {
+      setError(null);
+      setMenu(null);
+      setDrag(next);
+    },
+    endDrag: () => {
+      setDrag(null);
+      setDragOver(null);
+    },
+    setDragOver,
+    canDropOn: (target) => {
+      if (!drag) return false;
+      if (drag.from === target) return false;
+      if (drag.kind === "folder" && target !== null && folderSubtree(folders, drag.id).has(target)) return false;
+      return true;
+    },
+    // A document moves with the document route, a folder with the folder
+    // route (which refuses a folder into itself as well).
+    dropOn: (target) => {
+      const moving = drag;
+      setDrag(null);
+      setDragOver(null);
+      if (!moving || moving.from === target) return;
+      if (moving.kind === "document") {
+        void run("drag", () =>
+          api(`/api/notebooks/${notebookId}/documents/${moving.id}`, "PATCH", { folderId: target }),
+        );
+      } else {
+        if (target !== null && folderSubtree(folders, moving.id).has(target)) return;
+        void run("drag", () =>
+          api(`/api/notebooks/${notebookId}/folders/${moving.id}`, "PATCH", { parentId: target }),
+        );
+      }
     },
     // What the folder holds moves up one level; the route does it.
     deleteFolder: (folder) => {

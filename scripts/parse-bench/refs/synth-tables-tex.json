@@ -12,7 +12,8 @@
           "text": "2025 Annual Financial Report",
           "bold": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -21,7 +22,12 @@
           "text": "Kestrel Energy Group"
         }
       ],
-      "align": "center"
+      "align": "center",
+      "font": {
+        "shape": "serif",
+        "size": 14.35
+      },
+      "spaceAfter": 10
     },
     {
       "kind": "paragraph",
@@ -52,7 +58,8 @@
           "text": "1",
           "sup": true
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "footnote",
@@ -321,7 +328,8 @@
         {
           "text": "The income statement below follows the presentation of prior years. Notes refer to the notes to the consolidated financial statements, which are published separately."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "table",
@@ -1115,7 +1123,8 @@
         {
           "text": "Table 3 lists every plant the group operated at the end of 2025, with its nameplate capacity, its output for the year, and its capacity factor, the ratio of actual output to the output at full capacity all year."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "table",
@@ -3399,7 +3408,8 @@
         {
           "text": "Capacity factors for batteries measure energy discharged. The Millbrook and Greystone nuclear units ran above 88% for the third year in a row."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "heading",
@@ -3417,7 +3427,8 @@
         {
           "text": "The group reports four segments. Corporate costs and eliminations between segments are not allocated."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "table",
@@ -3799,7 +3810,9 @@
         {
           "text": "For 2026 the group expects:"
         }
-      ]
+      ],
+      "align": "justify",
+      "spaceAfter": 13
     },
     {
       "kind": "list",
@@ -3831,7 +3844,9 @@
             }
           ]
         }
-      ]
+      ],
+      "itemSpace": 8,
+      "spaceAfter": 13
     },
     {
       "kind": "paragraph",
@@ -3843,7 +3858,8 @@
           "text": "2",
           "sup": true
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "footnote",
@@ -3864,6 +3880,30 @@
     "Page 4 of 4",
     "Continued on next page"
   ],
+  "fonts": {
+    "body": {
+      "shape": "serif",
+      "size": 9.96
+    },
+    "title": {
+      "shape": "serif",
+      "size": 17.22,
+      "bold": true
+    },
+    "h2": {
+      "shape": "serif",
+      "size": 14.35,
+      "bold": true
+    },
+    "footnote": {
+      "shape": "serif",
+      "size": 7.97
+    },
+    "caption": {
+      "shape": "serif",
+      "size": 9.96
+    }
+  },
   "license": "open",
   "provenance": "generated",
   "notes": "Table 3 runs across pages: its header row repeats at the top of each page (and in LaTeX “Continued on next page” closes each broken part); the reference holds the header once. Negative numbers are in parentheses."

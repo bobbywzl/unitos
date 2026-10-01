@@ -167,8 +167,9 @@ async function importPicture(page: Page, n: number): Promise<Buffer | null> {
     const sheet = [...document.querySelectorAll<HTMLElement>(".docs-sheet")].filter((s) => s.getBoundingClientRect().top <= y).at(-1);
     (sheet ?? el)?.scrollIntoView({ block: "start" });
   }, n);
-  const missing = await settle(page);
-  if (missing > 0) console.log(`page ${n}: ${missing} figure image${missing === 1 ? "" : "s"} did not load; the picture shows the caption in its place`);
+  const around = await measure();
+  const missing = around ? await settle(page, around) : [];
+  if (missing.length > 0) console.log(`page ${n}: ${missing.length} figure image${missing.length === 1 ? "" : "s"} did not load (${missing.join("; ")}); the picture shows the caption in its place`);
   const box = await measure();
   if (!box) return null;
   const clip = { x: box.x, y: Math.max(0, box.top), width: box.width, height: Math.max(1, Math.ceil(box.bottom - Math.max(0, box.top))) };
@@ -188,9 +189,12 @@ async function importPicture(page: Page, n: number): Promise<Buffer | null> {
 
 /** Fonts loaded, the images in view loaded (a figure's crop is drawn by the
     figure route when first asked for, slowly on a busy machine), two frames
-    drawn. Returns how many images in view did not load. */
-async function settle(page: Page): Promise<number> {
-  return page.evaluate(async () => {
+    drawn. Returns the figures of the paired page (between the box's top and
+    bottom) whose image did not load, each named by its media id and its
+    caption's first words: the tall viewport holds other pages' images too.
+    No box: no figure is named. */
+async function settle(page: Page, box: { top: number; bottom: number } | null = null): Promise<string[]> {
+  return page.evaluate(async (box) => {
     await document.fonts.ready;
     const images = [...document.images].filter((img) => {
       const r = img.getBoundingClientRect();
@@ -204,8 +208,33 @@ async function settle(page: Page): Promise<number> {
       });
     await Promise.race([Promise.all(images.filter((img) => !img.complete).map(loaded)), new Promise((done) => setTimeout(done, 90_000))]);
     await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
-    return images.filter((img) => !img.complete || img.naturalWidth === 0).length;
-  });
+    if (!box) return [];
+    return [...document.querySelectorAll<HTMLElement>(".docs-prose [data-docs-figure]")]
+      .filter((figure) => {
+        const r = figure.getBoundingClientRect();
+        const img = figure.querySelector("img");
+        return r.bottom > box.top && r.top < box.bottom && (!img || !img.complete || img.naturalWidth === 0) && figure.querySelector(".docs-figure-crop") !== null;
+      })
+      .map((figure) => `${figure.dataset.mediaId ?? "?"} "${(figure.querySelector(".docs-figure-caption")?.textContent ?? "").trim().slice(0, 40)}"`);
+  }, box);
+}
+
+/** A step run again once the page editor stands again, when the page
+    navigated under it: a dev server reloads while other sessions edit
+    files, and a long run stopped partway with "Execution context was
+    destroyed". */
+async function steady<T>(page: Page, step: () => Promise<T>, ready: () => Promise<void>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await step();
+    } catch (err) {
+      const lost = err instanceof Error && /Execution context was destroyed|navigation|Target page, context or browser has been closed/i.test(err.message);
+      if (!lost || attempt >= 3) throw err;
+      console.log(`the page navigated (${err.message.split("\n")[0]}): measuring again`);
+      await page.waitForLoadState("domcontentloaded");
+      await ready();
+    }
+  }
 }
 
 /** The PDF page and the import's page side by side, as one PNG. */
@@ -231,7 +260,7 @@ async function composePair(browser: Browser, pdfPng: Buffer, importPng: Buffer |
 async function main() {
   const { entries } = loadCorpus();
   const entry = entries.find((e) => e.id === id);
-  if (!entry) throw new Error(`${id} is not in corpus.json`);
+  if (!entry) throw new Error(`${id} is not in the corpus (corpus.json, .bench/corpus-private.json)`);
   const found = refPath(entry.id);
   const loaded = found ? loadRef(found) : null;
   const ref = loaded && "ref" in loaded ? loaded.ref : undefined;
@@ -277,17 +306,20 @@ async function main() {
     const page = await context.newPage();
     const link = `${BASE}/n/${notebookId}?doc=${documentId}`;
     await page.goto(link, { waitUntil: "domcontentloaded" });
-    if (isImport) {
-      await page.waitForFunction(() => (document.querySelector(".docs-prose")?.textContent ?? "").trim().length > 0);
-      await page.waitForFunction(() => Boolean((window as unknown as { __docsEditor?: unknown }).__docsEditor));
-    } else {
-      await page.waitForSelector("article.reader-prose [data-block-id]");
-    }
-    await settle(page);
+    const ready = async () => {
+      if (isImport) {
+        await page.waitForFunction(() => (document.querySelector(".docs-prose")?.textContent ?? "").trim().length > 0);
+        await page.waitForFunction(() => Boolean((window as unknown as { __docsEditor?: unknown }).__docsEditor));
+      } else {
+        await page.waitForSelector("article.reader-prose [data-block-id]");
+      }
+      await settle(page);
+    };
+    await steady(page, ready, ready);
     for (const n of pages) {
       const pdfPng = join(scratch, `pdf-${n}`);
       execFileSync("pdftoppm", ["-f", String(n), "-l", String(n), "-r", String(96 * DPR), "-png", "-singlefile", join(ROOT, file), pdfPng]);
-      const shot = isImport ? await importPicture(page, n) : null;
+      const shot = isImport ? await steady(page, () => importPicture(page, n), ready) : null;
       const note = isImport ? `No page start names page ${n}.` : "The add kept a block document (the size guard): no import to show.";
       const png = await composePair(browser, readFileSync(`${pdfPng}.png`), shot, `${id}, page ${n}`, note);
       const path = join(out, `${id}-p${n}.png`);

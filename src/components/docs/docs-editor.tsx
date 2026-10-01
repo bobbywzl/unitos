@@ -1,6 +1,8 @@
 "use client";
 
 import "./docs.css";
+// After the page's styles, where Tiptap put its own sheet: its rules win a tie.
+import "./css/prosemirror.css";
 import type { JSONContent } from "@tiptap/core";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import { useRouter } from "next/navigation";
@@ -27,7 +29,7 @@ import { showTranslations } from "@/components/docs/layer/reading";
 import { SuggestLayer } from "@/components/docs/suggest/layer";
 import { PageBanner, PageCanvas, PageRuler } from "@/components/docs/areas/page";
 import { StatusPopup } from "@/components/docs/page/status-popup";
-import { useSaveState } from "@/components/docs/page/store";
+import { PAGE_EVENT, useSaveState } from "@/components/docs/page/store";
 import { TypingLayer } from "@/components/docs/areas/typing";
 import { VersionHistory, VersionHistoryButton } from "@/components/docs/versions/version-history";
 import type { DocsAreaProps } from "@/components/docs/areas/types";
@@ -35,6 +37,7 @@ import type { Highlight } from "@/components/reader/block-view";
 import { api } from "@/lib/api";
 import { inlineText } from "@/lib/docs/blocks";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
+import { pageRangesLabel, type PageRange } from "@/lib/pdf-pages";
 
 // The page editor (SPEC.md §29): a blank document is written here the way a
 // Google Doc is written — a title row, the toolbar, and white pages on a gray
@@ -50,14 +53,16 @@ const FONTS_LINK_ID = "unitos-docs-fonts";
 /** An import (SPEC.md §29): a document made from a PDF, a web page, a
     Markdown or text file, or a Word file, as the page sends it. origin: the
     address, or "" for an uploaded file; pages: a PDF's page count;
-    importRev: the revision the import or its last re-parse stored (a
-    re-parse builds the page editor anew); edited: changed since then
-    (richTextRev > importRev); shared: attached to a project another account
-    owns, so Editing and Suggesting are off. */
+    pdfPages: the PDF's pages the reader chose at the add (SPEC.md §15),
+    null for every page; importRev: the revision the import or its last
+    re-parse stored (a re-parse builds the page editor anew); edited:
+    changed since then (richTextRev > importRev); shared: attached to a
+    project another account owns, so Editing and Suggesting are off. */
 export type Imported = {
   kind: "pdf" | "url" | "markdown" | "docx";
   origin: string;
   pages: number | null;
+  pdfPages?: PageRange[] | null;
   importRev: number;
   edited: boolean;
   shared: boolean;
@@ -103,7 +108,8 @@ function siteOf(address: string): string {
 }
 
 /** Where an import came from, after its title: "Imported from" the site, a
-    link to the page; a PDF and its page count; a text file; or a Word file.
+    link to the page; a PDF and its page count, or the pages the reader
+    chose of it ("PDF · pages 45–60 of 409"); a text file; or a Word file.
     Muted, the accent on hover. */
 function ImportLine({ imported }: { imported: Imported }) {
   const t = useT();
@@ -130,7 +136,19 @@ function ImportLine({ imported }: { imported: Imported }) {
   }
   if (imported.kind === "pdf") {
     const n = imported.pages;
-    parts.push(<span key="pdf">{n ? t("docsPage.importPdf", { n, s: n === 1 ? "" : "s" }) : "PDF"}</span>);
+    const chosen = imported.pdfPages;
+    parts.push(
+      <span key="pdf">
+        {n && chosen
+          ? t(chosen.length === 1 && chosen[0][0] === chosen[0][1] ? "docsPage.importPdfPage" : "docsPage.importPdfPages", {
+              pages: pageRangesLabel(chosen),
+              n,
+            })
+          : n
+            ? t("docsPage.importPdf", { n, s: n === 1 ? "" : "s" })
+            : "PDF"}
+      </span>,
+    );
   } else if (imported.kind === "markdown" && !imported.origin) {
     parts.push(<span key="file">{t("docsPage.importTextFile")}</span>);
   } else if (imported.kind === "docx" && !imported.origin) {
@@ -372,6 +390,9 @@ export function DocsEditor({
   const mode: DocsMode = locked ? "viewing" : chosenMode;
   const [zoom, setZoom] = useState<Zoom>(100);
   const [headerHidden, setHeaderHidden] = useState(false);
+  // View > Full screen: the title row, the toolbar, and the rulers hide,
+  // as in Google Docs; Esc brings them back.
+  const [fullScreen, setFullScreen] = useState(false);
   // The header or footer being edited: the toolbar formats its text.
   const [hfEditor, setHfEditor] = useState<Editor | null>(null);
 
@@ -400,6 +421,8 @@ export function DocsEditor({
       editable: writable && openedIn !== "viewing",
       immediatelyRender: false,
       shouldRerenderOnTransaction: false,
+      // ProseMirror's styles come with the page's (css/prosemirror.css).
+      injectCSS: false,
       // Docs' own autocorrect formats typing (ext/typing.ts); a paste only links addresses.
       enableInputRules: false,
       enablePasteRules: ["link"],
@@ -541,6 +564,30 @@ export function DocsEditor({
     };
   }, [editor]);
 
+  // Full screen from its command (page/commands.ts); an Esc no one else
+  // took brings the header back.
+  useEffect(() => {
+    if (!editor) return;
+    const dom = editor.view.dom;
+    const on = () => {
+      setFullScreen(true);
+      toast(t("docsPage.fullScreenHint"), editor);
+    };
+    dom.addEventListener(PAGE_EVENT.fullScreen, on);
+    return () => dom.removeEventListener(PAGE_EVENT.fullScreen, on);
+  }, [editor, t]);
+  useEffect(() => {
+    if (!fullScreen) return;
+    // The page cancels every Esc it gets (ProseMirror), so an open menu or
+    // dialog, not the cancel, says the key was someone else's.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.isComposing || document.querySelector("[data-docs-menu], [role='dialog']")) return;
+      setFullScreen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fullScreen]);
+
   const insertImage = useCallback(
     (source: { file: File } | { url: string }) => {
       if (editor) insertImageFrom(editor, source);
@@ -645,9 +692,9 @@ export function DocsEditor({
   }
 
   return (
-    <div className="docs-shell" data-docs-editor data-docs-mode={mode} data-import={imported?.kind}>
+    <div className="docs-shell" data-docs-editor data-docs-mode={mode} data-import={imported?.kind} data-full-screen={fullScreen || undefined}>
       <div className="docs-header" data-edit-control data-away={away || undefined}>
-        {!headerHidden && (
+        {!headerHidden && !fullScreen && (
           <div className="docs-title-row @container">
             <DocIcon size={26} className="docs-title-icon" />
             <TitleField
@@ -665,7 +712,8 @@ export function DocsEditor({
             <VersionHistoryButton editor={editor} />
           </div>
         )}
-        {chrome}
+        {/* Hidden, not taken away, in full screen: the toolbar's keys still answer. */}
+        <div style={{ display: fullScreen ? "none" : "contents" }}>{chrome}</div>
       </div>
       <PageBanner.Provider value={banner}>{pages}</PageBanner.Provider>
       <CollapsedView editor={editor} collapse={collapse} highlightsByBlock={highlightsByBlock} editing={editing} />

@@ -68,19 +68,22 @@ export default async function AssistantHistoryPage(props: { params: Promise<{ no
       const turns = loggedTurns(n);
       if (turns.length === 0) return null;
       const source = n.sources[0] ?? null;
-      const anchor = source
-        ? {
-            documentId: source.documentId,
-            documentTitle: source.document.title,
-            sourceId: source.id,
-            quotedText:
-              source.quotedText ||
-              (source.startTime !== null
-                ? formatTimeRange(source.startTime, source.endTime ?? source.startTime)
-                : ""),
-            orphaned: source.orphaned,
-          }
-        : null;
+      // A conversation about a passage of a deleted document keeps its turns;
+      // the anchor went with the document.
+      const anchor =
+        source?.documentId && source.document
+          ? {
+              documentId: source.documentId,
+              documentTitle: source.document.title,
+              sourceId: source.id,
+              quotedText:
+                source.quotedText ||
+                (source.startTime !== null
+                  ? formatTimeRange(source.startTime, source.endTime ?? source.startTime)
+                  : ""),
+              orphaned: source.orphaned,
+            }
+          : null;
       const origin: HistoryConversation["origin"] =
         kind !== "assistant" ? "tool" : anchor ? "selection" : "sidebar";
       return {

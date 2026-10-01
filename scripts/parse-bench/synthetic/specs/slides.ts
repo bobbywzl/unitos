@@ -102,6 +102,19 @@ export const slides: Spec = {
       smallCaps: "keep",
       drawnBullets: true,
       bands: { top: 0, bottom: 12 },
+      // beamer's sizes in Latin Modern Sans as pdflatex prints them. Madrid prints a frame's title white on
+      // its bar; the reference keeps no color for it, since the page editor has no bar to draw it on.
+      fonts: {
+        body: { shape: "sans", size: 10.91 },
+        title: { shape: "sans", size: 14.35, bold: true },
+        subtitle: { shape: "sans", size: 9.96 },
+        author: { shape: "sans", size: 10.91 },
+        affiliation: { shape: "sans", size: 9.96 },
+        date: { shape: "sans", size: 9.96 },
+        h2: { shape: "sans", size: 14.35 },
+      },
+      centered: [],
+      justified: false,
     },
   },
   notes: "One page per slide. The slide title is a level 2 heading. The theme draws the bullets as shapes, so a bullet list has no marker in the text layer; the reference names the marker •. The footline on every slide is furniture.",

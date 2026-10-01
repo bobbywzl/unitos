@@ -31,16 +31,34 @@ export function imageUrl(id: string): string {
   return `/api/images/${id}`;
 }
 
+/** The stored image an address points at (`/api/images/<id>`, on this site),
+    or null for any other address. */
+export function storedImageId(src: string): string | null {
+  let path = src;
+  if (/^https?:/i.test(src)) {
+    try {
+      const url = new URL(src);
+      if (typeof window === "undefined" || url.origin !== window.location.origin) return null;
+      path = url.pathname;
+    } catch {
+      return null;
+    }
+  }
+  return /^\/api\/images\/([a-z0-9]+)(?:[?#]|$)/i.exec(path)?.[1] ?? null;
+}
+
 /** The image markdown a note carries: the alt text is the file's name, so a
     note read without the image still says what was there. */
 export function imageMarkdown(id: string, name: string): string {
   return `![${name.replace(IMAGE_EXTENSIONS, "").replace(/[[\]]/g, "")}](${imageUrl(id)})`;
 }
 
-/** The html a FIGURE block carries for a dropped image. */
-export function imageFigureHtml(id: string, alt: string): string {
-  const safe = alt.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
-  return `<figure><img src="${imageUrl(id)}" alt="${safe}" /></figure>`;
+/** The html a FIGURE block carries for a dropped image: `src` is the stored
+    image's URL, or the address of a picture from another page that the
+    browser could not read. */
+export function imageFigureHtml(src: string, alt: string): string {
+  const escape = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+  return `<figure><img src="${escape(src)}" alt="${escape(alt)}" /></figure>`;
 }
 
 /** Store one dropped image and get its URL back. Throws with the server's

@@ -1,0 +1,27 @@
+/* Tools > Line numbers (page/line-numbers.tsx): each page's numbers in its
+   left margin, right-aligned a quarter inch from the text, gray, in the
+   page's own sheet so print keeps them beside their lines. */
+.docs-line-numbers {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  pointer-events: none;
+  user-select: none;
+}
+.docs-line-number {
+  position: absolute;
+  right: 0;
+  color: #80868b;
+  font: 400 12px Arial, Arimo, "Liberation Sans", sans-serif;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.docs-line-numbers-modes {
+  margin: -6px 0 0 26px;
+  padding: 0;
+  border: 0;
+}
+.docs-line-numbers-modes:disabled {
+  opacity: 0.5;
+}

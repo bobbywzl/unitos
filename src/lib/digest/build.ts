@@ -171,8 +171,8 @@ export async function buildDigest(
     content: withToolConversation(n),
     sources: n.sources.map(
       (src): DigestSource => ({
-        documentId: src.documentId,
-        documentTitle: src.document.title,
+        documentId: src.documentId ?? "",
+        documentTitle: src.document?.title ?? "",
         quote: cut(src.quotedText, QUOTE_MAX),
         orphaned: src.orphaned,
         startTime: src.startTime,

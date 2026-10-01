@@ -7,7 +7,7 @@ import { useAuthor, useCollab } from "@/components/collab/collab-context";
 import type { DocsAreaProps } from "@/components/docs/areas/types";
 import { registerDocsCommands } from "@/components/docs/commands";
 import { focusSuggestion, readSuggestions, setSuggesting, settleSuggestions, suggestionAt } from "@/components/docs/ext/suggest";
-import { belowSlot, pageGeometry, paneReach, slotAt } from "@/components/docs/layer/margin";
+import { belowSlot, marginPlace, pageGeometry, paneReach, slotAt } from "@/components/docs/layer/margin";
 import { applyAssistantOps, type Landing } from "@/components/docs/suggest/assistant";
 import { SuggestionCard } from "@/components/docs/suggest/card";
 import { ReviewPanel } from "@/components/docs/suggest/review";
@@ -91,9 +91,9 @@ registerDocsCommands([
   })),
 ]);
 
-/** The column's box over the pane and the notes tray beside it (in a split
-    pane, the pane alone), under the title row and the toolbar; its inside
-    in the pane's coordinates. */
+/** The column's box over the pane, never over the notes tray beside it,
+    under the title row and the toolbar; its inside in the pane's
+    coordinates. */
 function fitColumn(pane: HTMLElement, column: HTMLElement): void {
   const box = column.parentElement;
   if (!box) return;
@@ -128,20 +128,25 @@ function wordsAt(editor: Editor, card: HTMLElement, from: Map<string, number>): 
     beside the page stay where they are, and the cards flow around them the
     same way. With no column (a split pane, no room), only the open cards
     show, under their words. The column's end stretches the pane, so the
-    lowest card can be scrolled to. True when the column holds a card. */
+    lowest card can be scrolled to. True when the column holds a card, or
+    would once the page moves left for it. */
 function placeCards(editor: Editor, pane: HTMLElement, column: HTMLElement): boolean {
   const geo = pageGeometry(pane, 0);
   const page = pane.querySelector("[data-docs-page]");
   if (!geo || !page) return false;
-  const slot = column.parentElement?.hasAttribute("data-split") ? null : slotAt(geo, 0);
+  const split = column.parentElement?.hasAttribute("data-split") ?? false;
+  const slot = split ? null : slotAt(geo, 0);
   const { left, width } = slot ?? belowSlot(geo, 0);
   const paneRect = pane.getBoundingClientRect();
   const paneTop = paneRect.top - pane.scrollTop;
   const from = new Map(readSuggestions(editor.state.doc).map((s) => [s.id, s.from]));
   const cards: { el: HTMLElement; at: number; top: number; open: boolean }[] = [];
+  // A card whose words are in the page, shown or not.
+  let placeable = false;
   for (const el of column.querySelectorAll<HTMLElement>(COLUMN_CARD)) {
     if (el.closest(".presence-exit")) continue;
     const at = wordsAt(editor, el, from);
+    if (at !== null) placeable = true;
     const open = el.hasAttribute("data-active") || el.dataset.sideCard === "comment";
     const shown = at !== null && (slot !== null || open);
     el.style.display = shown ? "" : "none";
@@ -202,7 +207,11 @@ function placeCards(editor: Editor, pane: HTMLElement, column: HTMLElement): boo
   cards.forEach(({ el }, i) => Object.assign(el.style, { left: `${left}px`, width: `${width}px`, top: `${tops[i]}px` }));
   const end = pane.querySelector<HTMLElement>("[data-docs-column-end]");
   if (end) end.style.top = `${Math.max(0, ...fixed.map((f) => f.bottom), ...cards.map((_, i) => tops[i] + heights[i])) + CARD_GAP}px`;
-  return slot !== null && cards.length > 0;
+  // No room where the page stands, but room once it moves left: holding the
+  // margin moves it (reader-interactions.tsx), and the cards take their
+  // places when it has moved (the canvas's size, observed below). The
+  // column never reaches past the pane, over the notes tray.
+  return slot ? cards.length > 0 : !split && placeable && marginPlace(geo) !== null;
 }
 
 export function SuggestLayer({ editor, canEdit, editing, suggesting }: DocsAreaProps & { suggesting: boolean }) {
@@ -279,9 +288,11 @@ export function SuggestLayer({ editor, canEdit, editing, suggesting }: DocsAreaP
     };
     const boxes = `${FIXED}, ${COLUMN_CARD}`;
     const sizes = new ResizeObserver(later);
+    // The canvas narrows as the page moves left for the column: the cards
+    // take their places then, with or without the move's transition.
     const watch = () => {
       sizes.disconnect();
-      for (const el of [pane, editor.view.dom.closest("[data-docs-editor]"), ...column.querySelectorAll(boxes)]) {
+      for (const el of [pane, editor.view.dom.closest("[data-docs-editor]"), pane.querySelector(".docs-canvas"), ...column.querySelectorAll(boxes)]) {
         if (el) sizes.observe(el);
       }
     };

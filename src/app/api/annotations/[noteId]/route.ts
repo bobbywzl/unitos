@@ -38,7 +38,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ noteId: string 
     quotedText: source?.quotedText ?? null,
     orphaned: source?.orphaned ?? false,
     documentId: source?.documentId ?? null,
-    documentTitle: source?.document.title ?? null,
+    documentTitle: source?.document?.title ?? null,
     conversation: conversationTurns(note),
   };
   return NextResponse.json(view);

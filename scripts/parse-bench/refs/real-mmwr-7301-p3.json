@@ -11,7 +11,7 @@
  ],
  "license": "public-domain",
  "provenance": "hand",
- "notes": "CDC's Morbidity and Mortality Weekly Report, vol. 73 no. 1 (January 11, 2024), \"Topical Antifungal Prescribing for Medicare Part D Beneficiaries — United States, 2021\"; a work of the United States government. Scored: two InDesign pages in two columns with full-width tables: Table 1 (group rows \"Antifungal drug\" and \"U.S. Census Bureau region\", a bold total row) and Table 2 (two header rows with spanning group headers), table notes as footnotes with their symbols, article footnotes with symbol labels, section headings (h2) and bold subheadings (h3), soft hyphens at discretionary breaks and hard hyphens at compound breaks. The first paragraph starts on page 2 and the last runs to page 5. The Discussion paragraph runs from page 3 to page 4 around both tables: it is one block, the tables follow it. A footnote follows the paragraph that cites it; a table's notes follow the table.",
+ "notes": "CDC's Morbidity and Mortality Weekly Report, vol. 73 no. 1 (January 11, 2024), \"Topical Antifungal Prescribing for Medicare Part D Beneficiaries — United States, 2021\"; a work of the United States government. Scored: two InDesign pages in two columns with full-width tables: Table 1 (group rows \"Antifungal drug\" and \"U.S. Census Bureau region\", a bold total row) and Table 2 (two header rows with spanning group headers), table notes as footnotes with their symbols, article footnotes with symbol labels, section headings (h2) and bold subheadings (h3), soft hyphens at discretionary breaks and hard hyphens at compound breaks. The first paragraph starts on page 2 and the last runs to page 5. The Discussion paragraph runs from page 3 to page 4 around both tables: it is one block, the tables follow it. A footnote follows the paragraph that cites it; a table's notes follow the table. Alignment (round 2, measured with PyMuPDF): blocks 3, 8 are centered: each line's middle lies within 4 pt of its column's middle and both its ends stand more than 8 pt inside the column's margins (a column's margin is where three or more of its lines end, or its furthest line end).",
  "furniture": [
   "Morbidity and Mortality Weekly Report",
   "3",
@@ -26,7 +26,8 @@
     {
      "text": "practitioner or physician assistant, dermatologist, podiatrist, and other) in the Medicare Part D Prescribers–by Provider and Drug data set as the denominator."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -38,7 +39,11 @@
      "text": "¶¶",
      "sup": true
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   }
   },
   {
    "kind": "footnote",
@@ -56,7 +61,8 @@
     {
      "text": "Results"
     }
-   ]
+   ],
+   "align": "center"
   },
   {
    "kind": "heading",
@@ -90,7 +96,11 @@
     {
      "text": "Among 1,017,417 unique prescribers, 130,637 (12.8%) prescribed topical antifungals (Table 2). The number of prescriptions per provider was highest for dermatologists (87.1), followed by podiatrists (67.2), and primary care physicians (12.3). Among 6.5 million topical antifungal prescriptions, the most were written by primary care physicians (2.6 million [40.0%], followed by nurse practitioners or physician assistants (1.4 million [21.4%]), dermatologists (1.1 million [17.6%]), and podiatrists (0.9 million [14.1%]). Among all topical antifungal prescriptions, 44.2% (2.9 million) were written by the top 10% (13,106) of topical antifungal prescribers. By provider type, the percentage of topical antifungal prescriptions written by higher-volume topical antifungal prescribers ranged from 35.5% for dermatologists to 54.8% for podiatrists."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   }
   },
   {
    "kind": "heading",
@@ -99,7 +109,8 @@
     {
      "text": "Discussion"
     }
-   ]
+   ],
+   "align": "center"
   },
   {
    "kind": "paragraph",
@@ -1588,7 +1599,12 @@
     {
      "text": ")."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -1610,7 +1626,11 @@
     {
      "text": " Clinicians should be aware of the potential risks"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 9
+   }
   },
   {
    "kind": "footnote",

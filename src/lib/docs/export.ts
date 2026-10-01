@@ -16,25 +16,36 @@ import {
   Header,
   HeadingLevel,
   HeightRule,
+  HorizontalPositionAlign,
+  HorizontalPositionRelativeFrom,
   ImageRun,
   InsertedTextRun,
   InternalHyperlink,
   LevelFormat,
+  LevelSuffix,
+  LineNumberRestartFormat,
   LineRuleType,
   Packer,
   PageBreak,
   PageNumber,
   PageOrientation,
   Paragraph,
+  Run,
   ShadingType,
+  StringContainer,
   Tab,
   TabStopType,
   Table,
   TableCell,
   TableRow,
   TextRun,
+  TextWrappingType,
   VerticalAlignTable,
+  VerticalPositionAlign,
+  VerticalPositionRelativeFrom,
   WidthType,
+  XmlAttributeComponent,
+  XmlComponent,
   type IBorderOptions,
   type ILevelsOptions,
   type IParagraphOptions,
@@ -45,14 +56,30 @@ import type { DocStyle } from "@/components/docs/extensions";
 import { firstFamily } from "@/components/docs/fonts";
 import type { FigureMediaView } from "@/components/docs/insert/figure";
 import { DEFAULT_HF_MARGIN_PT, PX_PER_PT } from "@/components/docs/page/geometry";
-import { listPreset } from "@/components/docs/toolbar/lists";
+import { levelMarker, lineLevel } from "@/components/docs/toolbar/lists";
 import { readStyles, sizeInPt, styleFont, type NamedStyle } from "@/components/docs/toolbar/styles";
 import { authEnabled } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { fetchFigureImage } from "@/lib/derive/figure";
 import { isAssistantAuthor } from "@/lib/docs/assistant-suggestions";
 import { hex6, inlineText } from "@/lib/docs/blocks";
-import { suggestionAuthor, suggestionTime, ZWSP, type PageSetup, type RichMark, type RichNode } from "@/lib/docs/schema";
+import {
+  captionMathOf,
+  captionParts,
+  captionStylesOf,
+  listIndentsOf,
+  NOTE_SYMBOL,
+  suggestionAuthor,
+  suggestionTime,
+  ZWSP,
+  type CaptionStyle,
+  type ListIndent,
+  type PageSetup,
+  type RichMark,
+  type RichNode,
+} from "@/lib/docs/schema";
+import { isMask, maskPath, type Mask } from "@/lib/docs/mask";
+import { FADED_OPACITY, watermarkImageSize } from "@/lib/docs/watermark";
 import { CROP_PAD, CROP_PAGE_WIDTH, WHOLE_PAGE_WIDTH } from "@/lib/figure-crop";
 import { cropPageRegion, renderPdfPage } from "@/lib/handwritten/pages";
 import { serverT } from "@/lib/i18n/server";
@@ -70,8 +97,9 @@ import { parseRegion, type Region } from "@/lib/video/types";
 
 type Block = Paragraph | Table;
 type Picture = { data: Uint8Array; type: "png" | "jpg" | "gif" | "bmp"; width: number; height: number };
-/** A figure object's pictures, and whether they are a PDF figure's crop. */
-type FigurePictures = { pictures: Picture[]; crop: boolean };
+/** A figure object's pictures, whether they are a PDF figure's crop, and
+    the size in px a crop is printed at (FigureMediaView.size). */
+type FigurePictures = { pictures: Picture[]; crop: boolean; printed?: { width: number; height: number } | null };
 
 /** The figure objects' media (FigureMedia, by media id), the PDF a figure's
     crop is cut from, and the address a web figure's relative images
@@ -232,7 +260,8 @@ function runOf(node: RichNode, ctx: Ctx, extra: IRunOptions): ParagraphChild | n
       return run({ ...props, break: 1 });
     case "footnoteReference": {
       const n = ctx.footnotes.get(String(node.attrs?.footnoteId));
-      return n ? new FootnoteReferenceRun(n) : null;
+      const symbol = noteSymbolOf(node);
+      return n ? (symbol ? new SymbolReferenceRun(n, symbol) : new FootnoteReferenceRun(n)) : null;
     }
     case "bookmark":
       return bookmark(ctx, bookmarkName("b", String(node.attrs?.bookmarkId ?? "")), []);
@@ -304,14 +333,59 @@ function para(ctx: Ctx, options: IParagraphOptions): Paragraph {
   return paragraph;
 }
 
+/** A footnote's symbol (an import's "*", "†": lib/docs/schema.ts
+    NOTE_SYMBOL), or null for a numbered footnote. */
+function noteSymbolOf(node: RichNode): string | null {
+  const symbol = node.attrs?.symbol;
+  return typeof symbol === "string" && NOTE_SYMBOL.test(symbol) ? symbol : null;
+}
+
+/** Word's footnote reference with a custom mark: the symbol after it
+    (w:customMarkFollows) stands in place of a number, and the footnote
+    takes none. */
+class SymbolReferenceAttributes extends XmlAttributeComponent<{ customMarkFollows: boolean; id: number }> {
+  protected readonly xmlKeys = { customMarkFollows: "w:customMarkFollows", id: "w:id" };
+}
+class SymbolReference extends XmlComponent {
+  constructor(id: number) {
+    super("w:footnoteReference");
+    this.root.push(new SymbolReferenceAttributes({ customMarkFollows: true, id }));
+  }
+}
+class SymbolReferenceRun extends Run {
+  constructor(id: number, symbol: string) {
+    super({ style: "FootnoteReference" });
+    this.root.push(new SymbolReference(id), new StringContainer("w:t", symbol));
+  }
+}
+
+/** A footnote's first paragraph opens with its symbol, as Word writes a
+    custom mark's footnote, in place of Word's number (w:footnoteRef). */
+function withSymbol(para: Paragraph, symbol: string | undefined): Paragraph {
+  if (!symbol) return para;
+  const front = para.addRunToFront.bind(para);
+  para.addRunToFront = () => front(new TextRun({ text: symbol, style: "FootnoteReference" }));
+  return para;
+}
+
 function paragraph(node: RichNode, ctx: Ctx, extra: IParagraphOptions = {}, run: IRunOptions = {}): Paragraph {
   const a = node.attrs ?? {};
   const level = Math.min(6, Math.max(1, Number(a.level) || 1));
   const lineSpacing = num(a.lineSpacing);
   const firstLine = num(a.indentFirstLine) ?? 0;
   let children = inline(node.content, ctx, run, typeof a.blockId === "string" ? ctx.cuts.get(a.blockId) : undefined);
+  // A run-in heading (an import's bold lead) is Word's style separator: its
+  // paragraph mark hidden, Word draws it at the start of the next
+  // paragraph, a space before its words, and its contents list it.
+  const runIn = node.type === "heading" && a.runIn === true;
+  if (runIn) children = [...children, new TextRun(" ")];
   if (node.type === "heading" && typeof a.blockId === "string") children = [bookmark(ctx, bookmarkName("h", a.blockId), children)];
   const stops = typeof a.tabStops === "string" ? a.tabStops.split(" ").map((stop) => stop.split(":")) : [];
+  // A side's line and its padding stand in the indent, as the page draws
+  // them: Word's indent is where the words start.
+  const inset = (side: unknown) => (typeof side === "string" ? side.split(" ").reduce((sum, v, k) => sum + (k === 0 || k === 3 ? Number(v) || 0 : 0), 0) : 0);
+  const [left, right] = [num(a.indentLeft), num(a.indentRight)];
+  const [insetLeft, insetRight] = [inset(a.borderLeft), inset(a.borderRight)];
   return para(ctx, {
     heading: node.type === "heading" ? HEADINGS[level - 1] : a.docStyle === "title" ? HeadingLevel.TITLE : undefined,
     style: a.docStyle === "subtitle" ? "Subtitle" : undefined,
@@ -323,8 +397,8 @@ function paragraph(node: RichNode, ctx: Ctx, extra: IParagraphOptions = {}, run:
       lineRule: lineSpacing ? LineRuleType.AUTO : undefined,
     },
     indent: {
-      left: num(a.indentLeft) === undefined ? undefined : tw(a.indentLeft as number),
-      right: num(a.indentRight) === undefined ? undefined : tw(a.indentRight as number),
+      left: left === undefined && !insetLeft ? undefined : tw((left ?? 0) + insetLeft),
+      right: right === undefined && !insetRight ? undefined : tw((right ?? 0) + insetRight),
       firstLine: firstLine > 0 ? tw(firstLine) : undefined,
       hanging: firstLine < 0 ? tw(-firstLine) : undefined,
     },
@@ -335,19 +409,65 @@ function paragraph(node: RichNode, ctx: Ctx, extra: IParagraphOptions = {}, run:
             position: tw(Number(at) || 0),
           }))
         : undefined,
+    border: paragraphBorders(a),
+    // Borders and shading's background (toolbar/borders.ts): "#rrggbb <padding pt>".
+    shading: paragraphShading(a),
     keepNext: a.keepWithNext === true || undefined,
+    suppressLineNumbers: a.suppressLineNumbers === true || undefined,
     keepLines: a.keepLinesTogether === true || undefined,
     widowControl: a.preventSingleLines !== false,
     pageBreakBefore: a.pageBreakBefore === true || undefined,
+    run: runIn ? { vanish: true, specVanish: true } : undefined,
     children,
     ...extra,
   });
 }
 
+/** A paragraph's borders as Word's (w:pBdr): each side as a cell's side,
+    with the room between the line and the words (an import's Word file,
+    or Borders and shading), and the line between the paragraphs of a box. */
+function paragraphBorders(a: Record<string, unknown>): IParagraphOptions["border"] {
+  const sides = (["top", "right", "bottom", "left", "between"] as const).flatMap((name) => {
+    const value = a[`border${name[0].toUpperCase()}${name.slice(1)}`];
+    return typeof value === "string" ? [[name, { ...side(value), space: Number(value.split(" ")[3] ?? 0) || 0 }] as const] : [];
+  });
+  return sides.length > 0 ? Object.fromEntries(sides) : undefined;
+}
+
+/** A paragraph's background as Word's shading (w:shd). */
+function paragraphShading(a: Record<string, unknown>): IParagraphOptions["shading"] {
+  const fill = typeof a.shading === "string" ? wordColor(a.shading.split(" ")[0]) : undefined;
+  return fill ? { type: ShadingType.CLEAR, color: "auto", fill } : undefined;
+}
+
 // ── Lists ───────────────────────────────────────────────────────────────────
 
-/** Level n sits n + 1 half inches in, its glyph a quarter inch before it. */
-const levelIndent = (level: number) => ({ left: 720 * (level + 1), hanging: 360 });
+/** Level n sits n + 1 half inches in, its glyph a quarter inch before it,
+    or farther for a wider glyph and a space ("*15", "1.1", "A-1." ran into
+    their words at a quarter inch). `width` is in twips. A list whose page
+    set its depths (listIndents: an import's) takes them, as the page draws
+    them, the levels past them a half inch a level further. */
+function levelIndent(level: number, width = 0, indents: ListIndent[] | null = null): { left: number; hanging?: number; firstLine?: number } {
+  const hanging = Math.max(360, width + 110);
+  if (!indents) return { left: 720 * (level + 1), hanging };
+  const last = indents.length - 1;
+  if (level > last) return { left: tw(indents[last][0]) + 720 * (level - last), hanging };
+  const [left, first] = indents[level];
+  return first < 0 ? { left: tw(left), hanging: tw(-first) } : { left: tw(left), firstLine: first > 0 ? tw(first) : undefined };
+}
+
+/** Where a level's words stand after a marker that does not hang, in
+    twips: the page's place (listIndents' hang, from the marker's start),
+    the tab stop Word's tab after the number goes to; none past the page's
+    depths or under a hanging marker, whose indent is the stop. */
+function levelTab(level: number, indents: ListIndent[] | null): number | undefined {
+  const at = indents?.[level];
+  return at && at[1] >= 0 && at[2] !== undefined && at[2] > 0 ? tw(at[0] + at[1] + at[2]) : undefined;
+}
+
+/** A glyph's width in Arial 11 pt, in twips: about 70 a narrow character
+    ("i", ".", "(") and 122 any other. */
+const glyphWidth = (glyph: string) => [...glyph].reduce((w, c) => w + (/[iljtfr.,:;()[\]*'-]/.test(c) ? 70 : 122), 0);
 
 function bulletLevels(glyph: string): ILevelsOptions[] {
   return Array.from({ length: 9 }, (_, level) => ({
@@ -358,27 +478,71 @@ function bulletLevels(glyph: string): ILevelsOptions[] {
   }));
 }
 
-/** A list's nine levels in its preset's glyphs; a numbered list starts at its start. */
-function listLevels(list: RichNode): ILevelsOptions[] {
-  const preset = listPreset(list.type === "orderedList", list.attrs?.listStyle);
-  return preset.levels.map((glyph, level) => ({
-    level,
-    ...("bullet" in glyph
-      ? { format: LevelFormat.BULLET, text: glyph.bullet }
-      : "nested" in glyph
-        ? { format: LevelFormat.DECIMAL, text: `${Array.from({ length: level + 1 }, (_, i) => `%${i + 1}`).join(".")}.` }
-        : { format: COUNTERS[glyph.counter], text: `${glyph.before}%${level + 1}${glyph.after}` }),
-    start: level === 0 ? Number(list.attrs?.start) || 1 : 1,
-    style: { paragraph: { indent: levelIndent(level) } },
-  }));
+/** A list's nine levels in Word: each the level the page draws for the
+    list's kind (toolbar/lists.ts lineLevel: the levels of the list that
+    draws it, else the default's), its glyph format as Word's level text
+    ("(%1)" for "(%0)"), a legal level's numbers above it as numbers, as the
+    page draws them. A level that draws no marker (an empty bullet) is
+    Word's none, its words where the page sets them: at the level's left,
+    the first line at its own place, and no marker's hanging indent. The
+    list starts at its start at its own level. */
+function listLevels(list: RichNode, drawer: RichNode, depth: number, indents: ListIndent[] | null): ILevelsOptions[] {
+  const widths = markerWidths(list, drawer, depth, []);
+  return Array.from({ length: 9 }, (_, level) => {
+    const glyph = lineLevel(drawer, level, list.type === "orderedList");
+    const none = "bullet" in glyph && glyph.bullet === "";
+    const indent = levelIndent(level, widths[level], indents);
+    return {
+      level,
+      ...(none
+        ? { format: LevelFormat.NONE, text: "", suffix: LevelSuffix.NOTHING }
+        : "bullet" in glyph
+          ? { format: LevelFormat.BULLET, text: glyph.bullet }
+          : {
+              format: COUNTERS[glyph.counter],
+              text: glyph.format.replace(/%([0-8])/g, (_, k: string) => `%${Number(k) + 1}`),
+              isLegalNumberingStyle: /%\d.*%\d/.test(glyph.format) || undefined,
+            }),
+      start: level === depth ? Number(list.attrs?.start) || 1 : 1,
+      style: {
+        paragraph: {
+          indent: none && !(indents && level < indents.length) ? { left: indent.left } : indent,
+          leftTabStop: none ? undefined : levelTab(level, indents),
+        },
+      },
+    };
+  });
+}
+
+/** The widest glyph of a list at each level, in twips: its lines' and
+    those of the lists of its kind inside it, numbered from `above`. */
+function markerWidths(list: RichNode, drawer: RichNode, depth: number, above: number[], out: number[] = []): number[] {
+  const start = Number(list.attrs?.start) || 1;
+  (list.content ?? []).forEach((item, i) => {
+    const numbers = [...above, start + i];
+    const glyph = levelMarker(lineLevel(drawer, depth, list.type === "orderedList"), numbers);
+    out[depth] = Math.max(out[depth] ?? 0, glyphWidth(glyph));
+    for (const child of item.content ?? []) if (child.type === list.type) markerWidths(child, drawer, depth + 1, numbers, out);
+  });
+  return out;
 }
 
 /** A list's lines. A list nested in a list of its kind goes one level down
     the outer list's numbering; a checklist line takes the ticked or the
-    empty box, and a ticked line is struck through unless the preset says not. */
-function list(node: RichNode, ctx: Ctx, outer: { type: string; reference: string } | null, level: number): Block[] {
+    empty box, and a ticked line is struck through unless the preset says
+    not. `drawer` is the list whose format draws this one: the outermost,
+    or the nearest with a preset or levels of its own. */
+function list(
+  node: RichNode,
+  ctx: Ctx,
+  outer: { type: string; reference: string } | null,
+  level: number,
+  drawer: RichNode = node,
+  indents: ListIndent[] | null = listIndentsOf(node.attrs?.listIndents),
+): Block[] {
   const own = outer?.type === node.type ? outer : { type: node.type, reference: `list${ctx.numbering.length}` };
-  if (own !== outer && node.type !== "taskList") ctx.numbering.push({ reference: own.reference, levels: listLevels(node) });
+  const draws = node.attrs?.listStyle || node.attrs?.listLevels ? node : drawer;
+  if (own !== outer && node.type !== "taskList") ctx.numbering.push({ reference: own.reference, levels: listLevels(node, draws, level, indents) });
   const strike = node.attrs?.listStyle !== "CHECKLIST_NO_STRIKETHROUGH";
   const out: Block[] = [];
   for (const item of node.content ?? []) {
@@ -386,10 +550,10 @@ function list(node: RichNode, ctx: Ctx, outer: { type: string; reference: string
     const reference = node.type === "taskList" ? (ticked ? "ticked" : "unticked") : own.reference;
     (item.content ?? []).forEach((child, i) => {
       if (child.type === "bulletList" || child.type === "orderedList" || child.type === "taskList") {
-        out.push(...list(child, ctx, own, level + 1));
+        out.push(...list(child, ctx, own, level + 1, draws, indents));
       } else if (child.type === "paragraph" || child.type === "heading") {
         const lineStyle = ticked && strike ? { strike: true, color: "666666" } : {};
-        out.push(paragraph(child, ctx, i === 0 ? { numbering: { reference, level } } : { indent: { left: levelIndent(level).left } }, lineStyle));
+        out.push(paragraph(child, ctx, i === 0 ? { numbering: { reference, level } } : { indent: { left: levelIndent(level, 0, indents).left } }, lineStyle));
       } else {
         out.push(...blocks([child], ctx));
       }
@@ -421,12 +585,16 @@ function table(node: RichNode, ctx: Ctx): Table {
   const columnWidths = widths.map((w) => Math.round((w ?? share) * 15));
   const align = node.attrs?.tableAlign;
   const indent = num(node.attrs?.tableIndent);
+  // The cells' padding as the page set it (an import's cellPadding), else
+  // 5 pt a side.
+  const [top, right, bottom, left] = typeof node.attrs?.cellPadding === "string" ? node.attrs.cellPadding.split(" ").map(Number) : [];
+  const padded = [top, right, bottom, left].every((v) => typeof v === "number" && Number.isFinite(v) && v >= 0);
   return new Table({
     columnWidths,
     width: { size: columnWidths.reduce((sum, w) => sum + w, 0), type: WidthType.DXA },
     alignment: align === "center" ? AlignmentType.CENTER : align === "right" ? AlignmentType.RIGHT : undefined,
     indent: indent && align !== "center" && align !== "right" ? { size: tw(indent), type: WidthType.DXA } : undefined,
-    margins: { top: 100, bottom: 100, left: 100, right: 100 },
+    margins: padded ? { top: tw(top), right: tw(right), bottom: tw(bottom), left: tw(left) } : { top: 100, bottom: 100, left: 100, right: 100 },
     rows: rows.map((row) => {
       const minHeight = num(row.attrs?.minHeight);
       return new TableRow({
@@ -475,27 +643,30 @@ function imageRun(node: RichNode, ctx: Ctx): ImageRun | null {
   });
 }
 
-/** A figure's picture takes at most the text column's width and 28rem of
-    height, as the page draws a PDF figure (css/import.css). A row of
-    pictures shares the width, FIGURE_GAP px apart. */
+/** A web figure's picture takes at most the text column's width and 28rem
+    of height. A row of pictures shares the width, FIGURE_GAP px apart. */
 const FIGURE_MAX_HEIGHT = 448;
 const FIGURE_GAP = 12;
 
 /** A figure object (SPEC.md §30), as the page draws it: its pictures
-    centered on one line, kept with its caption under them (9 pt, gray; a
-    PDF figure's in italics). A figure with no picture (a video, an embed, a
-    crop that did not render) is its caption. */
+    centered on one line, kept with its caption under them (9 pt, or the
+    size a PDF's page sets it in; gray, in the marks a PDF figure's caption
+    keeps). A figure with no picture (a video, an embed, a crop that did not
+    render) is its caption. */
 function figure(node: RichNode, ctx: Ctx): Paragraph[] {
-  const { pictures, crop } = ctx.figures.get(node) ?? { pictures: [], crop: false };
+  const { pictures, crop, printed } = ctx.figures.get(node) ?? { pictures: [], crop: false };
   const caption = typeof node.attrs?.caption === "string" ? node.attrs.caption.trim() : "";
   const change = changeOf(node);
   const out: Paragraph[] = [];
   if (pictures.length > 0) {
     const room = (ctx.textWidth - FIGURE_GAP * (pictures.length - 1)) / pictures.length;
     const children = pictures.flatMap((picture, i) => {
-      // A crop fills the column, as the page draws it; any other picture
-      // keeps its own size when it fits.
-      const scale = Math.min(room / picture.width, FIGURE_MAX_HEIGHT / picture.height, crop ? Infinity : 1);
+      // A crop takes the size the PDF prints it at, as the page draws it;
+      // any other picture keeps its own size when it fits.
+      const scale =
+        crop && printed
+          ? Math.min(room / picture.width, printed.width / picture.width)
+          : Math.min(room / picture.width, FIGURE_MAX_HEIGHT / picture.height, crop ? Infinity : 1);
       const run = new ImageRun({
         type: picture.type,
         data: picture.data,
@@ -515,11 +686,31 @@ function figure(node: RichNode, ctx: Ctx): Paragraph[] {
     );
   }
   if (caption) {
-    const run = runOf({ type: "text", text: caption, marks: node.marks }, ctx, { italics: crop || undefined, size: 18, color: "666666" });
-    out.push(para(ctx, { spacing: { before: pictures.length > 0 ? 0 : tw(9), after: tw(9) }, children: run ? [run] : [] }));
+    // A PDF figure's caption keeps its bold label and the rest of its marks,
+    // and a formula its TeX, as an inline equation writes it.
+    const styles = captionStylesOf(node.attrs?.captionStyles) ?? [];
+    const math = captionMathOf(node.attrs?.captionMath) ?? [];
+    const size = num(node.attrs?.captionSize);
+    const runs = captionParts(caption, styles, math).flatMap((part) => {
+      const marks = [...(node.marks ?? []), ...part.styles.map((style) => ({ type: CAPTION_MARKS[style] }))];
+      const words: RichNode = part.latex ? { type: "inlineMath", attrs: { latex: part.latex }, marks } : { type: "text", text: part.text, marks };
+      return runOf(words, ctx, { size: size ? Math.round(size * 2) : 18, color: "666666" }) ?? [];
+    });
+    out.push(para(ctx, { spacing: { before: pictures.length > 0 ? 0 : tw(9), after: tw(9) }, children: runs }));
   }
   return out;
 }
+
+/** A caption style's mark (lib/docs/schema.ts CaptionStyle). */
+const CAPTION_MARKS: Record<CaptionStyle["style"], string> = {
+  bold: "bold",
+  italic: "italic",
+  underline: "underline",
+  strike: "strike",
+  smallCaps: "smallCaps",
+  sub: "subscript",
+  sup: "superscript",
+};
 
 /** The document's headings, for its tables of contents. */
 function headingsOf(nodes: RichNode[] = []): { level: number; text: string; id: string }[] {
@@ -549,6 +740,9 @@ function blocks(nodes: RichNode[] = [], ctx: Ctx): Block[] {
       case "blockquote":
         for (const child of node.content ?? []) {
           if (child.type !== "paragraph" && child.type !== "heading") out.push(...blocks([child], ctx));
+          // A quote that draws its own bar (an import's Word quote) keeps
+          // it and its indent, as the page draws it.
+          else if (typeof child.attrs?.borderLeft === "string") out.push(paragraph(child, ctx));
           else out.push(paragraph(child, ctx, { indent: { left: 720 }, border: { left: { style: BorderStyle.SINGLE, size: 18, color: "DADCE0", space: 12 } } }));
         }
         break;
@@ -571,7 +765,14 @@ function blocks(nodes: RichNode[] = [], ctx: Ctx): Block[] {
         break;
       }
       case "blockMath":
-        out.push(para(ctx, { alignment: AlignmentType.CENTER, children: [new TextRun(String(a.latex ?? ""))] }));
+        // An import's display keeps the page's space under it.
+        out.push(
+          para(ctx, {
+            alignment: AlignmentType.CENTER,
+            spacing: num(a.spaceAfter) === undefined ? undefined : { after: tw(a.spaceAfter as number) },
+            children: [new TextRun(String(a.latex ?? ""))],
+          }),
+        );
         break;
       case "figure":
         out.push(...figure(node, ctx));
@@ -630,19 +831,28 @@ async function imageBytes(src: string): Promise<Uint8Array | null> {
 }
 
 /** Image bytes as Word takes them: cut by `crop` (the part of each side, top
-    right bottom left), and a format Word reads (anything else, an svg too,
-    is redrawn as a PNG). */
-async function picture(bytes: Uint8Array, crop: number[] = [0, 0, 0, 0]): Promise<Picture | null> {
-  const { createCanvas, loadImage } = await import("@napi-rs/canvas");
+    right bottom left), at `opacity`, inside `mask` (Mask image: the pixels
+    outside the shape clear), and a format Word reads (anything else, an svg
+    too, is redrawn as a PNG). */
+async function picture(bytes: Uint8Array, crop: number[] = [0, 0, 0, 0], opacity = 1, mask: Mask | null = null): Promise<Picture | null> {
+  const { createCanvas, loadImage, Path2D } = await import("@napi-rs/canvas");
   const image = await loadImage(Buffer.from(bytes)).catch(() => null);
   if (!image || !(image.width > 0 && image.height > 0)) return null;
   const [top, right, bottom, left] = crop;
   const type = WORD_TYPES[sniffImage(bytes) ?? ""];
-  if (type && top + right + bottom + left === 0) return { data: bytes, type, width: image.width, height: image.height };
+  if (type && top + right + bottom + left === 0 && opacity === 1 && !mask) return { data: bytes, type, width: image.width, height: image.height };
   const width = Math.max(1, Math.round(image.width * (1 - left - right)));
   const height = Math.max(1, Math.round(image.height * (1 - top - bottom)));
   const canvas = createCanvas(width, height);
-  canvas.getContext("2d").drawImage(image, image.width * left, image.height * top, width, height, 0, 0, width, height);
+  const g = canvas.getContext("2d");
+  g.globalAlpha = opacity;
+  if (mask) {
+    // The shape's path is drawn in a unit box: stretched to the image, it clips.
+    const shape = new Path2D();
+    shape.addPath(new Path2D(maskPath(mask)), { a: width, b: 0, c: 0, d: height, e: 0, f: 0 });
+    g.clip(shape);
+  }
+  g.drawImage(image, image.width * left, image.height * top, width, height, 0, 0, width, height);
   return { data: canvas.toBuffer("image/png"), type: "png", width, height };
 }
 
@@ -651,7 +861,48 @@ async function pictureOf(node: RichNode): Promise<Picture | null> {
   const bytes = await imageBytes(String(node.attrs?.src ?? ""));
   if (!bytes) return null;
   const crop = ["cropTop", "cropRight", "cropBottom", "cropLeft"].map((key) => Math.min(0.95, Math.max(0, num(node.attrs?.[key]) ?? 0)));
-  return picture(bytes, crop);
+  return picture(bytes, crop, 1, isMask(node.attrs?.mask) ? node.attrs.mask : null);
+}
+
+// ── The watermark ───────────────────────────────────────────────────────────
+
+/** The watermark's image and its size in px (SPEC.md §29). */
+type WatermarkPicture = { picture: Picture; width: number; height: number };
+
+/** The watermark as Word takes it: a text watermark is the image the dialog
+    drew of its words; an image watermark is its image, faded when Faded is
+    on, fitting the text area (Auto) or at a share of its own size. Null in
+    pageless, which shows none, and when the image cannot be read. */
+async function watermarkPicture(setup: PageSetup): Promise<WatermarkPicture | null> {
+  const mark = setup.pageless ? null : setup.watermark;
+  if (!mark) return null;
+  if (mark.kind === "text") {
+    const bytes = mark.image ? await imageBytes(mark.image.src) : null;
+    const drawn = bytes ? await picture(bytes) : null;
+    return drawn && mark.image ? { picture: drawn, width: mark.image.width, height: mark.image.height } : null;
+  }
+  const bytes = await imageBytes(mark.src);
+  const drawn = bytes ? await picture(bytes, undefined, mark.faded ? FADED_OPACITY : 1) : null;
+  if (!drawn) return null;
+  const m = setup.margins;
+  const room = { width: (setup.width - m.left - m.right) * PX_PER_PT, height: (setup.height - m.top - m.bottom) * PX_PER_PT };
+  return { picture: drawn, ...watermarkImageSize(mark.scale, drawn, room) };
+}
+
+/** The watermark's run: behind the text, centered on the page. */
+function watermarkRun(mark: WatermarkPicture): ImageRun {
+  return new ImageRun({
+    type: mark.picture.type,
+    data: mark.picture.data,
+    transformation: { width: Math.round(mark.width), height: Math.round(mark.height) },
+    floating: {
+      horizontalPosition: { relative: HorizontalPositionRelativeFrom.PAGE, align: HorizontalPositionAlign.CENTER },
+      verticalPosition: { relative: VerticalPositionRelativeFrom.PAGE, align: VerticalPositionAlign.CENTER },
+      behindDocument: true,
+      allowOverlap: true,
+      wrap: { type: TextWrappingType.NONE },
+    },
+  });
 }
 
 function imageNodes(node: RichNode | null | undefined): RichNode[] {
@@ -701,7 +952,7 @@ async function figurePictures(
   if (media.html === null) {
     const bytes = media.page !== null && crop ? await crop(media.page, parseRegion(media.region)) : null;
     const shown = bytes ? await picture(bytes) : null;
-    return { pictures: shown ? [shown] : [], crop: true };
+    return { pictures: shown ? [shown] : [], crop: true, printed: media.size };
   }
   const srcs = [...media.html.matchAll(/<img\b[^>]*?\ssrc="([^"]+)"/gi)].map((m) => m[1].replaceAll("&amp;", "&"));
   // An svg in a page needs no namespace; a file of its own does.
@@ -796,12 +1047,13 @@ export async function richTextDocx(
   const doc = tracked(stored);
   const styles = readStyles({ attrs: doc.attrs ?? {} });
   const shown = (hf: RichNode | null | undefined) => (setup.pageless ? null : hf);
-  const parts = [doc, shown(setup.header), shown(setup.footer), shown(setup.firstHeader), shown(setup.firstFooter)];
+  const parts = [doc, shown(setup.header), shown(setup.footer), shown(setup.firstHeader), shown(setup.firstFooter), shown(setup.evenHeader), shown(setup.evenFooter)];
   const images = parts.flatMap(imageNodes);
   const crop = figures.pdf ? pdfCrops(figures.pdf, Date.now() + FIGURE_RENDER_MS) : null;
-  const [imageRows, figureRows] = await Promise.all([
+  const [imageRows, figureRows, mark] = await Promise.all([
     Promise.all(images.map(async (node) => [node, await pictureOf(node)] as const)),
     Promise.all(figureNodes(doc).map(async (node) => [node, await figurePictures(node, figures, crop)] as const)),
+    watermarkPicture(setup),
   ]);
   const ctx: Ctx = {
     doc,
@@ -852,11 +1104,21 @@ export async function richTextDocx(
   if (ctx.breakBefore) body.push(new Paragraph({ children: [new PageBreak()] }));
   ctx.breakBefore = false;
   const notes = (doc.content ?? []).filter((n) => n.type === "footnotes").flatMap((n) => n.content ?? []);
+  const symbols = new Map<string, string>();
+  const symbolsOf = (node: RichNode) => {
+    const symbol = node.type === "footnoteReference" ? noteSymbolOf(node) : null;
+    if (symbol && !symbols.has(String(node.attrs?.footnoteId))) symbols.set(String(node.attrs?.footnoteId), symbol);
+    node.content?.forEach(symbolsOf);
+  };
+  symbolsOf(doc);
   const footnotes = Object.fromEntries(
     [...ctx.footnotes].map(([id, n]) => [
       n,
       {
-        children: (notes.find((f) => f.attrs?.footnoteId === id)?.content ?? []).map((p) => paragraph(p, ctx, { style: "FootnoteText" })),
+        children: (notes.find((f) => f.attrs?.footnoteId === id)?.content ?? []).map((p, k) => {
+          const para = paragraph(p, ctx, { style: "FootnoteText" });
+          return k === 0 ? withSymbol(para, symbols.get(id)) : para;
+        }),
       },
     ]),
   );
@@ -864,9 +1126,21 @@ export async function richTextDocx(
     const children = blocks(hf?.content, ctx);
     return { children: children.length > 0 ? children : [new Paragraph({})] };
   };
+  // The watermark rides in every header, in its first paragraph, as Word
+  // keeps its own; a document with no header gets one for it.
+  const headerPart = (hf: RichNode | null | undefined) => {
+    const { children } = part(hf);
+    if (!mark) return { children };
+    const first = children.find((c): c is Paragraph => c instanceof Paragraph);
+    if (!first) return { children: [new Paragraph({ children: [watermarkRun(mark)] }), ...children] };
+    first.addChildElement(watermarkRun(mark));
+    return { children };
+  };
   const header = shown(setup.header);
   const footer = shown(setup.footer);
   const first = setup.differentFirst && !setup.pageless;
+  // Different odd & even: Word's even pages take their own (w:evenAndOddHeaders).
+  const even = setup.differentOddEven === true && !setup.pageless;
   const landscape = setup.width > setup.height;
   const file = new DocxDocument({
     title,
@@ -898,10 +1172,16 @@ export async function richTextDocx(
     footnotes,
     comments: { children: placed },
     background: setup.color.toLowerCase() === "#ffffff" ? undefined : { color: setup.color.slice(1) },
+    evenAndOddHeaderAndFooters: even || undefined,
     sections: [
       {
         properties: {
           titlePage: first || undefined,
+          // Tools > Line numbers: every line, from 1 on each page or on through the document.
+          lineNumbers:
+            setup.lineNumbers && !setup.pageless
+              ? { countBy: 1, restart: setup.lineNumbers === "page" ? LineNumberRestartFormat.NEW_PAGE : LineNumberRestartFormat.CONTINUOUS }
+              : undefined,
           page: {
             // Word takes the portrait sides and turns them for landscape.
             size: {
@@ -921,12 +1201,14 @@ export async function richTextDocx(
           },
         },
         headers: {
-          default: header ? new Header(part(header)) : undefined,
-          first: first ? new Header(part(setup.firstHeader)) : undefined,
+          default: header || mark ? new Header(headerPart(header)) : undefined,
+          first: first ? new Header(headerPart(setup.firstHeader)) : undefined,
+          even: even ? new Header(headerPart(setup.evenHeader)) : undefined,
         },
         footers: {
           default: footer ? new Footer(part(footer)) : undefined,
           first: first ? new Footer(part(setup.firstFooter)) : undefined,
+          even: even ? new Footer(part(setup.evenFooter)) : undefined,
         },
         children: body,
       },

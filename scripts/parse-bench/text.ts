@@ -9,9 +9,11 @@ const WORD_RE =
 export type Word = { w: string; start: number; end: number };
 
 /** One word as the metrics compare it: NFKC (ligatures, full-width forms,
-    Kangxi radicals), lower case, soft hyphens and zero-width characters out. */
+    Kangxi radicals), lower case, soft hyphens and zero-width characters out.
+    A dotless ı and a combining acute are í: TeX sets í so ("Domínguez"),
+    the parse composes the two, and pdftotext keeps them apart. */
 export function normWord(word: string): string {
-  return word.normalize("NFKC").toLowerCase().replace(/[\u00AD\u200B-\u200D\u2060\uFEFF]/g, "");
+  return word.replace(/\u0131\u0301/g, "\u00ED").normalize("NFKC").toLowerCase().replace(/[\u00AD\u200B-\u200D\u2060\uFEFF]/g, "");
 }
 
 /** The words of a text with their offsets in it. */
@@ -28,6 +30,7 @@ export function wordsOf(text: string): Word[] {
     soft hyphens and zero-width characters out, spaces collapsed, lower case. */
 export function normText(text: string): string {
   return text
+    .replace(/\u0131\u0301/g, "\u00ED")
     .normalize("NFKC")
     .replace(/[\u00AD\u200B-\u200D\u2060\uFEFF]/g, "")
     .replace(/[‘’‚‛′‵]/g, "'")
@@ -49,7 +52,9 @@ const GARBLES: { kind: string; re: RegExp }[] = [
   { kind: "private-use character", re: /[\uE000-\uF8FF\u{F0000}-\u{FFFFD}\u{100000}-\u{10FFFD}]/gu },
   { kind: "lone combining mark", re: /(?<![\p{L}\p{N}\p{M}])\p{M}/gu },
   { kind: "accent apart from its letter", re: /[´¨ˆ˜˙ˇ˘˚¸˛](?=\p{L})|(?<=\p{L})[´¨ˆ˜˙ˇ˘˚¸˛]/gu },
-  { kind: "negation slash read as 6", re: /(?<![\d.,+\-−*/^_=(\[{])6\s?[=∈∋⊂⊃⊆⊇≡∼≈≃≅≤≥<>|∥⊢⊨≺≻⪯⪰∃]/gu },
+  // Not a 6 that stands after a relation or an operator, a space between (a
+  // fraction read flat: "σ = 6 = 1.5").
+  { kind: "negation slash read as 6", re: /(?<![\d.,+\-−*/^_=(\[{]\s?)6\s?[=∈∋⊂⊃⊆⊇≡∼≈≃≅≤≥<>|∥⊢⊨≺≻⪯⪰∃]/gu },
   { kind: "maps-to read as 7→", re: /7(?:→|−+→)/gu },
   { kind: "long arrow in two glyphs", re: /=⇒|⇐=|⇐⇒|←−|−→/gu },
 ];
@@ -67,6 +72,23 @@ export function garblesOf(text: string): Garble[] {
 
 // ── Lines that are furniture ────────────────────────────────────────────────
 
-/** A line that is only a page number: "12", "xii", "- 12 -", "Page 3",
+/** A roman page number from i to lxxxix, as front matter counts its pages
+    ("civil" and "mix" are words, not numbers). */
+const ROMAN = "(?=[ivxl])(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})";
+/** A line that is only a page number: "12", "12.", "xii", "- 12 -", "Page 3",
     "Page 3 of 12", "3 of 12", "3/12". */
-export const PAGE_NUMBER_RE = /^[-–— ]*(?:(?:page|p\.)\s*)?(?:\d{1,4}|[ivxlc]{1,7})(?:\s*(?:of|\/)\s*\d{1,4})?[-–— ]*$/i;
+export const PAGE_NUMBER_RE = new RegExp(`^[-–— ]*(?:(?:page|p\\.)\\s*)?(?:\\d{1,4}|${ROMAN})\\.?(?:\\s*(?:of|\\/)\\s*\\d{1,4})?[-–— ]*$`, "i");
+
+/** The number a page-number line prints ("12", "- 12 -", "Page 12 of 30",
+    "xii"), or null. */
+export function pageNumberOf(line: string): number | null {
+  const text = line.trim();
+  if (!PAGE_NUMBER_RE.test(text)) return null;
+  const digits = /\d{1,4}/.exec(text.replace(/^[-–— ]*(?:(?:page|p\.)\s*)?/i, ""));
+  if (digits) return Number(digits[0]);
+  const roman = new RegExp(ROMAN, "i").exec(text.replace(/^[-–— ]*(?:(?:page|p\.)\s*)?/i, ""))?.[0].toLowerCase() ?? "";
+  const value: Record<string, number> = { i: 1, v: 5, x: 10, l: 50 };
+  let n = 0;
+  for (let k = 0; k < roman.length; k++) n += value[roman[k]] < (value[roman[k + 1]] ?? 0) ? -value[roman[k]] : value[roman[k]];
+  return n > 0 ? n : null;
+}

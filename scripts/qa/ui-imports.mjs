@@ -2441,8 +2441,8 @@ RISKS.R23 = async (theme) => {
 };
 
 // C2: the assistant's suggestions on an import: a page start passes, a
-// figure is an object, the landing switches Viewing to Editing, Accept
-// keeps "p. N". First the landing's own ops (window.__applyAssistantOps),
+// figure's caption is its words and a figure itself is an object, the
+// landing switches Viewing to Editing, Accept keeps "p. N". First the landing's own ops (window.__applyAssistantOps),
 // then the assistant's bar with the model mock, as a person uses it.
 RISKS.C2 = async (theme) => {
   const pdf = await fresh("pdf", `-c2${theme[0]}`);
@@ -2455,12 +2455,15 @@ RISKS.C2 = async (theme) => {
   const changed = base.replace(/\bthe\b/, "one").replace(/\bthe\b(?![\s\S]*\bthe\b)/, "one");
   const ops = [
     { i: 0, op: "rewrite_block", blockId: s.blockId, base, text: changed, why: "QA: a word changed on each side of a page start." },
-    { i: 1, op: "rewrite_block", blockId: fig.blockId, base: fig.caption, text: "A new caption", why: "QA: a caption is the figure's." },
+    { i: 1, op: "rewrite_block", blockId: fig.blockId, base: fig.caption, text: "A new caption", why: "QA: a caption is the figure's words." },
+    { i: 2, op: "remove_blocks", blockIds: [fig.blockId], base: [fig.caption], why: "QA: a figure is an object." },
   ];
   const landed = await page.evaluate((o) => (window.__applyAssistantOps ? window.__applyAssistantOps(o) : null), ops);
   const switched = await until(async () => (await mode(page)) === "editing", 10_000);
   check("C2", Array.isArray(landed?.ids) && landed.ids.length > 0, `(${theme}) a rewrite across p. ${s.page} lands`, clip(JSON.stringify(landed), 160));
-  check("C2", (landed?.skipped ?? []).some((k) => k.i === 1 && k.reason === "object"), `(${theme}) an op on a figure is skipped as "object"`, clip(JSON.stringify(landed?.skipped), 120));
+  const captioned = (await figures(page)).find((f) => f.blockId === fig.blockId)?.caption ?? null;
+  check("C2", !(landed?.skipped ?? []).some((k) => k.i === 1) && captioned === "A new caption", `(${theme}) a rewrite of a figure's caption lands as a suggestion`, `caption "${clip(String(captioned), 40)}"; skipped ${clip(JSON.stringify(landed?.skipped), 80)}`);
+  check("C2", (landed?.skipped ?? []).some((k) => k.i === 2 && k.reason === "object"), `(${theme}) an op that removes a figure is skipped as "object"`, clip(JSON.stringify(landed?.skipped), 120));
   check("C2", switched, `(${theme}) suggestions landing on an import in Viewing switch it to Editing`, `mode ${await mode(page)}`);
   const still = (await pageStarts(page)).filter((x) => x.page === s.page);
   check("C2", still.length === 1, `(${theme}) the pending suggestion across p. ${s.page} keeps the page start`, `${still.length}${still[0] ? ` before "${still[0].before.slice(-15)}" after "${still[0].after.slice(0, 15)}"` : ""}`);
@@ -2602,8 +2605,41 @@ RISKS.AUDIT = async (theme) => {
     };
   });
   const chromeShot = await shot(page, `AUDIT-pdf-chrome-${theme}`);
-  check("AUDIT", chrome.titleRow && chrome.toolbar && chrome.ruler && chrome.vruler && chrome.sheets >= 15 && Math.abs(chrome.width - 816) <= 2 && Math.abs(chrome.height - 1056) <= 2, `(${theme}) the PDF reads as a Doc: title row, toolbar, rulers, pages at the paper's size`, `${JSON.stringify(chrome)} ${chromeShot}`);
+  // The 15-page PDF fills about as many pages: its lines draw at the page's
+  // own pitch in the page editor's wider column, so four fifths at least.
+  check("AUDIT", chrome.titleRow && chrome.toolbar && chrome.ruler && chrome.vruler && chrome.sheets >= 12 && Math.abs(chrome.width - 816) <= 2 && Math.abs(chrome.height - 1056) <= 2, `(${theme}) the PDF reads as a Doc: title row, toolbar, rulers, pages at the paper's size`, `${JSON.stringify(chrome)} ${chromeShot}`);
   check("AUDIT", /PDF · 15 pages/.test(chrome.line), `(${theme}) the import line says "PDF · 15 pages"`, chrome.line);
+  // A formula's closing mark stays on its line (insert/math.ts): at ten text
+  // widths, no line opens with the "." or ")" that follows an inline equation.
+  const lone = await page.evaluate(async () => {
+    const MARKS = ".,;:!?)]}’”%…-";
+    const style = document.createElement("style");
+    document.head.appendChild(style);
+    let tails = 0;
+    let alone = 0;
+    for (let pad = 0; pad <= 45; pad += 5) {
+      style.textContent = `.docs-prose > * { margin-right: ${pad}px !important }`;
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      tails = 0;
+      for (const m of document.querySelectorAll(".docs-prose .docs-math:not([data-math-block])")) {
+        const walker = document.createTreeWalker(m.closest("p, h1, h2, h3, h4, h5, h6, li, td, th") ?? document.body, NodeFilter.SHOW_TEXT);
+        let t = null;
+        for (let n = walker.nextNode(); n && !t; n = walker.nextNode()) if (!m.contains(n) && m.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING) t = n;
+        if (!t?.data || !MARKS.includes(t.data[0])) continue;
+        tails++;
+        const r = document.createRange();
+        r.setStart(t, 0);
+        r.setEnd(t, 1);
+        const mark = r.getClientRects()[0];
+        const rects = m.getClientRects();
+        const last = rects[rects.length - 1];
+        if (mark && last && mark.top >= last.bottom - 2) alone++;
+      }
+    }
+    style.remove();
+    return { tails, alone };
+  });
+  check("AUDIT", lone.tails > 0 && lone.alone === 0, `(${theme}) no line opens with the closing mark after an inline equation, at ten text widths`, `${lone.tails} equations with a closing mark; ${lone.alone} marks alone`);
   // The tabs & outlines panel lists the Title and the headings.
   const openOutline = page.locator('[data-track="docs:outline-open"]').first();
   if (await openOutline.count()) {

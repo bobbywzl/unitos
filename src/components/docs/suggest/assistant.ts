@@ -1,17 +1,19 @@
 import { suggestChangesKey } from "@handlewithcare/prosemirror-suggest-changes";
 import { CommandManager, createNodeFromContent, type ChainedCommands, type Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
-import type { Fragment, Node as PMNode } from "@tiptap/pm/model";
+import { Fragment, type Mark, type Node as PMNode } from "@tiptap/pm/model";
 import { EditorState, TextSelection, type Transaction } from "@tiptap/pm/state";
+import { TableMap } from "@tiptap/pm/tables";
+import { ReplaceStep } from "@tiptap/pm/transform";
 import { isSuggestionMark, newId, readSuggestions, settle, suggest } from "@/components/docs/ext/suggest";
 import { aroundPageStarts, FIGURE, findBlock, findIndexed, PAGE_START, posInBlock } from "@/components/docs/layer/anchor";
 import { DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
 import { isList, isListItem } from "@/components/docs/typing/lists";
 import { markdownToHtml } from "@/components/docs/typing/markdown";
 import { diffSegments } from "@/lib/anchors/remap";
-import type { ResolvedOp, SkipReason, SuggestFormat, SuggestStyle } from "@/lib/docs/assistant-suggestions";
+import type { ResolvedOp, SkipReason, SuggestFormat, SuggestMarkFormat, SuggestStyle } from "@/lib/docs/assistant-suggestions";
 import { inlineText, outOfIndex } from "@/lib/docs/blocks";
-import { suggestionAuthor, type RichNode } from "@/lib/docs/schema";
+import { newBlockId, suggestionAuthor, type RichNode } from "@/lib/docs/schema";
 import { blockPlaces } from "@/lib/docs/suggest-ops";
 
 // The assistant's suggestions in the page editor (SPEC.md §29): the ops the
@@ -47,7 +49,9 @@ export function applyAssistantOps(editor: Editor, ops: readonly ResolvedOp[], au
   // suggestions as not made), which no op of this landing changes.
   let places: ReturnType<typeof blockPlaces> | null = null;
   const styleOf = (blockId: string) => (places ??= blockPlaces(tr.doc.toJSON() as RichNode)).get(blockId)?.style;
-  for (const op of ops) {
+  // A style change lands after the other ops: a line it makes a list line
+  // still takes the words changed in it.
+  for (const op of [...ops.filter((o) => o.op !== "set_style"), ...ops.filter((o) => o.op === "set_style")]) {
     const reason = land(editor, tr, op, author, made, styleOf);
     if (reason) skipped.push({ i: op.i, reason });
   }
@@ -85,16 +89,21 @@ function land(
   // suggestions on these words, or on the blocks around them, give way: a
   // new op on them takes their place. Another person's stack, as the
   // assistant's for someone else do. A style change on the blocks around
-  // gives way only to a new style.
-  const clear = (from: number, to: number, style = false): SkipReason | null => {
+  // gives way only to a new style, and meets only a new style: a line this
+  // landing made a heading still takes a word fixed in it. An alignment is
+  // a block's change of its own, and gives way only to a new alignment; so
+  // are its spacing and its indent.
+  const clear = (from: number, to: number, kind: "words" | BlockChange = "words"): SkipReason | null => {
     const earlier = new Set<string>();
     let meets = false;
+    const counts = (node: PMNode, mark: Mark) =>
+      node.isInline || mark.type.name !== "modification" || (kind !== "words" && changeOf(mark.attrs.attrName) === kind);
     tr.doc.nodesBetween(from, to, (node) => {
       for (const mark of node.marks) {
         const id = String(mark.attrs.id);
-        if (!isSuggestionMark(mark) || suggestionAuthor(id) !== author) continue;
+        if (!isSuggestionMark(mark) || suggestionAuthor(id) !== author || !counts(node, mark)) continue;
         if (made.includes(id)) meets = true;
-        else if (node.isInline || style || mark.type.name !== "modification") earlier.add(id);
+        else earlier.add(id);
       }
     });
     if (meets) return "overlap";
@@ -102,9 +111,20 @@ function land(
     return null;
   };
 
-  // A figure object is no words: an op that changes one is skipped.
-  const named = op.op === "replace_blocks" || op.op === "remove_blocks" ? op.blockIds : op.op === "insert_blocks" ? [] : [op.blockId];
+  // A figure object is no words: an op that removes or replaces one is
+  // skipped. Its caption is its words (rewrite_block, below).
+  const named = op.op === "replace_blocks" || op.op === "remove_blocks" ? op.blockIds : op.op === "insert_blocks" || op.op === "rewrite_block" ? [] : [op.blockId];
   if (named.some((blockId) => findIndexed(tr.doc, blockId)?.node.type.name === FIGURE)) return "object";
+
+  // An object with words of its own takes them as its attribute: an
+  // equation its TeX, a figure object its caption.
+  const object = op.op === "rewrite_block" ? findIndexed(tr.doc, op.blockId) : null;
+  const attr = object?.node.type.name === "blockMath" ? "latex" : object?.node.type.name === FIGURE ? "caption" : null;
+  if (op.op === "rewrite_block" && object && !object.node.isTextblock) {
+    if (!attr) return "object";
+    if (String(object.node.attrs[attr] ?? "").trim() !== op.base.trim()) return "changed";
+    return clear(object.pos, object.pos + 1, "style") ?? commit((state) => state.tr.setNodeAttribute(object.pos, attr, op.text));
+  }
 
   switch (op.op) {
     case "replace_words":
@@ -117,13 +137,24 @@ function land(
       if (at === null || !place) return "changed";
       let reason = clear(place.from, place.to);
       if (reason) return reason;
-      for (const s of stretches(base, op.text)) {
+      // An inline equation stands in the words as $TeX$: a new equation
+      // takes its place (Reject keeps the old one whole).
+      const math = op.op === "replace_words" && TEX.test(op.find) && TEX.test(op.text.trim()) ? inlineMathAt(tr.doc, place.from, place.to) : null;
+      if (math !== null) {
+        return commit((state) => {
+          const node = state.doc.nodeAt(math)!;
+          return state.tr.replaceWith(math, math + node.nodeSize, node.type.create({ ...node.attrs, latex: op.text.trim().slice(1, -1) }, null, node.marks));
+        });
+      }
+      // New words in a format of their own replace the words whole.
+      const format = op.op === "replace_words" ? op.format : undefined;
+      for (const s of format ? [{ start: 0, end: base.length, text: op.text }] : stretches(base, op.text)) {
         reason =
           commit((state) => {
             const r = range(state.doc, op.blockId, at + s.start, at + s.end);
             if (!r) return "changed";
             const whole = !holdsObject(state.doc, r.from, r.to) && wordsIn(state.doc, r.from, r.to) === base.slice(s.start, s.end);
-            return whole ? replaceText(state.tr, r.from, r.to, s.text) : "object";
+            return whole ? replaceText(state.tr, r.from, r.to, s.text, format) : "object";
           }) ?? reason;
       }
       return reason;
@@ -141,8 +172,7 @@ function land(
           if (wordsIn(state.doc, r.from, r.to) !== op.find) return "object";
           // The words take the format; a page start among them keeps its own.
           const edit = state.tr;
-          const mark = state.schema.marks[MARKS[op.format]].create();
-          for (const [from, to] of aroundPageStarts(state.doc, r.from, r.to)) edit.addMark(from, to, mark);
+          for (const [from, to] of aroundPageStarts(state.doc, r.from, r.to)) formatWords(edit, from, to, op.format, op.value);
           return edit;
         })
       );
@@ -174,11 +204,85 @@ function land(
         })
       );
     }
+    case "insert_row":
+    case "insert_column":
+    case "remove_row":
+    case "remove_column":
+    case "move_row":
+    case "move_column": {
+      const cell = cellOf(tr.doc, op.blockId);
+      if (!cell) return "changed";
+      if ((op.op === "move_row" || op.op === "move_column") && !cellOf(tr.doc, op.toBlockId)) return "changed";
+      // A row op meets what this landing changed in the row, a column op or
+      // a move what it changed in the table. The asker's earlier
+      // suggestions in the table stack.
+      const table = tr.doc.nodeAt(cell.table)!;
+      const whole = op.op !== "insert_row" && op.op !== "remove_row";
+      const row = tr.doc.resolve(cell.cell).before();
+      const [from, to] = whole ? [cell.table, cell.table + table.nodeSize] : [row, row + tr.doc.nodeAt(row)!.nodeSize];
+      let meets = false;
+      tr.doc.nodesBetween(from, to, (node) => {
+        meets ||= node.marks.some((mark) => isSuggestionMark(mark) && made.includes(String(mark.attrs.id)));
+        return !meets;
+      });
+      return meets ? "overlap" : commit((state) => editTable(editor, state, op));
+    }
+    case "insert_footnote": {
+      const block = findBlock(tr.doc, op.blockId);
+      const at = block ? wordsAt(indexText(block.node), op) : null;
+      const place = at === null ? null : range(tr.doc, op.blockId, at, at + op.find.length);
+      if (at === null || !place) return "changed";
+      return (
+        clear(place.to, place.to) ??
+        commit((state) => {
+          const r = range(state.doc, op.blockId, at, at + op.find.length);
+          return r ? (addFootnote(state, r.to, op.text) ?? "object") : "changed";
+        })
+      );
+    }
+    case "set_spacing":
+    case "set_indent": {
+      const block = findBlock(tr.doc, op.blockId);
+      if (!block) return "changed";
+      const values =
+        op.op === "set_spacing"
+          ? { lineSpacing: op.line, spaceBefore: op.before, spaceAfter: op.after }
+          : { indentLeft: op.left, indentRight: op.right, indentFirstLine: op.firstLine };
+      return (
+        clear(block.pos, block.pos + 1, op.op === "set_spacing" ? "spacing" : "indent") ??
+        commit((state) => {
+          const found = findBlock(state.doc, op.blockId);
+          if (!found) return "changed";
+          // The attributes Line & paragraph spacing and the ruler set; a
+          // 0 indent or space is none. Values the block has already: no change.
+          const next = Object.fromEntries(
+            Object.entries(values).flatMap(([name, value]) => (value === undefined ? [] : [[name, value === 0 && name !== "lineSpacing" ? null : value]])),
+          );
+          if (Object.entries(next).every(([name, value]) => (found.node.attrs[name] ?? null) === value)) return state.tr;
+          return state.tr.setNodeMarkup(found.pos, undefined, { ...found.node.attrs, ...next });
+        })
+      );
+    }
+    case "set_alignment": {
+      const block = findBlock(tr.doc, op.blockId);
+      if (!block) return "changed";
+      return (
+        clear(block.pos, block.pos + 1, "alignment") ??
+        commit((state) => {
+          const found = findBlock(state.doc, op.blockId);
+          if (!found) return "changed";
+          // The toolbar's own command, on this block.
+          const edit = state.tr.setSelection(TextSelection.create(state.doc, found.pos + 1));
+          new CommandManager({ editor, state }).createChain(edit).setTextAlign(op.alignment).run();
+          return edit;
+        })
+      );
+    }
     case "set_style": {
       const block = findBlock(tr.doc, op.blockId);
       if (!block || styleOf(op.blockId) !== op.baseStyle) return "changed";
       return (
-        clear(block.pos, block.pos + 1, true) ??
+        clear(block.pos, block.pos + 1, "style") ??
         commit((state) => {
           const found = findBlock(state.doc, op.blockId);
           if (!found) return "changed";
@@ -265,28 +369,261 @@ function stretches(base: string, text: string): Stretch[] {
     the new words take the marks where they start. A page start in the
     range stays where it stands: the words after it go, and the new words
     take the place of the words before it. */
-function replaceText(tr: Transaction, from: number, to: number, text: string): Transaction {
+function replaceText(tr: Transaction, from: number, to: number, text: string, format?: SuggestMarkFormat): Transaction {
   const [head, ...rest] = aroundPageStarts(tr.doc, from, to);
   // The last first, so the positions before them hold.
   for (const [a, b] of rest.reverse()) tr.delete(a, b);
   const [start, end] = head ?? [from, from];
   if (!text) return end > start ? tr.delete(start, end) : tr;
   const $from = tr.doc.resolve(start);
-  const marks = (start === end ? $from.marks() : $from.marksAcross(tr.doc.resolve(end))) ?? [];
   const { schema } = tr.doc.type;
+  const kept = (start === end ? $from.marks() : $from.marksAcross(tr.doc.resolve(end))) ?? [];
+  const marks = format ? schema.marks[MARKS[format]].create().addToSet(kept) : kept;
   const lines = $from.parent.type.spec.code ? [text] : text.split("\n");
   const nodes = lines.flatMap((line, i) => [...(i ? [schema.nodes.hardBreak.create()] : []), ...(line ? [schema.text(line, marks)] : [])]);
   return tr.replaceWith(start, end, nodes);
 }
 
-const MARKS: Record<SuggestFormat, string> = { bold: "bold", italic: "italic", underline: "underline", strikethrough: "strike" };
+const MARKS: Record<SuggestMarkFormat, string> = { bold: "bold", italic: "italic", underline: "underline", strikethrough: "strike" };
+// The text style attribute each value format sets, as the toolbar sets it.
+const TEXT_STYLE: Record<"color" | "highlight_color" | "font" | "size", string> = {
+  color: "color",
+  highlight_color: "backgroundColor",
+  font: "fontFamily",
+  size: "fontSize",
+};
+
+/** A format on from..to: a mark on (bold, italic, underline, strikethrough),
+    a link to `value` ("" takes the link off), or a text style value (the
+    color, the font, the size in points) set beside the words' other text
+    styles, as the toolbar sets them. */
+function formatWords(tr: Transaction, from: number, to: number, format: SuggestFormat, value = ""): void {
+  const { marks } = tr.doc.type.schema;
+  if (format === "link") {
+    if (value) tr.addMark(from, to, marks.link.create({ href: value }));
+    else tr.removeMark(from, to, marks.link);
+    return;
+  }
+  if (format === "color" || format === "highlight_color" || format === "font" || format === "size") {
+    const attrs = { [TEXT_STYLE[format]]: format === "size" ? `${value}pt` : value };
+    tr.doc.nodesBetween(from, to, (node, pos) => {
+      if (!node.isText) return;
+      const current = marks.textStyle.isInSet(node.marks)?.attrs ?? {};
+      tr.addMark(Math.max(from, pos), Math.min(to, pos + node.nodeSize), marks.textStyle.create({ ...current, ...attrs }));
+    });
+    return;
+  }
+  tr.addMark(from, to, marks[MARKS[format]].create());
+}
+
+/** An inline equation's words: $TeX$. */
+const TEX = /^\$[^$]+\$$/;
+
+/** The position of the inline equation from..to holds whole and alone, or null. */
+function inlineMathAt(doc: PMNode, from: number, to: number): number | null {
+  const node = doc.nodeAt(from);
+  return node?.type.name === "inlineMath" && to === from + node.nodeSize ? from : null;
+}
+
+/** The table a cell's paragraph stands in: the table's position, the
+    cell's, and the row's index. */
+function cellOf(doc: PMNode, blockId: string): { table: number; cell: number; row: number } | null {
+  const block = findBlock(doc, blockId);
+  if (!block) return null;
+  const $pos = doc.resolve(block.pos);
+  for (let depth = $pos.depth; depth > 0; depth--) {
+    if ($pos.node(depth).type.spec.tableRole !== "table") continue;
+    return { table: $pos.before(depth), cell: $pos.before(depth + 2), row: $pos.index(depth) };
+  }
+  return null;
+}
+
+/** A new cell with its words: its one paragraph holds them. */
+function filledCell(cell: PMNode, words: string): PMNode {
+  const paragraph = cell.firstChild;
+  if (!paragraph || !words) return cell;
+  return cell.type.create(cell.attrs, paragraph.type.create(paragraph.attrs, paragraph.type.schema.text(words)), cell.marks);
+}
+
+/** A row or column command's inserts made again on `state`, each new cell
+    carrying its words: one insert per new row or cell, at the place it
+    took. Words typed into cells the same change adds read to the library
+    as more rows, so the words go in with the cells. Null when the command
+    did more than insert (merged cells widened). */
+function withWords(state: EditorState, scratch: Transaction, words: string[], row: boolean): Transaction | null {
+  const inserts: { pos: number; node: PMNode }[] = [];
+  for (let i = 0; i < scratch.steps.length; i++) {
+    const step = scratch.steps[i];
+    if (!(step instanceof ReplaceStep) || step.from !== step.to || step.slice.openStart || step.slice.openEnd || step.slice.content.childCount !== 1) return null;
+    inserts.push({ pos: scratch.mapping.slice(0, i).invert().map(step.from), node: step.slice.content.firstChild! });
+  }
+  inserts.sort((a, b) => a.pos - b.pos);
+  const filled = inserts.map(({ pos, node }, k) => {
+    if (!row) return { pos, node: filledCell(node, words[k] ?? "") };
+    const cells: PMNode[] = [];
+    node.forEach((cell, _offset, j) => cells.push(filledCell(cell, words[j] ?? "")));
+    return { pos, node: node.type.create(node.attrs, cells, node.marks) };
+  });
+  const edit = state.tr;
+  // The last first, so the places before it hold.
+  for (const { pos, node } of filled.reverse()) edit.insert(pos, node);
+  return edit;
+}
+
+/** A row or a column added, removed, or moved, as the table menu does it,
+    on the cell `op.blockId` names; new cells take their words. A row that
+    holds or crosses merged cells does not move. */
+function editTable(
+  editor: Editor,
+  state: EditorState,
+  op: Extract<ResolvedOp, { op: "insert_row" | "insert_column" | "remove_row" | "remove_column" | "move_row" | "move_column" }>,
+): Transaction | SkipReason {
+  const at = cellOf(state.doc, op.blockId);
+  if (!at) return "changed";
+  const edit = state.tr.setSelection(TextSelection.create(state.doc, at.cell + 2));
+  const chain = new CommandManager({ editor, state }).createChain(edit);
+  if (op.op === "remove_row") return chain.deleteRow().run() ? edit : "object";
+  if (op.op === "remove_column") return chain.deleteColumn().run() ? edit : "object";
+  if (op.op === "insert_row" || op.op === "insert_column") {
+    const added = op.op === "insert_row" ? (op.where === "above" ? chain.addRowBefore() : chain.addRowAfter()) : op.where === "left" ? chain.addColumnBefore() : chain.addColumnAfter();
+    if (!added.run()) return "object";
+    return withWords(state, edit, op.cells, op.op === "insert_row") ?? "object";
+  }
+  if (op.op === "move_column") return moveColumn(state, edit, at, op);
+  // move_row: the row out, and a copy of it where it goes; its paragraphs
+  // take new ids, as moved blocks do.
+  const to = cellOf(state.doc, op.toBlockId);
+  const map = TableMap.get(state.doc.nodeAt(at.table)!);
+  const merged = (row: number) => map.map.slice(row * map.width, (row + 1) * map.width).some((cell, col) => (row > 0 && map.map[(row - 1) * map.width + col] === cell) || (row < map.height - 1 && map.map[(row + 1) * map.width + col] === cell));
+  if (!to || to.table !== at.table || merged(at.row)) return "object";
+  const rows = state.doc.nodeAt(at.table)!;
+  const start = (index: number) => {
+    let pos = at.table + 1;
+    for (let i = 0; i < index; i++) pos += rows.child(i).nodeSize;
+    return pos;
+  };
+  const target = to.row + (op.where === "below" ? 1 : 0);
+  // Where it stands already: no change.
+  if (target === at.row || target === at.row + 1) return edit;
+  const row = rows.child(at.row);
+  const copy = row.type.create(row.attrs, freshIds(row.content), row.marks);
+  const from = start(at.row);
+  edit.insert(start(target), copy);
+  const moved = edit.mapping.map(from);
+  edit.delete(moved, moved + row.nodeSize);
+  return edit;
+}
+
+/** A column out, cell by cell, and a copy of each cell where the column
+    goes, in the same rows; the copies' paragraphs take new ids, as a moved
+    row's do. A table with a merged cell in either column does not move. */
+function moveColumn(
+  state: EditorState,
+  edit: Transaction,
+  at: { table: number; cell: number },
+  op: Extract<ResolvedOp, { op: "move_column" }>,
+): Transaction | SkipReason {
+  const to = cellOf(state.doc, op.toBlockId);
+  const table = state.doc.nodeAt(at.table)!;
+  if (!to || to.table !== at.table) return "object";
+  const map = TableMap.get(table);
+  const start = at.table + 1;
+  const col = map.colCount(at.cell - start);
+  const target = map.colCount(to.cell - start) + (op.where === "right" ? 1 : 0);
+  const merged = (c: number) =>
+    c < map.width && Array.from({ length: map.height }, (_, r) => table.nodeAt(map.map[r * map.width + c])!).some((cell) => cell.attrs.colspan > 1 || cell.attrs.rowspan > 1);
+  if (merged(col) || merged(target)) return "object";
+  // Where it stands already: no change.
+  if (target === col || target === col + 1) return edit;
+  let rowStart = start;
+  table.forEach((row, _offset, r) => {
+    const cellPos = start + map.map[r * map.width + col];
+    const cell = state.doc.nodeAt(cellPos)!;
+    const place = target < map.width ? start + map.map[r * map.width + target] : rowStart + row.nodeSize - 1;
+    edit.insert(edit.mapping.map(place), cell.type.create(cell.attrs, freshIds(cell.content), cell.marks));
+    const moved = edit.mapping.map(cellPos);
+    edit.delete(moved, moved + cell.nodeSize);
+    rowStart += row.nodeSize;
+  });
+  return edit;
+}
+
+/** Content with every block id taken off: the editor gives each a new one. */
+function freshIds(content: Fragment): Fragment {
+  const out: PMNode[] = [];
+  content.forEach((node) => {
+    const attrs = "blockId" in node.attrs ? { ...node.attrs, blockId: null } : node.attrs;
+    out.push(node.isText ? node : node.type.create(attrs, freshIds(node.content), node.marks));
+  });
+  return Fragment.fromArray(out);
+}
+
+// What the footnote numbers may not end: a body that ends on an object gets
+// an empty line before the footnotes, as insert/footnotes.ts normalizes it.
+const LINE_ENDS = new Set(["paragraph", "heading", "bulletList", "orderedList", "taskList"]);
+
+/** A footnote at `pos`: its number there, and its words in the footnotes at
+    the document's end, in the numbers' order, as Insert footnote makes it.
+    Null where a footnote cannot stand (code, a footnote). */
+function addFootnote(state: EditorState, pos: number, words: string): Transaction | null {
+  const { schema } = state;
+  const { footnoteReference: ref, footnotes: block, footnote: note, paragraph } = schema.nodes;
+  const $pos = state.doc.resolve(pos);
+  if (!ref || !block || !note || !paragraph || !$pos.parent.isTextblock || $pos.parent.type.spec.code) return null;
+  for (let depth = $pos.depth; depth > 0; depth--) if ($pos.node(depth).type === note) return null;
+  const id = newBlockId();
+  const edit = state.tr.insert(pos, ref.create({ footnoteId: id }));
+  let before = 0;
+  edit.doc.descendants((node, at) => {
+    if (node.type === block) return false;
+    if (node.type === ref && at < pos) before++;
+    return true;
+  });
+  const footnote = note.create({ footnoteId: id }, paragraph.create({ blockId: newBlockId() }, schema.text(words)));
+  const last = edit.doc.lastChild;
+  if (last?.type === block) {
+    let at = edit.doc.content.size - last.nodeSize + 1;
+    for (let i = 0; i < Math.min(before, last.childCount); i++) at += last.child(i).nodeSize;
+    return edit.insert(at, footnote);
+  }
+  const line = last && !LINE_ENDS.has(last.type.name) ? [paragraph.create({ blockId: newBlockId() })] : [];
+  return edit.insert(edit.doc.content.size, [...line, block.create(null, footnote)]);
+}
 
 /** Markdown as the page editor's blocks, parsed as Paste from Markdown
     parses it. */
 function blocksOf(state: EditorState, markdown: string): Fragment {
-  const html = markdownToHtml(markdown);
-  return (createNodeFromContent(html, state.schema, { slice: false, parseOptions: { preserveWhitespace: "full" } }) as PMNode).content;
+  // An image on a line of its own is an image block, as By URL inserts it;
+  // the lines between are Markdown.
+  const nodes: PMNode[] = [];
+  let text: string[] = [];
+  const flush = () => {
+    if (text.join("").trim()) {
+      const html = markdownToHtml(text.join("\n"));
+      (createNodeFromContent(html, state.schema, { slice: false, parseOptions: { preserveWhitespace: "full" } }) as PMNode).content.forEach((node) => nodes.push(node));
+    }
+    text = [];
+  };
+  for (const line of markdown.split("\n")) {
+    const image = IMAGE_LINE.exec(line);
+    if (image && state.schema.nodes.image) {
+      flush();
+      nodes.push(state.schema.nodes.image.create({ src: image[2], alt: image[1] }));
+    } else text.push(line);
+  }
+  flush();
+  return Fragment.fromArray(nodes);
 }
+
+// An image line as the server keeps it (lib/docs/suggest-ops.ts): a web address.
+const IMAGE_LINE = /^\s*!\[([^\]\n]*)\]\((https?:\/\/\S+?)\)\s*$/i;
+
+/** The block changes that give way only to their own kind. */
+type BlockChange = "style" | "alignment" | "spacing" | "indent";
+const SPACING = new Set(["lineSpacing", "spaceBefore", "spaceAfter"]);
+const INDENT = new Set(["indentLeft", "indentRight", "indentFirstLine"]);
+const changeOf = (attrName: unknown): BlockChange =>
+  attrName === "textAlign" ? "alignment" : SPACING.has(String(attrName)) ? "spacing" : INDENT.has(String(attrName)) ? "indent" : "style";
 
 /** New blocks in a list: a list of its kind goes in as its lines. */
 function fit(parent: PMNode, content: Fragment): Fragment {

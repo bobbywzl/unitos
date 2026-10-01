@@ -21,7 +21,12 @@
           "text": "Northwind Logistics · Operations Analytics · October 2026"
         }
       ],
-      "align": "center"
+      "align": "center",
+      "font": {
+        "shape": "sans",
+        "size": 14,
+        "color": "#595959"
+      }
     },
     {
       "kind": "heading",
@@ -131,7 +136,9 @@
             }
           ]
         }
-      ]
+      ],
+      "itemSpace": 2,
+      "spaceAfter": 8
     },
     {
       "kind": "paragraph",
@@ -508,7 +515,11 @@
         {
           "text": "Figure 1. Cost per parcel, Q4 2025 to Q3 2026 (USD)"
         }
-      ]
+      ],
+      "font": {
+        "shape": "sans",
+        "size": 10
+      }
     },
     {
       "kind": "heading",
@@ -718,7 +729,8 @@
         {
           "text": "The operations team will take the following steps before the peak season:"
         }
-      ]
+      ],
+      "spaceAfter": 8
     },
     {
       "kind": "list",
@@ -750,7 +762,8 @@
             }
           ]
         }
-      ]
+      ],
+      "itemSpace": 2
     },
     {
       "kind": "heading",
@@ -771,7 +784,8 @@
         {
           "text": " is the share of parcels delivered by the date promised at the time of shipment."
         }
-      ]
+      ],
+      "spaceAfter": 8
     },
     {
       "kind": "paragraph",
@@ -792,6 +806,43 @@
     "Q3 2026 Operations Review",
     "2"
   ],
+  "fonts": {
+    "body": {
+      "shape": "sans",
+      "size": 11
+    },
+    "title": {
+      "shape": "sans",
+      "size": 24,
+      "color": "#1f3864"
+    },
+    "h1": {
+      "shape": "sans",
+      "size": 16,
+      "bold": true,
+      "color": "#1f3864"
+    },
+    "footnote": {
+      "shape": "sans",
+      "size": 9
+    },
+    "h2": {
+      "shape": "sans",
+      "size": 13,
+      "bold": true,
+      "color": "#1f3864"
+    },
+    "caption": {
+      "shape": "sans",
+      "size": 11
+    },
+    "h3": {
+      "shape": "sans",
+      "size": 11,
+      "bold": true,
+      "color": "#1f3864"
+    }
+  },
   "license": "open",
   "provenance": "generated",
   "notes": "Word's bullets are text glyphs (• and o). The second table's shaded rows that span all four columns name groups of risks."

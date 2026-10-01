@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/api";
+import { refreshWhenOnline } from "@/lib/offline/queue";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import type { ReplyView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
@@ -59,7 +60,7 @@ export function ReplyThread({
     setError(null);
     try {
       await fn();
-      router.refresh();
+      refreshWhenOnline(router);
       onChange?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("common.requestFailed"));

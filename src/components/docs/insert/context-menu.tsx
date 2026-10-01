@@ -7,7 +7,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/components/lang-provider";
 import { NotesIcon, QuestionIcon, SparkleIcon } from "@/components/icons";
-import { AddCommentIcon, AddIcon, ClearFormattingIcon, EditIcon, LinkIcon, OutlineIcon, SuggestIcon } from "@/components/docs/icons";
+import { AddCommentIcon, AddIcon, ClearFormattingIcon, CloseIcon, EditIcon, LinkIcon, OutlineIcon, SuggestIcon } from "@/components/docs/icons";
 import { isSuggesting } from "@/components/docs/ext/suggest";
 import { keys, matchesCombo, isMac } from "@/components/docs/keys";
 import { DropdownPanel, MenuItem, MenuSeparator } from "@/components/docs/menu";
@@ -18,17 +18,19 @@ import { blockStyle, updateStyleToMatch } from "@/components/docs/toolbar/styles
 import { DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
 import { copyMarkdown, insertImageFiles, pasteMarkdown } from "@/components/docs/typing/paste";
 import { typingPrefs } from "@/components/docs/typing/prefs";
-import { misspellingAt, replaceWord, type Misspelling } from "@/components/docs/typing/spelling";
+import { addToDictionary, ignoreAll, misspellingAt, replaceWord, type Misspelling } from "@/components/docs/typing/spelling";
 import { emitInsert, onInsert, toast, type InsertContext } from "@/components/docs/insert/context";
 import { selectAllMatching } from "@/components/docs/insert/format-match";
 import {
   AltTextIcon,
   ArrowDownIcon,
   ArrowUpIcon,
+  ChartIcon,
   CopyIcon,
   CropIcon,
   CutIcon,
   DeleteIcon,
+  DrawingIcon,
   DistributeColumnsIcon,
   DistributeRowsIcon,
   ImageOptionsIcon,
@@ -45,7 +47,7 @@ import {
   TextFormatIcon,
   UnpinIcon,
 } from "@/components/docs/insert/icons";
-import { imageViewAt, resetImage, selectedImage } from "@/components/docs/insert/image";
+import { imageViewAt, isChartImage, isDrawingImage, resetImage, selectedImage } from "@/components/docs/insert/image";
 import { openLinkHref } from "@/components/docs/insert/links";
 import { distributeRows, pinnedCount, tableRectOf } from "@/components/docs/insert/table";
 import { refreshTocs } from "@/components/docs/insert/toc";
@@ -196,8 +198,16 @@ function ContextMenu({ editor, ctx, place, onClose }: { editor: Editor; ctx: Ins
   const anchorRef = useRef<HTMLSpanElement>(null);
   const [entries] = useState(() => buildEntries(editor, ctx, t));
   const { spelling } = place;
+  // A misspelled word: its spelling suggestions, then the two ways to keep
+  // it as it is — in every document (the personal dictionary) or in this one.
   const suggestions: Entry[] = spelling
-    ? [...spelling.suggestions.map((word): Entry => ({ label: word, run: () => replaceWord(editor, spelling, word) })), "sep"]
+    ? [
+        ...spelling.suggestions.map((word): Entry => ({ label: word, run: () => replaceWord(editor, spelling, word) })),
+        "sep",
+        { label: t("docsTyping.addToDictionary"), icon: <AddIcon />, run: () => addToDictionary(spelling.word) },
+        { label: t("docsTyping.ignoreAll"), icon: <CloseIcon />, run: () => ignoreAll(ctx.documentId, spelling.word) },
+        "sep",
+      ]
     : [];
   // While the menu is open the text's keys stay in it: letting go of the
   // keys that opened it never opens the Unitos toolbar beside it.
@@ -279,6 +289,8 @@ function buildEntries(editor: Editor, ctx: InsertContext, t: ReturnType<typeof u
     const pos = image.pos;
     return [
       ...out,
+      ...(isChartImage(image.node) ? [item("docsInsert.editChart", <ChartIcon />, () => emitInsert(editor, { type: "chart", pos }))] : []),
+      ...(isDrawingImage(image.node) ? [item("docsInsert.editDrawing", <DrawingIcon />, () => emitInsert(editor, { type: "drawing", pos }))] : []),
       item("docsInsert.cropImage", <CropIcon />, () => imageViewAt(editor.view, pos)?.startCrop()),
       item("docsInsert.replaceImage", <ResetIcon />, () => emitInsert(editor, { type: "image-replace" })),
       item("docsInsert.imageOptions", <ImageOptionsIcon />, () => emitInsert(editor, { type: "image-options" })),
@@ -339,6 +351,8 @@ function buildEntries(editor: Editor, ctx: InsertContext, t: ReturnType<typeof u
       item("docsInsert.distributeRows", <DistributeRowsIcon />, () => distributeRows(editor)),
       item("docsInsert.distributeColumns", <DistributeColumnsIcon />, () => chain().distributeColumns().run()),
       item("docsInsert.tableOptions", <ImageOptionsIcon />, () => emitInsert(editor, { type: "table-options" })),
+      // Insert > Chart from the table's words and numbers (insert/chart-dialog.tsx).
+      item("docsInsert.chartFromTable", <ChartIcon />, () => emitInsert(editor, { type: "chart", kind: "column" })),
       "sep",
     );
   }

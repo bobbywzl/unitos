@@ -178,9 +178,11 @@ const en = {
   sharedWithYou: "Shared with you",
   byOwner: "by {name}",
   sharedBadge: "Shared · {n}",
-  // Notifications from the admin (SPEC.md §18), above the shelf
+  // Notifications (SPEC.md §18): one pop-up over the dashboard
   notifications: "Notifications",
   dismiss: "Dismiss",
+  dismissAll: "Dismiss all",
+  notificationCount: "{n} of {total}",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -336,9 +338,11 @@ const zh: Record<keyof typeof en, string> = {
   sharedWithYou: "与你共享",
   byOwner: "来自 {name}",
   sharedBadge: "已共享 · {n}",
-  // Notifications from the admin (SPEC.md §18), above the shelf
+  // Notifications (SPEC.md §18): one pop-up over the dashboard
   notifications: "通知",
   dismiss: "关闭",
+  dismissAll: "全部关闭",
+  notificationCount: "第 {n} 条，共 {total} 条",
 };
 
 export const works = { en, zh } as const;

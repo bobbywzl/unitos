@@ -141,7 +141,9 @@ export function GraphOverlay({
 
   return (
     <div data-track-surface="sidebar" className="graph-overlay-in fixed inset-0 z-50 flex flex-col bg-paper">
-      <div className="flex items-center gap-3 border-b border-line px-5 py-3">
+      {/* Below md the row wraps, so the close button stays in view on a
+          narrow screen. */}
+      <div className="flex items-center gap-3 border-b border-line px-5 py-3 max-md:flex-wrap">
         <span className="font-display text-[18px]">{t("panes.graph")}</span>
         <span className="mr-auto text-[13px] text-sand-600">
           {t("panes.graphCounts", {
@@ -149,65 +151,70 @@ export function GraphOverlay({
             links: edges.reduce((sum, e) => sum + e.accepted + e.recommended, 0),
           })}
         </span>
-        {canEdit && nodes.length >= 2 && (
+        {/* On md+ the pills stand in the row itself (contents); below md
+            they take a line of their own under the title and the counts,
+            so the close button stays at the top right. */}
+        <div className="contents max-md:order-1 max-md:flex max-md:basis-full max-md:flex-wrap max-md:items-center max-md:gap-3">
+          {canEdit && nodes.length >= 2 && (
+            <button
+              onClick={() => void scan()}
+              data-track={scanning ? "graph-recommend-links-stop" : "graph-recommend-links"}
+              disabled={!scanning && scanLeft <= 0}
+              data-tip={
+                scanning
+                  ? t("panes.recommendScanStopTitle")
+                  : scanLeft > 0
+                    ? t("panes.recommendScanTitle", { left: scanLeft })
+                    : t("panes.recommendScanSpentTitle")
+              }
+              className="ml-auto flex items-center gap-1.5 rounded-full border border-line px-3.5 py-1.5 text-[13px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40 max-md:ml-0"
+            >
+              <SparkleIcon size={13} />
+              {scanning ? t("panes.recommendScanRunning") : t("panes.recommendScan")}
+              {scanning ? (
+                <StopPill />
+              ) : (
+                <span className="rounded-full bg-sand-200 px-1.5 text-[11px] font-semibold tabular-nums text-sand-700">
+                  {scanLeft}
+                </span>
+              )}
+            </button>
+          )}
           <button
-            onClick={() => void scan()}
-            data-track={scanning ? "graph-recommend-links-stop" : "graph-recommend-links"}
-            disabled={!scanning && scanLeft <= 0}
-            data-tip={
-              scanning
-                ? t("panes.recommendScanStopTitle")
-                : scanLeft > 0
-                  ? t("panes.recommendScanTitle", { left: scanLeft })
-                  : t("panes.recommendScanSpentTitle")
-            }
-            className="ml-auto flex items-center gap-1.5 rounded-full border border-line px-3.5 py-1.5 text-[13px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+            onClick={() => setList((v) => (v === "recommended" ? null : "recommended"))}
+            data-track="graph-recommended-links"
+            aria-expanded={listOpen}
+            data-tip={t("panes.recommendedLinksToggleTitle")}
+            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 ${
+              listOpen
+                ? "border-line bg-clay-100 text-clay-800"
+                : recommended.length > 0
+                  ? "border-dashed border-clay-400 text-clay-800"
+                  : "border-line text-sand-600"
+            }`}
           >
-            <SparkleIcon size={13} />
-            {scanning ? t("panes.recommendScanRunning") : t("panes.recommendScan")}
-            {scanning ? (
-              <StopPill />
-            ) : (
-              <span className="rounded-full bg-sand-200 px-1.5 text-[11px] font-semibold tabular-nums text-sand-700">
-                {scanLeft}
-              </span>
-            )}
+            <UnlinkIcon size={13} />
+            {t("panes.recommendedLinks")}
+            <span className="rounded-full bg-sand-200 px-1.5 text-[11px] font-semibold tabular-nums text-sand-700">
+              {recommended.length}
+            </span>
           </button>
-        )}
-        <button
-          onClick={() => setList((v) => (v === "recommended" ? null : "recommended"))}
-          data-track="graph-recommended-links"
-          aria-expanded={listOpen}
-          data-tip={t("panes.recommendedLinksToggleTitle")}
-          className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 ${
-            listOpen
-              ? "border-line bg-clay-100 text-clay-800"
-              : recommended.length > 0
-                ? "border-dashed border-clay-400 text-clay-800"
-                : "border-line text-sand-600"
-          }`}
-        >
-          <UnlinkIcon size={13} />
-          {t("panes.recommendedLinks")}
-          <span className="rounded-full bg-sand-200 px-1.5 text-[11px] font-semibold tabular-nums text-sand-700">
-            {recommended.length}
-          </span>
-        </button>
-        <button
-          onClick={() => setList((v) => (v === "generated" ? null : "generated"))}
-          data-track="graph-generated"
-          aria-expanded={list === "generated"}
-          data-tip={t("stitch.generatedToggleTitle")}
-          className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 ${
-            list === "generated" ? "border-line bg-clay-100 text-clay-800" : "border-line text-sand-600"
-          }`}
-        >
-          <PageIcon size={13} />
-          {t("stitch.generated")}
-          <span className="rounded-full bg-sand-200 px-1.5 text-[11px] font-semibold tabular-nums text-sand-700">
-            {generated.length}
-          </span>
-        </button>
+          <button
+            onClick={() => setList((v) => (v === "generated" ? null : "generated"))}
+            data-track="graph-generated"
+            aria-expanded={list === "generated"}
+            data-tip={t("stitch.generatedToggleTitle")}
+            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 ${
+              list === "generated" ? "border-line bg-clay-100 text-clay-800" : "border-line text-sand-600"
+            }`}
+          >
+            <PageIcon size={13} />
+            {t("stitch.generated")}
+            <span className="rounded-full bg-sand-200 px-1.5 text-[11px] font-semibold tabular-nums text-sand-700">
+              {generated.length}
+            </span>
+          </button>
+        </div>
         <button
           onClick={onClose}
           data-track="graph-close"

@@ -1,4 +1,5 @@
 import type { Editor } from "@tiptap/core";
+import type { ChartType } from "@/lib/docs/chart";
 import type { PageSetup } from "@/lib/docs/schema";
 import { DEFAULT_LANG, type Lang } from "@/lib/i18n/config";
 import { translatorFor, type TFunc } from "@/lib/i18n/dictionaries";
@@ -52,6 +53,11 @@ type InsertEvent =
   | { type: "equation"; pos: number }
   | { type: "dropdown-dialog"; dropdownId: string | null }
   | { type: "toc-options"; pos: number }
+  // Insert > Chart: a new chart of `kind` (from the table the caret is in,
+  // if any), or the chart image at `pos` to edit.
+  | { type: "chart"; kind?: ChartType; pos?: number }
+  // Insert > Drawing: a new drawing, or the drawing image at `pos` to edit.
+  | { type: "drawing"; pos?: number }
   | { type: "clipboard-blocked" };
 
 type Handler = (event: InsertEvent) => void;

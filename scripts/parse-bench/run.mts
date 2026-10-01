@@ -6,31 +6,42 @@
 // math fonts against its own glyphs, glyphs.ts). Nothing is stored but what
 // the flags ask for.
 //
-//   npx tsx scripts/parse-bench/run.mts [--quick] [--only id,id] [--category c] [--json out.json]
+//   npx tsx scripts/parse-bench/run.mts [--quick] [--sweep] [--only id,id] [--category c] [--json out.json]
 //     [--baseline [file[,file]]] [--save-baseline [file]] [--detail id [--import]]
 //
-// --quick runs the entries corpus.json marks quick: one document for each
-// kind of fault, the fast ones. The last line gives the run's time by stage.
+// The corpus is corpus.json and the owner's entries in
+// .bench/corpus-private.json when it exists (load.ts). --quick runs the
+// entries marked quick: one document for each kind of fault, the fast ones.
+// --sweep adds the entries marked sweep: whole documents read without a
+// reference, every page (--only and --detail run them by name). The last
+// line gives the run's time by stage.
 //
 // Baselines: scripts/parse-bench/baseline.json holds the documents whose
-// reference is committed; .bench/baseline-private.json holds the rest. With
+// reference is committed, and the open and public-domain documents read
+// without one; .bench/baseline-private.json holds the rest. With
 // no file named, --baseline reads both and --save-baseline writes each
-// document into its own (merged with what the file holds). The exit code is
-// 1 when a metric dropped against the baseline.
+// document into its own (merged with what the file holds), and every
+// document's inline formulas by page into .bench/formulas-baseline.json,
+// against which --baseline counts the formulas a page lost. The exit code
+// is 1 when a metric dropped against the baseline.
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { performance } from "node:perf_hooks";
 import { richTextFromImport } from "@/lib/docs/import";
 import type { RichNode } from "@/lib/docs/schema";
 import { parsePdf } from "@/lib/parse/pdf";
-import type { ParsedBlock } from "@/lib/parse/types";
+import type { ParsedBlock, ParsedDocument } from "@/lib/parse/types";
 import { resolveContentsLinks } from "@/lib/parse/url";
 import { fromImport, fromParse, printedNotes, type Doc } from "./adapt";
-import { forgetText, freeScores, pdfText, type FreeScores, type PdfText } from "./free";
-import { forgetGlyphs, glyphScores, pdfGlyphs, placeEquations, type GlyphScores } from "./glyphs";
+import { blindText, forgetText, freeScores, laterTitle, lookScores, pdfText, wordBorders, type FreeScores, type PageSetup, type PdfText } from "./free";
+import { forgetGlyphs, glyphScores, pdfGlyphs, placeCrops, placeEquations, type GlyphScores } from "./glyphs";
+import { bodyFace, labelScores, layoutScores, linesOfUnits, type PageInk } from "./layout";
 import { loadCorpus, loadRef, refPath, REF_DIRS, ROOT, type CorpusEntry } from "./load";
-import { flatten, score, type Scores } from "./metrics";
-import type { RefDoc } from "./model";
+import { contentImages } from "./floats";
+import { flatten, formulasByPage, lostFormulas, score, type Scores } from "./metrics";
+import { forgetPaint, inkBands, inkRight, pdfPaint, type PagePaint } from "./paint";
+import type { RefBlock, RefDoc, Span } from "./model";
 import { detailReport } from "./report";
 
 // ── Flags ───────────────────────────────────────────────────────────────────
@@ -46,10 +57,35 @@ const category = value("--category");
 const detail = value("--detail");
 const BASELINE_PUBLIC = join(import.meta.dirname, "baseline.json");
 const BASELINE_PRIVATE = join(ROOT, ".bench", "baseline-private.json");
+/** Each document's inline formulas by page, as the run saved with the baselines (never committed: the owner's
+    formulas are among them): --baseline counts the formulas a candidate lost against them (lostFormulas). */
+const FORMULAS = join(ROOT, ".bench", "formulas-baseline.json");
 
 // ── Parsing, once per file ──────────────────────────────────────────────────
 
-type Parsed = { title: string | null; blocks: ParsedBlock[]; richText: RichNode | null; importError?: string; ms: number };
+/** The page's look the parse keeps and the add passes the converter (lib/parse/ingest.ts pageLook): the
+    body's font, the title's font and alignment, the title's lines where the writer broke it, and the page
+    the title stands on. */
+type Look = Pick<ParsedDocument, "bodyFont" | "titleFont" | "titleAlign" | "titleLines" | "titlePage">;
+/** The size guard (lib/parse/ingest.ts IMPORT_MAX_ROWS, IMPORT_MAX_JSON_BYTES): past either, the add keeps a
+    block document, and the page editor never shows the import. */
+const GUARD = { rows: 1_500, json: 1_500_000 };
+type Parsed = {
+  title: string | null;
+  blocks: ParsedBlock[];
+  richText: RichNode | null;
+  /** A PDF's first page and the import's page setup, in points: where the page editor draws a crop. */
+  pageSize?: { width: number; height: number };
+  pageSetup?: PageSetup;
+  importError?: string;
+  /** The import's rows and bytes when the size guard keeps it a block document. */
+  guarded?: { rows: number; json: number };
+  /** A PDF's own page labels, which the page editor draws at each page start. */
+  pageLabels?: string[];
+  /** A Word figure's html by its media id: the page editor draws its caption from it. */
+  media?: Map<string, string>;
+  ms: number;
+} & Look;
 const parses = new Map<string, Promise<Parsed>>();
 
 /** The run's time by stage, in ms: each file's parse and conversion once,
@@ -76,12 +112,13 @@ async function quietly<T>(work: () => Promise<T>): Promise<T> {
 }
 
 /** A Word file as the Word add parses it (lib/parse/ingest.ts ingestDocx):
-    its title only when the file's own words give it; no picture stored. */
-async function parseWord(bytes: Uint8Array, path: string): Promise<{ title: string | null; blocks: ParsedBlock[]; pageSize?: undefined }> {
+    its title only when the file's own words give it, and the page's look
+    the add passes the converter (pageLook); no picture stored. */
+async function parseWord(bytes: Uint8Array, path: string): Promise<{ title: string | null; blocks: ParsedBlock[]; pageSize?: undefined } & Look> {
   // Loaded when a Word file comes up, so the runner also runs on a tree without the Word parser.
   const { parseDocx } = await import("@/lib/parse/docx");
   const parsed = await parseDocx(bytes, basename(path), { storeImage: async () => "/api/images/bench" });
-  return { title: parsed.titleFromFile ? null : parsed.title, blocks: parsed.blocks };
+  return { title: parsed.titleFromFile ? null : parsed.title, blocks: parsed.blocks, bodyFont: parsed.bodyFont, titleFont: parsed.titleFont, titleAlign: parsed.titleAlign, titleLines: parsed.titleLines };
 }
 
 function parseFile(path: string): Promise<Parsed> {
@@ -98,24 +135,84 @@ function parseFile(path: string): Promise<Parsed> {
       // The add's converter call (lib/parse/ingest.ts ingestPdf, ingestDocx,
       // convertImport). A converter that throws costs the import's score,
       // not the parse's.
+      const look: Look = { bodyFont: parsed.bodyFont, titleFont: parsed.titleFont, titleAlign: parsed.titleAlign, titleLines: parsed.titleLines, titlePage: parsed.titlePage };
       try {
-        const { richText } = richTextFromImport({
+        const { richText, size, pageSetup, figures } = richTextFromImport({
           kind: word ? "docx" : "pdf",
           title: parsed.title ?? basename(path).replace(/\.(pdf|docx)$/i, ""),
           titleFromOriginal: Boolean(parsed.title),
           blocks: resolveContentsLinks(parsed.blocks),
           pageSize: parsed.pageSize,
+          ...look,
         });
         since("import", t1);
-        return { title: parsed.title, blocks: parsed.blocks, richText, ms };
+        // The add saves the rich text as JSON in Postgres, which refuses a lone
+        // surrogate (a formula cut inside a Cambria Math letter): the add shows
+        // "Could not read this PDF" where the benchmark scored the import.
+        const lone = loneSurrogate(richText);
+        if (lone) throw new Error(`the rich text holds a lone surrogate the save refuses, in "${lone}"`);
+        const guarded = size.rows > GUARD.rows || size.json > GUARD.json ? { rows: size.rows, json: size.json } : undefined;
+        const labels = "pageLabels" in parsed ? { pageLabels: parsed.pageLabels } : {};
+        const media = new Map(figures.flatMap((f) => (f.html ? [[f.mediaId, f.html] as [string, string]] : [])));
+        return { title: parsed.title, blocks: parsed.blocks, richText, pageSize: parsed.pageSize, pageSetup, media, ms, ...look, ...labels, ...(guarded ? { guarded } : {}) };
       } catch (err) {
         since("import", t1);
-        return { title: parsed.title, blocks: parsed.blocks, richText: null, importError: err instanceof Error ? err.message : String(err), ms };
+        const labels = "pageLabels" in parsed ? { pageLabels: parsed.pageLabels } : {};
+        return { title: parsed.title, blocks: parsed.blocks, richText: null, importError: err instanceof Error ? err.message : String(err), ms, ...look, ...labels };
       }
     });
     parses.set(path, hit);
   }
   return hit;
+}
+
+/** The first string of a node or its attributes that holds a lone surrogate, cut short; or null. */
+function loneSurrogate(node: RichNode): string | null {
+  const lone = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+  const strings = [node.text ?? "", ...Object.values(node.attrs ?? {}).filter((v): v is string => typeof v === "string"), ...(node.marks ?? []).flatMap((m) => Object.values(m.attrs ?? {}).filter((v): v is string => typeof v === "string"))];
+  const hit = strings.find((text) => lone.test(text));
+  if (hit) return hit.slice(0, 40);
+  for (const child of node.content ?? []) {
+    const found = loneSurrogate(child);
+    if (found) return found;
+  }
+  return null;
+}
+
+/** Whether a PDF's text on the scored pages is a scan's OCR layer alone: every font GlyphLessFont, the
+    invisible face OCR sets each word in. Such a text layer carries its words' places and sizes, not their
+    faces, so no parse can read their styles from it (a scan's italics are the picture's). */
+function ocrOnly(path: string, pages: [number, number] | undefined): boolean {
+  const range = pages ? ["-f", String(pages[0]), "-l", String(pages[1])] : [];
+  const listing = execFileSync("pdffonts", [...range, path], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] });
+  const names = listing.split("\n").slice(2).map((line) => line.trim().split(/\s+/)[0]).filter(Boolean);
+  return names.length > 0 && names.every((name) => /^(?:[A-Z]{6}\+)?GlyphLessFont$/.test(name));
+}
+
+/** The styles a text layer carries no trace of on an OCR page: a face's (bold, italic, small caps), a
+    drawn line's (underline, strikethrough), a color, a highlight. Raised and lowered words keep their place. */
+const FACE_STYLES = ["bold", "italic", "smallCaps", "underline", "strike", "color", "highlight"] as const;
+
+/** A reference without the styles its page's text layer cannot carry (ocrOnly). */
+function reachable(ref: RefDoc): RefDoc {
+  const plain = (spans: Span[]) => spans.map((span) => Object.fromEntries(Object.entries(span).filter(([key]) => !(FACE_STYLES as readonly string[]).includes(key))) as Span);
+  const blocks = ref.blocks.map((block): RefBlock => {
+    switch (block.kind) {
+      case "list":
+        return { ...block, items: block.items.map((item) => ({ ...item, spans: plain(item.spans) })) };
+      case "table":
+        return { ...block, ...(block.caption ? { caption: plain(block.caption) } : {}), rows: block.rows.map((row) => ({ cells: row.cells.map((cell) => ({ ...cell, spans: plain(cell.spans) })) })) };
+      case "figure":
+        return block.caption ? { ...block, caption: plain(block.caption) } : block;
+      case "equation":
+      case "code":
+      case "separator":
+        return block;
+      default:
+        return { ...block, spans: plain(block.spans) };
+    }
+  });
+  return { ...ref, blocks };
 }
 
 const texts = new Map<string, PdfText>();
@@ -135,6 +232,7 @@ type Result = {
   /** Where the corpus entry and its reference disagree. */
   mismatch?: string;
   importError?: string;
+  guarded?: { rows: number; json: number };
   ref?: RefDoc;
   committed: boolean;
   pages?: [number, number];
@@ -147,6 +245,8 @@ type Result = {
   glyphs?: { parse: GlyphScores; import?: GlyphScores };
   docs?: { parse: Doc; import: Doc };
   pdf?: PdfText;
+  /** Each candidate's inline formulas by page (formulasByPage). */
+  formulas?: { parse: Record<number, string[]>; import?: Record<number, string[]> };
 };
 
 async function runEntry(entry: CorpusEntry): Promise<Result> {
@@ -156,7 +256,7 @@ async function runEntry(entry: CorpusEntry): Promise<Result> {
   const ref = loaded && "ref" in loaded ? loaded.ref : undefined;
   const result: Result = {
     entry,
-    committed: Boolean(found && ref && found.startsWith(REF_DIRS[0])),
+    committed: found ? Boolean(ref && found.startsWith(REF_DIRS[0])) : entry.license === "open" || entry.license === "public-domain",
     ms: 0,
     ref,
     refProblems: loaded && "problems" in loaded ? loaded.problems : undefined,
@@ -173,30 +273,59 @@ async function runEntry(entry: CorpusEntry): Promise<Result> {
   if (!existsSync(path)) return { ...result, skipped: `${file} is missing` };
   const pages = ref?.pages ?? entry.pages;
   result.pages = pages;
+  if (ref && /\.pdf$/i.test(path) && ocrOnly(path, pages)) result.ref = reachable(ref);
   const parsed = await parseFile(path);
   result.ms = parsed.ms;
   result.importError = parsed.importError;
+  result.guarded = parsed.guarded;
   let t0 = performance.now();
-  const docs = { parse: fromParse(parsed, pages), import: parsed.richText ? fromImport(parsed.richText, pages, ref ? printedNotes(ref.blocks) : undefined) : { blocks: [] } };
+  // A title the parse takes from a later page is scored with that page.
+  const pdfPath = path.replace(/\.docx$/i, ".pdf");
+  const shown = pages && pages[0] > 1 && existsSync(pdfPath) ? laterTitle(pdfTextOf(pdfPath, pages), pdfTextOf(pdfPath, [1, 1])) : undefined;
+  const docs = { parse: fromParse(parsed, pages, shown), import: parsed.richText ? fromImport(parsed.richText, pages, ref ? printedNotes(ref.blocks) : undefined, shown, parsed.media, /\.docx$/i.test(path) ? "docx" : "pdf") : { blocks: [] } };
+  if (parsed.richText) placeCrops(docs.parse, docs.import);
   result.docs = docs;
-  if (ref) {
-    const reference: Doc = { blocks: ref.blocks };
-    result.parse = score(reference, ref.furniture, docs.parse).scores;
-    if (parsed.richText) result.import = score(reference, ref.furniture, docs.import).scores;
+  result.formulas = { parse: formulasByPage(flatten(docs.parse)), ...(parsed.richText ? { import: formulasByPage(flatten(docs.import)) } : {}) };
+  if (result.ref) {
+    const reference: Doc = { blocks: result.ref.blocks, fonts: result.ref.fonts };
+    result.parse = score(reference, result.ref.furniture, docs.parse).scores;
+    if (parsed.richText) result.import = score(reference, result.ref.furniture, docs.import).scores;
   }
   t0 = since("reference", t0);
   // A Word file is checked against its PDF rendering beside it, when there is one.
-  const pdfPath = path.replace(/\.docx$/i, ".pdf");
   if (!existsSync(pdfPath)) return result;
-  result.pdf = pdfTextOf(pdfPath, pages);
+  // What the pages paint beyond pdftotext's lines (paint.ts): the text it cannot read, the images.
+  const paint: PagePaint[] = await quietly(() => pdfPaint(pdfPath));
+  const text = pdfTextOf(pdfPath, pages);
+  result.pdf = { ...text, blind: blindText(text, paint) };
+  // The text layer and its furniture are the reference-free checks' (a 500-page scan's took most of the time
+  // the line charged to the glyph checks).
+  t0 = since("free", t0);
   const glyphs = /\.pdf$/i.test(file) ? await quietly(() => pdfGlyphs(pdfPath)) : null;
+  if (parsed.richText) placeEquations(docs.parse, docs.import);
   if (glyphs) {
-    if (parsed.richText) placeEquations(docs.parse, docs.import);
     result.glyphs = { parse: glyphScores(glyphs, docs.parse, pages), import: parsed.richText ? glyphScores(glyphs, docs.import, pages) : undefined };
   }
   t0 = since("glyphs", t0);
-  result.freeParse = freeScores(result.pdf, flatten(docs.parse), result.glyphs?.parse);
-  if (parsed.richText) result.freeImport = freeScores(result.pdf, flatten(docs.import), result.glyphs?.import);
+  const word = /\.docx$/i.test(file);
+  // The checks against the page's lines and fonts (layout.ts): the body's face and the page labels are the
+  // document's, the rest each candidate's.
+  const face = bodyFace(pdfPath, pages);
+  const labels = labelScores(parsed.pageLabels, result.pdf.sizes.size, pages);
+  // A Word file's pictures are its own images, not crops of its rendering's pages: no picture to find.
+  const pictures = word ? [] : contentImages(result.pdf, paint);
+  const ink: PageInk = { bands: (page, box) => inkBands(pdfPath, page, box), right: (page, box) => inkRight(pdfPath, page, box) };
+  const parseFlat = flatten(docs.parse);
+  const parsePlaced = linesOfUnits(result.pdf, parseFlat);
+  const parseLayout = layoutScores(result.pdf, parseFlat, parsePlaced, { drawn: docs.parse.fonts?.body.shape, face, labels, pictures, ink });
+  result.freeParse = freeScores(result.pdf, parseFlat, result.glyphs?.parse, word, null, parseLayout);
+  if (parsed.richText) {
+    const imported = flatten(docs.import);
+    const placed = linesOfUnits(result.pdf, imported);
+    const look = lookScores(imported, { page: parsed.pageSize, setup: parsed.pageSetup, word: word ? wordBorders(path) : undefined, rich: parsed.richText, parse: docs.parse, pdf: result.pdf, placed, path: pdfPath });
+    const importLayout = layoutScores(result.pdf, imported, placed, { drawn: docs.import.fonts?.body.shape, face, labels, pictures, ink });
+    result.freeImport = freeScores(result.pdf, imported, result.glyphs?.import, word, look, importLayout);
+  }
   since("free", t0);
   return result;
 }
@@ -204,7 +333,38 @@ async function runEntry(entry: CorpusEntry): Promise<Result> {
 // ── Numbers for the table, the JSON, and the baselines ──────────────────────
 
 /** Metrics where a smaller number is better. */
-const LOWER_IS_BETTER = new Set(["furnitureLeaks", "splits", "merges", "tableOutside", "tableInside", "mathImages", "plainDisplay", "plainInline", "garbles", "numberLines", "notesExtra", "codeGarbles"]);
+const LOWER_IS_BETTER = new Set([
+  "furnitureLeaks",
+  "splits",
+  "merges",
+  "tableOutside",
+  "tableInside",
+  "mathImages",
+  "plainDisplay",
+  "plainInline",
+  "garbles",
+  "numberLines",
+  "notesExtra",
+  "codeGarbles",
+  "linesAcross",
+  "falseIndents",
+  "tableProse",
+  "figurePieces",
+  "cropProse",
+  "labelsBackward",
+  "figuresMissed",
+  "captionsAlone",
+  "cropsOverlap",
+  "captionSide",
+  "titleMarks",
+  "farSpace",
+  "gridProse",
+  "brokenNumbers",
+  "mathRows",
+  "runInIndent",
+  "qedPlace",
+  "checklistWraps",
+]);
 
 function numbers(s: Scores): Record<string, number | null> {
   return {
@@ -220,6 +380,8 @@ function numbers(s: Scores): Record<string, number | null> {
     splits: s.blocks.splits.reduce((n, x) => n + x.pieces.length - 1, 0),
     merges: s.blocks.merges.reduce((n, x) => n + x.parts.length - 1, 0),
     headings: s.parts.headings,
+    headingRecall: s.headings.recall,
+    headingPrecision: s.headings.precision,
     listItems: s.lists.recall,
     listDepth: s.lists.depth,
     listMarkers: s.lists.markers,
@@ -243,16 +405,27 @@ function numbers(s: Scores): Record<string, number | null> {
     notesWords: s.notes?.words ?? null,
     notesExtra: s.notes?.extra ?? null,
     underline: s.styles.f1.underline,
+    strike: s.styles.f1.strike,
     smallCaps: s.styles.f1.smallCaps,
     sub: s.styles.f1.sub,
     sup: s.styles.f1.sup,
+    color: s.styles.f1.color,
+    highlight: s.styles.f1.highlight,
     roles: s.roles.score,
     align: s.roles.align,
     indent: s.roles.indent,
+    indentSize: s.roles.indentSize,
+    spacing: s.roles.spacing,
+    labelSide: s.math.labels.side.score,
     captions: s.roles.captions,
     checks: s.roles.checks,
     separators: s.roles.separators,
     quotes: s.roles.quotes,
+    fonts: s.fonts?.score ?? null,
+    fontShape: s.fonts?.shape ?? null,
+    fontSize: s.fonts?.size ?? null,
+    fontBold: s.fonts?.bold ?? null,
+    fontColor: s.fonts?.color ?? null,
   };
 }
 
@@ -267,6 +440,36 @@ function freeNumbers(f: FreeScores): Record<string, number | null> {
     math: f.math,
     numberLines: f.numberLines.count,
     garbles: f.garbles.count,
+    look: f.look?.score ?? null,
+    lookFormulas: f.look?.formulas ?? null,
+    lookFigures: f.look?.figures ?? null,
+    lookBorders: f.look?.borders ?? null,
+    lookDisplays: f.look?.displays ?? null,
+    lookRows: f.look?.rows ?? null,
+    lookMarkers: f.look?.markers ?? null,
+    lookNumbers: f.look?.numbers ?? null,
+    brokenNumbers: f.look ? f.look.broken : null,
+    lookChecklists: f.look?.checklists ?? null,
+    checklistWraps: f.look ? f.look.checklistsWrong : null,
+    order: f.layout?.order ?? null,
+    linesAcross: f.layout ? f.layout.columns.across : null,
+    structure: f.layout?.structure ?? null,
+    tableProse: f.layout ? f.layout.tables.prose : null,
+    figurePieces: f.layout ? f.layout.figures.split : null,
+    cropProse: f.layout ? f.layout.crops.prose : null,
+    layout: f.layout?.layout ?? null,
+    falseIndents: f.layout ? f.layout.indents.wrong : null,
+    face: f.layout?.face.score ?? null,
+    labelsBackward: f.layout ? f.layout.labels.wrong : null,
+    figuresMissed: f.layout ? f.layout.pictures.missed : null,
+    captionsAlone: f.layout ? f.layout.captions.alone : null,
+    cropsOverlap: f.layout ? f.layout.overlaps.overlapping : null,
+    captionSide: f.layout ? f.layout.sides.wrong : null,
+    titleMarks: f.layout ? f.layout.marks.wrong : null,
+    farSpace: f.layout ? f.layout.spaces.wrong : null,
+    gridProse: f.layout ? f.layout.grids.prose : null,
+    runInIndent: f.layout ? f.layout.runIns.wrong : null,
+    qedPlace: f.layout ? f.layout.proofs.wrong : null,
   };
 }
 
@@ -280,6 +483,7 @@ function glyphNumbers(g: GlyphScores | undefined): Record<string, number | null>
     mathChecked: g.checked,
     mathPassed: g.passed,
     mathCheck: g.checked > 0 ? g.passed / g.checked : null,
+    mathRows: g.rowsWrong,
   };
 }
 
@@ -322,7 +526,7 @@ function printTable(results: Result[]) {
   const idWidth = Math.max(10, ...results.map((r) => r.entry.id.length)) + 1;
   if (scored.length > 0) {
     console.log("\nWith a reference — composite for the parse and the import, then the parse's metrics (0–1; counts where noted):");
-    const head = ["parse", "import", "text", "order", "furn", "blocks", "para", "head", "lists", "tables", "math", "img#", "garb#", "style", "notes", "roles", "ms"];
+    const head = ["parse", "import", "text", "order", "furn", "blocks", "para", "head", "lists", "tables", "math", "img#", "garb#", "style", "notes", "roles", "fonts", "ms"];
     console.log(pad("id", idWidth) + pad("category", 11) + head.map((h) => lpad(h, 7)).join(""));
     for (const r of scored) {
       const s = r.parse as Scores;
@@ -343,6 +547,7 @@ function printTable(results: Result[]) {
         fmt(s.styles.score),
         fmt(s.parts.footnotes),
         fmt(s.parts.roles),
+        fmt(s.parts.fonts),
         String(Math.round(r.ms)),
       ];
       console.log(pad(r.entry.id, idWidth) + pad(r.entry.category, 11) + cells.map((c) => lpad(c, 7)).join(""));
@@ -394,10 +599,16 @@ function printTable(results: Result[]) {
 // ── Main ────────────────────────────────────────────────────────────────────
 
 const t0 = performance.now();
-const { entries, problems } = loadCorpus();
+const { entries, problems, withPrivate } = loadCorpus();
 for (const p of problems) console.log(`corpus: ${p}`);
+if (!withPrivate) console.log("No .bench/corpus-private.json: the public corpus only.");
 const picked = entries.filter(
-  (e) => (!only || only.includes(e.id)) && (!category || e.category === category) && (!detail || e.id === detail) && (!flag("--quick") || e.quick),
+  (e) =>
+    (!only || only.includes(e.id)) &&
+    (!category || e.category === category) &&
+    (!detail || e.id === detail) &&
+    (!flag("--quick") || e.quick) &&
+    (!e.sweep || flag("--sweep") || only?.includes(e.id) || detail === e.id),
 );
 if (picked.length === 0) {
   console.log("No corpus document matches.");
@@ -417,6 +628,7 @@ function release(file: string) {
     for (const key of [...texts.keys()]) if (key.startsWith(`${path}|`)) texts.delete(key);
     forgetText(path);
     forgetGlyphs(path);
+    forgetPaint(path);
   }
 }
 const results: Result[] = [];
@@ -442,10 +654,17 @@ for (const r of results) {
   if (r.refProblems) console.log(`${r.entry.id}: the reference does not load, scored without it — ${r.refProblems.join("; ")}`);
   if (r.mismatch) console.log(`${r.entry.id}: ${r.mismatch}`);
   if (r.importError) console.log(`${r.entry.id}: the import converter failed, the import is not scored — ${r.importError}`);
+  if (r.guarded) {
+    console.log(
+      `${r.entry.id}: the size guard keeps it a block document (${r.guarded.rows.toLocaleString("en")} rows, ${Math.round(r.guarded.json / 1000).toLocaleString("en")} kB): the page editor never shows this import; its import scores are the converter's`,
+    );
+  }
   if (r.skipped) console.log(`${r.entry.id}: skipped — ${r.skipped}`);
 }
-const listed = new Set(entries.map((e) => e.id));
-const orphans = REF_DIRS.flatMap((dir) => (existsSync(dir) ? readdirJson(dir) : [])).filter((id) => !listed.has(id));
+// An entry's own reference or the one it names; without the private list,
+// the owner's references in .bench/refs have no entry to name them.
+const listed = new Set(entries.flatMap((e) => [e.id, ...(e.ref ? [e.ref] : [])]));
+const orphans = (withPrivate ? REF_DIRS : REF_DIRS.slice(0, 1)).flatMap((dir) => (existsSync(dir) ? readdirJson(dir) : [])).filter((id) => !listed.has(id));
 if (orphans.length > 0) console.log(`References with no corpus entry: ${orphans.join(", ")}`);
 
 if (detail) {
@@ -468,6 +687,7 @@ if (json) {
     import: r.import ? numbers(r.import) : null,
     freeParse: r.freeParse ? { ...freeNumbers(r.freeParse), ...glyphNumbers(r.glyphs?.parse) } : null,
     freeImport: r.freeImport ? { ...freeNumbers(r.freeImport), ...glyphNumbers(r.glyphs?.import) } : null,
+    sizeGuard: r.guarded ?? null,
   }));
   writeFileSync(json, `${JSON.stringify(out, null, 2)}\n`);
   console.log(`\nWrote ${json}`);
@@ -491,11 +711,31 @@ if (flag("--baseline")) {
         // A candidate that stops making tables where the reference has none
         // leaves the tables metric nothing to score: no drop.
         if (metric === "tables" && r.ref && !r.ref.blocks.some((b) => b.kind === "table")) continue;
+        // A candidate that stops inventing headings where the reference has none leaves heading precision
+        // nothing to score: no drop.
+        if (metric === "headingPrecision" && r.ref && !r.ref.blocks.some((b) => b.kind === "heading")) continue;
+        // A text layer that reads blind leaves coverage unscored (free.ts BLIND): no drop.
+        const free = key.startsWith("free.parse.") ? r.freeParse : key.startsWith("free.import.") ? r.freeImport : undefined;
+        if (metric.startsWith("coverage") && free?.coverage.blind) continue;
         lines.push(`  ${r.entry.id} ${key}: ${was} → (none)`);
         continue;
       }
       const worse = LOWER_IS_BETTER.has(metric) ? is > was : is < was;
       if (worse) lines.push(`  ${r.entry.id} ${key}: ${was} → ${is}`);
+    }
+  }
+  // The inline formulas a saved run held on a page that the candidate lost there.
+  const saved = existsSync(FORMULAS) ? (JSON.parse(readFileSync(FORMULAS, "utf8")) as Record<string, { parse: Record<number, string[]>; import?: Record<number, string[]> }>) : {};
+  for (const r of results) {
+    const was = saved[r.entry.id];
+    if (!was || !r.formulas) continue;
+    for (const mode of ["parse", "import"] as const) {
+      const [before, now] = [was[mode], r.formulas[mode]];
+      if (!before || !now) continue;
+      const lost = lostFormulas(before, now);
+      if (lost.length === 0) continue;
+      const pages = [...new Set(lost.map((f) => f.page))].sort((a, b) => a - b);
+      lines.push(`  ${r.entry.id} free.${mode}.inlineLost: 0 → ${lost.length} (inline formulas the saved run held, on pages ${pages.join(", ")})`);
     }
   }
   dropped = lines.length;
@@ -514,6 +754,9 @@ if (flag("--save-baseline")) {
   else {
     if (Object.keys(pub).length > 0) writeBaseline(BASELINE_PUBLIC, pub);
     if (Object.keys(priv).length > 0) writeBaseline(BASELINE_PRIVATE, priv);
+    const formulas: Record<string, unknown> = existsSync(FORMULAS) ? (JSON.parse(readFileSync(FORMULAS, "utf8")) as Record<string, unknown>) : {};
+    for (const r of results) if (!r.skipped && r.formulas) formulas[r.entry.id] = r.formulas;
+    writeFileSync(FORMULAS, `${JSON.stringify(formulas)}\n`);
   }
   console.log(`Saved the baseline for ${Object.keys(pub).length + Object.keys(priv).length} documents.`);
 }

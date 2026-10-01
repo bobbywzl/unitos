@@ -24,7 +24,8 @@
     {
      "text": "Christian Tarsney"
     }
-   ]
+   ],
+   "spaceAfter": 21
   },
   {
    "kind": "paragraph",
@@ -56,7 +57,8 @@
     {
      "text": ", something that is useful for a wide range of final goals. Others have recently expressed skepticism of these claims. This paper aims to formalize the concepts of instrumental convergence and power-seeking in an abstract, decision-theoretic framework, and to assess the claim that power is a convergent instrumental goal. I conclude that this claim contains at least an element of truth, but might turn out to have limited predictive utility, since an agent’s options cannot always be ranked in terms of power in the absence of substantive information about the agent’s final goals. However, the fact of instrumental convergence is more predictive for agents who have a good shot at attaining absolute or near-absolute power."
     }
-   ]
+   ],
+   "spaceAfter": 12
   },
   {
    "kind": "paragraph",
@@ -68,7 +70,11 @@
     {
      "text": " AI alignment, AI safety, AI decision theory, instrumental convergence, power-seeking, orthogonality thesis"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 42
+   }
   },
   {
    "kind": "heading",
@@ -137,7 +143,11 @@
     {
      "text": " AI systems that can carry out complex plans autonomously can substitute for human labor, and perhaps eventually perform many tasks better than human workers, giving them potentially enormous economic value."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 17
+   }
   },
   {
    "kind": "footnote",
@@ -161,7 +171,12 @@
     {
      "text": " is, roughly, the problem of making sure that artificial agents want what we want them to want (Gabriel, 2020; Ngo et al., 2023). The more capable and widely deployed artificial agents become, the more the world will be influenced by their activities, and the more important it will be that they are pursuing the right goals."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 17
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -183,7 +198,11 @@
     {
      "text": " for artificial agents to want things that we don’t want them to want, and (ii) it’s at least difficult to ensure before deployment that we’ve eliminated all those undesirable default tendencies from an AI agent."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 17
+   }
   },
   {
    "kind": "footnote",
@@ -257,7 +276,11 @@
     {
      "text": " Other proposed examples of convergent instrumental goals include resources, information, cognitive self-enhancement, and keeping one’s options open, among others."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 17
+   }
   },
   {
    "kind": "footnote",
@@ -285,7 +308,11 @@
      "text": "5",
      "sup": true
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 17
+   }
   },
   {
    "kind": "footnote",
@@ -323,7 +350,11 @@
     {
      "text": " For instance, Joseph Carlsmith writes: “[P]ower is extremely useful to accomplishing objectives—indeed, it is so almost by definition. So to the extent that an agent is engaging in unintended behavior in pursuit of problematic objectives, it will generally have incentives, other things equal, to gain and maintain forms of power in the process” (Carlsmith, 2022, p. 18)."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 17
+   }
   },
   {
    "kind": "footnote",
@@ -402,7 +433,12 @@
     {
      "text": ", even (or perhaps especially) if that agent is extremely intelligent and capable."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 17
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -445,7 +481,11 @@
     {
      "text": " for a superintelligent AI agent to pursue power will involve actions that are catastrophic for humanity, like wiping us out or enslaving us to ensure that we can’t threaten its power in future."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 17
+   }
   },
   {
    "kind": "footnote",
@@ -462,7 +502,12 @@
     {
      "text": "Instrumentally convergent power-seeking, the difficulty of reliably eliminating default tendencies in AI agents pre-deployment, and the potentially catastrophic harms from superhuman AI agents seeking power together suggest that the creation of such agents is catastrophically risky."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 17
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -474,7 +519,11 @@
      "text": "9",
      "sup": true
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 17
+   }
   },
   {
    "kind": "footnote",
@@ -505,7 +554,12 @@
     {
      "text": " instrumentally convergent power-seeking, or at any rate for a version of that claim that could play a role in a compelling argument for catastrophic risks from AI. What their papers show is that, a bit surprisingly, there is not yet a satisfactory general formalization of the claim that power is a convergent instrumental goal, or a formal argument for that general claim."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 17
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -513,7 +567,11 @@
     {
      "text": "There are, as Thorstad discusses at length, a number of “power-seeking theorems” in the reinforcement literature (Benson-Tilsen and Soares, 2016; Turner et al., 2021; Turner and Tadepalli, 2022; Krakovna and Kramar, 2023). But while these theorems make valuable contributions, they have at least two limitations: First, they make fairly specific assumptions about the agent’s final goals—in particular the assumption, characteristic of reinforcement learning, that the agent is maximizing or has been trained to maximize a discounted sum of time-separable rewards. Second, they make substantial assumptions about the decision situations the agent faces. For instance, Benson-Tilsen and Soares (2016) assume that the agent operates in an environment divided into discrete regions, and that its choices concern the allocation of resources across regions, with particular rules for how the state of each region evolves, how the allocation of resources at one time-step generates new resources at the next time step, and so on. Results that depend on substantial assumptions about an agent’s final goals or about the environment can provide only limited support for claim that power or some other goal is instrumentally convergent, in Bostrom’s sense of “[increasing] the chances of the agent’s goals being realized for a wide range of final goals and a wide range of situations”."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 17
+   }
   },
   {
    "kind": "paragraph",
@@ -528,7 +586,11 @@
     {
      "text": " On the other hand, I will also point out some potential limits on the predictive utility of this truth, that is, limits on how much it allows us to predict about the behavior of future artificial agents."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 17
+   }
   },
   {
    "kind": "footnote",
@@ -580,7 +642,12 @@
     {
      "text": " power. §7 will conclude by surveying a few of the important questions about instrumentally convergent power-seeking left open by the preceding discussion."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 17
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -602,7 +669,11 @@
     {
      "text": " My aim is just to partially vindicate one premise of that argument."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 17
+   }
   },
   {
    "kind": "footnote",
@@ -663,7 +734,8 @@
     {
      "text": ". The agent follows a path through the tree, from an initial node, until eventually reaching an outcome. At choice nodes, the path she takes depends on her choice. At chance nodes, the path she takes depends on a chance event, with each branch having a predetermined probability. Figure 1 gives a simple illustration of a decision tree."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -672,9 +744,9 @@
      "text": "We will assume a set "
     },
     {
-     "text": "O",
+     "text": "𝕆",
      "latex": "\\mathbb{O}",
-     "mathml": "<math display=\"inline\"><mi>O</mi></math>"
+     "mathml": "<math display=\"inline\"><mi>𝕆</mi></math>"
     },
     {
      "text": " of possible outcomes that is finite but has cardinality "
@@ -688,17 +760,17 @@
      "text": ". This defines a set "
     },
     {
-     "text": "𝒯O",
-     "latex": "\\mathcal{T}{O}",
-     "mathml": "<math display=\"inline\"><mrow><mi>𝒯</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>O</mi></mrow></math>"
+     "text": "𝒯𝕆",
+     "latex": "\\mathcal{T}_{\\mathbb{O}}",
+     "mathml": "<math display=\"inline\"><msub><mi>𝒯</mi><mi>𝕆</mi></msub></math>"
     },
     {
      "text": " of all finite decision trees (that is, decision trees with a finite number of nodes) terminating in outcomes from "
     },
     {
-     "text": "O",
+     "text": "𝕆",
      "latex": "\\mathbb{O}",
-     "mathml": "<math display=\"inline\"><mi>O</mi></math>"
+     "mathml": "<math display=\"inline\"><mi>𝕆</mi></math>"
     },
     {
      "text": ". A "
@@ -807,7 +879,11 @@
     {
      "text": ", the part of the overall decision tree accessible from that node."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 17
+   }
   },
   {
    "kind": "figure",
@@ -831,17 +907,17 @@
      "text": ". This means that there is some utility function "
     },
     {
-     "text": "u:O→R",
+     "text": "u:𝕆→ℝ",
      "latex": "u:\\mathbb{O}\\to\\mathbb{R}",
-     "mathml": "<math display=\"inline\"><mrow><mi>u</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><mi>O</mi><mo stretchy=\"false\">→</mo><mi>R</mi></mrow></mrow></math>"
+     "mathml": "<math display=\"inline\"><mrow><mi>u</mi><mo lspace=\"0.278em\" rspace=\"0.278em\">:</mo><mrow><mi>𝕆</mi><mo stretchy=\"false\">→</mo><mi>ℝ</mi></mrow></mrow></math>"
     },
     {
      "text": " such that, in any decision tree "
     },
     {
-     "text": "t∈𝒯O",
-     "latex": "t\\in\\mathcal{T}{O}",
-     "mathml": "<math display=\"inline\"><mrow><mi>t</mi><mo>∈</mo><mrow><mi>𝒯</mi><mo lspace=\"0em\" rspace=\"0em\">​</mo><mi>O</mi></mrow></mrow></math>"
+     "text": "t∈𝒯𝕆",
+     "latex": "t\\in\\mathcal{T}_{\\mathbb{O}}",
+     "mathml": "<math display=\"inline\"><mrow><mi>t</mi><mo>∈</mo><msub><mi>𝒯</mi><mi>𝕆</mi></msub></mrow></math>"
     },
     {
      "text": ", she will follow a strategy "
@@ -900,9 +976,9 @@
      "text": " Since we are assuming that the set of possible outcomes "
     },
     {
-     "text": "O",
+     "text": "𝕆",
      "latex": "\\mathbb{O}",
-     "mathml": "<math display=\"inline\"><mi>O</mi></math>"
+     "mathml": "<math display=\"inline\"><mi>𝕆</mi></math>"
     },
     {
      "text": " is finite, utilities are necessarily bounded, and without loss of generality we can think of them as confined to the unit interval "
@@ -1020,7 +1096,12 @@
     {
      "text": "."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 17
+   },
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -1075,7 +1156,11 @@
     {
      "text": " such subtree, in the case of ties). In other words, she chooses based on a fixed ranking of subtrees, without regard to the particular set of alternatives she faces at a given choice node, the larger structure of the decision tree in which she finds herself, or her own past choices."
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 17
+   }
   },
   {
    "kind": "heading",
@@ -1106,7 +1191,8 @@
     {
      "text": "."
     }
-   ]
+   ],
+   "spaceAfter": 0
   },
   {
    "kind": "paragraph",
@@ -1129,7 +1215,11 @@
     {
      "text": " final"
     }
-   ]
+   ],
+   "indentPt": {
+    "left": 0,
+    "first": 17
+   }
   }
  ],
  "furniture": [

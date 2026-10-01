@@ -21,7 +21,8 @@ export type PageName = (page: number) => string;
 
 /** An import's rows carry the page of the PDF their first word stands on,
     named as the page's margin names it: the PDF's own label
-    (Document.pageLabels), else the number. Null for every other document:
+    (Document.pageLabels), else the number; a page with no number among
+    numbered ones ("") names none. Null for every other document:
     its pages are not shown to the reader. Every caller of one document
     passes the same, so the prefix stays byte-identical. */
 export function pageNames(document: { importRev: number | null; pageLabels: unknown }): PageName | null {
@@ -29,7 +30,7 @@ export function pageNames(document: { importRev: number | null; pageLabels: unkn
   const labels: unknown[] = Array.isArray(document.pageLabels) ? document.pageLabels : [];
   return (page) => {
     const label = labels[page - 1];
-    return typeof label === "string" && label ? label : String(page);
+    return typeof label === "string" ? label : String(page);
   };
 }
 
@@ -53,10 +54,11 @@ export function renderBlockLines(blocks: PrefixBlock[], pageName: PageName | nul
         return `[block ${b.id}] (${b.type} ${b.startTime.toFixed(1)}s–${b.endTime.toFixed(1)}s)\n${b.text}`;
       }
       const place = cellPlace(b.cell);
+      const name = pageName && b.page != null ? pageName(b.page) : "";
       const tag = [
         b.type,
         ...(place ? [`table ${place.table}, row ${place.row}, column ${place.column}`] : []),
-        ...(pageName && b.page != null ? [`p. ${pageName(b.page)}`] : []),
+        ...(name ? [`p. ${name}`] : []),
       ].join(", ");
       return `[block ${b.id}] (${tag})\n${b.text}`;
     })
@@ -293,7 +295,7 @@ export async function corpusSection(
   for (const s of sections) {
     for (const n of s.notes) {
       const sources = n.sources
-        .map((src) => `"${src.quotedText.slice(0, 160)}" (${src.document.title})`)
+        .map((src) => `"${src.quotedText.slice(0, 160)}" (${src.document?.title ?? "a deleted document"})`)
         .join("; ");
       if (s.hidden) {
         const kind =

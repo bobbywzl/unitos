@@ -22,6 +22,7 @@ import { blockStyle, readStyles, selectionSize, sizeInPt } from "@/components/do
 import { suggestExtensions } from "@/components/docs/ext/suggest";
 import { typingExtensions } from "@/components/docs/ext/typing";
 import { DOCS_EVENT, TYPING_EVENT, fireDocs } from "@/components/docs/typing/events";
+import { ParagraphBoxes } from "@/components/docs/toolbar/borders";
 import { INDEXED_NODE_TYPES, newBlockId } from "@/lib/docs/schema";
 
 // The page editor's schema and behavior (SPEC.md §29): Google Docs' model on
@@ -145,10 +146,95 @@ function ptAttr(name: string, css: (v: number) => string) {
   };
 }
 
+/** A paragraph's border side, Docs' Borders and shading (an import's Word
+    paragraph borders, w:pBdr: a rule under a heading, a bar beside a
+    quote): "<width pt> <solid|dotted|dashed> #rrggbb <padding pt>", the
+    padding the room between the line and the words. The paragraph's space
+    before and after stay outside its lines, as margins in place of its
+    padding: a rule sits under the words, not under the space after, and a
+    bar runs down the words alone. */
+const PARAGRAPH_BORDER = /^(\d{1,2}(?:\.\d{1,2})?) (solid|dotted|dashed) (#[0-9a-fA-F]{6})(?: (\d{1,2}(?:\.\d{1,2})?))?$/;
+
+/** A line's color as the page draws it: black is the page's own line, which
+    dark mode draws in the table grid's sand (--docs-grid), as it draws the
+    words' black as ink. */
+const lineColor = (hex: string) => (hex.toLowerCase() === "#000000" ? "var(--docs-grid, #000000)" : hex);
+
+function borderAttr(side: "top" | "right" | "bottom" | "left") {
+  const name = `border${side[0].toUpperCase()}${side.slice(1)}`;
+  return {
+    default: null,
+    parseHTML: (el: HTMLElement) => el.getAttribute(`data-border-${side}`),
+    renderHTML: (attrs: Record<string, unknown>) => {
+      const value = attrs[name];
+      const m = typeof value === "string" ? PARAGRAPH_BORDER.exec(value) : null;
+      if (!m) return {};
+      const css = [`border-${side}: ${m[1]}pt ${m[2]} ${lineColor(m[3])}`, `padding-${side}: ${m[4] ?? 0}pt`];
+      const lined = (key: string) => typeof attrs[key] === "string" && PARAGRAPH_BORDER.test(attrs[key] as string);
+      // The space before and after as margins: a lined edge keeps its own
+      // side's padding, and beside a bar an edge without a line has none.
+      // Beside a bar the space is also --docs-bar-top and -bottom: where
+      // barred paragraphs follow one another, it lies inside their one bar
+      // (css/import.css).
+      for (const [edge, key, space] of [["top", "borderTop", attrs.spaceBefore], ["bottom", "borderBottom", attrs.spaceAfter]] as const) {
+        if (key !== name && (side === "top" || side === "bottom" || lined(key))) continue;
+        const pt = `${typeof space === "number" ? space : 0}pt`;
+        if (key !== name) css.push(`padding-${edge}: 0`, `--docs-bar-${edge}: ${pt}`);
+        css.push(`margin-${edge}: ${pt}`);
+      }
+      return { [`data-border-${side}`]: value, style: css.join("; ") };
+    },
+  };
+}
+
+/** A paragraph's shading, Borders and shading's background: "#rrggbb
+    <padding pt>". The background fills the box and the padding all round
+    it; the space before and after stay outside it, as margins. On a light
+    background in dark mode the words keep the light theme's ink
+    (borders.css). */
+const PARAGRAPH_SHADING = /^(#[0-9a-fA-F]{6})(?: (\d{1,2}(?:\.\d{1,2})?))?$/;
+
+const shadingAttr = {
+  default: null,
+  parseHTML: (el: HTMLElement) => el.getAttribute("data-shading"),
+  renderHTML: (attrs: Record<string, unknown>) => {
+    const m = typeof attrs.shading === "string" ? PARAGRAPH_SHADING.exec(attrs.shading) : null;
+    if (!m) return {};
+    const pad = `${m[2] ?? 0}pt`;
+    const pt = (v: unknown) => `${typeof v === "number" ? v : 0}pt`;
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(m[1].slice(i, i + 2), 16));
+    const light = 0.2126 * r + 0.7152 * g + 0.0722 * b > 140;
+    const css = [`background-color: ${m[1]}`, `padding: ${pad}`, `margin-top: ${pt(attrs.spaceBefore)}`, `margin-bottom: ${pt(attrs.spaceAfter)}`];
+    return { "data-shading": attrs.shading, ...(light ? { "data-shading-light": "" } : {}), style: css.join("; ") };
+  },
+};
+
+/** Borders and shading's line between the paragraphs of one box, and the
+    box's inner room (toolbar/borders.ts): the line draws only where the
+    next paragraph shares the box (borders.css), and inside the box the
+    paragraphs keep their space before and after, a line between adding
+    its padding on both sides. */
+const boxInside = {
+  default: null,
+  parseHTML: (el: HTMLElement) => el.getAttribute("data-border-between"),
+  renderHTML: (attrs: Record<string, unknown>) => {
+    const side = (v: unknown) => (typeof v === "string" ? PARAGRAPH_BORDER.exec(v) : null);
+    const between = side(attrs.borderBetween);
+    const boxed = between || side(attrs.borderTop) || side(attrs.borderBottom) || (typeof attrs.shading === "string" && PARAGRAPH_SHADING.test(attrs.shading));
+    if (!boxed) return {};
+    const pt = (v: unknown) => (typeof v === "number" ? v : 0);
+    const pad = between ? Number(between[4] ?? 0) : 0;
+    const css = [`--docs-box-inner-before: ${pt(attrs.spaceBefore) + pad}pt`, `--docs-box-inner-after: ${pt(attrs.spaceAfter) + pad}pt`];
+    if (between) css.push(`--docs-box-between: ${between[1]}pt ${between[2]} ${lineColor(between[3])}`);
+    return between ? { "data-border-between": attrs.borderBetween, style: css.join("; ") } : { style: css.join("; ") };
+  },
+};
+
 /** Google Docs' paragraph formatting: line spacing, space before and after,
-    left, right, and first-line indents, and the Title and Subtitle styles
-    (a heading is its own node). Spacing is padding, so a paragraph's space
-    after and the next one's space before add up, as in Docs. */
+    left, right, and first-line indents, borders, and the Title and
+    Subtitle styles (a heading is its own node). Spacing is padding, so a
+    paragraph's space after and the next one's space before add up, as in
+    Docs. */
 const ParagraphFormat = Extension.create({
   name: "docsParagraph",
   addGlobalAttributes() {
@@ -162,6 +248,15 @@ const ParagraphFormat = Extension.create({
           indentLeft: ptAttr("indent-left", (v) => `margin-left: ${v}pt`),
           indentRight: ptAttr("indent-right", (v) => `margin-right: ${v}pt`),
           indentFirstLine: ptAttr("indent-first-line", (v) => `text-indent: ${v}pt`),
+          // After the spacing: a bordered side's padding and margin win.
+          borderTop: borderAttr("top"),
+          borderRight: borderAttr("right"),
+          borderBottom: borderAttr("bottom"),
+          borderLeft: borderAttr("left"),
+          // Borders and shading: after the sides, so the background's
+          // padding and margins win (toolbar/borders.ts).
+          borderBetween: boxInside,
+          shading: shadingAttr,
         },
       },
       {
@@ -171,6 +266,19 @@ const ParagraphFormat = Extension.create({
             default: null,
             parseHTML: (el) => el.getAttribute("data-doc-style"),
             renderHTML: (attrs) => (attrs.docStyle ? { "data-doc-style": attrs.docStyle } : {}),
+          },
+        },
+      },
+      {
+        types: ["heading"],
+        attributes: {
+          // A run-in heading (an import's bold lead, "1.2.3. Two examples."):
+          // drawn at the start of the paragraph under it, on its first line
+          // (css/import.css); the outline and the paragraph index list it.
+          runIn: {
+            default: null,
+            parseHTML: (el) => (el.hasAttribute("data-run-in") ? true : null),
+            renderHTML: (attrs) => (attrs.runIn === true ? { "data-run-in": "" } : {}),
           },
         },
       },
@@ -423,6 +531,8 @@ export function docsExtensions(imported?: ImportedEditor) {
     // typing area's autocorrect (ext/typing.ts).
     BlockIds,
     ParagraphFormat,
+    // Borders and shading: paragraphs sharing a box draw one box.
+    ParagraphBoxes,
     PageBreak,
     // An import's figure objects, page starts, and citations.
     Figure.configure({ imported: imported ?? null }),

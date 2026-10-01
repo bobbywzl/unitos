@@ -20,10 +20,16 @@ const QUEUEABLE: { method: string; path: RegExp }[] = [
   { method: "DELETE", path: /^\/api\/replies\/[^/]+$/ },
   { method: "PATCH", path: /^\/api\/blocks\/[^/]+$/ },
   { method: "DELETE", path: /^\/api\/blocks\/[^/]+$/ },
+  // Join text (Merge with AI needs a model and never queues: isAiCall).
+  { method: "POST", path: /^\/api\/notes\/merge$/ },
+  // Resolve and Reopen on a comment.
+  { method: "PATCH", path: /^\/api\/annotations\/[^/]+$/ },
+  { method: "PATCH", path: /^\/api\/links\/[^/]+$/ },
+  { method: "DELETE", path: /^\/api\/links\/[^/]+$/ },
 ];
 
-function queueable(path: string, method: string): boolean {
-  return QUEUEABLE.some((q) => q.method === method && q.path.test(path));
+function queueable(path: string, method: string, body: unknown): boolean {
+  return QUEUEABLE.some((q) => q.method === method && q.path.test(path)) && !isAiCall(path, body);
 }
 
 // The language on the client, outside React: the same cookie the layout reads.
@@ -87,7 +93,7 @@ async function send<T>(
     if (err instanceof Error && !(err instanceof TypeError)) throw err;
     // Network failure. With Unitos Premium the queueable writes save offline
     // and sync later (SPEC.md §17); everything else reports plainly.
-    if (offlinePremium() && queueable(path, method)) {
+    if (offlinePremium() && queueable(path, method, body)) {
       await queueWrite(path, method as "POST" | "PATCH" | "DELETE", body);
       return { queued: true } as T;
     }

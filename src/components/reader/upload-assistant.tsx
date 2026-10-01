@@ -12,6 +12,7 @@ import { classifyDriveFile, type DrivePickedFile } from "@/lib/drive/types";
 import { isImageFile } from "@/lib/handwritten/image";
 import { isMarkdownFile } from "@/lib/markdown-file";
 import { isSheetsFile, isSlidesFile, isWordFile } from "@/lib/office-file";
+import type { PageRange } from "@/lib/pdf-pages";
 import { isMediaUrl, MAX_VIDEO_BYTES, MEDIA_EXTENSIONS, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 import { parseYouTubeId } from "@/lib/video/youtube";
 import {
@@ -34,27 +35,34 @@ import {
 
 // One item of a batch add (SPEC.md §22): the add dialog queues links and
 // files of every kind together, and the box adds them one after another.
+// pdfPages: a PDF's pages the reader chose in the queue (SPEC.md §15);
+// absent, every page.
 export type UploadItem =
   | { kind: "url"; url: string }
   | { kind: "video-url"; url: string }
-  | { kind: "file"; file: File }
+  | { kind: "file"; file: File; pdfPages?: PageRange[] }
   // A file picked in the Google Drive picker (SPEC.md §14), with the token
   // its import spends. Picks queue beside files and links.
-  | { kind: "drive-file"; token: string; file: DrivePickedFile };
+  | { kind: "drive-file"; token: string; file: DrivePickedFile; pdfPages?: PageRange[] };
 
 /** What a queued item is called in the list: the file's name, or the link. */
 export function uploadItemTitle(item: UploadItem): string {
   return item.kind === "file" || item.kind === "drive-file" ? item.file.name : item.url;
 }
 
-export type UploadRequest =
+export type UploadRequest = (
   | { kind: "url"; url: string }
   | { kind: "video-url"; url: string }
   | { kind: "files"; files: File[] }
   // Files picked in the Google Drive picker (SPEC.md §14): the box imports
   // each pick with the token.
   | { kind: "drive"; token: string; files: DrivePickedFile[] }
-  | { kind: "batch"; items: UploadItem[] };
+  | { kind: "batch"; items: UploadItem[] }
+) & {
+  // The folder of the project the added documents land in (SPEC.md §6);
+  // absent = the project itself.
+  folderId?: string | null;
+};
 
 // What the box opens when it is done: the first added document.
 export type OpenTarget = { kind: "document"; id: string };
@@ -131,6 +139,13 @@ function hasFigureCheck(detail: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** The size guard's line for an add it kept out of the page editor: a PDF's
+    (its detail has no figure check) says how to bring it in, with fewer
+    pages (SPEC.md §15). */
+export function blockDocumentLine(detail: string): "panes.uploadBlockDocument" | "panes.uploadBlockDocumentPdf" {
+  return hasFigureCheck(detail) ? "panes.uploadBlockDocument" : "panes.uploadBlockDocumentPdf";
 }
 
 // Does the saved document read well enough to open before its finishing
@@ -317,10 +332,12 @@ export function UploadAssistant({
 
   // clip: the part of a recording to import, asked for once the bytes are
   // up and before the add completes (the range step); null = the whole.
+  // pdfPages: a PDF's chosen pages (SPEC.md §15).
   async function uploadChunked(
     file: File,
     kind: "pdf" | "video",
     clip?: () => Promise<MediaClip | null>,
+    pdfPages?: PageRange[],
   ): Promise<Response> {
     const uploadId = crypto.randomUUID();
     const totalLabel = megabytes(file.size);
@@ -355,16 +372,19 @@ export function UploadAssistant({
         uploadId,
         filename: file.name,
         notebookId,
+        ...(request.folderId ? { folderId: request.folderId } : {}),
         kind,
         ...(part ? { clipStart: part.start, clipEnd: part.end } : {}),
+        ...(pdfPages ? { pdfPages } : {}),
       }),
     });
   }
 
   // One file's add: a media file uploads in chunks as a video; a PDF over
   // the single-request size uploads in chunks; anything else goes in one
-  // multipart request. Every path lands one document.
-  async function addFile(file: File): Promise<Added> {
+  // multipart request. Every path lands one document. pdfPages: a PDF's
+  // chosen pages (SPEC.md §15).
+  async function addFile(file: File, pdfPages?: PageRange[]): Promise<Added> {
     const media = isMediaFile(file);
     if (media && file.size > MAX_VIDEO_BYTES) {
       throw new Error(t("panes.fileTooLarge", { name: file.name, mb: 200 }));
@@ -377,11 +397,13 @@ export function UploadAssistant({
       media
         ? await uploadChunked(file, "video", () => pickRange(file))
         : file.size > SINGLE_REQUEST_BYTES
-          ? await uploadChunked(file, "pdf")
+          ? await uploadChunked(file, "pdf", undefined, pdfPages)
           : await (() => {
               const form = new FormData();
               form.set("file", file);
               form.set("notebookId", notebookId);
+              if (request.folderId) form.set("folderId", request.folderId);
+              if (pdfPages) form.set("pdfPages", JSON.stringify(pdfPages));
               return fetch("/api/documents", { method: "POST", body: form });
             })(),
     );
@@ -399,8 +421,8 @@ export function UploadAssistant({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           video
-            ? { url, notebookId }
-            : { url, notebookId },
+            ? { url, notebookId, folderId: request.folderId ?? undefined }
+            : { url, notebookId, folderId: request.folderId ?? undefined },
         ),
       }),
     );
@@ -416,7 +438,7 @@ export function UploadAssistant({
       return t("panes.fileTooLarge", { name: file.name, mb: 200 });
     }
     if (
-      (kind === "pdf" || kind === "slides-file" || kind === "sheets-file") &&
+      (kind === "pdf" || kind === "docx-file" || kind === "slides-file" || kind === "sheets-file") &&
       file.sizeBytes !== null &&
       file.sizeBytes > MAX_PDF_BYTES
     ) {
@@ -426,8 +448,8 @@ export function UploadAssistant({
   }
 
   // One Drive pick's add (SPEC.md §14): the server fetches the file with the
-  // token and ingests it like an upload.
-  async function addDriveFile(file: DrivePickedFile, token: string): Promise<Added> {
+  // token and ingests it like an upload, a PDF's chosen pages alone.
+  async function addDriveFile(file: DrivePickedFile, token: string, pdfPages?: PageRange[]): Promise<Added> {
     setSteps(initialIngestSteps(driveKindOf(file) === "media" ? "media" : "drive"));
     const result = await ingestAndFinish(
       await fetch("/api/drive/import", {
@@ -438,9 +460,11 @@ export function UploadAssistant({
         },
         body: JSON.stringify({
           notebookId,
+          ...(request.folderId ? { folderId: request.folderId } : {}),
           fileId: file.id,
           name: file.name,
           mimeType: file.mimeType,
+          ...(pdfPages ? { pdfPages } : {}),
         }),
       }),
     );
@@ -488,8 +512,8 @@ export function UploadAssistant({
           }
         }
         try {
-          if (item.kind === "file") collected.push(await addFile(item.file));
-          else if (item.kind === "drive-file") collected.push(await addDriveFile(item.file, item.token));
+          if (item.kind === "file") collected.push(await addFile(item.file, item.pdfPages));
+          else if (item.kind === "drive-file") collected.push(await addDriveFile(item.file, item.token, item.pdfPages));
           else collected.push(...(await addLink(item.url)));
         } catch (err) {
           failed.push(
@@ -720,7 +744,7 @@ export function UploadAssistant({
                 ].join(" · ")}
               </p>
             )}
-            {blockDocument && <p className="text-xs text-sand-600">{t("panes.uploadBlockDocument")}</p>}
+            {blockDocument && singleDetail && <p className="text-xs text-sand-600">{t(blockDocumentLine(singleDetail))}</p>}
             {(failures.length > 0 || lostFigures || blockDocument) && (
               <>
                 {failures.length > 0 && (

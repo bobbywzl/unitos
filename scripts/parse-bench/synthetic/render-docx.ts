@@ -28,6 +28,7 @@ import {
   Table,
   TableBorders,
   TableCell,
+  TableOfContents,
   TableRow,
   TextRun,
   WidthType,
@@ -36,9 +37,10 @@ import {
   type ParagraphChild,
 } from "docx";
 import type { Browser } from "playwright-core";
+import type { Font } from "../model";
 import { picturePng } from "./pictures";
 import { pinDocx, pinPdf } from "./stamp";
-import { tableGrid, type HeadingLevel as Level, type Leaf, type RenderBlock, type SpecItem, type SpecSpan } from "./spec";
+import { ink, leafFont, tableGrid, type HeadingLevel as Level, type Leaf, type LeafLook, type RenderBlock, type SpecItem, type SpecSpan } from "./spec";
 
 /** A header or footer line: its parts at the left margin, the center, and the right margin. "{PAGE}" and "{PAGES}" are fields. */
 export type HeaderLine = { left?: string; center?: string; right?: string };
@@ -52,6 +54,8 @@ export type DocxLayout = {
   /** Sizes in points of the title and each heading level. */
   headingSizes: Partial<Record<Level | 0, number>>;
   headingColor?: string;
+  /** A color for the title or a heading level, past headingColor (a Heading 3 in its own blue). */
+  headingColors?: Partial<Record<Level | 0, string>>;
   /** Headings in bold (Word's default); Google Docs sets them in the regular weight. */
   headingBold?: boolean;
   /** Space after a body paragraph, in points. */
@@ -63,6 +67,35 @@ export type DocxLayout = {
   /** The page's head and foot bands in points from the top and bottom edges: what prints there is furniture. */
   bands: { top: number; bottom: number };
 };
+
+/** The shape of each face a layout names; LibreOffice draws its metric twin, of the same shape. */
+const SHAPES: Record<string, Font["shape"]> = { "Times New Roman": "serif", Cambria: "serif", Arial: "sans", Calibri: "sans", "Courier New": "mono" };
+
+/** Each leaf's font and alignment as the layout sets them: the body's font, the Title and heading styles',
+    a subtitle's and a small paragraph's, a caption's, a footnote's (the sizes runs() and docxTable() give; a
+    run's own size and color win); a paragraph aligned as the spec aligns it, a cover title centered. */
+export function docxLooks(layout: DocxLayout, leaves: Leaf[]): LeafLook[] {
+  const face = (name: string, size: number, bold = false, color?: string): Font => {
+    const hex = ink(color);
+    return { shape: SHAPES[name] ?? "serif", size, ...(bold ? { bold: true } : {}), ...(hex ? { color: hex } : {}) };
+  };
+  const heading = (level: Level | 0) =>
+    face(layout.headingFont ?? layout.font, layout.headingSizes[level] ?? layout.size, level !== 0 && layout.headingBold !== false, layout.headingColors?.[level] ?? layout.headingColor);
+  return leaves.map(({ block }): LeafLook => {
+    const role =
+      block.kind === "title" ? (block.direct ? face(layout.font, layout.size) : heading(0))
+      : block.kind === "heading" ? heading(block.level)
+      : block.kind === "paragraph" ? (block.role === "subtitle" ? face(layout.font, layout.size + 3, false, "595959") : face(layout.font, block.small ? layout.size - 2 : layout.size))
+      : block.kind === "list" ? face(layout.font, layout.size)
+      : block.kind === "footnote" ? face(layout.font, layout.size - 2)
+      : block.kind === "table" ? face(layout.font, block.layout?.size ?? (block.layout?.small ? layout.size - 1 : layout.size))
+      : block.kind === "figure" ? face(layout.font, layout.size - 1)
+      : undefined;
+    const font = leafFont(role, block);
+    const align = block.kind === "paragraph" ? block.align : block.kind === "title" && block.direct ? "center" : undefined;
+    return { ...(font ? { font } : {}), ...(align ? { align } : {}) };
+  });
+}
 
 const TWIPS_PER_POINT = 20;
 const PAGE_WIDTH = 12240;
@@ -196,10 +229,11 @@ function runs(spans: SpecSpan[], ctx: Context, base: { bold?: boolean; italic?: 
           bold: s.bold ?? base.bold,
           italics: s.italic ?? base.italic,
           underline: s.underline ? {} : undefined,
+          strike: s.strike,
           smallCaps: s.smallCaps,
           ...(s.code ? { font: "Courier New" } : /^[☐☑☒▪◦●○■]+$/.test(piece) ? { font: SYMBOL_FONT } : {}),
-          ...(base.size ? { size: base.size * 2 } : {}),
-          ...(base.color ? { color: base.color } : {}),
+          ...((s.size ?? base.size) ? { size: (s.size ?? base.size ?? 0) * 2 } : {}),
+          ...((s.color ?? base.color) ? { color: (s.color ?? base.color ?? "").replace("#", "") } : {}),
           ...(s.href ? { style: "Hyperlink" } : {}),
           ...highlight,
         }),
@@ -224,7 +258,7 @@ function docxTable(block: Extract<RenderBlock, { kind: "table" }>, ctx: Context)
   const weights = tl.widths ?? Array.from({ length: columns }, () => 1);
   const total = weights.reduce((a, c) => a + c, 0);
   const columnWidths = weights.map((w) => Math.round((TEXT_WIDTH * w) / total));
-  const size = tl.small ? ctx.layout.size - 1 : ctx.layout.size;
+  const size = tl.size ?? (tl.small ? ctx.layout.size - 1 : ctx.layout.size);
   const rows = block.rows.map((r, index) => {
     const shade = r.shade ?? (index < headers ? tl.shadeHeader : undefined);
     const cols = slots[index].flatMap((slot) => ("cell" in slot ? [slot.col] : []));
@@ -237,7 +271,7 @@ function docxTable(block: Extract<RenderBlock, { kind: "table" }>, ctx: Context)
             children: [new Paragraph({ alignment: ALIGN[c.align ?? ((tl.align?.[cols[k]] ?? "l") as "l")], children: runs(c.spans, ctx, { size }) })],
             ...(c.colspan ? { columnSpan: c.colspan } : {}),
             ...(c.rowspan ? { rowSpan: c.rowspan } : {}),
-            ...(shade ? { shading: { type: ShadingType.CLEAR, fill: shade.replace("#", ""), color: "auto" } } : {}),
+            ...((c.shade ?? shade) ? { shading: { type: ShadingType.CLEAR, fill: (c.shade ?? shade ?? "").replace("#", ""), color: "auto" } } : {}),
             ...(rules === "booktabs" && (index === headers - 1 || r.rule) ? { borders: { bottom: line(6) } } : {}),
           }),
       ),
@@ -259,7 +293,7 @@ function docxTable(block: Extract<RenderBlock, { kind: "table" }>, ctx: Context)
 /** The document's parts from the leaves; pictures are PNG files in `pictures`, in order. */
 function docxDocument(title: string, layout: DocxLayout, leaves: Leaf[], pictures: { data: Buffer; width: number; height: number }[]): Document {
   const ctx: Context = { layout, footnotes: {}, footnoteCount: 0 };
-  const children: (Paragraph | Table)[] = [];
+  const children: (Paragraph | Table | TableOfContents)[] = [];
   const numbering: { reference: string; levels: ILevelsOptions[] }[] = [];
   const after = (layout.after ?? 8) * TWIPS_PER_POINT;
   let pictureIndex = 0;
@@ -267,13 +301,19 @@ function docxDocument(title: string, layout: DocxLayout, leaves: Leaf[], picture
   for (const { block } of leaves) {
     switch (block.kind) {
       case "title":
-        children.push(new Paragraph({ heading: HeadingLevel.TITLE, children: runs(block.spans, ctx) }));
+        // A cover line in the Normal style, set by its runs (a report made in Word), or the Title style.
+        children.push(
+          block.direct
+            ? new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after }, children: runs(block.spans, ctx) })
+            : new Paragraph({ heading: HeadingLevel.TITLE, children: runs(block.spans, ctx) }),
+        );
         break;
       case "heading":
         children.push(new Paragraph({ heading: HEADINGS[block.level - 1], keepNext: true, children: runs(block.spans, ctx) }));
         break;
       case "paragraph": {
-        const alignment = block.align === "center" ? AlignmentType.CENTER : block.align === "right" ? AlignmentType.RIGHT : undefined;
+        const alignment =
+          block.align === "center" ? AlignmentType.CENTER : block.align === "right" ? AlignmentType.RIGHT : block.align === "justify" ? AlignmentType.JUSTIFIED : undefined;
         const indent =
           block.indent === "first" ? { firstLine: 360 } : block.indent === "hanging" ? { left: 720, hanging: 720 } : block.indent === "block" ? { left: 720 } : undefined;
         const base = block.role === "subtitle" ? { size: layout.size + 3, color: "595959" } : block.small ? { size: layout.size - 2 } : {};
@@ -302,6 +342,10 @@ function docxDocument(title: string, layout: DocxLayout, leaves: Leaf[], picture
       }
       case "table":
         children.push(...docxTable(block, ctx));
+        break;
+      case "contents":
+        // Word's contents field as a file stores it before Word updates it: no entries.
+        children.push(new TableOfContents("Contents", { hyperlink: true, headingStyleRange: `${block.levels[0]}-${block.levels[1]}` }));
         break;
       case "figure": {
         const picture = pictures[pictureIndex++];
@@ -362,7 +406,12 @@ function docxDocument(title: string, layout: DocxLayout, leaves: Leaf[], picture
     });
   };
   const heading = (level: Level | 0) => ({
-    run: { font: layout.headingFont ?? layout.font, size: (layout.headingSizes[level] ?? layout.size) * 2, bold: level !== 0 && layout.headingBold !== false, color: layout.headingColor ?? "000000" },
+    run: {
+      font: layout.headingFont ?? layout.font,
+      size: (layout.headingSizes[level] ?? layout.size) * 2,
+      bold: level !== 0 && layout.headingBold !== false,
+      color: layout.headingColors?.[level] ?? layout.headingColor ?? "000000",
+    },
     paragraph: { spacing: { before: level === 0 ? 0 : 240, after: 120 } },
   });
   return new Document({

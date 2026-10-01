@@ -22,15 +22,20 @@ import type { PageSetup, RichNode } from "@/lib/docs/schema";
 // its bottom; a header taller than the top margin pushes the text down. A
 // double-click in a page's top or bottom margin edits the header or the
 // footer in place, with Docs' bar at its inner edge: the label, Different
-// first page, and Options (Header format, Page numbers, Remove header).
+// first page, Different odd & even, and Options (Header format, Page
+// numbers, Remove header).
 // Escape or a press in the text leaves. The header and footer are the page
 // setup's rich text; a page number field draws each page's number.
 
-type Slot = "header" | "footer" | "firstHeader" | "firstFooter";
+type Slot = "header" | "footer" | "firstHeader" | "firstFooter" | "evenHeader" | "evenFooter";
 
-/** Which of the setup's headers or footers page `page` shows. */
+/** Which of the setup's headers or footers page `page` (from 0) shows: the
+    first page's own, then the even pages' own, then the one of every page.
+    A page is even by its number, as in Word: numbering from 2 makes the
+    first page even. */
 export function slotFor(setup: PageSetup, area: HeaderArea, page: number): Slot {
   if (setup.differentFirst && page === 0) return area === "header" ? "firstHeader" : "firstFooter";
+  if (setup.differentOddEven && ((setup.pageNumberStart ?? 1) + page) % 2 === 0) return area === "header" ? "evenHeader" : "evenFooter";
   return area;
 }
 
@@ -174,6 +179,8 @@ function HeaderEditor({
       ],
       content: doc as JSONContent,
       immediatelyRender: false,
+      // ProseMirror's styles come with the page's (css/prosemirror.css).
+      injectCSS: false,
       editorProps: {
         attributes: { class: "docs-hf-prose", spellcheck: "true" },
         handleKeyDown: (_view, event) => {
@@ -255,12 +262,24 @@ export function HeaderFooterLayer({
   const start = setup.pageNumberStart ?? 1;
   const ctx = { page, pages, start };
   const top = page * frame.pitch;
-  const label =
+  const odd = setup.differentOddEven === true;
+  const label = t(
     slot === "firstHeader"
-      ? t("docsPage.firstPageHeader")
+      ? "docsPage.firstPageHeader"
       : slot === "firstFooter"
-        ? t("docsPage.firstPageFooter")
-        : t(area === "header" ? "docsPage.header" : "docsPage.footer");
+        ? "docsPage.firstPageFooter"
+        : slot === "evenHeader"
+          ? "docsPage.evenPageHeader"
+          : slot === "evenFooter"
+            ? "docsPage.evenPageFooter"
+            : area === "header"
+              ? odd
+                ? "docsPage.oddPageHeader"
+                : "docsPage.header"
+              : odd
+                ? "docsPage.oddPageFooter"
+                : "docsPage.footer",
+  );
 
   // Escape leaves: the text takes the keys again, as in Google Docs.
   const exit = () => {
@@ -302,6 +321,15 @@ export function HeaderFooterLayer({
           />
           {t("docsPage.differentFirstPage")}
         </label>
+        <label className="docs-hf-check">
+          <input
+            type="checkbox"
+            checked={odd}
+            data-track="docs:hf:odd-even"
+            onChange={(e) => store.editSetup({ ...store.get().setup, differentOddEven: e.target.checked })}
+          />
+          {t("docsPage.differentOddEven")}
+        </label>
         <button
           ref={optionsRef}
           type="button"
@@ -335,6 +363,11 @@ export function addPageNumbers(setup: PageSetup, area: HeaderArea, onFirst: bool
   else if (next.differentFirst) {
     const first = area === "header" ? "firstHeader" : "firstFooter";
     next[first] = withPageNumber(setup[first]);
+  }
+  // The even pages number too.
+  if (next.differentOddEven) {
+    const even = area === "header" ? "evenHeader" : "evenFooter";
+    next[even] = withPageNumber(setup[even]);
   }
   return next;
 }
@@ -399,7 +432,7 @@ export function PageNumbersDialog({ store, onClose }: { store: PageStore; onClos
   );
 }
 
-/** Headers & footers: their margins, and Different first page. */
+/** Headers & footers: their margins, Different first page, and Different odd & even. */
 export function HeaderFormatDialog({ store, onClose }: { store: PageStore; onClose: () => void }) {
   const t = useT();
   const unit = lengthUnitFor(useLang());
@@ -407,9 +440,10 @@ export function HeaderFormatDialog({ store, onClose }: { store: PageStore; onClo
   const [header, setHeader] = useState(formatLength(setup.headerMargin ?? DEFAULT_HF_MARGIN_PT, unit));
   const [footer, setFooter] = useState(formatLength(setup.footerMargin ?? DEFAULT_HF_MARGIN_PT, unit));
   const [first, setFirst] = useState(setup.differentFirst === true);
+  const [oddEven, setOddEven] = useState(setup.differentOddEven === true);
   const apply = () => {
     const pt = (v: string) => Math.min(700, parseLength(v, unit) ?? DEFAULT_HF_MARGIN_PT);
-    void store.saveSetup({ ...setup, headerMargin: pt(header), footerMargin: pt(footer), differentFirst: first });
+    void store.saveSetup({ ...setup, headerMargin: pt(header), footerMargin: pt(footer), differentFirst: first, differentOddEven: oddEven });
     onClose();
   };
   return (
@@ -441,6 +475,10 @@ export function HeaderFormatDialog({ store, onClose }: { store: PageStore; onClo
           <label className="docs-setup-radio">
             <input type="checkbox" checked={first} onChange={(e) => setFirst(e.target.checked)} />
             {t("docsPage.differentFirstPage")}
+          </label>
+          <label className="docs-setup-radio">
+            <input type="checkbox" checked={oddEven} data-track="docs:hf-format:odd-even" onChange={(e) => setOddEven(e.target.checked)} />
+            {t("docsPage.differentOddEven")}
           </label>
         </fieldset>
       </div>

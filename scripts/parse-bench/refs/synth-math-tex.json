@@ -11,7 +11,8 @@
         {
           "text": "A SHEET OF FORMULAS"
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -20,7 +21,12 @@
           "text": "ADA L. MERCER"
         }
       ],
-      "align": "center"
+      "align": "center",
+      "font": {
+        "shape": "serif",
+        "size": 8.97
+      },
+      "spaceAfter": 15
     },
     {
       "kind": "paragraph",
@@ -32,7 +38,12 @@
         {
           "text": " This sheet sets each formula twice: once inline, in a sentence, and once as a numbered display. The formulas grow from single symbols to nested structures, so a parser can be scored on how far it gets."
         }
-      ]
+      ],
+      "align": "justify",
+      "font": {
+        "shape": "serif",
+        "size": 8.97
+      }
     },
     {
       "kind": "heading",
@@ -42,7 +53,8 @@
           "text": "1. Scripts and accents",
           "smallCaps": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -57,12 +69,14 @@
         {
           "text": " has one superscript."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "x^2",
-      "label": "(1)"
+      "label": "(1)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -77,12 +91,14 @@
         {
           "text": " has a two-letter subscript."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "a_{ij}",
-      "label": "(2)"
+      "label": "(2)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -97,12 +113,14 @@
         {
           "text": " stacks a subscript under a superscript."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "x_i^2",
-      "label": "(3)"
+      "label": "(3)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -117,12 +135,14 @@
         {
           "text": " has a superscript of two symbols."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "e^{i\\pi}+1=0",
-      "label": "(4)"
+      "label": "(4)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -137,12 +157,14 @@
         {
           "text": " puts its scripts before the letter."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "{}^{14}_{6}\\mathrm{C}",
-      "label": "(5)"
+      "label": "(5)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -157,12 +179,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\hat{x}+\\bar{y}+\\tilde{z}",
-      "label": "(6)"
+      "label": "(6)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -177,12 +201,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\vec{v}\\cdot\\dot{x}+\\ddot{y}",
-      "label": "(7)"
+      "label": "(7)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -197,12 +223,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\widehat{AB}+\\overline{z+w}",
-      "label": "(8)"
+      "label": "(8)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -217,12 +245,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "f'(x)+f''(x)",
-      "label": "(9)"
+      "label": "(9)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -237,12 +267,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "x^{y^{z}}",
-      "label": "(10)"
+      "label": "(10)",
+      "labelSide": "left"
     },
     {
       "kind": "heading",
@@ -252,7 +284,8 @@
           "text": "2. Fractions and roots",
           "smallCaps": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -267,12 +300,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\frac{1}{2}",
-      "label": "(11)"
+      "label": "(11)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -287,12 +322,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\frac{a+b}{c-d}",
-      "label": "(12)"
+      "label": "(12)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -307,12 +344,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\tfrac{1}{2}\\,\\dfrac{1}{2}",
-      "label": "(13)"
+      "label": "(13)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -327,12 +366,14 @@
         {
           "text": " is irrational."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\sqrt{2}",
-      "label": "(14)"
+      "label": "(14)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -347,12 +388,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\sqrt[3]{x^2+y^2}",
-      "label": "(15)"
+      "label": "(15)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -367,12 +410,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\frac{1}{1+\\frac{1}{x}}",
-      "label": "(16)"
+      "label": "(16)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -387,12 +432,14 @@
         {
           "text": " counts subsets."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\binom{n}{k}=\\frac{n!}{k!\\,(n-k)!}",
-      "label": "(17)"
+      "label": "(17)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -407,12 +454,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\frac{\\partial^2 u}{\\partial x^2}+\\frac{\\partial^2 u}{\\partial y^2}=0",
-      "label": "(18)"
+      "label": "(18)",
+      "labelSide": "left"
     },
     {
       "kind": "heading",
@@ -422,7 +471,8 @@
           "text": "3. Big operators",
           "smallCaps": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -437,12 +487,14 @@
         {
           "text": " has limits under and over the sigma."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\sum_{i=1}^{n} i=\\frac{n(n+1)}{2}",
-      "label": "(19)"
+      "label": "(19)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -457,12 +509,14 @@
         {
           "text": " runs over the primes."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\prod_{p\\text{ prime}}\\frac{1}{1-p^{-s}}",
-      "label": "(20)"
+      "label": "(20)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -477,12 +531,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\int_0^1 x^2\\,dx=\\frac{1}{3}",
-      "label": "(21)"
+      "label": "(21)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -497,12 +553,14 @@
         {
           "text": " has infinite limits."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\int_{-\\infty}^{\\infty}e^{-x^2}\\,dx=\\sqrt{\\pi}",
-      "label": "(22)"
+      "label": "(22)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -517,12 +575,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\iint_{D}f(x,y)\\,dx\\,dy",
-      "label": "(23)"
+      "label": "(23)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -537,12 +597,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\oint_{\\gamma}\\frac{dz}{z}=2\\pi i",
-      "label": "(24)"
+      "label": "(24)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -557,12 +619,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\bigcup_{n\\ge 1}A_n\\subseteq\\bigcap_{k}B_k",
-      "label": "(25)"
+      "label": "(25)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -577,12 +641,14 @@
         {
           "text": " defines the number e."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\lim_{n\\to\\infty}\\left(1+\\frac{1}{n}\\right)^n=e",
-      "label": "(26)"
+      "label": "(26)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -597,12 +663,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\limsup_{n\\to\\infty}a_n",
-      "label": "(27)"
+      "label": "(27)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -617,12 +685,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\max_{1\\le i\\le n}|x_i|",
-      "label": "(28)"
+      "label": "(28)",
+      "labelSide": "left"
     },
     {
       "kind": "heading",
@@ -632,7 +702,8 @@
           "text": "4. Delimiters",
           "smallCaps": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -647,12 +718,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\left(\\frac{a}{b}\\right)",
-      "label": "(29)"
+      "label": "(29)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -667,12 +740,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\left[0,1\\right)",
-      "label": "(30)"
+      "label": "(30)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -687,12 +762,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\left\\{x\\in\\mathbb{R}:x>0\\right\\}",
-      "label": "(31)"
+      "label": "(31)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -707,12 +784,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\left|x\\right|+\\left\\|v\\right\\|",
-      "label": "(32)"
+      "label": "(32)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -727,12 +806,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\langle u,v\\rangle",
-      "label": "(33)"
+      "label": "(33)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -747,12 +828,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\lfloor x\\rfloor+\\lceil y\\rceil",
-      "label": "(34)"
+      "label": "(34)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -767,12 +850,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\bigl(a+b\\bigr)^2",
-      "label": "(35)"
+      "label": "(35)",
+      "labelSide": "left"
     },
     {
       "kind": "heading",
@@ -782,7 +867,8 @@
           "text": "5. Fonts",
           "smallCaps": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -797,12 +883,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\mathbb{R}^n",
-      "label": "(36)"
+      "label": "(36)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -817,12 +905,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\mathcal{F}\\subseteq 2^{\\Omega}",
-      "label": "(37)"
+      "label": "(37)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -837,12 +927,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\mathbf{E}[X]",
-      "label": "(38)"
+      "label": "(38)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -857,12 +949,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\mathfrak{g}",
-      "label": "(39)"
+      "label": "(39)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -877,12 +971,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\mathscr{L}",
-      "label": "(40)"
+      "label": "(40)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -897,12 +993,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\mathrm{d}x",
-      "label": "(41)"
+      "label": "(41)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -917,12 +1015,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\operatorname{Var}(X)",
-      "label": "(42)"
+      "label": "(42)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -937,12 +1037,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\boldsymbol{\\alpha}",
-      "label": "(43)"
+      "label": "(43)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -957,12 +1059,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\mathsf{A}",
-      "label": "(44)"
+      "label": "(44)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -977,12 +1081,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\text{if }x>0",
-      "label": "(45)"
+      "label": "(45)",
+      "labelSide": "left"
     },
     {
       "kind": "heading",
@@ -992,7 +1098,8 @@
           "text": "6. Relations and arrows",
           "smallCaps": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -1007,12 +1114,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "a\\le b\\ge c\\ne d",
-      "label": "(46)"
+      "label": "(46)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -1027,12 +1136,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "x\\mapsto f(x)",
-      "label": "(47)"
+      "label": "(47)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -1047,12 +1158,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "A\\Longrightarrow B\\iff C",
-      "label": "(48)"
+      "label": "(48)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -1067,12 +1180,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "f:X\\to Y",
-      "label": "(49)"
+      "label": "(49)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -1087,12 +1202,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "a\\equiv b\\pmod{n}",
-      "label": "(50)"
+      "label": "(50)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -1107,12 +1224,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "x\\approx y\\sim z\\simeq w",
-      "label": "(51)"
+      "label": "(51)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -1127,12 +1246,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "A\\subsetneq B",
-      "label": "(52)"
+      "label": "(52)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -1147,12 +1268,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\forall\\varepsilon>0\\ \\exists\\delta>0",
-      "label": "(53)"
+      "label": "(53)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -1167,12 +1290,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\nabla\\times\\mathbf{F}",
-      "label": "(54)"
+      "label": "(54)",
+      "labelSide": "left"
     },
     {
       "kind": "heading",
@@ -1182,7 +1307,8 @@
           "text": "7. Matrices, cases, and arrays",
           "smallCaps": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -1197,12 +1323,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}",
-      "label": "(55)"
+      "label": "(55)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -1217,12 +1345,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\begin{bmatrix}1&0\\\\0&1\\end{bmatrix}",
-      "label": "(56)"
+      "label": "(56)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -1237,12 +1367,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\begin{vmatrix}a&b\\\\c&d\\end{vmatrix}=ad-bc",
-      "label": "(57)"
+      "label": "(57)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -1257,12 +1389,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "|x|=\\begin{cases}x,&x\\ge 0,\\\\-x,&x<0\\end{cases}",
-      "label": "(58)"
+      "label": "(58)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -1277,12 +1411,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\begin{pmatrix}a_{11}&\\cdots&a_{1n}\\\\\\vdots&\\ddots&\\vdots\\\\a_{m1}&\\cdots&a_{mn}\\end{pmatrix}",
-      "label": "(59)"
+      "label": "(59)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -1297,12 +1433,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\begin{array}{c|c}x&f(x)\\\\\\hline 0&1\\end{array}",
-      "label": "(60)"
+      "label": "(60)",
+      "labelSide": "left"
     },
     {
       "kind": "heading",
@@ -1312,7 +1450,8 @@
           "text": "8. Harder combinations",
           "smallCaps": true
         }
-      ]
+      ],
+      "align": "center"
     },
     {
       "kind": "paragraph",
@@ -1327,12 +1466,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\begin{aligned}(a+b)^2&=a^2+2ab+b^2\\\\&\\ge 4ab\\end{aligned}",
-      "label": "(61)"
+      "label": "(61)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -1347,12 +1488,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\mathbf{P}\\left(\\left|\\frac{S_n}{n}-\\mu\\right|>\\varepsilon\\right)\\le\\frac{\\sigma^2}{n\\varepsilon^2}",
-      "label": "(62)"
+      "label": "(62)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -1367,12 +1510,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\zeta(s)=\\sum_{n=1}^{\\infty}\\frac{1}{n^s}=\\prod_{p}\\frac{1}{1-p^{-s}}",
-      "label": "(63)"
+      "label": "(63)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -1387,12 +1532,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\hat{f}(\\xi)=\\int_{\\mathbb{R}}f(x)\\,e^{-2\\pi i x\\xi}\\,dx",
-      "label": "(64)"
+      "label": "(64)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -1407,12 +1554,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\underbrace{1+1+\\cdots+1}_{n\\text{ times}}=n",
-      "label": "(65)"
+      "label": "(65)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -1427,12 +1576,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\overbrace{a+\\cdots+a}^{k}",
-      "label": "(66)"
+      "label": "(66)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -1447,12 +1598,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\sqrt{\\frac{\\sum_{i=1}^n(x_i-\\bar{x})^2}{n-1}}",
-      "label": "(67)"
+      "label": "(67)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -1467,12 +1620,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\frac{d}{dt}\\int_{a(t)}^{b(t)}f(x,t)\\,dx",
-      "label": "(68)"
+      "label": "(68)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -1487,12 +1642,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "\\Pr\\Bigl[\\,\\max_{k\\le n}|S_k|\\ge\\lambda\\Bigr]\\le\\frac{\\mathbf{E}S_n^2}{\\lambda^2}",
-      "label": "(69)"
+      "label": "(69)",
+      "labelSide": "left"
     },
     {
       "kind": "paragraph",
@@ -1507,12 +1664,14 @@
         {
           "text": "."
         }
-      ]
+      ],
+      "align": "justify"
     },
     {
       "kind": "equation",
       "latex": "e^{x}=\\sum_{k=0}^{\\infty}\\frac{x^k}{k!}=1+x+\\frac{x^2}{2!}+\\cdots",
-      "label": "(70)"
+      "label": "(70)",
+      "labelSide": "left"
     }
   ],
   "furniture": [
@@ -1526,6 +1685,21 @@
     "6",
     "7"
   ],
+  "fonts": {
+    "body": {
+      "shape": "serif",
+      "size": 10.91
+    },
+    "title": {
+      "shape": "serif",
+      "size": 10.91,
+      "bold": true
+    },
+    "h2": {
+      "shape": "serif",
+      "size": 10.91
+    }
+  },
   "license": "open",
   "provenance": "generated",
   "notes": "Each formula stands twice: inline in a paragraph and as a display labeled (n). Every latex string renders in KaTeX as written."

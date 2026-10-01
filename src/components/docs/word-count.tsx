@@ -74,7 +74,15 @@ function countAll(editor: Editor, extras: boolean): Counts {
     if (extras || node.type.name !== "footnotes") blocks.push(node);
   });
   const setup = insertContext(editor)?.pageSetup;
-  const parts = extras && setup && !setup.pageless ? [setup.header, setup.footer, ...(setup.differentFirst ? [setup.firstHeader, setup.firstFooter] : [])] : [];
+  const parts =
+    extras && setup && !setup.pageless
+      ? [
+          setup.header,
+          setup.footer,
+          ...(setup.differentFirst ? [setup.firstHeader, setup.firstFooter] : []),
+          ...(setup.differentOddEven ? [setup.evenHeader, setup.evenFooter] : []),
+        ]
+      : [];
   for (const line of parts.flatMap((part) => part?.content ?? []).map(inlineText)) {
     if (line) blocks.push(schema.nodes.paragraph.create(null, schema.text(line)));
   }

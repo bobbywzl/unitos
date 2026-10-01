@@ -11,7 +11,7 @@
  ],
  "license": "public-domain",
  "provenance": "hand",
- "notes": "NASA Open Science Data Repository workshop slides, AGU 2023 (NTRS 20230017293), a work of the United States government, printed from a slide program to PDF (960x540 pt pages). Scored: four slides: a title bar per slide (a heading), \"•\" bullet lists with wrapped items, a hub diagram whose labels are live text (a figure: its labels are not text), a grid of eight photos each with its caption under it (eight captioned figures, row by row), a quotation with bold words over a photo background (the photo is a figure; the black page-size backdrop is not), a citation line, section labels \"Mission\" and \"Vision\" (headings). Slide numbers are furniture.",
+ "notes": "NASA Open Science Data Repository workshop slides, AGU 2023 (NTRS 20230017293), a work of the United States government, printed from a slide program to PDF (960x540 pt pages). Scored: four slides: a title bar per slide (a heading), \"•\" bullet lists with wrapped items, a hub diagram whose labels are live text (a figure: its labels are not text), a grid of eight photos each with its caption under it (eight captioned figures, row by row), a quotation with bold words over a photo background (the photo is a figure; the black page-size backdrop is not), a citation line, section labels \"Mission\" and \"Vision\" (headings). Slide numbers are furniture. Alignment (round 2, measured with PyMuPDF): blocks 0, 3, 16 are centered: each line's middle lies within 4 pt of its column's middle and both its ends stand more than 8 pt inside the column's margins (a column's margin is where three or more of its lines end, or its furthest line end).",
  "furniture": [
   "4",
   "5",
@@ -26,7 +26,8 @@
     {
      "text": "Space Biology Objectives"
     }
-   ]
+   ],
+   "align": "center"
   },
   {
    "kind": "list",
@@ -85,7 +86,8 @@
       }
      ]
     }
-   ]
+   ],
+   "itemSpace": 33
   },
   {
    "kind": "figure"
@@ -97,7 +99,8 @@
     {
      "text": "Flight Hardware To Support Space Biology Research"
     }
-   ]
+   ],
+   "align": "center"
   },
   {
    "kind": "figure",
@@ -212,7 +215,8 @@
     {
      "text": "OSDR Mission and Vision"
     }
-   ]
+   ],
+   "align": "center"
   },
   {
    "kind": "heading",
@@ -303,7 +307,8 @@
       }
      ]
     }
-   ]
+   ],
+   "itemSpace": 12
   }
  ]
 }

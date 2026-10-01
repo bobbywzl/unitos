@@ -82,6 +82,25 @@
 .docs-prose ::selection {
   background: var(--docs-selection);
 }
+/* A line may break before a tab (page/tabs.ts): a tab that finds no room
+   goes to the next line, and the word before it stays. The page keeps its
+   spaces, and a line may break after each: a space of no width before the
+   tab is that break. (A zero-width space is not one: the tab after it counts
+   as its space, and the break came after the tab.) */
+.docs-prose .docs-tab::before {
+  content: " ";
+  font-size: 0;
+}
+/* An underlined tab's line (page/tabs.ts): Chromium draws no underline under
+   a tab. It stands where the words' underline does, in their color, and
+   prints. */
+.docs-prose .docs-tab-line {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-repeat: no-repeat;
+  background-position: 0 calc(100% - 0.19em);
+  background-size: 100% 1px;
+  print-color-adjust: exact;
+}
 .docs-prose p,
 .docs-prose h1,
 .docs-prose h2,
@@ -111,6 +130,14 @@
 .docs-prose h6 { font-size: 11pt; padding-top: 12pt; padding-bottom: 4pt; color: var(--docs-gray-2); font-style: italic; }
 .docs-prose p[data-doc-style="title"] { font-size: 26pt; padding-bottom: 3pt; }
 .docs-prose p[data-doc-style="subtitle"] { font-size: 15pt; padding-bottom: 16pt; color: var(--docs-gray-2); }
+/* An import's H1, H2, and Title keep their own color, as in Docs: Normal
+   text's (the named style's, on the page's root) is not theirs. A blank
+   document's take Normal text's color, as they always have. :where keeps
+   a named style's own color the winner. */
+:where(.docs-shell[data-import]) .docs-prose :is(h1, h2),
+:where(.docs-shell[data-import]) .docs-prose p[data-doc-style="title"] {
+  color: var(--docs-ink);
+}
 /* The first heading of the document starts at the page's top margin. */
 .docs-prose > :first-child {
   padding-top: 0;
@@ -318,4 +345,58 @@ textarea.docs-field {
 .docs-button-primary:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+/* ── Images dropped and pasted (typing/drop.ts, typing/paste.ts) ───────
+   The drop line says where dropped images land: the card's drop line
+   (globals.css .drop-line), fixed over the page. An image on its way to
+   the server draws faint with a clay ring turning over it until the stored
+   copy takes its place; under reduced motion the ring holds still. (Here
+   while css/ is another agent's; it belongs in css/typing.css.) */
+.docs-drop-line {
+  position: fixed;
+  z-index: 60;
+  border-radius: 2px;
+  background: var(--docs-blue);
+  pointer-events: none;
+}
+.docs-prose figure.docs-img-uploading .docs-img-frame img {
+  opacity: 0.55;
+}
+.docs-prose figure.docs-img-uploading .docs-img-frame::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
+  border: 2px solid color-mix(in srgb, var(--docs-blue) 30%, transparent);
+  border-top-color: var(--docs-blue);
+  border-radius: 50%;
+  animation: docs-img-upload 0.9s linear infinite;
+}
+@keyframes docs-img-upload {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .docs-prose figure.docs-img-uploading .docs-img-frame::after {
+    animation: none;
+  }
+}
+
+/* View > Full screen (docs-editor.tsx): the page alone; the vertical ruler
+   goes with the title row, the toolbar, and the ruler. */
+.docs-shell[data-full-screen] .docs-vruler {
+  display: none;
+}
+
+/* Tools > Compare documents (page/compare-dialog.tsx): what Compare makes,
+   and why it made nothing. */
+.docs-compare-note {
+  margin: 0;
+  color: var(--docs-muted);
+  font: 400 13px/18px var(--docs-ui-font);
 }

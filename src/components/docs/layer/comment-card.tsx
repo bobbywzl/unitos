@@ -307,8 +307,8 @@ export function CommentCard({
 export type ColumnComment = { sourceId: string; content: string; authorId: string | null };
 
 /** The page editor's card column (SPEC.md §29): a layer over the pane from
-    the toolbar's foot down, reaching over the notes tray beside the pane (in
-    a split pane, the pane alone). Its inside scrolls with the pane, so every
+    the toolbar's foot down, never over the notes tray beside the pane. Its
+    inside scrolls with the pane, so every
     card in it — the toolbar, a tool's card, a comment's, a suggestion's —
     stands in the pane's coordinates. Every comment has its card here, one
     line each but the open one. The suggestion layer fits the column and

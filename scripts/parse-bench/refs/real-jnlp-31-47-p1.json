@@ -1,0 +1,263 @@
+{
+ "id": "real-jnlp-31-47-p1",
+ "category": "cjk",
+ "source": {
+  "pdf": ".bench/real/jnlp-31-47.pdf",
+  "url": "https://www.jstage.jst.go.jp/article/jnlp/31/1/31_47/_pdf/-char/ja"
+ },
+ "pages": [
+  1,
+  1
+ ],
+ "license": "open",
+ "provenance": "hand",
+ "notes": "Ariyama et al., 'Achievements and Challenges in Japanese Question Answering: Insights from Quiz Competition Results', Journal of Natural Language Processing (自然言語処理) 31(1):47-78 (2024), CC BY 4.0, from J-STAGE; pLaTeX and dvipdfmx. Its Japanese is set in Ryumin and Gothic BBB (Adobe-Japan1 CID fonts) with no ToUnicode map: only Adobe's CMaps say what the codes are (pdf.js without them drops every Japanese word; poppler without poppler-data too). Scored: page 1: the article type and a boxed 'Peer-Reviewed' at the right, the Japanese title over two lines (one title, the lines joined with no space), the Japanese author line (full-width spaces inside names, raised daggers), a Japanese abstract whose lines join with no space, a keyword line with a Gothic label, the English title (a heading), small-caps English authors, the English abstract (two end-of-line hyphens to drop, an fi ligature), a key-word line in italic, four affiliation notes under a short rule (footnotes, placed after the author line that cites them), and the license line. Gothic in pLaTeX is the bold face: the Gothic lines are bold here. pLaTeX's space between Japanese and Latin letters (xkanjiskip) is spacing, not a space character: 「AI王」, 計3回. Alignment (round 2, measured with PyMuPDF): blocks 2 are centered: each line's middle lies within 4 pt of its column's middle and both its ends stand more than 8 pt inside the column's margins (a column's margin is where three or more of its lines end, or its furthest line end).",
+ "furniture": [],
+ "blocks": [
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "一般論文",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Peer-Reviewed"
+    }
+   ],
+   "align": "right"
+  },
+  {
+   "kind": "title",
+   "spans": [
+    {
+     "text": "クイズコンペティションの結果分析から見た日本語質問応答の到達点と課題",
+     "bold": true
+    }
+   ],
+   "align": "center"
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "有山　知希"
+    },
+    {
+     "text": "†",
+     "sup": true
+    },
+    {
+     "text": "・鈴木　　潤"
+    },
+    {
+     "text": "†,††",
+     "sup": true
+    },
+    {
+     "text": "・鈴木　正敏"
+    },
+    {
+     "text": "†††,†",
+     "sup": true
+    },
+    {
+     "text": "・田中　涼太"
+    },
+    {
+     "text": "††††,†",
+     "sup": true
+    },
+    {
+     "text": "・赤間　怜奈"
+    },
+    {
+     "text": "†,††",
+     "sup": true
+    },
+    {
+     "text": "・西田　京介"
+    },
+    {
+     "text": "††††",
+     "sup": true
+    }
+   ],
+   "align": "center"
+  },
+  {
+   "kind": "footnote",
+   "label": "†",
+   "spans": [
+    {
+     "text": "東北大学, Tohoku University"
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "††",
+   "spans": [
+    {
+     "text": "理化学研究所, RIKEN"
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "†††",
+   "spans": [
+    {
+     "text": "株式会社Studio Ousia, Studio Ousia Inc."
+    }
+   ]
+  },
+  {
+   "kind": "footnote",
+   "label": "††††",
+   "spans": [
+    {
+     "text": "日本電信電話株式会社NTT人間情報研究所, NTT"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "質問応答は，自然言語処理における重要な研究テーマの一つである．近年の深層学習技術の発達と言語資源の充実により，質問応答技術は飛躍的な発展を遂げている．しかし，これらの研究は英語を対象としたものがほとんどであり，現状，日本語での質問応答に関する研究はあまり活発には行われていない．この背景を受けて，我々は日本語での質問応答研究を促進するため，日本語のクイズを題材とした質問応答のコンペティション「AI王」を企画し，これまでに計3回実施してきた．本論文では，日本語の質問応答技術における現在の到達点と課題を明らかにすることを目標として，使用したクイズ問題と提出された質問応答システム，さらに比較対象として大規模言語モデルを用いた分析を行い，その結果を報告する．"
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "キーワード",
+     "bold": true
+    },
+    {
+     "text": "：質問応答，システム分析，日本語，クイズ，システム構成"
+    }
+   ]
+  },
+  {
+   "kind": "heading",
+   "level": 1,
+   "spans": [
+    {
+     "text": "Achievements and Challenges in Japanese Question Answering: Insights from Quiz Competition Results",
+     "bold": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Tomoki Ariyama",
+     "smallCaps": true
+    },
+    {
+     "text": "†",
+     "sup": true
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "Jun Suzuki",
+     "smallCaps": true
+    },
+    {
+     "text": "†,††",
+     "sup": true
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "Masatoshi Suzuki",
+     "smallCaps": true
+    },
+    {
+     "text": "†††,†",
+     "sup": true
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "Ryota Tanaka",
+     "smallCaps": true
+    },
+    {
+     "text": "††††,†",
+     "sup": true
+    },
+    {
+     "text": ", "
+    },
+    {
+     "text": "Reina Akama",
+     "smallCaps": true
+    },
+    {
+     "text": "†,††",
+     "sup": true
+    },
+    {
+     "text": " and "
+    },
+    {
+     "text": "Kyosuke Nishida",
+     "smallCaps": true
+    },
+    {
+     "text": "††††",
+     "sup": true
+    }
+   ],
+   "align": "center",
+   "spaceAfter": 10
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Question answering(QA) is one of the most crucial research topics within the realm of Natural Language Processing. Recent advances in deep learning methodologies, coupled with the burgeoning availability of linguistic resources, have led to dramatic progresses in QA. However, most of these studies have been conducted in English, and only a little research has been done on QA in Japanese. To encourage research endeavors in Japanese QA, we organized three quiz competitions, encompassing questions posed in Japanese. This study undertook an analysis of the trivia questions employed in these competitions, scrutinized the QA systems submitted, and introduced comparisons with large language models to unveil the current achievements and challenges within the domain of QA in Japanese. This paper presents the findings of the analysis."
+    }
+   ],
+   "spaceAfter": 4
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "Key Words",
+     "bold": true
+    },
+    {
+     "text": ": "
+    },
+    {
+     "text": "Question Answering, System Analysis, Japanese, Quiz, System Architecture",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "kind": "paragraph",
+   "spans": [
+    {
+     "text": "(C) The Association for Natural Language Processing. Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)."
+    }
+   ]
+  }
+ ]
+}
