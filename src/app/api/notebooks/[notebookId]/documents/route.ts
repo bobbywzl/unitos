@@ -8,6 +8,8 @@ import { parseBody } from "@/lib/validate";
 
 const attachSchema = z.object({
   documentId: z.string().min(1),
+  // The folder of the project the new document lands in (SPEC.md §6).
+  folderId: z.string().min(1).nullable().optional(),
 });
 
 // Attach an existing document from the library. No re-parse.
@@ -24,7 +26,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ notebookId: st
   const document = await db.document.findUnique({ where: { id: data.documentId } });
   if (!document) return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });
 
-  await attachDocument(notebookId, data.documentId);
+  await attachDocument(notebookId, data.documentId, data.folderId);
   await bumpNotebook(notebookId);
   return NextResponse.json({ ok: true }, { status: 201 });
 }

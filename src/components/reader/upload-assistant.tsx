@@ -50,14 +50,19 @@ export function uploadItemTitle(item: UploadItem): string {
   return item.kind === "file" || item.kind === "drive-file" ? item.file.name : item.url;
 }
 
-export type UploadRequest =
+export type UploadRequest = (
   | { kind: "url"; url: string }
   | { kind: "video-url"; url: string }
   | { kind: "files"; files: File[] }
   // Files picked in the Google Drive picker (SPEC.md §14): the box imports
   // each pick with the token.
   | { kind: "drive"; token: string; files: DrivePickedFile[] }
-  | { kind: "batch"; items: UploadItem[] };
+  | { kind: "batch"; items: UploadItem[] }
+) & {
+  // The folder of the project the added documents land in (SPEC.md §6);
+  // absent = the project itself.
+  folderId?: string | null;
+};
 
 // What the box opens when it is done: the first added document.
 export type OpenTarget = { kind: "document"; id: string };
@@ -367,6 +372,7 @@ export function UploadAssistant({
         uploadId,
         filename: file.name,
         notebookId,
+        ...(request.folderId ? { folderId: request.folderId } : {}),
         kind,
         ...(part ? { clipStart: part.start, clipEnd: part.end } : {}),
         ...(pdfPages ? { pdfPages } : {}),
@@ -396,6 +402,7 @@ export function UploadAssistant({
               const form = new FormData();
               form.set("file", file);
               form.set("notebookId", notebookId);
+              if (request.folderId) form.set("folderId", request.folderId);
               if (pdfPages) form.set("pdfPages", JSON.stringify(pdfPages));
               return fetch("/api/documents", { method: "POST", body: form });
             })(),
@@ -414,8 +421,8 @@ export function UploadAssistant({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           video
-            ? { url, notebookId }
-            : { url, notebookId },
+            ? { url, notebookId, folderId: request.folderId ?? undefined }
+            : { url, notebookId, folderId: request.folderId ?? undefined },
         ),
       }),
     );
@@ -453,6 +460,7 @@ export function UploadAssistant({
         },
         body: JSON.stringify({
           notebookId,
+          ...(request.folderId ? { folderId: request.folderId } : {}),
           fileId: file.id,
           name: file.name,
           mimeType: file.mimeType,

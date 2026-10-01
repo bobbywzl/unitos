@@ -30,6 +30,7 @@ import {
 import {
   DocumentTree,
   FolderPicker,
+  folderPath,
   type DocumentFolderView,
 } from "@/components/reader/document-folders";
 import {
@@ -234,6 +235,15 @@ export function DocumentBar({
   const searchParams = useSearchParams();
   const [phase, setPhase] = useState<IngestPhase | null>(null);
   const [dialog, setDialog] = useState(false);
+  // The folder the add-document dialog adds to (SPEC.md §6): the + of a
+  // folder's list sets it; the header's + and a page drop add to the
+  // project itself.
+  const [addFolder, setAddFolder] = useState<string | null>(null);
+  function openAddDialog(folderId: string | null) {
+    setError(null);
+    setAddFolder(folderId);
+    setDialog(true);
+  }
   // The document list: opens on hover or click, closes on leave (after a
   // grace period), outside click, Escape, or opening a document.
   const listRef = useRef<HTMLDivElement>(null);
@@ -339,6 +349,7 @@ export function DocumentBar({
       const created = await api<{ id: string; title: string }>("/api/documents/blank", "POST", {
         notebookId,
         title: t("panes.untitledDocument"),
+        ...(addFolder ? { folderId: addFolder } : {}),
       });
       setDialog(false);
       const params = new URLSearchParams();
@@ -672,7 +683,7 @@ export function DocumentBar({
             ? queueUpload(item.file, notebookId)
             : item.kind === "drive-file"
               ? Promise.resolve()
-              : queueWrite("/api/documents", "POST", { url: item.url, notebookId }),
+              : queueWrite("/api/documents", "POST", { url: item.url, notebookId, ...(request.folderId ? { folderId: request.folderId } : {}) }),
         ),
       ).then(() => items.length);
       void queued.then((n) => {
@@ -717,7 +728,7 @@ export function DocumentBar({
         fetch("/api/drive/import", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ notebookId, fileId }),
+          body: JSON.stringify({ notebookId, fileId, ...(addFolder ? { folderId: addFolder } : {}) }),
         }),
       );
       setDialog(false);
@@ -777,7 +788,7 @@ export function DocumentBar({
   // go straight to the box (the dialog's queue is gone with the page load).
   async function importFromDrive() {
     const picked = await pickFromDrive();
-    if (picked) openAssistant({ kind: "drive", token: picked.token, files: picked.files });
+    if (picked) openAssistant({ kind: "drive", token: picked.token, files: picked.files, folderId: addFolder });
   }
 
   // Back from Link Google Drive: the callback returns here with ?drive=linked
@@ -862,7 +873,7 @@ export function DocumentBar({
         fetch("/api/documents", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: trimmed, notebookId }),
+          body: JSON.stringify({ url: trimmed, notebookId, ...(addFolder ? { folderId: addFolder } : {}) }),
         }),
       );
       setDialog(false);
@@ -899,7 +910,7 @@ export function DocumentBar({
   }
 
   async function attach(documentId: string) {
-    await api(`/api/notebooks/${notebookId}/documents`, "POST", { documentId });
+    await api(`/api/notebooks/${notebookId}/documents`, "POST", { documentId, ...(addFolder ? { folderId: addFolder } : {}) });
     setDialog(false);
     open(documentId);
     router.refresh();
@@ -1226,6 +1237,10 @@ export function DocumentBar({
                 canEdit={canEdit}
                 panelEl={listEl}
                 renderDocument={renderDocumentRow}
+                onAddIn={(folderId) => {
+                  closeList();
+                  openAddDialog(folderId);
+                }}
               />
             </div>
           )}
@@ -1235,10 +1250,7 @@ export function DocumentBar({
 
       <div className={`shrink-0 ${canEdit ? "" : "hidden"}`}>
         <button
-          onClick={() => {
-            setError(null);
-            setDialog(true);
-          }}
+          onClick={() => openAddDialog(null)}
           data-track="add-document"
           // The onboarding nudge on + waits for the first document: a new
           // project opens on the dialog, so the nudge would sit behind it.
@@ -1272,7 +1284,7 @@ export function DocumentBar({
         phase={phase}
         error={error}
         onError={setError}
-        onSubmit={openAssistant}
+        onSubmit={(request) => openAssistant({ ...request, folderId: addFolder })}
         onCreateBlank={() => void createBlank()}
         fileAccept={UPLOAD_FILE_ACCEPT}
         projectTitle={
@@ -1298,6 +1310,7 @@ export function DocumentBar({
         attachedIds={attachedIds}
         onOpenLibrary={() => void openLibrary()}
         onAttach={(id) => void attach(id)}
+        folderPath={addFolder ? folderPath(folders, addFolder).map((id) => folders.find((f) => f.id === id)?.title ?? "") : null}
         onRemoveFromLibrary={(id) => void removeFromLibrary(id)}
       />
 

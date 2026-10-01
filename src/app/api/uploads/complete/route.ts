@@ -30,6 +30,8 @@ export const maxDuration = 300;
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
 
 const bodySchema = z.object({
+  // The folder of the project the new document lands in (SPEC.md §6).
+  folderId: z.string().min(1).nullable().optional(),
   uploadId: z.string().regex(/^[a-zA-Z0-9-]{8,64}$/),
   filename: z.string().min(1),
   notebookId: z.string().min(1),
@@ -124,7 +126,7 @@ export async function POST(req: Request) {
     return progressResponse(async (onProgress) => {
       try {
         const { document, deduped } = await parse.ingestDocx(bytes, filename, onProgress, {}, user?.id ?? null);
-        await attachDocument(data.notebookId, document.id);
+        await attachDocument(data.notebookId, document.id, data.folderId);
         await bumpNotebook(data.notebookId);
         if (!deduped) after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
         return { id: document.id, title: document.title, deduped };
@@ -143,7 +145,7 @@ export async function POST(req: Request) {
           format === "slides"
             ? await parse.ingestSlides(bytes, filename, onProgress, {}, user?.id ?? null)
             : await parse.ingestSheets(bytes, filename, onProgress, {}, user?.id ?? null);
-        await attachDocument(data.notebookId, document.id);
+        await attachDocument(data.notebookId, document.id, data.folderId);
         await bumpNotebook(data.notebookId);
         if (!deduped) after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
         // An uploaded deck's pictures render after the response (SPEC.md §27).
@@ -162,7 +164,7 @@ export async function POST(req: Request) {
     return progressResponse(async (onProgress) => {
       try {
         const { document, deduped } = await parse.ingestMarkdown(bytes, filename, onProgress, {}, user?.id ?? null);
-        await attachDocument(data.notebookId, document.id);
+        await attachDocument(data.notebookId, document.id, data.folderId);
         await bumpNotebook(data.notebookId);
         return { id: document.id, title: document.title, deduped };
       } catch (err) {
@@ -183,7 +185,7 @@ export async function POST(req: Request) {
         { pages, convert: data.convert, pdfPages: data.pdfPages },
         user?.id ?? null,
       );
-      await attachDocument(data.notebookId, document.id);
+      await attachDocument(data.notebookId, document.id, data.folderId);
       await bumpNotebook(data.notebookId);
       if (!deduped && document.handwritten) {
         // The pages render and store after the response (SPEC.md §16); the
@@ -254,7 +256,7 @@ async function completeVideo(data: Body, userId: string | null, t: TFunc) {
   const existing = await db.document.findFirst({ where: { fileHash }, orderBy: { createdAt: "asc" } });
   if (existing) {
     await db.uploadChunk.deleteMany({ where: { uploadId: data.uploadId } });
-    await attachDocument(data.notebookId, existing.id);
+    await attachDocument(data.notebookId, existing.id, data.folderId);
     await bumpNotebook(data.notebookId);
     return progressResponse(async () => ({
       id: existing.id,
@@ -301,7 +303,7 @@ async function completeVideo(data: Body, userId: string | null, t: TFunc) {
         throw new Error(t("api.videoCopyIncomplete"));
       }
       await db.uploadChunk.deleteMany({ where: { uploadId: data.uploadId } });
-      await attachDocument(data.notebookId, document.id);
+      await attachDocument(data.notebookId, document.id, data.folderId);
       await bumpNotebook(data.notebookId);
       // Transcription starts on its own — the transcript is the point. The
       // recommended-links scan follows it, so it reads the transcript.

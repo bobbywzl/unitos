@@ -99,6 +99,7 @@ export function AddDocumentDialog({
   onOpenLibrary,
   onAttach,
   onRemoveFromLibrary,
+  folderPath,
 }: {
   open: boolean;
   onClose: () => void;
@@ -132,6 +133,9 @@ export function AddDocumentDialog({
   onOpenLibrary: () => void;
   onAttach: (documentId: string) => void;
   onRemoveFromLibrary: (documentId: string) => void;
+  // The folder the documents land in (SPEC.md §6), as its path of titles;
+  // null = the project itself.
+  folderPath?: string[] | null;
 }) {
   const t = useT();
   const ime = useImeGuard();
@@ -295,8 +299,13 @@ export function AddDocumentDialog({
         onClick={(e) => e.stopPropagation()}
         className="flex max-h-[85vh] w-[600px] max-w-full flex-col gap-4 overflow-y-auto rounded-[24px] bg-card p-6 shadow-float"
       >
-        <div className="flex items-center">
+        <div className="flex items-center gap-2">
           <span className="font-display text-[20px]">{t("panes.addDocument")}</span>
+          {folderPath && folderPath.length > 0 && (
+            <span className="min-w-0 truncate rounded-full bg-clay-100 px-2.5 py-0.5 text-[12px] font-semibold text-clay-800">
+              {t("panes.addInFolder", { folder: folderPath.join(" / ") })}
+            </span>
+          )}
           <button
             onClick={onClose}
             data-track="add-dialog-close"

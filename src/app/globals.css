@@ -2045,6 +2045,25 @@ ellipse.anchor-flash {
 .presence-exit > * {
   pointer-events: none;
 }
+/* The document list's rows fall in one after another, top to bottom, when a
+   folder's list opens (document-folders.tsx): --row is the row's place in
+   its level. */
+@keyframes tree-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .tree-row-in {
+    animation: tree-row-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: calc(min(var(--row, 0), 12) * 32ms);
+  }
+}
 @media (prefers-reduced-motion: no-preference) {
   .menu-in {
     animation: menu-in 0.16s ease-out both;

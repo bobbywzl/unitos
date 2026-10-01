@@ -44,6 +44,8 @@ export const maxDuration = 120;
 // convert are the upload assistant's check output (SPEC.md §15, §16), same as
 // every other PDF add path. pdfPages: a PDF's pages the reader chose (§15).
 const bodySchema = z.object({
+  // The folder of the project the new document lands in (SPEC.md §6).
+  folderId: z.string().min(1).nullable().optional(),
   notebookId: z.string().min(1),
   fileId: z.string().min(1),
   name: z.string().min(1).optional(),
@@ -96,7 +98,7 @@ export async function POST(req: Request) {
         // chunked video upload path titles a document (/api/uploads/complete).
         title: mediaName.replace(/\.[a-z0-9]+$/i, ""),
       });
-      await attachDocument(data.notebookId, document.id);
+      await attachDocument(data.notebookId, document.id, data.folderId);
       await bumpNotebook(data.notebookId);
       // Transcription starts on its own — the transcript is the point. The
       // recommended-links scan follows it, so it reads the transcript.
@@ -148,7 +150,7 @@ export async function POST(req: Request) {
             { picture },
             user?.id ?? null,
           );
-          await attachDocument(data.notebookId, document.id);
+          await attachDocument(data.notebookId, document.id, data.folderId);
           await bumpNotebook(data.notebookId);
           if (!deduped) {
             const pdf = picture;
@@ -174,7 +176,7 @@ export async function POST(req: Request) {
           {},
           user?.id ?? null,
         );
-        await attachDocument(data.notebookId, document.id);
+        await attachDocument(data.notebookId, document.id, data.folderId);
         await bumpNotebook(data.notebookId);
         if (!deduped) after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
         return { id: document.id, title: document.title, deduped };
@@ -210,7 +212,7 @@ export async function POST(req: Request) {
       }
       if (ingested) {
         const { document, deduped } = ingested;
-        await attachDocument(data.notebookId, document.id);
+        await attachDocument(data.notebookId, document.id, data.folderId);
         await bumpNotebook(data.notebookId);
         // The skeleton builds after the response (SPEC.md §22).
         if (!deduped) after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
@@ -235,7 +237,7 @@ export async function POST(req: Request) {
       throw new Error(describeIngestError(err, t, "pdf"));
     }
     const { document, deduped } = ingested;
-    await attachDocument(data.notebookId, document.id);
+    await attachDocument(data.notebookId, document.id, data.folderId);
     await bumpNotebook(data.notebookId);
     // The skeleton builds after the response (SPEC.md §22); a handwritten
     // document's waits for its conversion.
