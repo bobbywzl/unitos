@@ -35,6 +35,9 @@ export type NoteView = {
   // When the note last changed on the server (ISO). A local draft older than
   // this lost to an edit made elsewhere and is not replayed (lib/note-drafts.ts).
   updatedAt: string;
+  // When the note was made (ISO): the notes group by week or month of it.
+  // Absent on a note made in this tab before the refresh lands.
+  createdAt?: string;
   // The document the note was written in (SPEC.md §6); null = the project
   // as a whole. The tray lists the open document's notes: this, or a source.
   documentId: string | null;

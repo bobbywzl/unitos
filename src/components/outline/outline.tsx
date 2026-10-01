@@ -17,6 +17,7 @@ import { MergeUndoBar } from "@/components/outline/merge-undo";
 import { NoteCard } from "@/components/outline/note-card";
 import { SectionBoard } from "@/components/outline/section-board";
 import { SectionItem } from "@/components/outline/section-item";
+import { NoteGroups, NotesOrganize, useNoteGrouping } from "@/components/outline/note-groups";
 import { SelectionBar } from "@/components/outline/selection-bar";
 import {
   filterSections,
@@ -40,6 +41,7 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
   const { canEdit } = useCollab();
   const { tree, pending, actions, lastRejected, undoReject } = useOutline(notebook, canEdit);
   const [query, setQuery] = useState("");
+  const [grouping, setGrouping] = useNoteGrouping();
   const needle = query.trim();
   const found = needle ? filterSections(tree, query) : tree;
   // The notes in the compare view, in pane order; null = closed.
@@ -104,6 +106,7 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
           className="w-72 rounded-full bg-card px-4 py-2 text-[13px] shadow-soft outline-none placeholder:text-sand-500"
         />
         <CollapsedViewToggle view={actions.notesView} onChange={actions.setNotesView} track="notes-view" />
+        <NotesOrganize grouping={grouping} onGrouping={setGrouping} />
         {notebook.documents.length > 0 && (
           <button
             onClick={() => {
@@ -122,6 +125,11 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
         )}
       </div>
 
+      {grouping !== "section" ? (
+        <div className="pt-[22px]">
+          <NoteGroups tree={tree} grouping={grouping} documents={notebook.documents} actions={actions} variant="page" search={query} />
+        </div>
+      ) : (
       <div className="flex flex-col gap-[30px] pt-[22px]">
         {/* One drag across the whole page (SPEC.md §6): a note dragged out
             of its section drops into any other, a note held over another
@@ -178,6 +186,7 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
           <p className="text-sm text-sand-600">{t("outline.emptySections")}</p>
         )}
       </div>
+      )}
 
       <SelectionBar
         tree={tree}

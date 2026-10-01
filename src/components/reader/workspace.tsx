@@ -53,6 +53,7 @@ import { TierMark } from "@/components/tier-mark";
 import { FloatingNoteEditor } from "@/components/outline/floating-note-editor";
 import { readTrayFold, subscribeTrayFold } from "@/lib/assistant/side-chat-open";
 import { NotesTray } from "@/components/outline/notes-tray";
+import { useNoteScope } from "@/components/outline/note-groups";
 import { Presence } from "@/components/presence";
 import { flattenNotes, useOutline } from "@/components/outline/use-outline";
 import { DocumentBar, type AttachedDocument } from "@/components/reader/document-bar";
@@ -178,12 +179,14 @@ export function Workspace({
 }) {
   const t = useT();
   const canEdit = collab.canEdit;
-  // The tray's notes are the open document's (SPEC.md §6); the notes full
-  // page has the whole project.
+  // The tray's notes: every note of the project, or the open document's
+  // alone, as the reader picked (note-groups.tsx, SPEC.md §6).
+  const [noteScope, setNoteScope] = useNoteScope();
   const { tree, pending, pendingElsewhere, actions, lastRejected, undoReject } = useOutline(
     notebook,
     canEdit,
     activeDocumentId,
+    noteScope === "document",
   );
   // Live sync: poll the corpus's rev, refresh when another account changes it,
   // and learn who else is here (SPEC.md gained this with sharing).
@@ -813,7 +816,15 @@ export function Workspace({
             {/* Keyed by tab: switching remounts the panel, and it rises in. */}
             <div key={tab} className="panel-in min-h-0 flex-1 overflow-y-auto">
               {tab === "notes" && (
-                <NotesTray tree={tree} pending={pending} pendingElsewhere={pendingElsewhere} actions={actions} />
+                <NotesTray
+                  tree={tree}
+                  pending={pending}
+                  pendingElsewhere={pendingElsewhere}
+                  actions={actions}
+                  documents={notebook.documents}
+                  scope={noteScope}
+                  onScope={setNoteScope}
+                />
               )}
               {tab === "assistant" && assistant}
               {tab === "distill" && distillPanel}

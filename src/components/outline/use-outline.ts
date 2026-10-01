@@ -185,7 +185,9 @@ export function filterSections(sections: SectionView[], query: string): SectionV
 // are its notes alone (scopeSections), and a note added lands in it; null,
 // the notes full page, returns the whole project. Every write reads the
 // whole tree, so a merge or a selection never loses a note the scope hides.
-export function useOutline(notebook: NotebookView, canEdit = true, documentId: string | null = null) {
+// scopeToDocument false (the tray's All notes): the tree and the queue are
+// the whole project, and a note added still lands in the open document.
+export function useOutline(notebook: NotebookView, canEdit = true, documentId: string | null = null, scopeToDocument = true) {
   const t = useT();
   const router = useRouter();
   const [tree, setTree] = useState(notebook.sections);
@@ -300,7 +302,10 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
   const notesView = useCollapsedView(`${NOTES_VIEW_STORE}:${notebook.id}`);
 
   // The tree on screen: the open document's notes, or the whole project.
-  const scopedTree = useMemo(() => (documentId ? scopeSections(tree, documentId) : tree), [tree, documentId]);
+  const scopedTree = useMemo(
+    () => (documentId && scopeToDocument ? scopeSections(tree, documentId) : tree),
+    [tree, documentId, scopeToDocument],
+  );
   // Pending queue in outline order (SPEC.md §6 keyboard flow): the notes on
   // screen. pendingElsewhere: pending notes the scope hides — other
   // documents' and the project's — which the notes full page shows.

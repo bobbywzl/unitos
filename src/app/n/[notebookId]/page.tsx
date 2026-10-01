@@ -1020,6 +1020,7 @@ export default async function NotebookPage(props: {
       order: n.order,
       createdById: n.createdById,
       updatedAt: n.updatedAt.toISOString(),
+      createdAt: n.createdAt.toISOString(),
       documentId: n.documentId,
       sources: n.sources.map((src) => ({
         id: src.id,

@@ -20,6 +20,7 @@ import { useNoteCompose } from "@/components/outline/use-note-compose";
 import { VoiceNoteButton } from "@/components/outline/voice-note";
 import { Collapse } from "@/components/presence";
 import { SelectionBar } from "@/components/outline/selection-bar";
+import { NoteGroups, NotesOrganize, useNoteGrouping, type NoteScope } from "@/components/outline/note-groups";
 import {
   filterSections,
   findSection,
@@ -31,10 +32,11 @@ import {
 // The tray is for triage first: pending notes hoist to the top as one queue,
 // accepted notes sit under their section label (design 1a), collapsed to one
 // line each, and move by a hold anywhere on the card — as on the notes full
-// page. The tray holds the open document's notes alone (SPEC.md §6): the
-// notes written in it and the notes that quote it; the notes full page has
-// the whole project, and a line under the queue says how many pending notes
-// wait there. A search shows the notes it found whole, with the words it
+// page. The tray holds every note of the project, or, when the reader picks
+// This document, the open document's alone (SPEC.md §6): the notes written
+// in it and the notes that quote it; then a line under the queue says how
+// many pending notes wait elsewhere. Group by shows the notes by document,
+// week, month, or title instead of by section. A search shows the notes it found whole, with the words it
 // found lit up. Renaming sections and composing at length live on the notes
 // full page.
 export function NotesTray({
@@ -42,16 +44,25 @@ export function NotesTray({
   pending,
   pendingElsewhere = 0,
   actions,
+  documents,
+  scope,
+  onScope,
 }: {
   tree: SectionView[];
   pending: NoteView[];
   /** Pending notes of other documents and of the project: on the notes full page. */
   pendingElsewhere?: number;
   actions: OutlineActions;
+  /** The project's documents, in attach order: the groups of By document. */
+  documents: { id: string; title: string }[];
+  /** All notes of the project, or the open document's alone. */
+  scope: NoteScope;
+  onScope: (scope: NoteScope) => void;
 }) {
   const t = useT();
   const { canEdit } = useCollab();
   const [query, setQuery] = useState("");
+  const [grouping, setGrouping] = useNoteGrouping();
   const label = "text-[11px] font-bold tracking-[0.08em] uppercase";
   const shown = filterSections(tree, query);
   const needle = query.trim();
@@ -130,6 +141,8 @@ export function NotesTray({
         </Link>
       </div>
 
+      <NotesOrganize grouping={grouping} onGrouping={setGrouping} scope={scope} onScope={onScope} />
+
       {shownPending.length > 0 && (
         <div className="flex flex-col gap-2">
           <div className="flex items-baseline gap-2">
@@ -159,32 +172,36 @@ export function NotesTray({
           picks it up; a note dropped in another section moves there, a note
           held over another until the ring closes joins it, and a note let go
           over the article floats there. */}
-      <SortableBoard
-        id="tray-board"
-        onDrop={onDrop}
-        onDropOutside={canEdit ? onDropOutside : undefined}
-        onMerge={canEdit ? onMerge : undefined}
-        canMerge={(id, intoId) =>
-          notesById.get(id)?.status === "ACCEPTED" && notesById.get(intoId)?.status === "ACCEPTED"
-        }
-        overlay={(itemId) => {
-          const note = notesById.get(itemId);
-          return note ? <NoteCard note={note} actions={actions} variant="tray" search={query} /> : null;
-        }}
-      >
-        <div className="flex flex-col gap-3.5">
-          {shown.map((section, i) => (
-            <TraySection
-              key={section.id}
-              section={section}
-              actions={actions}
-              labelClass={label}
-              search={query}
-              nudgeFirst={i === 0}
-            />
-          ))}
-        </div>
-      </SortableBoard>
+      {grouping !== "section" ? (
+        <NoteGroups tree={tree} grouping={grouping} documents={documents} actions={actions} variant="tray" search={query} accepted />
+      ) : (
+        <SortableBoard
+          id="tray-board"
+          onDrop={onDrop}
+          onDropOutside={canEdit ? onDropOutside : undefined}
+          onMerge={canEdit ? onMerge : undefined}
+          canMerge={(id, intoId) =>
+            notesById.get(id)?.status === "ACCEPTED" && notesById.get(intoId)?.status === "ACCEPTED"
+          }
+          overlay={(itemId) => {
+            const note = notesById.get(itemId);
+            return note ? <NoteCard note={note} actions={actions} variant="tray" search={query} /> : null;
+          }}
+        >
+          <div className="flex flex-col gap-3.5">
+            {shown.map((section, i) => (
+              <TraySection
+                key={section.id}
+                section={section}
+                actions={actions}
+                labelClass={label}
+                search={query}
+                nudgeFirst={i === 0}
+              />
+            ))}
+          </div>
+        </SortableBoard>
+      )}
 
       {needle && shown.length === 0 && shownPending.length === 0 && (
         <p className="text-[13px] text-sand-600">
