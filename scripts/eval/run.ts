@@ -8,7 +8,12 @@
 // regressions; latest.json keeps the last result of every case, so a run of
 // one tool compares with that tool's last run. Usage:
 //   npx tsx scripts/eval/run.ts [--tools simplify,act] [--cases id,id]
-//     [--judge claude|kimi|none] [--baseline latest|<path>] [--gate]
+//     [--judge claude|kimi|external|none] [--baseline latest|<path>] [--gate]
+//     [--external <dir>]
+// --external: no model is called; each case's prompt is written under <dir>
+// and an agent's answer is read back from there (lib.ts). Run once to write
+// the prompts, let agents answer, run again with --judge external to write
+// the judge prompts, let agents judge, run a third time for the report.
 // Keys: MOONSHOT_API_KEY runs the tools; ANTHROPIC_API_KEY runs Collapse
 // (Claude Opus 5.5, as the route does) and makes Claude the judge (else
 // Kimi judges, else no judge). MOONSHOT_API_KEY=mock with
@@ -58,6 +63,9 @@ import {
   cjkShare,
   defaultJudge,
   fixturePrefix,
+  isExternal,
+  setCurrentCase,
+  setExternal,
   loadFixtures,
   numbersIn,
   promptCtx,
@@ -109,6 +117,8 @@ const judgeWanted = (flag("judge") as JudgeModel | null) ?? defaultJudge();
 const baselineWanted = flag("baseline");
 const gate = has("gate");
 const outRoot = flag("out") ?? join(process.cwd(), ".eval", "runs");
+const externalWanted = flag("external");
+if (externalWanted) setExternal(externalWanted);
 
 // ── Cases ──────────────────────────────────────────────────────────────────
 function loadCases(): EvalCase[] {
@@ -534,7 +544,7 @@ async function main() {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   const outDir = join(outRoot, stamp);
   mkdirSync(outDir, { recursive: true });
-  const run: Run = { stamp, judge: judgeWanted, model: "", results: [] };
+  const run: Run = { stamp, judge: judgeWanted, model: externalWanted ? "external" : "", results: [] };
   console.log(`eval ${stamp}: ${cases.length} cases, judge ${judgeWanted}, out ${outDir}`);
 
   for (const c of cases) {
@@ -545,12 +555,16 @@ async function main() {
       continue;
     }
     try {
+      setCurrentCase(c.id);
       const r = await adapters[c.tool](c, f);
       let judge: CaseResult["judge"] = null;
-      if (judgeWanted !== "none") {
+      // External mode: no judge until the agent's answer is there, and a
+      // judge that has not answered yet is pending, not failed.
+      const pending = isExternal() && r.raw === "";
+      if (judgeWanted !== "none" && !pending) {
         const answer = judgeSchema.safeParse(await callJudge(judgeWanted, judgePrompt(c, f, r.input, r.output)));
         if (answer.success) judge = answer.data;
-        else r.checks.push({ name: "judge answered", ok: false, detail: "the judge's JSON did not parse" });
+        else if (judgeWanted !== "external") r.checks.push({ name: "judge answered", ok: false, detail: "the judge's JSON did not parse" });
       }
       const failed = r.checks.filter((k) => !k.ok).map((k) => k.name);
       console.log(

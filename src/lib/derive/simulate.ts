@@ -266,6 +266,8 @@ export const simulationSchema = z.object({
           .max(12),
         rate: formula,
         start: z.number(),
+        // What the legend calls it, in the passage's words; the name when absent.
+        label: z.string().max(48).nullish(),
       }),
     )
     .min(1)
@@ -275,6 +277,14 @@ export const simulationSchema = z.object({
   duration: z.number().positive().max(1e9),
   xLabel: z.string().max(40).nullish(),
   uLabel: z.string().max(40).nullish(),
+  // The unit of the law's time, shown on the clock: "s", "min", "days".
+  tUnit: z.string().max(12).nullish(),
+  // Levels the passage names — a threshold, the temperature the rod settles
+  // at — drawn as dashed lines across the plot, each with its label.
+  levels: z
+    .array(z.object({ value: z.number(), label: z.string().min(1).max(60) }))
+    .max(3)
+    .nullish(),
 });
 
 export type Simulation = z.infer<typeof simulationSchema>;
@@ -283,7 +293,7 @@ export type Simulation = z.infer<typeof simulationSchema>;
 
 const FRAMES = 36; // over the loop's 8 seconds
 const POINTS = 96;
-const POINTS_WAVEFUNCTION = 128;
+const POINTS_WAVEFUNCTION = 200;
 const LOOP_SECONDS = 8;
 
 type Field = { x: number[]; frames: number[][] };
@@ -467,8 +477,59 @@ function advection(sim: Simulation): Field {
 /** The Schrödinger equation i ψ_t = −a ψ_xx + V ψ (ħ = 1, a = ħ/2m):
     Crank–Nicolson in the complex plane, on a box (the ends hold ψ = 0) or an
     insulated domain. Returns |ψ|² as the frames and Re ψ beside it. */
+// The wavefunction's grid is the physics', not the picture's: a step of a
+// third of a radian of the phase or less, eight points across the narrowest
+// feature of the potential, sixteen across the packet; between 128 and
+// 2048 points. The picture draws a smoothed copy at POINTS_WAVEFUNCTION.
+const WAVEFUNCTION_MIN = 128;
+const WAVEFUNCTION_MAX = 2048;
+
+function wavefunctionPoints(sim: Simulation): number {
+  const L = sim.x1 - sim.x0;
+  const probe = grid({ ...sim, boundary: "fixed" }, 8192);
+  let dx = L / (WAVEFUNCTION_MIN - 1);
+  if (sim.momentum) dx = Math.min(dx, 0.33 / Math.abs(sim.momentum));
+  if (sim.potential) {
+    const V = sample(compileFormula(sim.potential, ["x"]), probe, "The potential");
+    const span = Math.max(...V) - Math.min(...V);
+    if (span > 0) {
+      const edges: number[] = [];
+      for (let i = 1; i < V.length; i++) if (Math.abs(V[i] - V[i - 1]) > span * 1e-3) edges.push(probe[i]);
+      for (let i = 1; i < edges.length; i++) {
+        const w = edges[i] - edges[i - 1];
+        // Consecutive samples of one smooth slope are not a feature.
+        if (w > (2 * L) / 8192) dx = Math.min(dx, w / 8);
+      }
+    }
+  }
+  if (sim.initial) {
+    const amp = sample(compileFormula(sim.initial, ["x"]), probe, "The initial amplitude").map(Math.abs);
+    const peak = Math.max(...amp);
+    const wide = amp.filter((v) => v > peak / 2).length * (L / 8191);
+    if (wide > 0) dx = Math.min(dx, wide / 16);
+  }
+  return Math.max(WAVEFUNCTION_MIN, Math.min(WAVEFUNCTION_MAX, Math.ceil(L / dx) + 1));
+}
+
+/** The rows on the picture's grid: each point the mean of the fine grid's
+    points nearest it, so a fringe finer than a point smooths, never aliases. */
+function toPicture(x: number[], rows: number[][], n: number): { x: number[]; rows: number[][] } {
+  if (x.length <= n) return { x, rows };
+  const px = Array.from({ length: n }, (_, i) => x[0] + ((x[x.length - 1] - x[0]) * i) / (n - 1));
+  const cell = (x.length - 1) / (n - 1);
+  const pick = (row: number[]) =>
+    px.map((_, i) => {
+      const lo = Math.max(0, Math.round((i - 0.5) * cell));
+      const hi = Math.min(row.length - 1, Math.round((i + 0.5) * cell));
+      let sum = 0;
+      for (let j = lo; j <= hi; j++) sum += row[j];
+      return sum / (hi - lo + 1);
+    });
+  return { x: px, rows: rows.map(pick) };
+}
+
 function schrodinger(sim: Simulation): Field & { real: number[][]; potential: number[] } {
-  const x = grid({ ...sim, boundary: sim.boundary === "periodic" ? "fixed" : sim.boundary }, POINTS_WAVEFUNCTION);
+  const x = grid({ ...sim, boundary: sim.boundary === "periodic" ? "fixed" : sim.boundary }, wavefunctionPoints(sim));
   const dx = x[1] - x[0];
   const a = Math.abs(sim.coefficient) || 1;
   const amp = sample(compileFormula(sim.initial!, ["x"]), x, "The initial amplitude");
@@ -558,7 +619,13 @@ function schrodinger(sim: Simulation): Field & { real: number[][]; potential: nu
     frames.push(density());
     real.push(re.slice());
   }
-  return { x, frames, real, potential: V };
+  const dens = toPicture(x, frames, POINTS_WAVEFUNCTION);
+  // Re ψ at the picture's grid only where a wavelength spans six points or
+  // more; a finer phase would draw as noise, so it is left out.
+  const wavelengthPoints = sim.momentum ? ((2 * Math.PI) / Math.abs(sim.momentum)) / ((x[n - 1] - x[0]) / (POINTS_WAVEFUNCTION - 1)) : Infinity;
+  const phase = wavelengthPoints >= 6 ? toPicture(x, real, POINTS_WAVEFUNCTION).rows : [];
+  const picV = toPicture(x, [V], POINTS_WAVEFUNCTION).rows[0];
+  return { x: dens.x, frames: dens.rows, real: phase, potential: picV };
 }
 
 type Series = { t: number[]; names: string[]; values: number[][] };
@@ -608,11 +675,14 @@ const PY1 = 252;
 const BAR_Y = 292;
 const FONT = `font-family="system-ui, sans-serif"`;
 
+// A number as a reader reads it on an axis: thousands grouped, no exponent
+// from a thousandth to a million, at most `digits` significant figures.
 const fmt = (v: number, digits = 3) => {
   if (v === 0) return "0";
   const abs = Math.abs(v);
-  if (abs >= 1000 || abs < 0.01) return v.toExponential(1).replace("e+", "e");
-  return String(Number(v.toPrecision(digits)));
+  if (abs >= 1e6 || abs < 1e-3) return v.toExponential(1).replace("e+", "e");
+  const rounded = Number(v.toPrecision(digits));
+  return abs >= 1000 ? rounded.toLocaleString("en-US") : String(rounded);
 };
 // Axis ticks are short: two figures fit the margin, and the axis is there to
 // give the scale, not the value.
@@ -634,8 +704,87 @@ function range(values: number[][]): { lo: number; hi: number } {
     lo -= 1;
     hi += 1;
   }
-  const pad = (hi - lo) * 0.08;
-  return { lo: lo - pad, hi: hi + pad };
+  // Round bounds, so the axis reads 0 and 100, not −8 and 108: the range
+  // widens to the nearest multiples of a round step (1, 2, 2.5, or 5 times a
+  // power of ten, about a quarter of the span).
+  const raw = (hi - lo) / 4;
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const n = raw / mag;
+  const step = (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * mag;
+  return { lo: Math.floor(lo / step + 1e-9) * step, hi: Math.ceil(hi / step - 1e-9) * step };
+}
+
+// Text widths at the drawing's scale, estimated: a CJK character is as wide
+// as the font size, a Latin one a little over half, bold a little more.
+function textWidth(text: string, size: number, bold = false): number {
+  let w = 0;
+  for (const ch of text) w += ch.codePointAt(0)! >= 0x2e80 ? size : size * (bold ? 0.6 : 0.55);
+  return w;
+}
+
+/** The passage's levels as dashed lines across the plot, each labeled at
+    its right end, above the line. */
+function levelLines(sim: Simulation, sy: (v: number) => number): string[] {
+  return (sim.levels ?? []).map((l) => {
+    const y = sy(l.value);
+    return (
+      `<line x1="${PX0}" y1="${px(y)}" x2="${PX1}" y2="${px(y)}" stroke="${MUTED}" stroke-width="1.5" stroke-dasharray="6 4"/>` +
+      `<text x="${PX1 - 4}" y="${px(y - 5)}" font-size="14" fill="${MUTED}" text-anchor="end" ${FONT}>${escapeXml(l.label)}</text>`
+    );
+  });
+}
+
+/** The range the plot covers: the values, and the levels drawn over them. */
+function withLevels(rows: number[][], sim: Simulation): number[][] {
+  const levels = (sim.levels ?? []).map((l) => l.value);
+  return levels.length ? [...rows, levels] : rows;
+}
+
+// The law above the plot, fitted to the frame: one line at 16 when it fits,
+// smaller down to 14 (9.3 px at the card's width), else two lines, split at
+// the comma, semicolon, or space nearest the middle, at 14 or, for a law too
+// long for that, 13.
+const EQUATION_ROOM = W - 24;
+function equationLines(equation: string): { lines: string[]; size: number } {
+  for (const size of [16, 15, 14]) {
+    if (textWidth(equation, size, true) <= EQUATION_ROOM) return { lines: [equation], size };
+  }
+  const mid = equation.length / 2;
+  let cut = -1;
+  for (let i = 0; i < equation.length; i++) {
+    if (/[,;]/.test(equation[i]) || (equation[i] === " " && cut === -1)) {
+      if (cut === -1 || Math.abs(i - mid) < Math.abs(cut - mid)) cut = i;
+    }
+  }
+  if (cut <= 0) cut = Math.floor(mid);
+  const head = equation.slice(0, cut + (/[,;]/.test(equation[cut]) ? 1 : 0)).trim();
+  const tail = equation.slice(cut + 1).trim();
+  const size = textWidth(head, 14, true) <= EQUATION_ROOM && textWidth(tail, 14, true) <= EQUATION_ROOM ? 14 : 13;
+  return { lines: [head, tail], size };
+}
+
+/** The picture: the law on top, fitted to the frame, and the plot under it,
+    moved down when the law takes two lines. */
+function frame(sim: Simulation, defs: string, body: string[]): string {
+  const eq = sim.equation ? equationLines(sim.equation) : null;
+  const extra = eq && eq.lines.length > 1 ? eq.size + 4 : 0;
+  const title = eq
+    ? eq.lines.map(
+        (line, i) =>
+          `<text x="${W / 2}" y="${22 + i * (eq.size + 4)}" font-size="${eq.size}" font-weight="700" fill="${INK}" text-anchor="middle" ${FONT}>${escapeXml(line)}</text>`,
+      )
+    : [];
+  return [
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H + extra}" role="img">`,
+    THEME_STYLE,
+    defs,
+    `<rect x="0" y="0" width="${W}" height="${H + extra}" fill="${PAPER}"/>`,
+    ...title,
+    extra ? `<g transform="translate(0 ${extra})">` : "<g>",
+    ...body,
+    `</g>`,
+    `</svg>`,
+  ].join("");
 }
 
 function keyTimes(): string {
@@ -650,17 +799,12 @@ function loopValues(paths: string[]): string {
 
 function frameText(sim: Simulation, boundaryNote: string | null): string[] {
   const out: string[] = [];
-  if (sim.equation) {
-    out.push(
-      `<text x="${W / 2}" y="26" font-size="16" font-weight="700" fill="${INK}" text-anchor="middle" ${FONT}>${escapeXml(sim.equation)}</text>`,
-    );
-  }
   // The time bar: a track, a fill that grows over the loop, and the ends.
   out.push(
     `<line x1="${PX0}" y1="${BAR_Y}" x2="${PX1}" y2="${BAR_Y}" stroke="${MUTED}" stroke-width="2" stroke-opacity="0.35"/>`,
     `<rect x="${PX0}" y="${BAR_Y - 2}" width="0" height="4" rx="2" fill="${ACCENT}"><animate attributeName="width" values="0;${PX1 - PX0}" dur="${LOOP_SECONDS}s" repeatCount="indefinite"/></rect>`,
     `<text x="${PX0}" y="${BAR_Y + 18}" font-size="14" fill="${MUTED}" ${FONT}>t = 0</text>`,
-    `<text x="${PX1}" y="${BAR_Y + 18}" font-size="14" fill="${MUTED}" text-anchor="end" ${FONT}>t = ${escapeXml(fmt(sim.duration))}</text>`,
+    `<text x="${PX1}" y="${BAR_Y + 18}" font-size="14" fill="${MUTED}" text-anchor="end" ${FONT}>t = ${escapeXml(fmt(sim.duration))}${sim.tUnit ? ` ${escapeXml(sim.tUnit.trim())}` : ""}</text>`,
   );
   if (boundaryNote) {
     out.push(
@@ -685,7 +829,7 @@ function axes(xLo: string, xHi: string, yLo: string, yHi: string, xLabel: string
 
 function fieldSvg(sim: Simulation, field: Field, extra: string[] = [], yRange?: { lo: number; hi: number }): string {
   const { x, frames } = field;
-  const { lo, hi } = yRange ?? range(frames);
+  const { lo, hi } = yRange ?? range(withLevels(frames, sim));
   const sx = (xi: number) => PX0 + ((xi - sim.x0) / (sim.x1 - sim.x0)) * (PX1 - PX0);
   const sy = (v: number) => PY1 - ((v - lo) / (hi - lo)) * (PY1 - PY0);
   const line = (row: number[]) =>
@@ -712,29 +856,25 @@ function fieldSvg(sim: Simulation, field: Field, extra: string[] = [], yRange?: 
           ]
         : [];
   const clip = `<clipPath id="plot"><rect x="${PX0}" y="${PY0 - 4}" width="${PX1 - PX0}" height="${PY1 - PY0 + 8}"/></clipPath>`;
-  return [
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" role="img">`,
-    THEME_STYLE,
-    `<defs>${clip}</defs>`,
-    `<rect x="0" y="0" width="${W}" height="${H}" fill="${PAPER}"/>`,
+  return frame(sim, `<defs>${clip}</defs>`, [
     ...axes(tick(sim.x0), tick(sim.x1), tick(lo), tick(hi), sim.xLabel ?? "x", sim.uLabel ?? "u"),
     `<g clip-path="url(#plot)">`,
     // Where it started, kept faint under the motion.
     `<path d="${lines[0]}" fill="none" stroke="${MUTED}" stroke-width="1.5" stroke-dasharray="4 4" stroke-opacity="0.7"/>`,
+    ...levelLines(sim, sy),
     ...extra,
     `<path d="${areas[0]}" fill="${ACCENT}" fill-opacity="0.16" stroke="none">${anim(loopValues(areas))}</path>`,
     `<path d="${lines[0]}" fill="none" stroke="${ACCENT}" stroke-width="2.5" stroke-linejoin="round">${anim(loopValues(lines))}</path>`,
     `</g>`,
     ...ends,
     ...frameText(sim, boundaryNote),
-    `</svg>`,
-  ].join("");
+  ]);
 }
 
 function seriesSvg(sim: Simulation, series: Series): string {
   const { t, names, values } = series;
   const columns = names.map((_, j) => values.map((row) => row[j]));
-  const { lo, hi } = range(columns);
+  const { lo, hi } = range(withLevels(columns, sim));
   const sx = (tt: number) => PX0 + (tt / sim.duration) * (PX1 - PX0);
   const sy = (v: number) => PY1 - ((v - lo) / (hi - lo)) * (PY1 - PY0);
   const curves = columns.map(
@@ -748,22 +888,47 @@ function seriesSvg(sim: Simulation, series: Series): string {
   const curtain =
     `<rect x="${PX0}" y="${PY0 - 4}" width="${PX1 - PX0 + 2}" height="${PY1 - PY0 + 4}" fill="${PAPER}"><animate attributeName="x" values="${PX0};${PX1 + 2}" dur="${LOOP_SECONDS}s" repeatCount="indefinite"/></rect>` +
     `<line x1="${PX0}" y1="${PY0 - 4}" x2="${PX0}" y2="${PY1}" stroke="${MUTED}" stroke-width="1.5" stroke-dasharray="3 3"><animate attributeName="x1" values="${PX0};${PX1 + 2}" dur="${LOOP_SECONDS}s" repeatCount="indefinite"/><animate attributeName="x2" values="${PX0};${PX1 + 2}" dur="${LOOP_SECONDS}s" repeatCount="indefinite"/></line>`;
-  const legend = names.map(
-    (nm, j) =>
-      `<rect x="${PX1 - 16 - (names.length - j) * 72}" y="${PY0 - 18}" width="12" height="12" rx="3" fill="${ACCENTS[j % ACCENTS.length]}"/>` +
-      `<text x="${PX1 - 16 - (names.length - j) * 72 + 16}" y="${PY0 - 7}" font-size="14" fill="${INK}" ${FONT}>${escapeXml(nm)}</text>`,
-  );
-  return [
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" role="img">`,
-    THEME_STYLE,
-    `<rect x="0" y="0" width="${W}" height="${H}" fill="${PAPER}"/>`,
+  // The legend, right-aligned above the plot, each entry as wide as its
+  // label: a variable's label when it has one, else its name.
+  const labels = names.map((nm, j) => sim.variables?.[j]?.label?.trim() || nm);
+  const widths = labels.map((l) => 16 + textWidth(l, 14) + 14);
+  const room = PX1 - PX0 - textWidth(sim.uLabel ?? "", 14) - 16;
+  let legend: string[];
+  if (widths.reduce((a, b) => a + b, 0) <= room) {
+    let right = PX1;
+    legend = labels
+      .map((l, j) => ({ l, j, w: widths[j] }))
+      .reverse()
+      .map(({ l, j, w }) => {
+        right -= w;
+        return (
+          `<rect x="${px(right)}" y="${PY0 - 18}" width="12" height="12" rx="3" fill="${ACCENTS[j % ACCENTS.length]}"/>` +
+          `<text x="${px(right + 16)}" y="${PY0 - 7}" font-size="14" fill="${INK}" ${FONT}>${escapeXml(l)}</text>`
+        );
+      });
+  } else {
+    // Too long for the row above the plot: a column in the plot's top right,
+    // on the paper, one entry a line.
+    const w = Math.min(PX1 - PX0 - 8, Math.max(...widths));
+    const x = PX1 - 4 - w;
+    legend = [
+      `<rect x="${px(x - 4)}" y="${PY0}" width="${px(w + 4)}" height="${labels.length * 18 + 6}" fill="${PAPER}" fill-opacity="0.9"/>`,
+      ...labels.map(
+        (l, j) =>
+          `<rect x="${px(x)}" y="${PY0 + 5 + j * 18}" width="12" height="12" rx="3" fill="${ACCENTS[j % ACCENTS.length]}"/>` +
+          `<text x="${px(x + 16)}" y="${PY0 + 16 + j * 18}" font-size="14" fill="${INK}" ${FONT}>${escapeXml(l)}</text>`,
+      ),
+    ];
+  }
+  return frame(sim, "", [
     ...curves,
     curtain,
+    // Over the curtain: a level is there from the start, not revealed.
+    ...levelLines(sim, sy),
     ...axes("0", tick(sim.duration), tick(lo), tick(hi), sim.xLabel ?? "t", sim.uLabel ?? ""),
     ...legend,
     ...frameText(sim, null),
-    `</svg>`,
-  ].join("");
+  ]);
 }
 
 /** The simulation as one SMIL animation, or the reason it could not run —
@@ -785,22 +950,18 @@ export function renderSimulation(sim: Simulation): { svg: string } | { error: st
     // the potential shows what the packet meets, each drawn to its own range.
     const dens = range(psi.frames);
     const sx = (xi: number) => PX0 + ((xi - sim.x0) / (sim.x1 - sim.x0)) * (PX1 - PX0);
-    const reRange = range(psi.real);
-    const reScale = (v: number) => PY1 - ((v - reRange.lo) / (reRange.hi - reRange.lo)) * (PY1 - PY0);
-    // Every other point: the phase reads at half the density's resolution,
-    // and the picture is a third smaller for it.
-    const reLines = psi.real.map((row) =>
-      row
-        .filter((_, i) => i % 2 === 0 || i === row.length - 1)
-        .map((v, j) => {
-          const i = Math.min(j * 2, row.length - 1);
-          return `${j === 0 ? "M" : "L"}${pxWhole(sx(psi.x[i]))},${px(reScale(v))}`;
-        })
-        .join(""),
-    );
-    const extra = [
-      `<path d="${reLines[0]}" fill="none" stroke="${INK}" stroke-width="1.2" stroke-opacity="0.45"><animate attributeName="d" values="${loopValues(reLines)}" keyTimes="${keyTimes()}" calcMode="linear" dur="${LOOP_SECONDS}s" repeatCount="indefinite"/></path>`,
-    ];
+    // Re ψ, when the phase resolves on the picture's grid (schrodinger).
+    const extra: string[] = [];
+    if (psi.real.length > 0) {
+      const reRange = range(psi.real);
+      const reScale = (v: number) => PY1 - ((v - reRange.lo) / (reRange.hi - reRange.lo)) * (PY1 - PY0);
+      const reLines = psi.real.map((row) =>
+        row.map((v, i) => `${i === 0 ? "M" : "L"}${pxWhole(sx(psi.x[i]))},${px(reScale(v))}`).join(""),
+      );
+      extra.push(
+        `<path d="${reLines[0]}" fill="none" stroke="${INK}" stroke-width="1.2" stroke-opacity="0.45"><animate attributeName="d" values="${loopValues(reLines)}" keyTimes="${keyTimes()}" calcMode="linear" dur="${LOOP_SECONDS}s" repeatCount="indefinite"/></path>`,
+      );
+    }
     const vLo = Math.min(...psi.potential);
     const vHi = Math.max(...psi.potential);
     if (vHi - vLo > 1e-12) {

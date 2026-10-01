@@ -3,7 +3,7 @@
 // Runs outside Next.js: everything imported from src/ is pure or reads only
 // env (lib/kimi.ts, lib/claude.ts). No database: lib/models.ts falls back to
 // the default model ids when the ModelChoice table cannot be read.
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { generateText, type ModelMessage } from "ai";
 import { claude, claudeConfigured, claudeOptions } from "@/lib/claude";
@@ -160,6 +160,41 @@ export function promptCtx(
 
 export type CallResult = { text: string; finishReason: string; inputTokens: number; outputTokens: number; ms: number; model: string };
 
+// External mode (--external <dir>): no model is called. Each tool call writes
+// its messages to <dir>/<case>/prompt.md and reads the answer an agent wrote
+// to <dir>/<case>/answer.txt; the judge writes judge-prompt.md and reads
+// judge.json. A run before the answers exist writes the prompts; a run after
+// reads them. So a Claude session can stand in for the model and the judge
+// when no key is set.
+let externalDir: string | null = null;
+let currentCase = "case";
+
+export function setExternal(dir: string | null): void {
+  externalDir = dir;
+}
+
+export function setCurrentCase(id: string): void {
+  currentCase = id;
+}
+
+export function isExternal(): boolean {
+  return externalDir !== null;
+}
+
+function renderMessages(messages: ModelMessage[]): string {
+  return messages
+    .map((m) => `=====[${m.role.toUpperCase()}]=====\n${typeof m.content === "string" ? m.content : JSON.stringify(m.content)}`)
+    .join("\n\n");
+}
+
+function external(file: string, prompt: string, answer: string): string | null {
+  const dir = join(externalDir!, currentCase);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, file), prompt);
+  const path = join(dir, answer);
+  return existsSync(path) ? readFileSync(path, "utf8") : null;
+}
+
 /** One call on the tool's model with the same effort and budget the route
     uses: Kimi K3 at the route's effort, or the call a feature's model gives
     (featureCall in lib/feature-models.ts: Collapse runs on Claude Opus
@@ -168,6 +203,10 @@ export async function callTool(params: {
   messages: ModelMessage[];
   maxOutputTokens: number;
 } & ({ effort: KimiEffort; call?: undefined } | { call: ModelCall; effort?: undefined })): Promise<CallResult> {
+  if (externalDir) {
+    const text = external("prompt.md", renderMessages(params.messages), "answer.txt");
+    return { text: text ?? "", finishReason: text === null ? "pending" : "stop", inputTokens: 0, outputTokens: Math.round((text ?? "").length / 3.5), ms: 0, model: "external" };
+  }
   if (!params.call && !kimiConfigured()) throw new Error("MOONSHOT_API_KEY is not set (MOONSHOT_API_KEY=mock with the mock server for a dry run)");
   const started = Date.now();
   const result = await generateText({
@@ -187,7 +226,7 @@ export async function callTool(params: {
   };
 }
 
-export type JudgeModel = "claude" | "kimi" | "none";
+export type JudgeModel = "claude" | "kimi" | "external" | "none";
 
 /** Which judge the environment allows: Claude when its key is set, else
     Kimi, else none. --judge overrides. */
@@ -200,6 +239,10 @@ export function defaultJudge(): JudgeModel {
 /** One judge call: a JSON answer, parsed tolerantly. */
 export async function callJudge(judge: JudgeModel, prompt: string): Promise<unknown | null> {
   if (judge === "none") return null;
+  if (judge === "external") {
+    const text = external("judge-prompt.md", prompt, "judge.json");
+    return text === null ? null : extractJson(text);
+  }
   const result =
     judge === "claude"
       ? await generateText({
