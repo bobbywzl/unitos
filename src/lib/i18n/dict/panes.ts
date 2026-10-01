@@ -134,6 +134,10 @@ const en = {
   deleteDocument: "Delete document",
   deleteDocumentTitle: "Delete this document from the project and the library",
   confirmDeleteDocument: "Delete this document? It leaves the project and the library, and its annotations go with it. Notes that quote it keep their quotes.",
+  confirmDeleteDocumentCounts:
+    "Delete this document? It leaves the project and the library.\n\n{annotations} annotations on it are deleted with it.\n{notes} notes that quote it or were written in it stay, with their quotes.",
+  confirmDeleteDocumentShared:
+    "Another account's project holds this document, so it only leaves your projects. Every annotation and note stays.\n\nRemove it from your projects?",
   documentActions: "Document actions",
   documentList: "Documents in this project",
   documentActionsFor: "Document actions: {title}",
@@ -581,6 +585,9 @@ const zh: Record<keyof typeof en, string> = {
   deleteDocument: "删除文档",
   deleteDocumentTitle: "从项目和文档库中删除此文档",
   confirmDeleteDocument: "删除此文档？它将从项目和文档库中移除，其批注一并删除。引用它的笔记保留引文。",
+  confirmDeleteDocumentCounts:
+    "删除此文档？它将从项目和文档库中移除。\n\n其上的 {annotations} 条批注一并删除。\n引用它或在其中写下的 {notes} 条笔记保留，引文也保留。",
+  confirmDeleteDocumentShared: "另一个账户的项目也有此文档，因此它只从你的项目中移除。所有批注和笔记都保留。\n\n从你的项目中移除？",
   documentActions: "文档操作",
   documentList: "此项目的文档",
   documentActionsFor: "文档操作：{title}",

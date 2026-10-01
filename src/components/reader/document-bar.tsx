@@ -910,7 +910,7 @@ export function DocumentBar({
   // notes that quote it keep their quotes).
   async function deleteDocument(documentId: string) {
     closeList();
-    if (!confirm(t("panes.confirmDeleteDocument"))) return;
+    if (!confirm(await deleteMessage(documentId))) return;
     setError(null);
     try {
       await api(`/api/documents/${documentId}`, "DELETE");
@@ -918,6 +918,24 @@ export function DocumentBar({
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("panes.deleteFailed"));
+    }
+  }
+
+  // The delete's confirm names what it reaches: how many annotations go and
+  // how many notes stay, or that a shared document only leaves the reader's
+  // projects. Offline, or when the count fails, the plain message stands.
+  async function deleteMessage(
+    documentId: string,
+    fallback: "panes.confirmDeleteDocument" | "panes.confirmDeleteFromLibrary" = "panes.confirmDeleteDocument",
+  ): Promise<string> {
+    try {
+      const res = await fetch(`/api/documents/${documentId}/footprint`);
+      if (!res.ok) return t(fallback);
+      const reach = (await res.json()) as { annotations: number; notes: number; shared: boolean };
+      if (reach.shared) return t("panes.confirmDeleteDocumentShared");
+      return t("panes.confirmDeleteDocumentCounts", { annotations: reach.annotations, notes: reach.notes });
+    } catch {
+      return t(fallback);
     }
   }
 
@@ -935,7 +953,7 @@ export function DocumentBar({
   }
 
   async function removeFromLibrary(documentId: string) {
-    if (!confirm(t("panes.confirmDeleteFromLibrary"))) return;
+    if (!confirm(await deleteMessage(documentId, "panes.confirmDeleteFromLibrary"))) return;
     setError(null);
     try {
       await api(`/api/documents/${documentId}`, "DELETE");

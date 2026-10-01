@@ -1,10 +1,8 @@
-import type { User } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { authEnabled } from "@/lib/auth";
-import { bumpDocument, bumpNotebook, documentAccess, roleOf } from "@/lib/collab";
+import { bumpDocument, bumpNotebook, documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
-import { ANNOTATIONS_SECTION_TITLE } from "@/lib/derive/config";
+import { documentFootprint, editableNotebooks } from "@/lib/document-footprint";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
 
@@ -57,46 +55,13 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ documentId:
   const access = await documentAccess(documentId, "editor");
   if (access instanceof NextResponse) return access;
 
-  const [attached, writtenIn] = await Promise.all([
-    db.notebookDocument.findMany({ where: { documentId }, select: { notebookId: true } }),
-    db.note.findMany({ where: { documentId }, select: { section: { select: { notebookId: true } } } }),
-  ]);
-  const citing = await db.source.findMany({
-    where: { documentId },
-    select: {
-      noteId: true,
-      note: {
-        select: {
-          derivationType: true,
-          section: { select: { hidden: true, title: true, notebookId: true } },
-          sources: { select: { documentId: true } },
-        },
-      },
-    },
-  });
-  const annotations = new Set(
-    citing
-      .filter(
-        ({ note }) =>
-          note.section.hidden &&
-          note.section.title === ANNOTATIONS_SECTION_TITLE &&
-          note.derivationType !== "SYNTHESIS" &&
-          note.sources.every((s) => s.documentId === documentId),
-      )
-      .map((c) => c.noteId),
-  );
-  const notebooks = new Set(citing.map(({ note }) => note.section.notebookId));
-
-  const involved = [
-    ...new Set([
-      ...attached.map((a) => a.notebookId),
-      ...writtenIn.map((n) => n.section.notebookId),
-      ...notebooks,
-    ]),
-  ];
+  const footprint = await documentFootprint(documentId);
+  const annotations = footprint.annotations;
+  const notebooks = footprint.quoting;
+  const involved = footprint.involved;
   const editable = await editableNotebooks(involved, access.user);
   if (involved.some((id) => !editable.has(id))) {
-    const mine = attached.map((a) => a.notebookId).filter((id) => editable.has(id));
+    const mine = footprint.attached.filter((id) => editable.has(id));
     await db.$transaction([
       db.notebookDocument.deleteMany({ where: { documentId, notebookId: { in: mine } } }),
       db.notebookEvent.createMany({
@@ -115,7 +80,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ documentId:
   // Bump before the attachments go, so every corpus that carried it refreshes.
   await bumpDocument(documentId);
   await db.$transaction([
-    db.note.deleteMany({ where: { id: { in: [...annotations] } } }),
+    db.note.deleteMany({ where: { id: { in: annotations } } }),
     db.source.updateMany({ where: { documentId }, data: { orphaned: true } }),
     db.notebookDocument.deleteMany({ where: { documentId } }),
     db.document.delete({ where: { id: documentId } }),
@@ -123,22 +88,4 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ documentId:
   // The projects whose notes quoted it refresh their quotes.
   for (const id of notebooks) await bumpNotebook(id);
   return NextResponse.json({ ok: true });
-}
-
-// The projects among these the account can edit (owner or editor). Sign-in
-// off: the one reader edits every project.
-async function editableNotebooks(ids: string[], user: User): Promise<Set<string>> {
-  if (!authEnabled()) return new Set(ids);
-  const rows = await db.notebook.findMany({
-    where: { id: { in: ids } },
-    select: { id: true, userId: true, collaborators: { select: { email: true, role: true } } },
-  });
-  return new Set(
-    rows
-      .filter((n) => {
-        const role = roleOf(n, user);
-        return role === "owner" || role === "editor";
-      })
-      .map((n) => n.id),
-  );
 }
