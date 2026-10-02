@@ -77,7 +77,9 @@ function pageUrls(id: string, info: OfflineInfo): string[] {
 }
 
 const STATIC_RE = /\/_next\/static\/[^"'\s)\\]+/g;
-const ASSET_RE = /\/api\/(?:images\/[A-Za-z0-9_-]+|documents\/[A-Za-z0-9_-]+\/(?:figure|page)\/[A-Za-z0-9_-]+)/g;
+// A page image's URL carries its renderer's revision (?r=2,
+// lib/handwritten/page-url.ts), and the copy keeps it whole.
+const ASSET_RE = /\/api\/(?:images\/[A-Za-z0-9_-]+|documents\/[A-Za-z0-9_-]+\/(?:figure\/[A-Za-z0-9_-]+|page\/[A-Za-z0-9_-]+(?:\?r=\d+)?))/g;
 
 function collect(text: string, re: RegExp, into: Set<string>) {
   for (const m of text.matchAll(re)) into.add(m[0]);

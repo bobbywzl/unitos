@@ -8,6 +8,7 @@ import { ThinkingIndicator } from "@/components/thinking";
 import { HIGHLIGHT_HUES, HUE_DOT, HUE_KEY, type HighlightHue } from "@/components/reader/hues";
 import { api } from "@/lib/api";
 import type { PageSize } from "@/lib/handwritten/pages";
+import { pageImageUrl } from "@/lib/handwritten/page-url";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
 import { regionBounds, regionPathD, type Region } from "@/lib/video/types";
 
@@ -275,7 +276,7 @@ export function PageBlock({
       <div className="relative overflow-hidden rounded-xl bg-card shadow-soft">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={`/api/documents/${documentId}/page/${blockId}`}
+          src={pageImageUrl(documentId, blockId)}
           alt=""
           width={size?.width}
           height={size?.height}

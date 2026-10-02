@@ -17,6 +17,7 @@ import { useT } from "@/components/lang-provider";
 import { Equation } from "@/components/reader/equation";
 import { MediaHtml } from "@/components/reader/figure-media";
 import { bindTableMarkClicks, marksSignature, paintTableMarks } from "@/components/reader/table-marks";
+import { pageImageUrl } from "@/lib/handwritten/page-url";
 import { endSweep } from "@/lib/mark-sweep";
 import { OFFICE_CSS } from "@/lib/office-css";
 import { googleFontsUrl, parseFontList, webFontFamilies } from "@/lib/office-fonts";
@@ -946,7 +947,7 @@ export function BlockView({
           <div data-block-id={block.id} className={`${shared} my-6`}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={`/api/documents/${documentId}/page/${block.id}`}
+              src={pageImageUrl(documentId, block.id)}
               alt=""
               loading="lazy"
               draggable={false}

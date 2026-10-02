@@ -7,12 +7,14 @@ import { CLASSIFY_IMAGE_WIDTH, renderPdfPage } from "@/lib/handwritten/pages";
 import type { ParsedBlock } from "@/lib/parse/types";
 import { classifyPrompt } from "@/lib/prompts/classify";
 
-// Import PDF classification (SPEC.md §16): article or handwritten. A PDF whose
-// text layer yielded article-scale text that reads like language is an article
-// without a model call. Below that — or when the text layer is junk — the
-// model reads sample page images and judges. Without a key or on failure, the
-// character yield and the junk check decide alone.
-export type PdfKind = "article" | "handwritten";
+// Import PDF classification (SPEC.md §16): article, scan, or handwritten. A
+// PDF whose text layer yielded article-scale text that reads like language is
+// an article without a model call. Below that — or when the text layer is
+// junk — the model reads sample page images and judges: a scan is printed or
+// typed pages whose text layer is missing or garbled, read off the page
+// images into text; handwritten is notes and drawings, kept as pages. Without
+// a key or on failure, the character yield and the junk check decide alone.
+export type PdfKind = "article" | "scan" | "handwritten";
 
 // A typeset page carries thousands of characters; slides still carry hundreds.
 const ARTICLE_CHARS_PER_PAGE = 250;
@@ -41,7 +43,15 @@ export function junkTextLayer(blocks: ParsedBlock[]): boolean {
   return total > 0 && junk / total >= JUNK_SHARE;
 }
 
-const classifyOutputSchema = z.object({ kind: z.enum(["article", "handwritten"]) });
+const classifyOutputSchema = z.object({ kind: z.enum(["article", "scan", "handwritten"]) });
+
+/** The text layer holds next to no text, or junk: a parse of it is an empty
+    document. A re-parse to computer text reads such a PDF off its page
+    images instead (SPEC.md §16). */
+export function textLayerEmpty(blocks: ParsedBlock[], pageCount: number): boolean {
+  const textChars = blocks.reduce((n, b) => n + b.text.length, 0);
+  return junkTextLayer(blocks) || textChars / Math.max(1, pageCount) < FALLBACK_HANDWRITTEN_CHARS_PER_PAGE;
+}
 
 // pages: the PDF's pages the document holds, 1-based: every page, or the
 // pages the reader chose at the add (SPEC.md §15). blocks are theirs.

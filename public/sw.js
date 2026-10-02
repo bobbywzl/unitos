@@ -151,6 +151,14 @@ async function cachedPage(url) {
   return caches.match(doc ? `${base}?doc=${encodeURIComponent(doc)}` : base, { ignoreVary: true });
 }
 
+// A page image's URL carries its renderer's revision (?r=2); a copy saved
+// before the revision holds the URL without it, which still answers offline.
+async function cachedAsset(url) {
+  const exact = await caches.match(url.href, { ignoreVary: true });
+  if (exact || !url.search || !isAsset(url)) return exact;
+  return caches.match(url.origin + url.pathname, { ignoreVary: true });
+}
+
 async function cacheFirst(request) {
   const cache = await caches.open(STATIC);
   const hit = await cache.match(request.url);
@@ -170,9 +178,7 @@ async function networkFirst(request, navigate) {
     }
     return res;
   } catch (err) {
-    const cached = navigate
-      ? await cachedPage(url)
-      : await caches.match(url.href, { ignoreVary: true });
+    const cached = navigate ? await cachedPage(url) : await cachedAsset(url);
     if (cached) return cached;
     if (navigate) {
       const offline = await caches.match("/offline", { ignoreVary: true });

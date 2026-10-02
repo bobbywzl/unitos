@@ -36,8 +36,9 @@ import { pageRangesSchema } from "@/lib/pdf-pages";
 // from the linked grant — the pasted-Drive-link path. What the token reaches
 // (the stored grant, or the configured access a per-visit grant asked for)
 // picks the message when Drive refuses a file. Same budget as
-// /api/documents, which downloads media URLs under the same ceiling.
-export const maxDuration = 120;
+// /api/documents, which downloads media URLs under the same ceiling and reads
+// a scan's pages inside the add (SPEC.md §16).
+export const maxDuration = 300;
 
 // name and mimeType come from the picker; a pasted link sends the fileId
 // alone and the facts come from Drive metadata. instructions, pages, and
@@ -229,7 +230,13 @@ export async function POST(req: Request) {
         bytes,
         filename,
         onProgress,
-        { pages: data.pages, convert: data.convert, pdfPages: kind === "pdf" ? data.pdfPages : undefined },
+        {
+          pages: data.pages,
+          convert: data.convert,
+          pdfPages: kind === "pdf" ? data.pdfPages : undefined,
+          // A scan reads its pages inside the add (SPEC.md §16).
+          deadline: parse.modelPassDeadline(maxDuration),
+        },
         user?.id ?? null,
       );
     } catch (err) {

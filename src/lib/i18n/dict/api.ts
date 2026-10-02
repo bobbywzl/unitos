@@ -244,6 +244,9 @@ const en = {
   pdfEncrypted: "This PDF is password-protected. Remove the password and upload it again.",
   pdfDamaged: "This PDF could not be opened. The file may be damaged, or not a PDF.",
   pdfPagesPast: "This PDF has {n} pages. Choose pages from 1 to {n}.",
+  // A scan of print, read off its page images (SPEC.md §16).
+  readingScan: "Reading the scanned pages: {done} of {total}",
+  scanNoModel: "Set ANTHROPIC_API_KEY. Reading a scan needs it.",
   modelBusy: "The AI service is busy right now. Wait a minute and try again.",
   modelKeyInvalid: "The AI service rejected the key. Check ANTHROPIC_API_KEY.",
   ingestTimedOut: "The add ran out of time. Try again; a long page or a large PDF may need splitting.",
@@ -586,6 +589,8 @@ const zh: Record<keyof typeof en, string> = {
   pdfEncrypted: "此 PDF 有密码保护。请去掉密码后重新上传。",
   pdfDamaged: "此 PDF 无法打开。文件可能已损坏，或不是 PDF。",
   pdfPagesPast: "此 PDF 共 {n} 页。请在 1 到 {n} 页之间选择页码。",
+  readingScan: "读取扫描页面：{done}/{total}",
+  scanNoModel: "请设置 ANTHROPIC_API_KEY。读取扫描页面需要它。",
   modelBusy: "AI 服务当前繁忙。请稍等一分钟再试。",
   modelKeyInvalid: "AI 服务拒绝了密钥。请检查 ANTHROPIC_API_KEY。",
   ingestTimedOut: "添加超时。请重试；很长的页面或很大的 PDF 可能需要拆分。",

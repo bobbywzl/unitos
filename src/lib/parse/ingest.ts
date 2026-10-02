@@ -10,7 +10,9 @@ import { syncRichText } from "@/lib/docs/sync";
 import { keepNamedVersion } from "@/lib/docs/versions";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { serverT } from "@/lib/i18n/server";
-import { classifyPdf } from "@/lib/handwritten/classify";
+import { classifyPdf, textLayerEmpty } from "@/lib/handwritten/classify";
+import { CONVERT_MAX_PAGES, transcribePages } from "@/lib/handwritten/convert";
+import { featureConfigured } from "@/lib/feature-models";
 import { storePageSizes } from "@/lib/handwritten/page-images";
 import { pageBlockText, pdfPageCount } from "@/lib/handwritten/pages";
 import {
@@ -540,6 +542,9 @@ async function createHandwrittenDocument(data: {
   pages: number[];
   pdfPages: PdfPages | null;
   convert: boolean;
+  // A scan whose read failed in the add (SPEC.md §16): the reason, kept as
+  // the conversion's failure, so the strip under the pages shows it with Retry.
+  readError?: string;
 }) {
   return db.$transaction(async (tx) => {
     const document = await tx.document.create({
@@ -551,8 +556,10 @@ async function createHandwrittenDocument(data: {
         parserVersion: PARSER_VERSION,
         handwritten: true,
         // OFF records the reader's "do not convert": nothing auto-starts, the
-        // strip offers Convert to text (SPEC.md §16).
-        conversionStatus: data.convert ? "NONE" : "OFF",
+        // strip offers Convert to text (SPEC.md §16). FAILED: a scan's read
+        // failed in the add; nothing auto-starts, the strip offers Retry.
+        conversionStatus: data.readError !== undefined ? "FAILED" : data.convert ? "NONE" : "OFF",
+        conversionError: data.readError ?? null,
         ...pdfPagesColumn(data.pdfPages),
       },
     });
@@ -568,6 +575,35 @@ async function storePageSizesQuietly(documentId: string, bytes: Uint8Array): Pro
     await storePageSizes(documentId, bytes);
   } catch (err) {
     console.warn("[handwritten] page sizes failed:", err);
+  }
+}
+
+/** A scan of print read off its page images into text blocks (SPEC.md §16),
+    the add's progress reporting the pages read; the model calls stop at the
+    deadline. The reason when the read fails: no model, the time up, a batch
+    that did not convert, a page that did not render, no text found. */
+async function readScan(
+  bytes: Uint8Array,
+  pages: number[],
+  opts: { userId: string | null; deadline?: number; onProgress?: OnIngestProgress },
+): Promise<{ ok: true; blocks: ParsedBlock[] } | { ok: false; error: string }> {
+  const t = await serverT();
+  if (!(await featureConfigured("convert"))) return { ok: false, error: t("api.scanNoModel") };
+  const signal = modelPassSignal(opts.deadline);
+  if (signal === null) return { ok: false, error: "The time to read the pages ran out" };
+  const total = Math.min(pages.length, CONVERT_MAX_PAGES);
+  opts.onProgress?.("parse", t("api.readingScan", { done: 0, total }));
+  try {
+    const rows = await transcribePages(bytes, pages, {
+      userId: opts.userId,
+      kind: "scan",
+      signal,
+      onPages: (done) => opts.onProgress?.("parse", t("api.readingScan", { done, total })),
+    });
+    return { ok: true, blocks: rows.map((r) => ({ type: r.type, text: r.text, html: r.html ?? undefined, page: r.page })) };
+  } catch (err) {
+    console.warn("[scan] read failed:", err);
+    return { ok: false, error: err instanceof Error ? err.message : "The pages did not read" };
   }
 }
 
@@ -611,8 +647,15 @@ export async function ingestPdf(
   const kind = opts.pages
     ? "handwritten"
     : await classifyPdf(bytes, parsed.blocks, pages, userId);
-  if (kind === "handwritten") {
-    onProgress?.("save");
+  // A scan of print reads off its page images into text, and goes on as an
+  // article (SPEC.md §16). A read that fails leaves the PDF as its pages,
+  // the reason on the strip under them and in the box.
+  const read = kind === "scan" ? await readScan(bytes, pages, { userId, deadline: opts.deadline, onProgress }) : null;
+  if (kind === "handwritten" || (read && !read.ok)) {
+    const readError = read && !read.ok ? read.error : undefined;
+    // The save detail says the document is pages: the box waits for them
+    // and for their conversion before it opens (SPEC.md §15).
+    onProgress?.("save", JSON.stringify({ pages: pages.length }));
     const document = await createHandwrittenDocument({
       title: filename.replace(/\.pdf$/i, ""),
       sourceUrl: opts.sourceUrl,
@@ -621,12 +664,13 @@ export async function ingestPdf(
       pages,
       pdfPages,
       convert: opts.convert !== false,
+      readError,
     });
     await storePageSizesQuietly(document.id, bytes);
     return { document, deduped: false };
   }
   const title = parsed.title ?? filename.replace(/\.pdf$/i, "");
-  const blocks = parsed.blocks;
+  const blocks = read?.ok ? read.blocks : parsed.blocks;
   // An article is an import while the switch is on: pages at the PDF's
   // size, its page numbers at the lines where its pages begin.
   const converted = (await importPageEditorOn())
@@ -1170,6 +1214,16 @@ export async function reparseDocument(
     if (isPdfBytes(bytes)) {
       const parsed = await parsePdf(bytes, { pages: pdfPages ? rangePages(pdfPages.ranges) : undefined });
       blocks = parsed.blocks;
+      // A text layer with next to no text — a scan, or handwritten pages
+      // switched to computer text — reads off the page images instead
+      // (SPEC.md §16). A read that fails stops the re-parse with its reason:
+      // the document stays as it was.
+      const pages = documentPages(pdfPages, pdfPages?.count ?? (await pdfPageCount(bytes)));
+      if (textLayerEmpty(parsed.blocks, pages.length)) {
+        const read = await readScan(bytes, pages, { userId, deadline, onProgress });
+        if (!read.ok) throw new Error(read.error);
+        blocks = read.blocks;
+      }
       kind = "pdf";
       originalTitle = parsed.title;
       pageSize = parsed.pageSize;

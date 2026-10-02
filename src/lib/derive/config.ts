@@ -315,6 +315,9 @@ export const HANDWRITTEN_MODEL = CLAUDE_OPUS_5_5;
 export const HANDWRITTEN_EFFORT: ClaudeEffort = "high";
 export const CLASSIFY_MODEL = HANDWRITTEN_MODEL;
 export const CONVERT_MODEL = HANDWRITTEN_MODEL;
+// A scan of printed pages reads inside the add, against its time limit
+// (lib/handwritten/convert.ts transcribePages): print reads at low effort.
+export const SCAN_EFFORT: ClaudeEffort = "low";
 
 export const ANNOTATIONS_SECTION_TITLE = "Annotations";
 

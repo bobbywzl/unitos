@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { documentAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
-import type { FinishPlan } from "@/lib/finish";
+import type { FinishConversion, FinishPlan } from "@/lib/finish";
+import { featureConfigured } from "@/lib/feature-models";
+import { conversionIsStale } from "@/lib/handwritten/convert";
+import { pageImageUrl } from "@/lib/handwritten/page-url";
 import { serverT } from "@/lib/i18n/server";
 
 const paramsSchema = z.object({ documentId: z.string().min(1) });
@@ -16,8 +19,15 @@ const paramsSchema = z.object({ documentId: z.string().min(1) });
 // PDF figure's crop by its media id, a web figure's images from its html —
 // the same URLs the page editor requests. An image in an import's text is a
 // FIGURE row with html, as in a blank document.
+// conversion: a handwritten document's pages converting to text (SPEC.md
+// §16), which the box waits on so the document opens with its text — or with
+// the reason it has none. A conversion the add starts after its response is
+// NONE for a moment: a document that young, with the model configured,
+// counts as running.
 // Nothing else is left: the glossary is built when the reader opens it and
 // links when the reader asks for them (SPEC.md §13).
+
+const CONVERSION_START_MS = 60_000;
 
 const IMG_SRC_RX = /<img\b[^>]*?\ssrc="([^"]+)"/gi;
 
@@ -53,6 +63,11 @@ export async function GET(_req: Request, ctx: { params: Promise<{ documentId: st
   const document = await db.document.findUnique({
     where: { id: documentId },
     select: {
+      handwritten: true,
+      conversionStatus: true,
+      conversionError: true,
+      conversionStartedAt: true,
+      createdAt: true,
       blocks: {
         orderBy: { order: "asc" },
         select: { id: true, type: true, page: true, html: true, mediaId: true },
@@ -78,7 +93,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ documentId: st
       if (figure?.html) addImageSources(figure.html, images);
       else if (figure && figure.page !== null) images.add(`/api/documents/${documentId}/figure/${figure.id}`);
     } else if (block.type === "PAGE" && block.page !== null) {
-      images.add(`/api/documents/${documentId}/page/${block.id}`);
+      images.add(pageImageUrl(documentId, block.id));
     } else if (block.type === "FIGURE" && !block.html && block.page !== null) {
       images.add(`/api/documents/${documentId}/figure/${block.id}`);
     } else if (block.type === "SLIDE" && block.html) {
@@ -90,6 +105,22 @@ export async function GET(_req: Request, ctx: { params: Promise<{ documentId: st
       addImageSources(block.html, images);
     }
   }
-  const plan: FinishPlan = { images: [...images] };
+  let conversion: FinishConversion = { state: "none" };
+  if (document.handwritten) {
+    const status = document.conversionStatus;
+    if (status === "PENDING" && !conversionIsStale(status, document.conversionStartedAt)) {
+      conversion = { state: "running" };
+    } else if (status === "FAILED") {
+      conversion = { state: "failed", error: document.conversionError };
+    } else if (
+      status === "NONE" &&
+      Date.now() - document.createdAt.getTime() < CONVERSION_START_MS &&
+      (await featureConfigured("convert"))
+    ) {
+      conversion = { state: "running" };
+    }
+  }
+  const pages = document.blocks.filter((b) => b.type === "PAGE").length;
+  const plan: FinishPlan = { images: [...images], pages, conversion };
   return NextResponse.json(plan);
 }

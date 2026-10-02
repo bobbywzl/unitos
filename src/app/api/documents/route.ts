@@ -242,7 +242,13 @@ export async function POST(req: Request) {
           bytes,
           filename,
           onProgress,
-          { pages, convert: fields.data.convert === "1", pdfPages: fields.data.pdfPages },
+          {
+            pages,
+            convert: fields.data.convert === "1",
+            pdfPages: fields.data.pdfPages,
+            // A scan reads its pages inside the add (SPEC.md §16).
+            deadline: parse.modelPassDeadline(maxDuration),
+          },
           user?.id ?? null,
         );
         await attachDocument(fields.data.notebookId, document.id, fields.data.folderId);

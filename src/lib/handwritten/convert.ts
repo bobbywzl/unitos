@@ -3,12 +3,13 @@ import type { ModelMessage } from "ai";
 import { z } from "zod";
 import { bumpDocument } from "@/lib/collab";
 import { db } from "@/lib/db";
-import { HANDWRITTEN_EFFORT } from "@/lib/derive/config";
+import { HANDWRITTEN_EFFORT, SCAN_EFFORT } from "@/lib/derive/config";
 import { featureCall, featureConfigured } from "@/lib/feature-models";
 import { callForJson } from "@/lib/derive/json-call";
-import { PAGE_IMAGE_WIDTH, renderPdfPage } from "@/lib/handwritten/pages";
+import { PAGE_IMAGE_WIDTH, renderPdfPage, renderPdfPagesJpeg } from "@/lib/handwritten/pages";
 import { texError } from "@/lib/katex";
 import { convertPrompt } from "@/lib/prompts/convert";
+import { scanPrompt } from "@/lib/prompts/scan";
 import { fixTexPrompt } from "@/lib/prompts/fix-tex";
 import { refreshSkeleton } from "@/lib/graph/skeleton";
 import { tableHtml } from "@/lib/replica";
@@ -27,6 +28,8 @@ export type ConversionResult =
 const BATCH_PAGES = 6;
 const BATCH_CONCURRENCY = 3;
 const MAX_PAGES = 60;
+/** The pages a conversion or a scan's read reads; the rest is declared cut. */
+export const CONVERT_MAX_PAGES = MAX_PAGES;
 const CONVERT_STALE_MS = 10 * 60 * 1000;
 
 /** A PENDING older than 10 minutes is a dead run and may start again. */
@@ -132,6 +135,145 @@ async function repairEquations(
   return { failed: broken.length, fixed };
 }
 
+export type TranscribedBlock = BlockRow;
+
+// A scan's read (SPEC.md §16) runs inside the add, against the add's time
+// limit: small batches, every batch at once (the page cap makes 15 at most),
+// each sent as soon as its pages are drawn.
+const SCAN_BATCH_PAGES = 4;
+const SCAN_TIME_UP = "The time to read the pages ran out";
+
+type PageImageInput = { page: number; image: Uint8Array; mediaType: "image/png" | "image/jpeg" };
+
+/** A read that may fail before anything awaits it: the failure is held for
+    the allSettled that judges every read, never thrown unhandled. */
+function handled<T>(read: Promise<T>): Promise<T> {
+  read.catch(() => {});
+  return read;
+}
+
+/** The pages read into text blocks (SPEC.md §16), the words verbatim: kind
+    handwritten for notes and drawings, scan for printed or typed pages
+    whose text layer is missing. Pages render to images and transcribe in
+    batches that run together; one failed batch, or one page that does not
+    render, fails the read with its reason — a partial text never lands
+    silently. Past MAX_PAGES the cut is declared in a final paragraph.
+    signal aborts the model calls; onPages reports the pages read so far.
+    Throws on failure. */
+export async function transcribePages(
+  bytes: Uint8Array,
+  pages: number[],
+  opts: {
+    userId: string | null;
+    kind: "handwritten" | "scan";
+    signal?: AbortSignal;
+    onPages?: (done: number, total: number) => void;
+  },
+): Promise<TranscribedBlock[]> {
+  const { userId, kind, signal, onPages } = opts;
+  const usePages = pages.slice(0, MAX_PAGES);
+  const pageCount = pages.length;
+  let read = 0;
+
+  async function readBatch(batch: PageImageInput[]): Promise<ConvertedBlock[]> {
+    const first = batch[0].page;
+    const last = batch[batch.length - 1].page;
+    const range = { firstPage: first, lastPage: last, pageCount };
+    const messages: ModelMessage[] = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: kind === "scan" ? scanPrompt(range) : convertPrompt(range) },
+          ...batch.map(({ image, mediaType }) => ({ type: "file" as const, data: image, mediaType })),
+        ],
+      },
+    ];
+    const convertCall = await featureCall("convert", kind === "scan" ? SCAN_EFFORT : HANDWRITTEN_EFFORT);
+    const result = await callForJson({
+      model: convertCall.model,
+      messages,
+      maxOutputTokens: 65536, // dense pages transcribe long
+      providerOptions: convertCall.providerOptions,
+      schema: convertOutputSchema,
+      label: kind === "scan" ? "SCAN" : "CONVERT",
+      usage: { userId, feature: "convert", model: convertCall.modelId },
+      abortSignal: signal,
+    });
+    if (!result.ok) {
+      throw new Error(signal?.aborted ? SCAN_TIME_UP : `Pages ${first}-${last} did not convert: ${result.error}`);
+    }
+    read += batch.length;
+    onPages?.(read, usePages.length);
+    // A page number outside the batch is a model slip; clamp into the batch.
+    const inBatch = new Set(batch.map((b) => b.page));
+    return result.data.blocks.map((b) => ({ ...b, page: inBatch.has(b.page) ? b.page : first }));
+  }
+
+  let results: ConvertedBlock[][];
+  if (kind === "scan") {
+    // One open of the PDF draws the pages in order; a batch goes to the
+    // model as soon as its pages are drawn.
+    const reads: Promise<ConvertedBlock[]>[] = [];
+    let batch: PageImageInput[] = [];
+    const drawn = new Set<number>();
+    await renderPdfPagesJpeg(bytes, usePages, PAGE_IMAGE_WIDTH, async (page, image) => {
+      if (signal?.aborted) return false;
+      drawn.add(page);
+      batch.push({ page, image, mediaType: "image/jpeg" });
+      if (batch.length === SCAN_BATCH_PAGES) {
+        reads.push(handled(readBatch(batch)));
+        batch = [];
+      }
+    });
+    if (batch.length > 0) reads.push(handled(readBatch(batch)));
+    // Every read settles before the outcome is judged: none runs on unseen.
+    const settled = await Promise.allSettled(reads);
+    if (signal?.aborted) throw new Error(SCAN_TIME_UP);
+    const missing = usePages.find((page) => !drawn.has(page));
+    if (missing !== undefined) throw new Error(`Page ${missing} did not render`);
+    const failed = settled.find((r): r is PromiseRejectedResult => r.status === "rejected");
+    if (failed) throw failed.reason instanceof Error ? failed.reason : new Error(String(failed.reason));
+    results = settled.map((r) => (r as PromiseFulfilledResult<ConvertedBlock[]>).value);
+  } else {
+    const batches: number[][] = [];
+    for (let i = 0; i < usePages.length; i += BATCH_PAGES) {
+      batches.push(usePages.slice(i, i + BATCH_PAGES));
+    }
+    // Batches run together (BATCH_CONCURRENCY at a time); results keep batch order.
+    results = new Array<ConvertedBlock[]>(batches.length);
+    let next = 0;
+    const worker = async () => {
+      for (;;) {
+        const index = next++;
+        if (index >= batches.length) return;
+        const images: PageImageInput[] = [];
+        for (const page of batches[index]) {
+          images.push({ page, image: await renderPdfPage(bytes, page, PAGE_IMAGE_WIDTH), mediaType: "image/png" });
+        }
+        results[index] = await readBatch(images);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(BATCH_CONCURRENCY, batches.length) }, () => worker()));
+  }
+
+  const rows = results.flat().map(toBlockRow).filter((b) => b.text.trim().length > 0);
+  if (rows.length === 0) throw new Error("No text found on the pages");
+  const repair = await repairEquations(rows, userId);
+  if (repair.failed > 0) {
+    console.log(`[convert] ${repair.fixed}/${repair.failed} equations repaired`);
+  }
+  // Past the page cap, the cut is declared, never silent (SPEC.md §7 discipline).
+  if (pageCount > MAX_PAGES) {
+    rows.push({
+      type: "PARAGRAPH",
+      text: `[Conversion stopped at page ${MAX_PAGES} of ${pageCount}.]`,
+      html: null,
+      page: MAX_PAGES,
+    });
+  }
+  return rows;
+}
+
 export async function runConversion(
   documentId: string,
   userId: string | null = null,
@@ -186,88 +328,8 @@ export async function runConversion(
   await bumpDocument(documentId);
 
   try {
-    const bytes = new Uint8Array(document.fileData);
+    const rows = await transcribePages(new Uint8Array(document.fileData), pages, { userId, kind: "handwritten" });
     const usePages = pages.slice(0, MAX_PAGES);
-    const pageCount = pages.length;
-
-    const batches: number[][] = [];
-    for (let i = 0; i < usePages.length; i += BATCH_PAGES) {
-      batches.push(usePages.slice(i, i + BATCH_PAGES));
-    }
-
-    // Batches run together (BATCH_CONCURRENCY at a time); results keep batch order.
-    const results = new Array<ConvertedBlock[]>(batches.length);
-    let next = 0;
-    const worker = async () => {
-      for (;;) {
-        const index = next++;
-        if (index >= batches.length) return;
-        const batch = batches[index];
-        const images: { page: number; image: Uint8Array }[] = [];
-        for (const page of batch) {
-          images.push({ page, image: await renderPdfPage(bytes, page, PAGE_IMAGE_WIDTH) });
-        }
-        const messages: ModelMessage[] = [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: convertPrompt({
-                  firstPage: batch[0],
-                  lastPage: batch[batch.length - 1],
-                  pageCount,
-                }),
-              },
-              ...images.map(({ image }) => ({
-                type: "file" as const,
-                data: image,
-                mediaType: "image/png",
-              })),
-            ],
-          },
-        ];
-        const convertCall = await featureCall("convert", HANDWRITTEN_EFFORT);
-        const result = await callForJson({
-          model: convertCall.model,
-          messages,
-          maxOutputTokens: 65536, // dense pages transcribe long
-          providerOptions: convertCall.providerOptions,
-          schema: convertOutputSchema,
-          label: "CONVERT",
-          usage: { userId, feature: "convert", model: convertCall.modelId },
-        });
-        if (!result.ok) {
-          throw new Error(
-            `Pages ${batch[0]}-${batch[batch.length - 1]} did not convert: ${result.error}`,
-          );
-        }
-        // A page number outside the batch is a model slip; clamp into the batch.
-        results[index] = result.data.blocks.map((b) => ({
-          ...b,
-          page: batch.includes(b.page) ? b.page : batch[0],
-        }));
-      }
-    };
-    await Promise.all(
-      Array.from({ length: Math.min(BATCH_CONCURRENCY, batches.length) }, () => worker()),
-    );
-
-    const rows = results.flat().map(toBlockRow).filter((b) => b.text.trim().length > 0);
-    if (rows.length === 0) throw new Error("No text found on the pages");
-    const repair = await repairEquations(rows, userId);
-    if (repair.failed > 0) {
-      console.log(`[convert] ${documentId}: ${repair.fixed}/${repair.failed} equations repaired`);
-    }
-    // Past the page cap, the cut is declared, never silent (SPEC.md §7 discipline).
-    if (pageCount > MAX_PAGES) {
-      rows.push({
-        type: "PARAGRAPH",
-        text: `[Conversion stopped at page ${MAX_PAGES} of ${pageCount}.]`,
-        html: null,
-        page: MAX_PAGES,
-      });
-    }
 
     const written = await db.$transaction(async (tx) => {
       // A shape switch or a re-parse while the pages converted (SPEC.md §16):

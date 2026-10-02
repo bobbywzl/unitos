@@ -148,10 +148,24 @@ export function blockDocumentLine(detail: string): "panes.uploadBlockDocument" |
   return hasFigureCheck(detail) ? "panes.uploadBlockDocument" : "panes.uploadBlockDocumentPdf";
 }
 
+/** The save stage's detail says the document is the pages of a PDF
+    (SPEC.md §16; lib/parse/ingest.ts): the pages are its content. */
+function pagesDocument(detail: string | null): boolean {
+  if (!detail?.startsWith("{")) return false;
+  try {
+    return typeof (JSON.parse(detail) as { pages?: unknown }).pages === "number";
+  } catch {
+    return false;
+  }
+}
+
 // Does the saved document read well enough to open before its finishing
 // step is done? The save stage's figure check says: the figures that loaded
 // against the captions left without one. No check: nothing speaks against it.
+// A document of pages never opens early: until its pages are drawn and
+// converted it shows blank pages and no text.
 function readsWell(saveDetail: string | null): boolean {
+  if (pagesDocument(saveDetail)) return false;
   const counts = saveDetail ? ingestCounts(saveDetail) : null;
   if (!counts) return true;
   if (counts.mediaLost.length > 0) return false;
@@ -160,10 +174,26 @@ function readsWell(saveDetail: string | null): boolean {
 }
 
 // The finishing step (SPEC.md §15), after the save: the visuals loaded into
-// the browser's cache, so the document opens painted.
-const FINISH_STEPS: IngestStep[] = [
-  { key: "figures", labelKey: "panes.stepFigures", status: "pending" },
-];
+// the browser's cache, so the document opens painted — a handwritten
+// document's pages, then its conversion to text (SPEC.md §16).
+const FINISH_FIGURES: IngestStep = { key: "figures", labelKey: "panes.stepFigures", status: "pending" };
+const FINISH_PAGES: IngestStep = { key: "figures", labelKey: "panes.stepPages", status: "pending" };
+const FINISH_CONVERTING: IngestStep = { key: "converting", labelKey: "panes.stepConverting", status: "pending" };
+
+// The box waits on a running conversion this long at most — the window after
+// which a run counts as dead (lib/handwritten/convert.ts) — asking every few
+// seconds.
+const CONVERSION_WAIT_MS = 10 * 60 * 1000;
+const CONVERSION_POLL_MS = 3000;
+
+async function fetchFinishPlan(id: string): Promise<FinishPlan | null> {
+  try {
+    const res = await fetch(`/api/documents/${id}/finish`);
+    return res.ok ? ((await res.json()) as FinishPlan) : null;
+  } catch {
+    return null;
+  }
+}
 
 export function UploadAssistant({
   notebookId,
@@ -251,6 +281,10 @@ export function UploadAssistant({
   const [addStartedAt, setAddStartedAt] = useState(0);
   const addStartedAtRef = useRef(0);
   const earlyOpenRef = useRef<"pending" | "opened" | "off">("off");
+  // A single add's pages that did not convert to text (SPEC.md §16): the
+  // reason, which keeps the box open until Close.
+  const conversionFailedRef = useRef<string | null>(null);
+  const [conversionFailed, setConversionFailed] = useState<string | null>(null);
 
   // ── The adds: one streamed request per file or Drive pick, progress in the box ──
   async function streamIngest(res: Response): Promise<IngestResult> {
@@ -278,18 +312,21 @@ export function UploadAssistant({
   // glossary is built when the reader opens it and links when the reader asks
   // for them in the graph (SPEC.md §13).
   async function finishDocument(id: string) {
-    let plan: FinishPlan;
-    try {
-      const res = await fetch(`/api/documents/${id}/finish`);
-      if (!res.ok) return;
-      plan = (await res.json()) as FinishPlan;
-    } catch {
-      return;
+    const plan = await fetchFinishPlan(id);
+    if (!plan) return;
+    const converting = plan.conversion.state === "running";
+    const finishSteps = [
+      ...(plan.images.length > 0 ? [plan.pages > 0 ? FINISH_PAGES : FINISH_FIGURES] : []),
+      ...(converting ? [FINISH_CONVERTING] : []),
+    ];
+    // The first finishing step runs from the start, so the card names it.
+    if (finishSteps.length > 0) {
+      setSteps((s) => [
+        ...completeIngestSteps(s ?? []),
+        ...finishSteps.map((step, i): IngestStep => (i === 0 ? { ...step, status: "active" } : step)),
+      ]);
     }
-    const visuals = plan.images.length > 0;
-    if (!visuals) return;
-    setSteps((s) => [...completeIngestSteps(s ?? []), ...FINISH_STEPS]);
-    {
+    if (plan.images.length > 0) {
       let done = 0;
       await warmImages(plan.images, () => {
         done++;
@@ -300,6 +337,18 @@ export function UploadAssistant({
         );
       });
     }
+    // A handwritten document's pages convert to text after the add (SPEC.md
+    // §16): the box says so and waits, so the document opens with its text.
+    let conversion = plan.conversion;
+    if (converting) {
+      setSteps((s) => (s ? advanceIngestSteps(s, "converting") : s));
+      const started = Date.now();
+      while (conversion.state === "running" && Date.now() - started < CONVERSION_WAIT_MS) {
+        await new Promise((resolve) => setTimeout(resolve, CONVERSION_POLL_MS));
+        conversion = (await fetchFinishPlan(id))?.conversion ?? conversion;
+      }
+    }
+    if (conversion.state === "failed") conversionFailedRef.current = conversion.error ?? t("panes.convertFailedPlain");
   }
 
   async function ingestAndFinish(res: Response): Promise<IngestResult> {
@@ -480,6 +529,7 @@ export function UploadAssistant({
     const collected: Added[] = [];
     const failed: string[] = [];
     saveDetailRef.current = null;
+    conversionFailedRef.current = null;
     addStartedAtRef.current = Date.now();
     setAddStartedAt(addStartedAtRef.current);
     earlyOpenRef.current = "pending";
@@ -587,11 +637,15 @@ export function UploadAssistant({
     // Clean adds close themselves; failures stay visible until Close, and so
     // does a lost figure: a single add whose figure check found a caption
     // without a figure, and an import the size guard kept out of the page
-    // editor. A clean figure check line shows long enough to read.
+    // editor, and pages that did not convert to text. A clean figure check
+    // line shows long enough to read.
+    const failedConversion = itemCount === 1 ? conversionFailedRef.current : null;
+    setConversionFailed(failedConversion);
     const lost =
       itemCount === 1 &&
       ((ingestCounts(saveDetailRef.current ?? "")?.captionsWithoutFigure ?? 0) > 0 ||
-        keptBlockDocument(saveDetailRef.current));
+        keptBlockDocument(saveDetailRef.current) ||
+        failedConversion !== null);
     if (failed.length === 0 && !lost) {
       setTimeout(() => onClose(target), collected.length > 1 || saveDetailRef.current ? 900 : 300);
     } else if (hiddenRef.current) {
@@ -745,7 +799,10 @@ export function UploadAssistant({
               </p>
             )}
             {blockDocument && singleDetail && <p className="text-xs text-sand-600">{t(blockDocumentLine(singleDetail))}</p>}
-            {(failures.length > 0 || lostFigures || blockDocument) && (
+            {conversionFailed !== null && (
+              <p className={amberNote}>{t("panes.uploadConvertFailed", { reason: conversionFailed })}</p>
+            )}
+            {(failures.length > 0 || lostFigures || blockDocument || conversionFailed !== null) && (
               <>
                 {failures.length > 0 && (
                   <ul className="flex flex-col gap-1 text-xs text-red-500">

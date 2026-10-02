@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { PAGE_RENDER_REV } from "@/lib/handwritten/page-url";
 import {
   PAGE_IMAGE_WIDTH,
   pdfPageSizes,
@@ -73,7 +74,9 @@ export async function renderPageImages(
 }
 
 /** One page rendered and stored now, for the route's first request of a
-    page without a render. Null when the render failed. */
+    page without a render, or with one an older renderer drew
+    (PageImage.renderRev). Null when the render failed: a stored image
+    stays as it was. */
 export async function renderPageImage(
   blockId: string,
   bytes: Uint8Array,
@@ -88,11 +91,8 @@ export async function renderPageImage(
 }
 
 async function storeRender(blockId: string, image: Uint8Array<ArrayBuffer>, size: PageSize): Promise<void> {
-  await db.pageImage.upsert({
-    where: { blockId },
-    create: { blockId, width: size.width, height: size.height, data: image },
-    update: { width: size.width, height: size.height, data: image },
-  });
+  const row = { width: size.width, height: size.height, data: image, renderRev: PAGE_RENDER_REV };
+  await db.pageImage.upsert({ where: { blockId }, create: { blockId, ...row }, update: row });
 }
 
 /** The stored size per PAGE block, for the reader's layout. Blocks without a

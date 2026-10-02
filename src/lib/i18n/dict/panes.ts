@@ -250,6 +250,9 @@ const en = {
   // The finishing step (SPEC.md §15): the scans and the visuals, before the
   // document opens.
   stepFigures: "Preparing figures",
+  // A handwritten document's pages, then their conversion (SPEC.md §16).
+  stepPages: "Preparing the pages",
+  stepConverting: "Converting the pages to text",
   uploadHide: "Hide — the add keeps running",
   // The range step of a video or audio add (components/reader/media-range.tsx)
   uploadRangeTitle: "Which part to import",
@@ -451,6 +454,8 @@ const en = {
   // PDF's pages can be chosen on a new add (SPEC.md §15).
   uploadBlockDocument: "Too long for the page editor, so it opens in the reader instead.",
   uploadBlockDocumentPdf: "Too long for the page editor, so it opens in the reader instead. Add it again and choose its pages.",
+  // The pages of a single add did not convert to text (SPEC.md §16).
+  uploadConvertFailed: "The pages did not convert to text. {reason} Retry under the pages tries again.",
   // The document bar, after the automatic re-parse (document-bar.tsx)
   reparseCaptionsWithoutFigure: "No figure loaded for {labels} after the re-parse.",
   reparseMediaLost: "Not loaded from the page after the re-parse: {names}.",
@@ -693,6 +698,8 @@ const zh: Record<keyof typeof en, string> = {
   stepParsing: "解析",
   stepSaving: "保存",
   stepFigures: "准备插图",
+  stepPages: "准备页面",
+  stepConverting: "将页面转换为文本",
   uploadHide: "隐藏——添加继续进行",
   uploadRangeTitle: "导入哪一部分",
   uploadRangeDesc: "移动手柄只保留录音的一部分。逐字稿、助手和各项工具只读取这一部分；文件本身保持完整。",
@@ -864,6 +871,7 @@ const zh: Record<keyof typeof en, string> = {
   uploadEveryMediaLoaded: "页面上的每个图片和视频都已加载（{n} 个）",
   uploadBlockDocument: "内容太长，无法在页面编辑器中打开，改为在阅读器中打开。",
   uploadBlockDocumentPdf: "内容太长，无法在页面编辑器中打开，改为在阅读器中打开。重新添加，并在页码中选择要导入的页。",
+  uploadConvertFailed: "页面没有转换为文本。{reason} 点页面下方的重试再试一次。",
   reparseCaptionsWithoutFigure: "重新解析后，{labels} 没有加载插图。",
   reparseMediaLost: "重新解析后，页面上没有加载：{names}。",
   reparseRenderFailed: "浏览器渲染失败：{reason}",

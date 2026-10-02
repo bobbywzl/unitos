@@ -1,7 +1,10 @@
 // The finishing step of an add (SPEC.md §15). The plan comes from
 // GET /api/documents/{id}/finish: images, every visual the reader will
-// request on open.
-export type FinishPlan = { images: string[] };
+// request on open; pages, how many of them are the pages of a handwritten
+// document; conversion, where its pages' conversion to text stands
+// (SPEC.md §16) — running, failed with its reason, or nothing to wait on.
+export type FinishConversion = { state: "running" } | { state: "failed"; error: string | null } | { state: "none" };
+export type FinishPlan = { images: string[]; pages: number; conversion: FinishConversion };
 
 // The browser half: load every visual the reader will request on open — a PDF's figure and page renders,
 // a page's remote figures — once, now, so the document opens with all of them

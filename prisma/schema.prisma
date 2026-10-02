@@ -782,6 +782,10 @@ model PageImage {
   width     Int
   height    Int
   data      Bytes? // JPEG at PAGE_IMAGE_WIDTH
+  // The renderer that drew data (lib/handwritten/page-url.ts PAGE_RENDER_REV).
+  // Null = the one before, which drew a scan's JBIG2, CCITT, and JPEG 2000
+  // images white: a PAGE block's image is drawn again on its next request.
+  renderRev Int?
   updatedAt DateTime @updatedAt
 }
 
