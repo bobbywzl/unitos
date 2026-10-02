@@ -940,9 +940,14 @@ export function attachFigureRegions(
     return kept;
   };
   // A caption wrapped into a second paragraph: the same (smaller) font a
-  // line below the caption continues it.
+  // line below the caption continues it. One set at the body's size
+  // continues it only where its lines stand: from the caption's left edge,
+  // or centered under it. The text's next paragraph starts at its own
+  // indent (parse loop finding: GeoTopo's "Die Umkehrabbildung g ist nicht
+  // stetig, …" under its centered caption read into it).
   const withFollower = (cap: Segment, follow: Segment | undefined): { text: string; runs: Run[] | undefined; box: Box } => {
     const box = cap.box!;
+    const aligned = (f: Box, size: number) => Math.abs(f.x1 - box.x1) < size || Math.abs((f.x1 + f.x2) / 2 - (box.x1 + box.x2) / 2) < size;
     if (
       !follow ||
       follow.type !== "PARAGRAPH" ||
@@ -952,7 +957,8 @@ export function attachFigureRegions(
       cap.lineSize === undefined ||
       Math.abs(follow.lineSize - cap.lineSize) >= 0.6 ||
       box.y1 - follow.box.y2 > cap.lineSize * ctx.leading * 0.9 ||
-      (cap.lineSize >= ctx.bodySize * 0.98 && follow.text.length >= 240 && box.y1 - follow.box.y2 > cap.lineSize * 0.35)
+      (cap.lineSize >= ctx.bodySize * 0.98 && follow.text.length >= 240 && box.y1 - follow.box.y2 > cap.lineSize * 0.35) ||
+      (cap.lineSize >= ctx.bodySize * 0.98 && !aligned(follow.box, cap.lineSize))
     ) {
       return { text: cap.text, runs: cap.runs, box };
     }
