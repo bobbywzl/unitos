@@ -1378,6 +1378,10 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext, lines: Line[
     const y2 = Math.max(f.left.y1, f.left.y2);
     if (y2 - y1 > high - low + size * 2 || !glyphs.some((g) => g.x + g.w / 2 > x1 && g.x + g.w / 2 < x2 && g.y > y1 && g.y < y2)) continue;
     for (const r of [f.left, f.right, f.top, f.bottom]) if (!rules.includes(r)) rules.push(r);
+    // So is every horizontal rule inside it: a fraction bar may reach past
+    // the glyphs' extent by more than the pad (the CS 229 probability
+    // refresher's ρ_{XY} = σ²_{XY}/(σ_Xσ_Y), its bar 2.03 pt past them).
+    for (const r of ctx.drawing.rules) if (r.dir === "h" && r.x1 > x1 && r.x2 < x2 && r.y1 > y1 && r.y1 < y2 && !rules.includes(r)) rules.push(r);
   }
   const paths = ctx.drawing.paths.filter(
     (b) =>
