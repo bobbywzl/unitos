@@ -953,13 +953,19 @@ function ruledArrayOf(atoms: Atom[], vr: Rule[], rules: Rule[], em: number): Ato
 
 // ── Rows: matrices, binomials, cases, aligned lines ────────────────────────
 
-// Baselines of main-size atoms at least 0.9 em apart, top first.
+// Baselines of main-size atoms at least 0.9 em apart, top first. A row of
+// vertical or diagonal dots alone hangs nothing under its baseline: the
+// row under it may stand half an em lower (parse loop finding: the CS 229
+// refresher's matrices set rows tight, the ⋮ row's baseline 0.8 em over
+// the last row's, and ⋮ read as the last row's superscript).
 function rowLines(atoms: Atom[], unit: number): number[] {
-  const ys = [...new Set(atoms.map((a) => Math.round(a.yb * 2) / 2))].sort((p, q) => q - p);
+  const at = (a: Atom) => Math.round(a.yb * 2) / 2;
+  const ys = [...new Set(atoms.map(at))].sort((p, q) => q - p);
+  const dotsOnly = (y: number) => atoms.every((a) => at(a) !== y || a.tex === "\\vdots" || a.tex === "\\ddots");
   const lines: number[] = [];
   for (const y of ys) {
     const last = lines[lines.length - 1];
-    if (last !== undefined && last - y < 0.9 * unit) continue;
+    if (last !== undefined && last - y < (dotsOnly(last) ? 0.5 : 0.9) * unit) continue;
     lines.push(y);
   }
   return lines;
