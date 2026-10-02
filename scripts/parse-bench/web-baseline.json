@@ -1,0 +1,914 @@
+{
+ "total": {
+  "f1": 0.908,
+  "precision": 0.84,
+  "recall": 0.988
+ },
+ "pages": {
+  "042bb7b5fe": {
+   "f1": 0.471,
+   "precision": 0.308,
+   "recall": 1
+  },
+  "04a6711caa": {
+   "f1": 0.952,
+   "precision": 0.908,
+   "recall": 1
+  },
+  "05844573ca": {
+   "f1": 0.895,
+   "precision": 0.809,
+   "recall": 1
+  },
+  "06e5123e4e": {
+   "f1": 0.982,
+   "precision": 0.964,
+   "recall": 1
+  },
+  "06ee193de4": {
+   "f1": 1,
+   "precision": 1,
+   "recall": 1
+  },
+  "076f4f33bf": {
+   "f1": 1,
+   "precision": 1,
+   "recall": 1
+  },
+  "08f7937627": {
+   "f1": 0.837,
+   "precision": 0.72,
+   "recall": 1
+  },
+  "098bb3e96c": {
+   "f1": 0.804,
+   "precision": 0.672,
+   "recall": 1
+  },
+  "0d46122928": {
+   "f1": 0.952,
+   "precision": 0.909,
+   "recall": 1
+  },
+  "0dd1357045": {
+   "f1": 0.93,
+   "precision": 0.901,
+   "recall": 0.961
+  },
+  "0e014df693": {
+   "f1": 0.889,
+   "precision": 0.801,
+   "recall": 1
+  },
+  "0ec95c7261": {
+   "f1": 0.983,
+   "precision": 1,
+   "recall": 0.967
+  },
+  "11ea381ad9": {
+   "f1": 0.959,
+   "precision": 0.92,
+   "recall": 1
+  },
+  "14cc2a0ca5": {
+   "f1": 1,
+   "precision": 1,
+   "recall": 1
+  },
+  "156770d676": {
+   "f1": 0.919,
+   "precision": 0.868,
+   "recall": 0.976
+  },
+  "16c30add7e": {
+   "f1": 0.954,
+   "precision": 0.917,
+   "recall": 0.994
+  },
+  "1ace8c85aa": {
+   "f1": 0.99,
+   "precision": 0.98,
+   "recall": 1
+  },
+  "1ee91d1fce": {
+   "f1": 1,
+   "precision": 1,
+   "recall": 1
+  },
+  "1f765c4878": {
+   "f1": 1,
+   "precision": 1,
+   "recall": 1
+  },
+  "20b2b64916": {
+   "f1": 0.978,
+   "precision": 0.957,
+   "recall": 1
+  },
+  "21486419bb": {
+   "f1": 0.977,
+   "precision": 0.956,
+   "recall": 1
+  },
+  "232a43fb15": {
+   "f1": 0.32,
+   "precision": 0.191,
+   "recall": 0.989
+  },
+  "23aaecd141": {
+   "f1": 0.899,
+   "precision": 0.817,
+   "recall": 1
+  },
+  "264dc3ae31": {
+   "f1": 0.942,
+   "precision": 0.89,
+   "recall": 1
+  },
+  "287e4d9f4a": {
+   "f1": 0.982,
+   "precision": 0.965,
+   "recall": 1
+  },
+  "291a8bf33e": {
+   "f1": 0.904,
+   "precision": 0.828,
+   "recall": 0.995
+  },
+  "2c46804d9d": {
+   "f1": 0.917,
+   "precision": 0.852,
+   "recall": 0.993
+  },
+  "2f42ef1d3e": {
+   "f1": 0.93,
+   "precision": 0.882,
+   "recall": 0.983
+  },
+  "30b771a40a": {
+   "f1": 0.873,
+   "precision": 0.783,
+   "recall": 0.987
+  },
+  "3252222e61": {
+   "f1": 0.891,
+   "precision": 0.804,
+   "recall": 1
+  },
+  "33fe2471fd": {
+   "f1": 0.978,
+   "precision": 0.969,
+   "recall": 0.986
+  },
+  "34a7328535": {
+   "f1": 0.957,
+   "precision": 0.946,
+   "recall": 0.967
+  },
+  "358cc4a080": {
+   "f1": 0.938,
+   "precision": 0.882,
+   "recall": 1
+  },
+  "359fee2285": {
+   "f1": 0.983,
+   "precision": 0.973,
+   "recall": 0.994
+  },
+  "35b158918c": {
+   "f1": 0.815,
+   "precision": 0.688,
+   "recall": 1
+  },
+  "360c732d1f": {
+   "f1": 0.905,
+   "precision": 0.838,
+   "recall": 0.984
+  },
+  "374ac9a59a": {
+   "f1": 0.943,
+   "precision": 0.892,
+   "recall": 1
+  },
+  "39d5c43beb": {
+   "f1": 0.637,
+   "precision": 0.467,
+   "recall": 1
+  },
+  "3c5bf8db42": {
+   "f1": 0.935,
+   "precision": 0.888,
+   "recall": 0.988
+  },
+  "3c6d3381ef": {
+   "f1": 0.979,
+   "precision": 0.965,
+   "recall": 0.994
+  },
+  "3cb22bfabe": {
+   "f1": 1,
+   "precision": 1,
+   "recall": 1
+  },
+  "3cb5e2f466": {
+   "f1": 0.933,
+   "precision": 0.874,
+   "recall": 1
+  },
+  "3ce1c8fdf6": {
+   "f1": 0.68,
+   "precision": 0.515,
+   "recall": 1
+  },
+  "3d8f3404cf": {
+   "f1": 0.94,
+   "precision": 0.889,
+   "recall": 0.998
+  },
+  "3f65af7b6b": {
+   "f1": 0.91,
+   "precision": 0.883,
+   "recall": 0.94
+  },
+  "4219d09690": {
+   "f1": 0.926,
+   "precision": 0.877,
+   "recall": 0.98
+  },
+  "42aad16bde": {
+   "f1": 0.959,
+   "precision": 0.933,
+   "recall": 0.987
+  },
+  "432362af0b": {
+   "f1": 0.845,
+   "precision": 0.732,
+   "recall": 1
+  },
+  "4648a420af": {
+   "f1": 0.989,
+   "precision": 0.977,
+   "recall": 1
+  },
+  "4a44ab3e4c": {
+   "f1": 0.845,
+   "precision": 0.856,
+   "recall": 0.835
+  },
+  "51374560f4": {
+   "f1": 0.812,
+   "precision": 0.702,
+   "recall": 0.963
+  },
+  "51d066b060": {
+   "f1": 0.964,
+   "precision": 0.931,
+   "recall": 1
+  },
+  "5211188428": {
+   "f1": 0.907,
+   "precision": 0.83,
+   "recall": 1
+  },
+  "55bb6340e3": {
+   "f1": 0.902,
+   "precision": 0.821,
+   "recall": 1
+  },
+  "57b4dafd18": {
+   "f1": 1,
+   "precision": 1,
+   "recall": 1
+  },
+  "57d46c9d75": {
+   "f1": 0.977,
+   "precision": 0.955,
+   "recall": 1
+  },
+  "57e2e98887": {
+   "f1": 1,
+   "precision": 1,
+   "recall": 1
+  },
+  "5a822960e9": {
+   "f1": 0.939,
+   "precision": 0.885,
+   "recall": 1
+  },
+  "5ae11e580a": {
+   "f1": 1,
+   "precision": 1,
+   "recall": 1
+  },
+  "5caf91b8a4": {
+   "f1": 0.841,
+   "precision": 0.734,
+   "recall": 0.986
+  },
+  "5f03fc173e": {
+   "f1": 0.998,
+   "precision": 0.996,
+   "recall": 1
+  },
+  "5f9c5ed5d6": {
+   "f1": 0.531,
+   "precision": 0.362,
+   "recall": 1
+  },
+  "5fa3154ec0": {
+   "f1": 0.966,
+   "precision": 0.934,
+   "recall": 1
+  },
+  "5fa5679de5": {
+   "f1": 0.97,
+   "precision": 0.942,
+   "recall": 1
+  },
+  "5fbc7ccb50": {
+   "f1": 0.936,
+   "precision": 0.883,
+   "recall": 0.997
+  },
+  "612cd29826": {
+   "f1": 0.895,
+   "precision": 0.821,
+   "recall": 0.984
+  },
+  "624fcd903d": {
+   "f1": 0.813,
+   "precision": 0.719,
+   "recall": 0.935
+  },
+  "63db31a161": {
+   "f1": 0.983,
+   "precision": 0.967,
+   "recall": 1
+  },
+  "65408257db": {
+   "f1": 0.917,
+   "precision": 0.852,
+   "recall": 0.992
+  },
+  "65bf3048b5": {
+   "f1": 0.963,
+   "precision": 0.938,
+   "recall": 0.99
+  },
+  "65ce3a4577": {
+   "f1": 0.971,
+   "precision": 0.944,
+   "recall": 1
+  },
+  "680c2848e9": {
+   "f1": 0.99,
+   "precision": 0.98,
+   "recall": 1
+  },
+  "686bb170ef": {
+   "f1": 0.905,
+   "precision": 0.835,
+   "recall": 0.988
+  },
+  "6a72de37e8": {
+   "f1": 0.942,
+   "precision": 0.904,
+   "recall": 0.984
+  },
+  "6ebac05f63": {
+   "f1": 0.831,
+   "precision": 0.727,
+   "recall": 0.97
+  },
+  "702d1da63b": {
+   "f1": 0.987,
+   "precision": 0.975,
+   "recall": 1
+  },
+  "70cb2d5bca": {
+   "f1": 0.77,
+   "precision": 0.637,
+   "recall": 0.973
+  },
+  "776a1c0467": {
+   "f1": 0.936,
+   "precision": 0.879,
+   "recall": 1
+  },
+  "7837c9d66c": {
+   "f1": 0.991,
+   "precision": 0.982,
+   "recall": 1
+  },
+  "785affa2c3": {
+   "f1": 0.902,
+   "precision": 0.822,
+   "recall": 1
+  },
+  "7916ecca96": {
+   "f1": 0.931,
+   "precision": 0.879,
+   "recall": 0.99
+  },
+  "7a457a4f71": {
+   "f1": 0.914,
+   "precision": 0.848,
+   "recall": 0.991
+  },
+  "7a664e40d2": {
+   "f1": 0.922,
+   "precision": 0.866,
+   "recall": 0.985
+  },
+  "7ab16ade32": {
+   "f1": 0.571,
+   "precision": 0.399,
+   "recall": 1
+  },
+  "7bb1ca9035": {
+   "f1": 0.918,
+   "precision": 0.852,
+   "recall": 0.995
+  },
+  "7de5241947": {
+   "f1": 0.953,
+   "precision": 0.914,
+   "recall": 0.996
+  },
+  "7dfc3e359d": {
+   "f1": 0.845,
+   "precision": 0.746,
+   "recall": 0.972
+  },
+  "7f93c1944a": {
+   "f1": 0.914,
+   "precision": 0.852,
+   "recall": 0.985
+  },
+  "8267acacb9": {
+   "f1": 0.989,
+   "precision": 0.978,
+   "recall": 1
+  },
+  "82b6d780c7": {
+   "f1": 0.947,
+   "precision": 0.9,
+   "recall": 0.999
+  },
+  "833caf3bdb": {
+   "f1": 0.899,
+   "precision": 0.817,
+   "recall": 1
+  },
+  "8380689f35": {
+   "f1": 0.643,
+   "precision": 0.475,
+   "recall": 0.992
+  },
+  "851498a2b9": {
+   "f1": 0.979,
+   "precision": 0.974,
+   "recall": 0.984
+  },
+  "85439e26c4": {
+   "f1": 0.84,
+   "precision": 0.724,
+   "recall": 1
+  },
+  "8634d1211c": {
+   "f1": 0.838,
+   "precision": 0.724,
+   "recall": 0.993
+  },
+  "87438a0dac": {
+   "f1": 0.994,
+   "precision": 0.987,
+   "recall": 1
+  },
+  "87bf60570e": {
+   "f1": 0.979,
+   "precision": 0.96,
+   "recall": 1
+  },
+  "88c328b68b": {
+   "f1": 0.817,
+   "precision": 0.691,
+   "recall": 1
+  },
+  "8b19453030": {
+   "f1": 0.885,
+   "precision": 0.797,
+   "recall": 0.994
+  },
+  "8cad00dc22": {
+   "f1": 0.905,
+   "precision": 0.826,
+   "recall": 1
+  },
+  "8e3efab59f": {
+   "f1": 0.185,
+   "precision": 0.102,
+   "recall": 1
+  },
+  "921019755f": {
+   "f1": 0.954,
+   "precision": 0.988,
+   "recall": 0.922
+  },
+  "94fbcc2677": {
+   "f1": 0.955,
+   "precision": 0.929,
+   "recall": 0.983
+  },
+  "95301fb788": {
+   "f1": 0.906,
+   "precision": 0.828,
+   "recall": 1
+  },
+  "961bd85ca8": {
+   "f1": 0.98,
+   "precision": 0.96,
+   "recall": 1
+  },
+  "9a440270bf": {
+   "f1": 0.82,
+   "precision": 0.695,
+   "recall": 1
+  },
+  "9cb8224b66": {
+   "f1": 0.981,
+   "precision": 0.97,
+   "recall": 0.992
+  },
+  "9da36ae471": {
+   "f1": 0.983,
+   "precision": 1,
+   "recall": 0.967
+  },
+  "9e8c9f082a": {
+   "f1": 0.982,
+   "precision": 0.971,
+   "recall": 0.993
+  },
+  "9ebb3af656": {
+   "f1": 0.829,
+   "precision": 0.714,
+   "recall": 0.988
+  },
+  "9eef8162bb": {
+   "f1": 0.995,
+   "precision": 0.989,
+   "recall": 1
+  },
+  "a078b3656a": {
+   "f1": 0.962,
+   "precision": 0.926,
+   "recall": 1
+  },
+  "a1fca19b88": {
+   "f1": 0.956,
+   "precision": 0.916,
+   "recall": 1
+  },
+  "a6968f427c": {
+   "f1": 0.911,
+   "precision": 0.837,
+   "recall": 0.998
+  },
+  "a860fb5eda": {
+   "f1": 0.916,
+   "precision": 0.846,
+   "recall": 1
+  },
+  "aadb38e527": {
+   "f1": 0.906,
+   "precision": 0.828,
+   "recall": 1
+  },
+  "aade2ec8d1": {
+   "f1": 0.539,
+   "precision": 0.369,
+   "recall": 1
+  },
+  "abd9d6291b": {
+   "f1": 0.989,
+   "precision": 0.98,
+   "recall": 0.997
+  },
+  "ac1bfdd4c5": {
+   "f1": 0.919,
+   "precision": 0.853,
+   "recall": 0.995
+  },
+  "ac3c035520": {
+   "f1": 0.096,
+   "precision": 0.051,
+   "recall": 1
+  },
+  "ad826691a8": {
+   "f1": 0.902,
+   "precision": 0.832,
+   "recall": 0.986
+  },
+  "ad9e9e596f": {
+   "f1": 0.983,
+   "precision": 0.972,
+   "recall": 0.994
+  },
+  "aec5deeaad": {
+   "f1": 0.87,
+   "precision": 0.791,
+   "recall": 0.966
+  },
+  "b0cf2bbf01": {
+   "f1": 0.918,
+   "precision": 0.849,
+   "recall": 1
+  },
+  "b37be3535e": {
+   "f1": 0.528,
+   "precision": 0.362,
+   "recall": 0.976
+  },
+  "b3c19dd5f0": {
+   "f1": 0.916,
+   "precision": 0.845,
+   "recall": 1
+  },
+  "b6906ca016": {
+   "f1": 0.995,
+   "precision": 0.99,
+   "recall": 1
+  },
+  "b6fb53e9fb": {
+   "f1": 0.918,
+   "precision": 0.848,
+   "recall": 1
+  },
+  "ba07d1e647": {
+   "f1": 0.966,
+   "precision": 0.94,
+   "recall": 0.992
+  },
+  "ba4dfe2d3e": {
+   "f1": 0.633,
+   "precision": 0.682,
+   "recall": 0.59
+  },
+  "bc13ff87b2": {
+   "f1": 0.906,
+   "precision": 0.828,
+   "recall": 1
+  },
+  "bd673bd798": {
+   "f1": 0.958,
+   "precision": 0.929,
+   "recall": 0.989
+  },
+  "bdb56ac835": {
+   "f1": 0.977,
+   "precision": 0.955,
+   "recall": 0.999
+  },
+  "c00962aabe": {
+   "f1": 0.986,
+   "precision": 0.972,
+   "recall": 1
+  },
+  "c13b9c0e04": {
+   "f1": 0.939,
+   "precision": 0.885,
+   "recall": 1
+  },
+  "c467d50755": {
+   "f1": 0.976,
+   "precision": 0.953,
+   "recall": 1
+  },
+  "c4a3637c66": {
+   "f1": 0.991,
+   "precision": 0.983,
+   "recall": 1
+  },
+  "c50845a715": {
+   "f1": 0.915,
+   "precision": 0.862,
+   "recall": 0.975
+  },
+  "c582d3b772": {
+   "f1": 0.993,
+   "precision": 0.99,
+   "recall": 0.995
+  },
+  "c58aa507c4": {
+   "f1": 0.988,
+   "precision": 0.977,
+   "recall": 1
+  },
+  "c69e539d68": {
+   "f1": 1,
+   "precision": 1,
+   "recall": 1
+  },
+  "c7e39ac49f": {
+   "f1": 0.849,
+   "precision": 0.75,
+   "recall": 0.978
+  },
+  "c81e134ed4": {
+   "f1": 0.959,
+   "precision": 0.921,
+   "recall": 1
+  },
+  "c82b3d1d54": {
+   "f1": 0.922,
+   "precision": 0.856,
+   "recall": 1
+  },
+  "c90731f051": {
+   "f1": 0.71,
+   "precision": 0.55,
+   "recall": 1
+  },
+  "cc03ddb5ef": {
+   "f1": 0.729,
+   "precision": 0.597,
+   "recall": 0.937
+  },
+  "cc4aa22b82": {
+   "f1": 0.983,
+   "precision": 0.97,
+   "recall": 0.995
+  },
+  "d0382c0d95": {
+   "f1": 0.968,
+   "precision": 0.939,
+   "recall": 1
+  },
+  "d1c57d7821": {
+   "f1": 0.988,
+   "precision": 0.977,
+   "recall": 1
+  },
+  "d48aeb9cf2": {
+   "f1": 0.934,
+   "precision": 0.876,
+   "recall": 1
+  },
+  "d605bdef2c": {
+   "f1": 0.939,
+   "precision": 0.892,
+   "recall": 0.99
+  },
+  "d90bda7ed1": {
+   "f1": 0.99,
+   "precision": 0.981,
+   "recall": 1
+  },
+  "db6b0816c6": {
+   "f1": 0.721,
+   "precision": 0.563,
+   "recall": 1
+  },
+  "dc7ccccc1f": {
+   "f1": 0.876,
+   "precision": 0.788,
+   "recall": 0.985
+  },
+  "dfd43bc0d4": {
+   "f1": 1,
+   "precision": 1,
+   "recall": 1
+  },
+  "e100c9612a": {
+   "f1": 0.59,
+   "precision": 0.42,
+   "recall": 0.991
+  },
+  "e1c7023ee2": {
+   "f1": 0.727,
+   "precision": 0.574,
+   "recall": 0.992
+  },
+  "e1cd54e557": {
+   "f1": 0.835,
+   "precision": 0.725,
+   "recall": 0.983
+  },
+  "e372e42c0a": {
+   "f1": 1,
+   "precision": 1,
+   "recall": 1
+  },
+  "e4c6a3b482": {
+   "f1": 0.975,
+   "precision": 0.95,
+   "recall": 1
+  },
+  "e593d7fe88": {
+   "f1": 1,
+   "precision": 1,
+   "recall": 1
+  },
+  "e7301133ba": {
+   "f1": 0.955,
+   "precision": 0.914,
+   "recall": 1
+  },
+  "e7994d5500": {
+   "f1": 0.916,
+   "precision": 0.847,
+   "recall": 0.998
+  },
+  "e7d77f1869": {
+   "f1": 0.842,
+   "precision": 0.908,
+   "recall": 0.784
+  },
+  "ea25dd7edf": {
+   "f1": 0.909,
+   "precision": 0.832,
+   "recall": 1
+  },
+  "eb62ac8425": {
+   "f1": 0.862,
+   "precision": 0.769,
+   "recall": 0.981
+  },
+  "ec3878db7e": {
+   "f1": 0.99,
+   "precision": 0.981,
+   "recall": 1
+  },
+  "ec7fc408c5": {
+   "f1": 0.993,
+   "precision": 0.992,
+   "recall": 0.995
+  },
+  "ecb46e3e48": {
+   "f1": 0.866,
+   "precision": 0.767,
+   "recall": 0.996
+  },
+  "eecd257509": {
+   "f1": 0.929,
+   "precision": 0.87,
+   "recall": 0.996
+  },
+  "ef2b3f268a": {
+   "f1": 0.888,
+   "precision": 0.799,
+   "recall": 1
+  },
+  "ef4e67b66d": {
+   "f1": 0.966,
+   "precision": 0.937,
+   "recall": 0.996
+  },
+  "f105de6e63": {
+   "f1": 0.673,
+   "precision": 0.569,
+   "recall": 0.825
+  },
+  "f344ca5fb3": {
+   "f1": 0.951,
+   "precision": 0.907,
+   "recall": 1
+  },
+  "f5c90a6d52": {
+   "f1": 0.829,
+   "precision": 0.708,
+   "recall": 1
+  },
+  "f6ac15a4d9": {
+   "f1": 0.464,
+   "precision": 0.302,
+   "recall": 1
+  },
+  "f81c6c05d9": {
+   "f1": 0.968,
+   "precision": 0.939,
+   "recall": 1
+  },
+  "f8ff621a0b": {
+   "f1": 0.955,
+   "precision": 0.913,
+   "recall": 1
+  },
+  "fde930b018": {
+   "f1": 0.883,
+   "precision": 0.838,
+   "recall": 0.932
+  },
+  "ff0f958ade": {
+   "f1": 0.992,
+   "precision": 0.983,
+   "recall": 1
+  },
+  "ffc109d474": {
+   "f1": 1,
+   "precision": 1,
+   "recall": 1
+  }
+ }
+}
