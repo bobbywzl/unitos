@@ -713,6 +713,22 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
   const columns0 = input.map((_, n) => columnOf(input, n, ctx));
   const kinds0 = input.map((l, n) => kindOf(l, ctx, columns0[n], fenced(l)));
   for (let n = 0; n < input.length; n++) if (kinds0[n] === "math" && !fenced(input[n]) && isProseLine(input, n, kinds0, columns0, ctx)) kinds0[n] = "text";
+  // The rows of cases: lines that start just right of a tall delimiter a
+  // math line ends with, within its height, are the display's, words and
+  // all (parse loop finding: ICML's ξ(0, h) ∼ {h^{−1/2}, smooth
+  // activations; h^{−1/3}, kinked activations} read its rows as two
+  // paragraphs, and the display, its brace open, was a crop).
+  const opening = fences.filter((f) =>
+    input.some((l, m) => {
+      const { xEnd } = unlabeled(l);
+      return kinds0[m] === "math" && l.y > f.y1 && l.y < f.y2 && xEnd >= f.x1 && xEnd <= f.x2 + l.size * 0.3;
+    }),
+  );
+  for (let n = 0; n < input.length; n++) {
+    const l = input[n];
+    if (kinds0[n] !== "text") continue;
+    if (opening.some((f) => l.y > f.y1 && l.y < f.y2 && l.x >= f.x2 - l.size * 0.2 && l.x - f.x2 < l.size * 1.5)) kinds0[n] = "math";
+  }
   // A line of a lone period stacked under or over a period of a math line,
   // at its x, is the rest of \vdots: LaTeX stacks the text font's periods
   // 4 pt apart, and the lines split the stack (parse loop finding: the MML
