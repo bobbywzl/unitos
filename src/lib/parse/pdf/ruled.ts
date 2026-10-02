@@ -338,6 +338,19 @@ function proseHalves(lines: Line[], x1: number, x2: number, items: Item[], band:
   return new Set(prose.map((p) => p.line)).size * 4 >= lines.length && halves.every((n) => n >= 3);
 }
 
+// A display in a frame (\boxed, a framed box): two rules over and under it
+// and a rule down each side, its characters most of them in math fonts. A
+// matrix's rows in it set columns as a table's do, and it read as a table
+// of the matrix's entries (parse loop finding: the CS 229 refresher frames
+// its displays: "xyᵀ = (x₁y₁ ⋯ x₁yₙ; …) ∈ ℝ^{m×n}" read as a table of
+// three columns). The display reads as math (math/display.ts).
+function framedMath(box: Box, items: Item[], columns: Rule[]): boolean {
+  const side = (x: number) => columns.some((r) => Math.abs(r.x1 - x) <= 2 && r.y1 <= box.y1 + 2 && r.y2 >= box.y2 - 2);
+  if (!side(box.x1) || !side(box.x2)) return false;
+  const chars = (list: Item[]) => list.reduce((n, it) => n + it.str.replace(/\s/g, "").length, 0);
+  return chars(items.filter((it) => it.math)) * 2 >= chars(items);
+}
+
 // A stack's rules, and the rule its last row would have: a table open at
 // its foot, whose column rules run on under its lowest rule and end level
 // with one another where its last row does (the W-9 rules no line under
@@ -614,7 +627,7 @@ export function ruledTables(all: Item[], page: PageDrawing, pageWidth: number, p
       if (!free(box)) continue;
       const inside = items.filter((it) => inBox(it, { ...box, x1: box.x1 - 2, x2: box.x2 + 2 }));
       const lines = buildLines(inside, 0);
-      if (!isTableRegion(lines, box.x2 - box.x1, columns) || slices(box, lines, items)) continue;
+      if (!isTableRegion(lines, box.x2 - box.x1, columns) || slices(box, lines, items) || framedMath(box, inside, columns)) continue;
       const inner = rules.filter((r) => r.y1 < box.y2 - 1 && r.y1 > box.y1 + 1 && r.x1 >= box.x1 - 3 && r.x2 <= box.x2 + 3);
       const region = { box, items: inside, lines, grid: null, rules: inner, drawing };
       // The rules drawn between its columns are the table's, no chart's
