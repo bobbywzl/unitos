@@ -3687,7 +3687,7 @@
   },
   "lastampa.it.temperature.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "latercera.com-laagenda.html": {
@@ -4862,7 +4862,7 @@
   },
   "„Sieci”_ IPN, czyli element infrastruktury krytycznej Tygodnik Sieci.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "zamg.ac.at-Jahresbericht.html": {
