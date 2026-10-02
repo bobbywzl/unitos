@@ -1504,6 +1504,28 @@ function linearAt(input: Atom[]): string {
     for (const s of label) s.claimed = true;
     if (label.length) labels.set(a, label);
   }
+  // So is a label stacked under a relation (\underset{n\to+\infty}{\sim}):
+  // small glyphs under its width, wholly under its baseline, and the
+  // glyphs set on with them (the CS 229 probability refresher's central
+  // limit theorem read "\overline{X}_{n\rightarrow}\sim_{\infty}", and
+  // lost its "+").
+  const underLabels = new Map<Atom, Atom[]>();
+  for (const a of main) {
+    if (a.cls !== "rel") continue;
+    const label = small.filter((s) => !s.claimed && cx(s) > a.x1 - 0.1 * em && cx(s) < a.x2 + 0.1 * em && a.yb - s.yb > 0.4 * baseSize && s.top < a.yb);
+    for (let grew = label.length > 0; grew; ) {
+      grew = false;
+      for (const s of small) {
+        if (s.claimed || label.includes(s)) continue;
+        if (label.some((l) => Math.abs(l.yb - s.yb) < 0.1 * em && (Math.abs(s.x1 - l.x2) < 0.3 * em || Math.abs(l.x1 - s.x2) < 0.3 * em))) {
+          label.push(s);
+          grew = true;
+        }
+      }
+    }
+    for (const s of label) s.claimed = true;
+    if (label.length) underLabels.set(a, label);
+  }
   // The limit under \lim, \sup, \max in display is claimed before any
   // script: wider than the name, it starts left of it ("N → ∞" under "lim"
   // read as a subscript of the "=" before it).
@@ -1646,6 +1668,8 @@ function linearAt(input: Atom[]): string {
     if (tex === ":" && prev && a.x1 - prev.x2 < 0.25 * em && next && next.x1 - a.x2 > 0.3 * em) tex = "\\colon";
     const label = labels.get(a);
     if (label) tex = `\\overset{${linear(label.map((s) => ({ ...s, claimed: false })))}}{${tex}}`;
+    const under = underLabels.get(a);
+    if (under) tex = `\\underset{${linear(under.map((s) => ({ ...s, claimed: false })))}}{${tex}}`;
     const right = next ? next.x1 : Infinity;
     let mine = small.filter((s) => !s.claimed && s.x1 >= last.x2 - 0.25 * em && s.x1 < right - 0.05 * em);
     // A script's word runs on under the next symbol's bracket, set tight on
