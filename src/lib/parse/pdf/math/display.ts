@@ -988,7 +988,17 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
       over !== undefined &&
       over.y - top.y < pitch * 1.6 &&
       band.every((l) => kindIn(l) === "math" && Math.abs(l.x - over.x) < 1 && !centered(l));
-    const math = !flush && band.some((l) => kindIn(l) === "math" && (labels > 0 || band.length > 1 || alone(l)));
+    // A formula with words of prose beside it, set in at the text's edge
+    // (an item's indent, a proof's), that reads as no display is a line of
+    // the text: its formulas read inline. A display stands centered or
+    // labeled (parse loop finding: GeoTopo's "a) f heißt stetig :⇔ ∀U ∈
+    // 𝔗_Y : f⁻¹(U) ∈ 𝔗_X." and "„⇐“: Sei U ⊆ Y offen, …" were crops).
+    const worded =
+      labels === 0 &&
+      band.some((l) => kindIn(l) === "math" && wordsOf(l, columns[lines.indexOf(l)]).words.some((w) => /^\p{L}{3,}$/u.test(w))) &&
+      !band.some(centered) &&
+      !reads(join(band));
+    const math = !flush && !worded && band.some((l) => kindIn(l) === "math" && (labels > 0 || band.length > 1 || alone(l)));
     // A band of small lines alone is no display (a figure's labels over
     // the rules of its drawing, arXiv 2411.19946 pp. 1, 3): a display has
     // glyphs at the text's size.
