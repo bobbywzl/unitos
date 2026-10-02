@@ -318,8 +318,8 @@ export function cropScores(pdf: PdfText, cand: Flat): CropScores {
 
 export type FigureScores = { figures: number; split: number; score: number | null; found: { page: number; text: string }[] };
 
-/** A caption's label and number: "Figure 3.", "Fig. 2:", "Table IV", "図表Ⅰ-2-1-3", "表 1". */
-const CAPTION_LABEL_RE = /^\s*(?:fig(?:ure)?\.?|table|tab\.|scheme|chart|exhibit|plate|図表?|表)\s*[\dIVXLivxlⅠ-Ⅻ]/iu;
+/** A caption's label and number: "Figure 3.", "Fig. 2:", "Table IV", "Abbildung 1.4:", "Abb. 2", "Tabelle 1", "図表Ⅰ-2-1-3", "表 1". */
+const CAPTION_LABEL_RE = /^\s*(?:fig(?:ure)?\.?|table|tab\.|scheme|chart|exhibit|plate|abbildung|abb\.|tabelle|図表?|表)\s*[\dIVXLivxlⅠ-Ⅻ]/iu;
 
 /** A figure in two pieces: two of the candidate's figures on one page, one
     over the other with no line of the page between them, sharing most of
