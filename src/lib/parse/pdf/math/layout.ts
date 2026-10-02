@@ -755,7 +755,12 @@ function structure(atoms: Atom[], rules: Rule[], depth = 0): Atom[] {
       // fraction in a script set at the script's size (MathJax's
       // e^{-\frac{1}{2}…} in OpenStax's f(x)): its own size is theirs, and
       // \tfrac keeps its parts at that size.
-      const part = Math.max(maxSize(above), maxSize(below));
+      // A big operator in a part hangs at its own size, larger than the
+      // part's letters: the part's size is theirs (the CS 229 refresher's
+      // Bayes rule, a ∑ under its bar, made the fraction larger than the
+      // "P(A_k|B) =" before it, which then read as its prescript).
+      const partSize = (list: Atom[]) => maxSize(list.some((a) => !hangingFamily(a.fam)) ? list.filter((a) => !hangingFamily(a.fam)) : list);
+      const part = Math.max(partSize(above), partSize(below));
       const script = pool.some(
         (a) =>
           !above.includes(a) &&
