@@ -811,7 +811,7 @@ type TitleClues = { page: number; running: Set<string>; words?: Map<string, numb
 // than the body, a centered heading that opens the first page is the title:
 // amsart sets its title in bold capitals at the body's size (arXiv
 // 2506.08494, 2410.04586), and a Word contract in bold centered lines.
-const SECTION_NUMBER_RE = /^\d{1,2}(?:\.\d{1,2})*\.?\s+\p{Lu}/u;
+const SECTION_NUMBER_RE = /^\d{1,2}(?:\.\d{1,2})*\.?\s+[\p{Lu}\p{Lo}\p{N}]/u;
 function titleOf(segments: Segment[], bodySize: number, clues: TitleClues, pages = 1): Segment | undefined {
   const onPages = (s: Segment) => s.page >= clues.page && s.page < clues.page + pages;
   // Most of a title's letters are set large: the W-9's form number, "W-9"
