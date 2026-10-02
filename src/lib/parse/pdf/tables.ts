@@ -518,6 +518,9 @@ export function boldHeaderRows(rows: TableRow[]): number {
 // A cell of a value: an amount, a share, or a count ("$ 2,174", "(357)",
 // "21.0 %", "-£2,000").
 export const NUMERIC_CELL_RE = /^[-−–]?[$€£¥]?\s*\(?[-−–]?[\d.,]+\)?\s*%?$/;
+// A cell of a measure: a number with a short unit or none ("2.20x", "35
+// ms"), or a dash for none.
+const VALUE_RE = /^(?:[-−–]?[$€£¥]?\s*\(?[-−–]?[\d.,]*\d[\d.,]*\)?\s*(?:%|×|x|[a-zµμ]{1,3})?|[-−–—])$/;
 
 // Row starts in a run of lines split into cells. Rows come from the run's
 // vertical rhythm: with two gap sizes present, the small gap is a wrapped
@@ -564,7 +567,12 @@ function rowStartsOf(run: Line[], cellsOf: Cell[][], leading: number): number[] 
     const firstOnly = cellsOf[k].every((cell, idx) => idx === 0 || cell.text.length === 0);
     const valuesNext = k + 1 < run.length && /^\p{Ll}/u.test(cellsOf[k + 1][0].text) && valued(k + 1);
     const opens = lastFirst >= 0 && (colon(lastFirst) || (valued(lastFirst) && (colon(k) || valuesNext)));
-    const continues = (firstOnly && !opens) || /^[a-z]/.test(cellsOf[k][0].text);
+    // A lowercase label with a value in every column the row over it fills
+    // is a row of its own: a benchmark's or a function's name ("access-
+    // nbody  8  16  18 …"). Parse loop finding: TraceMonkey's Figure 13 read
+    // 24 such rows as one row of wrapped cells.
+    const own = lastFirst >= 0 && valued(lastFirst) && cellsOf[lastFirst].every((c, idx) => idx === 0 || !c.text || VALUE_RE.test(cellsOf[k][idx].text.trim()));
+    const continues = (firstOnly && !opens) || (/^[a-z]/.test(cellsOf[k][0].text) && !own);
     const wrap =
       continues &&
       lastFirst >= 0 &&
@@ -580,9 +588,10 @@ function rowStartsOf(run: Line[], cellsOf: Cell[][], leading: number): number[] 
   // first column: the head lines are head rows, a row for each line that
   // fills other columns than the line above it ("Year Ended December 31,"
   // over the years over the amounts: the 10-K's OI&E statement, p. 78, read
-  // its heads into its first row).
+  // its heads into its first row). A measure with its unit is a value
+  // ("2.20x": TraceMonkey's Figure 13 read its heads into "3d-cube"'s row).
   const filled = (k: number) => cellsOf[k].map((c) => (c.text.length > 0 ? "1" : "0")).join("");
-  const values = anchors.length > 0 && cellsOf[anchors[0]].slice(1).some((c) => c.text) && cellsOf[anchors[0]].slice(1).every((c) => !c.text || NUMERIC_CELL_RE.test(c.text.trim()));
+  const values = anchors.length > 0 && cellsOf[anchors[0]].slice(1).some((c) => c.text) && cellsOf[anchors[0]].slice(1).every((c) => !c.text || VALUE_RE.test(c.text.trim()));
   if (anchorRows && values && anchors[0] > 0) {
     for (let m = 1; m < anchors[0]; m++) if (filled(m) !== filled(m - 1)) rowStarts.push(m);
     rowStarts.push(anchors[0]);
