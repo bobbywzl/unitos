@@ -393,6 +393,25 @@ function inlineHost(line: Line, lines: Line[], kinds: LineKind[], fences: Box[],
       ),
   );
   if (under) return under;
+  // A limit over or under a big operator of a text line, set small and
+  // centered on it: a display-size operator hangs past the line's pitch,
+  // and its limits stand farther off than a row would (parse loop finding:
+  // GeoTopo's "sodass ⋃_{j=1}^{n} U_{i_j} ∪ (X∖A) = X" read "j=1" as a
+  // paragraph of its own, its "n" lost).
+  const mid = (line.x + line.xEnd) / 2;
+  const limitOf = lines.find(
+    (t, n) =>
+      text(t, n) &&
+      line.items.every((i) => i.size <= t.size * 0.85) &&
+      t.items.some((i) =>
+        (i.glyphs ?? []).some((g) => {
+          const box = hangingGlyph(g);
+          if (!box?.display || mid < g.x - g.size * 0.3 || mid > g.x + g.w + g.size * 0.3) return false;
+          return (line.y < box.bottom && box.bottom - line.y < line.size * 1.6) || (line.y > box.top && line.y - box.top < line.size);
+        }),
+      ),
+  );
+  if (limitOf) return limitOf;
   // A fraction's bar on the text line, under or over the whole row, takes
   // the line as far as the row: a line may end in a fraction whose
   // numerator is wider than its denominator, or whose parts both stand off
