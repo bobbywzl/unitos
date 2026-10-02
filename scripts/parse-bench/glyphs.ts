@@ -350,13 +350,20 @@ function atomsOf(glyphs: PageGlyph[]): Atom[] | null {
 
 /** The symbols the atoms draw, each atom rendered alone at its script level
     (its size against the formula's largest glyph outside the extension
-    font: 0.85 or more is 0, 0.6 or more is 1, else 2; an extension font's
+    font: 0.85 or more is 0, 0.6 or more is 1, else 2; where two script
+    sizes stand under it, the larger is 1 and the smaller 2; an extension font's
     glyph is 0 down to 0.75, and one set in a script's size is a script's,
     as the app's check has it: the ∑ of an exponent); null when KaTeX
     cannot read an atom. Pieces and radical signs draw as rules or pictures
     in KaTeX: they are left out on both sides. */
 function atomSymbols(atoms: Atom[]): string[] | null {
   const big = Math.max(0, ...atoms.filter((a) => a.fam !== "omx").map((a) => a.size)) || Math.max(1, ...atoms.map((a) => a.size));
+  // Two script sizes under the formula's: the larger is the first level,
+  // the smaller the second, whatever their ratio to the formula's (an 8 pt
+  // formula sets its scripts at 6 and 5 pt: 5/8 is over 0.6).
+  const smalls = atoms.filter((a) => a.fam !== "omx" && a.tex && !a.piece && a.size < big * 0.85).map((a) => a.size);
+  const script = Math.max(0, ...smalls);
+  const two = smalls.some((s) => s < script * 0.9);
   const out: string[] = [];
   for (const a of atoms) {
     // A stacked delimiter counts once: its top piece, and the top bar of a column of bar pieces.
@@ -372,7 +379,7 @@ function atomSymbols(atoms: Atom[]): string[] | null {
     }
     if (a.piece || a.cls === "piece" || a.cls === "radical" || !a.tex) continue;
     const r = a.size / big;
-    const level = (a.fam === "omx" && r >= 0.75) || r >= 0.85 ? 0 : r >= 0.6 ? 1 : 2;
+    const level = (a.fam === "omx" && r >= 0.75) || r >= 0.85 ? 0 : two ? (a.size >= script * 0.95 ? 1 : 2) : r >= 0.6 ? 1 : 2;
     const own = drawn(a.cls === "accent" ? `${a.tex}{}` : a.tex);
     if (!own) return null;
     for (const s of own) {
