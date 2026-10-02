@@ -671,7 +671,11 @@ export function glyphScores(pages: PageGlyphs[], doc: Doc, range: [number, numbe
     if (!page) continue;
     const glyphs = glyphsIn(page, block.at.region);
     if (block.kind === "figure") {
-      if (glyphs.length > 0 && glyphs.every((g) => g.family !== null) && glyphs.some((g) => MATH.has(g.family ?? ""))) mathImages++;
+      // A figure with its own caption ("Fig. 11") is a figure, whatever
+      // fonts its labels are set in: Springer's Fig. 11 sets a chart's
+      // axes and legend in TeX's math fonts, and counted as an equation.
+      const captioned = OWN_CAPTION_RE.test((block.caption ?? []).map((s) => s.text).join("").trim());
+      if (!captioned && glyphs.length > 0 && glyphs.every((g) => g.family !== null) && glyphs.some((g) => MATH.has(g.family ?? ""))) mathImages++;
       continue;
     }
     if (block.kind !== "equation") continue;
