@@ -4,7 +4,7 @@
 // math, the TeX math family).
 
 import type { Glyph } from "@/lib/parse/pdf/drawing";
-import { isBbm, mathGlyph, openTypeGlyphs, sizeFontGlyph } from "@/lib/parse/pdf/math-fonts";
+import { extensionGlyph, isBbm, mathGlyph, openTypeGlyphs, sizeFontGlyph } from "@/lib/parse/pdf/math-fonts";
 import type { Flags } from "@/lib/parse/pdf/types";
 
 export const CONTROL_CHARS_RE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g;
@@ -257,10 +257,12 @@ type UnicodeFont =
 // OpenSymbol also draws a list's bullets and dashes: those are no math.
 // MathTime's extension font (MTEX) numbers its glyphs anew in each PDF
 // (Springer's ∑ at 0x08): each is a big operator, a sized delimiter, or a
-// piece, and stays unread. So does each glyph of MathDesign's symbol fonts
-// A and B, whose layouts the tables lack, but for font A's capitals at
-// their own codes, which are \mathbb's: the text layer reads them as "O"
-// and "R" (arXiv 2506.06352's u: 𝕆 → ℝ).
+// piece, read by its character and its advance as TeX's extension font's
+// (math-fonts.ts extensionGlyph; parse loop finding: every Springer display
+// with one was a crop). Each glyph of MathDesign's symbol fonts A and B,
+// whose layouts the tables lack, stays unread, but for font A's capitals
+// at their own codes, which are \mathbb's: the text layer reads them as
+// "O" and "R" (arXiv 2506.06352's u: 𝕆 → ℝ).
 const UNICODE_TEX_RE =
   /^(STIXGeneral|STIXNonUnicode|STIXVariants|LibertineMath|NewTXB?MI|txmia|txsy|MTMI|MTSY|RMTMI|MTEX|MnSymbol|EURM|OpenSymbol|MathDesign-.+-MathDesignSymbol[AB]-)/;
 const ITALIC_MATH_RE = /Italic|MI(B|\d)*$|txmia|MathMI|^EURM/;
@@ -339,6 +341,10 @@ const SAME: Record<string, [MathFamily, number]> = {
   "˙": ["ot1", 0x5f], "¨": ["ot1", 0x7f], "´": ["ot1", 0x13], "ˊ": ["ot1", 0x13], "`": ["ot1", 0x12], "ˋ": ["ot1", 0x12],
   "˘": ["ot1", 0x15], "ˇ": ["ot1", 0x14], "˚": ["ot1", 0x17], "": ["oms", 0x36], "/": ["oml", 0x3d],
   "⋅": ["oms", 0x01], "∘": ["oms", 0x0e], "∙": ["oms", 0x0f], "∣": ["oms", 0x6a], "∖": ["oms", 0x6e],
+  // MathTime's symbol font maps its angle brackets to the CJK ones and its
+  // \| to the double vertical line (parse loop finding: Springer's ⟨…⟩
+  // and ‖…‖ read as no symbol, and every formula with one failed).
+  "〈": ["oms", 0x68], "〉": ["oms", 0x69], "‖": ["oms", 0x6b],
 };
 
 // Unicode's mathematical alphanumerics (U+1D400…): the first code of each
@@ -409,7 +415,10 @@ function texWorldChar(char: string, italic: boolean, bullets: boolean): Tex | nu
   // The micro sign is μ.
   const c = char.normalize("NFKC");
   const letter = /^([A-Za-z]|\p{Script=Greek})$/u.test(c);
-  const tex = (italic && letter ? texOf(c, ["oml"]) : null) ?? openTypeChar(c);
+  // A spacing accent reads by its own character: NFKC makes "¯" a space
+  // and a combining macron, which no table holds (parse loop finding:
+  // MathTime's \bar and \tilde, Springer's ā and ã, read as no symbol).
+  const tex = (italic && letter ? texOf(c, ["oml"]) : null) ?? openTypeChar(c) ?? openTypeChar(char);
   return tex?.family === "omx" ? null : tex;
 }
 
@@ -560,7 +569,14 @@ export function unicodeMath(glyphs: Glyph[]): Glyph[] {
       // wide.
       const delta = /^RMTMI/.test(g.base) && g.code === 0x31 && g.w > g.size * 0.65;
       if (delta) g.unicode = "Δ";
-      tex = font.blackboard && g.code >= 0x41 && g.code <= 0x5a ? { family: "msb", code: g.code } : font.unread ? null : texWorldChar(g.unicode, font.italic && !delta, font.bullets);
+      tex =
+        font.blackboard && g.code >= 0x41 && g.code <= 0x5a
+          ? { family: "msb", code: g.code }
+          : font.unread
+            ? /^MTEX/.test(g.base)
+              ? extensionGlyph(g.unicode, g.w / g.size)
+              : null
+            : texWorldChar(g.unicode, font.italic && !delta, font.bullets);
     }
     else {
       tex = openTypeSized(g, font.name);
