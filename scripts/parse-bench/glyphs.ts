@@ -505,7 +505,9 @@ function printedText(doc: Doc): string {
         for (const row of b.rows) for (const cell of row.cells) spans(cell.spans);
         break;
       case "equation":
-        parts.push(mathLeaves(b, true).join(""), b.label ?? "");
+        // A label in math (\tag*{$\blacksquare$}, an end-of-proof box set
+        // beside the display's last row) prints its symbols, not its TeX.
+        parts.push(mathLeaves(b, true).join(""), (b.label ?? "").replace(/\$([^$]+)\$/g, (_, tex: string) => mathLeaves({ latex: tex }, false).join("")));
         break;
       case "figure":
         // A crop's glyphs are counted from its region (glyphScores), and so
