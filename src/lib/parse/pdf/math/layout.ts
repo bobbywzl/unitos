@@ -141,10 +141,23 @@ function variantOf(base: string): Variant {
     depth: a big operator or delimiter hangs below its origin; a text font's
     letter, digit, or bracket too. Other glyphs come back apart (the check
     fails on them). */
+const LIGATURES: Record<string, string> = { "ﬀ": "ff", "ﬁ": "fi", "ﬂ": "fl", "ﬃ": "ffi", "ﬄ": "ffl" };
+
 function atomsOf(glyphs: Glyph[]): { atoms: Atom[]; unknown: Glyph[] } {
   const atoms: Atom[] = [];
   const unknown: Glyph[] = [];
   for (const g of glyphs) {
+    // A text font's ligature is its letters, each a share of its advance:
+    // T1's ﬀ (cm-super, at 0x1b) has no glyph in OT1's table, and GeoTopo's
+    // "𝔘 = {U_i} mit U_i offen in X" was a crop (parse loop finding).
+    const letters = LIGATURES[g.unicode];
+    if (letters && (g.family === null || g.family === "ot1")) {
+      const w = Math.max(g.w, 0) / letters.length;
+      const parts = [...letters].map((ch, k) => textAtom({ ...g, unicode: ch, family: null, x: g.x + k * w, w }));
+      if (parts.every((a) => a !== null)) atoms.push(...(parts as Atom[]));
+      else unknown.push(g);
+      continue;
+    }
     const entry = g.family ? mathGlyph(g.family, g.code) : null;
     if (!entry || (!entry.latex && entry.cls !== "piece" && entry.cls !== "radical")) {
       const text = g.family === null ? textAtom(g) : null;
