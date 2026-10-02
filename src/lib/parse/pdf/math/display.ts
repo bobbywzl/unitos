@@ -144,6 +144,7 @@ function wordsOf(line: Line, column: { left: number; right: number }) {
   return { x, xEnd, text, label, outside, zoneChars, words, letters, opens };
 }
 
+const CONTENTS_TAIL_RE = /(?:\s*\.){5,}\s*\d{1,4}\s*$/;
 function kindOf(line: Line, ctx: PageContext, column: { left: number; right: number }, fenced: boolean): LineKind {
   if (LABEL_RE.test(line.text.trim()) || QED_RE.test(line.text.trim())) return "label";
   const { x, xEnd, text, label, outside, zoneChars, words, letters, opens } = wordsOf(line, column);
@@ -159,6 +160,10 @@ function kindOf(line: Line, ctx: PageContext, column: { left: number; right: num
   // A caption is text, whatever its math (parse loop finding: The Art of
   // Linear Algebra's "Figure 16: S = QΛQᵀ" read as an equation).
   if (CAPTION_RE.test(text.trim())) return "text";
+  // So is a contents entry, its leader dots run to its page number (parse
+  // loop finding: The Art of Linear Algebra's "6.1 A = CR . . . . 6" to
+  // "6.5 A = UΣVᵀ . . . . 9" joined as one display's rows).
+  if (CONTENTS_TAIL_RE.test(line.text)) return "text";
   const glyphs = line.items.flatMap((i) => i.glyphs ?? []);
   // A big operator of a display's size, taller than a line and a half (an
   // integral with limits of two levels, IEEE Access p. 9), stands in a
