@@ -811,6 +811,7 @@ type TitleClues = { page: number; running: Set<string>; words?: Map<string, numb
 // than the body, a centered heading that opens the first page is the title:
 // amsart sets its title in bold capitals at the body's size (arXiv
 // 2506.08494, 2410.04586), and a Word contract in bold centered lines.
+const SECTION_NUMBER_RE = /^\d{1,2}(?:\.\d{1,2})*\.?\s+\p{Lu}/u;
 function titleOf(segments: Segment[], bodySize: number, clues: TitleClues, pages = 1): Segment | undefined {
   const onPages = (s: Segment) => s.page >= clues.page && s.page < clues.page + pages;
   // Most of a title's letters are set large: the W-9's form number, "W-9"
@@ -838,8 +839,14 @@ function titleOf(segments: Segment[], bodySize: number, clues: TitleClues, pages
     for (const w of words) own.set(w, (own.get(w) ?? 0) + 1);
     return words.filter((w) => (clues.words!.get(w) ?? 0) > own.get(w)!).length * 2 >= words.length;
   };
+  // parse loop finding: a page that opens with its first section ("1 A
+  // small example", a LaTeX article with no \maketitle) has no title: a
+  // numbered heading set flush left under half again the body's size is a
+  // section's. A title set off with a number ("10 Simple Rules for …") is
+  // set larger, or centered.
+  const section = (s: Segment) => s.align !== "center" && s.rawSize! < bodySize * 1.5 && SECTION_NUMBER_RE.test(s.text);
   let heads = segments.filter(
-    (s) => onPages(s) && s.type === "HEADING" && s.rawSize !== undefined && s.rawSize >= bodySize * 1.14 && s.text.length > 4 && large(s) && wordy(s) && known(s),
+    (s) => onPages(s) && s.type === "HEADING" && s.rawSize !== undefined && s.rawSize >= bodySize * 1.14 && s.text.length > 4 && large(s) && wordy(s) && known(s) && !section(s),
   );
   if (heads.length === 0 && pages === 1) {
     const at = segments.findIndex((s) => s.page === clues.page && s.text.trim().length > 0);
