@@ -838,6 +838,13 @@ const TABLE: Record<MathFamily, Record<number, Row>> = {
     0x08: ["\\Phi", "Φ", "ord", 0.683, 0.0],
     0x09: ["\\Psi", "Ψ", "ord", 0.683, 0.0],
     0x0a: ["\\Omega", "Ω", "ord", 0.683, 0.0],
+    // The ligatures: \mathrm{eff} sets its ff as one glyph (ICML's ξ_eff
+    // read with no ff, and two displays were crops: parse loop finding).
+    0x0b: ["ff", "ff", "ord", 0.694, 0.0, {"upright": true}],
+    0x0c: ["fi", "fi", "ord", 0.694, 0.0, {"upright": true}],
+    0x0d: ["fl", "fl", "ord", 0.694, 0.0, {"upright": true}],
+    0x0e: ["ffi", "ffi", "ord", 0.694, 0.0, {"upright": true}],
+    0x0f: ["ffl", "ffl", "ord", 0.694, 0.0, {"upright": true}],
     0x12: ["\\grave", "̀", "accent", 0.694, 0.0],
     0x13: ["\\acute", "́", "accent", 0.694, 0.0],
     0x14: ["\\check", "̌", "accent", 0.628, 0.0],

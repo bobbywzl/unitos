@@ -214,8 +214,10 @@ function atomsOf(glyphs: Glyph[]): { atoms: Atom[]; unknown: Glyph[] } {
 // only (parse loop finding: the Japanese "L = E⁻¹ として, A = LU" lost its
 // kana, failed the check, and was a crop).
 const TEXT_CHAR_RE = /^[A-Za-z0-9,.;:()[\]=+−–·!/<>\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u017F\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}ー]$/u;
-/** A letter a word in a formula holds: ASCII, Latin with a mark, or CJK. */
-const LETTER_RE = /^[A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u017F\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}ー]$/u;
+/** A letter a word in a formula holds: ASCII, Latin with a mark, or CJK.
+    A ligature of TeX's text font (ff, fi, fl, ffi, ffl) is the letters it
+    joins: \mathrm{eff} read \mathrm{e}ff. */
+const LETTER_RE = /^(?:[A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u017F\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}ー]|ff|fi|fl|ffi|ffl)$/u;
 /** A Latin letter with a mark, or a CJK character: no math letter, so text only. */
 const MARKED_RE = /[\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u017F\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}ー]/u;
 const CM_NAME_RE = /cm(r|mi|mib|sy|bsy|ex|bx|ti|ss|tt|sl)\d/i;
