@@ -87,6 +87,8 @@
   { "id": "word-cambria-math", "category": "report", "pdf": ".bench/real/word-cambria-math.pdf", "url": "https://raw.githubusercontent.com/mozilla/pdf.js/master/test/pdfs/bug1937438_from_word.pdf", "license": "open", "sweep": true },
   { "id": "lualatex-lm-math", "category": "math-tex", "pdf": ".bench/real/lualatex-lm-math.pdf", "url": "https://raw.githubusercontent.com/mozilla/pdf.js/master/test/pdfs/bug1937438_mml_from_latex.pdf", "license": "open", "sweep": true },
   { "id": "lualatex-stix-math", "category": "math-tex", "pdf": ".bench/real/lualatex-stix-math.pdf", "url": "https://raw.githubusercontent.com/mozilla/pdf.js/master/test/pdfs/bug1937438_af_from_latex.pdf", "license": "open", "sweep": true },
+  { "id": "probability-cheatsheet", "category": "math-tex", "pdf": ".bench/real/probability-cheatsheet.pdf", "url": "https://raw.githubusercontent.com/wzchen/probability_cheatsheet/master/probability_cheatsheet.pdf", "license": "open", "sweep": true },
+  { "id": "cs229-algebra-calculus", "category": "math-tex", "pdf": ".bench/real/cs229-algebra-calculus.pdf", "url": "https://raw.githubusercontent.com/afshinea/stanford-cs-229-machine-learning/master/en/refresher-algebra-calculus.pdf", "license": "open", "sweep": true },
   { "id": "tracemonkey", "category": "paper", "pdf": ".bench/real/tracemonkey.pdf", "url": "https://raw.githubusercontent.com/mozilla/pdf.js/master/test/pdfs/tracemonkey.pdf", "license": "copyrighted", "pages": [1, 12], "sweep": true },
   { "id": "art-of-linear-algebra-j", "category": "cjk", "pdf": ".bench/real/art-of-linear-algebra-j.pdf", "url": "https://raw.githubusercontent.com/kenjihiranabe/The-Art-of-Linear-Algebra/main/The-Art-of-Linear-Algebra-j.pdf", "license": "public-domain", "sweep": true }
 ]
