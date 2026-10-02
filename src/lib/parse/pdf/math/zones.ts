@@ -9,7 +9,7 @@
 // page's rules are known (resolveZones).
 
 import type { Glyph, PageDrawing, Rule } from "@/lib/parse/pdf/drawing";
-import { isBoldFont, isItalicFont, isTextMath, isUnicodeMathFont, isUnreadMath } from "@/lib/parse/pdf/glyphs";
+import { isBoldFont, isItalicFont, isTextMath, isUnicodeMathFont, isUnreadMath, longArrowEnd } from "@/lib/parse/pdf/glyphs";
 import { layoutLatex } from "@/lib/parse/pdf/math/check";
 import { braceLabelBoxes, hangingGlyph, type Atom } from "@/lib/parse/pdf/math/layout";
 import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
@@ -75,12 +75,43 @@ function ownTextFont(items: Item[]): boolean {
   return own > 3 * tex;
 }
 
+/** The small glyphs set over a long arrow drawn in pieces (glyphs.ts
+    longArrowEnd): its label (\xRightarrow{\text{Def. 12.a}}). The label
+    joins the arrow's formula whatever its font, where a word in a text
+    font would end it, and the arrow is math though its first piece is the
+    text font's "=" (parse loop finding: GeoTopo's "==⇒" under "Def. 12.a"
+    and under "Kompakt", set in the text's sans, read as words, and the
+    arrow as a "⟹" of no formula; a label with a math letter, "f stetig",
+    read). */
+function arrowLabels(glyphs: Glyph[], size: number): { arrows: Set<Glyph>; labels: Set<Glyph> } {
+  const arrows = new Set<Glyph>();
+  const labels = new Set<Glyph>();
+  for (const arrow of glyphs) {
+    const end = longArrowEnd(arrow);
+    if (end === undefined) continue;
+    let label = false;
+    for (const g of glyphs) {
+      const rise = (g.y - arrow.y) / arrow.size;
+      const center = g.x + g.w / 2;
+      if (g.size < size * 0.85 && rise > 0.3 && rise < 1.1 && center > arrow.x && center < end) {
+        labels.add(g);
+        label = true;
+      }
+    }
+    if (label) arrows.add(arrow);
+  }
+  return { arrows, labels };
+}
+
 /** The formulas among a cell's glyphs (in x order), as glyph runs. */
 function zonesOf(glyphs: Glyph[], size: number, textFont: boolean): Glyph[][] {
   const zones: Glyph[][] = [];
   let cur: Glyph[] = [];
   const tight = (a: Glyph | undefined, b: Glyph | undefined) => a !== undefined && b !== undefined && boldOrSans(a) && boldOrSans(b) && gapOf(a, b) < 0.12 * size;
+  const { arrows, labels } = arrowLabels(glyphs, size);
   const kinds = glyphs.map((g, k): Kind => {
+    if (arrows.has(g)) return "math";
+    if (labels.has(g)) return "attach";
     // Where the text is set in a font of its own (Times), a letter of TeX's
     // bold or sans is a formula's: \mathbf{g}, \mathsf{G}_1 (arXiv 2504.02736
     // read "g4" and "G1" as words). A word of them is a word (\textsf{Adam}

@@ -7,7 +7,11 @@ import type { Glyph } from "@/lib/parse/pdf/drawing";
 import { extensionGlyph, isBbm, mathGlyph, openTypeGlyphs, openTypeSizedByAdvance, sizeFontGlyph } from "@/lib/parse/pdf/math-fonts";
 import type { Flags } from "@/lib/parse/pdf/types";
 
-export const CONTROL_CHARS_RE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g;
+// Control characters, C0 and C1 and DEL, are no text: a glyph whose code
+// maps to one draws a shape no text names (parse loop finding: GeoTopo's
+// xy-pic arrow tips, XYATIP's codes read as DEL, left "\x7f\x7f" in a
+// diagram's words).
+export const CONTROL_CHARS_RE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/g;
 // Some generators map common CJK glyphs to the Kangxi Radicals and CJK
 // Radicals Supplement blocks (⼴州 for 广州): the glyph looks right and a
 // search for the word finds nothing. NFKC folds the Kangxi block; the
@@ -549,6 +553,42 @@ export const isBoldFont = (base: string) => fontLook(base).bold;
     draws it otherwise, and its alphabet), and each glyph of a TeX text font
     under another name the family of CMR's (texTextFonts). A glyph no table
     knows keeps no family: a formula it is in fails the check. */
+// cmex10's radicals by size (0x70–0x73): each hangs from its origin, as
+// deep as the table says.
+const RADICAL_DEPTHS = [1.16, 1.76, 2.36, 2.96];
+
+/** A radical of an extension font that numbers its glyphs anew (MTEX):
+    its sizes share one advance, so the radicand sets the size, as TeX
+    chose it: the smallest radical as deep as the radicand. The radicand
+    is the glyphs right after the sign under its origin, read down from
+    the one nearest the bar while each stands within three quarters of an
+    em under the last and is no larger than the first (a fraction's
+    parts; the next row of a display is set larger than a script-size
+    radicand, or farther down). Parse loop finding: Springer's
+    √(k₂/D_A) in MathTime read as no symbol, and each display with one
+    was a crop. */
+function radicalBySpan(g: Glyph, glyphs: Glyph[]): { family: MathFamily; code: number } {
+  const em = g.size;
+  const start = g.x + g.w;
+  const under = glyphs
+    .filter((h) => h !== g && h.unicode.trim() !== "" && h.x >= start - 0.1 * em && h.x <= start + 1.5 * em && h.y < g.y && g.y - h.y < 3.5 * em)
+    .sort((p, q) => q.y - p.y);
+  const top = (h: Glyph) => h.y + 0.7 * h.size;
+  const bottom = (h: Glyph) => h.y - 0.25 * h.size;
+  let low = g.y;
+  const first = under[0];
+  if (first && top(first) >= g.y - em) {
+    low = bottom(first);
+    for (const h of under.slice(1)) {
+      if (h.size > first.size * 1.15 || top(h) < low - 0.75 * em) break;
+      low = Math.min(low, bottom(h));
+    }
+  }
+  const depth = (g.y - low) / em;
+  const size = RADICAL_DEPTHS.findIndex((d) => d >= depth - 0.05);
+  return { family: "omx", code: 0x70 + (size < 0 ? 3 : size) };
+}
+
 export function unicodeMath(glyphs: Glyph[]): Glyph[] {
   texTextFonts(glyphs);
   bbmLetters(glyphs);
@@ -576,7 +616,9 @@ export function unicodeMath(glyphs: Glyph[]): Glyph[] {
           ? { family: "msb", code: g.code }
           : font.unread
             ? /^MTEX/.test(g.base)
-              ? extensionGlyph(g.unicode, g.w / g.size)
+              ? g.unicode === "√"
+                ? radicalBySpan(g, glyphs)
+                : extensionGlyph(g.unicode, g.w / g.size)
               : null
             : texWorldChar(g.unicode, font.italic && !delta, font.bullets);
     }
@@ -701,6 +743,14 @@ function arrowOf(pieces: ArrowPiece[]): string | null {
 // column's edge. The glyphs keep their own boxes: the layout reads the
 // parts by their overlap.
 const compositeEnd = new WeakMap<Glyph, number>();
+// Where a long arrow drawn in pieces ends, by the glyph it sits on.
+const arrowEnd = new WeakMap<Glyph, number>();
+
+/** The end of the long arrow (⟹, ⟶, ↪) glyphTexts fused onto g, its
+    leftmost piece; undefined when g starts none. */
+export function longArrowEnd(g: Glyph): number | undefined {
+  return arrowEnd.get(g);
+}
 
 // The text of the page's glyphs where it is not the text layer's: every glyph
 // of a math family, and the glyphs of a composite or an accented letter. A
@@ -835,6 +885,7 @@ export function glyphTexts(glyphs: Glyph[]): Map<Glyph, string> {
       if (arrow) {
         const first = run.reduce((l, g) => (g.x < l.x - 0.01 ? g : l));
         fuse(first, arrow, run.filter((g) => g !== first));
+        arrowEnd.set(first, compositeEnd.get(first)!);
       }
     }
   }

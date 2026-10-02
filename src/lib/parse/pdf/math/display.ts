@@ -728,6 +728,41 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
     );
     if (stacked) kinds0[n] = "math";
   }
+  // A row of an aligned display holds words of its own, as many as it
+  // likes, in any language: it opens with its relation, at the x of a math
+  // row over or under it, a row's pitch away, both set well into the
+  // column (three ems or more), where no prose starts (parse loop finding:
+  // GeoTopo p19's "⇒ 𝔘 = {U_i | i ∈ I} ∪ {X ∖ A} ist offene Überdeckung
+  // von X" and "⟹ es gibt i₁, …, i_n ∈ I, sodass ⋃ U_{i_j} ∪ (X ∖ A) = X"
+  // read as paragraphs between the rows of their display).
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (let n = 0; n < input.length; n++) {
+      const l = input[n];
+      if (kinds0[n] !== "text" || !wordsOf(l, columns0[n]).opens || !/^(?:[=<>≤≥≈∼≃≅≡≠∝≪≫⇒⇔⟹⟺⊆⊂]|:=)/.test(l.text.trim())) continue;
+      if (l.x < columns0[n].left + l.size * 3) continue;
+      const pitch = Math.max(l.size, ctx.bodySize) * ctx.leading * 1.8;
+      // The next row over and under, past the limits of its sums.
+      const next = (step: 1 | -1) => {
+        let m = n + step;
+        while (kinds0[m] === "fragment") m += step;
+        return { m, limits: Math.abs(m - n) > 1 };
+      };
+      const row = [next(-1), next(1)].some(({ m, limits }) => {
+        const o = input[m];
+        return (
+          o !== undefined &&
+          kinds0[m] === "math" &&
+          Math.abs(o.x - l.x) < 1 &&
+          Math.abs(o.y - l.y) < pitch * (limits ? 2 : 1) &&
+          /^(?:[=<>≤≥≈∼≃≅≡≠∝≪≫⇒⇔⟹⟺⊆⊂]|:=)/.test(o.text.trim())
+        );
+      });
+      if (!row) continue;
+      kinds0[n] = "math";
+      grew = true;
+    }
+  }
   // A label with no math line near it is a display's whose rows read as
   // text: each has a word or two before its formula, the last at the
   // column's edge ("Round M−1: arg min …" over "(7)", arXiv 2411.19946).
@@ -979,8 +1014,17 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
     // list item's second line and a paragraph's last line are neither,
     // whatever their math (synthetic notes p. 4–5: "∑ c_k P(A_k)." ending a
     // sentence, an item's "then EX_n → EX").
+    // A proof's end mark at the margin is no part of the row it ends:
+    // with it, a row of a proof's chain at the text's edge ran to the
+    // margin and read as centered (parse loop finding: GeoTopo p13's "⇒
+    // 𝔅δ(x) ⊆ f⁻¹(…) ⊆ f⁻¹(U)  ■" read as an equation tagged ■ under
+    // its rows of text).
     const centered = (l: Line) => {
-      const { x, xEnd } = unlabeled(l);
+      const { x, xEnd: end } = unlabeled(l);
+      const items = l.items.filter((i) => i.str.trim() !== "").sort((p, q) => p.x - q.x);
+      const mark = items.length > 1 && QED_RE.test(items[items.length - 1].str.trim()) ? items[items.length - 1] : null;
+      const rest = items.slice(0, -1);
+      const xEnd = mark && mark.x - Math.max(...rest.map((i) => i.x + i.w)) > l.size * 2 ? Math.max(...rest.map((i) => i.x + i.w)) : end;
       const c = columns[lines.indexOf(l)];
       return Number.isFinite(c.right) && x > c.left + l.size * 0.5 && Math.abs((x + xEnd) / 2 - (c.left + c.right) / 2) < l.size * 1.5;
     };

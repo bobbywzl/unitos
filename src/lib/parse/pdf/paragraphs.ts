@@ -1178,8 +1178,15 @@ export function measureSpacing(segments: Segment[], ctx: PageContext, lines: Lin
     const [top, bottom] = [table ? a.box : edge(a), table && b.type === "TABLE" ? b.box : edge(b)];
     if (!top || !bottom || !a.box || !b.box || a.page !== b.page) continue;
     const size = b.lineSize ?? ctx.bodySize;
-    // b stands under a, and their columns meet.
-    if (b.box.y2 > a.box.y1 + size || b.box.x1 > a.box.x2 || b.box.x2 < a.box.x1) continue;
+    // b stands under a, and their columns meet. A display centered in the
+    // column stands right of a short line over it: the column of a's last
+    // line holds its middle (parse loop finding: lualatex-stix-math's
+    // "Some text, and an equation." over √(x²) = |x| measured no space,
+    // and the import set the default 7 pt where the page sets 14).
+    const middle = (b.box.x1 + b.box.x2) / 2;
+    const own = b.type === "EQUATION" ? lines.filter((l) => l.y >= a.box!.y1 - 1 && l.y <= a.box!.y2 + 1 && l.x < a.box!.x2 && l.xEnd > a.box!.x1).map(lineColumn) : [];
+    const inColumn = own.some((c) => c !== undefined && middle > c[0] && middle < c[1]);
+    if (b.box.y2 > a.box.y1 + size || ((b.box.x1 > a.box.x2 || b.box.x2 < a.box.x1) && !inColumn)) continue;
     // A line's box reaches 0.3 of its size under its baseline and 0.85
     // over it (geometry.ts): between two blocks of text the space is their
     // baselines' step beyond the step the two lines take with none between

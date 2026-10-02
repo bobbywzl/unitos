@@ -33,6 +33,9 @@ export type Atom = {
   upper?: string;
   lower?: string;
   claimed?: boolean;
+  // A big operator's own left edge, where its limits widen x1: the line's
+  // order goes by it.
+  ownX1?: number;
   fracPart?: number; // a fraction outside any other structure: its parts' size
   rows?: number[]; // an array's or a matrix's row baselines, top first
 };
@@ -530,7 +533,7 @@ function arrowRuns(atoms: Atom[]): Atom[] {
     } else if (label.length > 0 || labelBelow.length > 0 || run.length > 2) {
       // A label's own composites are read first: "A ∩ B ≠ ∅" over an arrow
       // holds \not over "=".
-      const above = label.length ? linear(fuseComposites(label.map((b) => ({ ...b })))) : "";
+      const above = label.length ? textLabel(label) ?? linear(fuseComposites(label.map((b) => ({ ...b })))) : "";
       const below = labelBelow.length ? `[${linear(fuseComposites(labelBelow.map((b) => ({ ...b }))))}]` : "";
       made = node([...run, ...label, ...labelBelow], `\\x${name}${below}{${above}}`, head.yb, em, { cls: "rel" });
       for (const b of [...label, ...labelBelow]) out.splice(out.indexOf(b), 1);
@@ -539,6 +542,21 @@ function arrowRuns(atoms: Atom[]): Atom[] {
     out.push(made);
   }
   return out;
+}
+
+// A label set in the text font alone is a phrase: \text{Def. 12.a}, its
+// word spaces kept (read as math, "Def" was \operatorname{Def} and the
+// spaces were lost). A label with a math glyph ("f stetig") is a formula.
+const LABEL_CHAR_RE = /^[\p{L}\p{N}.,:;!?()'-]$/u;
+function textLabel(label: Atom[]): string | null {
+  if (!label.every((b) => b.fam === "ot1" && !b.italic && LABEL_CHAR_RE.test(b.tex)) || !label.some((b) => LETTER_RE.test(b.tex))) return null;
+  const sorted = [...label].sort(byX);
+  let text = "";
+  sorted.forEach((b, k) => {
+    if (k > 0 && b.x1 - sorted[k - 1].x2 > 0.2 * b.size) text += " ";
+    text += b.tex;
+  });
+  return `\\text{${text}}`;
 }
 
 // \overbrace and \underbrace: the brace tips and cusp are four pieces on
@@ -662,7 +680,9 @@ function structure(atoms: Atom[], rules: Rule[], depth = 0): Atom[] {
       // An index is set smaller than the radicand and raised over its
       // baseline; a letter before the sign on the radicand's baseline is
       // the formula's (T_{i\sqrt{p}}, arXiv 2506.08494 (2.10), read as a
-      // cube root's i).
+      // cube root's i). TeX raises it to 0.6 of the sign's height: a
+      // script of the glyph before a tall sign stands under its middle
+      // (Springer's "k₁√(k₂/D_A)" read k\sqrt[1]{…}).
       const innerSize = inner.length ? maxSize(inner) : rad.size;
       const innerBase = inner.length ? mainBaseline(inner) : rad.yb;
       const index = pool.filter(
@@ -675,6 +695,7 @@ function structure(atoms: Atom[], rules: Rule[], depth = 0): Atom[] {
           a.size < innerSize * 0.9 &&
           a.yb > innerBase + 0.2 * innerSize &&
           a.bottom > rad.bottom &&
+          a.yb > (rad.top + rad.bottom) / 2 &&
           a.top <= y + 0.3 * em,
       );
       const innerRules = hr.filter((q) => q !== r && !used.has(q) && q.x1 >= r.x1 - 0.1 && q.x2 <= r.x2 + 0.1 && ry(q) < y);
@@ -944,14 +965,47 @@ function rowLines(atoms: Atom[], unit: number): number[] {
   return lines;
 }
 
+// Each atom goes to the row whose baseline is nearest, and a script to its
+// base's row: a block entry set between two rows (A₂ in the corner of a
+// 3×3 matrix, its baseline midway) stands as near one row as the other,
+// and its script nearer the lower (parse loop finding: The Art of Linear
+// Algebra's Japanese edition, Figure 13, put A in the second row and its
+// "2" in the third, and the display was a crop).
 function splitRows(atoms: Atom[], lines: number[]): Atom[][] {
   const rows: Atom[][] = lines.map(() => []);
-  for (const a of atoms) {
+  const em = maxSize(atoms);
+  const nearest = (a: Atom) => {
     let best = 0;
     lines.forEach((ly, i) => {
       if (Math.abs(ly - a.yb) < Math.abs(lines[best] - a.yb)) best = i;
     });
-    rows[best].push(a);
+    return best;
+  };
+  const full = atoms.filter((a) => a.size >= em * 0.85);
+  const rowOf = new Map(full.map((a) => [a, nearest(a)]));
+  // A limit goes to its operator's row: set over a ⋃ of the row under,
+  // it stands nearer the row over (GeoTopo p19's "n" over ⋃ read as a
+  // subscript of the row above's last word).
+  // An integral sets its limits beside it, as scripts.
+  const ops = full.filter((o) => o.cls === "op" && hangingFamily(o.fam) && o.entry?.display && !INTEGRAL_RE.test(o.tex));
+  const limitOf = (a: Atom) =>
+    ops.find(
+      (o) =>
+        cx(a) > o.x1 &&
+        cx(a) < o.x2 &&
+        ((a.bottom >= o.top - 0.2 * em && a.bottom - o.top < 0.8 * em) || (a.top <= o.bottom + 0.2 * em && o.bottom - a.top < 0.8 * em)),
+    );
+  for (const a of atoms) {
+    let row = rowOf.get(a);
+    const op = row === undefined ? limitOf(a) : undefined;
+    if (op) row = rowOf.get(op);
+    if (row === undefined) {
+      const base = full
+        .filter((b) => a.x1 >= b.x2 - 0.05 * em && a.x1 <= b.x2 + 0.2 * em && a.yb > b.yb - 0.5 * em && a.yb < b.yb + 0.7 * em)
+        .sort((p, q) => a.x1 - p.x2 - (a.x1 - q.x2))[0];
+      row = base ? rowOf.get(base)! : nearest(a);
+    }
+    rows[row].push(a);
   }
   return rows;
 }
@@ -1287,6 +1341,7 @@ function limits(atoms: Atom[], em: number): Atom[] {
     if (up.length) op.upper = stackedLimit(up);
     if (low.length) op.lower = stackedLimit(low);
     op.limits = true;
+    op.ownX1 = op.x1;
     op.x1 = Math.min(op.x1, ...[...up, ...low].map((b) => b.x1));
     op.x2 = Math.max(op.x2, ...[...up, ...low].map((b) => b.x2));
     for (const b of [...up, ...low]) out.splice(out.indexOf(b), 1);
@@ -1389,7 +1444,12 @@ function linearAt(input: Atom[]): string {
     }
   }
   const onLine = (a: Atom) => onBase(a) && !bound.has(a);
-  const main = atoms.filter(onLine).sort(byX);
+  // A big operator stands in the line where its own glyph stands: a limit
+  // set wider than the space before it (\mathclap) reaches past the
+  // relation before it (parse loop finding: GeoTopo's "Z(x) := ⋃ A" with
+  // "A ⊆ X zhgd." under the ⋃ starting left of the "=" read
+  // "Z(x):\bigcup…=\quad A").
+  const main = atoms.filter(onLine).sort((a, b) => (a.ownX1 ?? a.x1) - (b.ownX1 ?? b.x1));
   const small = atoms.filter((a) => !main.includes(a));
   // An upright word from main[k]: its last index and its letters ("lim"
   // takes a following "sup" set a thin space apart, "arg" a "min").
@@ -1645,6 +1705,7 @@ function scripts(list: Atom[], yb: number, em: number): string {
 }
 
 const ALPHABET_RE = /^\\(mathfrak|mathbf|mathsf|mathtt)\{([A-Za-z0-9]+)\}$/;
+const TEXT_RE = /^\\text\{([^{}\\]*)\}$/;
 
 function join(tokens: string[]): string {
   const merged: string[] = [];
@@ -1652,7 +1713,12 @@ function join(tokens: string[]): string {
     const m = ALPHABET_RE.exec(t);
     const last = merged.length ? ALPHABET_RE.exec(merged[merged.length - 1]) : null;
     // One alphabet per run: \mathfrak{su}, not \mathfrak{s}\mathfrak{u}.
+    // One \text per phrase: \text{ ist offene Überdeckung von }, not a
+    // \text for each word (GeoTopo's rows of words in aligned displays).
+    const words = TEXT_RE.exec(t);
+    const before = merged.length ? TEXT_RE.exec(merged[merged.length - 1]) : null;
     if (m && last && m[1] === last[1]) merged[merged.length - 1] = `\\${m[1]}{${last[2]}${m[2]}}`;
+    else if (words && before) merged[merged.length - 1] = `\\text{${before[1]}${words[1]}}`;
     else merged.push(t);
   }
   let s = "";

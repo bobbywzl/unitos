@@ -12,6 +12,7 @@ import {
   justifiedItems,
   layout,
   leftEdge,
+  lineAlign,
   opensWithLabel,
   proseEdge,
   pushedApart,
@@ -256,6 +257,10 @@ function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[],
     break;
   }
   if ((first === DRAWN && items.length < 2) || !isList(items, i, ctx)) return null;
+  // A dash before lines set flush right is a signature's, not a bullet:
+  // "– Gilbert Strang" over "Professor of Mathematics at MIT" closing a
+  // foreword, both lines ending at the column's right edge, read as a LIST.
+  if (items.length === 1 && /^[-–—]$/.test(first.text) && lineAlign(lines, i, j, ctx) === "right") return null;
   const { depths, levels } = depthsOf(items, line.size);
   const list = listSegment(items, depths);
   list.listIndents = listIndentsOf(items, depths, levels, listEdge(items, lines, i, j, ctx));
