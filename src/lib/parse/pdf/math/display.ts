@@ -356,7 +356,16 @@ function inlineHost(line: Line, lines: Line[], kinds: LineKind[], fences: Box[],
   const text = (t: Line, n: number) => t !== line && kinds[n] === "text" && (!join || (!t.table && t.text.trim() !== ""));
   for (const f of fences) {
     if (line.y > f.y2 || line.y < f.y1) continue;
-    if (!((line.x >= f.x2 - 1 && line.x - f.x2 < line.size * 3) || (line.xEnd <= f.x1 + 1 && f.x1 - line.xEnd < line.size * 3))) continue;
+    // The row starts just inside the delimiter, ends just before it, or
+    // runs across it: a row that holds the delimiter's top piece (parse
+    // loop finding: the MML book's inline matrices in a list item, "A + B
+    // = [a₁₁ + b₁₁ ⋯ a₁ₙ + b₁ₙ; ⋮; …]", their first rows read into the
+    // line of prose over them, a crop).
+    const across =
+      line.x <= f.x1 + 1 &&
+      line.xEnd >= f.x2 - 1 &&
+      line.items.some((i) => (i.glyphs ?? []).some((g) => g.family === "omx" && g.x >= f.x1 - 1 && g.x + g.w <= f.x2 + 1 && mathGlyph("omx", g.code)?.piece !== undefined));
+    if (!((line.x >= f.x2 - 1 && line.x - f.x2 < line.size * 3) || (line.xEnd <= f.x1 + 1 && f.x1 - line.xEnd < line.size * 3) || across)) continue;
     const host = lines.find((t, n) => text(t, n) && t.y <= f.y2 && t.y >= f.y1 && t.x <= f.x1 && t.xEnd >= f.x2);
     if (host) return host;
   }
