@@ -416,7 +416,14 @@ export function rowHeights(cand: Flat, placed: number[][], pdf: PdfText): RowHei
     for (const [row, units] of [...rows].sort((a, c) => a[0] - c[0])) {
       if (!units.every(oneLine)) continue;
       const lines = units.map((u) => pdf.lines[placed[u][0]]);
-      tops.push({ row, top: Math.min(...lines.map((l) => l.top)), page: lines[0].page });
+      // parse loop finding: a grid of small numbers ("0", "1.0") places a cell on another row's line that
+      // holds the same words (tracemonkey's Figure 13 measured its 10 pt rows 20 pt apart): the row stands
+      // where most of its cells are placed, and a row with no such majority is not measured.
+      const height = Math.min(...lines.map((l) => l.bottom - l.top));
+      const onRow = (l: (typeof lines)[number]) => lines.filter((m) => m.page === l.page && Math.abs(m.top - l.top) <= height / 2);
+      const most = lines.map(onRow).reduce((a, b) => (b.length > a.length ? b : a));
+      if (most.length * 2 <= lines.length) continue;
+      tops.push({ row, top: Math.min(...most.map((l) => l.top)), page: most[0].page });
     }
     const pairs = tops.slice(1).flatMap((t, k) => (t.row === tops[k].row + 1 && t.page === tops[k].page && t.top > tops[k].top ? [{ page: t.top - tops[k].top, drawn: Math.max(line, least[tops[k].row] ?? 0) }] : []));
     if (pairs.length < 2) return;
