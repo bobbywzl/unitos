@@ -8,7 +8,7 @@ import type { Glyph } from "@/lib/parse/pdf/drawing";
 import { CAPTION_RE } from "@/lib/parse/pdf/figures";
 import { geom, lineMathShare, median } from "@/lib/parse/pdf/geometry";
 import { BULLET_RE, GLYPH_BULLET_RE, follows, isGlyphMarker, opensSequence, readMarker, type Marker } from "@/lib/parse/pdf/markers";
-import { boldShare, endsBold, fillsMargin, joinGroup, startsWithBoldLead } from "@/lib/parse/pdf/text";
+import { boldShare, endsBold, fillsMargin, isMonoLine, joinGroup, startsWithBoldLead } from "@/lib/parse/pdf/text";
 import type { Box, Line, PageContext, Segment, Step } from "@/lib/parse/pdf/types";
 import type { Indent } from "@/lib/parse/types";
 
@@ -896,6 +896,12 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
       // label under an underbrace joined the formula and diluted its math
       // share below the equation threshold (import compare loop finding).
       isDisplayMathLine(prev, ctx) !== isDisplayMathLine(next, ctx) ||
+      // A line of code under a line of prose that introduces it (a colon,
+      // not a link's scheme, or a line short of the column's edge) opens a
+      // listing (parse loop finding: ThinkDSP's "Here's an updated version
+      // of test1:" read "def test2():" as its paragraph's last words, and
+      // the listing lost its first line).
+      (isMonoLine(next) && !isMonoLine(prev) && (/(?<!\b(?:https?|ftp|mailto)):\s*$/i.test(prev.text) || (colEdge > 0 && prev.xEnd < colEdge - prev.size * 2))) ||
       // A marker opening the next line starts an item — a glyph bullet or a
       // box always, a number or a "(7)" only under a line that ended short
       // of the column edge or with a sentence: "(7) Weight-space…" at a line
