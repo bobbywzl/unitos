@@ -1874,6 +1874,54 @@ function unreadShape(atoms: Atom[], rules: Rule[], paths: Box[], used: Set<Box>)
   return (left.length > 0 && right.length > 0) || [...left, ...right].some((p) => p.y2 - p.y1 < top - bottom + em);
 }
 
+/** Frames among a formula's rules (\boxed, a framed box): a rule down each
+    side and one over and under, meeting at the corners. tol is how far
+    apart the ends may stand. */
+export function framesOf(rules: Rule[], tol: number): { left: Rule; right: Rule; top: Rule; bottom: Rule }[] {
+  const vr = rules.filter((r) => r.dir === "v").sort((a, b) => a.x1 - b.x1);
+  const hr = rules.filter((r) => r.dir === "h");
+  const out: { left: Rule; right: Rule; top: Rule; bottom: Rule }[] = [];
+  const taken = new Set<Rule>();
+  for (const left of vr) {
+    if (taken.has(left)) continue;
+    const right = vr.find((r) => r !== left && !taken.has(r) && r.x1 - left.x1 > 2 * tol && Math.abs(r.y1 - left.y1) < tol && Math.abs(r.y2 - left.y2) < tol);
+    if (!right) continue;
+    const across = (y: number) =>
+      hr.find((r) => !taken.has(r) && Math.abs(r.y1 - y) < tol && r.x1 < left.x1 + tol && r.x2 > right.x1 - tol && r.x2 - r.x1 < right.x1 - left.x1 + 4 * tol);
+    const top = across(Math.max(left.y1, left.y2));
+    const bottom = across(Math.min(left.y1, left.y2));
+    if (!top || !bottom || top === bottom) continue;
+    for (const r of [left, right, top, bottom]) taken.add(r);
+    out.push({ left, right, top, bottom });
+  }
+  return out;
+}
+
+/** A frame around atoms of the formula (\boxed): the atoms inside are laid
+    out alone, with the rules inside, into one \boxed node; its four rules
+    are read (parse loop finding: the probability cheatsheet boxes each
+    worked answer, "= \boxed{n\sum_{j=1}^{n}\frac{1}{j}}", and the frame's
+    rules, unread, failed its displays to crops). */
+function framed(atoms: Atom[], rules: Rule[]): Atom[] {
+  if (atoms.length === 0) return atoms;
+  const em = maxSize(atoms);
+  let out = atoms;
+  for (const f of framesOf(rules.filter((r) => !read.has(r)), 0.15 * em)) {
+    const x1 = f.left.x1;
+    const x2 = f.right.x1;
+    const y1 = Math.min(f.left.y1, f.left.y2);
+    const y2 = Math.max(f.left.y1, f.left.y2);
+    const inside = out.filter((a) => cx(a) > x1 && cx(a) < x2 && a.yb > y1 && a.yb < y2);
+    if (inside.length === 0) continue;
+    const frame = [f.left, f.right, f.top, f.bottom];
+    const inner = rules.filter((r) => !frame.includes(r) && !read.has(r) && r.dir === "h" && r.x1 > x1 && r.x2 < x2 && r.y1 > y1 && r.y1 < y2);
+    for (const r of frame) read.add(r);
+    const built = structure(inside, inner, 1);
+    out = [...out.filter((a) => !inside.includes(a)), node(inside, `\\boxed{${linear(built)}}`, mainBaseline(built), maxSize(inside), { x1, x2, top: y2, bottom: y1 })];
+  }
+  return out;
+}
+
 /** A formula's LaTeX from its glyphs and the shapes drawn with them (rules,
     and paths), the atoms the check compares against (pieces joined,
     composites fused), and the paths it read. */
@@ -1896,7 +1944,10 @@ export function formulaToLatex(
   // arrow would otherwise fuse into \longrightarrow.
   const fused = fuseComposites(arrowRuns(assemblePieces([...atoms, ...radicals, ...drawn.atoms], all)));
   const copies = ruledArray(
-    fused.map((a) => ({ ...a })),
+    framed(
+      fused.map((a) => ({ ...a })),
+      all,
+    ),
     all,
   );
   const bars = all.filter((r) => r.dir === "h");

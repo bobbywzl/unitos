@@ -20,7 +20,7 @@ import { ATTACH_PUNCT_RE, spaceGap } from "@/lib/parse/pdf/lines";
 import { drawnBulletAt } from "@/lib/parse/pdf/lists";
 import { BULLET_RE } from "@/lib/parse/pdf/markers";
 import { layoutLatex } from "@/lib/parse/pdf/math/check";
-import { braceLabelBoxes, drawnBraces, hangingFamily, hangingGlyph, LIMIT_OPS } from "@/lib/parse/pdf/math/layout";
+import { braceLabelBoxes, drawnBraces, framesOf, hangingFamily, hangingGlyph, LIMIT_OPS } from "@/lib/parse/pdf/math/layout";
 import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
 import { balanced, onOtherLine, orphanGlyphs, paintsRule, resolveZone } from "@/lib/parse/pdf/math/zones";
 import type { Box, Cell, Item, Line, MathZone, PageContext, Run, Segment } from "@/lib/parse/pdf/types";
@@ -1356,6 +1356,17 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext, lines: Line[
   const columns = ctx.drawing.rules.filter((r) => r.dir === "v" && r.x1 > line.x && r.x1 < line.xEnd && r.y1 >= low - size && r.y2 <= high + size);
   const pad = columns.length > 0 ? Math.max(2, size * 0.6) : 2;
   const rules = [...ctx.drawing.rules.filter((r) => r.dir === "h" && r.x1 >= line.x - pad && r.x2 <= line.xEnd + pad && r.y1 >= low && r.y1 <= high), ...columns];
+  // A frame around the formula or a part of it (\boxed) stands its padding
+  // out from the glyphs: its four rules are the formula's when it holds
+  // some of them (layout.ts reads it).
+  for (const f of framesOf(ctx.drawing.rules, size * 0.15)) {
+    const x1 = f.left.x1;
+    const x2 = f.right.x1;
+    const y1 = Math.min(f.left.y1, f.left.y2);
+    const y2 = Math.max(f.left.y1, f.left.y2);
+    if (y2 - y1 > high - low + size * 2 || !glyphs.some((g) => g.x + g.w / 2 > x1 && g.x + g.w / 2 < x2 && g.y > y1 && g.y < y2)) continue;
+    for (const r of [f.left, f.right, f.top, f.bottom]) if (!rules.includes(r)) rules.push(r);
+  }
   const paths = ctx.drawing.paths.filter(
     (b) =>
       !b.clip &&
