@@ -213,11 +213,16 @@ function zonesOf(glyphs: Glyph[], size: number, textFont: boolean): Glyph[][] {
     // A lone text italic letter a page's math takes is a formula (lone,
     // below), and so is one with its scripts (t_i, t_1).
     const single = isTextMath(z[0]) && isLetter(z[0]) && z.slice(1).every((g) => g.size < size * 0.85 && (isTextMath(g) || kindOf(g) === "attach"));
+    // So is a run of such letters with a glyph of TeX's text font: on such
+    // a page TeX's roman sets only formulas' brackets, digits, and signs
+    // (mathpazo's thesis: "P(E_i) =" read as words before a fraction, its
+    // display lost, its numerator and denominator dropped).
+    const roman = z.some((g) => g.family === "ot1") && z.some((g) => isTextMath(g) && isLetter(g));
     const again = () => {
       cur = after;
       if (cur.length > 0) flush();
     };
-    if (!stacked && !single && (math.length === 0 || url)) return again();
+    if (!stacked && !single && !roman && (math.length === 0 || url)) return again();
     // A lone raised symbol after a word (a footnote's dagger) is a mark,
     // not a formula: every glyph small, none on the line.
     if (!stacked && z.every((g) => g.size < size * 0.85)) return again();
