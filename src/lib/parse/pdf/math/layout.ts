@@ -1705,6 +1705,7 @@ function scripts(list: Atom[], yb: number, em: number): string {
 }
 
 const ALPHABET_RE = /^\\(mathfrak|mathbf|mathsf|mathtt)\{([A-Za-z0-9]+)\}$/;
+const TEXT_RE = /^\\text\{([^{}\\]*)\}$/;
 
 function join(tokens: string[]): string {
   const merged: string[] = [];
@@ -1712,7 +1713,12 @@ function join(tokens: string[]): string {
     const m = ALPHABET_RE.exec(t);
     const last = merged.length ? ALPHABET_RE.exec(merged[merged.length - 1]) : null;
     // One alphabet per run: \mathfrak{su}, not \mathfrak{s}\mathfrak{u}.
+    // One \text per phrase: \text{ ist offene Überdeckung von }, not a
+    // \text for each word (GeoTopo's rows of words in aligned displays).
+    const words = TEXT_RE.exec(t);
+    const before = merged.length ? TEXT_RE.exec(merged[merged.length - 1]) : null;
     if (m && last && m[1] === last[1]) merged[merged.length - 1] = `\\${m[1]}{${last[2]}${m[2]}}`;
+    else if (words && before) merged[merged.length - 1] = `\\text{${before[1]}${words[1]}}`;
     else merged.push(t);
   }
   let s = "";
