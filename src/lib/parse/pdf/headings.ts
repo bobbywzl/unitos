@@ -731,13 +731,29 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
   // Over a list's first item likewise: OpenStax's "Solution 6.2" sits a
   // line over its "a. This z-score tells you …".
   const itemBelow = title && bodyBelow && readMarker(below) !== null;
+  // Over a paragraph's first line flush with it, a short title set apart
+  // above needs no gap under it either: a thesis's "Choice, Uncertainty,
+  // and Entropy" and TAM Review's "Introduction" sit one line's pitch over
+  // their paragraphs and read as paragraphs. The title stops well short of
+  // its column's edge (a bold sentence wrapped fills it), and the line
+  // under it is regular type at its size.
+  const edge = lineColumn(last)?.[1];
+  const flushBelow =
+    title &&
+    run.length === 1 &&
+    bodyBelow &&
+    Math.abs(below.x - last.x) <= last.size * 0.5 &&
+    Math.abs(below.size - last.size) <= 0.5 &&
+    edge !== undefined &&
+    edge - last.xEnd > last.size * 4 &&
+    below.xEnd - below.x > (edge - below.x) * 0.6;
   const small = line.size < ctx.bodySize * 0.98;
   if (small && !(headingAbove && bodyBelow) && !(gapAbove && (headingBelow || opensBelow))) return null;
   // A centered title set apart above needs no gap under it: a statement's
   // title sits 12.8 pt over its units line ("CONDENSED CONSOLIDATED
   // STATEMENTS OF OPERATIONS (Unaudited)" read as a paragraph).
   const centeredTitle = title && centered && gapAbove;
-  if (!below || !(centeredTitle || ((gapAbove || headingAbove) && (gapBelow || headingBelow || opensBelow || (gapAbove && itemBelow) || (headingAbove && bodyBelow))))) return null;
+  if (!below || !(centeredTitle || ((gapAbove || headingAbove) && (gapBelow || headingBelow || opensBelow || (gapAbove && (itemBelow || flushBelow)) || (headingAbove && bodyBelow))))) return null;
   const { text: joined, runs } = headingText(run, centered);
   return { segments: [headingOf(run, joined, runs)], next: j };
 }
