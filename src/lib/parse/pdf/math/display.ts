@@ -848,7 +848,24 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
       // stands farther.
       if (kinds[j] !== "label" && (next.xEnd < x1 - size * 6 || next.x > x2 + size * 6) && !band.every((l) => kinds[lines.indexOf(l)] === "label")) break;
       const label = kinds[j] === "label" || unlabeled(next).label !== null ? 1 : 0;
-      if (labels + label > 1) break;
+      if (labels + label > 1) {
+        // The numerators of the next display's fractions stand closer to the
+        // display over it than a display's own rows do, and the band took
+        // them: a line just over a fraction bar of the next display, and
+        // under none of its own, goes back to it (parse loop finding:
+        // Springer's (27) and (28), ∂a/∂t = … over ∂b/∂t = …, read as a
+        // display ending in its neighbor's numerators and a display of bare
+        // denominators, two crops).
+        while (band.length > 1) {
+          const f = band[band.length - 1];
+          const kind = kinds[lines.indexOf(f)];
+          if ((kind !== "fragment" && kind !== "math") || unlabeled(f).label !== null) break;
+          const bar = (r: Rule) => r.dir === "h" && r.x1 < f.xEnd && r.x2 > f.x && Math.abs(r.y1 - f.y) < f.size * 1.2;
+          if (!rules.some((r) => bar(r) && r.y1 < f.y && r.y1 > next.y) || rules.some((r) => bar(r) && r.y1 > f.y)) break;
+          band.pop();
+        }
+        break;
+      }
       // A fragment between two math lines of the display stays in it (an
       // aligned row's lone "=" over its fraction's denominator).
       const after = lines[j + 1];
