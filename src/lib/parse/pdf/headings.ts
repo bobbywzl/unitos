@@ -663,7 +663,19 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
     !CAPTION_RE.test(text) &&
     !/(?:\s*\.){3,}\s*\d{1,4}\s*$/.test(text) &&
     (!/[.,;:?!]$/.test(text) || capsPeriod);
-  const title = titleLike(line);
+  // A centered title's line may end with a colon where its next line goes
+  // on in its look (tam-review p2: "Overview of the Technology Acceptance
+  // Model:" over "Origins, Developments and Future Directions", bold and
+  // centered, read as two paragraphs).
+  const colonOn = (l: Line, n: Line | undefined) =>
+    n !== undefined &&
+    /:$/.test(l.text.trim()) &&
+    titleLike({ ...l, text: l.text.trimEnd().slice(0, -1) }) &&
+    titleLike(n) &&
+    Math.abs(n.size - l.size) <= 0.5 &&
+    l.y - n.y > 0 &&
+    l.y - n.y <= l.size * ctx.leading * 1.3;
+  const title = titleLike(line) || (colonOn(line, lines[i + 1]) && isCentered(lines, i, ctx) && isCentered(lines, i + 1, ctx));
   if (!title && !labelled) return null;
   // A contents entry ends in leader dots and a page number; a title may end
   // in a number of its own ("Risk-neutral pricing 1").
