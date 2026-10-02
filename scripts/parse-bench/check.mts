@@ -1589,11 +1589,13 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     { kind: "figure", caption: [{ text: "Figure 1. The upper dam." }], at: { page: 1, region: region(72, 100, 300, 200) } },
     { kind: "paragraph", spans: [{ text: "Photo 2. Crews on the levee at dawn." }] },
     { kind: "paragraph", spans: [{ text: "Figure 1 shows the dam before the flood." }] },
+    { kind: "paragraph", spans: [{ text: "Figure 6.1 shows the dam after the flood." }] },
     { kind: "figure", at: { page: 1, region: region(72, 150, 300, 250) } },
+    { kind: "figure", caption: [{ text: "Figure 2.6 Not all subsets are subspaces." }] },
   ];
   const flatFloats = flatten({ blocks: floats });
   const captions = captionScores(flatFloats);
-  check("floats: a paragraph that opens as a caption is a caption apart; a sentence that names a figure is none", captions.alone === 1 && captions.captions === 2, JSON.stringify(captions));
+  check("floats: a paragraph that opens as a caption is a caption apart; a sentence that names a figure (\"Figure 6.1 shows\") is none; a figure's caption with no stop after its number is kept", captions.alone === 1 && captions.captions === 3, JSON.stringify(captions));
   const overlaps = cropOverlaps(pdfOf([]), flatFloats);
   check("floats: two crops that share half their area overlap", overlaps.overlapping === 2 && overlaps.figures === 2, JSON.stringify(overlaps));
 
