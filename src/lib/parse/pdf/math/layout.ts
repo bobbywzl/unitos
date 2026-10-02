@@ -33,6 +33,9 @@ export type Atom = {
   upper?: string;
   lower?: string;
   claimed?: boolean;
+  // A big operator's own left edge, where its limits widen x1: the line's
+  // order goes by it.
+  ownX1?: number;
   fracPart?: number; // a fraction outside any other structure: its parts' size
   rows?: number[]; // an array's or a matrix's row baselines, top first
 };
@@ -1302,6 +1305,7 @@ function limits(atoms: Atom[], em: number): Atom[] {
     if (up.length) op.upper = stackedLimit(up);
     if (low.length) op.lower = stackedLimit(low);
     op.limits = true;
+    op.ownX1 = op.x1;
     op.x1 = Math.min(op.x1, ...[...up, ...low].map((b) => b.x1));
     op.x2 = Math.max(op.x2, ...[...up, ...low].map((b) => b.x2));
     for (const b of [...up, ...low]) out.splice(out.indexOf(b), 1);
@@ -1404,7 +1408,12 @@ function linearAt(input: Atom[]): string {
     }
   }
   const onLine = (a: Atom) => onBase(a) && !bound.has(a);
-  const main = atoms.filter(onLine).sort(byX);
+  // A big operator stands in the line where its own glyph stands: a limit
+  // set wider than the space before it (\mathclap) reaches past the
+  // relation before it (parse loop finding: GeoTopo's "Z(x) := ⋃ A" with
+  // "A ⊆ X zhgd." under the ⋃ starting left of the "=" read
+  // "Z(x):\bigcup…=\quad A").
+  const main = atoms.filter(onLine).sort((a, b) => (a.ownX1 ?? a.x1) - (b.ownX1 ?? b.x1));
   const small = atoms.filter((a) => !main.includes(a));
   // An upright word from main[k]: its last index and its letters ("lim"
   // takes a following "sup" set a thin space apart, "arg" a "min").
