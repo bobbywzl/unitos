@@ -1,7 +1,7 @@
 {
  "total": {
   "f1": 0.961,
-  "precision": 0.933,
+  "precision": 0.934,
   "recall": 0.991
  },
  "pages": {
@@ -16,8 +16,8 @@
    "recall": 1
   },
   "05844573ca": {
-   "f1": 0.909,
-   "precision": 0.833,
+   "f1": 0.911,
+   "precision": 0.837,
    "recall": 1
   },
   "06e5123e4e": {
@@ -431,8 +431,8 @@
    "recall": 0.995
   },
   "7de5241947": {
-   "f1": 0.965,
-   "precision": 0.936,
+   "f1": 0.968,
+   "precision": 0.941,
    "recall": 0.996
   },
   "7dfc3e359d": {
@@ -571,8 +571,8 @@
    "recall": 1
   },
   "a6968f427c": {
-   "f1": 0.942,
-   "precision": 0.891,
+   "f1": 0.947,
+   "precision": 0.902,
    "recall": 0.998
   },
   "a860fb5eda": {
@@ -616,8 +616,8 @@
    "recall": 0.994
   },
   "aec5deeaad": {
-   "f1": 0.93,
-   "precision": 0.897,
+   "f1": 0.933,
+   "precision": 0.903,
    "recall": 0.966
   },
   "b0cf2bbf01": {
@@ -766,8 +766,8 @@
    "recall": 1
   },
   "db6b0816c6": {
-   "f1": 0.75,
-   "precision": 0.6,
+   "f1": 0.757,
+   "precision": 0.608,
    "recall": 1
   },
   "dc7ccccc1f": {
@@ -851,8 +851,8 @@
    "recall": 0.996
   },
   "eecd257509": {
-   "f1": 0.951,
-   "precision": 0.909,
+   "f1": 0.953,
+   "precision": 0.913,
    "recall": 0.996
   },
   "ef2b3f268a": {
