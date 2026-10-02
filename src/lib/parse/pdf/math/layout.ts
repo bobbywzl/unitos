@@ -962,14 +962,33 @@ function rowLines(atoms: Atom[], unit: number): number[] {
   return lines;
 }
 
+// Each atom goes to the row whose baseline is nearest, and a script to its
+// base's row: a block entry set between two rows (A₂ in the corner of a
+// 3×3 matrix, its baseline midway) stands as near one row as the other,
+// and its script nearer the lower (parse loop finding: The Art of Linear
+// Algebra's Japanese edition, Figure 13, put A in the second row and its
+// "2" in the third, and the display was a crop).
 function splitRows(atoms: Atom[], lines: number[]): Atom[][] {
   const rows: Atom[][] = lines.map(() => []);
-  for (const a of atoms) {
+  const em = maxSize(atoms);
+  const nearest = (a: Atom) => {
     let best = 0;
     lines.forEach((ly, i) => {
       if (Math.abs(ly - a.yb) < Math.abs(lines[best] - a.yb)) best = i;
     });
-    rows[best].push(a);
+    return best;
+  };
+  const full = atoms.filter((a) => a.size >= em * 0.85);
+  const rowOf = new Map(full.map((a) => [a, nearest(a)]));
+  for (const a of atoms) {
+    let row = rowOf.get(a);
+    if (row === undefined) {
+      const base = full
+        .filter((b) => a.x1 >= b.x2 - 0.05 * em && a.x1 <= b.x2 + 0.2 * em && a.yb > b.yb - 0.5 * em && a.yb < b.yb + 0.7 * em)
+        .sort((p, q) => a.x1 - p.x2 - (a.x1 - q.x2))[0];
+      row = base ? rowOf.get(base)! : nearest(a);
+    }
+    rows[row].push(a);
   }
   return rows;
 }
