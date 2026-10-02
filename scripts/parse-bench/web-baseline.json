@@ -1,7 +1,7 @@
 {
  "total": {
   "f1": 0.959,
-  "precision": 0.929,
+  "precision": 0.93,
   "recall": 0.991
  },
  "pages": {
@@ -31,8 +31,8 @@
    "recall": 0.97
   },
   "076f4f33bf": {
-   "f1": 0.935,
-   "precision": 0.878,
+   "f1": 0.942,
+   "precision": 0.89,
    "recall": 1
   },
   "08f7937627": {
@@ -86,8 +86,8 @@
    "recall": 0.994
   },
   "1ace8c85aa": {
-   "f1": 0.99,
-   "precision": 0.98,
+   "f1": 1,
+   "precision": 1,
    "recall": 1
   },
   "1ee91d1fce": {
@@ -186,8 +186,8 @@
    "recall": 0.984
   },
   "374ac9a59a": {
-   "f1": 0.885,
-   "precision": 0.793,
+   "f1": 0.887,
+   "precision": 0.798,
    "recall": 1
   },
   "39d5c43beb": {
@@ -221,8 +221,8 @@
    "recall": 1
   },
   "3d8f3404cf": {
-   "f1": 0.976,
-   "precision": 0.956,
+   "f1": 0.977,
+   "precision": 0.957,
    "recall": 0.998
   },
   "3f65af7b6b": {
@@ -386,9 +386,9 @@
    "recall": 1
   },
   "70cb2d5bca": {
-   "f1": 0.864,
-   "precision": 0.777,
-   "recall": 0.973
+   "f1": 0.874,
+   "precision": 0.788,
+   "recall": 0.98
   },
   "776a1c0467": {
    "f1": 0.96,
@@ -511,8 +511,8 @@
    "recall": 1
   },
   "921019755f": {
-   "f1": 0.951,
-   "precision": 0.928,
+   "f1": 0.956,
+   "precision": 0.938,
    "recall": 0.976
   },
   "94fbcc2677": {
@@ -606,8 +606,8 @@
    "recall": 1
   },
   "ad826691a8": {
-   "f1": 0.942,
-   "precision": 0.902,
+   "f1": 0.944,
+   "precision": 0.906,
    "recall": 0.986
   },
   "ad9e9e596f": {
@@ -737,7 +737,7 @@
   },
   "cc4aa22b82": {
    "f1": 0.995,
-   "precision": 0.994,
+   "precision": 0.995,
    "recall": 0.995
   },
   "d0382c0d95": {
@@ -906,8 +906,8 @@
    "recall": 1
   },
   "ffc109d474": {
-   "f1": 0.982,
-   "precision": 0.964,
+   "f1": 0.985,
+   "precision": 0.971,
    "recall": 1
   }
  }
