@@ -127,7 +127,13 @@ function checkLatex(latex: string, atoms: Atom[], unknown: Glyph[], display: boo
   // text's size, a script's own script stands at the script's size, and the
   // check takes the two levels as one.
   const counted = atoms.filter((a) => a.tex && a.cls !== "piece" && a.cls !== "radical" && !(a.fam === "omx" && (a.cls === "open" || a.cls === "close")));
-  const clamped = counted.length > 0 && counted.every((a) => a.size / size >= 0.75);
+  // TeX's fonts stop at 5 points: a formula set at 7 points sets its
+  // scripts and their own scripts at 5 (the probability cheatsheet's
+  // e^{-x^{2}/2}), so where every script glyph is at that floor the check
+  // takes the two levels as one too.
+  const smalls = counted.filter((a) => !hangingFamily(a.fam) && a.size < size * 0.85).map((a) => a.size);
+  const floor = smalls.length > 0 && smalls.every((s) => s >= 4.5 && s <= 5.3);
+  const clamped = counted.length > 0 && (counted.every((a) => a.size / size >= 0.75) || floor);
   // A bracket takes the size of what it holds, not of its level: a limit's
   // terms at a script's size stand in parentheses at the text's (IEEE
   // Access p. 9). Brackets count at any level.
