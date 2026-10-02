@@ -262,9 +262,11 @@ type UnicodeFont =
 // with one was a crop). Each glyph of MathDesign's symbol fonts A and B,
 // whose layouts the tables lack, stays unread, but for font A's capitals
 // at their own codes, which are \mathbb's: the text layer reads them as
-// "O" and "R" (arXiv 2506.06352's u: 𝕆 → ℝ).
+// "O" and "R" (arXiv 2506.06352's u: 𝕆 → ℝ). So are the capitals of
+// doublestroke's fonts (\mathds: dsrom10, dsss10) and bbold's (parse loop
+// finding: the MML book's every ℝ read as \mathrm{R}).
 const UNICODE_TEX_RE =
-  /^(STIXGeneral|STIXNonUnicode|STIXVariants|LibertineMath|NewTXB?MI|txmia|txsy|MTMI|MTSY|RMTMI|MTEX|MnSymbol|EURM|OpenSymbol|MathDesign-.+-MathDesignSymbol[AB]-)/;
+  /^(STIXGeneral|STIXNonUnicode|STIXVariants|LibertineMath|NewTXB?MI|txmia|txsy|MTMI|MTSY|RMTMI|MTEX|MnSymbol|EURM|OpenSymbol|MathDesign-.+-MathDesignSymbol[AB]-|dsrom\d|dsss\d|bbold\d)/;
 const ITALIC_MATH_RE = /Italic|MI(B|\d)*$|txmia|MathMI|^EURM/;
 // STIX's first fonts set a formula's sized delimiters, big operators, and
 // the pieces of tall delimiters in five size fonts: each glyph reads by the
@@ -293,7 +295,7 @@ function unicodeFont(base: string): UnicodeFont {
                 italic: ITALIC_MATH_RE.test(base),
                 bullets: /^OpenSymbol/.test(base),
                 unread: /^MTEX|MathDesignSymbol/.test(base),
-                blackboard: /MathDesignSymbolA/.test(base),
+                blackboard: /MathDesignSymbolA|^dsrom|^dsss|^bbold/.test(base),
               }
             : null;
     fontKinds.set(base, kind);
