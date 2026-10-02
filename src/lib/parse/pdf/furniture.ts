@@ -150,8 +150,14 @@ export function findFurniture(pages: Line[][], pageHeights: number[], pageNumber
   // pages, enough of them. Only for rows of three letters or more (a
   // diagram's label "o3" tops three pages of a paper) and no larger than the
   // body text (a slide deck repeats a title on the slides that continue it).
+  // A row of parts set apart across the page (a title at the left and a
+  // URL at the right, a foot of three parts) in the outer 8% of the page
+  // may be a step larger: a slide's title is one part (parse loop finding:
+  // the CS 229 refresher sets its 10 pt head and foot over 8 pt text, and
+  // both stayed in the text of its two pages).
+  const parted = (r: Row) => r.lines.reduce((n, l) => n + Math.max(1, l.cells.length), 0) >= 2 && Math.min(r.top, r.bottom) < (r.top + r.bottom) * 0.08;
   const repeated = (c: Candidate): boolean => {
-    if (c.row.size > bodySize * 1.15 || (c.row.key.match(/\p{L}/gu)?.length ?? 0) < 3) return false;
+    if (c.row.size > bodySize * (parted(c.row) ? 1.3 : 1.15) || (c.row.key.match(/\p{L}/gu)?.length ?? 0) < 3) return false;
     const on = new Set<number>([c.row.page]);
     for (const s of strong) {
       if (s.side !== c.side || on.has(s.row.page)) continue;

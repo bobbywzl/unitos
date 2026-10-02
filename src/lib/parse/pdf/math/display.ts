@@ -20,7 +20,7 @@ import { ATTACH_PUNCT_RE, spaceGap } from "@/lib/parse/pdf/lines";
 import { drawnBulletAt } from "@/lib/parse/pdf/lists";
 import { BULLET_RE } from "@/lib/parse/pdf/markers";
 import { layoutLatex } from "@/lib/parse/pdf/math/check";
-import { braceLabelBoxes, drawnBraces, hangingFamily, hangingGlyph, LIMIT_OPS } from "@/lib/parse/pdf/math/layout";
+import { braceLabelBoxes, drawnBraces, framesOf, hangingFamily, hangingGlyph, LIMIT_OPS } from "@/lib/parse/pdf/math/layout";
 import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
 import { balanced, onOtherLine, orphanGlyphs, paintsRule, resolveZone } from "@/lib/parse/pdf/math/zones";
 import type { Box, Cell, Item, Line, MathZone, PageContext, Run, Segment } from "@/lib/parse/pdf/types";
@@ -1275,7 +1275,19 @@ function formulaGlyphs(line: Line, pageOrphans: Glyph[], page: Glyph[], lines: L
   const elsewhere = (g: Glyph) =>
     page.some((h) => h !== g && !own.has(h) && !pageOrphans.includes(h) && Math.abs(h.x - g.x) < g.size * 0.12 && Math.abs(h.y - g.y) < g.size * 0.05);
   // An orphan on another line's baseline is that line's (resolveZones).
-  const orphans = pageOrphans.filter((g) => g.x + g.w / 2 > line.x && g.x + g.w / 2 < line.xEnd && g.y >= bottom && g.y <= top && !elsewhere(g) && !onOtherLine(g, line, lines));
+  // So is a limit under or over one of the line's operators, past the
+  // line's reach: a text-size ∑ with its limit set under it (\sum\limits)
+  // hangs it more than half a line down (the probability cheatsheet's
+  // E(X) = ∑ᵢ xᵢP(X = xᵢ) lost its i, and was a crop).
+  const ops = line.items.flatMap((i) => i.glyphs ?? []).flatMap((g) => {
+    const h = hangingGlyph(g);
+    return h && g.family === "omx" && mathGlyph("omx", g.code)?.cls === "op" ? [{ x1: g.x, x2: g.x + g.w, ...h }] : [];
+  });
+  const limit = (g: Glyph) =>
+    ops.some((o) => g.x + g.w / 2 > o.x1 && g.x + g.w / 2 < o.x2 && ((g.y < o.bottom && g.y > o.bottom - line.size) || (g.y > o.top && g.y < o.top + line.size * 0.6)));
+  const orphans = pageOrphans.filter(
+    (g) => g.x + g.w / 2 > line.x && g.x + g.w / 2 < line.xEnd && ((g.y >= bottom && g.y <= top) || limit(g)) && !elsewhere(g) && !onOtherLine(g, line, lines),
+  );
   // A blank glyph is no symbol (KaTeX sets struts as spaces a point high).
   const glyphs = [...line.items.flatMap((i) => i.glyphs!), ...orphans].filter((g) => g.family !== null || g.unicode.trim() !== "").sort((a, b) => a.x - b.x);
   if (glyphs.length === 0) return null;
@@ -1356,6 +1368,21 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext, lines: Line[
   const columns = ctx.drawing.rules.filter((r) => r.dir === "v" && r.x1 > line.x && r.x1 < line.xEnd && r.y1 >= low - size && r.y2 <= high + size);
   const pad = columns.length > 0 ? Math.max(2, size * 0.6) : 2;
   const rules = [...ctx.drawing.rules.filter((r) => r.dir === "h" && r.x1 >= line.x - pad && r.x2 <= line.xEnd + pad && r.y1 >= low && r.y1 <= high), ...columns];
+  // A frame around the formula or a part of it (\boxed) stands its padding
+  // out from the glyphs: its four rules are the formula's when it holds
+  // some of them (layout.ts reads it).
+  for (const f of framesOf(ctx.drawing.rules, size * 0.15)) {
+    const x1 = f.left.x1;
+    const x2 = f.right.x1;
+    const y1 = Math.min(f.left.y1, f.left.y2);
+    const y2 = Math.max(f.left.y1, f.left.y2);
+    if (y2 - y1 > high - low + size * 2 || !glyphs.some((g) => g.x + g.w / 2 > x1 && g.x + g.w / 2 < x2 && g.y > y1 && g.y < y2)) continue;
+    for (const r of [f.left, f.right, f.top, f.bottom]) if (!rules.includes(r)) rules.push(r);
+    // So is every horizontal rule inside it: a fraction bar may reach past
+    // the glyphs' extent by more than the pad (the CS 229 probability
+    // refresher's ρ_{XY} = σ²_{XY}/(σ_Xσ_Y), its bar 2.03 pt past them).
+    for (const r of ctx.drawing.rules) if (r.dir === "h" && r.x1 > x1 && r.x2 < x2 && r.y1 > y1 && r.y1 < y2 && !rules.includes(r)) rules.push(r);
+  }
   const paths = ctx.drawing.paths.filter(
     (b) =>
       !b.clip &&

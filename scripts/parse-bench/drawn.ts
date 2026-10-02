@@ -263,7 +263,8 @@ function formulaLineHeight(): number {
     KaTeX's display margin), and the formula's ink in its line box (KaTeX's
     struts in a line of `.katex`'s height: formulaBox). Right within 2 pt or
     a quarter. A display whose neighbor is no paragraph, or whose page
-    leaves more than 36 pt, is not judged. `bandsOf`: the page's ink in a
+    leaves more than 36 pt, is not judged; nor is the space over one with
+    the running head over it. `bandsOf`: the page's ink in a
     box (paint.ts inkBands). */
 export function displayGaps(rich: RichNode, parse: Doc, pdf: PdfText, bandsOf: (page: number, box: Rect) => InkBand[]): DisplayGaps {
   const placed = parse.blocks.filter((b) => b.kind === "equation" && b.at);
@@ -300,7 +301,11 @@ export function displayGaps(rich: RichNode, parse: Doc, pdf: PdfText, bandsOf: (
       if (Math.abs(drawnPt - page) <= Math.max(2, 0.25 * page)) right++;
       else misses.push(`p${at.page}: ${what} ${Math.round(drawnPt)} pt, the page's ${Math.round(page)} pt`);
     };
-    judge(above ? inkTop - above.baseline : null, drawn.above, "above");
+    // A display that opens its column has the running head over it: the
+    // space over it is the page's margin, not a display's.
+    const over = column.filter((l) => l.bottom <= y1 + 1).sort((a, b) => b.bottom - a.bottom)[0];
+    const opens = over !== undefined && pdf.furniture.includes(over);
+    judge(above && !opens ? inkTop - above.baseline : null, drawn.above, "above");
     judge(below ? below.baseline - inkBottom : null, drawn.below, "below");
   });
   return { edges, right, score: edges > 0 ? right / edges : null, misses };

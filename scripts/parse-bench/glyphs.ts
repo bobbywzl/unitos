@@ -306,8 +306,13 @@ function atomsOf(glyphs: PageGlyph[]): Atom[] | null {
       continue;
     }
     // Every join the glyph opens: ⇐ opens ⟸ (with =) and ⟺ (with ⇒).
+    // An extensible arrow over a short label (\xrightarrow{D}) sets its
+    // shaft further into its head than \joinrel does: up to 0.6 em where a
+    // label stands over the pair.
+    const labeled = (b: Atom) => atoms.some((c) => c !== a && c !== b && c.size < 0.85 * em && c.y > a.y + 0.2 * em && c.y < a.y + 1.2 * em && c.x1 < b.x2 && c.x2 > a.x1);
     const joined = JOINED.filter(([left]) => named(a, left)).some(([, right, arrow]) => {
-      const j = find((b) => named(b, right) && b.x1 > a.x1 && Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1) > 0.08 * em && Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1) < 0.3 * em);
+      const overlap = (b: Atom) => Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1);
+      const j = find((b) => named(b, right) && b.x1 > a.x1 && overlap(b) > 0.08 * em && (overlap(b) < 0.3 * em || (overlap(b) < 0.6 * em && labeled(b))));
       if (j < 0) return false;
       atoms[j].tex = arrow;
       atoms[j].cls = "rel";
@@ -350,13 +355,20 @@ function atomsOf(glyphs: PageGlyph[]): Atom[] | null {
 
 /** The symbols the atoms draw, each atom rendered alone at its script level
     (its size against the formula's largest glyph outside the extension
-    font: 0.85 or more is 0, 0.6 or more is 1, else 2; an extension font's
+    font: 0.85 or more is 0, 0.6 or more is 1, else 2; where two script
+    sizes stand under it, the larger is 1 and the smaller 2; an extension font's
     glyph is 0 down to 0.75, and one set in a script's size is a script's,
     as the app's check has it: the ∑ of an exponent); null when KaTeX
     cannot read an atom. Pieces and radical signs draw as rules or pictures
     in KaTeX: they are left out on both sides. */
 function atomSymbols(atoms: Atom[]): string[] | null {
   const big = Math.max(0, ...atoms.filter((a) => a.fam !== "omx").map((a) => a.size)) || Math.max(1, ...atoms.map((a) => a.size));
+  // Two script sizes under the formula's: the larger is the first level,
+  // the smaller the second, whatever their ratio to the formula's (an 8 pt
+  // formula sets its scripts at 6 and 5 pt: 5/8 is over 0.6).
+  const smalls = atoms.filter((a) => a.fam !== "omx" && a.tex && !a.piece && a.size < big * 0.85).map((a) => a.size);
+  const script = Math.max(0, ...smalls);
+  const two = smalls.some((s) => s < script * 0.9);
   const out: string[] = [];
   for (const a of atoms) {
     // A stacked delimiter counts once: its top piece, and the top bar of a column of bar pieces.
@@ -372,7 +384,7 @@ function atomSymbols(atoms: Atom[]): string[] | null {
     }
     if (a.piece || a.cls === "piece" || a.cls === "radical" || !a.tex) continue;
     const r = a.size / big;
-    const level = (a.fam === "omx" && r >= 0.75) || r >= 0.85 ? 0 : r >= 0.6 ? 1 : 2;
+    const level = (a.fam === "omx" && r >= 0.75) || r >= 0.85 ? 0 : two ? (a.size >= script * 0.95 ? 1 : 2) : r >= 0.6 ? 1 : 2;
     const own = drawn(a.cls === "accent" ? `${a.tex}{}` : a.tex);
     if (!own) return null;
     for (const s of own) {
@@ -664,7 +676,11 @@ export function glyphScores(pages: PageGlyphs[], doc: Doc, range: [number, numbe
     if (!page) continue;
     const glyphs = glyphsIn(page, block.at.region);
     if (block.kind === "figure") {
-      if (glyphs.length > 0 && glyphs.every((g) => g.family !== null) && glyphs.some((g) => MATH.has(g.family ?? ""))) mathImages++;
+      // A figure with its own caption ("Fig. 11") is a figure, whatever
+      // fonts its labels are set in: Springer's Fig. 11 sets a chart's
+      // axes and legend in TeX's math fonts, and counted as an equation.
+      const captioned = OWN_CAPTION_RE.test((block.caption ?? []).map((s) => s.text).join("").trim());
+      if (!captioned && glyphs.length > 0 && glyphs.every((g) => g.family !== null) && glyphs.some((g) => MATH.has(g.family ?? ""))) mathImages++;
       continue;
     }
     if (block.kind !== "equation") continue;
@@ -676,8 +692,15 @@ export function glyphScores(pages: PageGlyphs[], doc: Doc, range: [number, numbe
     const want = atomSymbols(atoms);
     // A printed label the region does not hold may lie beside it.
     const label = block.label && number.length === 0 ? (/^\(.*\)$/.test(block.label) ? `\\tag{${block.label.slice(1, -1)}}` : `\\tag*{${block.label}}`) : "";
+    // TeX's fonts stop at 5 points: a formula at 7 points sets its scripts
+    // and their own scripts at 5, so where every script glyph is at that
+    // floor the two levels are one.
+    const big = Math.max(0, ...atoms.filter((a) => a.fam !== "omx").map((a) => a.size));
+    const smalls = atoms.filter((a) => a.fam !== "omx" && a.tex && !a.piece && a.size < big * 0.85).map((a) => a.size);
+    const floor = smalls.length > 0 && smalls.every((s) => s >= 4.5 && s <= 5.3);
+    const level = (list: string[]) => (floor ? list.map((x) => x.replace(/@2$/, "@1")) : list);
     const forms = [block.latex, ...(label ? [`${block.latex} ${label}`] : [])].map((latex) => drawn(latex));
-    const results = forms.map((got) => (want && got ? settle(surplus(bag(want), bag(got)), surplus(bag(got), bag(want))) : null));
+    const results = forms.map((got) => (want && got ? settle(surplus(bag(level(want)), bag(level(got))), surplus(bag(level(got)), bag(level(want)))) : null));
     const rows = rowsCheck(glyphs.filter((g) => !number.includes(g)), block.latex);
     if (rows) rowsWrong++;
     if (results.some((r) => r && r.missing.length === 0 && r.extra.length === 0) && !rows) passed++;

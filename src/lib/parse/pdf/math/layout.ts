@@ -755,7 +755,12 @@ function structure(atoms: Atom[], rules: Rule[], depth = 0): Atom[] {
       // fraction in a script set at the script's size (MathJax's
       // e^{-\frac{1}{2}…} in OpenStax's f(x)): its own size is theirs, and
       // \tfrac keeps its parts at that size.
-      const part = Math.max(maxSize(above), maxSize(below));
+      // A big operator in a part hangs at its own size, larger than the
+      // part's letters: the part's size is theirs (the CS 229 refresher's
+      // Bayes rule, a ∑ under its bar, made the fraction larger than the
+      // "P(A_k|B) =" before it, which then read as its prescript).
+      const partSize = (list: Atom[]) => maxSize(list.some((a) => !hangingFamily(a.fam)) ? list.filter((a) => !hangingFamily(a.fam)) : list);
+      const part = Math.max(partSize(above), partSize(below));
       const script = pool.some(
         (a) =>
           !above.includes(a) &&
@@ -953,13 +958,19 @@ function ruledArrayOf(atoms: Atom[], vr: Rule[], rules: Rule[], em: number): Ato
 
 // ── Rows: matrices, binomials, cases, aligned lines ────────────────────────
 
-// Baselines of main-size atoms at least 0.9 em apart, top first.
+// Baselines of main-size atoms at least 0.9 em apart, top first. A row of
+// vertical or diagonal dots alone hangs nothing under its baseline: the
+// row under it may stand half an em lower (parse loop finding: the CS 229
+// refresher's matrices set rows tight, the ⋮ row's baseline 0.8 em over
+// the last row's, and ⋮ read as the last row's superscript).
 function rowLines(atoms: Atom[], unit: number): number[] {
-  const ys = [...new Set(atoms.map((a) => Math.round(a.yb * 2) / 2))].sort((p, q) => q - p);
+  const at = (a: Atom) => Math.round(a.yb * 2) / 2;
+  const ys = [...new Set(atoms.map(at))].sort((p, q) => q - p);
+  const dotsOnly = (y: number) => atoms.every((a) => at(a) !== y || a.tex === "\\vdots" || a.tex === "\\ddots");
   const lines: number[] = [];
   for (const y of ys) {
     const last = lines[lines.length - 1];
-    if (last !== undefined && last - y < 0.9 * unit) continue;
+    if (last !== undefined && last - y < (dotsOnly(last) ? 0.5 : 0.9) * unit) continue;
     lines.push(y);
   }
   return lines;
@@ -1493,6 +1504,28 @@ function linearAt(input: Atom[]): string {
     for (const s of label) s.claimed = true;
     if (label.length) labels.set(a, label);
   }
+  // So is a label stacked under a relation (\underset{n\to+\infty}{\sim}):
+  // small glyphs under its width, wholly under its baseline, and the
+  // glyphs set on with them (the CS 229 probability refresher's central
+  // limit theorem read "\overline{X}_{n\rightarrow}\sim_{\infty}", and
+  // lost its "+").
+  const underLabels = new Map<Atom, Atom[]>();
+  for (const a of main) {
+    if (a.cls !== "rel") continue;
+    const label = small.filter((s) => !s.claimed && cx(s) > a.x1 - 0.1 * em && cx(s) < a.x2 + 0.1 * em && a.yb - s.yb > 0.4 * baseSize && s.top < a.yb);
+    for (let grew = label.length > 0; grew; ) {
+      grew = false;
+      for (const s of small) {
+        if (s.claimed || label.includes(s)) continue;
+        if (label.some((l) => Math.abs(l.yb - s.yb) < 0.1 * em && (Math.abs(s.x1 - l.x2) < 0.3 * em || Math.abs(l.x1 - s.x2) < 0.3 * em))) {
+          label.push(s);
+          grew = true;
+        }
+      }
+    }
+    for (const s of label) s.claimed = true;
+    if (label.length) underLabels.set(a, label);
+  }
   // The limit under \lim, \sup, \max in display is claimed before any
   // script: wider than the name, it starts left of it ("N → ∞" under "lim"
   // read as a subscript of the "=" before it).
@@ -1635,6 +1668,8 @@ function linearAt(input: Atom[]): string {
     if (tex === ":" && prev && a.x1 - prev.x2 < 0.25 * em && next && next.x1 - a.x2 > 0.3 * em) tex = "\\colon";
     const label = labels.get(a);
     if (label) tex = `\\overset{${linear(label.map((s) => ({ ...s, claimed: false })))}}{${tex}}`;
+    const under = underLabels.get(a);
+    if (under) tex = `\\underset{${linear(under.map((s) => ({ ...s, claimed: false })))}}{${tex}}`;
     const right = next ? next.x1 : Infinity;
     let mine = small.filter((s) => !s.claimed && s.x1 >= last.x2 - 0.25 * em && s.x1 < right - 0.05 * em);
     // A script's word runs on under the next symbol's bracket, set tight on
@@ -1659,8 +1694,11 @@ function linearAt(input: Atom[]): string {
     // operator in a display: KaTeX would set them over and under. An
     // operator a display sets at the text's size (ℓ(θ) = Σᵢ ℓᵢ, arXiv
     // 2302.12627 p. 5) is drawn so: KaTeX would draw it large.
+    // A text-size operator in a display with limits over and under it
+    // (\textstyle\sum\limits_{i}) keeps them there: \textstyle alone sets
+    // them beside it.
     const big = a.cls === "op" && hangingFamily(a.fam);
-    if ((a.lower || a.upper) && (!style.display || INTEGRAL_RE.test(tex))) tex += "\\limits";
+    if ((a.lower || a.upper) && (!style.display || INTEGRAL_RE.test(tex) || (big && !a.entry?.display && nesting === displayDepth))) tex += "\\limits";
     else if (style.display && big && a.entry?.display && mine.length > 0 && !a.lower && !a.upper && !INTEGRAL_RE.test(tex)) tex += "\\nolimits";
     if (a.lower) tex += `_{${a.lower}}`;
     if (a.upper) tex += `^{${a.upper}}`;
@@ -1874,6 +1912,54 @@ function unreadShape(atoms: Atom[], rules: Rule[], paths: Box[], used: Set<Box>)
   return (left.length > 0 && right.length > 0) || [...left, ...right].some((p) => p.y2 - p.y1 < top - bottom + em);
 }
 
+/** Frames among a formula's rules (\boxed, a framed box): a rule down each
+    side and one over and under, meeting at the corners. tol is how far
+    apart the ends may stand. */
+export function framesOf(rules: Rule[], tol: number): { left: Rule; right: Rule; top: Rule; bottom: Rule }[] {
+  const vr = rules.filter((r) => r.dir === "v").sort((a, b) => a.x1 - b.x1);
+  const hr = rules.filter((r) => r.dir === "h");
+  const out: { left: Rule; right: Rule; top: Rule; bottom: Rule }[] = [];
+  const taken = new Set<Rule>();
+  for (const left of vr) {
+    if (taken.has(left)) continue;
+    const right = vr.find((r) => r !== left && !taken.has(r) && r.x1 - left.x1 > 2 * tol && Math.abs(r.y1 - left.y1) < tol && Math.abs(r.y2 - left.y2) < tol);
+    if (!right) continue;
+    const across = (y: number) =>
+      hr.find((r) => !taken.has(r) && Math.abs(r.y1 - y) < tol && r.x1 < left.x1 + tol && r.x2 > right.x1 - tol && r.x2 - r.x1 < right.x1 - left.x1 + 4 * tol);
+    const top = across(Math.max(left.y1, left.y2));
+    const bottom = across(Math.min(left.y1, left.y2));
+    if (!top || !bottom || top === bottom) continue;
+    for (const r of [left, right, top, bottom]) taken.add(r);
+    out.push({ left, right, top, bottom });
+  }
+  return out;
+}
+
+/** A frame around atoms of the formula (\boxed): the atoms inside are laid
+    out alone, with the rules inside, into one \boxed node; its four rules
+    are read (parse loop finding: the probability cheatsheet boxes each
+    worked answer, "= \boxed{n\sum_{j=1}^{n}\frac{1}{j}}", and the frame's
+    rules, unread, failed its displays to crops). */
+function framed(atoms: Atom[], rules: Rule[]): Atom[] {
+  if (atoms.length === 0) return atoms;
+  const em = maxSize(atoms);
+  let out = atoms;
+  for (const f of framesOf(rules.filter((r) => !read.has(r)), 0.15 * em)) {
+    const x1 = f.left.x1;
+    const x2 = f.right.x1;
+    const y1 = Math.min(f.left.y1, f.left.y2);
+    const y2 = Math.max(f.left.y1, f.left.y2);
+    const inside = out.filter((a) => cx(a) > x1 && cx(a) < x2 && a.yb > y1 && a.yb < y2);
+    if (inside.length === 0) continue;
+    const frame = [f.left, f.right, f.top, f.bottom];
+    const inner = rules.filter((r) => !frame.includes(r) && !read.has(r) && r.dir === "h" && r.x1 > x1 && r.x2 < x2 && r.y1 > y1 && r.y1 < y2);
+    for (const r of frame) read.add(r);
+    const built = structure(inside, inner, 1);
+    out = [...out.filter((a) => !inside.includes(a)), node(inside, `\\boxed{${linear(built)}}`, mainBaseline(built), maxSize(inside), { x1, x2, top: y2, bottom: y1 })];
+  }
+  return out;
+}
+
 /** A formula's LaTeX from its glyphs and the shapes drawn with them (rules,
     and paths), the atoms the check compares against (pieces joined,
     composites fused), and the paths it read. */
@@ -1896,7 +1982,10 @@ export function formulaToLatex(
   // arrow would otherwise fuse into \longrightarrow.
   const fused = fuseComposites(arrowRuns(assemblePieces([...atoms, ...radicals, ...drawn.atoms], all)));
   const copies = ruledArray(
-    fused.map((a) => ({ ...a })),
+    framed(
+      fused.map((a) => ({ ...a })),
+      all,
+    ),
     all,
   );
   const bars = all.filter((r) => r.dir === "h");
