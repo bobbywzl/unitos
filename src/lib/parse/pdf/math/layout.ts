@@ -588,7 +588,18 @@ function braces(atoms: Atom[], rules: Rule[], used: Set<Rule>): Atom[] {
     const within = (b: Atom) => !g.includes(b) && cx(b) > x1 - 0.1 * em && cx(b) < x2 + 0.1 * em;
     const top = Math.max(...g.map((a) => a.top));
     const bottom = Math.min(...g.map((a) => a.bottom));
-    const far = out.filter((b) => within(b) && (over ? b.top <= bottom + 0.1 * em : b.bottom >= top - 0.1 * em));
+    // The content is the glyphs stacked against the brace, as a fraction's
+    // part against its bar: in an aligned display the rows over an
+    // underbrace lie within its width too (parse loop finding: GeoTopo's
+    // "⇒ ⋃ (U_{i_j} ∩ A) ∪ ((X∖A) ∩ A) = A" took the row over it into
+    // its braces, and the display was a crop).
+    const far = chain(
+      out.filter((b) => within(b) && (over ? b.top <= bottom + 0.1 * em : b.bottom >= top - 0.1 * em)),
+      over ? bottom : top,
+      over ? -1 : 1,
+      em,
+      rules.filter((r) => !used.has(r)),
+    );
     const near = out.filter(
       (b) =>
         within(b) &&
