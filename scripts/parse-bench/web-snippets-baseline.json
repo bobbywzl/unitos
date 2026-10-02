@@ -1,7 +1,7 @@
 {
  "total": {
-  "f1": 0.883,
-  "precision": 0.824,
+  "f1": 0.884,
+  "precision": 0.826,
   "recall": 0.952
  },
  "pages": {
@@ -1112,7 +1112,7 @@
   },
   "Ile jest warta godzina pracy_ W tych krajach praca popłaca - Forsal.pl.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 2,
    "fn": 0
   },
   "francais.radio.cz-ministre.html": {
@@ -1832,7 +1832,7 @@
   },
   "spektrum.de.engelbart.html": {
    "tp": 2,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "security.googleblog.com.protection.html": {
@@ -2402,7 +2402,7 @@
   },
   "amnesty.de-waffensysteme.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "anchor.ch.lanka.html": {
@@ -2742,7 +2742,7 @@
   },
   "cbsnews.com.carolina.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "cducsu.de-wasserstoff.html": {
@@ -3017,7 +3017,7 @@
   },
   "eawag.ch-elektron.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "ebrosia.de.zinfandel.html": {
@@ -3222,7 +3222,7 @@
   },
   "fluter.de.vorbild.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "flvw.de-hallenmeisterschaften.html": {
@@ -3407,7 +3407,7 @@
   },
   "handwerksblatt.de-Friseurbesuch.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 2,
    "fn": 0
   },
   "hassanchef.com.bhindi.html": {
@@ -3842,7 +3842,7 @@
   },
   "mdavis.xyz.supermarket.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "mdr.de.autohaeuser.html": {
