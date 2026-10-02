@@ -306,8 +306,13 @@ function atomsOf(glyphs: PageGlyph[]): Atom[] | null {
       continue;
     }
     // Every join the glyph opens: ⇐ opens ⟸ (with =) and ⟺ (with ⇒).
+    // An extensible arrow over a short label (\xrightarrow{D}) sets its
+    // shaft further into its head than \joinrel does: up to 0.6 em where a
+    // label stands over the pair.
+    const labeled = (b: Atom) => atoms.some((c) => c !== a && c !== b && c.size < 0.85 * em && c.y > a.y + 0.2 * em && c.y < a.y + 1.2 * em && c.x1 < b.x2 && c.x2 > a.x1);
     const joined = JOINED.filter(([left]) => named(a, left)).some(([, right, arrow]) => {
-      const j = find((b) => named(b, right) && b.x1 > a.x1 && Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1) > 0.08 * em && Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1) < 0.3 * em);
+      const overlap = (b: Atom) => Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1);
+      const j = find((b) => named(b, right) && b.x1 > a.x1 && overlap(b) > 0.08 * em && (overlap(b) < 0.3 * em || (overlap(b) < 0.6 * em && labeled(b))));
       if (j < 0) return false;
       atoms[j].tex = arrow;
       atoms[j].cls = "rel";
