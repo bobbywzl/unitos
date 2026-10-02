@@ -1,7 +1,7 @@
 {
  "total": {
-  "f1": 0.883,
-  "precision": 0.823,
+  "f1": 0.886,
+  "precision": 0.829,
   "recall": 0.952
  },
  "pages": {
@@ -72,7 +72,7 @@
   },
   "haitiantimes.com-family.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 2,
    "fn": 0
   },
   "heavenlynnhealthy.de.areenburk.html": {
@@ -122,12 +122,12 @@
   },
   "nationnews.com-schools.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "nationnews.com-tridents.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "nowgrenada.com-pm.html": {
@@ -607,7 +607,7 @@
   },
   "aktion-hummelschutz.de.hummeln.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "alexanderlasch.wordpress.com.sprachgeschichte.html": {
@@ -642,7 +642,7 @@
   },
   "aoc.media.archaisme.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "apolut.net-Sonja-Silberhorn.html": {
@@ -922,7 +922,7 @@
   },
   "dietagespresse.com-halloween.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "digitalcourage.de-Muendigkeit.html": {
@@ -1112,7 +1112,7 @@
   },
   "Ile jest warta godzina pracy_ W tych krajach praca popłaca - Forsal.pl.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 1,
    "fn": 0
   },
   "francais.radio.cz-ministre.html": {
@@ -1447,7 +1447,7 @@
   },
   "link.springer.com.1007.html": {
    "tp": 2,
-   "fp": 1,
+   "fp": 0,
    "fn": 1
   },
   "literaturgefluester.wordpress.com.jahr.html": {
@@ -1587,7 +1587,7 @@
   },
   "netzpolitik.org.abmahnungen.html": {
    "tp": 4,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "wsl.ch-neubeau.html": {
@@ -1832,7 +1832,7 @@
   },
   "spektrum.de.engelbart.html": {
    "tp": 2,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "security.googleblog.com.protection.html": {
@@ -2402,7 +2402,7 @@
   },
   "amnesty.de-waffensysteme.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "anchor.ch.lanka.html": {
@@ -2712,7 +2712,7 @@
   },
   "bundesrat.de-erinnerungen.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 2,
    "fn": 0
   },
   "caktusgroup.com.django.html": {
@@ -2742,7 +2742,7 @@
   },
   "cbsnews.com.carolina.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "cducsu.de-wasserstoff.html": {
@@ -2807,12 +2807,12 @@
   },
   "cnet.de.schutz.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 1,
    "fn": 0
   },
   "coaching-magazin.de.transgenerationales-coaching.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "comparis.ch.autofinanzierung.html": {
@@ -3012,12 +3012,12 @@
   },
   "Winda w chmurach _ Obyczaje _ Dwutygodnik _ Dwutygodnik.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "eawag.ch-elektron.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "ebrosia.de.zinfandel.html": {
@@ -3222,7 +3222,7 @@
   },
   "fluter.de.vorbild.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "flvw.de-hallenmeisterschaften.html": {
@@ -3407,7 +3407,7 @@
   },
   "handwerksblatt.de-Friseurbesuch.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 2,
    "fn": 0
   },
   "hassanchef.com.bhindi.html": {
@@ -3687,7 +3687,7 @@
   },
   "lastampa.it.temperature.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "latercera.com-laagenda.html": {
@@ -3842,7 +3842,7 @@
   },
   "mdavis.xyz.supermarket.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "mdr.de.autohaeuser.html": {
@@ -4262,7 +4262,7 @@
   },
   "reuters.com.parasite.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "rhein-neckar-loewen.de-vorverkauf.html": {
@@ -4552,7 +4552,7 @@
   },
   "telegraph.co.uk.plumber.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "telemedicus.info.rezension.html": {
@@ -4862,7 +4862,7 @@
   },
   "„Sieci”_ IPN, czyli element infrastruktury krytycznej Tygodnik Sieci.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "zamg.ac.at-Jahresbericht.html": {
