@@ -34,6 +34,7 @@ export type Atom = {
   lower?: string;
   claimed?: boolean;
   fracPart?: number; // a fraction outside any other structure: its parts' size
+  rows?: number[]; // an array's or a matrix's row baselines, top first
 };
 
 const OPNAMES = new Set([
@@ -253,11 +254,32 @@ const PIECE_DELIM: Record<string, string> = { lparen: "(", rparen: ")", lbrack: 
 function assemblePieces(atoms: Atom[], rules: Rule[]): Atom[] {
   const pieces = atoms.filter((a) => a.fam === "omx" && (/^(l|r)(paren|brack|brace)-|^brace-rep$/.test(a.entry?.piece ?? "") || isPiece(a, "vrep")));
   const rest = atoms.filter((a) => !pieces.includes(a));
-  const columns: Atom[][] = [];
+  const stacks: Atom[][] = [];
   for (const p of pieces.sort(byX)) {
-    const col = columns.find((c) => Math.abs(c[0].x1 - p.x1) < 0.15 * p.size && isPiece(c[0], "vrep") === isPiece(p, "vrep"));
+    const col = stacks.find((c) => Math.abs(c[0].x1 - p.x1) < 0.15 * p.size && isPiece(c[0], "vrep") === isPiece(p, "vrep"));
     if (col) col.push(p);
-    else columns.push([p]);
+    else stacks.push([p]);
+  }
+  // Delimiters stacked at one x are each their own: a top piece under a
+  // bottom piece starts the next (parse loop finding: the MML book's three
+  // augmented matrices one under another, joined by ⇝, read their brackets
+  // as one bracket around all three).
+  const columns: Atom[][] = [];
+  for (const stack of stacks) {
+    let cur: Atom[] = [];
+    // (Each delimiter keeps its pieces in the stack's order: its first
+    // piece gives its baseline.)
+    const keep = (list: Atom[]) => columns.push(stack.filter((p) => list.includes(p)));
+    for (const p of [...stack].sort((a, b) => b.top - a.top)) {
+      const prev = cur[cur.length - 1];
+      const ends = prev && /-bot$/.test(prev.entry?.piece ?? "") && /-top$/.test(p.entry?.piece ?? "");
+      if (ends) {
+        keep(cur);
+        cur = [];
+      }
+      cur.push(p);
+    }
+    if (cur.length) keep(cur);
   }
   const fences: Atom[] = [];
   for (const col of columns) {
@@ -773,16 +795,40 @@ function accents(atoms: Atom[]): Atom[] {
     (60)). The atoms by the vertical rules, and those set on with them,
     become one node; the rules it holds are read. */
 function ruledArray(atoms: Atom[], rules: Rule[]): Atom[] {
-  const vr = rules.filter((r) => r.dir === "v" && !read.has(r));
-  if (vr.length === 0 || atoms.length === 0) return atoms;
+  const all = rules.filter((r) => r.dir === "v" && !read.has(r));
+  if (all.length === 0 || atoms.length === 0) return atoms;
   const em = maxSize(atoms);
+  // Arrays stacked in one display are each their own: vertical rules that
+  // touch from row to row are one array's (parse loop finding: the MML
+  // book's three augmented matrices joined by ⇝ read as one array of
+  // twelve rows).
+  const groups: Rule[][] = [];
+  for (const r of [...all].sort((a, b) => b.y2 - a.y2)) {
+    const last = groups[groups.length - 1];
+    if (last && r.y2 >= Math.min(...last.map((q) => q.y1)) - 0.3 * em) last.push(r);
+    else groups.push([r]);
+  }
+  let out = atoms;
+  for (const vr of groups) out = ruledArrayOf(out, vr, rules, em);
+  return out;
+}
+
+function ruledArrayOf(atoms: Atom[], vr: Rule[], rules: Rule[], em: number): Atom[] {
   const y1 = Math.min(...vr.map((r) => r.y1));
   const y2 = Math.max(...vr.map((r) => r.y2));
-  const band = atoms.filter((a) => a.yb > y1 - 0.3 * em && a.yb < y2 + 0.3 * em).sort(byX);
-  // The array runs from the rules out to the first gap wider than a
-  // column's (an em and a half): the formula's other atoms stand apart.
   const rx1 = Math.min(...vr.map((r) => r.x1));
   const rx2 = Math.max(...vr.map((r) => r.x1));
+  // Tall delimiters around the rules are the array's fences, not its
+  // cells: the array runs between them (parse loop finding: the MML book's
+  // augmented matrices [A | I] read "\Biggl[1 & …" with the bracket in the
+  // first cell and the comma after the matrix in a row).
+  const fences = atoms.filter((a) => isTall(a, em) && a.bottom <= y1 + 0.5 * em && a.top >= y2 - 0.5 * em);
+  const open = fences.filter((a) => a.x2 <= rx1).sort((p, q) => q.x2 - p.x2)[0];
+  const close = fences.filter((a) => a.x1 >= rx2).sort((p, q) => p.x1 - q.x1)[0];
+  const inside = (a: Atom) => !open || !close || (a.x1 >= open.x2 - 0.1 && a.x2 <= close.x1 + 0.1 && a !== open && a !== close);
+  const band = atoms.filter((a) => a.yb > y1 - 0.3 * em && a.yb < y2 + 0.3 * em && inside(a)).sort(byX);
+  // The array runs from the rules out to the first gap wider than a
+  // column's (an em and a half): the formula's other atoms stand apart.
   const left = band.filter((a) => cx(a) < rx1);
   const right = band.filter((a) => cx(a) > rx2);
   if (left.length === 0 && right.length === 0) return atoms;
@@ -790,7 +836,9 @@ function ruledArray(atoms: Atom[], rules: Rule[]): Atom[] {
   let hi = band.indexOf(right[0] ?? left[left.length - 1]);
   while (lo > 0 && band[lo].x1 - band[lo - 1].x2 < 1.5 * em) lo--;
   while (hi < band.length - 1 && band[hi + 1].x1 - band[hi].x2 < 1.5 * em) hi++;
-  const content = band.slice(lo, hi + 1);
+  // Between its fences the array is all there is, however wide its columns
+  // stand (the MML book's [A | b] sets them two ems apart).
+  const content = open && close ? band : band.slice(lo, hi + 1);
   const mains = content.filter((a) => a.size >= em * 0.95);
   const lines = rowLines(mains.length ? mains : content, em);
   // One row between rules is a table's row, not an array (arXiv
@@ -803,7 +851,10 @@ function ruledArray(atoms: Atom[], rules: Rule[]): Atom[] {
   // in every row.
   const ruleXs = [...new Set(vr.filter((r) => r.x1 > x1 && r.x1 < x2).map((r) => Math.round(r.x1)))].sort((p, q) => p - q);
   if (ruleXs.length === 0) return atoms;
-  const cuts = [...ruleXs, ...columnCuts(rows, em).filter((c) => ruleXs.every((x) => Math.abs(x - c) > 0.5 * em))].sort((p, q) => p - q);
+  // A ruled array's columns may stand closer than a matrix's: half an em
+  // open in every row is a column gap, more than any space TeX sets inside
+  // a cell (the MML book's [A | A⁻¹] sets −1 and 2 6.6 pt apart).
+  const cuts = [...ruleXs, ...columnCuts(rows, em, 0.5 * em).filter((c) => ruleXs.every((x) => Math.abs(x - c) > 0.5 * em))].sort((p, q) => p - q);
   const spec = ["c", ...cuts.map((c) => (ruleXs.includes(c) ? "|c" : "c"))].join("");
   // Horizontal rules across the columns: \hline over the row under them.
   const hr = rules.filter((r) => r.dir === "h" && r.x1 <= x1 + 0.5 * em && r.x2 >= x2 - 0.5 * em && r.y1 > y1 - 0.3 * em && r.y1 < y2 + 0.3 * em);
@@ -828,7 +879,7 @@ function ruledArray(atoms: Atom[], rules: Rule[]): Atom[] {
   for (const r of [...hr, ...vr]) read.add(r);
   const top = Math.max(...content.map((a) => a.top), y2);
   const bottom = Math.min(...content.map((a) => a.bottom), y1);
-  const made = node(content, `\\begin{array}{${spec}} ${body.trim()} \\end{array}`, (top + bottom) / 2 - 0.25 * em, em, { top, bottom });
+  const made = node(content, `\\begin{array}{${spec}} ${body.trim()} \\end{array}`, (top + bottom) / 2 - 0.25 * em, em, { top, bottom, rows: lines });
   return [...atoms.filter((a) => !content.includes(a)), made];
 }
 
@@ -861,7 +912,7 @@ function splitRows(atoms: Atom[], lines: number[]): Atom[][] {
 // Columns: gaps of 0.9 em or more open in every row that splits two cells,
 // or of 9.5 pt: TeX sets an array's columns 10 pt apart at any text size
 // (a 12 pt paper's bmatrix read each row as one cell).
-function columnCuts(rows: Atom[][], em: number): number[] {
+function columnCuts(rows: Atom[][], em: number, least = Math.min(0.9 * em, 9.5)): number[] {
   const all = rows.flat();
   if (all.length === 0) return [];
   const x1 = Math.min(...all.map((a) => a.x1));
@@ -874,7 +925,7 @@ function columnCuts(rows: Atom[][], em: number): number[] {
       rows.filter((r) => r.some((a) => a.x2 <= x) && r.some((a) => a.x1 >= x)).length >= 2;
     if (open && start === null) start = x;
     if (!open && start !== null) {
-      if (x - start >= Math.min(0.9 * em, 9.5)) cuts.push((start + x) / 2);
+      if (x - start >= least) cuts.push((start + x) / 2);
       start = null;
     }
   }
@@ -981,12 +1032,45 @@ function fencedGroups(atoms: Atom[], em: number): Atom[] {
         const env = FENCE_ENV[open.tex] ?? "matrix";
         tex = `\\begin{${env}} ${cells(rows, cuts)} \\end{${env}}`;
       }
-      made = node([open, ...content, ...(close ? [close] : [])], tex, axis - 0.25 * em, em);
+      made = node([open, ...content, ...(close ? [close] : [])], tex, axis - 0.25 * em, em, { rows: lines });
       out = out.filter((a) => a !== open && a !== close && !content.includes(a));
       out.push(made);
     }
     if (!made && !marked) return out;
   }
+}
+
+// Notes set beside a matrix's rows ("Swap with R₃", "−4R₁", "·(−1)"): the
+// atoms right of the matrix, within its height, each on one of its rows'
+// baselines, are a column of their own beside it, one row to each of its
+// rows (parse loop finding: the MML book's elimination steps read each
+// note as a row of a gathered display or a subscript of the matrix, and
+// were crops). A mark after the matrix on its axis stays after the notes.
+function rowNotes(atoms: Atom[], em: number): Atom[] {
+  let out = atoms;
+  for (const grid of atoms.filter((a) => a.rows && a.rows.length >= 2)) {
+    const lines = grid.rows!;
+    // The matrix's closing delimiter, when the array is set between two,
+    // comes first.
+    const fence = out.find((a) => isTall(a, em) && a.cls === "close" && a.x1 >= grid.x2 - 0.1 * em && a.x1 - grid.x2 < em);
+    const edge = fence ? fence.x2 : grid.x2;
+    const right = out.filter((a) => a !== grid && a !== fence && a.x1 >= edge - 0.1 * em && a.yb > grid.bottom && a.yb < grid.top);
+    const rowOf = (a: Atom) => lines.findIndex((y) => Math.abs(a.yb - y) < 0.3 * em);
+    const notes = right.filter((a) => rowOf(a) >= 0);
+    if (notes.length === 0) continue;
+    // A note starts within a few ems of the matrix and nothing else stands
+    // among the notes; a mark on the axis after them all is the sentence's.
+    const x2 = Math.max(...notes.map((a) => a.x2));
+    if (Math.min(...notes.map((a) => a.x1)) - edge > 3 * em) continue;
+    if (right.some((a) => !notes.includes(a) && a.x1 < x2)) continue;
+    // One note on the axis alone is the matrix's script or the formula's
+    // next symbol, no column.
+    if (new Set(notes.map(rowOf)).size === 1 && notes.every((a) => Math.abs(a.yb - grid.yb) < 0.3 * em)) continue;
+    const cells = lines.map((_, k) => linear(notes.filter((a) => rowOf(a) === k).map((a) => ({ ...a }))));
+    const column = node(notes, `\\quad\\begin{matrix} ${cells.join(" \\\\ ")} \\end{matrix}`, grid.yb, grid.size, { top: grid.top, bottom: grid.bottom });
+    out = [...out.filter((a) => !notes.includes(a)), column];
+  }
+  return out;
 }
 
 // Unfenced rows: aligned when every row's first relation sits at one x,
@@ -1209,6 +1293,7 @@ function linearAt(input: Atom[]): string {
   for (const a of atoms) {
     if (hangingFamily(a.fam) && (a.cls === "op" || a.entry?.size || a.entry?.piece || a.cls === "open" || a.cls === "close")) a.yb = (a.top + a.bottom) / 2 - 0.25 * Math.min(em, a.size);
   }
+  atoms = rowNotes(atoms, em);
   const rows = alignedRows(atoms, em);
   if (rows) return rows;
   // Tall delimiters pair up as \left … \right (an editor redraws them to

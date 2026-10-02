@@ -190,6 +190,11 @@ function kindOf(line: Line, ctx: PageContext, column: { left: number; right: num
   // A labeled line: a short formula beside it, whatever its fonts (¹⁴₆C,
   // a sans-serif A).
   if (label && words.length === 0 && text.replace(/\s/g, "").length <= 20) return "math";
+  // A matrix's row of numbers alone, set in TeX's fonts between its tall
+  // delimiters, is the matrix's: its digits are no formula's zone (parse
+  // loop finding: the MML book's augmented matrix [1 0 2 0 | 1 0 0 0]
+  // read its rows as a table's, apart from its brackets).
+  if (fenced && /\d/.test(text) && /^[\d\s.,−+-]+$/.test(text) && glyphs.every((g) => g.family !== null)) return "math";
   if (zoneChars === 0) return "text";
   // A labeled formula with a unit or two in words, wherever it starts: a
   // journal that sets displays flush left starts them at the column edge
@@ -880,7 +885,12 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
       // A display's lines sit side by side at most a few ems apart (a
       // fraction's numerator beside a big operator); a label at the margin
       // stands farther.
-      if (kinds[j] !== "label" && (next.xEnd < x1 - size * 6 || next.x > x2 + size * 6) && !band.every((l) => kinds[lines.indexOf(l)] === "label")) break;
+      // So do a matrix's two delimiters, however wide the matrix, when
+      // their top pieces are lines of their own (parse loop finding: the MML
+      // book's augmented matrix read its "[" as a display apart).
+      const inFence = (l: Line, f: Box) => l.y >= f.y1 - l.size && l.y <= f.y2 + l.size && l.x < f.x2 + 1 && l.xEnd > f.x1 - 1;
+      const pair = Math.abs(prev.y - next.y) < size * 0.3 && fences.some((f) => inFence(prev, f) && fences.some((g) => g !== f && inFence(next, g) && Math.abs(g.y1 - f.y1) < size && Math.abs(g.y2 - f.y2) < size));
+      if (kinds[j] !== "label" && !pair && (next.xEnd < x1 - size * 6 || next.x > x2 + size * 6) && !band.every((l) => kinds[lines.indexOf(l)] === "label")) break;
       const label = kinds[j] === "label" || unlabeled(next).label !== null ? 1 : 0;
       if (labels + label > 1) {
         // The numerators of the next display's fractions stand closer to the
