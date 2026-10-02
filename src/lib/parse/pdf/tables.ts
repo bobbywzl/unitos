@@ -7,6 +7,7 @@ import { geom, lineMathShare, median } from "@/lib/parse/pdf/geometry";
 import { sameFlags } from "@/lib/parse/pdf/glyphs";
 import { ATTACH_PUNCT_RE } from "@/lib/parse/pdf/lines";
 import { isGlyphMarker, readMarker } from "@/lib/parse/pdf/markers";
+import { CAPTION_RE } from "@/lib/parse/pdf/figures";
 import { firstPageOf } from "@/lib/parse/pdf/merge";
 import { mathSpans } from "@/lib/parse/pdf/math/zones";
 import { TextBuilder, boldShare, escapeHtml, isMonoLine, joinGroup, lineEndHyphen, spansFromRuns } from "@/lib/parse/pdf/text";
@@ -310,9 +311,9 @@ export function tableSegment(
 }
 
 // A table's caption opens with its label and a mark after the number:
-// "Table 2:", "TABLE 1.", "Table II.", "Table A1 –" ("Table 3 shows …" is
-// a sentence).
-const TABLE_CAPTION_RE = /^(?:table|tab\.)\s*(?:\d+|[A-Z]\d+|[IVXL]+)\s*[.:|–—-]/i;
+// "Table 2:", "TABLE 1.", "Table II.", "Table A1 –", German's "Tabelle
+// 2:" ("Table 3 shows …" is a sentence).
+const TABLE_CAPTION_RE = /^(?:table|tab\.|tabelle)\s*(?:\d+|[A-Z]\d+|[IVXL]+)\s*[.:|–—-]/i;
 
 /** A table's caption joins its table: a paragraph that opens with a
     table's label, right over the table on its first page or right under it
@@ -377,6 +378,16 @@ export function attachTableCaptions(segments: Segment[]): Segment[] {
   join(labeled);
   const pages = new Set([...taken].map((s) => s.page));
   join(segments.flatMap((s, k) => (pages.has(s.page) && isSubCaption(s) ? [k] : [])));
+  // A caption a figure's label opens that no figure took, right under a
+  // table or right over it, is the table's: ACM's style labels a table
+  // "Figure" (parse loop finding: TraceMonkey's "Figure 13. Detailed trace
+  // recording statistics …" read as a paragraph under its table).
+  segments.forEach((s, k) => {
+    if (taken.has(s) || s.type !== "PARAGRAPH" || s.footnote || s.text.length > 1200 || !CAPTION_RE.test(s.text.trim())) return;
+    const [below, above] = [tableBy(k, true), tableBy(k, false)];
+    const table = open(below) && open(above) ? nearer(s, below, above) : open(below) ? below : open(above) ? above : undefined;
+    if (table) captionOf(table, s, table === below, taken);
+  });
   // A table with no caption takes one the paragraph over it kept as its
   // last line.
   segments.forEach((table, i) => {
