@@ -1031,7 +1031,21 @@ export function attachFigureRegions(
       // caption (arXiv 2609.29669 p5: a flowchart's steps, a sentence in
       // each box, read as paragraphs and its caption as one).
       const step = framed(prev) && steps >= 2;
-      if (!isFigureDebris(prev, ctx) && !inDrawing && !byGraphic && !underGraphic && !diagramPart && !step) break;
+      // A figure set in TeX's math fonts and nothing drawn (an array of
+      // matrices with labels beside them) reads as displays with no number,
+      // equations or crops, right over its caption: they are the figure's
+      // (parse loop finding: ThinkDSP's Figure 6.1, "Synthesis with
+      // arrays", read as two crops, an equation ".f_k..", and its caption
+      // as a paragraph). A figure's caption only, with nothing drawn between
+      // it and the display, and no graphic under it.
+      const mathFigure =
+        (prev.type === "EQUATION" ? !/\\tag\*?\{/.test(prev.text) : prev.type === "FIGURE" && prev.mathCrop === true && !/\(\d{1,3}(?:\.\d{1,3})*[a-z]?\)/.test(prev.text)) &&
+        !TABLE_CAPTION_RE.test(cap.text) &&
+        prev.box !== undefined &&
+        drawingIn(drawing, cap.box.y2, prev.box.y1, x1, x2) === null &&
+        !graphics.some((g) => g.box.x1 < x2 && g.box.x2 > x1 && g.box.y1 >= cap.box!.y2 - 1 && g.box.y2 <= prev.box!.y1 + 1) &&
+        !graphics.some((g) => g.box.x1 < x2 && g.box.x2 > x1 && g.box.y2 <= cap.box!.y1 + 1 && cap.box!.y1 - g.box.y2 < rowGap * 2);
+      if (!isFigureDebris(prev, ctx) && !inDrawing && !byGraphic && !underGraphic && !diagramPart && !step && !mathFigure) break;
       // What reaches well past the column (a table across both columns) is
       // no debris of a figure in it.
       if (prev.box && (prev.box.x1 < x1 - ctx.bodySize * 2 || prev.box.x2 > x2 + ctx.bodySize * 2)) break;
