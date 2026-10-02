@@ -701,6 +701,14 @@ function arrowOf(pieces: ArrowPiece[]): string | null {
 // column's edge. The glyphs keep their own boxes: the layout reads the
 // parts by their overlap.
 const compositeEnd = new WeakMap<Glyph, number>();
+// Where a long arrow drawn in pieces ends, by the glyph it sits on.
+const arrowEnd = new WeakMap<Glyph, number>();
+
+/** The end of the long arrow (⟹, ⟶, ↪) glyphTexts fused onto g, its
+    leftmost piece; undefined when g starts none. */
+export function longArrowEnd(g: Glyph): number | undefined {
+  return arrowEnd.get(g);
+}
 
 // The text of the page's glyphs where it is not the text layer's: every glyph
 // of a math family, and the glyphs of a composite or an accented letter. A
@@ -835,6 +843,7 @@ export function glyphTexts(glyphs: Glyph[]): Map<Glyph, string> {
       if (arrow) {
         const first = run.reduce((l, g) => (g.x < l.x - 0.01 ? g : l));
         fuse(first, arrow, run.filter((g) => g !== first));
+        arrowEnd.set(first, compositeEnd.get(first)!);
       }
     }
   }
