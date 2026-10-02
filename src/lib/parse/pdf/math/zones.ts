@@ -459,12 +459,23 @@ export function splitZones(items: Item[], cells: number[]): Item[] {
 }
 
 // The size most of a cell's characters are set in.
+// A cell's text size: the size most of its characters take, among those
+// at a script's size or more under its largest letter. A cell of a
+// letter and its long subscript (a fraction's denominator, ξ_{eff,uniform})
+// holds more of the script's characters than of the letter's (a math
+// font's letter: a heading beside a column's text is no such letter): read at the
+// script's size, its subscript's letters were words, and the fraction's
+// line went into the text line over it (parse loop finding: ICML's (34)
+// was a crop).
 function textSize(items: Item[]): number {
+  const big = Math.max(0, ...items.filter((i) => (i.glyphs ?? []).some((g) => isMathGlyph(g) && LETTER_RE.test(g.unicode))).map((i) => i.size));
   const chars = new Map<number, number>();
   for (const i of items) {
+    if (i.size < big * 0.85) continue;
     const key = Math.round(i.size * 10) / 10;
     chars.set(key, (chars.get(key) ?? 0) + i.str.length);
   }
+  if (chars.size === 0) for (const i of items) chars.set(Math.round(i.size * 10) / 10, (chars.get(Math.round(i.size * 10) / 10) ?? 0) + i.str.length);
   return [...chars].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 10;
 }
 
