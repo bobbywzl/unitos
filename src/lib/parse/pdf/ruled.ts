@@ -20,6 +20,7 @@ import {
   columnAt,
   columnSeparators,
   isProseColumns,
+  proseCell,
   leadIn,
   LINK_LINE_RE,
   NUMERIC_CELL_RE,
@@ -298,7 +299,8 @@ function stackRegions(rules: Rule[], x1: number, x2: number, items: Item[], colu
     const lines = buildLines(items.filter((it) => inBox(it, band)), 0);
     const breaks =
       lines.some((l) => isProseLine(l, x2 - x1, columns) || CAPTION_START_RE.test(l.text)) ||
-      isProseColumns(lines.filter((l) => l.cells.length >= 2), false);
+      isProseColumns(lines.filter((l) => l.cells.length >= 2), false) ||
+      proseHalves(lines, x1, x2, items, band);
     if (breaks) {
       close();
       continue;
@@ -317,6 +319,23 @@ function stackRegions(rules: Rule[], x1: number, x2: number, items: Item[], colu
   }
   close();
   return regions;
+}
+
+// A page's head rule and foot rule around its two columns of text: the band
+// holds most of the page's characters (four fifths), a quarter of its lines
+// hold a cell of prose, and prose stands in both halves, three cells at
+// least on each side. A table with a column of prose holds it on one side.
+// The lines of two columns between formulas and lists hold two cells of
+// prose side by side too seldom for isProseColumns (parse loop finding:
+// the CS 229 refresher's first page, its formulas between short lines, read
+// as one table of the whole page).
+function proseHalves(lines: Line[], x1: number, x2: number, items: Item[], band: Box): boolean {
+  const chars = (list: Item[]) => list.reduce((n, it) => n + it.str.trim().length, 0);
+  if (chars(items.filter((it) => inBox(it, band))) < chars(items) * 0.8) return false;
+  const middle = (x1 + x2) / 2;
+  const prose = lines.flatMap((l) => l.cells.filter((c) => proseCell(c.text)).map((c) => ({ line: l, left: c.x < middle })));
+  const halves = [prose.filter((p) => p.left).length, prose.filter((p) => !p.left).length];
+  return new Set(prose.map((p) => p.line)).size * 4 >= lines.length && halves.every((n) => n >= 3);
 }
 
 // A stack's rules, and the rule its last row would have: a table open at

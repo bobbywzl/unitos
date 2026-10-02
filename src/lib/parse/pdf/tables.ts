@@ -811,7 +811,7 @@ const FIGURE_CAPTION_RE = /^(?:fig\.|figure)\s*\d+[a-z]?\s*[.:|]/i;
 const holdsCaption = (line: Line) => line.cells.some((c) => FIGURE_CAPTION_RE.test(c.text.trim()));
 
 // A cell of prose: six words or more.
-const proseCell = (text: string) => text.split(/\s+/).filter((w) => /\p{L}{2}/u.test(w)).length >= 6;
+export const proseCell = (text: string) => text.split(/\s+/).filter((w) => /\p{L}{2}/u.test(w)).length >= 6;
 
 // Lines whose cells hold prose: two prose cells side by side on half of
 // them or more (two columns of text), or on a scan's text layer a prose
