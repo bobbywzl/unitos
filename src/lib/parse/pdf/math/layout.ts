@@ -983,8 +983,22 @@ function splitRows(atoms: Atom[], lines: number[]): Atom[][] {
   };
   const full = atoms.filter((a) => a.size >= em * 0.85);
   const rowOf = new Map(full.map((a) => [a, nearest(a)]));
+  // A limit goes to its operator's row: set over a ⋃ of the row under,
+  // it stands nearer the row over (GeoTopo p19's "n" over ⋃ read as a
+  // subscript of the row above's last word).
+  // An integral sets its limits beside it, as scripts.
+  const ops = full.filter((o) => o.cls === "op" && hangingFamily(o.fam) && o.entry?.display && !INTEGRAL_RE.test(o.tex));
+  const limitOf = (a: Atom) =>
+    ops.find(
+      (o) =>
+        cx(a) > o.x1 &&
+        cx(a) < o.x2 &&
+        ((a.bottom >= o.top - 0.2 * em && a.bottom - o.top < 0.8 * em) || (a.top <= o.bottom + 0.2 * em && o.bottom - a.top < 0.8 * em)),
+    );
   for (const a of atoms) {
     let row = rowOf.get(a);
+    const op = row === undefined ? limitOf(a) : undefined;
+    if (op) row = rowOf.get(op);
     if (row === undefined) {
       const base = full
         .filter((b) => a.x1 >= b.x2 - 0.05 * em && a.x1 <= b.x2 + 0.2 * em && a.yb > b.yb - 0.5 * em && a.yb < b.yb + 0.7 * em)
