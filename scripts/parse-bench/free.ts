@@ -12,7 +12,7 @@ import type { LayoutScores } from "./layout";
 import { inkBands, type PagePaint } from "./paint";
 import { ROOT } from "./load";
 import { mathLeaves } from "./math";
-import { FREE_WEIGHTS, furnitureMatches, type Flat } from "./metrics";
+import { FREE_WEIGHTS, furnitureMatches, type Flat, type MathItem } from "./metrics";
 import { garblesOf, normText, PAGE_NUMBER_RE, pageNumberOf, wordsOf } from "./text";
 
 // Checks that need no reference: the PDF's own text (pdftotext) against the
@@ -861,7 +861,10 @@ function countWords(texts: string[]): Map<string, number> {
     spacing ("2", "k1", "t" where the formula reads "2k1t"), so the formulas'
     glyphs cover the PDF's short words, as the reference metrics let a
     reference's math do, and are never extra words. */
-function printedWords(cand: Flat, contents: boolean): { words: string[]; glyphs: Map<string, number>; raised: { joined: string; parts: string[] }[] } {
+function printedWords(
+  cand: Flat,
+  contents: boolean,
+): { words: string[]; glyphs: Map<string, number>; raised: { joined: string; parts: string[] }[]; tight: { joined: string; parts: string[]; formula: string }[] } {
   const kept = (b: number) => contents || cand.blocks[b].role !== "contents";
   const toks = cand.toks.filter((t) => kept(cand.units[t.unit].block));
   const words = toks.map((t) => t.w);
@@ -879,11 +882,24 @@ function printedWords(cand: Flat, contents: boolean): { words: string[]; glyphs:
     if (block.kind === "list" && kept(b)) for (const item of block.items) words.push(...wordsOf(item.marker).map((w) => w.w));
   });
   const glyphs = new Map<string, number>();
+  const readings = new Map<MathItem, string>();
   for (const m of cand.math) {
     const reading = m.text?.trim() ? m.text : m.latex !== undefined || m.mathml !== undefined ? mathLeaves(m, m.display).join(" ") : "";
+    readings.set(m, reading);
     for (const w of wordsOf(`${reading} ${m.label ?? ""}`)) for (const ch of w.w) glyphs.set(ch, (glyphs.get(ch) ?? 0) + 1);
   }
-  return { words, glyphs, raised };
+  // A word set tight after a formula ("$n$th", "$k$th"): the text layer reads
+  // the formula's glyphs and the word as one word ("nth"). parse loop
+  // finding: thinkdsp's "the nth row" scored "nth" missing and "th" extra.
+  const tight: { joined: string; parts: string[]; formula: string }[] = [];
+  for (const m of cand.math) {
+    if (m.display || m.to === undefined || !kept(m.block)) continue;
+    const t = toks.find((x) => x.unit === m.unit && x.start === m.to);
+    const formula = wordsOf(readings.get(m) ?? "").map((w) => w.w).join("");
+    const joined = t && formula ? wordsOf(formula + t.w)[0]?.w : undefined;
+    if (t && joined && [...formula].length <= 4) tight.push({ joined, parts: [t.w], formula });
+  }
+  return { words, glyphs, raised, tight };
 }
 
 /** The reference-free checks: text coverage against pdftotext (every word of
@@ -914,7 +930,7 @@ export function mathPart(glyphs: Pick<GlyphScores, "checked" | "passed" | "mathI
 }
 
 export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word = false, look: LookScores | null = null, layout: LayoutScores | null = null): FreeScores {
-  const { words: printed, glyphs: formulaGlyphs, raised } = printedWords(cand, !word);
+  const { words: printed, glyphs: formulaGlyphs, raised, tight } = printedWords(cand, !word);
   const candBag = countWords([]);
   for (const w of printed) candBag.set(w, (candBag.get(w) ?? 0) + 1);
   const expected = new Map<string, number>();
@@ -985,6 +1001,18 @@ export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word 
     if (!short || !parts.every((w) => (expected.get(w) ?? 0) > (candBag.get(w) ?? 0))) continue;
     candBag.set(joined, (candBag.get(joined) ?? 0) - 1);
     for (const w of parts) candBag.set(w, (candBag.get(w) ?? 0) + 1);
+  }
+  // A word set tight after a formula counts as the text layer reads it: the
+  // formula's glyphs and the word as one word.
+  for (const { joined, parts, formula } of tight) {
+    const short = (expected.get(joined) ?? 0) > (candBag.get(joined) ?? 0);
+    const extra = parts.every((w) => (candBag.get(w) ?? 0) > (expected.get(w) ?? 0));
+    const chars = countWords([]);
+    for (const ch of formula) chars.set(ch, (chars.get(ch) ?? 0) + 1);
+    if (!short || !extra || ![...chars].every(([ch, c]) => (formulaGlyphs.get(ch) ?? 0) >= c)) continue;
+    for (const [ch, c] of chars) formulaGlyphs.set(ch, (formulaGlyphs.get(ch) ?? 0) - c);
+    for (const w of parts) candBag.set(w, (candBag.get(w) ?? 0) - 1);
+    candBag.set(joined, (candBag.get(joined) ?? 0) + 1);
   }
   // The candidate's word count, a split mark counted apart.
   const printedCount = [...candBag.values()].reduce((a, n) => a + n, 0);
