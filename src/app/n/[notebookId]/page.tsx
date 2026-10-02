@@ -73,6 +73,7 @@ import { isTextStyle, type TextStyle } from "@/lib/text-style";
 import { coreBlocks } from "@/lib/anchors/layer";
 import { READING_LINE_PX, type BlockPosition } from "@/lib/reading-position";
 import { storedPdfPages } from "@/lib/pdf-pages";
+import type { DocumentKind } from "@/lib/document-order";
 
 export const dynamic = "force-dynamic";
 
@@ -122,6 +123,10 @@ export default async function NotebookPage(props: {
               richTextRev: true,
               importRev: true,
               video: { select: { id: true } },
+              // The document list's sort and grouping (SPEC.md §6).
+              createdAt: true,
+              format: true,
+              generatedCommand: true,
             },
           },
         },
@@ -151,19 +156,49 @@ export default async function NotebookPage(props: {
 
   // Which stored files are PDFs (a stored file that does not start with
   // `%PDF-` is a Markdown file, §2): Re-parse on a PDF asks which shape
-  // (SPEC.md §16). Read from the first bytes, never the whole file.
-  const fileIds = notebook.documents.filter((nd) => nd.document.fileHash !== null).map((nd) => nd.document.id);
-  const pdfIds = new Set(
-    fileIds.length > 0
+  // (SPEC.md §16). Read from the first bytes, never the whole file. The same
+  // read says which documents are Word files (a zip, "PK") and which hold
+  // rich text, for the document list's kinds (SPEC.md §6).
+  const documentIds = notebook.documents.map((nd) => nd.document.id);
+  const heads = new Map(
+    documentIds.length > 0
       ? (
-          await db.$queryRaw<{ id: string }[]>`
-            SELECT id FROM "Document"
-            WHERE id IN (${Prisma.join(fileIds)})
-              AND encode(substring("fileData" from 1 for 5), 'escape') = '%PDF-'
+          await db.$queryRaw<{ id: string; head: string | null; rich: boolean }[]>`
+            SELECT id, encode(substring("fileData" from 1 for 5), 'escape') AS head, ("richText" IS NOT NULL) AS rich
+            FROM "Document"
+            WHERE id IN (${Prisma.join(documentIds)})
           `
-        ).map((r) => r.id)
+        ).map((r) => [r.id, r])
       : [],
   );
+  const pdfIds = new Set(
+    notebook.documents
+      .filter((nd) => nd.document.fileHash !== null && heads.get(nd.document.id)?.head === "%PDF-")
+      .map((nd) => nd.document.id),
+  );
+  // When this account last read each document (ReadingPosition.at): the
+  // document list's Last read order.
+  const readAt = new Map(
+    documentIds.length > 0
+      ? (
+          await db.readingPosition.findMany({
+            where: { userId: user.id, documentId: { in: documentIds } },
+            select: { documentId: true, at: true },
+          })
+        ).map((r) => [r.documentId, r.at.toISOString()])
+      : [],
+  );
+  const kindOf = (nd: (typeof notebook.documents)[number]): DocumentKind => {
+    const d = nd.document;
+    const head = heads.get(d.id);
+    if (d.video) return "media";
+    if (d.handwritten) return "handwritten";
+    if (d.generatedCommand) return "generated";
+    if (d.format === "slides" || d.format === "sheets") return d.format;
+    if (d.fileHash !== null) return pdfIds.has(d.id) ? "pdf" : head?.head?.startsWith("PK") ? "word" : "markdown";
+    if (d.sourceUrl && /^https?:/i.test(d.sourceUrl)) return "page";
+    return head?.rich ? "blank" : "text";
+  };
   const attached = notebook.documents.map((nd) => ({
     id: nd.document.id,
     title: nd.document.title,
@@ -178,6 +213,9 @@ export default async function NotebookPage(props: {
     folderId: nd.folderId,
     // Re-parse of an edited import asks first (document-bar.tsx).
     importEdited: editedSinceImport(nd.document),
+    kind: kindOf(nd),
+    addedAt: nd.document.createdAt.toISOString(),
+    readAt: readAt.get(nd.document.id) ?? null,
   }));
   const activeId = doc && attached.some((d) => d.id === doc) ? doc : (attached[0]?.id ?? null);
   // The reader view is a per-visit choice carried in the URL; a fresh open is Normal.
