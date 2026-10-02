@@ -6,6 +6,9 @@ import type { PageDrawing, PathBox } from "@/lib/parse/pdf/drawing";
 import { median, regionOf, unionBox } from "@/lib/parse/pdf/geometry";
 import { lineColumn, type Placed } from "@/lib/parse/pdf/columns";
 import { buildLines } from "@/lib/parse/pdf/lines";
+import { resolveZones } from "@/lib/parse/pdf/math/zones";
+import { cellParagraphs } from "@/lib/parse/pdf/ruled";
+import { tableSegment, type TableRow } from "@/lib/parse/pdf/tables";
 import { joinGroup } from "@/lib/parse/pdf/text";
 import type { Box, Item, Line, PageContext, Run, Segment } from "@/lib/parse/pdf/types";
 
@@ -970,9 +973,118 @@ export function attachFigureRegions(
       box: unionBox(box, follow.box),
     };
   };
+  // A table with no rules whose rows hold pictures between their words (a
+  // formula, a drawing of it, and lines on it in each row) is a table of
+  // the words: the rows over its "Table N" caption, each beside pictures,
+  // three rows of pictures at least, the lowest a row's space or two over
+  // the caption. Each row's words left of the pictures are its first cell,
+  // the words right of them its second; the pictures are no cell (a table
+  // cell holds no crop), and the caption joins the table (tables.ts). Parse
+  // loop finding: The Art of Linear Algebra's Table 1, "The Five
+  // Factorization", read as scattered paragraphs, a table of two of its
+  // rows, and an empty picture, its caption apart; a crop of it lost its
+  // words.
+  const pictureTables: Box[] = [];
+  const picturedTable = (before: Segment[], cap: Box, x1: number, x2: number): { table: Segment; rows: Segment[] } | null => {
+    const pictures = [...drawing.paths, ...drawing.images].filter(
+      (b) => !("clip" in b && b.clip) && b.x1 >= x1 - 1 && b.x2 <= x2 + 1 && b.x2 - b.x1 > 2 && b.y2 - b.y1 > 2 && b.x2 - b.x1 < (x2 - x1) * 0.5 && b.y1 >= cap.y2 - 1,
+    );
+    const column = before.filter((s) => s.box !== undefined && s.box.x1 < x2 && s.box.x2 > x1);
+    const rows: Segment[] = [];
+    const level = new Set<Box>();
+    for (let k = column.length - 1; k >= 0; k--) {
+      const s = column[k];
+      const box = s.box!;
+      const short =
+        s.type === "TABLE" ||
+        (s.type === "EQUATION" && !/\\tag\*?\{/.test(s.text)) ||
+        (s.type === "FIGURE" && !s.region) ||
+        (s.type === "PARAGRAPH" && s.text.split("\n").every((l) => l.trim().length <= 60 && !/[.!?:;。．！？：；]["”’)」』）]?$/.test(l.trim())));
+      const beside = pictures.filter((b) => b.y1 < box.y2 + rowGap && b.y2 > box.y1 - rowGap);
+      if (!short || beside.length === 0) break;
+      for (const b of beside) level.add(b);
+      rows.push(s);
+    }
+    if (rows.length < 3 || rows[0].box!.y1 - cap.y2 > rowGap * 2) return null;
+    // The rows of pictures: pictures over each other's height are one row.
+    const bands: Box[] = [];
+    for (const b of [...level].sort((p, q) => q.y2 - p.y2)) {
+      const last = bands[bands.length - 1];
+      if (last && b.y2 > last.y1) bands[bands.length - 1] = unionBox(last, b);
+      else bands.push({ ...b });
+    }
+    if (bands.length < 3) return null;
+    const px1 = Math.min(...[...level].map((b) => b.x1));
+    const px2 = Math.max(...[...level].map((b) => b.x2));
+    const box = [...rows.map((s) => s.box!), ...bands].reduce((a, b) => unionBox(a, b));
+    const held = lines.filter((l) => l.y >= box.y1 - 1 && l.y <= box.y2 + 1 && l.x < x2 && l.xEnd > x1);
+    // The words left of the pictures and right of them, each side read as
+    // lines of its own (a row's big formula pulled its words' lines into
+    // one: "Gaussian eliminationLU decomposition from"), each line in the
+    // row of pictures whose middle is nearest. A word among the pictures (a
+    // label) or a line no row is near leaves the rows as they read.
+    const sides = { left: [] as Item[], right: [] as Item[] };
+    for (const it of held.flatMap((l) => l.items)) {
+      if (it.str.trim() === "") continue;
+      if (it.x + it.w <= px1 + 1) sides.left.push(it);
+      else if (it.x >= px2 - 1) sides.right.push(it);
+      else return null;
+    }
+    const cells = bands.map(() => ({ left: [] as Line[], right: [] as Line[] }));
+    // A row's middle: its formula's baseline when the row has one left of
+    // the pictures (its words center on it), else its pictures' middle.
+    const middles = bands.map((b) => (b.y1 + b.y2) / 2);
+    for (const side of ["left", "right"] as const) {
+      if (side === "right") {
+        cells.forEach(({ left }, k) => {
+          if (left.length > 0) middles[k] = left.reduce((n, l) => n + l.y, 0) / left.length;
+        });
+      }
+      for (const l of buildLines(sides[side], held[0].page)) {
+        const away = middles.map((m) => Math.abs(l.y - m));
+        const k = away.indexOf(Math.min(...away));
+        if (away[k] > rowGap * 2.5) return null;
+        cells[k][side].push(l);
+      }
+    }
+    // The lines' formulas read as the page's lines' are (ruled.ts reads a
+    // grid's cells so).
+    resolveZones(
+      cells.flatMap((c) => [...c.left, ...c.right]),
+      ctx.drawing,
+    );
+    const byTop = (a: Line, b: Line) => b.y - a.y || a.x - b.x;
+    // A side's cell starts where its words start: the space beside the
+    // pictures is no indent.
+    const from = (ls: Line[], fallback: number) => (ls.length > 0 ? Math.min(...ls.map((l) => l.x)) : fallback);
+    const leftFrom = from(cells.flatMap((c) => c.left), x1);
+    const rightFrom = from(cells.flatMap((c) => c.right), px2);
+    const tableRows: TableRow[] = cells.map(({ left, right }) => ({
+      cells: [
+        cellParagraphs(left.sort(byTop), { x1: leftFrom, x2: px1, y1: box.y1, y2: box.y2 }, { left: 0, right: 0 }),
+        cellParagraphs(right.sort(byTop), { x1: rightFrom, x2, y1: box.y1, y2: box.y2 }, { left: 0, right: 0 }),
+      ],
+    }));
+    if (tableRows.some((r) => r.cells.every((c) => c.text.trim() === ""))) return null;
+    const words = cells.flatMap((c) => c.right);
+    const size = words.length > 0 ? Math.round(median(words.map((l) => l.size)) * 2) / 2 : ctx.bodySize;
+    const table = tableSegment(tableRows, 0, rows[0].page, { box, lineSize: size, mathShare: 0 }, { size, columns: [px1 - x1, x2 - px2] });
+    return { table, rows };
+  };
   for (let c = 0; c < withMath.length; c++) {
     const cap = withMath[c];
     if (consumed.has(cap)) continue;
+    if (cap.type === "PARAGRAPH" && cap.box && isCaption(cap.text, cap.runs) && TABLE_CAPTION_RE.test(cap.text)) {
+      const [x1, x2] = columnOf(cap.box);
+      const found = picturedTable(out, cap.box, x1, x2);
+      if (found) {
+        const at = out.indexOf(found.rows[found.rows.length - 1]);
+        const kept = out.filter((s) => !found.rows.includes(s));
+        out.length = 0;
+        out.push(...kept.slice(0, at), found.table, ...kept.slice(at));
+        if (found.table.box) pictureTables.push(found.table.box);
+      }
+    }
     if (
       cap.type !== "PARAGRAPH" ||
       !cap.box ||
@@ -1287,6 +1399,8 @@ export function attachFigureRegions(
   // Every image and path the page paints, small ones too (a diagram's arrow).
   const painted: Drawn = { images: ctx.drawing.images, paths: ctx.drawing.paths };
   for (const graphic of [...graphics].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
+    // A picture among a table's rows is no figure of its own (picturedTable).
+    if (pictureTables.some((t) => inside(graphic.box, t))) continue;
     let box = clearOfDropped(graphic.box);
     // A display's crop a quarter or more inside a graphic, on its drawing, is
     // one of the graphic's labels: the graphic's crop takes it in (NASA pptx

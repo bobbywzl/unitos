@@ -1380,7 +1380,7 @@ function cellFill(cell: Box, table: Box, fills: Fill[]): string | undefined {
 // right, or set in from the cell's left edge. inset: the cells' padding;
 // flush: the right edge of a column set flush right; centered: the cell's
 // row centers its cells.
-function cellParagraphs(lines: Line[], box: Box, inset: { left: number; right: number }, flush?: number, centered = false): TableCell {
+export function cellParagraphs(lines: Line[], box: Box, inset: { left: number; right: number }, flush?: number, centered = false): TableCell {
   const left = box.x1 + inset.left;
   const right = box.x2 - inset.right;
   const groups: Line[][] = [];
