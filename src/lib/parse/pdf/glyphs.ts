@@ -7,7 +7,11 @@ import type { Glyph } from "@/lib/parse/pdf/drawing";
 import { extensionGlyph, isBbm, mathGlyph, openTypeGlyphs, openTypeSizedByAdvance, sizeFontGlyph } from "@/lib/parse/pdf/math-fonts";
 import type { Flags } from "@/lib/parse/pdf/types";
 
-export const CONTROL_CHARS_RE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g;
+// Control characters, C0 and C1 and DEL, are no text: a glyph whose code
+// maps to one draws a shape no text names (parse loop finding: GeoTopo's
+// xy-pic arrow tips, XYATIP's codes read as DEL, left "\x7f\x7f" in a
+// diagram's words).
+export const CONTROL_CHARS_RE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/g;
 // Some generators map common CJK glyphs to the Kangxi Radicals and CJK
 // Radicals Supplement blocks (⼴州 for 广州): the glyph looks right and a
 // search for the word finds nothing. NFKC folds the Kangxi block; the
