@@ -274,7 +274,7 @@ function isProseLine(line: Line, width: number, columns: Rule[] = []): boolean {
   return words.length >= 8 || (line.text.match(CJK_RE)?.length ?? 0) >= 20;
 }
 
-const CAPTION_START_RE = /^(fig\.|figure|table|tab\.)\s*([\dIVX]+|[A-Z]\d+)\b/i;
+const CAPTION_START_RE = /^(fig\.|figure|table|tab\.|abbildung|abb\.|tabelle)\s*([\dIVX]+|[A-Z]\d+)\b/i;
 
 // The regions a stack of same-width rules bounds: the bands between
 // consecutive rules, joined while they read as one table. A band that holds

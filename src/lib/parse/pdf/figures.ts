@@ -23,7 +23,7 @@ import type { Box, Item, Line, PageContext, Run, Segment } from "@/lib/parse/pdf
 // "Visualization", "Map", …) or a table's. Earth Observer labels its photos
 // "Photo 1." and "Photo.": 15 captions read as paragraphs, and two ran into
 // the next page's text.
-const LABEL = String.raw`fig\.?|figure|table|tab\.|photo|visualization|image|map|chart|plate|box`;
+const LABEL = String.raw`fig\.?|figure|table|tab\.|photo|visualization|image|map|chart|plate|box|abbildung|abb\.|tabelle`;
 // A caption's label and its stop: "Figure 2:", "Fig. 3a.", PLOS's "Fig 1.",
 // "Table A1 |", "Photo 3.", and the roman numbers of REVTeX and IEEE ("TABLE
 // II. Fitting parameters …", arXiv 2502.02648, read as a paragraph with no
@@ -31,13 +31,18 @@ const LABEL = String.raw`fig\.?|figure|table|tab\.|photo|visualization|image|map
 // colon after it names a role ("Visualization: …", PLOS's contributions). A
 // Chinese or Japanese label takes a space for its stop ("図表Ⅰ-2-1-1 避難所デ
 // ータ…"), and a caption there holds no full stop: "图 3 示意了…。" opens a
-// paragraph (arXiv 2111.04880 p10).
+// paragraph (arXiv 2111.04880 p10). German labels its floats "Abbildung",
+// "Abb.", and "Tabelle" (parse loop finding: GeoTopo's "Abbildung 1.4:
+// Wenn X₁, X₂ hausdorffsch sind, …" was a paragraph, and its figure's
+// labels a table). A number with parts ("1.8a", "2-1") takes its stop
+// after its last part: "Abbildung 1.8a veranschaulicht …" opens a
+// sentence.
 export const CAPTION_RE = new RegExp(
-  String.raw`^(?:(?:${LABEL})\s*(?:\d+[a-z]?|[A-Z]\d+[a-z]?|[IVXL]+\b)\s*[.:|–—-]\s*|(?:figure|photo|visualization|image|map|chart|plate)\.\s+\S|(?:図表|図|图|圖|表)\s*[0-9Ⅰ-Ⅻ]+(?:[-‐–.][0-9Ⅰ-Ⅻ]+)*\s(?![^]*。))`,
+  String.raw`^(?:(?:${LABEL})\s*(?:\d+(?:[.‐–-]\d+)*[a-z]?|[A-Z]\d+[a-z]?|[IVXL]+\b)\s*[.:|–—-](?!\d)\s*|(?:figure|photo|visualization|image|map|chart|plate|abbildung)\.\s+\S|(?:図表|図|图|圖|表)\s*[0-9Ⅰ-Ⅻ]+(?:[-‐–.][0-9Ⅰ-Ⅻ]+)*\s(?![^]*。))`,
   "i",
 );
 // "Table 3", "Table A1", IEEE's "TABLE IV", and "表 2".
-const TABLE_CAPTION_RE = /^(?:(?:table|tab\.)\s*(?:\d+|[A-Z]\d+|[IVXL]+\b)|表\s*[0-9Ⅰ-Ⅻ])/i;
+const TABLE_CAPTION_RE = /^(?:(?:table|tab\.|tabelle)\s*(?:\d+|[A-Z]\d+|[IVXL]+\b)|表\s*[0-9Ⅰ-Ⅻ])/i;
 // A float's label at a line's start, with a stop after it or none.
 const LABEL_START_RE = new RegExp(String.raw`^(?:(?:${LABEL})\s*(?:\d+|[A-Z]\d+|[IVXL]+\b)|(?:図表|図|图|圖|表)\s*[0-9Ⅰ-Ⅻ])`, "i");
 const LABEL_RE = new RegExp(String.raw`^(${LABEL})\s*(\d+|[A-Z]\d+)[a-z]?(?=\s)`, "i");
@@ -64,8 +69,9 @@ export function isCaption(text: string, runs: Run[] | undefined): boolean {
 // "（出典）…"). They are the figure's caption, before or after its own as
 // the page reads (arXiv 2302.12627 p18, 2410.04586 p9, 2506.08209 p12,
 // Grinstead–Snell p16: their words were in no block). A letter alone is
-// the panel's label, which the figure's caption names.
-const PANEL_RE = /^(?:\(\p{L}\)|\p{L}[.)])\s+(?=[^]*\p{L})[^]{3,}/u;
+// the panel's label, which the figure's caption names; a symbol and its
+// script is a caption ("(c) Ω₃", GeoTopo's Abbildung 1.12: it was lost).
+const PANEL_RE = /^(?:\(\p{L}\)|\p{L}[.)])\s+(?=[^]*\p{L})[^]{2,}/u;
 const NOTE_RE = /^(?:(?:notes?|sources?)\s*[:.]\s+\S|[（(](?:出典|注|資料|来源|來源)[）)]|(?:出典|注|来源|來源)[:：])/i;
 // Panel letters alone ("(c) (d)") are a chart's labels, no caption.
 const LETTERS_RE = /^(?:\s*(?:\(\p{L}\)|\p{L}[.)]))+\s*$/u;
@@ -988,12 +994,18 @@ export function attachFigureRegions(
       // of their own (Grinstead–Snell p. 8: Fig. 1.5's labels, set in a
       // typewriter face, read as code); an attached figure never is.
       const oneLine = prev.box !== undefined && prev.box.y2 - prev.box.y1 <= (prev.lineSize ?? ctx.bodySize) * 1.8;
+      // A drawing's label set in TeX's math fonts ("W_i", "U_{x,y}") reads
+      // as a display with no number: a short one over the drawing is its
+      // label, within an em of it (parse loop finding: GeoTopo's
+      // Abbildung 1.7 kept its axes' labels as equations, and its figure was
+      // a sliver over the caption).
+      const label = prev.type === "EQUATION" && !/\\tag\*?\{/.test(prev.text) && prev.text.length <= 24;
       const inDrawing =
         prev.box !== undefined &&
         !(prev.type === "FIGURE" && prev.region) &&
-        prev.type !== "EQUATION" &&
+        (prev.type !== "EQUATION" || label) &&
         (prev.text.length < 80 || oneLine || isTicks(prev.text)) &&
-        overlapsDrawing(prev.box, drawing, cap.box);
+        overlapsDrawing(label ? grow(prev.box, ctx.bodySize) : prev.box, drawing, cap.box);
       // A display's crop inside a diagram (over its boxes, arrows, and
       // pictures, or over a chart's lines) is a part of it: TeX's fonts in
       // its labels read as an equation, and the figure drew in two pieces

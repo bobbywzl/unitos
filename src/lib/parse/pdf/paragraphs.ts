@@ -755,7 +755,7 @@ function sequelOf(lines: Line[], k: number, marker: Marker): boolean {
 }
 
 // A float's label alone on its line: "TABLE I", "Figure 3.".
-const FLOAT_LABEL_RE = /^(?:fig\.?|figure|table|tab\.)\s*(?:\d+|[A-Z]\d+|[IVXL]+)[.:]?$/i;
+const FLOAT_LABEL_RE = /^(?:fig\.?|figure|table|tab\.|abbildung|abb\.|tabelle)\s*(?:\d+|[A-Z]\d+|[IVXL]+)[.:]?$/i;
 
 // Paragraph group: vertically continuous same-size lines in one column.
 // A hanging indent (a reference entry, a glossary term) indents every

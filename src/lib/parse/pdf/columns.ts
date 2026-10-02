@@ -453,7 +453,7 @@ function overCaption(bands: Band[], band: Band): boolean {
   return false;
 }
 
-const FIGURE_LABEL_RE = /^(?:fig\.?|figure)\s*\d+/i;
+const FIGURE_LABEL_RE = /^(?:fig\.?|figure|abbildung|abb\.)\s*\d+/i;
 
 // Two sides of a gutter that read as columns: both prose columns, or one a
 // prose column and the other a column of text and display equations whose
