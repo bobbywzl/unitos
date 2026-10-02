@@ -1,7 +1,7 @@
 {
  "total": {
   "f1": 0.883,
-  "precision": 0.823,
+  "precision": 0.824,
   "recall": 0.952
  },
  "pages": {
@@ -1587,7 +1587,7 @@
   },
   "netzpolitik.org.abmahnungen.html": {
    "tp": 4,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "wsl.ch-neubeau.html": {
@@ -2807,7 +2807,7 @@
   },
   "cnet.de.schutz.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 2,
    "fn": 0
   },
   "coaching-magazin.de.transgenerationales-coaching.html": {
@@ -4552,7 +4552,7 @@
   },
   "telegraph.co.uk.plumber.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "telemedicus.info.rezension.html": {
