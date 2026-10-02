@@ -156,6 +156,9 @@ function kindOf(line: Line, ctx: PageContext, column: { left: number; right: num
   // finding: the MML book's "▪ λ(BC) = (λB)C = …, B ∈ R^{m×n}" read as a
   // display's second row, and the item's formulas were a crop).
   if (drawnBulletAt(line, ctx, 0.65, true) !== null) return "text";
+  // A caption is text, whatever its math (parse loop finding: The Art of
+  // Linear Algebra's "Figure 16: S = QΛQᵀ" read as an equation).
+  if (CAPTION_RE.test(text.trim())) return "text";
   const glyphs = line.items.flatMap((i) => i.glyphs ?? []);
   // A big operator of a display's size, taller than a line and a half (an
   // integral with limits of two levels, IEEE Access p. 9), stands in a
