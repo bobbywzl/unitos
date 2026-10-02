@@ -1665,8 +1665,11 @@ function linearAt(input: Atom[]): string {
     // operator in a display: KaTeX would set them over and under. An
     // operator a display sets at the text's size (ℓ(θ) = Σᵢ ℓᵢ, arXiv
     // 2302.12627 p. 5) is drawn so: KaTeX would draw it large.
+    // A text-size operator in a display with limits over and under it
+    // (\textstyle\sum\limits_{i}) keeps them there: \textstyle alone sets
+    // them beside it.
     const big = a.cls === "op" && hangingFamily(a.fam);
-    if ((a.lower || a.upper) && (!style.display || INTEGRAL_RE.test(tex))) tex += "\\limits";
+    if ((a.lower || a.upper) && (!style.display || INTEGRAL_RE.test(tex) || (big && !a.entry?.display && nesting === displayDepth))) tex += "\\limits";
     else if (style.display && big && a.entry?.display && mine.length > 0 && !a.lower && !a.upper && !INTEGRAL_RE.test(tex)) tex += "\\nolimits";
     if (a.lower) tex += `_{${a.lower}}`;
     if (a.upper) tex += `^{${a.upper}}`;
