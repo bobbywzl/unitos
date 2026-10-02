@@ -22,7 +22,7 @@ import { BULLET_RE } from "@/lib/parse/pdf/markers";
 import { layoutLatex } from "@/lib/parse/pdf/math/check";
 import { braceLabelBoxes, drawnBraces, hangingFamily, hangingGlyph, LIMIT_OPS } from "@/lib/parse/pdf/math/layout";
 import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
-import { balanced, orphanGlyphs, paintsRule, resolveZone } from "@/lib/parse/pdf/math/zones";
+import { balanced, onOtherLine, orphanGlyphs, paintsRule, resolveZone } from "@/lib/parse/pdf/math/zones";
 import type { Box, Cell, Item, Line, MathZone, PageContext, Run, Segment } from "@/lib/parse/pdf/types";
 
 // A numbered display equation: "… = softmax(QKᵀ/√d)V   (1)". Its words are
@@ -1182,7 +1182,7 @@ function isEquationShaped(s: Segment, ctx: PageContext, columnLeft: number): boo
 // (its \tag, or \tag* for a proof's end mark; left: the page sets it at the
 // left margin, as amsbook does). null when an item holds text the drawing
 // has no glyph for (the check could not see it).
-function formulaGlyphs(line: Line, pageOrphans: Glyph[], page: Glyph[]): { glyphs: Glyph[]; label: string | null; labelGlyphs: Glyph[]; left: boolean } | null {
+function formulaGlyphs(line: Line, pageOrphans: Glyph[], page: Glyph[], lines: Line[]): { glyphs: Glyph[]; label: string | null; labelGlyphs: Glyph[]; left: boolean } | null {
   if (line.items.some((i) => !i.glyphs?.length)) return null;
   const top = line.yMax + line.size * 1.2;
   const bottom = line.yMin - line.size * 0.6;
@@ -1192,7 +1192,8 @@ function formulaGlyphs(line: Line, pageOrphans: Glyph[], page: Glyph[]): { glyph
   // display (arXiv 2506.08494 (2.23) took it as a row).
   const elsewhere = (g: Glyph) =>
     page.some((h) => h !== g && !own.has(h) && !pageOrphans.includes(h) && Math.abs(h.x - g.x) < g.size * 0.12 && Math.abs(h.y - g.y) < g.size * 0.05);
-  const orphans = pageOrphans.filter((g) => g.x + g.w / 2 > line.x && g.x + g.w / 2 < line.xEnd && g.y >= bottom && g.y <= top && !elsewhere(g));
+  // An orphan on another line's baseline is that line's (resolveZones).
+  const orphans = pageOrphans.filter((g) => g.x + g.w / 2 > line.x && g.x + g.w / 2 < line.xEnd && g.y >= bottom && g.y <= top && !elsewhere(g) && !onOtherLine(g, line, lines));
   // A blank glyph is no symbol (KaTeX sets struts as spaces a point high).
   const glyphs = [...line.items.flatMap((i) => i.glyphs!), ...orphans].filter((g) => g.family !== null || g.unicode.trim() !== "").sort((a, b) => a.x - b.x);
   if (glyphs.length === 0) return null;
@@ -1257,8 +1258,8 @@ function formulaGlyphs(line: Line, pageOrphans: Glyph[], page: Glyph[]): { glyph
 // (their drawn extent, the label's included): padded for the crop, and as
 // drawn (glyphBox: the display's space above and below is measured to it);
 // null when the check fails.
-function equationOf(line: Line, orphans: Glyph[], ctx: PageContext): { latex: string; box: Box; glyphBox: Box; left: boolean } | null {
-  const found = formulaGlyphs(line, orphans, ctx.drawing.glyphs);
+function equationOf(line: Line, orphans: Glyph[], ctx: PageContext, lines: Line[] = []): { latex: string; box: Box; glyphBox: Box; left: boolean } | null {
+  const found = formulaGlyphs(line, orphans, ctx.drawing.glyphs, lines);
   if (!found || found.glyphs.length === 0) return null;
   const glyphs = found.glyphs;
   const size = Math.max(...glyphs.filter((g) => !hangingFamily(g.family)).map((g) => g.size), 1);
@@ -1466,7 +1467,7 @@ export function displayEquations(
     if (line) {
       used.add(line);
       orphans ??= orphanGlyphs(lines, ctx.drawing);
-      equation = equationOf(line, orphans, ctx);
+      equation = equationOf(line, orphans, ctx, lines);
     } else if (missed ? !isMissed(segments[k]) : tex || !isMathSegment(segments[k], ctx)) {
       out.push(segments[k]);
       k++;

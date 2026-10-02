@@ -459,7 +459,12 @@ export function resolveZones(lines: Line[], drawing: PageDrawing) {
       if (!zone || seen.has(zone)) continue;
       seen.add(zone);
       orphans ??= orphanGlyphs(lines, drawing);
-      resolveZone(zone, drawing, orphans, taken);
+      // An orphan on another line's baseline, within that line, is that
+      // line's (parse loop finding: GeoTopo's arrow under "Vor.", its
+      // "=" and "⇒" read by the composite ⟹ of their line, stood a line
+      // over "⇒ 𝔅δ(x) ⊆ f⁻¹(…)", whose formula took them as a row
+      // "=\Rightarrow" and failed).
+      resolveZone(zone, drawing, orphans, taken, (g) => onOtherLine(g, line, lines));
     }
   }
   if (seen.size === 0) return;
@@ -472,10 +477,19 @@ export function resolveZones(lines: Line[], drawing: PageDrawing) {
   }
 }
 
+/** Whether a glyph stands on the baseline of another line of text (no
+    display's), within that line, and off this line's: it is that line's. */
+export function onOtherLine(g: Glyph, line: Line, lines: Line[]): boolean {
+  return (
+    Math.abs(line.y - g.y) >= g.size * 0.1 &&
+    lines.some((l) => l !== line && !l.display && Math.abs(l.y - g.y) < g.size * 0.1 && g.x >= l.x - g.size * 0.5 && g.x <= l.xEnd + g.size * 0.5)
+  );
+}
+
 /** One zone's LaTeX and check (resolveZones). orphans: the page's glyphs
     no item reads; the zone takes those that sit on it. taken: the paths
     other formulas read; the zone reads none of them, and adds its own. */
-export function resolveZone(zone: MathZone, drawing: PageDrawing, orphans: Glyph[], taken = new Set<Box>()) {
+export function resolveZone(zone: MathZone, drawing: PageDrawing, orphans: Glyph[], taken = new Set<Box>(), elsewhere: (g: Glyph) => boolean = () => false) {
   const x1 = Math.min(...zone.glyphs.map((g) => g.x));
   // A symbol drawn in two glyphs from one origin (↦: the bar has no width,
   // and the text layer holds the bar alone) reaches as far as its second
@@ -492,7 +506,7 @@ export function resolveZone(zone: MathZone, drawing: PageDrawing, orphans: Glyph
   // (a_{ij} read its scripts at the base's level).
   const em = Math.max(zone.size, ...zone.glyphs.map((g) => g.size));
   const on = (g: Glyph) => g.x + g.w / 2 > x1 && g.x + g.w / 2 < x2 && g.y > low - em * 0.6 && g.y < high + em * 1.2;
-  const extra = orphans.filter(on);
+  const extra = orphans.filter((g) => on(g) && !elsewhere(g));
   for (const g of extra) orphans.splice(orphans.indexOf(g), 1);
   const glyphs = [...zone.glyphs, ...extra];
   // The rules inside it: a fraction bar, a radical's or an overline's
@@ -561,7 +575,7 @@ export function resolveZone(zone: MathZone, drawing: PageDrawing, orphans: Glyph
     // another line took is missing from the LaTeX, which still passes
     // the check (synth-math-html: a numerator's x^k read as x).
     zone.ok = check.ok && !strayInside(atoms, new Set(glyphs), drawing.glyphs);
-    const last = atoms.filter((a) => a.size >= zone.size * 0.85).sort((a, b) => b.x2 - a.x2)[0];
+      const last = atoms.filter((a) => a.size >= zone.size * 0.85).sort((a, b) => b.x2 - a.x2)[0];
     zone.open = last !== undefined && (last.cls === "rel" || last.cls === "bin" || last.cls === "punct");
   } catch {
     zone.ok = false;
