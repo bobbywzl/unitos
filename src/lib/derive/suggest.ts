@@ -96,6 +96,8 @@ export type SuggestRun = {
   signal?: AbortSignal;
   // Where the ops land (lib/prompts/suggest.ts); absent = the page editor.
   target?: "plan";
+  // The order pass of the same command moves the blocks (lib/assistant/reorder.ts).
+  reorder?: boolean;
 };
 
 /** The scope's blocks as runs of consecutive rows. */
@@ -136,6 +138,7 @@ export async function runSuggest(run: SuggestRun): Promise<SuggestResult> {
     pending: document.richText ? assistantSuggestionsIn(document.richText, run.userId, new Set(blockIds)) : [],
     history: run.history,
     target: run.target ?? "page",
+    reorder: run.reorder,
   });
   // The document is the cached system prefix: every window and every command
   // on the same document reads it from the cache.

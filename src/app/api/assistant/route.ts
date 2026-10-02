@@ -409,6 +409,7 @@ async function handle(req: Request, t: TFunc) {
             .slice(-20)
             .map((turn) => ({ role: turn.role, content: turn.content.slice(0, 8000) })),
           blockIds: revise.blockIds,
+          reorder: revise.reorder,
           caretBlockId: data.caretBlockId ?? null,
           thinking: data.thinking ?? "deep",
           signal: AbortSignal.any([req.signal, deadline]),

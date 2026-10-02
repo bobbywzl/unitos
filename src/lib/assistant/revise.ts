@@ -10,6 +10,7 @@ import { scopeOf, windowsOf, type BlockPlace } from "@/lib/docs/suggest-ops";
 import type { Lang } from "@/lib/i18n/config";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { mapLimit } from "@/lib/jev";
+import { blockUnits, orderBlockActions, runOrderPass } from "@/lib/assistant/reorder-run";
 import type { ReaderProfileCtx } from "@/lib/prompts/types";
 import { REPLICA_REFUSAL, replicaEdit, type ReplicaRefusal } from "@/lib/replica";
 import { hexStyle } from "@/lib/text-style";
@@ -447,14 +448,72 @@ export type ReviseRun = {
   blockIds: string[] | undefined;
   caretBlockId: string | null;
   thinking: Thinking;
+  // The change moves blocks too: the order pass runs beside the windows
+  // (lib/assistant/reorder.ts), and its moves come first in the plan.
+  reorder?: boolean;
   // Windows not started by then are reported.
   signal: AbortSignal;
   deadline: AbortSignal;
 };
 
+/** The order pass of a revise action: the moves, the new headings, and the
+    headings that go, as block actions. The moves run one after another, so
+    one the document does not take would leave the order half made: then
+    none is offered, and the warning says why. */
+async function reviseOrder(run: ReviseRun): Promise<{ actions: AssistantAction[]; warnings: string[] }> {
+  const { t, shape } = run;
+  const blocks = run.document.blocks;
+  const units = blockUnits(blocks, shape);
+  const scopeRowIds = run.blockIds?.length ? scopeOf(blocks, revisePlaces(blocks, shape), run.blockIds) : [];
+  try {
+    const order = await runOrderPass({
+      userId: run.userId,
+      document: { title: run.document.title, references: run.document.references, rows: blocks, pageName: null },
+      units,
+      scopeRowIds,
+      profile: run.profile,
+      lang: run.lang,
+      t,
+      command: run.command,
+      instruction: run.instruction,
+      material: run.material,
+      history: run.history,
+      thinking: run.thinking,
+      signal: run.signal,
+    });
+    if (!order.plan) return { actions: [], warnings: order.warnings };
+    const actions = orderBlockActions(units, order.scope, order.plan, order.why);
+    const byId = new Map(blocks.map((b) => [b.id, b]));
+    const index = new Map(blocks.map((b, k) => [b.id, k]));
+    const next = (id: string) => blocks[(index.get(id) ?? -2) + 1]?.type;
+    const lands = (afterBlockId: string | null) =>
+      afterBlockId === null ? blockTakes.start(blocks[0]?.type, shape) : blockTakes.after(byId.get(afterBlockId)?.type ?? "", next(afterBlockId), shape);
+    const refused = actions.find((a) =>
+      a.type === "move_block"
+        ? !blockTakes.move(byId.get(a.blockId)?.type ?? "", shape) || !lands(a.afterBlockId)
+        : a.type === "insert_paragraph"
+          ? !lands(a.afterBlockId)
+          : a.type === "remove_block" && !blockTakes.removal(byId.get(a.blockId)?.type ?? "", shape),
+    );
+    if (refused) return { actions: [], warnings: [...order.warnings, t("api.reorderNotForDocument")] };
+    return { actions, warnings: order.warnings };
+  } catch (err) {
+    return { actions: [], warnings: [err instanceof Error ? err.message : String(err)] };
+  }
+}
+
 /** The revision over its windows, SUGGEST_PARALLEL at once, as block
-    actions and warnings. */
+    actions and warnings; with reorder, the order pass's moves first. */
 export async function runRevise(run: ReviseRun): Promise<{ actions: AssistantAction[]; warnings: string[] }> {
+  if (!run.reorder) return runWindows(run);
+  const [order, words] = await Promise.all([reviseOrder(run), runWindows(run)]);
+  // A heading the order takes away needs no removal of the windows' too.
+  const gone = new Set(order.actions.flatMap((a) => (a.type === "remove_block" ? [a.blockId] : [])));
+  const kept = words.actions.filter((a) => a.type !== "remove_block" || !gone.has(a.blockId));
+  return { actions: [...order.actions, ...kept], warnings: [...order.warnings, ...words.warnings] };
+}
+
+async function runWindows(run: ReviseRun): Promise<{ actions: AssistantAction[]; warnings: string[] }> {
   const { t } = run;
   const blocks = run.document.blocks;
   const places = revisePlaces(blocks, run.shape);
@@ -494,6 +553,7 @@ export async function runRevise(run: ReviseRun): Promise<{ actions: AssistantAct
         budget,
         signal: run.signal,
         target: "plan",
+        reorder: run.reorder,
       });
       found[i] = result.ops;
       summaries[i] = result.summary;
@@ -505,8 +565,9 @@ export async function runRevise(run: ReviseRun): Promise<{ actions: AssistantAct
   });
   if (late) warnings.push(t("api.suggestOutOfTime"));
   const converted = reviseActions(found.flat(), { blocks, shape: run.shape, t });
-  // Nothing to change: the first window's word on why.
-  if (converted.actions.length === 0 && converted.warnings.length === 0 && warnings.length === 0) {
+  // Nothing to change: the first window's word on why. With an order pass,
+  // a command may ask for nothing but the order.
+  if (!run.reorder && converted.actions.length === 0 && converted.warnings.length === 0 && warnings.length === 0) {
     const said = summaries.find(Boolean);
     warnings.push(said ?? t("api.reviseNoEdits"));
   }

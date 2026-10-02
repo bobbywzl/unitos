@@ -40,6 +40,8 @@ export type SuggestCtx = {
   // The asker's pending suggestions in the scope, one line each (lib/docs/suggest-ops.ts).
   pending: string[];
   history: ChatTurn[];
+  // The command moves blocks too: the order pass does that (lib/assistant/reorder.ts).
+  reorder?: boolean;
   // Where the ops land: the page editor, as the assistant's suggestions
   // (page); or the plan card, as the block edits of a document without rich
   // text (plan, lib/assistant/revise.ts).
@@ -122,6 +124,11 @@ export function suggestPrompt(ctx: SuggestCtx): string {
     `Keep the document's language. Write summary and every why in ${languageName(ctx.lang)}.`,
     "why: one sentence on what the op changes and why.",
     "summary: one or two sentences on what the suggestions change. When the command asks no change, return no ops and say so in summary.",
+    ...(ctx.reorder
+      ? [
+          "Another pass of this command moves the blocks and adds a heading for each group. Never move, reorder, or group blocks, and add no heading for a group. Change only the words the command asks to change; when the command asks for nothing but a new order, return no ops.",
+        ]
+      : []),
     ...(ctx.scope.kind === "blocks" && ctx.scope.windows > 1
       ? ["When the command concerns one place in the document, only the window that holds it changes it; the other windows return no ops."]
       : []),

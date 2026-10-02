@@ -42,6 +42,7 @@ import { WEB_SEARCH_MAX_USES, WEB_SEARCH_TOOL, webSearchTool, webSearchUsd } fro
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { actionsSchema, enrichActions, fitActions, planShape, type DocumentEdits, type ReadActions } from "@/lib/assistant/plan";
 import { runRevise } from "@/lib/assistant/revise";
+import { orderSuggestOps, richTextUnits, runOrderPass } from "@/lib/assistant/reorder-run";
 import { actPrompt, textSelectionBlock } from "@/lib/prompts/act";
 import { transcriptContext } from "@/lib/assistant/transcript";
 import { pageLines } from "@/lib/assistant/pages";
@@ -492,6 +493,7 @@ async function handle(req: Request, t: TFunc) {
       material: result.data.reply,
       history,
       blockIds: revise.blockIds ?? (selected.length > 0 ? selected : undefined),
+      reorder: revise.reorder,
       caretBlockId: null,
       thinking: data.thinking ?? "deep",
       signal: AbortSignal.any([req.signal, deadline]),
@@ -523,6 +525,27 @@ async function handle(req: Request, t: TFunc) {
       scope = { kind: "blocks", blockIds: windows[0] ?? [] };
       window = { n: 1, of: windows.length, whole };
     }
+    // A command that moves blocks: the order pass runs beside the window,
+    // and its moves land after the window's words (lib/assistant/reorder.ts).
+    const units = suggest?.reorder ? richTextUnits(doc.richText!, doc.rows) : [];
+    const selected = [...new Set(passage.map((segment) => segment.blockId))];
+    const ordering = suggest?.reorder
+      ? runOrderPass({
+          userId: user.id,
+          document: { title: doc.title, references: doc.references, rows: doc.rows, pageName: doc.pageName },
+          units,
+          scopeRowIds: suggest.blockIds ? scopeOf(doc.rows, doc.places, suggest.blockIds) : selected,
+          profile,
+          lang,
+          t,
+          command: data.command,
+          instruction: suggest.instruction,
+          material: null,
+          history,
+          thinking: data.thinking ?? "deep",
+          signal: req.signal,
+        }).catch((err: unknown) => (err instanceof Error ? err : new Error(String(err))))
+      : null;
     try {
       const run = await runSuggest({
         userId: user.id,
@@ -540,8 +563,20 @@ async function handle(req: Request, t: TFunc) {
         thinking: data.thinking ?? "deep",
         budget: { chars: SUGGEST_MAX_NEW_CHARS },
         signal: req.signal,
+        reorder: suggest?.reorder,
       });
       suggestions = { ...run, warnings: [...run.warnings, ...cut] };
+      const order = ordering ? await ordering : null;
+      if (order instanceof Error) suggestions.warnings.push(modelErrorMessage(order));
+      else if (order) {
+        const first = Math.max(-1, ...run.ops.map((op) => op.i)) + 1;
+        const moves = order.plan ? orderSuggestOps(units, order.scope, order.plan, doc.rows, order.why, first) : [];
+        suggestions = {
+          ops: [...run.ops, ...moves],
+          warnings: [...order.warnings, ...suggestions.warnings],
+          summary: [moves.length > 0 ? order.summary : "", run.ops.length > 0 ? run.summary : ""].filter(Boolean).join(" ") || run.summary,
+        };
+      }
     } catch (err) {
       return NextResponse.json({ error: modelErrorMessage(err) }, { status: 422 });
     }

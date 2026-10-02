@@ -138,6 +138,10 @@ const en = {
   warnSkipped: "Skipped: {reason}. ({description})",
   reviseNoBlocks: "Nothing to revise: no block in the scope takes a change to its words.",
   reviseNoEdits: "The revision found nothing to change.",
+  reorderNothing: "Nothing to put in a new order: the scope holds fewer than two blocks that move.",
+  reorderFailed: "The new order could not be found. {reason}",
+  reorderMissing: "The new order left out {count} blocks: they stay after the block they followed.",
+  reorderNotForDocument: "Skipped the new order: this document does not take one of its moves.",
 
   // Derivations
   deriveNeedsKey: "MOONSHOT_API_KEY is not set. Derivations need it.",
@@ -493,6 +497,10 @@ const zh: Record<keyof typeof en, string> = {
   warnSkipped: "已跳过：{reason}。（{description}）",
   reviseNoBlocks: "无可修订：范围内没有可以改动文字的块。",
   reviseNoEdits: "修订没有找到需要改动的地方。",
+  reorderNothing: "无需重新排序：范围内可移动的块少于两个。",
+  reorderFailed: "无法得出新的顺序。{reason}",
+  reorderMissing: "新的顺序漏掉了 {count} 个块：它们留在原先所跟的块之后。",
+  reorderNotForDocument: "已跳过新的顺序：此文档不接受其中的移动。",
 
   deriveNeedsKey: "未设置 MOONSHOT_API_KEY。AI 生成需要它。",
   typeNotBuilt: "{type} 尚未实现",

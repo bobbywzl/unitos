@@ -5746,6 +5746,7 @@ export function ReaderInteractions({
           command: request.command,
           instruction: request.instruction,
           blockIds: request.blockIds,
+          reorder: request.reorder,
           caretBlockId: typeof caret === "string" && caret ? caret : undefined,
           material: request.material,
           history: request.history,

@@ -78,6 +78,16 @@ const BlockIds = Extension.create({
             parseHTML: (el) => el.getAttribute("data-block-id"),
             renderHTML: (attrs) => (attrs.blockId ? { "data-block-id": attrs.blockId } : {}),
           },
+          // A copy the assistant's move suggestion adds (suggest/assistant.ts
+          // moveBlocks): the id of the block it moves. Once the move is
+          // accepted and that block is gone, the copy takes its id, so every
+          // anchor on it stays (ext/suggest.ts settle).
+          movedFrom: {
+            default: null,
+            keepOnSplit: false,
+            parseHTML: () => null,
+            renderHTML: () => ({}),
+          },
         },
       },
     ];
@@ -91,7 +101,7 @@ const BlockIds = Extension.create({
           nodes.push(node);
           return;
         }
-        const attrs = INDEXED_NODE_TYPES.has(node.type.name) ? { ...node.attrs, blockId: null } : node.attrs;
+        const attrs = INDEXED_NODE_TYPES.has(node.type.name) ? { ...node.attrs, blockId: null, movedFrom: null } : node.attrs;
         nodes.push(node.type.create(attrs, node.isLeaf ? null : strip(node.content), node.marks));
       });
       return Fragment.fromArray(nodes);

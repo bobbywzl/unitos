@@ -822,6 +822,28 @@ export function settle(tr: Transform, accept: boolean, ids?: ReadonlySet<string>
     }
   }
   dropStrays(tr);
+  adoptMovedIds(tr);
+}
+
+/** A moved block's copy (suggest/assistant.ts moveBlocks) whose move is
+    settled: accepted, with the block it copies gone, it takes that block's
+    id, so every anchor on the block stays on its words; otherwise it keeps
+    its own and forgets the other. A copy still pending waits. */
+function adoptMovedIds(tr: Transform): void {
+  const ids = new Set<string>();
+  const copies: { pos: number; node: PMNode }[] = [];
+  tr.doc.descendants((node, pos) => {
+    if (typeof node.attrs.blockId === "string") ids.add(node.attrs.blockId);
+    if (typeof node.attrs.movedFrom === "string" && !node.marks.some((m) => m.type.name === "insertion")) copies.push({ pos, node });
+    return !node.isTextblock;
+  });
+  for (const { pos, node } of copies) {
+    const from = node.attrs.movedFrom as string;
+    const pending = node.isTextblock && node.childCount > 0 && node.firstChild!.marks.some((m) => m.type.name === "insertion");
+    if (pending) continue;
+    tr.setNodeMarkup(pos, undefined, ids.has(from) ? { ...node.attrs, movedFrom: null } : { ...node.attrs, blockId: from, movedFrom: null });
+    ids.add(from);
+  }
 }
 
 /** Accept or reject a suggestion, some, or every one (no ids), as one undo

@@ -113,7 +113,14 @@ function land(
 
   // A figure object is no words: an op that removes or replaces one is
   // skipped. Its caption is its words (rewrite_block, below).
-  const named = op.op === "replace_blocks" || op.op === "remove_blocks" ? op.blockIds : op.op === "insert_blocks" || op.op === "rewrite_block" ? [] : [op.blockId];
+  const named =
+    op.op === "replace_blocks" || op.op === "remove_blocks"
+      ? op.blockIds
+      : op.op === "move_blocks"
+        ? op.items.flatMap((item) => ("blockIds" in item ? item.blockIds : []))
+        : op.op === "insert_blocks" || op.op === "rewrite_block"
+          ? []
+          : [op.blockId];
   if (named.some((blockId) => findIndexed(tr.doc, blockId)?.node.type.name === FIGURE)) return "object";
 
   // An object with words of its own takes them as its attribute: an
@@ -192,6 +199,8 @@ function land(
         })
       );
     }
+    case "move_blocks":
+      return moveBlocks(tr, op, author, commit);
     case "insert_blocks": {
       // New blocks may follow a paragraph, or an object on its own line.
       const block = op.afterBlockId === null ? null : findIndexed(tr.doc, op.afterBlockId);
@@ -546,6 +555,97 @@ function moveColumn(
     rowStart += row.nodeSize;
   });
   return edit;
+}
+
+/** The top-level node that holds this row, as a range of the doc. */
+function topRange(doc: PMNode, blockId: string): { from: number; to: number } | null {
+  const found = findIndexed(doc, blockId);
+  if (!found) return null;
+  const $pos = doc.resolve(found.pos);
+  return $pos.depth === 0 ? { from: found.pos, to: found.pos + found.node.nodeSize } : { from: $pos.before(1), to: $pos.after(1) };
+}
+
+/** The order pass's move (lib/assistant/reorder.ts): its top-level nodes,
+    each while it holds exactly the rows and the words the server read, go
+    right after the node that holds afterBlockId, with the new headings
+    among them, as one suggestion: the nodes struck where they stood and
+    added where they go. Accept moves them, Reject leaves them. A node holds
+    the asker's earlier suggestions (the same command's windows changed its
+    words, in this landing or before it): the copy carries them accepted and the place it leaves takes
+    them back, so the move is the one suggestion on those words. A node with
+    another author's suggestion is skipped: its copy would repeat it. */
+function moveBlocks(
+  tr: Transaction,
+  op: Extract<ResolvedOp, { op: "move_blocks" }>,
+  author: string,
+  commit: (build: (state: EditorState) => Transaction | SkipReason) => SkipReason | null,
+): SkipReason | null {
+  const units = op.items.flatMap((item) => ("blockIds" in item ? [item] : []));
+  const rangeOf = (doc: PMNode, unit: { blockIds: string[] }) => topRange(doc, unit.blockIds[0]);
+  const own = new Set<string>();
+  for (const unit of units) {
+    const r = rangeOf(tr.doc, unit);
+    if (!r) return "changed";
+    let other = false;
+    tr.doc.nodesBetween(r.from, r.to, (node) => {
+      for (const mark of node.marks) {
+        if (!isSuggestionMark(mark)) continue;
+        const id = String(mark.attrs.id);
+        if (suggestionAuthor(id) !== author) other = true;
+        else own.add(id);
+      }
+    });
+    if (other) return "overlap";
+  }
+  // The copies: each node with the asker's suggestions in it accepted. A node
+  // those suggestions remove whole has no copy: the move takes it away.
+  const accepted = EditorState.create({ doc: tr.doc }).tr;
+  if (own.size) settle(accepted, true, own);
+  const copies = units.map((unit) => {
+    for (const id of unit.blockIds) {
+      const r = topRange(accepted.doc, id);
+      if (r) return accepted.doc.slice(r.from, r.to).content;
+    }
+    return Fragment.empty;
+  });
+  if (own.size) settle(tr, false, own);
+  // The nodes as the server read them: the rows and their words.
+  for (const unit of units) {
+    const r = rangeOf(tr.doc, unit);
+    if (!r || rowsBetween(tr.doc, r.from, r.to).join("\n") !== unit.blockIds.join("\n")) return "changed";
+    if (unit.blockIds.some((id, k) => {
+      const block = findIndexed(tr.doc, id);
+      return !block || indexText(block.node) !== unit.base[k];
+    })) return "changed";
+  }
+  return commit((state) => {
+    const ranges = units.map((unit) => rangeOf(state.doc, unit));
+    if (ranges.some((r) => !r)) return "changed";
+    const after = op.afterBlockId === null ? { to: 0 } : topRange(state.doc, op.afterBlockId);
+    if (!after || ranges.some((r) => r!.from < after.to && after.to < r!.to)) return "changed";
+    let u = 0;
+    const content: PMNode[] = [];
+    for (const item of op.items) {
+      const fragment = "blockIds" in item ? movedCopy(copies[u++]) : blocksOf(state, item.markdown);
+      fragment.forEach((node) => content.push(node));
+    }
+    const edit = state.tr.insert(after.to, Fragment.fromArray(content));
+    for (const r of [...ranges].sort((a, b) => b!.from - a!.from)) edit.delete(edit.mapping.map(r!.from), edit.mapping.map(r!.to));
+    return edit;
+  });
+}
+
+/** A moved block's copy: each indexed node takes a new id from the editor
+    and names the block it copies, whose id it takes once the move is
+    accepted (ext/suggest.ts settle), so the anchors on it stay. */
+function movedCopy(content: Fragment): Fragment {
+  const out: PMNode[] = [];
+  content.forEach((node) => {
+    const id = node.attrs.blockId;
+    const attrs = "blockId" in node.attrs ? { ...node.attrs, blockId: null, movedFrom: typeof id === "string" ? id : null } : node.attrs;
+    out.push(node.isText ? node : node.type.create(attrs, movedCopy(node.content), node.marks));
+  });
+  return Fragment.fromArray(out);
 }
 
 /** Content with every block id taken off: the editor gives each a new one. */
