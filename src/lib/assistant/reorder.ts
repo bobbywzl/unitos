@@ -15,8 +15,9 @@ import { z } from "zod";
 const HEADING_MAX = 200;
 const WHY_MAX = 240;
 
-/** One entry of the new order: a block of the document by its id, or a new heading. */
-export type OrderEntry = { blockId: string } | { heading: string; level: 1 | 2 | 3 };
+/** One entry of the new order: a block of the document by its id, a new
+    heading, or new blocks written as markdown (the one pass, lib/assistant/one-pass.ts). */
+export type OrderEntry = { blockId: string } | { heading: string; level: 1 | 2 | 3 } | { markdown: string };
 
 const entrySchema = z.union([
   z.string().trim().min(1).max(64).transform((blockId): OrderEntry => ({ blockId })),
@@ -56,8 +57,8 @@ export type OrderUnit = {
   heading: boolean;
 };
 
-/** An item of the new sequence: a unit by its index, or a new heading. */
-export type SequenceItem = { unit: number } | { heading: string; level: 1 | 2 | 3 };
+/** An item of the new sequence: a unit by its index, a new heading, or new blocks. */
+export type SequenceItem = { unit: number } | { heading: string; level: 1 | 2 | 3 } | { markdown: string };
 
 export type OrderPlan = {
   /** The scope's units and new headings in their new order. */
@@ -73,13 +74,23 @@ export type OrderPlan = {
     are passed over; a heading named in removeHeadings and left out of the
     order goes; every other unit the answer leaves out stays right after the
     unit it followed. Null when the answer names no unit of the scope. */
-export function planOrder(units: OrderUnit[], scope: number[], answer: Pick<OrderAnswer, "order" | "removeHeadings">): OrderPlan | null {
+export function planOrder(
+  units: OrderUnit[],
+  scope: number[],
+  answer: { order: OrderEntry[]; removeHeadings: string[] },
+  // Which units the answer may take away: a heading alone, unless the caller says more.
+  canRemove: (unit: OrderUnit) => boolean = (unit) => unit.heading,
+): OrderPlan | null {
   const inScope = new Set(scope.filter((u) => !units[u].fixed));
   const unitOfRow = new Map<string, number>();
   units.forEach((unit, u) => unit.rowIds.forEach((id) => unitOfRow.set(id, u)));
   const sequence: SequenceItem[] = [];
   const placed = new Set<number>();
   for (const entry of answer.order) {
+    if ("markdown" in entry) {
+      sequence.push(entry);
+      continue;
+    }
     if ("heading" in entry) {
       // Two new headings in a row: the second stands, the first has nothing under it.
       const last = sequence[sequence.length - 1];
@@ -95,7 +106,7 @@ export function planOrder(units: OrderUnit[], scope: number[], answer: Pick<Orde
   if (placed.size === 0) return null;
   // A new heading at the end has nothing under it.
   while (sequence.length > 0 && "heading" in sequence[sequence.length - 1]) sequence.pop();
-  const dropped = new Set(answer.removeHeadings.map((id) => unitOfRow.get(id)).filter((u): u is number => u !== undefined && inScope.has(u) && !placed.has(u) && units[u].heading));
+  const dropped = new Set(answer.removeHeadings.map((id) => unitOfRow.get(id)).filter((u): u is number => u !== undefined && inScope.has(u) && !placed.has(u) && canRemove(units[u])));
   // The units left out, in document order: each right after the unit it
   // followed (the last one before it that is placed), else at the start.
   let missing = 0;

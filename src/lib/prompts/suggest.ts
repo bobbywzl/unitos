@@ -48,7 +48,7 @@ export type SuggestCtx = {
   target: "page" | "plan";
 };
 
-const OP_LINES = [
+export const OP_LINES = [
   '- replace_words {blockId, find, text, format?, why}: change words inside one block. find: the block\'s words exactly as written, long enough to occur once in it. text: the words that take their place; "" deletes them. format: bold, italic, underline, or strikethrough, when the new words take one.',
   "- rewrite_block {blockId, text, why}: one block's words written anew, whole, plain, one paragraph with no blank line. Use it when most of a block changes. The block keeps its style.",
   "- replace_blocks {blockIds, markdown, why}: consecutive blocks replaced by new blocks. Use it to turn a paragraph into a list, split one, join two, or reorder them.",
@@ -71,7 +71,7 @@ const OP_LINES = [
 
 // A document without rich text: its blocks take the plan card's edits
 // (lib/assistant/revise.ts), so the ops are the ones those edits make.
-const PLAN_OP_LINES = [
+export const PLAN_OP_LINES = [
   '- replace_words {blockId, find, text, format?, why}: change words inside one block. find: the block\'s words exactly as written, long enough to occur once in it. text: the words that take their place; "" deletes them. format: bold, italic, or underline, when the new words take one.',
   "- rewrite_block {blockId, text, why}: one block's words written anew, whole, with no blank line. Use it when most of a block changes. The block keeps its format.",
   "- replace_blocks {blockIds, markdown, why}: consecutive blocks replaced by new blocks. Use it to turn a paragraph into a list, split one, join two, or reorder them.",

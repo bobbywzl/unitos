@@ -9,6 +9,7 @@ import { loadProfile } from "@/lib/derive/context";
 import { modelErrorMessage } from "@/lib/derive/json-call";
 import { runSuggest, suggestDocument } from "@/lib/derive/suggest";
 import { orderSuggestOps, richTextUnits, runOrderPass } from "@/lib/assistant/reorder-run";
+import { fitsOnePass, runOnePass } from "@/lib/assistant/one-pass";
 import type { SuggestEvent } from "@/lib/docs/assistant-suggestions";
 import { importShared, importSharedResponse } from "@/lib/docs/server";
 import { scopeOf, takesSuggestions, windowsOf } from "@/lib/docs/suggest-ops";
@@ -105,6 +106,37 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
         const windows = all.slice(0, SUGGEST_MAX_WINDOWS);
         const warnings = all.length > windows.length ? [t("api.suggestTooLong")] : [];
         if (whole || windows.length > 1) await keepVersionBeforeSuggestions(documentId, t("api.suggestVersionName"));
+        // A scope that fits one call: the one pass, the whole document read
+        // at once and its answer by reference (lib/assistant/one-pass.ts).
+        if (fitsOnePass(doc.rows, whole ? [] : scope)) {
+          send({ windows: 1 });
+          const units = richTextUnits(doc.richText!, doc.rows);
+          const pass = await runOnePass({
+            userId,
+            document: { title: doc.title, references: doc.references, rows: doc.rows, pageName: doc.pageName },
+            units,
+            places: doc.places,
+            scopeRowIds: whole ? [] : scope,
+            profile,
+            lang,
+            t,
+            command: data.command,
+            instruction: data.instruction ?? null,
+            material: data.material ?? null,
+            history: data.history ?? [],
+            caretBlockId: data.caretBlockId ?? null,
+            thinking: data.thinking ?? "deep",
+            plan: false,
+            signal,
+          });
+          const first = Math.max(-1, ...pass.ops.map((op) => op.i)) + 1;
+          const moves = pass.order ? orderSuggestOps(units, pass.scope, { ...pass.order, removed: [] }, doc.rows, pass.why, first) : [];
+          const ops = [...pass.ops, ...moves];
+          send({ window: 1, ops, warnings: pass.warnings, summary: pass.summary });
+          console.log(`[suggest] ${documentId}: one pass, ${ops.length} ops`);
+          send({ done: true, summary: pass.summary, warnings });
+          return;
+        }
         send({ windows: windows.length + (data.reorder ? 1 : 0) });
         const units = data.reorder ? richTextUnits(doc.richText!, doc.rows) : [];
         const ordering = data.reorder

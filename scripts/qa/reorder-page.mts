@@ -143,6 +143,56 @@ async function main() {
     check(JSON.stringify(words(editor.getJSON() as RichNode)) === JSON.stringify(before), "Reject all gives the document back, the old words too");
     editor.destroy();
   }
+  // 3. The one pass (lib/assistant/one-pass.ts): a recorded answer to "group
+  // by themes, keep the quotes, erase the commentary", with one made-up
+  // number in a rewrite, read, grounded, and landed.
+  {
+    const { onePassAnswerSchema, readOnePass, orderOf } = await import("@/lib/assistant/one-pass");
+    const { groundingOf } = await import("@/lib/docs/grounding");
+    const { blockPlaces } = await import("@/lib/docs/suggest-ops");
+    const answer = onePassAnswerSchema.parse({
+      summary: "Grouped the quotes by theme and erased the commentary.",
+      why: "Group by theme; keep the quotes.",
+      document: [
+        { new: "## Animals" },
+        "q1",
+        "l1",
+        "q3",
+        { new: "## Geology" },
+        { id: "q2", text: "\u201cRivers carve canyons over 5 million years.\u201d" },
+        "nope",
+      ],
+      remove: ["c1", "c2", "h1"],
+      formats: [],
+    });
+    const scope = units.map((_, u) => u);
+    const t = ((key: string, vars?: Record<string, unknown>) => `${key} ${JSON.stringify(vars ?? {})}`) as unknown as import("@/lib/i18n/dictionaries").TFunc;
+    const read = readOnePass(answer, {
+      rows,
+      units,
+      places: blockPlaces(start),
+      scope,
+      grounding: groundingOf([...rows.map((r) => r.text), "group by themes, keep the quotes, erase the commentary"]),
+      t,
+    });
+    check(read.warnings.some((w) => w.includes("suggestSkipUnsupported") && w.includes("5")), `the made-up number is skipped (${read.warnings.join(" | ")})`);
+    const order = orderOf(units, scope, read, new Set());
+    const first = Math.max(-1, ...read.ops.map((op) => op.i)) + 1;
+    const ops2 = [...read.ops, ...(order ? orderSuggestOps(units, scope, { ...order, removed: [] }, rows, read.why, first) : [])];
+    const editor = make();
+    const landed = applyAssistantOps(editor, ops2, author);
+    check(landed.skipped.length === 0, `the one pass lands (skipped: ${JSON.stringify(landed.skipped)})`);
+    settleSuggestions(editor, true);
+    const accepted = words(editor.getJSON() as RichNode);
+    const want = ["Animals", before[1], "Cats purr", "Cats climb", before[7], "Geology", before[3]];
+    check(JSON.stringify(accepted) === JSON.stringify(want), `Accept all: grouped, commentary gone, quotes word for word\n     got  ${JSON.stringify(accepted)}\n     want ${JSON.stringify(want)}`);
+    editor.destroy();
+    const again = make();
+    applyAssistantOps(again, ops2, author);
+    settleSuggestions(again, false);
+    check(JSON.stringify(words(again.getJSON() as RichNode)) === JSON.stringify(before), "Reject all gives the document back");
+    again.destroy();
+  }
   console.log(failures === 0 ? "reorder-page: all passed" : `reorder-page: ${failures} failed`);
   process.exit(failures === 0 ? 0 : 1);
 }

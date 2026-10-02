@@ -153,7 +153,11 @@ const checkAnswerSchema = z.object({
     change what the command did not ask, drop what it said to keep, or state
     what the document does not. The ops it names, with its why. A check that
     fails keeps every op: the reader still accepts or rejects each one. */
-async function checkOps(run: SuggestRun, prefix: ModelMessage, ops: ResolvedOp[]): Promise<Map<number, string>> {
+export async function checkOps(
+  run: Pick<SuggestRun, "userId" | "lang" | "command" | "instruction" | "signal"> & { document: { rows: Pick<Block, "id" | "text">[] } },
+  prefix: ModelMessage,
+  ops: ResolvedOp[],
+): Promise<Map<number, string>> {
   const rows = new Map(run.document.rows.map((r) => [r.id, r.text]));
   const listed = ops.flatMap((op) => checkedOp(op, (id) => rows.get(id) ?? "") ?? []);
   if (listed.length === 0) return new Map();

@@ -16,6 +16,7 @@ import type { TFunc } from "@/lib/i18n/dictionaries";
 import { reorderPrompt } from "@/lib/prompts/reorder";
 import type { ReaderProfileCtx } from "@/lib/prompts/types";
 import type { AssistantAction } from "@/lib/types";
+import type { BlockKind } from "@/lib/block-kind";
 
 // The order pass on the server (SPEC.md §7, lib/assistant/reorder.ts): one
 // model call over the whole document, under the same cached document prefix
@@ -152,7 +153,14 @@ const KINDS = { 1: "h1", 2: "h2", 3: "h3" } as const;
     it (new headings after one block follow each other); then the headings
     that go. The plan card runs them in this order, and Undo takes them back
     newest first. */
-export function orderBlockActions(units: OrderUnit[], scope: number[], plan: OrderPlan, why: string): AssistantAction[] {
+export function orderBlockActions(
+  units: OrderUnit[],
+  scope: number[],
+  plan: OrderPlan,
+  why: string,
+  // New blocks written as markdown, as the blocks of a document without rich text (revise.ts markdownBlocks).
+  newBlocks: (markdown: string) => { kind: BlockKind; text: string }[] = () => [],
+): AssistantAction[] {
   const id = (u: number) => units[u].rowIds[0];
   const moves: AssistantAction[] = [];
   const headings: AssistantAction[] = [];
@@ -162,8 +170,12 @@ export function orderBlockActions(units: OrderUnit[], scope: number[], plan: Ord
       if ("unit" in item) {
         moves.push({ type: "move_block", blockId: id(item.unit), afterBlockId: after, description: why });
         after = id(item.unit);
-      } else {
+      } else if ("heading" in item) {
         headings.push({ type: "insert_paragraph", afterBlockId: after, text: item.heading, kind: KINDS[item.level], description: why });
+      } else {
+        for (const block of newBlocks(item.markdown)) {
+          headings.push({ type: "insert_paragraph", afterBlockId: after, text: block.text, ...(block.kind === "paragraph" ? {} : { kind: block.kind }), description: why });
+        }
       }
     }
   }
@@ -179,7 +191,11 @@ export function orderSuggestOps(units: OrderUnit[], scope: number[], plan: Order
   const text = new Map(rows.map((r) => [r.id, r.text]));
   const base = (u: number) => units[u].rowIds.map((id) => text.get(id) ?? "");
   const item = (entry: SequenceItem) =>
-    "unit" in entry ? { blockIds: units[entry.unit].rowIds, base: base(entry.unit) } : { markdown: `${"#".repeat(entry.level)} ${entry.heading}` };
+    "unit" in entry
+      ? { blockIds: units[entry.unit].rowIds, base: base(entry.unit) }
+      : "heading" in entry
+        ? { markdown: `${"#".repeat(entry.level)} ${entry.heading}` }
+        : { markdown: entry.markdown };
   let i = first;
   const ops: ResolvedOp[] = moveRuns(plan.sequence, unitBefore(scope)).map((run) => ({
     i: i++,

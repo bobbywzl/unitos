@@ -66,7 +66,7 @@ const suggestOpSchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("move_column"), blockId: id, toBlockId: id, where: z.enum(["left", "right"]), why }),
   z.object({ op: z.literal("insert_footnote"), blockId: id, find, text: z.string().trim().min(1).max(4_000), why }),
 ]);
-type SuggestOp = z.infer<typeof suggestOpSchema>;
+export type SuggestOp = z.infer<typeof suggestOpSchema>;
 
 /** A value format's value as the page sets it: an address (http, https,
     mailto, tel, or one of the document's own; "" takes the link off), a
@@ -90,7 +90,7 @@ const clip = (text: string, max: number): string => (text.length <= max ? text :
     the cap were left. A why past its length is cut to it, and a field
     written null is left out (afterBlockId null is the document's start). */
 export type ReadOps = { ops: SuggestOp[]; unreadable: string[]; over: number };
-function readOps(items: unknown[]): ReadOps {
+export function readOps(items: unknown[]): ReadOps {
   const read: ReadOps = { ops: [], unreadable: [], over: 0 };
   for (const item of items) {
     const fields = item && typeof item === "object" && !Array.isArray(item) ? (item as Record<string, unknown>) : {};
@@ -345,7 +345,7 @@ const IMAGE_LINE = /^\s*!\[([^\]\n]*)\]\(\s*(\S+?)\s*\)\s*$/;
 /** Markdown as the page takes it: no HTML, at most 200 lines. An image on a
     line of its own stays when its address is a web address; any other
     image is its words. */
-function cleanMarkdown(text: string): string {
+export function cleanMarkdown(text: string): string {
   return text
     .replace(/<\/?[a-zA-Z][^>]*>/g, "")
     .split("\n")
