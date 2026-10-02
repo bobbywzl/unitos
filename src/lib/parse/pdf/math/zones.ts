@@ -44,7 +44,7 @@ function kind(g: Glyph, size: number): Kind {
   // A text font's digit joins the math beside it as CMR's does where the
   // page's formulas take their digits from the text's font (glyphs.ts
   // isTextMath: MathDesign's Utopia, LibreOffice's Liberation Serif).
-  if (g.family === null) return isTextMath(g) && /^[0-9]$/.test(g.unicode) ? "attach" : "text";
+  if (g.family === null) return isTextMath(g) && /^[0-9/]$/.test(g.unicode) ? "attach" : "text";
   if (g.family !== "ot1") return "text";
   if (g.size < size * 0.85 || ATTACH_RE.test(g.unicode)) return "attach";
   // An accent over a math letter (\hat, \bar, \dot) is the text font's.

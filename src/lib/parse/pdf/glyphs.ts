@@ -666,7 +666,8 @@ export function unicodeMath(glyphs: Glyph[]): Glyph[] {
   const digits = glyphs.some((g) => g.family !== null && /^[0-9]$/.test(g.unicode));
   for (const g of glyphs) {
     if (g.family !== null) continue;
-    if ((!latin && /^[A-Za-z]$/.test(g.unicode) && isItalicFont(g.base)) || (!digits && /^[0-9]$/.test(g.unicode))) textMath.add(g);
+    // So is its slash: "p = 1/n" read "p = 1" and the words "/n".
+    if ((!latin && /^[A-Za-z]$/.test(g.unicode) && isItalicFont(g.base)) || (!digits && /^[0-9/]$/.test(g.unicode))) textMath.add(g);
   }
   return glyphs;
 }
