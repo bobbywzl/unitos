@@ -484,16 +484,23 @@ function fuseComposites(input: Atom[]): Atom[] {
 // set small over it makes \xrightarrow{label}; content under it,
 // \overrightarrow{content}. Two glyphs overlapping by \joinrel's 3mu and
 // nothing over them are \longrightarrow, a composite.
+// A double arrow (\xRightarrow) is drawn the same way from equals signs
+// and a double arrowhead (parse loop finding: GeoTopo's "==⇒" under
+// "o. B. d. A." read as \overset{…}{=}====\Rightarrow).
 function arrowRuns(atoms: Atom[]): Atom[] {
   const out = [...atoms];
   const shafts = out.filter((a) => a.tex === "-" && a.fam === "oms");
-  for (const head of out.filter((a) => a.tex === "\\rightarrow" || a.tex === "\\leftarrow")) {
+  const bars = out.filter((a) => a.tex === "=");
+  for (const head of out.filter((a) => /^\\(right|left|Right|Left)arrow$/.test(a.tex))) {
     const em = head.size;
-    const right = head.tex === "\\rightarrow";
+    const right = /^\\(right|Right)/.test(head.tex);
+    const double = /^\\[RL]/.test(head.tex);
+    const name = `${double ? (right ? "Right" : "Left") : right ? "right" : "left"}arrow`;
+    const pieces = double ? bars : shafts;
     const run: Atom[] = [head];
     for (;;) {
       const edge = run[run.length - 1];
-      const next = shafts.find(
+      const next = pieces.find(
         (s) =>
           !run.includes(s) &&
           Math.abs(s.yb - head.yb) < 0.05 * em &&
@@ -508,17 +515,21 @@ function arrowRuns(atoms: Atom[]): Atom[] {
     const inside = (b: Atom) => !run.includes(b) && cx(b) > x1 - 0.1 * em && cx(b) < x2 + 0.1 * em;
     const bottom = Math.min(...run.map((a) => a.bottom));
     const under = out.filter((b) => inside(b) && b.top <= bottom + 0.2 * em && b.top >= bottom - 0.5 * em && b.size >= em * 0.9);
-    const label = out.filter((b) => inside(b) && b.bottom >= head.yb && b.yb > head.yb + 0.1 * em && b.size < em * 0.9);
-    const labelBelow = out.filter((b) => inside(b) && b.top <= head.yb && b.yb < head.yb - 0.1 * em && b.size < em * 0.9);
+    // A label stands within an em of the arrow: the row over it in an
+    // aligned display is no label (GeoTopo's rows of labeled arrows).
+    const label = out.filter((b) => inside(b) && b.bottom >= head.yb && b.yb > head.yb + 0.1 * em && b.yb < head.yb + em && b.size < em * 0.9);
+    const labelBelow = out.filter((b) => inside(b) && b.top <= head.yb && b.yb < head.yb - 0.1 * em && b.yb > head.yb - em && b.size < em * 0.9);
     let made: Atom;
-    if (under.length > 0 && label.length === 0) {
+    if (under.length > 0 && label.length === 0 && !double) {
       const body = linear(under.map((b) => ({ ...b })));
       made = node([...run, ...under], `\\over${right ? "right" : "left"}arrow{${body}}`, under[0].yb, under[0].size);
       for (const b of under) out.splice(out.indexOf(b), 1);
     } else if (label.length > 0 || labelBelow.length > 0 || run.length > 2) {
-      const above = label.length ? linear(label.map((b) => ({ ...b }))) : "";
-      const below = labelBelow.length ? `[${linear(labelBelow.map((b) => ({ ...b })))}]` : "";
-      made = node([...run, ...label, ...labelBelow], `\\x${right ? "right" : "left"}arrow${below}{${above}}`, head.yb, em, { cls: "rel" });
+      // A label's own composites are read first: "A ∩ B ≠ ∅" over an arrow
+      // holds \not over "=".
+      const above = label.length ? linear(fuseComposites(label.map((b) => ({ ...b })))) : "";
+      const below = labelBelow.length ? `[${linear(fuseComposites(labelBelow.map((b) => ({ ...b }))))}]` : "";
+      made = node([...run, ...label, ...labelBelow], `\\x${name}${below}{${above}}`, head.yb, em, { cls: "rel" });
       for (const b of [...label, ...labelBelow]) out.splice(out.indexOf(b), 1);
     } else continue;
     for (const r of run) out.splice(out.indexOf(r), 1);
