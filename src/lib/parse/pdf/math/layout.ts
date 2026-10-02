@@ -680,7 +680,9 @@ function structure(atoms: Atom[], rules: Rule[], depth = 0): Atom[] {
       // An index is set smaller than the radicand and raised over its
       // baseline; a letter before the sign on the radicand's baseline is
       // the formula's (T_{i\sqrt{p}}, arXiv 2506.08494 (2.10), read as a
-      // cube root's i).
+      // cube root's i). TeX raises it to 0.6 of the sign's height: a
+      // script of the glyph before a tall sign stands under its middle
+      // (Springer's "k₁√(k₂/D_A)" read k\sqrt[1]{…}).
       const innerSize = inner.length ? maxSize(inner) : rad.size;
       const innerBase = inner.length ? mainBaseline(inner) : rad.yb;
       const index = pool.filter(
@@ -693,6 +695,7 @@ function structure(atoms: Atom[], rules: Rule[], depth = 0): Atom[] {
           a.size < innerSize * 0.9 &&
           a.yb > innerBase + 0.2 * innerSize &&
           a.bottom > rad.bottom &&
+          a.yb > (rad.top + rad.bottom) / 2 &&
           a.top <= y + 0.3 * em,
       );
       const innerRules = hr.filter((q) => q !== r && !used.has(q) && q.x1 >= r.x1 - 0.1 && q.x2 <= r.x2 + 0.1 && ry(q) < y);
