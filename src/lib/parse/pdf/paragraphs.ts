@@ -767,6 +767,12 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
   const firstLineIndent = isFirstLineIndent(lines, i, ctx, runOf);
   const group: Line[] = [line];
   const colEdge = proseEdge(lines, i, i);
+  // The column's edge the lines around the first tell: a first line that
+  // ended a sentence ran to the margin only where another line shows the
+  // margin (parse loop finding: on a page of short lines, "Some inline
+  // mathematics involving x ∈ ℝ." was its own edge, and the indented "A
+  // list of items" under it read as a hanging indent).
+  const otherEdge = proseEdge(lines, i, i + 1);
   const sentenceEdge = sharedEdge(lines, i, i);
   const step = paragraphStep(lines, ctx);
   let j = i + 1;
@@ -838,7 +844,7 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
       next.x <= prev.x + next.size * 3.5 &&
       !BULLET_RE.test(next.text) &&
       gap <= next.size * ctx.leading * 1.3 &&
-      (!prevTerminal || /^[a-z0-9(]/.test(next.text) || prev.xEnd > colEdge - prev.size * 1.5);
+      (!prevTerminal || /^[a-z0-9(]/.test(next.text) || (otherEdge > 0 && prev.xEnd > otherEdge - prev.size * 1.5));
     // A wrapped line whose stretched word gaps read as cells is still one
     // line of prose when no table run claims it.
     const stretched =
