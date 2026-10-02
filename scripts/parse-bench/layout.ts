@@ -664,7 +664,8 @@ const NUMBER_RE = /^[-−–+($]?\.?\d[\d,.]*\)?%?$/u;
     longest run of its words (in reading order, across units) that repeats
     the grid's words row by row, half of them or more; the grid is read as
     prose when most of that run stands in paragraphs or list items, not in
-    a table's cells. A grid whose words the candidate holds in no such run
+    a table's cells or a code listing (a program's printed array keeps its
+    rows and columns there: ThinkDSP's matrices). A grid whose words the candidate holds in no such run
     is not judged. The score is the share of the page's grids read as a
     table. */
 export function gridProse(pdf: PdfText, cand: Flat): GridProse {
@@ -733,7 +734,7 @@ export function gridProse(pdf: PdfText, cand: Flat): GridProse {
       if (reading.length * 2 < words.length) continue;
       grids++;
       const kinds = cand.toks.slice(reading.at, reading.at + reading.length).map((t) => cand.blocks[cand.units[t.unit].block].kind);
-      if (kinds.filter((kind) => kind !== "table").length * 2 <= kinds.length) continue;
+      if (kinds.filter((kind) => kind !== "table" && kind !== "code").length * 2 <= kinds.length) continue;
       prose++;
       found.push({ page, text: run.map((r) => r.row.map((l) => l.text).join("  ")).join(" | ").slice(0, 120) });
     }

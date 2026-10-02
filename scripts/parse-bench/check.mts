@@ -1660,6 +1660,8 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     "layout: a grid of numbers read as a paragraph is prose; read as a table it is not",
     gridProse(gridPage, asProse).prose === 1 && gridProse(gridPage, asTable).prose === 0 && gridProse(gridPage, asTable).grids === 1,
   );
+  const asCode = flatten({ blocks: [{ kind: "code", text: "0 1\n1 1\n2 2\n3 6" }] });
+  check("layout: a grid of numbers in a code listing keeps its rows: it is no prose", gridProse(gridPage, asCode).prose === 0 && gridProse(gridPage, asCode).grids === 1);
   // Numbers in columns 5 pt apart, a little over a word space ("40,000 45,050"): a grid all the same.
   const close = [0, 1, 2].map((r) => line(100 + 12 * r, 72, 150, `${40 + r},000 ${45 + r},050 .${r}25`, [{ left: 72, right: 96, text: `${40 + r},000` }, { left: 101, right: 125, text: `${45 + r},050` }, { left: 130, right: 150, text: `.${r}25` }]));
   const closeText = close.map((l) => l.text).join(" ");
