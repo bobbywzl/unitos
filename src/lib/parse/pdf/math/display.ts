@@ -483,6 +483,19 @@ function joinInlineRows(lines: Line[], hosts: (Line | null)[], ctx: PageContext)
       if (last && row.x < Math.max(...last.map((r) => r.xEnd))) last.push(row);
       else groups.push([row]);
     }
+    // Runs of rows in one formula of the text line are one formula: two
+    // braces' labels side by side ("B = (B∩U₁) ∪ (B∩U₂)" over "=U₁" and
+    // "=∅"), each read alone, left the other's label a stray, and the
+    // formula failed (parse loop finding: GeoTopo p. 14).
+    const zonesOf = (group: Line[]) => {
+      const x1 = Math.min(...group.map((r) => r.x));
+      const x2 = Math.max(...group.map((r) => r.xEnd));
+      return new Set(host.items.filter((i) => i.zone && i.x < x2 + host.size * 0.6 && i.x + i.w > x1 - host.size * 0.6).map((i) => i.zone!));
+    };
+    for (let g = groups.length - 1; g > 0; g--) {
+      const shared = [...zonesOf(groups[g])].some((z) => zonesOf(groups[g - 1]).has(z));
+      if (shared) groups.splice(g - 1, 2, [...groups[g - 1], ...groups[g]]);
+    }
     let line = host;
     for (const group of groups) line = joinRows(line, group, ctx, orphans);
     joined.set(host, line);
