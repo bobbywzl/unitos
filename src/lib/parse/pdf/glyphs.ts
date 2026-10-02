@@ -752,13 +752,66 @@ export function longArrowEnd(g: Glyph): number | undefined {
   return arrowEnd.get(g);
 }
 
+// A font subset that names each glyph by its id in the whole font ("g131")
+// and carries no Unicode map: the text layer reads its codes as control
+// characters and stray letters. Word's PDFs set Cambria so (parse loop
+// finding: a review in Cambria read 24% of its words). Cambria's ids, the
+// same in its regular, bold, and italic faces: capitals from 4, small
+// letters from 131, figures from 882, and the punctuation Word's text
+// uses. An id the table lacks reads as the text layer reads it.
+const CAMBRIA_IDS: Record<number, string> = {
+  3: " ",
+  428: "&",
+  481: ",",
+  482: ";",
+  483: ":",
+  484: ".",
+  486: "-",
+  491: "?",
+  495: "’",
+  498: "“",
+  499: "”",
+  512: "/",
+  514: "–",
+  523: "(",
+  524: ")",
+  820: "_",
+  821: "'",
+  938: "+",
+  945: "=",
+};
+for (let k = 0; k < 26; k++) {
+  CAMBRIA_IDS[4 + k] = String.fromCharCode(65 + k);
+  CAMBRIA_IDS[131 + k] = String.fromCharCode(97 + k);
+}
+for (let k = 0; k < 10; k++) CAMBRIA_IDS[882 + k] = String.fromCharCode(48 + k);
+const CAMBRIA_RE = /^Cambria(?:-(?:Bold|Italic|BoldItalic))?$/;
+
+/** What each code of a font that names its glyphs by id draws, from the
+    font's encoding (its glyph name for each code); null for any other
+    font. */
+export function namedGlyphs(base: string, names: ArrayLike<string | null | undefined> | undefined): Map<number, string> | null {
+  if (!names || !CAMBRIA_RE.test(base)) return null;
+  const out = new Map<number, string>();
+  for (let code = 0; code < names.length; code++) {
+    const m = /^g(\d+)$/.exec(names[code] ?? "");
+    const text = m ? CAMBRIA_IDS[Number(m[1])] : undefined;
+    if (text !== undefined) out.set(code, text);
+  }
+  return out.size > 0 ? out : null;
+}
+
 // The text of the page's glyphs where it is not the text layer's: every glyph
 // of a math family, and the glyphs of a composite or an accented letter. A
 // glyph that reads as nothing (a composite's second glyph, a placed accent)
-// maps to "".
+// maps to "". A glyph read by its name (namedGlyphs) reads as it.
 export function glyphTexts(glyphs: Glyph[]): Map<Glyph, string> {
   const texts = new Map<Glyph, string>();
   for (const g of glyphs) {
+    if (g.named) {
+      texts.set(g, g.unicode);
+      continue;
+    }
     if (g.family === null || g.family === "ot1") continue;
     const entry = mathGlyph(g.family, g.code);
     // A font read by its character reads as its text layer does: the
@@ -930,9 +983,17 @@ export function itemText(glyphs: Glyph[], texts: Map<Glyph, string>): { str: str
       "",
     );
     g.text = text;
+    // A space read by its name and the gap around it are one space (Word
+    // justifies a line by the gaps beside its spaces).
+    if (g.named && text.trim() === "") {
+      g.text = str === "" || str.endsWith(" ") ? "" : " ";
+      str += g.text;
+      prevEnd = g.x + g.w;
+      continue;
+    }
     if (text !== "") {
       if (str === "") x = g.x;
-      else if (prevEnd !== null && g.x - prevEnd >= g.size * 0.102) str += " ";
+      else if (prevEnd !== null && g.x - prevEnd >= g.size * 0.102 && !str.endsWith(" ")) str += " ";
       str += text;
       end = Math.max(end, compositeEnd.get(g) ?? g.x + g.w);
     }
@@ -953,9 +1014,8 @@ export function unreadRuns(glyphs: Glyph[], read: Set<Glyph>, texts: Map<Glyph, 
   let run: Glyph[] = [];
   for (const g of glyphs) {
     const unread =
-      g.family !== null &&
-      g.family !== "ot1" &&
-      ((g.family !== "omx" && g.family !== "esint") || g.unicode.trim() === "") &&
+      ((g.named === true && g.unicode.trim() !== "") ||
+        (g.family !== null && g.family !== "ot1" && ((g.family !== "omx" && g.family !== "esint") || g.unicode.trim() === ""))) &&
       !read.has(g) &&
       (texts.get(g) ?? "") !== "";
     const last = run[run.length - 1];

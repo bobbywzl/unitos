@@ -72,7 +72,10 @@ const FURNITURE_PAGES = 6;
 
 export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Promise<PdfParse> {
   // pdf.js transfers (detaches) the buffer it receives — parse a copy so callers keep theirs.
-  const pdf = await getDocumentProxy(new Uint8Array(data), PDF_CMAPS);
+  // fontExtraProperties keeps each font's encoding (its glyph names) for the
+  // drawing: a font with no Unicode map reads by its names (glyphs.ts
+  // namedGlyphs).
+  const pdf = await getDocumentProxy(new Uint8Array(data), { ...PDF_CMAPS, fontExtraProperties: true });
   // The chosen pages (chosen[i] is the PDF's number for the parse's page i),
   // and the pages read.
   const chosen = chosenPages(pdf.numPages, opts.pages);
@@ -105,8 +108,8 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
       const ops = (await page.getOperatorList()) as { fnArray: number[]; argsArray: unknown[] };
       const fonts: FontLookup = (id) => {
         try {
-          const font = page.commonObjs.get(id) as { name?: string; fontMatrix?: number[]; vertical?: boolean } | null;
-          return font ? { name: font.name ?? "", fontMatrix: font.fontMatrix, vertical: font.vertical } : null;
+          const font = page.commonObjs.get(id) as { name?: string; fontMatrix?: number[]; vertical?: boolean; differences?: (string | null)[] } | null;
+          return font ? { name: font.name ?? "", fontMatrix: font.fontMatrix, vertical: font.vertical, differences: font.differences } : null;
         } catch {
           return null;
         }
@@ -258,9 +261,11 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     // space: ⊖ ⊘ ⊙ in a CMSY font with no Unicode map, a \big⟨) become items
     // of their own, on the baseline they stand on.
     const [viewX1, viewY1, viewX2, viewY2] = page.view;
-    // The math glyphs items read (unreadRuns asks only of those).
+    // The math glyphs items read, and the glyphs read by name (unreadRuns
+    // asks only of those): the text layer drops a named glyph whose code it
+    // takes for a space (Cambria's "o" at code 9, a tab).
     const read = new Set<Glyph>();
-    for (const run of glyphRuns) for (const g of run ?? []) if (g.family !== null && g.family !== "ot1") read.add(g);
+    for (const run of glyphRuns) for (const g of run ?? []) if ((g.family !== null && g.family !== "ot1") || g.named) read.add(g);
     for (const run of unreadRuns(drawing.glyphs, read, glyphText)) {
       const first = run[0];
       if (run.every((g) => g.hidden)) continue;
