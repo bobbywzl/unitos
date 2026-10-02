@@ -979,8 +979,17 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
     // list item's second line and a paragraph's last line are neither,
     // whatever their math (synthetic notes p. 4–5: "∑ c_k P(A_k)." ending a
     // sentence, an item's "then EX_n → EX").
+    // A proof's end mark at the margin is no part of the row it ends:
+    // with it, a row of a proof's chain at the text's edge ran to the
+    // margin and read as centered (parse loop finding: GeoTopo p13's "⇒
+    // 𝔅δ(x) ⊆ f⁻¹(…) ⊆ f⁻¹(U)  ■" read as an equation tagged ■ under
+    // its rows of text).
     const centered = (l: Line) => {
-      const { x, xEnd } = unlabeled(l);
+      const { x, xEnd: end } = unlabeled(l);
+      const items = l.items.filter((i) => i.str.trim() !== "").sort((p, q) => p.x - q.x);
+      const mark = items.length > 1 && QED_RE.test(items[items.length - 1].str.trim()) ? items[items.length - 1] : null;
+      const rest = items.slice(0, -1);
+      const xEnd = mark && mark.x - Math.max(...rest.map((i) => i.x + i.w)) > l.size * 2 ? Math.max(...rest.map((i) => i.x + i.w)) : end;
       const c = columns[lines.indexOf(l)];
       return Number.isFinite(c.right) && x > c.left + l.size * 0.5 && Math.abs((x + xEnd) / 2 - (c.left + c.right) / 2) < l.size * 1.5;
     };
