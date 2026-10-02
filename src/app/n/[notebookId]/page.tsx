@@ -104,7 +104,7 @@ export default async function NotebookPage(props: {
     include: {
       collaborators: true,
       // The project's folders (SPEC.md §6); the tree is drawn client-side.
-      folders: { select: { id: true, title: true, parentId: true } },
+      folders: { select: { id: true, title: true, parentId: true, createdAt: true } },
       documents: {
         // Attach order. Without it the rows come back in scan order, and the
         // first row picks the document a bare project URL opens.
@@ -158,7 +158,7 @@ export default async function NotebookPage(props: {
   // `%PDF-` is a Markdown file, §2): Re-parse on a PDF asks which shape
   // (SPEC.md §16). Read from the first bytes, never the whole file. The same
   // read says which documents are Word files (a zip, "PK") and which hold
-  // rich text, for the document list's kinds (SPEC.md §6).
+  // rich text, for the document list's Sort by Kind (SPEC.md §6).
   const documentIds = notebook.documents.map((nd) => nd.document.id);
   const heads = new Map(
     documentIds.length > 0
@@ -175,18 +175,6 @@ export default async function NotebookPage(props: {
     notebook.documents
       .filter((nd) => nd.document.fileHash !== null && heads.get(nd.document.id)?.head === "%PDF-")
       .map((nd) => nd.document.id),
-  );
-  // When this account last read each document (ReadingPosition.at): the
-  // document list's Last read order.
-  const readAt = new Map(
-    documentIds.length > 0
-      ? (
-          await db.readingPosition.findMany({
-            where: { userId: user.id, documentId: { in: documentIds } },
-            select: { documentId: true, at: true },
-          })
-        ).map((r) => [r.documentId, r.at.toISOString()])
-      : [],
   );
   const kindOf = (nd: (typeof notebook.documents)[number]): DocumentKind => {
     const d = nd.document;
@@ -215,7 +203,6 @@ export default async function NotebookPage(props: {
     importEdited: editedSinceImport(nd.document),
     kind: kindOf(nd),
     addedAt: nd.document.createdAt.toISOString(),
-    readAt: readAt.get(nd.document.id) ?? null,
   }));
   const activeId = doc && attached.some((d) => d.id === doc) ? doc : (attached[0]?.id ?? null);
   // The reader view is a per-visit choice carried in the URL; a fresh open is Normal.
@@ -1432,7 +1419,7 @@ export default async function NotebookPage(props: {
     <Workspace
       notebook={view}
       documents={attached}
-      folders={notebook.folders}
+      folders={notebook.folders.map((f) => ({ ...f, createdAt: f.createdAt.toISOString() }))}
       readerView={readerView}
       activeDocumentId={paneOne?.document.id ?? null}
       drive={driveConfig(user)}

@@ -11,7 +11,7 @@ import { isImeKey } from "@/lib/ime";
 import { useCollab } from "@/components/collab/collab-context";
 import { reportError } from "@/lib/error-log";
 import { ChevronDownIcon, SpinnerIcon } from "@/components/icons";
-import { useLang, useT } from "@/components/lang-provider";
+import { useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
 import { Logo } from "@/components/logo";
 import { Collapse, Presence } from "@/components/presence";
@@ -33,13 +33,8 @@ import {
   folderPath,
   type DocumentFolderView,
 } from "@/components/reader/document-folders";
-import {
-  DocumentGroups,
-  DocumentsOrganize,
-  useDocumentGrouping,
-  useDocumentSort,
-} from "@/components/reader/document-organize";
-import { sortDocuments, type DocumentKind } from "@/lib/document-order";
+import { DocumentsSort, useDocumentSort } from "@/components/reader/document-organize";
+import type { DocumentKind } from "@/lib/document-order";
 import {
   IngestProgress,
   advanceIngestSteps,
@@ -84,12 +79,10 @@ export type AttachedDocument = {
   // An import edited since it was imported (SPEC.md §29): Re-parse asks
   // before it replaces the edits. Absent: the server's 409 "edited" asks.
   importEdited?: boolean;
-  // The document list's sort and grouping (SPEC.md §6; lib/document-order.ts):
-  // what the document was made from, when it was added, and when this
-  // account last read it (null: never).
+  // The document list's Sort by (SPEC.md §6; lib/document-order.ts): what
+  // the document was made from, and when it was added.
   kind: DocumentKind;
   addedAt: string;
-  readAt: string | null;
 };
 type IngestPhase = { fileLabel: string; steps: IngestStep[] };
 // Wire format from /api/documents: a stage event per line, then one terminal line.
@@ -244,13 +237,12 @@ export function DocumentBar({
 }) {
   const { canEdit } = useCollab();
   const t = useT();
-  const lang = useLang();
   const router = useRouter();
   const searchParams = useSearchParams();
-  // The list's Sort and Group by (SPEC.md §6): one choice per browser. Sort
-  // orders every list; a grouping other than Folder is a view.
+  // The list's Sort by (SPEC.md §6): one choice per browser. It orders every
+  // list, folders among the documents, and every sort but Added puts them
+  // in categories.
   const [documentSort, setDocumentSort] = useDocumentSort();
-  const [documentGrouping, setDocumentGrouping] = useDocumentGrouping();
   const [phase, setPhase] = useState<IngestPhase | null>(null);
   const [dialog, setDialog] = useState(false);
   // The folder the add-document dialog adds to (SPEC.md §6): the + of a
@@ -1257,34 +1249,21 @@ export function DocumentBar({
               ref={placeList}
               className="menu-in absolute top-full left-0 z-40 mt-2 flex max-h-[min(60vh,480px)] w-80 max-w-[calc(100vw-96px)] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-card py-1.5 shadow-float"
             >
-              <DocumentsOrganize
+              <DocumentsSort sort={documentSort} onSort={setDocumentSort} />
+              <DocumentTree
+                notebookId={notebookId}
+                folders={folders}
+                documents={documents}
                 sort={documentSort}
-                onSort={setDocumentSort}
-                grouping={documentGrouping}
-                onGrouping={setDocumentGrouping}
+                activeId={activeId}
+                canEdit={canEdit}
+                panelEl={listEl}
+                renderDocument={renderDocumentRow}
+                onAddIn={(folderId) => {
+                  closeList();
+                  openAddDialog(folderId);
+                }}
               />
-              {documentGrouping === "folder" ? (
-                <DocumentTree
-                  notebookId={notebookId}
-                  folders={folders}
-                  documents={sortDocuments(documents, documentSort, lang)}
-                  activeId={activeId}
-                  canEdit={canEdit}
-                  panelEl={listEl}
-                  renderDocument={renderDocumentRow}
-                  onAddIn={(folderId) => {
-                    closeList();
-                    openAddDialog(folderId);
-                  }}
-                />
-              ) : (
-                <DocumentGroups
-                  documents={sortDocuments(documents, documentSort, lang)}
-                  grouping={documentGrouping}
-                  sort={documentSort}
-                  renderDocument={renderDocumentRow}
-                />
-              )}
             </div>
           )}
           </Presence>

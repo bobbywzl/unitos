@@ -1,9 +1,10 @@
-// How the document list orders and groups a project's documents (SPEC.md §6),
-// the way the notes tray orders and groups notes. Sort orders the documents
-// of every list: the project itself, each folder, each group. Group by Folder
-// is the reader's own folders, where documents drag between folders; every
-// other grouping is a view: a collapsible row per group, and no document
-// moves. Read only: nothing here writes a document, a folder, or an order.
+// Sort by in the document list (SPEC.md §6). One choice orders every list —
+// the project itself and each folder's own list — and a sort other than
+// Added puts the list's rows in categories: a letter for Title, a kind for
+// Kind, a week or a month for Week added and Month added. A folder is a row
+// like a document: its own title and the day it was made sort it, not what
+// it holds; under Kind, folders are a kind of their own. Read only: nothing
+// here writes a document, a folder, or an order.
 
 // What a document is, by what it was made from.
 export type DocumentKind =
@@ -19,8 +20,12 @@ export type DocumentKind =
   | "generated"
   | "text";
 
-// The kinds in the order Group by Kind lists them.
-export const DOCUMENT_KINDS: DocumentKind[] = [
+// A row's kind under Sort by Kind: a folder, or what a document was made from.
+export type RowKind = "folder" | DocumentKind;
+
+// The kinds in the order Sort by Kind lists them: folders first.
+export const ROW_KINDS: RowKind[] = [
+  "folder",
   "pdf",
   "page",
   "word",
@@ -34,45 +39,25 @@ export const DOCUMENT_KINDS: DocumentKind[] = [
   "text",
 ];
 
-// added: oldest first, the order the list has always had.
-export type DocumentSort = "added" | "added-newest" | "title" | "read";
-export const DOCUMENT_SORTS: DocumentSort[] = ["added", "added-newest", "title", "read"];
+// added: the list as it has always been — folders by title, then documents
+// oldest first — with no categories.
+export type DocumentSort = "added" | "title" | "kind" | "week" | "month";
+export const DOCUMENT_SORTS: DocumentSort[] = ["added", "title", "kind", "week", "month"];
 
-export type DocumentGrouping = "folder" | "kind" | "week" | "month" | "title";
-export const DOCUMENT_GROUPINGS: DocumentGrouping[] = ["folder", "kind", "week", "month", "title"];
+// One row of a list: a folder or a document. addedAt: when the folder was
+// made or the document added (DocumentFolder.createdAt, Document.createdAt).
+export type SortRow = { id: string; title: string; kind: RowKind; addedAt: string };
 
-// What ordering a document needs. addedAt: when the document was added
-// (Document.createdAt); readAt: when this account last read it, or null.
-export type OrderedDocument = { id: string; title: string; kind: DocumentKind; addedAt: string; readAt: string | null };
+export type RowCategory<T> = { key: string; title: string; rows: T[] };
 
-export type DocumentGroup<T> = { key: string; title: string; documents: T[] };
-
-const time = (iso: string | null): number => {
-  const ms = iso ? Date.parse(iso) : NaN;
+const time = (iso: string): number => {
+  const ms = Date.parse(iso);
   return Number.isNaN(ms) ? 0 : ms;
 };
 
 function collatorFor(lang: string): Intl.Collator {
   // Titles sort as a reader expects: "Chapter 2" before "Chapter 10", case aside.
   return new Intl.Collator(lang === "zh" ? "zh-CN" : "en-US", { numeric: true, sensitivity: "base" });
-}
-
-/** The documents in the chosen order. Ties keep the order they came in (the
-    order the documents were added), so every sort is stable. Last read puts
-    the most recently read first, and documents never read after them, in
-    the order they were added. */
-export function sortDocuments<T extends OrderedDocument>(documents: T[], sort: DocumentSort, lang: string): T[] {
-  const indexed = documents.map((document, index) => ({ document, index }));
-  const collator = collatorFor(lang);
-  const compare: (a: (typeof indexed)[number], b: (typeof indexed)[number]) => number =
-    sort === "added"
-      ? (a, b) => time(a.document.addedAt) - time(b.document.addedAt)
-      : sort === "added-newest"
-        ? (a, b) => time(b.document.addedAt) - time(a.document.addedAt)
-        : sort === "title"
-          ? (a, b) => collator.compare(a.document.title, b.document.title)
-          : (a, b) => time(b.document.readAt) - time(a.document.readAt);
-  return indexed.sort((a, b) => compare(a, b) || a.index - b.index).map(({ document }) => document);
 }
 
 /** Monday of the week, at midnight, local time. */
@@ -83,49 +68,62 @@ function weekStart(ms: number): Date {
   return d;
 }
 
-/** The documents, already in their sort order, in groups for every grouping
-    but Folder. Kinds run in DOCUMENT_KINDS order; titles A to Z, by first
-    letter or digit; weeks and months newest first, oldest first when the
-    sort is Added, oldest first. Each group keeps the sort order inside. */
-export function groupDocuments<T extends OrderedDocument>(
-  documents: T[],
-  grouping: Exclude<DocumentGrouping, "folder">,
-  sort: DocumentSort,
+/** A list's rows in categories, for every sort but Added. `rows` come in the
+    list's own order (folders by title, then documents in the order they
+    were added); ties keep it.
+    - Title: rows A to Z, in a category per first letter or digit; # for
+      any other first mark, No title last.
+    - Kind: Folder first, then each kind of document; a category keeps the
+      list's own order.
+    - Week added, Month added: newest first, the rows in a category newest
+      first. */
+export function categorizeRows<T extends SortRow>(
+  rows: T[],
+  sort: Exclude<DocumentSort, "added">,
   lang: string,
-  labels: { kind: (kind: DocumentKind) => string; untitled: string; weekOf: (date: string) => string },
-): DocumentGroup<T>[] {
+  labels: { kind: (kind: RowKind) => string; untitled: string; weekOf: (date: string) => string },
+): RowCategory<T>[] {
   const locale = lang === "zh" ? "zh-CN" : "en-US";
-  const byKey = new Map<string, DocumentGroup<T>>();
-  const add = (key: string, title: string, document: T) => {
-    const group = byKey.get(key);
-    if (group) group.documents.push(document);
-    else byKey.set(key, { key, title, documents: [document] });
+  const collator = collatorFor(lang);
+  const byKey = new Map<string, RowCategory<T>>();
+  const add = (key: string, title: string, row: T) => {
+    const category = byKey.get(key);
+    if (category) category.rows.push(row);
+    else byKey.set(key, { key, title, rows: [row] });
   };
-  if (grouping === "kind") {
-    for (const document of documents) add(document.kind, labels.kind(document.kind), document);
-    return DOCUMENT_KINDS.flatMap((kind) => byKey.get(kind) ?? []);
+  const indexed = rows.map((row, index) => ({ row, index }));
+
+  if (sort === "kind") {
+    for (const row of rows) add(row.kind, labels.kind(row.kind), row);
+    return ROW_KINDS.flatMap((kind) => byKey.get(kind) ?? []);
   }
-  if (grouping === "title") {
-    const collator = collatorFor(lang);
-    for (const document of documents) {
-      const first = document.title.trim()[0]?.toLocaleUpperCase(locale) ?? "";
-      if (!first) add("", labels.untitled, document);
-      else if (/[\p{L}\p{N}]/u.test(first)) add(first, first, document);
-      else add("#", "#", document);
+  if (sort === "title") {
+    indexed.sort((a, b) => collator.compare(a.row.title, b.row.title) || a.index - b.index);
+    for (const { row } of indexed) {
+      const first = row.title.trim()[0]?.toLocaleUpperCase(locale) ?? "";
+      if (!first) add("", labels.untitled, row);
+      else if (/[\p{L}\p{N}]/u.test(first)) add(first, first, row);
+      else add("#", "#", row);
     }
-    return [...byKey.values()].sort((a, b) =>
-      a.key === "" ? 1 : b.key === "" ? -1 : collator.compare(a.key, b.key),
-    );
+    return [...byKey.values()].sort((a, b) => (a.key === "" ? 1 : b.key === "" ? -1 : collator.compare(a.key, b.key)));
   }
-  for (const document of documents) {
-    const d = new Date(time(document.addedAt));
-    if (grouping === "week") {
+  indexed.sort((a, b) => time(b.row.addedAt) - time(a.row.addedAt) || a.index - b.index);
+  for (const { row } of indexed) {
+    const d = new Date(time(row.addedAt));
+    if (sort === "week") {
       const start = weekStart(d.getTime());
-      add(start.toISOString(), labels.weekOf(start.toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric" })), document);
+      add(
+        start.toISOString(),
+        labels.weekOf(start.toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric" })),
+        row,
+      );
     } else {
-      add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`, d.toLocaleDateString(locale, { year: "numeric", month: "long" }), document);
+      add(
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+        d.toLocaleDateString(locale, { year: "numeric", month: "long" }),
+        row,
+      );
     }
   }
-  const oldestFirst = sort === "added";
-  return [...byKey.values()].sort((a, b) => (oldestFirst ? 1 : -1) * a.key.localeCompare(b.key));
+  return [...byKey.values()].sort((a, b) => b.key.localeCompare(a.key));
 }
