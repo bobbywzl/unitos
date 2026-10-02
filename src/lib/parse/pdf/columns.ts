@@ -179,7 +179,10 @@ function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: n
     }
   }
   const split = best && best.cross / total < 0.5 ? splitAt(items, graphics, page, pageWidth, depth, best.g, total) : null;
-  if (split || !oneBand || depth > 0) return split;
+  if (split) return split;
+  const margin = marginGutter(items, graphics, x0, width);
+  const notes = margin === null ? null : splitAt(items, graphics, page, pageWidth, depth, margin, total);
+  if (notes || !oneBand || depth > 0) return notes;
   // A page that is not two columns may still hold one band of them, or a
   // column and a note beside it: its gutter is then the one beside which
   // one clear band holds the most words on both sides (IEEE's two columns
@@ -187,6 +190,35 @@ function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: n
   // paragraphs, a seventh of the width).
   const g = bandGutter(items, graphics, x0, width);
   return g === null ? null : splitAt(items, graphics, page, pageWidth, depth, g, total, true);
+}
+
+// The gutter of a column of notes in the region's outer fifth, the margin a
+// book sets its margin notes in: no item and no graphic crosses it, the
+// notes' side holds a seventh of the characters at most, and its words are
+// set smaller than the column's (a page number in the margin aside). The
+// gutter stands next to the column. Parse loop finding: the MML book's
+// margin notes ("associativity", "augmented matrix") stand closer to the
+// page's edge than a fifth of its width, the columns test never cut there,
+// and each note ran into the line of the column beside it.
+function marginGutter(items: Item[], graphics: Placed[], x0: number, width: number): number | null {
+  const total = chars(items);
+  const sizeOf = (list: Item[]) => median(list.filter((i) => !/^\d+$/.test(i.str.trim())).map((i) => i.size));
+  const clear = (g: number) => !items.some((i) => i.x < g && i.x + i.w > g) && !graphics.some((p) => p.box.x1 < g && p.box.x2 > g);
+  const fits = (g: number) => {
+    const left = items.filter((i) => i.x + i.w <= g);
+    const right = items.filter((i) => i.x >= g);
+    const [note, wide] = chars(left) < chars(right) ? [left, right] : [right, left];
+    const words = note.filter((i) => !/^\d+$/.test(i.str.trim()));
+    return words.length > 0 && chars(note) * 7 <= total && sizeOf(note) < sizeOf(wide) * 0.9;
+  };
+  const step = width * 0.01;
+  // Left: the gutter nearest the column, scanning in from the fifth.
+  let left: number | null = null;
+  for (let g = x0 + width * 0.2; g >= x0 + width * 0.03 && left === null; g -= step) if (clear(g)) left = g;
+  if (left !== null && fits(left)) return left;
+  let right: number | null = null;
+  for (let g = x0 + width * 0.8; g <= x0 + width * 0.97 && right === null; g += step) if (clear(g)) right = g;
+  return right !== null && fits(right) ? right : null;
 }
 
 // The gutter of the region's best band: for each x, the clear bands between
@@ -536,7 +568,10 @@ function sideNote(band: Band, page: number): Side[] | null {
   const notePitch = median(noteLines.slice(1).map((l, k) => noteLines[k].y - l.y));
   const groups: Item[][] = [];
   noteLines.forEach((l, k) => {
-    if (k > 0 && noteLines[k - 1].y - l.y > notePitch * 1.3) groups.push([]);
+    // Two notes alone set their one gap as the pitch: a gap of two lines
+    // of their size parts them too (the MML book's "associativity" and
+    // "distributivity", four lines apart, read as one note).
+    if (k > 0 && (noteLines[k - 1].y - l.y > notePitch * 1.3 || noteLines[k - 1].y - l.y > l.size * 2.5)) groups.push([]);
     if (groups.length === 0) groups.push([]);
     groups[groups.length - 1].push(...l.items);
   });

@@ -105,6 +105,14 @@ function continuesOnPage(prev: Segment, next: Segment, setting: PageSetting): bo
   // export's list of links read as one. "…available at" and a link still
   // join.
   if (/(?:https?:\/\/|www\.)\S*$/.test(prev.text) && /^(?:https?:\/\/|www\.)/.test(next.text)) return false;
+  // A short line alone, a few words, with the next part two lines or more
+  // under it, is a label or a note, however it ends: a paragraph cut by a
+  // float runs its first part to the column's edge (the MML book's margin
+  // notes "associativity" and "distributivity" read as one note, and
+  // "augmented matrix" went on into the paragraph under the display).
+  const lineSize = prev.lineSize ?? 10;
+  const lone = prev.box !== undefined && prev.box.y2 - prev.box.y1 <= lineSize * 1.6 && prev.text.length <= 30;
+  if (lone && next.box !== undefined && next.box.y2 < prev.box!.y1 - lineSize * 2) return false;
   if ((/[a-z,;\-–—]$/.test(prev.text) || ABBREVIATION_END_RE.test(prev.text)) && goesOn(prev.text, next.text)) return true;
   const size = prev.lineSize ?? 10;
   const columnBreak = prev.box !== undefined && next.box !== undefined && next.box.y2 > prev.box.y1 && next.box.x1 > prev.box.x2 - size;
