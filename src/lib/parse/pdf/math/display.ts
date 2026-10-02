@@ -728,6 +728,36 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
     );
     if (stacked) kinds0[n] = "math";
   }
+  // A row of fractions' denominators is the display's, a short word among
+  // them ("dt" of d⟨x⟩/dt, set upright): each of its cells stands under a
+  // fraction bar about its width, a numerator over the bar (parse loop
+  // finding: Springer p26's "dt  √k₂  √π" read as text, and the display's
+  // rows joined it as a sentence's inline rows, apart from its last
+  // fraction, a crop).
+  const hbars = ctx.drawing.rules.filter((r) => r.dir === "h");
+  for (let n = 0; n < input.length; n++) {
+    const l = input[n];
+    const { words } = wordsOf(l, columns0[n]);
+    if (kinds0[n] !== "text" || words.length > 1 || words.some((w) => w.length > 3) || l.cells.length === 0) continue;
+    const ink = l.items.flatMap((i) => i.glyphs ?? []).filter((g) => g.unicode.trim() !== "");
+    const barred = l.cells.every((c, i) => {
+      const next = l.cells[i + 1]?.x ?? Infinity;
+      const own = ink.filter((g) => g.x >= c.x - 0.5 && g.x < next - 0.5);
+      if (own.length === 0) return false;
+      const x1 = Math.min(...own.map((g) => g.x));
+      const x2 = Math.max(...own.map((g) => g.x + g.w));
+      return hbars.some(
+        (r) =>
+          r.x1 <= x1 + l.size * 0.2 &&
+          r.x2 >= x2 - l.size * 0.2 &&
+          r.x2 - r.x1 <= x2 - x1 + l.size * 4 &&
+          r.y1 > l.y &&
+          r.y1 - l.y < l.size * 1.2 &&
+          input.some((o) => o !== l && o.y > r.y1 && o.y - r.y1 < o.size * 1.2 && o.x < r.x2 && o.xEnd > r.x1),
+      );
+    });
+    if (barred) kinds0[n] = "math";
+  }
   // A row of an aligned display holds words of its own, as many as it
   // likes, in any language: it opens with its relation, at the x of a math
   // row over or under it, a row's pitch away, both set well into the
@@ -962,7 +992,15 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
       // book's augmented matrix read its "[" as a display apart).
       const inFence = (l: Line, f: Box) => l.y >= f.y1 - l.size && l.y <= f.y2 + l.size && l.x < f.x2 + 1 && l.xEnd > f.x1 - 1;
       const pair = Math.abs(prev.y - next.y) < size * 0.3 && fences.some((f) => inFence(prev, f) && fences.some((g) => g !== f && inFence(next, g) && Math.abs(g.y1 - f.y1) < size && Math.abs(g.y2 - f.y2) < size));
-      if (kinds[j] !== "label" && !pair && (next.xEnd < x1 - size * 6 || next.x > x2 + size * 6) && !band.every((l) => kinds[lines.indexOf(l)] === "label")) break;
+      // So do two fractions' numerators far apart on one row, when the
+      // display's main row under them runs under both (parse loop finding:
+      // Springer p26's "d⟨x⟩_b … k₁√D_A" and "2k₁√(D_A t)" split the display
+      // in two).
+      const far = (l: Line, a: number, b: number) => l.xEnd < a - size * 6 || l.x > b + size * 6;
+      const bridged = lines.some(
+        (l, m) => m > j && kinds[m] === "math" && next.y - l.y >= 0 && next.y - l.y <= size * 1.6 && !far(l, x1, x2) && l.x <= next.xEnd && l.xEnd >= next.x,
+      );
+      if (kinds[j] !== "label" && !pair && !bridged && far(next, x1, x2) && !band.every((l) => kinds[lines.indexOf(l)] === "label")) break;
       const label = kinds[j] === "label" || unlabeled(next).label !== null ? 1 : 0;
       if (labels + label > 1) {
         // The numerators of the next display's fractions stand closer to the
