@@ -269,8 +269,11 @@ type UnicodeFont =
 // "O" and "R" (arXiv 2506.06352's u: 𝕆 → ℝ). So are the capitals of
 // doublestroke's fonts (\mathds: dsrom10, dsss10) and bbold's (parse loop
 // finding: the MML book's every ℝ read as \mathrm{R}).
+// mathpazo's PazoMath fonts (Palatino's Greek, ∑, ∏, ∞, ∝) read so too: a
+// thesis set in Palatino lost every Greek letter and every ∑ of its
+// formulas, and each display with one was a crop (parse loop finding).
 const UNICODE_TEX_RE =
-  /^(STIXGeneral|STIXNonUnicode|STIXVariants|LibertineMath|NewTXB?MI|txmia|txsy|MTMI|MTSY|RMTMI|MTEX|MnSymbol|EURM|OpenSymbol|MathDesign-.+-MathDesignSymbol[AB]-|dsrom\d|dsss\d|bbold\d)/;
+  /^(STIXGeneral|STIXNonUnicode|STIXVariants|LibertineMath|NewTXB?MI|txmia|txsy|MTMI|MTSY|RMTMI|MTEX|MnSymbol|EURM|OpenSymbol|MathDesign-.+-MathDesignSymbol[AB]-|dsrom\d|dsss\d|bbold\d|PazoMath(-Italic)?$)/;
 const ITALIC_MATH_RE = /Italic|MI(B|\d)*$|txmia|MathMI|^EURM/;
 // STIX's first fonts set a formula's sized delimiters, big operators, and
 // the pieces of tall delimiters in five size fonts: each glyph reads by the
@@ -589,6 +592,22 @@ function radicalBySpan(g: Glyph, glyphs: Glyph[]): { family: MathFamily; code: n
   return { family: "omx", code: 0x70 + (size < 0 ? 3 : size) };
 }
 
+/** PazoMath's ∑ and ∏ stand on the baseline as a text glyph does (its ∑
+    0.78 em over it and 0.13 em under it, as the page draws it), where
+    cmex10's hang from their origin. mathpazo sets a display's operator
+    from the same glyph scaled 1.4 times: one set larger than the glyphs
+    beside it on its baseline is the display form. Read with its own box,
+    its limits stand over and under it (a thesis's ∑ᵢ₌₁ⁿ read its limits
+    into the lines around the display, and the display was a crop). */
+const PAZO_OPERATORS: Record<string, number> = { "∑": 0x50, "∏": 0x51 };
+function pazoOperator(g: Glyph, glyphs: Glyph[]): Tex | null {
+  const code = /^PazoMath$/.test(g.base) ? PAZO_OPERATORS[g.unicode] : undefined;
+  if (code === undefined) return null;
+  const beside = glyphs.filter((h) => h !== g && h.unicode.trim() !== "" && Math.abs(h.y - g.y) < g.size * 0.1 && h.x >= g.x + g.w * 0.5 && h.x < g.x + g.w + g.size * 1.5);
+  const display = beside.length > 0 && Math.max(...beside.map((h) => h.size)) < g.size / 1.25;
+  return { family: "omx", code: display ? code + 8 : code, box: [0.78, 0.13] };
+}
+
 export function unicodeMath(glyphs: Glyph[]): Glyph[] {
   texTextFonts(glyphs);
   bbmLetters(glyphs);
@@ -620,7 +639,7 @@ export function unicodeMath(glyphs: Glyph[]): Glyph[] {
                 ? radicalBySpan(g, glyphs)
                 : extensionGlyph(g.unicode, g.w / g.size)
               : null
-            : texWorldChar(g.unicode, font.italic && !delta, font.bullets);
+            : (pazoOperator(g, glyphs) ?? texWorldChar(g.unicode, font.italic && !delta, font.bullets));
     }
     else {
       tex = openTypeSized(g, font.name);
