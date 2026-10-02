@@ -6,7 +6,7 @@
 // spaces read as one.
 //
 //   npx tsx scripts/parse-bench/web-snippets.mts [--limit n] [--only file,file]
-//     [--baseline] [--save-baseline] [--worst n] [--detail file]
+//     [--baseline] [--save-baseline] [--worst n] [--detail file] [--parts-dir dir]
 //
 // jsdom keeps memory across pages, so a run of more than BATCH pages parses
 // them in child runs of BATCH pages each (--part i/n, --out file) and reads
@@ -83,11 +83,14 @@ if (part) {
   const [i, n] = part.split("/").map(Number);
   urls = urls.slice(Math.floor((urls.length * i) / n), Math.floor((urls.length * (i + 1)) / n));
 }
+// Each run's parts carry its process id, so two runs never read each other's.
+// --parts-dir keeps them somewhere else, for a script that compares runs.
+const partsDir = value("--parts-dir") ?? join(ROOT, ".bench", "web");
 const parts = !part && urls.length > BATCH ? Math.ceil(urls.length / BATCH) : 0;
 if (parts > 0) {
   const pass = argv.filter((a, i) => !["--baseline", "--save-baseline"].includes(a) && argv[i - 1] !== "--worst" && a !== "--worst");
   for (let i = 0; i < parts; i++) {
-    const file = join(ROOT, ".bench", "web", `snippets-part-${i}.json`);
+    const file = join(partsDir, `snippets-part-${process.pid}-${i}.json`);
     execFileSync("npx", ["tsx", join(import.meta.dirname, "web-snippets.mts"), ...pass, "--part", `${i}/${parts}`, "--out", file, "--worst", "0"], {
       stdio: "ignore",
     });
