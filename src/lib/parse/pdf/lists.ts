@@ -399,8 +399,9 @@ function listSegment(items: Item[], depths: number[]): Segment {
 // A bullet the page draws as a shape left of a line's first word, about its
 // letters' height, at most `most` ems wide and high (Beamer's and a slide
 // program's bullets never reach the text layer; Beamer paints its balls as
-// shadings): the shape's left edge, or null.
-function drawnBulletAt(line: Line, ctx: PageContext, most = 0.9): number | null {
+// shadings): the shape's left edge, or null. square: the shape's sides
+// within twice each other (a brace KaTeX draws in pieces has slivers).
+export function drawnBulletAt(line: Line, ctx: PageContext, most = 0.9, square = false): number | null {
   const s = line.size;
   const shape = [...ctx.drawing.paths.filter((b) => !b.clip), ...ctx.drawing.fills, ...ctx.drawing.shades].find(
     (b) =>
@@ -411,7 +412,8 @@ function drawnBulletAt(line: Line, ctx: PageContext, most = 0.9): number | null 
       b.y2 - b.y1 >= s * 0.1 &&
       b.y2 - b.y1 <= s * most &&
       b.y1 >= line.y - s * 0.3 &&
-      b.y2 <= line.y + s,
+      b.y2 <= line.y + s &&
+      (!square || (b.x2 - b.x1 <= (b.y2 - b.y1) * 2 && b.y2 - b.y1 <= (b.x2 - b.x1) * 2)),
   );
   return shape ? shape.x1 : null;
 }

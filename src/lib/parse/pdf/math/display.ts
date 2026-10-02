@@ -17,6 +17,7 @@ import { CAPTION_RE } from "@/lib/parse/pdf/figures";
 import { isUnreadMath, sameFlags } from "@/lib/parse/pdf/glyphs";
 import { regionOf, unionBox } from "@/lib/parse/pdf/geometry";
 import { ATTACH_PUNCT_RE, spaceGap } from "@/lib/parse/pdf/lines";
+import { drawnBulletAt } from "@/lib/parse/pdf/lists";
 import { BULLET_RE } from "@/lib/parse/pdf/markers";
 import { layoutLatex } from "@/lib/parse/pdf/math/check";
 import { braceLabelBoxes, drawnBraces, hangingFamily, hangingGlyph, LIMIT_OPS } from "@/lib/parse/pdf/math/layout";
@@ -151,6 +152,10 @@ function kindOf(line: Line, ctx: PageContext, column: { left: number; right: num
   // ("•x₀xᵢ where …", arXiv 2410.04586 p. 12). A marker a formula took is
   // the formula's: "(Mu)" opening a display is no item "(a)".
   if ((BULLET_RE.test(text) && !opens) || /^\s*[•▪◦‣●]/.test(text)) return "text";
+  // So is a line with a bullet the page draws left of it (parse loop
+  // finding: the MML book's "▪ λ(BC) = (λB)C = …, B ∈ R^{m×n}" read as a
+  // display's second row, and the item's formulas were a crop).
+  if (drawnBulletAt(line, ctx, 0.65, true) !== null) return "text";
   const glyphs = line.items.flatMap((i) => i.glyphs ?? []);
   // A big operator of a display's size, taller than a line and a half (an
   // integral with limits of two levels, IEEE Access p. 9), stands in a
@@ -908,7 +913,21 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
       return words.length === 0 && above !== undefined && below !== undefined && above.y - l.y > pitch * 1.25 && l.y - below.y > pitch * 1.25;
     };
     const alone = (l: Line) => spaced(l) && (centered(l) || (set(l) && detached(l)) || wide(l));
-    const math = band.some((l) => kindIn(l) === "math" && (labels > 0 || band.length > 1 || alone(l)));
+    // Rows of math with no label, each starting where the line of text
+    // right over them starts and none centered, are lines of that text: an
+    // item's formulas, one to a line. A display stands centered or set in
+    // (parse loop finding: the MML book's "Distributivity:" over "(λ+ψ)C =
+    // λC + ψC, C ∈ R^{m×n}" and "λ(B+C) = λB + λC, …" was a crop).
+    const top = band[0];
+    const over = lines
+      .filter((o, m) => kinds[m] === "text" && o.y > top.y && o.x < top.xEnd && o.xEnd > top.x)
+      .sort((a, b) => a.y - b.y)[0];
+    const flush =
+      labels === 0 &&
+      over !== undefined &&
+      over.y - top.y < pitch * 1.6 &&
+      band.every((l) => kindIn(l) === "math" && Math.abs(l.x - over.x) < 1 && !centered(l));
+    const math = !flush && band.some((l) => kindIn(l) === "math" && (labels > 0 || band.length > 1 || alone(l)));
     // A band of small lines alone is no display (a figure's labels over
     // the rules of its drawing, arXiv 2411.19946 pp. 1, 3): a display has
     // glyphs at the text's size.
