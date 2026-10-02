@@ -831,8 +831,15 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
       // A limit over the next row's sum stands a little farther from the
       // row above (a display of several rows, each with its sums).
       const limit = kinds[j] === "fragment" && prev.y - next.y <= size * 2.2 && attached(next, around(next, band), rules, edge(next), braces, band);
-      // Rows a tall delimiter holds are one display, however far apart.
-      const held = fences.some((f) => [prev, next].every((l) => l.y >= f.y1 && l.y <= f.y2 && l.x >= f.x2 - 1 && l.x - f.x2 < l.size * 3)) || byOperator(prev, next);
+      // Rows a tall delimiter holds are one display, however far apart: each
+      // starts just inside it, or runs across it (parse loop finding: The
+      // Art of Linear Algebra's A = [a11 a12; …] = [a1 a2] = […], its first
+      // row a line of brackets and entries set apart from "A = …", read as
+      // two crops).
+      const held =
+        fences.some((f) =>
+          [prev, next].every((l) => l.y >= f.y1 && l.y <= f.y2 && ((l.x >= f.x2 - 1 && l.x - f.x2 < l.size * 3) || (l.x <= f.x1 + 1 && l.xEnd >= f.x2 - 1))),
+        ) || byOperator(prev, next);
       // A fragment stands over the next row's far end too (IEEE Access
       // (31): the square of its tall parentheses).
       const ahead = lines.find((l, m) => m > j && kinds[m] === "math" && l.y <= next.y && next.y - l.y <= size * 1.6);
