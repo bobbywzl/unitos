@@ -521,12 +521,18 @@ function leaksOf(pdf: PdfText, furniture: Line[], cand: Flat): Leaks {
   const strings = [...new Set(furniture.map((f) => f.text.trim()))].filter((f) => wordsOf(f).length > 0);
   const words = strings.map((f) => wordsOf(f).map((w) => w.w));
   const inLine = (run: string[]) => own.some((line) => holds(line, run));
+  // A word only pdftotext cannot read stands beside a string the page's
+  // own line holds: the line reads short (parse loop finding: a Japanese
+  // book's list item "• 6 章 固有値と固有ベクトル" read "6" alone in
+  // pdftotext, and the item's number counted as page 6's number).
+  const read = new Set(own.flat());
+  const unread = new Set((pdf.blind ?? []).flatMap((b) => wordsOf(b.text).map((w) => w.w)).filter((w) => !read.has(w)));
   const beside = (m: { unit: number; tok: number }, x: number) => {
     const unit = cand.units[m.unit];
     const k = words[x].length;
     const before = m.tok > unit.first ? cand.toks[m.tok - 1].w : null;
     const after = m.tok + k < unit.end ? cand.toks[m.tok + k].w : null;
-    return (before !== null && inLine([before, ...words[x]])) || (after !== null && inLine([...words[x], after]));
+    return (before !== null && (inLine([before, ...words[x]]) || unread.has(before))) || (after !== null && (inLine([...words[x], after]) || unread.has(after)));
   };
   const atEdges = furnitureMatches(cand, words, false, false);
   // A heading made of running heads alone is the section's own title, which

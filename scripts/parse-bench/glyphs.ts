@@ -1,4 +1,4 @@
-import "@/lib/pdf-runtime";
+import { PDF_CMAPS } from "@/lib/pdf-runtime";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -55,10 +55,15 @@ export function pdfGlyphs(path: string): Promise<PageGlyphs[] | null> {
       const pdfKey = createHash("sha1").update(bytes).digest("hex").slice(0, 16);
       const code = createHash("sha1");
       for (const file of WALK_CODE) code.update(readFileSync(file));
+      code.update("cmaps");
       const name = `${pdfKey}-${code.digest("hex").slice(0, 16)}.json`;
       const stored = join(DISK, name);
       if (existsSync(stored)) return JSON.parse(readFileSync(stored, "utf8")) as PageGlyphs[];
-      const pdf = await getDocumentProxy(new Uint8Array(bytes));
+      // The parse's CMaps: without them a CID font's glyphs (a Japanese
+      // word in a display) were not walked, and a display that read them
+      // in \text failed the check on words the page draws (parse loop
+      // finding).
+      const pdf = await getDocumentProxy(new Uint8Array(bytes), PDF_CMAPS);
       const pages: PageGlyphs[] = [];
       for (let p = 1; p <= pdf.numPages; p++) {
         const page = await pdf.getPage(p);

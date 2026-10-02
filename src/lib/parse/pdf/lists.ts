@@ -239,7 +239,16 @@ function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[],
     // On a page set justified a wrapped line fills the column: under a line
     // that stopped short, a line with no marker is no wrap of the item (a
     // form's label lines under a checkbox item).
-    if (!stopsShort(lines, j - 1, ctx) && goesOn(item, prev, next, edge, ctx)) {
+    // A line at the item's words goes on with the item, though the line
+    // above stopped short, where that says nothing of the item's end: a
+    // formula set on a line of its own, the line under one, or the line
+    // under the item's lead that ends in a colon (parse loop finding: the
+    // MML book's "▪ Associativity:" over "(λψ)C = λ(ψC), C ∈ ℝ^{m×n}" read
+    // each line as an item of its own, and "Note that this allows us to
+    // move scalar values around." under its item's formula too).
+    // A display the math reader joined stays its own block.
+    const atWords = !next.display && Math.abs(next.x - item.bodyX) <= next.size * 0.3 && (lineMathShare(next) >= 0.5 || lineMathShare(prev) >= 0.5 || /:$/.test(prev.text.trim()));
+    if ((atWords || !stopsShort(lines, j - 1, ctx)) && goesOn(item, prev, next, edge, ctx)) {
       item.lines.push(next);
       j++;
       continue;
