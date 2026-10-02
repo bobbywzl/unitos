@@ -1275,7 +1275,19 @@ function formulaGlyphs(line: Line, pageOrphans: Glyph[], page: Glyph[], lines: L
   const elsewhere = (g: Glyph) =>
     page.some((h) => h !== g && !own.has(h) && !pageOrphans.includes(h) && Math.abs(h.x - g.x) < g.size * 0.12 && Math.abs(h.y - g.y) < g.size * 0.05);
   // An orphan on another line's baseline is that line's (resolveZones).
-  const orphans = pageOrphans.filter((g) => g.x + g.w / 2 > line.x && g.x + g.w / 2 < line.xEnd && g.y >= bottom && g.y <= top && !elsewhere(g) && !onOtherLine(g, line, lines));
+  // So is a limit under or over one of the line's operators, past the
+  // line's reach: a text-size ∑ with its limit set under it (\sum\limits)
+  // hangs it more than half a line down (the probability cheatsheet's
+  // E(X) = ∑ᵢ xᵢP(X = xᵢ) lost its i, and was a crop).
+  const ops = line.items.flatMap((i) => i.glyphs ?? []).flatMap((g) => {
+    const h = hangingGlyph(g);
+    return h && g.family === "omx" && mathGlyph("omx", g.code)?.cls === "op" ? [{ x1: g.x, x2: g.x + g.w, ...h }] : [];
+  });
+  const limit = (g: Glyph) =>
+    ops.some((o) => g.x + g.w / 2 > o.x1 && g.x + g.w / 2 < o.x2 && ((g.y < o.bottom && g.y > o.bottom - line.size) || (g.y > o.top && g.y < o.top + line.size * 0.6)));
+  const orphans = pageOrphans.filter(
+    (g) => g.x + g.w / 2 > line.x && g.x + g.w / 2 < line.xEnd && ((g.y >= bottom && g.y <= top) || limit(g)) && !elsewhere(g) && !onOtherLine(g, line, lines),
+  );
   // A blank glyph is no symbol (KaTeX sets struts as spaces a point high).
   const glyphs = [...line.items.flatMap((i) => i.glyphs!), ...orphans].filter((g) => g.family !== null || g.unicode.trim() !== "").sort((a, b) => a.x - b.x);
   if (glyphs.length === 0) return null;
