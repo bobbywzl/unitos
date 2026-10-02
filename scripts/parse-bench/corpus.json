@@ -78,5 +78,7 @@
   { "id": "real-nps-thesis-2020-shevock-p4", "category": "form", "pdf": ".bench/real/nps-thesis-2020-shevock.pdf", "url": "https://calhoun.nps.edu/server/api/core/bitstreams/8bdab7d0-42cf-4066-94db-050c5ae96e60/content", "license": "public-domain", "pages": [4, 4] },
   { "id": "real-openstax-introstat-ch6-p2", "category": "textbook", "pdf": ".bench/real/openstax-introstat-ch6.pdf", "url": "https://assets.openstax.org/oscms-prodcms/media/documents/IntroductoryStatistics-OP_i6tAI7e.pdf", "license": "open", "pages": [2, 3] },
   { "id": "real-resume-jake-ryan-p1", "category": "report", "pdf": ".bench/real/resume-jake-ryan.pdf", "url": "https://github.com/jakegut/resume", "license": "open", "pages": [1, 1], "quick": true },
-  { "id": "real-sec-10k-goog-2024-p54", "category": "financial", "pdf": ".bench/real/sec-10k-goog-2024.pdf", "url": "https://s206.q4cdn.com/479360582/files/doc_financials/2024/q4/goog-10-k-2024.pdf", "license": "copyrighted", "pages": [54, 54] }
+  { "id": "real-sec-10k-goog-2024-p54", "category": "financial", "pdf": ".bench/real/sec-10k-goog-2024.pdf", "url": "https://s206.q4cdn.com/479360582/files/doc_financials/2024/q4/goog-10-k-2024.pdf", "license": "copyrighted", "pages": [54, 54] },
+  { "id": "mml-book-ch2", "category": "book", "pdf": ".bench/real/mml-book.pdf", "url": "https://raw.githubusercontent.com/mml-book/mml-book.github.io/master/book/mml-book.pdf", "license": "copyrighted", "pages": [32, 51], "sweep": true },
+  { "id": "thinkdsp-ch6", "category": "book", "pdf": ".bench/real/thinkdsp.pdf", "url": "https://raw.githubusercontent.com/AllenDowney/ThinkDSP/master/book/thinkdsp.pdf", "license": "open", "pages": [75, 94], "sweep": true }
 ]
