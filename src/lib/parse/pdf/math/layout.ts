@@ -203,7 +203,15 @@ function atomsOf(glyphs: Glyph[]): { atoms: Atom[]; unknown: Glyph[] } {
 // Computer Modern font under another name (arXiv 2502.02648's "mwa_cmmi10")
 // is no text font: its letters are math italic, and the formula stays a
 // picture.
-const TEXT_CHAR_RE = /^[A-Za-z0-9,.;:()[\]=+−–·!/<>]$/;
+// A Latin letter with a mark (ü, ß, é) is a word's letter: it reads in
+// \text, as math has no such letter (parse loop finding: GeoTopo's "für"
+// and "überdecken" in its displays failed the check on their ü and ß, and
+// each display was a crop).
+const TEXT_CHAR_RE = /^[A-Za-z0-9,.;:()[\]=+−–·!/<>\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u017F]$/;
+/** A letter a word in a formula holds: ASCII, or Latin with a mark. */
+const LETTER_RE = /^[A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u017F]$/;
+/** A Latin letter with a mark: no math letter, so text only. */
+const MARKED_RE = /[\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u017F]/;
 const CM_NAME_RE = /cm(r|mi|mib|sy|bsy|ex|bx|ti|ss|tt|sl)\d/i;
 
 function textAtom(g: Glyph): Atom | null {
@@ -240,6 +248,7 @@ function textAtom(g: Glyph): Atom | null {
   // A bold letter or digit is \mathbf (Springer's vectors n, m in Times
   // Bold read as \mathrm), a bold italic one \boldsymbol.
   const bold = /[A-Za-z0-9]/.test(ch) && isBoldFont(g.base);
+  // A bold letter with a mark reads as an upright one: \mathbf has no ü.
   return {
     fam: null,
     code: g.code,
@@ -253,10 +262,10 @@ function textAtom(g: Glyph): Atom | null {
     yb: g.y,
     top: g.y + height * g.size,
     bottom: g.y - depth * g.size,
-    upright: /[A-Za-z]/.test(ch) && !italic && !bold,
+    upright: LETTER_RE.test(ch) && !italic && !bold,
     // PLOS sets every formula's letters in Minion's italic ("dP_k/dt"):
     // those are math letters (isTextMath), not words.
-    italic: /[A-Za-z]/.test(ch) && italic && !bold && !isTextMath(g),
+    italic: LETTER_RE.test(ch) && italic && !bold && !isTextMath(g),
   };
 }
 
@@ -1366,7 +1375,7 @@ function linearAt(input: Atom[]): string {
       (w === "lim" || (w === "arg" && /^m(in|ax)$/.test(main.slice(end + 1, end + 4).map((b) => b.tex).join("")))) && main[end + 1].x1 - main[end].x2 < 0.3 * em;
     while (
       (main[k].italic ? main[end + 1]?.italic : main[end + 1]?.upright) &&
-      /^[A-Za-z]$/.test(main[end + 1].tex) &&
+      LETTER_RE.test(main[end + 1].tex) &&
       (main[end + 1].x1 - main[end].x2 < 0.12 * em || named(word))
     ) {
       end++;
@@ -1405,7 +1414,7 @@ function linearAt(input: Atom[]): string {
   const nameLimits = new Map<Atom, Atom[]>();
   const names: { a: Atom; x1: number; x2: number }[] = [];
   for (let k = 0; k < main.length; k++) {
-    if (!main[k].upright || !/^[A-Za-z]$/.test(main[k].tex)) continue;
+    if (!main[k].upright || !LETTER_RE.test(main[k].tex)) continue;
     const { end, word } = wordAt(k);
     if (LIMIT_OPS.has(word)) names.push({ a: main[k], x1: main[k].x1, x2: main[end].x2 });
     k = end;
@@ -1446,7 +1455,7 @@ function linearAt(input: Atom[]): string {
     // sets two after the 2). A bar may be a relation (a ∣ b); a period, a
     // slash, and a prime are no operand.
     const operand = (b: Atom, classes: string[]) => b.code >= 0 && classes.includes(b.cls) && !/^(\||\\\||\\mid|\\vert|\\Vert|\.|\/|'|\\prime)$/.test(b.tex);
-    const wordStarts = (a.upright || a.italic) && /^[A-Za-z]$/.test(a.tex) && wordAt(k).word.length > 1;
+    const wordStarts = (a.upright || a.italic) && LETTER_RE.test(a.tex) && wordAt(k).word.length > 1;
     const net = prev && tail ? gap - italicOf(tail) - (tail === prev ? 0 : tail.size < prev.size * 0.6 ? 0.1 * em : 0.05 * em) : 0;
     const apart = prev !== null && !spaced && !afterWord && !wordStarts && operand(prev, ["ord", "close"]) && operand(a, ["ord", "open"]) && net > 0.2 * em;
     let wordEnds = false;
@@ -1455,14 +1464,14 @@ function linearAt(input: Atom[]): string {
     // A word in a text italic set apart as text is \textit (\text{ for all }
     // in a theorem's italic read as the math letters "forall"); its letter
     // alone, or letters set tight, stay math letters.
-    if (a.italic && /^[A-Za-z]$/.test(a.tex)) {
+    if (a.italic && LETTER_RE.test(a.tex)) {
       const { end, word } = wordAt(k);
       const next = main[end + 1];
       const trail = next ? next.x1 - main[end].x2 : 0;
       // A word space, which math never sets between two symbols of its own
       // (Times' quarter em before an "i": arXiv 2410.04586 p. 7 "fori").
       const apart = (b: Atom | null | undefined, space: number) => !b || space > (b.cls === "ord" ? 0.15 : 0.25) * em;
-      if (word.length > 1 && ((apart(prev, gap) && apart(next, trail)) || /^[a-z]{4,}$/.test(word))) {
+      if ((word.length > 1 && ((apart(prev, gap) && apart(next, trail)) || /^[a-z]{4,}$/.test(word))) || MARKED_RE.test(word)) {
         k = end;
         last = main[k];
         wordEnds = true;
@@ -1471,7 +1480,7 @@ function linearAt(input: Atom[]): string {
       }
     }
     // Upright letters: an operator name, a word in text, or \mathrm.
-    else if (a.upright && /^[A-Za-z]$/.test(a.tex)) {
+    else if (a.upright && LETTER_RE.test(a.tex)) {
       const { end, word } = wordAt(k);
       k = end;
       last = main[k];
@@ -1483,8 +1492,8 @@ function linearAt(input: Atom[]): string {
       // A word with a script set on it names a thing (SF_+): no text.
       const scripted = small.some((s) => !s.claimed && s.x1 >= last.x2 - 0.05 * em && s.x1 < last.x2 + 0.15 * em);
       if (OPNAMES.has(word)) tex = `\\${word}`;
-      else if (word.length === 1 || scripted) tex = `\\mathrm{${word}}`;
-      else if (!applied && (((!prev || gap > 0.2 * em) && (!main[k + 1] || trail > 0.2 * em)) || /^[a-z]{4,}$/.test(word))) {
+      else if ((word.length === 1 || scripted) && !MARKED_RE.test(word)) tex = `\\mathrm{${word}}`;
+      else if (MARKED_RE.test(word) || (!applied && (((!prev || gap > 0.2 * em) && (!main[k + 1] || trail > 0.2 * em)) || /^[a-z]{4,}$/.test(word)))) {
         // A word set apart by spaces is text; the spaces stay inside it
         // ("\text{in }\Omega", not "inΩ"), unless a quad already holds them
         // or the word before ends with it.
