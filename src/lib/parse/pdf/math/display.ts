@@ -570,10 +570,13 @@ function fencesOf(ctx: PageContext): Box[] {
 // own, over the formula it fences, and the line reads as a display of its
 // own: it joins the display whose baseline the delimiter spans (arXiv
 // 2302.12627 p. 6: the braces of w(𝒮m) = 2{sup … − sup …} were two crops
-// of their own over the display's crop).
+// of their own over the display's crop). The top piece of a brace left of
+// a display stands too far from the display's other lines to join its band,
+// and stays a line of text: it joins as well (parse loop finding: MML book
+// (2.50), (2.55) — "{ x ∈ R⁵ : x = λ₁[…] + λ₂[…] }" read with its closing
+// brace alone, and the display was a crop).
 function withFencePieces(lines: Line[], fences: Box[]): Line[] {
   const pieceOf = (l: Line): Box | undefined => {
-    if (!l.display) return undefined;
     const glyphs = l.items.flatMap((i) => i.glyphs ?? []).filter((g) => g.unicode.trim() !== "" || g.family !== null);
     if (glyphs.length === 0 || l.items.some((i) => !i.glyphs?.length)) return undefined;
     const pieces = glyphs.every((g) => g.family === "omx" && mathGlyph("omx", g.code)?.piece !== undefined);
