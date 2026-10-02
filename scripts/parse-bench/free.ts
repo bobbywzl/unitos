@@ -278,7 +278,8 @@ export function furnitureOf(lines: Line[], sizes: Sizes): Line[] {
   // stands apart from the page numbers' height); a lone number at that
   // distance in a page's first or last row (a paper sets its first page's
   // number at the foot, the others' in the head); a lone number in the
-  // page's outer 8%. Roman numbers count apart from arabic ones.
+  // page's outer 8% (no lone letter). Roman numbers count apart from
+  // arabic ones.
   const numbered = candidates.flatMap((l) => {
     const n = pageNumberOf(l.text);
     const roman = !/\d/.test(l.text);
@@ -291,7 +292,10 @@ export function furnitureOf(lines: Line[], sizes: Sizes): Line[] {
   }
   const offsets = new Set(numbered.filter((n) => furniture.has(n.line)).map((n) => n.offset));
   for (const { line, offset } of numbered) if (offsets.has(offset) && outermost.has(line)) furniture.add(line);
-  for (const l of candidates) if (outer(l) && PAGE_NUMBER_RE.test(l.text.trim())) furniture.add(l);
+  // A lone letter (i, v, x) is a page number only by its distance from the
+  // page's index: alone it is a formula's limit or label more often (the
+  // probability cheatsheet's ∑ₓ at two pages' feet).
+  for (const l of candidates) if (outer(l) && PAGE_NUMBER_RE.test(l.text.trim()) && !/^[ivxIVX]$/.test(l.text.trim())) furniture.add(l);
 
   // Repeats: a line or a whole row of three letters or more (a diagram's
   // label "o3" tops pages too). A row, since pdftotext cuts a head at its
