@@ -994,6 +994,23 @@ function alignedRows(atoms: Atom[], em: number): string | null {
   const mains = atoms.filter((a) => a.size >= em * 0.95 && !hangingFamily(a.fam) && !(a.fam === null && a.limits) && a.cls !== "open" && a.cls !== "close");
   const lines = rowLines(mains, em);
   if (lines.length < 2) return null;
+  // A period or a comma after the rows' last glyphs, at the text's size,
+  // on no row's baseline, is the sentence's mark after the whole display:
+  // TeX sets it on the display's axis, between two rows (parse loop
+  // finding: the MML book's systems of equations (2.44), (2.45), (2.73)
+  // read it as the middle row's superscript, "0^{.}", and were crops).
+  const last = [...atoms].sort((p, q) => q.x2 - p.x2)[0];
+  if (/^[.,;]$/.test(last.tex) && last.size >= em * 0.95 && atoms.every((a) => a === last || a.x2 <= last.x1 + 0.1 * em)) {
+    const rest = atoms.filter((a) => a !== last);
+    const restLines = rowLines(
+      rest.filter((a) => mains.includes(a)),
+      em,
+    );
+    if (restLines.length >= 2 && restLines.every((y) => Math.abs(y - last.yb) > 0.25 * em)) {
+      const inner = alignedRows(rest, em);
+      if (inner) return `${inner}${last.tex}`;
+    }
+  }
   const rows = splitRows(atoms, lines);
   // Rows that are no more than a big operator's limits are no rows, nor is
   // a limit with a word in the text's size, centered under or over the
