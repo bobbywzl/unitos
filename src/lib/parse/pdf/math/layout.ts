@@ -530,7 +530,7 @@ function arrowRuns(atoms: Atom[]): Atom[] {
     } else if (label.length > 0 || labelBelow.length > 0 || run.length > 2) {
       // A label's own composites are read first: "A ∩ B ≠ ∅" over an arrow
       // holds \not over "=".
-      const above = label.length ? linear(fuseComposites(label.map((b) => ({ ...b })))) : "";
+      const above = label.length ? textLabel(label) ?? linear(fuseComposites(label.map((b) => ({ ...b })))) : "";
       const below = labelBelow.length ? `[${linear(fuseComposites(labelBelow.map((b) => ({ ...b }))))}]` : "";
       made = node([...run, ...label, ...labelBelow], `\\x${name}${below}{${above}}`, head.yb, em, { cls: "rel" });
       for (const b of [...label, ...labelBelow]) out.splice(out.indexOf(b), 1);
@@ -539,6 +539,21 @@ function arrowRuns(atoms: Atom[]): Atom[] {
     out.push(made);
   }
   return out;
+}
+
+// A label set in the text font alone is a phrase: \text{Def. 12.a}, its
+// word spaces kept (read as math, "Def" was \operatorname{Def} and the
+// spaces were lost). A label with a math glyph ("f stetig") is a formula.
+const LABEL_CHAR_RE = /^[\p{L}\p{N}.,:;!?()'-]$/u;
+function textLabel(label: Atom[]): string | null {
+  if (!label.every((b) => b.fam === "ot1" && !b.italic && LABEL_CHAR_RE.test(b.tex)) || !label.some((b) => LETTER_RE.test(b.tex))) return null;
+  const sorted = [...label].sort(byX);
+  let text = "";
+  sorted.forEach((b, k) => {
+    if (k > 0 && b.x1 - sorted[k - 1].x2 > 0.2 * b.size) text += " ";
+    text += b.tex;
+  });
+  return `\\text{${text}}`;
 }
 
 // \overbrace and \underbrace: the brace tips and cusp are four pieces on
