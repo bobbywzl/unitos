@@ -117,8 +117,10 @@ export function captionScores(cand: Flat): CaptionScores {
   let kept = 0;
   const found: CaptionScores["found"] = [];
   cand.blocks.forEach((block, b) => {
-    const caption = block.caption?.map((s) => s.text).join("") ?? "";
-    if ((block.kind === "figure" || block.kind === "table") && (CAPTION_OPENING_RE.test(caption) || LABELED_RE.test(caption))) kept++;
+    if (block.kind === "figure" || block.kind === "table") {
+      const caption = block.caption?.map((s) => s.text).join("") ?? "";
+      if (CAPTION_OPENING_RE.test(caption) || LABELED_RE.test(caption)) kept++;
+    }
     if (block.kind === "paragraph" && CAPTION_OPENING_RE.test(text(b))) found.push({ text: text(b).slice(0, 100) });
   });
   const captions = kept + found.length;
