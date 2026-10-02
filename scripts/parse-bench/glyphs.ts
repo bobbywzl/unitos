@@ -692,8 +692,15 @@ export function glyphScores(pages: PageGlyphs[], doc: Doc, range: [number, numbe
     const want = atomSymbols(atoms);
     // A printed label the region does not hold may lie beside it.
     const label = block.label && number.length === 0 ? (/^\(.*\)$/.test(block.label) ? `\\tag{${block.label.slice(1, -1)}}` : `\\tag*{${block.label}}`) : "";
+    // TeX's fonts stop at 5 points: a formula at 7 points sets its scripts
+    // and their own scripts at 5, so where every script glyph is at that
+    // floor the two levels are one.
+    const big = Math.max(0, ...atoms.filter((a) => a.fam !== "omx").map((a) => a.size));
+    const smalls = atoms.filter((a) => a.fam !== "omx" && a.tex && !a.piece && a.size < big * 0.85).map((a) => a.size);
+    const floor = smalls.length > 0 && smalls.every((s) => s >= 4.5 && s <= 5.3);
+    const level = (list: string[]) => (floor ? list.map((x) => x.replace(/@2$/, "@1")) : list);
     const forms = [block.latex, ...(label ? [`${block.latex} ${label}`] : [])].map((latex) => drawn(latex));
-    const results = forms.map((got) => (want && got ? settle(surplus(bag(want), bag(got)), surplus(bag(got), bag(want))) : null));
+    const results = forms.map((got) => (want && got ? settle(surplus(bag(level(want)), bag(level(got))), surplus(bag(level(got)), bag(level(want)))) : null));
     const rows = rowsCheck(glyphs.filter((g) => !number.includes(g)), block.latex);
     if (rows) rowsWrong++;
     if (results.some((r) => r && r.missing.length === 0 && r.extra.length === 0) && !rows) passed++;
