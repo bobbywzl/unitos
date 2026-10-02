@@ -474,7 +474,7 @@ const NEGATED = "(negated relation)";
 const MAPSTO = "↦";
 
 /** A figure's caption that is a caption ("Figure 3.", "Table 2"), not the words of its picture. */
-const OWN_CAPTION_RE = /^\s*(?:fig(?:ure)?\.?|table|tab\.)\s*[\dIVXLivxl]+/i;
+const OWN_CAPTION_RE = /^\s*(?:fig(?:ure)?\.?|table|tab\.|abbildung|abb\.|tabelle)\s*[\dIVXLivxl]+/i;
 
 /** The words a figure's caption holds that are its picture's own labels (a
     diagram read with its labels as its caption, no "Figure N"): the region

@@ -60,7 +60,7 @@ const lettersOf = (text: string) => readingOf(text).letters;
 /** A caption's label opening a line ("図表Ⅰ-2-1-3", "Figure 4", "TABLE II"):
     a report sets every chart's caption at one height, so the label repeats
     with its number changed, but it is the figure's, never the page's. */
-const CAPTION_LABEL_RE = /^\s*(?:図表|図|表|fig(?:ure)?\.?|table)\s*[\dⅠ-Ⅻivxlc]/iu;
+const CAPTION_LABEL_RE = /^\s*(?:図表|図|表|fig(?:ure)?\.?|table|abbildung|abb\.|tabelle)\s*[\dⅠ-Ⅻivxlc]/iu;
 const CJK_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
 /** A line's length in words, a CJK character a quarter word (wordsOf makes
     each a word, so a chart's label "インターネット利用率" read as ten words). */
