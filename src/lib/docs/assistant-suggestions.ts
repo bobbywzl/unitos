@@ -51,7 +51,7 @@ export type ResolvedOp =
   // A footnote whose number goes right after the words find (at `end`).
   | { i: number; op: "insert_footnote"; blockId: string; start: number; end: number; find: string; text: string; why: string };
 /** Why an op did not land. The page shows each reason in the reader's language. */
-export type SkipReason = "outside" | "notFound" | "ambiguous" | "overlap" | "notText" | "changed" | "object" | "limit" | "unreadable" | "tex";
+export type SkipReason = "outside" | "notFound" | "ambiguous" | "overlap" | "notText" | "changed" | "object" | "limit" | "unreadable" | "tex" | "unsupported";
 export type SuggestResult = { ops: ResolvedOp[]; warnings: string[]; summary: string };
 export type SuggestEvent =
   | { stage: "read" }

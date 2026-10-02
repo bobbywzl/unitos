@@ -260,6 +260,7 @@ export const COLLAPSE_WINDOW_CHARS = 30_000;
 export const SUGGEST_MODEL = CLAUDE_SONNET_5;
 export const SUGGEST_EFFORT: Record<"fast" | "deep", ClaudeEffort> = { fast: "low", deep: "high" };
 export const SUGGEST_MAX_OUTPUT_TOKENS = 32768; // room for the reasoning and the ops
+export const SUGGEST_CHECK_MAX_OUTPUT_TOKENS = 8192; // the check's reasoning and the ops it drops
 export const SUGGEST_MAX_OPS = 80; // per call: a window's worth; more is a model running away
 export const SUGGEST_WINDOW_CHARS = 8_000; // a window's full rewrite is about 2,500 output tokens: under a minute
 export const SUGGEST_WINDOW_ROWS = 60; // short lines and empty paragraphs take an op each: a window's rows stay under SUGGEST_MAX_OPS

@@ -6,6 +6,7 @@ import type { TranscriptContext } from "@/lib/assistant/transcript";
 import { REPLICA_REFUSAL, replicaEdit } from "@/lib/replica";
 import { joinRefusal, splitRefusal } from "@/lib/transcript-lines";
 import type { AssistantAction, AssistantAnchor } from "@/lib/types";
+import { groundingOf, ungrounded } from "@/lib/docs/grounding";
 
 // The assistant's actions (SPEC.md §7): what the model proposes, validated
 // and enriched against the real document before the reader sees it. The
@@ -299,6 +300,9 @@ export type PlanContext = {
   // Every document attached to the project, the open one included.
   attachedIds: Set<string>;
   sectionIds: Set<string>;
+  // The reader's message and the conversation: with the document, what new
+  // words may draw on. Absent: no grounding check.
+  sources?: string[];
   t: TFunc;
 };
 
@@ -347,7 +351,17 @@ export function enrichActions(
   const joinedAway = new Set<string>();
   const missing = (description: string) => warnings.push(t("api.warnBlockNotFound", { description }));
 
+  // New words in an edit_block or an insert_paragraph: a number or a
+  // quotation in them must stand in the document or the conversation
+  // (lib/docs/grounding.ts), else the action is a warning.
+  const grounding = ctx.sources ? groundingOf([...ctx.blocks.map((b) => b.text), ...ctx.sources]) : null;
   for (const action of raw) {
+    const fresh = action.type === "edit_block" ? action.newText : action.type === "insert_paragraph" ? action.text : null;
+    const fact = grounding && fresh !== null ? ungrounded(fresh, grounding) : null;
+    if (fact) {
+      warnings.push(t("api.warnUnsupported", { fact, description: action.description }));
+      continue;
+    }
     if (!fitsDocument(action.type, ctx.edits)) {
       refuse(action.description);
       continue;

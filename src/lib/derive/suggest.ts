@@ -2,10 +2,10 @@ import type { Block } from "@prisma/client";
 import type { ModelMessage } from "ai";
 import type { Thinking } from "@/lib/assistant/thinking";
 import type { ChatTurn } from "@/lib/conversation";
-import { SUGGEST_EFFORT, SUGGEST_MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
+import { SUGGEST_CHECK_MAX_OUTPUT_TOKENS, SUGGEST_EFFORT, SUGGEST_MAX_OUTPUT_TOKENS } from "@/lib/derive/config";
 import { documentPrefix, pageNames, type PageName } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
-import type { SuggestResult } from "@/lib/docs/assistant-suggestions";
+import type { ResolvedOp, SuggestResult } from "@/lib/docs/assistant-suggestions";
 import type { RichNode } from "@/lib/docs/schema";
 import {
   assistantSuggestionsIn,
@@ -18,9 +18,12 @@ import {
   type SuggestScope,
 } from "@/lib/docs/suggest-ops";
 import { featureCall } from "@/lib/feature-models";
+import { groundingOf } from "@/lib/docs/grounding";
 import type { Lang } from "@/lib/i18n/config";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { suggestPrompt } from "@/lib/prompts/suggest";
+import { suggestCheckPrompt, type CheckedOp } from "@/lib/prompts/suggest-check";
+import { z } from "zod";
 import type { ReaderProfileCtx } from "@/lib/prompts/types";
 
 // The assistant's suggestions (SPEC.md §29), the one code path: the command
@@ -41,6 +44,7 @@ const SKIPPED: Record<ServerSkip, TKey> = {
   limit: "api.suggestSkipLimit",
   unreadable: "api.suggestSkipUnreadable",
   tex: "api.suggestSkipTex",
+  unsupported: "api.suggestSkipUnsupported",
 };
 
 /** A document with rich text as the suggestions read it: its paragraph index
@@ -113,6 +117,66 @@ function runsOf(rows: IndexRow[], blockIds: string[]): { from: string; to: strin
   return runs;
 }
 
+/** What an op changes, for the check: the ops on words and blocks; a
+    format, a style, or a table's row or column is not checked. */
+function checkedOp(op: ResolvedOp, text: (id: string) => string): CheckedOp | null {
+  switch (op.op) {
+    case "replace_words":
+      return { i: op.i, kind: "replace words", blockIds: [op.blockId], before: op.find, after: op.text, why: op.why };
+    case "rewrite_block":
+      return { i: op.i, kind: "rewrite", blockIds: [op.blockId], before: op.base, after: op.text, why: op.why };
+    case "replace_blocks":
+      return { i: op.i, kind: "replace blocks", blockIds: op.blockIds, before: op.base.join("\n"), after: op.markdown, why: op.why };
+    case "remove_blocks":
+      return { i: op.i, kind: "remove blocks", blockIds: op.blockIds, before: op.base.join("\n"), after: "", why: op.why };
+    case "insert_blocks":
+      return { i: op.i, kind: "new blocks after", blockIds: op.afterBlockId ? [op.afterBlockId] : [], before: "", after: op.markdown, why: op.why };
+    case "insert_footnote":
+      return { i: op.i, kind: "new footnote", blockIds: [op.blockId], before: "", after: op.text, why: op.why };
+    case "insert_row":
+    case "insert_column":
+      return { i: op.i, kind: `new table ${op.op === "insert_row" ? "row" : "column"}`, blockIds: [op.blockId], before: "", after: op.cells.join(" | "), why: op.why };
+    case "remove_row":
+    case "remove_column":
+      return { i: op.i, kind: `remove table ${op.op === "remove_row" ? "row" : "column"}`, blockIds: [op.blockId], before: text(op.blockId), after: "", why: op.why };
+    default:
+      return null;
+  }
+}
+
+const checkAnswerSchema = z.object({
+  drop: z.array(z.object({ i: z.number().int(), why: z.string().catch("") }).passthrough()).catch([]),
+});
+
+/** The check (lib/prompts/suggest-check.ts): a second model reads the ops
+    against the command under the same cached document and names those that
+    change what the command did not ask, drop what it said to keep, or state
+    what the document does not. The ops it names, with its why. A check that
+    fails keeps every op: the reader still accepts or rejects each one. */
+async function checkOps(run: SuggestRun, prefix: ModelMessage, ops: ResolvedOp[]): Promise<Map<number, string>> {
+  const rows = new Map(run.document.rows.map((r) => [r.id, r.text]));
+  const listed = ops.flatMap((op) => checkedOp(op, (id) => rows.get(id) ?? "") ?? []);
+  if (listed.length === 0) return new Map();
+  try {
+    const call = await featureCall("suggest", SUGGEST_EFFORT.fast);
+    const result = await callForJson({
+      model: call.model,
+      messages: [prefix, { role: "user", content: suggestCheckPrompt({ lang: run.lang, command: run.command, instruction: run.instruction, ops: listed }) }],
+      maxOutputTokens: SUGGEST_CHECK_MAX_OUTPUT_TOKENS,
+      providerOptions: call.providerOptions,
+      schema: checkAnswerSchema,
+      label: "SUGGEST CHECK",
+      usage: { userId: run.userId, feature: "suggest", model: call.modelId },
+      abortSignal: run.signal,
+    });
+    if (!result.ok) return new Map();
+    const known = new Set(listed.map((op) => op.i));
+    return new Map(result.data.drop.filter((d) => known.has(d.i)).map((d) => [d.i, d.why.trim() || (ops.find((op) => op.i === d.i)?.why ?? "")]));
+  } catch {
+    return new Map();
+  }
+}
+
 /** One model call: the ops for the scope, resolved, with a reason for each
     op skipped. Throws with the reason when the call fails. */
 export async function runSuggest(run: SuggestRun): Promise<SuggestResult> {
@@ -165,12 +229,26 @@ export async function runSuggest(run: SuggestRun): Promise<SuggestResult> {
   // An op that did not read is skipped with its why; ops past the cap say
   // the command covered too much for one run.
   const read = result.data.ops;
-  const { ops, skipped } = resolveOps(read.ops, { rows: document.rows, places: document.places, scope, budget: run.budget });
+  // A number or a quotation in new words must stand in what the model read:
+  // the document, the command, the instruction, the answer, the conversation.
+  const grounding = groundingOf([
+    ...document.rows.map((r) => r.text),
+    document.title,
+    run.command,
+    run.instruction ?? "",
+    run.material ?? "",
+    ...run.history.map((m) => m.content),
+  ]);
+  const resolved = resolveOps(read.ops, { rows: document.rows, places: document.places, scope, budget: run.budget, grounding });
+  const { skipped } = resolved;
+  const checked = await checkOps(run, messages[0], resolved.ops);
+  const ops = resolved.ops.filter((op) => !checked.has(op.i));
   return {
     ops,
     warnings: [
       ...read.unreadable.map((why) => run.t(SKIPPED.unreadable, { why })),
       ...skipped.map((s) => run.t(SKIPPED[s.reason], { why: s.why })),
+      ...[...checked.values()].map((why) => run.t("api.suggestSkipChecked", { why })),
       ...(read.over > 0 ? [run.t("api.suggestTooLong")] : []),
     ],
     summary: result.data.summary,

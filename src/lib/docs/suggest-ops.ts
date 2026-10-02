@@ -15,6 +15,7 @@ import { withoutSuggestions } from "@/lib/docs/blocks";
 import { INDEXED_NODE_TYPES, SUGGESTION_MARK_TYPES, suggestionAuthor, ZWSP, type RichNode } from "@/lib/docs/schema";
 import { SUGGEST_MAX_OPS, SUGGEST_WINDOW_CHARS, SUGGEST_WINDOW_ROWS } from "@/lib/derive/config";
 import { texError } from "@/lib/katex";
+import { ungrounded, type Grounding } from "@/lib/docs/grounding";
 
 // The assistant's suggestions on the server (SPEC.md §29): the ops the model
 // answers with, checked against the paragraph index and the stored rich text
@@ -364,15 +365,41 @@ const coversRow = (text: string, span: { start: number; end: number } | undefine
 
 type Resolved = { op: ResolvedOp; claim: Claim; chars: number };
 
+/** The new words an op writes, for the grounding check. */
+function newWordsOf(op: ResolvedOp): string {
+  switch (op.op) {
+    case "replace_words":
+    case "rewrite_block":
+    case "insert_footnote":
+      return op.text;
+    case "replace_blocks":
+    case "insert_blocks":
+      return op.markdown;
+    case "insert_row":
+    case "insert_column":
+      return op.cells.join("\n");
+    default:
+      return "";
+  }
+}
+
 /** The model's ops checked against the paragraph index (SPEC.md §29): each
     lands with its offsets or bases, or is skipped with its reason; an op
     that changes nothing is dropped. `budget` is the new text the command
     has left, shared by its windows. */
 export function resolveOps(
   ops: SuggestOp[],
-  ctx: { rows: IndexRow[]; places: Map<string, BlockPlace>; scope: SuggestScope; budget: { chars: number } },
+  ctx: {
+    rows: IndexRow[];
+    places: Map<string, BlockPlace>;
+    scope: SuggestScope;
+    budget: { chars: number };
+    // What new words may draw on (lib/docs/grounding.ts): a number or a
+    // quotation the op adds must stand in it, else the op is skipped.
+    grounding?: Grounding;
+  },
 ): { ops: ResolvedOp[]; skipped: { reason: ServerSkip; why: string }[] } {
-  const { rows, places, scope, budget } = ctx;
+  const { rows, places, scope, budget, grounding } = ctx;
   const order = new Map(rows.map((r, k) => [r.id, k]));
   const spans = new Map(scope.kind === "words" ? scope.segments.map((s) => [s.blockId, s]) : []);
   const inScope = new Set(scope.kind === "words" ? spans.keys() : scope.blockIds);
@@ -538,6 +565,11 @@ export function resolveOps(
     const reason = claims.some((c) => conflicts(c, got.claim)) ? "overlap" : got.chars > budget.chars ? "limit" : null;
     if (reason) {
       skipped.push({ reason, why: op.why });
+      return;
+    }
+    const fact = grounding ? ungrounded(newWordsOf(got.op), grounding) : null;
+    if (fact) {
+      skipped.push({ reason: "unsupported", why: `${fact} — ${op.why}` });
       return;
     }
     claims.push(got.claim);

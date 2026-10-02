@@ -468,6 +468,7 @@ async function handle(req: Request, t: TFunc) {
     transcript,
     attachedIds: new Set(attachedDocs.map((nd) => nd.documentId)),
     sectionIds: new Set(sections.map((s) => s.id)),
+    sources: [data.command, ...history.map((turn) => turn.content)],
     t,
   };
   const enriched = enrichActions(fitActions(result.data.actions, edits), planContext);

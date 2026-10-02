@@ -385,6 +385,8 @@ async function handle(req: Request, t: TFunc) {
         transcript: act!.transcript,
         attachedIds: new Set(act!.attachedDocs.map((d) => d.id)),
         sectionIds: new Set(act!.sections.map((s) => s.id)),
+        // A web search's pages are not kept: with the web on, new words go unchecked.
+        sources: data.web ? undefined : [question, ...files.map((f) => f.text ?? ""), ...(data.history ?? []).map((turn) => turn.content)],
         t,
       };
       const plan = enrichActions(raw, ctx);
