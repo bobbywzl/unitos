@@ -401,7 +401,10 @@ function fuseComposites(input: Atom[]): Atom[] {
         }
       }
       // Dots: three periods or three centered dots in a row; three periods
-      // stacked (\vdots) or on a diagonal (\ddots).
+      // stacked (\vdots) or on a diagonal (\ddots). LaTeX sets \vdots and
+      // \ddots in the text's roman font: a page whose text font is no
+      // Computer Modern stacks the text font's periods (parse loop finding:
+      // mml-book's Charter periods left (2.70) and (2.71) crops).
       if (a.tex === "." || a.tex === "\\cdot") {
         const next = (p: Atom, dx: [number, number], dy: [number, number]) =>
           out.find((b) => b !== p && b.tex === a.tex && b.x1 - p.x1 >= dx[0] * em && b.x1 - p.x1 <= dx[1] * em && p.yb - b.yb >= dy[0] * em && p.yb - b.yb <= dy[1] * em);
@@ -411,7 +414,7 @@ function fuseComposites(input: Atom[]): Atom[] {
           ["\\ddots", [0.3, 0.5], [0.2, 0.4]],
         ];
         for (const [tex, dx, dy] of shapes) {
-          if (tex !== "\\ldots" && tex !== "\\cdots" && a.fam !== "ot1") continue;
+          if (tex !== "\\ldots" && tex !== "\\cdots" && a.fam !== "ot1" && a.fam !== null) continue;
           if ((tex === "\\ldots" || tex === "\\cdots") && a.tex === "." && a.fam !== "oml") continue;
           const b = next(a, dx, dy);
           const c = b ? next(b, dx, dy) : undefined;

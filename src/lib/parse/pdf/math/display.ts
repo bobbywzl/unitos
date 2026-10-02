@@ -662,6 +662,21 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
   const columns0 = input.map((_, n) => columnOf(input, n, ctx));
   const kinds0 = input.map((l, n) => kindOf(l, ctx, columns0[n], fenced(l)));
   for (let n = 0; n < input.length; n++) if (kinds0[n] === "math" && !fenced(input[n]) && isProseLine(input, n, kinds0, columns0, ctx)) kinds0[n] = "text";
+  // A line of a lone period stacked under or over a period of a math line,
+  // at its x, is the rest of \vdots: LaTeX stacks the text font's periods
+  // 4 pt apart, and the lines split the stack (parse loop finding: the MML
+  // book's (2.70), x₁ = ∑ … over ⋮ over x_m = ∑ …, read its last dot as
+  // text, and the display broke in two at it).
+  const dots = (l: Line) => l.items.flatMap((i) => i.glyphs ?? []).filter((g) => g.unicode === ".");
+  for (let n = 0; n < input.length; n++) {
+    const l = input[n];
+    if (kinds0[n] !== "text" || l.text.replace(/\s/g, "") !== "." || dots(l).length !== 1) continue;
+    const [d] = dots(l);
+    const stacked = input.some(
+      (o, m) => m !== n && kinds0[m] !== "text" && dots(o).some((e) => Math.abs(e.x - d.x) < d.size * 0.1 && Math.abs(e.y - d.y) > d.size * 0.2 && Math.abs(e.y - d.y) < d.size * 0.5),
+    );
+    if (stacked) kinds0[n] = "math";
+  }
   // A label with no math line near it is a display's whose rows read as
   // text: each has a word or two before its formula, the last at the
   // column's edge ("Round M−1: arg min …" over "(7)", arXiv 2411.19946).
