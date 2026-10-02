@@ -4,7 +4,7 @@
 // math, the TeX math family).
 
 import type { Glyph } from "@/lib/parse/pdf/drawing";
-import { extensionGlyph, isBbm, mathGlyph, openTypeGlyphs, sizeFontGlyph } from "@/lib/parse/pdf/math-fonts";
+import { extensionGlyph, isBbm, mathGlyph, openTypeGlyphs, openTypeSizedByAdvance, sizeFontGlyph } from "@/lib/parse/pdf/math-fonts";
 import type { Flags } from "@/lib/parse/pdf/types";
 
 export const CONTROL_CHARS_RE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g;
@@ -580,7 +580,7 @@ export function unicodeMath(glyphs: Glyph[]): Glyph[] {
     }
     else {
       tex = openTypeSized(g, font.name);
-      if (tex === undefined) tex = openTypeChar(g.unicode);
+      if (tex === undefined) tex = openTypeSizedByAdvance(g.unicode, g.w / g.size) ?? openTypeChar(g.unicode);
     }
     if (!tex) continue;
     g.family = tex.family;

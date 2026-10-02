@@ -1852,6 +1852,26 @@ export function extensionGlyph(char: string, advance: number): { family: MathFam
   return hit ? { family: hit.family, code: hit.code } : null;
 }
 
+/** A sized character (a big operator, a delimiter) of an OpenType math
+    font the tables do not know (Cambria Math, Word's) read by its advance
+    as the size whose advance is nearest its own, with the size font's box:
+    an OpenType font stands its glyphs on the baseline, as KaTeX's size
+    fonts do. A delimiter narrower than its first size is the text's own
+    ("(" of the prose's size), and stays unread here. Parse loop finding:
+    Word's display ∑ read as TeX's text ∑, hung from its origin; its lower
+    limit fell outside its box and the display became a crop. */
+export function openTypeSizedByAdvance(char: string, advance: number): TexCode | null {
+  const advances = SIZE_ADVANCES[char];
+  if (!advances || /^[\u239b-\u23b7]$/u.test(char)) return null;
+  const operator = /^[∑∏∐∫∮⋃⋂⋀⋁⨄⨆⨁⨂⨀]$/u.test(char);
+  if (!operator && advance < advances[0] * 0.95) return null;
+  let best = 0;
+  advances.forEach((a, i) => {
+    if (Math.abs(a - advance) < Math.abs(advances[best] - advance)) best = i;
+  });
+  return SIZE_BY_CHAR.get(`Size${best + 1}-Regular`)?.get(char) ?? null;
+}
+
 export type OpenTypeGlyph = TexCode & { gid: number; advance: number };
 
 /** The OpenType math font's glyphs a character can be, with their glyph ids
