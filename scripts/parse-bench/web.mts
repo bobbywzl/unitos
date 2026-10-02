@@ -3,7 +3,7 @@
 // article's body as a person marked it.
 //
 //   npx tsx scripts/parse-bench/web.mts [--only id,id] [--limit n] [--json out.json]
-//     [--baseline] [--save-baseline] [--worst n] [--detail id] [--others]
+//     [--baseline] [--save-baseline] [--worst n] [--detail id] [--others] [--extras]
 //
 // The corpus is Zyte's article extraction benchmark (github.com/scrapinghub/
 // article-extraction-benchmark, MIT): 181 news and blog pages saved as the
@@ -17,7 +17,9 @@
 // not the article's body there) and separators. Page furniture shows as lost
 // precision, a missed paragraph as lost recall. --others prints the
 // benchmark's saved outputs of other extractors (Readability, Trafilatura,
-// and the rest) scored the same way, for standing.
+// and the rest) scored the same way, for standing. --extras lists the blocks
+// the articles do not have, the most frequent first (digits read as #): the
+// furniture worth a rule.
 //
 // The run is offline: every outbound fetch fails, so a page parses as it would
 // when its stylesheets will not load (bakeFigureStyles keeps the html as is).
@@ -123,6 +125,8 @@ type PageResult = { id: string; url: string; f1: number; precision: number; reca
 const results: PageResult[] = [];
 const counts: Counts[] = [];
 const bodies = new Map<string, string>();
+/** Blocks the article does not have: their text (digits as #) → the pages. */
+const extras = new Map<string, Set<string>>();
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return Promise.race([p, new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`timeout after ${ms} ms`)), ms))]);
@@ -145,6 +149,17 @@ for (const hash of hashes) {
   }
   const ms = Math.round(performance.now() - start);
   const c = match(articleBody, body);
+  const truthGrams = shingles(articleBody);
+  const truthWords = new Set(tokenize(articleBody.toLowerCase()));
+  for (const para of body.split("\n\n")) {
+    const g = [...shingles(para).keys()];
+    const tokens = tokenize(para.toLowerCase());
+    const foreign = g.length > 1 ? g.filter((k) => !truthGrams.has(k)).length / g.length > 0.5 : tokens.some((t) => !truthWords.has(t));
+    if (!foreign) continue;
+    const key = para.replace(/\s+/g, " ").trim().replace(/\d+/g, "#").slice(0, 120);
+    if (!extras.has(key)) extras.set(key, new Set());
+    extras.get(key)!.add(idOf(hash));
+  }
   counts.push(c);
   bodies.set(idOf(hash), body);
   results.push({ id: idOf(hash), url, f1: pageF1(c), precision: precision(c), recall: recall(c), ms, ...(error ? { error } : {}) });
@@ -196,6 +211,13 @@ if (flag("--others") && !only && !detail && !limit) {
   console.log("\nStanding (the benchmark's saved outputs, same score):");
   for (const r of rows.sort((a, b) => b.f1 - a.f1)) {
     console.log(`  ${r.name.padEnd(22)} F1 ${fmt(r.f1)}  P ${fmt(r.precision)}  R ${fmt(r.recall)}`);
+  }
+}
+
+if (flag("--extras")) {
+  console.log("\nBlocks the articles do not have, by the pages that hold them:");
+  for (const [text, pages] of [...extras].sort((a, b) => b[1].size - a[1].size).slice(0, 80)) {
+    console.log(`  ${String(pages.size).padStart(3)}  ${text}`);
   }
 }
 
