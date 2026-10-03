@@ -9,7 +9,7 @@
 // one tool compares with that tool's last run. Usage:
 //   npx tsx scripts/eval/run.ts [--tools simplify,act] [--cases id,id]
 //     [--judge claude|kimi|external|none] [--baseline latest|<path>] [--gate]
-//     [--external <dir>]
+//     [--external <dir>] [--judge-dir <dir>]
 // --external: no model is called; each case's prompt is written under <dir>
 // and an agent's answer is read back from there (lib.ts). Run once to write
 // the prompts, let agents answer, run again with --judge external to write
@@ -73,6 +73,7 @@ import {
   callTool,
   cjkShare,
   defaultJudge,
+  setJudgeDir,
   fixturePrefix,
   isExternal,
   setCurrentCase,
@@ -130,6 +131,8 @@ const gate = has("gate");
 const outRoot = flag("out") ?? join(process.cwd(), ".eval", "runs");
 const externalWanted = flag("external");
 if (externalWanted) setExternal(externalWanted);
+const judgeDirWanted = flag("judge-dir");
+if (judgeDirWanted) setJudgeDir(judgeDirWanted);
 
 // ── Cases ──────────────────────────────────────────────────────────────────
 function loadCases(): EvalCase[] {

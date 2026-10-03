@@ -3,6 +3,7 @@
 // Runs outside Next.js: everything imported from src/ is pure or reads only
 // env (lib/kimi.ts, lib/claude.ts). No database: lib/models.ts falls back to
 // the default model ids when the ModelChoice table cannot be read.
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { generateText, type ModelMessage } from "ai";
@@ -168,6 +169,15 @@ export type CallResult = { text: string; finishReason: string; inputTokens: numb
 // when no key is set.
 let externalDir: string | null = null;
 let currentCase = "case";
+// Judge-only external mode (--judge-dir <dir>): the tools run on their real
+// models and only the judge is external. Each live answer is kept under
+// <dir>/<case>/live-<hash>.txt and read back on the next run, so the run
+// that reads the judges' answers scores the same outputs they judged.
+let judgeDir: string | null = null;
+
+export function setJudgeDir(dir: string | null): void {
+  judgeDir = dir;
+}
 
 export function setExternal(dir: string | null): void {
   externalDir = dir;
@@ -188,7 +198,7 @@ function renderMessages(messages: ModelMessage[]): string {
 }
 
 function external(file: string, prompt: string, answer: string): string | null {
-  const dir = join(externalDir!, currentCase);
+  const dir = join((externalDir ?? judgeDir)!, currentCase);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, file), prompt);
   const path = join(dir, answer);
@@ -207,6 +217,19 @@ export async function callTool(params: {
     const text = external("prompt.md", renderMessages(params.messages), "answer.txt");
     return { text: text ?? "", finishReason: text === null ? "pending" : "stop", inputTokens: 0, outputTokens: Math.round((text ?? "").length / 3.5), ms: 0, model: "external" };
   }
+  if (judgeDir) {
+    const key = createHash("sha256").update(renderMessages(params.messages)).digest("hex").slice(0, 12);
+    const kept = join(judgeDir, currentCase, `live-${key}.json`);
+    if (existsSync(kept)) return JSON.parse(readFileSync(kept, "utf8")) as CallResult;
+    const live = await callLive(params);
+    mkdirSync(join(judgeDir, currentCase), { recursive: true });
+    writeFileSync(kept, JSON.stringify(live));
+    return live;
+  }
+  return callLive(params);
+}
+
+async function callLive(params: Parameters<typeof callTool>[0]): Promise<CallResult> {
   if (!params.call && !kimiConfigured()) throw new Error("MOONSHOT_API_KEY is not set (MOONSHOT_API_KEY=mock with the mock server for a dry run)");
   const started = Date.now();
   const result = await generateText({
