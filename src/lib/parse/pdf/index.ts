@@ -484,6 +484,11 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
   // A FIGURE with a region and no caption is an embedded image; every other
   // empty segment drops.
   segments = segments.filter((s) => s.text.trim().length > 0 || holdsFill(s) || (s.type === "FIGURE" && s.region));
+  // A slide deck: every page wider than tall, two or more of them (a slide
+  // program's 960 × 540, beamer's 364 × 272).
+  const slides = pageWidths.length >= 2 && pageWidths.every((w, p) => w > pageHeights[p]);
+  // A deck's frame printed on several pages reads once (collapseOverlaySteps).
+  if (slides) segments = collapseOverlaySteps(segments, graphics, pageDrawings);
   // Vector-figure debris: chart axis ticks read as tiny numeric-only lines.
   // Inline-math debris: a sum limit or exponent too far from its base line
   // to join it reads as a paragraph of one or two math glyphs.
@@ -531,10 +536,6 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     if (segments[0].box && segments[1].box) segments[0].box = unionBox(segments[0].box, segments[1].box);
     segments.splice(1, 1);
   }
-
-  // A slide deck: every page wider than tall, two or more of them (a slide
-  // program's 960 × 540, beamer's 364 × 272).
-  const slides = pageWidths.length >= 2 && pageWidths.every((w, p) => w > pageHeights[p]);
 
   // The title, on the first page with words that is no library's notice
   // (a scan's archive notice gave its title), read on a scan's page only in
@@ -785,6 +786,61 @@ function pagesToRead(chosen: number[], pageCount: number): number[] {
     .filter((p) => !kept.has(p))
     .sort((a, b) => distance(a) - distance(b) || a - b);
   return [...chosen, ...others.slice(0, FURNITURE_PAGES - chosen.length)].sort((a, b) => a - b);
+}
+
+// A slide deck's frame printed on several pages, read once. Beamer prints
+// a frame once per overlay step, each page showing what the page before it
+// shows and more (a list item per click, an alert's color per click), and
+// a frame that continues sets its title again over the next page. A reader
+// wants the frame once, whole:
+// - a page whose segments open the next page's, in order, each the same
+//   kind with the same words (a figure the same region, the page's drawn
+//   labels and images the same), is an overlay step of that page, and
+//   drops: the next page holds all of it (parse loop finding: a beamer
+//   deck's alerts frame, printed three times, read as three frames, and
+//   the bench counted its lines as furniture leaking seven times);
+// - a page that opens with the heading the last kept page opened with
+//   continues that page's frame ("one figure per click", a frame that
+//   breaks), and drops the heading.
+// The pages the kept segments stand on stay their own: a figure's region
+// crops its own page.
+function collapseOverlaySteps(segments: Segment[], graphics: Graphic[][], drawings: PageDrawing[]): Segment[] {
+  const byPage = new Map<number, Segment[]>();
+  for (const s of segments) byPage.set(s.page, [...(byPage.get(s.page) ?? []), s]);
+  const pages = [...byPage.keys()].sort((a, b) => a - b);
+  const squash = (t: string) => t.replace(/\s+/g, " ").trim();
+  // What the page draws beyond its words: its graphics' labels and
+  // captions, and its images' boxes. A figure that changes under one title
+  // changes these (a chart's axis labels), and the pages are two frames.
+  const drawnOf = (p: number) => {
+    const labels = (graphics[p] ?? []).flatMap((g) => [...g.labels, ...g.caption].map((i) => i.str.trim())).filter(Boolean);
+    const images = (drawings[p]?.images ?? []).map((b) => [b.x1, b.y1, b.x2, b.y2].map((v) => Math.round(v)).join(","));
+    return `${labels.join(" ")}|${images.join(";")}`;
+  };
+  const keyOf = (s: Segment) => {
+    const region = s.region ? [s.region.x, s.region.y, s.region.width, s.region.height].map((v) => Math.round(v * 2) / 2).join(",") : "";
+    return `${s.type}|${squash(s.text)}|${region}`;
+  };
+  const keys = new Map<number, string[]>();
+  for (const p of pages) keys.set(p, [drawnOf(p), ...(byPage.get(p) ?? []).map(keyOf)]);
+  const dropped = new Set<Segment>();
+  const stepPages = new Set<number>();
+  for (let k = 0; k + 1 < pages.length; k++) {
+    const [p, q] = [pages[k], pages[k + 1]];
+    if (q !== p + 1) continue;
+    const [a, b] = [keys.get(p)!, keys.get(q)!];
+    if (a.length < 2 || a.length > b.length || !a.every((key, i) => key === b[i])) continue;
+    stepPages.add(p);
+    for (const s of byPage.get(p) ?? []) dropped.add(s);
+  }
+  let last: Segment | undefined;
+  for (const p of pages) {
+    if (stepPages.has(p)) continue;
+    const first = byPage.get(p)![0];
+    if (first.type === "HEADING" && last?.type === "HEADING" && squash(first.text) === squash(last.text) && Math.abs((first.rawSize ?? 0) - (last.rawSize ?? 0)) < 0.5) dropped.add(first);
+    last = first;
+  }
+  return dropped.size > 0 ? segments.filter((s) => !dropped.has(s)) : segments;
 }
 
 // The segments in runs of pages that follow one another in the PDF: a
