@@ -92,12 +92,19 @@ export function pictureScores(pdf: PdfText, cand: Flat, pictures: Picture[]): Pi
 
 /** A caption's opening: a figure's or a table's label, its number, and the
     stop after them ("Figure 3.", "Table 2:", "Photo 11.", "図表Ⅰ-2-1-3",
-    "Visualization.", German's "Abbildung 1.4:"); a sentence that names a
-    figure ("Figure 3 shows", "Figure 6.1 shows") has no stop there: a
-    period before a digit is the number's. */
+    German's "Abbildung 1.4:"); a sentence that names a figure ("Figure 3
+    shows", "Figure 6.1 shows") has no stop there: a period before a digit
+    is the number's. A label with no number takes a full stop
+    ("Visualization. The …", a newsletter's "Photo."), as figures.ts
+    CAPTION_RE reads it: a colon after it names a part of the text
+    ("Visualization: …", PLOS's contributions; parse loop finding: a
+    textbook's worked examples run "Model: …", "Visualization: …",
+    "Solution: …", each a paragraph with a run-in lead and no figure beside
+    it, and the two "Visualization:" paragraphs counted as captions apart
+    from their figure). */
 const NUMBER = "[\\dIVXLivxl]+(?:[.\\-–][\\dIVXLivxl]+)*[a-z]?";
 const CAPTION_OPENING_RE = new RegExp(
-  `^\\s*(?:(?:figure|table|photo|visualization|image|map|chart|plate|box|exhibit|scheme|abbildung|tabelle)\\s*(?:${NUMBER})?\\s*[.:—–](?!\\d)|(?:fig|tab|abb)\\.\\s*${NUMBER}\\s*[.:—–](?!\\d)|(?:図表?|表)\\s*[\\dⅠ-Ⅻ]+(?:[.\\-–][\\dⅠ-Ⅻ]+)*)`,
+  `^\\s*(?:(?:figure|table|photo|visualization|image|map|chart|plate|box|exhibit|scheme|abbildung|tabelle)\\s*(?:${NUMBER}\\s*[.:—–]|\\.)(?!\\d)|(?:fig|tab|abb)\\.\\s*${NUMBER}\\s*[.:—–](?!\\d)|(?:図表?|表)\\s*[\\dⅠ-Ⅻ]+(?:[.\\-–][\\dⅠ-Ⅻ]+)*)`,
   "iu",
 );
 /** A figure's or a table's caption opening with its label and number,
