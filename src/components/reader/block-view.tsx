@@ -16,7 +16,7 @@ import {
 import { useT } from "@/components/lang-provider";
 import { Equation } from "@/components/reader/equation";
 import { MediaHtml } from "@/components/reader/figure-media";
-import { bindTableMarkClicks, marksSignature, paintTableMarks } from "@/components/reader/table-marks";
+import { bindTableMarkClicks, clickEndsDrag, marksSignature, paintTableMarks, pressMark } from "@/components/reader/table-marks";
 import { pageImageUrl } from "@/lib/handwritten/page-url";
 import { endSweep } from "@/lib/mark-sweep";
 import { OFFICE_CSS } from "@/lib/office-css";
@@ -450,9 +450,13 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
                   ? t("panes.extractOpenCard", { label: extractMark.extractLabel ?? "" })
                   : undefined
           }
+          // A drag inside the mark selects words: the selection toolbar
+          // takes it, and only a plain click opens what the mark opens.
+          onMouseDown={focusable || noteMark || extractMark ? pressMark : undefined}
           onClick={
             focusable
               ? (e) => {
+                  if (clickEndsDrag(e)) return;
                   e.stopPropagation();
                   window.dispatchEvent(
                     new CustomEvent("dissect:open-annotation", {
@@ -462,6 +466,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
                 }
               : noteMark
                 ? (e) => {
+                    if (clickEndsDrag(e)) return;
                     e.stopPropagation();
                     window.dispatchEvent(
                       new CustomEvent("dissect:show-note", { detail: { noteId: noteMark } }),
@@ -469,6 +474,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
                   }
                 : extractMark
                   ? (e) => {
+                      if (clickEndsDrag(e)) return;
                       e.stopPropagation();
                       window.dispatchEvent(
                         new CustomEvent("dissect:extract-chip", {
@@ -657,8 +663,8 @@ const LABEL_DOT: Record<string, string> = {
   plum: "#a78bfa",
 };
 
-// A highlighted figure, table, or equation gets a side label instead of text
-// marks: it sits to the right of the block and jumps to the annotation. The
+// A highlighted figure or equation gets a side label instead of text marks
+// (a table is text: its marks paint on its cells, table-marks.ts): it sits to the right of the block and jumps to the annotation. The
 // label shows the block's annotation ids ("A1"), matching the chips on the
 // annotation cards, behind the symbol of the tool that made the annotation
 // (a color dot for a plain highlight). Outside the block element, so the
@@ -854,8 +860,9 @@ export function BlockView({
   const content = highlights.length > 0 ? markedText(block.id, block.text, highlights, t) : block.text;
   const anchorIds = highlights.filter((h) => h.kind === "anchor" && h.sourceId && !h.leaving);
   const figureAnchors = highlights.filter((h) => h.kind === "anchor" && !h.leaving);
-  // A whole figure, table, or equation under the toolbar rings like an
-  // annotated one: its text is not selectable, so the ring is the tint.
+  // A whole figure or equation under the toolbar rings like an annotated
+  // one: its text is not selectable, so the ring is the tint. A table, a
+  // slide, or a sheet rings only when its marks cannot paint (MarkedHtml).
   const selected = highlights.some((h) => h.kind === "selection");
   const htmlHighlighted = anchorIds.length > 0 || selected ? "rounded-lg ring-2 ring-clay-300" : "";
   const firstSourceId = anchorIds[0]?.sourceId ?? undefined;

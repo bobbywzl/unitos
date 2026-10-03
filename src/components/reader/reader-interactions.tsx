@@ -6,7 +6,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import { createPortal, flushSync } from "react-dom";
 import { api } from "@/lib/api";
 import { formatKind, type BlockKind, type FormatKind } from "@/lib/block-kind";
-import { definable, defineKey } from "@/lib/define";
+import { defineKey, definableSelection } from "@/lib/define";
 import { MARK_SWEPT_EVENT, type MarkSweptDetail } from "@/lib/mark-sweep";
 import {
   ACCOUNT_SAVE_MAX_MS,
@@ -336,11 +336,13 @@ function contentKindOf(type: string | undefined): ContentKind {
   return "text";
 }
 
-/** Whether the popover offers Define: one word selected in one block, never
-    a phrase and never Chinese text (lib/define.ts). Never on the
-    hold-and-circle gesture, whose anchor is the whole block. */
+/** Whether the popover offers Define: one whole word selected in one block,
+    never a piece of a word, a phrase, words across two table cells, or
+    Chinese text (lib/define.ts). Never on the hold-and-circle gesture, whose
+    anchor is the whole block. */
 function offersDefine(popover: Popover): boolean {
-  return !popover.figure && segmentsOf(popover.anchor).length === 1 && definable(popover.anchor.quotedText);
+  const { quotedText, prefix, suffix } = popover.anchor;
+  return !popover.figure && segmentsOf(popover.anchor).length === 1 && definableSelection(quotedText, prefix, suffix);
 }
 
 // Define's output for one popover (SPEC.md §6): the meaning of the selected
