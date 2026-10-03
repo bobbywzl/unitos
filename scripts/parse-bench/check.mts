@@ -7,7 +7,7 @@ import type { ParsedBlock } from "@/lib/parse/types";
 import type { Glyph } from "@/lib/parse/pdf/drawing";
 import { fromImport, fromParse, printedNotes, type Doc, type DocBlock } from "./adapt";
 import { brokenNumbers, checklistWraps, displayDrawn, displayGaps, displaySpace, markerStart, rowHeight, rowHeights } from "./drawn";
-import { blindText, borderScore, formulaScaleOf, freeScores, furnitureOf, mathPart, ocrSame, type PdfText } from "./free";
+import { blindText, borderScore, formulaScaleOf, freeScores, furnitureOf, mathPart, mathSymbolWords, ocrSame, type PdfText } from "./free";
 import { captionScores, captionSides, contentImages, cropOverlaps, pictureScores } from "./floats";
 import type { PagePaint } from "./paint";
 import { glyphScores, placeCrops, placeEquations, type PageGlyphs } from "./glyphs";
@@ -615,6 +615,25 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   const symbolic = freeScores(symbolPdf, flatten({ blocks: [para("◆ The yard grew α wide.")] })).coverage;
   check("free: a symbol font's character counts as the page draws it, not as the text layer's letter", near(symbolic.recall, 1) && near(symbolic.precision, 1), `recall ${symbolic.recall}, precision ${symbolic.precision}`);
   check("free: a line that is a page number and a period counts as a page-number line", numbered.numberLines.count === 1, `count ${numbered.numberLines.count}`);
+  // TeX's math glyphs the text layer reads by their codes: cmex's ∫ read "Z", cmsy's ⟩ read "i" after "xyz"; cmsy's
+  // "|" (code 106, "j") in a word read right ("|ψj") stays as the text layer reads it.
+  const mathLine = { page: 1, top: 100, bottom: 110, left: 100, right: 300, text: "Z |xyzi |ψj", words: [{ left: 100, right: 110, text: "Z" }, { left: 120, right: 160, text: "|xyzi" }, { left: 170, right: 200, text: "|ψj" }] };
+  const mathPage: PageGlyphs = {
+    width: 600,
+    height: 800,
+    shapes: [],
+    glyphs: [
+      { family: "omx", code: 90, unicode: "∫", x: 101, y: 692, w: 8, size: 10 },
+      { family: "oms", code: 105, unicode: "⟩", x: 152, y: 692, w: 6, size: 10 },
+      { family: "oms", code: 106, unicode: "|", x: 170, y: 692, w: 3, size: 10 },
+    ],
+  };
+  const mathWords = mathSymbolWords({ lines: [mathLine] }, [mathPage]);
+  check(
+    "free: a TeX math glyph the text layer reads by its code counts as the page draws it",
+    mathWords.length === 2 && mathWords[0].reads === "" && mathWords[1].reads === "|xyz",
+    JSON.stringify(mathWords.map((w) => [w.word, w.reads])),
+  );
 }
 {
   const ROLE_REF: RefBlock[] = [

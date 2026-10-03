@@ -7,7 +7,8 @@ import { regionBounds } from "@/lib/video/types";
 import type { RichNode } from "@/lib/docs/schema";
 import type { Doc, DocBlock, Side } from "./adapt";
 import { brokenNumbers, checklistWraps, displayGaps, markerPlaces, rowHeights } from "./drawn";
-import type { GlyphScores } from "./glyphs";
+import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
+import type { GlyphScores, PageGlyphs } from "./glyphs";
 import type { LayoutScores } from "./layout";
 import { inkBands, type PagePaint } from "./paint";
 import { ROOT } from "./load";
@@ -196,6 +197,60 @@ function layoutOf(pdf: string): Layout {
   const steps = overlaySteps(all, sizes);
   const lines = all.filter((l) => !steps.has(l.page));
   return { lines, furniture: furnitureOf(lines, sizes), sizes, symbols: symbols.filter((w) => !steps.has(w.page)), steps };
+}
+
+/** The families of TeX's math fonts whose codes the tables name (glyphs.ts MATH). */
+const MATH_FAMILIES = new Set(["oml", "oms", "omx", "msa", "msb", "euf", "rsfs", "lasy"]);
+
+/** The words pdftotext reads with a TeX math glyph in them, as the page
+    draws them (a SymbolWord each, as symbolChars gives for symbol fonts).
+    pdftotext reads a math font's glyph whose name it does not know by its
+    character code: Computer Modern's ∫ (cmex 90) as "Z", ⟨ and ⟩ (cmsy 104
+    and 105) as "h" and "i". The glyph's code names its symbol (math-fonts.ts):
+    a letter or a digit counts as itself, any other symbol as no word. Parse
+    bench finding: a quantum mechanics textbook's "|Ψi", "h~r |Ψi", and "Z"
+    over each ∫ counted as words to cover, which no formula's glyphs cover,
+    so a display read as LaTeX in place of a crop (whose lines are no words
+    to cover) lowered the coverage by the "Z" and "h" and "i" it drew. */
+export function mathSymbolWords(text: Pick<PdfText, "lines">, pages: PageGlyphs[]): SymbolWord[] {
+  const out: SymbolWord[] = [];
+  const byPage = new Map<number, { x: number; y: number; size: number; read: string; drawn: string }[]>();
+  pages.forEach((page, i) => {
+    const list: { x: number; y: number; size: number; read: string; drawn: string }[] = [];
+    for (const g of page.glyphs) {
+      if (g.family === null || !MATH_FAMILIES.has(g.family)) continue;
+      const entry = mathGlyph(g.family, g.code);
+      if (!entry || g.code < 33 || g.code > 126) continue;
+      const read = String.fromCharCode(g.code);
+      const drawn = /^[\p{L}\p{N}]+$/u.test(entry.unicode.normalize("NFKC")) ? entry.unicode : "";
+      if (normText(read) === normText(drawn)) continue;
+      list.push({ x: g.x + g.w / 2, y: page.height - g.y, size: g.size, read, drawn });
+    }
+    if (list.length) byPage.set(i + 1, list);
+  });
+  for (const line of text.lines) {
+    const glyphs = byPage.get(line.page)?.filter((g) => g.y - g.size * 0.3 >= line.top - 1 && g.y - g.size * 0.3 <= line.bottom + 1);
+    if (!glyphs?.length) continue;
+    for (const word of line.words ?? []) {
+      const own = glyphs.filter((g) => g.x >= word.left - 1 && g.x <= word.right + 1).sort((a, b) => a.x - b.x);
+      // The code's character stands where the glyph stands in the word (one
+      // character either way): a word read right by its font's map may hold
+      // that letter elsewhere ("|ψj" where the "|" is cmsy's 106, "j").
+      const span = Math.max(1, word.right - word.left);
+      let reads = word.text;
+      let at = 0;
+      for (const g of own) {
+        const place = Math.floor(((g.x - word.left) / span) * word.text.length) + (reads.length - word.text.length);
+        const k = reads.indexOf(g.read, at);
+        if (k < 0 || Math.abs(k - place) > 1) continue;
+        reads = reads.slice(0, k) + g.drawn + reads.slice(k + g.read.length);
+        at = k + g.drawn.length;
+      }
+      const said = (t: string) => wordsOf(t).map((w) => w.w).join(" ");
+      if (said(reads) !== said(word.text)) out.push({ page: line.page, word: word.text, reads, line });
+    }
+  }
+  return out;
 }
 
 /** A slide deck's overlay steps: in a deck (every page wider than tall),
