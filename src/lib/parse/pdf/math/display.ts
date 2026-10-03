@@ -1576,11 +1576,24 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext, lines: Line[
           names.some((n) => cx > n.x1 - n.size * 0.5 && cx < n.x2 + n.size * 0.5 && g.y < n.y - n.size * 0.3 && g.y > n.y - n.size * 1.3))
       );
     };
+    // A row of three letters of a text font at the text's size, nearly a
+    // line or more over the formula's top row, is the sentence over the
+    // display, which a tall delimiter's top reaches up to; a glyph on that
+    // row, or a superscript's height over it, is the sentence's (its "ℝ³").
+    // A formula's own text stands on one of its rows. Parse loop finding:
+    // the MML book's (2.79), its braces three rows tall under a list item's
+    // line, failed on that line's letters and was a crop; (2.78), under a
+    // line set farther, passed.
+    const topRow = Math.max(...glyphs.filter((g) => !hangingFamily(g.family)).map((g) => g.y));
+    const within = (g: Glyph) => g.x + g.w / 2 > box.x1 && g.x + g.w / 2 < box.x2;
+    const letters = ctx.drawing.glyphs.filter((g) => !own.has(g) && g.family === null && g.size >= size * 0.9 && /\p{L}/u.test(g.unicode) && within(g) && g.y > topRow + size * 0.8);
+    const sentenceRows = letters.map((g) => g.y).filter((y, i, ys) => ys.filter((z) => Math.abs(z - y) < size * 0.1).length >= 3);
+    const sentence = (g: Glyph) => sentenceRows.some((y) => g.y >= y - size * 0.1 && g.y < y + size * 0.6);
     const stray = ctx.drawing.glyphs.some((g) => {
       if (own.has(g) || (g.family === null && g.unicode.trim() === "")) return false;
       if (past(g) || beyond(g) || brace(g) || limit(g)) return true;
       if (labels.some((b) => g.x + g.w / 2 > b.x1 && g.x + g.w / 2 < b.x2 && g.y > b.y1 && g.y < b.y2)) return true;
-      if (g.x + g.w / 2 <= box.x1 || g.x + g.w / 2 >= box.x2) return false;
+      if (!within(g) || sentence(g)) return false;
       // A text font's ligature ("ﬁ") is letters: it hangs from nothing (the
       // line over arXiv 2506.06752 (14) failed it).
       const hangs = g.family === null && (isUnreadMath(g) || !/^[\p{Script=Latin}\p{Script=Greek}\p{N}\p{P}]+$/u.test(g.unicode.normalize("NFKC")));
