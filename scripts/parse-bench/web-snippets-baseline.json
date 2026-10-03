@@ -1,8 +1,8 @@
 {
  "total": {
-  "f1": 0.898,
+  "f1": 0.899,
   "precision": 0.838,
-  "recall": 0.968
+  "recall": 0.969
  },
  "pages": {
   "100noticias.com-millones.html": {
@@ -1836,9 +1836,9 @@
    "fn": 0
   },
   "security.googleblog.com.protection.html": {
-   "tp": 0,
-   "fp": 1,
-   "fn": 3
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
   },
   "seglerblog.stössenseer.de.sauber.html": {
    "tp": 0,
