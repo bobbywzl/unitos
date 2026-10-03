@@ -66,8 +66,8 @@
    "recall": 0.967
   },
   "11ea381ad9": {
-   "f1": 0.979,
-   "precision": 0.96,
+   "f1": 1,
+   "precision": 1,
    "recall": 1
   },
   "14cc2a0ca5": {
@@ -731,8 +731,8 @@
    "recall": 1
   },
   "cc03ddb5ef": {
-   "f1": 0.766,
-   "precision": 0.648,
+   "f1": 0.817,
+   "precision": 0.724,
    "recall": 0.938
   },
   "cc4aa22b82": {
