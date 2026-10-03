@@ -682,10 +682,37 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     for (const i of r.items) if (i.look) chars.set(i.look.face, (chars.get(i.look.face) ?? 0) + i.str.trim().length);
     return [...chars].sort((a, b) => b[1] - a[1])[0]?.[0];
   };
-  const bodyFaces = new Set(runs.filter((r) => r.chars >= 40 && !r.items.every((i) => i.mono)).map(faceOf));
+  // The body's faces: a face two long lines or more are set in. One long
+  // line alone is no body: a chart's title can run past 40 characters
+  // (parse loop finding: a statistics book's "95% confidence and
+  // prediction intervals for cars.lm" over its plot made its own face the
+  // body's, and read as a heading).
+  const faceLines = new Map<string, number>();
+  for (const r of runs) {
+    const face = faceOf(r);
+    if (face !== undefined && r.chars >= 40 && !r.items.every((i) => i.mono)) faceLines.set(face, (faceLines.get(face) ?? 0) + 1);
+  }
+  const bodyFaces = new Set([...faceLines].filter(([, n]) => n >= 2).map(([face]) => face));
   const titlesOf = (plot: Box, axis: TextRun[]): TextRun[] => {
     const faces = new Set([...axis, ...runsIn(plot).filter((r) => !isPageText(r))].map(faceOf));
     const mid = (plot.x1 + plot.x2) / 2;
+    // A chart's title is centered on its plot, or on the chart's whole
+    // device: the plot, its axis labels, its sideways axis title (a glyph
+    // drawn with no advance along the page, level with the plot, within
+    // four lines of its edge), and the shape level with it (its legend,
+    // drawn in a frame of its own beside the plot). R centers a title on
+    // the device, not the plot (parse loop finding: a statistics book's
+    // title over a plot with its legend read as a heading, its middle off
+    // the plot's by four ems).
+    const sideways = drawing.glyphs
+      .filter((g) => !g.hidden && g.w === 0 && /\p{L}/u.test(g.unicode) && g.y > plot.y1 && g.y < plot.y2 && g.x > plot.x1 - textSize * 4 && g.x < plot.x2 + textSize * 4)
+      .map((g): Box => ({ x1: g.x - g.size * 0.85, y1: g.y, x2: g.x + g.size * 0.3, y2: g.y }));
+    const row = parts
+      .filter(({ box: m, thin }) => !thin && m.x2 - m.x1 >= textSize && m.y2 - m.y1 >= textSize && shareInside(m, plot) < 0.5)
+      .map(({ box: m }) => m)
+      .filter((m) => Math.min(m.y2, plot.y2) - Math.max(m.y1, plot.y1) > Math.min(m.y2 - m.y1, plot.y2 - plot.y1) * 0.5 && Math.max(m.x1 - plot.x2, plot.x1 - m.x2) < pageWidth * 0.1);
+    const wide = [...axis.map((r) => r.box), ...sideways, ...row].reduce((b, m) => unionBox(b, m), plot);
+    const wideMid = (wide.x1 + wide.x2) / 2;
     const under = Math.min(plot.y1, ...axis.filter((r) => r.box.y2 <= plot.y1 + r.size).map((r) => r.box.y1));
     const over = Math.max(plot.y2, ...axis.filter((r) => r.box.y1 >= plot.y2 - r.size).map((r) => r.box.y2));
     return runs.filter((r) => {
@@ -695,7 +722,8 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
       if (/[.!?;:,]$/.test(textOf(r).trim())) return false;
       const reach = Math.max(r.size, textSize) * 3;
       const cx = (r.box.x1 + r.box.x2) / 2;
-      if (Math.abs(cx - mid) > r.size || r.box.x1 < plot.x1 - r.size || r.box.x2 > plot.x2 + r.size) return false;
+      const centered = (Math.abs(cx - mid) <= r.size && r.box.x1 >= plot.x1 - r.size && r.box.x2 <= plot.x2 + r.size) || (Math.abs(cx - wideMid) <= r.size && r.box.x1 >= wide.x1 - r.size && r.box.x2 <= wide.x2 + r.size);
+      if (!centered) return false;
       return (r.box.y2 <= under + r.size * 0.5 && r.box.y2 >= under - reach) || (r.box.y1 >= over - r.size * 0.5 && r.box.y1 <= over + reach);
     });
   };
