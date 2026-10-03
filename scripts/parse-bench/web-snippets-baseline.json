@@ -1,7 +1,7 @@
 {
  "total": {
-  "f1": 0.912,
-  "precision": 0.851,
+  "f1": 0.914,
+  "precision": 0.855,
   "recall": 0.982
  },
  "pages": {
@@ -22,7 +22,7 @@
   },
   "breakingbelizenews.com-paho.html": {
    "tp": 2,
-   "fp": 4,
+   "fp": 2,
    "fn": 0
   },
   "cubadebate.cu-sesiona.html": {
@@ -87,7 +87,7 @@
   },
   "jamaica.gleaner.com-victims.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "jamaicaobserver.com-attacks.html": {
@@ -652,7 +652,7 @@
   },
   "d44c5ef50718437984dca47627dee96b.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "arsnova.thm.de.frag.html": {
@@ -942,7 +942,7 @@
   },
   "djz.de-amoklauf.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "docs.docker.com.install.html": {
@@ -1002,7 +1002,7 @@
   },
   "elpais.com.ciencia.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "emacspeak.blogspot.com.meta.html": {
@@ -1492,7 +1492,7 @@
   },
   "meedia.de.freenet.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "mein-mmo.de-MMORPG.html": {
@@ -2112,7 +2112,7 @@
   },
   "vorangedacht.de.kohleausstieg.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "archive.org-travaillent.html": {
@@ -2267,7 +2267,7 @@
   },
   "wildundhund.de-bonn.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "winfuture.de-NASA.html": {
@@ -2397,7 +2397,7 @@
   },
   "ambito.com-paritarias.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "amnesty.de-waffensysteme.html": {
@@ -2842,12 +2842,12 @@
   },
   "corkbeo.ie.level.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "correio24horas.com.br-PMS.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "correiobraziliense.com.br-poderes.html": {
@@ -3102,7 +3102,7 @@
   },
   "eluniversal.com-senador.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "emotion.de.selfcare.html": {
@@ -4232,7 +4232,7 @@
   },
   "refinery29.com.single.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "regenbogenportal.de-intersex.html": {
@@ -4712,7 +4712,7 @@
   },
   "unocero.com.marcas.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "unsere-zeitung.at.inklusion.html": {
@@ -4792,7 +4792,7 @@
   },
   "0a24692a9ea846c1819bd6a5f92a8874.html": {
    "tp": 5,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "wbf.admin.ch.14093.html": {
@@ -4927,7 +4927,7 @@
   },
   "yle.fi.3-11212601.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "youhadmeatgardening.com.lemon.html": {
