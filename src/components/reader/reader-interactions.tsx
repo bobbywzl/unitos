@@ -2267,6 +2267,12 @@ export function ReaderInteractions({
     // below the toolbox.
     const pageTop = headerBottom !== undefined ? Math.max(lineTop, headerBottom + 56) : lineTop;
     const pageBelow = Boolean(pageGeo) && side === "below";
+    // Near the pane's top edge on screen — the document's first lines, or
+    // the line at the top after a scroll — the bubbles above the toolbox
+    // (Add to notes, the colors) would sit out of view: the colors drop
+    // below it, and the toolbox moves down to where Add to notes fits above.
+    const nearTop = !pageGeo && firstLine.top - containerRect.top < 100;
+    const readerTop = nearTop ? Math.max(yTop, container.scrollTop + 48) : yTop;
     return {
       anchor: {
         blockId,
@@ -2282,7 +2288,7 @@ export function ReaderInteractions({
       yTop:
         pageGeo && side === "right"
           ? Math.max(8, pageTop - containerRect.top + container.scrollTop)
-          : yTop,
+          : readerTop,
       textLeft,
       endLeft,
       endTop,
@@ -2290,7 +2296,7 @@ export function ReaderInteractions({
       side,
       rightBase: articleRight + 10,
       cw,
-      ...(headerBottom !== undefined ? { nearTop: pageBelow || lineTop - headerBottom < 96 } : {}),
+      ...(headerBottom !== undefined ? { nearTop: pageBelow || lineTop - headerBottom < 96 } : { nearTop }),
       ...(pageGeo ? { page: { geo: pageGeo } } : {}),
     };
   }, []);
