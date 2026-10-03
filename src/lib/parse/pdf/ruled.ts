@@ -228,11 +228,16 @@ function mostlyTiny(texts: string[]): boolean {
 // polylines, markers — paths that are no rule, no filled box, and no box on
 // the table's own lines (xs, ys) — or its data as a staircase of rules off
 // those lines. Three shapes, or more stray rules than twice the cells, make
-// a chart.
-function isChart(b: Box, xs: number[], ys: number[], cells: number, drawing: TableDrawing): boolean {
+// a chart. rows: the region's lines, when they are known. A small drawing
+// inside the height of a row of two cells or more is that row's cell, no
+// chart's data (parse loop finding: a LaTeX package's manual draws each
+// bond of its table of bonds, "single – normal, sb", with a few short
+// rules and an arrowhead; forty such rules read as a plot).
+function isChart(b: Box, xs: number[], ys: number[], cells: number, drawing: TableDrawing, rows: Line[] = []): boolean {
   const on = (v: number, lines: number[]) => lines.some((l) => Math.abs(l - v) <= 1.5);
   const within = (r: Box) => r.x1 >= b.x1 - 1 && r.x2 <= b.x2 + 1 && r.y1 >= b.y1 - 1 && r.y2 <= b.y2 + 1;
-  const stray = drawing.rules.filter((r) => within(r) && (r.dir === "h" ? !on(r.y1, ys) : !on(r.x1, xs))).length;
+  const inRow = (r: Box) => rows.some((l) => l.cells.length >= 2 && r.y1 >= l.yMin - l.size * 0.3 && r.y2 <= l.yMax + l.size * 0.8);
+  const stray = drawing.rules.filter((r) => within(r) && !inRow(r) && (r.dir === "h" ? !on(r.y1, ys) : !on(r.x1, xs))).length;
   if (stray > Math.max(20, cells * 2)) return true;
   const same = (p: Box, f: Box) => Math.abs(p.x1 - f.x1) <= 0.5 && Math.abs(p.x2 - f.x2) <= 0.5 && Math.abs(p.y1 - f.y1) <= 0.5 && Math.abs(p.y2 - f.y2) <= 0.5;
   const shapes = drawing.paths.filter(
@@ -245,6 +250,7 @@ function isChart(b: Box, xs: number[], ys: number[], cells: number, drawing: Tab
       p.y1 >= b.y1 - 1 &&
       p.y2 <= b.y2 + 1 &&
       !drawing.fills.some((f) => same(p, f)) &&
+      !inRow(p) &&
       !(on(p.x1, xs) && on(p.x2, xs) && on(p.y1, ys) && on(p.y2, ys)),
   );
   return shapes.length >= 3;
@@ -383,8 +389,22 @@ function slices(box: Box, lines: Line[], items: Item[]): boolean {
 // A rule region is a table when its lines split into two columns or more and
 // two rows or more carry cells in two of them. A listing's frame, a figure's
 // box around one label, a region of prose, and a plot's frame are not.
-function isTableRegion(lines: Line[], width: number, columns: Rule[]): boolean {
-  if (lines.length < 2 || lines.filter((l) => isMonoLine(l)).length * 2 > lines.length) return false;
+// rules: the region's rules inside it. A region whose first line is a head
+// in a text face, two phrases or more over a rule of the region, is a
+// table however many of its rows are set in a typewriter face: a listing
+// has no head row (parse loop finding: a LaTeX package's manual lists its
+// bond names and their aliases in typewriter under "name appearance
+// aliases" and a booktabs rule; read as a listing's frame, the table broke
+// into a paragraph, two listings, a figure, and a formula).
+function isTableRegion(lines: Line[], width: number, columns: Rule[], rules: Rule[] = []): boolean {
+  if (lines.length < 2) return false;
+  const [head, next] = lines;
+  const headed =
+    !isMonoLine(head) &&
+    head.runs.every((r) => !r.mono) &&
+    head.text.trim().split(/\s+/).length >= 2 &&
+    rules.some((r) => r.y1 < head.yMin && r.y1 > next.yMax && r.x1 <= head.x + 2 && r.x2 >= head.xEnd - 2);
+  if (!headed && lines.filter((l) => isMonoLine(l)).length * 2 > lines.length) return false;
   if (lines.some((l) => isProseLine(l, width, columns))) return false;
   const separators = columnSeparators(lines);
   if (separators.length === 0) return false;
@@ -633,13 +653,13 @@ export function ruledTables(all: Item[], page: PageDrawing, pageWidth: number, p
       if (!free(box)) continue;
       const inside = items.filter((it) => inBox(it, { ...box, x1: box.x1 - 2, x2: box.x2 + 2 }));
       const lines = buildLines(inside, 0);
-      if (!isTableRegion(lines, box.x2 - box.x1, columns) || slices(box, lines, items) || framedMath(box, inside, columns)) continue;
       const inner = rules.filter((r) => r.y1 < box.y2 - 1 && r.y1 > box.y1 + 1 && r.x1 >= box.x1 - 3 && r.x2 <= box.x2 + 3);
+      if (!isTableRegion(lines, box.x2 - box.x1, columns, inner) || slices(box, lines, items) || framedMath(box, inside, columns)) continue;
       const region = { box, items: inside, lines, grid: null, rules: inner, drawing };
       // The rules drawn between its columns are the table's, no chart's
       // (PLOS's tables rule every cell apart: forty rules read as a plot).
       const ruledXs = [...new Set(columnRules(region).map((r) => r.x1))];
-      if (isChart(box, [box.x1, ...ruledXs, box.x2], stack.rules.map((r) => r.y1), lines.length, drawing)) continue;
+      if (isChart(box, [box.x1, ...ruledXs, box.x2], stack.rules.map((r) => r.y1), lines.length, drawing, lines)) continue;
       regions.push(region);
     }
   }
