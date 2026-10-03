@@ -422,6 +422,29 @@ function nestColumns(row: Element) {
   }
 }
 
+// A control inside a figure: a print button, a pin button, a share button,
+// a jump link drawn as a button (role="button", a class token "button" or
+// "btn": "wprm-recipe-print-wide-button"). Its words are no caption: a
+// recipe card's picture read "Zum Rezept Drucken Pinnen" and "Rezept
+// drucken Bei Pinterest speichern" as its caption (held-out set finding,
+// two lines marked as not the article; 17 figures of the set hold such a
+// control, none marked as the article's). A control that holds the media
+// (a lightbox button around the picture) stays.
+const CONTROL_SELECTOR = "[role='button'], [class*='button' i], [class*='btn' i]";
+const CONTROL_CLASS_RX = /(?:^|[\s_-])(?:button|btn)(?:$|[\s_-])/i;
+
+function isControl(el: Element): boolean {
+  return el.getAttribute("role") === "button" || CONTROL_CLASS_RX.test(el.getAttribute("class") ?? "");
+}
+
+/** Remove the controls under a figure's clone. */
+function dropControls(clone: Element) {
+  for (const el of [...clone.querySelectorAll(CONTROL_SELECTOR)]) {
+    // The clone stands outside the document: containment, not isConnected.
+    if (clone.contains(el) && isControl(el) && !hasMeaningfulMedia(el)) el.remove();
+  }
+}
+
 export function figureBlock(el: Element, ctx: WalkCtx): ParsedBlock | null {
   const clone = el.cloneNode(true) as Element;
   dedupeFigureMedia(clone);
@@ -432,6 +455,7 @@ export function figureBlock(el: Element, ctx: WalkCtx): ParsedBlock | null {
   for (const img of [...clone.querySelectorAll("img")]) {
     if (!isContentImage(img)) img.remove();
   }
+  dropControls(clone);
   const caption = figureCaption(clone);
   // The img may be the element itself (a bare <img> in the flow).
   const altImg = clone.matches("img[alt]") ? clone : clone.querySelector("img[alt]");
