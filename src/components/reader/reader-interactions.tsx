@@ -426,13 +426,19 @@ type CardRect = { left: number; right: number; top: number; bottom: number };
 
 function measureSideCards(container: HTMLElement | null, excludeKind?: string) {
   if (!container) {
-    return { rects: [] as CardRect[], articleLeft: 0, articleRight: 0, cw: 1200 };
+    return { rects: [] as CardRect[], articleLeft: 0, articleRight: 0, wordsLeft: 0, wordsRight: 0, cw: 1200 };
   }
   const crect = container.getBoundingClientRect();
   const arect = container.querySelector("article")?.getBoundingClientRect();
   const cw = container.clientWidth;
   const articleLeft = arect ? arect.left - crect.left : cw;
   const articleRight = arect ? arect.right - crect.left : 0;
+  // The words' edges: the article's box less its padding, where a toolbox
+  // may still sit without covering a word.
+  const article = container.querySelector("article");
+  const pad = article ? getComputedStyle(article) : null;
+  const wordsLeft = articleLeft + (pad ? parseFloat(pad.paddingLeft) || 0 : 0);
+  const wordsRight = articleRight - (pad ? parseFloat(pad.paddingRight) || 0 : 0);
   const rects = [...container.querySelectorAll<HTMLElement>("[data-side-card]")]
     // A card still playing its exit (Presence) holds no place.
     .filter((el) => el.dataset.sideCard !== excludeKind && !el.closest(".presence-exit"))
@@ -445,7 +451,7 @@ function measureSideCards(container: HTMLElement | null, excludeKind?: string) {
         bottom: r.bottom - crect.top + container.scrollTop,
       };
     });
-  return { rects, articleLeft, articleRight, cw };
+  return { rects, articleLeft, articleRight, wordsLeft, wordsRight, cw };
 }
 
 function blocksOnSide(
@@ -2266,9 +2272,20 @@ export function ReaderInteractions({
     const yTop = Math.max(8, rect.top - containerRect.top + container.scrollTop);
     // The rail's side follows the tool blocks nearby: right of the text when
     // that side is clear, else left, else directly below the highlight.
-    const { rects, articleLeft, articleRight, cw } = measureSideCards(container);
+    const { rects, articleLeft, articleRight, wordsLeft, wordsRight, cw } = measureSideCards(container);
     const articleMid = (articleLeft + articleRight) / 2;
     const POPOVER_ESTIMATE = 280;
+    // A side takes the toolbox only with the room for it beside the words:
+    // in a narrow pane (a split pane, a small window) the toolbox landed on
+    // the words it was opened for. Without the room it goes below the
+    // selection, as the page editor's does under its page.
+    // The toolbox at rest is 176px with a 6px edge margin; pressed against
+    // the pane's edge it may ride over the words' box by a sliver (the last
+    // line rarely reaches the box's edge), never by more.
+    const TOOLBOX_EDGE = 176 + 6;
+    const SLIVER = 40;
+    const roomRight = wordsRight - (cw - TOOLBOX_EDGE) <= SLIVER;
+    const roomLeft = TOOLBOX_EDGE + 10 - wordsLeft <= SLIVER;
     // The page editor (SPEC.md §29): beside the page's right edge, else over
     // its margin, else under the words.
     const shift = docsShiftRef.current;
@@ -2279,9 +2296,9 @@ export function ReaderInteractions({
         ? toolbarLeft(pageGeo, shift, 176) === null
           ? ("below" as const)
           : ("right" as const)
-        : blocksOnSide(rects, articleMid, "right", yTop, POPOVER_ESTIMATE).length === 0
+        : roomRight && blocksOnSide(rects, articleMid, "right", yTop, POPOVER_ESTIMATE).length === 0
           ? ("right" as const)
-          : blocksOnSide(rects, articleMid, "left", yTop, POPOVER_ESTIMATE).length === 0
+          : roomLeft && blocksOnSide(rects, articleMid, "left", yTop, POPOVER_ESTIMATE).length === 0
             ? ("left" as const)
             : ("below" as const);
     // The toolbox's first row centers on the selection's first line, as
@@ -2302,7 +2319,10 @@ export function ReaderInteractions({
     // On the right the stack also clears the Collapse and Extract chips,
     // which stick to the pane's top right (reader.tsx), so both stay in
     // reach.
-    const nearTop = !pageGeo && firstLine.top - containerRect.top < 100;
+    // Below the words the bubbles drop under the toolbox too, and the
+    // toolbox leaves the room above it for Add to notes, as under a page.
+    const readerBelow = !pageGeo && side === "below";
+    const nearTop = !pageGeo && (readerBelow || firstLine.top - containerRect.top < 100);
     const readerTop = nearTop ? Math.max(yTop, container.scrollTop + (side === "right" ? 100 : 48)) : yTop;
     return {
       anchor: {
@@ -2315,7 +2335,7 @@ export function ReaderInteractions({
         ...(segments.length > 1 ? { segments } : {}),
       },
       x: Math.max(margin, Math.min(rawX, containerRect.width - margin)),
-      y: rect.bottom - containerRect.top + container.scrollTop + (side === "below" ? 14 : 6) + (pageBelow ? 48 : 0),
+      y: rect.bottom - containerRect.top + container.scrollTop + (side === "below" ? 14 : 6) + (pageBelow || readerBelow ? 48 : 0),
       yTop:
         pageGeo && side === "right"
           ? Math.max(8, pageTop - containerRect.top + container.scrollTop)
