@@ -1072,10 +1072,26 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
           if ((kind !== "fragment" && kind !== "math") || unlabeled(f).label !== null) break;
           const bar = (r: Rule) => r.dir === "h" && r.x1 < f.xEnd && r.x2 > f.x && Math.abs(r.y1 - f.y) < f.size * 1.2;
           const script = kind === "fragment" && scriptOf(f);
+          // So does the row of arrows set over the next display's row: a
+          // math line set small, under a fragment of the band's (a row of
+          // labels, which nothing of the band hangs from), within the next
+          // line's extent and a row's space over it (parse loop finding:
+          // Springer's chains (3) and (4), each a row of labeled arrows
+          // over a row of symbols and arrows, read (4)'s upper arrows into
+          // (3)'s band; both displays were crops).
+          const before = band[band.length - 2];
+          const arrows =
+            kind === "math" &&
+            f.size < next.size * 0.9 &&
+            before !== undefined &&
+            kinds[lines.indexOf(before)] === "fragment" &&
+            f.x >= next.x - f.size &&
+            f.xEnd <= next.xEnd + f.size &&
+            f.y - next.y <= next.size * 1.6;
           const fencedNext = fences.some(
             (g) => [f, next].every((l) => l.y >= g.y1 && l.y <= g.y2 && l.x < g.x2 + l.size * 3 && l.xEnd > g.x1 - l.size * 3) && !band.some((l) => l !== f && l.y >= g.y1 && l.y <= g.y2),
           );
-          if (!script && !fencedNext && (!rules.some((r) => bar(r) && r.y1 < f.y && r.y1 > next.y) || rules.some((r) => bar(r) && r.y1 > f.y))) break;
+          if (!script && !fencedNext && !arrows && (!rules.some((r) => bar(r) && r.y1 < f.y && r.y1 > next.y) || rules.some((r) => bar(r) && r.y1 > f.y))) break;
           band.pop();
         }
         break;
