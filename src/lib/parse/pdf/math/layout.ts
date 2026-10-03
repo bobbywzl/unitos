@@ -336,7 +336,32 @@ function assemblePieces(atoms: Atom[], rules: Rule[]): Atom[] {
   // row of an aligned display) are no absolute value.
   const bars = fences.filter((a) => a.cls === "bar").sort(byX);
   for (const tex of ["|", "\\|"]) {
-    const kind = bars.filter((b) => b.tex === tex);
+    let kind = bars.filter((b) => b.tex === tex);
+    // Bars set against each other with nothing between them are nested
+    // (\left| \left| a matrix \right| \right|: a determinant inside an
+    // absolute value): a run of them on the left pairs with the run on the
+    // right, the inner pair closing first (parse loop finding: the
+    // probability cheatsheet's ||a b; c d|| = |ad − bc| paired each outer bar
+    // with the inner bar beside it, and the display was a crop).
+    const runs: Atom[][] = [];
+    for (const b of kind) {
+      const last = runs[runs.length - 1];
+      const prev = last?.[last.length - 1];
+      const between = (a: Atom) => prev !== undefined && a.x2 > prev.x1 && a.x1 < b.x2 && a.yb < prev.top && a.yb > prev.bottom;
+      if (prev && b.x1 - prev.x2 < 0.35 * b.size && !rest.some(between)) last.push(b);
+      else runs.push([b]);
+    }
+    const overlap = (a: Atom, b: Atom) => Math.min(a.top, b.top) > Math.max(a.bottom, b.bottom);
+    for (let i = 0; i + 1 < runs.length; i++) {
+      const [a, b] = [runs[i], runs[i + 1]];
+      if (a.length < 2 || a.length !== b.length || !overlap(a[0], b[0])) continue;
+      a.forEach((d, k) => {
+        d.cls = "open";
+        b[b.length - 1 - k].cls = "close";
+      });
+      kind = kind.filter((d) => !a.includes(d) && !b.includes(d));
+      i++;
+    }
     for (let i = 0; i + 1 < kind.length; ) {
       if (Math.min(kind[i].top, kind[i + 1].top) > Math.max(kind[i].bottom, kind[i + 1].bottom)) {
         kind[i].cls = "open";
