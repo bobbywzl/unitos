@@ -98,5 +98,6 @@
   { "id": "rl-textbook-ch3", "category": "book", "pdf": ".bench/real/rl-textbook.pdf", "url": "https://raw.githubusercontent.com/pyshka501/rl-textbook/main/book/main.pdf", "license": "open", "pages": [37, 48], "sweep": true },
   { "id": "ieee-elixpo-caching", "category": "paper", "pdf": ".bench/real/ieee-elixpo-caching.pdf", "url": "https://raw.githubusercontent.com/pollinations/search.elixpo/main/docs/paper/paper.pdf", "license": "public-domain", "sweep": true },
   { "id": "langsci-adjarian-ch4", "category": "book", "pdf": ".bench/real/langsci-adjarian.pdf", "url": "https://raw.githubusercontent.com/langsci/385/master/385-Adjarian-2024.pdf", "license": "open", "pages": [146, 161], "sweep": true },
-  { "id": "qm-madsen-ch23", "category": "book", "pdf": ".bench/real/qm-madsen.pdf", "url": "https://raw.githubusercontent.com/madsenmj/book-quantum-mechanics/master/phy315book.pdf", "license": "open", "pages": [170, 190], "sweep": true }
+  { "id": "qm-madsen-ch23", "category": "book", "pdf": ".bench/real/qm-madsen.pdf", "url": "https://raw.githubusercontent.com/madsenmj/book-quantum-mechanics/master/phy315book.pdf", "license": "open", "pages": [170, 190], "sweep": true },
+  { "id": "ipsur-ch11", "category": "book", "pdf": ".bench/real/ipsur.pdf", "url": "https://raw.githubusercontent.com/gjkerns/IPSUR/master/inst/doc/IPSUR.pdf", "license": "open", "pages": [239, 268], "sweep": true }
 ]
