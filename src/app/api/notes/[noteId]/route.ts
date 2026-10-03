@@ -12,8 +12,14 @@ import { sourcesLeftByQuotes } from "@/lib/notes/quote-sources";
 import { normalizeNoteOrders, movedOrder } from "@/lib/order";
 import { parseBody } from "@/lib/validate";
 
+const MAX_CONTENT = 50_000;
+
 const patchSchema = z.object({
-  content: z.string().min(1).max(50_000).optional(),
+  content: z.string().min(1).max(MAX_CONTENT).optional(),
+  // Text added at the end of the note (Add to notes into an existing note):
+  // the note's words stay as they are, then one blank line, then this. Never
+  // sent with `content`.
+  append: z.string().min(1).max(MAX_CONTENT).optional(),
   // A quote dropped into the note (SPEC.md §6): its anchor, one segment per
   // block of a passage over several. Resolved through the ladder like a
   // source on a new note (/api/notes), and added to the note's sources.
@@ -46,6 +52,20 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: strin
   if (access instanceof NextResponse) return access;
 
   const fromSectionId = note.sectionId;
+
+  // The note's next text: the whole replacement, or the current text with the
+  // appended words after a blank line (an empty note becomes the words).
+  if (data.append !== undefined && data.content !== undefined) {
+    return NextResponse.json({ error: t("api.appendWithContent") }, { status: 400 });
+  }
+  let content = data.content;
+  if (data.append !== undefined) {
+    const head = note.content.replace(/\n+$/, "");
+    content = head ? `${head}\n\n${data.append}` : data.append;
+    if (content.length > MAX_CONTENT) {
+      return NextResponse.json({ error: t("api.noteTooLong") }, { status: 400 });
+    }
+  }
 
   if (data.addSource) {
     const { source, segments } = data.addSource;
@@ -110,7 +130,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: strin
   }
 
   if (
-    data.content !== undefined ||
+    content !== undefined ||
     data.status !== undefined ||
     data.color !== undefined ||
     data.pinned !== undefined
@@ -120,20 +140,23 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: strin
       data: {
         // A content edit clears the gist; the next collapsed render asks for a
         // new one (SPEC.md §6).
-        ...(data.content !== undefined ? { content: data.content, gist: null } : {}),
+        ...(content !== undefined ? { content, gist: null } : {}),
         ...(data.status !== undefined ? { status: data.status } : {}),
         ...(data.color !== undefined ? { color: data.color } : {}),
         ...(data.pinned !== undefined ? { pinned: data.pinned } : {}),
       },
     });
     // A changed text is the note's history (SPEC.md §12).
-    if (data.content !== undefined && data.content !== note.content) {
-      await recordNoteEdit(noteId, access.user.id || null, data.content);
+    if (content !== undefined && content !== note.content) {
+      await recordNoteEdit(noteId, access.user.id || null, content);
       // A quote deleted from the note takes its source with it: the mark in
       // the reader no longer points at a note that lost the words (SPEC.md §6).
-      const sources = await db.source.findMany({ where: { noteId }, select: { id: true, quotedText: true } });
-      const left = sourcesLeftByQuotes(note.content, data.content, sources);
-      if (left.length > 0) await db.source.deleteMany({ where: { id: { in: left }, noteId } });
+      // An append keeps every quote, so it leaves every source.
+      if (data.content !== undefined) {
+        const sources = await db.source.findMany({ where: { noteId }, select: { id: true, quotedText: true } });
+        const left = sourcesLeftByQuotes(note.content, data.content, sources);
+        if (left.length > 0) await db.source.deleteMany({ where: { id: { in: left }, noteId } });
+      }
     }
   }
 
