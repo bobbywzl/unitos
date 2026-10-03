@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import type { AnnotationItem, LinkIn, LinkOut, SectionView } from "@/lib/types";
 import { api } from "@/lib/api";
 import { LINK_KIND_VAR } from "@/lib/annotations/kind";
@@ -314,7 +315,9 @@ export function AnnotationsPanel({
 
   return (
     <div className="flex flex-col gap-3.5">
-      {conversationOverlay}
+      {/* On the body: inside the tray a transformed ancestor (the sheet
+          rising in) would hold the page-wide overlay to the tray's box. */}
+      {conversationOverlay && typeof document !== "undefined" && createPortal(conversationOverlay, document.body)}
       {errorText && <p className="text-[13px] text-red-600">{errorText}</p>}
       <div className="flex items-center justify-end gap-1.5">
         {(counts.core > 0 || layer === "core") && (
@@ -342,6 +345,7 @@ export function AnnotationsPanel({
                   view={view}
                   menu={menuFor(a)}
                   summary={annotationSummary(a)}
+                  jumpNotebookId={notebookId}
                 >
                   <AnnotationBody annotation={a} />
                   {actionsFor(a)}
