@@ -63,6 +63,8 @@ const lettersOf = (text: string) => readingOf(text).letters;
     a report sets every chart's caption at one height, so the label repeats
     with its number changed, but it is the figure's, never the page's. */
 const CAPTION_LABEL_RE = /^\s*(?:図表|図|表|fig(?:ure)?\.?|table|abbildung|abb\.|tabelle)\s*[\dⅠ-Ⅻivxlc]/iu;
+/** A list item's bullet at a line's start (not a dash: a head may open with one). */
+const BULLET_RE = /^\s*[•◦▪■□‣∗*]\s/u;
 const CJK_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
 /** A line's length in words, a CJK character a quarter word (wordsOf makes
     each a word, so a chart's label "インターネット利用率" read as ten words). */
@@ -342,11 +344,18 @@ export function furnitureOf(lines: Line[], sizes: Sizes): Line[] {
     height: Math.max(...ls.map((l) => l.bottom - l.top)),
     numbers: (text.match(/\d+/g) ?? []).map(Number),
   });
+  // A line that opens with a bullet is a list's item, however many pages
+  // set it at one height: a running head or foot carries no bullet. PDF
+  // benchmark finding: a deck's template slides each end their list with
+  // the same item ("• Ut labore et dolore magna aliqua", pmichaillat-
+  // presentation pp. 2–3, 6–7), and the count read the parse's four items
+  // as a furniture line leaked three times; a parse that dropped the item
+  // would have lost the slide's last point and scored higher.
   const units: Unit[] = [
     ...candidates.map((l) => unitOf([l], l.text)),
     ...edgeRows.filter((r) => r.length > 1).map((r) => unitOf(r, r.map((l) => l.text.trim()).join(" "))),
   ]
-    .filter((u) => u.letters.length >= 3 && !CAPTION_LABEL_RE.test(u.text))
+    .filter((u) => u.letters.length >= 3 && !CAPTION_LABEL_RE.test(u.text) && !BULLET_RE.test(u.text))
     .sort((a, b) => a.top - b.top);
   // The units near a unit's height, from the list sorted by height (a book's thousands of rows).
   const reach = 0.03 * Math.max(792, ...[...sizes.values()].map((x) => x.height));

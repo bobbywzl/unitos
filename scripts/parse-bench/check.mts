@@ -1385,6 +1385,8 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
   for (const [p, left] of [[4, 80], [5, 100], [6, 120]]) at(p, 60, left, "Tip");
   for (const [p, n] of [[5, 2], [6, 11], [8, 13]]) at(p, 45, 72, `Note ${n}.`);
   at(4, 58, 72, "I.");
+  // A deck's template slides each end their list with the same bulleted item at one height.
+  for (const p of [2, 3, 4, 5]) at(p, 700, 72, "• Ut labore et dolore magna aliqua");
   const found = new Set(furnitureOf(lines, new Map(Array.from({ length: 10 }, (_, k) => [k + 1, { width: 612, height: 792 }]))).map((l) => `${l.page} ${l.text}`));
   const has = (key: string) => found.has(key);
   check(
@@ -1396,6 +1398,11 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     "free: a chapter's heading on pages far apart, a label at other places, notes that do not count, and a chapter's I. are no furniture",
     !has("3 Introduction") && !has("5 Tip") && !has("6 Note 11.") && !has("4 I."),
     [...found].filter((k) => /Introduction|Tip|Note|I\./.test(k)).join(" | "),
+  );
+  check(
+    "free: a bulleted item at one height on every slide is a list's item, not furniture",
+    !has("3 • Ut labore et dolore magna aliqua"),
+    [...found].filter((k) => /labore/.test(k)).join(" | "),
   );
   // A page number next to a heading's own words is no leak; one alone is.
   const pageNumber = { page: 2, top: 740, bottom: 750, left: 300, right: 306, text: "2" };
