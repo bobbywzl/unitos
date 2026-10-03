@@ -256,6 +256,13 @@ function kindOf(line: Line, ctx: PageContext, column: { left: number; right: num
   // journal that sets displays flush left starts them at the column edge
   // ("E_γ ε_γ ≃ 0.032 … GeV. (2)", MNRAS, arXiv 2503.22874 p. 5).
   if (label && words.length <= 2 && letters <= zoneChars) return "math";
+  // A labeled line that tall delimiters hold, set in from the column's
+  // edge, is a display's row whatever its words: a function's argument
+  // names in a formula are no prose (parse loop finding: a statistics
+  // book's (11.36), Ŷ ∼ norm(mean = μ(x₀), sd = σ√(1/n + …)), its names set
+  // in a typewriter face between tall parentheses, read as three
+  // paragraphs).
+  if (label && fenced && x > column.left + line.size * 1.5) return "math";
   // Pure math anywhere; math with a word or two of text only set in from
   // the column edge (a prose line that ends in a formula starts at it).
   if (words.length === 0 && letters <= zoneChars) return "math";
