@@ -220,6 +220,11 @@ type Popover = {
   side: "right" | "left" | "below";
   rightBase: number;
   cw: number;
+  // Container coords of the top of the words' first line. A toolbox under
+  // the words with no room below them goes above them (above), its bottom
+  // over this line.
+  wordsTop?: number;
+  above?: boolean;
 };
 
 // Where the browser's own editing commands belong: a text box, or any
@@ -2285,8 +2290,7 @@ export function ReaderInteractions({
     const headerBottom = pageGeo
       ? container.querySelector(".docs-header")?.getBoundingClientRect().bottom
       : undefined;
-    // Under the page editor's toolbar, and under the words, the bubbles drop
-    // below the toolbox.
+    // Under the page editor's toolbar the bubbles drop below the toolbox.
     const pageTop = headerBottom !== undefined ? Math.max(lineTop, headerBottom + 56) : lineTop;
     const pageBelow = Boolean(pageGeo) && side === "below";
     // Near the pane's top edge on screen — the document's first lines, or
@@ -2296,8 +2300,7 @@ export function ReaderInteractions({
     // On the right the stack also clears the Collapse and Extract chips,
     // which stick to the pane's top right (reader.tsx), so both stay in
     // reach.
-    // Below the words the bubbles drop under the toolbox too, and the
-    // toolbox leaves the room above it for Add to notes, as under a page.
+    // Below the words the toolbox is compact (the bubbles are its rows).
     const readerBelow = !pageGeo && side === "below";
     const nearTop = !pageGeo && (readerBelow || firstLine.top - containerRect.top < 100);
     const readerTop = nearTop ? Math.max(yTop, container.scrollTop + (side === "right" ? 100 : 48)) : yTop;
@@ -2312,7 +2315,8 @@ export function ReaderInteractions({
         ...(segments.length > 1 ? { segments } : {}),
       },
       x: Math.max(margin, Math.min(rawX, containerRect.width - margin)),
-      y: rect.bottom - containerRect.top + container.scrollTop + (side === "below" ? 14 : 6) + (pageBelow || readerBelow ? 48 : 0),
+      y: rect.bottom - containerRect.top + container.scrollTop + (side === "below" ? 14 : 6),
+      wordsTop: firstLine.top - containerRect.top + container.scrollTop,
       yTop:
         pageGeo && side === "right"
           ? Math.max(8, pageTop - containerRect.top + container.scrollTop)
@@ -4026,7 +4030,9 @@ export function ReaderInteractions({
   // measured against the pane's bottom edge. Beside the words the toolbox
   // moves up by the overflow: it stays beside its paragraph and covers no
   // words. Under the words, where moving up would cover the selection, the
-  // pane scrolls by the overflow instead, and the selection rides up with it.
+  // toolbox goes above the words when the room above holds it, so the words
+  // stay where the reader is looking; only with room on neither side does
+  // the pane scroll by the overflow, and the selection ride up with it.
   useLayoutEffect(() => {
     if (!popover) return;
     const container = containerRef.current;
@@ -4037,6 +4043,18 @@ export function ReaderInteractions({
     const overflow = Math.ceil(bottom - container.getBoundingClientRect().bottom + 20);
     if (overflow <= 0) return;
     if (popover.side === "below") {
+      // The room above runs from the words' first line up to the page
+      // editor's header, or to the chips at the pane's top.
+      const containerTop = container.getBoundingClientRect().top;
+      const ceiling = container.querySelector(".docs-header")?.getBoundingClientRect().bottom ?? containerTop + 48;
+      const height = bottom - el.getBoundingClientRect().top;
+      if (
+        popover.wordsTop !== undefined &&
+        popover.wordsTop - container.scrollTop + containerTop - ceiling >= height + 8
+      ) {
+        setPopover((p) => (p === popover ? { ...p, above: true } : p));
+        return;
+      }
       container.scrollBy({ top: overflow, behavior: "smooth" });
       return;
     }
@@ -4115,6 +4133,7 @@ export function ReaderInteractions({
         x: Math.max(margin, Math.min(rawX, containerRect.width - margin)),
         y: rect.bottom - containerRect.top + container.scrollTop + (side === "below" ? 14 : 6),
         yTop,
+        wordsTop: yTop,
         textLeft: articleRect ? articleRect.left - containerRect.left + 24 : 24,
         truncated: false,
         term: true,
@@ -7386,11 +7405,13 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           return { top: popover.yTop, left, width: Math.max(restWidth, Math.min(w, popover.cw - 6 - left)) };
         }
         if (popover.side === "below") {
-          return {
-            top: popover.y,
-            left: Math.max(6, Math.min(popover.x - w / 2, popover.cw - w - 6)),
-            width: w,
-          };
+          const left = Math.max(6, Math.min(popover.x - w / 2, popover.cw - w - 6));
+          // Above the words, the box's bottom sits over their first line, and
+          // a field it opens grows it upward, off the words.
+          if (popover.above && popover.wordsTop !== undefined) {
+            return { top: popover.wordsTop - 8, left, width: w, translate: "0 -100%" };
+          }
+          return { top: popover.y, left, width: w };
         }
         const width = Math.max(restWidth, Math.min(w, popover.textLeft - 10 - 6));
         return { top: popover.yTop, left: Math.max(6, popover.textLeft - width - 10), width };
@@ -7398,6 +7419,10 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
     : { top: 0, left: 0, width: 0 };
   // Near the top, the bubbles above the toolbox drop below it.
   const popoverNearTop = popover ? (popover.nearTop ?? popover.yTop < 54) : false;
+  // The compact toolbox — under the words, and on a coarse pointer — holds
+  // its bubbles as rows: the colors and the voice first, then Add to notes,
+  // so the stack is the toolbox alone and covers as few lines as it can.
+  const compact = coarse || popover?.side === "below";
   // One row of the toolbox. Coarse pointers get 44px-tall rows.
   const toolRow = coarse ? "px-3.5 py-2.5 text-[14px]" : "px-2.5 py-[5px] text-[12px]";
   // The assistant's bar (SPEC.md §29) takes the selection box's Assistant on
@@ -7435,6 +7460,33 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   // A bubble outside the toolbox (the highlight colors, Add to notes, Read
   // aloud) draws a clay ring when its tool leads.
   const leadRing = (tool: Tool) => (leads(tool) ? " ring-2 ring-clay/60" : "");
+  // Read aloud: a round bubble under the toolbox, or the last button of the
+  // colors row in the compact toolbox (inRow).
+  const voiceButton = (inRow: boolean) => (
+    <button
+      onClick={() => void speakSelection()}
+      data-track="read-aloud"
+      aria-label={voice === "idle" ? t("reader.readAloud") : t("reader.stopReading")}
+      data-tip={voice === "idle" ? t("reader.readAloud") : t("reader.stopReading")}
+      className={`flex ${
+        inRow ? (coarse ? "size-7" : "size-6") : `${coarse ? "size-11" : "size-[34px]"} shadow-float`
+      } items-center justify-center rounded-full ${
+        voice !== "idle"
+          ? "bg-clay text-clay-fg hover:bg-clay-600"
+          : inRow
+            ? "text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+            : "bg-card text-sand-700 hover:text-clay-800"
+      }${leadRing("readAloud")}`}
+    >
+      {voice === "loading" ? (
+        <SpinnerIcon size={inRow ? 12 : 14} className="motion-safe:animate-spin" />
+      ) : voice === "playing" ? (
+        <StopIcon size={inRow ? 11 : 13} />
+      ) : (
+        <VolumeIcon size={inRow ? 13 : 15} />
+      )}
+    </button>
+  );
   // Every tool card grows with its content up to the pane's height, then its
   // body scrolls (SPEC.md §6). Unmeasured (the SSR pass): no cap.
   const cardMaxHeight = paneHeight > 0 ? Math.max(200, paneHeight - 24) : undefined;
@@ -8313,11 +8365,11 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           )}
 
           {/* Define (SPEC.md §6): the first row when the selection is one
-              word, right under the highlight colors — on a
-              coarse pointer, where the colors are the toolbox's first row,
-              the row after them. The definition opens under the row. */}
+              word, right under the highlight colors — in the compact
+              toolbox, where the colors are the toolbox's first row, the row
+              after them. The definition opens under the row. */}
           {has("define") && (
-            <div className={`flex flex-col gap-0.5${coarse ? " -order-2" : ""}`}>
+            <div className={`flex flex-col gap-0.5${compact ? " -order-2" : ""}`}>
               <button
                 onClick={() => {
                   defineNew.seen();
@@ -8602,12 +8654,13 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           {/* Highlight: a separate bubble right above the toolbox holds the
               color dots, as wide as the toolbox. Near the top of the page it
               drops below instead, under the voice bubble, so it never lands
-              out of reach. On a coarse pointer it is the toolbox's first row. */}
+              out of reach. In the compact toolbox it is the first row, and
+              the voice ends it. */}
           {has("highlight") && (
           <div
             className={
-              coarse
-                ? `order-first flex items-center justify-around rounded-full px-2 py-2${leadRing("highlight")}`
+              compact
+                ? `order-first flex items-center justify-around rounded-full ${coarse ? "px-2 py-2" : "px-1.5 py-1"}${leadRing("highlight")}`
                 : `absolute left-0 flex w-full items-center justify-around rounded-full bg-card px-3 py-2 shadow-float ${
                     popoverNearTop ? "top-full mt-[50px]" : "bottom-full mb-2"
                   }${leadRing("highlight")}`
@@ -8628,6 +8681,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 style={{ background: HUE_DOT[color] }}
               />
             ))}
+            {compact && has("readAloud") && voiceButton(true)}
           </div>
           )}
 
@@ -8635,12 +8689,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               toolbox. Press it, pick a section, and the highlighted text lands
               there as a quote. It sits one slot higher than the highlight
               bubble; when the highlight bubble drops below near the page top,
-              it takes the near slot. On a coarse pointer it is the toolbox's
+              it takes the near slot. In the compact toolbox it is the
               second row. */}
           {has("addToNotes") && sectionChoices.length > 0 && (
             <div
               className={
-                coarse
+                compact
                   ? `-order-1 flex flex-col gap-0.5 rounded-2xl${leadRing("addToNotes")}`
                   : `absolute bottom-full left-0 flex w-full flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float ${
                       popoverNearTop ? "mb-2" : "mb-[52px]"
@@ -8668,7 +8722,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             // content; the room is what is in view above the toolbox.
             const PANEL_ROOM = 400;
             const dropsDown =
-              !coarse &&
+              !compact &&
               (Boolean(popover.page) || popover.yTop - (containerRef.current?.scrollTop ?? 0) < PANEL_ROOM);
             const first = sectionChoices[0];
             const hasNotes = sections.some((s) =>
@@ -8758,29 +8812,10 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           )}
 
           {/* Voice: a separate bubble under the toolbar reads the highlighted
-              text aloud. Press again to stop. Text only. */}
-          {has("readAloud") && (
-          <div className="absolute top-full left-0 mt-2">
-            <button
-              onClick={() => void speakSelection()}
-              data-track="read-aloud"
-              aria-label={voice === "idle" ? t("reader.readAloud") : t("reader.stopReading")}
-              data-tip={voice === "idle" ? t("reader.readAloud") : t("reader.stopReading")}
-              className={`flex ${coarse ? "size-11" : "size-[34px]"} items-center justify-center rounded-full shadow-float ${
-                voice === "idle"
-                  ? "bg-card text-sand-700 hover:text-clay-800"
-                  : "bg-clay text-clay-fg hover:bg-clay-600"
-              }${leadRing("readAloud")}`}
-            >
-              {voice === "loading" ? (
-                <SpinnerIcon size={14} className="motion-safe:animate-spin" />
-              ) : voice === "playing" ? (
-                <StopIcon size={13} />
-              ) : (
-                <VolumeIcon size={15} />
-              )}
-            </button>
-          </div>
+              text aloud. Press again to stop. Text only. In the compact
+              toolbox it ends the colors row. */}
+          {has("readAloud") && !(compact && has("highlight")) && (
+          <div className="absolute top-full left-0 mt-2">{voiceButton(false)}</div>
           )}
         </div>
       )}
