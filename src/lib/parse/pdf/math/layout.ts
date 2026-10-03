@@ -694,6 +694,16 @@ function braces(atoms: Atom[], rules: Rule[], used: Set<Rule>): Atom[] {
         (over ? b.bottom >= top - 0.2 * em && b.bottom < top + 1.5 * em : b.top <= bottom + 0.2 * em && b.top > bottom - 1.5 * em),
     );
     if (far.length === 0) continue;
+    // The label is one row: the baseline nearest the brace. A glyph of a
+    // later row within a line and a half of the brace is that row's (parse
+    // loop finding: GeoTopo p. 20 sets "⇒ ⋃ ⋃ W_i(x_j, y_i) = X × Y" 1.3 em
+    // under an underbrace's label, its ⋃ reaching up to the label; the
+    // row read as the label's second line, and the display was a crop).
+    if (near.length > 1) {
+      const row = over ? Math.min(...near.map((b) => b.yb)) : Math.max(...near.map((b) => b.yb));
+      const same = near.filter((b) => Math.abs(b.yb - row) < 0.7 * em);
+      near.splice(0, near.length, ...same);
+    }
     // A label wider than its brace runs past the brace's ends: the word
     // goes on at the label's size on the label's baseline, each letter
     // against the last (parse loop finding: the CS 229 refresher's
@@ -707,7 +717,10 @@ function braces(atoms: Atom[], rules: Rule[], used: Set<Rule>): Atom[] {
         for (;;) {
           const edge = dir < 0 ? Math.min(...near.map((b) => b.x1)) : Math.max(...near.map((b) => b.x2));
           const gap = (b: Atom) => (dir < 0 ? edge - b.x2 : b.x1 - edge);
-          const next = out.find((b) => onLabel(b) && gap(b) > -0.05 * b.size && gap(b) < 0.25 * b.size);
+          // A label of several words goes on past a word space too (GeoTopo
+          // p. 20's "Ein grün-oranges Kästchen" lost "Ein" before the
+          // space, and the display was a crop).
+          const next = out.filter((b) => onLabel(b) && gap(b) > -0.05 * b.size && gap(b) < 0.45 * b.size).sort((p, q) => gap(p) - gap(q))[0];
           if (!next) break;
           near.push(next);
         }
@@ -724,7 +737,16 @@ function braces(atoms: Atom[], rules: Rule[], used: Set<Rule>): Atom[] {
     const body = linear(structured);
     const label = near.length ? linear(near.map((b) => ({ ...b }))) : "";
     const tex = over ? `\\overbrace{${body}}${label ? `^{${label}}` : ""}` : `\\underbrace{${body}}${label ? `_{${label}}` : ""}`;
-    const made = node([...g, ...far, ...near], tex, mainBaseline(structured), maxSize(far));
+    // The node's width is the brace's and its content's: a label wider
+    // than the brace hangs past it, as a wide script does, and takes no
+    // room from the scripts of the symbol before (GeoTopo p. 20's "Ein"
+    // reached under the ⋃'s limit "m(x_j)", and the limit's "j" and ")"
+    // had no base).
+    const span = [...g, ...far];
+    const made = node([...g, ...far, ...near], tex, mainBaseline(structured), maxSize(far), {
+      x1: Math.min(...span.map((b) => b.x1)),
+      x2: Math.max(...span.map((b) => b.x2)),
+    });
     out = out.filter((b) => !g.includes(b) && !far.includes(b) && !near.includes(b));
     out.push(made);
   }
