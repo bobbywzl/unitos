@@ -324,7 +324,12 @@ export function misplaced(latex: string, atoms: Atom[], display: boolean, size: 
   if (!drawn) return [];
   const glyphs: (Placed & { size: number })[] = [];
   for (const a of atoms) {
-    if (!a.tex || a.cls === "piece" || a.cls === "radical" || (a.fam === "omx" && (a.cls === "open" || a.cls === "close"))) continue;
+    // A sized bar (\big| from the extension font's pieces) is a sized
+    // delimiter too: KaTeX draws it as pieces, which the tree walk leaves
+    // out, so the bar's glyph had no symbol to stand on (parse loop
+    // finding: a quantum mechanics book's ⟨r⃗| R̂ \big| r⃗′⟩ failed on its
+    // bar's row).
+    if (!a.tex || a.cls === "piece" || a.cls === "radical" || (a.fam === "omx" && (a.cls === "open" || a.cls === "close" || a.tex === "|" || a.tex === "\\|"))) continue;
     const own = placedSymbols(a.cls === "accent" ? `${a.tex}{}` : a.tex, display) ?? [];
     // A node of several symbols (a long arrow's label) is placed as a
     // whole: its symbols stay out of the comparison.
