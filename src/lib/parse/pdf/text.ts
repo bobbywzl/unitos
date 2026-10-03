@@ -690,13 +690,24 @@ export function boldShare(runs: Run[], length: number): number {
 // Monospace line: a listing's line (import compare loop finding: a python
 // listing shattered into lists, paragraphs and joined lines).
 export function isMonoLine(line: Line): boolean {
-  const chars = line.text.replace(/\s/g, "").length;
+  let chars = line.text.replace(/\s/g, "").length;
   if (chars === 0) return false;
   let mono = 0;
   for (const r of line.runs) {
     if (r.mono) mono += line.text.slice(r.start, r.end).replace(/\s/g, "").length;
   }
-  return mono / chars >= 0.85;
+  // A listing's line number: digits at the line's start in a face that is
+  // no typewriter face, set smaller than the code after it, count for
+  // neither side (parse loop finding: a LaTeX package's manual numbers
+  // each listing line in 5 pt beside 8 pt code; a line "2 {" counted its
+  // number as half its characters, read as no code, and every listing
+  // broke into code and paragraphs at its braces).
+  const [first, ...rest] = line.items;
+  const code = rest.filter((it) => it.mono && it.str.trim());
+  if (first && !first.mono && /^\s*\d{1,4}\s*$/.test(first.str) && code.length > 0 && first.size < Math.min(...code.map((it) => it.size)) * 0.85) {
+    chars -= first.str.trim().length;
+  }
+  return chars > 0 && mono / chars >= 0.85;
 }
 
 // ── Style and link spans out of runs ────────────────────────────────────────
