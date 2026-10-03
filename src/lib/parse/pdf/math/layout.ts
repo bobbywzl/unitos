@@ -222,12 +222,25 @@ const LETTER_RE = /^(?:[A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u017F\p{Script=H
 const MARKED_RE = /[\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u017F\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}ー]/u;
 const CM_NAME_RE = /cm(r|mi|mib|sy|bsy|ex|bx|ti|ss|tt|sl)\d/i;
 
+// A text font's spacing accent over a formula's letter: mathpazo sets
+// \hat, \tilde, \bar, and \dot with Palatino's own accents (parse loop
+// finding: a quantum mechanics book's every X̂ |xyz⟩ lost its hat, and each
+// display with an operator was a crop).
+const TEXT_ACCENTS: Record<string, string> = {
+  "ˆ": "\\hat", "^": "\\hat", "˜": "\\tilde", "~": "\\tilde", "¯": "\\bar", "˙": "\\dot", "ˇ": "\\check", "˘": "\\breve", "´": "\\acute", "`": "\\grave", "¨": "\\ddot",
+};
+
 function textAtom(g: Glyph): Atom | null {
   const ch = g.unicode;
   // A math font's glyph no table reads (MathTime's big parenthesis) is no
   // text: read as a small one, it made a row of its own over its formula.
   // Nor is a glyph of a font with no name: bbm's 𝕜 reads "k" (glyphs.ts).
-  if (!TEXT_CHAR_RE.test(ch) || CM_NAME_RE.test(g.base) || isUnreadMath(g) || isUnnamedFont(g.base)) return null;
+  if (CM_NAME_RE.test(g.base) || isUnreadMath(g) || isUnnamedFont(g.base)) return null;
+  const accent = TEXT_ACCENTS[ch];
+  if (accent) {
+    return { fam: null, code: g.code, entry: null, tex: accent, cls: "accent", size: g.size, x1: g.x, x2: g.x + Math.max(g.w, 0), yb: g.y, top: g.y + 0.69 * g.size, bottom: g.y, upright: false };
+  }
+  if (!TEXT_CHAR_RE.test(ch)) return null;
   const [height, depth] = /[gjpqy]/.test(ch)
     ? [0.45, 0.22]
     : /[acemnorsuvwxz]/.test(ch)
