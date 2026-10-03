@@ -2,7 +2,7 @@
  "total": {
   "f1": 0.891,
   "precision": 0.837,
-  "recall": 0.953
+  "recall": 0.954
  },
  "pages": {
   "100noticias.com-millones.html": {
@@ -1941,9 +1941,9 @@
    "fn": 0
   },
   "taz.de.siemens.html": {
-   "tp": 0,
-   "fp": 1,
-   "fn": 3
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
   },
   "tegernseerstimme.de-Klimavorreiter.html": {
    "tp": 3,
