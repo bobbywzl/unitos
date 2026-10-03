@@ -41,6 +41,8 @@ import type {
   Distillation,
   DistillationView,
   ExtractionView,
+  NoteView,
+  SectionView,
 } from "@/lib/types";
 import type { DocumentReference } from "@/lib/parse/types";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
@@ -84,6 +86,8 @@ import { clipWords } from "@/lib/markdown-preview";
 import { AnnotationGrip } from "@/components/outline/annotation-grip";
 import { useCardDropOpen } from "@/components/outline/use-card-drop";
 import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
   CollapseIcon,
   CommentIcon,
   DefineIcon,
@@ -124,6 +128,7 @@ import { AuthorChip } from "@/components/collab/person-badge";
 import { ConversationView } from "@/components/reader/conversation-view";
 import { DistillPage } from "@/components/reader/distill-page";
 import { ContentsMenu } from "@/components/reader/contents-menu";
+import { NotePicker } from "@/components/reader/note-picker";
 import { PANE_HEADER } from "@/components/reader/reader-panes";
 import type { FigureRenderInfo } from "@/components/reader/figure-capture";
 import { Reader, type TranscriptVariant } from "@/components/reader/reader";
@@ -421,13 +426,19 @@ type CardRect = { left: number; right: number; top: number; bottom: number };
 
 function measureSideCards(container: HTMLElement | null, excludeKind?: string) {
   if (!container) {
-    return { rects: [] as CardRect[], articleLeft: 0, articleRight: 0, cw: 1200 };
+    return { rects: [] as CardRect[], articleLeft: 0, articleRight: 0, wordsLeft: 0, wordsRight: 0, cw: 1200 };
   }
   const crect = container.getBoundingClientRect();
   const arect = container.querySelector("article")?.getBoundingClientRect();
   const cw = container.clientWidth;
   const articleLeft = arect ? arect.left - crect.left : cw;
   const articleRight = arect ? arect.right - crect.left : 0;
+  // The words' edges: the article's box less its padding, where a toolbox
+  // may still sit without covering a word.
+  const article = container.querySelector("article");
+  const pad = article ? getComputedStyle(article) : null;
+  const wordsLeft = articleLeft + (pad ? parseFloat(pad.paddingLeft) || 0 : 0);
+  const wordsRight = articleRight - (pad ? parseFloat(pad.paddingRight) || 0 : 0);
   const rects = [...container.querySelectorAll<HTMLElement>("[data-side-card]")]
     // A card still playing its exit (Presence) holds no place.
     .filter((el) => el.dataset.sideCard !== excludeKind && !el.closest(".presence-exit"))
@@ -440,7 +451,7 @@ function measureSideCards(container: HTMLElement | null, excludeKind?: string) {
         bottom: r.bottom - crect.top + container.scrollTop,
       };
     });
-  return { rects, articleLeft, articleRight, cw };
+  return { rects, articleLeft, articleRight, wordsLeft, wordsRight, cw };
 }
 
 function blocksOnSide(
@@ -889,6 +900,7 @@ export function ReaderInteractions({
   documentId,
   notebookId,
   sectionChoices,
+  sections = [],
   attachedDocuments,
   title,
   blocks,
@@ -933,6 +945,9 @@ export function ReaderInteractions({
   // an article works on the lines. No edit mode, no article menu.
   transcript?: TranscriptVariant;
   sectionChoices: { id: string; label: string }[];
+  /** The project's sections with their notes: the notes Add to a note… can
+      append to (SPEC.md §6). Absent = the row is not offered. */
+  sections?: SectionView[];
   attachedDocuments: { id: string; title: string }[];
   title: string;
   blocks: BlockData[];
@@ -1079,6 +1094,16 @@ export function ReaderInteractions({
   // selection alive, which also keeps a native select from ever opening.
   const [submenu, setSubmenu] = useState<null | "add" | "ai" | "comment" | "define">(null);
   const [commentDraft, setCommentDraft] = useState("");
+  // The Add to notes bubble (SPEC.md §6): the comment that goes under the
+  // quote, and whether the bubble lists the sections for a new note or the
+  // notes to append to. Keyed to the selection it was typed for: a new
+  // selection starts the bubble over, so a comment typed for one passage
+  // does not go under another.
+  const [addDraft, setAddDraft] = useState<{ key: string | null; comment: string; mode: "sections" | "notes" }>({
+    key: null,
+    comment: "",
+    mode: "sections",
+  });
   // The page editor's right-click Explain, waiting for its popover (below).
   const [pendingExplain, setPendingExplain] = useState(false);
   // The lead tool Jev predicts for a popover (SPEC.md §6), keyed by the
@@ -1386,9 +1411,15 @@ export function ReaderInteractions({
   // Optimistic highlight marks: painted the instant a color dot is clicked,
   // cleared when the server's anchors arrive with the refresh. sourceId: the
   // stored source, once the save answers, so a mark whose words were typed
-  // into meanwhile still finds its stored copy.
+  // into meanwhile still finds its stored copy. tool: the assistant's
+  // conversation mark paints as the stored copy will (block-view.tsx
+  // anchorClass): the thin underline in the assistant's color, filled only
+  // while its card is open and the assistant is not changing the passage.
   const [localAnchors, setLocalAnchors] = useState<
-    Record<string, { start: number; end: number; color: string | null; comment?: boolean; sourceId?: string }[]>
+    Record<
+      string,
+      { start: number; end: number; color: string | null; comment?: boolean; sourceId?: string; tool?: Highlight["tool"] }[]
+    >
   >({});
   // Spans made in this session: their marks sweep in left to right the first
   // time they paint (block-view.tsx mark-sweep). Keyed `${blockId}:${start}:${end}`,
@@ -1414,14 +1445,16 @@ export function ReaderInteractions({
   }
   // A span an AI tool persisted keeps its mark after its card closes, until
   // the server's copy arrives — the same optimistic paint a color dot gets.
-  // Every segment of the passage paints.
-  function addLocalAnchor(anchor: Anchor) {
+  // Every segment of the passage paints. The assistant passes its tool, so
+  // its mark is the assistant's from the first paint, never a clay fill over
+  // a passage its suggestions are changing.
+  function addLocalAnchor(anchor: Anchor, tool?: Highlight["tool"]) {
     setLocalAnchors((prev) => {
       let next = prev;
       for (const s of segmentsOf(anchor)) {
         const list = next[s.blockId] ?? [];
         if (list.some((h) => h.start === s.startOffset && h.end === s.endOffset)) continue;
-        next = { ...next, [s.blockId]: [...list, { start: s.startOffset, end: s.endOffset, color: null }] };
+        next = { ...next, [s.blockId]: [...list, { start: s.startOffset, end: s.endOffset, color: null, tool }] };
       }
       return next;
     });
@@ -2153,7 +2186,14 @@ export function ReaderInteractions({
     };
     const startBlock = blockOf(range.startContainer);
     const endBlock = blockOf(range.endContainer);
-    if (!startBlock && !pageSegments) return null;
+    // A drag that starts off the blocks but on the article — the title, the
+    // label over it, the space between blocks — still reads the blocks it
+    // reaches: the first from its start, as a drag from the margin does.
+    const startEl = range.startContainer instanceof Element ? range.startContainer : range.startContainer.parentElement;
+    const onArticle =
+      Boolean(startEl?.closest("article")) &&
+      !startEl?.closest("[data-side-card], [data-log-card], [data-selection-popover], [data-anchor-skip]");
+    if (!startBlock && !pageSegments && !onArticle) return null;
     // A layer inside this one (the article card in the video pane, SPEC.md
     // §11) takes its own selections: a block whose nearest reader root is
     // not this container belongs to that layer.
@@ -2232,9 +2272,20 @@ export function ReaderInteractions({
     const yTop = Math.max(8, rect.top - containerRect.top + container.scrollTop);
     // The rail's side follows the tool blocks nearby: right of the text when
     // that side is clear, else left, else directly below the highlight.
-    const { rects, articleLeft, articleRight, cw } = measureSideCards(container);
+    const { rects, articleLeft, articleRight, wordsLeft, wordsRight, cw } = measureSideCards(container);
     const articleMid = (articleLeft + articleRight) / 2;
     const POPOVER_ESTIMATE = 280;
+    // A side takes the toolbox only with the room for it beside the words:
+    // in a narrow pane (a split pane, a small window) the toolbox landed on
+    // the words it was opened for. Without the room it goes below the
+    // selection, as the page editor's does under its page.
+    // The toolbox at rest is 176px with a 6px edge margin; pressed against
+    // the pane's edge it may ride over the words' box by a sliver (the last
+    // line rarely reaches the box's edge), never by more.
+    const TOOLBOX_EDGE = 176 + 6;
+    const SLIVER = 40;
+    const roomRight = wordsRight - (cw - TOOLBOX_EDGE) <= SLIVER;
+    const roomLeft = TOOLBOX_EDGE + 10 - wordsLeft <= SLIVER;
     // The page editor (SPEC.md §29): beside the page's right edge, else over
     // its margin, else under the words.
     const shift = docsShiftRef.current;
@@ -2245,9 +2296,9 @@ export function ReaderInteractions({
         ? toolbarLeft(pageGeo, shift, 176) === null
           ? ("below" as const)
           : ("right" as const)
-        : blocksOnSide(rects, articleMid, "right", yTop, POPOVER_ESTIMATE).length === 0
+        : roomRight && blocksOnSide(rects, articleMid, "right", yTop, POPOVER_ESTIMATE).length === 0
           ? ("right" as const)
-          : blocksOnSide(rects, articleMid, "left", yTop, POPOVER_ESTIMATE).length === 0
+          : roomLeft && blocksOnSide(rects, articleMid, "left", yTop, POPOVER_ESTIMATE).length === 0
             ? ("left" as const)
             : ("below" as const);
     // The toolbox's first row centers on the selection's first line, as
@@ -2261,6 +2312,18 @@ export function ReaderInteractions({
     // below the toolbox.
     const pageTop = headerBottom !== undefined ? Math.max(lineTop, headerBottom + 56) : lineTop;
     const pageBelow = Boolean(pageGeo) && side === "below";
+    // Near the pane's top edge on screen — the document's first lines, or
+    // the line at the top after a scroll — the bubbles above the toolbox
+    // (Add to notes, the colors) would sit out of view: the colors drop
+    // below it, and the toolbox moves down to where Add to notes fits above.
+    // On the right the stack also clears the Collapse and Extract chips,
+    // which stick to the pane's top right (reader.tsx), so both stay in
+    // reach.
+    // Below the words the bubbles drop under the toolbox too, and the
+    // toolbox leaves the room above it for Add to notes, as under a page.
+    const readerBelow = !pageGeo && side === "below";
+    const nearTop = !pageGeo && (readerBelow || firstLine.top - containerRect.top < 100);
+    const readerTop = nearTop ? Math.max(yTop, container.scrollTop + (side === "right" ? 100 : 48)) : yTop;
     return {
       anchor: {
         blockId,
@@ -2272,11 +2335,11 @@ export function ReaderInteractions({
         ...(segments.length > 1 ? { segments } : {}),
       },
       x: Math.max(margin, Math.min(rawX, containerRect.width - margin)),
-      y: rect.bottom - containerRect.top + container.scrollTop + (side === "below" ? 14 : 6) + (pageBelow ? 48 : 0),
+      y: rect.bottom - containerRect.top + container.scrollTop + (side === "below" ? 14 : 6) + (pageBelow || readerBelow ? 48 : 0),
       yTop:
         pageGeo && side === "right"
           ? Math.max(8, pageTop - containerRect.top + container.scrollTop)
-          : yTop,
+          : readerTop,
       textLeft,
       endLeft,
       endTop,
@@ -2284,7 +2347,7 @@ export function ReaderInteractions({
       side,
       rightBase: articleRight + 10,
       cw,
-      ...(headerBottom !== undefined ? { nearTop: pageBelow || lineTop - headerBottom < 96 } : {}),
+      ...(headerBottom !== undefined ? { nearTop: pageBelow || lineTop - headerBottom < 96 } : { nearTop }),
       ...(pageGeo ? { page: { geo: pageGeo } } : {}),
     };
   }, []);
@@ -2408,6 +2471,16 @@ export function ReaderInteractions({
           }
         }
         showTools(captured);
+        // A selection that began off the blocks (the title, the label over
+        // it) leaves the browser's own selection drawn there after the tint
+        // paints the blocks: the tint is the selection now, so the browser's
+        // goes.
+        if (captured && !richTextRef.current) {
+          const sel = window.getSelection();
+          const node = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).startContainer : null;
+          const el = node instanceof Element ? node : node?.parentElement;
+          if (el && !el.closest("[data-block-id], [data-edit-block]")) sel?.removeAllRanges();
+        }
       });
     };
     // The toolbar on a selection. A pending link waits on the next
@@ -3917,6 +3990,12 @@ export function ReaderInteractions({
     ? `${popover.anchor.blockId}:${popover.anchor.startOffset}:${popover.anchor.endOffset}:${popover.term ? "t" : ""}${popover.figure ? "f" : ""}`
     : null;
   const leadTool: Tool | null = leadAnswer && leadAnswer.key === popoverAnchorKey ? leadAnswer.tool : null;
+  const addComment = addDraft.key === popoverAnchorKey ? addDraft.comment : "";
+  const addMode = addDraft.key === popoverAnchorKey ? addDraft.mode : "sections";
+  const setAddComment = (comment: string) =>
+    setAddDraft((d) => ({ key: popoverAnchorKey, comment, mode: d.key === popoverAnchorKey ? d.mode : "sections" }));
+  const setAddMode = (mode: "sections" | "notes") =>
+    setAddDraft((d) => ({ key: popoverAnchorKey, mode, comment: d.key === popoverAnchorKey ? d.comment : "" }));
   useEffect(() => {
     if (!popover || !popoverAnchorKey || popover.term || popover.figure) return;
     const text = popover.anchor.quotedText.trim();
@@ -3948,6 +4027,61 @@ export function ReaderInteractions({
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [popoverAnchorKey, notebookId]);
+
+  // The tint repaints the paragraph's words as marks, and the browser's
+  // selection, which lived in the text nodes the repaint replaced, collapses
+  // with them. A press on the tinted words then starts a new selection in
+  // place of the quote drag (dragstart reads the selection), so the drag
+  // worked only in a paragraph that already had marks. Once the tint has
+  // painted, the selection goes back over the marks: the same words, with
+  // the same transparent color. Not in the page editor, which keeps its own
+  // selection and takes no tint.
+  useLayoutEffect(() => {
+    if (!popover || popover.term || popover.figure || richTextRef.current) return;
+    const container = containerRef.current;
+    const sel = window.getSelection();
+    if (!container || !sel) return;
+    const marks = container.querySelectorAll(".selection-mark");
+    if (marks.length === 0) return;
+    const first = marks[0];
+    const last = marks[marks.length - 1];
+    if (sel.rangeCount > 0 && !sel.isCollapsed) {
+      const range = sel.getRangeAt(0);
+      if (first.contains(range.startContainer) && last.contains(range.endContainer)) return;
+    }
+    const range = document.createRange();
+    range.setStart(first, 0);
+    range.setEnd(last, last.childNodes.length);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [popoverAnchorKey]);
+
+  // A selection low in the pane opens the toolbox past the pane's bottom
+  // edge: its last rows and the bubbles under it out of view, so the reader
+  // scrolls to reach a tool they just asked for. Once the toolbox is on
+  // screen, its stack (the toolbox and the bubbles anchored to it) is
+  // measured against the pane's bottom edge. Beside the words the toolbox
+  // moves up by the overflow: it stays beside its paragraph and covers no
+  // words. Under the words, where moving up would cover the selection, the
+  // pane scrolls by the overflow instead, and the selection rides up with it.
+  useLayoutEffect(() => {
+    if (!popover) return;
+    const container = containerRef.current;
+    const el = container?.querySelector<HTMLElement>("[data-layer-toolbar]");
+    if (!container || !el) return;
+    let bottom = el.getBoundingClientRect().bottom;
+    for (const child of el.children) bottom = Math.max(bottom, child.getBoundingClientRect().bottom);
+    const overflow = Math.ceil(bottom - container.getBoundingClientRect().bottom + 20);
+    if (overflow <= 0) return;
+    if (popover.side === "below") {
+      container.scrollBy({ top: overflow, behavior: "smooth" });
+      return;
+    }
+    const floor = container.scrollTop + 8;
+    setPopover((p) => (p === popover ? { ...p, yTop: Math.max(floor, p.yTop - overflow) } : p));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [popoverAnchorKey]);
 
   // A definition on its way stops when its popover closes or moves to
   // another selection: nobody is left to read it.
@@ -4269,31 +4403,68 @@ export function ReaderInteractions({
     }
   }
 
+  // What Add to notes writes (SPEC.md §6): the highlighted text as a quote —
+  // blockquote lines render as the boxed quotation on the note card; a
+  // passage over several blocks quotes every block, a blank line between —
+  // then, after a blank line, the comment the reader typed in the bubble.
+  function addToNotesText(anchor: Anchor): string {
+    const quote = passageText(anchor)
+      .split("\n")
+      .map((line) => (line ? `> ${line}` : ">"))
+      .join("\n");
+    const comment = addComment.trim();
+    return comment ? `${quote}\n\n${comment}` : quote;
+  }
+
+  // After the quote landed: the toolbar closes and the page refreshes, so
+  // the note shows where it went.
+  function addedToNotes(anchor: Anchor) {
+    markFreshAnchor(anchor);
+    setPopover(null);
+    setAddDraft({ key: null, comment: "", mode: "sections" });
+    window.getSelection()?.removeAllRanges();
+    refreshWhenOnline(router);
+  }
+
   async function addToSection(sectionId: string) {
     if (!popover || busy) return;
     setBusy(true);
     try {
       await flushLiveBlock(popover.anchor.blockId);
-      // The highlighted text lands as a quote: blockquote lines render as the
-      // boxed quotation on the note card. Edits and replies go underneath. A
-      // passage over several blocks quotes every block, a blank line between.
-      const quote = passageText(popover.anchor)
-        .split("\n")
-        .map((line) => (line ? `> ${line}` : ">"))
-        .join("\n");
       const note = await api<{ id: string }>("/api/notes", "POST", {
         sectionId,
-        content: quote,
+        content: addToNotesText(popover.anchor),
         source: { documentId, ...anchorBody(popover.anchor) },
         ...segmentsBody(popover.anchor),
       });
-      markFreshAnchor(popover.anchor);
-      setPopover(null);
-      window.getSelection()?.removeAllRanges();
-      refreshWhenOnline(router);
+      addedToNotes(popover.anchor);
       // A blank document opens with the tray folded (SPEC.md §29): the tray
       // opens on the new note, so the reader sees where it went.
       if (richTextRef.current) window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: note.id } }));
+    } catch (err) {
+      showError(err instanceof Error ? err.message : t("reader.addFailed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Add to a note… (SPEC.md §6): the quote and the comment go onto the end of
+  // a note the reader picked, and the passage's anchor becomes a source of
+  // that note. The tray then opens on the note, so the reader sees it land.
+  async function addToNote(note: NoteView) {
+    if (!popover || busy) return;
+    setBusy(true);
+    try {
+      await flushLiveBlock(popover.anchor.blockId);
+      await api(`/api/notes/${note.id}`, "PATCH", {
+        append: addToNotesText(popover.anchor),
+        addSource: {
+          source: { documentId, ...anchorBody(popover.anchor) },
+          ...segmentsBody(popover.anchor),
+        },
+      });
+      addedToNotes(popover.anchor);
+      window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: note.id } }));
     } catch (err) {
       showError(err instanceof Error ? err.message : t("reader.addFailed"));
     } finally {
@@ -5435,7 +5606,7 @@ export function ReaderInteractions({
       window.getSelection()?.removeAllRanges();
       // The conversation continues in a chat card docked beside the article.
       markFreshAnchor(anchor);
-      if (turn.noteId) addLocalAnchor(anchor);
+      if (turn.noteId) addLocalAnchor(anchor, "assistant");
       const slot = claimSideSlot("assistant", yTop);
       setAssistantChat({
         anchor,
@@ -5502,7 +5673,7 @@ export function ReaderInteractions({
     try {
       await flushLiveBlock(anchor.blockId);
       const turn = await assistantTurn(text, anchor, messages, noteId, controller.signal, undefined, undefined, chip?.name, replacing);
-      if (turn.noteId) addLocalAnchor(anchor);
+      if (turn.noteId) addLocalAnchor(anchor, "assistant");
       const done: AssistantBar = {
         ...current,
         noteId: turn.noteId ?? noteId,
@@ -5599,6 +5770,7 @@ export function ReaderInteractions({
     const suggestKey = plan.suggestions
       ? await landSuggestions(plan.suggestions, anchor ? `${command}\n\n${passageText(anchor)}` : command, replacing)
       : undefined;
+    if (suggestKey && anchor) collapseSelectionAfterLanding(suggestKey);
     if (parts.length === 0) parts.push(plan.suggestions?.summary || (plan.warnings[0] ?? t("reader.noActions")));
     // The anchored conversation persisted server-side; refresh paints its mark.
     if (plan.conversationNoteId) router.refresh();
@@ -5682,6 +5854,24 @@ export function ReaderInteractions({
     run.running = false;
     publishRun(key);
     return key;
+  }
+
+  // A command on selected words landed suggestions in the page editor: the
+  // selection collapses to its end. The reader picked the passage to have it
+  // changed, not to keep it selected, and the moment the page takes the focus
+  // back a long passage drawn blue over the suggestions in the assistant's
+  // color is a block of color over the very words to review. The caret lands
+  // after the passage, where the page's own commands leave it; the page is
+  // not focused, so nothing scrolls. A plain answer lands no suggestion and
+  // moves nothing; the panel's command over the document (suggestDocument)
+  // runs on no selection and never comes here.
+  function collapseSelectionAfterLanding(key: string) {
+    const run = suggestRunsRef.current.get(key);
+    const editor = pageEditorIn(containerRef.current);
+    if (!run || run.ids.length === 0 || !editor || editor.isDestroyed) return;
+    const { selection } = editor.state;
+    if (selection.empty) return;
+    editor.commands.setTextSelection(selection.to);
   }
 
   function countRun(run: SuggestionRun, present: readonly { id: string }[]): number {
@@ -6039,7 +6229,7 @@ export function ReaderInteractions({
         undefined,
         pending ? suggestRunsRef.current.get(pending)?.ids : undefined,
       );
-      if (turn.noteId && chat.anchor && !open) addLocalAnchor(chat.anchor);
+      if (turn.noteId && chat.anchor && !open) addLocalAnchor(chat.anchor, "assistant");
       setAssistantChat((c) => {
         if (!c) return c;
         if (open) {
@@ -6849,6 +7039,32 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   return block ? formatKind(block.type, block.html, block.text) : null;
 }
 
+  // The assistant is changing the passage the chat is on: a message is in
+  // flight, or the last answer landed suggestions (SPEC.md §29). A reader
+  // who selects a long passage for a command does not want it kept as a
+  // block of color while the suggestions, in the assistant's color, land in
+  // it and are reviewed — unlike a passage selected to annotate. So while
+  // this holds the passage keeps the thin mark a closed conversation has
+  // (block-view.tsx tool-mark: the underline and no fill), and the card
+  // keeps its connector line; a plain answer brings the fill back.
+  const assistantEditing =
+    assistantChat !== null && (assistantChat.busy || assistantChat.messages.at(-1)?.suggestKey !== undefined);
+  // The spans of the chat's passage, as the local marks key them.
+  const chatSpans = new Set(
+    assistantChat?.anchor ? segmentsOf(assistantChat.anchor).map((s) => `${s.blockId}:${s.startOffset}:${s.endOffset}`) : [],
+  );
+  // The assistant's thin mark on a span: the mark a stored conversation
+  // paints with its card closed.
+  const thinAssistantMark = (start: number, end: number): Highlight => ({
+    sourceId: null,
+    start,
+    end,
+    kind: "anchor",
+    annotation: true,
+    tool: "assistant",
+    open: false,
+  });
+
   // Merge anchor, extraction, term, and link layers per block.
   const highlightsByBlock: Record<string, Highlight[]> = {};
   for (const [blockId, list] of Object.entries(anchorHighlights)) {
@@ -6876,11 +7092,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           ((stored?.conversation.length ?? 0) > 0 ||
             openTurns > 0 ||
             (toolConversationsRef.current[h.noteId]?.length ?? 0) > 0);
-        // Its card open: the mark keeps the fill (block-view.tsx open).
+        // Its card open: the mark keeps the fill (block-view.tsx open). The
+        // assistant's loses it while the assistant is changing the passage.
         const open =
           bubble?.noteId === h.noteId ||
           simplifyCard?.noteId === h.noteId ||
-          assistantChat?.noteId === h.noteId ||
+          (assistantChat?.noteId === h.noteId && !assistantEditing) ||
           commentCard?.noteId === h.noteId;
         return {
           ...h,
@@ -6902,9 +7119,13 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         start: h.start,
         end: h.end,
         color: h.color,
-        annotation: Boolean(h.comment),
+        annotation: Boolean(h.comment) || h.tool !== undefined,
         comment: h.comment,
         kind: "anchor" as const,
+        // The assistant's local mark fills only as the stored one would: its
+        // chat open on this passage, and the assistant not changing it.
+        tool: h.tool,
+        open: h.tool !== undefined && chatSpans.has(`${blockId}:${h.start}:${h.end}`) && !assistantEditing,
       })),
     ];
   }
@@ -7107,8 +7328,11 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   // While an Explanation, Assistant, or Comment card is open, its anchor keeps
   // the anchor tint — the same mark its stored annotation paints after refresh.
   // Spans the server already marks are skipped, so the text never double-marks.
+  // The assistant's passage keeps the thin mark instead while the assistant
+  // is changing it (assistantEditing above).
   for (const anchor of [bubble?.anchor, assistantChat?.anchor, commentCard?.anchor]) {
     if (!anchor) continue;
+    const thin = anchor === assistantChat?.anchor && assistantEditing;
     for (const s of segmentsOf(anchor)) {
       const existing = highlightsByBlock[s.blockId] ?? [];
       const marked = existing.some(
@@ -7117,29 +7341,38 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       if (marked) continue;
       highlightsByBlock[s.blockId] = [
         ...existing,
-        { sourceId: null, start: s.startOffset, end: s.endOffset, kind: "anchor" as const },
+        thin
+          ? thinAssistantMark(s.startOffset, s.endOffset)
+          : { sourceId: null, start: s.startOffset, end: s.endOffset, kind: "anchor" as const },
       ];
     }
   }
   // The text under the open toolbar keeps the selection tint (block-view.tsx
   // kind "selection"): the browser's own selection goes the moment the
-  // assistant's command box or the comment box takes focus, and while the
-  // assistant runs; the mark stays until the toolbar closes. Every block of
-  // the passage keeps it, so the tint is the selection, whole, from the
-  // moment the pointer lifts. The Close link chip's highlight keeps it the
-  // same way. The page editor keeps its own selection drawn, blue or gray
-  // (SPEC.md §29): no tint, so opening the toolbar never repaints the page,
-  // and a repaint cannot put back a selection the keys have just moved. A
-  // core's words (SPEC.md §28) are drawn over the page, not its text: they
-  // keep the tint.
+  // assistant's command box or the comment box takes focus; the mark stays
+  // until the toolbar closes. Every block of the passage keeps it, so the
+  // tint is the selection, whole, from the moment the pointer lifts. The
+  // Close link chip's highlight keeps it the same way. The page editor keeps
+  // its own selection drawn, blue or gray (SPEC.md §29): no tint, so opening
+  // the toolbar never repaints the page, and a repaint cannot put back a
+  // selection the keys have just moved. A core's words (SPEC.md §28) are
+  // drawn over the page, not its text: they keep the tint. From the moment
+  // the toolbar's command box sends to the assistant (aiBusy), the passage
+  // keeps the assistant's thin mark in place of the tint: the toolbar stays
+  // open with its thinking indicator until the answer lands, and the reader
+  // asked for the passage to be worked on, not to look at it tinted. A
+  // figure keeps the tint: its tint is the ring around it, not a fill.
   const toolbarAnchor = popover?.anchor ?? closeLink?.anchor ?? null;
   const underToolbar = richText && !(toolbarAnchor && isCoreKey(toolbarAnchor.blockId)) ? null : toolbarAnchor;
   if (underToolbar) {
+    const running = aiBusy && popover !== null && underToolbar === popover.anchor && !popover.figure;
     for (const s of segmentsOf(underToolbar)) {
       const existing = highlightsByBlock[s.blockId] ?? [];
       highlightsByBlock[s.blockId] = [
         ...existing,
-        { sourceId: null, start: s.startOffset, end: s.endOffset, kind: "selection" as const },
+        running
+          ? thinAssistantMark(s.startOffset, s.endOffset)
+          : { sourceId: null, start: s.startOffset, end: s.endOffset, kind: "selection" as const },
       ];
     }
   }
@@ -8433,32 +8666,101 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 {t("reader.addToNotes")}
               </button>
           {(() => {
-            // Beside the page editor's page the list drops down over the
-            // tools: growing upward, it would go under the page editor's
-            // header.
-            const list = submenu === "add" && (
+            // The bubble's panel: the comment field on top, then the
+            // sections for a new note under "New note in", then Add to a
+            // note…, which swaps the sections for the note picker. Beside the
+            // page editor's page, and wherever the room above the toolbox is
+            // short for it, the panel drops down over the tools: growing
+            // upward, it would go under the page editor's header, or off the
+            // top of the pane. yTop counts from the top of the scrolled
+            // content; the room is what is in view above the toolbox.
+            const PANEL_ROOM = 400;
+            const dropsDown =
+              !coarse &&
+              (Boolean(popover.page) || popover.yTop - (containerRef.current?.scrollTop ?? 0) < PANEL_ROOM);
+            const first = sectionChoices[0];
+            const hasNotes = sections.some((s) =>
+              [s, ...s.children].some((x) => x.notes.some((n) => n.status === "ACCEPTED")),
+            );
+            const smallLabel = `${coarse ? "text-[11px]" : "text-[10px]"} font-bold tracking-[0.08em] text-sand-500 uppercase`;
+            const panel = submenu === "add" && (
               <div
                 className={
-                  popover.page && !coarse
-                    ? "absolute top-full left-0 z-10 mt-1 flex max-h-44 w-full flex-col overflow-y-auto rounded-2xl bg-card p-1.5 shadow-float"
-                    : "flex max-h-44 flex-col overflow-y-auto"
+                  dropsDown
+                    ? "absolute top-full left-0 z-10 mt-1 flex w-full flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float"
+                    : "flex flex-col gap-0.5"
                 }
               >
-                {sectionChoices.map((choice) => (
-                  <button
-                    key={choice.id}
-                    disabled={busy}
-                    onClick={() => void addToSection(choice.id)}
-                    data-track="add-to-notes-section"
-                    data-tip={t("reader.addPendingNote", { section: choice.label })}
-                    className={`truncate rounded-full ${toolRow} text-left text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
-                  >
-                    {choice.label}
-                  </button>
-                ))}
+                <input
+                  autoFocus={!coarse}
+                  value={addComment}
+                  onChange={(e) => setAddComment(e.target.value)}
+                  {...ime.props}
+                  onKeyDown={(e) => {
+                    if (ime.isImeEnter(e) || isImeKey(e)) return;
+                    // Enter: the fastest path, a new note in the first section.
+                    if (e.key === "Enter" && !busy) {
+                      e.preventDefault();
+                      void addToSection(first.id);
+                    }
+                  }}
+                  placeholder={t("reader.addCommentPlaceholder")}
+                  aria-label={t("reader.addCommentPlaceholder")}
+                  data-tip={t("reader.addCommentTitle", { section: first.label })}
+                  data-track="add-to-notes-comment"
+                  className={`w-full rounded-full bg-sand-100 ${
+                    coarse ? "px-3.5 py-2.5 text-[14px]" : "px-2.5 py-1.5 text-[12px]"
+                  } outline-none placeholder:text-sand-500`}
+                />
+                {addMode === "sections" ? (
+                  <>
+                    <span className={`px-2.5 pt-1.5 pb-0.5 ${smallLabel}`}>{t("reader.addNewNoteIn")}</span>
+                    <div className="flex max-h-44 flex-col overflow-y-auto">
+                      {sectionChoices.map((choice) => (
+                        <button
+                          key={choice.id}
+                          disabled={busy}
+                          onClick={() => void addToSection(choice.id)}
+                          data-track="add-to-notes-section"
+                          data-tip={t("reader.addPendingNote", { section: choice.label })}
+                          className={`truncate rounded-full ${toolRow} text-left text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
+                        >
+                          {choice.label}
+                        </button>
+                      ))}
+                    </div>
+                    {hasNotes && (
+                      <>
+                        <div className="mx-2.5 my-0.5 border-t border-line" />
+                        <button
+                          disabled={busy}
+                          onClick={() => setAddMode("notes")}
+                          data-track="add-to-notes-existing"
+                          data-tip={t("reader.addToExistingNoteTitle")}
+                          className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
+                        >
+                          <span className="truncate">{t("reader.addToExistingNote")}</span>
+                          <ChevronRightIcon size={coarse ? 14 : 12} />
+                        </button>
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => setAddMode("sections")}
+                      data-track="add-to-notes-back"
+                      className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left ${smallLabel} hover:bg-clay-100 hover:text-clay-800`}
+                    >
+                      <ChevronLeftIcon size={coarse ? 14 : 12} />
+                      {t("reader.addPickNote")}
+                    </button>
+                    <NotePicker sections={sections} onPick={(note) => void addToNote(note)} disabled={busy} />
+                  </>
+                )}
               </div>
             );
-            return popover.page && !coarse ? list : <Collapse open={submenu === "add"}>{list}</Collapse>;
+            return dropsDown ? panel : <Collapse open={submenu === "add"}>{panel}</Collapse>;
           })()}
             </div>
           )}

@@ -33,7 +33,7 @@ import {
   type VideoSource,
 } from "@/components/video/video-player";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
-import type { FormalizedArticle } from "@/lib/types";
+import type { FormalizedArticle, SectionView } from "@/lib/types";
 import { captureStoryboardFrame } from "@/lib/video/frame-client";
 import {
   activeLineAt,
@@ -65,6 +65,7 @@ export type ReaderTextProps = Omit<
   | "documentId"
   | "notebookId"
   | "sectionChoices"
+  | "sections"
   | "title"
   | "blocks"
   | "translationAvailable"
@@ -115,6 +116,7 @@ export function VideoPane({
   annotations,
   seekBySource,
   sectionChoices,
+  sections,
   translationAvailable,
   split,
   paneHeader,
@@ -142,6 +144,8 @@ export function VideoPane({
       chips and annotation cards jump through ?src=. */
   seekBySource: Record<string, number>;
   sectionChoices: { id: string; label: string }[];
+  /** The project's sections with their notes, for Add to a note… (reader-interactions.tsx). */
+  sections?: SectionView[];
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1110,6 +1114,7 @@ export function VideoPane({
       documentId={documentId}
       notebookId={notebookId}
       sectionChoices={sectionChoices}
+      sections={sections}
       title={title}
       translationAvailable={translationAvailable}
       blocks={transcript.map((l) => ({ id: l.id, type: "TRANSCRIPT" as const, text: l.text, html: null }))}
