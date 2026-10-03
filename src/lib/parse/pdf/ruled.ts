@@ -883,6 +883,7 @@ function tableOfRegion(region: TableRegion, page: number): Segment {
   spanHeadColumns(rows, headerRows);
   if (body.length > 0) {
     built.push(...body);
+    fractionCells(body, separators, region.drawing.rules);
     let cellsOf = body.map((line) => cellsBySeparators(line, separators));
     const starts0 = oneRow(body, cellsOf, region, drawn) ? [0] : ((drawn.length > 0 ? ruledRowStarts(body, cellsOf, [...full, ...pieceEnds(drawn, region.box)]) : null) ?? regionRowStarts(body, cellsOf));
     const starts = stackedFormulas(body, starts0, separators);
@@ -892,6 +893,30 @@ function tableOfRegion(region: TableRegion, page: number): Segment {
     rows.push(...spanCenteredLabels(bodyRows, starts.map((k) => body[k].y), full));
   }
   return segment(rows, headerRows || (rows.length > 1 && boldHeaderRows(rows) > 0 ? 1 : 0), bounds);
+}
+
+// A cell whose glyphs stand on two baselines with a rule drawn between
+// them, inside the cell, is a fraction, one formula read from its glyphs
+// at the line's size: a fraction's parts set small join their row's line
+// (parse loop finding: ICML's Table 1 read its exponents 1/2, 3/2, and
+// 1/3 as "12", "32", and "13"). A grid's cells read theirs in fractionCell.
+function fractionCells(body: Line[], separators: number[], rules: Rule[]) {
+  for (const line of body) {
+    for (let j = 0; j <= separators.length; j++) {
+      const items = line.items.filter((it) => columnAt(it.x + it.w / 2, separators) === j && it.str.trim() !== "");
+      if (items.length < 2 || items.some((it) => it.zone)) continue;
+      const ys = items.map((it) => it.y);
+      const [low, high] = [Math.min(...ys), Math.max(...ys)];
+      if (high - low < line.size * 0.4) continue;
+      const x1 = Math.min(...items.map((it) => it.x));
+      const x2 = Math.max(...items.map((it) => it.x + it.w));
+      const bar = rules.some((r) => r.dir === "h" && r.y1 > low && r.y1 < high && r.x1 < x2 + 1 && r.x2 > x1 - 1 && r.x1 > x1 - line.size && r.x2 < x2 + line.size);
+      const glyphs = items.flatMap((it) => it.glyphs ?? []);
+      if (!bar || glyphs.length === 0 || !items.every((it) => it.math || /^[\p{L}\p{N}+\-−=(),.!]{1,12}$/u.test(it.str.trim()))) continue;
+      const zone: MathZone = { glyphs, size: line.size, latex: "", ok: false, open: false };
+      for (const it of items) it.zone = zone;
+    }
+  }
 }
 
 // A row's formulas stacked on lines of their own (a binomial's rows, a
