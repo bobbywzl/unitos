@@ -5,7 +5,7 @@ import { gatewayAdminKey, gatewayBaseUrl, gatewayKey } from "@/lib/gateway";
 import { isClaudeId, isGeminiId } from "@/lib/model-call";
 import { currentModelId, isGlmModel, MODEL_ROLES, resolveModelId, ROLE_ORDER, type ModelRole } from "@/lib/models";
 import { outboundFetch } from "@/lib/outbound-fetch";
-import { providerOf } from "@/lib/usage";
+import { providerOf, recordUsage } from "@/lib/usage";
 
 // The gateway's management API, for the admin console alone (SPEC.md §2):
 // what the gateway page reads — readiness, the models and their limits and
@@ -527,7 +527,20 @@ export async function appGatewayModels(): Promise<string[]> {
 // makes the call (it holds a sample). Every other model is a chat model.
 const AUDIO_MODELS = new Set(["groq/whisper-large-v3-turbo", "openai/whisper-1", "openai/gpt-4o-mini-tts"]);
 
-const chatSchema = z.object({ choices: z.array(z.unknown()).optional() }).loose();
+const chatSchema = z
+  .object({
+    choices: z.array(z.unknown()).optional(),
+    usage: z
+      .object({
+        prompt_tokens: z.number().optional(),
+        completion_tokens: z.number().optional(),
+        prompt_tokens_details: z.object({ cached_tokens: z.number().nullable().optional() }).loose().nullable().optional(),
+      })
+      .loose()
+      .nullable()
+      .optional(),
+  })
+  .loose();
 
 type Probe = { healthy: string[]; unhealthy: { model: string; error: string }[] };
 
@@ -536,15 +549,27 @@ type Probe = { healthy: string[]; unhealthy: { model: string; error: string }[] 
     wildcard route (moonshot/*, anthropic/*, gemini/*) resolves the way it
     does for the app; the gateway's own /health?model= does not resolve a
     wildcard, so it never reports these. The call carries feature:check, so
-    the usage page lists the probes as their own function. */
+    the usage page lists the probes as their own function, and the app
+    records it under check too: a probe is billed like any call. */
 async function probeChat(model: string, key: string): Promise<Probe> {
-  await call("/v1/chat/completions", chatSchema, {
+  const body = await call("/v1/chat/completions", chatSchema, {
     method: "POST",
     key,
     headers: { "x-litellm-tags": "feature:check" },
     body: { model, messages: [{ role: "user", content: "Say OK." }], max_tokens: 64 },
     timeoutMs: 110_000,
   });
+  if (body.usage) {
+    const cached = body.usage.prompt_tokens_details?.cached_tokens ?? 0;
+    recordUsage(
+      { userId: null, feature: "check", model: model.replace(/^[a-z]+\//, "") },
+      {
+        inputTokens: Math.max(0, (body.usage.prompt_tokens ?? 0) - cached),
+        outputTokens: body.usage.completion_tokens ?? 0,
+        cacheReadTokens: cached,
+      },
+    );
+  }
   return { healthy: [model], unhealthy: [] };
 }
 

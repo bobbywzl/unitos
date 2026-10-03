@@ -12,7 +12,7 @@ import {
   type ModelRole,
 } from "@/lib/models";
 import { outboundFetch } from "@/lib/outbound-fetch";
-import { recordUsage, sdkTokens } from "@/lib/usage";
+import { geminiTokens, recordUsage, sdkTokens } from "@/lib/usage";
 import { geminiApiKey, geminiBaseUrl, geminiConfigured } from "@/lib/video/gemini";
 
 // The bimonthly model update (SPEC.md §2): for each role, read the provider's
@@ -238,6 +238,11 @@ async function probe(role: ModelRole, id: string): Promise<void> {
       },
     );
     if (!res.ok) throw new Error(`probe failed (${res.status})`);
+    // The probe is a billed call like any other, so it is recorded.
+    const body = (await res.json().catch(() => null)) as {
+      usageMetadata?: Parameters<typeof geminiTokens>[0];
+    } | null;
+    if (body?.usageMetadata) recordUsage(usage, geminiTokens(body.usageMetadata));
     return;
   }
   await probeChatModel(id);

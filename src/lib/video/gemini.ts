@@ -2,7 +2,7 @@ import { GEMINI_FLASH } from "@/lib/derive/config";
 import { gatewayConfigured, gatewayHeaders, gatewayUrl, keyFor, providerConfigured } from "@/lib/gateway";
 import { currentModelId } from "@/lib/models";
 import { outboundFetch } from "@/lib/outbound-fetch";
-import { recordUsage } from "@/lib/usage";
+import { geminiTokens, recordUsage } from "@/lib/usage";
 import { regionBounds, type Region } from "@/lib/video/types";
 import { youtubeWatchUrl } from "@/lib/video/youtube";
 
@@ -85,20 +85,12 @@ export async function geminiCall<T>(
       }
       const body = (await res.json()) as {
         candidates?: { content?: { parts?: { text?: string }[] } }[];
-        usageMetadata?: {
-          promptTokenCount?: number;
-          candidatesTokenCount?: number;
-          cachedContentTokenCount?: number;
-        };
+        usageMetadata?: Parameters<typeof geminiTokens>[0];
       };
       if (opts.usage && body.usageMetadata) {
         recordUsage(
           { userId: opts.usage.userId, feature: opts.usage.feature, model },
-          {
-            inputTokens: body.usageMetadata.promptTokenCount ?? 0,
-            outputTokens: body.usageMetadata.candidatesTokenCount ?? 0,
-            cacheReadTokens: body.usageMetadata.cachedContentTokenCount ?? 0,
-          },
+          geminiTokens(body.usageMetadata),
         );
       }
       const text = body.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";

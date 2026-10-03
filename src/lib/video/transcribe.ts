@@ -235,6 +235,9 @@ function youtubeAudioRung(youtubeId: string, opts: TranscribeOptions): Promise<T
 // ── Whisper family: Groq and OpenAI, one endpoint shape ─────────────────────
 
 const whisperResponseSchema = z.object({
+  // Seconds of audio, the length the provider bills. A response without it
+  // falls back to the last segment's end.
+  duration: z.number().min(0).optional(),
   segments: z
     .array(
       z.object({
@@ -271,6 +274,8 @@ type WhisperProvider = {
   endpoint: () => string;
   model: string;
   usdPerMinute: number;
+  /** The shortest length a request is billed for, in seconds. */
+  minSeconds: number;
 };
 
 const GROQ_WHISPER: WhisperProvider = {
@@ -283,6 +288,8 @@ const GROQ_WHISPER: WhisperProvider = {
       : (process.env.GROQ_API_URL ?? "https://api.groq.com/openai/v1/audio/transcriptions"),
   model: "whisper-large-v3-turbo",
   usdPerMinute: 0.04 / 60,
+  // Groq bills every request at least 10 seconds.
+  minSeconds: 10,
 };
 
 const OPENAI_WHISPER: WhisperProvider = {
@@ -292,6 +299,7 @@ const OPENAI_WHISPER: WhisperProvider = {
     gatewayConfigured() ? gatewayUrl("/v1/audio/transcriptions") : "https://api.openai.com/v1/audio/transcriptions",
   model: "whisper-1",
   usdPerMinute: 0.006,
+  minSeconds: 0,
 };
 
 /** The gateway or a Whisper key is set, so a Whisper rung runs. */
@@ -335,12 +343,13 @@ async function whisperCall(
   const parsed = whisperResponseSchema.safeParse(await res.json());
   if (!parsed.success) throw new Error("no timed segments returned");
   const segments = normalizeSegments(parsed.data.segments);
-  // Whisper bills per minute; tokens do not apply.
-  const minutes = (segments.at(-1)?.end ?? 0) / 60;
+  // Whisper bills the length of the audio, silence included, per minute;
+  // tokens do not apply.
+  const seconds = Math.max(parsed.data.duration ?? segments.at(-1)?.end ?? 0, opts.minSeconds);
   recordUsage(
     { userId: opts.userId, feature: "transcribe", model: opts.model },
-    { inputTokens: Math.ceil(minutes * 60) },
-    minutes * opts.usdPerMinute,
+    { inputTokens: Math.ceil(seconds) },
+    (seconds / 60) * opts.usdPerMinute,
   );
   return segments;
 }

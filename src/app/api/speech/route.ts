@@ -3,7 +3,7 @@ import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { gatewayConfigured, gatewayHeaders, gatewayModelId, gatewayUrl, keyFor, providerConfigured } from "@/lib/gateway";
 import { serverT } from "@/lib/i18n/server";
-import { recordUsage } from "@/lib/usage";
+import { recordUsage, type TokenCounts } from "@/lib/usage";
 import { parseBody } from "@/lib/validate";
 import { EDGE_TTS_MODEL, edgeSpeech } from "@/lib/voice/edge";
 
@@ -16,6 +16,26 @@ export const maxDuration = 60;
 // app key). When both are out, the route answers 503 and the client reads
 // with the browser voice.
 const TTS_MODEL = "gpt-4o-mini-tts";
+
+// What one reading costs, for the usage record (lib/usage.ts). OpenAI bills
+// gpt-4o-mini-tts by audio tokens out, about 1,250 per minute of speech
+// ($0.015 a minute at $12 per 1M), and the text in at about 4 characters a
+// token. A minute of speech is about 900 characters of English or 250 of
+// Chinese.
+const AUDIO_TOKENS_PER_MINUTE = 1_250;
+const CHARS_PER_MINUTE = 900;
+const CJK_CHARS_PER_MINUTE = 250;
+const CJK_RX = /[\u3400-\u9fff\uf900-\ufaff]/g;
+
+function speechTokens(text: string): TokenCounts {
+  const cjk = text.match(CJK_RX)?.length ?? 0;
+  const minutes = cjk / CJK_CHARS_PER_MINUTE + (text.length - cjk) / CHARS_PER_MINUTE;
+  return {
+    inputTokens: Math.ceil(text.length / 4),
+    outputTokens: Math.ceil(minutes * AUDIO_TOKENS_PER_MINUTE),
+  };
+}
+
 const speechSchema = z.object({
   text: z.string().min(1).max(4096),
 });
@@ -25,13 +45,12 @@ export async function POST(req: Request) {
   const { data, error } = await parseBody(req, speechSchema);
   if (error) return error;
   const user = await currentUser();
-  // Estimate: ~4 chars per text token in, roughly the same in audio tokens out.
-  const tokens = Math.ceil(data.text.length / 4);
+  const tokens = speechTokens(data.text);
   try {
     const audio = await edgeSpeech(data.text);
     recordUsage(
       { userId: user?.id ?? null, feature: "voice", model: EDGE_TTS_MODEL },
-      { inputTokens: tokens, outputTokens: tokens },
+      tokens,
     );
     return new Response(new Uint8Array(audio), { headers: { "Content-Type": "audio/mpeg" } });
   } catch (err) {
@@ -73,7 +92,7 @@ export async function POST(req: Request) {
   }
   recordUsage(
     { userId: user?.id ?? null, feature: "voice", model: TTS_MODEL },
-    { inputTokens: tokens, outputTokens: tokens },
+    tokens,
   );
   return new Response(res.body, { headers: { "Content-Type": "audio/mpeg" } });
 }

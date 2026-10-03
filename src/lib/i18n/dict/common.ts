@@ -58,6 +58,7 @@
 //   billing switch 付费开关 · Stripe 不翻译 · card(银行卡) 银行卡 ·
 //   subscription panel(设置里的订阅面板) 订阅面板 · upgrade panel 升级面板 ·
 //   billing ask(30 分钟后请求绑卡) 绑卡提醒 · active time 活跃时长 ·
+//   balance(提供商预付额度的剩余) 余额 · recharge 充值 · provider 提供商 ·
 //   tier button(仪表板顶部的方案按钮) 方案按钮 ·
 //   slides(幻灯片文档) 幻灯片 · slide(一页幻灯片) 幻灯片 · replica(复刻) 复刻 ·
 //   picture(幻灯片的图片) 图片 · speaker notes 演讲者备注 ·

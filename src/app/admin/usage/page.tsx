@@ -11,10 +11,19 @@ import {
   type GatewaySpend,
   type GatewayTagSpend,
 } from "@/lib/gateway-admin";
+import {
+  BALANCE_LABELS,
+  balances,
+  refreshLiveBalances,
+  type Balance,
+  type BalanceStatus,
+  type LiveErrors,
+} from "@/lib/balances";
 import { FIXED_COSTS, MONTHS_PER_YEAR, fixedCostsPerMonth } from "@/lib/fixed-costs";
-import { providerOf } from "@/lib/usage";
+import { GATEWAY_PROVIDERS, providerOf } from "@/lib/usage";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { serverT } from "@/lib/i18n/server";
+import { BalanceEdit } from "@/components/admin/balance-edit";
 import { BarList, DailyChart, fmtTok, fmtUsd, Tile } from "@/components/admin/charts";
 
 export const dynamic = "force-dynamic";
@@ -28,10 +37,6 @@ export const dynamic = "force-dynamic";
 // app's own count makes of the gateway's models, as a check on the two
 // price lists. Without the gateway, the app's records are the whole page,
 // priced at list at call time.
-
-// The providers whose cost the gateway prices (litellm/config.yaml). The
-// rest is priced by the app alone.
-const GATEWAY_PROVIDERS = new Set(["zai", "moonshot", "anthropic", "google", "groq", "openai"]);
 
 type Fetched<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -53,6 +58,8 @@ export default async function AdminUsagePage() {
   const since30 = new Date(now - 30 * 86_400_000);
 
   const gateway = gatewayConfigured() && gatewayAdminConfigured();
+  // The live balances are read while the rest loads (lib/balances.ts).
+  const liveRefresh = refreshLiveBalances();
 
   // The horizons (SPEC.md §7): the app's own records are kept for good, so
   // every window is a slice of one history — the last 7, 30, 90, and 365
@@ -142,6 +149,9 @@ export default async function AdminUsagePage() {
     gateway ? fetched<GatewaySpend>(() => gatewaySpend(30)) : null,
     gateway ? fetched<GatewayTagSpend>(() => gatewayTagSpend(30)) : null,
   ]);
+  const liveErrors = await liveRefresh;
+  const balanceRows = await balances();
+
   // The app's own count over 30 days, split by whether the gateway prices
   // the model: the gateway providers' part is the cross-check tile; the
   // rest is the "outside the gateway" figure and its by-function rows.
@@ -209,6 +219,8 @@ export default async function AdminUsagePage() {
         <h1 className="text-[28px]">{t("admin.usage")}</h1>
         <p className="text-sm text-sand-600">{gateway ? t("admin.usageGatewayDesc") : t("admin.usageDesc")}</p>
       </header>
+
+      <BalanceSection t={t} rows={balanceRows} liveErrors={liveErrors} />
 
       <div id="spending" className="mb-4 grid grid-cols-2 gap-3">
         <Tile label={t("admin.usageSpending") + " " + t("admin.usageColPerMonth")} value={fmtUsd(spendingPerMonth)} />
@@ -363,6 +375,146 @@ export default async function AdminUsagePage() {
         </div>
       )}
     </main>
+  );
+}
+
+// The balances (lib/balances.ts): a line per balance that warns, Recharge
+// now in red and Low in amber, then one row per balance — its status, what
+// is left, the spend per day, the days left, and its form.
+const STATUS_STYLE: Record<BalanceStatus, string> = {
+  recharge: "bg-red-600 text-white",
+  low: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200",
+  ok: "bg-sage-200 text-sage-800",
+  unset: "bg-sand-200 text-sand-600",
+};
+const STATUS_LABEL = {
+  recharge: "admin.balanceStatusRecharge",
+  low: "admin.balanceStatusLow",
+  ok: "admin.balanceStatusOk",
+  unset: "admin.balanceStatusUnset",
+} as const satisfies Record<BalanceStatus, Parameters<TFunc>[0]>;
+
+const fmtTime = (iso: string) => iso.slice(0, 16).replace("T", " ");
+
+function BalanceSection({ t, rows, liveErrors }: { t: TFunc; rows: Balance[]; liveErrors: LiveErrors }) {
+  const label = (b: Balance) => (b.key === "gateway" ? t("admin.balanceGateway") : BALANCE_LABELS[b.key]);
+  const amount = (b: Balance, v: number) =>
+    b.unit === "chars" ? t("admin.balanceChars", { n: fmtTok(Math.max(0, Math.round(v))) }) : fmtUsd(Math.max(0, v));
+  const days = (d: number | null) =>
+    d === null
+      ? "—"
+      : d < 1
+        ? t("admin.balanceUnderDay")
+        : d < 2
+          ? t("admin.balanceOneDay")
+          : t("admin.balanceDays", { n: Math.floor(d).toLocaleString() });
+  const detail = (b: Balance) => {
+    const r = b.reading;
+    if (!r || r.kind === "none") return t("admin.balanceUnsetHint");
+    if (r.kind === "chars") {
+      return `${t("admin.balanceQuota", { used: fmtTok(Math.round(r.limit - (b.left ?? 0))), limit: fmtTok(r.limit) })} · ${t("admin.balanceLive", { time: fmtTime(r.at) })}`;
+    }
+    if (r.source === "manual") {
+      return t("admin.balanceManual", { time: fmtTime(r.at), usd: fmtUsd(r.usd), spent: fmtUsd(b.spentSince) });
+    }
+    const resets = r.resetsAt ? ` · ${t("admin.balanceResets", { time: fmtTime(r.resetsAt) })}` : "";
+    return t("admin.balanceLive", { time: fmtTime(r.at) }) + resets;
+  };
+  const alerts = rows.filter((b) => b.status === "recharge" || b.status === "low");
+  const unset = rows.filter((b) => b.status === "unset").length;
+  const alertText = (b: Balance) => {
+    const params = { provider: label(b), left: amount(b, b.left ?? 0), days: days(b.daysLeft) };
+    if (b.status === "recharge") {
+      return b.daysLeft === null ? t("admin.balanceAlertRecharge", params) : t("admin.balanceAlertRechargeRunway", params);
+    }
+    return b.daysLeft === null ? t("admin.balanceAlertLow", params) : t("admin.balanceAlertLowRunway", params);
+  };
+
+  return (
+    <section id="balances" className="mb-6">
+      {alerts.length > 0 && (
+        <ul className="mb-3 space-y-2">
+          {alerts.map((b) => (
+            <li
+              key={b.key}
+              role="alert"
+              className={`flex items-start gap-2 rounded-xl px-3 py-2 text-sm font-semibold ${
+                b.status === "recharge"
+                  ? "bg-red-50 text-red-800 dark:bg-red-950 dark:text-red-200"
+                  : "bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-200"
+              }`}
+            >
+              <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" className="mt-0.5 size-4 shrink-0">
+                <path
+                  fillRule="evenodd"
+                  d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495ZM10 6a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 6Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              <a href={`#balance-${b.key}`} className="hover:underline">
+                {alertText(b)}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="rounded-2xl bg-card p-4 shadow-soft">
+        <p className="mb-1 text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">{t("admin.balances")}</p>
+        <p className="mb-2 text-xs text-sand-500">{t("admin.balancesHint")}</p>
+        {rows.length === 0 ? (
+          <p className="text-xs text-sand-500">{t("admin.balancesNone")}</p>
+        ) : (
+          <>
+            {alerts.length === 0 && unset === 0 && (
+              <p className="mb-1 text-xs font-semibold text-sage-700">{t("admin.balancesAllOk")}</p>
+            )}
+            {unset > 0 && <p className="mb-1 text-xs text-sand-600">{t("admin.balancesUnset", { n: unset })}</p>}
+            <ul className="divide-y divide-line">
+              {rows.map((b) => (
+                <li
+                  key={b.key}
+                  id={`balance-${b.key}`}
+                  className="flex scroll-mt-4 flex-wrap items-center gap-x-4 gap-y-2 py-3"
+                >
+                  <span
+                    className={`w-24 shrink-0 rounded-full px-2 py-0.5 text-center text-[11px] font-semibold ${STATUS_STYLE[b.status]}`}
+                  >
+                    {t(STATUS_LABEL[b.status])}
+                  </span>
+                  <div className="min-w-40 flex-1">
+                    <p className="text-sm font-semibold text-sand-800">{label(b)}</p>
+                    <p className="text-xs text-sand-500">{detail(b)}</p>
+                    {liveErrors[b.key] && (
+                      <p className="text-xs text-red-600">{t("admin.balanceLiveFailed", { error: liveErrors[b.key]! })}</p>
+                    )}
+                  </div>
+                  <div className="grid basis-full grid-cols-3 gap-2 sm:flex sm:basis-auto sm:gap-4">
+                    <BalanceFigure label={t("admin.balanceColLeft")} value={b.left === null ? "—" : amount(b, b.left)} />
+                    <BalanceFigure label={t("admin.balanceColPerDay")} value={amount(b, b.perDay)} />
+                    <BalanceFigure label={t("admin.balanceColDaysLeft")} value={days(b.daysLeft)} />
+                  </div>
+                  <BalanceEdit
+                    balanceKey={b.key}
+                    canSet={!b.live || Boolean(liveErrors[b.key])}
+                    showWarn={b.unit === "usd"}
+                    warnUsd={b.warnUsd}
+                  />
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function BalanceFigure({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="shrink-0 sm:w-24 sm:text-right">
+      <p className="text-[10px] tracking-wider text-sand-500 uppercase">{label}</p>
+      <p className="text-sm font-semibold text-sand-800 tabular-nums">{value}</p>
+    </div>
   );
 }
 

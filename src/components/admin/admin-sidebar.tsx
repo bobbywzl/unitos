@@ -72,12 +72,20 @@ const PAGES: Page[] = [
 // set, else the app's own count; the layout says which.
 function usageSections(gateway: boolean): Section[] {
   return [
+    { id: "balances", label: "admin.balances" },
     { id: "spending", label: "admin.usageSpending" },
     gateway ? { id: "gateway", label: "admin.gatewaySpend30" } : { id: "app", label: "admin.usageCostAll" },
   ];
 }
 
-export function AdminSidebar({ gateway }: { gateway: boolean }) {
+export function AdminSidebar({
+  gateway,
+  balanceAlerts,
+}: {
+  gateway: boolean;
+  /** The balances that warn (lib/balances.ts): counted beside Usage. */
+  balanceAlerts: { recharge: number; low: number };
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const t = useT();
@@ -106,17 +114,29 @@ export function AdminSidebar({ gateway }: { gateway: boolean }) {
       {PAGES.map((page) => {
         const active = isActive(page);
         const sections = page.href === "/admin/usage" ? usageSections(gateway) : page.sections;
+        const alerts = page.href === "/admin/usage" ? balanceAlerts.recharge + balanceAlerts.low : 0;
         return (
           <div key={page.href}>
             <Link
-              href={page.href}
+              href={alerts > 0 ? `${page.href}#balances` : page.href}
               onClick={() => setOpen(false)}
               aria-current={active ? "page" : undefined}
-              className={`block rounded-lg px-3 py-1.5 text-sm font-semibold ${
+              className={`flex items-center justify-between gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold ${
                 active ? "bg-ink text-paper" : "text-sand-700 hover:bg-sand-100 hover:text-clay-800"
               }`}
             >
               {t(page.label)}
+              {alerts > 0 && (
+                <span
+                  title={t("admin.balanceBadge", { n: alerts })}
+                  aria-label={t("admin.balanceBadge", { n: alerts })}
+                  className={`min-w-5 rounded-full px-1.5 text-center text-[11px] leading-5 font-bold ${
+                    balanceAlerts.recharge > 0 ? "bg-red-600 text-white" : "bg-amber-400 text-amber-950"
+                  }`}
+                >
+                  {alerts}
+                </span>
+              )}
             </Link>
             {active && sections.length > 0 && (
               <div className="my-1 ml-3 flex flex-col border-l border-line">

@@ -108,17 +108,46 @@ export function computeCostUsd(model: string, t: TokenCounts): number {
   );
 }
 
-/** The AI SDK's usage shape → plain token counts. */
+/** The AI SDK's usage shape → plain token counts. The SDK's inputTokens is
+    every input token, the cached ones included; here inputTokens is the
+    uncached part alone, so a cache read is priced once, at the cache price,
+    and never again at the full input price. outputTokens already holds the
+    reasoning, which every provider bills as output. */
 export function sdkTokens(usage: {
   inputTokens?: number;
   outputTokens?: number;
-  inputTokenDetails?: { cacheReadTokens?: number | null; cacheWriteTokens?: number | null };
+  inputTokenDetails?: {
+    noCacheTokens?: number | null;
+    cacheReadTokens?: number | null;
+    cacheWriteTokens?: number | null;
+  };
 }): TokenCounts {
+  const cacheReadTokens = usage.inputTokenDetails?.cacheReadTokens ?? 0;
+  const cacheWriteTokens = usage.inputTokenDetails?.cacheWriteTokens ?? 0;
   return {
-    inputTokens: usage.inputTokens ?? 0,
+    inputTokens:
+      usage.inputTokenDetails?.noCacheTokens ??
+      Math.max(0, (usage.inputTokens ?? 0) - cacheReadTokens - cacheWriteTokens),
     outputTokens: usage.outputTokens ?? 0,
-    cacheReadTokens: usage.inputTokenDetails?.cacheReadTokens ?? 0,
-    cacheWriteTokens: usage.inputTokenDetails?.cacheWriteTokens ?? 0,
+    cacheReadTokens,
+    cacheWriteTokens,
+  };
+}
+
+/** Gemini's usageMetadata → plain token counts. promptTokenCount holds the
+    cached tokens, so they come off the input; thoughtsTokenCount is billed
+    as output beside candidatesTokenCount. */
+export function geminiTokens(meta: {
+  promptTokenCount?: number;
+  candidatesTokenCount?: number;
+  cachedContentTokenCount?: number;
+  thoughtsTokenCount?: number;
+}): TokenCounts {
+  const cacheReadTokens = meta.cachedContentTokenCount ?? 0;
+  return {
+    inputTokens: Math.max(0, (meta.promptTokenCount ?? 0) - cacheReadTokens),
+    outputTokens: (meta.candidatesTokenCount ?? 0) + (meta.thoughtsTokenCount ?? 0),
+    cacheReadTokens,
   };
 }
 
@@ -161,6 +190,11 @@ export function providerOf(model: string): string {
   for (const [rx, provider] of PROVIDERS) if (rx.test(model)) return provider;
   return "other";
 }
+
+/** The providers whose calls the gateway prices (litellm/config.yaml). The
+    rest — Deepgram, DeepL, Jev, the Edge voice, the browser, email — the
+    app prices alone, the pass-throughs included. */
+export const GATEWAY_PROVIDERS = new Set(["zai", "moonshot", "anthropic", "google", "groq", "openai"]);
 
 /** Record one call. costUsd defaults to list price × tokens; a caller billed
     on something other than tokens (whisper per minute, Deepgram per second,
