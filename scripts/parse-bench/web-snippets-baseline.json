@@ -1,8 +1,8 @@
 {
  "total": {
-  "f1": 0.888,
-  "precision": 0.833,
-  "recall": 0.952
+  "f1": 0.89,
+  "precision": 0.835,
+  "recall": 0.953
  },
  "pages": {
   "100noticias.com-millones.html": {
@@ -691,9 +691,9 @@
    "fn": 1
   },
   "battery-news.de.ultium-cells.html": {
-   "tp": 0,
+   "tp": 3,
    "fp": 0,
-   "fn": 3
+   "fn": 0
   },
   "beige.de.suedfrankreich.html": {
    "tp": 3,
@@ -1247,7 +1247,7 @@
   },
   "hausinfo.ch-kondenswasser.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 2,
    "fn": 0
   },
   "heavenlynnhealthy.de.mareenburk.html": {
@@ -1372,7 +1372,7 @@
   },
   "knowtechie.com.rally.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "kulturnews.de-Deutschland-Tour.html": {
@@ -2632,7 +2632,7 @@
   },
   "bmz.de-schulze.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 0,
    "fn": 0
   },
   "bondyblog.fr.paris-8.html": {
@@ -2947,7 +2947,7 @@
   },
   "die-tagespost.de.Demut.html": {
    "tp": 0,
-   "fp": 2,
+   "fp": 1,
    "fn": 3
   },
   "digitale-exzellenz.de.gesundheitswesen.html": {
