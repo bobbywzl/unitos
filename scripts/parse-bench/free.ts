@@ -38,6 +38,8 @@ export type PdfText = {
   symbols: SymbolWord[];
   /** The text pdftotext cannot read, which pdf.js reads (blindText): words to cover. */
   blind?: { page: number; text: string }[];
+  /** A slide deck's overlay steps (overlaySteps): pages read into the page after them, with no words to cover. */
+  steps?: Set<number>;
 };
 
 function run(args: string[]): string {
@@ -76,7 +78,7 @@ const DOUBLED_RE = /([\u{1D400}-\u{1D7FF}\p{Script=Greek}])\1/gu;
 /** A long table's foot on each page it breaks at (LaTeX's longtable, Word). */
 const CONTINUED_RE = /^\(?continued (?:on (?:the )?next page|overleaf)\)?\.?$/i;
 
-type Layout = { lines: Line[]; furniture: Line[]; sizes: Map<number, { width: number; height: number }>; symbols: SymbolWord[] };
+type Layout = { lines: Line[]; furniture: Line[]; sizes: Map<number, { width: number; height: number }>; symbols: SymbolWord[]; steps: Set<number> };
 type Sizes = Layout["sizes"];
 
 /** Fonts that draw symbols at the codes of letters: pdftotext reads a code
@@ -188,8 +190,34 @@ function layoutOf(pdf: string): Layout {
     const said = (t: string) => wordsOf(t).map((w) => w.w).join(" ");
     if (entry && said(reads) !== said(f[11])) symbols.push({ page, word: f[11], reads, line: entry });
   }
-  const lines = [...byKey.values()].filter((l) => l.text.trim());
-  return { lines, furniture: furnitureOf(lines, sizes), sizes, symbols };
+  const all = [...byKey.values()].filter((l) => l.text.trim());
+  const steps = overlaySteps(all, sizes);
+  const lines = all.filter((l) => !steps.has(l.page));
+  return { lines, furniture: furnitureOf(lines, sizes), sizes, symbols: symbols.filter((w) => !steps.has(w.page)), steps };
+}
+
+/** A slide deck's overlay steps: in a deck (every page wider than tall),
+    a page whose lines open the next page's, in order, each the same words,
+    is the next page printed with less (beamer prints a frame once per
+    click). The parse reads the frame once, whole (lib/parse/pdf/index.ts
+    collapseOverlaySteps), so the step's lines are no words to cover and no
+    evidence of furniture (a beamer deck's alerts frame, printed three times,
+    counted its title and its last two items as furniture, which the parse
+    leaked seven times, and its words were expected three times). */
+function overlaySteps(lines: Line[], sizes: Sizes): Set<number> {
+  const steps = new Set<number>();
+  if (sizes.size < 2 || ![...sizes.values()].every((z) => z.width > z.height)) return steps;
+  const texts = new Map<number, string[]>();
+  for (const row of rowsOf(lines)) {
+    const page = row[0].page;
+    texts.set(page, [...(texts.get(page) ?? []), ...row.map((l) => normText(l.text))]);
+  }
+  for (const [page, own] of texts) {
+    const next = texts.get(page + 1);
+    if (!next || own.length === 0 || own.length > next.length || !own.every((t, i) => t === next[i])) continue;
+    steps.add(page);
+  }
+  return steps;
 }
 
 /** A line set sideways: over 30 pt tall and three times as tall as wide. */
@@ -417,6 +445,11 @@ export function pdfText(pdf: string, pages?: [number, number]): PdfText {
   if (raw.length > 1 && raw.at(-1)?.join("").trim() === "") raw.pop();
   let layout = layouts.get(pdf);
   if (!layout) layouts.set(pdf, (layout = layoutOf(pdf)));
+  // A deck's overlay step holds no words to cover (overlaySteps).
+  const first = pages?.[0] ?? 1;
+  raw.forEach((_, p) => {
+    if (layout.steps.has(first + p)) raw[p] = [];
+  });
   const inRange = (l: Line) => !pages || (l.page >= pages[0] && l.page <= pages[1]);
   const lines = layout.lines.filter(inRange);
   return {
@@ -426,6 +459,7 @@ export function pdfText(pdf: string, pages?: [number, number]): PdfText {
     lines,
     furniture: layout.furniture.filter(inRange),
     sizes: layout.sizes,
+    steps: layout.steps,
     symbols: layout.symbols.filter((s) => !pages || (s.page >= pages[0] && s.page <= pages[1])),
   };
 }
@@ -442,7 +476,8 @@ export function blindText(pdf: PdfText, paint: PagePaint[]): { page: number; tex
   const last = pdf.first + pdf.raw.length - 1;
   for (let page = pdf.first; page <= last; page++) {
     const painted = paint[page - 1];
-    if (!painted) continue;
+    // An overlay step's words are the next page's (overlaySteps).
+    if (!painted || pdf.steps?.has(page)) continue;
     const lines = pdf.lines.filter((l) => l.page === page);
     // Words the page's furniture holds are no words to cover: a title the margin's tab repeats is the page's own.
     const held = heldBy(lines.filter((l) => !furniture.has(l)).map((l) => wordsOf(l.text).map((w) => w.w)));
