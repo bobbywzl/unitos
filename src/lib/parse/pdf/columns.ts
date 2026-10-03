@@ -32,11 +32,15 @@ const chars = (list: Item[]) => list.reduce((n, i) => n + i.str.trim().length, 0
 // The page's horizontal rules outside its tables, while pageLines reads it:
 // a rule across a gutter ends the band of columns above it (splitAt).
 let pageRules: Box[] = [];
+// The boxes the page draws as paths (a listing's frame), while pageLines
+// reads it.
+let pageFrames: Box[] = [];
 
-export function pageLines(items: Item[], pageWidth: number, page: number, graphics: Placed[] = [], rules: Box[] = []): Line[] {
+export function pageLines(items: Item[], pageWidth: number, page: number, graphics: Placed[] = [], rules: Box[] = [], frames: Box[] = []): Line[] {
   const text = items.filter((i) => i.str.trim().length > 0);
   if (text.length === 0 && graphics.length === 0) return [];
   pageRules = rules;
+  pageFrames = frames;
   const pieces = readRegion(text, graphics, page, pageWidth, 0);
   const lines: Line[] = [];
   let order = 0;
@@ -71,6 +75,20 @@ function readRegion(items: Item[], graphics: Placed[], page: number, pageWidth: 
       ...readRegion(items.filter((i) => i !== table && higher(i.y)), graphics.filter((p) => higher((p.box.y1 + p.box.y2) / 2)), page, pageWidth, depth, undefined, column),
       { items: [table], extent },
       ...readRegion(items.filter((i) => i !== table && !higher(i.y)), graphics.filter((p) => !higher((p.box.y1 + p.box.y2) / 2)), page, pageWidth, depth, undefined, column),
+    ];
+  }
+  const pair = lines ? null : listingPair(items, graphics);
+  if (pair) {
+    const { frame, code, output } = pair;
+    const higher = (y: number) => y > frame.y2;
+    const lower = (y: number) => y < frame.y1;
+    const inside = (p: Placed) => !higher((p.box.y1 + p.box.y2) / 2) && !lower((p.box.y1 + p.box.y2) / 2);
+    const column = extent ?? [x0, x1];
+    return [
+      ...readRegion(items.filter((i) => higher(i.y)), graphics.filter((p) => higher((p.box.y1 + p.box.y2) / 2)), page, pageWidth, depth, undefined, column),
+      { items: code, extent: column },
+      ...leaf(output, graphics.filter(inside), undefined, column),
+      ...readRegion(items.filter((i) => lower(i.y)), graphics.filter((p) => lower((p.box.y1 + p.box.y2) / 2)), page, pageWidth, depth, undefined, column),
     ];
   }
   const split = depth < 3 ? findSplit(items, graphics, page, pageWidth, depth) : null;
@@ -114,6 +132,55 @@ function readRegion(items: Item[], graphics: Placed[], page: number, pageWidth: 
     if (band.separator) out.push(band.separator);
   }
   return out;
+}
+
+// A listing beside what it typesets: inside a frame the page draws,
+// typewriter lines on the left, the output in a text face on the right, a
+// clear gap between them that no word crosses. The listing reads first, as
+// one block, then the output (parse loop finding: a LaTeX package's manual
+// sets each example's code beside its rendered result in one frame; read
+// row by row, every code line took the output on its baseline into it, and
+// the examples read as tables, lists, and paragraphs of code and formulas
+// mixed). Nothing of the region may stand beside the frame, and an output
+// line of more than six words is a table's description column, not an
+// example's output.
+function listingPair(items: Item[], graphics: Placed[]): { frame: Box; code: Item[]; output: Item[] } | null {
+  for (const frame of pageFrames) {
+    const within = (i: Item) => i.x + i.w / 2 > frame.x1 && i.x + i.w / 2 < frame.x2 && i.y > frame.y1 && i.y < frame.y2;
+    const inside = items.filter(within);
+    if (inside.length < 2) continue;
+    if (items.some((i) => !within(i) && i.y >= frame.y1 && i.y <= frame.y2)) continue;
+    const monoSizes = inside.filter((i) => i.mono && i.str.trim()).map((i) => i.size);
+    if (monoSizes.length === 0) continue;
+    const codeSize = median(monoSizes);
+    // A listing's line number, set small in a text face, counts for
+    // neither side (text.ts isMonoLine).
+    const counted = inside.filter((i) => i.mono || !/^\s*\d{1,4}\s*$/.test(i.str) || i.size >= codeSize * 0.85);
+    const share = (list: Item[]) => {
+      const all = chars(list);
+      return all === 0 ? null : chars(list.filter((i) => i.mono)) / all;
+    };
+    // The gaps between the items' spans across the frame, left to right.
+    const spans = [...inside].sort((a, b) => a.x - b.x);
+    let reach = spans[0].x + spans[0].w;
+    for (const item of spans.slice(1)) {
+      if (item.x - reach >= codeSize) {
+        const gap = reach;
+        const code = inside.filter((i) => i.x + i.w <= gap + 0.01);
+        const output = inside.filter((i) => i.x + i.w > gap + 0.01);
+        const left = share(code.filter((i) => counted.includes(i)));
+        const right = share(output);
+        if (left !== null && right !== null && left >= 0.85 && right <= 0.15) {
+          const rows = buildLines(output, 0);
+          if (rows.every((l) => l.text.trim().split(/\s+/).length <= 6) && !graphics.some((p) => p.box.x2 <= gap && p.box.y1 < frame.y2 && p.box.y2 > frame.y1)) {
+            return { frame, code, output };
+          }
+        }
+      }
+      reach = Math.max(reach, item.x + item.w);
+    }
+  }
+  return null;
 }
 
 const extentOf = (items: Item[]): [number, number] => [Math.min(...items.map((i) => i.x)), Math.max(...items.map((i) => i.x + i.w))];
