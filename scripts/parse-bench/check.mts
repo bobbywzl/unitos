@@ -1472,6 +1472,15 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
   // A display read as words holds a line "12": no page-number line.
   const display = freeScores({ ...numberPdf, furniture: [] }, flatten({ blocks: [para("MSE = 1\n12\nI=0")] }));
   check("free: a number on a line inside a block is no page-number line", display.numberLines.count === 0, `count ${display.numberLines.count}`);
+  // A listing's row "2 {": its line number and its brace, two lines of the text layer, read the page number's words.
+  const listingRow = [
+    { page: 1, top: 200, bottom: 206, left: 100, right: 103, text: "2" },
+    { page: 1, top: 199, bottom: 207, left: 118, right: 123, text: "{" },
+  ];
+  const listingPdf: PdfText = { ...numberPdf, lines: [...numberPdf.lines, ...listingRow] };
+  const listing: DocBlock = { kind: "code", text: "1 \\draw\n2 {\n3 }" };
+  const numbered2 = freeScores(listingPdf, flatten({ blocks: [heading, para("The telescope saw the source."), listing] })).furniture;
+  check("free: a listing's row that reads a page number's words is the page's own", numbered2.leaked === 0, `leaked ${numbered2.leaked}`);
 }
 
 // ── The page's own lines: columns, indents, tables, figures, crops, faces, labels ──

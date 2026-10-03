@@ -613,9 +613,19 @@ function picturedBy(pdf: PdfText, cand: Flat): (line: Line) => Extract<DocBlock,
     region that reaches up to the running head). */
 function leaksOf(pdf: PdfText, furniture: Line[], cand: Flat): Leaks {
   const furnitureSet = new Set(furniture);
-  const alone = aloneOnRow(pdf.lines);
+  // The page's own rows (no furniture line on them) that read a furniture
+  // string's words, by their words: a listing's row "4 {", the line number
+  // and the brace two lines of the text layer, reads the page number "4"
+  // (parse bench finding: a LaTeX package's manual numbers each listing
+  // line, and its rows "4 {" and "5 }" counted as the page numbers 4 and 5
+  // leaked into the code).
+  const said = (text: string) => wordsOf(text).map((w) => w.w).join(" ");
   const others = new Map<string, number>();
-  for (const l of pdf.lines) if (!furnitureSet.has(l) && alone.has(l)) others.set(normText(l.text), (others.get(normText(l.text)) ?? 0) + 1);
+  for (const row of rowsOf(pdf.lines)) {
+    if (row.some((l) => furnitureSet.has(l))) continue;
+    const key = said([...row].sort((a, b) => a.left - b.left).map((l) => l.text).join(" "));
+    others.set(key, (others.get(key) ?? 0) + 1);
+  }
   // The PDF's other lines and rows (a heading the text layer reads as two
   // lines on one row, "第 1 節" and its title), as words.
   const kept = pdf.lines.filter((l) => !furnitureSet.has(l));
@@ -678,7 +688,7 @@ function leaksOf(pdf: PdfText, furniture: Line[], cand: Flat): Leaks {
   strings.forEach((text, x) => {
     if (!flat.has(text)) return;
     const inPictures = pictured.get(text) ?? 0;
-    const excess = Math.max(0, matches[x].length - (others.get(normText(text)) ?? 0)) + inPictures;
+    const excess = Math.max(0, matches[x].length - (others.get(said(text)) ?? 0)) + inPictures;
     if (excess <= 0) return;
     leaked++;
     leaks += excess;
