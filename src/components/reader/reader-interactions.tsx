@@ -167,6 +167,7 @@ import {
 } from "@/lib/docs/assistant-suggestions";
 import type { SuggestCommand } from "@/lib/prompts/suggest";
 import { readNdjson } from "@/lib/ndjson";
+import { clearToolbarDraft, useToolbarDraft, useToolbarDraftRestore, writeToolbarDraft } from "@/lib/toolbar-drafts";
 import {
   publishSuggestRun,
   SUGGEST_EVENT,
@@ -1093,7 +1094,8 @@ export function ReaderInteractions({
   // native selects: the popover preventDefaults mousedown to keep the text
   // selection alive, which also keeps a native select from ever opening.
   const [submenu, setSubmenu] = useState<null | "add" | "ai" | "comment" | "define">(null);
-  const [commentDraft, setCommentDraft] = useState("");
+  // Kept per selection as a toolbar draft (lib/toolbar-drafts.ts) until the save lands.
+  const [commentDraft, setCommentDraft] = useToolbarDraft("comment", documentId, popover?.anchor ?? null);
   // The Add to notes bubble (SPEC.md §6): the comment that goes under the
   // quote, and whether the bubble lists the sections for a new note or the
   // notes to append to. Keyed to the selection it was typed for: a new
@@ -1748,6 +1750,8 @@ export function ReaderInteractions({
   }, [documentId]);
   const aiCommandRef = useRef("");
   aiCommandRef.current = aiCommand;
+  // The question is kept per selection as a toolbar draft (lib/toolbar-drafts.ts) until the answer lands.
+  useToolbarDraftRestore(submenu === "ai", "assistant", documentId, popover?.anchor ?? null, aiCommand, setAiCommand);
   // The running assistant turn, so Stop can abort it — the popover's Run
   // button before the chat card exists, or the chat card's Send button once
   // it does; only one is ever in flight at a time.
@@ -2134,7 +2138,6 @@ export function ReaderInteractions({
     setLinkCard(null);
     setAnnotationCard(null);
     setEditMode(false);
-    setCommentDraft("");
     setLocalAnchors({});
     setLocalLinks([]);
     setRemovedNotes({});
@@ -2496,7 +2499,6 @@ export function ReaderInteractions({
       }
       setPopover(captured);
       setCloseLink(null);
-      setCommentDraft("");
     };
     // The page editor (SPEC.md §29): a keyboard selection opens the toolbar
     // once Shift, Ctrl, or Cmd is let go; a caret moved with the keys closes it.
@@ -2595,7 +2597,6 @@ export function ReaderInteractions({
         setPopover(captured);
         setSubmenu("comment");
         setCloseLink(null);
-        setCommentDraft("");
       });
     };
     // The selection; for the assistant with none, the caret's paragraph. A
@@ -3990,10 +3991,13 @@ export function ReaderInteractions({
     ? `${popover.anchor.blockId}:${popover.anchor.startOffset}:${popover.anchor.endOffset}:${popover.term ? "t" : ""}${popover.figure ? "f" : ""}`
     : null;
   const leadTool: Tool | null = leadAnswer && leadAnswer.key === popoverAnchorKey ? leadAnswer.tool : null;
-  const addComment = addDraft.key === popoverAnchorKey ? addDraft.comment : "";
+  // The comment is kept per selection as a toolbar draft (lib/toolbar-drafts.ts) until the save lands.
+  const [addComment, keepAddComment] = useToolbarDraft("add", documentId, popover?.anchor ?? null);
   const addMode = addDraft.key === popoverAnchorKey ? addDraft.mode : "sections";
-  const setAddComment = (comment: string) =>
+  const setAddComment = (comment: string) => {
+    keepAddComment(comment);
     setAddDraft((d) => ({ key: popoverAnchorKey, comment, mode: d.key === popoverAnchorKey ? d.mode : "sections" }));
+  };
   const setAddMode = (mode: "sections" | "notes") =>
     setAddDraft((d) => ({ key: popoverAnchorKey, mode, comment: d.key === popoverAnchorKey ? d.comment : "" }));
   useEffect(() => {
@@ -4111,7 +4115,6 @@ export function ReaderInteractions({
         if (!captured) return;
         suppressNextMouseUp.current = true;
         setSubmenu(null);
-        setCommentDraft("");
         setPopover({ ...captured, term: true });
         return;
       }
@@ -4140,7 +4143,6 @@ export function ReaderInteractions({
             : ("below" as const);
       const rawX = rect.left + rect.width / 2 - containerRect.left;
       setSubmenu(null);
-      setCommentDraft("");
       setPopover({
         anchor: {
           blockId,
@@ -4359,7 +4361,6 @@ export function ReaderInteractions({
     // emptied one would put the caret at the text's start on the next key.
     if (!richTextRef.current) window.getSelection()?.removeAllRanges();
     setSubmenu(null);
-    setCommentDraft("");
     setPopover({
       anchor: { blockId, startOffset: 0, endOffset: text.length, quotedText: text, prefix: "", suffix: "" },
       figure: true,
@@ -4422,6 +4423,7 @@ export function ReaderInteractions({
     markFreshAnchor(anchor);
     setPopover(null);
     setAddDraft({ key: null, comment: "", mode: "sections" });
+    clearToolbarDraft("add", documentId, anchor);
     window.getSelection()?.removeAllRanges();
     refreshWhenOnline(router);
   }
@@ -5372,7 +5374,6 @@ export function ReaderInteractions({
     });
     setPopover(null);
     setSubmenu(null);
-    setCommentDraft("");
     window.getSelection()?.removeAllRanges();
     // A new comment shows, and every hidden comment with it.
     if (input.comment) {
@@ -5402,6 +5403,7 @@ export function ReaderInteractions({
       // order), and one whose stored copy is already in goes.
       const note = (await res.json().catch(() => null)) as { sources?: { id: string; blockId: string }[] } | null;
       if (input.comment) madeCommentRef.current = (note?.sources ?? []).map((s) => s.id);
+      if (input.comment) clearToolbarDraft("comment", documentId, anchor);
       const sources = [...(note?.sources ?? [])];
       const ids = new Map<object, string | undefined>(
         optimistic.map(({ blockId, mark }) => {
@@ -5426,6 +5428,7 @@ export function ReaderInteractions({
       // non-AI annotation — queue it, keep the optimistic paint, sync later.
       if (isOffline() && offlinePremium()) {
         await queueWrite("/api/annotations", "POST", body);
+        if (input.comment) clearToolbarDraft("comment", documentId, anchor);
         showToast(t("reader.annotationQueuedOffline"));
         setBusy(false);
         return;
@@ -5603,6 +5606,7 @@ export function ReaderInteractions({
       setPopover(null);
       setSubmenu(null);
       setAiCommand("");
+      clearToolbarDraft("assistant", documentId, anchor, command);
       window.getSelection()?.removeAllRanges();
       // The conversation continues in a chat card docked beside the article.
       markFreshAnchor(anchor);
@@ -8405,7 +8409,10 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               <textarea
                 autoFocus
                 value={aiCommand}
-                onChange={(e) => setAiCommand(e.target.value)}
+                onChange={(e) => {
+                  setAiCommand(e.target.value);
+                  if (popover) writeToolbarDraft("assistant", documentId, popover.anchor, e.target.value);
+                }}
                 {...ime.props}
                 onKeyDown={(e) => {
                   if (ime.isImeEnter(e) || isImeKey(e)) return;
@@ -8625,11 +8632,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               <button
                 key={color}
                 disabled={busy}
-                onClick={() => void annotate({ color, comment: commentDraft.trim() || undefined })}
+                // A comment kept from before rides along only while its box is open.
+                onClick={() => void annotate({ color, comment: (submenu === "comment" && commentDraft.trim()) || undefined })}
                 data-track={`highlight:${color}`}
                 aria-label={t("reader.highlightIn", { color: t(HUE_KEY[color]) })}
                 data-tip={t(
-                  commentDraft.trim() ? "reader.highlightInWithNote" : "reader.highlightIn",
+                  submenu === "comment" && commentDraft.trim() ? "reader.highlightInWithNote" : "reader.highlightIn",
                   { color: t(HUE_KEY[color]) },
                 )}
                 className={`${coarse ? "size-7" : "size-5"} rounded-full transition-transform hover:scale-110 disabled:opacity-40`}
