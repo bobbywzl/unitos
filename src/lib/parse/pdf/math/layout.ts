@@ -1211,12 +1211,19 @@ function splitRows(atoms: Atom[], lines: number[]): Atom[][] {
 // Columns: gaps of 0.9 em or more open in every row that splits two cells,
 // or of 9.5 pt: TeX sets an array's columns 10 pt apart at any text size
 // (a 12 pt paper's bmatrix read each row as one cell).
-function columnCuts(rows: Atom[][], em: number, least = Math.min(0.9 * em, 9.5)): number[] {
+// Between fences, three rows or more, a channel narrower than that but
+// over a relation's space (0.28 em) parts two columns when the cells on
+// each side of it stand centered on one x down every row, as a matrix's
+// columns do and a sum's terms do not (parse loop finding: Springer's
+// (17) sets its tridiagonal S with 0.3 em between a column's "−2" and
+// the next column's "1", and each row read as one cell of spaced text).
+function columnCuts(rows: Atom[][], em: number, least = Math.min(0.9 * em, 9.5), fenced = false): number[] {
   const all = rows.flat();
   if (all.length === 0) return [];
   const x1 = Math.min(...all.map((a) => a.x1));
   const x2 = Math.max(...all.map((a) => a.x2));
-  const cuts: number[] = [];
+  const thin = fenced && rows.length >= 3 ? Math.min(0.28 * em, least) : least;
+  const channels: { x1: number; x2: number }[] = [];
   let start: number | null = null;
   for (let x = x1; x <= x2; x += 0.5) {
     const open =
@@ -1224,11 +1231,21 @@ function columnCuts(rows: Atom[][], em: number, least = Math.min(0.9 * em, 9.5))
       rows.filter((r) => r.some((a) => a.x2 <= x) && r.some((a) => a.x1 >= x)).length >= 2;
     if (open && start === null) start = x;
     if (!open && start !== null) {
-      if (x - start >= least) cuts.push((start + x) / 2);
+      if (x - start >= thin) channels.push({ x1: start, x2: x });
       start = null;
     }
   }
-  return cuts;
+  const mid = (c: { x1: number; x2: number }) => (c.x1 + c.x2) / 2;
+  if (thin >= least) return channels.map(mid);
+  const edges = channels.map(mid);
+  const cellsOf = (k: number) =>
+    rows.map((r) => r.filter((a) => (k === 0 || cx(a) > edges[k - 1]) && (k === edges.length || cx(a) < edges[k]))).filter((c) => c.length > 0);
+  const centered = (cells: Atom[][]) => {
+    if (cells.length < 2) return false;
+    const mids = cells.map((c) => (Math.min(...c.map((a) => a.x1)) + Math.max(...c.map((a) => a.x2))) / 2);
+    return Math.max(...mids) - Math.min(...mids) < 0.15 * em;
+  };
+  return channels.filter((c, k) => c.x2 - c.x1 >= least || (centered(cellsOf(k)) && centered(cellsOf(k + 1)))).map(mid);
 }
 
 // A fraction or a binomial set in the other style than its place: \dfrac
@@ -1348,7 +1365,7 @@ function fencedGroups(atoms: Atom[], em: number): Atom[] {
       const bordered = close !== undefined && new Set(rowLabels.map(rowOf)).size >= 2;
       if (!bordered && new Set(rowLabels.map(rowOf)).size >= 2) lost++;
       const rows = splitRows(content, lines);
-      const cuts = columnCuts(rows, stackSize);
+      const cuts = columnCuts(rows, stackSize, undefined, true);
       const axis = (open.top + open.bottom) / 2;
       let tex: string;
       // A binomial's rows' size says its style, as a fraction's parts do
