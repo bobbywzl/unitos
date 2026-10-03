@@ -390,7 +390,13 @@ function isTableRegion(lines: Line[], width: number, columns: Rule[]): boolean {
   if (separators.length === 0) return false;
   const multi = lines.filter((l) => new Set(l.items.map((it) => columnAt(it.x + it.w / 2, separators))).size >= 2);
   if (multi.length < 2) return false;
-  return !mostlyTiny(lines.flatMap((l) => cellsBySeparators(l, separators).map((c) => c.text.trim())));
+  // A region whose every line opens with a label of letters in its first
+  // column is a table however short its values: a plot's frame holds tick
+  // labels, never a label column (parse loop finding: ICML's Table 1,
+  // "Smooth activation | 1 1 1 1 2 1/2 −1" under its head of symbols, read
+  // as a paragraph of its head and a crop of its rows).
+  const labeled = lines.every((l) => /\p{L}{3,}/u.test(cellsBySeparators(l, separators)[0]?.text ?? ""));
+  return labeled || !mostlyTiny(lines.flatMap((l) => cellsBySeparators(l, separators).map((c) => c.text.trim())));
 }
 
 // The column ranges a line's phrases cover, bounds the column edges (the
