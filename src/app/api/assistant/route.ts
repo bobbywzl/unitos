@@ -35,7 +35,8 @@ import { takesSuggestions } from "@/lib/docs/suggest-ops";
 import { HEARTBEAT_MS, streamTextTo } from "@/lib/derive/text-stream";
 import { ensureDigest } from "@/lib/digest/ensure";
 import { rankDocumentsForQuestion } from "@/lib/digest/rank";
-import { corpusSystem, documentSystem } from "@/lib/digest/render";
+import { corpusPickedSystem, corpusSystem, documentSystem } from "@/lib/digest/render";
+import { projectPicks } from "@/lib/assistant/project-reading";
 import { checkOutput } from "@/lib/derive/check";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { gatewayHeaders } from "@/lib/gateway";
@@ -159,12 +160,33 @@ async function handle(req: Request, t: TFunc) {
     scopeLabel =
       "this page: the open document in full, and every note, annotation, distillation, extraction, and summary on it";
   } else {
-    // Past the text budget, the documents render in the order the question
-    // needs them (lib/digest/rank.ts), so the cut falls on the rest.
-    const documents = await rankDocumentsForQuestion(digest.parts.documents, question, access.user.id);
-    system = corpusSystem({ ...digest.parts, documents });
-    scopeLabel =
-      "this project: every document in full, and every note, annotation, distillation, extraction, and summary in it";
+    // Past the whole threshold, the message reads the blocks it needs, found
+    // from the documents' skeletons (lib/assistant/project-reading.ts).
+    const picks = await projectPicks({
+      notebookId: data.notebookId,
+      documents: digest.parts.documents,
+      question,
+      history: data.history ?? [],
+      profile,
+      userId: access.user.id,
+      signal: req.signal,
+    }).catch((err: unknown) => {
+      // A reading that fails reads the project whole, as before.
+      console.warn("[assistant] project reading failed, reading the digest whole:", err);
+      return null;
+    });
+    if (picks) {
+      system = corpusPickedSystem(digest.parts, picks);
+      scopeLabel =
+        "this project: each document's gist and the blocks picked for this message, and every note, annotation, distillation, extraction, and summary in it";
+    } else {
+      // Past the text budget, the documents render in the order the question
+      // needs them (lib/digest/rank.ts), so the cut falls on the rest.
+      const documents = await rankDocumentsForQuestion(digest.parts.documents, question, access.user.id);
+      system = corpusSystem({ ...digest.parts, documents });
+      scopeLabel =
+        "this project: every document in full, and every note, annotation, distillation, extraction, and summary in it";
+    }
   }
 
   const lang = await currentLang();
