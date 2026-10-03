@@ -1,8 +1,8 @@
 {
  "total": {
-  "f1": 0.906,
-  "precision": 0.849,
-  "recall": 0.971
+  "f1": 0.907,
+  "precision": 0.85,
+  "recall": 0.973
  },
  "pages": {
   "100noticias.com-millones.html": {
@@ -1956,9 +1956,9 @@
    "fn": 0
   },
   "tell-review.de.heimweh.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "teslamag.de-Musk.html": {
    "tp": 3,
@@ -2901,9 +2901,9 @@
    "fn": 0
   },
   "demokratiewebstatt.at.luft.html": {
-   "tp": 1,
+   "tp": 2,
    "fp": 1,
-   "fn": 2
+   "fn": 1
   },
   "derpapierplanet.de.juni.html": {
    "tp": 3,
@@ -3146,9 +3146,9 @@
    "fn": 0
   },
   "evref.ch-ökumene.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 1,
-   "fn": 1
+   "fn": 0
   },
   "d57cfadc540842ebb09971e28df123ec.html": {
    "tp": 3,
@@ -3421,9 +3421,9 @@
    "fn": 0
   },
   "haus.de-Vorsatzschallung.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "haustiermagazin.com-katzenspielzeug.html": {
    "tp": 3,
@@ -4086,9 +4086,9 @@
    "fn": 0
   },
   "pcmag.com.platters.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "peta.de-veterinärämter.html": {
    "tp": 3,
@@ -4751,9 +4751,9 @@
    "fn": 0
   },
   "vergleich.de.leasen.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "verivox.de.finanzierung.html": {
    "tp": 3,
