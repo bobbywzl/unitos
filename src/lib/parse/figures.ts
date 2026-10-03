@@ -536,6 +536,18 @@ export function tryCompositeFigure(el: Element, ctx: WalkCtx): boolean {
   // (import compare loop finding: an article header's summary, byline, and
   // author avatar became one FIGURE).
   if (labeled.length + plain.length < paragraphs.length) return false;
+  // A paragraph above the media, when the media's caption is already a
+  // figcaption, is not a second caption: it is the lead set over the lead
+  // photo (held-out set finding: a story's standfirst swallowed into the
+  // figure under it, which had its own figcaption). A caption follows its
+  // picture.
+  const firstMedia = meaningfulMediaIn(el)[0];
+  if (
+    firstMedia &&
+    labeled.some((c) => c.tagName.toLowerCase() === "figcaption") &&
+    plain.some((p) => (p.compareDocumentPosition(firstMedia) & 4) !== 0)
+  )
+    return false;
   const row = figureRow(el);
   const columnEls = row ? mediaColumns(row) : [];
   const columns = row ? columnEls.length : 1;
