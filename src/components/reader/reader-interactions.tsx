@@ -210,9 +210,6 @@ type Popover = {
   y: number;
   yTop: number;
   textLeft: number;
-  // Container coords of the end of the selection: the Close link chip sits there.
-  endLeft: number;
-  endTop: number;
   truncated: boolean; // the selection crossed an equation or a page, which the passage leaves out
   figure?: boolean; // opened by the hold-and-circle gesture on a figure, equation, or table: the anchor is the whole block
   term?: boolean; // opened by clicking a key term; Extract leads, recommended
@@ -1579,15 +1576,6 @@ export function ReaderInteractions({
   pendingLinkRef.current = pendingLink;
   const documentIdRef = useRef(documentId);
   documentIdRef.current = documentId;
-  // With a link pending, highlighting text shows this chip at the end of the
-  // highlight; pressing it closes the link there.
-  const [closeLink, setCloseLink] = useState<{
-    anchor: Anchor;
-    left: number;
-    top: number;
-  } | null>(null);
-  const closeLinkRef = useRef(closeLink);
-  closeLinkRef.current = closeLink;
 
   // A card over the article holds an annotation once it is persisted, and an
   // annotation goes into a note as an annotation reference (SPEC.md §6,
@@ -1666,7 +1654,6 @@ export function ReaderInteractions({
       const next = (e as CustomEvent<PendingLink | null>).detail;
       setPendingLink(next ?? null);
       pendingLinkRef.current = next ?? null;
-      if (!next) setCloseLink(null);
     };
     window.addEventListener("dissect:pending-link", onPending);
     return () => window.removeEventListener("dissect:pending-link", onPending);
@@ -1852,8 +1839,7 @@ export function ReaderInteractions({
     annotationCard !== null ||
     commentCard !== null ||
     linkCard !== null ||
-    extractCard !== null ||
-    closeLink !== null;
+    extractCard !== null;
   // The mouseup that ends a hold-and-circle gesture must not run selection
   // capture — it would replace the figure popover it just opened.
   const suppressNextMouseUp = useRef(false);
@@ -2027,9 +2013,9 @@ export function ReaderInteractions({
   }
 
   // Ctrl/Cmd+C copies the highlighted text (SPEC.md §6). The article tints the
-  // highlighted text itself while a tool is open on it — the toolbar or the
-  // Close link chip — and painting that tint replaces the block's marks, which
-  // takes the browser's own selection with it (the comment on
+  // highlighted text itself while the toolbar is open on it, and painting
+  // that tint replaces the block's marks, which takes the browser's own
+  // selection with it (the comment on
   // highlightsByBlock's "selection" kind explains why), so the system copy
   // would have nothing left to act on. The anchor's quotedText is the same
   // text, so this copies exactly what a working native copy would have.
@@ -2039,7 +2025,7 @@ export function ReaderInteractions({
     // Read through the refs, not the state: the Ctrl/Cmd+C effect below closes
     // over this function once, at mount, so a direct read would stay the
     // initial null forever.
-    const quote = (popoverRef.current ?? closeLinkRef.current)?.anchor.quotedText;
+    const quote = popoverRef.current?.anchor.quotedText;
     if (!quote) return;
     try {
       await navigator.clipboard.writeText(quote);
@@ -2052,7 +2038,7 @@ export function ReaderInteractions({
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.altKey || e.key.toLowerCase() !== "c") return;
-      if (!popoverRef.current && !closeLinkRef.current) return;
+      if (!popoverRef.current) return;
       const active = document.activeElement as HTMLElement | null;
       if (active && !active.closest("[data-edit-block]") && isTextEntry(active)) return;
       // A real native selection anywhere — the article's own editable while
@@ -2125,7 +2111,6 @@ export function ReaderInteractions({
     setPrevDocumentId(documentId);
     setPopover(null);
     setSubmenu(null);
-    setCloseLink(null);
     setBubble(null);
     setSimplifyCard(null);
     setAssistantChat(null);
@@ -2256,15 +2241,7 @@ export function ReaderInteractions({
 
     const rect = range.getBoundingClientRect();
     const containerRect = container.getBoundingClientRect();
-    // The end of the selection is the last drawn line's right edge — the
-    // bounding rect's right is the widest line, not the end.
     const lineRects = Array.from(range.getClientRects()).filter((r) => r.width > 0 && r.height > 0);
-    const endRect = lineRects[lineRects.length - 1] ?? rect;
-    const endLeft = Math.max(
-      8,
-      Math.min(endRect.right - containerRect.left + 6, containerRect.width - 110),
-    );
-    const endTop = endRect.top + endRect.height / 2 - containerRect.top + container.scrollTop;
     const rawX = rect.left + rect.width / 2 - containerRect.left;
     const margin = Math.min(240, containerRect.width / 2);
     const articleRect = container.querySelector("article")?.getBoundingClientRect();
@@ -2341,8 +2318,6 @@ export function ReaderInteractions({
           ? Math.max(8, pageTop - containerRect.top + container.scrollTop)
           : readerTop,
       textLeft,
-      endLeft,
-      endTop,
       truncated,
       side,
       rightBase: articleRight + 10,
@@ -2355,14 +2330,17 @@ export function ReaderInteractions({
   const captureSelectionRef = useRef(captureSelection);
   captureSelectionRef.current = captureSelection;
 
-  // Escape closes the popover and bubbles first; with nothing open it leaves
-  // edit mode, saving unsaved typing on the way out.
+  // Escape closes the popover and bubbles first, and cancels a pending link
+  // with them; with nothing open it leaves edit mode, saving unsaved typing
+  // on the way out.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       // Escape that dismisses a pinyin candidate list stays the IME's.
       if (isImeKey(e)) return;
-      if (overlayOpenRef.current) {
+      const linkPending = pendingLinkRef.current !== null;
+      if (linkPending) broadcastPendingLink(null);
+      if (overlayOpenRef.current || linkPending) {
         setPopover(null);
         setSubmenu(null);
         setBubble(null);
@@ -2375,7 +2353,6 @@ export function ReaderInteractions({
         setLinkCard(null);
         setAnnotationCard(null);
         setExtractCard(null);
-        setCloseLink(null);
         // The page editor keeps the selection, as Google Docs does.
         if (!richTextRef.current) window.getSelection()?.removeAllRanges();
         return;
@@ -2400,13 +2377,12 @@ export function ReaderInteractions({
     // there starts a drag of the passage (dragstart below).
     const onContainerMouseDown = (event: MouseEvent) => {
       if (event.button !== 0) return;
-      if (!popoverRef.current && !closeLinkRef.current) return;
+      if (!popoverRef.current) return;
       const target = event.target instanceof Element ? event.target : null;
       // The page editor's toolbar acts on the open selection: a press there keeps it.
       if (target?.closest("[data-selection-popover], .selection-mark, .link-pending-mark, [data-docs-editor] [data-edit-control]")) return;
       setPopover(null);
       setSubmenu(null);
-      setCloseLink(null);
     };
     // A drag that starts on the article and lets go outside the pane still
     // ends a selection: the mouseup listens on the document, and a press
@@ -2483,19 +2459,12 @@ export function ReaderInteractions({
         }
       });
     };
-    // The toolbar on a selection. A pending link waits on the next
-    // highlighted text instead: the Close link chip shows at its end, and
-    // pressing it closes the link there — an accidental selection creates
-    // nothing.
+    // The toolbar on a selection. With a link pending, Close link is its
+    // first row, and pressing it closes the link there — an accidental
+    // selection creates nothing.
     const showTools = (captured: Popover | null) => {
       setSubmenu(null);
-      if (captured && pendingLinkRef.current) {
-        setPopover(null);
-        setCloseLink({ anchor: captured.anchor, left: captured.endLeft, top: captured.endTop });
-        return;
-      }
       setPopover(captured);
-      setCloseLink(null);
       setCommentDraft("");
     };
     // The page editor (SPEC.md §29): a keyboard selection opens the toolbar
@@ -2514,7 +2483,7 @@ export function ReaderInteractions({
           return;
         }
         const captured = captureSelection();
-        const open = popoverRef.current ?? closeLinkRef.current;
+        const open = popoverRef.current;
         if (captured && JSON.stringify(open?.anchor) !== JSON.stringify(captured.anchor)) showTools(captured);
       });
     };
@@ -2534,12 +2503,6 @@ export function ReaderInteractions({
       selectionTimer = setTimeout(() => {
         const captured = captureSelection();
         if (!captured) return;
-        if (captured && pendingLinkRef.current) {
-          setPopover(null);
-          setSubmenu(null);
-          setCloseLink({ anchor: captured.anchor, left: captured.endLeft, top: captured.endTop });
-          return;
-        }
         setPopover(captured);
         setSubmenu(null);
       }, 500);
@@ -2594,7 +2557,6 @@ export function ReaderInteractions({
         setAnnotationCard(null);
         setPopover(captured);
         setSubmenu("comment");
-        setCloseLink(null);
         setCommentDraft("");
       });
     };
@@ -2630,7 +2592,6 @@ export function ReaderInteractions({
       }
       popoverRef.current = captured;
       setPopover(captured);
-      setCloseLink(null);
       setSubmenu(tool === "add-to-notes" ? "add" : tool === "assistant" ? "ai" : null);
       if (tool === "explain") setPendingExplain(true);
     };
@@ -3776,15 +3737,14 @@ export function ReaderInteractions({
       window.removeEventListener("pointercancel", back);
     };
   }, [pageHeld, docsShift]);
-  // The page editor's words changed: the toolbar and the Close link chip close.
+  // The page editor's words changed: the toolbar closes.
   useEffect(() => {
     if (!blankDocument) return;
     const onEdited = (e: Event) => {
       if ((e as CustomEvent<{ documentId: string }>).detail?.documentId !== documentId) return;
-      if (!popoverRef.current && !closeLinkRef.current) return;
+      if (!popoverRef.current) return;
       setPopover(null);
       setSubmenu(null);
-      setCloseLink(null);
     };
     window.addEventListener(PAGE_EDITED_EVENT, onEdited);
     return () => window.removeEventListener(PAGE_EDITED_EVENT, onEdited);
@@ -4154,8 +4114,6 @@ export function ReaderInteractions({
         y: rect.bottom - containerRect.top + container.scrollTop + (side === "below" ? 14 : 6),
         yTop,
         textLeft: articleRect ? articleRect.left - containerRect.left + 24 : 24,
-        endLeft: Math.max(8, Math.min(rect.right - containerRect.left + 6, containerRect.width - 110)),
-        endTop: rect.top + rect.height / 2 - containerRect.top + container.scrollTop,
         truncated: false,
         term: true,
         side,
@@ -4369,8 +4327,6 @@ export function ReaderInteractions({
       y: y + 8 + (page && !beside ? 48 : 0),
       yTop: beside ? Math.max(8, pageTop - containerRect.top + container.scrollTop) : Math.max(8, y - 8),
       textLeft: Math.min(clientX - containerRect.left + 130, containerRect.width - 20),
-      endLeft: Math.max(8, Math.min(clientX - containerRect.left + 6, containerRect.width - 110)),
-      endTop: y,
       truncated: false,
       side: beside ? "right" : page ? "below" : "left",
       rightBase: containerRect.width - 130,
@@ -5479,7 +5435,6 @@ export function ReaderInteractions({
         toAnchor: to,
       });
       broadcastPendingLink(null);
-      setCloseLink(null);
       window.getSelection()?.removeAllRanges();
       // Both ends paint at once, sweeping in, in every pane that shows one —
       // the event reaches the other pane of a split view. The server's copy
@@ -5537,12 +5492,6 @@ export function ReaderInteractions({
     }
   }
 
-  // The Close link chip's press: the chip's highlight is the other end. On
-  // failure the chip stays for another try; the banner's ✕ still cancels.
-  async function completeCloseLink() {
-    if (!closeLink) return;
-    await completeLinkTo(closeLink.anchor, closeLink.top - 10);
-  }
 
   // A link closed in this pane or the other one: the ends in this document
   // paint now, before the refresh delivers the server's copy.
@@ -7362,7 +7311,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   // open with its thinking indicator until the answer lands, and the reader
   // asked for the passage to be worked on, not to look at it tinted. A
   // figure keeps the tint: its tint is the ring around it, not a fill.
-  const toolbarAnchor = popover?.anchor ?? closeLink?.anchor ?? null;
+  const toolbarAnchor = popover?.anchor ?? null;
   const underToolbar = richText && !(toolbarAnchor && isCoreKey(toolbarAnchor.blockId)) ? null : toolbarAnchor;
   if (underToolbar) {
     const running = aiBusy && popover !== null && underToolbar === popover.anchor && !popover.figure;
@@ -7454,12 +7403,13 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
     popover ? blocks.find((b) => b.id === popover.anchor.blockId)?.type : undefined,
   );
   // A selection in a core (SPEC.md §28) takes every tool but Link: a link
-  // joins the texts themselves.
+  // joins the texts themselves. With a link pending, Close link takes Link's
+  // place.
   const inCore = popover ? isCoreKey(popover.anchor.blockId) : false;
   // Define shows on one word alone (offersDefine).
   const has = (tool: Tool) =>
     TOOLBARS[popoverKind].includes(tool) &&
-    !(inCore && tool === "link") &&
+    !((inCore || pendingLink) && tool === "link") &&
     (tool !== "define" || (popover !== null && offersDefine(popover)));
   // The definition under the Define row: the open popover's own.
   const shownDefinition = definition && definition.key === popoverAnchorKey ? definition : null;
@@ -7993,6 +7943,38 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         {!split && !transcript && !embedded && !richText && collapseButton}
         {!split && !transcript && !embedded && !richText && distillButton}
       </div>
+      {/* A pending link's banner: under the controls, beside the toast, so
+          it covers no control. Escape or its ✕ cancels the link. */}
+      <Presence show={pendingLink !== null && !embedded} exit="fade">
+        {pendingLink && !embedded && (
+          <div
+            data-link-banner
+            className="pointer-events-auto flex max-w-full items-center gap-1 rounded-full bg-card py-1 pr-1 pl-4 shadow-float"
+          >
+            <span className="truncate text-[12.5px] text-sand-700">
+              {t("reader.linkingBanner", {
+                quote:
+                  pendingLink.anchor.quotedText.slice(0, 48) +
+                  (pendingLink.anchor.quotedText.length > 48 ? "…" : ""),
+                source:
+                  pendingLink.fromDocumentId === documentId
+                    ? t("reader.thisDocument")
+                    : (attachedDocuments.find((d) => d.id === pendingLink.fromDocumentId)?.title ??
+                      t("reader.anotherDocument")),
+              })}
+            </span>
+            <button
+              onClick={() => broadcastPendingLink(null)}
+              data-track="cancel-link"
+              aria-label={t("reader.cancelLink")}
+              data-tip={t("reader.cancelLink")}
+              className="flex size-7 shrink-0 items-center justify-center rounded-full text-xs text-sand-500 hover:bg-sand-100 hover:text-clay-700"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+      </Presence>
       <Presence show={toast !== null} exit="fade">
         {toast && (
           <span
@@ -8307,15 +8289,17 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               {t("reader.keyTerm")}
             </p>
           )}
-          {pendingLink && (
+          {/* With a link pending, Close link is the toolbox's first row: the
+              selection is the link's other end once it is pressed. */}
+          {pendingLink && !inCore && (
             <button
               disabled={busy}
               onClick={() => void completeLink()}
               data-track="close-link"
               data-tip={t("reader.closeLinkTitle")}
-              className={`flex w-full items-center gap-1.5 rounded-full bg-sage-600 ${toolRow} text-left font-semibold text-sage-fg hover:bg-sage-700 disabled:opacity-40`}
+              className={`order-first flex w-full items-center gap-1.5 rounded-full bg-sage-600 ${toolRow} text-left font-semibold text-sage-fg hover:bg-sage-700 disabled:opacity-40`}
             >
-              <LinkIcon size={11} />
+              {busy ? <SpinnerIcon size={11} className="motion-safe:animate-spin" /> : <LinkIcon size={11} />}
               {t("reader.closeLink")}
             </button>
           )}
@@ -8794,28 +8778,6 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       )}
       </Presence>
 
-      <Presence show={closeLink !== null} exit="pop">
-      {closeLink && (
-        <button
-          data-selection-popover
-          data-track-surface="ai-toolbar"
-          data-track="close-link"
-          disabled={busy}
-          data-tip={t("reader.closeLinkTitle")}
-          onMouseDown={(e) => e.preventDefault()} // keep the highlight alive under the press
-          onClick={() => void completeCloseLink()}
-          className={`absolute ${TOOL_LAYER} flex -translate-y-1/2 items-center gap-1.5 rounded-full bg-sage-600 px-2.5 py-1 text-[11.5px] font-semibold text-sage-fg shadow-float hover:bg-sage-700 disabled:opacity-40`}
-          style={{ left: closeLink.left, top: closeLink.top }}
-        >
-          {busy ? (
-            <SpinnerIcon size={10} className="motion-safe:animate-spin" />
-          ) : (
-            <LinkIcon size={10} />
-          )}
-          {t("reader.closeLink")}
-        </button>
-      )}
-      </Presence>
 
       <Presence show={bubble !== null} exit="bubble">
       {bubble && (
@@ -9527,34 +9489,6 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           )}
           {t("reader.stopReading")}
         </button>
-      )}
-      </Presence>
-
-      <Presence show={pendingLink !== null} exit="fade">
-      {pendingLink && (
-        <div className="fixed top-24 left-1/2 z-40 flex max-w-[80vw] -translate-x-1/2 items-center gap-3 rounded-full bg-card px-4 py-2 shadow-float">
-          <span className="truncate text-[12.5px] text-sand-700">
-            {t("reader.linkingBanner", {
-              quote:
-                pendingLink.anchor.quotedText.slice(0, 48) +
-                (pendingLink.anchor.quotedText.length > 48 ? "…" : ""),
-              source:
-                pendingLink.fromDocumentId === documentId
-                  ? t("reader.thisDocument")
-                  : (attachedDocuments.find((d) => d.id === pendingLink.fromDocumentId)?.title ??
-                    t("reader.anotherDocument")),
-            })}
-          </span>
-          <button
-            onClick={() => broadcastPendingLink(null)}
-            data-track="cancel-link"
-            aria-label={t("reader.cancelLink")}
-            data-tip={t("reader.cancelLink")}
-            className="shrink-0 text-xs text-sand-500 hover:text-clay-700"
-          >
-            ✕
-          </button>
-        </div>
       )}
       </Presence>
 
