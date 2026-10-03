@@ -213,7 +213,10 @@ function atomsOf(glyphs: Glyph[]): { atoms: Atom[]; unknown: Glyph[] } {
 // A CJK character (kana, kanji, hangul) is a word's letter too, and text
 // only (parse loop finding: the Japanese "L = E⁻¹ として, A = LU" lost its
 // kana, failed the check, and was a crop).
-const TEXT_CHAR_RE = /^[A-Za-z0-9,.;:()[\]=+−–·!/<>#%&\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u017F\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}ー]$/u;
+// A question mark is a formula's close mark, as "!" is (parse loop finding:
+// a textbook's "(X̂, Ŷ, Ẑ) → (R̂, Θ̂, φ̂)?" and "d/dt ⟨Ψ|Ψ⟩?" failed on
+// their "?", and each display was a crop).
+const TEXT_CHAR_RE = /^[A-Za-z0-9,.;:()[\]=+−–·!?/<>#%&\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u017F\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}ー]$/u;
 /** A letter a word in a formula holds: ASCII, Latin with a mark, or CJK.
     A ligature of TeX's text font (ff, fi, fl, ffi, ffl) is the letters it
     joins: \mathrm{eff} read \mathrm{e}ff. */
@@ -267,7 +270,7 @@ function textAtom(g: Glyph): Atom | null {
     ? "punct"
     : /[([]/.test(ch)
       ? "open"
-      : /[)\]!]/.test(ch)
+      : /[)\]!?]/.test(ch)
         ? "close"
         : /[=<>]/.test(ch)
           ? "rel"
