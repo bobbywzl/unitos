@@ -1121,19 +1121,27 @@ function splitRows(atoms: Atom[], lines: number[]): Atom[][] {
   // subscript of the row above's last word).
   // An integral sets its limits beside it, as scripts.
   // A limit set between two operators, under one and over the other, is
-  // the nearer's: TeX sets a lower limit close under its own ∑, and the
-  // next aligned row's ∑ stands a row's space under that (parse loop
-  // finding: in a proof's chain of three rows, "a ∈ 𝒜(s)" under the
-  // second row's ∑ read its middle as the third row's upper limit, and
-  // the display was a crop).
+  // the nearer's: TeX sets a limit a fixed small gap from its own
+  // operator, and the next aligned row's operator stands a row's space
+  // past that (parse loop finding: in a proof's chain of three rows,
+  // "a ∈ 𝒜(s)" under the second row's ∑ read its middle as the third
+  // row's upper limit, and the display was a crop). The gap is the
+  // limit's, not the glyph's: the glyphs on the atom's baseline within a
+  // limit's width stand as one run, and the run's top is what the gap
+  // under an operator is measured to, its bottom the gap over one (a
+  // comma hangs low on its run, and alone it stood nearer the next
+  // row's ∑ top than its own ∑'s bottom).
   const ops = full.filter((o) => o.cls === "op" && hangingFamily(o.fam) && o.entry?.display && !INTEGRAL_RE.test(o.tex));
   const limitOf = (a: Atom) => {
+    const run = atoms.filter((c) => !rowOf.has(c) && Math.abs(c.yb - a.yb) < 0.3 * Math.max(a.size, c.size) && Math.abs(cx(c) - cx(a)) < 2 * em);
+    const top = Math.max(a.top, ...run.map((c) => c.top));
+    const bottom = Math.min(a.bottom, ...run.map((c) => c.bottom));
     let best: Atom | undefined;
     let gap = Infinity;
     for (const o of ops) {
       if (cx(a) <= o.x1 || cx(a) >= o.x2) continue;
-      const over = a.bottom >= o.top - 0.2 * em && a.bottom - o.top < 0.8 * em ? a.bottom - o.top : Infinity;
-      const under = a.top <= o.bottom + 0.2 * em && o.bottom - a.top < 0.8 * em ? o.bottom - a.top : Infinity;
+      const over = a.bottom >= o.top - 0.2 * em && a.bottom - o.top < 0.8 * em ? Math.max(0, bottom - o.top) : Infinity;
+      const under = a.top <= o.bottom + 0.2 * em && o.bottom - a.top < 0.8 * em ? Math.max(0, o.bottom - top) : Infinity;
       const d = Math.min(over, under);
       if (d < gap) {
         gap = d;
