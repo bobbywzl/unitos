@@ -4,7 +4,7 @@
 // math, the TeX math family).
 
 import type { Glyph } from "@/lib/parse/pdf/drawing";
-import { extensionGlyph, isBbm, mathGlyph, openTypeGlyphs, openTypeSizedByAdvance, sizeFontGlyph } from "@/lib/parse/pdf/math-fonts";
+import { extensionGlyph, isBbm, mathGlyph, openTypeGlyphs, openTypeSizedByAdvance, sizeFontGlyph, sizedOperator } from "@/lib/parse/pdf/math-fonts";
 import type { Flags } from "@/lib/parse/pdf/types";
 
 // Control characters, C0 and C1 and DEL, are no text: a glyph whose code
@@ -606,6 +606,25 @@ function radicalBySpan(g: Glyph, glyphs: Glyph[]): { family: MathFamily; code: n
     as the text form, its limit "states" read into it as a line of words,
     and (1.79) was a crop). */
 const PAZO_OPERATORS: Record<string, number> = { "∑": 0x50, "∏": 0x51 };
+
+/** A big operator of a math font read by its character (MnSymbol's,
+    STIX's first fonts', MathTime's) reads as TeX's extension font's, its
+    text form or its display form (math-fonts.ts sizedOperator): read as
+    no symbol, it failed every formula it stood in (parse loop finding: a
+    beamer deck set in MnSymbol kept its ∑, ∏, and ∫ unread, and its
+    theorem displays were crops). The display form is the one the glyph's
+    name says (Glyph.display), else the one set larger than the glyphs
+    beside it on its baseline, as mathpazo's is read (pazoOperator). */
+function displayByNeighbors(g: Glyph, glyphs: Glyph[]): boolean {
+  const beside = glyphs.filter(
+    (h) =>
+      h !== g &&
+      h.unicode.trim() !== "" &&
+      Math.abs(h.y - g.y) < g.size * 0.2 &&
+      ((h.x >= g.x + g.w * 0.5 && h.x < g.x + g.w + g.size * 1.5) || (h.x + h.w <= g.x + g.w * 0.5 && h.x + h.w > g.x - g.size * 1.5)),
+  );
+  return beside.length > 0 && Math.max(...beside.map((h) => h.size)) < g.size / 1.25;
+}
 function pazoOperator(g: Glyph, glyphs: Glyph[]): Tex | null {
   const code = /^PazoMath$/.test(g.base) ? PAZO_OPERATORS[g.unicode] : undefined;
   if (code === undefined) return null;
@@ -663,7 +682,7 @@ export function unicodeMath(glyphs: Glyph[]): Glyph[] {
                 ? radicalBySpan(g, glyphs)
                 : extensionGlyph(g.unicode, g.w / g.size)
               : null
-            : (pazoOperator(g, glyphs) ?? texWorldChar(g.unicode, font.italic && !delta, font.bullets));
+            : (pazoOperator(g, glyphs) ?? sizedOperator(g.unicode, g.display === true || displayByNeighbors(g, glyphs)) ?? texWorldChar(g.unicode, font.italic && !delta, font.bullets));
     }
     else {
       tex = openTypeSized(g, font.name);
@@ -885,6 +904,17 @@ export function symbolOfName(name: string): string | undefined {
   const uni = /^uni([0-9A-Fa-f]{4})$|^u([0-9A-Fa-f]{4,6})$/.exec(base);
   if (uni) return String.fromCodePoint(parseInt(uni[1] ?? uni[2], 16));
   return SYMBOL_NAMES[base];
+}
+
+/** The codes whose glyph name in the PDF's encoding says the display form
+    of an operator: a ".disp" or ".display" suffix (MnSymbol's
+    "integral.disp"), or a name ending in "display" (TeX's
+    "summationdisplay"); null for a font with no such name. */
+export function displayNames(names: ArrayLike<string | null | undefined> | undefined): Set<number> | null {
+  if (!names) return null;
+  const out = new Set<number>();
+  for (let code = 0; code < names.length; code++) if (/\.(?:disp|display)$|display$/.test(names[code] ?? "")) out.add(code);
+  return out.size > 0 ? out : null;
 }
 
 /** What each code of a font draws by the glyph names in the PDF's encoding

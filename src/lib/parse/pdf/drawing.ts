@@ -13,7 +13,7 @@
 // on amsbook notes, a Word form, a Google Docs export, and a pdfLaTeX
 // paper, every text item's origin is a glyph origin here.
 
-import { mathFamily, namedGlyphs, symbolNames, unicodeMath, type MathFamily, type MathVariant } from "@/lib/parse/pdf/glyphs";
+import { displayNames, mathFamily, namedGlyphs, symbolNames, unicodeMath, type MathFamily, type MathVariant } from "@/lib/parse/pdf/glyphs";
 import type { Box } from "@/lib/parse/pdf/types";
 
 export type Glyph = {
@@ -54,6 +54,9 @@ export type Glyph = {
   // is not what the text layer reads (glyphs.ts symbolNames): MathTime's
   // "rho1" read as a control character.
   symbol?: string;
+  // The glyph's name in the PDF's font encoding says it is an operator's
+  // display form (MnSymbol's "integral.disp"; glyphs.ts displayNames).
+  display?: true;
   // Its fill color as it shows over white (#rrggbb); absent where no plain
   // color fills it (a pattern).
   color?: string;
@@ -221,14 +224,14 @@ export function readDrawing(
   let annotation = 0;
   // pdf.js sends W (clip) just before the path it clips to.
   let clipping = false;
-  const fontCache = new Map<string, { base: string; family: MathFamily | null; scale: number; vertical: boolean; named: Map<number, string> | null; symbols: Map<number, string> | null }>();
+  const fontCache = new Map<string, { base: string; family: MathFamily | null; scale: number; vertical: boolean; named: Map<number, string> | null; symbols: Map<number, string> | null; displays: Set<number> | null }>();
   const fontOf = (id: string) => {
     let hit = fontCache.get(id);
     if (!hit) {
       const font = fonts(id);
       const base = (font?.name ?? "").replace(/^[A-Z]{6}\+/, "");
       const named = namedGlyphs(base, font?.differences);
-      hit = { base, family: mathFamily(base), scale: font?.fontMatrix?.[0] ?? 0.001, vertical: font?.vertical === true, named, symbols: named ? null : symbolNames(font?.differences) };
+      hit = { base, family: mathFamily(base), scale: font?.fontMatrix?.[0] ?? 0.001, vertical: font?.vertical === true, named, symbols: named ? null : symbolNames(font?.differences), displays: displayNames(font?.differences) };
       fontCache.set(id, hit);
     }
     return hit;
@@ -399,6 +402,7 @@ export function readDrawing(
             }
             const symbol = font.symbols?.get(glyph.code);
             if (symbol !== undefined && symbol !== glyph.unicode.normalize("NFKC")) glyph.symbol = symbol;
+            if (font.displays?.has(glyph.code)) glyph.display = true;
             if (
               Math.max(px, ex) <= shown.x1 - 0.5 ||
               Math.min(px, ex) >= shown.x2 + 0.5 ||
