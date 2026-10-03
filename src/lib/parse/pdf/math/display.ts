@@ -750,11 +750,20 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
   // finding: Springer p26's "dt  √k₂  √π" read as text, and the display's
   // rows joined it as a sentence's inline rows, apart from its last
   // fraction, a crop).
+  // A fraction's parts in words ("number of outcomes favorable to A" over
+  // "number of outcomes") are the display's too, each bar on the row of a
+  // math line that reaches it (parse loop finding: the probability
+  // cheatsheet's P_naive(A) and the thesis's (1.69), p_i = "# codons for
+  // amino acid i" over "total # of codons" = n_i/N, read their parts as
+  // text lines, and both displays were crops).
   const hbars = ctx.drawing.rules.filter((r) => r.dir === "h");
+  const beside = (r: Rule) =>
+    input.some((m, k) => kinds0[k] === "math" && Math.abs(m.y - r.y1) < m.size && m.x < r.x2 + m.size * 1.5 && m.xEnd > r.x1 - m.size * 1.5);
   for (let n = 0; n < input.length; n++) {
     const l = input[n];
     const { words } = wordsOf(l, columns0[n]);
-    if (kinds0[n] !== "text" || words.length > 1 || words.some((w) => w.length > 3) || l.cells.length === 0) continue;
+    if (kinds0[n] !== "text" || l.cells.length === 0) continue;
+    const worded = words.length > 1 || words.some((w) => w.length > 3);
     const ink = l.items.flatMap((i) => i.glyphs ?? []).filter((g) => g.unicode.trim() !== "");
     // Each glyph stands within the span of a bar the line's own size away,
     // a line across the bar from it; a cell may hold two fractions' parts
@@ -777,7 +786,10 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
         return r !== undefined || /^[=+−<>≤≥]$/.test(g.unicode);
       }) &&
       holds.size > 0 &&
-      [...holds].every(([r, own]) => r.x2 - r.x1 <= Math.max(...own.map((g) => g.x + g.w)) - Math.min(...own.map((g) => g.x)) + l.size * 4);
+      [...holds].every(
+        ([r, own]) =>
+          (worded && beside(r)) || r.x2 - r.x1 <= Math.max(...own.map((g) => g.x + g.w)) - Math.min(...own.map((g) => g.x)) + l.size * 4,
+      );
     if (barred) kinds0[n] = "math";
   }
   // A row of an aligned display holds words of its own, as many as it
