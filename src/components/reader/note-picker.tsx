@@ -89,7 +89,7 @@ export function NotePicker({
                 data-track={track}
                 className={menuRowClass}
               >
-                <span className="shrink-0 font-mono text-[10.5px] text-sand-500">#{shortNoteId(note.id)}</span>
+                <span className="shrink-0 font-mono text-[10.5px] text-sand-500">{shortNoteId(note.id)}</span>
                 <span className="min-w-0 flex-1 truncate">{noteLine(note)}</span>
               </button>
             ))}
