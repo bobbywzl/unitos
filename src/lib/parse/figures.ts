@@ -499,6 +499,35 @@ function isCaptionBlock(block: ParsedBlock | undefined): boolean {
   );
 }
 
+// An agency credit closing a caption: "(Manu Fernandez/AP)", "(NASA/JPL-
+// Caltech/ASU)", "(AP Photo/Gene J. Puskar)" — names and agencies set apart
+// by slashes in parentheses, each opening with a capital or a digit, and no
+// sentence after. A unit or a pair of words in parentheses ("(km/h)",
+// "(and/or)") opens lowercase.
+const AGENCY_CREDIT_END_RX = /\(\s*(?:[^()/]{1,40}\/){1,4}[^()/]{1,40}\)$/u;
+const CREDITED_CAPTION_WORDS_MAX = 40;
+
+/** A caption told by the agency credit that closes it, at most forty words,
+    with the caption's own words before the credit: a credit alone,
+    "(Credit: Clayton Aldern / Grist)", is a credit line, not a caption
+    (held-out set finding). Web benchmark finding: a lead photo's caption set
+    as a paragraph beside the uncaptioned figure, read as the story's first
+    line. */
+export function isCreditedCaption(text: string): boolean {
+  const t = text.trim();
+  const m = AGENCY_CREDIT_END_RX.exec(t);
+  if (!m || t.split(/\s+/).length > CREDITED_CAPTION_WORDS_MAX) return false;
+  if (!/\p{L}/u.test(t.slice(0, m.index))) return false;
+  return m[0]
+    .slice(1, -1)
+    .split("/")
+    .every((part) => /^[\p{Lu}\d©]/u.test(part.trim()));
+}
+
+function isCreditedCaptionBlock(block: ParsedBlock | undefined): boolean {
+  return block !== undefined && block.type === "PARAGRAPH" && isCreditedCaption(block.text);
+}
+
 /** The element in the page whose text is this caption. */
 function captionElement(root: Element, text: string, index: Map<string, Element>): Element | null {
   if (index.size === 0) {
@@ -553,10 +582,11 @@ export function repairFigures(blocks: ParsedBlock[], root: Element, ctx: WalkCtx
     const figure = figureBlock(container, ctx);
     if (figure && figure.type === "FIGURE") out[i] = figure;
   }
-  // A caption beside a figure without one: the figure takes it.
+  // A caption beside a figure without one: the figure takes it. A labeled
+  // caption, or one told by its agency credit.
   for (let i = 0; i < out.length; i++) {
     const block = out[i];
-    if (!isCaptionBlock(block)) continue;
+    if (!isCaptionBlock(block) && !isCreditedCaptionBlock(block)) continue;
     const before = out[i - 1];
     const after = out[i + 1];
     const target = isFigureWithMedia(before) && !isFigureCaption(before.text) ? i - 1 : isFigureWithMedia(after) && !isFigureCaption(after.text) ? i + 1 : -1;
