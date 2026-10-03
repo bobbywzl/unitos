@@ -112,13 +112,20 @@ function wordsOf(line: Line, column: { left: number; right: number }) {
   const { x, xEnd, runs, text, label } = unlabeled(line);
   const inZone = new Uint8Array(text.length);
   for (const r of runs) if (r.zone) inZone.fill(1, r.start, r.end);
+  // A word set as a script of a formula (\bar{r}_{\text{diff}},
+  // \bar{A}_{\text{total}}) is the formula's, not a word of prose (parse
+  // loop finding: Springer's first row of (39) read as text for its three
+  // subscript words, and the display was a crop of its second row).
+  const inScript = new Uint8Array(text.length);
+  for (const r of runs) if ((r.sub || r.sup) && !r.zone) inScript.fill(1, r.start, r.end);
   let zoneChars = 0;
   let outside = "";
   for (let i = 0; i < text.length; i++) {
     if (inZone[i]) {
       if (!/\s/.test(text[i])) zoneChars++;
       outside += " ";
-    } else outside += text[i];
+    } else if (inScript[i]) outside += " ";
+    else outside += text[i];
   }
   // A word of two or three capitals is a formula's name for a thing set in
   // roman (the outcome "HH" in m(HH)), not a word of prose.
