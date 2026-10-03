@@ -1096,7 +1096,12 @@ function fencedGroups(atoms: Atom[], em: number): Atom[] {
         return yes;
       };
       const right = close ? close.x1 + 0.1 : Infinity;
-      let content = out.filter((a) => a !== open && a !== close && a.x1 >= open.x2 - 0.1 && a.x2 <= right && a.top <= open.top + 0.2 * em && a.bottom >= open.bottom - 0.2 * em);
+      // The rows may stand a third of an em past the delimiters' ends: a
+      // binomial set small fills its \Big parentheses to the brim (parse
+      // loop finding: the probability cheatsheet's (n−1 over i−1) in CMEX7
+      // stood its "1" 0.23 em over their top, and lost it).
+      const reach = 0.35 * em;
+      let content = out.filter((a) => a !== open && a !== close && a.x1 >= open.x2 - 0.1 && a.x2 <= right && a.top <= open.top + reach && a.bottom >= open.bottom - reach);
       if (!close) {
         // What follows cases on the formula's baseline, past every row's end
         // and on no row's baseline (the sentence's period), is the
