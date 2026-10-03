@@ -2220,6 +2220,7 @@ export function ReaderInteractions({
       container.querySelectorAll<HTMLElement>("[data-block-id], [data-edit-block]"),
     ).filter((el) => own(el) && (el === startBlock || el === endBlock || range.intersectsNode(el)));
     const segments: Segment[] = pageSegments ?? [];
+    const segmentEls: HTMLElement[] = [];
     let truncated = pageSelection?.truncated ?? false;
     // A core's words (SPEC.md §28) take the core key: their anchor is in the
     // collapsed view's layer. A passage stays in one layer — the first
@@ -2260,14 +2261,32 @@ export function ReaderInteractions({
         prefix: text.slice(Math.max(0, start - 32), start),
         suffix: text.slice(end, end + 32),
       });
+      segmentEls.push(el);
     }
     if (segments.length === 0) return null;
     const first = segments[0];
     const { blockId, startOffset, endOffset, quotedText, prefix, suffix } = first;
 
-    const rect = range.getBoundingClientRect();
     const containerRect = container.getBoundingClientRect();
-    const lineRects = Array.from(range.getClientRects()).filter((r) => r.width > 0 && r.height > 0);
+    // The words' own lines: a drag that starts on the title or the label
+    // over it reads from the first block (above), and the toolbox stands
+    // level with that block's words, not with the title. The range's lines
+    // are cut to the blocks the passage reads.
+    const spanTop = segmentEls[0]?.getBoundingClientRect().top ?? -Infinity;
+    const spanBottom = segmentEls[segmentEls.length - 1]?.getBoundingClientRect().bottom ?? Infinity;
+    const lineRects = Array.from(range.getClientRects()).filter(
+      (r) => r.width > 0 && r.height > 0 && r.bottom > spanTop && r.top < spanBottom,
+    );
+    const rect =
+      lineRects.length > 0
+        ? (() => {
+            const left = Math.min(...lineRects.map((r) => r.left));
+            const top = Math.min(...lineRects.map((r) => r.top));
+            const right = Math.max(...lineRects.map((r) => r.right));
+            const bottom = Math.max(...lineRects.map((r) => r.bottom));
+            return new DOMRect(left, top, right - left, bottom - top);
+          })()
+        : range.getBoundingClientRect();
     const rawX = rect.left + rect.width / 2 - containerRect.left;
     const margin = Math.min(240, containerRect.width / 2);
     const articleRect = container.querySelector("article")?.getBoundingClientRect();
