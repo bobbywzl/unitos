@@ -81,7 +81,14 @@ if (limit) hashes = hashes.slice(0, limit);
 
 // A soft hyphen (U+00AD) is drawn as nothing but at a line's end: "Pa­tien­ten"
 // reads "Patienten", one word, as the reader sees it on the page.
-const tokenize = (text: string) => text.replace(/­/g, "").match(/[\p{L}\p{N}_]+/gu) ?? [];
+// Japanese and Chinese set no spaces between words, so each Han or kana
+// character is a token of its own. Before, a whole Japanese sentence was one
+// token, and a space the marked body adds around an inline link ("管理ソフト
+// KeePass の起動…", where the page has "管理ソフト<a>KeePass</a>の起動…")
+// split that token: every 4-gram over the sentence missed on both sides
+// although the parse kept the page's words as they are.
+const tokenize = (text: string) =>
+  text.replace(/­/g, "").match(/[\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}]|(?:(?![\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}])[\p{L}\p{N}_])+/gu) ?? [];
 function shingles(text: string, n = 4): Map<string, number> {
   const tokens = tokenize(text);
   const out = new Map<string, number>();
