@@ -50,7 +50,10 @@ const GARBLES: { kind: string; re: RegExp }[] = [
   { kind: "control character", re: /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/gu },
   { kind: "replacement character", re: /\uFFFD/gu },
   { kind: "private-use character", re: /[\uE000-\uF8FF\u{F0000}-\u{FFFFD}\u{100000}-\u{10FFFD}]/gu },
-  { kind: "lone combining mark", re: /(?<![\p{L}\p{N}\p{M}])\p{M}/gu },
+  // A combining mark stands on a letter, a digit, or a math symbol: \vec
+  // over ∇ is ∇⃗ (parse loop finding: a quantum mechanics book's seven
+  // ∇⃗ were counted lone).
+  { kind: "lone combining mark", re: /(?<![\p{L}\p{N}\p{M}\p{Sm}])\p{M}/gu },
   { kind: "accent apart from its letter", re: /[´¨ˆ˜˙ˇ˘˚¸˛](?=\p{L})|(?<=\p{L})[´¨ˆ˜˙ˇ˘˚¸˛]/gu },
   // Not a 6 that stands after a relation or an operator, a space between (a
   // fraction read flat: "σ = 6 = 1.5").
