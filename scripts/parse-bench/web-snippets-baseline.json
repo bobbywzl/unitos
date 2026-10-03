@@ -1,8 +1,8 @@
 {
  "total": {
-  "f1": 0.907,
-  "precision": 0.85,
-  "recall": 0.973
+  "f1": 0.908,
+  "precision": 0.849,
+  "recall": 0.975
  },
  "pages": {
   "100noticias.com-millones.html": {
@@ -26,9 +26,9 @@
    "fn": 0
   },
   "cubadebate.cu-sesiona.html": {
-   "tp": 1,
+   "tp": 3,
    "fp": 0,
-   "fn": 2
+   "fn": 0
   },
   "diaadia.com.pa-ulpiano.html": {
    "tp": 3,
@@ -1091,9 +1091,9 @@
    "fn": 0
   },
   "fluessiggas.de.dimethylether.html": {
-   "tp": 1,
+   "tp": 3,
    "fp": 1,
-   "fn": 2
+   "fn": 0
   },
   "fogsmagazin.com.outdoor.html": {
    "tp": 3,
@@ -2377,7 +2377,7 @@
   },
   "alacarte.at-purzelbaum.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 3,
    "fn": 0
   },
   "alexander-klier.net.zeitphilosophie.html": {
@@ -2476,9 +2476,9 @@
    "fn": 0
   },
   "axios.com.future.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "backenmachtgluecklich.de.zitronenkuchen.html": {
    "tp": 6,
@@ -3391,9 +3391,9 @@
    "fn": 0
   },
   "handball.ch-bruderduell.html": {
-   "tp": 1,
+   "tp": 3,
    "fp": 0,
-   "fn": 2
+   "fn": 0
   },
   "handelsblatt.com.grenzschliessungen.html": {
    "tp": 3,
