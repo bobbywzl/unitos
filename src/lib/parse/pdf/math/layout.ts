@@ -1794,6 +1794,9 @@ function linearAt(input: Atom[]): string {
   // whether it ended a word (a name, \text): the space after it is its own.
   let tail: Atom | null = null;
   let afterWord = false;
+  // The slash of a slanted fraction (¹/ₙ: its numerator raised small
+  // before it, its denominator small on the baseline after it).
+  let slanted: Atom | null = null;
   for (let k = 0; k < main.length; k++) {
     const a = main[k];
     // A piece no composite took (a map arrow's bar whose arrow the line
@@ -1880,13 +1883,18 @@ function linearAt(input: Atom[]): string {
       if (low) tex += `${style.display ? "" : "\\limits"}_{${linear(low.map((s) => ({ ...s, claimed: false })))}}`;
     }
     // Scripts set before a symbol with no base of their own: {}^{14}_{6}C.
+    // A slanted fraction's numerator overlaps its slash by a fifth of an
+    // em (parse loop finding: GeoTopo sets ¹/ₙ and ᵋ/₂ so, and read "1/n"
+    // and "ε/2" as words, and a line of them was a crop).
     const pre = small.filter(
-      (s) => !s.claimed && s.x2 <= a.x1 + 0.1 * em && (!prev || s.x1 >= prev.x2 - 0.05 * em) && Math.abs(s.yb - a.yb) < 0.6 * em,
+      (s) => !s.claimed && s.x2 <= a.x1 + (a.tex === "/" ? 0.2 : 0.1) * em && (!prev || s.x1 >= prev.x2 - 0.05 * em) && Math.abs(s.yb - a.yb) < 0.6 * em,
     );
     if (pre.length) {
       for (const s of pre) s.claimed = true;
       out.push(`{}${scripts(pre, a.yb, em)}`);
     }
+    if (a.tex === "/" && pre.length > 0 && pre.every((s) => s.yb > a.yb + 0.1 * em)) slanted = a;
+    else if (slanted && (a.x1 - (prev?.x2 ?? a.x1) > 0.15 * em || a.size >= style.size * 0.85)) slanted = null;
     if (prev && gap > 1.9 * em) out.push("\\qquad");
     else if (spaced) out.push("\\quad");
     // A word space after a comma between formulas set in one display
@@ -1946,6 +1954,12 @@ function linearAt(input: Atom[]): string {
     if (a.upper) tex += `^{${a.upper}}`;
     if (mine.length) tex += scripts(mine, last.yb, em);
     if (style.display && nesting === displayDepth && big && !a.entry?.display) tex = `{\\textstyle ${tex}}`;
+    // A slanted fraction's denominator, set small on the baseline right
+    // after the slash, is set in \scriptstyle, its own scripts with it:
+    // the check wants it at a script's level, and KaTeX sets a glyph on
+    // the line at the text's (parse loop finding: GeoTopo p. 16's U_n =
+    // (¹/ₙ, 1 − ¹/ₙ) read its n at the text's level, and was a crop).
+    if (slanted && a !== slanted && a.code >= 0 && !hangingFamily(a.fam)) tex = `{\\scriptstyle ${tex}}`;
     out.push(tex);
     prev = { ...last, x1: a.x1, x2: Math.max(last.x2, ...mine.map((s) => s.x2), ...reach.map((s) => s.x2)) };
     tail = [last, ...mine, ...reach].reduce((t, s) => (s.x2 > t.x2 ? s : t));
