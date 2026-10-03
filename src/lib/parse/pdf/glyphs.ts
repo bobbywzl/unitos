@@ -210,17 +210,21 @@ export type MathFamily = "oml" | "oms" | "omx" | "msa" | "msb" | "euf" | "rsfs" 
 const FAMILIES: [RegExp, MathFamily][] = [
   // MathDesign's math italic and symbols, and Belleek's extension font
   // (MathTime's free twin), keep TeX's codes: arXiv 2506.06352's ≻ and ⊂,
-  // IEEE Access's braces drawn in pieces.
-  [/^(CMMIB?\d|LMMathItalic|MathDesign-.+-MathItalic-)/i, "oml"],
+  // IEEE Access's braces drawn in pieces. So do txfonts' Times math fonts:
+  // rtxmi is OML, txex OMX, and rtxr OT1 (its digits, + = and the ligatures
+  // of \mathrm), each with a bold twin (parse loop finding: a statistics
+  // book set in txfonts drew every one of its 50 displays as a crop, its ∑
+  // and its sized parentheses in no family).
+  [/^(CMMIB?\d|LMMathItalic|MathDesign-.+-MathItalic-|rtxb?mi$)/i, "oml"],
   [/^(CMB?SY\d|LMMathSymbols|MathDesign-.+-Symbol-\d)/i, "oms"],
-  [/^(CMEX\d|LMMathExtension|BLEX$)/i, "omx"],
+  [/^(CMEX\d|LMMathExtension|BLEX$|txb?ex$)/i, "omx"],
   [/^MSAM\d/i, "msa"],
   [/^MSBM\d/i, "msb"],
   [/^EUF[MB]\d/i, "euf"],
   [/^RSFS\d/i, "rsfs"],
   [/^LASYB?\d/i, "lasy"],
   [/^ESINT\d/i, "esint"],
-  [/^CM(R|BX|TI|SS|SSBX|SSI|SL|BXTI)\d/i, "ot1"],
+  [/^(CM(R|BX|TI|SS|SSBX|SSI|SL|BXTI)\d|rtx[rb]$)/i, "ot1"],
 ];
 
 // The family of a font by its name, the subset prefix removed ("CMMI10").

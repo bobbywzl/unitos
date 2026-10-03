@@ -4,6 +4,7 @@ import { pageLines } from "@/lib/parse/pdf/columns";
 import { fitOcrItems } from "@/lib/parse/pdf/lines";
 import { resolveContentsLinks } from "@/lib/parse/pdf/contents";
 import { itemGlyphs, readDrawing, type FontLookup, type Glyph, type PageDrawing } from "@/lib/parse/pdf/drawing";
+import { nameShape } from "@/lib/parse/pdf/faces";
 import { attachFigureRegions, pageGraphics, type Graphic } from "@/lib/parse/pdf/figures";
 import { ABSTRACT_RE, cutFootnotes, placeFootnotes } from "@/lib/parse/pdf/footnotes";
 import { dropFurniture } from "@/lib/parse/pdf/furniture";
@@ -95,6 +96,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
   const graphics: Graphic[][] = [];
   const flagsByFont = new Map<string, FontFlags>();
   const unnamedFonts = new Set<string>();
+  const realNames = new Map<string, string>();
 
   for (const pageNumber of read) {
     const keep = kept.has(pageNumber);
@@ -168,6 +170,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
         }
         flags = fontFlags(realName);
         flagsByFont.set(fontName, flags);
+        if (realName !== null) realNames.set(fontName, realName);
         if (realName === null || /^Type3/i.test(realName)) unnamedFonts.add(fontName);
       }
       return flags;
@@ -312,6 +315,34 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
       if (list.length < 3) continue;
       const m = median(list);
       if (list.every((a) => Math.abs(a - m) <= m * 0.05)) {
+        for (const it of items) if (it.font === font) it.mono = true;
+      }
+    }
+    // A named font whose name says no shape, and whose glyphs all advance
+    // the same, a narrow letter or mark (i, l, t, r, a stop) and a wide
+    // letter (n, e, m) alike, is monospace too: txfonts' and newtx's
+    // typewriter fonts are named txtt and t1xtt (parse loop finding: a
+    // statistics book's every R listing read as paragraphs, and its tables
+    // of fitted values as prose). Eight characters at least, so a subset
+    // of a few glyphs says nothing; a text font sets its digits at one
+    // width, so digits alone say nothing; a CJK face sets its Latin
+    // letters at one width too, and its name says its shape (faces.ts).
+    const widthsByFont = new Map<string, Map<string, number>>();
+    for (const it of items) {
+      if (!it.font || it.mono || unnamedFonts.has(it.font) || !it.glyphs || nameShape(realNames.get(it.font) ?? "") !== null) continue;
+      const widths = widthsByFont.get(it.font) ?? new Map<string, number>();
+      for (const g of it.glyphs) {
+        const ch = g.unicode.normalize("NFKC");
+        if (ch.trim().length !== 1 || g.w <= 0 || widths.has(ch)) continue;
+        widths.set(ch, g.w / g.size);
+      }
+      widthsByFont.set(it.font, widths);
+    }
+    for (const [font, widths] of widthsByFont) {
+      const chars = [...widths.keys()];
+      if (chars.length < 8 || !chars.some((c) => /[ijlftrsIJ.,;:'|!()[\]]/.test(c)) || !chars.some((c) => /[abdeghknopquvxyzmwABDEGHKNOPQUVXYZMW]/.test(c))) continue;
+      const m = median([...widths.values()]);
+      if ([...widths.values()].every((w) => Math.abs(w - m) <= m * 0.05)) {
         for (const it of items) if (it.font === font) it.mono = true;
       }
     }

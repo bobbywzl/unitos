@@ -213,7 +213,10 @@ function atomsOf(glyphs: Glyph[]): { atoms: Atom[]; unknown: Glyph[] } {
 // A CJK character (kana, kanji, hangul) is a word's letter too, and text
 // only (parse loop finding: the Japanese "L = E⁻¹ として, A = LU" lost its
 // kana, failed the check, and was a crop).
-const TEXT_CHAR_RE = /^[A-Za-z0-9,.;:()[\]=+−–·!/<>#%&\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u017F\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}ー]$/u;
+// A question mark is a formula's close mark, as "!" is (parse loop finding:
+// a textbook's "(X̂, Ŷ, Ẑ) → (R̂, Θ̂, φ̂)?" and "d/dt ⟨Ψ|Ψ⟩?" failed on
+// their "?", and each display was a crop).
+const TEXT_CHAR_RE = /^[A-Za-z0-9,.;:()[\]=+−–·!?/<>#%&\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u017F\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}ー]$/u;
 /** A letter a word in a formula holds: ASCII, Latin with a mark, or CJK.
     A ligature of TeX's text font (ff, fi, fl, ffi, ffl) is the letters it
     joins: \mathrm{eff} read \mathrm{e}ff. */
@@ -235,6 +238,15 @@ function textAtom(g: Glyph): Atom | null {
   // A math font's glyph no table reads (MathTime's big parenthesis) is no
   // text: read as a small one, it made a row of its own over its formula.
   // Nor is a glyph of a font with no name: bbm's 𝕜 reads "k" (glyphs.ts).
+  // Its digit is the one exception: dsfont's and bbm's double-struck
+  // digits (\mathds{1}, \mathbbm{1}) are Metafont bitmaps that read as a
+  // plain digit, and no other digit is set in a font with no name. It
+  // reads as \mathbb (parse loop finding: a quantum mechanics book's
+  // identity operator, 1̂ = ∫ |r⟩⟨r| d³r, left every display that held it
+  // a crop).
+  if (isUnnamedFont(g.base) && /^[0-9]$/.test(ch)) {
+    return { fam: null, code: g.code, entry: null, tex: `\\mathbb{${ch}}`, cls: "ord", size: g.size, x1: g.x, x2: g.x + Math.max(g.w, 0), yb: g.y, top: g.y + 0.69 * g.size, bottom: g.y, upright: false };
+  }
   if (CM_NAME_RE.test(g.base) || isUnreadMath(g) || isUnnamedFont(g.base)) return null;
   const accent = TEXT_ACCENTS[ch];
   if (accent) {
@@ -258,7 +270,7 @@ function textAtom(g: Glyph): Atom | null {
     ? "punct"
     : /[([]/.test(ch)
       ? "open"
-      : /[)\]!]/.test(ch)
+      : /[)\]!?]/.test(ch)
         ? "close"
         : /[=<>]/.test(ch)
           ? "rel"
@@ -1027,7 +1039,12 @@ function accents(atoms: Atom[]): Atom[] {
     if (bases.length === 0) continue;
     const pick = wide ? bases : [bases.sort((p, q) => Math.abs(cx(p) - cx(acc)) - Math.abs(cx(q) - cx(acc)))[0]];
     const body = linear(pick.map((b) => ({ ...b })));
-    const made = node(pick, `${acc.tex}{${body}}`, pick[0].yb, pick[0].size);
+    // A text font's macron drawn on an italic h's own baseline, through
+    // its ascender, is ħ: mathpazo sets \hbar as the macron kerned back
+    // over the h, never raised (parse loop finding: a quantum mechanics
+    // book's every ħ read \bar{h}).
+    const hbar = acc.tex === "\\bar" && pick.length === 1 && pick[0].tex === "h" && !pick[0].upright && Math.abs(acc.yb - pick[0].yb) < 0.1 * em;
+    const made = node(pick, hbar ? "\\hbar" : `${acc.tex}{${body}}`, pick[0].yb, pick[0].size);
     for (const b of pick) out.splice(out.indexOf(b), 1);
     out.splice(out.indexOf(acc), 1, made);
   }

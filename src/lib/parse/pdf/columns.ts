@@ -546,43 +546,67 @@ function withoutTail(band: Band, page: number): Band {
 
 // A note beside a column: the band's narrow side, a seventh of its
 // characters or less, set in another size or in italic, with no graphic on
-// its side (a pull quote, a side note, a label). It reads beside the wide side's
-// paragraph that holds its top, as the reader meets it: after it when it
-// stands on the right (the Earth Observer's pull quote stands beside the
-// article's first paragraph), and each of its groups before the paragraph
-// beside it when it stands on the left (PLOS's sidebar beside the page's
-// first paragraph, the 10-K's italic labels beside their paragraphs).
+// its side (a pull quote, a side note, a label), or set in the margin
+// (inMargin, a graphic there a margin figure). It reads beside the wide
+// side's paragraph that holds its top, as the reader meets it: after it
+// when it stands on the right (the Earth Observer's pull quote stands
+// beside the article's first paragraph), and each of its groups before
+// the paragraph beside it when it stands on the left (PLOS's sidebar
+// beside the page's first paragraph, the 10-K's italic labels beside
+// their paragraphs). A margin figure is a group of its own.
 function sideNote(band: Band, page: number): Side[] | null {
   const onLeft = chars(band.left.items) < chars(band.right.items);
   const [note, wide] = onLeft ? [band.left, band.right] : [band.right, band.left];
-  if (note.items.length === 0 || note.graphics.length > 0 || chars(note.items) * 7 > chars(note.items) + chars(wide.items)) return null;
+  if (note.items.length === 0 || chars(note.items) * 7 > chars(note.items) + chars(wide.items)) return null;
   const size = (list: Item[]) => median(list.map((i) => i.size));
   const italic = (list: Item[]) => list.filter((i) => i.italic).length * 2 > list.length;
-  if (Math.abs(size(note.items) - size(wide.items)) < size(wide.items) * 0.1 && italic(note.items) === italic(wide.items)) return null;
   const lines = buildLines(wide.items, page);
+  // A note set at the column's size and shape stands in the margin
+  // beyond a justified column: four lines or more of the column end at
+  // its right edge (within a quarter em: an italic letter or a hyphen
+  // reaches past it), and every word of the note starts an em or more
+  // past that edge, and so does every graphic on the note's side (parse
+  // loop finding: a Tufte textbook sets its margin notes and its margin
+  // figures' labels at the body's size; read in one pass, a paragraph
+  // beside a figure's axis labels became a table, and a display's
+  // denominator joined the note on its baseline; a figure's caption in
+  // the margin joined the display beside it once the figure was found).
+  const inMargin = () => {
+    const edge = Math.max(...lines.map((l) => l.xEnd));
+    const em = size(wide.items);
+    return (
+      !onLeft &&
+      lines.filter((l) => edge - l.xEnd <= em * 0.25).length >= 4 &&
+      note.items.every((i) => i.x >= edge + em) &&
+      note.graphics.every((p) => p.box.x1 >= edge + em)
+    );
+  };
+  if (note.graphics.length > 0 && !inMargin()) return null;
+  if (Math.abs(size(note.items) - size(wide.items)) < size(wide.items) * 0.1 && italic(note.items) === italic(wide.items) && !inMargin()) return null;
   const gaps = lines.slice(1).map((l, k) => lines[k].y - l.y);
   const pitch = median(gaps);
   // A group of the note: its lines at their own pitch (a stray mark on the
   // note's side, its page number, is a group of its own).
   const noteLines = buildLines(note.items, page);
   const notePitch = median(noteLines.slice(1).map((l, k) => noteLines[k].y - l.y));
-  const groups: Item[][] = [];
+  const groups: (Side & { top: number })[] = [];
   noteLines.forEach((l, k) => {
     // Two notes alone set their one gap as the pitch: a gap of two lines
     // of their size parts them too (the MML book's "associativity" and
     // "distributivity", four lines apart, read as one note).
-    if (k > 0 && (noteLines[k - 1].y - l.y > notePitch * 1.3 || noteLines[k - 1].y - l.y > l.size * 2.5)) groups.push([]);
-    if (groups.length === 0) groups.push([]);
-    groups[groups.length - 1].push(...l.items);
+    if (k > 0 && (noteLines[k - 1].y - l.y > notePitch * 1.3 || noteLines[k - 1].y - l.y > l.size * 2.5)) groups.push({ items: [], graphics: [], top: l.y });
+    if (groups.length === 0) groups.push({ items: [], graphics: [], top: l.y });
+    groups[groups.length - 1].items.push(...l.items);
   });
+  for (const graphic of note.graphics) groups.push({ items: [], graphics: [graphic], top: graphic.box.y2 });
+  groups.sort((a, b) => b.top - a.top);
   // Where each group reads: under the cut, a y on the wide side. On the
   // right, the paragraph's end: the first line at or under the group's top
   // whose gap to the next line is wider than the lines' pitch. On the left,
   // the paragraph's start: the last line at or over the group's top whose
   // gap to the line above is wider than the pitch, or the first line.
   const cuts: number[] = [];
-  for (const group of groups) {
-    const top = Math.max(...group.map((i) => i.y));
+  for (const { top } of groups) {
     if (onLeft) {
       let start = lines.findLastIndex((l, k) => l.y >= top - l.size * 0.5 && (k === 0 || gaps[k - 1] > pitch * 1.3));
       if (start < 0) start = 0;
@@ -600,7 +624,7 @@ function sideNote(band: Band, page: number): Side[] | null {
     const cut = Math.min(above, cuts[k]);
     const between = (y: number) => y <= above && y > cut;
     parts.push({ items: wide.items.filter((i) => between(i.y)), graphics: wide.graphics.filter((p) => between(graphicY(p))) });
-    parts.push({ items: group, graphics: [] });
+    parts.push({ items: group.items, graphics: group.graphics });
     above = cut;
   });
   parts.push({ items: wide.items.filter((i) => i.y <= above), graphics: wide.graphics.filter((p) => graphicY(p) <= above) });
