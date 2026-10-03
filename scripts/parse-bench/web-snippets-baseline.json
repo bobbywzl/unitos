@@ -1,7 +1,7 @@
 {
  "total": {
-  "f1": 0.89,
-  "precision": 0.835,
+  "f1": 0.891,
+  "precision": 0.837,
   "recall": 0.953
  },
  "pages": {
@@ -492,7 +492,7 @@
   },
   "shingon-reiki.de.schamanismus.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "silvias.net.wahlzensur.html": {
@@ -512,7 +512,7 @@
   },
   "sprechwaisen.com.sw082.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "spreeblick.com.habeck.html": {
@@ -707,7 +707,7 @@
   },
   "beyssonmanagement.com.innovation.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "bigdata.ypart.eu.datenerhebung.html": {
@@ -892,7 +892,7 @@
   },
   "denkanstoos.com.2012.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "denkmalpraxismoderne.de.studentendorf.html": {
@@ -1292,7 +1292,7 @@
   },
   "insubordinant.wordpress.com.speed.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "internetchemie.info.Heliumkerne.html": {
@@ -1372,7 +1372,7 @@
   },
   "knowtechie.com.rally.html": {
    "tp": 3,
-   "fp": 0,
+   "fp": 1,
    "fn": 0
   },
   "kulturnews.de-Deutschland-Tour.html": {
@@ -1682,7 +1682,7 @@
   },
   "pagesix.com.myers.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "pawszilla.com.celine.html": {
