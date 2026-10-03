@@ -176,8 +176,17 @@ export function captionSides(pdf: PdfText, cand: Flat, placed: number[][]): Capt
     const captionLines = units.filter((u) => cand.units[u].index === -1).flatMap((u) => placed[u]).map((i) => pdf.lines[i]);
     const first = captionLines[0];
     if (!first) return;
-    const cells: Line[] = units.filter((u) => cand.units[u].index >= 0).flatMap((u) => placed[u]).map((i) => pdf.lines[i]).filter((l) => l.page === first.page);
+    const cellUnits = units.filter((u) => cand.units[u].index >= 0 && cand.units[u].text.trim() !== "");
+    const cells: Line[] = cellUnits.flatMap((u) => placed[u]).map((i) => pdf.lines[i]).filter((l) => l.page === first.page);
     if (cells.length < 2) return;
+    // A table whose cells the text layer mostly does not place is not
+    // judged: pdftotext (-nodiag) drops a table whose head is set
+    // diagonal, rows and all, and the few cells placed land on the body's
+    // lines that cite the same words (parse benchmark finding: an IEEE
+    // paper's Table I, its head rotated 60°, placed "LangChain [5]" and
+    // "GPTCache [6]" on the paragraph over the table that cites them, and
+    // the caption set over the table read as under it).
+    if (cells.length * 3 < cellUnits.length) return;
     const top = Math.min(...cells.map((l) => l.top));
     const bottom = Math.max(...cells.map((l) => l.top));
     const side = first.top < top ? "above" : first.top > bottom ? "below" : null;
