@@ -1359,7 +1359,17 @@ function markHidden(document: Document, rules: Rule[], page: Page) {
     // captions read as paragraphs).
     if ((tag === "img" || tag === "picture") && isLazyPicture(el)) continue;
     const style = styleOf(el, page);
-    if (!style) return;
+    if (!style) {
+      // Past the style budget: the element's own declarations still say
+      // display none, read without its ancestors' (no var() to resolve).
+      // The loop stopped here before, and every element after it showed:
+      // a page whose 12,500 hidden menu items came first read its hidden
+      // consent dialog as the article. Web benchmark finding: no page of
+      // either set reaches the budget here (every page's marks unchanged).
+      const own = declsOf(el, page).get("display")?.value.toLowerCase();
+      if (own === "none") el.setAttribute("data-unitos-hidden", "1");
+      continue;
+    }
     const display = ownValue(style, "display");
     if (display === "none") {
       el.setAttribute("data-unitos-hidden", "1");
