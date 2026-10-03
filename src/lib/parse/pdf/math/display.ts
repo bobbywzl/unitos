@@ -1435,6 +1435,24 @@ function formulaGlyphs(line: Line, pageOrphans: Glyph[], page: Glyph[], lines: L
   return { glyphs: glyphs.filter((g) => !label.glyphs.includes(g)), label: tag, labelGlyphs: label.glyphs, left: right === null };
 }
 
+/** A proof's end box drawn as rules on one of the formula's rows: a frame
+    a third to nine tenths of an em each way, its center on the row of a
+    full-size glyph (the main row's, not a fraction's denominator), an em
+    or more right of the formula, no glyph between. */
+function qedFrame(glyphs: Glyph[], box: Box, size: number, ctx: PageContext): boolean {
+  const rows = glyphs.filter((g) => g.size >= size * 0.9 && !hangingFamily(g.family)).map((g) => g.y);
+  if (rows.length === 0) return false;
+  return framesOf(ctx.drawing.rules, size * 0.15).some((f) => {
+    const w = f.right.x1 - f.left.x1;
+    const h = Math.abs(f.left.y2 - f.left.y1);
+    const cy = (f.left.y1 + f.left.y2) / 2;
+    if (w < size * 0.3 || w > size * 0.9 || h < size * 0.3 || h > size * 0.9 || f.left.x1 < box.x2 + size) return false;
+    const row = rows.find((y) => cy >= y - size * 0.1 && cy <= y + size * 0.8);
+    if (row === undefined) return false;
+    return !ctx.drawing.glyphs.some((g) => g.unicode.trim() !== "" && g.x + g.w / 2 > box.x2 && g.x < f.left.x1 && g.y > row - size * 0.5 && g.y < row + size * 0.8);
+  });
+}
+
 // The equation's LaTeX with its label as \tag, and the box of its glyphs
 // (their drawn extent, the label's included): padded for the crop, and as
 // drawn (glyphBox: the display's space above and below is measured to it);
@@ -1559,7 +1577,14 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext, lines: Line[
     const glyphBox = box;
     const pad = size * 0.15;
     box = { x1: box.x1 - pad, y1: box.y1 - pad, x2: box.x2 + pad, y2: box.y2 + pad };
-    return { latex: found.label ? `${latex} ${found.label}` : latex, box, glyphBox, left: found.left };
+    // A proof's end box drawn as rules (amsthm's \qed: four rules, 0.6 em
+    // wide and 0.675 em tall) on the display's last row, an em or more
+    // right of the formula with nothing between, is the display's end
+    // mark, as a □ glyph there is (formulaGlyphs): \tag*{$\square$}
+    // (parse loop finding: a proof's chain of three rows ending in a drawn
+    // box read without it, and the box was lost).
+    const label = found.label ?? (qedFrame(glyphs, glyphBox, size, ctx) ? "\\tag*{$\\square$}" : null);
+    return { latex: label ? `${latex} ${label}` : latex, box, glyphBox, left: found.left };
   } catch {
     return null;
   }
