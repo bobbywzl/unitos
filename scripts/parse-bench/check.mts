@@ -1512,6 +1512,11 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
   const falseSet = indentScores(flushPdf, indented, linesOfUnits(flushPdf, indented));
   const trueSet = indentScores(setInPdf, indented, linesOfUnits(setInPdf, indented));
   check("layout: a block indent the page does not set is false; one it sets is right", falseSet.wrong === 1 && trueSet.judged === 1 && trueSet.wrong === 0, `${JSON.stringify(falseSet.found)} ${JSON.stringify(trueSet.found)}`);
+  // A page that sets every block 20 pt in under heads at the column's edge: the heads show the edge.
+  const heads = [0, 1].map((i) => ({ page: 1, top: 80 + 200 * i, bottom: 90 + 200 * i, left: 72, right: 150, text: `Bemerkung ${i + 17}` }));
+  const blocksPdf: PdfText = { ...flushPdf, lines: [...own.map((l) => ({ ...l, left: 92 })), ...other.map((l) => ({ ...l, left: 92 })), ...heads] };
+  const underHeads = indentScores(blocksPdf, indented, linesOfUnits(blocksPdf, indented));
+  check("layout: a block set in under heads at the column's edge is set in", underHeads.judged === 1 && underHeads.wrong === 0, JSON.stringify(underHeads));
   // A drawing read as a display's crop over the captioned rest of its figure: one figure in two pieces.
   const region = (y1: number, y2: number) => ({ kind: "path" as const, points: [[20, y1], [80, y1], [80, y2], [20, y2]] as [number, number][] });
   const top: DocBlock = { kind: "figure", mathImage: "", at: { page: 1, region: region(10, 20) } };

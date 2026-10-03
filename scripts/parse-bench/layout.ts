@@ -196,8 +196,10 @@ const byPage = new WeakMap<PdfText, Map<number, Line[]>>();
     list's and a note's; not a table's cells), and start less than that
     measure left of it (not a line across two columns), the leftmost place
     where two of them or more start within a point; on another page
-    (`page`), its lines at the line's place across the page. */
-export function columnEdge(pdf: PdfText, line: Line, measure: number, own: Set<Line>, page = line.page): number | null {
+    (`page`), its lines at the line's place across the page. With `heads`,
+    lines of any width count: the heads a page sets at the column's edge
+    over blocks it sets in ("Bemerkung 18", "Beweis: Sei …"). */
+export function columnEdge(pdf: PdfText, line: Line, measure: number, own: Set<Line>, page = line.page, heads = false): number | null {
   let pages = byPage.get(pdf);
   if (!pages) {
     pages = new Map();
@@ -208,8 +210,10 @@ export function columnEdge(pdf: PdfText, line: Line, measure: number, own: Set<L
     }
     byPage.set(pdf, pages);
   }
-  const column = (pages.get(page) ?? []).filter(
-    (l) => !own.has(l) && l.right - l.left >= 0.6 * measure && l.left > line.left - measure && Math.min(l.right, line.right) - Math.max(l.left, line.left) >= 0.5 * (line.right - line.left),
+  const column = (pages.get(page) ?? []).filter((l) =>
+    heads
+      ? !own.has(l) && l.left > line.left - measure && l.left <= line.left + 1 && l.right > line.left
+      : !own.has(l) && l.right - l.left >= 0.6 * measure && l.left > line.left - measure && Math.min(l.right, line.right) - Math.max(l.left, line.left) >= 0.5 * (line.right - line.left),
   );
   const lefts = column.map((l) => l.left).sort((a, b) => a - b);
   const count = (x: number) => lefts.filter((y) => Math.abs(y - x) <= 1).length;
@@ -263,6 +267,15 @@ export function indentScores(pdf: PdfText, cand: Flat, placed: number[][]): Inde
       if (lines.length === 1 && (edge === null || Math.abs(l.left - edge) <= 2)) {
         const beside = [l.page - 2, l.page + 2].map((p) => columnEdge(pdf, l, measure, own, p)).filter((x): x is number => x !== null);
         if (beside.length > 0) edge = Math.min(edge ?? Infinity, ...beside);
+      }
+      // A page that sets every block in under its heads (a lecture's
+      // "Bemerkung 18", "Beweis: Sei …" at the edge, each body 20 pt in):
+      // its wide lines all stand at the indent, and the heads show the edge
+      // (parse bench finding: GeoTopo's proofs, set in as the page sets
+      // them, counted as indents the page does not set).
+      if (edge !== null && Math.abs(l.left - edge) <= 2) {
+        const head = columnEdge(pdf, l, measure, own, l.page, true);
+        if (head !== null && head < edge - 2) edge = head;
       }
       return edge === null || l.left - edge < -2 ? null : l.left - edge;
     });
