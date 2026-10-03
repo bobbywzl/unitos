@@ -144,7 +144,12 @@ function wordsOf(line: Line, column: { left: number; right: number }) {
   return { x, xEnd, text, label, outside, zoneChars, words, letters, opens };
 }
 
-const CONTENTS_TAIL_RE = /(?:\s*\.){5,}\s*\d{1,4}\s*$/;
+// The entry has a title before its dots: a matrix's row of dots ending in a
+// digit is none (parse loop finding: the CS 229 refresher's D = (d_1 0 ⋯ 0;
+// 0 ⋱ ⋱ ⋮; ⋮ ⋱ ⋱ 0; 0 ⋯ 0 d_n) read its third row "⋮ ⋱ ⋱ 0", drawn as
+// dots, as text, which ended the display, and D was a crop over an
+// equation of its last row).
+const CONTENTS_TAIL_RE = /\p{L}.*(?:\s*\.){5,}\s*\d{1,4}\s*$/u;
 function kindOf(line: Line, ctx: PageContext, column: { left: number; right: number }, fenced: boolean): LineKind {
   if (LABEL_RE.test(line.text.trim()) || QED_RE.test(line.text.trim())) return "label";
   const { x, xEnd, text, label, outside, zoneChars, words, letters, opens } = wordsOf(line, column);
