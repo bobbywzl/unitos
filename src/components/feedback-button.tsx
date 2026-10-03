@@ -28,6 +28,8 @@ function parseLink(raw: string): string | null {
 export function FeedbackButton() {
   const pathname = usePathname();
   const t = useT();
+  // The reader (/n/<project>): its tray and rail fill the right edge.
+  const inReader = /^\/n\/[^/]+\/?$/.test(pathname ?? "");
   const [open, setOpen] = useState(false);
   const [category, setCategory] = useState<"bug" | "idea" | "other">("bug");
   const [message, setMessage] = useState("");
@@ -146,14 +148,38 @@ export function FeedbackButton() {
   return (
     <>
       {/* Above the mobile bottom bar; on md+ above the rail's More button,
-          which sits in the bottom-right corner. */}
+          which sits in the bottom-right corner. In the reader the pill
+          would lie on the tray's last row (its select circle, the ⋯ that
+          reopens a resolved comment): there, on md+, it is a round button
+          at the foot of the rail, where no control sits. */}
       <button
         onClick={() => setOpen(!open)}
         aria-label={t("works.sendFeedback")}
         data-tip={t("works.sendFeedback")}
-        className="fixed right-4 bottom-[calc(64px+env(safe-area-inset-bottom))] z-20 rounded-full bg-card px-4 py-2 text-sm text-sand-700 shadow-lift hover:bg-clay-100 hover:text-clay-800 md:bottom-[60px] print:hidden"
+        data-feedback-button=""
+        className={`fixed right-4 bottom-[calc(64px+env(safe-area-inset-bottom))] z-20 rounded-full bg-card px-4 py-2 text-sm text-sand-700 shadow-lift hover:bg-clay-100 hover:text-clay-800 md:bottom-[60px] print:hidden ${
+          inReader ? "md:right-2 md:bottom-4 md:flex md:size-9 md:items-center md:justify-center md:p-0" : ""
+        }`}
       >
-        {t("works.feedback")}
+        <span className={inReader ? "md:hidden" : undefined}>{t("works.feedback")}</span>
+        {inReader && (
+          <svg
+            aria-hidden
+            className="hidden md:block"
+            width="17"
+            height="17"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            <path d="M12 7v4" />
+            <path d="M12 14h.01" />
+          </svg>
+        )}
       </button>
       <Presence show={open} exit="pop">
       {open && (
