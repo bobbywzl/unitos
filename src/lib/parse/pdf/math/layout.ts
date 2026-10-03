@@ -639,10 +639,16 @@ function braces(atoms: Atom[], rules: Rule[], used: Set<Rule>): Atom[] {
     if (far.length === 0) continue;
     const farRules = rules.filter((r) => !used.has(r) && r.dir === "h" && r.x1 >= x1 - 0.2 * em && r.x2 <= x2 + 0.2 * em && (over ? r.y1 < bottom : r.y1 > top));
     for (const r of farRules) used.add(r);
-    const body = linear(structure(far, farRules, 1));
+    // The brace's baseline is its body's once its fractions are read: a
+    // fraction that opens the content stands its numerator leftmost (parse
+    // loop finding: the thesis's (1.41) set ½H(1/3, 1/6) under an
+    // overbrace, the brace took the numerator's baseline, stood off the
+    // row, and the display was a crop).
+    const structured = structure(far, farRules, 1);
+    const body = linear(structured);
     const label = near.length ? linear(near.map((b) => ({ ...b }))) : "";
     const tex = over ? `\\overbrace{${body}}${label ? `^{${label}}` : ""}` : `\\underbrace{${body}}${label ? `_{${label}}` : ""}`;
-    const made = node([...g, ...far, ...near], tex, mainBaseline(far), maxSize(far));
+    const made = node([...g, ...far, ...near], tex, mainBaseline(structured), maxSize(far));
     out = out.filter((b) => !g.includes(b) && !far.includes(b) && !near.includes(b));
     out.push(made);
   }
@@ -833,8 +839,16 @@ function chain(cands: Atom[], y: number, dir: 1 | -1, em: number, rules: Rule[],
     const gap = dir > 0 ? a.bottom - edge : edge - a.top;
     if (gap > 0.9 * em) break;
     const near = dir > 0 ? a.bottom : a.top;
+    // A rule between the part's row and the glyph is a fraction's bar
+    // inside the part: the glyph across it is the fraction's other part,
+    // on a row of its own (parse loop finding: the thesis's (1.41) sets
+    // ½H(1/3, 1/6) under an overbrace; the chain took the numerator first,
+    // made its baseline the row, and the "2" under the bar stood too far
+    // from it once the parenthesis had moved the edge past the bar, so the
+    // display was a crop).
+    const from = row === null ? edge : dir > 0 ? Math.min(edge, row) : Math.max(edge, row);
     const barred = rules.some(
-      (r) => r.x1 < a.x2 && r.x2 > a.x1 && (r.y1 + r.y2) / 2 > Math.min(edge, near) && (r.y1 + r.y2) / 2 < Math.max(edge, near),
+      (r) => r.x1 < a.x2 && r.x2 > a.x1 && (r.y1 + r.y2) / 2 > Math.min(from, near) && (r.y1 + r.y2) / 2 < Math.max(from, near),
     );
     if (taken.length > 0 && gap > 0.25 * unit && !barred) break;
     // (A radical's sign and a sized delimiter hang from their origins: no baseline.)
