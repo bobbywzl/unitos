@@ -3012,7 +3012,7 @@
   },
   "Winda w chmurach _ Obyczaje _ Dwutygodnik _ Dwutygodnik.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "eawag.ch-elektron.html": {
@@ -4142,7 +4142,7 @@
   },
   "pluralsight.com.python.html": {
    "tp": 2,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "pocketpc.ch.auslieferung.html": {
