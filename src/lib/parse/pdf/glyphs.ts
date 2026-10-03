@@ -4,7 +4,7 @@
 // math, the TeX math family).
 
 import type { Glyph } from "@/lib/parse/pdf/drawing";
-import { extensionGlyph, isBbm, mathGlyph, openTypeGlyphs, openTypeSizedByAdvance, sizeFontGlyph } from "@/lib/parse/pdf/math-fonts";
+import { extensionGlyph, isBbm, mathGlyph, openTypeGlyphs, openTypeSizedByAdvance, sizeFontGlyph, sizedOperator } from "@/lib/parse/pdf/math-fonts";
 import type { Flags } from "@/lib/parse/pdf/types";
 
 // Control characters, C0 and C1 and DEL, are no text: a glyph whose code
@@ -606,6 +606,25 @@ function radicalBySpan(g: Glyph, glyphs: Glyph[]): { family: MathFamily; code: n
     as the text form, its limit "states" read into it as a line of words,
     and (1.79) was a crop). */
 const PAZO_OPERATORS: Record<string, number> = { "∑": 0x50, "∏": 0x51 };
+
+/** A big operator of a math font read by its character (MnSymbol's,
+    STIX's first fonts', MathTime's) reads as TeX's extension font's, its
+    text form or its display form (math-fonts.ts sizedOperator): read as
+    no symbol, it failed every formula it stood in (parse loop finding: a
+    beamer deck set in MnSymbol kept its ∑, ∏, and ∫ unread, and its
+    theorem displays were crops). The display form is the one the glyph's
+    name says (Glyph.display), else the one set larger than the glyphs
+    beside it on its baseline, as mathpazo's is read (pazoOperator). */
+function displayByNeighbors(g: Glyph, glyphs: Glyph[]): boolean {
+  const beside = glyphs.filter(
+    (h) =>
+      h !== g &&
+      h.unicode.trim() !== "" &&
+      Math.abs(h.y - g.y) < g.size * 0.2 &&
+      ((h.x >= g.x + g.w * 0.5 && h.x < g.x + g.w + g.size * 1.5) || (h.x + h.w <= g.x + g.w * 0.5 && h.x + h.w > g.x - g.size * 1.5)),
+  );
+  return beside.length > 0 && Math.max(...beside.map((h) => h.size)) < g.size / 1.25;
+}
 function pazoOperator(g: Glyph, glyphs: Glyph[]): Tex | null {
   const code = /^PazoMath$/.test(g.base) ? PAZO_OPERATORS[g.unicode] : undefined;
   if (code === undefined) return null;
@@ -624,8 +643,20 @@ export function unicodeMath(glyphs: Glyph[]): Glyph[] {
   texTextFonts(glyphs);
   bbmLetters(glyphs);
   for (const g of glyphs) {
-    if (g.family !== null) continue;
+    // A glyph of a family's font whose name in the PDF's encoding names
+    // another symbol than the table's at its code is that symbol
+    // (symbolNames: Springer's "MSAM10" sets ⪅ at ⊠'s code).
+    if (g.family !== null) {
+      if (g.symbol === undefined || g.family === "ot1" || mathGlyph(g.family, g.code)?.unicode === g.symbol) continue;
+      const tex = openTypeChar(g.symbol);
+      if (tex && tex.family !== "omx") {
+        g.family = tex.family;
+        g.code = tex.code;
+      }
+      continue;
+    }
     const font = unicodeFont(g.base);
+    if (g.symbol !== undefined) g.unicode = g.symbol;
     if (!font || g.unicode.trim() === "" || g.size <= 0) continue;
     // Word maps some of Cambria Math's glyphs to their letter twice ("𝑝𝑝",
     // pdftotext too): one glyph is one letter. Read as two, it took no
@@ -651,7 +682,7 @@ export function unicodeMath(glyphs: Glyph[]): Glyph[] {
                 ? radicalBySpan(g, glyphs)
                 : extensionGlyph(g.unicode, g.w / g.size)
               : null
-            : (pazoOperator(g, glyphs) ?? texWorldChar(g.unicode, font.italic && !delta, font.bullets));
+            : (pazoOperator(g, glyphs) ?? sizedOperator(g.unicode, g.display === true || displayByNeighbors(g, glyphs)) ?? texWorldChar(g.unicode, font.italic && !delta, font.bullets));
     }
     else {
       tex = openTypeSized(g, font.name);
@@ -833,6 +864,73 @@ export function namedGlyphs(base: string, names: ArrayLike<string | null | undef
   return out.size > 0 ? out : null;
 }
 
+// A glyph's name in the PDF's font encoding (its Differences array) names
+// the glyph the font draws, whatever the text layer or a family's table
+// says of its code: a Type 1 font selects its glyphs by name. Where the
+// name is a symbol's (Adobe's glyph list and TeX's names), the glyph is
+// that symbol. Parse loop findings: MathTime's math italic names its ϱ
+// "rho1" at code 7, which the text layer reads as a control character
+// (Springer's "ϱ = 0.02" lost its ϱ, and the display was a crop); and
+// Springer's "MSAM10" sets ⪅ ("lessorapproxeql") at code 2, where the AMS
+// font's table has ⊠. A suffix after a period names a variant of the same
+// symbol (MnSymbol's "integral.disp", "slash.left"). Letters, digits, and
+// punctuation are left to the text layer: a small capital named "A.s" may
+// read as "a" by design.
+const SYMBOL_NAMES: Record<string, string> = {
+  alpha: "α", beta: "β", gamma: "γ", delta: "δ", epsilon: "ϵ", epsilon1: "ε", zeta: "ζ", eta: "η", theta: "θ", theta1: "ϑ",
+  iota: "ι", kappa: "κ", lambda: "λ", mu: "μ", nu: "ν", xi: "ξ", omicron: "ο", pi: "π", pi1: "ϖ", rho: "ρ", rho1: "ϱ",
+  sigma: "σ", sigma1: "ς", tau: "τ", upsilon: "υ", phi: "ϕ", phi1: "φ", chi: "χ", psi: "ψ", omega: "ω",
+  Gamma: "Γ", Delta: "Δ", Theta: "Θ", Lambda: "Λ", Xi: "Ξ", Pi: "Π", Sigma: "Σ", Upsilon: "Υ", Phi: "Φ", Psi: "Ψ", Omega: "Ω",
+  minus: "−", plus: "+", plusminus: "±", minusplus: "∓", multiply: "×", divide: "÷", dotmath: "⋅", periodcentered: "·",
+  asteriskmath: "∗", circlemultiply: "⊗", circleplus: "⊕", circleminus: "⊖", circledot: "⊙", bulletmath: "∙",
+  equal: "=", notequal: "≠", lessequal: "≤", greaterequal: "≥", less: "<", greater: ">", equivalence: "≡", notequivalence: "≢",
+  similar: "∼", approxequal: "≈", congruent: "≅", asymptoticallyequal: "≃", lessorapproxeql: "⪅", greaterorapproxeql: "⪆",
+  lessmuch: "≪", greatermuch: "≫", precedes: "≺", follows: "≻", proportional: "∝", perpendicular: "⊥", parallel: "∥",
+  element: "∈", notelement: "∉", suchthat: "∋", propersubset: "⊂", propersuperset: "⊃", reflexsubset: "⊆", reflexsuperset: "⊇",
+  notsubset: "⊄", union: "∪", intersection: "∩", logicaland: "∧", logicalor: "∨", logicalnot: "¬", emptyset: "∅",
+  universal: "∀", existential: "∃", infinity: "∞", partialdiff: "∂", gradient: "∇", nabla: "∇",
+  summation: "∑", product: "∏", coproduct: "∐", integral: "∫", contintegral: "∮", radical: "√",
+  arrowleft: "←", arrowright: "→", arrowup: "↑", arrowdown: "↓", arrowboth: "↔", arrowupdn: "↕",
+  arrowdblleft: "⇐", arrowdblright: "⇒", arrowdblup: "⇑", arrowdbldown: "⇓", arrowdblboth: "⇔", mapsto: "↦",
+  angleleft: "⟨", angleright: "⟩", prime: "′", lozenge: "◊", triangle: "△", therefore: "∴",
+  aleph: "ℵ", weierstrass: "℘", Ifraktur: "ℑ", Rfraktur: "ℜ",
+};
+
+/** The character a glyph name names, or undefined: a name of SYMBOL_NAMES
+    (a suffix after a period dropped), or a Unicode name ("uni2A85",
+    "u1D400"). */
+export function symbolOfName(name: string): string | undefined {
+  const base = name.replace(/\..*$/, "");
+  const uni = /^uni([0-9A-Fa-f]{4})$|^u([0-9A-Fa-f]{4,6})$/.exec(base);
+  if (uni) return String.fromCodePoint(parseInt(uni[1] ?? uni[2], 16));
+  return SYMBOL_NAMES[base];
+}
+
+/** The codes whose glyph name in the PDF's encoding says the display form
+    of an operator: a ".disp" or ".display" suffix (MnSymbol's
+    "integral.disp"), or a name ending in "display" (TeX's
+    "summationdisplay"); null for a font with no such name. */
+export function displayNames(names: ArrayLike<string | null | undefined> | undefined): Set<number> | null {
+  if (!names) return null;
+  const out = new Set<number>();
+  for (let code = 0; code < names.length; code++) if (/\.(?:disp|display)$|display$/.test(names[code] ?? "")) out.add(code);
+  return out.size > 0 ? out : null;
+}
+
+/** What each code of a font draws by the glyph names in the PDF's encoding
+    (symbolOfName), for the codes whose name is a symbol's; null for a font
+    with no names. */
+export function symbolNames(names: ArrayLike<string | null | undefined> | undefined): Map<number, string> | null {
+  if (!names) return null;
+  const out = new Map<number, string>();
+  for (let code = 0; code < names.length; code++) {
+    const name = names[code];
+    const char = name ? symbolOfName(name) : undefined;
+    if (char !== undefined) out.set(code, char);
+  }
+  return out.size > 0 ? out : null;
+}
+
 // The text of the page's glyphs where it is not the text layer's: every glyph
 // of a math family, and the glyphs of a composite or an accented letter. A
 // glyph that reads as nothing (a composite's second glyph, a placed accent)
@@ -844,13 +942,18 @@ export function glyphTexts(glyphs: Glyph[]): Map<Glyph, string> {
       texts.set(g, g.unicode);
       continue;
     }
-    if (g.family === null || g.family === "ot1") continue;
+    // A glyph its name reads otherwise than the text layer (symbolNames)
+    // reads by its name.
+    if (g.family === null || g.family === "ot1") {
+      if (g.symbol !== undefined) texts.set(g, g.symbol);
+      continue;
+    }
     const entry = mathGlyph(g.family, g.code);
     // A font read by its character reads as its text layer does: the
     // Math Guide's ∖ is no backslash, though TeX's code for both is one.
     // A blackboard capital the text layer reads as a plain one is \mathbb's.
     const font = unicodeFont(g.base);
-    if (!entry || (font?.kind === "tex" && !font.blackboard)) texts.set(g, g.unicode.replace(CONTROL_CHARS_RE, ""));
+    if (!entry || (font?.kind === "tex" && !font.blackboard)) texts.set(g, (g.symbol ?? g.unicode).replace(CONTROL_CHARS_RE, ""));
     else texts.set(g, entry.cls === "piece" ? (PIECE_TEXT[entry.piece ?? ""] ?? "") : entry.unicode);
   }
   const textOf = (g: Glyph) => texts.get(g) ?? g.unicode;

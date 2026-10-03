@@ -22,7 +22,7 @@ import { mathLeaves } from "./math";
 // (math-fonts.ts); the LaTeX's symbols from KaTeX.
 
 /** A glyph as the checks read it. */
-export type PageGlyph = Pick<Glyph, "family" | "code" | "unicode" | "x" | "y" | "w" | "size">;
+export type PageGlyph = Pick<Glyph, "family" | "code" | "unicode" | "symbol" | "x" | "y" | "w" | "size">;
 export type PageGlyphs = { width: number; height: number; glyphs: PageGlyph[] };
 
 /** A family of TeX's math fonts, whose codes the tables name. */
@@ -36,7 +36,7 @@ const cache = new Map<string, Promise<PageGlyphs[] | null>>();
     PDF keeps only its latest (a walk of a long PDF is 12 MB, and the walk's
     code changed often in round 1). */
 const DISK = join(ROOT, ".bench", "cache", "glyphs");
-const WALK_CODE = ["drawing.ts", "glyphs.ts"].map((f) => join(ROOT, "src", "lib", "parse", "pdf", f));
+const WALK_CODE = [...["drawing.ts", "glyphs.ts"].map((f) => join(ROOT, "src", "lib", "parse", "pdf", f)), join(import.meta.dirname, "glyphs.ts")];
 
 /** Let a file's glyphs go once no document still to score reads them. */
 export function forgetGlyphs(path: string) {
@@ -63,7 +63,10 @@ export function pdfGlyphs(path: string): Promise<PageGlyphs[] | null> {
       // word in a display) were not walked, and a display that read them
       // in \text failed the check on words the page draws (parse loop
       // finding).
-      const pdf = await getDocumentProxy(new Uint8Array(bytes), PDF_CMAPS);
+      // The fonts' glyph names too (fontExtraProperties): a glyph the PDF's
+      // encoding names otherwise than TeX's table at its code is what the
+      // name says (lib/parse/pdf/glyphs.ts symbolNames).
+      const pdf = await getDocumentProxy(new Uint8Array(bytes), { ...PDF_CMAPS, fontExtraProperties: true });
       const pages: PageGlyphs[] = [];
       for (let p = 1; p <= pdf.numPages; p++) {
         const page = await pdf.getPage(p);
@@ -71,13 +74,13 @@ export function pdfGlyphs(path: string): Promise<PageGlyphs[] | null> {
         const ops = (await page.getOperatorList()) as { fnArray: number[]; argsArray: unknown[] };
         const lookup: FontLookup = (id) => {
           try {
-            const font = page.commonObjs.get(id) as { name?: string; fontMatrix?: number[]; vertical?: boolean } | null;
-            return font ? { name: font.name ?? "", fontMatrix: font.fontMatrix, vertical: font.vertical } : null;
+            const font = page.commonObjs.get(id) as { name?: string; fontMatrix?: number[]; vertical?: boolean; differences?: (string | null)[] } | null;
+            return font ? { name: font.name ?? "", fontMatrix: font.fontMatrix, vertical: font.vertical, differences: font.differences } : null;
           } catch {
             return null;
           }
         };
-        const glyphs = readDrawing(ops, lookup, viewport.width, viewport.height).glyphs.map(({ family, code, unicode, x, y, w, size }) => ({ family, code, unicode, x, y, w, size }));
+        const glyphs = readDrawing(ops, lookup, viewport.width, viewport.height).glyphs.map(({ family, code, unicode, symbol, x, y, w, size }) => ({ family, code, unicode, ...(symbol !== undefined ? { symbol } : {}), x, y, w, size }));
         pages.push({ width: viewport.width, height: viewport.height, glyphs });
       }
       await pdf.loadingTask.destroy();
@@ -625,6 +628,13 @@ export function glyphScores(pages: PageGlyphs[], doc: Doc, range: [number, numbe
   const symbolOf = (g: PageGlyph) => {
     const entry = g.family && MATH.has(g.family) ? mathGlyph(g.family, g.code) : null;
     if (!entry || entry.cls === "accent") return null;
+    // A glyph the PDF's encoding names otherwise than the table at its code
+    // (Springer's "MSAM10" sets ⪅ at ⊠'s code): the page draws the named
+    // symbol, and the text layer is wrong where it reads another.
+    if (g.symbol !== undefined && !entry.piece && entry.unicode.normalize("NFC") !== g.symbol.normalize("NFC")) {
+      const symbol = classOf(g.symbol.normalize("NFC"));
+      return symbol ? { symbol, wrong: g.unicode.normalize("NFC") !== g.symbol.normalize("NFC") } : null;
+    }
     const symbol = entry.piece === "not" ? NEGATED : entry.piece === "mapstochar" ? MAPSTO : entry.piece || !entry.unicode ? null : classOf(entry.unicode.normalize("NFC"));
     return symbol ? { symbol, wrong: entry.piece ? g.unicode !== "" : g.unicode.normalize("NFC") !== entry.unicode.normalize("NFC") } : null;
   };

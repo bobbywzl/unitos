@@ -420,8 +420,12 @@ export type LabelScores = { pairs: number; wrong: number; score: number | null; 
     the other must count on in their series: a label that repeats or runs
     backwards (a scan's unnamed pages given their PDF numbers among named
     ones: 1, 3, 2, 3) is wrong. A page drawn with no label pairs with none.
-    The scored pages are judged with a page on each side. */
-export function labelScores(labels: string[] | undefined, pageCount: number, pages: [number, number] | undefined): LabelScores {
+    The scored pages are judged with a page on each side. A slide deck
+    (`deck`: every page wider than tall) labels its pages by frame, and a
+    frame of several overlay steps repeats its label on each (beamer's
+    alerts frame, 6, 6, 6): a repeat in a deck is the PDF's own, and only a
+    label that runs backwards is wrong. */
+export function labelScores(labels: string[] | undefined, pageCount: number, pages: [number, number] | undefined, deck = false): LabelScores {
   if (!labels || labels.length === 0) return { pairs: 0, wrong: 0, score: null, found: [] };
   const name = (p: number) => labels[p - 1] ?? String(p);
   const [from, to] = pages ? [Math.max(1, pages[0] - 1), Math.min(pageCount, pages[1] + 1)] : [1, pageCount];
@@ -432,7 +436,7 @@ export function labelScores(labels: string[] | undefined, pageCount: number, pag
     const [a, b] = [labelValue(name(p)), labelValue(name(p + 1))];
     if (!a || !b || a.series !== b.series) continue;
     pairs++;
-    if (b.n > a.n) continue;
+    if (b.n > a.n || (deck && b.n === a.n)) continue;
     wrong++;
     found.push({ page: p + 1, labels: `${name(p)} → ${name(p + 1)}` });
   }

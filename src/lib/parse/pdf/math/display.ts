@@ -14,7 +14,7 @@
 
 import type { Glyph, Rule } from "@/lib/parse/pdf/drawing";
 import { CAPTION_RE } from "@/lib/parse/pdf/figures";
-import { isUnreadMath, sameFlags } from "@/lib/parse/pdf/glyphs";
+import { isTextMath, isUnreadMath, sameFlags } from "@/lib/parse/pdf/glyphs";
 import { regionOf, unionBox } from "@/lib/parse/pdf/geometry";
 import { ATTACH_PUNCT_RE, spaceGap } from "@/lib/parse/pdf/lines";
 import { drawnBulletAt } from "@/lib/parse/pdf/lists";
@@ -112,13 +112,20 @@ function wordsOf(line: Line, column: { left: number; right: number }) {
   const { x, xEnd, runs, text, label } = unlabeled(line);
   const inZone = new Uint8Array(text.length);
   for (const r of runs) if (r.zone) inZone.fill(1, r.start, r.end);
+  // A word set as a script of a formula (\bar{r}_{\text{diff}},
+  // \bar{A}_{\text{total}}) is the formula's, not a word of prose (parse
+  // loop finding: Springer's first row of (39) read as text for its three
+  // subscript words, and the display was a crop of its second row).
+  const inScript = new Uint8Array(text.length);
+  for (const r of runs) if ((r.sub || r.sup) && !r.zone) inScript.fill(1, r.start, r.end);
   let zoneChars = 0;
   let outside = "";
   for (let i = 0; i < text.length; i++) {
     if (inZone[i]) {
       if (!/\s/.test(text[i])) zoneChars++;
       outside += " ";
-    } else outside += text[i];
+    } else if (inScript[i]) outside += " ";
+    else outside += text[i];
   }
   // A word of two or three capitals is a formula's name for a thing set in
   // roman (the outcome "HH" in m(HH)), not a word of prose.
@@ -331,7 +338,11 @@ function attached(frag: Line, near: Line[], rules: Rule[], edge: boolean, braces
   const under = (g: Glyph) =>
     names.some((n) => g.x + g.w / 2 > n.x1 - n.size && g.x + g.w / 2 < n.x2 + n.size && n.y - g.y > n.size * 0.3 && n.y - g.y < n.size * 1.3);
   if (glyphs.length > 0 && glyphs.every((g) => g.unicode.trim() === "" || under(g))) return true;
-  if (edge) return false;
+  // A fragment on the page's first or last line stays out, unless it is
+  // math glyphs alone: a display that opens the page sets its arrow's
+  // label on the page's first line (parse loop finding: Springer's
+  // "∅ → A₁" with k₁/h_A over the arrow, (19), lost its k and was a crop).
+  if (edge && !(glyphs.length > 0 && glyphs.every((g) => g.unicode.trim() === "" || (g.family !== null && g.family !== "ot1") || isTextMath(g)))) return false;
   // The display's width is all its lines': a limit's second row, wider than
   // its first, stands past the first alone (a subarray's rows align left,
   // and the display passed with the second row left out as words).
@@ -1072,10 +1083,26 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
           if ((kind !== "fragment" && kind !== "math") || unlabeled(f).label !== null) break;
           const bar = (r: Rule) => r.dir === "h" && r.x1 < f.xEnd && r.x2 > f.x && Math.abs(r.y1 - f.y) < f.size * 1.2;
           const script = kind === "fragment" && scriptOf(f);
+          // So does the row of arrows set over the next display's row: a
+          // math line set small, under a fragment of the band's (a row of
+          // labels, which nothing of the band hangs from), within the next
+          // line's extent and a row's space over it (parse loop finding:
+          // Springer's chains (3) and (4), each a row of labeled arrows
+          // over a row of symbols and arrows, read (4)'s upper arrows into
+          // (3)'s band; both displays were crops).
+          const before = band[band.length - 2];
+          const arrows =
+            kind === "math" &&
+            f.size < next.size * 0.9 &&
+            before !== undefined &&
+            kinds[lines.indexOf(before)] === "fragment" &&
+            f.x >= next.x - f.size &&
+            f.xEnd <= next.xEnd + f.size &&
+            f.y - next.y <= next.size * 1.6;
           const fencedNext = fences.some(
             (g) => [f, next].every((l) => l.y >= g.y1 && l.y <= g.y2 && l.x < g.x2 + l.size * 3 && l.xEnd > g.x1 - l.size * 3) && !band.some((l) => l !== f && l.y >= g.y1 && l.y <= g.y2),
           );
-          if (!script && !fencedNext && (!rules.some((r) => bar(r) && r.y1 < f.y && r.y1 > next.y) || rules.some((r) => bar(r) && r.y1 > f.y))) break;
+          if (!script && !fencedNext && !arrows && (!rules.some((r) => bar(r) && r.y1 < f.y && r.y1 > next.y) || rules.some((r) => bar(r) && r.y1 > f.y))) break;
           band.pop();
         }
         break;
