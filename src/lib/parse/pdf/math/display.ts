@@ -41,6 +41,8 @@ const OPERATOR_NAMES = new Set([
   "pr", "var", "cov", "tr", "sgn", "diag", "rank", "span", "supp",
 ]);
 const MATH_WORDS = new Set([...OPERATOR_NAMES, "if", "and", "or", "for", "all", "otherwise", "where", "with", "in", "on", "as", "then", "else"]);
+// A differential: d and one letter of its variable, not a word (wordsOf).
+const DIFFERENTIAL_RE = /^d(?![adeiou])[a-z]$/;
 
 // A formula's relations and operators: a display states or applies one.
 const RELATION_RE = /[=<>≤≥≈∼≃≅≡≠∝≪≫≺≻→←↔⇒⇐⇔⟶⟹⟺↦∈∉∋⊂⊆⊃⊇∑∏∫∮⋀⋁⋃⋂+×∪∩⊕⊗∧∨]/;
@@ -143,7 +145,12 @@ function wordsOf(line: Line, column: { left: number; right: number }) {
   // keeps its words ("−∞, otherwise," a cases row).
   const opening = opens ? "" : (/^\s*(\p{L}+)/u.exec(outside)?.[1] ?? "");
   const prose = /\[\d+(?:\s*[,–-]\s*\d+)*\]|[.?!]\s+\p{Lu}\p{Ll}/u.test(outside) || (opening.length >= 2 && !OPERATOR_NAMES.has(opening.toLowerCase()));
-  const exempt = (w: string) => !prose && (x > column.left + line.size * 1.5 || opens) && MATH_WORDS.has(w.toLowerCase());
+  // A differential, d and its variable (dx, dt), is a formula's, not a
+  // word of prose (parse loop finding: a quantum mechanics book's triple
+  // integral "… δ(z − z′) dx dy dz" read as text for its three
+  // differentials, and the display was a crop); "de", "do", "da", "du",
+  // and "di" are words.
+  const exempt = (w: string) => !prose && (x > column.left + line.size * 1.5 || opens) && (MATH_WORDS.has(w.toLowerCase()) || DIFFERENTIAL_RE.test(w));
   const all = outside.match(/\p{L}+/gu) ?? [];
   const words = all.filter((w) => w.length >= 2 && !exempt(w) && !/^\p{Lu}{2,3}$/u.test(w));
   // A formula's name set in capitals (\mathrm{GOE} over a 𝒦) is no prose.
