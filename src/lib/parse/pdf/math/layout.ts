@@ -456,14 +456,20 @@ function fuseComposites(input: Atom[]): Atom[] {
       // stacked (\vdots) or on a diagonal (\ddots). LaTeX sets \vdots and
       // \ddots in the text's roman font: a page whose text font is no
       // Computer Modern stacks the text font's periods (parse loop finding:
-      // mml-book's Charter periods left (2.70) and (2.71) crops).
+      // mml-book's Charter periods left (2.70) and (2.71) crops). It stacks
+      // \vdots' periods 4 pt apart and \ddots' 3 pt, whatever the size: 0.4
+      // and 0.3 em at 10 pt, 0.57 and 0.43 em at 7 pt (parse loop finding:
+      // the CS 229 refresher's D matrix, set at 8 pt, stood its ⋮ 0.502 em
+      // apart, over the bound of 0.5; read as three periods they made two
+      // rows of their own, the last row joined the one over it, and the
+      // display was a crop).
       if (a.tex === "." || a.tex === "\\cdot") {
         const next = (p: Atom, dx: [number, number], dy: [number, number]) =>
           out.find((b) => b !== p && b.tex === a.tex && b.x1 - p.x1 >= dx[0] * em && b.x1 - p.x1 <= dx[1] * em && p.yb - b.yb >= dy[0] * em && p.yb - b.yb <= dy[1] * em);
         const shapes: [string, [number, number], [number, number]][] = [
           [a.tex === "." ? "\\ldots" : "\\cdots", [0.2, 0.6], [-0.03, 0.03]],
-          ["\\vdots", [-0.05, 0.05], [0.3, 0.5]],
-          ["\\ddots", [0.3, 0.5], [0.2, 0.4]],
+          ["\\vdots", [-0.05, 0.05], [0.3, 0.6]],
+          ["\\ddots", [0.3, 0.5], [0.2, 0.45]],
         ];
         for (const [tex, dx, dy] of shapes) {
           if (tex !== "\\ldots" && tex !== "\\cdots" && a.fam !== "ot1" && a.fam !== null) continue;
