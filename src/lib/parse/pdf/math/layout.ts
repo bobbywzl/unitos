@@ -1061,10 +1061,17 @@ function columnCuts(rows: Atom[][], em: number, least = Math.min(0.9 * em, 9.5))
   return cuts;
 }
 
+// A fraction or a binomial set in the other style than its place: \dfrac
+// and \dbinom inline, \tfrac and \tbinom in a display (parse loop finding:
+// the probability cheatsheet's sampling table sets its binomials' rows at
+// the text's size in a table's cell, and read as \binom they failed the
+// check on every row glyph's level).
+const restyle = (tex: string, prefix: "d" | "t") => tex.replace(/^\\(frac|binom)\b/, `\\${prefix}$1`);
+
 // A cell of cases or a matrix is set in text style: a fraction whose parts
 // are the text's size there is \dfrac (arXiv 2502.02648 (14)).
 function cells(rows: Atom[][], cuts: number[]): string {
-  const cell = (a: Atom): Atom => ({ ...a, tex: a.fracPart !== undefined && a.fracPart >= style.size * 0.9 ? a.tex.replace(/^\\frac/, "\\dfrac") : a.tex });
+  const cell = (a: Atom): Atom => ({ ...a, tex: a.fracPart !== undefined && a.fracPart >= style.size * 0.9 ? restyle(a.tex, "d") : a.tex });
   return rows
     .map((r) => {
       const parts: Atom[][] = [[]];
@@ -1160,17 +1167,21 @@ function fencedGroups(atoms: Atom[], em: number): Atom[] {
       const cuts = columnCuts(rows, stackSize);
       const axis = (open.top + open.bottom) / 2;
       let tex: string;
+      // A binomial's rows' size says its style, as a fraction's parts do
+      // (fracPart; restyle).
+      const extra: Partial<Atom> = { rows: lines };
       if (!close && open.tex === "\\{") tex = `\\begin{cases} ${cells(rows, cuts)} \\end{cases}`;
       else if (!close) {
         stacks(false);
         continue;
       } else if (open.tex === "(" && close.tex === ")" && rows.length === 2 && cuts.length === 0) {
         tex = `\\binom{${linear(rows[0].map((a) => ({ ...a })))}}{${linear(rows[1].map((a) => ({ ...a })))}}`;
+        extra.fracPart = stackSize;
       } else {
         const env = FENCE_ENV[open.tex] ?? "matrix";
         tex = `\\begin{${env}} ${cells(rows, cuts)} \\end{${env}}`;
       }
-      made = node([open, ...content, ...(close ? [close] : [])], tex, axis - 0.25 * em, em, { rows: lines });
+      made = node([open, ...content, ...(close ? [close] : [])], tex, axis - 0.25 * em, em, extra);
       out = out.filter((a) => a !== open && a !== close && !content.includes(a));
       out.push(made);
     }
@@ -1679,8 +1690,8 @@ function linearAt(input: Atom[]): string {
     // matrix row's "−1 1" read as −11 (Springer).
     else if ((prev?.cls === "punct" && gap > 0.4 * em) || apart) out.push("\\ ");
     if (a.fracPart !== undefined && nesting === 1) {
-      if (style.display && a.fracPart < style.size * 0.8) tex = tex.replace(/^\\frac/, "\\tfrac");
-      else if (!style.display && a.fracPart >= style.size * 0.9) tex = tex.replace(/^\\frac/, "\\dfrac");
+      if (style.display && a.fracPart < style.size * 0.8) tex = restyle(tex, "t");
+      else if (!style.display && a.fracPart >= style.size * 0.9) tex = restyle(tex, "d");
     }
     const next = main[k + 1];
     // A bar with a relation's space on both sides is \mid, unless it closes
