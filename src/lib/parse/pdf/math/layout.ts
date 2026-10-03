@@ -1567,7 +1567,12 @@ function limitParts<T extends { x1: number; x2: number }>(glyphs: Atom[], owners
     const kept: typeof parts = [];
     for (const p of parts.sort((a, b) => a.off - b.off)) if (kept.every((q) => p.j <= q.i || q.j <= p.i)) kept.push(p);
     for (const p of kept) give(p.o, r.slice(p.i, p.j));
-    if (!kept.length && fit.length === 1) give(fit[0], r);
+    // A run wholly beside its one owner is a script, not a limit: an
+    // integral's scripts sit at its upper right and lower right, and the
+    // upper one is over the sign's top (parse loop finding: a slide's
+    // ∫₀^∞ took ∞ as a limit, grew by it, and lost its 0, which stood
+    // under the grown sign's right half).
+    if (!kept.length && fit.length === 1 && whole.x1 < fit[0].x2 - 0.05 * em && whole.x2 > fit[0].x1 + 0.05 * em) give(fit[0], r);
   }
   return taken;
 }
