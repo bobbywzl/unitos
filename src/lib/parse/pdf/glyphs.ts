@@ -396,12 +396,27 @@ function texOf(char: string, families: readonly MathFamily[], variant?: MathVari
   return null;
 }
 
+// A Greek variant letter is its own symbol: NFKC folds ϑ into θ, ϕ into
+// φ, ϖ into π, ϵ into ε, ϰ into κ, and ϱ into ρ, and a mathematical
+// alphanumeric variant (𝜗) into the base letter too (parse loop finding:
+// a Beamer deck's "\vartheta gives ϑ ≠ θ", set in Euler, read θ ≠ θ,
+// and the page's ϑ, ϵ, ϖ, and ϕ were lost). The variants stand at the
+// same six places in each Greek block of the mathematical alphanumerics.
+const GREEK_VARIANTS = "ϵϑϰϕϱϖ";
+function foldChar(char: string): string {
+  if ([...char].length === 1 && GREEK_VARIANTS.includes(char)) return char;
+  const cp = char.codePointAt(0) ?? 0;
+  const greek = ALPHABETS.find(([start, count]) => count === 58 && cp >= start + 52 && cp < start + count);
+  if (greek && [...char].length === 1) return GREEK_VARIANTS[cp - greek[0] - 52];
+  return char.normalize("NFKC");
+}
+
 /** A character of an OpenType math font: a mathematical alphanumeric by
     its alphabet, anything else as TeX's tables name it. */
 function openTypeChar(char: string): Tex | null {
   const cp = char.codePointAt(0) ?? 0;
   const alphabet = ALPHABETS.find(([start, count]) => cp >= start && cp < start + count);
-  const letter = char.normalize("NFKC");
+  const letter = foldChar(char);
   if (alphabet) {
     const { family, variant } = alphabet[2];
     // Upright bold Greek has no TeX font: its small letters are \boldsymbol's.
@@ -422,7 +437,7 @@ function texWorldChar(char: string, italic: boolean, bullets: boolean): Tex | nu
   if (bullets && /^[•–—…‰·]$/.test(char)) return null;
   if (char === "–") return { family: "oms", code: 0x00 };
   // The micro sign is μ.
-  const c = char.normalize("NFKC");
+  const c = foldChar(char);
   const letter = /^([A-Za-z]|\p{Script=Greek})$/u.test(c);
   // A spacing accent reads by its own character: NFKC makes "¯" a space
   // and a combining macron, which no table holds (parse loop finding:
