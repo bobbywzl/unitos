@@ -4057,6 +4057,32 @@ export function ReaderInteractions({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [popoverAnchorKey]);
 
+  // A selection low in the pane opens the toolbox past the pane's bottom
+  // edge: its last rows and the bubbles under it out of view, so the reader
+  // scrolls to reach a tool they just asked for. Once the toolbox is on
+  // screen, its stack (the toolbox and the bubbles anchored to it) is
+  // measured against the pane's bottom edge. Beside the words the toolbox
+  // moves up by the overflow: it stays beside its paragraph and covers no
+  // words. Under the words, where moving up would cover the selection, the
+  // pane scrolls by the overflow instead, and the selection rides up with it.
+  useLayoutEffect(() => {
+    if (!popover) return;
+    const container = containerRef.current;
+    const el = container?.querySelector<HTMLElement>("[data-layer-toolbar]");
+    if (!container || !el) return;
+    let bottom = el.getBoundingClientRect().bottom;
+    for (const child of el.children) bottom = Math.max(bottom, child.getBoundingClientRect().bottom);
+    const overflow = Math.ceil(bottom - container.getBoundingClientRect().bottom + 20);
+    if (overflow <= 0) return;
+    if (popover.side === "below") {
+      container.scrollBy({ top: overflow, behavior: "smooth" });
+      return;
+    }
+    const floor = container.scrollTop + 8;
+    setPopover((p) => (p === popover ? { ...p, yTop: Math.max(floor, p.yTop - overflow) } : p));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [popoverAnchorKey]);
+
   // A definition on its way stops when its popover closes or moves to
   // another selection: nobody is left to read it.
   useEffect(
