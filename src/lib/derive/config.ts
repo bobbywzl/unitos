@@ -205,10 +205,21 @@ export const STITCH_MAX_OUTPUT_TOKENS = 32768; // a page of whole-block referenc
 export const STITCH_WHOLE_THRESHOLD = 120_000; // chars of document text; under it the answer pass reads the documents whole
 export const STITCH_SKELETON_BUDGET = 200_000; // chars of skeleton text one select call reads; past it the route pass runs first
 export const STITCH_SELECTED_BUDGET = 200_000; // chars of real block text the answer pass reads
+// Past STITCH_SKELETON_BUDGET the select pass reads every line in groups of
+// this many chars of skeleton, the groups at once, so no line goes unread
+// and no call reads more than a few documents' worth; the route pass runs
+// first only past STITCH_GROUPED_MAX of skeleton (about 300 articles).
+export const STITCH_SKELETON_GROUP = 60_000;
+export const STITCH_GROUPED_MAX = 1_200_000;
+export const STITCH_GROUP_CONCURRENCY = 6;
 // The model passes together get this long; the route's limit (300 s) keeps
 // the rest for storing the answer. Past it the run stops and the reader is
 // told to narrow the command instead of reading a stream that ended empty.
 export const STITCH_DEADLINE_MS = 270_000;
+// The assistant at Project scope (SPEC.md §7, lib/assistant/project-reading.ts):
+// a project with more document text than this is read the way Stitch reads
+// it, through the skeletons, for each message; under it the digest goes whole.
+export const ASSISTANT_WHOLE_THRESHOLD = STITCH_WHOLE_THRESHOLD;
 
 // The skeleton of a document (SPEC.md §22): the document collapsed for
 // Stitch — a gist, one summary per part of the contents, one line per

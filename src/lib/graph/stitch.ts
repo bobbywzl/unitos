@@ -5,12 +5,15 @@ import { bumpNotebook } from "@/lib/collab";
 import { db } from "@/lib/db";
 import {
   STITCH_EFFORT,
+  STITCH_GROUP_CONCURRENCY,
+  STITCH_GROUPED_MAX,
   STITCH_MAX_OUTPUT_TOKENS,
   STITCH_ROUTE_EFFORT,
   STITCH_SELECT_EFFORT,
   STITCH_SELECT_MAX_OUTPUT_TOKENS,
   STITCH_SELECTED_BUDGET,
   STITCH_SKELETON_BUDGET,
+  STITCH_SKELETON_GROUP,
   STITCH_WHOLE_THRESHOLD,
 } from "@/lib/derive/config";
 import { loadProfile, pageNames, renderBlockLines } from "@/lib/derive/context";
@@ -22,9 +25,9 @@ import { parseMarkdown } from "@/lib/parse/markdown";
 import { PARSER_VERSION, type ParsedBlock } from "@/lib/parse/types";
 import { ensureSkeleton, type Skeleton } from "@/lib/graph/skeleton";
 import { jevRouteParts, jevSelectLines } from "@/lib/graph/stitch-jev";
-import { jevEnabled } from "@/lib/jev";
+import { jevEnabled, mapLimit } from "@/lib/jev";
 import { rank } from "@/lib/graph/rank";
-import { stitchPrompt, stitchRoutePrompt, stitchSelectPrompt } from "@/lib/prompts/stitch";
+import { stitchPrompt, stitchRoutePrompt, stitchSelectPrompt, type StitchDocumentCtx } from "@/lib/prompts/stitch";
 import type { StitchDocument, StitchResult } from "@/lib/types";
 import { transcriptIsStale } from "@/lib/video/types";
 
@@ -570,6 +573,36 @@ function cutLines(views: SkeletonView[], routed: Set<string> | null, command: st
   return shown;
 }
 
+/** The lines the select pass reads, split into calls: one call when they fit
+    the skeleton budget (the lines as they are, byte-identical from turn to
+    turn), else groups of about `group` chars in document order, a long
+    document's lines over several groups. Each group: its documents and the
+    aliases it shows. */
+export function skeletonGroups(
+  views: SkeletonView[],
+  shown: Set<string> | null,
+  budget: number,
+  group: number,
+): { views: SkeletonView[]; shown: Set<string> | null }[] {
+  const lines = views.flatMap((v) => v.lines.filter((l) => !shown || shown.has(l.alias)).map((l) => ({ v, l })));
+  const total = lines.reduce((sum, x) => sum + lineCost(x.l), 0);
+  if (total <= budget) return [{ views, shown }];
+  const groups: { views: SkeletonView[]; shown: Set<string> }[] = [];
+  let open: { views: SkeletonView[]; shown: Set<string> } | null = null;
+  let used = 0;
+  for (const { v, l } of lines) {
+    const cost = lineCost(l);
+    if (!open || used + cost > group) {
+      groups.push((open = { views: [], shown: new Set() }));
+      used = 0;
+    }
+    if (open.views[open.views.length - 1] !== v) open.views.push(v);
+    open.shown.add(l.alias);
+    used += cost;
+  }
+  return groups;
+}
+
 const PICK_RX = /^([A-Z]+)(\d+)(?:\s*-\s*(?:([A-Z]+))?(\d+))?$/;
 
 /** One pick of the select pass as aliases: an alias as it is (B12), or a
@@ -640,6 +673,170 @@ export function replyWithIds(reply: string, blockByRef: Map<string, DocBlock>): 
   });
 }
 
+/** The documents as the reading passes and the answer pass see them: every
+    document rendered under its letter, the ones with text to read, every
+    block under its alias and its stored id, and the list the prompts name. */
+export type Reading = {
+  rendered: Rendered[];
+  read: Rendered[];
+  blockByRef: Map<string, DocBlock>;
+  documentList: StitchDocumentCtx[];
+};
+
+/** The documents loaded by loadDocuments, ready for the reading passes.
+    length: the chars of document text. */
+export function readingOf(docs: Doc[]): Reading & { length: number } {
+  const { rendered, length } = renderDocuments(docs);
+  const read = rendered.filter((r) => r.coverage.status === "read");
+  const blockByRef = new Map<string, DocBlock>();
+  for (const r of rendered) {
+    for (const b of r.blocks) {
+      blockByRef.set(b.alias, b);
+      blockByRef.set(b.id, b);
+    }
+  }
+  const documentList = rendered.map((r) => ({
+    tag: r.letter,
+    title: r.doc.title,
+    note: coverageNote(r.coverage),
+    read: r.coverage.status === "read",
+  }));
+  return { rendered, read, blockByRef, documentList, length };
+}
+
+/** The reading passes (SPEC.md §22): the blocks a command needs, found from
+    the documents' skeletons — the route pass past the skeleton budget, then
+    the select pass — as aliases cut to the answer pass's budget. A pass that
+    fails falls back (every line ranked, every document's opening), so the
+    blocks always come back. Stitch reads them; so does the assistant at
+    Project scope past the whole threshold (lib/assistant/project-reading.ts).
+    feature: the usage record's name for the calls. */
+export async function pickBlocks(input: {
+  reading: Reading;
+  command: string;
+  history: ModelMessage[];
+  profile: Awaited<ReturnType<typeof loadProfile>>;
+  userId: string | null;
+  feature: string;
+  signal?: AbortSignal;
+}): Promise<Set<string>> {
+  const { rendered, read, blockByRef, documentList } = input.reading;
+  const { profile, history } = input;
+  const readRoute = await featureCall("stitch-select", STITCH_ROUTE_EFFORT);
+  const readSelect = await featureCall("stitch-select", STITCH_SELECT_EFFORT);
+  const readModel = readRoute.model;
+  const readUsage = { userId: input.userId, feature: input.feature, model: readRoute.modelId };
+  const aborted = () => {
+    throw new Error("aborted");
+  };
+
+  // Every document's skeleton: stored, patched for small edits, or built
+  // now. A build that fails reads the document's first words.
+  const skeletons = await Promise.all(read.map((r) => ensureSkeleton(r.doc, input.userId, input.signal)));
+  if (input.signal?.aborted) aborted();
+  const views = read.map((r, i) => skeletonView(r, skeletons[i]));
+  const skeletonLength = views.reduce((sum, v) => sum + v.lines.reduce((n, l) => n + lineCost(l), 0), 0);
+
+  // Past the budget the select pass reads every line in groups (below);
+  // past what the groups can read, the route pass names the parts first,
+  // and the lines are cut to them and, if still too many, ranked against
+  // the command. Jev reads part by part, so it routes past the budget.
+  let shown: Set<string> | null = null;
+  const jev = jevEnabled();
+  const routeOver = jev ? STITCH_SKELETON_BUDGET : STITCH_GROUPED_MAX;
+  if (skeletonLength > routeOver) {
+    // Jev first (one noul per part), else the GLM route pass.
+    let routed: Set<string> | null = jev ? await jevRouteParts(views, input.command, input.userId, input.signal) : null;
+    if (input.signal?.aborted) aborted();
+    if (!routed) {
+      const route = await callForJson({
+        model: readModel,
+        messages: [
+          { role: "system", content: routeSystem(views, rendered) },
+          ...history,
+          {
+            role: "user",
+            content: stitchRoutePrompt({ profile, documents: documentList, command: input.command, maxParts: MAX_ROUTED }),
+          },
+        ],
+        maxOutputTokens: STITCH_SELECT_MAX_OUTPUT_TOKENS,
+        providerOptions: readRoute.providerOptions,
+        schema: routeSchema,
+        label: "STITCH_ROUTE",
+        usage: readUsage,
+        abortSignal: input.signal,
+      });
+      if (!route.ok) {
+        if (input.signal?.aborted) aborted();
+        console.warn("[stitch] route pass failed, ranking every line:", route.error);
+      } else {
+        const partAliases = new Set(views.flatMap((v) => v.parts.map((p) => p.alias)));
+        const picked = route.data.parts.map((p) => p.trim().toUpperCase()).filter((p) => partAliases.has(p));
+        if (picked.length > 0) routed = new Set(picked);
+      }
+    }
+    shown = cutLines(views, routed, input.command, routeOver);
+  }
+
+  // The picks by document, most relevant first within each: Jev's (one
+  // noul per line), else the GLM select pass's, one call per group of
+  // lines, the groups at once.
+  let byDoc: Map<string, string[]> | null = jev
+    ? await jevSelectLines(views, shown, input.command, input.userId, input.signal)
+    : null;
+  if (input.signal?.aborted) aborted();
+  if (!byDoc) {
+    const groups = skeletonGroups(views, shown, STITCH_SKELETON_BUDGET, STITCH_SKELETON_GROUP);
+    const answers = await mapLimit(groups, STITCH_GROUP_CONCURRENCY, async (group) => {
+      const letters = new Set(group.views.map((v) => v.r.letter));
+      const pick = await callForJson({
+        model: readModel,
+        messages: [
+          { role: "system", content: skeletonSystem(group.views, rendered.filter((r) => letters.has(r.letter)), group.shown) },
+          ...history,
+          {
+            role: "user",
+            content: stitchSelectPrompt({
+              profile,
+              documents: groups.length > 1 ? documentList.filter((d) => letters.has(d.tag)) : documentList,
+              command: input.command,
+              maxBlocks: MAX_SELECTED,
+              partial: group.shown !== null,
+            }),
+          },
+        ],
+        maxOutputTokens: STITCH_SELECT_MAX_OUTPUT_TOKENS,
+        providerOptions: readSelect.providerOptions,
+        schema: selectSchema,
+        label: "STITCH_SELECT",
+        usage: readUsage,
+        abortSignal: input.signal,
+      });
+      if (!pick.ok) {
+        if (!input.signal?.aborted) console.warn("[stitch] select pass failed, reading the group's openings:", pick.error);
+        return [];
+      }
+      return pick.data.blockIds.flatMap(expandPick);
+    });
+    if (input.signal?.aborted) aborted();
+    byDoc = new Map<string, string[]>(read.map((r) => [r.doc.id, []]));
+    for (const alias of answers.flat()) {
+      const block = blockByRef.get(alias);
+      if (block) byDoc.get(block.documentId)?.push(alias);
+    }
+  }
+  const share = Math.floor(STITCH_SELECTED_BUDGET / read.length);
+  // A document the pick names nothing of reads as its opening, so every
+  // document read is under the answer pass.
+  const picksByDoc = byDoc;
+  const picks = read.map((r) => {
+    const own = picksByDoc.get(r.doc.id) ?? [];
+    return own.length > 0 ? own : opening(r, share);
+  });
+  if (input.signal?.aborted) aborted();
+  return cutSelection(interleave(picks), blockByRef);
+}
+
 /** Run one Stitch command. Throws with the reason on a failed model call. */
 export async function stitch(input: {
   notebookId: string;
@@ -654,29 +851,15 @@ export async function stitch(input: {
   onFailure: (reason: string) => Error;
 }): Promise<StitchResult> {
   const docs = await loadDocuments(input.notebookId, input.documentIds);
-  const { rendered, length } = renderDocuments(docs);
+  const { length, ...reading } = readingOf(docs);
+  const { rendered, read, blockByRef, documentList } = reading;
   const coverage = rendered.map((r) => r.coverage);
   // Fewer than two documents read: no links can be drawn and no page can rest
   // on the docs, so nothing runs and nothing is stored. The result says
   // what was read of every document and why the rest were not.
-  const read = rendered.filter((r) => r.coverage.status === "read");
   if (read.length < 2) return { reply: "", linkCount: 0, document: null, documents: coverage };
 
-  // Every block under its alias and under its stored id.
-  const blockByRef = new Map<string, DocBlock>();
-  for (const r of rendered) {
-    for (const b of r.blocks) {
-      blockByRef.set(b.alias, b);
-      blockByRef.set(b.id, b);
-    }
-  }
   const profile = await loadProfile(input.notebookId);
-  const documentList = rendered.map((r) => ({
-    tag: r.letter,
-    title: r.doc.title,
-    note: coverageNote(r.coverage),
-    read: r.coverage.status === "read",
-  }));
   const history: ModelMessage[] = input.history
     .slice(-MAX_HISTORY)
     .filter((turn) => turn.content.trim())
@@ -687,110 +870,23 @@ export async function stitch(input: {
   const answer = await featureCall("stitch", STITCH_EFFORT);
   const model = answer.model;
   const usage = { userId: input.userId, feature: "stitch" as const, model: answer.modelId };
-  const readRoute = await featureCall("stitch-select", STITCH_ROUTE_EFFORT);
-  const readSelect = await featureCall("stitch-select", STITCH_SELECT_EFFORT);
-  const readModel = readRoute.model;
-  const readUsage = { ...usage, model: readRoute.modelId };
 
   // ── The reading passes: the blocks the command needs, from the skeletons ──
   let context = wholeSystem(rendered);
   let selected = false;
   if (length > STITCH_WHOLE_THRESHOLD) {
-    // Every document's skeleton: stored, patched for small edits, or built
-    // now. A build that fails reads the document's first words.
-    const skeletons = await Promise.all(read.map((r) => ensureSkeleton(r.doc, input.userId, input.signal)));
-    if (input.signal?.aborted) throw input.onFailure("aborted");
-    const views = read.map((r, i) => skeletonView(r, skeletons[i]));
-    const skeletonLength = views.reduce((sum, v) => sum + v.lines.reduce((n, l) => n + lineCost(l), 0), 0);
-
-    // Past the budget: the route pass names the parts, and the lines are
-    // cut to them and, if still too many, ranked against the command.
-    let shown: Set<string> | null = null;
-    const jev = jevEnabled();
-    if (skeletonLength > STITCH_SKELETON_BUDGET) {
-      // Jev first (one noul per part), else the GLM route pass.
-      let routed: Set<string> | null = jev ? await jevRouteParts(views, input.command, input.userId, input.signal) : null;
-      if (input.signal?.aborted) throw input.onFailure("aborted");
-      if (!routed) {
-        const route = await callForJson({
-          model: readModel,
-          messages: [
-            { role: "system", content: routeSystem(views, rendered) },
-            ...history,
-            {
-              role: "user",
-              content: stitchRoutePrompt({ profile, documents: documentList, command: input.command, maxParts: MAX_ROUTED }),
-            },
-          ],
-          maxOutputTokens: STITCH_SELECT_MAX_OUTPUT_TOKENS,
-          providerOptions: readRoute.providerOptions,
-          schema: routeSchema,
-          label: "STITCH_ROUTE",
-          usage: readUsage,
-          abortSignal: input.signal,
-        });
-        if (!route.ok) {
-          if (input.signal?.aborted) throw input.onFailure(route.error);
-          console.warn("[stitch] route pass failed, ranking every line:", route.error);
-        } else {
-          const partAliases = new Set(views.flatMap((v) => v.parts.map((p) => p.alias)));
-          const picked = route.data.parts.map((p) => p.trim().toUpperCase()).filter((p) => partAliases.has(p));
-          if (picked.length > 0) routed = new Set(picked);
-        }
-      }
-      shown = cutLines(views, routed, input.command, STITCH_SKELETON_BUDGET);
-    }
-
-    // The picks by document, most relevant first within each: Jev's (one
-    // noul per line), else the GLM select pass's.
-    let byDoc: Map<string, string[]> | null = jev
-      ? await jevSelectLines(views, shown, input.command, input.userId, input.signal)
-      : null;
-    if (input.signal?.aborted) throw input.onFailure("aborted");
-    if (!byDoc) {
-      const pick = await callForJson({
-        model: readModel,
-        messages: [
-          { role: "system", content: skeletonSystem(views, rendered, shown) },
-          ...history,
-          {
-            role: "user",
-            content: stitchSelectPrompt({
-              profile,
-              documents: documentList,
-              command: input.command,
-              maxBlocks: MAX_SELECTED,
-              partial: shown !== null,
-            }),
-          },
-        ],
-        maxOutputTokens: STITCH_SELECT_MAX_OUTPUT_TOKENS,
-        providerOptions: readSelect.providerOptions,
-        schema: selectSchema,
-        label: "STITCH_SELECT",
-        usage: readUsage,
-        abortSignal: input.signal,
-      });
-      if (!pick.ok) {
-        if (input.signal?.aborted) throw input.onFailure(pick.error);
-        console.warn("[stitch] select pass failed, reading every document's opening:", pick.error);
-      }
-      byDoc = new Map<string, string[]>(read.map((r) => [r.doc.id, []]));
-      for (const alias of pick.ok ? pick.data.blockIds.flatMap(expandPick) : []) {
-        const block = blockByRef.get(alias);
-        if (block) byDoc.get(block.documentId)?.push(alias);
-      }
-    }
-    const share = Math.floor(STITCH_SELECTED_BUDGET / read.length);
-    // A document the pick names nothing of reads as its opening, so every
-    // document read is under the answer pass.
-    const picksByDoc = byDoc;
-    const picks = read.map((r) => {
-      const own = picksByDoc.get(r.doc.id) ?? [];
-      return own.length > 0 ? own : opening(r, share);
+    const picked = await pickBlocks({
+      reading,
+      command: input.command,
+      history,
+      profile,
+      userId: input.userId,
+      feature: "stitch",
+      signal: input.signal,
+    }).catch((err: unknown) => {
+      throw input.signal?.aborted ? input.onFailure("aborted") : err;
     });
-    if (input.signal?.aborted) throw input.onFailure("aborted");
-    context = selectedSystem(rendered, cutSelection(interleave(picks), blockByRef));
+    context = selectedSystem(rendered, picked);
     selected = true;
   }
 
