@@ -54,7 +54,40 @@ export function pageLines(items: Item[], pageWidth: number, page: number, graphi
     for (const line of built) columns.set(line, extent);
     lines.push(...built);
   }
-  return lines;
+  return joinRightRuns(lines, page);
+}
+
+// A short run set flush right on another line's baseline, a wide gap past
+// its end, is that line's own end: an option's "Default: chem" at the
+// right margin of its "circletype = chem|math". Read in a side of its
+// own, it stood after the description under its line (parse loop
+// finding: a LaTeX package's manual sets each option so; a line in a
+// typewriter face set smaller than its default broke away, and its
+// default read after its description). A run that starts where other
+// lines start, past the page's flush-right runs, is a column's line.
+function joinRightRuns(lines: Line[], page: number): Line[] {
+  // The right margin: the farthest line end that two other lines share.
+  const ends = lines.map((l) => l.xEnd).filter((x, k, all) => all.filter((o, j) => j !== k && Math.abs(o - x) <= 1).length >= 2);
+  if (ends.length === 0) return lines;
+  const right = Math.max(...ends);
+  const words = (l: Line) => l.text.trim().split(/\s+/).length;
+  const flush = (l: Line) => Math.abs(l.xEnd - right) <= l.size * 0.5 && words(l) <= 4;
+  const out = [...lines];
+  for (const run of lines) {
+    if (!flush(run) || run.cells.length !== 1) continue;
+    if (lines.some((l) => l !== run && !flush(l) && Math.abs(l.x - run.x) <= 1)) continue;
+    const row = out.filter((l) => l !== run && Math.abs(l.y - run.y) <= Math.min(l.size, run.size) * 0.2);
+    const owner = row.filter((l) => l.xEnd < run.x - run.size * 2).sort((a, b) => b.xEnd - a.xEnd)[0];
+    if (!owner || row.some((l) => l !== owner && l.x < run.x && l.xEnd > owner.xEnd)) continue;
+    const joined = buildLines([...owner.items, ...run.items], page);
+    if (joined.length !== 1) continue;
+    const [line] = joined;
+    const [a, b] = columns.get(owner) ?? [owner.x, owner.xEnd];
+    columns.set(line, [Math.min(a, line.x), Math.max(b, line.xEnd)]);
+    out[out.indexOf(owner)] = line;
+    out.splice(out.indexOf(run), 1);
+  }
+  return out;
 }
 
 // extent: the column the region's lines were read in, when it is not the
