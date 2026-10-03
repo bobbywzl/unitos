@@ -13,6 +13,7 @@ import { fitsOnePass, runOnePass } from "@/lib/assistant/one-pass";
 import type { SuggestEvent } from "@/lib/docs/assistant-suggestions";
 import { importShared, importSharedResponse } from "@/lib/docs/server";
 import { scopeOf, takesSuggestions, windowsOf } from "@/lib/docs/suggest-ops";
+import { runTargetPass } from "@/lib/assistant/target";
 import { keepVersionBeforeSuggestions } from "@/lib/docs/versions";
 import { featureConfigured } from "@/lib/feature-models";
 import { currentLang, serverT } from "@/lib/i18n/server";
@@ -102,7 +103,28 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
         const whole = !data.blockIds?.length;
         const scope = whole ? doc.rows.map((r) => r.id) : scopeOf(doc.rows, doc.places, data.blockIds!);
         if (scope.length === 0) throw new Error(t("api.blockNotInDocument"));
-        const all = windowsOf(doc.rows, doc.places, scope);
+        let all = windowsOf(doc.rows, doc.places, scope);
+        // A scope past the windows of one command: the target pass names the
+        // blocks the command changes, and the windows run over those alone
+        // (lib/assistant/target.ts).
+        let targeted = false;
+        if (all.length > SUGGEST_MAX_WINDOWS && !fitsOnePass(doc.rows, whole ? [] : scope)) {
+          const rows = await runTargetPass({
+            userId,
+            document: { title: doc.title, references: doc.references, rows: doc.rows, pageName: doc.pageName },
+            scope,
+            whole,
+            profile,
+            command: data.command,
+            instruction: data.instruction ?? null,
+            history: data.history ?? [],
+            signal,
+          });
+          if (rows) {
+            all = windowsOf(doc.rows, doc.places, rows);
+            targeted = true;
+          }
+        }
         const windows = all.slice(0, SUGGEST_MAX_WINDOWS);
         const warnings = all.length > windows.length ? [t("api.suggestTooLong")] : [];
         if (whole || windows.length > 1) await keepVersionBeforeSuggestions(documentId, t("api.suggestVersionName"));
@@ -181,7 +203,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
               material: data.material ?? null,
               history: data.history ?? [],
               scope: { kind: "blocks", blockIds },
-              window: { n: i + 1, of: windows.length, whole },
+              window: { n: i + 1, of: windows.length, whole: whole && !targeted },
               caretBlockId: data.caretBlockId ?? null,
               thinking: data.thinking ?? "deep",
               budget,

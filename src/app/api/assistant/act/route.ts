@@ -26,6 +26,7 @@ import { svgChartCall } from "@/lib/derive/svg-chart";
 import type { SuggestResult } from "@/lib/docs/assistant-suggestions";
 import { importShared, importSharedResponse } from "@/lib/docs/server";
 import { scopeOf, takesSuggestions, windowsOf, wordsScope, type SuggestScope } from "@/lib/docs/suggest-ops";
+import { runTargetPass } from "@/lib/assistant/target";
 import { keepVersionBeforeSuggestions } from "@/lib/docs/versions";
 import {
   annotationsSection,
@@ -522,11 +523,33 @@ async function handle(req: Request, t: TFunc) {
     if (!suggest?.blockIds && passage.length > 0) scope = wordsScope(document.blocks, passage);
     else {
       const whole = !suggest?.blockIds;
-      const windows = windowsOf(doc.rows, doc.places, whole ? doc.rows.map((r) => r.id) : scopeOf(doc.rows, doc.places, suggest!.blockIds!));
+      const inScope = whole ? doc.rows.map((r) => r.id) : scopeOf(doc.rows, doc.places, suggest!.blockIds!);
+      let windows = windowsOf(doc.rows, doc.places, inScope);
+      let targeted = false;
+      // A scope past one window and the one pass: the target pass names the
+      // blocks the command changes, and the window is cut from those alone
+      // (lib/assistant/target.ts).
+      if (!chip && windows.length > 1 && !fitsOnePass(doc.rows, whole ? [] : inScope)) {
+        const rows = await runTargetPass({
+          userId: user.id,
+          document: { title: doc.title, references: doc.references, rows: doc.rows, pageName: doc.pageName },
+          scope: inScope,
+          whole,
+          profile,
+          command: data.command,
+          instruction: suggest?.instruction ?? null,
+          history,
+          signal: req.signal,
+        });
+        if (rows) {
+          windows = windowsOf(doc.rows, doc.places, rows);
+          targeted = true;
+        }
+      }
       if (whole || windows.length > 1) await keepVersionBeforeSuggestions(document.id, t("api.suggestVersionName"));
       if (windows.length > 1) cut.push(t("api.suggestTooLong"));
       scope = { kind: "blocks", blockIds: windows[0] ?? [] };
-      window = { n: 1, of: windows.length, whole };
+      window = { n: 1, of: windows.length, whole: whole && !targeted };
       // A scope that fits one call goes by the one pass (lib/assistant/one-pass.ts).
       const rowsInScope = whole ? [] : scopeOf(doc.rows, doc.places, suggest!.blockIds!);
       if (!chip && fitsOnePass(doc.rows, rowsInScope)) onePassRows = rowsInScope;

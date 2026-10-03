@@ -7,6 +7,7 @@ import { SUGGEST_MAX_NEW_CHARS, SUGGEST_MAX_WINDOWS, SUGGEST_PARALLEL } from "@/
 import { runSuggest } from "@/lib/derive/suggest";
 import type { ResolvedOp, SuggestStyle } from "@/lib/docs/assistant-suggestions";
 import { scopeOf, windowsOf, type BlockPlace } from "@/lib/docs/suggest-ops";
+import { runTargetPass } from "@/lib/assistant/target";
 import type { Lang } from "@/lib/i18n/config";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { mapLimit } from "@/lib/jev";
@@ -573,10 +574,30 @@ async function runWindows(run: ReviseRun): Promise<{ actions: AssistantAction[];
   const places = revisePlaces(blocks, run.shape);
   const scope = reviseScope(blocks, places, run.blockIds);
   if (scope.length === 0) return { actions: [], warnings: [t("api.reviseNoBlocks")] };
-  const all = windowsOf(blocks, places, scope);
+  let all = windowsOf(blocks, places, scope);
+  let whole = !run.blockIds?.length;
+  // A scope past the windows of one command: the target pass names the
+  // blocks the command changes, and the windows run over those alone
+  // (lib/assistant/target.ts).
+  if (all.length > SUGGEST_MAX_WINDOWS) {
+    const rows = await runTargetPass({
+      userId: run.userId,
+      document: { title: run.document.title, references: run.document.references, rows: blocks, pageName: null },
+      scope,
+      whole,
+      profile: run.profile,
+      command: run.command,
+      instruction: run.instruction,
+      history: run.history,
+      signal: run.signal,
+    });
+    if (rows) {
+      all = windowsOf(blocks, places, rows);
+      whole = false;
+    }
+  }
   const windows = all.slice(0, SUGGEST_MAX_WINDOWS);
   const warnings = all.length > windows.length ? [t("api.suggestTooLong")] : [];
-  const whole = !run.blockIds?.length;
   const budget = { chars: SUGGEST_MAX_NEW_CHARS };
   const found: ResolvedOp[][] = [];
   const summaries: string[] = [];

@@ -3,6 +3,7 @@
 // declared, notes whole. Run: npx tsx scripts/qa/project-reading-check.ts
 import { corpusPickedSystem, corpusSystem } from "../../src/lib/digest/render";
 import type { DigestDocument, DigestParts } from "../../src/lib/digest/types";
+import { targetRows } from "../../src/lib/assistant/target";
 import { skeletonGroups, type SkeletonView } from "../../src/lib/graph/stitch";
 
 let failed = 0;
@@ -54,6 +55,14 @@ check("grouped: each group under the size", groups.every((g) => [...(g.shown ?? 
 check("grouped: a long document spans groups", groups.filter((g) => g.views.some((v) => v.r.letter === "C")).length > 1);
 const cut = skeletonGroups(views, new Set(["A1", "C5"]), 50_000, 10_000);
 check("shown lines only", cut.length === 1 && cut[0].shown?.size === 2);
+
+// The target pass's names as the scope's rows.
+const scope = ["r1", "r2", "r3", "r4", "r5", "r6"];
+check("ids and ranges", targetRows(["r2", "r4..r5"], scope).join() === "r2,r4,r5");
+check("range in reverse", targetRows(["r5..r3"], scope).join() === "r3,r4,r5");
+check("tags and spaces read", targetRows(["[block r1]", " r6 "], scope).join() === "r1,r6");
+check("outside the scope passed over", targetRows(["x9", "r2..x9"], scope).join() === "r2");
+check("document order, once", targetRows(["r6", "r1", "r1..r2"], scope).join() === "r1,r2,r6");
 
 if (failed > 0) {
   console.log(`${failed} failed`);
