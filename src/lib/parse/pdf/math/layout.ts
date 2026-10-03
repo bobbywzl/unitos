@@ -235,6 +235,15 @@ function textAtom(g: Glyph): Atom | null {
   // A math font's glyph no table reads (MathTime's big parenthesis) is no
   // text: read as a small one, it made a row of its own over its formula.
   // Nor is a glyph of a font with no name: bbm's 𝕜 reads "k" (glyphs.ts).
+  // Its digit is the one exception: dsfont's and bbm's double-struck
+  // digits (\mathds{1}, \mathbbm{1}) are Metafont bitmaps that read as a
+  // plain digit, and no other digit is set in a font with no name. It
+  // reads as \mathbb (parse loop finding: a quantum mechanics book's
+  // identity operator, 1̂ = ∫ |r⟩⟨r| d³r, left every display that held it
+  // a crop).
+  if (isUnnamedFont(g.base) && /^[0-9]$/.test(ch)) {
+    return { fam: null, code: g.code, entry: null, tex: `\\mathbb{${ch}}`, cls: "ord", size: g.size, x1: g.x, x2: g.x + Math.max(g.w, 0), yb: g.y, top: g.y + 0.69 * g.size, bottom: g.y, upright: false };
+  }
   if (CM_NAME_RE.test(g.base) || isUnreadMath(g) || isUnnamedFont(g.base)) return null;
   const accent = TEXT_ACCENTS[ch];
   if (accent) {
