@@ -54,7 +54,13 @@ function symbolLevels(tex: string, display: boolean): string[] | null {
       }
       if (top.delim) continue;
       const text = (tok[2] ?? "").replace(/&(?:lt|gt|amp|#x27|quot);/g, (e) => ENTITY[e]).normalize("NFKC").replace(INVISIBLE_RE, "");
-      for (const ch of text) out.push(`${ch}@${top.level}`);
+      // ħ (\hbar) counts as its h and its bar: a page that sets \hbar as a
+      // macron over an h (mathpazo) draws those two glyphs (layout.ts
+      // accents).
+      for (const ch of text) {
+        if (ch === "ħ") out.push(`h@${top.level}`, `ˉ@${top.level}`);
+        else out.push(`${ch}@${top.level}`);
+      }
     }
   }
   if (cache.size > 20000) cache.clear();
@@ -210,7 +216,8 @@ function lay(n: TreeNode, x: number, y: number, flow: Flow): number {
     const middle = flow.op || hasClass(n, "op-symbol") ? (((n.height ?? 0) - (n.depth ?? 0)) / 2) * scale : 0;
     // KaTeX sets a word (an operator's name, a \text) as one node: its
     // letters share its width.
-    const chars = [...n.text];
+    // (ħ is its h and its bar at one place, as symbolLevels counts it.)
+    const chars = [...n.text].flatMap((ch) => (ch === "ħ" || ch === "ℏ" ? ["h", "ˉ"] : [ch]));
     if (flow.out) chars.forEach((ch, k) => ch.trim() !== "" && flow.out!.push({ ch, x: x + left + ((k + 0.5) * width) / chars.length, y: y - ems(st.top) * scale + middle, scale }));
     return left + width + (Math.max(0, n.italic ?? 0) + ems(st.marginRight)) * scale;
   }

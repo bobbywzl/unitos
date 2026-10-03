@@ -1039,7 +1039,12 @@ function accents(atoms: Atom[]): Atom[] {
     if (bases.length === 0) continue;
     const pick = wide ? bases : [bases.sort((p, q) => Math.abs(cx(p) - cx(acc)) - Math.abs(cx(q) - cx(acc)))[0]];
     const body = linear(pick.map((b) => ({ ...b })));
-    const made = node(pick, `${acc.tex}{${body}}`, pick[0].yb, pick[0].size);
+    // A text font's macron drawn on an italic h's own baseline, through
+    // its ascender, is ħ: mathpazo sets \hbar as the macron kerned back
+    // over the h, never raised (parse loop finding: a quantum mechanics
+    // book's every ħ read \bar{h}).
+    const hbar = acc.tex === "\\bar" && pick.length === 1 && pick[0].tex === "h" && !pick[0].upright && Math.abs(acc.yb - pick[0].yb) < 0.1 * em;
+    const made = node(pick, hbar ? "\\hbar" : `${acc.tex}{${body}}`, pick[0].yb, pick[0].size);
     for (const b of pick) out.splice(out.indexOf(b), 1);
     out.splice(out.indexOf(acc), 1, made);
   }
