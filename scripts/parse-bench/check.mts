@@ -9,7 +9,7 @@ import { fromImport, fromParse, printedNotes, type Doc, type DocBlock } from "./
 import { brokenNumbers, checklistWraps, displayDrawn, displayGaps, displaySpace, markerStart, rowHeight, rowHeights } from "./drawn";
 import { blindText, borderScore, formulaScaleOf, freeScores, furnitureOf, mathPart, mathSymbolWords, ocrSame, type PdfText } from "./free";
 import { captionScores, captionSides, contentImages, cropOverlaps, pictureScores } from "./floats";
-import type { PagePaint } from "./paint";
+import type { InkBand, PagePaint } from "./paint";
 import { glyphScores, placeCrops, placeEquations, type PageGlyphs } from "./glyphs";
 import { columnScores, cropScores, faceShape, farSpace, figureScores, gridProse, indentScores, labelScores, linesOfUnits, proofBoxes, runInIndents, tableScores, titleMarks, type PageInk } from "./layout";
 import { mathTokens, sequenceSimilarity } from "./math";
@@ -1512,6 +1512,16 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
   check(
     "layout: a figure's top read apart from its captioned rest is a figure in two pieces; with words between them, two figures",
     figureScores(pdf, flatten({ blocks: [top, rest] })).split === 2 && figureScores(gapPdf, flatten({ blocks: [top, apart] })).split === 0,
+  );
+  // A margin caption read as a figure of its own: its region holds no ink but its caption's line.
+  const marginLine = { page: 1, top: 300, bottom: 310, left: 450, right: 520, text: "Figure 1. The dam." };
+  const marginPdf: PdfText = { ...pdf, lines: [...pdf.lines, marginLine] };
+  const margin: DocBlock = { kind: "figure", caption: [{ text: "Figure 1. The dam." }], at: { page: 1, region: { kind: "path", points: [[74, 30], [88, 30], [88, 45], [74, 45]] } } };
+  const inkOf = (bands: InkBand[]): PageInk => ({ bands: () => bands, right: () => null });
+  check(
+    "layout: a captioned figure that draws nothing but its caption is a piece; one that draws a picture is none",
+    figureScores(marginPdf, flatten({ blocks: [margin] }), inkOf([{ top: 300, bottom: 310, baseline: 308 }]), [[pdf.lines.length]]).split === 1 &&
+      figureScores(marginPdf, flatten({ blocks: [margin] }), inkOf([{ top: 250, bottom: 290, baseline: 290 }, { top: 300, bottom: 310, baseline: 308 }]), [[pdf.lines.length]]).split === 0,
   );
   // A display's crop that holds a line of the paragraph (it starts at the column's edge, words of prose) holds prose.
   const cropPdf = (text: string, left: number): PdfText => ({ ...pdf, lines: [...lines, { page: 1, top: 400, bottom: 410, left, right: left + 200, text }] });

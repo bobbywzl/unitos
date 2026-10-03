@@ -338,10 +338,16 @@ const CAPTION_LABEL_RE = /^\s*(?:fig(?:ure)?\.?|table|tab\.|scheme|chart|exhibit
     their width, only one of them with a caption ("Figure 1." …; the other
     a display's crop, or a picture whose caption is its own labels): a
     drawing's top read apart from the captioned rest, which the page editor
-    draws as two pictures, on two pages at times. The score is the share of
-    the candidate's figures that are no such piece. */
-export function figureScores(pdf: PdfText, cand: Flat): FigureScores {
-  const figures = cand.blocks.flatMap((block) => (block.kind === "figure" && block.at ? [{ block, box: boxOf(pdf, block.at) }] : [])).filter((f) => f.box !== null);
+    draws as two pictures, on two pages at times. With the page's ink, a
+    captioned figure whose region the page draws nothing in but the lines
+    its caption holds is a piece too: its caption read apart from its
+    picture (parse bench finding: a textbook's margin caption "Figure
+    24.1:" read as a figure of its own over the empty margin, its circle a
+    figure with no caption beside it; neither piece counted, as they stand
+    side by side). The score is the share of the candidate's figures that
+    are no such piece. */
+export function figureScores(pdf: PdfText, cand: Flat, ink?: PageInk, placed?: number[][]): FigureScores {
+  const figures = cand.blocks.flatMap((block, at) => (block.kind === "figure" && block.at ? [{ block, at, box: boxOf(pdf, block.at) }] : [])).filter((f) => f.box !== null);
   const captioned = (b: DocBlock) => b.kind === "figure" && b.mathImage === undefined && CAPTION_LABEL_RE.test((b.caption ?? []).map((s) => s.text).join(""));
   const pieces = new Set<number>();
   const found: FigureScores["found"] = [];
@@ -359,6 +365,23 @@ export function figureScores(pdf: PdfText, cand: Flat): FigureScores {
       found.push({ page: a.box.page, text: whole.kind === "figure" ? (whole.caption ?? []).map((span) => span.text).join("").slice(0, 80) : "" });
     });
   });
+  if (ink && placed) {
+    figures.forEach((f, i) => {
+      if (!f.box || pieces.has(i) || !captioned(f.block) || f.block.kind !== "figure") return;
+      const caption = (f.block.caption ?? []).map((s) => s.text).join("");
+      // The page's lines the caption holds (linesOfUnits).
+      const own = (placed[cand.unitsOf[f.at]?.[0] ?? -1] ?? []).map((k) => pdf.lines[k]).filter((l) => l.page === f.box?.page);
+      if (own.length === 0) return;
+      const box = f.box;
+      // A band of ink the caption's lines hold, top to bottom; a picture's band reaches past them.
+      const top = Math.min(...own.map((l) => l.top)) - 2;
+      const bottom = Math.max(...own.map((l) => l.bottom)) + 2;
+      const drawn = ink.bands(box.page, box).filter((b) => b.top < top || b.bottom > bottom);
+      if (drawn.length > 0) return;
+      pieces.add(i);
+      found.push({ page: box.page, text: caption.slice(0, 80) });
+    });
+  }
   return { figures: figures.length, split: pieces.size, score: figures.length > 0 ? 1 - pieces.size / figures.length : null, found };
 }
 
@@ -811,7 +834,7 @@ export function layoutScores(pdf: PdfText, cand: Flat, placed: number[][], input
   const columns = columnScores(pdf, cand, placed);
   const indents = indentScores(pdf, cand, placed);
   const tables = tableScores(cand, placed);
-  const figures = figureScores(pdf, cand);
+  const figures = figureScores(pdf, cand, input.ink, placed);
   const crops = cropScores(pdf, cand);
   const pictures = pictureScores(pdf, cand, input.pictures);
   const captions = captionScores(cand);
