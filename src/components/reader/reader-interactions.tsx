@@ -41,6 +41,8 @@ import type {
   Distillation,
   DistillationView,
   ExtractionView,
+  NoteView,
+  SectionView,
 } from "@/lib/types";
 import type { DocumentReference } from "@/lib/parse/types";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
@@ -84,6 +86,8 @@ import { clipWords } from "@/lib/markdown-preview";
 import { AnnotationGrip } from "@/components/outline/annotation-grip";
 import { useCardDropOpen } from "@/components/outline/use-card-drop";
 import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
   CollapseIcon,
   CommentIcon,
   DefineIcon,
@@ -124,6 +128,7 @@ import { AuthorChip } from "@/components/collab/person-badge";
 import { ConversationView } from "@/components/reader/conversation-view";
 import { DistillPage } from "@/components/reader/distill-page";
 import { ContentsMenu } from "@/components/reader/contents-menu";
+import { NotePicker } from "@/components/reader/note-picker";
 import { PANE_HEADER } from "@/components/reader/reader-panes";
 import type { FigureRenderInfo } from "@/components/reader/figure-capture";
 import { Reader, type TranscriptVariant } from "@/components/reader/reader";
@@ -889,6 +894,7 @@ export function ReaderInteractions({
   documentId,
   notebookId,
   sectionChoices,
+  sections = [],
   attachedDocuments,
   title,
   blocks,
@@ -933,6 +939,9 @@ export function ReaderInteractions({
   // an article works on the lines. No edit mode, no article menu.
   transcript?: TranscriptVariant;
   sectionChoices: { id: string; label: string }[];
+  /** The project's sections with their notes: the notes Add to a note… can
+      append to (SPEC.md §6). Absent = the row is not offered. */
+  sections?: SectionView[];
   attachedDocuments: { id: string; title: string }[];
   title: string;
   blocks: BlockData[];
@@ -1079,6 +1088,16 @@ export function ReaderInteractions({
   // selection alive, which also keeps a native select from ever opening.
   const [submenu, setSubmenu] = useState<null | "add" | "ai" | "comment" | "define">(null);
   const [commentDraft, setCommentDraft] = useState("");
+  // The Add to notes bubble (SPEC.md §6): the comment that goes under the
+  // quote, and whether the bubble lists the sections for a new note or the
+  // notes to append to. Keyed to the selection it was typed for: a new
+  // selection starts the bubble over, so a comment typed for one passage
+  // does not go under another.
+  const [addDraft, setAddDraft] = useState<{ key: string | null; comment: string; mode: "sections" | "notes" }>({
+    key: null,
+    comment: "",
+    mode: "sections",
+  });
   // The page editor's right-click Explain, waiting for its popover (below).
   const [pendingExplain, setPendingExplain] = useState(false);
   // The lead tool Jev predicts for a popover (SPEC.md §6), keyed by the
@@ -3938,6 +3957,12 @@ export function ReaderInteractions({
     ? `${popover.anchor.blockId}:${popover.anchor.startOffset}:${popover.anchor.endOffset}:${popover.term ? "t" : ""}${popover.figure ? "f" : ""}`
     : null;
   const leadTool: Tool | null = leadAnswer && leadAnswer.key === popoverAnchorKey ? leadAnswer.tool : null;
+  const addComment = addDraft.key === popoverAnchorKey ? addDraft.comment : "";
+  const addMode = addDraft.key === popoverAnchorKey ? addDraft.mode : "sections";
+  const setAddComment = (comment: string) =>
+    setAddDraft((d) => ({ key: popoverAnchorKey, comment, mode: d.key === popoverAnchorKey ? d.mode : "sections" }));
+  const setAddMode = (mode: "sections" | "notes") =>
+    setAddDraft((d) => ({ key: popoverAnchorKey, mode, comment: d.key === popoverAnchorKey ? d.comment : "" }));
   useEffect(() => {
     if (!popover || !popoverAnchorKey || popover.term || popover.figure) return;
     const text = popover.anchor.quotedText.trim();
@@ -4290,31 +4315,68 @@ export function ReaderInteractions({
     }
   }
 
+  // What Add to notes writes (SPEC.md §6): the highlighted text as a quote —
+  // blockquote lines render as the boxed quotation on the note card; a
+  // passage over several blocks quotes every block, a blank line between —
+  // then, after a blank line, the comment the reader typed in the bubble.
+  function addToNotesText(anchor: Anchor): string {
+    const quote = passageText(anchor)
+      .split("\n")
+      .map((line) => (line ? `> ${line}` : ">"))
+      .join("\n");
+    const comment = addComment.trim();
+    return comment ? `${quote}\n\n${comment}` : quote;
+  }
+
+  // After the quote landed: the toolbar closes and the page refreshes, so
+  // the note shows where it went.
+  function addedToNotes(anchor: Anchor) {
+    markFreshAnchor(anchor);
+    setPopover(null);
+    setAddDraft({ key: null, comment: "", mode: "sections" });
+    window.getSelection()?.removeAllRanges();
+    refreshWhenOnline(router);
+  }
+
   async function addToSection(sectionId: string) {
     if (!popover || busy) return;
     setBusy(true);
     try {
       await flushLiveBlock(popover.anchor.blockId);
-      // The highlighted text lands as a quote: blockquote lines render as the
-      // boxed quotation on the note card. Edits and replies go underneath. A
-      // passage over several blocks quotes every block, a blank line between.
-      const quote = passageText(popover.anchor)
-        .split("\n")
-        .map((line) => (line ? `> ${line}` : ">"))
-        .join("\n");
       const note = await api<{ id: string }>("/api/notes", "POST", {
         sectionId,
-        content: quote,
+        content: addToNotesText(popover.anchor),
         source: { documentId, ...anchorBody(popover.anchor) },
         ...segmentsBody(popover.anchor),
       });
-      markFreshAnchor(popover.anchor);
-      setPopover(null);
-      window.getSelection()?.removeAllRanges();
-      refreshWhenOnline(router);
+      addedToNotes(popover.anchor);
       // A blank document opens with the tray folded (SPEC.md §29): the tray
       // opens on the new note, so the reader sees where it went.
       if (richTextRef.current) window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: note.id } }));
+    } catch (err) {
+      showError(err instanceof Error ? err.message : t("reader.addFailed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Add to a note… (SPEC.md §6): the quote and the comment go onto the end of
+  // a note the reader picked, and the passage's anchor becomes a source of
+  // that note. The tray then opens on the note, so the reader sees it land.
+  async function addToNote(note: NoteView) {
+    if (!popover || busy) return;
+    setBusy(true);
+    try {
+      await flushLiveBlock(popover.anchor.blockId);
+      await api(`/api/notes/${note.id}`, "PATCH", {
+        append: addToNotesText(popover.anchor),
+        addSource: {
+          source: { documentId, ...anchorBody(popover.anchor) },
+          ...segmentsBody(popover.anchor),
+        },
+      });
+      addedToNotes(popover.anchor);
+      window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: note.id } }));
     } catch (err) {
       showError(err instanceof Error ? err.message : t("reader.addFailed"));
     } finally {
@@ -8516,32 +8578,101 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 {t("reader.addToNotes")}
               </button>
           {(() => {
-            // Beside the page editor's page the list drops down over the
-            // tools: growing upward, it would go under the page editor's
-            // header.
-            const list = submenu === "add" && (
+            // The bubble's panel: the comment field on top, then the
+            // sections for a new note under "New note in", then Add to a
+            // note…, which swaps the sections for the note picker. Beside the
+            // page editor's page, and wherever the room above the toolbox is
+            // short for it, the panel drops down over the tools: growing
+            // upward, it would go under the page editor's header, or off the
+            // top of the pane. yTop counts from the top of the scrolled
+            // content; the room is what is in view above the toolbox.
+            const PANEL_ROOM = 400;
+            const dropsDown =
+              !coarse &&
+              (Boolean(popover.page) || popover.yTop - (containerRef.current?.scrollTop ?? 0) < PANEL_ROOM);
+            const first = sectionChoices[0];
+            const hasNotes = sections.some((s) =>
+              [s, ...s.children].some((x) => x.notes.some((n) => n.status === "ACCEPTED")),
+            );
+            const smallLabel = `${coarse ? "text-[11px]" : "text-[10px]"} font-bold tracking-[0.08em] text-sand-500 uppercase`;
+            const panel = submenu === "add" && (
               <div
                 className={
-                  popover.page && !coarse
-                    ? "absolute top-full left-0 z-10 mt-1 flex max-h-44 w-full flex-col overflow-y-auto rounded-2xl bg-card p-1.5 shadow-float"
-                    : "flex max-h-44 flex-col overflow-y-auto"
+                  dropsDown
+                    ? "absolute top-full left-0 z-10 mt-1 flex w-full flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float"
+                    : "flex flex-col gap-0.5"
                 }
               >
-                {sectionChoices.map((choice) => (
-                  <button
-                    key={choice.id}
-                    disabled={busy}
-                    onClick={() => void addToSection(choice.id)}
-                    data-track="add-to-notes-section"
-                    data-tip={t("reader.addPendingNote", { section: choice.label })}
-                    className={`truncate rounded-full ${toolRow} text-left text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
-                  >
-                    {choice.label}
-                  </button>
-                ))}
+                <input
+                  autoFocus={!coarse}
+                  value={addComment}
+                  onChange={(e) => setAddComment(e.target.value)}
+                  {...ime.props}
+                  onKeyDown={(e) => {
+                    if (ime.isImeEnter(e) || isImeKey(e)) return;
+                    // Enter: the fastest path, a new note in the first section.
+                    if (e.key === "Enter" && !busy) {
+                      e.preventDefault();
+                      void addToSection(first.id);
+                    }
+                  }}
+                  placeholder={t("reader.addCommentPlaceholder")}
+                  aria-label={t("reader.addCommentPlaceholder")}
+                  data-tip={t("reader.addCommentTitle", { section: first.label })}
+                  data-track="add-to-notes-comment"
+                  className={`w-full rounded-full bg-sand-100 ${
+                    coarse ? "px-3.5 py-2.5 text-[14px]" : "px-2.5 py-1.5 text-[12px]"
+                  } outline-none placeholder:text-sand-500`}
+                />
+                {addMode === "sections" ? (
+                  <>
+                    <span className={`px-2.5 pt-1.5 pb-0.5 ${smallLabel}`}>{t("reader.addNewNoteIn")}</span>
+                    <div className="flex max-h-44 flex-col overflow-y-auto">
+                      {sectionChoices.map((choice) => (
+                        <button
+                          key={choice.id}
+                          disabled={busy}
+                          onClick={() => void addToSection(choice.id)}
+                          data-track="add-to-notes-section"
+                          data-tip={t("reader.addPendingNote", { section: choice.label })}
+                          className={`truncate rounded-full ${toolRow} text-left text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
+                        >
+                          {choice.label}
+                        </button>
+                      ))}
+                    </div>
+                    {hasNotes && (
+                      <>
+                        <div className="mx-2.5 my-0.5 border-t border-line" />
+                        <button
+                          disabled={busy}
+                          onClick={() => setAddMode("notes")}
+                          data-track="add-to-notes-existing"
+                          data-tip={t("reader.addToExistingNoteTitle")}
+                          className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
+                        >
+                          <span className="truncate">{t("reader.addToExistingNote")}</span>
+                          <ChevronRightIcon size={coarse ? 14 : 12} />
+                        </button>
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => setAddMode("sections")}
+                      data-track="add-to-notes-back"
+                      className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left ${smallLabel} hover:bg-clay-100 hover:text-clay-800`}
+                    >
+                      <ChevronLeftIcon size={coarse ? 14 : 12} />
+                      {t("reader.addPickNote")}
+                    </button>
+                    <NotePicker sections={sections} onPick={(note) => void addToNote(note)} disabled={busy} />
+                  </>
+                )}
               </div>
             );
-            return popover.page && !coarse ? list : <Collapse open={submenu === "add"}>{list}</Collapse>;
+            return dropsDown ? panel : <Collapse open={submenu === "add"}>{panel}</Collapse>;
           })()}
             </div>
           )}
