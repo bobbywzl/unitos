@@ -1386,9 +1386,15 @@ export function ReaderInteractions({
   // Optimistic highlight marks: painted the instant a color dot is clicked,
   // cleared when the server's anchors arrive with the refresh. sourceId: the
   // stored source, once the save answers, so a mark whose words were typed
-  // into meanwhile still finds its stored copy.
+  // into meanwhile still finds its stored copy. tool: the assistant's
+  // conversation mark paints as the stored copy will (block-view.tsx
+  // anchorClass): the thin underline in the assistant's color, filled only
+  // while its card is open and the assistant is not changing the passage.
   const [localAnchors, setLocalAnchors] = useState<
-    Record<string, { start: number; end: number; color: string | null; comment?: boolean; sourceId?: string }[]>
+    Record<
+      string,
+      { start: number; end: number; color: string | null; comment?: boolean; sourceId?: string; tool?: Highlight["tool"] }[]
+    >
   >({});
   // Spans made in this session: their marks sweep in left to right the first
   // time they paint (block-view.tsx mark-sweep). Keyed `${blockId}:${start}:${end}`,
@@ -1414,14 +1420,16 @@ export function ReaderInteractions({
   }
   // A span an AI tool persisted keeps its mark after its card closes, until
   // the server's copy arrives — the same optimistic paint a color dot gets.
-  // Every segment of the passage paints.
-  function addLocalAnchor(anchor: Anchor) {
+  // Every segment of the passage paints. The assistant passes its tool, so
+  // its mark is the assistant's from the first paint, never a clay fill over
+  // a passage its suggestions are changing.
+  function addLocalAnchor(anchor: Anchor, tool?: Highlight["tool"]) {
     setLocalAnchors((prev) => {
       let next = prev;
       for (const s of segmentsOf(anchor)) {
         const list = next[s.blockId] ?? [];
         if (list.some((h) => h.start === s.startOffset && h.end === s.endOffset)) continue;
-        next = { ...next, [s.blockId]: [...list, { start: s.startOffset, end: s.endOffset, color: null }] };
+        next = { ...next, [s.blockId]: [...list, { start: s.startOffset, end: s.endOffset, color: null, tool }] };
       }
       return next;
     });
@@ -5448,7 +5456,7 @@ export function ReaderInteractions({
       window.getSelection()?.removeAllRanges();
       // The conversation continues in a chat card docked beside the article.
       markFreshAnchor(anchor);
-      if (turn.noteId) addLocalAnchor(anchor);
+      if (turn.noteId) addLocalAnchor(anchor, "assistant");
       const slot = claimSideSlot("assistant", yTop);
       setAssistantChat({
         anchor,
@@ -5515,7 +5523,7 @@ export function ReaderInteractions({
     try {
       await flushLiveBlock(anchor.blockId);
       const turn = await assistantTurn(text, anchor, messages, noteId, controller.signal, undefined, undefined, chip?.name, replacing);
-      if (turn.noteId) addLocalAnchor(anchor);
+      if (turn.noteId) addLocalAnchor(anchor, "assistant");
       const done: AssistantBar = {
         ...current,
         noteId: turn.noteId ?? noteId,
@@ -5612,6 +5620,7 @@ export function ReaderInteractions({
     const suggestKey = plan.suggestions
       ? await landSuggestions(plan.suggestions, anchor ? `${command}\n\n${passageText(anchor)}` : command, replacing)
       : undefined;
+    if (suggestKey && anchor) collapseSelectionAfterLanding(suggestKey);
     if (parts.length === 0) parts.push(plan.suggestions?.summary || (plan.warnings[0] ?? t("reader.noActions")));
     // The anchored conversation persisted server-side; refresh paints its mark.
     if (plan.conversationNoteId) router.refresh();
@@ -5695,6 +5704,24 @@ export function ReaderInteractions({
     run.running = false;
     publishRun(key);
     return key;
+  }
+
+  // A command on selected words landed suggestions in the page editor: the
+  // selection collapses to its end. The reader picked the passage to have it
+  // changed, not to keep it selected, and the moment the page takes the focus
+  // back a long passage drawn blue over the suggestions in the assistant's
+  // color is a block of color over the very words to review. The caret lands
+  // after the passage, where the page's own commands leave it; the page is
+  // not focused, so nothing scrolls. A plain answer lands no suggestion and
+  // moves nothing; the panel's command over the document (suggestDocument)
+  // runs on no selection and never comes here.
+  function collapseSelectionAfterLanding(key: string) {
+    const run = suggestRunsRef.current.get(key);
+    const editor = pageEditorIn(containerRef.current);
+    if (!run || run.ids.length === 0 || !editor || editor.isDestroyed) return;
+    const { selection } = editor.state;
+    if (selection.empty) return;
+    editor.commands.setTextSelection(selection.to);
   }
 
   function countRun(run: SuggestionRun, present: readonly { id: string }[]): number {
@@ -6052,7 +6079,7 @@ export function ReaderInteractions({
         undefined,
         pending ? suggestRunsRef.current.get(pending)?.ids : undefined,
       );
-      if (turn.noteId && chat.anchor && !open) addLocalAnchor(chat.anchor);
+      if (turn.noteId && chat.anchor && !open) addLocalAnchor(chat.anchor, "assistant");
       setAssistantChat((c) => {
         if (!c) return c;
         if (open) {
@@ -6862,6 +6889,32 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   return block ? formatKind(block.type, block.html, block.text) : null;
 }
 
+  // The assistant is changing the passage the chat is on: a message is in
+  // flight, or the last answer landed suggestions (SPEC.md §29). A reader
+  // who selects a long passage for a command does not want it kept as a
+  // block of color while the suggestions, in the assistant's color, land in
+  // it and are reviewed — unlike a passage selected to annotate. So while
+  // this holds the passage keeps the thin mark a closed conversation has
+  // (block-view.tsx tool-mark: the underline and no fill), and the card
+  // keeps its connector line; a plain answer brings the fill back.
+  const assistantEditing =
+    assistantChat !== null && (assistantChat.busy || assistantChat.messages.at(-1)?.suggestKey !== undefined);
+  // The spans of the chat's passage, as the local marks key them.
+  const chatSpans = new Set(
+    assistantChat?.anchor ? segmentsOf(assistantChat.anchor).map((s) => `${s.blockId}:${s.startOffset}:${s.endOffset}`) : [],
+  );
+  // The assistant's thin mark on a span: the mark a stored conversation
+  // paints with its card closed.
+  const thinAssistantMark = (start: number, end: number): Highlight => ({
+    sourceId: null,
+    start,
+    end,
+    kind: "anchor",
+    annotation: true,
+    tool: "assistant",
+    open: false,
+  });
+
   // Merge anchor, extraction, term, and link layers per block.
   const highlightsByBlock: Record<string, Highlight[]> = {};
   for (const [blockId, list] of Object.entries(anchorHighlights)) {
@@ -6889,11 +6942,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           ((stored?.conversation.length ?? 0) > 0 ||
             openTurns > 0 ||
             (toolConversationsRef.current[h.noteId]?.length ?? 0) > 0);
-        // Its card open: the mark keeps the fill (block-view.tsx open).
+        // Its card open: the mark keeps the fill (block-view.tsx open). The
+        // assistant's loses it while the assistant is changing the passage.
         const open =
           bubble?.noteId === h.noteId ||
           simplifyCard?.noteId === h.noteId ||
-          assistantChat?.noteId === h.noteId ||
+          (assistantChat?.noteId === h.noteId && !assistantEditing) ||
           commentCard?.noteId === h.noteId;
         return {
           ...h,
@@ -6915,9 +6969,13 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         start: h.start,
         end: h.end,
         color: h.color,
-        annotation: Boolean(h.comment),
+        annotation: Boolean(h.comment) || h.tool !== undefined,
         comment: h.comment,
         kind: "anchor" as const,
+        // The assistant's local mark fills only as the stored one would: its
+        // chat open on this passage, and the assistant not changing it.
+        tool: h.tool,
+        open: h.tool !== undefined && chatSpans.has(`${blockId}:${h.start}:${h.end}`) && !assistantEditing,
       })),
     ];
   }
@@ -7120,8 +7178,11 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   // While an Explanation, Assistant, or Comment card is open, its anchor keeps
   // the anchor tint — the same mark its stored annotation paints after refresh.
   // Spans the server already marks are skipped, so the text never double-marks.
+  // The assistant's passage keeps the thin mark instead while the assistant
+  // is changing it (assistantEditing above).
   for (const anchor of [bubble?.anchor, assistantChat?.anchor, commentCard?.anchor]) {
     if (!anchor) continue;
+    const thin = anchor === assistantChat?.anchor && assistantEditing;
     for (const s of segmentsOf(anchor)) {
       const existing = highlightsByBlock[s.blockId] ?? [];
       const marked = existing.some(
@@ -7130,29 +7191,38 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       if (marked) continue;
       highlightsByBlock[s.blockId] = [
         ...existing,
-        { sourceId: null, start: s.startOffset, end: s.endOffset, kind: "anchor" as const },
+        thin
+          ? thinAssistantMark(s.startOffset, s.endOffset)
+          : { sourceId: null, start: s.startOffset, end: s.endOffset, kind: "anchor" as const },
       ];
     }
   }
   // The text under the open toolbar keeps the selection tint (block-view.tsx
   // kind "selection"): the browser's own selection goes the moment the
-  // assistant's command box or the comment box takes focus, and while the
-  // assistant runs; the mark stays until the toolbar closes. Every block of
-  // the passage keeps it, so the tint is the selection, whole, from the
-  // moment the pointer lifts. The Close link chip's highlight keeps it the
-  // same way. The page editor keeps its own selection drawn, blue or gray
-  // (SPEC.md §29): no tint, so opening the toolbar never repaints the page,
-  // and a repaint cannot put back a selection the keys have just moved. A
-  // core's words (SPEC.md §28) are drawn over the page, not its text: they
-  // keep the tint.
+  // assistant's command box or the comment box takes focus; the mark stays
+  // until the toolbar closes. Every block of the passage keeps it, so the
+  // tint is the selection, whole, from the moment the pointer lifts. The
+  // Close link chip's highlight keeps it the same way. The page editor keeps
+  // its own selection drawn, blue or gray (SPEC.md §29): no tint, so opening
+  // the toolbar never repaints the page, and a repaint cannot put back a
+  // selection the keys have just moved. A core's words (SPEC.md §28) are
+  // drawn over the page, not its text: they keep the tint. From the moment
+  // the toolbar's command box sends to the assistant (aiBusy), the passage
+  // keeps the assistant's thin mark in place of the tint: the toolbar stays
+  // open with its thinking indicator until the answer lands, and the reader
+  // asked for the passage to be worked on, not to look at it tinted. A
+  // figure keeps the tint: its tint is the ring around it, not a fill.
   const toolbarAnchor = popover?.anchor ?? closeLink?.anchor ?? null;
   const underToolbar = richText && !(toolbarAnchor && isCoreKey(toolbarAnchor.blockId)) ? null : toolbarAnchor;
   if (underToolbar) {
+    const running = aiBusy && popover !== null && underToolbar === popover.anchor && !popover.figure;
     for (const s of segmentsOf(underToolbar)) {
       const existing = highlightsByBlock[s.blockId] ?? [];
       highlightsByBlock[s.blockId] = [
         ...existing,
-        { sourceId: null, start: s.startOffset, end: s.endOffset, kind: "selection" as const },
+        running
+          ? thinAssistantMark(s.startOffset, s.endOffset)
+          : { sourceId: null, start: s.startOffset, end: s.endOffset, kind: "selection" as const },
       ];
     }
   }
