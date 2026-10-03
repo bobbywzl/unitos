@@ -40,13 +40,15 @@ export type SuggestCtx = {
   // The asker's pending suggestions in the scope, one line each (lib/docs/suggest-ops.ts).
   pending: string[];
   history: ChatTurn[];
+  // The command moves blocks too: the order pass does that (lib/assistant/reorder.ts).
+  reorder?: boolean;
   // Where the ops land: the page editor, as the assistant's suggestions
   // (page); or the plan card, as the block edits of a document without rich
   // text (plan, lib/assistant/revise.ts).
   target: "page" | "plan";
 };
 
-const OP_LINES = [
+export const OP_LINES = [
   '- replace_words {blockId, find, text, format?, why}: change words inside one block. find: the block\'s words exactly as written, long enough to occur once in it. text: the words that take their place; "" deletes them. format: bold, italic, underline, or strikethrough, when the new words take one.',
   "- rewrite_block {blockId, text, why}: one block's words written anew, whole, plain, one paragraph with no blank line. Use it when most of a block changes. The block keeps its style.",
   "- replace_blocks {blockIds, markdown, why}: consecutive blocks replaced by new blocks. Use it to turn a paragraph into a list, split one, join two, or reorder them.",
@@ -69,7 +71,7 @@ const OP_LINES = [
 
 // A document without rich text: its blocks take the plan card's edits
 // (lib/assistant/revise.ts), so the ops are the ones those edits make.
-const PLAN_OP_LINES = [
+export const PLAN_OP_LINES = [
   '- replace_words {blockId, find, text, format?, why}: change words inside one block. find: the block\'s words exactly as written, long enough to occur once in it. text: the words that take their place; "" deletes them. format: bold, italic, or underline, when the new words take one.',
   "- rewrite_block {blockId, text, why}: one block's words written anew, whole, with no blank line. Use it when most of a block changes. The block keeps its format.",
   "- replace_blocks {blockIds, markdown, why}: consecutive blocks replaced by new blocks. Use it to turn a paragraph into a list, split one, join two, or reorder them.",
@@ -122,6 +124,11 @@ export function suggestPrompt(ctx: SuggestCtx): string {
     `Keep the document's language. Write summary and every why in ${languageName(ctx.lang)}.`,
     "why: one sentence on what the op changes and why.",
     "summary: one or two sentences on what the suggestions change. When the command asks no change, return no ops and say so in summary.",
+    ...(ctx.reorder
+      ? [
+          "Another pass of this command moves the blocks and adds a heading for each group. Never move, reorder, or group blocks, and add no heading for a group. Change only the words the command asks to change; when the command asks for nothing but a new order, return no ops.",
+        ]
+      : []),
     ...(ctx.scope.kind === "blocks" && ctx.scope.windows > 1
       ? ["When the command concerns one place in the document, only the window that holds it changes it; the other windows return no ops."]
       : []),

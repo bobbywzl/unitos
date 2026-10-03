@@ -43,10 +43,15 @@ export type ResolvedOp =
   | { i: number; op: "insert_column"; blockId: string; where: "left" | "right"; cells: string[]; why: string }
   | { i: number; op: "remove_column"; blockId: string; why: string }
   | { i: number; op: "move_column"; blockId: string; toBlockId: string; where: "left" | "right"; why: string }
+  // The order pass (lib/assistant/reorder.ts): top-level blocks, each named
+  // by its rows and their words, and new headings (markdown), moved in this
+  // order right after the top-level block that holds afterBlockId (null: the
+  // document's start). The words go with their blocks, never written anew.
+  | { i: number; op: "move_blocks"; afterBlockId: string | null; items: ({ blockIds: string[]; base: string[] } | { markdown: string })[]; why: string }
   // A footnote whose number goes right after the words find (at `end`).
   | { i: number; op: "insert_footnote"; blockId: string; start: number; end: number; find: string; text: string; why: string };
 /** Why an op did not land. The page shows each reason in the reader's language. */
-export type SkipReason = "outside" | "notFound" | "ambiguous" | "overlap" | "notText" | "changed" | "object" | "limit" | "unreadable" | "tex";
+export type SkipReason = "outside" | "notFound" | "ambiguous" | "overlap" | "notText" | "changed" | "object" | "limit" | "unreadable" | "tex" | "unsupported";
 export type SuggestResult = { ops: ResolvedOp[]; warnings: string[]; summary: string };
 export type SuggestEvent =
   | { stage: "read" }

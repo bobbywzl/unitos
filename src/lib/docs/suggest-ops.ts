@@ -15,6 +15,7 @@ import { withoutSuggestions } from "@/lib/docs/blocks";
 import { INDEXED_NODE_TYPES, SUGGESTION_MARK_TYPES, suggestionAuthor, ZWSP, type RichNode } from "@/lib/docs/schema";
 import { SUGGEST_MAX_OPS, SUGGEST_WINDOW_CHARS, SUGGEST_WINDOW_ROWS } from "@/lib/derive/config";
 import { texError } from "@/lib/katex";
+import { ungrounded, type Grounding } from "@/lib/docs/grounding";
 
 // The assistant's suggestions on the server (SPEC.md §29): the ops the model
 // answers with, checked against the paragraph index and the stored rich text
@@ -65,7 +66,7 @@ const suggestOpSchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("move_column"), blockId: id, toBlockId: id, where: z.enum(["left", "right"]), why }),
   z.object({ op: z.literal("insert_footnote"), blockId: id, find, text: z.string().trim().min(1).max(4_000), why }),
 ]);
-type SuggestOp = z.infer<typeof suggestOpSchema>;
+export type SuggestOp = z.infer<typeof suggestOpSchema>;
 
 /** A value format's value as the page sets it: an address (http, https,
     mailto, tel, or one of the document's own; "" takes the link off), a
@@ -89,7 +90,7 @@ const clip = (text: string, max: number): string => (text.length <= max ? text :
     the cap were left. A why past its length is cut to it, and a field
     written null is left out (afterBlockId null is the document's start). */
 export type ReadOps = { ops: SuggestOp[]; unreadable: string[]; over: number };
-function readOps(items: unknown[]): ReadOps {
+export function readOps(items: unknown[]): ReadOps {
   const read: ReadOps = { ops: [], unreadable: [], over: 0 };
   for (const item of items) {
     const fields = item && typeof item === "object" && !Array.isArray(item) ? (item as Record<string, unknown>) : {};
@@ -344,7 +345,7 @@ const IMAGE_LINE = /^\s*!\[([^\]\n]*)\]\(\s*(\S+?)\s*\)\s*$/;
 /** Markdown as the page takes it: no HTML, at most 200 lines. An image on a
     line of its own stays when its address is a web address; any other
     image is its words. */
-function cleanMarkdown(text: string): string {
+export function cleanMarkdown(text: string): string {
   return text
     .replace(/<\/?[a-zA-Z][^>]*>/g, "")
     .split("\n")
@@ -364,15 +365,41 @@ const coversRow = (text: string, span: { start: number; end: number } | undefine
 
 type Resolved = { op: ResolvedOp; claim: Claim; chars: number };
 
+/** The new words an op writes, for the grounding check. */
+function newWordsOf(op: ResolvedOp): string {
+  switch (op.op) {
+    case "replace_words":
+    case "rewrite_block":
+    case "insert_footnote":
+      return op.text;
+    case "replace_blocks":
+    case "insert_blocks":
+      return op.markdown;
+    case "insert_row":
+    case "insert_column":
+      return op.cells.join("\n");
+    default:
+      return "";
+  }
+}
+
 /** The model's ops checked against the paragraph index (SPEC.md §29): each
     lands with its offsets or bases, or is skipped with its reason; an op
     that changes nothing is dropped. `budget` is the new text the command
     has left, shared by its windows. */
 export function resolveOps(
   ops: SuggestOp[],
-  ctx: { rows: IndexRow[]; places: Map<string, BlockPlace>; scope: SuggestScope; budget: { chars: number } },
+  ctx: {
+    rows: IndexRow[];
+    places: Map<string, BlockPlace>;
+    scope: SuggestScope;
+    budget: { chars: number };
+    // What new words may draw on (lib/docs/grounding.ts): a number or a
+    // quotation the op adds must stand in it, else the op is skipped.
+    grounding?: Grounding;
+  },
 ): { ops: ResolvedOp[]; skipped: { reason: ServerSkip; why: string }[] } {
-  const { rows, places, scope, budget } = ctx;
+  const { rows, places, scope, budget, grounding } = ctx;
   const order = new Map(rows.map((r, k) => [r.id, k]));
   const spans = new Map(scope.kind === "words" ? scope.segments.map((s) => [s.blockId, s]) : []);
   const inScope = new Set(scope.kind === "words" ? spans.keys() : scope.blockIds);
@@ -538,6 +565,11 @@ export function resolveOps(
     const reason = claims.some((c) => conflicts(c, got.claim)) ? "overlap" : got.chars > budget.chars ? "limit" : null;
     if (reason) {
       skipped.push({ reason, why: op.why });
+      return;
+    }
+    const fact = grounding ? ungrounded(newWordsOf(got.op), grounding) : null;
+    if (fact) {
+      skipped.push({ reason: "unsupported", why: `${fact} — ${op.why}` });
       return;
     }
     claims.push(got.claim);

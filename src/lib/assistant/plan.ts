@@ -6,6 +6,7 @@ import type { TranscriptContext } from "@/lib/assistant/transcript";
 import { REPLICA_REFUSAL, replicaEdit } from "@/lib/replica";
 import { joinRefusal, splitRefusal } from "@/lib/transcript-lines";
 import type { AssistantAction, AssistantAnchor } from "@/lib/types";
+import { groundingOf, ungrounded } from "@/lib/docs/grounding";
 
 // The assistant's actions (SPEC.md §7): what the model proposes, validated
 // and enriched against the real document before the reader sees it. The
@@ -96,6 +97,9 @@ export const actionSchema = z.discriminatedUnion("type", [
     type: z.literal("suggest"),
     instruction: z.string().min(1).max(INSTRUCTION_MAX),
     blockIds: z.array(z.string().min(1).max(64)).min(1).max(BLOCK_IDS_MAX).optional(),
+    // The change moves blocks across the document: the order pass runs
+    // beside the windows (lib/assistant/reorder.ts).
+    reorder: z.boolean().optional(),
     description,
   }),
   // A video's or an audio's transcript lines (SPEC.md §11): two lines
@@ -111,6 +115,7 @@ export const actionSchema = z.discriminatedUnion("type", [
     type: z.literal("revise"),
     instruction: z.string().min(1).max(INSTRUCTION_MAX),
     blockIds: z.array(z.string().min(1).max(64)).min(1).max(BLOCK_IDS_MAX).optional(),
+    reorder: z.boolean().optional(),
     description,
   }),
 ]);
@@ -149,6 +154,7 @@ function lenient(item: unknown, edits?: DocumentEdits): unknown {
   if (ids.length > 0 && ids.length <= BLOCK_IDS_MAX) fields.blockIds = ids;
   else delete fields.blockIds;
   if (typeof fields.instruction === "string") fields.instruction = clip(fields.instruction, INSTRUCTION_MAX);
+  if (typeof fields.reorder === "string") fields.reorder = fields.reorder.trim().toLowerCase() === "true";
   if (typeof fields.description === "string") fields.description = clip(fields.description, DESCRIPTION_MAX);
   if ((fields.type === "suggest" || fields.type === "revise") && !fields.description && typeof fields.instruction === "string") {
     fields.description = clip(fields.instruction, DESCRIPTION_MAX);
@@ -225,7 +231,7 @@ const ACTION_LINES: Record<RawAction["type"], string> = {
   style: '- style {blockId, quote, style: "bold"|"italic"|"underline", description} — bold, italicize, or underline exact text.',
   move_block: "- move_block {blockId, afterBlockId, description} — move a block after another block; afterBlockId null moves it to the document's start.",
   suggest:
-    "- suggest {instruction, blockIds?, description} — change the document's words or styles. The changes land in the document as suggestions the reader accepts or rejects. instruction: every change to make and where, in plain words, under 150 words; the suggestions write the new words, so never copy the changed text into it. blockIds: the blocks to change, only when the change concerns some blocks and not the selection or the whole document; a heading stands for its section. Leave blockIds out for the whole document.",
+    "- suggest {instruction, blockIds?, description} — change the document's words or styles. The changes land in the document as suggestions the reader accepts or rejects. instruction: every change to make and where, in plain words, under 150 words; the suggestions write the new words, so never copy the changed text into it. blockIds: the blocks to change, only when the change concerns some blocks and not the selection or the whole document; a heading stands for its section. Leave blockIds out for the whole document. reorder: true when the change moves blocks (group by theme, organize, put in order, move parts together): one pass reads the whole document and moves the blocks whole, never rewriting them, and adds a heading per group when the message asks for groups; the instruction still names every change to the words, and only those.",
   join_lines:
     "- join_lines {blockId, nextBlockId, description} — two transcript lines of one voice, the second right after the first, become one line: its time runs from the first line's start to the second line's end.",
   split_line:
@@ -233,7 +239,7 @@ const ACTION_LINES: Record<RawAction["type"], string> = {
   set_speaker: "- set_speaker {blockId, speakerId, description} — give one transcript line to another voice of the recording: an id from Speakers.",
   rename_speaker: "- rename_speaker {speakerId, name, description} — rename a voice on every line it says.",
   revise:
-    "- revise {instruction, blockIds?, description} — a change to many blocks at once: the spelling or grammar across the document, its register, a section rewritten. The document is read part by part, and the edit of each block comes to the plan card. instruction: every change to make and where, in plain words, under 150 words; never the changed text itself. blockIds: the blocks to change, only when the change concerns some blocks; a heading stands for its section. Leave blockIds out for the whole document.",
+    "- revise {instruction, blockIds?, description} — a change to many blocks at once: the spelling or grammar across the document, its register, a section rewritten. The document is read part by part, and the edit of each block comes to the plan card. instruction: every change to make and where, in plain words, under 150 words; never the changed text itself. blockIds: the blocks to change, only when the change concerns some blocks; a heading stands for its section. Leave blockIds out for the whole document. reorder: true when the change moves blocks (group by theme, organize, put in order, move parts together): one pass reads the whole document and moves the blocks whole, never rewriting them, and adds a heading per group when the message asks for groups; the instruction still names every change to the words, and only those.",
 };
 
 // A video's or an audio's transcript lines (SPEC.md §11): the rule the
@@ -294,6 +300,9 @@ export type PlanContext = {
   // Every document attached to the project, the open one included.
   attachedIds: Set<string>;
   sectionIds: Set<string>;
+  // The reader's message and the conversation: with the document, what new
+  // words may draw on. Absent: no grounding check.
+  sources?: string[];
   t: TFunc;
 };
 
@@ -309,6 +318,7 @@ function joinCommands(list: CommandAction[]): CommandAction {
     type: list[0].type,
     instruction: clip(list.map((a) => a.instruction).join("\n"), INSTRUCTION_MAX),
     ...(blockIds.length > 0 && blockIds.length <= BLOCK_IDS_MAX ? { blockIds } : {}),
+    ...(list.some((a) => a.reorder) ? { reorder: true } : {}),
     description: clip(list.map((a) => a.description).join(" "), DESCRIPTION_MAX),
   };
 }
@@ -341,7 +351,17 @@ export function enrichActions(
   const joinedAway = new Set<string>();
   const missing = (description: string) => warnings.push(t("api.warnBlockNotFound", { description }));
 
+  // New words in an edit_block or an insert_paragraph: a number or a
+  // quotation in them must stand in the document or the conversation
+  // (lib/docs/grounding.ts), else the action is a warning.
+  const grounding = ctx.sources ? groundingOf([...ctx.blocks.map((b) => b.text), ...ctx.sources]) : null;
   for (const action of raw) {
+    const fresh = action.type === "edit_block" ? action.newText : action.type === "insert_paragraph" ? action.text : null;
+    const fact = grounding && fresh !== null ? ungrounded(fresh, grounding) : null;
+    if (fact) {
+      warnings.push(t("api.warnUnsupported", { fact, description: action.description }));
+      continue;
+    }
     if (!fitsDocument(action.type, ctx.edits)) {
       refuse(action.description);
       continue;

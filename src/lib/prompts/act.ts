@@ -108,14 +108,14 @@ export function actPrompt(ctx: ActCtx): string {
       : ["9. matches: return an empty list. The reader has no selection."]),
     ...(ctx.edits === "suggestions"
       ? [
-          "10. A command that asks to change the document's words or styles: one suggest action, reply null, and matches an empty list. The suggestions carry the change: never write the changed text in reply.",
+          "10. A command that asks to change the document's words, styles, or order: one suggest action, reply null, and matches an empty list. A change of order (group by theme, organize, put in order) sets reorder: true on it. The suggestions carry the change: never write the changed text in reply.",
         ]
       : ctx.edits === "none"
         ? [
             "10. The document's words and styles cannot be changed: a project of another account holds the document too. A command that asks to change them: say so in reply, in one sentence, and return no action for the change.",
           ]
         : [
-            "10. A change to the words of more than five blocks (the spelling or grammar of a long selection or of the document, its register, a section rewritten) is one revise action, whatever its size; never more than five edit_block actions. Its blockIds: the selected blocks when the command concerns the selection. reply: one sentence on what will change: the plan carries the edits.",
+            "10. A change to the words of more than five blocks (the spelling or grammar of a long selection or of the document, its register, a section rewritten) is one revise action, whatever its size; never more than five edit_block actions. Its blockIds: the selected blocks when the command concerns the selection. A change of order of more than two blocks (group by theme, organize, put in order) is a revise action with reorder: true, never move_block actions. reply: one sentence on what will change: the plan carries the edits.",
             ...(ctx.transcript ? [`11. ${TRANSCRIPT_RULE}`] : []),
           ]),
     "",

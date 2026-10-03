@@ -452,11 +452,11 @@ export type AssistantAction =
   | { type: "move_block"; blockId: string; afterBlockId: string | null; description: string }
   // A change to a document with rich text (SPEC.md §29): the reader runs it
   // as the assistant's suggestions, never through the plan card.
-  | { type: "suggest"; instruction: string; blockIds?: string[]; description: string }
+  | { type: "suggest"; instruction: string; blockIds?: string[]; reorder?: boolean; description: string }
   // A document without rich text: the edits of many blocks, found part by
   // part on the server (lib/assistant/revise.ts); the plan carries those
   // edits in its place.
-  | { type: "revise"; instruction: string; blockIds?: string[]; description: string }
+  | { type: "revise"; instruction: string; blockIds?: string[]; reorder?: boolean; description: string }
   // A video's or an audio's transcript (SPEC.md §11, app/api/blocks/lines):
   // two lines next to each other joined into one; one line split in two, the
   // second from `offset` (its first words, `quote`); a line given to another
