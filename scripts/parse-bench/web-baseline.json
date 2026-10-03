@@ -786,8 +786,8 @@
    "recall": 1
   },
   "e1c7023ee2": {
-   "f1": 0.977,
-   "precision": 0.955,
+   "f1": 1,
+   "precision": 1,
    "recall": 1
   },
   "e1cd54e557": {
