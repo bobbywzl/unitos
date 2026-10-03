@@ -1370,6 +1370,7 @@ export default async function NotebookPage(props: {
           annotations={pane.videoAnnotations}
           seekBySource={pane.videoSeekBySource}
           sectionChoices={sectionChoices}
+          sections={top}
           translationAvailable={deeplConfigured()}
           split={split}
           paneHeader={paneHeader}
@@ -1391,6 +1392,7 @@ export default async function NotebookPage(props: {
           }
           notebookId={notebook.id}
           sectionChoices={sectionChoices}
+          sections={top}
           title={pane.document.title}
           split={split}
           paneHeader={paneHeader}
