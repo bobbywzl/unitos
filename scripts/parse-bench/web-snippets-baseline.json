@@ -1,8 +1,8 @@
 {
  "total": {
-  "f1": 0.897,
+  "f1": 0.898,
   "precision": 0.838,
-  "recall": 0.965
+  "recall": 0.967
  },
  "pages": {
   "100noticias.com-millones.html": {
@@ -1516,9 +1516,9 @@
    "fn": 0
   },
   "mitundvoneinander.com-Frühling.html": {
-   "tp": 0,
+   "tp": 1,
    "fp": 1,
-   "fn": 1
+   "fn": 0
   },
   "mitvergnuegen.de.herbst.html": {
    "tp": 3,
@@ -1551,9 +1551,9 @@
    "fn": 0
   },
   "mpimet.de.klimasystem.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "murdeltas.wordpress.com.politcamp.html": {
    "tp": 3,
@@ -2371,9 +2371,9 @@
    "fn": 0
   },
   "ahlen.de.reparaturcafe.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "alacarte.at-purzelbaum.html": {
    "tp": 3,
@@ -2571,9 +2571,9 @@
    "fn": 1
   },
   "biathlon-antholz.it-jubeln.html": {
-   "tp": 2,
-   "fp": 0,
-   "fn": 1
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
   },
   "biathlonword.com-chinesisch.html": {
    "tp": 3,
@@ -3836,9 +3836,9 @@
    "fn": 0
   },
   "martinruetter.com-Winter.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 1,
-   "fn": 1
+   "fn": 0
   },
   "mdavis.xyz.supermarket.html": {
    "tp": 3,
