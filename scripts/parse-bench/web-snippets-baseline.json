@@ -1,8 +1,8 @@
 {
  "total": {
-  "f1": 0.892,
-  "precision": 0.837,
-  "recall": 0.955
+  "f1": 0.896,
+  "precision": 0.838,
+  "recall": 0.964
  },
  "pages": {
   "100noticias.com-millones.html": {
@@ -666,9 +666,9 @@
    "fn": 0
   },
   "auto-presse.de-minisuv.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "auto-wirtschaft.ch-camping.html": {
    "tp": 3,
@@ -1606,9 +1606,9 @@
    "fn": 0
   },
   "next2games.de.anno.html": {
-   "tp": 0,
+   "tp": 3,
    "fp": 0,
-   "fn": 3
+   "fn": 0
   },
   "nextkabinett.wordpress.com.garden.html": {
    "tp": 3,
@@ -1856,9 +1856,9 @@
    "fn": 0
   },
   "nmb-media.de.ebay.html": {
-   "tp": 2,
-   "fp": 0,
-   "fn": 1
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
   },
   "skateboardmsm.de.dormhagen.html": {
    "tp": 4,
@@ -2136,9 +2136,9 @@
    "fn": 0
   },
   "archive.org.he.xinhuanet.com.25340717.html": {
-   "tp": 0,
+   "tp": 3,
    "fp": 0,
-   "fn": 3
+   "fn": 0
   },
   "archive.org.tv-orange.de.future.html": {
    "tp": 3,
@@ -2241,9 +2241,9 @@
    "fn": 0
   },
   "_Ziemniaki na szóstej, surówka na dziesiątej_. Jak pomagać, żeby nie zaszkodzić_ [PORADNIK W PIGUŁCE].html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "0a6291ebbce449b3b04256b43c73e39d.html": {
    "tp": 3,
@@ -2271,9 +2271,9 @@
    "fn": 0
   },
   "winfuture.de-NASA.html": {
-   "tp": 1,
+   "tp": 3,
    "fp": 0,
-   "fn": 2
+   "fn": 0
   },
   "wirtschaftspsychologie-aktuell.de.starken.html": {
    "tp": 3,
@@ -2451,9 +2451,9 @@
    "fn": 0
   },
   "automobilwoche.de-VW-Betriebsversammlung.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "autonews.ch-Tesla.html": {
    "tp": 3,
@@ -2486,9 +2486,9 @@
    "fn": 0
   },
   "badische-zeitung.de-Wohnungssuche.html": {
-   "tp": 0,
+   "tp": 3,
    "fp": 0,
-   "fn": 3
+   "fn": 0
   },
   "baechli-bergsport.ch-lawinen.html": {
    "tp": 3,
@@ -2826,9 +2826,9 @@
    "fn": 0
   },
   "d60caba9d12c467b9708ec8981cad8aa.html": {
-   "tp": 3,
-   "fp": 1,
-   "fn": 1
+   "tp": 4,
+   "fp": 2,
+   "fn": 0
   },
   "coopbuddy.de.bee.html": {
    "tp": 3,
@@ -2946,9 +2946,9 @@
    "fn": 0
   },
   "die-tagespost.de.Demut.html": {
-   "tp": 0,
+   "tp": 3,
    "fp": 1,
-   "fn": 3
+   "fn": 0
   },
   "digitale-exzellenz.de.gesundheitswesen.html": {
    "tp": 3,
@@ -3676,9 +3676,9 @@
    "fn": 0
   },
   "landwirt.com.sensortechnik.html": {
-   "tp": 1,
+   "tp": 3,
    "fp": 0,
-   "fn": 2
+   "fn": 0
   },
   "laola1.at-barisic.html": {
    "tp": 3,
@@ -3901,9 +3901,9 @@
    "fn": 0
   },
   "mix1.de-clio.html": {
-   "tp": 1,
+   "tp": 3,
    "fp": 0,
-   "fn": 2
+   "fn": 0
   },
   "modepilot.de.duschkopf.html": {
    "tp": 2,
@@ -3951,9 +3951,9 @@
    "fn": 0
   },
   "0b96fc66e2c94f45a1b923ec9a31fcf2.html": {
-   "tp": 1,
+   "tp": 3,
    "fp": 0,
-   "fn": 2
+   "fn": 0
   },
   "nationalgeographic.co.uk.goats.html": {
    "tp": 3,
@@ -4146,9 +4146,9 @@
    "fn": 0
   },
   "pocketpc.ch.auslieferung.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "politico.com.retirement.html": {
    "tp": 3,
@@ -4291,9 +4291,9 @@
    "fn": 0
   },
   "Unijne fundusze coraz bliżej. Sejm zagłosował _za_ - Polityka - rp.pl.html": {
-   "tp": 1,
-   "fp": 0,
-   "fn": 2
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
   },
   "rtl.de-lockdown.html": {
    "tp": 3,

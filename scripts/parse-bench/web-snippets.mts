@@ -2,8 +2,9 @@
 // magazines, government and company pages), each marked with a few passages
 // the article must hold and a few it must not (a date line, a menu, a
 // footer). The URL parse (parseHtmlContent) reads each page offline, as
-// web.mts does; a passage counts when the document's title and body hold it,
-// spaces read as one.
+// web.mts does, each page decoded by its own charset (lib/parse/charset.ts),
+// as the fetch decodes it; a passage counts when the document's title and body
+// hold it, spaces read as one.
 //
 //   npx tsx scripts/parse-bench/web-snippets.mts [--limit n] [--only file,file]
 //     [--baseline] [--save-baseline] [--worst n] [--detail file] [--parts-dir dir]
@@ -36,6 +37,7 @@ globalThis.fetch = (async () => {
 }) as typeof fetch;
 
 const { parseHtmlContent } = await import("@/lib/parse/url");
+const { decodePage } = await import("@/lib/parse/charset");
 
 const ROOT = join(import.meta.dirname, "..", "..");
 const TRAF = join(ROOT, ".bench", "web", "trafilatura");
@@ -105,7 +107,7 @@ for (const url of parts > 0 ? [] : urls) {
   if (!path) error = "file not found";
   else {
     try {
-      const parsed = await withTimeout(parseHtmlContent(readFileSync(path, "utf8"), url), PAGE_TIMEOUT_MS);
+      const parsed = await withTimeout(parseHtmlContent(decodePage(readFileSync(path)), url), PAGE_TIMEOUT_MS);
       text = [parsed.title ?? "", ...parsed.blocks.filter((b) => b.type !== "SEPARATOR").map((b) => b.text)].join("\n\n");
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);

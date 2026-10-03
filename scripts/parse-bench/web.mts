@@ -43,6 +43,7 @@ globalThis.fetch = (async () => {
 }) as typeof fetch;
 
 const { parseHtmlContent } = await import("@/lib/parse/url");
+const { decodePage } = await import("@/lib/parse/charset");
 
 const ROOT = join(import.meta.dirname, "..", "..");
 const AEB = join(ROOT, ".bench", "web", "aeb");
@@ -134,7 +135,7 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 
 for (const hash of hashes) {
   const { url, articleBody } = truth[hash];
-  const html = gunzipSync(readFileSync(join(AEB, "html", `${hash}.html.gz`))).toString("utf8");
+  const html = decodePage(gunzipSync(readFileSync(join(AEB, "html", `${hash}.html.gz`))));
   const start = performance.now();
   let body = "";
   let error: string | undefined;
