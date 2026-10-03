@@ -2152,7 +2152,14 @@ export function ReaderInteractions({
     };
     const startBlock = blockOf(range.startContainer);
     const endBlock = blockOf(range.endContainer);
-    if (!startBlock && !pageSegments) return null;
+    // A drag that starts off the blocks but on the article — the title, the
+    // label over it, the space between blocks — still reads the blocks it
+    // reaches: the first from its start, as a drag from the margin does.
+    const startEl = range.startContainer instanceof Element ? range.startContainer : range.startContainer.parentElement;
+    const onArticle =
+      Boolean(startEl?.closest("article")) &&
+      !startEl?.closest("[data-side-card], [data-log-card], [data-selection-popover], [data-anchor-skip]");
+    if (!startBlock && !pageSegments && !onArticle) return null;
     // A layer inside this one (the article card in the video pane, SPEC.md
     // §11) takes its own selections: a block whose nearest reader root is
     // not this container belongs to that layer.

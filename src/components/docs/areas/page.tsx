@@ -426,6 +426,12 @@ export function PageCanvas({
     if (target.closest("[data-docs-hf], [data-edit-control], button, a, input, textarea, select")) return;
     if (store.get().editing) store.set({ editing: null });
     if (editor.view.dom.contains(target)) return;
+    // The canvas's own scrollbars keep their press.
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const r = canvas.getBoundingClientRect();
+      if (e.clientX > r.left + canvas.clientWidth || e.clientY > r.top + canvas.clientHeight) return;
+    }
     const hit = nearestPos(editor, e.clientX, e.clientY);
     if (hit === null) return;
     e.preventDefault();
