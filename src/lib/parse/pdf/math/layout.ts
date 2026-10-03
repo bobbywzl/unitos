@@ -1150,10 +1150,26 @@ function splitRows(atoms: Atom[], lines: number[]): Atom[][] {
     }
     return best;
   };
+  // A script stands hard against its base (TeX sets it at the base's edge,
+  // an italic correction past it at most), a script's shift under or over
+  // the base's baseline; a limit stands centered on its operator. A small
+  // glyph set as a full glyph's script and centered on no operator is the
+  // glyph's, whatever operator stands under or over it (parse loop
+  // finding: in a proof's chain of three aligned rows, the π of the first
+  // row's 𝔼_π stood over the second row's ∑, 0.7 em off its center, and
+  // read as the ∑'s upper limit; the first row read alone, and the rest
+  // as a display of their own).
+  const scriptBase = (a: Atom) =>
+    full
+      .filter((b) => b.cls !== "op" && !hangingFamily(b.fam) && a.size < b.size * 0.9 && a.x1 >= b.x2 - 0.05 * em && a.x1 <= b.x2 + 0.1 * em && a.yb > b.yb - 0.45 * em && a.yb < b.yb + 0.7 * em)
+      .sort((p, q) => Math.abs(a.x1 - p.x2) - Math.abs(a.x1 - q.x2))[0];
+  const centered = (a: Atom) => ops.some((o) => Math.abs(cx(a) - cx(o)) < 0.2 * em);
   for (const a of atoms) {
     let row = rowOf.get(a);
-    const op = row === undefined ? limitOf(a) : undefined;
+    const base = row === undefined ? scriptBase(a) : undefined;
+    const op = row === undefined && !(base && !centered(a)) ? limitOf(a) : undefined;
     if (op) row = rowOf.get(op);
+    else if (base) row = rowOf.get(base);
     if (row === undefined) {
       const base = full
         .filter((b) => a.x1 >= b.x2 - 0.05 * em && a.x1 <= b.x2 + 0.2 * em && a.yb > b.yb - 0.5 * em && a.yb < b.yb + 0.7 * em)
