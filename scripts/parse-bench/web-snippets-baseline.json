@@ -1,7 +1,7 @@
 {
  "total": {
-  "f1": 0.899,
-  "precision": 0.838,
+  "f1": 0.904,
+  "precision": 0.846,
   "recall": 0.969
  },
  "pages": {
@@ -737,7 +737,7 @@
   },
   "blog.teufel.de.leistung.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "bloghaus.hypotheses.org.2320.html": {
@@ -817,7 +817,7 @@
   },
   "crazy-julia.de.tipps.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "creativecommons.org.html": {
@@ -1157,7 +1157,7 @@
   },
   "geschichtedergegenwart.ch.foucault.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "github.blog.spiceland.html": {
@@ -1217,7 +1217,7 @@
   },
   "grossefragen.wordpress.com.projekt.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "guten-tach.de-sperrung.html": {
@@ -1262,7 +1262,7 @@
   },
   "herrpfleger.de.fuelcell.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 0,
    "fn": 0
   },
   "hildesheimer-presse.de-hund.html": {
@@ -1372,7 +1372,7 @@
   },
   "knowtechie.com.rally.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "kulturnews.de-Deutschland-Tour.html": {
@@ -1567,7 +1567,7 @@
   },
   "mywakenews.wordpress.com.psyop.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "n-land.de-Simmelsdorf.html": {
@@ -1597,7 +1597,7 @@
   },
   "0a962f6bcd5649f7a7e6effa338df80d.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "newrepublic.com.neoliberalism.html": {
@@ -1692,7 +1692,7 @@
   },
   "peppermynta.de-Strickmode.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "phys.org.tool.html": {
@@ -1887,7 +1887,7 @@
   },
   "stackoverflow.com.rust.html": {
    "tp": 2,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "stardewvalleywiki.com.penny.html": {
@@ -1917,7 +1917,7 @@
   },
   "swim.de-ga2.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 0,
    "fn": 0
   },
   "t3n.de-Laufzeit.html": {
@@ -1957,7 +1957,7 @@
   },
   "tell-review.de.heimweh.html": {
    "tp": 2,
-   "fp": 1,
+   "fp": 0,
    "fn": 1
   },
   "teslamag.de-Musk.html": {
@@ -1987,7 +1987,7 @@
   },
   "thepostpartumparty.com.nursery.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "threatpost.com.android.html": {
@@ -2072,7 +2072,7 @@
   },
   "verfassungsblog.de.expertinnen.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "viconsortium.com-cocaine.html": {
@@ -2482,7 +2482,7 @@
   },
   "backenmachtgluecklich.de.zitronenkuchen.html": {
    "tp": 6,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "badische-zeitung.de-Wohnungssuche.html": {
@@ -2752,7 +2752,7 @@
   },
   "changelog.blog.zwischenbilanz.html": {
    "tp": 2,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "chefkoch.de.mandarinen.html": {
@@ -2792,7 +2792,7 @@
   },
   "cicero.de.pandemie.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "clarin.com-albertofernandez.html": {
@@ -3207,7 +3207,7 @@
   },
   "finanztip.de.altersvorsorge.html": {
    "tp": 6,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "fisch-hitparade.de-alkohhol.html": {
@@ -3427,7 +3427,7 @@
   },
   "haustiermagazin.com-katzenspielzeug.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 0,
    "fn": 0
   },
   "healthline.com.fat.html": {
@@ -3547,7 +3547,7 @@
   },
   "ingenieur.de.kernfusion.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "instyle.com.cancer.html": {
@@ -3827,7 +3827,7 @@
   },
   "management-circle.de.glasses.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 2,
    "fn": 0
   },
   "markeich.de.impressum.html": {
@@ -4017,7 +4017,7 @@
   },
   "oekonomenstimme.org.keynes.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "oetker.de.bienenstich.html": {
@@ -4092,7 +4092,7 @@
   },
   "peta.de-veterinärämter.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "petri-heil-ch-hechte.html": {
@@ -4337,7 +4337,7 @@
   },
   "scmp.com.playbook.html": {
    "tp": 0,
-   "fp": 1,
+   "fp": 0,
    "fn": 3
   },
   "selbst.de-wurmkiste.html": {
@@ -4437,7 +4437,7 @@
   },
   "spontis.de.jahrzehnt.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "sportnews.bz-peking.html": {
@@ -4577,7 +4577,7 @@
   },
   "thebalance.com.coinbase.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "theguardian.com.academics.html": {
@@ -4667,7 +4667,7 @@
   },
   "toptal.com.python.html": {
    "tp": 5,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "tour-magazin.de-unfall.html": {
@@ -4722,7 +4722,7 @@
   },
   "unterwegsinberlin.de.friedrichsfelde.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 2,
    "fn": 0
   },
   "urania.de.freiheit.html": {
@@ -4802,7 +4802,7 @@
   },
   "weinkenner.de-st.magdalener.html": {
    "tp": 0,
-   "fp": 2,
+   "fp": 1,
    "fn": 3
   },
   "d90b19386e2b48559082547016cbe5ec.html": {
