@@ -598,12 +598,24 @@ function radicalBySpan(g: Glyph, glyphs: Glyph[]): { family: MathFamily; code: n
     from the same glyph scaled 1.4 times: one set larger than the glyphs
     beside it on its baseline is the display form. Read with its own box,
     its limits stand over and under it (a thesis's ∑ᵢ₌₁ⁿ read its limits
-    into the lines around the display, and the display was a crop). */
+    into the lines around the display, and the display was a crop). The
+    display form stands centered on the axis, 0.15 em under the row's
+    baseline, and a fraction may stand right of it: the glyphs on either
+    side within a fifth of its size count (parse loop finding: the
+    thesis's (1.66), −K ∑ 1/n, and (1.79), 𝒵 ≡ ∑ e^{−βE_i}, read their ∑
+    as the text form, its limit "states" read into it as a line of words,
+    and (1.79) was a crop). */
 const PAZO_OPERATORS: Record<string, number> = { "∑": 0x50, "∏": 0x51 };
 function pazoOperator(g: Glyph, glyphs: Glyph[]): Tex | null {
   const code = /^PazoMath$/.test(g.base) ? PAZO_OPERATORS[g.unicode] : undefined;
   if (code === undefined) return null;
-  const beside = glyphs.filter((h) => h !== g && h.unicode.trim() !== "" && Math.abs(h.y - g.y) < g.size * 0.1 && h.x >= g.x + g.w * 0.5 && h.x < g.x + g.w + g.size * 1.5);
+  const beside = glyphs.filter(
+    (h) =>
+      h !== g &&
+      h.unicode.trim() !== "" &&
+      Math.abs(h.y - g.y) < g.size * 0.2 &&
+      ((h.x >= g.x + g.w * 0.5 && h.x < g.x + g.w + g.size * 1.5) || (h.x + h.w <= g.x + g.w * 0.5 && h.x + h.w > g.x - g.size * 1.5)),
+  );
   const display = beside.length > 0 && Math.max(...beside.map((h) => h.size)) < g.size / 1.25;
   return { family: "omx", code: display ? code + 8 : code, box: [0.78, 0.13] };
 }
