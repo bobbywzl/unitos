@@ -158,7 +158,13 @@ function wordsOf(line: Line, column: { left: number; right: number }) {
 // equation of its last row).
 const CONTENTS_TAIL_RE = /\p{L}.*(?:\s*\.){5,}\s*\d{1,4}\s*$/u;
 function kindOf(line: Line, ctx: PageContext, column: { left: number; right: number }, fenced: boolean): LineKind {
-  if (LABEL_RE.test(line.text.trim()) || QED_RE.test(line.text.trim())) return "label";
+  // An equation's label is set in the text's font: a line whose "(" is a
+  // tall delimiter's piece is a matrix's row with its fence's top, no
+  // label (parse loop finding: GeoTopo p. 15's N = (0; ⋮; 0; 1) set
+  // inline read its top row "(0)" as a label, and the vector lost its
+  // top row and its parentheses).
+  const pieced = line.items.some((i) => (i.glyphs ?? []).some((g) => g.family === "omx" && mathGlyph("omx", g.code)?.piece !== undefined));
+  if (!pieced && (LABEL_RE.test(line.text.trim()) || QED_RE.test(line.text.trim()))) return "label";
   const { x, xEnd, text, label, outside, zoneChars, words, letters, opens } = wordsOf(line, column);
   // A list item is an item, whatever its math (census class 1: items (b)–(d)
   // of an exercise became one page picture), its bullet a math glyph too
@@ -401,7 +407,9 @@ function inlineHost(line: Line, lines: Line[], kinds: LineKind[], fences: Box[],
   if (join && line.items.some((i) => !i.zone && (i.str.match(/\p{L}{2,}/gu) ?? []).some((w) => !MATH_WORDS.has(w.toLowerCase())))) return null;
   const text = (t: Line, n: number) => t !== line && kinds[n] === "text" && (!join || (!t.table && t.text.trim() !== ""));
   for (const f of fences) {
-    if (line.y > f.y2 || line.y < f.y1) continue;
+    // A sized delimiter alone stands its origin at the fence's own top, a
+    // hair over it in floating point: half a point of room.
+    if (line.y > f.y2 + 0.5 || line.y < f.y1 - 0.5) continue;
     // The row starts just inside the delimiter, ends just before it, or
     // runs across it: a row that holds the delimiter's top piece (parse
     // loop finding: the MML book's inline matrices in a list item, "A + B
@@ -411,7 +419,17 @@ function inlineHost(line: Line, lines: Line[], kinds: LineKind[], fences: Box[],
       line.x <= f.x1 + 1 &&
       line.xEnd >= f.x2 - 1 &&
       line.items.some((i) => (i.glyphs ?? []).some((g) => g.family === "omx" && g.x >= f.x1 - 1 && g.x + g.w <= f.x2 + 1 && mathGlyph("omx", g.code)?.piece !== undefined));
-    if (!((line.x >= f.x2 - 1 && line.x - f.x2 < line.size * 3) || (line.xEnd <= f.x1 + 1 && f.x1 - line.xEnd < line.size * 3) || across)) continue;
+    // The delimiter itself, alone on a line: a sized delimiter hangs from
+    // its origin, so a \right\} three rows tall stands its origin two ems
+    // over the text line it closes, on a line of its own (parse loop
+    // finding: GeoTopo p. 15's "H = { (x_1; ⋮; x_{n+1}) ∈ ℝ^{n+1} | x_{n+1}
+    // = 0 }" set inline left its "}" a display of its own, a crop, and
+    // the set read as text).
+    const lone =
+      line.x >= f.x1 - 1 &&
+      line.xEnd <= f.x2 + 1 &&
+      line.items.every((i) => (i.glyphs ?? []).length > 0 && (i.glyphs ?? []).every((g) => g.family === "omx"));
+    if (!((line.x >= f.x2 - 1 && line.x - f.x2 < line.size * 3) || (line.xEnd <= f.x1 + 1 && f.x1 - line.xEnd < line.size * 3) || across || lone)) continue;
     const host = lines.find((t, n) => text(t, n) && t.y <= f.y2 && t.y >= f.y1 && t.x <= f.x1 && t.xEnd >= f.x2);
     if (host) return host;
   }
