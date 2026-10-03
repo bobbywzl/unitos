@@ -530,6 +530,8 @@ function arrowRuns(atoms: Atom[]): Atom[] {
   const out = [...atoms];
   const shafts = out.filter((a) => a.tex === "-" && a.fam === "oms");
   const bars = out.filter((a) => a.tex === "=");
+  // Each stretchy single arrow made here, its way and its labels.
+  const stretchy = new Map<Atom, { right: boolean; above: string; below: string }>();
   for (const head of out.filter((a) => /^\\(right|left|Right|Left)arrow$/.test(a.tex))) {
     const em = head.size;
     const right = /^\\(right|Right)/.test(head.tex);
@@ -569,10 +571,40 @@ function arrowRuns(atoms: Atom[]): Atom[] {
       const above = label.length ? textLabel(label) ?? linear(fuseComposites(label.map((b) => ({ ...b })))) : "";
       const below = labelBelow.length ? `[${linear(fuseComposites(labelBelow.map((b) => ({ ...b }))))}]` : "";
       made = node([...run, ...label, ...labelBelow], `\\x${name}${below}{${above}}`, head.yb, em, { cls: "rel" });
+      if (!double) stretchy.set(made, { right, above, below: below.slice(1, -1) });
       for (const b of [...label, ...labelBelow]) out.splice(out.indexOf(b), 1);
     } else continue;
     for (const r of run) out.splice(out.indexOf(r), 1);
     out.push(made);
+  }
+  // Two long arrows set one over the other, pointing the opposite ways and
+  // of one width, are one stretchy pair: a right arrow over a left one is
+  // \xrightleftarrows, its label over the upper arrow and under the lower
+  // one. Read apart, the upper arrow stood on a row of its own, and the
+  // symbol after the pair was read as its subscript (parse loop finding:
+  // Springer's chains A₁ ⇄ A₂ ⇄ … with d_A over and under each arrow read
+  // as \underset{\xleftarrow[d_A]{}}{\xrightarrow{d_A}}_{A_2}, and the
+  // display was a crop). The pair stands on the lower arrow's baseline,
+  // the row the symbols beside it stand on.
+  for (const [upper, up] of stretchy) {
+    if (!out.includes(upper) || !up.right) continue;
+    const em = upper.size;
+    const lower = [...stretchy.keys()].find(
+      (b) =>
+        b !== upper &&
+        out.includes(b) &&
+        !stretchy.get(b)!.right &&
+        upper.yb > b.yb &&
+        upper.yb - b.yb < 1.2 * em &&
+        Math.abs(b.x1 - upper.x1) < 0.3 * em &&
+        Math.abs(b.x2 - upper.x2) < 0.3 * em,
+    );
+    if (!lower) continue;
+    const above = up.above;
+    const below = stretchy.get(lower)!.below;
+    out.splice(out.indexOf(upper), 1);
+    out.splice(out.indexOf(lower), 1);
+    out.push(node([upper, lower], `\\xrightleftarrows${below ? `[${below}]` : ""}{${above}}`, lower.yb, lower.size, { cls: "rel" }));
   }
   return out;
 }
