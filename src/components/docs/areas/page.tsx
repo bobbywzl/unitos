@@ -19,6 +19,7 @@ import {
   slotFor,
 } from "@/components/docs/page/header-footer";
 import { PageIndicator } from "@/components/docs/page/indicator";
+import { followMarginDrag, nearestPos, selectRange } from "@/components/docs/page/margin-select";
 import { OutlineButton, OutlinePanel } from "@/components/docs/page/outline";
 import type { PaginationConfig } from "@/components/docs/page/paginate";
 import { HorizontalRuler, VerticalRuler } from "@/components/docs/page/ruler";
@@ -416,21 +417,22 @@ export function PageCanvas({
 
   // A press in a page's margins puts the caret on the nearest line, as it
   // does in Google Docs; a press in the text leaves a header or footer.
+  // A press in a page's margin, or on the canvas beside the page, starts a
+  // selection at the nearest words, and a drag grows it
+  // (page/margin-select.ts). Shift grows the open selection instead.
   const onMarginDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
     const target = e.target as Element;
-    if (target.closest("[data-docs-hf], [data-edit-control]")) return;
+    if (target.closest("[data-docs-hf], [data-edit-control], button, a, input, textarea, select")) return;
     if (store.get().editing) store.set({ editing: null });
-    if (editor.view.dom.contains(target) || !editor.isEditable) return;
-    const text = editor.view.dom.getBoundingClientRect();
-    const x = Math.min(Math.max(e.clientX, text.left + 2), text.right - 2);
-    const y = Math.min(Math.max(e.clientY, text.top + 2), text.bottom - 2);
-    const hit = editor.view.posAtCoords({ left: x, top: y });
-    if (!hit) return;
+    if (editor.view.dom.contains(target)) return;
+    const hit = nearestPos(editor, e.clientX, e.clientY);
+    if (hit === null) return;
     e.preventDefault();
-    const { from } = editor.state.selection;
-    if (e.shiftKey) editor.chain().focus().setTextSelection({ from, to: hit.pos }).run();
-    else editor.chain().focus().setTextSelection(hit.pos).run();
+    const anchor = e.shiftKey ? editor.state.selection.anchor : hit;
+    if (editor.isEditable) editor.commands.focus(undefined, { scrollIntoView: false });
+    selectRange(editor, anchor, hit);
+    followMarginDrag(editor, anchor, e.nativeEvent);
   };
   // A double-click in a page's top or bottom margin edits its header or
   // footer.
@@ -513,13 +515,13 @@ export function PageCanvas({
         onScroll={(e) => {
           if (barRef.current) barRef.current.scrollLeft = e.currentTarget.scrollLeft;
         }}
+        onMouseDown={onMarginDown}
       >
         <Banner width={pageVisual} />
         <article
           ref={pageRef}
           className={`docs-page${compact ? " docs-page-compact" : ""}`}
           style={pageStyle}
-          onMouseDown={onMarginDown}
           onClick={onPageClick}
           onDoubleClick={onPageDoubleClick}
           data-docs-page
