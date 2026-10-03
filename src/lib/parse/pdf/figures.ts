@@ -714,8 +714,14 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
       return { row, box: row.reduce((b, r) => unionBox(b, r.box), h.box) };
     });
     const onBar = (r: TextRun) => bars.some((bar) => bar.row.includes(r));
-    const axis = drawn && !panel ? axisOf(plot).filter((r) => !onBar(r)) : [];
-    const titles = drawn && !panel ? titlesOf(plot, axis).filter((r) => !onBar(r)) : [];
+    // A panel takes its axis labels and titles too: R's lattice and grid
+    // graphics frame the plot and set its ticks and axis titles outside the
+    // frame (parse loop finding: a statistics book's quantile-quantile plot
+    // left its ticks "−2 −1 0 1 2" out of the crop, read its axis title "t
+    // Quantiles" as a heading, and its caption, under the heading, stood
+    // apart as a paragraph).
+    const axis = drawn ? axisOf(plot).filter((r) => !onBar(r)) : [];
+    const titles = drawn ? titlesOf(plot, axis).filter((r) => !onBar(r)) : [];
     for (const r of [...axis, ...titles]) taken.add(r);
     let box = [...axis, ...titles].reduce((b, r) => unionBox(b, r.box), plot);
     for (const { box: bar } of bars) {
