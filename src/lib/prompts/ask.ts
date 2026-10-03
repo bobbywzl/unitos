@@ -1,4 +1,13 @@
-import { answerLanguage, profileLines, SPECIFICITY_RULE, STYLE_RULE, type PromptCtx } from "@/lib/prompts/types";
+import {
+  ANSWER_LENGTH,
+  answerLanguage,
+  DEPTH_RULE,
+  profileLines,
+  SPECIFICITY_RULE,
+  STYLE_RULE,
+  WEB_LINES,
+  type PromptCtx,
+} from "@/lib/prompts/types";
 
 // ASK: a question about a time range of a video or audio document (SPEC.md
 // §11). The full timed transcript is the cached prefix; the range's lines are
@@ -23,9 +32,11 @@ export function askPrompt(ctx: PromptCtx): string {
     "2. When the range does not answer the question, say so plainly in one sentence. When another part of the transcript does, name its time and answer from there, and say that it is outside the range.",
     "3. Never add facts the transcript does not state. Never guess what a speaker meant beyond their words. Never fill a gap with what is generally known.",
     "4. Connect the answer to the reader's purpose when the connection is real. Skip forced connections.",
-    "Keep it under 150 words. Use markdown.",
+    ANSWER_LENGTH,
+    DEPTH_RULE,
     SPECIFICITY_RULE,
     STYLE_RULE,
+    ...(ctx.web ? ["", ...WEB_LINES] : []),
     answerLanguage(ctx.lang),
   ].join("\n");
 }

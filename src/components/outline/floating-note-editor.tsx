@@ -23,6 +23,7 @@ import { referenceMarkdownForDrop } from "@/components/outline/reference-drop";
 import { quoteMarkdown } from "@/lib/quote-drag";
 import { useCardDropTarget } from "@/components/outline/use-card-drop";
 import { useNoteDraft } from "@/components/outline/use-note-draft";
+import { NoteAssistant } from "@/components/outline/note-assistant";
 import type { FloatingEdit, OutlineActions } from "@/components/outline/use-outline";
 
 // The floating card: a note dragged out of the tray and put over the article,
@@ -684,6 +685,19 @@ export function FloatingNoteEditor({
             {t("outline.dockBack")}
           </button>
         </div>
+      )}
+      {/* The note's assistant (SPEC.md §6), docked at the bottom of the open
+          note: a change it proposes lands in the draft on Apply. */}
+      {editing && note && canEdit && (
+        <NoteAssistant
+          noteId={note.id}
+          draft={draft}
+          onApply={(next) => {
+            setDraft(next);
+            actions.floatingDraftChanged(next);
+          }}
+          className="mt-2.5"
+        />
       )}
     </div>
   );

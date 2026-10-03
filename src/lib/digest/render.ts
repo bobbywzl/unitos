@@ -304,7 +304,8 @@ export function renderDocumentDigest(
     ].join("\n"),
     renderDocument(doc, budget, new Map(), parts.corpusTitle),
   ];
-  const citing = parts.notes.filter((n) => n.sources.some((s) => s.documentId === documentId));
+  const cites = (n: DigestNote) => n.sources.some((s) => s.documentId === documentId);
+  const citing = parts.notes.filter(cites);
   const notes = spend(citing.map(noteBlock), budget, "notes");
   chunks.push(
     [
@@ -312,6 +313,14 @@ export function renderDocumentDigest(
       notes.length > 0 ? notes.join("\n\n") : "(no notes)",
     ].join("\n\n"),
   );
+  // The reader's other notes (SPEC.md §7): the whole reader is the context,
+  // so a question about this document can draw on what the reader thought
+  // about the rest of the project. After the citing notes, so the cut falls
+  // here first.
+  const others = spend(parts.notes.filter((n) => !cites(n)).map(noteBlock), budget, "notes");
+  if (others.length > 0) {
+    chunks.push(["## The reader's other notes in this project", others.join("\n\n")].join("\n\n"));
+  }
   return chunks.join("\n\n");
 }
 

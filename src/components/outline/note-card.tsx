@@ -32,6 +32,7 @@ import { NoteId } from "@/components/outline/note-id";
 import { NoteTitleField, focusBodyEditor, useNoteParts } from "@/components/outline/note-title-field";
 import { SaveStateLabel } from "@/components/outline/save-state";
 import { useNoteDraft } from "@/components/outline/use-note-draft";
+import { NoteAssistant } from "@/components/outline/note-assistant";
 import { NOTE_ABSORBED_EVENT, type OutlineActions } from "@/components/outline/use-outline";
 
 /** The nearest ancestor that scrolls: the tray's panel. Null on the notes full page, where the window scrolls. */
@@ -792,6 +793,9 @@ const NoteCardBody = memo(function NoteCardBody({
             {t("common.cancel")}
           </button>
         </div>
+        {/* The note's assistant (SPEC.md §6), docked at the bottom: a change
+            it proposes lands in the draft on Apply. */}
+        {canEdit && <NoteAssistant noteId={note.id} draft={draft} onApply={setDraft} className="mt-2.5" />}
       </div>
     );
   }

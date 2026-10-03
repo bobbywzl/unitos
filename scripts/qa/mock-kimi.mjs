@@ -449,6 +449,37 @@ function buildResponse(all) {
 
   if (all.includes('"issues"')) return JSON.stringify({ issues: [] });
 
+  // Save as note (SPEC.md §7): one note — a title, a point, the first
+  // block's words as its quote.
+  if (all.includes("Organize the answer into one note")) {
+    const quote = (blocks[0]?.text ?? "").split(/(?<=[.!?])\s/)[0].slice(0, 200);
+    const sectionId = all.match(/Where the note goes: section (\S+)/)?.[1];
+    return JSON.stringify({
+      notes: [
+        {
+          content: `# Mock organized note\n\n## The key point\n\nThe answer's reasoning, kept.${quote ? `\n\n> ${quote}` : ""}`,
+          sectionId,
+          quotes: quote && blocks[0] ? [{ blockId: blocks[0].id, quote }] : [],
+        },
+      ],
+    });
+  }
+
+  // The note's assistant (SPEC.md §6): a question gets a reply; a change
+  // gets the note back with one line added and one made-up quote, which the
+  // route's quote check takes out.
+  if (all.includes("The reader has a note open and asks the assistant about it.")) {
+    const note = all.match(/=== note ===\n([\s\S]*?)\n=== end of note ===/)?.[1] ?? "";
+    const message = all.match(/^Message: (.*)$/m)?.[1] ?? "";
+    if (!/\b(group|organize|shorten|rewrite|add|make)\b/i.test(message)) {
+      return JSON.stringify({ reply: `Mock answer about the note: it says ${note.split("\n")[0].slice(0, 60)}.`, content: null });
+    }
+    return JSON.stringify({
+      reply: "Grouped the points under one theme and kept every quote.",
+      content: `${note.trim()}\n\n## Mock theme\n\n- The point, grouped.\n\n> Seriousness is the mask every philosopher wears in public.`,
+    });
+  }
+
   // Ingest core pass: keep ranges around everything that does not look like page
   // chrome — bracketed chrome, footer link words, copyright lines. Exercises the
   // range apply path end-to-end.
@@ -582,7 +613,7 @@ async function chatCompletion(body, res) {
       : null;
   const text = toolCall
     ? ""
-    : searched
+    : searched && !buildResponse(all).trimStart().startsWith("{")
       ? `${buildResponse(all)} The web agrees ([${WEB_SOURCE.title}](${WEB_SOURCE.url})).\n\n**Web sources**\n- [${WEB_SOURCE.title}](${WEB_SOURCE.url})`
       : buildResponse(all);
   const finish = FAIL === "length" ? "length" : toolCall ? "tool_calls" : "stop";

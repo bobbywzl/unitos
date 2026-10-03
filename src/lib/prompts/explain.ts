@@ -1,9 +1,12 @@
 import {
+  ANSWER_LENGTH,
   answerLanguage,
+  DEPTH_RULE,
   GROUNDING_RULE,
   profileLines,
   SPECIFICITY_RULE,
   STYLE_RULE,
+  WEB_LINES,
   type PromptCtx,
 } from "@/lib/prompts/types";
 
@@ -33,9 +36,11 @@ export function explainPrompt(ctx: PromptCtx): string {
       "1. Start with what is said at this moment: the claim, the point, the example.",
       "2. Then place it: what the recording is arguing here and how this moment fits what came before and after, using the timed transcript.",
       "3. Connect it to the reader's purpose when the connection is real. Skip forced connections.",
-      "Keep it under 150 words, in flowing prose: no headings, no numbered sections. Start with the explanation.",
+      "Length: as long as the reasoning needs, usually 200 to 400 words, in flowing prose: no headings, no numbered sections. Start with the explanation.",
+      DEPTH_RULE,
       SPECIFICITY_RULE,
       STYLE_RULE,
+      ...(ctx.web ? ["", ...WEB_LINES] : []),
       answerLanguage(ctx.lang),
     ].join("\n");
   }
@@ -74,9 +79,11 @@ export function explainPrompt(ctx: PromptCtx): string {
       "2. Then place it: what the video is saying here, using the timed transcript, and how the visual and the words fit together.",
       "3. Never state anything about the image you cannot actually see. Where the frame is too small or unclear to be sure, say so plainly instead of guessing. If the image and the description disagree, trust the image and say what you see.",
       "4. Connect it to the reader's purpose when the connection is real. Skip forced connections.",
-      "Keep it under 150 words, in flowing prose: no headings, no numbered sections. Start with the explanation.",
+      "Length: as long as the reasoning needs, usually 200 to 400 words, in flowing prose: no headings, no numbered sections. Start with the explanation.",
+      DEPTH_RULE,
       SPECIFICITY_RULE,
       STYLE_RULE,
+      ...(ctx.web ? ["", ...WEB_LINES] : []),
       answerLanguage(ctx.lang),
     ].join("\n");
   }
@@ -110,9 +117,12 @@ export function explainPrompt(ctx: PromptCtx): string {
         ? "4. When the page does not answer the question, say so in one sentence, then say what the page does show about it."
         : "4. Explain the parts the reader is least likely to know, given their background.",
       "5. Connect it to the reader's purpose when the connection is real. Skip forced connections.",
-      "Keep it under 150 words. Use markdown. Start with the answer.",
+      "Start with the answer.",
+      ANSWER_LENGTH,
+      DEPTH_RULE,
       SPECIFICITY_RULE,
       STYLE_RULE,
+      ...(ctx.web ? ["", ...WEB_LINES] : []),
       answerLanguage(ctx.lang),
     ].join("\n");
   }
@@ -147,9 +157,12 @@ export function explainPrompt(ctx: PromptCtx): string {
       ...(ctx.corpus
         ? ["4. Where the project context clarifies this figure, name the document or the note and draw the connection explicitly."]
         : []),
-      "Keep it under 150 words. Use markdown. Start with the explanation.",
+      "Start with the explanation.",
+      ANSWER_LENGTH,
+      DEPTH_RULE,
       SPECIFICITY_RULE,
       STYLE_RULE,
+      ...(ctx.web ? ["", ...WEB_LINES] : []),
       answerLanguage(ctx.lang),
     ].join("\n");
   }
@@ -178,10 +191,13 @@ export function explainPrompt(ctx: PromptCtx): string {
     ctx.corpus
       ? "5. Where the project context clarifies the passage — another document's passage, a note, a highlight — name it and draw the connection explicitly. Skip forced connections."
       : "5. Connect the passage to the reader's purpose when the connection is real. Skip forced connections.",
-    "Keep it under 150 words. Use markdown. Start with the explanation.",
+    "Start with the explanation.",
+    ANSWER_LENGTH,
+    DEPTH_RULE,
     GROUNDING_RULE,
     SPECIFICITY_RULE,
     STYLE_RULE,
+    ...(ctx.web ? ["", ...WEB_LINES] : []),
     answerLanguage(ctx.lang),
   ].join("\n");
 }

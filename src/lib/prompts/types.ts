@@ -72,12 +72,28 @@ export type PromptCtx = {
   // reader's other documents, notes, and annotations), so the prompt asks
   // for links to it only when it is there.
   corpus?: boolean;
+  // The model can search the web (SPEC.md §7): EXPLAIN, ANALYZE, and ASK
+  // carry WEB_LINES when it is set.
+  web?: boolean;
 };
 
 // The one style line every template carries (CLAUDE.md rule 7). The tools
 // read beside the article, in a card: every sentence has to earn its place.
 export const STYLE_RULE =
-  "Style: work the whole answer out before you write a word; write only the result. Answer like a person who knows the material and is short on time. Say the answer first, in as few words as it takes, then stop. Short sentences, one point per sentence, the plainest words that say it — words anyone would know, not the field's, unless the material's own term is the one the reader needs. No idioms, no preamble, no filler, no restating the question, no closing summary, no headings for a short answer. Use technical language only where the material does. Give an example or a quote only where the answer needs one. Then, when there is one, name in one or two lines the thing most likely to trip the reader up here — a term, a step, a wrong assumption, a gap in the material — and clear it. Nothing else.";
+  "Style: work the whole answer out before you write a word; write only the result. Say the answer first, then the reasoning that earns it. Short sentences, one point per sentence, the plainest words that say it — words anyone would know, not the field's, unless the material's own term is the one the reader needs. No idioms, no preamble, no filler, no restating the question, no closing summary, no headings for a short answer. Use technical language only where the material does. Then, when there is one, name in one or two lines the thing most likely to trip the reader up here — a term, a step, a wrong assumption, a gap in the material — and clear it.";
+
+// The one depth line every template that explains or answers carries (an
+// explanation, an analysis, an answer of the assistant): the reader asked to
+// understand, so a gloss that restates the words is a failed answer. Plain
+// words (STYLE_RULE) and depth are not at odds: the reasoning is what the
+// words carry. Repeated exact wording across templates (CLAUDE.md rule 7).
+export const DEPTH_RULE =
+  "Depth: the reader asked to understand, not for a gloss. Before you write, think it through: what the words say, why the author says it here, what it rests on, what follows from it, how it fits the document's argument as a whole, and what the reader's own notes and annotations say about it. Then write the explanation an expert who has read the whole document and the reader's notes would give: the reasoning step by step, the evidence quoted and cited, the links to other parts of the document and to the reader's notes named, and the limit, the tension, or the other reading where there is one. Every paragraph adds a reason, a link, or a consequence the reader did not have. An answer that only restates or summarizes the words has failed.";
+
+// The length line of an answer that explains: as long as the reasoning
+// needs, never cut to a word count that leaves the reasoning out.
+export const ANSWER_LENGTH =
+  "Length: as long as the reasoning needs, never padded. A lookup (a name, a number, a place in the document) takes a few sentences. A question of meaning, argument, or interpretation usually takes 250 to 600 words. Use markdown: short paragraphs, bold for the key terms, and a list or a short heading only where it helps the reader follow.";
 
 // The one grounding line every assistant-voice template carries: what the
 // tool says rests on the document, and the reader can check it. Repeated
@@ -128,3 +144,27 @@ export const WEB_LINES = [
   "3. When the web contradicts the material, say so plainly and show both sides.",
   '4. End with a section titled "Web sources" listing every web page you relied on as a markdown link, one per line. Leave the section out when you used none.',
 ];
+
+// The reader's notes as the assistant reads them (SPEC.md §7): every note
+// whole, up to NOTE_CHARS each, until the budget runs out; a cut is declared,
+// never silent. "section: note", one note per paragraph.
+const NOTE_CHARS = 3000;
+export const READER_NOTES_BUDGET = 40_000;
+
+export function readerNotesText(
+  notes: { sectionTitle: string; content: string }[],
+  budget = READER_NOTES_BUDGET,
+): string {
+  if (notes.length === 0) return "none yet";
+  const out: string[] = [];
+  let left = budget;
+  for (const n of notes) {
+    const content = n.content.length > NOTE_CHARS ? `${n.content.slice(0, NOTE_CHARS)} [cut]` : n.content;
+    const rendered = `${n.sectionTitle}: ${content}`;
+    if (rendered.length > left) break;
+    left -= rendered.length;
+    out.push(rendered);
+  }
+  const cut = notes.length - out.length;
+  return [...out, ...(cut > 0 ? [`[${cut} more note${cut === 1 ? "" : "s"} not shown]`] : [])].join("\n\n");
+}

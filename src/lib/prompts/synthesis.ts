@@ -1,7 +1,9 @@
 import { actionLines, TRANSCRIPT_RULE, type DocumentEdits } from "@/lib/assistant/plan";
 import type { Lang } from "@/lib/i18n/config";
 import {
+  ANSWER_LENGTH,
   answerLanguage,
+  DEPTH_RULE,
   GROUNDING_RULE,
   languageName,
   profileLines,
@@ -80,12 +82,14 @@ export function synthesisAskPrompt(params: {
       : "The reader sent the attachments without a question. Say what they contain and how they relate to the material.",
     "",
     "Answer from the material above.",
-    "1. Start with the answer, in one or two sentences. Then the evidence: the passages the answer rests on, each cited as [block <id>] with the exact words quoted, and the notes it rests on as [note <id>]. Then, when the question asks for it, the reasoning that joins them.",
+    "1. Start with the answer, in one or two sentences. Then the evidence: the passages the answer rests on, each cited as [block <id>] with the exact words quoted, and the notes it rests on as [note <id>]. Then the reasoning that joins them: why the evidence supports the answer, what it implies, and where the material complicates it.",
     "2. A question about a passage, a term, or a claim: first gather the passages across the material that deal with it, from anywhere in the material, then answer from them. A passage that disagrees with the others is named as disagreeing, never dropped.",
     "3. A question the material answers only in part: answer the part it answers, then say in one sentence what it does not answer. Never fill the gap with what is generally known unless the reader asked for that, and then say which sentences come from outside the material.",
+    "3a. Cite with the tags alone: [block <id>] and [note <id>] render as links. Never write an id in your own words (\"note cmuo…\"), and never write a tag where you mean the words: name the note by what it says.",
     "4. A question about counts, spread, or absence (how many, where, does it ever): the material is complete except where a cut is declared, so answer with the count and cite each instance.",
     "5. Fit the answer to the reader context above: explain what the reader is least likely to know, skip what they know, connect to their purpose when the connection is real.",
-    "Use markdown. As few words as the answer needs: under 120 unless the question needs more.",
+    ANSWER_LENGTH,
+    DEPTH_RULE,
     GROUNDING_RULE,
     SPECIFICITY_RULE,
     ...(files.length > 0 || imageCount > 0

@@ -224,7 +224,7 @@ async function handle(req: Request, t: TFunc) {
     db.note.findMany({
       where: { section: { notebookId: data.notebookId }, status: "ACCEPTED" },
       orderBy: { createdAt: "asc" },
-      take: 80,
+      take: 400,
       include: { section: { select: { title: true, hidden: true } } },
     }),
   ]);

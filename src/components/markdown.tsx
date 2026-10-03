@@ -24,8 +24,12 @@ import type { SourceChip } from "@/lib/types";
 // block and flash it (the reader listens for dissect:flash-block).
 const BLOCK_TAG = /\[block ([a-zA-Z0-9]+)\]/g;
 
+// A note is cited as [note <id>]: a chip that opens the note in the notes
+// tray (dissect:show-note), never the bare id.
+const NOTE_TAG = /\[note ([a-zA-Z0-9]+)\]/g;
+
 function linkifyBlockTags(text: string): string {
-  return text.replace(BLOCK_TAG, "[¶](#dissect-block-$1)");
+  return text.replace(BLOCK_TAG, "[¶](#dissect-block-$1)").replace(NOTE_TAG, "[✎](#dissect-note-$1)");
 }
 
 // Note style tags: <u> underlines, <clay>/<sage>/<gold>/<plum> color the text
@@ -470,6 +474,19 @@ function Link({ node, href, children: linkChildren, ...props }: Override<"a">) {
     if (color) painted = <span className={STYLE_CLASS[color]}>{painted}</span>;
     if (styleTags.includes("u")) painted = <u>{painted}</u>;
     return painted;
+  }
+  const noteId = href?.startsWith("#dissect-note-") ? href.slice("#dissect-note-".length) : null;
+  if (noteId) {
+    return (
+      <button
+        type="button"
+        onClick={() => window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId } }))}
+        data-tip={t("panels.showCitedNote")}
+        className="mx-0.5 inline-flex size-[18px] items-center justify-center rounded-full bg-sage-100 align-text-bottom text-[10px] font-semibold text-sage-800 no-underline hover:bg-sage-200"
+      >
+        ✎
+      </button>
+    );
   }
   const blockId = href?.startsWith("#dissect-block-") ? href.slice("#dissect-block-".length) : null;
   if (blockId) {

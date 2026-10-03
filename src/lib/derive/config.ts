@@ -132,6 +132,22 @@ export const DERIVATION_EFFORT: Record<DerivationType, KimiEffort> = {
 export const VOICE_MODEL = CLAUDE_SONNET_5;
 export const VOICE_EFFORT: Record<"fast" | "deep", ClaudeEffort> = { fast: "low", deep: "high" };
 
+// Save as note (SPEC.md §7): an answer organized into one note, its quotes
+// copied verbatim from the blocks the answer cites. The voice command's
+// reasons hold: Claude Sonnet 5 copies quotes exactly and keeps every point.
+export const ORGANIZE_MODEL = CLAUDE_SONNET_5;
+export const ORGANIZE_EFFORT: ClaudeEffort = "medium";
+export const ORGANIZE_MAX_OUTPUT_TOKENS = 16384;
+
+// The note's assistant (SPEC.md §6): a message about the open note becomes
+// an answer and, when the message asks for a change, the note as it should
+// read. Claude Sonnet 5, for the same reasons: it follows an instruction to
+// the letter and keeps every quote word for word. With the web on, the web
+// feature's model answers, like every assistant surface.
+export const NOTE_ASSISTANT_MODEL = CLAUDE_SONNET_5;
+export const NOTE_ASSISTANT_EFFORT: Record<"fast" | "deep", ClaudeEffort> = { fast: "low", deep: "high" };
+export const NOTE_ASSISTANT_MAX_OUTPUT_TOKENS = 32768;
+
 // VISUALIZE (SPEC.md §20, Unitos Ultra) runs on Claude Opus 5.5 at its highest
 // reasoning effort: the model first judges whether a picture can carry the
 // passage's core idea with certainty, and draws only then. Opus 5.5 leads the

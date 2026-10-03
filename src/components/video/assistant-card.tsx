@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { useImeGuard } from "@/lib/ime";
 import { ThinkingChips, useThinking } from "@/components/assistant/thinking-chips";
 import { useWeb, WebChip } from "@/components/assistant/web-chip";
+import { SaveAsNote } from "@/components/assistant/save-as-note";
 import { QueuedList, queuedKey, type QueuedText } from "@/components/assistant/queued-list";
 import { SparkleIcon, StopIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
@@ -298,6 +299,17 @@ export function MediaAssistant({
             ) : (
               <div key={i} className="text-[13px] leading-relaxed text-sand-800">
                 <Markdown>{message.content}</Markdown>
+                {/* Save as note (SPEC.md §7): the answer organized into a note. */}
+                {!(busy && i === messages.length - 1) && message.content.trim() && (
+                  <SaveAsNote
+                    notebookId={notebookId}
+                    documentId={documentId}
+                    origin="act"
+                    question={messages[i - 1]?.content ?? ""}
+                    answer={message.content}
+                    className="mt-1.5 items-end"
+                  />
+                )}
               </div>
             ),
           )}
