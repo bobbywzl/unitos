@@ -311,7 +311,8 @@ async function runEntry(entry: CorpusEntry): Promise<Result> {
   // The checks against the page's lines and fonts (layout.ts): the body's face and the page labels are the
   // document's, the rest each candidate's.
   const face = bodyFace(pdfPath, pages);
-  const labels = labelScores(parsed.pageLabels, result.pdf.sizes.size, pages);
+  const deck = result.pdf.sizes.size >= 2 && [...result.pdf.sizes.values()].every((z) => z.width > z.height);
+  const labels = labelScores(parsed.pageLabels, result.pdf.sizes.size, pages, deck);
   // A Word file's pictures are its own images, not crops of its rendering's pages: no picture to find.
   const pictures = word ? [] : contentImages(result.pdf, paint);
   const ink: PageInk = { bands: (page, box) => inkBands(pdfPath, page, box), right: (page, box) => inkRight(pdfPath, page, box) };
