@@ -45,7 +45,17 @@ export function definableSelection(quote: string, before: string, after: string)
   return true;
 }
 
-/** A word as a lookup key: case and surrounding space do not count. */
+/** The bare word of a selection: the quotes, brackets, and punctuation
+    around it taken off ("earned;" → "earned"). What Define shows, asks
+    about, and keeps. */
+export function defineWord(text: string): string {
+  const word = text.replace(EDGE, "");
+  // An abbreviation keeps its last dot: "U.S." stays "U.S.".
+  const after = text.slice(text.indexOf(word) + word.length);
+  return word.includes(".") && after.startsWith(".") ? `${word}.` : word;
+}
+
+/** A word as a lookup key: case and the punctuation around it do not count. */
 export function defineKey(text: string): string {
-  return text.trim().toLowerCase();
+  return defineWord(text).toLowerCase();
 }

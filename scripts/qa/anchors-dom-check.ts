@@ -8,7 +8,7 @@
 import { JSDOM } from "jsdom";
 import { blankTolerantMap, paintTableMarks } from "@/components/reader/table-marks";
 import { anchorableOffset, anchorableText } from "@/lib/anchors/dom";
-import { definableSelection } from "@/lib/define";
+import { definableSelection, defineKey, defineWord } from "@/lib/define";
 
 // The helpers read the DOM only when called.
 const { window } = new JSDOM("<!doctype html><body></body>");
@@ -117,6 +117,10 @@ check(definableSelection("readers.", "the ", ""), "Define is offered on a word w
 check(definableSelection("Pages", "Count\n", "\t2"), "Define is offered on one cell's word");
 check(definableSelection("Buddha", "the ", "'s words"), "Define is offered on a word before an apostrophe");
 check(definableSelection("“Dhamma,”", "the ", " he"), "Define is offered on a quoted word");
+
+check(defineWord("earned;") === "earned" && defineWord("“Dhamma,”") === "Dhamma", "Define's word drops the punctuation around it");
+check(defineKey(" Earned; ") === "earned" && defineKey("earned") === "earned", "the word and the word with its semicolon share one lookup key");
+check(defineWord("self-mortification") === "self-mortification" && defineWord("U.S.,") === "U.S." && defineWord("ends.") === "ends", "a hyphen inside stays; a full stop goes, but an abbreviation keeps its last dot");
 
 console.log(failures === 0 ? "all checks pass" : `${failures} failed`);
 process.exit(failures === 0 ? 0 : 1);
