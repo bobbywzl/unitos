@@ -1059,9 +1059,15 @@ export function attachFigureRegions(
   // continues it only where its lines stand: from the caption's left edge,
   // or centered under it. The text's next paragraph starts at its own
   // indent (parse loop finding: GeoTopo's "Die Umkehrabbildung g ist nicht
-  // stetig, …" under its centered caption read into it).
+  // stetig, …" under its centered caption read into it). The follower's
+  // size may be the caption's last run's, not its line's: a caption set
+  // smaller than its label (parse loop finding: a statistics book sets
+  // "Figure 11.2:" in 10 pt and its words in 9 pt; the caption's line
+  // reads 10 pt, so its second line, "is approximately linear.", read as
+  // a paragraph of its own).
   const withFollower = (cap: Segment, follow: Segment | undefined): { text: string; runs: Run[] | undefined; box: Box } => {
     const box = cap.box!;
+    const tail =[...(cap.runs ?? [])].reverse().find((r) => r.look)?.look?.size;
     const aligned = (f: Box, size: number) => Math.abs(f.x1 - box.x1) < size || Math.abs((f.x1 + f.x2) / 2 - (box.x1 + box.x2) / 2) < size;
     if (
       !follow ||
@@ -1070,7 +1076,7 @@ export function attachFigureRegions(
       follow.page !== cap.page ||
       follow.lineSize === undefined ||
       cap.lineSize === undefined ||
-      Math.abs(follow.lineSize - cap.lineSize) >= 0.6 ||
+      (Math.abs(follow.lineSize - cap.lineSize) >= 0.6 && !(tail !== undefined && Math.abs(follow.lineSize - tail) < 0.6)) ||
       box.y1 - follow.box.y2 > cap.lineSize * ctx.leading * 0.9 ||
       (cap.lineSize >= ctx.bodySize * 0.98 && follow.text.length >= 240 && box.y1 - follow.box.y2 > cap.lineSize * 0.35) ||
       (cap.lineSize >= ctx.bodySize * 0.98 && !aligned(follow.box, cap.lineSize))
