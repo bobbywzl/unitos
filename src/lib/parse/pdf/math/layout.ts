@@ -1000,14 +1000,23 @@ function ruledArrayOf(atoms: Atom[], vr: Rule[], rules: Rule[], em: number): Ato
 // row under it may stand half an em lower (parse loop finding: the CS 229
 // refresher's matrices set rows tight, the ⋮ row's baseline 0.8 em over
 // the last row's, and ⋮ read as the last row's superscript).
-function rowLines(atoms: Atom[], unit: number): number[] {
+function rowLines(atoms: Atom[], unit: number, fenced = false): number[] {
   const at = (a: Atom) => Math.round(a.yb * 2) / 2;
   const ys = [...new Set(atoms.map(at))].sort((p, q) => q - p);
   const dotsOnly = (y: number) => atoms.every((a) => at(a) !== y || a.tex === "\\vdots" || a.tex === "\\ddots");
+  // Between fences, two baselines with an atom over an atom (half the
+  // narrower's width or more) are two rows however close: a matrix's
+  // entries stand in a grid, and no cell holds two (parse loop finding:
+  // the CS 229 refresher's x = (x_1; x_2; ⋮; x_n) stands x_2 0.58 em under
+  // x_1, and read as one row the display was a crop). An unfenced display
+  // keeps the step: an arrow's label stands over the arrow, on no row of
+  // its own.
+  const stacked = (y1: number, y2: number) =>
+    fenced && atoms.some((a) => at(a) === y1 && atoms.some((b) => at(b) === y2 && overlapX(a, b) >= 0.5 * Math.min(a.x2 - a.x1, b.x2 - b.x1)));
   const lines: number[] = [];
   for (const y of ys) {
     const last = lines[lines.length - 1];
-    if (last !== undefined && last - y < (dotsOnly(last) ? 0.5 : 0.9) * unit) continue;
+    if (last !== undefined && last - y < (dotsOnly(last) ? 0.5 : 0.9) * unit && !stacked(last, y)) continue;
     lines.push(y);
   }
   return lines;
@@ -1172,7 +1181,7 @@ function fencedGroups(atoms: Atom[], em: number): Atom[] {
       }
       const stackSize = maxSize(content);
       const mains = content.filter((a) => a.size >= stackSize * 0.95 && a.fam !== "omx");
-      const lines = rowLines(mains, stackSize);
+      const lines = rowLines(mains, stackSize, true);
       if (!stacks(lines.length >= 2)) continue;
       // A matrix whose rows are labeled beside it, a label in a column left
       // of its bracket on each row's baseline (a Markov chain's states):
