@@ -1,6 +1,6 @@
 {
  "total": {
-  "f1": 0.907,
+  "f1": 0.908,
   "precision": 0.848,
   "recall": 0.976
  },
@@ -1686,9 +1686,9 @@
    "fn": 0
   },
   "pawszilla.com.celine.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "peppermynta.de-Strickmode.html": {
    "tp": 3,
