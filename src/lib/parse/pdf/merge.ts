@@ -117,6 +117,11 @@ function continuesOnPage(prev: Segment, next: Segment, setting: PageSetting): bo
   const size = prev.lineSize ?? 10;
   const columnBreak = prev.box !== undefined && next.box !== undefined && next.box.y2 > prev.box.y1 && next.box.x1 > prev.box.x2 - size;
   const alike = !sizes || Math.max(...sizes) <= Math.min(...sizes) * 1.2;
+  // A part that ends in a relation or an operator ends no sentence: its
+  // formula goes on in the next part (parse loop finding: ICML p. 6's "to
+  // leading order uniform dropout yields ξ_eff ∼" | "h̄^{−1/2} while the
+  // step schedule gives", cut by a column break, read as two paragraphs).
+  if (alike && /[=∼≈≃≤≥<>+−×·∝≡→↦]$/.test(prev.text.trimEnd())) return true;
   // A column's last line that ran to its edge goes on as a page's does
   // (wrapsOver).
   if (columnBreak && alike && wrapsOver(prev, next, setting)) return true;
