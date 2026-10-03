@@ -1,7 +1,7 @@
 {
  "total": {
   "f1": 0.912,
-  "precision": 0.851,
+  "precision": 0.852,
   "recall": 0.982
  },
  "pages": {
@@ -942,7 +942,7 @@
   },
   "djz.de-amoklauf.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "docs.docker.com.install.html": {
@@ -2267,7 +2267,7 @@
   },
   "wildundhund.de-bonn.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "winfuture.de-NASA.html": {
@@ -2847,7 +2847,7 @@
   },
   "correio24horas.com.br-PMS.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "correiobraziliense.com.br-poderes.html": {
