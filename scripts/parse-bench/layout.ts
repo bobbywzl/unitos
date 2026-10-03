@@ -364,13 +364,19 @@ export function figureScores(pdf: PdfText, cand: Flat): FigureScores {
 
 // ── The body's face ─────────────────────────────────────────────────────────
 
+/** A font's subset prefix: six capitals ("HAAAAA+", the standard's tag) or
+    six hex digits (asciidoctor-pdf's "6ec323+"; parse bench finding: a
+    Chinese book set in one CJK face subset per page counted each subset as a
+    family of its own, and its code font, one subset, as the body's face). */
+export const SUBSET_PREFIX_RE = /^(?:[A-Z]{6}|[0-9a-f]{6})\+/;
+
 /** A face's shape by its name, as a reader tells it: a typewriter face, a
     sans-serif face, else a serif face, by the families a PDF names (a subset
     prefix and a style suffix aside); null for a name none of these tell (a
     symbol font, a face with a trade name only). TeX's own: CMR/ECRM/SFRM and
     Latin Modern Roman serif, CMSS/ECSS/SFSS sans, CMTT/ECTT/SFTT mono. */
 export function faceShape(name: string): "serif" | "sans" | "mono" | null {
-  const n = name.replace(/^[A-Z]{6}\+/, "").toLowerCase();
+  const n = name.replace(SUBSET_PREFIX_RE, "").toLowerCase();
   if (/mono|courier|consol|menlo|inconsolata|typewriter|lucidaconsole|andale|sourcecode|firacode|^(?:cm|ec|sf|lm)tt|nimbusmon|txtt|beramono|cursor/.test(n)) return "mono";
   if (/sans|arial|helvetica|verdana|tahoma|calibri|segoe|frutiger|myriad|gill|futura|univers|roboto|lato|avenir|biolinum|^(?:cm|ec|sf|lm)ss|arimo|carlito|trebuchet|franklin|gothic|meiryo|swiss|optima|montserrat|poppins|raleway|ubuntu|cantarell|heros|avantgarde|candara|corbel|klavika|akzidenz|hei|yahei|dengxian|malgun|dotum|gulim/.test(n)) return "sans";
   if (/serif|times|roman|minion|garamond|palatino|palladio|pagella|georgia|cambria|libertin|charis|utopia|baskerville|caslon|bookman|century|antiqua|^(?:cm|ec|sf)(?:r|bx|ti|sl|csc|cc|rm|u|b)\d|^lmroman|nimbusrom|termes|stix|tinos|caladea|mincho|song|ming|batang|sabon|janson|bembo|plantin|joanna|scala|lucidabright|newton|charter|fourier|dutch|constantia|goudy|didot|bodoni|cochin|hoefler|baskervville|spectral|merriweather|crimson|noto ?serif|source ?serif/.test(n)) return "serif";
@@ -393,7 +399,7 @@ export function bodyFace(path: string, pages: [number, number] | undefined): Fac
     xml = "";
   }
   const families = new Map<string, string>();
-  for (const m of xml.matchAll(/<fontspec id="(\d+)"[^>]*family="([^"]*)"/g)) families.set(m[1], m[2].replace(/^[A-Z]{6}\+/, ""));
+  for (const m of xml.matchAll(/<fontspec id="(\d+)"[^>]*family="([^"]*)"/g)) families.set(m[1], m[2].replace(SUBSET_PREFIX_RE, ""));
   const chars = new Map<string, number>();
   for (const m of xml.matchAll(/<text [^>]*font="(\d+)"[^>]*>([\s\S]*?)<\/text>/g)) {
     const family = families.get(m[1]);
