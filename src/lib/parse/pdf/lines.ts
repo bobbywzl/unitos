@@ -211,7 +211,13 @@ function composeAccents(items: Item[]): Item[] {
         const chars = it ? Array.from(it.str) : [];
         if (it === undefined || chars.length === 0 || it.w <= 0) return -1;
         const advance = it.w / chars.length;
-        const idx = Math.floor((cx - it.x + advance * 0.15) / advance);
+        const at = Math.floor((cx - it.x + advance * 0.15) / advance);
+        // TeX sets an accent over an italic letter shifted right by the
+        // letter's skew: an accent whose center falls up to 0.4 of an advance
+        // past the item's end is its last letter's (parse loop finding: a
+        // statistics book's β̂₀ in txfonts set the hat's center 0.2 em right
+        // of the β's, and the text read "βˆ0", the hat apart).
+        const idx = at === chars.length && cx - (it.x + it.w) < advance * 0.4 ? chars.length - 1 : at;
         return idx >= 0 && idx < chars.length && /\p{L}/u.test(chars[idx]) ? idx : -1;
       };
       const composedAt = (base: Item, idx: number): Item => {
