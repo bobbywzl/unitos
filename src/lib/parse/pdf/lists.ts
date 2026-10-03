@@ -647,12 +647,27 @@ export function readAlgorithm(lines: Line[], i: number, ctx: PageContext, runOf:
   const above = lines[i - 2];
   const apart = above === undefined || above.page !== caption.page || lineColumn(above) !== lineColumn(caption) || above.y - caption.y > caption.size * ctx.leading * 1.5;
   if (!apart && !caption.runs.some((r) => r.bold && r.start <= label - 1 && r.end >= label)) return null;
+  // A numbered line (algorithmic's "15:"): its number stands in a column
+  // of its own at the left, and its words start where its depth sets them.
+  // A line set three steps in holds a tab after its number, and read as
+  // two cells it ended the run; the depth is the words', not the number's
+  // (a number of two digits starts a digit left of one: lines 1–9 read a
+  // step deeper than 10–21). PDF benchmark finding: ieee-elixpo-caching's
+  // Algorithm 1 broke at its line 15 into paragraphs, and Algorithm 2 at
+  // its line 9.
+  const NUMBER_RE = /^\d{1,3}:$/;
+  const numbered = (l: Line) => l.cells.length === 2 && NUMBER_RE.test(l.cells[0].text.trim());
+  const wordsX = (l: Line) => {
+    const items = [...l.items].filter((it) => it.str.trim() !== "").sort((a, b) => a.x - b.x);
+    const first = items.findIndex((it) => !NUMBER_RE.test(it.str.trim()));
+    return first > 0 ? items[first].x : l.x;
+  };
   const run: Line[] = [line];
   for (let j = i + 1; j < lines.length; j++) {
     const next = lines[j];
     const prev = run[run.length - 1];
     const gap = prev.y - next.y;
-    if (runOf[j] !== -1 || next.cells.length !== 1 || lineColumn(next) !== lineColumn(prev) || Math.abs(next.size - size) > size * 0.15) break;
+    if (runOf[j] !== -1 || (next.cells.length !== 1 && !numbered(next)) || lineColumn(next) !== lineColumn(prev) || Math.abs(next.size - size) > size * 0.15) break;
     if (gap <= 0 || gap > size * ctx.leading * 1.6) break;
     run.push(next);
   }
@@ -661,14 +676,15 @@ export function readAlgorithm(lines: Line[], i: number, ctx: PageContext, runOf:
   if (right > 0 && run.slice(0, -1).filter((l) => l.xEnd >= right - size * 1.5).length * 3 > run.length - 1) return null;
   const head = (l: Line) => ALGORITHM_HEAD_RE.test(l.text.trim());
   const levels: number[] = [];
-  for (const x of run.filter((l) => !head(l)).map((l) => l.x).sort((a, b) => a - b)) {
+  for (const x of run.filter((l) => !head(l)).map(wordsX).sort((a, b) => a - b)) {
     if (!levels.some((v) => Math.abs(v - x) <= size * 0.3)) levels.push(x);
   }
-  const depths = run.map((l) => (head(l) ? 0 : Math.max(0, levels.findIndex((v) => Math.abs(v - l.x) <= size * 0.3))));
+  const depths = run.map((l) => (head(l) ? 0 : Math.max(0, levels.findIndex((v) => Math.abs(v - wordsX(l)) <= size * 0.3))));
   const builder = new TextBuilder();
   run.forEach((l, k) => {
     const lead = "  ".repeat(depths[k]);
-    builder.append({ text: lead + l.text, runs: l.runs.map((r) => ({ ...r, start: r.start + lead.length, end: r.end + lead.length })) }, "\n");
+    const text = numbered(l) ? l.text.replace(/\t/, " ") : l.text;
+    builder.append({ text: lead + text, runs: l.runs.map((r) => ({ ...r, start: r.start + lead.length, end: r.end + lead.length })) }, "\n");
   });
   const edge = leftEdge(line, ctx);
   const list: Segment = {
