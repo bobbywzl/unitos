@@ -1,8 +1,8 @@
 {
  "total": {
-  "f1": 0.908,
+  "f1": 0.909,
   "precision": 0.848,
-  "recall": 0.976
+  "recall": 0.978
  },
  "pages": {
   "100noticias.com-millones.html": {
@@ -1597,7 +1597,7 @@
   },
   "0a962f6bcd5649f7a7e6effa338df80d.html": {
    "tp": 3,
-   "fp": 0,
+   "fp": 1,
    "fn": 0
   },
   "newrepublic.com.neoliberalism.html": {
@@ -1631,9 +1631,9 @@
    "fn": 0
   },
   "nurmeinstandpunkt.wordpress.com.blogposting.html": {
-   "tp": 0,
+   "tp": 3,
    "fp": 0,
-   "fn": 3
+   "fn": 0
   },
   "nwx.new-work.se.digitaler-stress.html": {
    "tp": 3,
@@ -1841,9 +1841,9 @@
    "fn": 0
   },
   "seglerblog.stössenseer.de.sauber.html": {
-   "tp": 0,
+   "tp": 3,
    "fp": 0,
-   "fn": 3
+   "fn": 0
   },
   "selbermachen.de-wohngewaechshaus.html": {
    "tp": 3,
@@ -4902,7 +4902,7 @@
   },
   "zooroyal.de.trixie.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "0a4a8ab61c054192b1ec70cc3570cf45.html": {
