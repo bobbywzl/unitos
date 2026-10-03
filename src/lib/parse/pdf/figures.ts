@@ -405,6 +405,15 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
   // is the page's (arXiv 2609.29669 p9: a chart's 40-character title kept
   // the chart from being a figure, and its caption lost its figure).
   const isBodyLine = (r: TextRun) => r.chars >= 60;
+  // The right edge of the page's text column: where its rightmost line
+  // of page text ends, when four lines or more end within an em and a
+  // half of it (a column set ragged right ends most lines a word short
+  // of the edge). null on any other page.
+  const textEdge = (() => {
+    const ends = runs.filter(isPageText).map((r) => r.box.x2);
+    const edge = Math.max(...ends);
+    return ends.filter((e) => edge - e <= textSize * 1.5).length >= 4 ? edge : null;
+  })();
   // A chart's ticks: three numbers or more in a row, or right-aligned in a
   // column, on the box or within a line of it.
   const ticked = (box: Box) => {
@@ -506,9 +515,26 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     // compact set, eight shapes, was no figure: its labels read as an
     // equation and two crops).
     const sparse = shapes >= 5 && shapes >= paths.length * 0.8 && sized && ink < area(box) * 0.05 && !inside.some(isPageText);
+    // A drawing in the margin beside the text column: three paths or
+    // more, a shape among them, a figure's width and a line tall at the
+    // least, its box an em or more past the column's right edge, with no
+    // page text inside it (parse loop finding: a Tufte textbook's margin
+    // figures, an axis and a potential step in six paths, were no figure;
+    // their labels read as a table's cells beside the paragraph and as
+    // math crops).
+    const margin =
+      textEdge !== null &&
+      paths.length >= 3 &&
+      shapes >= 1 &&
+      box.x1 >= textEdge + textSize &&
+      w >= pageWidth * 0.12 &&
+      h >= textSize &&
+      ink < area(box) * 0.12 &&
+      !inside.some(isPageText);
     const drawn =
       (paths.length >= 10 && (shapes > paths.length * 0.5 || (shapes >= 2 && ticked(box))) && sized && ink < area(box) * 0.12) ||
       sparse ||
+      margin ||
       (shapes >= 10 && images.length === 0 && !meetsText(box) && nearLabel(box));
     if (image && !inside.some(isPageText)) found.push({ box, drawn: false, pictures: images.map((m) => m.box) });
     else if (image) found.push(...picturesOf(images.map((m) => m.box)));
