@@ -1,7 +1,7 @@
 {
  "total": {
   "f1": 0.914,
-  "precision": 0.854,
+  "precision": 0.855,
   "recall": 0.982
  },
  "pages": {
@@ -87,7 +87,7 @@
   },
   "jamaica.gleaner.com-victims.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "jamaicaobserver.com-attacks.html": {
@@ -3102,7 +3102,7 @@
   },
   "eluniversal.com-senador.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "emotion.de.selfcare.html": {
@@ -4792,7 +4792,7 @@
   },
   "0a24692a9ea846c1819bd6a5f92a8874.html": {
    "tp": 5,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "wbf.admin.ch.14093.html": {
