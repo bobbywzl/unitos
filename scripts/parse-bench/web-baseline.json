@@ -1,7 +1,7 @@
 {
  "total": {
   "f1": 0.966,
-  "precision": 0.941,
+  "precision": 0.942,
   "recall": 0.992
  },
  "pages": {
@@ -386,9 +386,9 @@
    "recall": 1
   },
   "70cb2d5bca": {
-   "f1": 0.886,
-   "precision": 0.805,
-   "recall": 0.987
+   "f1": 0.928,
+   "precision": 0.866,
+   "recall": 1
   },
   "776a1c0467": {
    "f1": 0.96,
@@ -711,9 +711,9 @@
    "recall": 1
   },
   "c7e39ac49f": {
-   "f1": 0.923,
-   "precision": 0.873,
-   "recall": 0.978
+   "f1": 0.957,
+   "precision": 0.928,
+   "recall": 0.987
   },
   "c81e134ed4": {
    "f1": 0.981,
@@ -826,8 +826,8 @@
    "recall": 0.773
   },
   "ea25dd7edf": {
-   "f1": 0.969,
-   "precision": 0.941,
+   "f1": 0.984,
+   "precision": 0.968,
    "recall": 1
   },
   "eb62ac8425": {
