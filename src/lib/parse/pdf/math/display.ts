@@ -1782,6 +1782,48 @@ export function displayEquations(
     }
     if (above?.box && above.page === group[0].page && above.box.y1 > crop.y1) crop = { ...crop, y2: Math.min(crop.y2, above.box.y1 - 1) };
     if (below?.box && below.page === group[0].page && below.box.y2 < crop.y2) crop = { ...crop, y1: Math.max(crop.y1, below.box.y2 + 1) };
+    // A crop takes the marks drawn against it: a shape, a picture, or a
+    // lone glyph no line reads, inside the crop's width and within a line
+    // and a half of its edge, is the picture's, with the short rules
+    // beside it, and so is the next mark against those, between the
+    // blocks over and under the crop. A rule alone joins nothing (a rule
+    // between a crop and the text is as often a separator), a rule two
+    // fifths of the page long or longer is no mark at all (a running
+    // head's rule, a frame's edge, a table's rule), and a glyph set in a
+    // word with another is text, not a mark (a running head's words drop
+    // from the lines and stay among the page's glyphs). Parse loop
+    // finding: the probability cheatsheet's timeline, an axis with its
+    // arrivals marked and "0 T₁ … T₅" under it, cropped its labels alone,
+    // and the axis and its marks were in no block.
+    if (!equation) {
+      orphans ??= orphanGlyphs(lines, ctx.drawing);
+      const lone = orphans;
+      const inWord = (g: Glyph) => lone.some((h) => h !== g && Math.abs(h.y - g.y) < 0.1 * g.size && Math.abs(h.size - g.size) < 0.1 * g.size && (h.x - (g.x + g.w) > -0.1 * g.size && h.x - (g.x + g.w) < 0.3 * g.size || g.x - (h.x + h.w) > -0.1 * g.size && g.x - (h.x + h.w) < 0.3 * g.size));
+      const marks: { box: Box; rule: boolean }[] = [
+        ...ctx.drawing.rules.filter((r) => (r.dir === "h" ? r.x2 - r.x1 : r.y2 - r.y1) < pageWidth * 0.4).map((box) => ({ box, rule: true })),
+        ...ctx.drawing.paths.filter((b) => !b.clip && Math.min(b.x2 - b.x1, b.y2 - b.y1) >= 1.5).map((box) => ({ box, rule: false })),
+        ...ctx.drawing.images.map((box) => ({ box, rule: false })),
+        ...lone.filter((g) => !inWord(g)).map((g) => ({ box: { x1: g.x, x2: g.x + Math.max(g.w, 0), y1: g.y - 0.2 * g.size, y2: g.y + 0.7 * g.size }, rule: false })),
+      ];
+      const top = above?.box && above.page === group[0].page && above.box.y1 > crop.y1 ? above.box.y1 - 1 : Infinity;
+      const bottom = below?.box && below.page === group[0].page && below.box.y2 < crop.y2 ? below.box.y2 + 1 : -Infinity;
+      const inWidth = (b: Box) => b.x1 >= crop.x1 - em * 2 && b.x2 <= crop.x2 + em * 2 && Math.min(b.x2, crop.x2) - Math.max(b.x1, crop.x1) >= (b.x2 - b.x1) * 0.5;
+      const taken = new Set<{ box: Box; rule: boolean }>();
+      for (let grew = true; grew; ) {
+        const over = marks.filter((m) => !taken.has(m) && inWidth(m.box) && m.box.y1 >= crop.y2 - em * 0.2 && m.box.y1 <= crop.y2 + em * 1.5 && m.box.y1 < top && m.box.y2 > crop.y2);
+        const under = marks.filter((m) => !taken.has(m) && inWidth(m.box) && m.box.y2 <= crop.y1 + em * 0.2 && m.box.y2 >= crop.y1 - em * 1.5 && m.box.y2 > bottom && m.box.y1 < crop.y1);
+        grew = false;
+        for (const list of [over, under]) {
+          if (list.length === 0 || list.every((m) => m.rule)) continue;
+          grew = true;
+          for (const m of list) {
+            taken.add(m);
+            crop = { x1: Math.min(crop.x1, m.box.x1 - size * 0.3), x2: Math.max(crop.x2, m.box.x2 + size * 0.3), y1: Math.min(crop.y1, m.box.y1 - size * 0.3), y2: Math.max(crop.y2, m.box.y2 + size * 0.3) };
+          }
+        }
+        crop = { ...crop, y1: Math.max(crop.y1, bottom), y2: Math.min(crop.y2, top) };
+      }
+    }
     if (equation) {
       out.push({
         type: "EQUATION",
