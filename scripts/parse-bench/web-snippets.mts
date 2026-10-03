@@ -71,7 +71,9 @@ if (detail) urls = urls.filter((u) => data[u].file === detail);
 else if (only) urls = urls.filter((u) => only.includes(data[u].file));
 if (limit) urls = urls.slice(0, limit);
 
-const norm = (text: string) => text.replace(/\s+/g, " ").trim();
+// A soft hyphen (U+00AD) is drawn as nothing but at a line's end: a passage
+// marked with or without one ("Ita­li­ens", "Italiens") is the same words.
+const norm = (text: string) => text.replace(/­/g, "").replace(/\s+/g, " ").trim();
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return Promise.race([p, new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`timeout after ${ms} ms`)), ms))]);
 }

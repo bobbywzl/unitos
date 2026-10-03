@@ -679,8 +679,12 @@ function isCaptionBlock(block: ParsedBlock | undefined): boolean {
 // Caltech/ASU)", "(AP Photo/Gene J. Puskar)" — names and agencies set apart
 // by slashes in parentheses, each opening with a capital or a digit, and no
 // sentence after. A unit or a pair of words in parentheses ("(km/h)",
-// "(and/or)") opens lowercase.
-const AGENCY_CREDIT_END_RX = /\(\s*(?:[^()/]{1,40}\/){1,4}[^()/]{1,40}\)$/u;
+// "(and/or)") opens lowercase. "via" sets them apart as a slash does: "(NASA
+// via AP, File)", "(Photo by Zhao Yun/VCG via Getty Images)" (web benchmark
+// finding: a lead photo's caption, 38 words, read as a news story's first
+// paragraph; 5 pages close a caption so, none in the article's text).
+const AGENCY_CREDIT_END_RX = /\(\s*(?:[^()/]{1,40}?(?:\/| via )){1,4}[^()/]{1,40}\)$/u;
+const AGENCY_CREDIT_SPLIT_RX = /\/| via /;
 const CREDITED_CAPTION_WORDS_MAX = 40;
 
 /** A caption told by the agency credit that closes it, at most forty words,
@@ -696,7 +700,7 @@ export function isCreditedCaption(text: string): boolean {
   if (!/\p{L}/u.test(t.slice(0, m.index))) return false;
   return m[0]
     .slice(1, -1)
-    .split("/")
+    .split(AGENCY_CREDIT_SPLIT_RX)
     .every((part) => /^[\p{Lu}\d©]/u.test(part.trim()));
 }
 

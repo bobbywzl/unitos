@@ -1,7 +1,7 @@
 {
  "total": {
-  "f1": 0.973,
-  "precision": 0.955,
+  "f1": 0.975,
+  "precision": 0.958,
   "recall": 0.992
  },
  "pages": {
@@ -461,8 +461,8 @@
    "recall": 0.995
   },
   "8380689f35": {
-   "f1": 0.806,
-   "precision": 0.675,
+   "f1": 0.972,
+   "precision": 0.945,
    "recall": 1
   },
   "851498a2b9": {
@@ -626,8 +626,8 @@
    "recall": 1
   },
   "b37be3535e": {
-   "f1": 0.851,
-   "precision": 0.741,
+   "f1": 0.996,
+   "precision": 0.992,
    "recall": 1
   },
   "b3c19dd5f0": {
@@ -791,9 +791,9 @@
    "recall": 0.996
   },
   "e1cd54e557": {
-   "f1": 0.901,
-   "precision": 0.831,
-   "recall": 0.983
+   "f1": 0.923,
+   "precision": 0.857,
+   "recall": 1
   },
   "e372e42c0a": {
    "f1": 1,
@@ -876,8 +876,8 @@
    "recall": 1
   },
   "f5c90a6d52": {
-   "f1": 0.979,
-   "precision": 0.958,
+   "f1": 0.999,
+   "precision": 0.999,
    "recall": 1
   },
   "f6ac15a4d9": {
