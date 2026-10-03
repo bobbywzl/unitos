@@ -101,6 +101,9 @@ const STRIP_BUTTON =
 const SHEET_HEIGHT = "max-md:h-[min(max(60%,400px),calc(100%-150px))]";
 // md and up: the tray is the side column; below it, the sheet.
 const MD_QUERY = "(min-width: 768px)";
+// How long a jump to a tray card waits for the card to show: a note just
+// made arrives with the refresh, seconds on a slow network.
+const FLASH_WAIT_MS = 15_000;
 
 // Tray width bounds: the bar between the reader and the tray drags within
 // these, so it can never overextend — the tray keeps a readable minimum and
@@ -435,17 +438,25 @@ export function Workspace({
   // sheet), open the note if it is collapsed (the card listens for
   // dissect:open-note), scroll, flash.
   useEffect(() => {
-    // Scroll to the tray's card and flash it. Below md the sheet that holds
-    // it may still be opening: the flash waits for the card to show, a frame
-    // at a time, a second at most.
-    const flash = (selector: string, frames = 60) => {
+    // Scroll to the tray's card and flash it. The card may not be there
+    // yet, on every width: the sheet that holds it is opening (below md), a
+    // folded tray or section is unfolding, or the note was just made and
+    // comes with the refresh. The flash waits for the card to show, a frame
+    // at a time, FLASH_WAIT_MS at most; onFound runs first, the frame the
+    // card shows.
+    const flash = (selector: string, onFound?: () => void, until = Date.now() + FLASH_WAIT_MS) => {
       const el = trayRef.current?.querySelector<HTMLElement>(selector);
       if (el && el.getClientRects().length > 0) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-        el.classList.add("anchor-flash");
-        setTimeout(() => el.classList.remove("anchor-flash"), 2000);
-      } else if (frames > 0 && !window.matchMedia(MD_QUERY).matches) {
-        requestAnimationFrame(() => flash(selector, frames - 1));
+        onFound?.();
+        // The next frame: an opened card has its full height to center on.
+        requestAnimationFrame(() => {
+          const card = trayRef.current?.querySelector<HTMLElement>(selector) ?? el;
+          card.scrollIntoView({ behavior: "smooth", block: "center" });
+          card.classList.add("anchor-flash");
+          setTimeout(() => card.classList.remove("anchor-flash"), 2000);
+        });
+      } else if (Date.now() < until) {
+        requestAnimationFrame(() => flash(selector, onFound, until));
       }
     };
     const onShowNote = (e: Event) => {
@@ -456,9 +467,9 @@ export function Workspace({
       openSheet();
       revealTray();
       setTimeout(() => {
-        window.dispatchEvent(new CustomEvent("dissect:open-note", { detail: { noteId } }));
-        // The next frame: the opened card has its full height to center on.
-        requestAnimationFrame(() => flash(`[data-note-id="${noteId}"]`));
+        flash(`[data-note-id="${noteId}"]`, () =>
+          window.dispatchEvent(new CustomEvent("dissect:open-note", { detail: { noteId } })),
+        );
       }, 100);
     };
     // A mark the reader has no card for focuses its card in the Annotations
@@ -479,7 +490,7 @@ export function Workspace({
         reopening = sourceId;
         window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId } }));
         reopening = null;
-        requestAnimationFrame(() => flash(`[data-annotation-source-id="${sourceId}"]`));
+        flash(`[data-annotation-source-id="${sourceId}"]`);
       }, 150);
     };
     // The page editor's Show all comments opens the Annotations tab.
@@ -682,10 +693,21 @@ export function Workspace({
             {!collab.ultra && !offlineSaved && <TierMark state="ultra" size={10} />}
           </button>
         )}
+        {/* The pending count opens the pending notes: the tray on notes,
+            the first pending note in view and flashed. */}
         {pending.length > 0 && (
-          <span className="hidden shrink-0 rounded-full bg-clay-200 px-3.5 py-1.5 text-xs font-semibold text-clay-800 lg:inline">
+          <button
+            onClick={() =>
+              window.dispatchEvent(
+                new CustomEvent("dissect:show-note", { detail: { noteId: actions.focusedPendingId ?? pending[0].id } }),
+              )
+            }
+            data-track="pending-count"
+            data-tip={t("panes.pendingCountTitle")}
+            className="hidden shrink-0 rounded-full bg-clay-200 px-3.5 py-1.5 text-xs font-semibold text-clay-800 hover:bg-clay-300 lg:inline"
+          >
             {t("panes.pendingCount", { n: pending.length })}
-          </span>
+          </button>
         )}
         <button
           onClick={openGuide}

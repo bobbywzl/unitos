@@ -108,8 +108,10 @@ const HeldContext = createContext<HeldStore | null>(null);
 const noSubscribe = () => () => {};
 
 /** Where the dragged card would land: before this card, or at the end of this
-    list. Items and groups read it to draw the line. */
-type DropLine = { listId: string; beforeId: string | null };
+    list. Items and groups read it to draw the line. header: the pointer is
+    on the list's header (a section's title row), which lands the card at the
+    top of the list and lights up. */
+type DropLine = { listId: string; beforeId: string | null; header?: boolean };
 const DropLineContext = createContext<DropLine | null>(null);
 
 /** The list an item is in: its id, its ids, and its layout, so the item
@@ -187,10 +189,25 @@ function itemAt(
 
 /** The line the pointer asks for: the card it is on decides — in a column
     its top half lands the drag before it and its bottom half after it; in a
-    grid its left half and its right half. Off every card, the list under the
-    pointer takes it at the end, and a list holding nothing takes it on its
-    own space. */
-function dropLineAt(root: ParentNode, lists: Lists, x: number, y: number): DropLine | null {
+    grid its left half and its right half. On a list's header (an element
+    marked data-drop-header with the list's id: a section's title row) the
+    card lands at the top of that list — a folded section, whose list is not
+    drawn, too: its header names its first card in data-drop-first. Off every
+    card, the list under the pointer takes it at the end, and a list holding
+    nothing takes it on its own space. */
+function dropLineAt(
+  root: ParentNode,
+  lists: Lists,
+  x: number,
+  y: number,
+  allowed: (listId: string) => boolean,
+): DropLine | null {
+  for (const el of root.querySelectorAll<HTMLElement>("[data-drop-header]")) {
+    const listId = el.dataset.dropHeader;
+    if (!listId || !allowed(listId) || !inRect(x, y, el.getBoundingClientRect())) continue;
+    const entry = lists.find(([id]) => id === listId)?.[1];
+    return { listId, beforeId: entry ? (entry.ids[0] ?? null) : el.dataset.dropFirst || null, header: true };
+  }
   const on = itemAt(root, lists, x, y);
   if (on) {
     const after =
@@ -321,7 +338,9 @@ export function SortableBoard({
   function setDropLine(next: DropLine | null) {
     lineRef.current = next;
     setLine((prev) =>
-      prev?.listId === next?.listId && prev?.beforeId === next?.beforeId ? prev : next,
+      prev?.listId === next?.listId && prev?.beforeId === next?.beforeId && prev?.header === next?.header
+        ? prev
+        : next,
     );
   }
 
@@ -398,10 +417,9 @@ export function SortableBoard({
 
     // Only the lists this card can land in.
     const from = listOf(dragged);
-    const lists: Lists = [...registry.current.entries()].filter(
-      ([listId]) => !from || !canDrop || canDrop(from[0], listId),
-    );
-    setDropLine(dropLineAt(root(), lists, x, y));
+    const allowed = (listId: string) => !from || !canDrop || canDrop(from[0], listId);
+    const lists: Lists = [...registry.current.entries()].filter(([listId]) => allowed(listId));
+    setDropLine(dropLineAt(root(), lists, x, y, allowed));
 
     if (!onMerge) return;
     // Where the dragged card is drawn: under the pointer, at the offset it was
@@ -578,6 +596,13 @@ export function SortableBoard({
         )}
     </DndContext>
   );
+}
+
+/** Whether the dragged card would land through this list's header: the
+    header lights up (it carries data-drop-header with the list's id). */
+export function useDropHeader(listId: string): boolean {
+  const line = useContext(DropLineContext);
+  return Boolean(line?.header && line.listId === listId);
 }
 
 // One list inside a board. It holds no DndContext of its own — the board's

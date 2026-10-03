@@ -1,15 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import type { SectionView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { PencilIcon, PlusIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
-import { DragHandle, SortableGroup, SortableItem, type HandleProps } from "@/components/sortable";
+import { DragHandle, SortableGroup, SortableItem, useDropHeader, type HandleProps } from "@/components/sortable";
 import { notesList, sectionsList } from "@/components/outline/board-lists";
 import { NoteCard } from "@/components/outline/note-card";
-import { NoteComposer } from "@/components/outline/note-composer";
+import { NoteComposer, focusComposer } from "@/components/outline/note-composer";
 import { SECTION_ACTION, SECTION_ADD_NOTE } from "@/components/outline/section-action";
 import { useNoteCompose } from "@/components/outline/use-note-compose";
 import { VoiceNoteButton } from "@/components/outline/voice-note";
@@ -49,6 +49,10 @@ export function SectionItem({
   // A search that found nothing here, and nothing in the children: the
   // section stays out of the way.
   const childrenShown = searching ? filterSections(section.children, search) : section.children;
+  const rootRef = useRef<HTMLElement>(null);
+  // A note held over the title row lands at the top of the section
+  // (sortable.tsx data-drop-header).
+  const headerLit = useDropHeader(notesList(section.id));
   if (searching && notes.length === 0 && childrenShown.length === 0) return null;
 
   async function saveTitle() {
@@ -62,8 +66,14 @@ export function SectionItem({
   }
 
   return (
-    <section className={`group flex flex-col gap-2.5 ${nested ? "mt-4 pl-5" : ""}`}>
-      <div className="flex items-baseline gap-2.5">
+    <section ref={rootRef} className={`group flex flex-col gap-2.5 ${nested ? "mt-4 pl-5" : ""}`}>
+      <div
+        data-drop-header={notesList(section.id)}
+        data-drop-first={notes[0]?.id ?? ""}
+        className={`-mx-2 flex items-baseline gap-2.5 rounded-full px-2 transition-colors ${
+          headerLit ? "bg-clay-100 ring-2 ring-clay-400" : ""
+        }`}
+      >
         <span className="self-center">
           <DragHandle handle={handle} label={t("outline.reorderSection", { title: section.title })} />
         </span>
@@ -114,7 +124,11 @@ export function SectionItem({
         <span className="text-[13px] text-sand-600">{notes.length || ""}</span>
         {canEdit && (
           <button
-            onClick={compose.open}
+            onClick={() => {
+              // A second press while the composer is open puts the caret back in it.
+              if (compose.composing) focusComposer(rootRef.current);
+              else compose.open();
+            }}
             data-track="section-add-note"
             data-tip={t("outline.addNoteTitle")}
             className={`ml-auto ${SECTION_ADD_NOTE}`}
@@ -143,7 +157,7 @@ export function SectionItem({
       <div className="flex flex-col gap-2.5">
         {/* The composer sits above the notes: a new note lands at the top of
             the section (SPEC.md §6). */}
-        {compose.composing && <NoteComposer compose={compose} full padding="p-4" />}
+        {compose.composing && <NoteComposer compose={compose} onRelease={() => actions.expectComposed(section.id)} full padding="p-4" />}
 
         {/* The page's one board holds every section's notes, so a note
             dragged out of this section drops into another; a note held over

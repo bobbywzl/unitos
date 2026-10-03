@@ -245,7 +245,7 @@ export function SectionBoard({
             the section (SPEC.md §6). */}
         {compose.composing && (
           <div className="mb-5 max-w-[760px]">
-            <NoteComposer compose={compose} full padding="p-4" />
+            <NoteComposer compose={compose} onRelease={() => actions.expectComposed(section.id)} full padding="p-4" />
           </div>
         )}
 
@@ -265,7 +265,7 @@ export function SectionBoard({
             // height limits, so the dragged tile keeps its size.
             return note ? (
               <div className={`h-full${sizedClass}`} style={tileVars}>
-                <NoteTile note={note} actions={actions} onOpen={() => {}} />
+                <NoteTile note={note} actions={actions} onOpen={() => {}} lifted />
               </div>
             ) : null;
           }}
