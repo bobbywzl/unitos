@@ -1415,6 +1415,9 @@ function isEquationShaped(s: Segment, ctx: PageContext, columnLeft: number): boo
 // (its \tag, or \tag* for a proof's end mark; left: the page sets it at the
 // left margin, as amsbook does). null when an item holds text the drawing
 // has no glyph for (the check could not see it).
+// A text font's spacing accent (layout.ts TEXT_ACCENTS).
+const TEXT_ACCENT_RE = /^[ˆ^˜~¯˙ˇ˘´`¨]$/;
+
 function formulaGlyphs(line: Line, pageOrphans: Glyph[], page: Glyph[], lines: Line[]): { glyphs: Glyph[]; label: string | null; labelGlyphs: Glyph[]; left: boolean } | null {
   if (line.items.some((i) => !i.glyphs?.length)) return null;
   const top = line.yMax + line.size * 1.2;
@@ -1646,8 +1649,10 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext, lines: Line[
       if (labels.some((b) => g.x + g.w / 2 > b.x1 && g.x + g.w / 2 < b.x2 && g.y > b.y1 && g.y < b.y2)) return true;
       if (!within(g) || sentence(g)) return false;
       // A text font's ligature ("ﬁ") is letters: it hangs from nothing (the
-      // line over arXiv 2506.06752 (14) failed it).
-      const hangs = g.family === null && (isUnreadMath(g) || !/^[\p{Script=Latin}\p{Script=Greek}\p{N}\p{P}]+$/u.test(g.unicode.normalize("NFKC")));
+      // line over arXiv 2506.06752 (14) failed it). Nor does a text font's
+      // accent: it sits over its letter on the row above (the hat of the
+      // row over a textbook's (24.14b) stood within an em over its box).
+      const hangs = g.family === null && !TEXT_ACCENT_RE.test(g.unicode) && (isUnreadMath(g) || !/^[\p{Script=Latin}\p{Script=Greek}\p{N}\p{P}]+$/u.test(g.unicode.normalize("NFKC")));
       return g.y >= box.y1 - size * 0.05 && g.y < box.y2 + (hangs ? g.size : 0);
     });
     if (stray) return null;

@@ -524,12 +524,16 @@ export function resolveZones(lines: Line[], drawing: PageDrawing) {
   }
 }
 
-/** Whether a glyph stands on the baseline of another line of text (no
-    display's), within that line, and off this line's: it is that line's. */
+/** Whether a glyph stands on the baseline of another line, within that
+    line, and off this line's: it is that line's. A line of text, or
+    another display's row (parse loop finding: a textbook's aligned rows
+    (24.14a–c) stand 24 pt apart, each a display of its own; the \vec of
+    one row, drawn on its baseline, stood within 1.2 em over the next
+    row's ∫ and went into its formula as a row of its own). */
 export function onOtherLine(g: Glyph, line: Line, lines: Line[]): boolean {
   return (
     Math.abs(line.y - g.y) >= g.size * 0.1 &&
-    lines.some((l) => l !== line && !l.display && Math.abs(l.y - g.y) < g.size * 0.1 && g.x >= l.x - g.size * 0.5 && g.x <= l.xEnd + g.size * 0.5)
+    lines.some((l) => l !== line && Math.abs(l.y - g.y) < g.size * 0.1 && g.x >= l.x - g.size * 0.5 && g.x <= l.xEnd + g.size * 0.5)
   );
 }
 
