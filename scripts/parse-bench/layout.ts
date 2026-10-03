@@ -27,9 +27,14 @@ const CJK = /^[\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}]$/u;
     several lines print it, the first at or after the last line placed (the
     reading goes on), else the nearest before it. A table's cell of one or
     two words is placed by its words whole, the same way (a table reads
-    cell by cell, so the last line placed is its neighbor's). A unit half of
-    whose words no line holds (a script the text layer reads blind) is
-    placed on none. */
+    cell by cell, so the last line placed is its neighbor's). A caption's
+    lines stand together: a run of a caption after its first is placed on a
+    line within three line heights under the caption's last line, else on
+    none (a caption's last words stand in the prose too, "production
+    conversation archives" half a page under the table; placed there, the
+    caption's reading runs on from the prose and the table's cells after it
+    land on prose lines). A unit half of whose words no line holds (a script
+    the text layer reads blind) is placed on none. */
 export function linesOfUnits(pdf: PdfText, cand: Flat): number[][] {
   const runs = new Map<string, number[]>();
   const size = (words: string[], k: number) => (words.slice(k, k + 3).every((w) => CJK.test(w)) ? 6 : 3);
@@ -48,9 +53,13 @@ export function linesOfUnits(pdf: PdfText, cand: Flat): number[][] {
   });
   let last = 0;
   const next = (found: number[]) => found.find((l) => l >= last) ?? found.reduce((a, b) => (Math.abs(b - last) < Math.abs(a - last) ? b : a));
+  // A caption's line after its first: on the page of the last line placed, from that line's top to three line heights under it.
+  const together = (prev: Line, l: Line) => l.page === prev.page && l.top >= prev.top - 1 && l.top <= prev.top + 3 * (prev.bottom - prev.top);
   return cand.units.map((unit) => {
     const out: number[] = [];
     const words = cand.toks.slice(unit.first, unit.end).map((x) => x.w);
+    const block = cand.blocks[unit.block];
+    const caption = block.kind === "figure" || (block.kind === "table" && unit.index === -1) || (block.kind === "paragraph" && block.role === "caption");
     if (words.length > 0 && words.length < 3 && cand.blocks[unit.block].kind === "table") {
       const found = runs.get(`${words.length}:${words.join(" ")}`);
       if (found) out.push((last = next(found)));
@@ -62,7 +71,10 @@ export function linesOfUnits(pdf: PdfText, cand: Flat): number[][] {
       const n = size(words, k);
       const found = k + n <= words.length ? runs.get(`${n}:${words.slice(k, k + n).join(" ")}`) : undefined;
       if (!found) continue;
-      const line = (last = next(found));
+      const prev = caption && out.length > 0 ? pdf.lines[out[out.length - 1]] : undefined;
+      const line = prev ? found.find((l) => together(prev, pdf.lines[l])) : next(found);
+      if (line === undefined) continue;
+      last = line;
       for (let t = k; t < k + n; t++) held.add(t);
       if (out.at(-1) !== line) out.push(line);
     }

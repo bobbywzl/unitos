@@ -1619,6 +1619,26 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     return captionSides(tablePage, f, linesOfUnits(tablePage, f));
   };
   check("floats: a caption the page sets under its table is wrong over it", sideOf("above").wrong === 1 && sideOf("below").wrong === 0 && sideOf("below").tables === 1, `${JSON.stringify(sideOf("above"))}`);
+  // A caption of two lines whose last words stand in the prose half a page under the table: placed on its own lines, the cells on theirs.
+  const twoLines: DocBlock = {
+    kind: "table",
+    caption: [{ text: "TABLE III HUFFMAN COMPRESSION RATIOS ON PRODUCTION CONVERSATION ARCHIVES" }],
+    captionSide: "above",
+    rows: [{ cells: [{ spans: [{ text: "Session" }] }, { spans: [{ text: "Ratio" }] }] }, { cells: [{ spans: [{ text: "c45775-a" }] }, { spans: [{ text: "65.3%" }] }] }],
+  };
+  const twoLinesPage = pdfOf([
+    line(100, 72, 300, "TABLE III"),
+    line(112, 72, 300, "H UFFMAN COMPRESSION RATIOS ON PRODUCTION CONVERSATION"),
+    line(124, 72, 300, "ARCHIVES"),
+    line(140, 72, 300, "Session Ratio"),
+    line(152, 72, 300, "c45775-a 65.3%"),
+    line(400, 72, 300, "Session names appear in the prose too, as do these"),
+    line(412, 72, 300, "production conversation archives."),
+  ]);
+  const twoLinesFlat = flatten({ blocks: [twoLines] });
+  const twoLinesPlaced = linesOfUnits(twoLinesPage, twoLinesFlat);
+  const twoLinesSide = captionSides(twoLinesPage, twoLinesFlat, twoLinesPlaced);
+  check("layout: a caption's last words in the prose under the table do not place the caption there; its table reads over its cells", twoLinesPlaced[0].every((l) => twoLinesPage.lines[l].top < 130) && twoLinesSide.tables === 1 && twoLinesSide.wrong === 0, `${JSON.stringify(twoLinesPlaced)} ${JSON.stringify(twoLinesSide)}`);
 
   // A note mark on the Title the page's title line does not print.
   const titled = (text: string) => {
