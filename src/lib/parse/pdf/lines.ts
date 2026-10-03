@@ -275,8 +275,16 @@ function opensCell(prev: Item, item: Item, size: number, next?: Item): boolean {
   const gap = item.x - (prev.x + prev.w);
   const words = next !== undefined && CJK_START_RE.test(next.str.trimStart()) && next.x - (item.x + item.w) < size * 0.5;
   const numeric = NUMERIC_TOKEN_RE.test(prev.str.trim()) && NUMERIC_TOKEN_RE.test(item.str.trim()) && !words;
-  return gap > Math.max(8, size * 1.6) || (numeric && gap > size * 1.0);
+  // An equation's label at the line's end, half an em or more past a
+  // glyph of a math font, opens a cell of its own (parse loop finding:
+  // ICML's (10) sets its label 0.6 em after the formula's comma in a
+  // column filled to its edge; read into the formula's cell, the line held
+  // no label, read as text with "Bernoulli" among its words, and the
+  // display was a crop).
+  const label = next === undefined && prev.math && !item.math && EQUATION_LABEL_RE.test(item.str.trim()) && gap > size * 0.5;
+  return gap > Math.max(8, size * 1.6) || (numeric && gap > size * 1.0) || label;
 }
+const EQUATION_LABEL_RE = /^\(\d{1,3}(?:\.\d{1,3}){0,2}[a-z]?\)$/;
 
 // A glyph set smaller than its cell's text and raised or lowered off the
 // text's baseline is a superscript or a subscript. Footnote references sit
