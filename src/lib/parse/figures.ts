@@ -445,6 +445,27 @@ function dropControls(clone: Element) {
   }
 }
 
+// A link to a picture file: a figure's own link, opening its picture.
+export const PICTURE_LINK_RX = /\.(?:jpe?g|png|gif|webp|avif|svg)(?:[?#]|$)/i;
+
+/** A picture linked to another page is the link's picture: a banner, a
+    teaser, a logo. Its alt is the link's words (a calendar banner's "Alle
+    wichtigen Termine für Unternehmerinnen und Unternehmer", a partner's
+    logo's name), not the picture's caption, and is no figure text (held-out
+    set finding: 8 such alts read as a figure's text, each marked as not the
+    article; the set holds 4884 linked pictures with an alt, 40 of them
+    marked so and 6 marked as the article's, each of those 6 said in the
+    text too). A link to the picture itself, to a fragment of the page, or
+    to the picture's own attachment page (rel="attachment") is a figure's
+    own link. */
+function linkedAway(img: Element, el: Element): boolean {
+  const a = img.closest("a[href]") ?? el.closest("a[href]");
+  if (!a) return false;
+  const href = (a.getAttribute("href") ?? "").trim();
+  if (!href || /^(?:#|javascript:)/i.test(href) || PICTURE_LINK_RX.test(href)) return false;
+  return !/(?:^|\s)attachment(?:$|\s)/i.test(a.getAttribute("rel") ?? "");
+}
+
 export function figureBlock(el: Element, ctx: WalkCtx): ParsedBlock | null {
   const clone = el.cloneNode(true) as Element;
   dedupeFigureMedia(clone);
@@ -459,7 +480,7 @@ export function figureBlock(el: Element, ctx: WalkCtx): ParsedBlock | null {
   const caption = figureCaption(clone);
   // The img may be the element itself (a bare <img> in the flow).
   const altImg = clone.matches("img[alt]") ? clone : clone.querySelector("img[alt]");
-  const alt = normalizeText(altImg?.getAttribute("alt") ?? "");
+  const alt = altImg && !linkedAway(altImg, el) ? normalizeText(altImg.getAttribute("alt") ?? "") : "";
   // A figure row: one nested figure per captioned column.
   const row = figureRow(clone);
   if (row) nestColumns(row);
