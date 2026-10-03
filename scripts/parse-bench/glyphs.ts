@@ -7,6 +7,7 @@ import katex from "katex";
 import { getDocumentProxy } from "unpdf";
 import { readDrawing, type FontLookup, type Glyph } from "@/lib/parse/pdf/drawing";
 import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
+import type { Box } from "@/lib/parse/pdf/types";
 import { regionBounds, type Region } from "@/lib/video/types";
 import type { Doc } from "./adapt";
 import { ROOT } from "./load";
@@ -23,7 +24,13 @@ import { mathLeaves } from "./math";
 
 /** A glyph as the checks read it. */
 export type PageGlyph = Pick<Glyph, "family" | "code" | "unicode" | "symbol" | "x" | "y" | "w" | "size">;
-export type PageGlyphs = { width: number; height: number; glyphs: PageGlyph[] };
+/** A drawn shape: a painted path more than 2 pt tall and wide (a box, a
+    curve, an arrowhead, a cross; a fraction bar or a rule is thinner), an
+    image, or a shading. A formula draws none; a diagram draws them. */
+export type PageShape = Box;
+export type PageGlyphs = { width: number; height: number; glyphs: PageGlyph[]; shapes: PageShape[] };
+/** The thickness a rule reaches: a painted path thicker than it both ways is a shape. */
+const RULE_THICKNESS = 2;
 
 /** A family of TeX's math fonts, whose codes the tables name. */
 const MATH = new Set(["oml", "oms", "omx", "msa", "msb", "euf", "rsfs", "lasy"]);
@@ -80,8 +87,14 @@ export function pdfGlyphs(path: string): Promise<PageGlyphs[] | null> {
             return null;
           }
         };
-        const glyphs = readDrawing(ops, lookup, viewport.width, viewport.height).glyphs.map(({ family, code, unicode, symbol, x, y, w, size }) => ({ family, code, unicode, ...(symbol !== undefined ? { symbol } : {}), x, y, w, size }));
-        pages.push({ width: viewport.width, height: viewport.height, glyphs });
+        const drawing = readDrawing(ops, lookup, viewport.width, viewport.height);
+        const glyphs = drawing.glyphs.map(({ family, code, unicode, symbol, x, y, w, size }) => ({ family, code, unicode, ...(symbol !== undefined ? { symbol } : {}), x, y, w, size }));
+        const shapes: PageShape[] = [
+          ...drawing.paths.filter((p) => !p.clip && p.x2 - p.x1 > RULE_THICKNESS && p.y2 - p.y1 > RULE_THICKNESS),
+          ...drawing.images,
+          ...drawing.shades,
+        ].map(({ x1, y1, x2, y2 }) => ({ x1, y1, x2, y2 }));
+        pages.push({ width: viewport.width, height: viewport.height, glyphs, shapes });
       }
       await pdf.loadingTask.destroy();
       mkdirSync(DISK, { recursive: true });
@@ -427,6 +440,21 @@ function glyphsIn(page: PageGlyphs, region: Region): PageGlyph[] {
   });
 }
 
+/** The drawn shapes inside a region (to 1% of the page past its edges): a
+    diagram's boxes, curves, arrowheads, and pictures. A shape that reaches
+    past the region is the page's (a column's white ground), not the figure's. */
+function shapesIn(page: PageGlyphs, region: Region): PageShape[] {
+  const b = regionBounds(region);
+  const slack = 1;
+  return page.shapes.filter((s) => {
+    const x1 = (s.x1 / page.width) * 100;
+    const x2 = (s.x2 / page.width) * 100;
+    const y1 = ((page.height - s.y2) / page.height) * 100;
+    const y2 = ((page.height - s.y1) / page.height) * 100;
+    return x1 >= b.x1 - slack && x2 <= b.x2 + slack && y1 >= b.y1 - slack && y2 <= b.y2 + slack;
+  });
+}
+
 /** An equation's printed number among a display region's glyphs: a run in a
     text font on one baseline at the region's right or left end that reads
     "(3)", "(2.1)", "(A.3)", set an em or more apart from the formula
@@ -689,8 +717,18 @@ export function glyphScores(pages: PageGlyphs[], doc: Doc, range: [number, numbe
       // A figure with its own caption ("Fig. 11") is a figure, whatever
       // fonts its labels are set in: Springer's Fig. 11 sets a chart's
       // axes and legend in TeX's math fonts, and counted as an equation.
+      // So is a figure whose region draws a shape (shapesIn): a formula
+      // draws glyphs and thin rules only; a chart's axes and curves, a
+      // diagram's boxes, a timeline's arrowhead and crosses are shapes. PDF
+      // benchmark finding: a chart with no caption (geotopo p12), a
+      // three-column diagram under braces (probability-cheatsheet p2) and
+      // the label pieces of a drawn diagram (geotopo p20) counted as
+      // equations shown as pictures, as their labels are set in TeX's math
+      // fonts; the count penalized the right reading of a diagram as a
+      // figure, and would have rewarded cutting one into an equation.
       const captioned = OWN_CAPTION_RE.test((block.caption ?? []).map((s) => s.text).join("").trim());
-      if (!captioned && glyphs.length > 0 && glyphs.every((g) => g.family !== null) && glyphs.some((g) => MATH.has(g.family ?? ""))) mathImages++;
+      const drawnDiagram = shapesIn(page, block.at.region).length > 0;
+      if (!captioned && !drawnDiagram && glyphs.length > 0 && glyphs.every((g) => g.family !== null) && glyphs.some((g) => MATH.has(g.family ?? ""))) mathImages++;
       continue;
     }
     if (block.kind !== "equation") continue;
