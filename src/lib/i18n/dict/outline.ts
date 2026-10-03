@@ -33,12 +33,12 @@ const en = {
   saved: "Saved",
   saveFailed: "Not saved",
   savedOffline: "Saved on this device · syncs when online",
-  // Hold to drag (SPEC.md §6): a hold anywhere on a note picks it up.
-  holdToDrag:
-    "Hold to drag. Move the note, hold it over another note to merge the two, or drop it on the article to float it.",
-  holdToDragPage: "Hold to drag. Move the note, or hold it over another note to merge the two.",
+  // Hold to drag (SPEC.md §6): a hold anywhere on a note picks it up. One
+  // short line: the tip sits on the cards around the one under the pointer.
+  holdToDrag: "Hold to move, merge, or float the note",
+  holdToDragPage: "Hold to move or merge the note",
   holdToMoveCard: "Hold to move this card. Drop it on the notes tray to put the note back.",
-  holdToDragTile: "Hold to drag. Move the note, or hold it over another note to merge the two. Click to open it.",
+  holdToDragTile: "Click to open. Hold to move or merge the note",
   // A section's board (SPEC.md §6): the section's notes filling the screen as tiles.
   openBoardTitle: "Open this section as a board: its notes side by side, filling the screen",
   boardSections: "Sections inside",
@@ -64,7 +64,10 @@ const en = {
   copy: "Copy",
   copied: "Copied",
   copyTitle: "Copy the note text",
-  confirmDeleteNote: "Delete this note?",
+  noteDeleted: "Note deleted",
+  notesDeleted: "{n} notes deleted",
+  undoDeleteTitle: "Put the deleted notes back",
+  deleteFailed: "The note was not deleted and is back in its place: {reason}",
   anchorUnresolvedTitle: "Anchor unresolved. Quoted text: {quote}",
   unresolvedLabel: "unresolved:",
 
@@ -101,6 +104,8 @@ const en = {
   mergedNotes: "{n} notes merged into one",
   undoMergeTitle: "Put the merged notes back as they were",
   dropNote: "Drop to merge this note in",
+  dropQuoteSectionTop: "Let go to make a new note at the top of {section}",
+  dropQuoteSectionEnd: "Let go to make a new note at the end of {section}",
   dropAnnotation: "Drop to put this annotation in the note: its quote, then its text",
   // An annotation reference in a note (lib/annotation-reference.ts): the
   // row's second line, its tooltip, and the annotation beside the note on the
@@ -115,7 +120,6 @@ const en = {
   pin: "Pin",
   unpin: "Unpin",
   pinnedLabel: "Pinned",
-  confirmDeleteSelected: "Delete {n} notes?",
   clearSelection: "Clear selection",
   holdToMerge: "Hold here until the ring closes to merge into this note",
 
@@ -254,10 +258,10 @@ const zh: Record<keyof typeof en, string> = {
   saved: "已保存",
   saveFailed: "未保存",
   savedOffline: "已保存在此设备 · 联网后同步",
-  holdToDrag: "按住即可拖动。移动笔记；压在另一条笔记上按住即合并；放到文章上即浮动。",
-  holdToDragPage: "按住即可拖动。移动笔记，或压在另一条笔记上按住即合并。",
+  holdToDrag: "按住即可移动、合并或浮动笔记",
+  holdToDragPage: "按住即可移动或合并笔记",
   holdToMoveCard: "按住即可移动此卡片。放到笔记栏上即把笔记放回。",
-  holdToDragTile: "按住即可拖动。移动笔记，或压在另一条笔记上按住即合并。点击打开。",
+  holdToDragTile: "点击打开。按住即可移动或合并笔记",
   openBoardTitle: "以看板打开此章节：笔记并排铺满屏幕",
   boardSections: "内含章节",
   boardEmpty: "此章节还没有笔记。",
@@ -280,7 +284,10 @@ const zh: Record<keyof typeof en, string> = {
   copy: "复制",
   copied: "已复制",
   copyTitle: "复制笔记文本",
-  confirmDeleteNote: "删除此笔记？",
+  noteDeleted: "笔记已删除",
+  notesDeleted: "已删除 {n} 条笔记",
+  undoDeleteTitle: "把删除的笔记放回原处",
+  deleteFailed: "笔记没有删除，已放回原处：{reason}",
   anchorUnresolvedTitle: "锚点无法定位。引文：{quote}",
   unresolvedLabel: "无法定位：",
 
@@ -306,6 +313,8 @@ const zh: Record<keyof typeof en, string> = {
   mergedNotes: "已把 {n} 条笔记合并为一条",
   undoMergeTitle: "把合并的笔记恢复原样",
   dropNote: "松开即把这条笔记合并进来",
+  dropQuoteSectionTop: "松开即在 {section} 顶部新建一条笔记",
+  dropQuoteSectionEnd: "松开即在 {section} 末尾新建一条笔记",
   dropAnnotation: "松开即把这条批注放进笔记：先是引文，再是批注内容",
   annotationReference: "批注",
   annotationReferenceTitle: "打开这条批注",
@@ -316,7 +325,6 @@ const zh: Record<keyof typeof en, string> = {
   pin: "置顶",
   unpin: "取消置顶",
   pinnedLabel: "已置顶",
-  confirmDeleteSelected: "删除这 {n} 条笔记？",
   clearSelection: "清除选择",
   holdToMerge: "按住不动直到圆环合拢，即合并进这条笔记",
 

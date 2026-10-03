@@ -13,11 +13,15 @@ import type { useNoteCompose } from "@/components/outline/use-note-compose";
 // carries the core tools, the page's the whole bar.
 export function NoteComposer({
   compose,
+  onRelease,
   full,
   moreHref,
   padding,
 }: {
   compose: ReturnType<typeof useNoteCompose>;
+  /** Save or Escape is letting the note go: the list takes it as the
+      composer closes (use-outline.ts expectComposed). */
+  onRelease?: () => void;
   /** The whole bar (the notes full page); false: the core tools (the tray). */
   full: boolean;
   /** With the core bar: where the whole bar is — the notes full page. */
@@ -27,11 +31,25 @@ export function NoteComposer({
 }) {
   const t = useT();
   const { parts, setTitle, setBody } = useNoteParts(compose.draft, compose.setDraft);
+  // Save on an empty composer is Cancel: there is nothing to keep.
+  function save() {
+    if (!compose.draft.trim()) {
+      void compose.cancel();
+      return;
+    }
+    onRelease?.();
+    void compose.save();
+  }
+  function escape() {
+    if (compose.draft.trim()) onRelease?.();
+    compose.escape();
+  }
   return (
     <form
+      data-note-composer=""
       onSubmit={(e) => {
         e.preventDefault();
-        void compose.save();
+        save();
       }}
     >
       {/* The save state at the top of the composer (SPEC.md §6). */}
@@ -45,7 +63,7 @@ export function NoteComposer({
           onKeyDown={(e) => {
             if (isImeKey(e)) return;
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.closest("form")?.requestSubmit();
-            if (e.key === "Escape") compose.escape();
+            if (e.key === "Escape") escape();
           }}
           placeholder={t("outline.writeNotePlaceholder")}
           full={full}
@@ -57,7 +75,7 @@ export function NoteComposer({
               value={parts.title}
               onChange={setTitle}
               onEnter={() => focusBodyEditor(document.activeElement as HTMLElement | null)}
-              onEscape={compose.escape}
+              onEscape={escape}
               autoFocus
             />
           }
@@ -82,4 +100,27 @@ export function NoteComposer({
       </div>
     </form>
   );
+}
+
+/** Put the caret back in the composer under `root`: its title field when
+    the title is empty, else the end of the body. */
+export function focusComposer(root: HTMLElement | null) {
+  const form = root?.querySelector<HTMLElement>("[data-note-composer]");
+  const title = form?.querySelector<HTMLInputElement>("input.note-title-input");
+  if (title && !title.value.trim()) {
+    title.focus();
+    return;
+  }
+  const body = form?.querySelector<HTMLElement>("[contenteditable]");
+  if (!body) {
+    title?.focus();
+    return;
+  }
+  body.focus();
+  const range = document.createRange();
+  range.selectNodeContents(body);
+  range.collapse(false);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
 }

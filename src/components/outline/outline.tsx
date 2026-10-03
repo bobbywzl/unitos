@@ -188,15 +188,19 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
       </div>
       )}
 
-      <SelectionBar
-        tree={tree}
-        actions={actions}
-        onCompare={(ids) => {
-          setCompare(ids);
-          actions.clearSelection();
-        }}
-      />
-      <MergeUndoBar actions={actions} />
+      {/* The bars are drawn on the body (merge-undo.tsx): while a board is
+          open it draws both of its own, and By document its selection bar. */}
+      {board === null && !byDocument && (
+        <SelectionBar
+          tree={tree}
+          actions={actions}
+          onCompare={(ids) => {
+            setCompare(ids);
+            actions.clearSelection();
+          }}
+        />
+      )}
+      {board === null && <MergeUndoBar actions={actions} />}
 
       <Presence show={board !== null} exit="fade">
         {board && (

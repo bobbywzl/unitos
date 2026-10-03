@@ -2079,8 +2079,12 @@ ellipse.anchor-flash {
   .content-in {
     animation: fade-in 0.28s ease-out both;
   }
+  /* The tray's tab rises in, then lets the transform go: filling for good
+     kept the scroll box transformed, so every fixed control drawn inside it
+     (the Undo pill, the selection bar, a conversation over the page)
+     scrolled with the tray and sat off screen once it was scrolled. */
   .panel-in {
-    animation: rise-in-short 0.22s ease-out both;
+    animation: rise-in-short 0.22s ease-out backwards;
   }
   /* Below md only: on md+ the same aside sits in the side column. */
   @media (max-width: 767.98px) {
