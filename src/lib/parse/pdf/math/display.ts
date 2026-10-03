@@ -1778,8 +1778,17 @@ export function displayEquations(
       // Once a row joined, only a block against the last joins: the rows
       // touch, and the next display stands a skip apart.
       let rows = false;
+      // A block in another column than the display (a Tufte book's
+      // margin text) is no part of it, and the walk stops there: a part
+      // overlaps the display's block across, within an em (parse loop
+      // finding: a textbook's "Active Reading 24.1: Do the integrals out
+      // in your notes.", set in the margin level with a display, joined
+      // its crop, and the line of prose over it joined too).
+      const own = segments[k].box;
+      const across = (s: Segment) => !own || !s.box || (s.box.x1 < own.x2 + em && s.box.x2 > own.x1 - em);
       while (m < segments.length && !(tex && displayOf(segments[m]))) {
         const s = segments[m];
+        if (!across(s)) break;
         const loose: boolean = !rows && ((!tex && isMathSegment(s, ctx)) || isMissed(s) || part(s)) && near(segments[m - 1], s);
         if (!loose && !(row(s) && against(segments[m - 1], s))) break;
         rows ||= !loose;
@@ -1793,6 +1802,7 @@ export function displayEquations(
       // Backward over equation-shaped lines and rows already pushed.
       while (out.length > 0) {
         const s = out[out.length - 1];
+        if (!across(s)) break;
         const loose: boolean = !rows && part(s) && near(s, segments[start]);
         if (!loose && !(row(s) && against(s, segments[start]))) break;
         rows ||= !loose;

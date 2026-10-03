@@ -911,6 +911,51 @@ function countWords(texts: string[]): Map<string, number> {
 /** A formula's text command and its words: "\text{ und }". */
 const TEXT_RE = /\\(?:text|textup|textrm|textit|textbf|mbox)\s*\{([^{}]*)\}/g;
 
+/** A formula's accent as the text layer reads it: a combining mark. KaTeX's
+    MathML leaves an accent as a spacing character ("^" for \hat, "~" for
+    \tilde, "ˉ" for \bar, "ˇ" for \check, "ˊ" for \acute), and pdftotext
+    reads the page's accent glyph as a combining mark on its letter ("x̂",
+    "ĥ") or, set apart from it, as a spacing modifier letter ("ˆ"). */
+const ACCENT_MARK: Record<string, string> = {
+  "^": "\u0302",
+  "ˆ": "\u0302",
+  "~": "\u0303",
+  "˜": "\u0303",
+  "ˉ": "\u0304",
+  "¯": "\u0304",
+  "\u0305": "\u0304",
+  "˙": "\u0307",
+  "¨": "\u0308",
+  "ˇ": "\u030c",
+  "ˊ": "\u0301",
+  "´": "\u0301",
+  "ˋ": "\u0300",
+  "`": "\u0300",
+  "˘": "\u0306",
+  "˚": "\u030a",
+};
+
+/** A word's characters as the page's glyphs, on both sides of the formula
+    cover: compatibility forms folded as normWord folds them (NFKC: 𝐱 is x,
+    ² is 2), then decomposed (NFD: "ĥ" is h and its hat), each accent its combining
+    mark (ACCENT_MARK), ħ its h and its macron, lower case, letters, digits,
+    and marks only. Parse bench finding: a quantum mechanics textbook set in
+    mathpazo draws \hbar as the text font's macron kerned over an italic h,
+    and \hat as the text font's circumflex over its letter; pdftotext reads
+    "h̄" (h, U+0304), "ih̄", "2πh̄", "Ĥ", "x̂j", and a hat set apart as "ˆ",
+    while the candidate's formulas read ħ and "^", so 38 words of a chapter's
+    displays counted as missing once the displays read as LaTeX, and every
+    rule that read one more display lowered its coverage. */
+export function glyphChars(text: string): string[] {
+  const out: string[] = [];
+  for (const ch of text.normalize("NFKC").normalize("NFD")) {
+    if (ch === "ħ" || ch === "ℏ") out.push("h", "\u0304");
+    else if (ACCENT_MARK[ch] !== undefined) out.push(ACCENT_MARK[ch]);
+    else if (/[\p{L}\p{N}\p{M}]/u.test(ch)) out.push(ch.toLowerCase());
+  }
+  return out;
+}
+
 /** The words the candidate prints, as the PDF's text layer holds them: its
     words and its list markers ("1.1", "(a)"). Its formulas apart, as the
     glyphs they draw (a parse's readable characters, else the glyphs KaTeX
@@ -955,7 +1000,7 @@ function printedWords(
     }
     const reading = m.text?.trim() ? m.text : latex !== undefined || m.mathml !== undefined ? mathLeaves({ ...m, latex }, m.display).join(" ") : "";
     readings.set(m, reading);
-    for (const w of wordsOf(`${reading} ${m.label ?? ""}`)) for (const ch of w.w) glyphs.set(ch, (glyphs.get(ch) ?? 0) + 1);
+    for (const ch of glyphChars(`${reading} ${m.label ?? ""}`)) glyphs.set(ch, (glyphs.get(ch) ?? 0) + 1);
   }
   // A word set tight after a formula ("$n$th", "$k$th"): the text layer reads
   // the formula's glyphs and the word as one word ("nth"). parse loop
@@ -1078,7 +1123,7 @@ export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word 
     const short = (expected.get(joined) ?? 0) > (candBag.get(joined) ?? 0);
     const extra = parts.every((w) => (candBag.get(w) ?? 0) > (expected.get(w) ?? 0));
     const chars = countWords([]);
-    for (const ch of formula) chars.set(ch, (chars.get(ch) ?? 0) + 1);
+    for (const ch of glyphChars(formula)) chars.set(ch, (chars.get(ch) ?? 0) + 1);
     if (!short || !extra || ![...chars].every(([ch, c]) => (formulaGlyphs.get(ch) ?? 0) >= c)) continue;
     for (const [ch, c] of chars) formulaGlyphs.set(ch, (formulaGlyphs.get(ch) ?? 0) - c);
     for (const w of parts) candBag.set(w, (candBag.get(w) ?? 0) - 1);
@@ -1119,7 +1164,7 @@ export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word 
   for (const [w, n] of expected) {
     let rest = n - Math.min(n, candBag.get(w) ?? 0);
     const chars = countWords([]);
-    for (const ch of w) chars.set(ch, (chars.get(ch) ?? 0) + 1);
+    for (const ch of glyphChars(w)) chars.set(ch, (chars.get(ch) ?? 0) + 1);
     while (rest > 0 && [...w].length <= 4 && [...chars].every(([ch, c]) => (formulaGlyphs.get(ch) ?? 0) >= c)) {
       for (const [ch, c] of chars) formulaGlyphs.set(ch, (formulaGlyphs.get(ch) ?? 0) - c);
       covered.set(w, (covered.get(w) ?? 0) + 1);
