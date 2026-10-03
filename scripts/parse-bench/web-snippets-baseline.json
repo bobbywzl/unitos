@@ -1,8 +1,8 @@
 {
  "total": {
-  "f1": 0.896,
+  "f1": 0.897,
   "precision": 0.838,
-  "recall": 0.964
+  "recall": 0.965
  },
  "pages": {
   "100noticias.com-millones.html": {
@@ -306,9 +306,9 @@
    "fn": 0
   },
   "banyuetan.org.1000200033136171577956287380194268_1.html": {
-   "tp": 0,
+   "tp": 3,
    "fp": 0,
-   "fn": 3
+   "fn": 0
   },
   "bibliothek2null.de.mai.html": {
    "tp": 3,
