@@ -1120,14 +1120,28 @@ function splitRows(atoms: Atom[], lines: number[]): Atom[][] {
   // it stands nearer the row over (GeoTopo p19's "n" over ⋃ read as a
   // subscript of the row above's last word).
   // An integral sets its limits beside it, as scripts.
+  // A limit set between two operators, under one and over the other, is
+  // the nearer's: TeX sets a lower limit close under its own ∑, and the
+  // next aligned row's ∑ stands a row's space under that (parse loop
+  // finding: in a proof's chain of three rows, "a ∈ 𝒜(s)" under the
+  // second row's ∑ read its middle as the third row's upper limit, and
+  // the display was a crop).
   const ops = full.filter((o) => o.cls === "op" && hangingFamily(o.fam) && o.entry?.display && !INTEGRAL_RE.test(o.tex));
-  const limitOf = (a: Atom) =>
-    ops.find(
-      (o) =>
-        cx(a) > o.x1 &&
-        cx(a) < o.x2 &&
-        ((a.bottom >= o.top - 0.2 * em && a.bottom - o.top < 0.8 * em) || (a.top <= o.bottom + 0.2 * em && o.bottom - a.top < 0.8 * em)),
-    );
+  const limitOf = (a: Atom) => {
+    let best: Atom | undefined;
+    let gap = Infinity;
+    for (const o of ops) {
+      if (cx(a) <= o.x1 || cx(a) >= o.x2) continue;
+      const over = a.bottom >= o.top - 0.2 * em && a.bottom - o.top < 0.8 * em ? a.bottom - o.top : Infinity;
+      const under = a.top <= o.bottom + 0.2 * em && o.bottom - a.top < 0.8 * em ? o.bottom - a.top : Infinity;
+      const d = Math.min(over, under);
+      if (d < gap) {
+        gap = d;
+        best = o;
+      }
+    }
+    return best;
+  };
   for (const a of atoms) {
     let row = rowOf.get(a);
     const op = row === undefined ? limitOf(a) : undefined;
