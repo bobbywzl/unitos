@@ -7,6 +7,7 @@ import { splitStreamError } from "@/lib/derive/config";
 import { useImeGuard } from "@/lib/ime";
 import { QuestionIcon, StopIcon } from "@/components/icons";
 import { useCollab } from "@/components/collab/collab-context";
+import { useWeb } from "@/components/assistant/web-chip";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { ThinkingIndicator } from "@/components/thinking";
@@ -38,6 +39,7 @@ export function AskRange({
   onClose: () => void;
 }) {
   const t = useT();
+  const web = useWeb();
   const router = useRouter();
   const ime = useImeGuard();
   const { canEdit } = useCollab();
@@ -85,7 +87,7 @@ export function AskRange({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
-        body: JSON.stringify({ type: "ASK", documentId, notebookId, question: q, video: range }),
+        body: JSON.stringify({ type: "ASK", documentId, notebookId, question: q, video: range, web }),
       });
       if (!res.ok || !res.body) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;

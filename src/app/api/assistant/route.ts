@@ -460,8 +460,10 @@ async function handle(req: Request, t: TFunc) {
             cancelled = true;
           }
         };
-        // This page scope: the answer streams up to the actions block; the
-        // block and what follows stay on the server. Text that could still
+        // The answer streams up to the actions block; the block and what
+        // follows stay on the server. This page scope reads it as the plan;
+        // Project scope proposes nothing, so a block written there anyway is
+        // dropped: the reader never sees the JSON. Text that could still
         // become the block (a fence whose JSON is not read yet) waits for
         // the next chunk (scanActionsFence).
         let relayed = "";
@@ -484,18 +486,18 @@ async function handle(req: Request, t: TFunc) {
           sent = Math.max(sent, end);
         };
         try {
-          const full = await streamTextTo(result, act ? relay : send, {
+          const full = await streamTextTo(result, relay, {
             t,
             onPart: (part) => {
               if (part.type === "tool-call" && part.toolName === WEB_SEARCH_TOOL) searches++;
             },
           });
-          const { text, content } = act ? splitActionsFence(full) : { text: full, content: null };
-          if (act) {
-            // The text before the fence, whole: the relay held back what
-            // could have been the fence's start.
-            flush();
-            if (content !== null) send(`${STREAM_PLAN_TOKEN}${JSON.stringify(await planFrom(text, content, send))}`);
+          const { text, content } = splitActionsFence(full);
+          // The text before the fence, whole: the relay held back what could
+          // have been the fence's start.
+          flush();
+          if (act && content !== null) {
+            send(`${STREAM_PLAN_TOKEN}${JSON.stringify(await planFrom(text, content, send))}`);
           }
           // The check (SPEC.md §25): the answer against its rubric, after
           // the reader has it; a weak answer is flagged for the loop.

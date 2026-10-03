@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { thinkingEffort, thinkingSchema } from "@/lib/assistant/thinking";
 import { coreBlocks, layerSchema } from "@/lib/anchors/layer";
+import { annotationKind } from "@/lib/annotations/kind";
 import { passageSources, resolvePassage, segmentsSchema } from "@/lib/anchors/passage";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import {
@@ -225,7 +226,7 @@ async function handle(req: Request, t: TFunc) {
     db.note.findMany({
       where: { section: { notebookId: data.notebookId }, status: "ACCEPTED" },
       orderBy: { createdAt: "asc" },
-      take: 80,
+      take: 400,
       include: { section: { select: { title: true, hidden: true } } },
     }),
   ]);
@@ -398,9 +399,14 @@ async function handle(req: Request, t: TFunc) {
     hasSelection: Boolean(anchored),
     sections,
     otherDocuments: otherDocs,
-    notes: notes
-      .filter((n) => !n.section.hidden)
-      .map((n) => ({ sectionTitle: n.section.title, content: n.content })),
+    // The notes first, then the annotations under their kind, so the reply
+    // can name the reader's previous work (CONNECTION_RULE).
+    notes: [
+      ...notes.filter((n) => !n.section.hidden).map((n) => ({ id: n.id, sectionTitle: n.section.title, content: n.content })),
+      ...notes
+        .filter((n) => n.section.hidden && n.content.trim())
+        .map((n) => ({ id: n.id, sectionTitle: annotationKind(n), content: n.content })),
+    ],
     history,
     command: data.command,
     edits,
