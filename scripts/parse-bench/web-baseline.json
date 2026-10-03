@@ -1,7 +1,7 @@
 {
  "total": {
-  "f1": 0.977,
-  "precision": 0.962,
+  "f1": 0.978,
+  "precision": 0.963,
   "recall": 0.994
  },
  "pages": {
@@ -336,9 +336,9 @@
    "recall": 1
   },
   "624fcd903d": {
-   "f1": 0.924,
-   "precision": 0.865,
-   "recall": 0.993
+   "f1": 0.965,
+   "precision": 0.932,
+   "recall": 1
   },
   "63db31a161": {
    "f1": 0.996,
@@ -651,9 +651,9 @@
    "recall": 0.992
   },
   "ba4dfe2d3e": {
-   "f1": 0.935,
-   "precision": 0.884,
-   "recall": 0.993
+   "f1": 0.976,
+   "precision": 0.953,
+   "recall": 1
   },
   "bc13ff87b2": {
    "f1": 0.972,
