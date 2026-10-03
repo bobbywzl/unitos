@@ -1,8 +1,8 @@
 {
  "total": {
-  "f1": 0.905,
+  "f1": 0.906,
   "precision": 0.849,
-  "recall": 0.969
+  "recall": 0.971
  },
  "pages": {
   "100noticias.com-millones.html": {
@@ -871,9 +871,9 @@
    "fn": 1
   },
   "de.induux.com.energiezaehler.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "motor1.de-erwischt.html": {
    "tp": 3,
@@ -3121,9 +3121,9 @@
    "fn": 0
   },
   "energiezukunft.eu.bioenergie.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "erneuerbareenergien.de.seeboden.html": {
    "tp": 3,
@@ -4741,9 +4741,9 @@
    "fn": 0
   },
   "vegolosi.it.climate.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "verbaende.com.2023.html": {
    "tp": 3,
@@ -4826,9 +4826,9 @@
    "fn": 0
   },
   "wind-energie.de.beschleunigung.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "wired.com.burn.html": {
    "tp": 3,
