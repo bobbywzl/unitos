@@ -646,14 +646,16 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
 
   // A chart's axis labels sit just outside its plot: the ticks under it and
   // beside it, a short word or number each, the first and the last centered
-  // on the axis's ends, no farther off than a line (arXiv 2609.29669 p7: a
-  // bar chart's years read as its caption and as a paragraph; Grinstead–Snell
-  // p8: the last tick, "10000", stayed text and cut Figure 1.5's crop).
+  // on the axis's ends, no farther off than a line and a half (arXiv
+  // 2609.29669 p7: a bar chart's years read as its caption and as a
+  // paragraph; Grinstead–Snell p8: the last tick, "10000", stayed text and
+  // cut Figure 1.5's crop; R sets its ticks a line and a half under the
+  // axis, and a statistics book's "−2 −1 0 1 2" stayed text).
   const axisOf = (plot: Box): TextRun[] =>
     runs.filter((r) => {
       if (taken.has(r) || r.chars > 12 || shareInside(r.box, plot) >= 0.7 || LABEL_START_RE.test(textOf(r))) return false;
       if (/[.!?;:,]$/.test(r.items.map((i) => i.str).join("").trim())) return false;
-      const reach = Math.max(r.size, textSize) * 1.2;
+      const reach = Math.max(r.size, textSize) * 1.7;
       const cx = (r.box.x1 + r.box.x2) / 2;
       const cy = (r.box.y1 + r.box.y2) / 2;
       const across = cx > plot.x1 - r.size && cx < plot.x2 + r.size;
@@ -665,6 +667,38 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
         (along && r.box.x1 >= plot.x2 - r.size && r.box.x1 <= plot.x2 + reach)
       );
     });
+  // A chart's title over its plot and its axis titles under it: a run
+  // centered on the plot (its middle within an em of the plot's), inside
+  // its width, set in the face of the plot's ticks, a face no line of the
+  // page's text is set in, within three lines of the plot or of its ticks,
+  // and short of a sentence (parse loop finding: a statistics book's R
+  // plots: "Histogram of residuals(cars.lm)" over a chart and
+  // "residuals(cars.lm)" under its ticks read as headings, and each
+  // caption stood apart from its figure, with the chart's words between).
+  // A run's face: the face most of its characters are set in (a body
+  // line that opens with a formula's glyph is the body's face).
+  const faceOf = (r: TextRun): string | undefined => {
+    const chars = new Map<string, number>();
+    for (const i of r.items) if (i.look) chars.set(i.look.face, (chars.get(i.look.face) ?? 0) + i.str.trim().length);
+    return [...chars].sort((a, b) => b[1] - a[1])[0]?.[0];
+  };
+  const bodyFaces = new Set(runs.filter((r) => r.chars >= 40 && !r.items.every((i) => i.mono)).map(faceOf));
+  const titlesOf = (plot: Box, axis: TextRun[]): TextRun[] => {
+    const faces = new Set([...axis, ...runsIn(plot).filter((r) => !isPageText(r))].map(faceOf));
+    const mid = (plot.x1 + plot.x2) / 2;
+    const under = Math.min(plot.y1, ...axis.filter((r) => r.box.y2 <= plot.y1 + r.size).map((r) => r.box.y1));
+    const over = Math.max(plot.y2, ...axis.filter((r) => r.box.y1 >= plot.y2 - r.size).map((r) => r.box.y2));
+    return runs.filter((r) => {
+      if (taken.has(r) || axis.includes(r) || r.chars > 60 || LABEL_START_RE.test(textOf(r))) return false;
+      const face = faceOf(r);
+      if (face === undefined || !faces.has(face) || bodyFaces.has(face)) return false;
+      if (/[.!?;:,]$/.test(textOf(r).trim())) return false;
+      const reach = Math.max(r.size, textSize) * 3;
+      const cx = (r.box.x1 + r.box.x2) / 2;
+      if (Math.abs(cx - mid) > r.size || r.box.x1 < plot.x1 - r.size || r.box.x2 > plot.x2 + r.size) return false;
+      return (r.box.y2 <= under + r.size * 0.5 && r.box.y2 >= under - reach) || (r.box.y1 >= over - r.size * 0.5 && r.box.y1 <= over + reach);
+    });
+  };
 
   return merged.map(({ box: plot, drawn, pictures, caption: corner, panel }) => {
     // A caption set on a bar across the drawing, or started across its
@@ -681,8 +715,9 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     });
     const onBar = (r: TextRun) => bars.some((bar) => bar.row.includes(r));
     const axis = drawn && !panel ? axisOf(plot).filter((r) => !onBar(r)) : [];
-    for (const r of axis) taken.add(r);
-    let box = axis.reduce((b, r) => unionBox(b, r.box), plot);
+    const titles = drawn && !panel ? titlesOf(plot, axis).filter((r) => !onBar(r)) : [];
+    for (const r of [...axis, ...titles]) taken.add(r);
+    let box = [...axis, ...titles].reduce((b, r) => unionBox(b, r.box), plot);
     for (const { box: bar } of bars) {
       if (bar.x1 >= box.x2 || bar.x2 <= box.x1 || bar.y1 >= box.y2 || bar.y2 <= box.y1) continue;
       if ((bar.y1 + bar.y2) / 2 > (box.y1 + box.y2) / 2) box = { ...box, y2: Math.min(box.y2, bar.y1) };
@@ -690,7 +725,7 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     }
     const caption = corner ?? captionOf(box);
     for (const r of caption) taken.add(r);
-    const labels = [...axis, ...runsIn(box).filter((r) => !(drawn ? isBodyLine(r) : isPageText(r) || isPageNumber(r)) && !taken.has(r) && !onBar(r))];
+    const labels = [...axis, ...titles, ...runsIn(box).filter((r) => !(drawn ? isBodyLine(r) : isPageText(r) || isPageNumber(r)) && !taken.has(r) && !onBar(r))];
     // Page text that reaches over one side of the graphic (a slide's
     // quotation over the dark half of its photo) leaves that side out of
     // the crop, when at least half the graphic is left.
