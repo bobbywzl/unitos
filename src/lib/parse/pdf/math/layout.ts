@@ -824,8 +824,20 @@ function structure(atoms: Atom[], rules: Rule[], depth = 0): Atom[] {
     const small = Math.max(nearest(ups, 1), nearest(downs, -1));
     const partEm = small < em * 0.8 ? small : em;
     const unit = Math.min(unit0, partEm);
-    const above = chain(ups, y, 1, partEm, rest, unit);
-    const below = chain(downs, y, -1, partEm, rest, unit);
+    let above = chain(ups, y, 1, partEm, rest, unit, r);
+    let below = chain(downs, y, -1, partEm, rest, unit, r);
+    // A fraction's parts are set at one size: glyphs on one side of a bar
+    // set smaller than the other side's by more than a sixth are no part
+    // of it, but the scripts of a neighbor (parse loop finding: Springer's
+    // (17) stacks \overline{A}_{K-1} over \overline{A}_K, and the K of the
+    // upper entry's subscript stood over the lower entry's bar, which read
+    // \frac{K}{A}).
+    const standing = (list: Atom[]) => list.filter((a) => !hangingFamily(a.fam));
+    if (above.length && below.length && standing(above).length && standing(below).length) {
+      const [up, down] = [maxSize(standing(above)), maxSize(standing(below))];
+      if (up < down * 0.85) above = [];
+      else if (down < up * 0.85) below = [];
+    }
     if (above.length && below.length) {
       used.add(r);
       read.add(r);
@@ -905,9 +917,22 @@ function structure(atoms: Atom[], rules: Rule[], depth = 0): Atom[] {
 // the part's size on another baseline than the part's: the rows of cases
 // set their fractions close, and one row's denominator stands just over the
 // next row's numerator (arXiv 2502.02648 (A2) read one inside the other).
-function chain(cands: Atom[], y: number, dir: 1 | -1, em: number, rules: Rule[], unit = em): Atom[] {
+// A rule in the gap that repeats the rule chained from (bar) is no
+// fraction's: it spans the same points, and the glyph across it stands off
+// it as the first glyph taken stands off the bar. The chain ends at it
+// (parse loop finding: Springer's (17) sets a column vector of
+// \overline{A}_i, each entry's bar 0.13 em over it, a row apart; the
+// first bar's chain took three rows, the bars under it read nothing, and
+// the display was a crop).
+function chain(cands: Atom[], y: number, dir: 1 | -1, em: number, rules: Rule[], unit = em, bar?: { x1: number; x2: number }): Atom[] {
   const taken: Atom[] = [];
   let edge = y;
+  const repeats = (r: Rule, a: Atom) => {
+    if (!bar || taken.length === 0 || Math.abs(r.x1 - bar.x1) > 0.1 * em || Math.abs(r.x2 - bar.x2) > 0.1 * em) return false;
+    const first = taken[0];
+    const off = (q: number, b: Atom) => (dir > 0 ? b.bottom - q : q - b.top);
+    return Math.abs(off((r.y1 + r.y2) / 2, a) - off(y, first)) < 0.04 * em;
+  };
   // The baseline of the part's glyphs at its size, since the last rule.
   let row: number | null = null;
   const sorted = cands.sort((a, b) => (dir > 0 ? a.bottom - b.bottom : b.top - a.top));
@@ -923,9 +948,11 @@ function chain(cands: Atom[], y: number, dir: 1 | -1, em: number, rules: Rule[],
     // from it once the parenthesis had moved the edge past the bar, so the
     // display was a crop).
     const from = row === null ? edge : dir > 0 ? Math.min(edge, row) : Math.max(edge, row);
-    const barred = rules.some(
+    const between = rules.filter(
       (r) => r.x1 < a.x2 && r.x2 > a.x1 && (r.y1 + r.y2) / 2 > Math.min(from, near) && (r.y1 + r.y2) / 2 < Math.max(from, near),
     );
+    if (between.some((r) => repeats(r, a))) break;
+    const barred = between.length > 0;
     if (taken.length > 0 && gap > 0.25 * unit && !barred) break;
     // (A radical's sign and a sized delimiter hang from their origins: no baseline.)
     const full = a.size >= em * 0.9 && !hangingFamily(a.fam) && a.cls !== "radical" && a.cls !== "piece";
@@ -1260,13 +1287,19 @@ function fencedGroups(atoms: Atom[], em: number): Atom[] {
         }
         return yes;
       };
-      const right = close ? close.x1 + 0.1 : Infinity;
+      const right = close ? close.x1 : Infinity;
       // The rows may stand a third of an em past the delimiters' ends: a
       // binomial set small fills its \Big parentheses to the brim (parse
       // loop finding: the probability cheatsheet's (n−1 over i−1) in CMEX7
       // stood its "1" 0.23 em over their top, and lost it).
       const reach = 0.35 * em;
-      let content = out.filter((a) => a !== open && a !== close && a.x1 >= open.x2 - 0.1 && a.x2 <= right && a.top <= open.top + reach && a.bottom >= open.bottom - reach);
+      // A delimiter's pieces may stand in a box wider than their ink: the
+      // content starts a fifth of an em into it at most, its middle past
+      // the box (parse loop finding: Springer's (17) sets \overline{A}_{K-1}
+      // from 0.9 pt inside its parenthesis's box to 1.4 pt inside the
+      // closing one's, and the row was no row of the matrix).
+      const inside = (a: Atom) => a.x1 >= open.x2 - 0.2 * em && a.x2 <= right + 0.2 * em && cx(a) > open.x2 && cx(a) < right;
+      let content = out.filter((a) => a !== open && a !== close && inside(a) && a.top <= open.top + reach && a.bottom >= open.bottom - reach);
       if (!close) {
         // What follows cases on the formula's baseline, past every row's end
         // and on no row's baseline (the sentence's period), is the
