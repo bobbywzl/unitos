@@ -14,7 +14,7 @@ import { splitTag } from "./math";
 import { wordsOf } from "./text";
 import { columnEdge } from "./layout";
 import type { InkBand, Rect } from "./paint";
-import type { Flat } from "./metrics";
+import type { Flat, MathItem } from "./metrics";
 
 // What the page editor draws around an import's words, read from its own
 // stylesheets (components/docs, KaTeX's) and the import's attributes, set
@@ -359,6 +359,9 @@ export function displayDrawn(rich: RichNode, index: number): { above: number | n
 
 // ── A table row's height ────────────────────────────────────────────────────
 
+/** TeX that stands taller than its line: a fraction, a binomial, a root, a big operator, an array. */
+const STACKED_TEX_RE = /\\(?:[dt]?frac|[dt]?binom|sqrt|sum|prod|coprod|int|oint|iint|bigcup|bigcap|bigoplus|bigotimes|begin|overset|underset|stackrel|substack|over)\b/;
+
 export type RowHeights = { tables: number; right: number; score: number | null; misses: string[] };
 
 /** The height the page editor draws a table row of one line in: the cell
@@ -418,8 +421,15 @@ export function rowHeights(cand: Flat, placed: number[][], pdf: PdfText): RowHei
         return n > 0;
       });
     };
+    // A row with a stacked formula in a cell (a fraction, a binomial, a root, a big operator, an array) is not
+    // measured: the page editor draws the row as tall as the formula, near twice the line for a fraction, and
+    // so does the page, where this measure knows the line's height alone (parse loop finding: ICML's Table 1
+    // sets 1/2 and 3/2 in its cells; its rows stand 17 pt apart on the page, and the measure drew them at the
+    // line's 12 pt). A formula's cell has no words of its own, so it is not among the row's placed units.
+    const stacked = (m: MathItem) => STACKED_TEX_RE.test(m.latex ?? "") || m.mathml !== undefined;
+    const formulaRows = new Set(cand.math.filter((m) => !m.display && m.block === b && stacked(m)).map((m) => cand.units[m.unit].row));
     for (const [row, units] of [...rows].sort((a, c) => a[0] - c[0])) {
-      if (!units.every(oneLine)) continue;
+      if (!units.every(oneLine) || formulaRows.has(row)) continue;
       const lines = units.map((u) => pdf.lines[placed[u][0]]);
       // parse loop finding: a grid of small numbers ("0", "1.0") places a cell on another row's line that
       // holds the same words (tracemonkey's Figure 13 measured its 10 pt rows 20 pt apart): the row stands

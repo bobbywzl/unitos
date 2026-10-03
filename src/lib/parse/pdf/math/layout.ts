@@ -213,7 +213,7 @@ function atomsOf(glyphs: Glyph[]): { atoms: Atom[]; unknown: Glyph[] } {
 // A CJK character (kana, kanji, hangul) is a word's letter too, and text
 // only (parse loop finding: the Japanese "L = E⁻¹ として, A = LU" lost its
 // kana, failed the check, and was a crop).
-const TEXT_CHAR_RE = /^[A-Za-z0-9,.;:()[\]=+−–·!/<>\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u017F\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}ー]$/u;
+const TEXT_CHAR_RE = /^[A-Za-z0-9,.;:()[\]=+−–·!/<>#%&\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u017F\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}ー]$/u;
 /** A letter a word in a formula holds: ASCII, Latin with a mark, or CJK.
     A ligature of TeX's text font (ff, fi, fl, ffi, ffl) is the letters it
     joins: \mathrm{eff} read \mathrm{e}ff. */
@@ -262,7 +262,7 @@ function textAtom(g: Glyph): Atom | null {
     code: g.code,
     entry: null,
     // KaTeX draws "-" in a formula as the minus sign.
-    tex: bold ? `\\${italic ? "boldsymbol" : "mathbf"}{${ch}}` : ch === "−" || ch === "–" ? "-" : ch === "·" ? "\\cdot" : ch,
+    tex: bold ? `\\${italic ? "boldsymbol" : "mathbf"}{${ch}}` : ch === "−" || ch === "–" ? "-" : ch === "·" ? "\\cdot" : /[#%&]/.test(ch) ? `\\${ch}` : ch,
     cls,
     size: g.size,
     x1: g.x,
@@ -336,7 +336,32 @@ function assemblePieces(atoms: Atom[], rules: Rule[]): Atom[] {
   // row of an aligned display) are no absolute value.
   const bars = fences.filter((a) => a.cls === "bar").sort(byX);
   for (const tex of ["|", "\\|"]) {
-    const kind = bars.filter((b) => b.tex === tex);
+    let kind = bars.filter((b) => b.tex === tex);
+    // Bars set against each other with nothing between them are nested
+    // (\left| \left| a matrix \right| \right|: a determinant inside an
+    // absolute value): a run of them on the left pairs with the run on the
+    // right, the inner pair closing first (parse loop finding: the
+    // probability cheatsheet's ||a b; c d|| = |ad − bc| paired each outer bar
+    // with the inner bar beside it, and the display was a crop).
+    const runs: Atom[][] = [];
+    for (const b of kind) {
+      const last = runs[runs.length - 1];
+      const prev = last?.[last.length - 1];
+      const between = (a: Atom) => prev !== undefined && a.x2 > prev.x1 && a.x1 < b.x2 && a.yb < prev.top && a.yb > prev.bottom;
+      if (prev && b.x1 - prev.x2 < 0.35 * b.size && !rest.some(between)) last.push(b);
+      else runs.push([b]);
+    }
+    const overlap = (a: Atom, b: Atom) => Math.min(a.top, b.top) > Math.max(a.bottom, b.bottom);
+    for (let i = 0; i + 1 < runs.length; i++) {
+      const [a, b] = [runs[i], runs[i + 1]];
+      if (a.length < 2 || a.length !== b.length || !overlap(a[0], b[0])) continue;
+      a.forEach((d, k) => {
+        d.cls = "open";
+        b[b.length - 1 - k].cls = "close";
+      });
+      kind = kind.filter((d) => !a.includes(d) && !b.includes(d));
+      i++;
+    }
     for (let i = 0; i + 1 < kind.length; ) {
       if (Math.min(kind[i].top, kind[i + 1].top) > Math.max(kind[i].bottom, kind[i + 1].bottom)) {
         kind[i].cls = "open";
@@ -456,14 +481,20 @@ function fuseComposites(input: Atom[]): Atom[] {
       // stacked (\vdots) or on a diagonal (\ddots). LaTeX sets \vdots and
       // \ddots in the text's roman font: a page whose text font is no
       // Computer Modern stacks the text font's periods (parse loop finding:
-      // mml-book's Charter periods left (2.70) and (2.71) crops).
+      // mml-book's Charter periods left (2.70) and (2.71) crops). It stacks
+      // \vdots' periods 4 pt apart and \ddots' 3 pt, whatever the size: 0.4
+      // and 0.3 em at 10 pt, 0.57 and 0.43 em at 7 pt (parse loop finding:
+      // the CS 229 refresher's D matrix, set at 8 pt, stood its ⋮ 0.502 em
+      // apart, over the bound of 0.5; read as three periods they made two
+      // rows of their own, the last row joined the one over it, and the
+      // display was a crop).
       if (a.tex === "." || a.tex === "\\cdot") {
         const next = (p: Atom, dx: [number, number], dy: [number, number]) =>
           out.find((b) => b !== p && b.tex === a.tex && b.x1 - p.x1 >= dx[0] * em && b.x1 - p.x1 <= dx[1] * em && p.yb - b.yb >= dy[0] * em && p.yb - b.yb <= dy[1] * em);
         const shapes: [string, [number, number], [number, number]][] = [
           [a.tex === "." ? "\\ldots" : "\\cdots", [0.2, 0.6], [-0.03, 0.03]],
-          ["\\vdots", [-0.05, 0.05], [0.3, 0.5]],
-          ["\\ddots", [0.3, 0.5], [0.2, 0.4]],
+          ["\\vdots", [-0.05, 0.05], [0.3, 0.6]],
+          ["\\ddots", [0.3, 0.5], [0.2, 0.45]],
         ];
         for (const [tex, dx, dy] of shapes) {
           if (tex !== "\\ldots" && tex !== "\\cdots" && a.fam !== "ot1" && a.fam !== null) continue;
@@ -631,12 +662,37 @@ function braces(atoms: Atom[], rules: Rule[], used: Set<Rule>): Atom[] {
         (over ? b.bottom >= top - 0.2 * em && b.bottom < top + 1.5 * em : b.top <= bottom + 0.2 * em && b.top > bottom - 1.5 * em),
     );
     if (far.length === 0) continue;
+    // A label wider than its brace runs past the brace's ends: the word
+    // goes on at the label's size on the label's baseline, each letter
+    // against the last (parse loop finding: the CS 229 refresher's
+    // "Antisymmetric" under a brace the width of (A − A^T)/2 kept its
+    // middle, its "A" became the "+"'s subscript, its "ric" a second
+    // label, and the display was a crop).
+    if (near.length > 0) {
+      const ref = near.reduce((p, q) => (q.x2 - q.x1 > p.x2 - p.x1 ? q : p));
+      const onLabel = (b: Atom) => !near.includes(b) && !g.includes(b) && !far.includes(b) && Math.abs(b.yb - ref.yb) < 0.15 * ref.size && Math.abs(b.size - ref.size) < 0.05 * ref.size;
+      for (const dir of [-1, 1]) {
+        for (;;) {
+          const edge = dir < 0 ? Math.min(...near.map((b) => b.x1)) : Math.max(...near.map((b) => b.x2));
+          const gap = (b: Atom) => (dir < 0 ? edge - b.x2 : b.x1 - edge);
+          const next = out.find((b) => onLabel(b) && gap(b) > -0.05 * b.size && gap(b) < 0.25 * b.size);
+          if (!next) break;
+          near.push(next);
+        }
+      }
+    }
     const farRules = rules.filter((r) => !used.has(r) && r.dir === "h" && r.x1 >= x1 - 0.2 * em && r.x2 <= x2 + 0.2 * em && (over ? r.y1 < bottom : r.y1 > top));
     for (const r of farRules) used.add(r);
-    const body = linear(structure(far, farRules, 1));
+    // The brace's baseline is its body's once its fractions are read: a
+    // fraction that opens the content stands its numerator leftmost (parse
+    // loop finding: the thesis's (1.41) set ½H(1/3, 1/6) under an
+    // overbrace, the brace took the numerator's baseline, stood off the
+    // row, and the display was a crop).
+    const structured = structure(far, farRules, 1);
+    const body = linear(structured);
     const label = near.length ? linear(near.map((b) => ({ ...b }))) : "";
     const tex = over ? `\\overbrace{${body}}${label ? `^{${label}}` : ""}` : `\\underbrace{${body}}${label ? `_{${label}}` : ""}`;
-    const made = node([...g, ...far, ...near], tex, mainBaseline(far), maxSize(far));
+    const made = node([...g, ...far, ...near], tex, mainBaseline(structured), maxSize(far));
     out = out.filter((b) => !g.includes(b) && !far.includes(b) && !near.includes(b));
     out.push(made);
   }
@@ -720,9 +776,24 @@ function structure(atoms: Atom[], rules: Rule[], depth = 0): Atom[] {
     // A fraction in a script, its bar short, measures its gaps at its
     // parts' size: the subscript beside an exponent's fraction is no part
     // of it (v_k^{2/p}).
-    const unit = r.x2 - r.x1 < 0.6 * em ? Math.min(em, 1.5 * (r.x2 - r.x1)) : em;
-    const above = chain(pool.filter((a) => within(a) && a.bottom >= y - 0.05 * em), y, 1, em, rest, unit);
-    const below = chain(pool.filter((a) => within(a) && a.top <= y + 0.05 * em), y, -1, em, rest, unit);
+    // So does a fraction whose parts next to its bar are set smaller than
+    // the formula (a matrix of ∂u/∂x in a scriptsize Jacobian), its rows'
+    // baselines too: a matrix row of them stands 0.9 em of its own under
+    // the row over it, and the upper fraction took the lower one as its
+    // denominator (parse loop finding: the probability cheatsheet's
+    // ∂(u,v)/∂(x,y) matrix).
+    const unit0 = r.x2 - r.x1 < 0.6 * em ? Math.min(em, 1.5 * (r.x2 - r.x1)) : em;
+    const nearest = (list: Atom[], dir: 1 | -1) => {
+      const side = list.filter((a) => !hangingFamily(a.fam) && (dir > 0 ? a.bottom - y : y - a.top) < 0.9 * em);
+      return side.length > 0 ? maxSize(side) : em;
+    };
+    const ups = pool.filter((a) => within(a) && a.bottom >= y - 0.05 * em);
+    const downs = pool.filter((a) => within(a) && a.top <= y + 0.05 * em);
+    const small = Math.max(nearest(ups, 1), nearest(downs, -1));
+    const partEm = small < em * 0.8 ? small : em;
+    const unit = Math.min(unit0, partEm);
+    const above = chain(ups, y, 1, partEm, rest, unit);
+    const below = chain(downs, y, -1, partEm, rest, unit);
     if (above.length && below.length) {
       used.add(r);
       read.add(r);
@@ -812,8 +883,16 @@ function chain(cands: Atom[], y: number, dir: 1 | -1, em: number, rules: Rule[],
     const gap = dir > 0 ? a.bottom - edge : edge - a.top;
     if (gap > 0.9 * em) break;
     const near = dir > 0 ? a.bottom : a.top;
+    // A rule between the part's row and the glyph is a fraction's bar
+    // inside the part: the glyph across it is the fraction's other part,
+    // on a row of its own (parse loop finding: the thesis's (1.41) sets
+    // ½H(1/3, 1/6) under an overbrace; the chain took the numerator first,
+    // made its baseline the row, and the "2" under the bar stood too far
+    // from it once the parenthesis had moved the edge past the bar, so the
+    // display was a crop).
+    const from = row === null ? edge : dir > 0 ? Math.min(edge, row) : Math.max(edge, row);
     const barred = rules.some(
-      (r) => r.x1 < a.x2 && r.x2 > a.x1 && (r.y1 + r.y2) / 2 > Math.min(edge, near) && (r.y1 + r.y2) / 2 < Math.max(edge, near),
+      (r) => r.x1 < a.x2 && r.x2 > a.x1 && (r.y1 + r.y2) / 2 > Math.min(from, near) && (r.y1 + r.y2) / 2 < Math.max(from, near),
     );
     if (taken.length > 0 && gap > 0.25 * unit && !barred) break;
     // (A radical's sign and a sized delimiter hang from their origins: no baseline.)
@@ -965,14 +1044,23 @@ function ruledArrayOf(atoms: Atom[], vr: Rule[], rules: Rule[], em: number): Ato
 // row under it may stand half an em lower (parse loop finding: the CS 229
 // refresher's matrices set rows tight, the ⋮ row's baseline 0.8 em over
 // the last row's, and ⋮ read as the last row's superscript).
-function rowLines(atoms: Atom[], unit: number): number[] {
+function rowLines(atoms: Atom[], unit: number, fenced = false): number[] {
   const at = (a: Atom) => Math.round(a.yb * 2) / 2;
   const ys = [...new Set(atoms.map(at))].sort((p, q) => q - p);
   const dotsOnly = (y: number) => atoms.every((a) => at(a) !== y || a.tex === "\\vdots" || a.tex === "\\ddots");
+  // Between fences, two baselines with an atom over an atom (half the
+  // narrower's width or more) are two rows however close: a matrix's
+  // entries stand in a grid, and no cell holds two (parse loop finding:
+  // the CS 229 refresher's x = (x_1; x_2; ⋮; x_n) stands x_2 0.58 em under
+  // x_1, and read as one row the display was a crop). An unfenced display
+  // keeps the step: an arrow's label stands over the arrow, on no row of
+  // its own.
+  const stacked = (y1: number, y2: number) =>
+    fenced && atoms.some((a) => at(a) === y1 && atoms.some((b) => at(b) === y2 && overlapX(a, b) >= 0.5 * Math.min(a.x2 - a.x1, b.x2 - b.x1)));
   const lines: number[] = [];
   for (const y of ys) {
     const last = lines[lines.length - 1];
-    if (last !== undefined && last - y < (dotsOnly(last) ? 0.5 : 0.9) * unit) continue;
+    if (last !== undefined && last - y < (dotsOnly(last) ? 0.5 : 0.9) * unit && !stacked(last, y)) continue;
     lines.push(y);
   }
   return lines;
@@ -1046,10 +1134,17 @@ function columnCuts(rows: Atom[][], em: number, least = Math.min(0.9 * em, 9.5))
   return cuts;
 }
 
+// A fraction or a binomial set in the other style than its place: \dfrac
+// and \dbinom inline, \tfrac and \tbinom in a display (parse loop finding:
+// the probability cheatsheet's sampling table sets its binomials' rows at
+// the text's size in a table's cell, and read as \binom they failed the
+// check on every row glyph's level).
+const restyle = (tex: string, prefix: "d" | "t") => tex.replace(/^\\(frac|binom)\b/, `\\${prefix}$1`);
+
 // A cell of cases or a matrix is set in text style: a fraction whose parts
 // are the text's size there is \dfrac (arXiv 2502.02648 (14)).
 function cells(rows: Atom[][], cuts: number[]): string {
-  const cell = (a: Atom): Atom => ({ ...a, tex: a.fracPart !== undefined && a.fracPart >= style.size * 0.9 ? a.tex.replace(/^\\frac/, "\\dfrac") : a.tex });
+  const cell = (a: Atom): Atom => ({ ...a, tex: a.fracPart !== undefined && a.fracPart >= style.size * 0.9 ? restyle(a.tex, "d") : a.tex });
   return rows
     .map((r) => {
       const parts: Atom[][] = [[]];
@@ -1096,7 +1191,12 @@ function fencedGroups(atoms: Atom[], em: number): Atom[] {
         return yes;
       };
       const right = close ? close.x1 + 0.1 : Infinity;
-      let content = out.filter((a) => a !== open && a !== close && a.x1 >= open.x2 - 0.1 && a.x2 <= right && a.top <= open.top + 0.2 * em && a.bottom >= open.bottom - 0.2 * em);
+      // The rows may stand a third of an em past the delimiters' ends: a
+      // binomial set small fills its \Big parentheses to the brim (parse
+      // loop finding: the probability cheatsheet's (n−1 over i−1) in CMEX7
+      // stood its "1" 0.23 em over their top, and lost it).
+      const reach = 0.35 * em;
+      let content = out.filter((a) => a !== open && a !== close && a.x1 >= open.x2 - 0.1 && a.x2 <= right && a.top <= open.top + reach && a.bottom >= open.bottom - reach);
       if (!close) {
         // What follows cases on the formula's baseline, past every row's end
         // and on no row's baseline (the sentence's period), is the
@@ -1125,7 +1225,7 @@ function fencedGroups(atoms: Atom[], em: number): Atom[] {
       }
       const stackSize = maxSize(content);
       const mains = content.filter((a) => a.size >= stackSize * 0.95 && a.fam !== "omx");
-      const lines = rowLines(mains, stackSize);
+      const lines = rowLines(mains, stackSize, true);
       if (!stacks(lines.length >= 2)) continue;
       // A matrix whose rows are labeled beside it, a label in a column left
       // of its bracket on each row's baseline (a Markov chain's states):
@@ -1140,17 +1240,21 @@ function fencedGroups(atoms: Atom[], em: number): Atom[] {
       const cuts = columnCuts(rows, stackSize);
       const axis = (open.top + open.bottom) / 2;
       let tex: string;
+      // A binomial's rows' size says its style, as a fraction's parts do
+      // (fracPart; restyle).
+      const extra: Partial<Atom> = { rows: lines };
       if (!close && open.tex === "\\{") tex = `\\begin{cases} ${cells(rows, cuts)} \\end{cases}`;
       else if (!close) {
         stacks(false);
         continue;
       } else if (open.tex === "(" && close.tex === ")" && rows.length === 2 && cuts.length === 0) {
         tex = `\\binom{${linear(rows[0].map((a) => ({ ...a })))}}{${linear(rows[1].map((a) => ({ ...a })))}}`;
+        extra.fracPart = stackSize;
       } else {
         const env = FENCE_ENV[open.tex] ?? "matrix";
         tex = `\\begin{${env}} ${cells(rows, cuts)} \\end{${env}}`;
       }
-      made = node([open, ...content, ...(close ? [close] : [])], tex, axis - 0.25 * em, em, { rows: lines });
+      made = node([open, ...content, ...(close ? [close] : [])], tex, axis - 0.25 * em, em, extra);
       out = out.filter((a) => a !== open && a !== close && !content.includes(a));
       out.push(made);
     }
@@ -1659,8 +1763,8 @@ function linearAt(input: Atom[]): string {
     // matrix row's "−1 1" read as −11 (Springer).
     else if ((prev?.cls === "punct" && gap > 0.4 * em) || apart) out.push("\\ ");
     if (a.fracPart !== undefined && nesting === 1) {
-      if (style.display && a.fracPart < style.size * 0.8) tex = tex.replace(/^\\frac/, "\\tfrac");
-      else if (!style.display && a.fracPart >= style.size * 0.9) tex = tex.replace(/^\\frac/, "\\dfrac");
+      if (style.display && a.fracPart < style.size * 0.8) tex = restyle(tex, "t");
+      else if (!style.display && a.fracPart >= style.size * 0.9) tex = restyle(tex, "d");
     }
     const next = main[k + 1];
     // A bar with a relation's space on both sides is \mid, unless it closes
