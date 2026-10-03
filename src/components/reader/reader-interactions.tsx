@@ -3855,6 +3855,11 @@ export function ReaderInteractions({
       return;
     }
     setFlippedBlocks(new Set());
+    // The toolbar's words go as the article changes view: the toolbar
+    // closes with them, and so does the browser's selection under the tint.
+    setPopover(null);
+    setSubmenu(null);
+    if (!richTextRef.current) window.getSelection()?.removeAllRanges();
     if (collapseOn) {
       setCollapseOn(false);
       rememberCollapse(false);
