@@ -818,7 +818,8 @@ function collapseOverlaySteps(segments: Segment[], graphics: Graphic[][], drawin
     return `${labels.join(" ")}|${images.join(";")}`;
   };
   const keyOf = (s: Segment) => {
-    const region = s.region ? [s.region.x, s.region.y, s.region.width, s.region.height].map((v) => Math.round(v * 2) / 2).join(",") : "";
+    // The region's points in percent of the page, to half a percent.
+    const region = s.region ? JSON.stringify(s.region, (_, v: unknown) => (typeof v === "number" ? Math.round(v * 2) / 2 : v)) : "";
     return `${s.type}|${squash(s.text)}|${region}`;
   };
   const keys = new Map<number, string[]>();
