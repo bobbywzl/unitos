@@ -837,7 +837,7 @@ export function layoutScores(pdf: PdfText, cand: Flat, placed: number[][], input
   const figures = figureScores(pdf, cand, input.ink, placed);
   const crops = cropScores(pdf, cand);
   const pictures = pictureScores(pdf, cand, input.pictures);
-  const captions = captionScores(cand);
+  const captions = captionScores(cand, pdf, placed);
   const overlaps = cropOverlaps(pdf, cand);
   const sides = captionSides(pdf, cand, placed);
   const marks = titleMarks(pdf, cand, placed);

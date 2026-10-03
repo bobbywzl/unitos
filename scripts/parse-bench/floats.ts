@@ -118,8 +118,17 @@ export type CaptionScores = { captions: number; alone: number; score: number | n
     caption does (CAPTION_OPENING_RE) is a caption the candidate did not
     give its figure or table (a figure's caption that runs into the page
     after, a table the candidate lost). The score is the share of the
-    candidate's captions set with their figure or table. */
-export function captionScores(cand: Flat): CaptionScores {
+    candidate's captions set with their figure or table. With the page's
+    lines, a caption cut in two counts too: the paragraph after a figure's
+    caption opens in lower case on the line the page sets right under the
+    caption's last line, at the caption's height (the next line, at most a
+    line and a half from top to top), so it is the caption's tail. Parse
+    bench finding: a statistics book sets each figure's caption in 9 pt
+    after its 10 pt "Figure 11.2:"; the parse ended the caption at the size
+    change, and the tail ("is approximately linear.") read as a paragraph
+    of its own, which no count saw (the caption itself opens as a caption
+    should). */
+export function captionScores(cand: Flat, pdf?: PdfText, placed?: number[][]): CaptionScores {
   const text = (b: number) => cand.unitsOf[b].map((u) => cand.units[u].text).join(" ");
   let kept = 0;
   const found: CaptionScores["found"] = [];
@@ -129,6 +138,18 @@ export function captionScores(cand: Flat): CaptionScores {
       if (CAPTION_OPENING_RE.test(caption) || LABELED_RE.test(caption)) kept++;
     }
     if (block.kind === "paragraph" && CAPTION_OPENING_RE.test(text(b))) found.push({ text: text(b).slice(0, 100) });
+    if (block.kind === "figure" && pdf && placed && cand.blocks[b + 1]?.kind === "paragraph" && /^\s*\p{Ll}/u.test(text(b + 1))) {
+      const caption = cand.unitsOf[b][0];
+      const tail = cand.unitsOf[b + 1][0];
+      const last = caption === undefined ? undefined : (placed[caption] ?? []).map((i) => pdf.lines[i]).sort((x, y) => y.top - x.top)[0];
+      const first = tail === undefined ? undefined : (placed[tail] ?? []).map((i) => pdf.lines[i]).sort((x, y) => x.top - y.top)[0];
+      if (!last || !first || last.page !== first.page) return;
+      const height = last.bottom - last.top;
+      const under = first.top >= last.bottom - height * 0.5 && first.top - last.top <= height * 1.5;
+      const level = Math.abs(first.bottom - first.top - height) <= height * 0.15;
+      const shared = Math.min(first.right, last.right) - Math.max(first.left, last.left) > 0;
+      if (under && level && shared) found.push({ text: text(b + 1).slice(0, 100) });
+    }
   });
   const captions = kept + found.length;
   return { captions, alone: found.length, score: captions > 0 ? 1 - found.length / captions : null, found };
