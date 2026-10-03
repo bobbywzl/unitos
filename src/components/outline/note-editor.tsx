@@ -6,6 +6,7 @@ import { attachNoteEditable, type NoteEditable, type StyleCommand } from "@/lib/
 import type { Patch } from "@/lib/markdown-style";
 import { IMAGE_ACCEPT, imageMarkdown, refuseImage, uploadImage } from "@/lib/images";
 import { hasQuoteDrag, quoteMarkdown, readQuoteDrag, type QuoteDrag } from "@/lib/quote-drag";
+import { quoteLanded } from "@/components/use-note-drop";
 import { RedoIcon, UndoIcon } from "@/components/icons";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
@@ -310,8 +311,9 @@ export function NoteEditor({
 
   // A quote dragged over the text (lib/quote-drag.ts): a caret, drawn by
   // this component and never blinking, stands where the quote would land —
-  // the text position under the pointer — and the drop puts the quote there
-  // on a line of its own. The caret rides the text's box; nothing else on the
+  // before or after the line under the pointer, by the half the pointer is
+  // in, never inside a sentence — and the drop puts the quote there on a
+  // line of its own. The caret rides the text's box; nothing else on the
   // page takes the drop.
   const bodyBox = useRef<HTMLDivElement>(null);
   const [dropCaret, setDropCaret] = useState<{ top: number; left: number; height: number } | null>(null);
@@ -339,8 +341,20 @@ export function NoteEditor({
       range = document.createRange();
       range.selectNodeContents(el);
       range.collapse(false);
+      return range;
     }
-    return range;
+    // The line under the pointer: its start on its top half, its end on its
+    // bottom half, so a quote never splits a sentence.
+    let line: Node | null = range.startContainer;
+    while (line && line !== el && !(line instanceof Element && /^(block|list-item)$/.test(getComputedStyle(line).display))) {
+      line = line.parentNode;
+    }
+    if (!(line instanceof Element) || line === el) return range;
+    const box = line.getBoundingClientRect();
+    const snapped = document.createRange();
+    snapped.selectNodeContents(line);
+    snapped.collapse(y < box.top + box.height / 2);
+    return snapped;
   };
 
   const showCaret = (range: Range) => {
@@ -395,6 +409,7 @@ export function NoteEditor({
     }
     core.current.insertBlock(quoteMarkdown(drag.text));
     readHistory();
+    quoteLanded();
     void onQuoteDrop(drag);
   }
 

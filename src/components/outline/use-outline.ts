@@ -1,9 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { arrayMove } from "@dnd-kit/sortable";
 import { api } from "@/lib/api";
+import { ACCOUNT_HEADER } from "@/lib/constants";
+import { tabAccount } from "@/lib/tab-account";
 import { refreshWhenOnline } from "@/lib/offline/queue";
 import type { MergeMode } from "@/lib/card-drag";
 import { clearNoteDraft, confirmNoteDraft, readNoteDraft, sweepStaleDrafts } from "@/lib/note-drafts";
@@ -33,10 +35,27 @@ export type FloatingEdit = {
 /** What a merge answered: the merged text, and the id that undoes the merge. */
 export type MergeResult = { content: string; undoId: string | null };
 
+/** A note taken out of its section, and where it stood: Undo puts it back
+    there. */
+type Placed = { note: NoteView; sectionId: string; index: number };
+
 /** The last merge, while it can be undone (SPEC.md §6): the pill under the
-    notes offers Undo for MERGE_UNDO_MS. */
-export type LastMerge = { undoId: string; targetId: string; count: number };
+    notes offers Undo for MERGE_UNDO_MS. before: the notes as they stood, so
+    Undo puts them back on screen before the server answers. */
+export type LastMerge = {
+  undoId: string;
+  targetId: string;
+  count: number;
+  before?: { target: NoteView; sources: Placed[] };
+};
 const MERGE_UNDO_MS = 12_000;
+
+/** The last delete, while it can be undone (SPEC.md §6): the notes leave the
+    list at once, and the server deletes them only when the Undo pill goes
+    (DELETE_UNDO_MS, the next delete, ✕, or the page closing). Undo before
+    then puts them back with no server call. */
+export type LastDelete = { ids: string[] };
+const DELETE_UNDO_MS = MERGE_UNDO_MS;
 
 /** The target of a merge took the other notes in: its card blooms
     (note-card.tsx listens). */
@@ -52,6 +71,15 @@ export type OutlineActions = {
   deleteSection: (id: string) => Promise<void>;
   reorderSection: (parentId: string | null, id: string, toIndex: number) => void;
   addNote: (sectionId: string, content: string) => Promise<void>;
+  /** A quote or an annotation let go on a section in the tray (SPEC.md §6):
+      a new note with the dropped text, at the top of the section (top) or
+      at its end. A quote's anchor becomes the note's source; an
+      annotation's anchors are copied in. The tray then shows the note. */
+  addDroppedNote: (
+    sectionId: string,
+    content: string,
+    from: { top: boolean; quote?: QuoteDrag; annotationId?: string },
+  ) => Promise<void>;
   saveNote: (id: string, content: string) => Promise<void>;
   /** A quote dropped into the note (lib/quote-drag.ts): its anchor becomes
       a source of the note, so the quote points back to the reader. */
@@ -60,7 +88,21 @@ export type OutlineActions = {
       copies of its anchors become sources of the note, so the quote it
       landed points back to the reader. */
   attachAnnotationSources: (id: string, annotationId: string) => Promise<void>;
+  /** Delete at once, no Undo: the composer's Cancel, for the note it made. */
   deleteNote: (id: string) => Promise<void>;
+  /** Delete with Undo (SPEC.md §6): the notes leave the list at once, and
+      the Undo pill offers them back until it goes; only then does the
+      server delete them. */
+  removeNotes: (ids: string[]) => void;
+  lastDelete: LastDelete | null;
+  undoDelete: () => void;
+  /** A change that did not reach the server and was put back: the pill under
+      the notes says so. Null when there is nothing to say. */
+  notice: string | null;
+  dismissNotice: () => void;
+  /** The composer of this section is letting its note go (Save, Escape):
+      the note joins the section's list the moment the server has it. */
+  expectComposed: (sectionId: string) => void;
   reorderNote: (sectionId: string, id: string, toIndex: number) => void;
   moveNoteToSection: (id: string, sectionId: string, toIndex?: number) => Promise<void>;
   /** Merge notes into the target (SPEC.md §6). join, the default: the notes'
@@ -78,6 +120,7 @@ export type OutlineActions = {
   lastMerge: LastMerge | null;
   /** Undo the last merge. Resolves to the reason when it could not run. */
   undoMerge: () => Promise<string | null>;
+  /** The pill's ✕: the merge stays, and a delete waiting on Undo runs now. */
   dismissMerge: () => void;
   setPinned: (id: string, pinned: boolean) => Promise<void>;
   acceptNote: (id: string) => Promise<void>;
@@ -125,6 +168,55 @@ function mapSections(
   fn: (s: SectionView) => SectionView,
 ): SectionView[] {
   return sections.map((s) => fn({ ...s, children: mapSections(s.children, fn) }));
+}
+
+/** Where the note stands: its section and its place there; null when it is
+    in no section. */
+function placeOf(sections: SectionView[], id: string): Placed | null {
+  for (const s of sections) {
+    const index = s.notes.findIndex((n) => n.id === id);
+    if (index !== -1) return { note: s.notes[index], sectionId: s.id, index };
+    const child = placeOf(s.children, id);
+    if (child) return child;
+  }
+  return null;
+}
+
+/** The tree with the note back where it stood, unless it is there already. */
+function putBack(sections: SectionView[], placed: Placed): SectionView[] {
+  if (placeOf(sections, placed.note.id)) return sections;
+  return updateSection(sections, placed.sectionId, (s) => {
+    const at = Math.max(0, Math.min(placed.index, s.notes.length));
+    return { ...s, notes: [...s.notes.slice(0, at), placed.note, ...s.notes.slice(at)] };
+  });
+}
+
+/** The tree without these notes. */
+function withoutNotes(sections: SectionView[], ids: ReadonlySet<string>): SectionView[] {
+  return mapSections(sections, (s) =>
+    s.notes.some((n) => ids.has(n.id)) ? { ...s, notes: s.notes.filter((n) => !ids.has(n.id)) } : s,
+  );
+}
+
+/** A note made in this tab, as the list shows it until the refresh brings
+    the server's own row. */
+function localNote(id: string, content: string, documentId: string | null, row?: Partial<NoteView>): NoteView {
+  const now = new Date().toISOString();
+  return {
+    id,
+    content,
+    gist: null,
+    status: "ACCEPTED",
+    derivationType: null,
+    pinned: false,
+    order: 0,
+    createdById: typeof row?.createdById === "string" ? row.createdById : null,
+    updatedAt: typeof row?.updatedAt === "string" ? row.updatedAt : now,
+    createdAt: typeof row?.createdAt === "string" ? row.createdAt : now,
+    documentId: typeof row?.documentId === "string" ? row.documentId : documentId,
+    sources: [],
+    replies: [],
+  };
 }
 
 /** The section with this id, anywhere in the tree; null when there is none. */
@@ -190,8 +282,30 @@ export function filterSections(sections: SectionView[], query: string): SectionV
 export function useOutline(notebook: NotebookView, canEdit = true, documentId: string | null = null, scopeToDocument = true) {
   const t = useT();
   const router = useRouter();
-  const [tree, setTree] = useState(notebook.sections);
+  const [rawTree, setTree] = useState(notebook.sections);
   const [prevSections, setPrevSections] = useState(notebook.sections);
+  // Notes deleted in this tab (removeNotes): out of the list at once, while
+  // the Undo pill shows and after, so a refresh that lands before the server
+  // deletes them never brings them back.
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
+  const tree = useMemo(() => (hidden.size > 0 ? withoutNotes(rawTree, hidden) : rawTree), [rawTree, hidden]);
+  // The tree as it is now, for the writes that read it from an event.
+  const treeRef = useRef(tree);
+  useLayoutEffect(() => {
+    treeRef.current = tree;
+  });
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), 8000);
+    return () => clearTimeout(timer);
+  }, [notice]);
+  const failure = useCallback(
+    (err: unknown) => setNotice(err instanceof Error && err.message ? err.message : t("common.requestFailed")),
+    [t],
+  );
+  // The composer letting its note go (expectComposed), by section.
+  const composedSection = useRef<string | null>(null);
   const [focusIndex, setFocusIndex] = useState(0);
   const [editRequest, setEditRequest] = useState<{ id: string; draft?: string } | null>(null);
   // The floating card, and its draft as typed — a ref, so a keystroke in the
@@ -263,18 +377,118 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
     const timer = setTimeout(() => setLastMerge(null), MERGE_UNDO_MS);
     return () => clearTimeout(timer);
   }, [lastMerge]);
+  // Undo puts the notes back on screen at once, as they stood before the
+  // merge; the server's answer follows. A failed undo brings the merged
+  // note back with the refresh, and the pill says why.
   const undoMerge = useCallback(async (): Promise<string | null> => {
     if (!lastMerge) return null;
-    const { undoId } = lastMerge;
+    const { undoId, targetId, before } = lastMerge;
     setLastMerge(null);
+    if (before) {
+      setTree((prev) => {
+        let next = mapSections(prev, (s) =>
+          s.notes.some((n) => n.id === targetId)
+            ? { ...s, notes: s.notes.map((n) => (n.id === targetId ? before.target : n)) }
+            : s,
+        );
+        for (const placed of [...before.sources].sort((a, b) => a.index - b.index)) next = putBack(next, placed);
+        return next;
+      });
+    }
     try {
       await api("/api/notes/merge/undo", "POST", { undoId });
     } catch (err) {
+      refresh();
       return err instanceof Error ? err.message : String(err);
     }
     refresh();
     return null;
   }, [lastMerge, refresh]);
+
+  // Delete with Undo (SPEC.md §6). The notes leave the list at once; the
+  // server deletes them when the pill goes. Until then nothing is deleted,
+  // so Undo needs no server call, and a failed delete puts the notes back
+  // and says so: a note is never gone from the screen while it is still
+  // on the server, nor gone from the server while Undo is on the screen.
+  const [lastDelete, setLastDelete] = useState<LastDelete | null>(null);
+  const waitingDelete = useRef<{ ids: string[]; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const restoreNotes = useCallback((ids: string[]) => {
+    setHidden((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) next.delete(id);
+      return next;
+    });
+    for (const id of ids) window.dispatchEvent(new CustomEvent("dissect:note-restored", { detail: { noteId: id } }));
+  }, []);
+  // The delete runs: the pill went. keepalive: the page is closing, and the
+  // request must outlive it.
+  const commitDelete = useCallback(
+    (keepalive = false) => {
+      const waiting = waitingDelete.current;
+      if (!waiting) return;
+      waitingDelete.current = null;
+      clearTimeout(waiting.timer);
+      setLastDelete(null);
+      if (keepalive) {
+        const account = tabAccount();
+        for (const id of waiting.ids) {
+          void fetch(`/api/notes/${id}`, {
+            method: "DELETE",
+            keepalive: true,
+            headers: account ? { [ACCOUNT_HEADER]: account } : {},
+          }).catch(() => {});
+        }
+        return;
+      }
+      void Promise.allSettled(waiting.ids.map((id) => api(`/api/notes/${id}`, "DELETE"))).then((results) => {
+        const failed = waiting.ids.filter((_, i) => results[i].status === "rejected");
+        const reason = results.find((r): r is PromiseRejectedResult => r.status === "rejected")?.reason;
+        if (failed.length > 0) {
+          restoreNotes(failed);
+          setNotice(t("outline.deleteFailed", { reason: reason instanceof Error ? reason.message : String(reason) }));
+        }
+        refresh();
+      });
+    },
+    [refresh, restoreNotes, t],
+  );
+  const commitDeleteRef = useRef(commitDelete);
+  useLayoutEffect(() => {
+    commitDeleteRef.current = commitDelete;
+  });
+  // The page closing, or the tray going away (another page): a delete
+  // waiting on Undo runs now.
+  useEffect(() => {
+    const onHide = () => commitDeleteRef.current(true);
+    window.addEventListener("pagehide", onHide);
+    return () => {
+      window.removeEventListener("pagehide", onHide);
+      commitDeleteRef.current();
+    };
+  }, []);
+  const removeNotes = useCallback(
+    (ids: string[]) => {
+      const present = ids.filter((id) => placeOf(treeRef.current, id));
+      if (present.length === 0) return;
+      commitDelete();
+      setLastMerge(null);
+      setHidden((prev) => new Set([...prev, ...present]));
+      // The reader fades the notes' marks at once (reader-interactions.tsx),
+      // and puts them back on Undo or a failed delete.
+      for (const id of present) window.dispatchEvent(new CustomEvent("dissect:note-removed", { detail: { noteId: id } }));
+      waitingDelete.current = { ids: present, timer: setTimeout(() => commitDeleteRef.current(), DELETE_UNDO_MS) };
+      setLastDelete({ ids: present });
+    },
+    [commitDelete],
+  );
+  const undoDelete = useCallback(() => {
+    const waiting = waitingDelete.current;
+    if (!waiting) return;
+    waitingDelete.current = null;
+    clearTimeout(waiting.timer);
+    setLastDelete(null);
+    restoreNotes(waiting.ids);
+  }, [restoreNotes]);
 
   // Ticker selection, pruned against the tree so deleted or merged notes drop out.
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
@@ -343,31 +557,54 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
     return () => clearTimeout(timer);
   }, [lastRejected]);
 
+  // Each reject, by note: where the note stood, and the request, so Undo
+  // puts the note back at once and sends its own request after the reject's
+  // has landed — never before it, or the note would end rejected.
+  const rejects = useRef(new Map<string, { placed: Placed | null; request: Promise<unknown>; undone: boolean }>());
+
   const rejectNote = useCallback(
     async (id: string) => {
-      setTree((prev) =>
-        prev.map(function walk(s): SectionView {
-          return {
-            ...s,
-            notes: s.notes.filter((n) => n.id !== id),
-            children: s.children.map(walk),
-          };
-        }),
-      );
+      const placed = placeOf(treeRef.current, id);
+      setTree((prev) => withoutNotes(prev, new Set([id])));
       setLastRejected(id);
-      await api(`/api/notes/${id}`, "PATCH", { status: "REJECTED" });
-      refresh();
+      const request = api(`/api/notes/${id}`, "PATCH", { status: "REJECTED" });
+      const entry = { placed, request, undone: false };
+      rejects.current.set(id, entry);
+      try {
+        await request;
+      } catch (err) {
+        // Not rejected: the note comes back to the queue, and the pill says why.
+        if (rejects.current.get(id) === entry) rejects.current.delete(id);
+        if (placed) setTree((prev) => putBack(prev, placed));
+        setLastRejected((current) => (current === id ? null : current));
+        failure(err);
+        return;
+      }
+      // Undo ran meanwhile: its own refresh follows its own request.
+      if (!entry.undone) refresh();
     },
-    [refresh],
+    [refresh, failure],
   );
 
   const undoReject = useCallback(async () => {
     if (!lastRejected) return;
     const id = lastRejected;
     setLastRejected(null);
-    await api(`/api/notes/${id}`, "PATCH", { status: "PENDING" });
+    const entry = rejects.current.get(id);
+    rejects.current.delete(id);
+    const placed = entry?.placed ? { ...entry.placed, note: { ...entry.placed.note, status: "PENDING" as const } } : null;
+    if (entry) entry.undone = true;
+    if (placed) setTree((prev) => putBack(prev, placed));
+    try {
+      await entry?.request.catch(() => {});
+      await api(`/api/notes/${id}`, "PATCH", { status: "PENDING" });
+    } catch (err) {
+      if (placed) setTree((prev) => withoutNotes(prev, new Set([id])));
+      failure(err);
+      return;
+    }
     refresh();
-  }, [lastRejected, refresh]);
+  }, [lastRejected, refresh, failure]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -450,13 +687,79 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
     },
     async addNote(sectionId, content) {
       // A note from the composer lands at the top of its section, and in
-      // the open document (SPEC.md §6).
-      await api("/api/notes", "POST", { sectionId, content, top: true, documentId: documentId ?? undefined });
+      // the open document (SPEC.md §6). It joins the list the moment the
+      // server has it, not when the refresh lands: the composer closes in
+      // the same frame, so the note is never in neither place.
+      const row = await api<Partial<NoteView> & { id?: unknown }>("/api/notes", "POST", {
+        sectionId,
+        content,
+        top: true,
+        documentId: documentId ?? undefined,
+      });
+      if (composedSection.current === sectionId) composedSection.current = null;
+      if (row && typeof row.id === "string") {
+        const note = localNote(row.id, content, documentId, row);
+        setTree((prev) => putBack(prev, { note, sectionId, index: 0 }));
+      }
       refresh();
     },
-    async saveNote(id, content) {
-      await api(`/api/notes/${id}`, "PATCH", { content });
+    async addDroppedNote(sectionId, content, from) {
+      const row = await api<Partial<NoteView> & { id?: unknown }>("/api/notes", "POST", {
+        sectionId,
+        content,
+        top: from.top,
+        ...(from.quote
+          ? { source: from.quote.source, ...(from.quote.segments ? { segments: from.quote.segments } : {}) }
+          : { documentId: documentId ?? undefined }),
+      });
+      if (!row || typeof row.id !== "string") {
+        refresh();
+        return;
+      }
+      const id = row.id;
+      setTree((prev) =>
+        updateSection(prev, sectionId, (s) => {
+          if (s.notes.some((n) => n.id === id)) return s;
+          const note = localNote(id, content, documentId, row);
+          return { ...s, notes: from.top ? [note, ...s.notes] : [...s.notes, note] };
+        }),
+      );
+      if (from.annotationId) {
+        await api(`/api/notes/${id}`, "PATCH", { copySourcesFrom: from.annotationId }).catch(() => {});
+      }
       refresh();
+      window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: id } }));
+    },
+    async saveNote(id, content) {
+      // The card shows the words at once; a failed save puts the old words
+      // back and the caller hears why.
+      const before = placeOf(treeRef.current, id)?.note.content;
+      const setContent = (text: string) =>
+        setTree((prev) =>
+          mapSections(prev, (s) =>
+            s.notes.some((n) => n.id === id)
+              ? { ...s, notes: s.notes.map((n) => (n.id === id ? { ...n, content: text } : n)) }
+              : s,
+          ),
+        );
+      if (before !== undefined && before !== content) setContent(content);
+      try {
+        await api(`/api/notes/${id}`, "PATCH", { content });
+      } catch (err) {
+        if (before !== undefined && before !== content) setContent(before);
+        throw err;
+      }
+      // The composer's own note, let go by Save or Escape: it joins the top
+      // of its section now, as the composer closes.
+      const composed = composedSection.current;
+      composedSection.current = null;
+      if (before === undefined && composed) {
+        setTree((prev) => putBack(prev, { note: localNote(id, content, documentId), sectionId: composed, index: 0 }));
+      }
+      refresh();
+    },
+    expectComposed(sectionId) {
+      composedSection.current = sectionId;
     },
     async attachSource(id, drag) {
       await api(`/api/notes/${id}`, "PATCH", {
@@ -479,6 +782,13 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
         throw err;
       }
       refresh();
+    },
+    removeNotes,
+    lastDelete,
+    undoDelete,
+    notice,
+    dismissNotice() {
+      setNotice(null);
     },
     reorderNote(sectionId, id, toIndex) {
       setTree((prev) =>
@@ -528,6 +838,13 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
       // A note open in its editor — the target or a source — saves its draft
       // first, so the merge reads what is on screen (use-note-draft.ts).
       await flushNoteDrafts([targetId, ...ids]);
+      // A delete waiting on Undo runs now: the merge takes the pill.
+      commitDelete();
+      // Where the notes stood, so Undo puts them back on screen at once.
+      const before = {
+        target,
+        sources: ids.map((id) => placeOf(treeRef.current, id)).filter((p): p is Placed => p !== null),
+      };
       // Optimistic: the notes fold into the target instantly. Join text puts
       // the notes in the order they stand in — the note on top first
       // (lib/notes/join.ts); an annotation's text lands with the answer. The
@@ -565,7 +882,7 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
         );
         refresh();
         const undoId = typeof merged?.undoId === "string" ? merged.undoId : null;
-        if (undoId) setLastMerge({ undoId, targetId, count: ids.length + 1 });
+        if (undoId) setLastMerge({ undoId, targetId, count: ids.length + 1, before });
         const content = merged?.content ?? joined;
         // The target open in its editor: the merged text takes the draft's
         // place, saved and ready to keep editing.
@@ -598,6 +915,7 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
     undoMerge,
     dismissMerge() {
       setLastMerge(null);
+      commitDelete();
     },
     async setPinned(id, pinned) {
       // Optimistic: pinning also moves the note to the top of its section.

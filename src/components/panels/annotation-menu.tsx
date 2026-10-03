@@ -11,6 +11,7 @@ import { ChevronLeftIcon, MoreIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { shortNoteId } from "@/components/outline/note-id";
 import { flatSections, menuRowClass as item, NotePicker } from "@/components/reader/note-picker";
+import { jumpToAnnotation } from "@/components/panels/annotation-card";
 
 // The menu on every annotation card (SPEC.md §6): the three dots at the
 // right of the header open it, collapsed or not. It puts the annotation into
@@ -123,8 +124,7 @@ export function AnnotationMenu({
 
   function jump() {
     close();
-    router.push(`/n/${notebookId}?doc=${documentId}&src=${annotation.sourceId}`);
-    window.dispatchEvent(new CustomEvent("dissect:flash-source", { detail: { sourceId: annotation.sourceId } }));
+    if (annotation.sourceId && documentId) jumpToAnnotation(router, notebookId, documentId, annotation.sourceId);
   }
 
   return (
@@ -253,7 +253,13 @@ export function AnnotationMenu({
           )}
 
           {mode === "notes" && (
-            <NotePicker sections={sections} onPick={addTo} disabled={working} track="annotation-add-to-note-pick" />
+            <NotePicker
+              sections={sections}
+              onPick={addTo}
+              onEscape={() => setMode("menu")}
+              disabled={working}
+              track="annotation-add-to-note-pick"
+            />
           )}
         </div>
       )}

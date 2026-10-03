@@ -13,7 +13,7 @@ import {
 // lifts, or a mouse moves HOLD_DISTANCE_PX and it lifts at once; a press
 // that ends first is a click, and a finger that drifts first is a scroll.
 // A press on an input, a text field, or a control marked data-no-drag never
-// starts a drag.
+// starts a drag. Escape puts a lifted card back and does nothing else.
 
 type Point = { x: number; y: number };
 
@@ -61,7 +61,10 @@ export class HoldSensor implements SensorInstance {
     this.listen(this.doc, "pointermove", this.onMove, { passive: false });
     this.listen(this.doc, "pointerup", this.onUp);
     this.listen(this.doc, "pointercancel", this.onCancel);
-    this.listen(this.doc, "keydown", this.onKey);
+    // Escape while a card is lifted belongs to the drag: heard first, on the
+    // window's capture, and kept from every other listener, so it puts the
+    // card back and closes nothing (a section's board, a selection).
+    this.listen(win, "keydown", this.onKey, { capture: true });
     // Once the card is lifted, a finger that moves must move the card, not
     // the list: the scroll is refused on the move event itself.
     this.listen(this.doc, "touchmove", this.onTouchMove, { passive: false });
@@ -158,7 +161,12 @@ export class HoldSensor implements SensorInstance {
   };
 
   private onKey = (event: Event) => {
-    if (event instanceof KeyboardEvent && event.key === "Escape") this.onCancel();
+    if (!(event instanceof KeyboardEvent) || event.key !== "Escape") return;
+    if (this.activated) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    this.onCancel();
   };
 }
 

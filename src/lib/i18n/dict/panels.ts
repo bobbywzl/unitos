@@ -24,6 +24,8 @@ const en = {
   simplified: "Simplified",
   links: "Links",
   jumpToAnchor: "Jump to the anchor in the reader",
+  jump: "Jump",
+  openAndJumpTitle: "Open this annotation and jump to it in the text",
   anchorUnresolved: "Anchor unresolved",
   otherEndUnresolved: "Other end unresolved",
   wasAnchoredTo: "was anchored to: {text}",
@@ -147,6 +149,8 @@ const zh: Record<keyof typeof en, string> = {
   simplified: "简化",
   links: "链接",
   jumpToAnchor: "跳转到阅读器中的锚点",
+  jump: "跳转",
+  openAndJumpTitle: "打开此批注并跳转到正文中的位置",
   anchorUnresolved: "锚点无法定位",
   // The conversation continued from the output (SPEC.md §21)
   conversation: "对话",

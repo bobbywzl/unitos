@@ -42,6 +42,7 @@ export function NoteTile({
   actions,
   handle,
   onOpen,
+  lifted = false,
 }: {
   note: NoteView;
   actions: OutlineActions;
@@ -49,6 +50,9 @@ export function NoteTile({
   handle?: HandleProps;
   /** A click: the note opens whole over the board. */
   onOpen: (id: string) => void;
+  /** The tile lifted by a hold, riding the pointer: drawn opaque, so the
+      tile under it never shows through and the two tiles' words never mix. */
+  lifted?: boolean;
 }) {
   const t = useT();
   const { canEdit, shared, people } = useCollab();
@@ -91,7 +95,7 @@ export function NoteTile({
 
   const surface = [
     "note-tile group/tile relative flex flex-col overflow-hidden rounded-2xl bg-card p-3.5 text-left shadow-soft",
-    pending ? "opacity-85" : "",
+    pending && !lifted ? "opacity-85" : "",
     isMergeTarget ? "outline-2 outline-sage-500" : isSelected ? "outline-2 outline-clay-300" : "",
     absorbed ? "note-absorb note-merged" : "",
   ]

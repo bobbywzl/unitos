@@ -14,7 +14,7 @@ import { Markdown } from "@/components/markdown";
 import { markdownPreview } from "@/lib/markdown-preview";
 import { useGist } from "@/lib/gist-client";
 import { useMergeTarget, type HandleProps } from "@/components/sortable";
-import { useNoteDrop } from "@/components/use-note-drop";
+import { quoteLanded, useNoteDrop } from "@/components/use-note-drop";
 import { referenceMarkdownForDrop } from "@/components/outline/reference-drop";
 import { quoteMarkdown } from "@/lib/quote-drag";
 import { useAnnotationSide } from "@/components/outline/annotation-side";
@@ -33,6 +33,7 @@ import { NoteTitleField, focusBodyEditor, useNoteParts } from "@/components/outl
 import { SaveStateLabel } from "@/components/outline/save-state";
 import { useNoteDraft } from "@/components/outline/use-note-draft";
 import { NoteAssistant } from "@/components/outline/note-assistant";
+import { WordLine } from "@/components/outline/word-line";
 import { NOTE_ABSORBED_EVENT, type OutlineActions } from "@/components/outline/use-outline";
 
 /** The nearest ancestor that scrolls: the tray's panel. Null on the notes full page, where the window scrolls. */
@@ -167,7 +168,7 @@ type NoteCommands = Pick<
   | "dockNote"
   | "acceptNote"
   | "rejectNote"
-  | "deleteNote"
+  | "removeNotes"
 >;
 
 /** The outline's commands as one object for the card's life, each calling
@@ -191,7 +192,7 @@ function useCommands(actions: OutlineActions): NoteCommands {
       dockNote: (...args) => latest.current.dockNote(...args),
       acceptNote: (...args) => latest.current.acceptNote(...args),
       rejectNote: (...args) => latest.current.rejectNote(...args),
-      deleteNote: (...args) => latest.current.deleteNote(...args),
+      removeNotes: (...args) => latest.current.removeNotes(...args),
     }),
     [],
   );
@@ -353,6 +354,7 @@ const NoteCardBody = memo(function NoteCardBody({
       const { drag } = end;
       if (drag.kind === "quote") {
         if (!drag.quote) return;
+        quoteLanded();
         await addToNote(quoteMarkdown(drag.quote.text));
         await commands.attachSource(note.id, drag.quote);
         return;
@@ -479,8 +481,18 @@ const NoteCardBody = memo(function NoteCardBody({
     if (sized) editCardRef.current?.scrollIntoView({ block: "nearest" });
   }, [sized]);
 
+  // After Done or Cancel the caret goes back to the note's pencil, where
+  // the edit began, not to whatever control comes first in the card.
+  const refocus = useRef(false);
+  useEffect(() => {
+    if (editing || !refocus.current) return;
+    refocus.current = false;
+    cardRef.current?.querySelector<HTMLElement>('[data-track="note-edit"]')?.focus({ preventScroll: true });
+  }, [editing]);
+
   function cancel() {
     cancelDraft();
+    refocus.current = true;
     setEditing(false);
   }
 
@@ -492,6 +504,7 @@ const NoteCardBody = memo(function NoteCardBody({
       return;
     }
     markSaved(trimmed);
+    refocus.current = true;
     setEditing(false);
     await commands.saveNote(note.id, trimmed);
     confirmSaved(trimmed);
@@ -524,6 +537,7 @@ const NoteCardBody = memo(function NoteCardBody({
     // source attached, so it points back (lib/quote-drag.ts). Inside the
     // editor the text takes the drop itself, at the caret.
     onQuote: async (drag) => {
+      quoteLanded();
       await addToNote(quoteMarkdown(drag.text));
       await commands.attachSource(note.id, drag);
     },
@@ -603,16 +617,19 @@ const NoteCardBody = memo(function NoteCardBody({
           stopTitle={t("outline.mergeStopTitle")}
         />
       )}
+      {/* The line ends at the last whole word that fits (word-line.tsx):
+          the row can be narrower than the gist's budget beside a source
+          count. A press opens the note whole. */}
       {collapsed && !merging && (
         <button
           onClick={() => commands.toggleCollapsed(note.id)}
           data-track="note-collapse"
           data-tip={t("outline.expandNote")}
-          className={`note-merging-under min-w-0 flex-1 overflow-hidden text-left text-[13px] leading-[18px] whitespace-nowrap hover:text-clay-800 ${
+          className={`note-merging-under min-w-0 flex-1 text-left text-[13px] leading-[18px] hover:text-clay-800 ${
             parts.title ? "font-semibold text-ink" : "text-sand-800"
           }`}
         >
-          {line}
+          <WordLine text={line} />
         </button>
       )}
       {collapsed && note.sources.length > 0 && (
@@ -710,8 +727,8 @@ const NoteCardBody = memo(function NoteCardBody({
             {t("outline.dockBack")}
           </button>
         </div>
-        <p className={`mt-1 overflow-hidden whitespace-nowrap ${parts.title ? "font-semibold text-ink" : "text-sand-500"}`}>
-          {line}
+        <p className={`mt-1 leading-[18px] ${parts.title ? "font-semibold text-ink" : "text-sand-500"}`}>
+          <WordLine text={line} />
         </p>
       </div>
     );
@@ -945,9 +962,9 @@ const NoteCardBody = memo(function NoteCardBody({
           </button>
           {canEdit && (
             <button
-              onClick={() => {
-                if (confirm(t("outline.confirmDeleteNote"))) void commands.deleteNote(note.id);
-              }}
+              // No confirm: the note leaves at once, and the Undo pill offers
+              // it back (SPEC.md §6).
+              onClick={() => commands.removeNotes([note.id])}
               data-track="note-delete"
               data-tip={t("outline.deleteNoteTitle")}
               className="text-xs text-red-500 hover:text-red-700"

@@ -25,9 +25,12 @@ import { ThinkingIndicator } from "@/components/thinking";
 // Cancel on the note restores what it said before the editor opened. The
 // panel never writes to the note itself.
 //
-// Closed, the panel folds to one Assistant chip; the choice is remembered in
-// this browser. The words typed in the box are kept in this browser until
-// they are sent, so a reload never loses them.
+// The panel starts folded to one Assistant chip, so the open note keeps its
+// room for the note; a press opens it, and the choice is remembered in this
+// browser. The words typed in the box are kept in this browser until they
+// are sent, so a reload never loses them, and a note with words waiting in
+// the box opens with the panel open. The hint under the head shows while
+// the box is empty and has the caret.
 const OPEN_KEY = "unitos-note-assistant";
 const DRAFT_KEY = "unitos-note-assistant-draft:";
 
@@ -42,16 +45,15 @@ type Turn =
 
 function readOpen(): boolean {
   try {
-    return localStorage.getItem(OPEN_KEY) !== "closed";
+    return localStorage.getItem(OPEN_KEY) === "open";
   } catch {
-    return true;
+    return false;
   }
 }
 
 function writeOpen(open: boolean) {
   try {
-    if (open) localStorage.removeItem(OPEN_KEY);
-    else localStorage.setItem(OPEN_KEY, "closed");
+    localStorage.setItem(OPEN_KEY, open ? "open" : "closed");
   } catch {
     // A blocked store only loses the memory of the choice.
   }
@@ -98,7 +100,8 @@ export function NoteAssistant({
   const t = useT();
   const thinking = useThinking();
   const web = useWeb();
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [focused, setFocused] = useState(false);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -111,9 +114,10 @@ export function NoteAssistant({
   // The browser's memory after the first render, so the server's render and
   // the first client render agree.
   useEffect(() => {
+    const typed = readTyped(noteId);
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setOpen(readOpen());
-    setInput(readTyped(noteId));
+    setOpen(readOpen() || typed.trim().length > 0);
+    setInput(typed);
   }, [noteId]);
 
   useEffect(() => () => abortRef.current?.abort(), []);
@@ -274,7 +278,7 @@ export function NoteAssistant({
           {busy && <ThinkingIndicator className="text-xs" onStop={stop} />}
         </div>
       )}
-      {turns.length === 0 && !busy && (
+      {turns.length === 0 && !busy && focused && !input.trim() && (
         <p className="px-3.5 pt-0.5 pb-1 text-[11.5px] leading-snug text-sand-500">{t("assistant.noteAssistantEmpty")}</p>
       )}
       {error && <p className="px-3.5 pb-1 text-[11.5px] text-red-500">{error}</p>}
@@ -286,6 +290,8 @@ export function NoteAssistant({
           value={input}
           rows={1}
           onChange={(e) => type(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           onKeyDown={(e) => {
             if (isImeKey(e)) return;
             // The note editor's own keys stay the note's: Enter sends here.

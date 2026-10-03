@@ -18,6 +18,7 @@ import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { AnnotationGrip } from "@/components/outline/annotation-grip";
 import { NoteId } from "@/components/outline/note-id";
+import { WordLine } from "@/components/outline/word-line";
 import { useCardDropOpen } from "@/components/outline/use-card-drop";
 import type { CollapsedViewModel } from "@/components/use-collapsed-view";
 
@@ -105,6 +106,24 @@ export function GroupLabel({ icon, children }: { icon?: React.ReactNode; childre
   );
 }
 
+/** Whether the annotation has a mark to jump to in its document. */
+export function canJumpTo(a: AnnotationItem, documentId: string | null): documentId is string {
+  return Boolean(a.sourceId) && !a.orphaned && !a.resolved && documentId !== null;
+}
+
+/** Jump to the annotation's mark in the reader. From the reader itself (the
+    Annotations tab) the jump takes the place of the page in the history, so
+    Back leaves the document instead of walking back through the jumps; from
+    the annotations full page the reader is a new page, and Back returns. */
+export function jumpToAnnotation(router: ReturnType<typeof useRouter>, notebookId: string, documentId: string, sourceId: string) {
+  const href = `/n/${notebookId}?doc=${documentId}&src=${sourceId}`;
+  if (window.location.pathname === `/n/${notebookId}`) router.replace(href, { scroll: false });
+  else router.push(href);
+  // The ?src effect only re-runs when the param changes; the event covers a
+  // second jump to the same annotation.
+  window.dispatchEvent(new CustomEvent("dissect:flash-source", { detail: { sourceId } }));
+}
+
 /** The line a collapsed card shows until its gist arrives: the annotation's
     first words. */
 export function annotationSummary(a: AnnotationItem): string {
@@ -120,6 +139,7 @@ export function AnnotationCard({
   summary,
   menu,
   showKind = false,
+  jumpNotebookId,
   children,
 }: {
   annotation: AnnotationItem;
@@ -132,9 +152,13 @@ export function AnnotationCard({
   /** The kind's symbol and name in the header row: the annotations full
       page, where the cards are grouped by document, not by kind. */
   showKind?: boolean;
+  /** In the reader (the Annotations tab): a press on the collapsed card's
+      line opens the card and jumps to its mark in the text too. */
+  jumpNotebookId?: string;
   children: React.ReactNode;
 }) {
   const t = useT();
+  const router = useRouter();
   // Somewhere to drop: a note of the tray, or the floating card over the
   // article (SPEC.md §6). The grip shows only then — with no note to drop on,
   // the gesture goes nowhere.
@@ -191,7 +215,7 @@ export function AnnotationCard({
           {collapsed ? <ChevronRightIcon size={11} /> : <ChevronDownIcon size={11} />}
         </button>
         {annotation.kind === "highlight" && <ColorDot color={annotation.color} />}
-        {showKind && annotation.kind !== "highlight" && (
+        {showKind && (
           <span className={`${label} flex shrink-0 items-center gap-1`} style={{ color }}>
             <AnnotationKindIcon kind={annotation.kind} size={11} />
             {t(ANNOTATION_KIND_KEY[annotation.kind])}
@@ -200,12 +224,19 @@ export function AnnotationCard({
         <NoteId id={annotation.id} />
         {collapsed && (
           <button
-            onClick={() => toggle(annotation.id)}
+            onClick={() => {
+              toggle(annotation.id);
+              if (jumpNotebookId && sourceId && canJumpTo(annotation, documentId)) {
+                jumpToAnnotation(router, jumpNotebookId, documentId, sourceId);
+              }
+            }}
             data-track="annotation-collapse"
-            title={t("outline.expandNote")}
-            className="min-w-0 flex-1 overflow-hidden text-left text-[13px] leading-[18px] whitespace-nowrap text-sand-800 hover:text-clay-800"
+            title={
+              jumpNotebookId && canJumpTo(annotation, documentId) ? t("panels.openAndJumpTitle") : t("outline.expandNote")
+            }
+            className="min-w-0 flex-1 text-left text-[13px] leading-[18px] text-sand-800 hover:text-clay-800"
           >
-            {gist}
+            <WordLine text={gist} />
           </button>
         )}
         {collapsed && annotation.figureLabel && (
@@ -308,15 +339,10 @@ export function AnnotationActions({
   const router = useRouter();
   const t = useT();
   const { canEdit } = useCollab();
-  const canJump = Boolean(annotation.sourceId) && !annotation.orphaned && !annotation.resolved && documentId !== null;
+  const canJump = canJumpTo(annotation, documentId);
 
   function jump() {
-    router.push(`/n/${notebookId}?doc=${documentId}&src=${annotation.sourceId}`);
-    // The ?src effect only re-runs when the param changes; the event covers a
-    // second jump to the same annotation.
-    window.dispatchEvent(
-      new CustomEvent("dissect:flash-source", { detail: { sourceId: annotation.sourceId } }),
-    );
+    if (annotation.sourceId && documentId) jumpToAnnotation(router, notebookId, documentId, annotation.sourceId);
   }
 
   return (
@@ -335,7 +361,7 @@ export function AnnotationActions({
           className="inline-flex items-center gap-1.5 rounded-full bg-clay-100 px-2.5 py-1 text-[11px] font-semibold text-clay-800 hover:bg-clay-200"
         >
           <LocateIcon size={11} />
-          {annotation.figureLabel ?? ""}
+          {annotation.figureLabel ?? t("panels.jump")}
         </button>
       )}
       {!canJump && annotation.figureLabel && (

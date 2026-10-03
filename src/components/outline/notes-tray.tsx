@@ -1,20 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { dropCardOn } from "@/lib/card-drag";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { dropCardOn, type CardDragEndDetail } from "@/lib/card-drag";
 import { isImeKey } from "@/lib/ime";
+import { hasQuoteDrag, quoteMarkdown, readQuoteDrag, type QuoteDrag } from "@/lib/quote-drag";
 import type { NoteView, SectionView } from "@/lib/types";
 import { ChevronDownIcon, ChevronRightIcon, MaximizeIcon, PlusIcon } from "@/components/icons";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { CollapsedViewToggle } from "@/components/collapsed-view-toggle";
-import { SortableBoard, SortableGroup, SortableItem } from "@/components/sortable";
+import { SortableBoard, SortableGroup, SortableItem, useDropHeader } from "@/components/sortable";
+import { useCardDropTarget } from "@/components/outline/use-card-drop";
+import { quoteLanded } from "@/components/use-note-drop";
+import { referenceMarkdownForDrop } from "@/components/outline/reference-drop";
 import { dropIndex, notesList, parseListId } from "@/components/outline/board-lists";
 import { landingLeft } from "@/components/outline/floating-note-editor";
 import { MergeUndoBar } from "@/components/outline/merge-undo";
 import { NoteCard } from "@/components/outline/note-card";
-import { NoteComposer } from "@/components/outline/note-composer";
+import { NoteComposer, focusComposer } from "@/components/outline/note-composer";
 import { SECTION_ACTION, SECTION_ADD_NOTE } from "@/components/outline/section-action";
 import { useNoteCompose } from "@/components/outline/use-note-compose";
 import { VoiceNoteButton } from "@/components/outline/voice-note";
@@ -88,6 +92,96 @@ export function NotesTray({
     else void actions.moveNoteToSection(itemId, to.parentId, index);
   }
 
+  // A note the reader asked to see (dissect:show-note: Add to notes, a pick
+  // in Add to a note…, a quote dropped here): its section unfolds when it
+  // holds it — now, or when the refresh brings it.
+  const [reveal, setReveal] = useState<string | null>(null);
+  useEffect(() => {
+    const onShow = (e: Event) => setReveal((e as CustomEvent<{ noteId: string }>).detail.noteId);
+    window.addEventListener("dissect:show-note", onShow);
+    return () => window.removeEventListener("dissect:show-note", onShow);
+  }, []);
+
+  // A quote let go on the tray off every note (SPEC.md §6): a new note with
+  // the quote, in the section under the pointer — at its top on the
+  // section's title row, else at its end — or, below every section, at the
+  // end of the last one. The section lights while the quote is over it.
+  const lastSection = tree.length > 0 ? tree[tree.length - 1].id : null;
+  const [quoteOver, setQuoteOver] = useState<{ sectionId: string; top: boolean } | null>(null);
+  const [dropError, setDropError] = useState<string | null>(null);
+  function quoteTarget(target: EventTarget | null): { sectionId: string; top: boolean } | null {
+    const el = target instanceof Element ? target : null;
+    // A note, a composer, or an open editor takes the quote itself.
+    if (el?.closest("[data-note-id], [data-note-composer]")) return null;
+    const section = el?.closest<HTMLElement>("[data-tray-section]")?.dataset.traySection ?? lastSection;
+    if (!section) return null;
+    return { sectionId: section, top: Boolean(el?.closest("[data-drop-header]")) };
+  }
+  async function dropQuote(at: { sectionId: string; top: boolean }, drag: QuoteDrag) {
+    setDropError(null);
+    quoteLanded();
+    try {
+      await actions.addDroppedNote(at.sectionId, quoteMarkdown(drag.text), { top: at.top, quote: drag });
+    } catch (err) {
+      setDropError(err instanceof Error ? err.message : t("common.requestFailed"));
+    }
+  }
+  const quoteDrop = canEdit
+    ? {
+        onDragOverCapture: (e: React.DragEvent) => {
+          if (!hasQuoteDrag(e.dataTransfer)) return;
+          const at = quoteTarget(e.target);
+          setQuoteOver((prev) => (prev?.sectionId === at?.sectionId && prev?.top === at?.top ? prev : at));
+        },
+        onDragOver: (e: React.DragEvent) => {
+          if (!hasQuoteDrag(e.dataTransfer) || !quoteTarget(e.target)) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "copy";
+        },
+        onDragLeave: (e: React.DragEvent) => {
+          if (!(e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget))) setQuoteOver(null);
+        },
+        onDrop: (e: React.DragEvent) => {
+          setQuoteOver(null);
+          if (!hasQuoteDrag(e.dataTransfer)) return;
+          const at = quoteTarget(e.target);
+          const drag = readQuoteDrag(e.dataTransfer);
+          if (!at || !drag) return;
+          e.preventDefault();
+          void dropQuote(at, drag);
+        },
+      }
+    : {};
+  // The same for a highlight held in the reader's text (lib/card-drag.ts),
+  // and an annotation: a new note with its annotation reference. Off every
+  // section: the last section's end.
+  async function takeCardDrop(sectionId: string, top: boolean, { drag }: CardDragEndDetail) {
+    setDropError(null);
+    try {
+      if (drag.kind === "quote" && drag.quote) {
+        quoteLanded();
+        await actions.addDroppedNote(sectionId, quoteMarkdown(drag.quote.text), { top, quote: drag.quote });
+      } else if (drag.kind === "annotation" && drag.reference) {
+        const markdown = await referenceMarkdownForDrop(actions.notebookId, drag.reference, t);
+        await actions.addDroppedNote(sectionId, markdown, {
+          top,
+          annotationId: drag.reference.quote ? drag.reference.annotationId : undefined,
+        });
+      }
+    } catch (err) {
+      setDropError(err instanceof Error ? err.message : t("common.requestFailed"));
+    }
+  }
+  const spaceDrop = useCardDropTarget(
+    "tray-space",
+    (end) => {
+      if (lastSection) void takeCardDrop(lastSection, false, end);
+    },
+    false,
+  );
+  const cardOver = spaceDrop.over && (spaceDrop.drag?.kind === "quote" || spaceDrop.drag?.kind === "annotation");
+  const quoteAt = quoteOver ?? (cardOver && lastSection ? { sectionId: lastSection, top: false } : null);
+
   // A note let go over the article floats there (SPEC.md §6): the floating
   // card lands where the card was seen, in its draggable mode.
   function onDropOutside(itemId: string, at: { x: number; y: number; grab: { dx: number; dy: number } }) {
@@ -115,7 +209,11 @@ export function NotesTray({
   }
 
   return (
-    <div className="flex flex-col gap-3.5">
+    <div
+      className="flex min-h-full flex-col gap-3.5"
+      {...quoteDrop}
+      data-note-drop-target={canEdit && lastSection ? "tray-space" : undefined}
+    >
       <div className="flex items-center gap-1.5">
         <input
           value={query}
@@ -144,7 +242,7 @@ export function NotesTray({
       <NotesOrganize grouping={grouping} onGrouping={setGrouping} scope={scope} onScope={onScope} />
 
       {shownPending.length > 0 && (
-        <div className="flex flex-col gap-2">
+        <div data-pending-queue="" className="flex flex-col gap-2">
           <div className="flex items-baseline gap-2">
             <span className={`${label} text-clay-800`}>
               {t("outline.pendingHeader", { n: shownPending.length })}
@@ -189,6 +287,7 @@ export function NotesTray({
           }}
         >
           <div className="flex flex-col gap-3.5">
+            {dropError && <p className="text-xs text-red-500">{dropError}</p>}
             {shown.map((section, i) => (
               <TraySection
                 key={section.id}
@@ -197,6 +296,9 @@ export function NotesTray({
                 labelClass={label}
                 search={query}
                 nudgeFirst={i === 0}
+                reveal={reveal}
+                quoteAt={quoteAt}
+                onCardDrop={(sectionId, top, end) => void takeCardDrop(sectionId, top, end)}
               />
             ))}
           </div>
@@ -225,6 +327,11 @@ export function NotesTray({
   );
 }
 
+/** Whether the section, or a section in it, holds the note. */
+function holdsNote(section: SectionView, id: string): boolean {
+  return section.notes.some((n) => n.id === id) || section.children.some((c) => holdsNote(c, id));
+}
+
 function TraySection({
   section,
   actions,
@@ -232,6 +339,9 @@ function TraySection({
   search,
   nudgeFirst,
   nested,
+  reveal,
+  quoteAt,
+  onCardDrop,
 }: {
   section: SectionView;
   actions: OutlineActions;
@@ -241,6 +351,13 @@ function TraySection({
   /** The first section of the tray: its first note is the onboarding nudge's target. */
   nudgeFirst?: boolean;
   nested?: boolean;
+  /** A note the tray was asked to show: the section unfolds when it holds it. */
+  reveal: string | null;
+  /** The section a quote is over, off every note: that section lights, and
+      on its title row the note lands at the top. */
+  quoteAt: { sectionId: string; top: boolean } | null;
+  /** A highlight or an annotation let go on a section (lib/card-drag.ts). */
+  onCardDrop: (sectionId: string, top: boolean, end: CardDragEndDetail) => void;
 }) {
   const t = useT();
   const { canEdit } = useCollab();
@@ -249,10 +366,45 @@ function TraySection({
   // The composer auto-saves (use-note-compose.ts); the note it owns stays out of the list.
   const compose = useNoteCompose({ sectionId: section.id, notes: section.notes, actions, canEdit });
   const accepted = compose.visibleNotes.filter((n) => n.status !== "PENDING");
+  const rootRef = useRef<HTMLDivElement>(null);
+  const listId = notesList(section.id);
+  // A note held over the title row lands at the top of the section, folded
+  // or not (sortable.tsx data-drop-header).
+  const headerLit = useDropHeader(listId);
+  // A highlight or an annotation held over the title row, or the section's space.
+  const takesCards = canEdit;
+  const headerDrop = useCardDropTarget(`section-top:${section.id}`, (end) => onCardDrop(section.id, true, end), false);
+  const spaceDrop = useCardDropTarget(`section:${section.id}`, (end) => onCardDrop(section.id, false, end), false);
+  const quoteOver = quoteAt?.sectionId === section.id ? quoteAt : null;
+  const cardKind = (headerDrop.drag ?? spaceDrop.drag)?.kind;
+  const cardTakes = cardKind === "quote" || cardKind === "annotation";
+  const lit = Boolean(quoteOver) || (cardTakes && (headerDrop.over || spaceDrop.over));
+  const litTop = (quoteOver?.top ?? false) || (cardTakes && headerDrop.over);
+
+  // The note the tray was asked to show is in here: the section unfolds.
+  const [revealed, setRevealed] = useState<string | null>(null);
+  if (reveal && reveal !== revealed && holdsNote(section, reveal)) {
+    setRevealed(reveal);
+    if (collapsed) setCollapsed(false);
+  }
 
   return (
-    <div className={`group/section flex flex-col gap-2 ${nested ? "pl-3" : ""}`}>
-      <div className="flex items-baseline gap-2">
+    <div
+      ref={rootRef}
+      data-tray-section={section.id}
+      data-note-drop-target={takesCards ? `section:${section.id}` : undefined}
+      className={`group/section flex flex-col gap-2 rounded-2xl transition-colors ${nested ? "pl-3" : ""} ${
+        lit && !litTop ? "outline-2 outline-offset-4 outline-dashed outline-clay-400" : ""
+      }`}
+    >
+      <div
+        data-drop-header={listId}
+        data-drop-first={accepted[0]?.id ?? ""}
+        data-note-drop-target={takesCards ? `section-top:${section.id}` : undefined}
+        className={`-mx-1.5 flex items-baseline gap-2 rounded-full px-1.5 transition-colors ${
+          headerLit || litTop ? "bg-clay-100 ring-2 ring-clay-400" : ""
+        }`}
+      >
         <button
           onClick={() => setCollapsed(!collapsed)}
           data-track="section-collapse"
@@ -270,7 +422,11 @@ function TraySection({
             same on the notes full page. */}
         {!collapsed && canEdit && (
           <button
-            onClick={compose.open}
+            onClick={() => {
+              // A second press while the composer is open puts the caret back in it.
+              if (compose.composing) focusComposer(rootRef.current);
+              else compose.open();
+            }}
             data-track="section-add-note"
             data-tip={t("outline.addNoteTitle")}
             className={`ml-auto ${SECTION_ADD_NOTE}`}
@@ -284,6 +440,12 @@ function TraySection({
         )}
       </div>
       {voiceError && <p className="text-xs text-red-500">{voiceError}</p>}
+      {/* A quote or an annotation over the section says where its note lands. */}
+      {lit && (
+        <p aria-live="polite" className={`text-[11.5px] font-semibold text-clay-700 ${litTop ? "" : "order-last"}`}>
+          {t(litTop ? "outline.dropQuoteSectionTop" : "outline.dropQuoteSectionEnd", { section: section.title })}
+        </p>
+      )}
 
       <Collapse open={!collapsed}>
       {!collapsed && (
@@ -293,6 +455,7 @@ function TraySection({
           {compose.composing && (
             <NoteComposer
               compose={compose}
+              onRelease={() => actions.expectComposed(section.id)}
               full={false}
               moreHref={`/n/${actions.notebookId}/notes`}
               padding="p-3"
@@ -328,6 +491,9 @@ function TraySection({
               labelClass={labelClass}
               search={search}
               nested
+              reveal={reveal}
+              quoteAt={quoteAt}
+              onCardDrop={onCardDrop}
             />
           ))}
         </div>

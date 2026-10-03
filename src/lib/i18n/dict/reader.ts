@@ -279,7 +279,8 @@ const en = {
   distilledToast: "Extracted — open Extract to read it",
   addSectionFirstDot: "Add a section first.",
   addSectionFirst: "Add a section first",
-  addPendingNote: "Add as a pending note in {section}",
+  // Add to notes makes an accepted note (POST /api/notes): the words say so.
+  addPendingNote: "Add a note in {section}",
   blockNotOpen: "That block is not in the open document.",
   figureNoCaption: "This figure has no caption to anchor to.",
   voiceUnavailable: "Voice is not available in this browser.",
@@ -567,7 +568,7 @@ const zh: Record<keyof typeof en, string> = {
   distilledToast: "提取完成——打开“提取”查看",
   addSectionFirstDot: "请先添加章节。",
   addSectionFirst: "请先添加章节",
-  addPendingNote: "添加为 {section} 中的待定笔记",
+  addPendingNote: "在 {section} 中添加笔记",
   blockNotOpen: "该块不在当前打开的文档中。",
   figureNoCaption: "此插图没有可锚定的说明。",
   voiceUnavailable: "此浏览器不支持朗读。",
