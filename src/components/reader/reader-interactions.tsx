@@ -3678,10 +3678,12 @@ export function ReaderInteractions({
     if (place && place.shift > docsShiftRef.current) setDocsShift(place.shift);
   }, [pageMargin]);
   // The toolbox's width: a submenu with a field (the comment, the assistant)
-  // or the definition under the Define row widens it; coarse pointers get
-  // wider boxes to fit the tap-sized rows.
+  // or the definition under the Define row widens it, as far as the room
+  // beside the words goes (popoverBox); coarse pointers get wider boxes to
+  // fit the tap-sized rows.
+  const restWidth = coarse ? 220 : 176;
   const toolboxWidth =
-    submenu === "ai" || submenu === "comment" || submenu === "define" ? (coarse ? 300 : 248) : coarse ? 220 : 176;
+    submenu === "ai" || submenu === "comment" || submenu === "define" ? (coarse ? 300 : 248) : restWidth;
   // A toolbar beside the page that has grown past its room moves the page
   // left, as a card does.
   const toolbarPage = popover?.side === "right" ? popover.page : undefined;
@@ -7375,8 +7377,13 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           const left = toolbarLeft(popover.page.geo, shift ?? docsShift, width) ?? Math.max(6, popover.cw - width - 6);
           return { top: popover.yTop, left, width };
         }
+        // Beside the words, the box stands where it stands at rest, and a
+        // box widened by a field grows away from the words, into the margin,
+        // as far as the margin goes: past that it keeps its width and the
+        // field wraps. It never grows back over the words it was opened for.
         if (popover.side === "right") {
-          return { top: popover.yTop, left: Math.min(popover.rightBase, popover.cw - w - 6), width: w };
+          const left = Math.min(popover.rightBase, popover.cw - restWidth - 6);
+          return { top: popover.yTop, left, width: Math.max(restWidth, Math.min(w, popover.cw - 6 - left)) };
         }
         if (popover.side === "below") {
           return {
@@ -7385,7 +7392,8 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             width: w,
           };
         }
-        return { top: popover.yTop, left: Math.max(6, popover.textLeft - w - 10), width: w };
+        const width = Math.max(restWidth, Math.min(w, popover.textLeft - 10 - 6));
+        return { top: popover.yTop, left: Math.max(6, popover.textLeft - width - 10), width };
       })()
     : { top: 0, left: 0, width: 0 };
   // Near the top, the bubbles above the toolbox drop below it.
@@ -8406,7 +8414,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 rows={2}
                 className="w-full resize-none rounded-xl bg-sand-100 p-2 text-[12px] outline-none placeholder:text-sand-500"
               />
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <ThinkingChips small />
                 <WebChip small />
               </div>
