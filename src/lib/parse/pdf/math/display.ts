@@ -744,7 +744,7 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
     );
     if (stacked) kinds0[n] = "math";
   }
-  // A row of fractions' denominators is the display's, a short word among
+  // A row of fractions' denominators or numerators is the display's, a short word among
   // them ("dt" of d⟨x⟩/dt, set upright): each of its cells stands under a
   // fraction bar about its width, a numerator over the bar (parse loop
   // finding: Springer p26's "dt  √k₂  √π" read as text, and the display's
@@ -756,22 +756,28 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
     const { words } = wordsOf(l, columns0[n]);
     if (kinds0[n] !== "text" || words.length > 1 || words.some((w) => w.length > 3) || l.cells.length === 0) continue;
     const ink = l.items.flatMap((i) => i.glyphs ?? []).filter((g) => g.unicode.trim() !== "");
-    const barred = l.cells.every((c, i) => {
-      const next = l.cells[i + 1]?.x ?? Infinity;
-      const own = ink.filter((g) => g.x >= c.x - 0.5 && g.x < next - 0.5);
-      if (own.length === 0) return false;
-      const x1 = Math.min(...own.map((g) => g.x));
-      const x2 = Math.max(...own.map((g) => g.x + g.w));
-      return hbars.some(
-        (r) =>
-          r.x1 <= x1 + l.size * 0.2 &&
-          r.x2 >= x2 - l.size * 0.2 &&
-          r.x2 - r.x1 <= x2 - x1 + l.size * 4 &&
-          r.y1 > l.y &&
-          r.y1 - l.y < l.size * 1.2 &&
-          input.some((o) => o !== l && o.y > r.y1 && o.y - r.y1 < o.size * 1.2 && o.x < r.x2 && o.xEnd > r.x1),
-      );
-    });
+    // Each glyph stands within the span of a bar the line's own size away,
+    // a line across the bar from it; a cell may hold two fractions' parts
+    // (parse loop finding: the thesis's (1.66), H(1/n, 1/n, …) = −K ∑ 1/n
+    // log(1/n), set its numerators "1 1  1  1" in Palatino's digits, a
+    // line of text, and the sum's line "∑ⁿ" joined it as its inline row;
+    // the display, its ∑ lost, was a crop). A bar is no wider than its
+    // glyphs and four ems. A sign between them is a limit's ("i = 1"
+    // under a ∑ on the denominators' baseline), held to no bar.
+    const near = hbars.filter(
+      (r) =>
+        Math.abs(r.y1 - l.y) < l.size * 1.2 &&
+        input.some((o) => o !== l && o.y > r.y1 !== l.y > r.y1 && Math.abs(o.y - r.y1) < o.size * 1.2 && o.x < r.x2 && o.xEnd > r.x1),
+    );
+    const holds = new Map<Rule, Glyph[]>();
+    const barred =
+      ink.every((g) => {
+        const r = near.find((r) => r.x1 <= g.x + l.size * 0.2 && r.x2 >= g.x + g.w - l.size * 0.2);
+        if (r) holds.set(r, [...(holds.get(r) ?? []), g]);
+        return r !== undefined || /^[=+−<>≤≥]$/.test(g.unicode);
+      }) &&
+      holds.size > 0 &&
+      [...holds].every(([r, own]) => r.x2 - r.x1 <= Math.max(...own.map((g) => g.x + g.w)) - Math.min(...own.map((g) => g.x)) + l.size * 4);
     if (barred) kinds0[n] = "math";
   }
   // A row of an aligned display holds words of its own, as many as it
