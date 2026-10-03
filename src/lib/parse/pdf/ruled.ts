@@ -833,7 +833,29 @@ function tableOfRegion(region: TableRegion, page: number): Segment {
     .filter((r) => r.x2 - r.x1 < width * 0.9 && phrased.filter((l) => l.y > r.y1).length >= 2 && phrased.filter((l) => l.y < r.y1).length >= 2)
     .map((r) => r.y1)
     .sort((a, b) => b - a)[0];
-  const headerRule = full.find((y) => phrased.some((l) => l.y > y) && phrased.filter((l) => l.y < y).length >= 2) ?? under;
+  // Booktabs draws a rule under each column's head (\cmidrule) where the
+  // heads are grouped: a row of two partial rules or more at one height,
+  // under the first line, with a line that starts in the first column
+  // under it, parts the head from the body when no full rule does, or
+  // when the full rules are the rows' (two or more between the lines: a
+  // table whose rows are ruled in full has one under its first row as
+  // well). Under a head of two rows, the full rule under the second row
+  // parts the head (ICML's Table 1: "Dataset /" wrapped over "model"
+  // under the cmidrules of "Lowest test loss" and "End of training").
+  // Parse loop finding: langsci 385's Table 6 read its first row as a
+  // head, and its Table 2, with no full rule under the head, had none.
+  const partial0 = region.rules.filter((r) => r.x2 - r.x1 < width * 0.9);
+  const cmid = [...new Set(partial0.map((r) => Math.round(r.y1)))]
+    .filter((y) => partial0.filter((r) => Math.abs(r.y1 - y) <= 1).length >= 2)
+    .filter((y) => phrased.some((l) => l.y > y) && phrased.filter((l) => l.y < y).length >= 2)
+    .filter((y) => {
+      const below = phrased.filter((l) => l.y < y).sort((a, b) => b.y - a.y)[0];
+      return below.x <= region.box.x1 + below.size;
+    })
+    .sort((a, b) => b - a)[0];
+  const fullRule = full.find((y) => phrased.some((l) => l.y > y) && phrased.filter((l) => l.y < y).length >= 2);
+  const rowRuled = full.filter((y) => phrased.some((l) => l.y > y) && phrased.some((l) => l.y < y)).length >= 2;
+  const headerRule = cmid !== undefined && (fullRule === undefined || (cmid > fullRule && rowRuled)) ? cmid : (fullRule ?? under);
   let head = headerRule === undefined ? [] : phrased.filter((l) => l.y > headerRule);
   let body = headerRule === undefined ? phrased : phrased.filter((l) => l.y < headerRule);
   // With no rule under the head, the lines at the top with no words in the
