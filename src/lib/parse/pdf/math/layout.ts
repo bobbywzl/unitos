@@ -662,6 +662,25 @@ function braces(atoms: Atom[], rules: Rule[], used: Set<Rule>): Atom[] {
         (over ? b.bottom >= top - 0.2 * em && b.bottom < top + 1.5 * em : b.top <= bottom + 0.2 * em && b.top > bottom - 1.5 * em),
     );
     if (far.length === 0) continue;
+    // A label wider than its brace runs past the brace's ends: the word
+    // goes on at the label's size on the label's baseline, each letter
+    // against the last (parse loop finding: the CS 229 refresher's
+    // "Antisymmetric" under a brace the width of (A − A^T)/2 kept its
+    // middle, its "A" became the "+"'s subscript, its "ric" a second
+    // label, and the display was a crop).
+    if (near.length > 0) {
+      const ref = near.reduce((p, q) => (q.x2 - q.x1 > p.x2 - p.x1 ? q : p));
+      const onLabel = (b: Atom) => !near.includes(b) && !g.includes(b) && !far.includes(b) && Math.abs(b.yb - ref.yb) < 0.15 * ref.size && Math.abs(b.size - ref.size) < 0.05 * ref.size;
+      for (const dir of [-1, 1]) {
+        for (;;) {
+          const edge = dir < 0 ? Math.min(...near.map((b) => b.x1)) : Math.max(...near.map((b) => b.x2));
+          const gap = (b: Atom) => (dir < 0 ? edge - b.x2 : b.x1 - edge);
+          const next = out.find((b) => onLabel(b) && gap(b) > -0.05 * b.size && gap(b) < 0.25 * b.size);
+          if (!next) break;
+          near.push(next);
+        }
+      }
+    }
     const farRules = rules.filter((r) => !used.has(r) && r.dir === "h" && r.x1 >= x1 - 0.2 * em && r.x2 <= x2 + 0.2 * em && (over ? r.y1 < bottom : r.y1 > top));
     for (const r of farRules) used.add(r);
     // The brace's baseline is its body's once its fractions are read: a
