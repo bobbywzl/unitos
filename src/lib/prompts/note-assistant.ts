@@ -2,7 +2,7 @@ import type { Lang } from "@/lib/i18n/config";
 import {
   ANSWER_LENGTH,
   answerLanguage,
-  DEPTH_RULE,
+  CORE_RULE,
   profileLines,
   readerNotesText,
   SPECIFICITY_RULE,
@@ -77,7 +77,7 @@ export function noteAssistantPrompt(ctx: NoteAssistantCtx): string {
     "6. Never write an id in the note or in reply: no [block <id>], no [note <id>], no bare ids. Name a passage by its words.",
     "7. The markup: \"# \" for the title line, \"## \" for a heading, \"- \" for a bullet, \"+ \" for a dash, \"1. \" for a numbered item, \"- [ ] \" for a checklist item, \"> \" for a quote, **bold**, *italic*. Keep the markup the note already uses unless the message asks for another shape.",
     `8. reply is markdown. ${ANSWER_LENGTH}`,
-    DEPTH_RULE,
+    CORE_RULE,
     SPECIFICITY_RULE,
     STYLE_RULE,
     ...(ctx.web ? ["", ...WEB_LINES] : []),

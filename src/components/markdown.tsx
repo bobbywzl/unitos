@@ -10,7 +10,12 @@ import { CommentIcon, LinkIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { isVisualizationImage, openVisualization } from "@/components/reader/visualization-viewer";
 import { imageWidth } from "@/lib/note-markup";
-import { parseAnnotationReference, type ParsedAnnotationReference } from "@/lib/annotation-reference";
+import {
+  annotationReferenceHref,
+  parseAnnotationReference,
+  type ParsedAnnotationReference,
+  type ReferencedAnnotation,
+} from "@/lib/annotation-reference";
 import { annotationKindColor } from "@/lib/annotations/kind";
 import type { AnnotationItem } from "@/lib/types";
 import { AnnotationKindIcon } from "@/components/annotation-kind-icon";
@@ -24,8 +29,8 @@ import type { SourceChip } from "@/lib/types";
 // block and flash it (the reader listens for dissect:flash-block).
 const BLOCK_TAG = /\[block ([a-zA-Z0-9]+)\]/g;
 
-// A note is cited as [note <id>]: a chip that opens the note in the notes
-// tray (dissect:show-note), never the bare id.
+// A note or an annotation is cited as [note <id>]: a chip that opens it
+// (showCitedNote), never the bare id.
 const NOTE_TAG = /\[note ([a-zA-Z0-9]+)\]/g;
 
 function linkifyBlockTags(text: string): string {
@@ -462,6 +467,41 @@ function Image({ src, alt }: Override<"img">) {
   );
 }
 
+// A cited [note <id>] is a note or an annotation (annotations are notes of
+// the hidden Annotations section). An annotation opens on its mark: its card
+// in the Annotations tab when its document is open, else the reader on its
+// document. A note opens in the notes tray.
+async function showCitedNote(noteId: string, go: (href: string) => void): Promise<void> {
+  const showNote = () => {
+    window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId } }));
+  };
+  let annotation: ReferencedAnnotation | null = null;
+  try {
+    const res = await fetch(`/api/annotations/${encodeURIComponent(noteId)}`);
+    if (res.ok) annotation = (await res.json()) as ReferencedAnnotation;
+  } catch {
+    // Offline or gone: the notes tray is the answer.
+  }
+  if (!annotation?.documentId) return showNote();
+  const here = new URLSearchParams(window.location.search).get("doc");
+  if (here === annotation.documentId && annotation.sourceId) {
+    const detail = { sourceId: annotation.sourceId };
+    window.dispatchEvent(new CustomEvent("dissect:flash-source", { detail }));
+    window.dispatchEvent(new CustomEvent("dissect:focus-annotation", { detail }));
+    return;
+  }
+  const notebookId = /^\/n\/([^/?#]+)/.exec(window.location.pathname)?.[1];
+  if (!notebookId) return showNote();
+  go(
+    annotationReferenceHref(notebookId, {
+      annotationId: annotation.id,
+      documentId: annotation.documentId,
+      sourceId: annotation.sourceId,
+      kind: annotation.kind,
+    }),
+  );
+}
+
 function Link({ node, href, children: linkChildren, ...props }: Override<"a">) {
   const { onAnnotationReference } = useContext(MarkdownData);
   const t = useT();
@@ -480,7 +520,7 @@ function Link({ node, href, children: linkChildren, ...props }: Override<"a">) {
     return (
       <button
         type="button"
-        onClick={() => window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId } }))}
+        onClick={() => void showCitedNote(noteId, (href) => router.push(href))}
         data-tip={t("panels.showCitedNote")}
         className="mx-0.5 inline-flex size-[18px] items-center justify-center rounded-full bg-sage-100 align-text-bottom text-[10px] font-semibold text-sage-800 no-underline hover:bg-sage-200"
       >

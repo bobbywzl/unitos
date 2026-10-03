@@ -82,18 +82,25 @@ export type PromptCtx = {
 export const STYLE_RULE =
   "Style: work the whole answer out before you write a word; write only the result. Say the answer first, then the reasoning that earns it. Short sentences, one point per sentence, the plainest words that say it — words anyone would know, not the field's, unless the material's own term is the one the reader needs. No idioms, no preamble, no filler, no restating the question, no closing summary, no headings for a short answer. Use technical language only where the material does. Then, when there is one, name in one or two lines the thing most likely to trip the reader up here — a term, a step, a wrong assumption, a gap in the material — and clear it.";
 
-// The one depth line every template that explains or answers carries (an
+// The one core line every template that explains or answers carries (an
 // explanation, an analysis, an answer of the assistant): the reader asked to
-// understand, so a gloss that restates the words is a failed answer. Plain
-// words (STYLE_RULE) and depth are not at odds: the reasoning is what the
-// words carry. Repeated exact wording across templates (CLAUDE.md rule 7).
-export const DEPTH_RULE =
-  "Depth: the reader asked to understand, not for a gloss. Before you write, think it through: what the words say, why the author says it here, what it rests on, what follows from it, how it fits the document's argument as a whole, and what the reader's own notes and annotations say about it. Then write the explanation an expert who has read the whole document and the reader's notes would give: the reasoning step by step, the evidence quoted and cited, the links to other parts of the document and to the reader's notes named, and the limit, the tension, or the other reading where there is one. Every paragraph adds a reason, a link, or a consequence the reader did not have. An answer that only restates or summarizes the words has failed.";
+// understand, so the answer finds what the words really say and says that,
+// briefly — neither a gloss that restates the words nor an essay. Repeated
+// exact wording across templates (CLAUDE.md rule 7).
+export const CORE_RULE =
+  "Core: before you write, find the core: what the words really say and why it matters here, read in the light of the whole document. Open with the core in one or two sentences, in plain words. Then give only what the reader needs to hold it: the reasoning step it rests on, the term or the step they would miss, the link to another part of the document that changes how it reads, the limit or the other reading where there is one. Combine the material: when the document, another document of the project, and the reader's notes speak to the same point, make it one point and cite each, never a paragraph each. Every sentence adds a reason, a link, or a consequence the reader did not have; a sentence that restates the words or the core is deleted.";
 
-// The length line of an answer that explains: as long as the reasoning
-// needs, never cut to a word count that leaves the reasoning out.
+// The length line of an answer that explains: the shortest answer that
+// carries the core and its reasoning.
 export const ANSWER_LENGTH =
-  "Length: as long as the reasoning needs, never padded. A lookup (a name, a number, a place in the document) takes a few sentences. A question of meaning, argument, or interpretation usually takes 250 to 600 words. Use markdown: short paragraphs, bold for the key terms, and a list or a short heading only where it helps the reader follow.";
+  "Length: the shortest answer that carries the core and its reasoning. A lookup (a name, a number, a place in the document) takes one to three sentences. A question of meaning, argument, or interpretation usually takes 80 to 200 words; go longer only when the reader asks for detail or the reasoning needs more steps. Use markdown: short paragraphs, bold for the one or two key terms, no headings.";
+
+// The connection line every template that reads the reader's notes and
+// annotations carries: what the reader already wrote is named where it bears
+// on the answer, so the answer joins their previous work. Repeated exact
+// wording across templates (CLAUDE.md rule 7).
+export const CONNECTION_RULE =
+  'Connection to previous work: when one of the reader\'s notes or annotations bears on this — it says the same thing, disagrees, extends it, or asks the question this answers — end with one short paragraph that opens with the bold label "Connection to your work:" (in the answer\'s language) and names each in a few words with its tag, [note <id>], and says how it connects. At most three, the strongest first. A note or annotation that only shares a word is not a connection. None bears on this: leave the paragraph out; never force one.';
 
 // The one grounding line every assistant-voice template carries: what the
 // tool says rests on the document, and the reader can check it. Repeated
@@ -147,12 +154,14 @@ export const WEB_LINES = [
 
 // The reader's notes as the assistant reads them (SPEC.md §7): every note
 // whole, up to NOTE_CHARS each, until the budget runs out; a cut is declared,
-// never silent. "section: note", one note per paragraph.
+// never silent. "section: note", one note per paragraph; with its id, the
+// note opens with its tag, [note <id>], so the answer can cite it
+// (CONNECTION_RULE). An annotation passes its kind as sectionTitle.
 const NOTE_CHARS = 3000;
 export const READER_NOTES_BUDGET = 40_000;
 
 export function readerNotesText(
-  notes: { sectionTitle: string; content: string }[],
+  notes: { id?: string; sectionTitle: string; content: string }[],
   budget = READER_NOTES_BUDGET,
 ): string {
   if (notes.length === 0) return "none yet";
@@ -160,7 +169,7 @@ export function readerNotesText(
   let left = budget;
   for (const n of notes) {
     const content = n.content.length > NOTE_CHARS ? `${n.content.slice(0, NOTE_CHARS)} [cut]` : n.content;
-    const rendered = `${n.sectionTitle}: ${content}`;
+    const rendered = `${n.id ? `[note ${n.id}] ` : ""}${n.sectionTitle}: ${content}`;
     if (rendered.length > left) break;
     left -= rendered.length;
     out.push(rendered);

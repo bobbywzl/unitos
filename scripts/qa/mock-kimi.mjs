@@ -537,9 +537,18 @@ function buildResponse(all) {
     return parts.join(" ");
   }
 
-  // EXPLAIN / SIMPLIFY / ask: plain prose, citing a real block tag.
+  // EXPLAIN / SIMPLIFY / ask: plain prose, citing a real block tag. Asked
+  // for the connection to the reader's work, the first annotation the
+  // context tags (else the first note) is named.
   const cited = blocks[0] ? ` See [block ${blocks[0].id}] for the setup.` : "";
-  return `Mock response: this passage sets out the core claim in plain terms, with the key figure restated for the reader's purpose.${cited}`;
+  const tagged =
+    all.match(/\[note ([a-z0-9]+)\] (?:comment|highlight|explanation|analysis|simplified rewrite)/)?.[1] ??
+    all.match(/\[note ([a-z0-9]+)\]/)?.[1];
+  const connection =
+    all.includes("Connection to previous work:") && tagged
+      ? `\n\n**Connection to your work:** your earlier remark [note ${tagged}] asks the question this passage answers.`
+      : "";
+  return `Mock response: this passage sets out the core claim in plain terms, with the key figure restated for the reader's purpose.${cited}${connection}`;
 }
 
 const WEB_SOURCE = { url: "https://example.com/mock-source", title: "Mock web source" };

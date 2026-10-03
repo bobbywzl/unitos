@@ -1,7 +1,7 @@
 import {
   ANSWER_LENGTH,
   answerLanguage,
-  DEPTH_RULE,
+  CORE_RULE,
   profileLines,
   SPECIFICITY_RULE,
   STYLE_RULE,
@@ -33,7 +33,7 @@ export function askPrompt(ctx: PromptCtx): string {
     "3. Never add facts the transcript does not state. Never guess what a speaker meant beyond their words. Never fill a gap with what is generally known.",
     "4. Connect the answer to the reader's purpose when the connection is real. Skip forced connections.",
     ANSWER_LENGTH,
-    DEPTH_RULE,
+    CORE_RULE,
     SPECIFICITY_RULE,
     STYLE_RULE,
     ...(ctx.web ? ["", ...WEB_LINES] : []),

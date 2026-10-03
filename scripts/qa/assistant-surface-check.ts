@@ -5,7 +5,8 @@
 // Run: npx tsx scripts/qa/assistant-surface-check.ts
 import { scanActionsFence, splitActionsFence } from "@/lib/assistant/fence";
 import { checkNoteQuotes } from "@/lib/notes/assistant-check";
-import { readerNotesText } from "@/lib/prompts/types";
+import { explainPrompt } from "@/lib/prompts/explain";
+import { CONNECTION_RULE, CORE_RULE, readerNotesText, type PromptCtx } from "@/lib/prompts/types";
 
 let failures = 0;
 const check = (ok: boolean, what: string) => {
@@ -61,6 +62,26 @@ check(/\[\d+ more notes not shown\]$/.test(text), "a cut is declared, never sile
 check(readerNotesText([]) === "none yet", "no notes reads as none yet");
 const long = readerNotesText([{ sectionTitle: "A", content: "y".repeat(5000) }]);
 check(long.endsWith("[cut]"), "a note past its length is cut with a mark");
+
+const tagged = readerNotesText([{ id: "n1", sectionTitle: "comment", content: "Is this circular?" }]);
+check(tagged === "[note n1] comment: Is this circular?", "a note or annotation with an id opens with its tag, so the answer can cite it");
+
+// ── The core and the connection to previous work ───────────────────────
+const ctx: PromptCtx = {
+  profile: null,
+  lang: "en",
+  documentTitle: "Beyond Good and Evil",
+  anchoredText: "Seriousness reveals our depth.",
+  contextBefore: "",
+  contextAfter: "",
+  sectionSkeleton: [],
+};
+const withCorpus = explainPrompt({ ...ctx, corpus: true });
+const withoutCorpus = explainPrompt({ ...ctx, corpus: false });
+check(withCorpus.includes(CORE_RULE) && withoutCorpus.includes(CORE_RULE), "Explain asks for the core first");
+check(withCorpus.includes(CONNECTION_RULE), "Explain with the project context asks for the connection to the reader's work");
+check(!withoutCorpus.includes(CONNECTION_RULE), "Explain with no notes to read asks for no connection");
+check(!/250 to 600|200 to 400/.test(withCorpus), "no answer is asked for hundreds of words");
 
 console.log(failures === 0 ? "\nall checks pass" : `\n${failures} check(s) failed`);
 process.exit(failures === 0 ? 0 : 1);
