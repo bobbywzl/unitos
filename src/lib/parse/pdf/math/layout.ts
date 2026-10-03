@@ -214,8 +214,10 @@ function atomsOf(glyphs: Glyph[]): { atoms: Atom[]; unknown: Glyph[] } {
 // only (parse loop finding: the Japanese "L = E⁻¹ として, A = LU" lost its
 // kana, failed the check, and was a crop).
 const TEXT_CHAR_RE = /^[A-Za-z0-9,.;:()[\]=+−–·!/<>\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u017F\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}ー]$/u;
-/** A letter a word in a formula holds: ASCII, Latin with a mark, or CJK. */
-const LETTER_RE = /^[A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u017F\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}ー]$/u;
+/** A letter a word in a formula holds: ASCII, Latin with a mark, or CJK.
+    A ligature of TeX's text font (ff, fi, fl, ffi, ffl) is the letters it
+    joins: \mathrm{eff} read \mathrm{e}ff. */
+const LETTER_RE = /^(?:[A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u017F\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}ー]|ff|fi|fl|ffi|ffl)$/u;
 /** A Latin letter with a mark, or a CJK character: no math letter, so text only. */
 const MARKED_RE = /[\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u017F\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}ー]/u;
 const CM_NAME_RE = /cm(r|mi|mib|sy|bsy|ex|bx|ti|ss|tt|sl)\d/i;
@@ -1098,14 +1100,18 @@ function fencedGroups(atoms: Atom[], em: number): Atom[] {
       if (!close) {
         // What follows cases on the formula's baseline, past every row's end
         // and on no row's baseline (the sentence's period), is the
-        // formula's, not a row's: arXiv 2502.02648 (25) read "γ < 1_{.}".
+        // formula's, not a row's: arXiv 2502.02648 (25) read "γ < 1_{.}",
+        // and ICML's (33) "x = ℓ/L." after its cases read as the first
+        // row's subscript. The longest such run goes.
         const base = (open.top + open.bottom) / 2 - 0.25 * em;
-        for (;;) {
-          const last = [...content].sort((p, q) => q.x2 - p.x2)[0];
-          const rest = content.filter((a) => a !== last);
-          if (!last || rest.length === 0 || Math.abs(last.yb - base) > 0.2 * em) break;
-          if (rest.some((a) => a.x2 > last.x1 + 0.1 * em || Math.abs(a.yb - last.yb) < 0.1 * em)) break;
-          content = rest;
+        const sorted = [...content].sort((p, q) => p.x1 - q.x1);
+        for (let k = 1; k < sorted.length; k++) {
+          const tail = sorted.slice(k);
+          const rest = sorted.slice(0, k);
+          if (tail.some((a) => Math.abs(a.yb - base) > 0.2 * em)) continue;
+          if (rest.some((a) => a.x2 > tail[0].x1 + 0.1 * em || tail.some((t) => Math.abs(a.yb - t.yb) < 0.1 * em))) continue;
+          content = content.filter((a) => rest.includes(a));
+          break;
         }
       }
       // Cases take no cases set after them on the line: two side by side

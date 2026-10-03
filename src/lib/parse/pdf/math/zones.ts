@@ -44,7 +44,7 @@ function kind(g: Glyph, size: number): Kind {
   // A text font's digit joins the math beside it as CMR's does where the
   // page's formulas take their digits from the text's font (glyphs.ts
   // isTextMath: MathDesign's Utopia, LibreOffice's Liberation Serif).
-  if (g.family === null) return isTextMath(g) && /^[0-9]$/.test(g.unicode) ? "attach" : "text";
+  if (g.family === null) return isTextMath(g) && /^[0-9/]$/.test(g.unicode) ? "attach" : "text";
   if (g.family !== "ot1") return "text";
   if (g.size < size * 0.85 || ATTACH_RE.test(g.unicode)) return "attach";
   // An accent over a math letter (\hat, \bar, \dot) is the text font's.
@@ -213,11 +213,16 @@ function zonesOf(glyphs: Glyph[], size: number, textFont: boolean): Glyph[][] {
     // A lone text italic letter a page's math takes is a formula (lone,
     // below), and so is one with its scripts (t_i, t_1).
     const single = isTextMath(z[0]) && isLetter(z[0]) && z.slice(1).every((g) => g.size < size * 0.85 && (isTextMath(g) || kindOf(g) === "attach"));
+    // So is a run of such letters with a glyph of TeX's text font: on such
+    // a page TeX's roman sets only formulas' brackets, digits, and signs
+    // (mathpazo's thesis: "P(E_i) =" read as words before a fraction, its
+    // display lost, its numerator and denominator dropped).
+    const roman = z.some((g) => g.family === "ot1") && z.some((g) => isTextMath(g) && isLetter(g));
     const again = () => {
       cur = after;
       if (cur.length > 0) flush();
     };
-    if (!stacked && !single && (math.length === 0 || url)) return again();
+    if (!stacked && !single && !roman && (math.length === 0 || url)) return again();
     // A lone raised symbol after a word (a footnote's dagger) is a mark,
     // not a formula: every glyph small, none on the line.
     if (!stacked && z.every((g) => g.size < size * 0.85)) return again();
@@ -454,12 +459,23 @@ export function splitZones(items: Item[], cells: number[]): Item[] {
 }
 
 // The size most of a cell's characters are set in.
+// A cell's text size: the size most of its characters take, among those
+// at a script's size or more under its largest letter. A cell of a
+// letter and its long subscript (a fraction's denominator, ξ_{eff,uniform})
+// holds more of the script's characters than of the letter's (a math
+// font's letter: a heading beside a column's text is no such letter): read at the
+// script's size, its subscript's letters were words, and the fraction's
+// line went into the text line over it (parse loop finding: ICML's (34)
+// was a crop).
 function textSize(items: Item[]): number {
+  const big = Math.max(0, ...items.filter((i) => (i.glyphs ?? []).some((g) => isMathGlyph(g) && LETTER_RE.test(g.unicode))).map((i) => i.size));
   const chars = new Map<number, number>();
   for (const i of items) {
+    if (i.size < big * 0.85) continue;
     const key = Math.round(i.size * 10) / 10;
     chars.set(key, (chars.get(key) ?? 0) + i.str.length);
   }
+  if (chars.size === 0) for (const i of items) chars.set(Math.round(i.size * 10) / 10, (chars.get(Math.round(i.size * 10) / 10) ?? 0) + i.str.length);
   return [...chars].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 10;
 }
 
