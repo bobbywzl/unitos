@@ -456,6 +456,27 @@ function measureSideCards(container: HTMLElement | null, excludeKind?: string) {
   return { rects, articleLeft, articleRight, wordsLeft, wordsRight, cw };
 }
 
+/** The toolbox's side for words whose first line starts at `top` (container
+    coords), in the block reader (SPEC.md §6): right of the words when that
+    side is clear, else left, else directly below them. A side takes the
+    toolbox only with the room for it beside the words: in a narrow pane (a
+    split pane, a small window) the toolbox landed on the words it was opened
+    for. The toolbox at rest is 176px with a 6px edge margin; pressed against
+    the pane's edge it may ride over the words' box by a sliver (the last line
+    rarely reaches the box's edge), never by more. */
+function toolboxSide(container: HTMLElement, top: number): "right" | "left" | "below" {
+  const { rects, articleLeft, articleRight, wordsLeft, wordsRight, cw } = measureSideCards(container);
+  const articleMid = (articleLeft + articleRight) / 2;
+  const POPOVER_ESTIMATE = 280;
+  const TOOLBOX_EDGE = 176 + 6;
+  const SLIVER = 40;
+  const roomRight = wordsRight - (cw - TOOLBOX_EDGE) <= SLIVER;
+  const roomLeft = TOOLBOX_EDGE + 10 - wordsLeft <= SLIVER;
+  if (roomRight && blocksOnSide(rects, articleMid, "right", top, POPOVER_ESTIMATE).length === 0) return "right";
+  if (roomLeft && blocksOnSide(rects, articleMid, "left", top, POPOVER_ESTIMATE).length === 0) return "left";
+  return "below";
+}
+
 function blocksOnSide(
   rects: CardRect[],
   articleMid: number,
@@ -2252,24 +2273,10 @@ export function ReaderInteractions({
     const articleRect = container.querySelector("article")?.getBoundingClientRect();
     const textLeft = articleRect ? articleRect.left - containerRect.left + 24 : 24;
     const yTop = Math.max(8, rect.top - containerRect.top + container.scrollTop);
-    // The rail's side follows the tool blocks nearby: right of the text when
-    // that side is clear, else left, else directly below the highlight.
-    const { rects, articleLeft, articleRight, wordsLeft, wordsRight, cw } = measureSideCards(container);
-    const articleMid = (articleLeft + articleRight) / 2;
-    const POPOVER_ESTIMATE = 280;
-    // A side takes the toolbox only with the room for it beside the words:
-    // in a narrow pane (a split pane, a small window) the toolbox landed on
-    // the words it was opened for. Without the room it goes below the
-    // selection, as the page editor's does under its page.
-    // The toolbox at rest is 176px with a 6px edge margin; pressed against
-    // the pane's edge it may ride over the words' box by a sliver (the last
-    // line rarely reaches the box's edge), never by more.
-    const TOOLBOX_EDGE = 176 + 6;
-    const SLIVER = 40;
-    const roomRight = wordsRight - (cw - TOOLBOX_EDGE) <= SLIVER;
-    const roomLeft = TOOLBOX_EDGE + 10 - wordsLeft <= SLIVER;
-    // The page editor (SPEC.md §29): beside the page's right edge, else over
-    // its margin, else under the words.
+    // The rail's side follows the tool blocks nearby and the room beside
+    // the words (toolboxSide). The page editor (SPEC.md §29): beside the
+    // page's right edge, else over its margin, else under the words.
+    const { articleRight, cw } = measureSideCards(container);
     const shift = docsShiftRef.current;
     const pageGeo = pageEditor ? pageGeometry(container, shift) : null;
     const side = window.matchMedia("(pointer: coarse)").matches
@@ -2278,11 +2285,7 @@ export function ReaderInteractions({
         ? toolbarLeft(pageGeo, shift, 176) === null
           ? ("below" as const)
           : ("right" as const)
-        : roomRight && blocksOnSide(rects, articleMid, "right", yTop, POPOVER_ESTIMATE).length === 0
-          ? ("right" as const)
-          : roomLeft && blocksOnSide(rects, articleMid, "left", yTop, POPOVER_ESTIMATE).length === 0
-            ? ("left" as const)
-            : ("below" as const);
+        : toolboxSide(container, yTop);
     // The toolbox's first row centers on the selection's first line, as
     // Google Docs' buttons do.
     const firstLine = lineRects[0] ?? rect;
@@ -4108,16 +4111,8 @@ export function ReaderInteractions({
       const margin = Math.min(240, containerRect.width / 2);
       const articleRect = container.querySelector("article")?.getBoundingClientRect();
       const yTop = Math.max(8, rect.top - containerRect.top + container.scrollTop);
-      const { rects, articleLeft, articleRight, cw } = measureSideCards(container);
-      const articleMid = (articleLeft + articleRight) / 2;
-      const POPOVER_ESTIMATE = 280;
-      const side = window.matchMedia("(pointer: coarse)").matches
-        ? ("below" as const)
-        : blocksOnSide(rects, articleMid, "right", yTop, POPOVER_ESTIMATE).length === 0
-          ? ("right" as const)
-          : blocksOnSide(rects, articleMid, "left", yTop, POPOVER_ESTIMATE).length === 0
-            ? ("left" as const)
-            : ("below" as const);
+      const { articleRight, cw } = measureSideCards(container);
+      const side = window.matchMedia("(pointer: coarse)").matches ? ("below" as const) : toolboxSide(container, yTop);
       const rawX = rect.left + rect.width / 2 - containerRect.left;
       setSubmenu(null);
       setCommentDraft("");
@@ -4333,19 +4328,57 @@ export function ReaderInteractions({
     const headerBottom = page ? container.querySelector(".docs-header")?.getBoundingClientRect().bottom : undefined;
     const lineTop = clientY - 20;
     const pageTop = headerBottom !== undefined ? Math.max(lineTop, headerBottom + 56) : lineTop;
+    // The block reader: beside the block, as a selection's toolbox stands
+    // beside its words (toolboxSide) — never over the figure, the table
+    // around it, or the caption it was opened on. Near the pane's top edge
+    // (a tall figure whose top is out of view) it stands where the bubbles
+    // over it fit, clear of the chips, as for words.
+    const blockRect = page
+      ? undefined
+      : container.querySelector(`[data-block-id="${blockId}"]`)?.getBoundingClientRect();
+    const blockTop = blockRect ? blockRect.top - containerRect.top + container.scrollTop : y;
+    const readerSide = blockRect
+      ? window.matchMedia("(pointer: coarse)").matches
+        ? ("below" as const)
+        : toolboxSide(container, blockTop)
+      : null;
+    const nearTop = blockRect !== undefined && (readerSide === "below" || blockRect.top - containerRect.top < 100);
+    const readerTop = nearTop
+      ? Math.max(blockTop, container.scrollTop + (readerSide === "right" ? 100 : 48))
+      : Math.max(8, blockTop);
     suppressNextMouseUp.current = true;
     // The page editor keeps its own selection, the figure it selected: an
     // emptied one would put the caret at the text's start on the next key.
     if (!richTextRef.current) window.getSelection()?.removeAllRanges();
     setSubmenu(null);
     setCommentDraft("");
+    const anchor = { blockId, startOffset: 0, endOffset: text.length, quotedText: text, prefix: "", suffix: "" };
+    if (blockRect && readerSide) {
+      const { articleRight, cw } = measureSideCards(container);
+      const articleRect = container.querySelector("article")?.getBoundingClientRect();
+      const margin = Math.min(240, containerRect.width / 2);
+      setPopover({
+        anchor,
+        figure: true,
+        x: Math.max(margin, Math.min(blockRect.left + blockRect.width / 2 - containerRect.left, containerRect.width - margin)),
+        y: blockRect.bottom - containerRect.top + container.scrollTop + 14,
+        yTop: readerTop,
+        wordsTop: blockTop,
+        textLeft: articleRect ? articleRect.left - containerRect.left + 24 : 24,
+        truncated: false,
+        side: readerSide,
+        rightBase: articleRight + 10,
+        cw,
+        nearTop,
+      });
+      return;
+    }
     setPopover({
-      anchor: { blockId, startOffset: 0, endOffset: text.length, quotedText: text, prefix: "", suffix: "" },
+      anchor,
       figure: true,
       x: Math.max(120, clientX - containerRect.left),
-      // Under the press, the bubbles over the toolbox clear it, as under a
-      // selection's words.
-      y: y + 8 + (page && !beside ? 48 : 0),
+      y: y + 8,
+      wordsTop: y - 8,
       yTop: beside ? Math.max(8, pageTop - containerRect.top + container.scrollTop) : Math.max(8, y - 8),
       textLeft: Math.min(clientX - containerRect.left + 130, containerRect.width - 20),
       truncated: false,
