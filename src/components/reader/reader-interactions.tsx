@@ -4028,6 +4028,35 @@ export function ReaderInteractions({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [popoverAnchorKey, notebookId]);
 
+  // The tint repaints the paragraph's words as marks, and the browser's
+  // selection, which lived in the text nodes the repaint replaced, collapses
+  // with them. A press on the tinted words then starts a new selection in
+  // place of the quote drag (dragstart reads the selection), so the drag
+  // worked only in a paragraph that already had marks. Once the tint has
+  // painted, the selection goes back over the marks: the same words, with
+  // the same transparent color. Not in the page editor, which keeps its own
+  // selection and takes no tint.
+  useLayoutEffect(() => {
+    if (!popover || popover.term || popover.figure || richTextRef.current) return;
+    const container = containerRef.current;
+    const sel = window.getSelection();
+    if (!container || !sel) return;
+    const marks = container.querySelectorAll(".selection-mark");
+    if (marks.length === 0) return;
+    const first = marks[0];
+    const last = marks[marks.length - 1];
+    if (sel.rangeCount > 0 && !sel.isCollapsed) {
+      const range = sel.getRangeAt(0);
+      if (first.contains(range.startContainer) && last.contains(range.endContainer)) return;
+    }
+    const range = document.createRange();
+    range.setStart(first, 0);
+    range.setEnd(last, last.childNodes.length);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [popoverAnchorKey]);
+
   // A definition on its way stops when its popover closes or moves to
   // another selection: nobody is left to read it.
   useEffect(
