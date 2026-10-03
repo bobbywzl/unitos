@@ -126,7 +126,12 @@ const REPAIR_CAPTION_MAX_CHARS = 300;
 // prose, not a figure.
 const MEDIA_SELECTOR = "img[src], video, iframe, svg";
 
-// A decorative asset is not content: tiny dimensions, or an unlabeled .svg icon.
+// A tracking pixel's host: the image is a beacon, not a picture.
+const TRACKING_PIXEL_RX = /^(?:https?:)?\/\/(?:[^/]*\.)?(?:scorecardresearch\.com|google-analytics\.com|doubleclick\.net|facebook\.com\/tr\b|quantserve\.com|ioam\.de|xiti\.com|wt-safetag\.com|chartbeat\.com)/i;
+
+// A decorative asset is not content: tiny dimensions, an unlabeled .svg
+// icon, an inline data-URL placeholder with no words (a gray box a script
+// swaps for the picture), or a tracking pixel.
 export function isContentImage(img: Element): boolean {
   const width = Number(img.getAttribute("width") ?? 0);
   const height = Number(img.getAttribute("height") ?? 0);
@@ -134,7 +139,10 @@ export function isContentImage(img: Element): boolean {
   // avatar made a figure of the byline — import compare loop finding).
   if ((width > 0 && width <= 48) || (height > 0 && height <= 48)) return false;
   const src = img.getAttribute("src") ?? "";
-  if (/\.svg(\?|#|$)/i.test(src) && !normalizeText(img.getAttribute("alt") ?? "")) return false;
+  const alt = normalizeText(img.getAttribute("alt") ?? "");
+  if (/\.svg(\?|#|$)/i.test(src) && !alt) return false;
+  if (src.startsWith("data:") && !alt) return false;
+  if (TRACKING_PIXEL_RX.test(src)) return false;
   return true;
 }
 
@@ -425,7 +433,9 @@ export function figureBlock(el: Element, ctx: WalkCtx): ParsedBlock | null {
     if (!isContentImage(img)) img.remove();
   }
   const caption = figureCaption(clone);
-  const alt = normalizeText(clone.querySelector("img[alt]")?.getAttribute("alt") ?? "");
+  // The img may be the element itself (a bare <img> in the flow).
+  const altImg = clone.matches("img[alt]") ? clone : clone.querySelector("img[alt]");
+  const alt = normalizeText(altImg?.getAttribute("alt") ?? "");
   // A figure row: one nested figure per captioned column.
   const row = figureRow(clone);
   if (row) nestColumns(row);
