@@ -305,8 +305,24 @@ function markShifts(items: Item[]) {
     const key = Math.round(i.size * 10) / 10;
     chars.set(key, (chars.get(key) ?? 0) + i.str.length);
   }
-  const textSize = [...chars].sort((a, b) => b[1] - a[1])[0][0];
-  const baseline = median(items.filter((i) => Math.abs(i.size - textSize) <= textSize * 0.05).map((i) => i.y));
+  let textSize = [...chars].sort((a, b) => b[1] - a[1])[0][0];
+  let baseline = median(items.filter((i) => Math.abs(i.size - textSize) <= textSize * 0.05).map((i) => i.y));
+  // A cell that opens with a letter its words' script follows, set at 0.55
+  // to 0.85 of its size and off its baseline by 0.1 to 0.4 of it, sets its
+  // text at that letter's size, however long the script (parse loop
+  // finding: a quantum mechanics book's "J_trans =" counted five letters of
+  // "trans" against one J, took the script's size for the text's, read
+  // "trans" as a word of prose, and the display (25.18b) read as three
+  // paragraphs). Small capitals stand on the letter's baseline; a drop cap
+  // is twice its words' size or more.
+  const lead = items.find((i) => i.str.trim() !== "");
+  if (lead && !lead.math && /^\p{L}$/u.test(lead.str.trim()) && textSize >= lead.size * 0.55 && textSize <= lead.size * 0.85) {
+    const shift = Math.abs(baseline - lead.y);
+    if (shift >= lead.size * 0.1 && shift <= lead.size * 0.4) {
+      textSize = lead.size;
+      baseline = lead.y;
+    }
+  }
   for (const item of items) {
     const small = !item.math && item.size <= textSize * 0.9;
     item.sup = small && item.y - baseline >= textSize * 0.15;

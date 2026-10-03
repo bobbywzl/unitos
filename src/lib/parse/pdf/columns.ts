@@ -496,7 +496,13 @@ function isNoteBand(band: Band, page: number): boolean {
   if (note.items.reduce((n, i) => n + i.str.replace(/[^\p{L}]/gu, "").length, 0) < 10) return false;
   const size = median(wide.items.map((i) => i.size));
   const gutter = Math.min(...band.right.items.map((i) => i.x)) - Math.max(...band.left.items.map((i) => i.x + i.w));
-  return gutter >= size && isColumn(wide.items, page) && isDense(buildLines(wide.items, page));
+  // A note set smaller than the column stands closer: three quarters of
+  // the column's size apart (parse loop finding: a LaTeX package's manual
+  // sets its "Introduced in version 4.11" notes in 9 pt, 10.6 pt left of
+  // its 10.9 pt column, and each note ran into the column's line beside
+  // it: "Introduced	chemformula offers …").
+  const smaller = median(note.items.map((i) => i.size)) <= size * 0.9;
+  return gutter >= size * (smaller ? 0.75 : 1) && isColumn(wide.items, page) && isDense(buildLines(wide.items, page));
 }
 
 // A region cut above and under one band: what stands above it, the band,

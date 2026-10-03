@@ -9,7 +9,7 @@ import { buildLines } from "@/lib/parse/pdf/lines";
 import { resolveZones } from "@/lib/parse/pdf/math/zones";
 import { cellParagraphs } from "@/lib/parse/pdf/ruled";
 import { tableSegment, type TableRow } from "@/lib/parse/pdf/tables";
-import { joinGroup } from "@/lib/parse/pdf/text";
+import { joinGroup, joinWrapped } from "@/lib/parse/pdf/text";
 import type { Box, Item, Line, PageContext, Run, Segment } from "@/lib/parse/pdf/types";
 
 // ── Figure regions ──────────────────────────────────────────────────────────
@@ -998,6 +998,15 @@ export function attachFigureRegions(
     if (drawingIn(drawing, at.y1 - reach, at.y2 + reach, x1, x2, (b) => Math.min(b.x2 - b.x1, b.y2 - b.y1) >= 1.5 && !inGraphic(b))) return undefined;
     const middle = (at.y1 + at.y2) / 2;
     const near = (gap: number) => gap >= -ctx.bodySize && gap <= pageWidth * 0.1;
+    // A wider gap, up to a quarter of the page, with no line of the page
+    // between the graphic and the caption's column at the graphic's rows:
+    // a margin caption beside a figure centered in the text column (parse
+    // loop finding: a Tufte textbook's "Figure 24.1:" stood 97 pt from
+    // its circle, and read as a figure of its own with nothing in it).
+    const clear = (g: Graphic) => {
+      const [a, b] = x1 > g.box.x2 ? [g.box.x2, x1] : [x2, g.box.x1];
+      return !lines.some((l) => l.y >= g.box.y1 && l.y <= g.box.y2 && l.x < b && l.xEnd > a);
+    };
     return graphics.find((g) => {
       if (g.caption.length > 0) return false;
       // Beside the caption's column, level with the graphic; or, where the
@@ -1007,7 +1016,7 @@ export function attachFigureRegions(
       const gap = Math.max(x1 - g.box.x2, g.box.x1 - x2);
       const own = Math.max(at.x1 - g.box.x2, g.box.x1 - at.x2);
       const beside =
-        (near(gap) && middle >= g.box.y1 - rowGap && middle <= g.box.y2 + rowGap) ||
+        ((near(gap) || (gap <= pageWidth * 0.25 && clear(g))) && middle >= g.box.y1 - rowGap && middle <= g.box.y2 + rowGap) ||
         (gap < -ctx.bodySize && near(own) && middle >= g.box.y1 && middle <= g.box.y2);
       if (!beside) return false;
       const others = sideCaptions.get(g);
@@ -1050,9 +1059,20 @@ export function attachFigureRegions(
   // continues it only where its lines stand: from the caption's left edge,
   // or centered under it. The text's next paragraph starts at its own
   // indent (parse loop finding: GeoTopo's "Die Umkehrabbildung g ist nicht
-  // stetig, …" under its centered caption read into it).
+  // stetig, …" under its centered caption read into it). The follower's
+  // size may be the caption's last run's, not its line's: a caption set
+  // smaller than its label (parse loop finding: a statistics book sets
+  // "Figure 11.2:" in 10 pt and its words in 9 pt; the caption's line
+  // reads 10 pt, so its second line, "is approximately linear.", read as
+  // a paragraph of its own). A line hung under the caption's words, past
+  // its label, continues it when the caption ends mid-sentence and the
+  // line opens in lower case (parse loop finding: GeoTopo's "Abbildung
+  // 1.10: … die be-" hangs "schränkte äußeres genannt." under "Die", 80 pt
+  // in, which read as a paragraph of its own).
   const withFollower = (cap: Segment, follow: Segment | undefined): { text: string; runs: Run[] | undefined; box: Box } => {
     const box = cap.box!;
+    const tail = [...(cap.runs ?? [])].reverse().find((r) => r.look)?.look?.size;
+    const hung = (f: Segment, fb: Box) => fb.x1 > box.x1 && fb.x1 < (box.x1 + box.x2) / 2 && !/[.!?:;]\s*$/.test(cap.text) && /^\s*\p{Ll}/u.test(f.text);
     const aligned = (f: Box, size: number) => Math.abs(f.x1 - box.x1) < size || Math.abs((f.x1 + f.x2) / 2 - (box.x1 + box.x2) / 2) < size;
     if (
       !follow ||
@@ -1061,18 +1081,20 @@ export function attachFigureRegions(
       follow.page !== cap.page ||
       follow.lineSize === undefined ||
       cap.lineSize === undefined ||
-      Math.abs(follow.lineSize - cap.lineSize) >= 0.6 ||
+      (Math.abs(follow.lineSize - cap.lineSize) >= 0.6 && !(tail !== undefined && Math.abs(follow.lineSize - tail) < 0.6)) ||
       box.y1 - follow.box.y2 > cap.lineSize * ctx.leading * 0.9 ||
       (cap.lineSize >= ctx.bodySize * 0.98 && follow.text.length >= 240 && box.y1 - follow.box.y2 > cap.lineSize * 0.35) ||
-      (cap.lineSize >= ctx.bodySize * 0.98 && !aligned(follow.box, cap.lineSize))
+      (cap.lineSize >= ctx.bodySize * 0.98 && !aligned(follow.box, cap.lineSize) && !hung(follow, follow.box))
     ) {
       return { text: cap.text, runs: cap.runs, box };
     }
     consumed.add(follow);
-    const offset = cap.text.length + 1;
+    // A word the line's end breaks loses the typesetter's hyphen ("be-" | "schränkte").
+    const joined: { text: string; runs?: Run[] } = { text: cap.text, runs: cap.runs };
+    const offset = joinWrapped(joined, follow.text);
     return {
-      text: `${cap.text} ${follow.text}`,
-      runs: [...(cap.runs ?? []), ...(follow.runs ?? []).map((r) => ({ ...r, start: r.start + offset, end: r.end + offset }))],
+      text: joined.text,
+      runs: [...(joined.runs ?? []), ...(follow.runs ?? []).map((r) => ({ ...r, start: r.start + offset, end: r.end + offset }))],
       box: unionBox(box, follow.box),
     };
   };

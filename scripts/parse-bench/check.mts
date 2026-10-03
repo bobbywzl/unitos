@@ -7,9 +7,9 @@ import type { ParsedBlock } from "@/lib/parse/types";
 import type { Glyph } from "@/lib/parse/pdf/drawing";
 import { fromImport, fromParse, printedNotes, type Doc, type DocBlock } from "./adapt";
 import { brokenNumbers, checklistWraps, displayDrawn, displayGaps, displaySpace, markerStart, rowHeight, rowHeights } from "./drawn";
-import { blindText, borderScore, formulaScaleOf, freeScores, furnitureOf, mathPart, ocrSame, type PdfText } from "./free";
+import { blindText, borderScore, formulaScaleOf, freeScores, furnitureOf, mathPart, mathSymbolWords, ocrSame, type PdfText } from "./free";
 import { captionScores, captionSides, contentImages, cropOverlaps, pictureScores } from "./floats";
-import type { PagePaint } from "./paint";
+import type { InkBand, PagePaint } from "./paint";
 import { glyphScores, placeCrops, placeEquations, type PageGlyphs } from "./glyphs";
 import { columnScores, cropScores, faceShape, farSpace, figureScores, gridProse, indentScores, labelScores, linesOfUnits, proofBoxes, runInIndents, tableScores, titleMarks, type PageInk } from "./layout";
 import { mathTokens, sequenceSimilarity } from "./math";
@@ -615,6 +615,25 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   const symbolic = freeScores(symbolPdf, flatten({ blocks: [para("◆ The yard grew α wide.")] })).coverage;
   check("free: a symbol font's character counts as the page draws it, not as the text layer's letter", near(symbolic.recall, 1) && near(symbolic.precision, 1), `recall ${symbolic.recall}, precision ${symbolic.precision}`);
   check("free: a line that is a page number and a period counts as a page-number line", numbered.numberLines.count === 1, `count ${numbered.numberLines.count}`);
+  // TeX's math glyphs the text layer reads by their codes: cmex's ∫ read "Z", cmsy's ⟩ read "i" after "xyz"; cmsy's
+  // "|" (code 106, "j") in a word read right ("|ψj") stays as the text layer reads it.
+  const mathLine = { page: 1, top: 100, bottom: 110, left: 100, right: 300, text: "Z |xyzi |ψj", words: [{ left: 100, right: 110, text: "Z" }, { left: 120, right: 160, text: "|xyzi" }, { left: 170, right: 200, text: "|ψj" }] };
+  const mathPage: PageGlyphs = {
+    width: 600,
+    height: 800,
+    shapes: [],
+    glyphs: [
+      { family: "omx", code: 90, unicode: "∫", x: 101, y: 692, w: 8, size: 10 },
+      { family: "oms", code: 105, unicode: "⟩", x: 152, y: 692, w: 6, size: 10 },
+      { family: "oms", code: 106, unicode: "|", x: 170, y: 692, w: 3, size: 10 },
+    ],
+  };
+  const mathWords = mathSymbolWords({ lines: [mathLine] }, [mathPage]);
+  check(
+    "free: a TeX math glyph the text layer reads by its code counts as the page draws it",
+    mathWords.length === 2 && mathWords[0].reads === "" && mathWords[1].reads === "|xyz",
+    JSON.stringify(mathWords.map((w) => [w.word, w.reads])),
+  );
 }
 {
   const ROLE_REF: RefBlock[] = [
@@ -1453,6 +1472,15 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
   // A display read as words holds a line "12": no page-number line.
   const display = freeScores({ ...numberPdf, furniture: [] }, flatten({ blocks: [para("MSE = 1\n12\nI=0")] }));
   check("free: a number on a line inside a block is no page-number line", display.numberLines.count === 0, `count ${display.numberLines.count}`);
+  // A listing's row "2 {": its line number and its brace, two lines of the text layer, read the page number's words.
+  const listingRow = [
+    { page: 1, top: 200, bottom: 206, left: 100, right: 103, text: "2" },
+    { page: 1, top: 199, bottom: 207, left: 118, right: 123, text: "{" },
+  ];
+  const listingPdf: PdfText = { ...numberPdf, lines: [...numberPdf.lines, ...listingRow] };
+  const listing: DocBlock = { kind: "code", text: "1 \\draw\n2 {\n3 }" };
+  const numbered2 = freeScores(listingPdf, flatten({ blocks: [heading, para("The telescope saw the source."), listing] })).furniture;
+  check("free: a listing's row that reads a page number's words is the page's own", numbered2.leaked === 0, `leaked ${numbered2.leaked}`);
 }
 
 // ── The page's own lines: columns, indents, tables, figures, crops, faces, labels ──
@@ -1484,6 +1512,11 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
   const falseSet = indentScores(flushPdf, indented, linesOfUnits(flushPdf, indented));
   const trueSet = indentScores(setInPdf, indented, linesOfUnits(setInPdf, indented));
   check("layout: a block indent the page does not set is false; one it sets is right", falseSet.wrong === 1 && trueSet.judged === 1 && trueSet.wrong === 0, `${JSON.stringify(falseSet.found)} ${JSON.stringify(trueSet.found)}`);
+  // A page that sets every block 20 pt in under heads at the column's edge: the heads show the edge.
+  const heads = [0, 1].map((i) => ({ page: 1, top: 80 + 200 * i, bottom: 90 + 200 * i, left: 72, right: 150, text: `Bemerkung ${i + 17}` }));
+  const blocksPdf: PdfText = { ...flushPdf, lines: [...own.map((l) => ({ ...l, left: 92 })), ...other.map((l) => ({ ...l, left: 92 })), ...heads] };
+  const underHeads = indentScores(blocksPdf, indented, linesOfUnits(blocksPdf, indented));
+  check("layout: a block set in under heads at the column's edge is set in", underHeads.judged === 1 && underHeads.wrong === 0, JSON.stringify(underHeads));
   // A drawing read as a display's crop over the captioned rest of its figure: one figure in two pieces.
   const region = (y1: number, y2: number) => ({ kind: "path" as const, points: [[20, y1], [80, y1], [80, y2], [20, y2]] as [number, number][] });
   const top: DocBlock = { kind: "figure", mathImage: "", at: { page: 1, region: region(10, 20) } };
@@ -1493,6 +1526,16 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
   check(
     "layout: a figure's top read apart from its captioned rest is a figure in two pieces; with words between them, two figures",
     figureScores(pdf, flatten({ blocks: [top, rest] })).split === 2 && figureScores(gapPdf, flatten({ blocks: [top, apart] })).split === 0,
+  );
+  // A margin caption read as a figure of its own: its region holds no ink but its caption's line.
+  const marginLine = { page: 1, top: 300, bottom: 310, left: 450, right: 520, text: "Figure 1. The dam." };
+  const marginPdf: PdfText = { ...pdf, lines: [...pdf.lines, marginLine] };
+  const margin: DocBlock = { kind: "figure", caption: [{ text: "Figure 1. The dam." }], at: { page: 1, region: { kind: "path", points: [[74, 30], [88, 30], [88, 45], [74, 45]] } } };
+  const inkOf = (bands: InkBand[]): PageInk => ({ bands: () => bands, right: () => null });
+  check(
+    "layout: a captioned figure that draws nothing but its caption is a piece; one that draws a picture is none",
+    figureScores(marginPdf, flatten({ blocks: [margin] }), inkOf([{ top: 300, bottom: 310, baseline: 308 }]), [[pdf.lines.length]]).split === 1 &&
+      figureScores(marginPdf, flatten({ blocks: [margin] }), inkOf([{ top: 250, bottom: 290, baseline: 290 }, { top: 300, bottom: 310, baseline: 308 }]), [[pdf.lines.length]]).split === 0,
   );
   // A display's crop that holds a line of the paragraph (it starts at the column's edge, words of prose) holds prose.
   const cropPdf = (text: string, left: number): PdfText => ({ ...pdf, lines: [...lines, { page: 1, top: 400, bottom: 410, left, right: left + 200, text }] });
@@ -1610,6 +1653,11 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
   const flatFloats = flatten({ blocks: floats });
   const captions = captionScores(flatFloats);
   check("floats: a paragraph that opens as a caption is a caption apart; a sentence that names a figure (\"Figure 6.1 shows\") is none; a figure's caption with no stop after its number is kept", captions.alone === 1 && captions.captions === 3, JSON.stringify(captions));
+  // A caption cut in two: its tail opens in lower case on the page's next line; a paragraph after the float's gap is none.
+  const cut = flatten({ blocks: [{ kind: "figure", caption: [{ text: "Figure 2: A plot of the flow" }], at: { page: 1, region: region(72, 100, 300, 300) } }, para("is clearly linear.")] });
+  const cutPdf = (gap: number) => pdfOf([line(300, 72, 400, "Figure 2: A plot of the flow"), line(300 + gap, 72, 160, "is clearly linear.")]);
+  const tailOf = (gap: number) => captionScores(cut, cutPdf(gap), [[0], [1]]).alone;
+  check("floats: a caption's tail on the page's next line is a caption apart; a paragraph a float's gap under it is none", tailOf(12) === 1 && tailOf(30) === 0, `${tailOf(12)} ${tailOf(30)}`);
   const overlaps = cropOverlaps(pdfOf([]), flatFloats);
   check("floats: two crops that share half their area overlap", overlaps.overlapping === 2 && overlaps.figures === 2, JSON.stringify(overlaps));
 

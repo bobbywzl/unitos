@@ -344,6 +344,15 @@ function withDrawnSeparators(
       (r) => r.dir === "v" && [r.y1, r.y2].some((end) => Math.abs(end - y) <= 2) && [rule.x1, rule.x2].some((x) => Math.abs((r.x1 + r.x2) / 2 - x) <= 2),
     );
     if (framed || corner) continue;
+    // A chart's axis: a vertical rule crosses it in its middle, an em past
+    // either end and reaching an em over and under it. A separator stands
+    // alone (parse loop finding: a textbook's circle drawn on two axes, its
+    // x axis read as a separator under the figure).
+    const crossed = ctx.drawing.rules.some((r) => {
+      const x = (r.x1 + r.x2) / 2;
+      return r.dir === "v" && x > rule.x1 + size && x < rule.x2 - size && r.y1 < y - size && r.y2 > y + size;
+    });
+    if (crossed) continue;
     at.add(start.at);
   }
   if (at.size === 0) return segments;

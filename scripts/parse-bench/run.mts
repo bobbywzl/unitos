@@ -34,7 +34,7 @@ import { parsePdf } from "@/lib/parse/pdf";
 import type { ParsedBlock, ParsedDocument } from "@/lib/parse/types";
 import { resolveContentsLinks } from "@/lib/parse/url";
 import { fromImport, fromParse, printedNotes, type Doc } from "./adapt";
-import { blindText, forgetText, freeScores, laterTitle, lookScores, pdfText, wordBorders, type FreeScores, type PageSetup, type PdfText } from "./free";
+import { blindText, forgetText, freeScores, laterTitle, lookScores, mathSymbolWords, pdfText, wordBorders, type FreeScores, type PageSetup, type PdfText } from "./free";
 import { forgetGlyphs, glyphScores, pdfGlyphs, placeCrops, placeEquations, type GlyphScores } from "./glyphs";
 import { bodyFace, labelScores, layoutScores, linesOfUnits, type PageInk } from "./layout";
 import { loadCorpus, loadRef, refPath, REF_DIRS, ROOT, type CorpusEntry } from "./load";
@@ -304,6 +304,8 @@ async function runEntry(entry: CorpusEntry): Promise<Result> {
   const glyphs = /\.pdf$/i.test(file) ? await quietly(() => pdfGlyphs(pdfPath)) : null;
   if (parsed.richText) placeEquations(docs.parse, docs.import);
   if (glyphs) {
+    // The words the text layer reads out of TeX's math fonts by their codes count as the page draws them.
+    result.pdf.symbols = [...result.pdf.symbols, ...mathSymbolWords(result.pdf, glyphs)];
     result.glyphs = { parse: glyphScores(glyphs, docs.parse, pages), import: parsed.richText ? glyphScores(glyphs, docs.import, pages) : undefined };
   }
   t0 = since("glyphs", t0);

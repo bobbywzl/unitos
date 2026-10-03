@@ -196,8 +196,10 @@ const byPage = new WeakMap<PdfText, Map<number, Line[]>>();
     list's and a note's; not a table's cells), and start less than that
     measure left of it (not a line across two columns), the leftmost place
     where two of them or more start within a point; on another page
-    (`page`), its lines at the line's place across the page. */
-export function columnEdge(pdf: PdfText, line: Line, measure: number, own: Set<Line>, page = line.page): number | null {
+    (`page`), its lines at the line's place across the page. With `heads`,
+    lines of any width count: the heads a page sets at the column's edge
+    over blocks it sets in ("Bemerkung 18", "Beweis: Sei …"). */
+export function columnEdge(pdf: PdfText, line: Line, measure: number, own: Set<Line>, page = line.page, heads = false): number | null {
   let pages = byPage.get(pdf);
   if (!pages) {
     pages = new Map();
@@ -208,8 +210,10 @@ export function columnEdge(pdf: PdfText, line: Line, measure: number, own: Set<L
     }
     byPage.set(pdf, pages);
   }
-  const column = (pages.get(page) ?? []).filter(
-    (l) => !own.has(l) && l.right - l.left >= 0.6 * measure && l.left > line.left - measure && Math.min(l.right, line.right) - Math.max(l.left, line.left) >= 0.5 * (line.right - line.left),
+  const column = (pages.get(page) ?? []).filter((l) =>
+    heads
+      ? !own.has(l) && l.left > line.left - measure && l.left <= line.left + 1 && l.right > line.left
+      : !own.has(l) && l.right - l.left >= 0.6 * measure && l.left > line.left - measure && Math.min(l.right, line.right) - Math.max(l.left, line.left) >= 0.5 * (line.right - line.left),
   );
   const lefts = column.map((l) => l.left).sort((a, b) => a - b);
   const count = (x: number) => lefts.filter((y) => Math.abs(y - x) <= 1).length;
@@ -263,6 +267,15 @@ export function indentScores(pdf: PdfText, cand: Flat, placed: number[][]): Inde
       if (lines.length === 1 && (edge === null || Math.abs(l.left - edge) <= 2)) {
         const beside = [l.page - 2, l.page + 2].map((p) => columnEdge(pdf, l, measure, own, p)).filter((x): x is number => x !== null);
         if (beside.length > 0) edge = Math.min(edge ?? Infinity, ...beside);
+      }
+      // A page that sets every block in under its heads (a lecture's
+      // "Bemerkung 18", "Beweis: Sei …" at the edge, each body 20 pt in):
+      // its wide lines all stand at the indent, and the heads show the edge
+      // (parse bench finding: GeoTopo's proofs, set in as the page sets
+      // them, counted as indents the page does not set).
+      if (edge !== null && Math.abs(l.left - edge) <= 2) {
+        const head = columnEdge(pdf, l, measure, own, l.page, true);
+        if (head !== null && head < edge - 2) edge = head;
       }
       return edge === null || l.left - edge < -2 ? null : l.left - edge;
     });
@@ -338,10 +351,16 @@ const CAPTION_LABEL_RE = /^\s*(?:fig(?:ure)?\.?|table|tab\.|scheme|chart|exhibit
     their width, only one of them with a caption ("Figure 1." …; the other
     a display's crop, or a picture whose caption is its own labels): a
     drawing's top read apart from the captioned rest, which the page editor
-    draws as two pictures, on two pages at times. The score is the share of
-    the candidate's figures that are no such piece. */
-export function figureScores(pdf: PdfText, cand: Flat): FigureScores {
-  const figures = cand.blocks.flatMap((block) => (block.kind === "figure" && block.at ? [{ block, box: boxOf(pdf, block.at) }] : [])).filter((f) => f.box !== null);
+    draws as two pictures, on two pages at times. With the page's ink, a
+    captioned figure whose region the page draws nothing in but the lines
+    its caption holds is a piece too: its caption read apart from its
+    picture (parse bench finding: a textbook's margin caption "Figure
+    24.1:" read as a figure of its own over the empty margin, its circle a
+    figure with no caption beside it; neither piece counted, as they stand
+    side by side). The score is the share of the candidate's figures that
+    are no such piece. */
+export function figureScores(pdf: PdfText, cand: Flat, ink?: PageInk, placed?: number[][]): FigureScores {
+  const figures = cand.blocks.flatMap((block, at) => (block.kind === "figure" && block.at ? [{ block, at, box: boxOf(pdf, block.at) }] : [])).filter((f) => f.box !== null);
   const captioned = (b: DocBlock) => b.kind === "figure" && b.mathImage === undefined && CAPTION_LABEL_RE.test((b.caption ?? []).map((s) => s.text).join(""));
   const pieces = new Set<number>();
   const found: FigureScores["found"] = [];
@@ -359,6 +378,23 @@ export function figureScores(pdf: PdfText, cand: Flat): FigureScores {
       found.push({ page: a.box.page, text: whole.kind === "figure" ? (whole.caption ?? []).map((span) => span.text).join("").slice(0, 80) : "" });
     });
   });
+  if (ink && placed) {
+    figures.forEach((f, i) => {
+      if (!f.box || pieces.has(i) || !captioned(f.block) || f.block.kind !== "figure") return;
+      const caption = (f.block.caption ?? []).map((s) => s.text).join("");
+      // The page's lines the caption holds (linesOfUnits).
+      const own = (placed[cand.unitsOf[f.at]?.[0] ?? -1] ?? []).map((k) => pdf.lines[k]).filter((l) => l.page === f.box?.page);
+      if (own.length === 0) return;
+      const box = f.box;
+      // A band of ink the caption's lines hold, top to bottom; a picture's band reaches past them.
+      const top = Math.min(...own.map((l) => l.top)) - 2;
+      const bottom = Math.max(...own.map((l) => l.bottom)) + 2;
+      const drawn = ink.bands(box.page, box).filter((b) => b.top < top || b.bottom > bottom);
+      if (drawn.length > 0) return;
+      pieces.add(i);
+      found.push({ page: box.page, text: caption.slice(0, 80) });
+    });
+  }
   return { figures: figures.length, split: pieces.size, score: figures.length > 0 ? 1 - pieces.size / figures.length : null, found };
 }
 
@@ -811,10 +847,10 @@ export function layoutScores(pdf: PdfText, cand: Flat, placed: number[][], input
   const columns = columnScores(pdf, cand, placed);
   const indents = indentScores(pdf, cand, placed);
   const tables = tableScores(cand, placed);
-  const figures = figureScores(pdf, cand);
+  const figures = figureScores(pdf, cand, input.ink, placed);
   const crops = cropScores(pdf, cand);
   const pictures = pictureScores(pdf, cand, input.pictures);
-  const captions = captionScores(cand);
+  const captions = captionScores(cand, pdf, placed);
   const overlaps = cropOverlaps(pdf, cand);
   const sides = captionSides(pdf, cand, placed);
   const marks = titleMarks(pdf, cand, placed);
