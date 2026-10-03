@@ -880,7 +880,7 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   check("glyphs: a figure whose region draws a shape is a diagram, not an equation shown as a picture", diagram.mathImages === 0);
   const ground = glyphScores([{ ...page, shapes: [{ x1: 0, y1: 0, x2: 600, y2: 700 }] }], doc("", [{ kind: "figure", at: { page: 1, region: around(16, 52) } }]), undefined);
   check("glyphs: a shape that reaches past the region is the page's, and the figure stays an equation shown as a picture", ground.mathImages === 1);
-  const blackboard: PageGlyphs = { width: 600, height: 800, glyphs: [g("msb", 0x52, "R", 100, 400)], shapes: [], shapes: [] };
+  const blackboard: PageGlyphs = { width: 600, height: 800, glyphs: [g("msb", 0x52, "R", 100, 400)], shapes: [] };
   const reals = glyphScores([blackboard], doc("", [{ kind: "equation", latex: "x \\in \\mathbb{R}" }]), undefined);
   check("glyphs: \\mathbb{R} in an equation prints ℝ", reals.hazards === 1 && reals.garbles === 0, JSON.stringify(reals.missing));
   const parsed: Doc = { blocks: [eq("x^{2}"), { kind: "equation", latex: "a \\neq b", at: { page: 1, region: around(32, 35) } }] };
@@ -898,15 +898,15 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   check("glyphs: a crop's symbols count as printed, captioned or not", cropped(undefined).garbles === 0 && cropped("6= F").garbles === 0, `${JSON.stringify(cropped(undefined).missing)} ${JSON.stringify(cropped("6= F").missing)}`);
   // A cmex brace hangs below its origin, which stands at its top: a crop whose region starts just under the top
   // holds it whole.
-  const braced: PageGlyphs = { width: 600, height: 800, glyphs: [g("omx", 40, "(", 390, 444), g("oml", 0x78, "x", 400, 400)], shapes: [], shapes: [] };
+  const braced: PageGlyphs = { width: 600, height: 800, glyphs: [g("omx", 40, "(", 390, 444), g("oml", 0x78, "x", 400, 400)], shapes: [] };
   const brace = glyphScores([braced], doc("", [{ kind: "figure", at: { page: 1, region: around(60, 70) } }]), undefined);
   check("glyphs: a crop holds the cmex brace that hangs into it", brace.hazards === 1 && brace.garbles === 0, JSON.stringify(brace.missing));
   // A cmex ∑ set at a script's size (an exponent's) is at the script's level; a norm's bars are one symbol
   // however KaTeX draws them (‖ or ∥).
-  const exponent: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x78, "x", 100, 400), g("omx", 0x50, "∑", 106, 404, 7), g("oml", 0x64, "d", 112, 404, 7)], shapes: [], shapes: [] };
+  const exponent: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x78, "x", 100, 400), g("omx", 0x50, "∑", 106, 404, 7), g("oml", 0x64, "d", 112, 404, 7)], shapes: [] };
   const scriptSum = glyphScores([exponent], doc("", [{ kind: "equation", latex: "x^{\\sum d}", at: { page: 1, region: around(15, 20) } }]), undefined);
   check("glyphs: a cmex glyph set at a script's size takes the script's level", scriptSum.checked === 1 && scriptSum.passed === 1, JSON.stringify(scriptSum.fails));
-  const bars: PageGlyphs = { width: 600, height: 800, glyphs: [g("oms", 0x6b, "k", 100, 400), g("oml", 0x78, "x", 106, 400), g("oms", 0x6b, "k", 112, 400)], shapes: [], shapes: [] };
+  const bars: PageGlyphs = { width: 600, height: 800, glyphs: [g("oms", 0x6b, "k", 100, 400), g("oml", 0x78, "x", 106, 400), g("oms", 0x6b, "k", 112, 400)], shapes: [] };
   // A candidate's LaTeX may hold ‖ itself, which KaTeX draws with a warning about its metrics: kept out of the output.
   const warn = console.warn;
   console.warn = () => {};
