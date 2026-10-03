@@ -558,8 +558,21 @@ function sideNote(band: Band, page: number): Side[] | null {
   if (note.items.length === 0 || note.graphics.length > 0 || chars(note.items) * 7 > chars(note.items) + chars(wide.items)) return null;
   const size = (list: Item[]) => median(list.map((i) => i.size));
   const italic = (list: Item[]) => list.filter((i) => i.italic).length * 2 > list.length;
-  if (Math.abs(size(note.items) - size(wide.items)) < size(wide.items) * 0.1 && italic(note.items) === italic(wide.items)) return null;
   const lines = buildLines(wide.items, page);
+  // A note set at the column's size and shape stands in the margin
+  // beyond a justified column: four lines or more of the column end at
+  // its right edge (within a quarter em: an italic letter or a hyphen
+  // reaches past it), and every word of the note starts an em or more
+  // past that edge (parse loop finding: a Tufte textbook sets its margin
+  // notes and its margin figures' labels at the body's size; read in one
+  // pass, a paragraph beside a figure's axis labels became a table, and a
+  // display's denominator joined the note on its baseline).
+  const inMargin = () => {
+    const edge = Math.max(...lines.map((l) => l.xEnd));
+    const em = size(wide.items);
+    return !onLeft && lines.filter((l) => edge - l.xEnd <= em * 0.25).length >= 4 && note.items.every((i) => i.x >= edge + em);
+  };
+  if (Math.abs(size(note.items) - size(wide.items)) < size(wide.items) * 0.1 && italic(note.items) === italic(wide.items) && !inMargin()) return null;
   const gaps = lines.slice(1).map((l, k) => lines[k].y - l.y);
   const pitch = median(gaps);
   // A group of the note: its lines at their own pitch (a stray mark on the
