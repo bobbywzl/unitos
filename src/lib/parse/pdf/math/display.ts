@@ -212,6 +212,13 @@ function kindOf(line: Line, ctx: PageContext, column: { left: number; right: num
   // loop finding: the MML book's augmented matrix [1 0 2 0 | 1 0 0 0]
   // read its rows as a table's, apart from its brackets).
   if (fenced && /\d/.test(text) && /^[\d\s.,−+-]+$/.test(text) && glyphs.every((g) => g.family !== null)) return "math";
+  // So is a row of its \vdots: LaTeX stacks the text font's periods, and
+  // the lines split a row of them into rows of periods (parse loop
+  // finding: the MML book's (2.51), five rows with ⋮ in a dozen columns,
+  // read its rows of periods as paragraphs and its last row alone as the
+  // equation).
+  const dotted = (text.match(/\./g) ?? []).length >= 3 && /^[\d\s.]+$/.test(text) && glyphs.every((g) => g.family !== null || g.unicode === ".");
+  if (fenced && dotted) return "math";
   if (zoneChars === 0) return "text";
   // A labeled formula with a unit or two in words, wherever it starts: a
   // journal that sets displays flush left starts them at the column edge
