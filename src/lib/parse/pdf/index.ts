@@ -178,6 +178,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
       return uriRegions.find((r) => cx >= r.x1 && cx <= r.x2 && cy >= r.y1 && cy <= r.y2)?.href ?? null;
     };
     const items: Item[] = [];
+    const rotated: Item[] = [];
     // Text set in a vertical font on a page of horizontal text (a
     // chapter's tab at the page's edge, in a Japanese white paper) is no
     // line of the text: read as horizontal, its characters joined the body's
@@ -213,7 +214,18 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
       // 2006.11239 failed). An OCR layer squeezes words to fit (0.9 wide, 6
       // tall): those stay.
       if (Math.max(size, Math.hypot(t[2], t[3])) < 1) continue;
-      if (Math.abs(t[1]) > size * 0.3) continue; // rotated text (margin watermarks)
+      // Rotated text (a margin watermark, an axis label) is no line of the
+      // page. A ruled table's head set aslant is its column heads: the item
+      // is kept aside, upright at its drawn box (uprightItem), and joins
+      // the table whose rules hold it (ruledTables). PDF parse loop finding:
+      // an IEEE paper's Table I lost its five heads rotated 60°, and its
+      // rows of ✓ and ✗ read under no column name.
+      if (Math.abs(t[1]) > size * 0.3) {
+        const fontName = String(raw.fontName ?? "");
+        const str = normalizeGlyphs(raw.str.replace(CONTROL_CHARS_RE, ""));
+        if (str.trim() !== "") rotated.push(uprightItem(str, t, raw.width, size, { ...flagsOf(fontName), href: null, font: fontName }));
+        continue;
+      }
       // A math glyph reads as its code names it, and so does a text glyph a
       // composite or an accent takes part in (≠ is a slash over "=").
       const glyphs = drawn ?? runOf.get(raw);
@@ -318,12 +330,12 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     // The MIC white paper's box starts at (36.85, 36.85); read in the PDF's
     // own coordinates, every crop sat 4.4% too high and 6.2% too far right,
     // and 19 lines at figures' feet were in neither the text nor a crop.
-    if (viewX1 !== 0 || viewY1 !== 0) toPageBox(items, drawing, viewX1, viewY1);
+    if (viewX1 !== 0 || viewY1 !== 0) toPageBox([...items, ...rotated], drawing, viewX1, viewY1);
     // The tables the page's rules draw leave the text flow before the column
     // split, and before the graphics: a table's shaded cells never read as a
     // drawing, its words never as a drawing's labels. Each table comes back
     // as one line at its place in the reading order.
-    const tables = ruledTables(items, drawing, viewport.width, viewport.height);
+    const tables = ruledTables(items, drawing, viewport.width, viewport.height, rotated);
     const tableItems = new Set(tables.flatMap((t) => t.items));
     const text = items.filter((i) => !tableItems.has(i));
     const inTable = (b: Box) => tables.some((t) => b.x1 >= t.box.x1 - 2 && b.x2 <= t.box.x2 + 2 && b.y1 >= t.box.y1 - 2 && b.y2 <= t.box.y2 + 2);
@@ -766,6 +778,19 @@ function toPageBox(items: Item[], drawing: PageDrawing, cornerX: number, cornerY
     i.x -= dx;
     i.y -= dy;
   }
+}
+
+// A rotated text item set upright: at the box its glyphs draw on the page
+// (the string run along the item's direction, the glyphs' ascent and
+// descent across it), its baseline the origin's. A head rotated 90° stands
+// in a box its size wide; one rotated 60° leans across half its length.
+function uprightItem(str: string, t: number[], width: number, size: number, flags: Omit<Item, "str" | "x" | "y" | "w" | "size" | "math">): Item {
+  const [a, b, c, d, x, y] = t;
+  const across = Math.hypot(c, d) || size;
+  const corners = [0, 1].flatMap((along) => [-0.2, 0.8].map((up) => [x + (a / size) * along * width + (c / across) * up * size, y + (b / size) * along * width + (d / across) * up * size]));
+  const x1 = Math.min(...corners.map((p) => p[0]));
+  const x2 = Math.max(...corners.map((p) => p[0]));
+  return { ...flags, str, x: x1, y, w: x2 - x1, size, math: false };
 }
 
 // The pages the blocks come from: the chosen pages the PDF holds, in order,

@@ -558,7 +558,7 @@ function checkboxes(drawing: PageDrawing, items: Item[]): { squares: PathBox[]; 
 
 // The ruled tables of a page, from its rules and filled boxes: grids first,
 // then the regions of rule stacks outside them.
-export function ruledTables(all: Item[], page: PageDrawing, pageWidth: number, pageHeight: number): TableRegion[] {
+export function ruledTables(all: Item[], page: PageDrawing, pageWidth: number, pageHeight: number, rotated: Item[] = []): TableRegion[] {
   // Blank items (the spaces pdf.js reports between words) say nothing of
   // where text is: one in a sliver between two cells kept the sliver open.
   const words = all.filter((it) => it.str.trim().length > 0);
@@ -672,6 +672,16 @@ export function ruledTables(all: Item[], page: PageDrawing, pageWidth: number, p
   // after the table: "….t001 their results").
   const kept = new Set(regions.flatMap((r) => r.items));
   for (const region of regions) region.items.push(...linkUnder(region, items.filter((it) => !kept.has(it))));
+  // A rotated item inside a table's rules is the table's: a column head
+  // set aslant, upright at its drawn box (index.ts uprightItem), reads in
+  // its column with the heads beside it. One outside every table stays off
+  // the page.
+  for (const region of regions) {
+    const own = rotated.filter((it) => inBox(it, { ...region.box, x1: region.box.x1 - 2, x2: region.box.x2 + 2 }));
+    if (own.length === 0) continue;
+    region.items.push(...own);
+    region.lines = buildLines(region.items, 0);
+  }
   return regions;
 }
 
