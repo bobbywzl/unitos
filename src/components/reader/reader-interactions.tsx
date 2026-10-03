@@ -2415,8 +2415,12 @@ export function ReaderInteractions({
     // that started outside the pane never opens or closes the toolbar.
     let pressStartedInside = false;
     let pressTarget: Element | null = null;
+    // The pane the reader last pressed in, not a layer inside it: its keys
+    // (Ctrl/Cmd+A) are its own.
+    let lastPressInside = false;
     const onDocumentMouseDown = (event: MouseEvent) => {
       pressStartedInside = event.target instanceof Node && container.contains(event.target);
+      lastPressInside = event.target instanceof Element && event.target.closest("[data-reader-root]") === container;
       pressTarget = event.target instanceof Element ? event.target : null;
     };
     const onMouseUp = (event: MouseEvent) => {
@@ -2513,6 +2517,47 @@ export function ReaderInteractions({
         if (captured && JSON.stringify(open?.anchor) !== JSON.stringify(captured.anchor)) showTools(captured);
       });
     };
+    // The block reader, which has no caret: a selection the keys change —
+    // Shift with the arrows from a drag's selection, Ctrl/Cmd+A below —
+    // opens the toolbar once Shift, Ctrl, or Cmd is let go, as the page
+    // editor's does.
+    const onReaderKeyUp = (e: KeyboardEvent) => {
+      if (richTextRef.current || !canEditRef.current) return;
+      if (e.key !== "Shift" && e.key !== "Control" && e.key !== "Meta") return;
+      if (e.target instanceof HTMLElement && isTextEntry(e.target)) return;
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
+      if (!container.contains(selection.getRangeAt(0).commonAncestorContainer)) return;
+      requestAnimationFrame(() => {
+        const captured = captureSelection();
+        if (captured && JSON.stringify(popoverRef.current?.anchor) !== JSON.stringify(captured.anchor)) {
+          showTools(captured);
+        }
+      });
+    };
+    // Ctrl/Cmd+A in the block reader selects the article's blocks — not the
+    // page around them, its header and the tray — and opens the toolbar on
+    // them. In edit mode and in a field, the browser's own Select all runs.
+    const onSelectAll = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== "a") return;
+      if (!lastPressInside || richTextRef.current || editModeRef.current || !canEditRef.current) return;
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && isTextEntry(active)) return;
+      const blocks = Array.from(container.querySelectorAll<HTMLElement>("[data-block-id]")).filter(
+        (el) => el.closest("[data-reader-root]") === container && el.getClientRects().length > 0,
+      );
+      const firstBlock = blocks[0];
+      const lastBlock = blocks[blocks.length - 1];
+      if (!firstBlock || !lastBlock) return;
+      e.preventDefault();
+      const range = document.createRange();
+      range.setStart(firstBlock, 0);
+      range.setEnd(lastBlock, lastBlock.childNodes.length);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      showTools(captureSelection());
+    };
     // Touch: mouseup is unreliable after long-press selection, and adjusting
     // the selection handles fires no mouseup at all. pointerup covers the
     // lift; a debounced selectionchange covers handle drags. Opening only —
@@ -2538,6 +2583,8 @@ export function ReaderInteractions({
     document.addEventListener("mouseup", onMouseUp);
     container.addEventListener("pointerup", onPointerUp);
     container.addEventListener("keyup", onKeyUp);
+    document.addEventListener("keyup", onReaderKeyUp);
+    document.addEventListener("keydown", onSelectAll);
     document.addEventListener("selectionchange", onSelectionChange);
     return () => {
       container.removeEventListener("mousedown", onContainerMouseDown);
@@ -2545,6 +2592,8 @@ export function ReaderInteractions({
       document.removeEventListener("mouseup", onMouseUp);
       container.removeEventListener("pointerup", onPointerUp);
       container.removeEventListener("keyup", onKeyUp);
+      document.removeEventListener("keyup", onReaderKeyUp);
+      document.removeEventListener("keydown", onSelectAll);
       document.removeEventListener("selectionchange", onSelectionChange);
       if (selectionTimer) clearTimeout(selectionTimer);
     };
