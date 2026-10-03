@@ -720,9 +720,24 @@ function structure(atoms: Atom[], rules: Rule[], depth = 0): Atom[] {
     // A fraction in a script, its bar short, measures its gaps at its
     // parts' size: the subscript beside an exponent's fraction is no part
     // of it (v_k^{2/p}).
-    const unit = r.x2 - r.x1 < 0.6 * em ? Math.min(em, 1.5 * (r.x2 - r.x1)) : em;
-    const above = chain(pool.filter((a) => within(a) && a.bottom >= y - 0.05 * em), y, 1, em, rest, unit);
-    const below = chain(pool.filter((a) => within(a) && a.top <= y + 0.05 * em), y, -1, em, rest, unit);
+    // So does a fraction whose parts next to its bar are set smaller than
+    // the formula (a matrix of ∂u/∂x in a scriptsize Jacobian), its rows'
+    // baselines too: a matrix row of them stands 0.9 em of its own under
+    // the row over it, and the upper fraction took the lower one as its
+    // denominator (parse loop finding: the probability cheatsheet's
+    // ∂(u,v)/∂(x,y) matrix).
+    const unit0 = r.x2 - r.x1 < 0.6 * em ? Math.min(em, 1.5 * (r.x2 - r.x1)) : em;
+    const nearest = (list: Atom[], dir: 1 | -1) => {
+      const side = list.filter((a) => !hangingFamily(a.fam) && (dir > 0 ? a.bottom - y : y - a.top) < 0.9 * em);
+      return side.length > 0 ? maxSize(side) : em;
+    };
+    const ups = pool.filter((a) => within(a) && a.bottom >= y - 0.05 * em);
+    const downs = pool.filter((a) => within(a) && a.top <= y + 0.05 * em);
+    const small = Math.max(nearest(ups, 1), nearest(downs, -1));
+    const partEm = small < em * 0.8 ? small : em;
+    const unit = Math.min(unit0, partEm);
+    const above = chain(ups, y, 1, partEm, rest, unit);
+    const below = chain(downs, y, -1, partEm, rest, unit);
     if (above.length && below.length) {
       used.add(r);
       read.add(r);
