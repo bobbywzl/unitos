@@ -6,6 +6,9 @@ import type { PageDrawing, PathBox } from "@/lib/parse/pdf/drawing";
 import { median, regionOf, unionBox } from "@/lib/parse/pdf/geometry";
 import { lineColumn, type Placed } from "@/lib/parse/pdf/columns";
 import { buildLines } from "@/lib/parse/pdf/lines";
+import { resolveZones } from "@/lib/parse/pdf/math/zones";
+import { cellParagraphs } from "@/lib/parse/pdf/ruled";
+import { tableSegment, type TableRow } from "@/lib/parse/pdf/tables";
 import { joinGroup } from "@/lib/parse/pdf/text";
 import type { Box, Item, Line, PageContext, Run, Segment } from "@/lib/parse/pdf/types";
 
@@ -23,7 +26,7 @@ import type { Box, Item, Line, PageContext, Run, Segment } from "@/lib/parse/pdf
 // "Visualization", "Map", …) or a table's. Earth Observer labels its photos
 // "Photo 1." and "Photo.": 15 captions read as paragraphs, and two ran into
 // the next page's text.
-const LABEL = String.raw`fig\.?|figure|table|tab\.|photo|visualization|image|map|chart|plate|box`;
+const LABEL = String.raw`fig\.?|figure|table|tab\.|photo|visualization|image|map|chart|plate|box|abbildung|abb\.|tabelle`;
 // A caption's label and its stop: "Figure 2:", "Fig. 3a.", PLOS's "Fig 1.",
 // "Table A1 |", "Photo 3.", and the roman numbers of REVTeX and IEEE ("TABLE
 // II. Fitting parameters …", arXiv 2502.02648, read as a paragraph with no
@@ -31,13 +34,18 @@ const LABEL = String.raw`fig\.?|figure|table|tab\.|photo|visualization|image|map
 // colon after it names a role ("Visualization: …", PLOS's contributions). A
 // Chinese or Japanese label takes a space for its stop ("図表Ⅰ-2-1-1 避難所デ
 // ータ…"), and a caption there holds no full stop: "图 3 示意了…。" opens a
-// paragraph (arXiv 2111.04880 p10).
+// paragraph (arXiv 2111.04880 p10). German labels its floats "Abbildung",
+// "Abb.", and "Tabelle" (parse loop finding: GeoTopo's "Abbildung 1.4:
+// Wenn X₁, X₂ hausdorffsch sind, …" was a paragraph, and its figure's
+// labels a table). A number with parts ("1.8a", "2-1") takes its stop
+// after its last part: "Abbildung 1.8a veranschaulicht …" opens a
+// sentence.
 export const CAPTION_RE = new RegExp(
-  String.raw`^(?:(?:${LABEL})\s*(?:\d+[a-z]?|[A-Z]\d+[a-z]?|[IVXL]+\b)\s*[.:|–—-]\s*|(?:figure|photo|visualization|image|map|chart|plate)\.\s+\S|(?:図表|図|图|圖|表)\s*[0-9Ⅰ-Ⅻ]+(?:[-‐–.][0-9Ⅰ-Ⅻ]+)*\s(?![^]*。))`,
+  String.raw`^(?:(?:${LABEL})\s*(?:\d+(?:[.‐–-]\d+)*[a-z]?|[A-Z]\d+[a-z]?|[IVXL]+\b)\s*[.:|–—-](?!\d)\s*|(?:figure|photo|visualization|image|map|chart|plate|abbildung)\.\s+\S|(?:図表|図|图|圖|表)\s*[0-9Ⅰ-Ⅻ]+(?:[-‐–.][0-9Ⅰ-Ⅻ]+)*\s(?![^]*。))`,
   "i",
 );
 // "Table 3", "Table A1", IEEE's "TABLE IV", and "表 2".
-const TABLE_CAPTION_RE = /^(?:(?:table|tab\.)\s*(?:\d+|[A-Z]\d+|[IVXL]+\b)|表\s*[0-9Ⅰ-Ⅻ])/i;
+const TABLE_CAPTION_RE = /^(?:(?:table|tab\.|tabelle)\s*(?:\d+|[A-Z]\d+|[IVXL]+\b)|表\s*[0-9Ⅰ-Ⅻ])/i;
 // A float's label at a line's start, with a stop after it or none.
 const LABEL_START_RE = new RegExp(String.raw`^(?:(?:${LABEL})\s*(?:\d+|[A-Z]\d+|[IVXL]+\b)|(?:図表|図|图|圖|表)\s*[0-9Ⅰ-Ⅻ])`, "i");
 const LABEL_RE = new RegExp(String.raw`^(${LABEL})\s*(\d+|[A-Z]\d+)[a-z]?(?=\s)`, "i");
@@ -64,8 +72,9 @@ export function isCaption(text: string, runs: Run[] | undefined): boolean {
 // "（出典）…"). They are the figure's caption, before or after its own as
 // the page reads (arXiv 2302.12627 p18, 2410.04586 p9, 2506.08209 p12,
 // Grinstead–Snell p16: their words were in no block). A letter alone is
-// the panel's label, which the figure's caption names.
-const PANEL_RE = /^(?:\(\p{L}\)|\p{L}[.)])\s+(?=[^]*\p{L})[^]{3,}/u;
+// the panel's label, which the figure's caption names; a symbol and its
+// script is a caption ("(c) Ω₃", GeoTopo's Abbildung 1.12: it was lost).
+const PANEL_RE = /^(?:\(\p{L}\)|\p{L}[.)])\s+(?=[^]*\p{L})[^]{2,}/u;
 const NOTE_RE = /^(?:(?:notes?|sources?)\s*[:.]\s+\S|[（(](?:出典|注|資料|来源|來源)[）)]|(?:出典|注|来源|來源)[:：])/i;
 // Panel letters alone ("(c) (d)") are a chart's labels, no caption.
 const LETTERS_RE = /^(?:\s*(?:\(\p{L}\)|\p{L}[.)]))+\s*$/u;
@@ -934,9 +943,14 @@ export function attachFigureRegions(
     return kept;
   };
   // A caption wrapped into a second paragraph: the same (smaller) font a
-  // line below the caption continues it.
+  // line below the caption continues it. One set at the body's size
+  // continues it only where its lines stand: from the caption's left edge,
+  // or centered under it. The text's next paragraph starts at its own
+  // indent (parse loop finding: GeoTopo's "Die Umkehrabbildung g ist nicht
+  // stetig, …" under its centered caption read into it).
   const withFollower = (cap: Segment, follow: Segment | undefined): { text: string; runs: Run[] | undefined; box: Box } => {
     const box = cap.box!;
+    const aligned = (f: Box, size: number) => Math.abs(f.x1 - box.x1) < size || Math.abs((f.x1 + f.x2) / 2 - (box.x1 + box.x2) / 2) < size;
     if (
       !follow ||
       follow.type !== "PARAGRAPH" ||
@@ -946,7 +960,8 @@ export function attachFigureRegions(
       cap.lineSize === undefined ||
       Math.abs(follow.lineSize - cap.lineSize) >= 0.6 ||
       box.y1 - follow.box.y2 > cap.lineSize * ctx.leading * 0.9 ||
-      (cap.lineSize >= ctx.bodySize * 0.98 && follow.text.length >= 240 && box.y1 - follow.box.y2 > cap.lineSize * 0.35)
+      (cap.lineSize >= ctx.bodySize * 0.98 && follow.text.length >= 240 && box.y1 - follow.box.y2 > cap.lineSize * 0.35) ||
+      (cap.lineSize >= ctx.bodySize * 0.98 && !aligned(follow.box, cap.lineSize))
     ) {
       return { text: cap.text, runs: cap.runs, box };
     }
@@ -958,9 +973,118 @@ export function attachFigureRegions(
       box: unionBox(box, follow.box),
     };
   };
+  // A table with no rules whose rows hold pictures between their words (a
+  // formula, a drawing of it, and lines on it in each row) is a table of
+  // the words: the rows over its "Table N" caption, each beside pictures,
+  // three rows of pictures at least, the lowest a row's space or two over
+  // the caption. Each row's words left of the pictures are its first cell,
+  // the words right of them its second; the pictures are no cell (a table
+  // cell holds no crop), and the caption joins the table (tables.ts). Parse
+  // loop finding: The Art of Linear Algebra's Table 1, "The Five
+  // Factorization", read as scattered paragraphs, a table of two of its
+  // rows, and an empty picture, its caption apart; a crop of it lost its
+  // words.
+  const pictureTables: Box[] = [];
+  const picturedTable = (before: Segment[], cap: Box, x1: number, x2: number): { table: Segment; rows: Segment[] } | null => {
+    const pictures = [...drawing.paths, ...drawing.images].filter(
+      (b) => !("clip" in b && b.clip) && b.x1 >= x1 - 1 && b.x2 <= x2 + 1 && b.x2 - b.x1 > 2 && b.y2 - b.y1 > 2 && b.x2 - b.x1 < (x2 - x1) * 0.5 && b.y1 >= cap.y2 - 1,
+    );
+    const column = before.filter((s) => s.box !== undefined && s.box.x1 < x2 && s.box.x2 > x1);
+    const rows: Segment[] = [];
+    const level = new Set<Box>();
+    for (let k = column.length - 1; k >= 0; k--) {
+      const s = column[k];
+      const box = s.box!;
+      const short =
+        s.type === "TABLE" ||
+        (s.type === "EQUATION" && !/\\tag\*?\{/.test(s.text)) ||
+        (s.type === "FIGURE" && !s.region) ||
+        (s.type === "PARAGRAPH" && s.text.split("\n").every((l) => l.trim().length <= 60 && !/[.!?:;。．！？：；]["”’)」』）]?$/.test(l.trim())));
+      const beside = pictures.filter((b) => b.y1 < box.y2 + rowGap && b.y2 > box.y1 - rowGap);
+      if (!short || beside.length === 0) break;
+      for (const b of beside) level.add(b);
+      rows.push(s);
+    }
+    if (rows.length < 3 || rows[0].box!.y1 - cap.y2 > rowGap * 2) return null;
+    // The rows of pictures: pictures over each other's height are one row.
+    const bands: Box[] = [];
+    for (const b of [...level].sort((p, q) => q.y2 - p.y2)) {
+      const last = bands[bands.length - 1];
+      if (last && b.y2 > last.y1) bands[bands.length - 1] = unionBox(last, b);
+      else bands.push({ ...b });
+    }
+    if (bands.length < 3) return null;
+    const px1 = Math.min(...[...level].map((b) => b.x1));
+    const px2 = Math.max(...[...level].map((b) => b.x2));
+    const box = [...rows.map((s) => s.box!), ...bands].reduce((a, b) => unionBox(a, b));
+    const held = lines.filter((l) => l.y >= box.y1 - 1 && l.y <= box.y2 + 1 && l.x < x2 && l.xEnd > x1);
+    // The words left of the pictures and right of them, each side read as
+    // lines of its own (a row's big formula pulled its words' lines into
+    // one: "Gaussian eliminationLU decomposition from"), each line in the
+    // row of pictures whose middle is nearest. A word among the pictures (a
+    // label) or a line no row is near leaves the rows as they read.
+    const sides = { left: [] as Item[], right: [] as Item[] };
+    for (const it of held.flatMap((l) => l.items)) {
+      if (it.str.trim() === "") continue;
+      if (it.x + it.w <= px1 + 1) sides.left.push(it);
+      else if (it.x >= px2 - 1) sides.right.push(it);
+      else return null;
+    }
+    const cells = bands.map(() => ({ left: [] as Line[], right: [] as Line[] }));
+    // A row's middle: its formula's baseline when the row has one left of
+    // the pictures (its words center on it), else its pictures' middle.
+    const middles = bands.map((b) => (b.y1 + b.y2) / 2);
+    for (const side of ["left", "right"] as const) {
+      if (side === "right") {
+        cells.forEach(({ left }, k) => {
+          if (left.length > 0) middles[k] = left.reduce((n, l) => n + l.y, 0) / left.length;
+        });
+      }
+      for (const l of buildLines(sides[side], held[0].page)) {
+        const away = middles.map((m) => Math.abs(l.y - m));
+        const k = away.indexOf(Math.min(...away));
+        if (away[k] > rowGap * 2.5) return null;
+        cells[k][side].push(l);
+      }
+    }
+    // The lines' formulas read as the page's lines' are (ruled.ts reads a
+    // grid's cells so).
+    resolveZones(
+      cells.flatMap((c) => [...c.left, ...c.right]),
+      ctx.drawing,
+    );
+    const byTop = (a: Line, b: Line) => b.y - a.y || a.x - b.x;
+    // A side's cell starts where its words start: the space beside the
+    // pictures is no indent.
+    const from = (ls: Line[], fallback: number) => (ls.length > 0 ? Math.min(...ls.map((l) => l.x)) : fallback);
+    const leftFrom = from(cells.flatMap((c) => c.left), x1);
+    const rightFrom = from(cells.flatMap((c) => c.right), px2);
+    const tableRows: TableRow[] = cells.map(({ left, right }) => ({
+      cells: [
+        cellParagraphs(left.sort(byTop), { x1: leftFrom, x2: px1, y1: box.y1, y2: box.y2 }, { left: 0, right: 0 }),
+        cellParagraphs(right.sort(byTop), { x1: rightFrom, x2, y1: box.y1, y2: box.y2 }, { left: 0, right: 0 }),
+      ],
+    }));
+    if (tableRows.some((r) => r.cells.every((c) => c.text.trim() === ""))) return null;
+    const words = cells.flatMap((c) => c.right);
+    const size = words.length > 0 ? Math.round(median(words.map((l) => l.size)) * 2) / 2 : ctx.bodySize;
+    const table = tableSegment(tableRows, 0, rows[0].page, { box, lineSize: size, mathShare: 0 }, { size, columns: [px1 - x1, x2 - px2] });
+    return { table, rows };
+  };
   for (let c = 0; c < withMath.length; c++) {
     const cap = withMath[c];
     if (consumed.has(cap)) continue;
+    if (cap.type === "PARAGRAPH" && cap.box && isCaption(cap.text, cap.runs) && TABLE_CAPTION_RE.test(cap.text)) {
+      const [x1, x2] = columnOf(cap.box);
+      const found = picturedTable(out, cap.box, x1, x2);
+      if (found) {
+        const at = out.indexOf(found.rows[found.rows.length - 1]);
+        const kept = out.filter((s) => !found.rows.includes(s));
+        out.length = 0;
+        out.push(...kept.slice(0, at), found.table, ...kept.slice(at));
+        if (found.table.box) pictureTables.push(found.table.box);
+      }
+    }
     if (
       cap.type !== "PARAGRAPH" ||
       !cap.box ||
@@ -988,12 +1112,18 @@ export function attachFigureRegions(
       // of their own (Grinstead–Snell p. 8: Fig. 1.5's labels, set in a
       // typewriter face, read as code); an attached figure never is.
       const oneLine = prev.box !== undefined && prev.box.y2 - prev.box.y1 <= (prev.lineSize ?? ctx.bodySize) * 1.8;
+      // A drawing's label set in TeX's math fonts ("W_i", "U_{x,y}") reads
+      // as a display with no number: a short one over the drawing is its
+      // label, within an em of it (parse loop finding: GeoTopo's
+      // Abbildung 1.7 kept its axes' labels as equations, and its figure was
+      // a sliver over the caption).
+      const label = prev.type === "EQUATION" && !/\\tag\*?\{/.test(prev.text) && prev.text.length <= 24;
       const inDrawing =
         prev.box !== undefined &&
         !(prev.type === "FIGURE" && prev.region) &&
-        prev.type !== "EQUATION" &&
+        (prev.type !== "EQUATION" || label) &&
         (prev.text.length < 80 || oneLine || isTicks(prev.text)) &&
-        overlapsDrawing(prev.box, drawing, cap.box);
+        overlapsDrawing(label ? grow(prev.box, ctx.bodySize) : prev.box, drawing, cap.box);
       // A display's crop inside a diagram (over its boxes, arrows, and
       // pictures, or over a chart's lines) is a part of it: TeX's fonts in
       // its labels read as an equation, and the figure drew in two pieces
@@ -1031,7 +1161,21 @@ export function attachFigureRegions(
       // caption (arXiv 2609.29669 p5: a flowchart's steps, a sentence in
       // each box, read as paragraphs and its caption as one).
       const step = framed(prev) && steps >= 2;
-      if (!isFigureDebris(prev, ctx) && !inDrawing && !byGraphic && !underGraphic && !diagramPart && !step) break;
+      // A figure set in TeX's math fonts and nothing drawn (an array of
+      // matrices with labels beside them) reads as displays with no number,
+      // equations or crops, right over its caption: they are the figure's
+      // (parse loop finding: ThinkDSP's Figure 6.1, "Synthesis with
+      // arrays", read as two crops, an equation ".f_k..", and its caption
+      // as a paragraph). A figure's caption only, with nothing drawn between
+      // it and the display, and no graphic under it.
+      const mathFigure =
+        (prev.type === "EQUATION" ? !/\\tag\*?\{/.test(prev.text) : prev.type === "FIGURE" && prev.mathCrop === true && !/\(\d{1,3}(?:\.\d{1,3})*[a-z]?\)/.test(prev.text)) &&
+        !TABLE_CAPTION_RE.test(cap.text) &&
+        prev.box !== undefined &&
+        drawingIn(drawing, cap.box.y2, prev.box.y1, x1, x2) === null &&
+        !graphics.some((g) => g.box.x1 < x2 && g.box.x2 > x1 && g.box.y1 >= cap.box!.y2 - 1 && g.box.y2 <= prev.box!.y1 + 1) &&
+        !graphics.some((g) => g.box.x1 < x2 && g.box.x2 > x1 && g.box.y2 <= cap.box!.y1 + 1 && cap.box!.y1 - g.box.y2 < rowGap * 2);
+      if (!isFigureDebris(prev, ctx) && !inDrawing && !byGraphic && !underGraphic && !diagramPart && !step && !mathFigure) break;
       // What reaches well past the column (a table across both columns) is
       // no debris of a figure in it.
       if (prev.box && (prev.box.x1 < x1 - ctx.bodySize * 2 || prev.box.x2 > x2 + ctx.bodySize * 2)) break;
@@ -1255,6 +1399,8 @@ export function attachFigureRegions(
   // Every image and path the page paints, small ones too (a diagram's arrow).
   const painted: Drawn = { images: ctx.drawing.images, paths: ctx.drawing.paths };
   for (const graphic of [...graphics].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
+    // A picture among a table's rows is no figure of its own (picturedTable).
+    if (pictureTables.some((t) => inside(graphic.box, t))) continue;
     let box = clearOfDropped(graphic.box);
     // A display's crop a quarter or more inside a graphic, on its drawing, is
     // one of the graphic's labels: the graphic's crop takes it in (NASA pptx

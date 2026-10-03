@@ -1,0 +1,4959 @@
+{
+ "total": {
+  "f1": 0.887,
+  "precision": 0.83,
+  "recall": 0.952
+ },
+ "pages": {
+  "100noticias.com-millones.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "bahamaslocal.com-atlantis.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "blog.python.org.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 0
+  },
+  "breakingbelizenews.com-paho.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 0
+  },
+  "cubadebate.cu-sesiona.html": {
+   "tp": 1,
+   "fp": 0,
+   "fn": 2
+  },
+  "diaadia.com.pa-ulpiano.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "dw.com.colonial.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "elfaro.net-asamblea.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "elheraldo.hn-JOH.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "energiehoch3.de.lexikon.energieversorgung.html": {
+   "tp": 2,
+   "fp": 2,
+   "fn": 0
+  },
+  "everardoherrera.com-momento.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 0
+  },
+  "gofeminin.de.abnehmen.html": {
+   "tp": 2,
+   "fp": 2,
+   "fn": 0
+  },
+  "guetemala.com-nicole.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "haitiantimes.com-family.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "heavenlynnhealthy.de.areenburk.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "iwr.de.IWR-Pressedienst.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "jamaica.gleaner.com-victims.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "jamaicaobserver.com-attacks.html": {
+   "tp": 4,
+   "fp": 0,
+   "fn": 0
+  },
+  "jis.gov.jm-investment.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "laestrella.com.pa-laboral.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "laprensagrafica.com.fiscal.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "larepublica.net-hackers.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "mercurynews.com.2023.01.16.letters-1119.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "nationnews.com-schools.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "nationnews.com-tridents.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "nowgrenada.com-pm.html": {
+   "tp": 2,
+   "fp": 1,
+   "fn": 0
+  },
+  "panamaamerica.com.pa-apropiarse.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "pcgamer.com.skyrim.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "prensalibre.com-tendencia.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 0
+  },
+  "searchlight.vc-dimond.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "soy502.com-capturan.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "stluciatimes.com-dea.html": {
+   "tp": 4,
+   "fp": 0,
+   "fn": 0
+  },
+  "thestkittsnevisobserver.com-bvi.html": {
+   "tp": 2,
+   "fp": 1,
+   "fn": 0
+  },
+  "womencantalksports.com.top10.html": {
+   "tp": 1,
+   "fp": 0,
+   "fn": 1
+  },
+  "zeit.de.zugverkehr.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 0
+  },
+  "archiv.krimiblog.de.2895.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "bayrische-bembel.de.504.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "bummfilm.de.über.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "columbus-entdeckt.de.trolls.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "diy-expeditions.com.uebersee.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "feuerwehrtaucher-oldenburg.de.ausbildung.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "fouryears.eu.interning.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "harddecor.at.denkmaler.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "iloveponysmag.com.barbour.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "kulinariaathome.com.mandelplätzchen.html": {
+   "tp": 4,
+   "fp": 0,
+   "fn": 0
+  },
+  "lexikon.huettenhilfe.de.banane.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "love-hina.ch.0409.html": {
+   "tp": 1,
+   "fp": 2,
+   "fn": 0
+  },
+  "marktplatz.die-besserwisser.org.zeit.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "mediaarchitecture.de.weber.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "ohneq.de.johannes.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "papaganda.org.minions.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "pinup-fashion.de.korsetts.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "rueda.wikidot.com.enchufla.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "schleifen.ucoz.de.briefe.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "sibenlab.blogspot.com.privacy.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "simmeltalzeitung.ch-Trinkwasser.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "thenervousbreakdown.com.loneliest.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "wir-empfehlen.info.3289.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "assabah.com.tn.article.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "aussengedanken.de.feuerholz.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "banyuetan.org.1000200033136171577956287380194268_1.html": {
+   "tp": 0,
+   "fp": 0,
+   "fn": 3
+  },
+  "bibliothek2null.de.mai.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "buero-hoppe.de.baumgutachten.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "cdu-fraktion-erfurt.de.waldorfschule.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 0
+  },
+  "chineselyrics4u.com.zhineng.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 0
+  },
+  "colours-of-the-soul.alhelm.net.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "creativecommons.ch.wie.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "der-erfolg-gibt-recht.de.rinderleber.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "echte-demokratie-jetzt.de.blog.html": {
+   "tp": 2,
+   "fp": 2,
+   "fn": 1
+  },
+  "einfachspanien.de.malaga.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "exlibris-deg.de.balsamo.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "finanztreff.de-Influencer.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "franziska-elea.de.vuitton.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "hearya.com.metal.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "heiko-adams.de.laufen.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 0
+  },
+  "helge.at.mahu.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "hertha-blog.de.dame.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "hr-innovation.org.enterprise.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "hundeverein-kreisunna.de.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 0
+  },
+  "internet-law.de.pseudonymen.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "interscenar.io.hoeren.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "jan-grosser.de.xum1541.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "jobsnhire.com.health.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "jovelstefan.de.gefallt.html": {
+   "tp": 2,
+   "fp": 1,
+   "fn": 0
+  },
+  "klaenge-des-verschweigens.de.geschichte.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "maescot.de.schafskunde.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "mueritzurlauber.de.blockhaus.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "nalas-loewenseiten.info.m.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "netbits.us.stunnel_rsync.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "parcoabruzzo.it.58354.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "pointofsail-kiel.de.wilson.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "qualisys.eu.gefahrstoff.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "regards.fr.enquetes.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "rs-ingenieure.de.tragwerksplanung.html": {
+   "tp": 1,
+   "fp": 0,
+   "fn": 0
+  },
+  "sauvonsluniversite.com.spip.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "schlosswirtjuval.it.geschichte.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "seelenradio.de.leo.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 1
+  },
+  "shingon-reiki.de.schamanismus.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "silvias.net.wahlzensur.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "simplyscience.ch.erdoel.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "singapur-reiseinfo.de.abc.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "sprechwaisen.com.sw082.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "spreeblick.com.habeck.html": {
+   "tp": 1,
+   "fp": 0,
+   "fn": 1
+  },
+  "steinhau.com.zahlen.html": {
+   "tp": 4,
+   "fp": 0,
+   "fn": 0
+  },
+  "toralin.de.schmierfett.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "villacc.de.galaxy.html": {
+   "tp": 1,
+   "fp": 0,
+   "fn": 2
+  },
+  "wehranlage-horka.de.887.html": {
+   "tp": 1,
+   "fp": 0,
+   "fn": 2
+  },
+  "womencantalksports.com-top10.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "xinhuanet.com.c_1125597921.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "1337kultur.de.picard.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "1hundetagebuch.wordpress.com.langer.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "24ora.com-internationalschol.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "2gewinnt.wordpress.com.uns.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "abc13.com-Copperfield.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "abc7news.com-Napa.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "abenteuer-astronomie.de.plejaden.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "abookshelffullofsunshine.blogspot.com.interview.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "achtundvierzig.hypotheses.org.822.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "jodel.com.advertising.html": {
+   "tp": 0,
+   "fp": 0,
+   "fn": 3
+  },
+  "aerobuzz.de-bremen.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "aktion-hummelschutz.de.hummeln.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "alexanderlasch.wordpress.com.sprachgeschichte.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "anarc.at.cdpath.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "andreabottlinger.wordpress.com.arent.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "angelmagazin.de-schmerzen.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "anglerboard.de-rute.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "anwaltniemeyer.de.index.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "aoc.media.archaisme.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "apolut.net-Sonja-Silberhorn.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "d44c5ef50718437984dca47627dee96b.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "arsnova.thm.de.frag.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "auto-motor.at-hyundaitest.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "auto-presse.de-minisuv.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 1
+  },
+  "auto-wirtschaft.ch-camping.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "auto.oe24.at-golfchina.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "backen.de.maulwurfkuchen.html": {
+   "tp": 4,
+   "fp": 1,
+   "fn": 1
+  },
+  "baike.baidu.com.tanya.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 1
+  },
+  "battery-news.de.ultium-cells.html": {
+   "tp": 0,
+   "fp": 0,
+   "fn": 3
+  },
+  "beige.de.suedfrankreich.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "berkutschi.com-willingen.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "beyssonmanagement.com.innovation.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "bigdata.ypart.eu.datenerhebung.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "blog.amp.dev.axios.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "blog.gaijinpot.com.chikan.html": {
+   "tp": 4,
+   "fp": 2,
+   "fn": 0
+  },
+  "leichtathletik-ostalbkreis.de.1952007.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "blog.mondediplo.net.turpitude.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "blog.teufel.de.leistung.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "bloghaus.hypotheses.org.2320.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "blogoff.de.i-htm.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "boingboing.net.millenials.html": {
+   "tp": 2,
+   "fp": 1,
+   "fn": 0
+  },
+  "bos-fahrzeuge.info-haubenfahrzeuge.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "buchperlen.wordpress.com.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 0
+  },
+  "bumsbutzener-gumpfen.blogspot.com.tach-auch.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "bunterepublik.wordpress.com.talstrasse.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "businessjargons.com.leadership.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "californiaglobe.com.amazon.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "campino2k.de.uberspace.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "chabermu.wordpress.com.expertenwissen.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "chadim.net.schreibstil.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "changenow.de.loibl.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "citylimits.org-Nycha.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "correctiv.org.zusage.html": {
+   "tp": 2,
+   "fp": 2,
+   "fn": 0
+  },
+  "crazy-julia.de.tipps.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "creativecommons.org.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "creeny.wordpress.com.nebelsuppe.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "cybercook.com.br.sequilho.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "daheim-solar.de.batteriespeicher.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "damianduchamps.wordpress.com.hbdi.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "dawo-dresden.de-Winterausstellung.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "de.cointelegraph.com-CME.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "de.creativecommons.org.endlich.html": {
+   "tp": 1,
+   "fp": 0,
+   "fn": 0
+  },
+  "de.globalvoices.org.nicaragua.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "de.happycoffee.org.sidamo.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 1
+  },
+  "de.induux.com.energiezaehler.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 1
+  },
+  "motor1.de-erwischt.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "de.starsinsider.com-Angst.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "deleuze.enacademic.com.micropolitics.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "denkanstoos.com.2012.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "denkmalpraxismoderne.de.studentendorf.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "der-farang.com-Grab-Bote.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "deutsche-wirtschafts-nachrichten.de-Industriestrompreis.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "die-partei.net.luebeck.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 0
+  },
+  "diem25.org.climate.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "dietagespresse.com-halloween.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "digitalcourage.de-Muendigkeit.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "disfunctions.de.podcasts.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "ditb.de-Propheten.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "djz.de-amoklauf.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "docs.docker.com.install.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "Eurostat_ Polska z najniższym bezrobociem w całej UE.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "dubisthalle.de-Intendanten-Wechsel.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "eatsmarter.de.porridge.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "eatwhattonight.com.stir.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "ebike-mtb.com-OFFROAD.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "economictimes.indiatimes.com.slideshow.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "edition.cnn.com-royal.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "elavegan.com-Peanut.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "elcomercio.pe-kenjifujimori.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "eldeber.com.bo-autos.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "elpais.com.ciencia.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "emacspeak.blogspot.com.meta.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 1
+  },
+  "blog.wordpress.com.diverse.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "en.wikipedia.org.tsne.html": {
+   "tp": 1,
+   "fp": 0,
+   "fn": 1
+  },
+  "Rosjanie sugerują natychmiastowe odcięcie Polski od gazu - Energetyka24.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "erfolg-magazin.de.konfliktkultur.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "erp-news.info.interview.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "ethify.org.vegetarier.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "evang.at-lockdown.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "ext.theperspective.com.items.html": {
+   "tp": 1,
+   "fp": 0,
+   "fn": 2
+  },
+  "exxpress.at-zaehne.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "finanzmarktwelt.de-Benko-Firma.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "fincompare.de.firmenwagen.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "hejfish.com-stephan.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "fischundfang.de-pop-ups.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "fivethirtyeight.com.endorsement.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "flawlessfood.co.uk.olive.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "flowfx.de.tmux.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "fluessiggas.de.dimethylether.html": {
+   "tp": 1,
+   "fp": 1,
+   "fn": 2
+  },
+  "fogsmagazin.com.outdoor.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "football.ua.podolski.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "foren.myoos.de.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "Ile jest warta godzina pracy_ W tych krajach praca popłaca - Forsal.pl.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "francais.radio.cz-ministre.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "france.attc.org-privatisations.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "frau-sabienes.de.konsumsparen.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "freshideen.com-Stollenfest.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "frolleinherr.com.lost.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "futurezone.at.lyft.html": {
+   "tp": 2,
+   "fp": 1,
+   "fn": 0
+  },
+  "gay.ch-papst.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "german.stackexchange.com.ausgeraubt.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "geschichtedergegenwart.ch.foucault.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "github.blog.spiceland.html": {
+   "tp": 4,
+   "fp": 1,
+   "fn": 0
+  },
+  "github.com.yapapi.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "gizmeo.eu.insekten.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "gnadlib.wordpress.com.scherenschnitt.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "gnaur.wordpress.com.moglichkeit.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "goodnight.at.konzert.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "gormulus.wordpress.com.durfen.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "gothamist.com-plagues.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "greator.com.innerezufriedenheit.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "gregoryszorc.com.python3.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "groove.de-Anti-A100-Aktivist.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "grossefragen.wordpress.com.projekt.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "guten-tach.de-sperrung.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "hackernoon.com.scrape.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "happyface313.com.plantur.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "harpers.org.justice.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "harrypotter.fandom.com.spell.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "hausinfo.ch-kondenswasser.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "heavenlynnhealthy.de.mareenburk.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "hellogiggles.com.skin.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "herrpfleger.de.fuelcell.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "hildesheimer-presse.de-hund.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "hpd.de-Homosexuellenhass.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "iconmagazine.de.sharonstone.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "idw-online.de-Hybridbatterie.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "industriemagazin.at-Luftfahrtbranche.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "insubordinant.wordpress.com.speed.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "internetchemie.info.Heliumkerne.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "islamische-zeitung.de-Bundespräsident.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "it-for-kids.org.variables.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "it-learner.de.autotuning.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "journal.3960.org.firefox.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "Journalistenwatch.com-Ladensterben.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "journals.univie.ac.at.submissions.html": {
+   "tp": 5,
+   "fp": 1,
+   "fn": 0
+  },
+  "0b66696af800472190a76b26faa845d4.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "jungle.world-Imperialismus-Phantom.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "KATAPULT-Magazin.de-parteien.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "kath.net-Menschensohn.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "kinzig.news-Nachhaltigkeit.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "kleinegruenemonster.wordpress.com.start.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "Nowa Zelandia_ płatny urlop dla rodziców poronionego dziecka. Jak to wygląda w Polsce_ — Klub Jagielloński.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "knowledge-on-air.de.koa039.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "knowtechie.com.rally.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "kulturnews.de-Deutschland-Tour.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "kyffhaeuser-nachrichten.de-Regen.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "ladiaria.com.uy-productor.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "lady50plus.de.sekre.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 2
+  },
+  "lapresse.tn.parite.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "larepublica.pe-minedu.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "laviedesidees.fr.evaluation.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "Lebensmittelpraxis.de-Stadtzentrum.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "legrandcontinent.eu.heran.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "lemire.me.json.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 1
+  },
+  "lernpfadprismen.wordpress.com.masse.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "leukefeld-handball.de.leukefeld.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "libero.pe-ronaldo.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "Koncesjonowana opozycja -Leszek Jażdżewski - Liberté!.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "link.springer.com.1007.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 1
+  },
+  "literaturgefluester.wordpress.com.jahr.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "literaturkritik.de-Ann-Cotten.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "litradio.net.bossong.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "lokalo.de-Weinbergsbahnen.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "madame.lefigaro.fr.dintestin.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "majkaswelt.com.fashion.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "makronom.de-Ressourcenschutzgesetz.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "mannschaft.com-katar.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "meedia.de.freenet.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "mein-mmo.de-MMORPG.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "Angus Barbieri. Nie jadł przez 382 dni - Menway w INTERIA.PL.html": {
+   "tp": 4,
+   "fp": 2,
+   "fn": 0
+  },
+  "missy-magazine.de-interabled.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "mitternachtskabinett.wordpress.com.gentrifizierung.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "mitundvoneinander.com-Frühling.html": {
+   "tp": 0,
+   "fp": 1,
+   "fn": 1
+  },
+  "mitvergnuegen.de.herbst.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "mixed.de.vrodo.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 0
+  },
+  "mluk.brandenburg.de-erlegungspermie.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "mobilsicher.de.icloud.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "moritz-meyer.net.vreni.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 1
+  },
+  "motor.at-elektroroller.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "mpimet.de.klimasystem.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 1
+  },
+  "murdeltas.wordpress.com.politcamp.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "mydailymagazine.com.halloween.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "mywakenews.wordpress.com.psyop.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "n-land.de-Simmelsdorf.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "nachtkritik.de-Dragqueens.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "netzfueralle.blog.rosalux.de.netzpolitik.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "netzpolitik.org.abmahnungen.html": {
+   "tp": 4,
+   "fp": 1,
+   "fn": 0
+  },
+  "wsl.ch-neubeau.html": {
+   "tp": 1,
+   "fp": 0,
+   "fn": 0
+  },
+  "0a962f6bcd5649f7a7e6effa338df80d.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "newrepublic.com.neoliberalism.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "next2games.de.anno.html": {
+   "tp": 0,
+   "fp": 0,
+   "fn": 3
+  },
+  "nextkabinett.wordpress.com.garden.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "nh24.de-Bundeswehr.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "nnz-online.de-Quantensprung.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "novalanalove.com.ear-candy.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "nurmeinstandpunkt.wordpress.com.blogposting.html": {
+   "tp": 0,
+   "fp": 0,
+   "fn": 3
+  },
+  "nwx.new-work.se.digitaler-stress.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "nymag.com.polarization.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "observer.com-LVMH.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "oekolaundbau.de-zweinutzungshuhns.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "omr.com-Schuhbrand.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "OnlineMarketing.de-Instagram.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "orsted.de.gruener-Wasserstoff.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "Ostbelgiendirekt.be-ARD-Doku.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "Osthessen-news.de-Buergermeisterwahl.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "pagesix.com.myers.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "pawszilla.com.celine.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 1
+  },
+  "peppermynta.de-Strickmode.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "phys.org.tool.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 0
+  },
+  "pinkstinks.de-Kulturtechnik.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "piratenpartei-mv.de.grundeinkommen.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 0
+  },
+  "plantcaretoday.com.bougainvillea.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "plentylife.blogspot.pamela-reif.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 0
+  },
+  "polizeiticker.ch-Unfall.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "Popkultur.de-Schauspieler.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "presse-ausburg.de-Tarifverbund.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "prof-pc.de.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "public.spot-on-news.de-Traumfrau.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "Finowie odkrywają wino _ Res Publica Nowa.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "publikum.net-HPV-Impfungen.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "pythonspeed.com.docker.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "Raptastisch.net-Seitenhieb.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "redtri.com.jokes.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "reitschuster.de-Hass-Demo.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "report24.news-Drohne.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "reset.org.clickbait.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "resonator-podcast.de.res158.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "rete-mirabile.net.15jahre.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "ritinardo.wordpress.com.btw17.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "rosa-mag.de.womanking.html": {
+   "tp": 2,
+   "fp": 1,
+   "fn": 1
+  },
+  "reporternewspapers.net-Brookhaven.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "sass-ag.de.index.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "schweizerjaeger.ch-steinkauz.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "schimmverband.at-weltmeisterschaft.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "scienceblogs.de-zufaellig.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "spektrum.de.engelbart.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 0
+  },
+  "security.googleblog.com.protection.html": {
+   "tp": 0,
+   "fp": 1,
+   "fn": 3
+  },
+  "seglerblog.stössenseer.de.sauber.html": {
+   "tp": 0,
+   "fp": 0,
+   "fn": 3
+  },
+  "selbermachen.de-wohngewaechshaus.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "shabka.org.about.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "nmb-media.de.ebay.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 1
+  },
+  "skateboardmsm.de.dormhagen.html": {
+   "tp": 4,
+   "fp": 1,
+   "fn": 0
+  },
+  "sladisworld.wordpress.com.sigma.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "Windows 10 od lipca przestanie obsługiwać Adobe Flash.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "sportowefakty.wp.pl.falubaz.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "sprechblase.wordpress.com.zapfsaeulen.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "stackoverflow.com.rust.html": {
+   "tp": 2,
+   "fp": 1,
+   "fn": 0
+  },
+  "stardewvalleywiki.com.penny.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "statisticsglobe.com.ggplot2.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "strangemachines.io.performant.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "surfguard.wordpress.com.medien.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "SW1.News-Heimat.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "swim.de-ga2.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "t3n.de-Laufzeit.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "Tageswoche.ch-weg.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "tarnkappe.info-Black.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "taucher.net-tauchmesse.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "taz.de.siemens.html": {
+   "tp": 0,
+   "fp": 1,
+   "fn": 3
+  },
+  "tegernseerstimme.de-Klimavorreiter.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "0afd671fc2b64f3caa83a91537e8d343.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "tell-review.de.heimweh.html": {
+   "tp": 2,
+   "fp": 1,
+   "fn": 1
+  },
+  "teslamag.de-Musk.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "thebigbone.wordpress.com.ueberforderung.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "theintercept.com-Gaza.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "theoriginalcopy.de.baby.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 1
+  },
+  "thepointsguy.com.alaska.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "thepostpartumparty.com.nursery.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "threatpost.com.android.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 0
+  },
+  "tierschutz-berlin.de-boellerverzicht.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "together.ch.schaffhausen.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "tonedeaf.thebrag.com.luboku.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "trails.de.ischgl.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "trome.pe-chollywood.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "uebermedien.de-Israel.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 0
+  },
+  "uepo.de.glossar.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "uk.trustpilot.com.reviews.html": {
+   "tp": 2,
+   "fp": 1,
+   "fn": 0
+  },
+  "ukbdnews.com.23646.html": {
+   "tp": 0,
+   "fp": 1,
+   "fn": 2
+  },
+  "ultimasnoticias.com.ve-ucraina.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "uncutnews.ch-ID-Diktat.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "uniqz.de.katzendecke.html": {
+   "tp": 0,
+   "fp": 0,
+   "fn": 3
+  },
+  "unzensuriert.at-Zeche.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "utopia.de-Werbung.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "vancouversun.com.microsoft.html": {
+   "tp": 2,
+   "fp": 1,
+   "fn": 0
+  },
+  "verfassungsblog.de.expertinnen.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "viconsortium.com-cocaine.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "viehbacher.com.steuerrecht.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "viertausendhertz.de.ddg48.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "villagersandheroes.com.forums.patchnotes.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "vipflash.de-Ehezoff.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "volksblatt.at-Alkoholkonsum.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "von-der-see.de.design.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "vorangedacht.de.kohleausstieg.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "archive.org-travaillent.html": {
+   "tp": 2,
+   "fp": 1,
+   "fn": 1
+  },
+  "archive.org.dimido.de.marketing.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "archive.org.dzs-clan.de.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "archive.org.stol.it.berlusconi.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "archive.org.he.xinhuanet.com.25340717.html": {
+   "tp": 0,
+   "fp": 0,
+   "fn": 3
+  },
+  "archive.org.tv-orange.de.future.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "archive.org.the-pain.net.silkroad.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "archive.peptalks.de.schulnoten.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "archive.org.nesselsetzer.wordpress.com.antipoden.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "archive.org.time4talks.com.kinos.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "archive.org.steinzeitwissen.de.werkzeuge.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 1
+  },
+  "archive.org.rent-a-pastor.com.hochzeitslokation.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "archive.org.bewegliche-lettern.de.typography.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "archive.org.muffinrezept.net.grundrezept.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "archive.org.welpenkaufen24.de.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "archive.ordnungsrausch.com.orga-life.html": {
+   "tp": 1,
+   "fp": 0,
+   "fn": 0
+  },
+  "archive.org.medialepfade.de.medienpaedagogin.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "archive.org.juergenheitmann.com.aggression.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "archive.org.swap-stop.org.shuji.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "archive.modabot.de.serkan.html": {
+   "tp": 2,
+   "fp": 1,
+   "fn": 0
+  },
+  "archive.org.przepisy.pl.pierogi.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "weinlachgummis.blogspot.com.rezi.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "weisser-ring.de-Erfolgsgechichte.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "weselpower.wordpress.com.monstergesprche.html": {
+   "tp": 1,
+   "fp": 0,
+   "fn": 0
+  },
+  "Dezubekizacja – reaktywacja. Czyli daty mają znaczenie - Dziennik.pl.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "_Ziemniaki na szóstej, surówka na dziesiątej_. Jak pomagać, żeby nie zaszkodzić_ [PORADNIK W PIGUŁCE].html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 1
+  },
+  "0a6291ebbce449b3b04256b43c73e39d.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "wiki.piratenpartei.de.stammtisch.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "wiki.python.org.Download.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "wikimediafoundation.org.turkey.html": {
+   "tp": 3,
+   "fp": 4,
+   "fn": 0
+  },
+  "wildundhund.de-bonn.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "winfuture.de-NASA.html": {
+   "tp": 1,
+   "fp": 0,
+   "fn": 2
+  },
+  "wirtschaftspsychologie-aktuell.de.starken.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "wolfgangschmale.eu.duchhardt.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "wolfsrebellen-netz.forumieren.com.regeln.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "wordsmith.org.maudlin.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "world.kbs.co.kr-Temperatures.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "Jest zgoda PE na umowę handlową między UE a Londynem.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "wsvn.com-crash.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "1000things.at-Wellnessoasen.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "24horas.cl-segundo.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "5min.at-Villachs.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "7mind.de.grenzen.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "90min.de-Bundesliga-Tabelle.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "achgut.com-coronalage.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "aclu.org-grades.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "acpjournals.org.3075.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "ad-magazin.de.wellness.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "adac.de.kindersitze.html": {
+   "tp": 4,
+   "fp": 1,
+   "fn": 1
+  },
+  "advents-shopping.de.weihnachtsmaerkte.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "agrarheute.com.abfallholz.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "ahlen.de.reparaturcafe.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 1
+  },
+  "alacarte.at-purzelbaum.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "alexander-klier.net.zeitphilosophie.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "alpin.de-freeride.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "amazedmag.de.meinleben.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "ambito.com-paritarias.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "amnesty.de-waffensysteme.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "anchor.ch.lanka.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "antary.de.wireshark.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "arbeit-und-arbeitsrecht.de.urlaub.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "arbeitsagentur.de-arbeitsmarkt.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "0b4609a864eb4fa0bbcb2b395f6be9eb.html": {
+   "tp": 1,
+   "fp": 0,
+   "fn": 0
+  },
+  "arteradio.com-nuls.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "austria.info.radfahren.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "auswaertiges-amt.de-Italien.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "autohaus.de-skode.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "automobilwoche.de-VW-Betriebsversammlung.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 1
+  },
+  "autonews.ch-Tesla.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "autosprint.ch-pistenstopp.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "autozeitung.de-adblue.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "awo.org-Menschenrechte.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "axios.com.future.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 1
+  },
+  "backenmachtgluecklich.de.zitronenkuchen.html": {
+   "tp": 6,
+   "fp": 1,
+   "fn": 0
+  },
+  "badische-zeitung.de-Wohnungssuche.html": {
+   "tp": 0,
+   "fp": 0,
+   "fn": 3
+  },
+  "baechli-bergsport.ch-lawinen.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "bafa.de-mineraloelabsatz.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 1
+  },
+  "basicthinking.de.tweets.html": {
+   "tp": 4,
+   "fp": 1,
+   "fn": 0
+  },
+  "bauemotion.de-schneereampflicht.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "baumeister.de.sportzentrum.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "baumev.de.Transformationslabor.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "bbc.com.52241221.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "bdzv.de.eliasson.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "be.ch-impfen.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "befifty.montauk.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "bergsteigen.com-skibergsteigen.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "berliner-feuerwehr.de-Ehrenzeichen.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "bettycrocker.com.pineapple.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "bewusster-leben.de.hope.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "bfn.de-verden.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "bfs.de-radon.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 1
+  },
+  "biathlon-antholz.it-jubeln.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 1
+  },
+  "biathlonword.com-chinesisch.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "bike-magazin.de-strava.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "biobiochile.cl-gremios.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "bka.de-messengerdienste.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "blinker.de-Rostock.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "bmas.de-anforderungen.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "bmbf.de.energiewende.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "bmel.de-zukunftsforum.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "bmfsfj.de-praesidentschaft.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "bmjv.de.konsum.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "bmwi.de-neubau.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "bmz.de-schulze.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "bondyblog.fr.paris-8.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "bostonherald.com-Brothel-catering.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "boxen.de-staatsanwaltschaft.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "boxen1.com-ring-rückkehr.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "brandeins.de.wahresIch.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "brasil247.com-militares.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "brigitte.de.ikigai.html": {
+   "tp": 4,
+   "fp": 0,
+   "fn": 0
+  },
+  "bsi.de-ki.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "btv.de-spuren.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "bund-naturschutz.de-habeck.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "bund.net-hermlin.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "bundesfeuerwehrverband.at-eröffnet.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "bundeskanzleramt.gv.at-bundesminsterin.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "bundespolizei.de-Belarus.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "bundespraesident.de.20030331.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "bundesrat.de-erinnerungen.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "caktusgroup.com.django.html": {
+   "tp": 5,
+   "fp": 2,
+   "fn": 0
+  },
+  "campograndenews.com.br-adolescente.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "careelite.de-flaechenverbrauch.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "caritas.de-Präsidentin.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "caymancompass.com-prison.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "cbsnews.com.carolina.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "cducsu.de-wasserstoff.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "changelog.blog.zwischenbilanz.html": {
+   "tp": 2,
+   "fp": 1,
+   "fn": 0
+  },
+  "chefkoch.de.mandarinen.html": {
+   "tp": 6,
+   "fp": 1,
+   "fn": 0
+  },
+  "chemie.de.spin-off.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "chemietechnik.de.forschungsgruppe fuer biotechnologie.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "chip.de.bestcrypt.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "chip.de.beef.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "chocolate.com.pregnant.html": {
+   "tp": 1,
+   "fp": 0,
+   "fn": 2
+  },
+  "chorknaben-ulm.de.geschichte.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "cicero.de.pandemie.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "clarin.com-albertofernandez.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "cleanthinking.de.oranger-wasserstoff.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "cnet.de.schutz.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "coaching-magazin.de.transgenerationales-coaching.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "comparis.ch.autofinanzierung.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "computerbase.de.htc.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 0
+  },
+  "d60caba9d12c467b9708ec8981cad8aa.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 1
+  },
+  "coopbuddy.de.bee.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "cooperativa.cl-presidente.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "corkbeo.ie.level.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "correio24horas.com.br-PMS.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "correiobraziliense.com.br-poderes.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "couchstyle.de.vintage.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "courgage-online.de.HIV.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "creativecommons.at.faircoin.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 0
+  },
+  "dailymail.co.uk.food.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "dalloz-actualite.fr.raoult.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "datev-magazin.de-kommunikation.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "dbjr.de.bundespraesident.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "0ac0531f1f0543f4a3f68159e5fd1875.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "decohome.de.magenta.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "demokratiewebstatt.at.luft.html": {
+   "tp": 1,
+   "fp": 1,
+   "fn": 2
+  },
+  "derpapierplanet.de.juni.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "deutsche-handwerkszeitung.de-eigentumsvorbehalt.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "deutscheweine.de-riesling.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "deutschlandfunk.de.titanic.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "deviante-pfade.de.unbefriedigt.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "www.dhb.de-regionallehrgang.html": {
+   "tp": 2,
+   "fp": 2,
+   "fn": 1
+  },
+  "dhz-online.de-bewegung.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "diakonie.de-Lebensgefühl.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "die-tagespost.de.Demut.html": {
+   "tp": 0,
+   "fp": 2,
+   "fn": 3
+  },
+  "digitale-exzellenz.de.gesundheitswesen.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "dobszay.ch.geheimdiensten.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "domradio.de-Reformstau.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "doschu.com.solopreneur.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "drk.de-Glasgow.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "dsv.de-synchronschwimmen.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "dtb-tennis.de-nominiert.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "dtb.de-kulturwandel.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "duengebehoerde-niedersachsen.de-Sperrfristen.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "dvg.de.weihnachtsurlaub.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "dvgw.de.heizug.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "dw.com-elephants.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "Winda w chmurach _ Obyczaje _ Dwutygodnik _ Dwutygodnik.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "eawag.ch-elektron.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "ebrosia.de.zinfandel.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 2
+  },
+  "economist.com.thinking.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "eishockeynews.de-halbfinale.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "ejwue.de.lieferketten.html": {
+   "tp": 1,
+   "fp": 0,
+   "fn": 2
+  },
+  "ekbo.de-Bischofs.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "ekd.de-Friedensdekade.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "ekhn.de-Pflegefinanzierung.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "ekiba.de-trauer.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "elcolumbiano.com-alcaldia.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "elespectador.com-orion.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "elle.de.sneaker.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "elmostrador.cl-congreso.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "elenacional.com-carta.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "elnuevodia.com-mujeres.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "elpais.com.uy-gobierno.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "eltiempo.com-candidatos.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "eluniversal.com-senador.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "emotion.de.selfcare.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "enwb.com.windpark.steinheim.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "energieverbraucher.de.energie.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "energiezukunft.eu.bioenergie.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 1
+  },
+  "erneuerbareenergien.de.seeboden.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "erzbstbstum-koeln.de-halskrankheiten.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "eurailpress.de-rekordniveau.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "eurosport.de-corona.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "evref.ch-ökumene.html": {
+   "tp": 2,
+   "fp": 1,
+   "fn": 1
+  },
+  "d57cfadc540842ebb09971e28df123ec.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "fairkom.eu.about.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "falstaff.de-burgenland.html": {
+   "tp": 2,
+   "fp": 2,
+   "fn": 1
+  },
+  "familie.de.montessori.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "faz.net.streaming.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "fdpbt.de-epidemischenLage.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "fem.com.gehaelter.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "feuerwehrverband.de-vorbereitungstagung.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "fifplay.com.settings.html": {
+   "tp": 4,
+   "fp": 0,
+   "fn": 0
+  },
+  "financescout24.de.autokredit.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "finanzcheck.de.finanzierung.html": {
+   "tp": 5,
+   "fp": 0,
+   "fn": 0
+  },
+  "finanztip.de.altersvorsorge.html": {
+   "tp": 6,
+   "fp": 2,
+   "fn": 0
+  },
+  "fisch-hitparade.de-alkohhol.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "fitforfun.de.sozialeaengste.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "fluter.de.vorbild.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "flvw.de-hallenmeisterschaften.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "focus.de.leasen.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "for-me-online.de-pubertät.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "forstpraxis.de.palletsauslaub.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "foxyfolksy.com.buttercream.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "fr.de.nordkorea.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "franceculture.fr.idees.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "freiheit.org-überlebende.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "freitag.de.morgen.html": {
+   "tp": 0,
+   "fp": 2,
+   "fn": 3
+  },
+  "furche.at.achtsam.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "gala.fr.surnom.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "galore.de.buch.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "d041d20a0bc04fdf8cef73f750f20bf6.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 0
+  },
+  "gartenjournal.net-Zaubernuss.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "gazetadopovo.com.br-pacheco.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "gdp.de-Wertschätzung.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "geburtstagsecke.de.ideen.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "geeks3d.com.hacklab.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "gelbe-liste.de-chininum.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "giga.de.chrome.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "gipfelbuch.ch-hochaufloesung.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "giromatch.com.kredit.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "gitarrebass.de-dieneue.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "gofeminin.de.horoskop.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "golf.de-augusta.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "golfpost.de-premiere.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "d73e0fa055834b2dbb2036ba27d46597.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "greenpeace.de.nachhaltigleben.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "gruen-digital.de.jahrestagung.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 0
+  },
+  "gruene-bundestag.de-COP26.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "guenter-pilger.de.mailaktion.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "gv-bayern.de.portraet.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "haenselblatt.com.chinese.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "handball.ch-bruderduell.html": {
+   "tp": 1,
+   "fp": 0,
+   "fn": 2
+  },
+  "handelsblatt.com.grenzschliessungen.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "handwerk-magazin.de-Angriffe.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "handwerksblatt.de-Friseurbesuch.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "hassanchef.com.bhindi.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "haufe.de-ordnungsgeld.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "haus.de-Vorsatzschallung.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 1
+  },
+  "haustiermagazin.com-katzenspielzeug.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "healthline.com.fat.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "heartlandnewsfeed.com-Christian.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "heise.de.lithium.html": {
+   "tp": 2,
+   "fp": 2,
+   "fn": 0
+  },
+  "heizung.de.waermepumpen.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "helmholtz-klima.de.kipppunkt.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "herzundblut.com.Besuch.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "d76cf81a74fa4633bd19d7060f5c05ee.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "holzwerken.net-Kreissaege.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "homify.de-Tischdecke.html": {
+   "tp": 0,
+   "fp": 0,
+   "fn": 3
+  },
+  "houzz.de-Projekte.html": {
+   "tp": 1,
+   "fp": 0,
+   "fn": 2
+  },
+  "hoy.com-daran.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "hrjournal.de.trends.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "hss.de-Regierung.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "humanresourcesmanager.de.diversity.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "hvw-online.org-zuschauer.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "iass-potsdam.de.energiewende.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "ihrwebprofi.at.publikumsvoting.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "impulse.de.eltern.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "incurvy.de.wellness.html": {
+   "tp": 4,
+   "fp": 0,
+   "fn": 0
+  },
+  "independent.co.uk.penalty.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "infobae.com-ucrania.html": {
+   "tp": 2,
+   "fp": 2,
+   "fn": 1
+  },
+  "infocomcgt.fr.caisse.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "infosperber.ch-Madagaskar.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "ingenieur.de.kernfusion.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "instyle.com.cancer.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "0a3108e507c54157a95fe7a1338f5e9c.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "it-finanzmagazin.de.creditshelf.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "iwr.de.IWRpressedienst.Nordex.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "jaegermagazin.de-südtirol.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "jagdoesterreich.at-Parkplätze.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "jagdleben.de-waldwege.html": {
+   "tp": 2,
+   "fp": 1,
+   "fn": 0
+  },
+  "jagdverband.de-erschuettert.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "japantimes.co.jp.surgical.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "jolie.de.adele.html": {
+   "tp": 2,
+   "fp": 1,
+   "fn": 0
+  },
+  "journelles.de.westwing.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "jugend-forscht.de-Feuerlöschtechnik.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "juraforum.de-Wohngeld.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "kaieteurnewsonline.com-essequibo.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "kas.de-nordmazedonien.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "katholisch.at-alleinerziehende.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "katzen-forum.net-Pepe.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "kirche-und-leben.de-Münster.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "kochbar.de.schneiden.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "kulturkaufhaus.de-basteln.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "kxan.com-Voters.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "l-mag.de-Holocaust-Gedenken.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "lacrux.com-mammut.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "lacuarta.com-loretoaravena.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "lanacion.com.ar-jugada.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "landwirt.com.sensortechnik.html": {
+   "tp": 1,
+   "fp": 0,
+   "fn": 2
+  },
+  "laola1.at-barisic.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "lastampa.it.temperature.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "latercera.com-laagenda.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "latimes.com.bloomberg.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "lavazza.de.qualita.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "laweekly.com-Cultivation.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "lbv.de-Bavaria.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "lecker.de.schneewittchen.html": {
+   "tp": 6,
+   "fp": 0,
+   "fn": 0
+  },
+  "ledevoir.com.trottinettes.html": {
+   "tp": 2,
+   "fp": 2,
+   "fn": 0
+  },
+  "leichtathletik-berlin.de-norddeutschland.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "leichtathletik.de-erfurt.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "lidl.de-nachhaltigkeit.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "limespace.de.entloeten.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "linkedin.com.hoeltmann.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "linksfraktion.de-Abzocke.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "liquimoly-hbl.de-cheftrainer.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "livenet.ch-sprache.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "d51e75d9e53a472bb7708191899aa6b4.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "lopinion.fr.glyphosate.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "losandes.com-mendoza.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "lostiempos.com-juicio.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "lsvd.de-afghanistan.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "luxuriousmagazine.com.polo.html": {
+   "tp": 1,
+   "fp": 0,
+   "fn": 1
+  },
+  "luxuryhaven.co.hyatt.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "d43f330cbaf74e92b9aec85e937cb904.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "macwelt.de-warten.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "madymorrsion.com.energy.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "maenner.media-church.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "malteser.de-Bevölkerungsschutz.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "management-circle.de.glasses.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "markeich.de.impressum.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "martinruetter.com-Winter.html": {
+   "tp": 2,
+   "fp": 1,
+   "fn": 1
+  },
+  "mdavis.xyz.supermarket.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "mdr.de.autohaeuser.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "medicalnewstoday.com.318674.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "mein-haustier.de-hund.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "mein-schoener-garten.de-topinabur.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "meininger.de-wachstum.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "mesopinions.com.mutilation.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "metrotimes.com-Mezcal.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "miamitodaynews.com-Transitway.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "mindmegette.hu.levagott.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "minusl.de.joghurt.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "minuto30-lasierra.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "mix1.de-clio.html": {
+   "tp": 1,
+   "fp": 0,
+   "fn": 2
+  },
+  "modepilot.de.duschkopf.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 0
+  },
+  "d71bfdce9dd246c9a6ee6d08c8b39e4c.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "d27eb719099b43639104995806e07d00.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "motorsport-magazin.com-alphatauri.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "motorsport-total.com-romeo.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "msn.com.university.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "mtb-news.de-tubeless.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "munich2022.com-topathleten.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "0af99c85f22b451a93a75bbf99ac412e.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "0b96fc66e2c94f45a1b923ec9a31fcf2.html": {
+   "tp": 1,
+   "fp": 0,
+   "fn": 2
+  },
+  "nationalgeographic.co.uk.goats.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "nationalrail.co.uk.disruptions.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "natuerliche-jagd.de-seminar.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "nature.com.telescope.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "ndr.de.podcastcoronavirus140.html": {
+   "tp": 6,
+   "fp": 3,
+   "fn": 0
+  },
+  "neos.eu.wir.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "nestle-family-com-chicken.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "nestle-marktplatz.de-produkttest.html": {
+   "tp": 0,
+   "fp": 0,
+   "fn": 3
+  },
+  "neues-deutschland.de.mietenstreik.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "nytimes.com.blackouts.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "d42c68f1b0f4408b81cf8f00bbe1a631.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "oekologisch-bauen.info.energieeffizienz.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "oekonomenstimme.org.keynes.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "oetker.de.bienenstich.html": {
+   "tp": 6,
+   "fp": 0,
+   "fn": 0
+  },
+  "oetv.at-taucher.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "offshore-stiftung.de.offshore-windenergie.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "ok-magazin.de.einbetoniert.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "omeda.de-paxlovid.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "Rosyjskie zamachy w Czechach – kontekst krajowy, implikacje, perspektywy.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "otto.de.twoforfashion.html": {
+   "tp": 2,
+   "fp": 1,
+   "fn": 0
+  },
+  "outdoor-magazin.com-vanlife.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "pagina12.com.ar-suprema.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "paginasiete.bo-carabineros.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "pamelaandersonfoundation.org.yellow.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "parallels.com.desktop.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "pcgamer.com.darkest.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "pcmag.com.platters.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 1
+  },
+  "peta.de-veterinärämter.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "petri-heil-ch-hechte.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "pferd-aktuell.de-stellungnahmen.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "pferderevue.at-übung.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "phillyvoice.com-Sixers.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "piratenpartei-hessen.de.nachbarschaftshilfe.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "piratenpartei-marburg.de.fridays.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "piratenpartei.at.grundeinkommen.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "piratenpatei.de-Entlarvt.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "pix-bavaria.de.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "pluralsight.com.python.html": {
+   "tp": 2,
+   "fp": 1,
+   "fn": 0
+  },
+  "pocketpc.ch.auslieferung.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 1
+  },
+  "politico.com.retirement.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "brandenburg.de.homo-brandenburgensis.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "„Królowa Elżbieta” wypływa w świat. Sygnał dla Chin i Rosji - Polityka.pl.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "popsugar.co.uk.halloween.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "Eurocash rusza z Innowacyjną Platformą Handlu - Handel dystrybucja.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "pronats.de.arbeit.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "propellets.at.energie.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "proplanta.de.erloesobergrenze.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "psl.eu.luniversite.html": {
+   "tp": 2,
+   "fp": 1,
+   "fn": 0
+  },
+  "publimetro.cl-ministra.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "publishedreporter.com-Hottest.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "Sprzeciw wobec ataków na Fundację Lux Veritatis – RadioMaryja.pl.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "realsimple.com.hydrangea.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "rechtambild.de.kochbuch.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 0
+  },
+  "recyclingmagazin.de.lithium.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "reddit.com.init.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "refinery29.com.single.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "regenbogenportal.de-intersex.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "regiolanda.de.filmbuero.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "reisen-mit-dem-internet.de.emden-21416.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "reiterrevue.de-heulage.html": {
+   "tp": 2,
+   "fp": 2,
+   "fn": 1
+  },
+  "rent-a-salesman.eu.auslagern.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 1
+  },
+  "reuters.com.parasite.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "rhein-neckar-loewen.de-vorverkauf.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "rheinruhronline.de.essenwestviertel.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "rnz.de.witzel.html": {
+   "tp": 2,
+   "fp": 1,
+   "fn": 0
+  },
+  "rosalux.de-quarantaene.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "royalroad.com.melas.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "Unijne fundusze coraz bliżej. Sejm zagłosował _za_ - Polityka - rp.pl.html": {
+   "tp": 1,
+   "fp": 0,
+   "fn": 2
+  },
+  "rtl.de-lockdown.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "0b5db24739704283849ca3ed20ce09d4.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "rutgers.edu.robot.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "sac-cas.ch-schneesport.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "salon.com.emissions.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "schneems.com.rubocop.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "sciencesetavenir.fr.rumeur.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "scinexx.com.ammoniak.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "scmp.com.playbook.html": {
+   "tp": 0,
+   "fp": 1,
+   "fn": 3
+  },
+  "selbst.de-wurmkiste.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "selbstversorger.de-Huhn.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "she-works.de.sport.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "sheego.de.cleaning.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "siegessaeule.de-Machtinstrument.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "siegfried-marcus-berufsschule.at.kft.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "silkes-weinkeller.de-dekantieren.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "skispringen.com-verpasst.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "slf.ch-lawinensituation.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "smava.de.privatkredit.html": {
+   "tp": 6,
+   "fp": 1,
+   "fn": 0
+  },
+  "Solarserver.de.solarthermisches kraftwerk dubai.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "sonnenernergie.de.Windrebell.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "sonntag-sachsen.de.emanuel.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 0
+  },
+  "soundofscience.fr.1927.html": {
+   "tp": 1,
+   "fp": 0,
+   "fn": 2
+  },
+  "spdfraktion.de-Vizepräsidentin.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "speicherguide.de.schwierige.html": {
+   "tp": 2,
+   "fp": 1,
+   "fn": 0
+  },
+  "spektrum.de.coronavirus.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "spiegel.de.albtraum.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 1
+  },
+  "spoe.at-mieterhöhung.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "spontis.de.jahrzehnt.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "sportnews.bz-peking.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "sports.fr.lorient.html": {
+   "tp": 0,
+   "fp": 0,
+   "fn": 3
+  },
+  "spox.com-corona-fealle.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "springer.com-produkte.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "st-georg.de-olympia.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "standard.co.uk.caribbean.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "d70fab3adde74d5fb63552855c981395.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "strafprozess.ch.polizisten.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "strive-magazin.de.dating.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "stuttgart.de.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 0
+  },
+  "stylegart.de.naturkosmetik.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "sueddeutsche.de.flixtrain.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 0
+  },
+  "swr.de-volleyball.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "tafelblog.de.europa.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "d76bb5cda4cd4621a04c1b166d6cad9f.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "0a29620f9c4347758c146ed06dab6f3e.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "tagesanzeiger.ch.umweltzerstoerung.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "tagesschau.de.rheinmetall.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "tagesspiegel.de.abstandsregeln.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "talent.ch.5031.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "tdg.ch.chlorothalonil.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "greentech.live.energiesparen bei cern.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "telegraph.co.uk.plumber.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "telemedicus.info.rezension.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "tennismagazin.de-viertelfinale.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "tennisnet.com-ueberraschungen.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "theatlantic.com.disasters.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "thebalance.com.coinbase.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "theguardian.com.academics.html": {
+   "tp": 2,
+   "fp": 1,
+   "fn": 0
+  },
+  "theinsidersnet.com-wellaflex.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "thelist.com.multivitamin.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "thelocal.se.tattooed.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "theplanetarypress.com.forestlands.html": {
+   "tp": 2,
+   "fp": 1,
+   "fn": 0
+  },
+  "theverge.com.ios13.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "thisisjanewayne.com.bauch.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "thw.de-frauen.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "d32ad974a4b04657bb6e4d91852bd52d.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "tierschutzpartei.de-wildvogelauffang.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "tierwelt.ch-plez.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "timesofisrael.com.washington.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "tine.no.fotballskole.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "tofugu.com.dezuka-suisan.html": {
+   "tp": 4,
+   "fp": 0,
+   "fn": 0
+  },
+  "tomshardware.com.rtx.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "tonight.de-Arschloch.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "topagrar.com.schnee.solat.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "toptal.com.python.html": {
+   "tp": 5,
+   "fp": 1,
+   "fn": 0
+  },
+  "tour-magazin.de-unfall.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "trainingline-english.de.einzeltraining.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "travanto.de.ferienhaus-feinen.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "tvtoday.de-willsmith.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "twincities.com-mayor.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "ultimahora.com-apelacion.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "umweltbundesamt.de-atomkraft.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "unendlich-viel-energie-strompreisbremse.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "unocero.com.marcas.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "unsere-zeitung.at.inklusion.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "unterwegsinberlin.de.friedrichsfelde.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "urania.de.freiheit.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "urlaubsarchitektur.de.glashaus.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "uusisuomi.fi.angela.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "vegolosi.it.climate.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 1
+  },
+  "verbaende.com.2023.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "vergleich.de.leasen.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 1
+  },
+  "verivox.de.finanzierung.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "vice.com.amazon.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 0
+  },
+  "villagevoice.com-Party.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "vinosytapas.de.rioja.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "vogelwarte.ch-aktionsplan.html": {
+   "tp": 3,
+   "fp": 3,
+   "fn": 0
+  },
+  "Volksstimme.ch-loehne.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "waldwiesen.net-holländerholzhandel.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "0a24692a9ea846c1819bd6a5f92a8874.html": {
+   "tp": 5,
+   "fp": 2,
+   "fn": 0
+  },
+  "wbf.admin.ch.14093.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "weinkenner.de-st.magdalener.html": {
+   "tp": 0,
+   "fp": 2,
+   "fn": 3
+  },
+  "d90b19386e2b48559082547016cbe5ec.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "werkzeugforum.de-heizjacke.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "wevolver.com.3dprinting.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "whiskyverkostung.com.halle.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "wind-energie.de.beschleunigung.html": {
+   "tp": 2,
+   "fp": 0,
+   "fn": 1
+  },
+  "wired.com.burn.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "Maciej Krzysztoszek rzecznik prasowy Amica menedżer komunikacji zewnętrznej.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "wmn.de.krankheit.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "wochenblatt.com-Heinen-Essen.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "wolfgangmichal.de.sorgfaltspflicht.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "womenshealth.de.weihnachten.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "„Sieci”_ IPN, czyli element infrastruktury krytycznej Tygodnik Sieci.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "zamg.ac.at-Jahresbericht.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "zdf.de.corona.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "zdh.de-foerderungsstopp.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "zdnet.de.facebook.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "0a12df42d1764095989ab078ee0f940b.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "zfk.de.waermepumpen.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "zoll.de-Tabaksteuer.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "zooroyal.de.trixie.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "0a4a8ab61c054192b1ec70cc3570cf45.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "zvei.org.messestellenbetriebsgesetz.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "www1.wdr.de-Correctiv-Recherche.html": {
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
+  },
+  "nhk.or.jp.k100.html": {
+   "tp": 0,
+   "fp": 0,
+   "fn": 3
+  },
+  "yle.fi.3-11212601.html": {
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
+  },
+  "youhadmeatgardening.com.lemon.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "zahlenzauberin.wordpress.com.ferien.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "zulang.wordpress.com.genitalverstuemmelung.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "elnuevoherald.com-miami.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  },
+  "zoo-berlin.de-turm.html": {
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
+  }
+ }
+}

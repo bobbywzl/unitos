@@ -428,9 +428,14 @@ export function tryCompositeFigure(el: Element, ctx: WalkCtx): boolean {
   // author avatar became one FIGURE).
   if (labeled.length + plain.length < paragraphs.length) return false;
   const row = figureRow(el);
-  const columns = row ? mediaColumns(row).length : 1;
+  const columnEls = row ? mediaColumns(row) : [];
+  const columns = row ? columnEls.length : 1;
   if (plain.length > columns) return false;
+  // The row's columns are marked before the clone, so the text outside
+  // every column can be read from the clone.
+  for (const column of columnEls) column.setAttribute("data-unitos-column", "");
   const clone = el.cloneNode(true) as Element;
+  for (const column of columnEls) column.removeAttribute("data-unitos-column");
   for (const box of figureBoxes(el, clone)) box.remove();
   for (const media of clone.querySelectorAll("svg, video, img")) media.remove();
   for (const p of clone.querySelectorAll("p, figcaption")) p.remove();
@@ -440,12 +445,45 @@ export function tryCompositeFigure(el: Element, ctx: WalkCtx): boolean {
   // compare loop finding: an author box's bio paragraph swallowed into a
   // figure). A row holds a caption's worth per column.
   if (residual.length > CAPTION_MAX_CHARS * columns) return false;
+  // The columns' allowance is for the words under each column's media. Prose
+  // beside the columns is one caption's worth at most: a blog post's body
+  // set in divs between its photos is not a row's captions (web benchmark
+  // finding: a whole Blogger post became one figure). Prose is lines of
+  // words; a menu's short labels are not.
+  for (const column of clone.querySelectorAll("[data-unitos-column]")) column.remove();
+  if (row && proseLength(clone) > CAPTION_MAX_CHARS) return false;
   const block = figureBlock(el, ctx);
   if (block) {
     ctx.blocks.push(block);
     return true;
   }
   return false;
+}
+
+// A line of prose is a run of words this long between two block edges.
+const PROSE_LINE_MIN_CHARS = 60;
+const BLOCK_TAG_RX = /^(address|article|aside|blockquote|dd|div|dl|dt|figure|footer|form|h[1-6]|header|li|main|nav|ol|p|pre|section|table|td|th|tr|ul)$/i;
+
+/** The characters of an element's lines of prose: its text cut at block
+    elements and line breaks, counting the runs of PROSE_LINE_MIN_CHARS or
+    more. */
+function proseLength(el: Element): number {
+  const runs: string[] = [""];
+  const walk = (node: Node) => {
+    for (const child of node.childNodes) {
+      if (child.nodeType === 3) runs[runs.length - 1] += child.textContent ?? "";
+      else if (child.nodeType === 1) {
+        const tag = (child as Element).tagName;
+        if (/^(script|style|noscript)$/i.test(tag)) continue;
+        const edge = BLOCK_TAG_RX.test(tag) || /^br$/i.test(tag);
+        if (edge) runs.push("");
+        walk(child);
+        if (edge) runs.push("");
+      }
+    }
+  };
+  walk(el);
+  return runs.map((run) => normalizeText(run).length).filter((n) => n >= PROSE_LINE_MIN_CHARS).reduce((a, b) => a + b, 0);
 }
 
 function isFigureWithMedia(block: ParsedBlock | undefined): boolean {

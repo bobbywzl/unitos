@@ -663,7 +663,19 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
     !CAPTION_RE.test(text) &&
     !/(?:\s*\.){3,}\s*\d{1,4}\s*$/.test(text) &&
     (!/[.,;:?!]$/.test(text) || capsPeriod);
-  const title = titleLike(line);
+  // A centered title's line may end with a colon where its next line goes
+  // on in its look (tam-review p2: "Overview of the Technology Acceptance
+  // Model:" over "Origins, Developments and Future Directions", bold and
+  // centered, read as two paragraphs).
+  const colonOn = (l: Line, n: Line | undefined) =>
+    n !== undefined &&
+    /:$/.test(l.text.trim()) &&
+    titleLike({ ...l, text: l.text.trimEnd().slice(0, -1) }) &&
+    titleLike(n) &&
+    Math.abs(n.size - l.size) <= 0.5 &&
+    l.y - n.y > 0 &&
+    l.y - n.y <= l.size * ctx.leading * 1.3;
+  const title = titleLike(line) || (colonOn(line, lines[i + 1]) && isCentered(lines, i, ctx) && isCentered(lines, i + 1, ctx));
   if (!title && !labelled) return null;
   // A contents entry ends in leader dots and a page number; a title may end
   // in a number of its own ("Risk-neutral pricing 1").
@@ -719,13 +731,29 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
   // Over a list's first item likewise: OpenStax's "Solution 6.2" sits a
   // line over its "a. This z-score tells you …".
   const itemBelow = title && bodyBelow && readMarker(below) !== null;
+  // Over a paragraph's first line flush with it, a short title set apart
+  // above needs no gap under it either: a thesis's "Choice, Uncertainty,
+  // and Entropy" and TAM Review's "Introduction" sit one line's pitch over
+  // their paragraphs and read as paragraphs. The title stops well short of
+  // its column's edge (a bold sentence wrapped fills it), and the line
+  // under it is regular type at its size.
+  const edge = lineColumn(last)?.[1];
+  const flushBelow =
+    title &&
+    run.length === 1 &&
+    bodyBelow &&
+    Math.abs(below.x - last.x) <= last.size * 0.5 &&
+    Math.abs(below.size - last.size) <= 0.5 &&
+    edge !== undefined &&
+    edge - last.xEnd > last.size * 4 &&
+    below.xEnd - below.x > (edge - below.x) * 0.6;
   const small = line.size < ctx.bodySize * 0.98;
   if (small && !(headingAbove && bodyBelow) && !(gapAbove && (headingBelow || opensBelow))) return null;
   // A centered title set apart above needs no gap under it: a statement's
   // title sits 12.8 pt over its units line ("CONDENSED CONSOLIDATED
   // STATEMENTS OF OPERATIONS (Unaudited)" read as a paragraph).
   const centeredTitle = title && centered && gapAbove;
-  if (!below || !(centeredTitle || ((gapAbove || headingAbove) && (gapBelow || headingBelow || opensBelow || (gapAbove && itemBelow) || (headingAbove && bodyBelow))))) return null;
+  if (!below || !(centeredTitle || ((gapAbove || headingAbove) && (gapBelow || headingBelow || opensBelow || (gapAbove && (itemBelow || flushBelow)) || (headingAbove && bodyBelow))))) return null;
   const { text: joined, runs } = headingText(run, centered);
   return { segments: [headingOf(run, joined, runs)], next: j };
 }

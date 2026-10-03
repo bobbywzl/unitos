@@ -8,7 +8,7 @@ import type { Glyph } from "@/lib/parse/pdf/drawing";
 import { CAPTION_RE } from "@/lib/parse/pdf/figures";
 import { geom, lineMathShare, median } from "@/lib/parse/pdf/geometry";
 import { BULLET_RE, GLYPH_BULLET_RE, follows, isGlyphMarker, opensSequence, readMarker, type Marker } from "@/lib/parse/pdf/markers";
-import { boldShare, endsBold, fillsMargin, joinGroup, startsWithBoldLead } from "@/lib/parse/pdf/text";
+import { boldShare, endsBold, fillsMargin, isMonoLine, joinGroup, startsWithBoldLead } from "@/lib/parse/pdf/text";
 import type { Box, Line, PageContext, Segment, Step } from "@/lib/parse/pdf/types";
 import type { Indent } from "@/lib/parse/types";
 
@@ -755,7 +755,7 @@ function sequelOf(lines: Line[], k: number, marker: Marker): boolean {
 }
 
 // A float's label alone on its line: "TABLE I", "Figure 3.".
-const FLOAT_LABEL_RE = /^(?:fig\.?|figure|table|tab\.)\s*(?:\d+|[A-Z]\d+|[IVXL]+)[.:]?$/i;
+const FLOAT_LABEL_RE = /^(?:fig\.?|figure|table|tab\.|abbildung|abb\.|tabelle)\s*(?:\d+|[A-Z]\d+|[IVXL]+)[.:]?$/i;
 
 // Paragraph group: vertically continuous same-size lines in one column.
 // A hanging indent (a reference entry, a glossary term) indents every
@@ -767,6 +767,12 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
   const firstLineIndent = isFirstLineIndent(lines, i, ctx, runOf);
   const group: Line[] = [line];
   const colEdge = proseEdge(lines, i, i);
+  // The column's edge the lines around the first tell: a first line that
+  // ended a sentence ran to the margin only where another line shows the
+  // margin (parse loop finding: on a page of short lines, "Some inline
+  // mathematics involving x ∈ ℝ." was its own edge, and the indented "A
+  // list of items" under it read as a hanging indent).
+  const otherEdge = proseEdge(lines, i, i + 1);
   const sentenceEdge = sharedEdge(lines, i, i);
   const step = paragraphStep(lines, ctx);
   let j = i + 1;
@@ -838,7 +844,7 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
       next.x <= prev.x + next.size * 3.5 &&
       !BULLET_RE.test(next.text) &&
       gap <= next.size * ctx.leading * 1.3 &&
-      (!prevTerminal || /^[a-z0-9(]/.test(next.text) || prev.xEnd > colEdge - prev.size * 1.5);
+      (!prevTerminal || /^[a-z0-9(]/.test(next.text) || (otherEdge > 0 && prev.xEnd > otherEdge - prev.size * 1.5));
     // A wrapped line whose stretched word gaps read as cells is still one
     // line of prose when no table run claims it.
     const stretched =
@@ -896,6 +902,12 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
       // label under an underbrace joined the formula and diluted its math
       // share below the equation threshold (import compare loop finding).
       isDisplayMathLine(prev, ctx) !== isDisplayMathLine(next, ctx) ||
+      // A line of code under a line of prose that introduces it (a colon,
+      // not a link's scheme, or a line short of the column's edge) opens a
+      // listing (parse loop finding: ThinkDSP's "Here's an updated version
+      // of test1:" read "def test2():" as its paragraph's last words, and
+      // the listing lost its first line).
+      (isMonoLine(next) && !isMonoLine(prev) && (/(?<!\b(?:https?|ftp|mailto)):\s*$/i.test(prev.text) || (colEdge > 0 && prev.xEnd < colEdge - prev.size * 2))) ||
       // A marker opening the next line starts an item — a glyph bullet or a
       // box always, a number or a "(7)" only under a line that ended short
       // of the column edge or with a sentence: "(7) Weight-space…" at a line
@@ -1166,8 +1178,15 @@ export function measureSpacing(segments: Segment[], ctx: PageContext, lines: Lin
     const [top, bottom] = [table ? a.box : edge(a), table && b.type === "TABLE" ? b.box : edge(b)];
     if (!top || !bottom || !a.box || !b.box || a.page !== b.page) continue;
     const size = b.lineSize ?? ctx.bodySize;
-    // b stands under a, and their columns meet.
-    if (b.box.y2 > a.box.y1 + size || b.box.x1 > a.box.x2 || b.box.x2 < a.box.x1) continue;
+    // b stands under a, and their columns meet. A display centered in the
+    // column stands right of a short line over it: the column of a's last
+    // line holds its middle (parse loop finding: lualatex-stix-math's
+    // "Some text, and an equation." over √(x²) = |x| measured no space,
+    // and the import set the default 7 pt where the page sets 14).
+    const middle = (b.box.x1 + b.box.x2) / 2;
+    const own = b.type === "EQUATION" ? lines.filter((l) => l.y >= a.box!.y1 - 1 && l.y <= a.box!.y2 + 1 && l.x < a.box!.x2 && l.xEnd > a.box!.x1).map(lineColumn) : [];
+    const inColumn = own.some((c) => c !== undefined && middle > c[0] && middle < c[1]);
+    if (b.box.y2 > a.box.y1 + size || ((b.box.x1 > a.box.x2 || b.box.x2 < a.box.x1) && !inColumn)) continue;
     // A line's box reaches 0.3 of its size under its baseline and 0.85
     // over it (geometry.ts): between two blocks of text the space is their
     // baselines' step beyond the step the two lines take with none between

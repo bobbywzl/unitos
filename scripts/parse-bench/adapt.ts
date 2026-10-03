@@ -573,7 +573,7 @@ function alignValue(value: unknown): Align | undefined {
 }
 
 /** A caption's label and number: "Fig. 3.", "Figure 2:", "Table IV", "表 1". */
-const CAPTION_LABEL_RE = /^\s*(?:fig(?:ure)?\.?|table|tab\.|scheme|chart|exhibit|plate|図表?|表)\s*[\dIVXLivxl]+/i;
+const CAPTION_LABEL_RE = /^\s*(?:fig(?:ure)?\.?|table|tab\.|scheme|chart|exhibit|plate|abbildung|abb\.|tabelle|図表?|表)\s*[\dIVXLivxl]+/i;
 
 /** A paragraph this long is the body's: the front matter's lines are shorter. */
 const BODY_CHARS = 200;

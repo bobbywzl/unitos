@@ -20,6 +20,7 @@ import {
   columnAt,
   columnSeparators,
   isProseColumns,
+  proseCell,
   leadIn,
   LINK_LINE_RE,
   NUMERIC_CELL_RE,
@@ -274,7 +275,7 @@ function isProseLine(line: Line, width: number, columns: Rule[] = []): boolean {
   return words.length >= 8 || (line.text.match(CJK_RE)?.length ?? 0) >= 20;
 }
 
-const CAPTION_START_RE = /^(fig\.|figure|table|tab\.)\s*([\dIVX]+|[A-Z]\d+)\b/i;
+const CAPTION_START_RE = /^(fig\.|figure|table|tab\.|abbildung|abb\.|tabelle)\s*([\dIVX]+|[A-Z]\d+)\b/i;
 
 // The regions a stack of same-width rules bounds: the bands between
 // consecutive rules, joined while they read as one table. A band that holds
@@ -298,7 +299,8 @@ function stackRegions(rules: Rule[], x1: number, x2: number, items: Item[], colu
     const lines = buildLines(items.filter((it) => inBox(it, band)), 0);
     const breaks =
       lines.some((l) => isProseLine(l, x2 - x1, columns) || CAPTION_START_RE.test(l.text)) ||
-      isProseColumns(lines.filter((l) => l.cells.length >= 2), false);
+      isProseColumns(lines.filter((l) => l.cells.length >= 2), false) ||
+      proseHalves(lines, x1, x2, items, band);
     if (breaks) {
       close();
       continue;
@@ -317,6 +319,36 @@ function stackRegions(rules: Rule[], x1: number, x2: number, items: Item[], colu
   }
   close();
   return regions;
+}
+
+// A page's head rule and foot rule around its two columns of text: the band
+// holds most of the page's characters (four fifths), a quarter of its lines
+// hold a cell of prose, and prose stands in both halves, three cells at
+// least on each side. A table with a column of prose holds it on one side.
+// The lines of two columns between formulas and lists hold two cells of
+// prose side by side too seldom for isProseColumns (parse loop finding:
+// the CS 229 refresher's first page, its formulas between short lines, read
+// as one table of the whole page).
+function proseHalves(lines: Line[], x1: number, x2: number, items: Item[], band: Box): boolean {
+  const chars = (list: Item[]) => list.reduce((n, it) => n + it.str.trim().length, 0);
+  if (chars(items.filter((it) => inBox(it, band))) < chars(items) * 0.8) return false;
+  const middle = (x1 + x2) / 2;
+  const prose = lines.flatMap((l) => l.cells.filter((c) => proseCell(c.text)).map((c) => ({ line: l, left: c.x < middle })));
+  const halves = [prose.filter((p) => p.left).length, prose.filter((p) => !p.left).length];
+  return new Set(prose.map((p) => p.line)).size * 4 >= lines.length && halves.every((n) => n >= 3);
+}
+
+// A display in a frame (\boxed, a framed box): two rules over and under it
+// and a rule down each side, its characters most of them in math fonts. A
+// matrix's rows in it set columns as a table's do, and it read as a table
+// of the matrix's entries (parse loop finding: the CS 229 refresher frames
+// its displays: "xyᵀ = (x₁y₁ ⋯ x₁yₙ; …) ∈ ℝ^{m×n}" read as a table of
+// three columns). The display reads as math (math/display.ts).
+function framedMath(box: Box, items: Item[], columns: Rule[]): boolean {
+  const side = (x: number) => columns.some((r) => Math.abs(r.x1 - x) <= 2 && r.y1 <= box.y1 + 2 && r.y2 >= box.y2 - 2);
+  if (!side(box.x1) || !side(box.x2)) return false;
+  const chars = (list: Item[]) => list.reduce((n, it) => n + it.str.replace(/\s/g, "").length, 0);
+  return chars(items.filter((it) => it.math)) * 2 >= chars(items);
 }
 
 // A stack's rules, and the rule its last row would have: a table open at
@@ -595,7 +627,7 @@ export function ruledTables(all: Item[], page: PageDrawing, pageWidth: number, p
       if (!free(box)) continue;
       const inside = items.filter((it) => inBox(it, { ...box, x1: box.x1 - 2, x2: box.x2 + 2 }));
       const lines = buildLines(inside, 0);
-      if (!isTableRegion(lines, box.x2 - box.x1, columns) || slices(box, lines, items)) continue;
+      if (!isTableRegion(lines, box.x2 - box.x1, columns) || slices(box, lines, items) || framedMath(box, inside, columns)) continue;
       const inner = rules.filter((r) => r.y1 < box.y2 - 1 && r.y1 > box.y1 + 1 && r.x1 >= box.x1 - 3 && r.x2 <= box.x2 + 3);
       const region = { box, items: inside, lines, grid: null, rules: inner, drawing };
       // The rules drawn between its columns are the table's, no chart's
@@ -1380,7 +1412,7 @@ function cellFill(cell: Box, table: Box, fills: Fill[]): string | undefined {
 // right, or set in from the cell's left edge. inset: the cells' padding;
 // flush: the right edge of a column set flush right; centered: the cell's
 // row centers its cells.
-function cellParagraphs(lines: Line[], box: Box, inset: { left: number; right: number }, flush?: number, centered = false): TableCell {
+export function cellParagraphs(lines: Line[], box: Box, inset: { left: number; right: number }, flush?: number, centered = false): TableCell {
   const left = box.x1 + inset.left;
   const right = box.x2 - inset.right;
   const groups: Line[][] = [];

@@ -13,7 +13,7 @@
 // on amsbook notes, a Word form, a Google Docs export, and a pdfLaTeX
 // paper, every text item's origin is a glyph origin here.
 
-import { mathFamily, unicodeMath, type MathFamily, type MathVariant } from "@/lib/parse/pdf/glyphs";
+import { mathFamily, namedGlyphs, unicodeMath, type MathFamily, type MathVariant } from "@/lib/parse/pdf/glyphs";
 import type { Box } from "@/lib/parse/pdf/types";
 
 export type Glyph = {
@@ -47,6 +47,9 @@ export type Glyph = {
   // Drawn outside the clip in effect or outside the page box: the glyph
   // shows nothing (a figure's labels past its crop, arXiv 2411.19946 p4).
   hidden?: true;
+  // Read by its glyph name where the font has no Unicode map (glyphs.ts
+  // namedGlyphs): unicode holds what the name says.
+  named?: true;
   // Its fill color as it shows over white (#rrggbb); absent where no plain
   // color fills it (a pattern).
   color?: string;
@@ -61,7 +64,9 @@ export type Fill = Box & { color?: string };
 export type PathBox = Box & { clip?: true };
 export type PageDrawing = { glyphs: Glyph[]; rules: Rule[]; fills: Fill[]; images: Box[]; paths: PathBox[]; shades: Box[] };
 // A font by pdf.js's id: its name, font matrix, and writing direction.
-export type FontLookup = (id: string) => { name: string; fontMatrix?: ArrayLike<number>; vertical?: boolean } | null;
+// differences: the glyph name of each code, where the font's encoding gives
+// one (pdf.js's font with fontExtraProperties).
+export type FontLookup = (id: string) => { name: string; fontMatrix?: ArrayLike<number>; vertical?: boolean; differences?: ArrayLike<string | null | undefined> } | null;
 
 // pdf.js operator numbers (OPS, pdf.js 6.1).
 const OP = {
@@ -212,13 +217,13 @@ export function readDrawing(
   let annotation = 0;
   // pdf.js sends W (clip) just before the path it clips to.
   let clipping = false;
-  const fontCache = new Map<string, { base: string; family: MathFamily | null; scale: number; vertical: boolean }>();
+  const fontCache = new Map<string, { base: string; family: MathFamily | null; scale: number; vertical: boolean; named: Map<number, string> | null }>();
   const fontOf = (id: string) => {
     let hit = fontCache.get(id);
     if (!hit) {
       const font = fonts(id);
       const base = (font?.name ?? "").replace(/^[A-Z]{6}\+/, "");
-      hit = { base, family: mathFamily(base), scale: font?.fontMatrix?.[0] ?? 0.001, vertical: font?.vertical === true };
+      hit = { base, family: mathFamily(base), scale: font?.fontMatrix?.[0] ?? 0.001, vertical: font?.vertical === true, named: namedGlyphs(base, font?.differences) };
       fontCache.set(id, hit);
     }
     return hit;
@@ -382,6 +387,11 @@ export function readDrawing(
               mode: state.mode,
             };
             if (color) glyph.color = color;
+            const named = font.named?.get(glyph.code);
+            if (named !== undefined) {
+              glyph.unicode = named;
+              glyph.named = true;
+            }
             if (
               Math.max(px, ex) <= shown.x1 - 0.5 ||
               Math.min(px, ex) >= shown.x2 + 0.5 ||
@@ -730,7 +740,7 @@ export function itemGlyphs(items: TextOrigin[], glyphs: Glyph[]): (Glyph[] | und
       // an OT1 LMRoman10-Regular: "ExactlyOne(mp", arXiv 2506.06752 p. 6):
       // the glyphs of either are the item's.
       if ((g.font !== item.font && g.base !== glyphs[start].base) || taken.has(i) || g.x > end || Math.abs(g.y - item.y) > item.size) break;
-      if (g.family === null && g.unicode.trim() === "") continue;
+      if (g.family === null && !g.named && g.unicode.trim() === "") continue;
       run.push(g);
     }
     return run;

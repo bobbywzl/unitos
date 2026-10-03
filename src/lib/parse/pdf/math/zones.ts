@@ -9,7 +9,7 @@
 // page's rules are known (resolveZones).
 
 import type { Glyph, PageDrawing, Rule } from "@/lib/parse/pdf/drawing";
-import { isBoldFont, isItalicFont, isTextMath, isUnicodeMathFont, isUnreadMath } from "@/lib/parse/pdf/glyphs";
+import { isBoldFont, isItalicFont, isTextMath, isUnicodeMathFont, isUnreadMath, longArrowEnd } from "@/lib/parse/pdf/glyphs";
 import { layoutLatex } from "@/lib/parse/pdf/math/check";
 import { braceLabelBoxes, hangingGlyph, type Atom } from "@/lib/parse/pdf/math/layout";
 import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
@@ -44,7 +44,7 @@ function kind(g: Glyph, size: number): Kind {
   // A text font's digit joins the math beside it as CMR's does where the
   // page's formulas take their digits from the text's font (glyphs.ts
   // isTextMath: MathDesign's Utopia, LibreOffice's Liberation Serif).
-  if (g.family === null) return isTextMath(g) && /^[0-9]$/.test(g.unicode) ? "attach" : "text";
+  if (g.family === null) return isTextMath(g) && /^[0-9/]$/.test(g.unicode) ? "attach" : "text";
   if (g.family !== "ot1") return "text";
   if (g.size < size * 0.85 || ATTACH_RE.test(g.unicode)) return "attach";
   // An accent over a math letter (\hat, \bar, \dot) is the text font's.
@@ -75,12 +75,43 @@ function ownTextFont(items: Item[]): boolean {
   return own > 3 * tex;
 }
 
+/** The small glyphs set over a long arrow drawn in pieces (glyphs.ts
+    longArrowEnd): its label (\xRightarrow{\text{Def. 12.a}}). The label
+    joins the arrow's formula whatever its font, where a word in a text
+    font would end it, and the arrow is math though its first piece is the
+    text font's "=" (parse loop finding: GeoTopo's "==⇒" under "Def. 12.a"
+    and under "Kompakt", set in the text's sans, read as words, and the
+    arrow as a "⟹" of no formula; a label with a math letter, "f stetig",
+    read). */
+function arrowLabels(glyphs: Glyph[], size: number): { arrows: Set<Glyph>; labels: Set<Glyph> } {
+  const arrows = new Set<Glyph>();
+  const labels = new Set<Glyph>();
+  for (const arrow of glyphs) {
+    const end = longArrowEnd(arrow);
+    if (end === undefined) continue;
+    let label = false;
+    for (const g of glyphs) {
+      const rise = (g.y - arrow.y) / arrow.size;
+      const center = g.x + g.w / 2;
+      if (g.size < size * 0.85 && rise > 0.3 && rise < 1.1 && center > arrow.x && center < end) {
+        labels.add(g);
+        label = true;
+      }
+    }
+    if (label) arrows.add(arrow);
+  }
+  return { arrows, labels };
+}
+
 /** The formulas among a cell's glyphs (in x order), as glyph runs. */
 function zonesOf(glyphs: Glyph[], size: number, textFont: boolean): Glyph[][] {
   const zones: Glyph[][] = [];
   let cur: Glyph[] = [];
   const tight = (a: Glyph | undefined, b: Glyph | undefined) => a !== undefined && b !== undefined && boldOrSans(a) && boldOrSans(b) && gapOf(a, b) < 0.12 * size;
+  const { arrows, labels } = arrowLabels(glyphs, size);
   const kinds = glyphs.map((g, k): Kind => {
+    if (arrows.has(g)) return "math";
+    if (labels.has(g)) return "attach";
     // Where the text is set in a font of its own (Times), a letter of TeX's
     // bold or sans is a formula's: \mathbf{g}, \mathsf{G}_1 (arXiv 2504.02736
     // read "g4" and "G1" as words). A word of them is a word (\textsf{Adam}
@@ -182,11 +213,16 @@ function zonesOf(glyphs: Glyph[], size: number, textFont: boolean): Glyph[][] {
     // A lone text italic letter a page's math takes is a formula (lone,
     // below), and so is one with its scripts (t_i, t_1).
     const single = isTextMath(z[0]) && isLetter(z[0]) && z.slice(1).every((g) => g.size < size * 0.85 && (isTextMath(g) || kindOf(g) === "attach"));
+    // So is a run of such letters with a glyph of TeX's text font: on such
+    // a page TeX's roman sets only formulas' brackets, digits, and signs
+    // (mathpazo's thesis: "P(E_i) =" read as words before a fraction, its
+    // display lost, its numerator and denominator dropped).
+    const roman = z.some((g) => g.family === "ot1") && z.some((g) => isTextMath(g) && isLetter(g));
     const again = () => {
       cur = after;
       if (cur.length > 0) flush();
     };
-    if (!stacked && !single && (math.length === 0 || url)) return again();
+    if (!stacked && !single && !roman && (math.length === 0 || url)) return again();
     // A lone raised symbol after a word (a footnote's dagger) is a mark,
     // not a formula: every glyph small, none on the line.
     if (!stacked && z.every((g) => g.size < size * 0.85)) return again();
@@ -423,12 +459,23 @@ export function splitZones(items: Item[], cells: number[]): Item[] {
 }
 
 // The size most of a cell's characters are set in.
+// A cell's text size: the size most of its characters take, among those
+// at a script's size or more under its largest letter. A cell of a
+// letter and its long subscript (a fraction's denominator, ξ_{eff,uniform})
+// holds more of the script's characters than of the letter's (a math
+// font's letter: a heading beside a column's text is no such letter): read at the
+// script's size, its subscript's letters were words, and the fraction's
+// line went into the text line over it (parse loop finding: ICML's (34)
+// was a crop).
 function textSize(items: Item[]): number {
+  const big = Math.max(0, ...items.filter((i) => (i.glyphs ?? []).some((g) => isMathGlyph(g) && LETTER_RE.test(g.unicode))).map((i) => i.size));
   const chars = new Map<number, number>();
   for (const i of items) {
+    if (i.size < big * 0.85) continue;
     const key = Math.round(i.size * 10) / 10;
     chars.set(key, (chars.get(key) ?? 0) + i.str.length);
   }
+  if (chars.size === 0) for (const i of items) chars.set(Math.round(i.size * 10) / 10, (chars.get(Math.round(i.size * 10) / 10) ?? 0) + i.str.length);
   return [...chars].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 10;
 }
 
@@ -459,7 +506,12 @@ export function resolveZones(lines: Line[], drawing: PageDrawing) {
       if (!zone || seen.has(zone)) continue;
       seen.add(zone);
       orphans ??= orphanGlyphs(lines, drawing);
-      resolveZone(zone, drawing, orphans, taken);
+      // An orphan on another line's baseline, within that line, is that
+      // line's (parse loop finding: GeoTopo's arrow under "Vor.", its
+      // "=" and "⇒" read by the composite ⟹ of their line, stood a line
+      // over "⇒ 𝔅δ(x) ⊆ f⁻¹(…)", whose formula took them as a row
+      // "=\Rightarrow" and failed).
+      resolveZone(zone, drawing, orphans, taken, (g) => onOtherLine(g, line, lines));
     }
   }
   if (seen.size === 0) return;
@@ -472,10 +524,19 @@ export function resolveZones(lines: Line[], drawing: PageDrawing) {
   }
 }
 
+/** Whether a glyph stands on the baseline of another line of text (no
+    display's), within that line, and off this line's: it is that line's. */
+export function onOtherLine(g: Glyph, line: Line, lines: Line[]): boolean {
+  return (
+    Math.abs(line.y - g.y) >= g.size * 0.1 &&
+    lines.some((l) => l !== line && !l.display && Math.abs(l.y - g.y) < g.size * 0.1 && g.x >= l.x - g.size * 0.5 && g.x <= l.xEnd + g.size * 0.5)
+  );
+}
+
 /** One zone's LaTeX and check (resolveZones). orphans: the page's glyphs
     no item reads; the zone takes those that sit on it. taken: the paths
     other formulas read; the zone reads none of them, and adds its own. */
-export function resolveZone(zone: MathZone, drawing: PageDrawing, orphans: Glyph[], taken = new Set<Box>()) {
+export function resolveZone(zone: MathZone, drawing: PageDrawing, orphans: Glyph[], taken = new Set<Box>(), elsewhere: (g: Glyph) => boolean = () => false) {
   const x1 = Math.min(...zone.glyphs.map((g) => g.x));
   // A symbol drawn in two glyphs from one origin (↦: the bar has no width,
   // and the text layer holds the bar alone) reaches as far as its second
@@ -492,7 +553,7 @@ export function resolveZone(zone: MathZone, drawing: PageDrawing, orphans: Glyph
   // (a_{ij} read its scripts at the base's level).
   const em = Math.max(zone.size, ...zone.glyphs.map((g) => g.size));
   const on = (g: Glyph) => g.x + g.w / 2 > x1 && g.x + g.w / 2 < x2 && g.y > low - em * 0.6 && g.y < high + em * 1.2;
-  const extra = orphans.filter(on);
+  const extra = orphans.filter((g) => on(g) && !elsewhere(g));
   for (const g of extra) orphans.splice(orphans.indexOf(g), 1);
   const glyphs = [...zone.glyphs, ...extra];
   // The rules inside it: a fraction bar, a radical's or an overline's
@@ -561,7 +622,7 @@ export function resolveZone(zone: MathZone, drawing: PageDrawing, orphans: Glyph
     // another line took is missing from the LaTeX, which still passes
     // the check (synth-math-html: a numerator's x^k read as x).
     zone.ok = check.ok && !strayInside(atoms, new Set(glyphs), drawing.glyphs);
-    const last = atoms.filter((a) => a.size >= zone.size * 0.85).sort((a, b) => b.x2 - a.x2)[0];
+      const last = atoms.filter((a) => a.size >= zone.size * 0.85).sort((a, b) => b.x2 - a.x2)[0];
     zone.open = last !== undefined && (last.cls === "rel" || last.cls === "bin" || last.cls === "punct");
   } catch {
     zone.ok = false;
