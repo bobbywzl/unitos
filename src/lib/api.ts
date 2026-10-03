@@ -1,6 +1,7 @@
 import { ACCOUNT_HEADER } from "@/lib/constants";
 import { DEFAULT_LANG, isLang, LANG_COOKIE, type Lang } from "@/lib/i18n/config";
 import { translate } from "@/lib/i18n/dictionaries";
+import { newNoteId } from "@/lib/notes/client-id";
 import { isAiCall } from "@/lib/offline/ai-routes";
 import { isOffline, offlinePremium, queueWrite } from "@/lib/offline/queue";
 import { beginWrite, endWrite } from "@/lib/save-state";
@@ -32,8 +33,34 @@ function queueable(path: string, method: string, body: unknown): boolean {
   return QUEUEABLE.some((q) => q.method === method && q.path.test(path)) && !isAiCall(path, body);
 }
 
+// A note write as it waits in the offline queue (SPEC.md §17). A create
+// carries its id, so the tray draws the note while it waits and a replay
+// never makes it twice. An edit made from a base text is put together with
+// the stored text on replay (onConflict "keep"): a queued write cannot read
+// a 409, and the queue drops a refused write — the words must land.
+function queuedBody(path: string, method: string, body: unknown): unknown {
+  if (!body || typeof body !== "object") return body;
+  if (method === "POST" && path === "/api/notes" && !("id" in body)) return { ...body, id: newNoteId() };
+  if (method === "PATCH" && /^\/api\/notes\/[^/]+$/.test(path) && "baseContent" in body) {
+    return { ...body, onConflict: "keep" };
+  }
+  return body;
+}
+
+/** A refused call: the status and the body the route answered with. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly detail: unknown,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 // The language on the client, outside React: the same cookie the layout reads.
-function clientLang(): Lang {
+export function clientLang(): Lang {
   if (typeof document === "undefined") return DEFAULT_LANG;
   const value = document.cookie.match(new RegExp(`(?:^|; )${LANG_COOKIE}=([^;]+)`))?.[1];
   return isLang(value) ? value : DEFAULT_LANG;
@@ -94,8 +121,10 @@ async function send<T>(
     // Network failure. With Unitos Premium the queueable writes save offline
     // and sync later (SPEC.md §17); everything else reports plainly.
     if (offlinePremium() && queueable(path, method, body)) {
-      await queueWrite(path, method as "POST" | "PATCH" | "DELETE", body);
-      return { queued: true } as T;
+      const queued = queuedBody(path, method, body);
+      await queueWrite(path, method as "POST" | "PATCH" | "DELETE", queued);
+      const id = queued && typeof queued === "object" && "id" in queued ? queued.id : undefined;
+      return (typeof id === "string" ? { queued: true, id } : { queued: true }) as T;
     }
     throw new Error(
       isOffline() ? translate(clientLang(), "common.offline") : err instanceof Error ? err.message : String(err),
@@ -107,7 +136,7 @@ async function send<T>(
       detail && typeof detail === "object" && "error" in detail && typeof detail.error === "string"
         ? detail.error
         : translate(clientLang(), "common.requestFailedStatus", { status: res.status });
-    throw new Error(message);
+    throw new ApiError(message, res.status, detail);
   }
   return res.json() as Promise<T>;
 }

@@ -16,6 +16,14 @@ import { parseBody } from "@/lib/validate";
 const createSchema = z
   .object({
     sectionId: z.string().min(1),
+    // The note's id, chosen by the client before the create leaves
+    // (lib/notes/client-id.ts): a create sent again — a reload while the
+    // first one was on its way, the offline queue replaying — answers with
+    // the note the first one made instead of a second copy.
+    id: z
+      .string()
+      .regex(/^c[a-z0-9]{20,40}$/)
+      .optional(),
     content: z.string().min(1).max(50_000).optional(),
     // A note made of an annotation (SPEC.md §6): the annotation's text and
     // anchors are copied into the new note, and the annotation stays where
@@ -64,6 +72,13 @@ export async function POST(req: Request) {
   if (!section) return NextResponse.json({ error: t("api.sectionNotFound") }, { status: 404 });
   const access = await sectionAccess(data.sectionId, "editor");
   if (access instanceof NextResponse) return access;
+
+  // The same create again: the note it made, as it is now.
+  if (data.id) {
+    const made = await madeBefore(data.id, section.notebookId, access.user.id);
+    if (made === "taken") return NextResponse.json({ error: t("api.noteIdTaken") }, { status: 409 });
+    if (made) return NextResponse.json(made, { status: 200 });
+  }
 
   // The source resolves through the ladder (SPEC.md §5): block id and offsets,
   // then the quote inside the block, then the quote across the document — a
@@ -183,6 +198,7 @@ export async function POST(req: Request) {
   const count = await db.note.count({ where: { sectionId: data.sectionId } });
   const note = await db.note.create({
     data: {
+      ...(data.id ? { id: data.id } : {}),
       sectionId: data.sectionId,
       content,
       // Find, distill, ask, and voice output is AI output: it lands PENDING, no exceptions (SPEC.md §1).
@@ -213,8 +229,25 @@ export async function POST(req: Request) {
         : {}),
     },
     include: { sources: true },
+  }).catch(async (err: unknown) => {
+    // Two copies of one create at once: the other one made the note.
+    if (data.id && err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      const made = await madeBefore(data.id, section.notebookId, access.user.id);
+      if (made && made !== "taken") return made;
+    }
+    throw err;
   });
   if (data.top) await normalizeNoteOrders(data.sectionId);
   await bumpNotebook(section.notebookId);
   return NextResponse.json(note, { status: 201 });
+}
+
+/** The note an earlier copy of this create made: null when there is none,
+    "taken" when the id is another person's note or in another project. */
+async function madeBefore(id: string, notebookId: string, userId: string) {
+  const note = await db.note.findUnique({ where: { id }, include: { sources: true } });
+  if (!note) return null;
+  const section = await db.section.findUnique({ where: { id: note.sectionId }, select: { notebookId: true } });
+  if (section?.notebookId !== notebookId || note.createdById !== userId) return "taken" as const;
+  return note;
 }

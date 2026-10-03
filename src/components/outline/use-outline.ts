@@ -5,14 +5,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { arrayMove } from "@dnd-kit/sortable";
 import { api } from "@/lib/api";
 import { refreshWhenOnline } from "@/lib/offline/queue";
+import { overlayQueuedNotes, useQueuedNoteWrites } from "@/lib/offline/queued-notes";
 import type { MergeMode } from "@/lib/card-drag";
-import { clearNoteDraft, confirmNoteDraft, readNoteDraft, sweepStaleDrafts } from "@/lib/note-drafts";
+import { clearNoteDraft, confirmNoteDraft, noteDraftBase, readNoteDraft, sweepStaleDrafts } from "@/lib/note-drafts";
+import { saveNoteText } from "@/lib/notes/save-text";
 import { joinNoteContents } from "@/lib/notes/join";
 import type { QuoteDrag } from "@/lib/quote-drag";
 import type { NotebookView, NoteView, SectionView } from "@/lib/types";
 import { useT } from "@/components/lang-provider";
 import { useCollapsedView, type CollapsedView } from "@/components/use-collapsed-view";
-import { flushNoteDrafts, replaceNoteDraft } from "@/components/outline/use-note-draft";
+import { flushNoteDrafts, openDraftSave, replaceNoteDraft } from "@/components/outline/use-note-draft";
 
 // The floating card: one note taken out of the tray, over the article
 // (floating-note-editor.tsx). It opens in its draggable mode; the pencil
@@ -51,8 +53,12 @@ export type OutlineActions = {
   renameSection: (id: string, title: string) => Promise<void>;
   deleteSection: (id: string) => Promise<void>;
   reorderSection: (parentId: string | null, id: string, toIndex: number) => void;
-  addNote: (sectionId: string, content: string) => Promise<void>;
-  saveNote: (id: string, content: string) => Promise<void>;
+  /** id: the id the note's create carries (lib/notes/client-id.ts), so a
+      create sent twice makes one note. */
+  addNote: (sectionId: string, content: string, id?: string) => Promise<void>;
+  /** base: the note's text the save was made from (lib/notes/save-text.ts);
+      unset, the open editor's, else the text on screen. */
+  saveNote: (id: string, content: string, base?: string) => Promise<void>;
   /** A quote dropped into the note (lib/quote-drag.ts): its anchor becomes
       a source of the note, so the quote points back to the reader. */
   attachSource: (id: string, drag: QuoteDrag) => Promise<void>;
@@ -209,22 +215,25 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
   // Local drafts (SPEC.md §6, lib/note-drafts.ts): a note's editor writes every
   // keystroke to localStorage, and the server save may not have landed before
   // the tab, the page, or the computer went away. On load, each draft is
-  // checked against the note: the same content, or a note changed elsewhere
-  // since, clears it; anything else is the user's unsaved words, written to the
-  // note now.
+  // checked against the note: the same content clears it; anything else is
+  // the user's unsaved words, written to the note now, made from the text the
+  // draft was made from — a note changed elsewhere since keeps both sides'
+  // words (lib/notes/save-text.ts). A draft written before drafts kept their
+  // base is cleared when the note changed elsewhere since, as it always was.
   useEffect(() => {
     sweepStaleDrafts();
     if (!canEdit) return;
-    const replay: { id: string; content: string }[] = [];
+    const replay: { id: string; content: string; base: string }[] = [];
     for (const note of flattenNotes(tree)) {
       const draft = readNoteDraft(note.id);
       if (!draft) continue;
       const content = draft.content.trim();
-      if (!content || content === note.content || Date.parse(note.updatedAt) > draft.savedAt) {
+      const base = noteDraftBase(draft, note.content);
+      if (!content || content === note.content.trim() || (base === undefined && Date.parse(note.updatedAt) > draft.savedAt)) {
         clearNoteDraft(note.id);
         continue;
       }
-      replay.push({ id: note.id, content });
+      replay.push({ id: note.id, content, base: base ?? note.content });
     }
     if (replay.length === 0) return;
     const byId = new Map(replay.map((r) => [r.id, r.content]));
@@ -239,7 +248,7 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
     );
     void Promise.all(
       replay.map((r) =>
-        api(`/api/notes/${r.id}`, "PATCH", { content: r.content })
+        saveNoteText(r.id, r.content, r.base)
           .then(() => confirmNoteDraft(r.id, r.content))
           .catch(() => {
             // Still unsaved: the draft stays for the next load.
@@ -301,18 +310,21 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
 
   const notesView = useCollapsedView(`${NOTES_VIEW_STORE}:${notebook.id}`);
 
-  // The tree on screen: the open document's notes, or the whole project.
+  // The tree on screen: the open document's notes, or the whole project —
+  // with the notes saved offline drawn in, marked, until the queue syncs.
+  const queued = useQueuedNoteWrites();
+  const shownTree = useMemo(() => overlayQueuedNotes(tree, queued.writes, queued.landed), [tree, queued]);
   const scopedTree = useMemo(
-    () => (documentId && scopeToDocument ? scopeSections(tree, documentId) : tree),
-    [tree, documentId, scopeToDocument],
+    () => (documentId && scopeToDocument ? scopeSections(shownTree, documentId) : shownTree),
+    [shownTree, documentId, scopeToDocument],
   );
   // Pending queue in outline order (SPEC.md §6 keyboard flow): the notes on
   // screen. pendingElsewhere: pending notes the scope hides — other
   // documents' and the project's — which the notes full page shows.
   const pending = useMemo(() => flattenNotes(scopedTree).filter((n) => n.status === "PENDING"), [scopedTree]);
   const pendingElsewhere = useMemo(
-    () => flattenNotes(tree).filter((n) => n.status === "PENDING").length - pending.length,
-    [tree, pending.length],
+    () => flattenNotes(shownTree).filter((n) => n.status === "PENDING").length - pending.length,
+    [shownTree, pending.length],
   );
   const focused = pending.length > 0 ? pending[Math.min(focusIndex, pending.length - 1)] : null;
 
@@ -448,14 +460,25 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
       });
       void api(`/api/sections/${id}`, "PATCH", { order: toIndex }).then(refresh);
     },
-    async addNote(sectionId, content) {
+    async addNote(sectionId, content, id) {
       // A note from the composer lands at the top of its section, and in
       // the open document (SPEC.md §6).
-      await api("/api/notes", "POST", { sectionId, content, top: true, documentId: documentId ?? undefined });
+      await api("/api/notes", "POST", {
+        ...(id ? { id } : {}),
+        sectionId,
+        content,
+        top: true,
+        documentId: documentId ?? undefined,
+      });
       refresh();
     },
-    async saveNote(id, content) {
-      await api(`/api/notes/${id}`, "PATCH", { content });
+    async saveNote(id, content, base) {
+      // Made from the text the note's open editor opened on, else the text
+      // on screen: a note changed elsewhere meanwhile keeps both sides' words.
+      const save = openDraftSave(id);
+      if (base !== undefined) await saveNoteText(id, content, base);
+      else if (save) await save(content);
+      else await saveNoteText(id, content, flattenNotes(tree).find((n) => n.id === id)?.content ?? null);
       refresh();
     },
     async attachSource(id, drag) {

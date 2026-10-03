@@ -43,6 +43,9 @@ export type NoteView = {
   documentId: string | null;
   sources: SourceChip[];
   replies: ReplyView[];
+  // Saved on this device and waiting for the offline queue to sync (SPEC.md
+  // §17, lib/offline/queued-notes.ts): drawn from the queue, not the server.
+  queued?: boolean;
 };
 
 export type SectionView = {

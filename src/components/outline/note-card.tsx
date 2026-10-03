@@ -637,6 +637,8 @@ const NoteCardBody = memo(function NoteCardBody({
       <span className="ml-auto flex shrink-0 items-center gap-1.5">
         {/* The save state, while editing (SPEC.md §6). */}
         {editing && <SaveStateLabel state={saveState} />}
+        {/* Saved offline, waiting for the queue (lib/offline/queued-notes.ts). */}
+        {!editing && note.queued && <SaveStateLabel state="offline" />}
         {canEdit && !editing && !merging && (
           <button
             onClick={openEditor}
