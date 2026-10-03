@@ -1026,12 +1026,26 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
         // Springer's (27) and (28), ∂a/∂t = … over ∂b/∂t = …, read as a
         // display ending in its neighbor's numerators and a display of bare
         // denominators, two crops).
+        // So do the scripts of the next display's big operators: glyphs
+        // within an operator's height, just right of it, on its row, and
+        // beside none of the band's (parse loop finding: ICML's (36) sets
+        // its integrals' upper limits 8 pt under (35)'s, which took them,
+        // and both displays were crops).
+        const spans = (o: (typeof operators)[number], l: Line) => l.y < o.top && l.y > o.bottom;
+        const nextOps = operators.filter((o) => spans(o, next));
+        const bandOps = operators.filter((o) => band.some((l) => kinds[lines.indexOf(l)] !== "fragment" && spans(o, l)));
+        const scriptOf = (f: Line) => {
+          const ink = f.items.flatMap((i) => i.glyphs ?? []).filter((g) => g.unicode.trim() !== "");
+          const beside = (g: Glyph, o: (typeof operators)[number]) => g.y < o.top && g.y > o.bottom && g.x >= o.x1 && g.x - o.x2 < f.size * 1.5;
+          return ink.length > 0 && ink.every((g) => nextOps.some((o) => beside(g, o)) && !bandOps.some((o) => g.y < o.top + f.size * 0.3 && g.y > o.bottom - f.size * 0.3));
+        };
         while (band.length > 1) {
           const f = band[band.length - 1];
           const kind = kinds[lines.indexOf(f)];
           if ((kind !== "fragment" && kind !== "math") || unlabeled(f).label !== null) break;
           const bar = (r: Rule) => r.dir === "h" && r.x1 < f.xEnd && r.x2 > f.x && Math.abs(r.y1 - f.y) < f.size * 1.2;
-          if (!rules.some((r) => bar(r) && r.y1 < f.y && r.y1 > next.y) || rules.some((r) => bar(r) && r.y1 > f.y)) break;
+          const script = kind === "fragment" && scriptOf(f);
+          if (!script && (!rules.some((r) => bar(r) && r.y1 < f.y && r.y1 > next.y) || rules.some((r) => bar(r) && r.y1 > f.y))) break;
           band.pop();
         }
         break;
