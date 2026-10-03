@@ -694,7 +694,11 @@ export function isFirstLineIndent(lines: Line[], i: number, ctx: PageContext, ru
   return (
     line.cells.length === 1 &&
     !(BULLET_RE.test(line.text) && line.size <= ctx.bodySize * 1.15) &&
-    line.x > edge + line.size * 0.6 &&
+    // Set in by six tenths of an em at least, or by half of the page's own
+    // step when the page shows one (parse loop finding: langsci 385 sets
+    // one paragraph in by 0.598 em where the page steps 1 em, and it
+    // read as a one-line item over its own second line).
+    line.x > edge + Math.min(line.size * 0.6, (paragraphStep(lines, ctx) ?? Infinity) * 0.55) &&
     line.x < edge + line.size * 6 &&
     after !== undefined &&
     runOf[i + 1] === -1 &&

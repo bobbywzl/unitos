@@ -558,7 +558,7 @@ function checkboxes(drawing: PageDrawing, items: Item[]): { squares: PathBox[]; 
 
 // The ruled tables of a page, from its rules and filled boxes: grids first,
 // then the regions of rule stacks outside them.
-export function ruledTables(all: Item[], page: PageDrawing, pageWidth: number, pageHeight: number): TableRegion[] {
+export function ruledTables(all: Item[], page: PageDrawing, pageWidth: number, pageHeight: number, rotated: Item[] = []): TableRegion[] {
   // Blank items (the spaces pdf.js reports between words) say nothing of
   // where text is: one in a sliver between two cells kept the sliver open.
   const words = all.filter((it) => it.str.trim().length > 0);
@@ -672,6 +672,16 @@ export function ruledTables(all: Item[], page: PageDrawing, pageWidth: number, p
   // after the table: "….t001 their results").
   const kept = new Set(regions.flatMap((r) => r.items));
   for (const region of regions) region.items.push(...linkUnder(region, items.filter((it) => !kept.has(it))));
+  // A rotated item inside a table's rules is the table's: a column head
+  // set aslant, upright at its drawn box (index.ts uprightItem), reads in
+  // its column with the heads beside it. One outside every table stays off
+  // the page.
+  for (const region of regions) {
+    const own = rotated.filter((it) => inBox(it, { ...region.box, x1: region.box.x1 - 2, x2: region.box.x2 + 2 }));
+    if (own.length === 0) continue;
+    region.items.push(...own);
+    region.lines = buildLines(region.items, 0);
+  }
   return regions;
 }
 
@@ -774,6 +784,9 @@ function tableOfRegion(region: TableRegion, page: number): Segment {
   // against the glyphs and rules the page draws (a failed check keeps the
   // words; synth-notes-tex's table of fractions read "1 36" for 1/36).
   const built: Line[] = [];
+  // Each item a stack of a cell's lines took (stackedFormulas), with the
+  // zone its line gave it.
+  const stacked = new Map<Item, MathZone | undefined>();
   const segment = (rows: TableRow[], headerRows: number, edges: number[], padding?: TableLook["padding"]) => {
     resolveZones(built, region.drawing);
     const look = { size: Math.round(textSize(region.items) * 2) / 2, columns: edges.slice(1).map((x, k) => x - edges[k]), padding };
@@ -823,7 +836,29 @@ function tableOfRegion(region: TableRegion, page: number): Segment {
     .filter((r) => r.x2 - r.x1 < width * 0.9 && phrased.filter((l) => l.y > r.y1).length >= 2 && phrased.filter((l) => l.y < r.y1).length >= 2)
     .map((r) => r.y1)
     .sort((a, b) => b - a)[0];
-  const headerRule = full.find((y) => phrased.some((l) => l.y > y) && phrased.filter((l) => l.y < y).length >= 2) ?? under;
+  // Booktabs draws a rule under each column's head (\cmidrule) where the
+  // heads are grouped: a row of two partial rules or more at one height,
+  // under the first line, with a line that starts in the first column
+  // under it, parts the head from the body when no full rule does, or
+  // when the full rules are the rows' (two or more between the lines: a
+  // table whose rows are ruled in full has one under its first row as
+  // well). Under a head of two rows, the full rule under the second row
+  // parts the head (ICML's Table 1: "Dataset /" wrapped over "model"
+  // under the cmidrules of "Lowest test loss" and "End of training").
+  // Parse loop finding: langsci 385's Table 6 read its first row as a
+  // head, and its Table 2, with no full rule under the head, had none.
+  const partial0 = region.rules.filter((r) => r.x2 - r.x1 < width * 0.9);
+  const cmid = [...new Set(partial0.map((r) => Math.round(r.y1)))]
+    .filter((y) => partial0.filter((r) => Math.abs(r.y1 - y) <= 1).length >= 2)
+    .filter((y) => phrased.some((l) => l.y > y) && phrased.filter((l) => l.y < y).length >= 2)
+    .filter((y) => {
+      const below = phrased.filter((l) => l.y < y).sort((a, b) => b.y - a.y)[0];
+      return below.x <= region.box.x1 + below.size;
+    })
+    .sort((a, b) => b - a)[0];
+  const fullRule = full.find((y) => phrased.some((l) => l.y > y) && phrased.filter((l) => l.y < y).length >= 2);
+  const rowRuled = full.filter((y) => phrased.some((l) => l.y > y) && phrased.some((l) => l.y < y)).length >= 2;
+  const headerRule = cmid !== undefined && (fullRule === undefined || (cmid > fullRule && rowRuled)) ? cmid : (fullRule ?? under);
   let head = headerRule === undefined ? [] : phrased.filter((l) => l.y > headerRule);
   let body = headerRule === undefined ? phrased : phrased.filter((l) => l.y < headerRule);
   // With no rule under the head, the lines at the top with no words in the
@@ -885,8 +920,25 @@ function tableOfRegion(region: TableRegion, page: number): Segment {
     built.push(...body);
     fractionCells(body, separators, region.drawing.rules);
     let cellsOf = body.map((line) => cellsBySeparators(line, separators));
-    const starts0 = oneRow(body, cellsOf, region, drawn) ? [0] : ((drawn.length > 0 ? ruledRowStarts(body, cellsOf, [...full, ...pieceEnds(drawn, region.box)]) : null) ?? regionRowStarts(body, cellsOf));
-    const starts = stackedFormulas(body, starts0, separators);
+    // Full rules between the body's lines are the rows' edges too (a
+    // table whose rows are ruled in full and whose columns are not:
+    // langsci 385's Table 6 read a two-line label's second line as a
+    // row).
+    const inner = full.filter((y) => y < body[0].y && y > body[body.length - 1].y);
+    const starts0 =
+      oneRow(body, cellsOf, region, drawn) ? [0] : ((drawn.length > 0 ? ruledRowStarts(body, cellsOf, [...full, ...pieceEnds(drawn, region.box)]) : inner.length > 0 ? ruledRowStarts(body, cellsOf, inner) : null) ?? regionRowStarts(body, cellsOf));
+    const starts = stackedFormulas(body, starts0, separators, stacked);
+    // A stack that fails as one formula reads line by line, each line's
+    // own formula, before the cells are built from the lines (parse loop
+    // finding: the probability cheatsheet's table of distributions sets a
+    // PMF over its support in one cell, and the two read as one formula
+    // of two rows, whose \binom KaTeX sets in display style where the
+    // page sets it in text style: the check failed, and the cell lost
+    // both formulas).
+    if (stacked.size > 0) {
+      resolveZones(built, region.drawing);
+      for (const [it, zone] of stacked) if (it.zone && !it.zone.ok) it.zone = zone;
+    }
     if (starts !== starts0) cellsOf = body.map((line) => cellsBySeparators(line, separators));
     const bodyRows = rowsOf(cellsOf, starts, columnCount);
     spanValues(bodyRows, body, starts, separators, ruledAt);
@@ -927,7 +979,7 @@ function fractionCells(body: Line[], separators: number[], rules: Rule[]) {
 // probability cheatsheet's sampling table, n^k, n!/(n−k)!, and its
 // binomials, read "k n" and a row of a lone "k"). The row starts, a new
 // array when the cells changed.
-function stackedFormulas(body: Line[], starts: number[], separators: number[]): number[] {
+function stackedFormulas(body: Line[], starts: number[], separators: number[], stacked: Map<Item, MathZone | undefined>): number[] {
   const mathOnly = (it: Item) => it.math || !/\p{L}{2,}/u.test(it.str);
   const rowOf = (r: number, list: number[]) => body.slice(list[r], list[r + 1] ?? body.length);
   const merged = starts.filter((k, r) => {
@@ -947,7 +999,10 @@ function stackedFormulas(body: Line[], starts: number[], separators: number[]): 
       const glyphs = items.flatMap((it) => it.glyphs ?? []);
       if (glyphs.length === 0) continue;
       const zone: MathZone = { glyphs, size: Math.max(...items.map((it) => it.size)), latex: "", ok: false, open: false };
-      for (const it of items) it.zone = zone;
+      for (const it of items) {
+        stacked.set(it, it.zone);
+        it.zone = zone;
+      }
       changed = true;
     }
   });

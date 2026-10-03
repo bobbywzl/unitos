@@ -499,8 +499,16 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     const ink = inside.reduce((n, r) => n + r.items.reduce((m, i) => m + i.w * i.size, 0), 0);
     const shapes = paths.filter((m) => !m.thin).length;
     const sized = area(box) >= pageArea * 0.03 || (w >= pageWidth * 0.5 && h >= textSize * 2);
+    // A drawing of a few shapes (a region, two circles, a box: five or
+    // more, nearly all of its paths), over 3% of the page, with no line of
+    // the page's text and next to no ink inside it, is a drawing too
+    // (parse loop finding: GeoTopo p. 17's uncaptioned picture of a
+    // compact set, eight shapes, was no figure: its labels read as an
+    // equation and two crops).
+    const sparse = shapes >= 5 && shapes >= paths.length * 0.8 && sized && ink < area(box) * 0.05 && !inside.some(isPageText);
     const drawn =
       (paths.length >= 10 && (shapes > paths.length * 0.5 || (shapes >= 2 && ticked(box))) && sized && ink < area(box) * 0.12) ||
+      sparse ||
       (shapes >= 10 && images.length === 0 && !meetsText(box) && nearLabel(box));
     if (image && !inside.some(isPageText)) found.push({ box, drawn: false, pictures: images.map((m) => m.box) });
     else if (image) found.push(...picturesOf(images.map((m) => m.box)));

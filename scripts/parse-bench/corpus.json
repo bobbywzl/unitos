@@ -96,5 +96,6 @@
   { "id": "icml-dropout-universality", "category": "paper", "pdf": ".bench/real/icml-dropout-universality.pdf", "url": "https://raw.githubusercontent.com/luklacasito/icml/main/paper.pdf", "license": "open", "pages": [1, 16], "sweep": true },
   { "id": "pmichaillat-presentation", "category": "slides", "pdf": ".bench/real/pmichaillat-presentation.pdf", "url": "https://raw.githubusercontent.com/pmichaillat/latex-presentation/main/presentation.pdf", "license": "open", "sweep": true },
   { "id": "rl-textbook-ch3", "category": "book", "pdf": ".bench/real/rl-textbook.pdf", "url": "https://raw.githubusercontent.com/pyshka501/rl-textbook/main/book/main.pdf", "license": "open", "pages": [37, 48], "sweep": true },
-  { "id": "ieee-elixpo-caching", "category": "paper", "pdf": ".bench/real/ieee-elixpo-caching.pdf", "url": "https://raw.githubusercontent.com/pollinations/search.elixpo/main/docs/paper/paper.pdf", "license": "public-domain", "sweep": true }
+  { "id": "ieee-elixpo-caching", "category": "paper", "pdf": ".bench/real/ieee-elixpo-caching.pdf", "url": "https://raw.githubusercontent.com/pollinations/search.elixpo/main/docs/paper/paper.pdf", "license": "public-domain", "sweep": true },
+  { "id": "langsci-adjarian-ch4", "category": "book", "pdf": ".bench/real/langsci-adjarian.pdf", "url": "https://raw.githubusercontent.com/langsci/385/master/385-Adjarian-2024.pdf", "license": "open", "pages": [146, 161], "sweep": true }
 ]
