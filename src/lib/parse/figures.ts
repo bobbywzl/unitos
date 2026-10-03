@@ -28,7 +28,90 @@ export type WalkCtx = {
   // media under the element it built from; the table and list cases mark
   // theirs). The media check reads what is left (checkMedia).
   consumed: WeakSet<Element>;
+  // The text blocks the walk read out of a caption element whose figure did
+  // not take them (the picture a placeholder the parse cannot load, or none):
+  // they fold into the uncaptioned figure beside them (repairFigures), and
+  // the rest drop (lib/parse/url.ts). Never the article's paragraphs.
+  captionBlocks?: WeakSet<ParsedBlock>;
 };
+
+// An element the page names a caption: "caption", "image-caption",
+// "wp-caption-text", "figcaption" in its class. Web benchmark finding: on 24
+// of 181 pages such an element read as a paragraph of the story (a news
+// photo's caption of 230 characters in a div beside its img, a caption whose
+// picture a script draws, a video's title in a caption div); 126 such
+// elements sit outside the marked bodies and 3 inside them. Held-out set:
+// 41 marked as not the article's, 3 as the article's (two of them wrappers
+// of more than this many characters). A caption-classed element with more
+// text than this is a teaser box or a lead named for its look, not a caption.
+const CAPTION_CLASS_RX = /caption/i;
+const CAPTION_CLASS_MAX_CHARS = 400;
+
+/** An element with a caption class and a caption's worth of text. */
+export function isClassCaption(el: Element): boolean {
+  if (/^(?:figcaption|img|a|button|svg)$/i.test(el.tagName)) return false;
+  const cls = el.getAttribute("class") ?? "";
+  if (!CAPTION_CLASS_RX.test(cls)) return false;
+  const text = normalizeText(el.textContent ?? "");
+  return text.length > 0 && text.length <= CAPTION_CLASS_MAX_CHARS;
+}
+
+// A video's caption describes the video, and reads as the story's own
+// words: the web benchmark marks the lines under a video player as the
+// article's on 3 pages ("A video showing the dramatic moment a kidnapped
+// 8-year-old Fort Worth girl was rescued by police was released on
+// Monday."), and a photo's caption as not the article's on 13. A caption
+// within this many wrappers of a player keeps its paragraph.
+const VIDEO_RX = /(?:^|[\s_-])(?:video|player)(?:$|[\s_-])|video/i;
+const VIDEO_WRAPPERS_MAX = 4;
+
+const VIDEO_SELECTOR = "video, iframe, [class*='video' i], [class*='player' i]";
+
+/** A video player: an element that names a video or a player, or holds
+    one, or a video or a frame. */
+function isVideoPlayer(el: Element): boolean {
+  return VIDEO_RX.test(`${el.getAttribute("class") ?? ""} ${el.id}`) || el.querySelector(VIDEO_SELECTOR) !== null;
+}
+
+/** Does a video player sit around the element: an ancestor within a few
+    wrappers, or a sibling of one of them, that is or holds a player? */
+export function nearVideo(el: Element, root: Element): boolean {
+  let node: Element | null = el;
+  for (let up = 0; node && node !== root && up <= VIDEO_WRAPPERS_MAX; node = node.parentElement, up++) {
+    if (isVideoPlayer(node)) return true;
+    for (const sibling of [node.previousElementSibling, node.nextElementSibling]) {
+      if (sibling && isVideoPlayer(sibling)) return true;
+    }
+  }
+  return false;
+}
+
+/** The nearest caption-classed element at or above the element, below the
+    root; the outermost one when they nest (a caption div's own p). Null
+    beside a video player: its caption is the story's words. */
+export function captionClassAncestor(el: Element, root: Element): Element | null {
+  let found: Element | null = null;
+  for (let node: Element | null = el; node && node !== root; node = node.parentElement) {
+    if (isClassCaption(node)) found = node;
+  }
+  return found && !nearVideo(found, root) ? found : null;
+}
+
+// The elements a figure's caption may be: a figcaption, a paragraph, or an
+// element the page names a caption.
+const CAPTION_CANDIDATE_SELECTOR = "figcaption, p, [class*='caption' i]";
+
+/** The caption candidates below a container, the outermost of a nest only:
+    never a paragraph inside a figcaption, never a caption div's own p. */
+function captionCandidates(container: Element): Element[] {
+  return [...container.querySelectorAll(CAPTION_CANDIDATE_SELECTOR)].filter((el) => {
+    if (el.tagName.toLowerCase() !== "figcaption" && el.tagName.toLowerCase() !== "p" && !isClassCaption(el)) return false;
+    for (let node = el.parentElement; node && node !== container; node = node.parentElement) {
+      if (node.tagName.toLowerCase() === "figcaption" || isClassCaption(node)) return false;
+    }
+    return true;
+  });
+}
 
 // A caption without a "Figure N" label is at most this long; longer text
 // beside media is prose.
@@ -192,9 +275,10 @@ function besideMedia(el: Element, container: Element): boolean {
   return false;
 }
 
-/** A labeled caption: a figcaption, or text that opens like "Figure 2." */
+/** A labeled caption: a figcaption, an element the page names a caption, or
+    text that opens like "Figure 2." */
 function isLabeledCaption(el: Element): boolean {
-  return el.tagName.toLowerCase() === "figcaption" || isFigureCaption(captionText(el));
+  return el.tagName.toLowerCase() === "figcaption" || isClassCaption(el) || isFigureCaption(captionText(el));
 }
 
 /** A plain caption: short text beside media. */
@@ -207,9 +291,7 @@ function isPlainCaption(el: Element, container: Element): boolean {
     has any, else its plain captions. Never a caption inside a nested
     caption, never the figure's words. */
 function captionElements(container: Element): Element[] {
-  const candidates = [...container.querySelectorAll("figcaption, p")].filter(
-    (el) => captionText(el).length > 0 && el.parentElement?.closest("figcaption") === null,
-  );
+  const candidates = captionCandidates(container).filter((el) => captionText(el).length > 0);
   const labeled = candidates.filter(isLabeledCaption);
   if (labeled.length > 0) return labeled;
   return candidates.filter((el) => !isFigureWords(el, container) && isPlainCaption(el, container));
@@ -358,7 +440,21 @@ export function figureBlock(el: Element, ctx: WalkCtx): ParsedBlock | null {
     // A figure with no media is its text: a pull quote wrapped in <figure>
     // is a paragraph, and a bare caption is a paragraph.
     const text = caption || normalizeText(clone.textContent ?? "");
-    return text ? { type: "PARAGRAPH", text } : null;
+    if (!text) return null;
+    const block: ParsedBlock = { type: "PARAGRAPH", text };
+    // A figure that is its labeled caption alone has a picture a script
+    // draws: the caption is a caption still, never the article's paragraph
+    // (web benchmark finding: a news photo's figcaption read as a line of
+    // the story).
+    if (
+      caption &&
+      captionElements(clone).some(isLabeledCaption) &&
+      normalizeText(clone.textContent ?? "") === normalizeText(caption) &&
+      !nearVideo(el, el.ownerDocument.body ?? el)
+    ) {
+      ctx.captionBlocks?.add(block);
+    }
+    return block;
   }
 
   // A wrapper around one <figure> is that figure, not a figure in a figure.
@@ -383,7 +479,22 @@ export function figureBlock(el: Element, ctx: WalkCtx): ParsedBlock | null {
   // The sanitizer drops what it does not keep (an iframe from an unknown
   // host): a figure left with no media is its caption or nothing (import
   // compare loop finding: an empty FIGURE where a nutrition-label iframe was).
-  if (!/<(?:img|video|iframe|svg)\b/i.test(html)) return caption ? { type: "PARAGRAPH", text: caption } : null;
+  if (!/<(?:img|video|iframe|svg)\b/i.test(html)) {
+    if (!caption) return null;
+    const block: ParsedBlock = { type: "PARAGRAPH", text: caption };
+    // A picture the parse cannot load (a data: placeholder with no URL to
+    // swap in) leaves its labeled caption a caption, never a paragraph (web
+    // benchmark finding: a lead photo's caption read as the story's first
+    // line). A frame or a video the sanitizer refused keeps its caption as
+    // the paragraph that says what was there.
+    if (
+      !nearVideo(el, el.ownerDocument.body ?? el) &&
+      captionElements(shell).some(isLabeledCaption)
+    ) {
+      ctx.captionBlocks?.add(block);
+    }
+    return block;
+  }
   // The same asset appearing again (repeated hero, shared illustration) is not
   // a second figure.
   const keys = mediaKeys(html);
@@ -418,9 +529,7 @@ export function svgBlock(svg: Element, ctx?: WalkCtx): ParsedBlock | null {
 export function tryCompositeFigure(el: Element, ctx: WalkCtx): boolean {
   if (!hasMeaningfulMedia(el)) return false;
   if (el.querySelector("h1, h2, h3, h4, h5, h6, ul, ol, table, pre, x-math, blockquote")) return false;
-  const paragraphs = [...el.querySelectorAll("p, figcaption")].filter(
-    (p) => captionText(p).length > 0 && !isFigureWords(p, el),
-  );
+  const paragraphs = captionCandidates(el).filter((p) => captionText(p).length > 0 && !isFigureWords(p, el));
   const labeled = paragraphs.filter(isLabeledCaption);
   const plain = paragraphs.filter((p) => !isLabeledCaption(p) && isPlainCaption(p, el));
   // A paragraph that is neither is prose beside media: a header, a card
@@ -438,7 +547,7 @@ export function tryCompositeFigure(el: Element, ctx: WalkCtx): boolean {
   for (const column of columnEls) column.removeAttribute("data-unitos-column");
   for (const box of figureBoxes(el, clone)) box.remove();
   for (const media of clone.querySelectorAll("svg, video, img")) media.remove();
-  for (const p of clone.querySelectorAll("p, figcaption")) p.remove();
+  for (const p of captionCandidates(clone)) p.remove();
   const residual = spacedText(clone);
   // More text than a caption holds is prose: past it, the text would live
   // only inside the figure's html and never reach a text block (import
@@ -541,7 +650,7 @@ function captionElement(root: Element, text: string, index: Map<string, Element>
 
 /** Does the element hold a labeled caption other than this one? */
 function holdsOtherCaption(el: Element, caption: Element): boolean {
-  return [...el.querySelectorAll("p, figcaption")].some(
+  return captionCandidates(el).some(
     (p) => p !== caption && !caption.contains(p) && !p.contains(caption) && isLabeledCaption(p),
   );
 }
@@ -586,7 +695,7 @@ export function repairFigures(blocks: ParsedBlock[], root: Element, ctx: WalkCtx
   // caption, or one told by its agency credit.
   for (let i = 0; i < out.length; i++) {
     const block = out[i];
-    if (!isCaptionBlock(block) && !isCreditedCaptionBlock(block)) continue;
+    if (!isCaptionBlock(block) && !isCreditedCaptionBlock(block) && !ctx.captionBlocks?.has(block)) continue;
     const before = out[i - 1];
     const after = out[i + 1];
     const target = isFigureWithMedia(before) && !isFigureCaption(before.text) ? i - 1 : isFigureWithMedia(after) && !isFigureCaption(after.text) ? i + 1 : -1;
