@@ -624,8 +624,20 @@ export function unicodeMath(glyphs: Glyph[]): Glyph[] {
   texTextFonts(glyphs);
   bbmLetters(glyphs);
   for (const g of glyphs) {
-    if (g.family !== null) continue;
+    // A glyph of a family's font whose name in the PDF's encoding names
+    // another symbol than the table's at its code is that symbol
+    // (symbolNames: Springer's "MSAM10" sets ⪅ at ⊠'s code).
+    if (g.family !== null) {
+      if (g.symbol === undefined || g.family === "ot1" || mathGlyph(g.family, g.code)?.unicode === g.symbol) continue;
+      const tex = openTypeChar(g.symbol);
+      if (tex && tex.family !== "omx") {
+        g.family = tex.family;
+        g.code = tex.code;
+      }
+      continue;
+    }
     const font = unicodeFont(g.base);
+    if (g.symbol !== undefined) g.unicode = g.symbol;
     if (!font || g.unicode.trim() === "" || g.size <= 0) continue;
     // Word maps some of Cambria Math's glyphs to their letter twice ("𝑝𝑝",
     // pdftotext too): one glyph is one letter. Read as two, it took no
@@ -833,6 +845,62 @@ export function namedGlyphs(base: string, names: ArrayLike<string | null | undef
   return out.size > 0 ? out : null;
 }
 
+// A glyph's name in the PDF's font encoding (its Differences array) names
+// the glyph the font draws, whatever the text layer or a family's table
+// says of its code: a Type 1 font selects its glyphs by name. Where the
+// name is a symbol's (Adobe's glyph list and TeX's names), the glyph is
+// that symbol. Parse loop findings: MathTime's math italic names its ϱ
+// "rho1" at code 7, which the text layer reads as a control character
+// (Springer's "ϱ = 0.02" lost its ϱ, and the display was a crop); and
+// Springer's "MSAM10" sets ⪅ ("lessorapproxeql") at code 2, where the AMS
+// font's table has ⊠. A suffix after a period names a variant of the same
+// symbol (MnSymbol's "integral.disp", "slash.left"). Letters, digits, and
+// punctuation are left to the text layer: a small capital named "A.s" may
+// read as "a" by design.
+const SYMBOL_NAMES: Record<string, string> = {
+  alpha: "α", beta: "β", gamma: "γ", delta: "δ", epsilon: "ϵ", epsilon1: "ε", zeta: "ζ", eta: "η", theta: "θ", theta1: "ϑ",
+  iota: "ι", kappa: "κ", lambda: "λ", mu: "μ", nu: "ν", xi: "ξ", omicron: "ο", pi: "π", pi1: "ϖ", rho: "ρ", rho1: "ϱ",
+  sigma: "σ", sigma1: "ς", tau: "τ", upsilon: "υ", phi: "ϕ", phi1: "φ", chi: "χ", psi: "ψ", omega: "ω",
+  Gamma: "Γ", Delta: "Δ", Theta: "Θ", Lambda: "Λ", Xi: "Ξ", Pi: "Π", Sigma: "Σ", Upsilon: "Υ", Phi: "Φ", Psi: "Ψ", Omega: "Ω",
+  minus: "−", plus: "+", plusminus: "±", minusplus: "∓", multiply: "×", divide: "÷", dotmath: "⋅", periodcentered: "·",
+  asteriskmath: "∗", circlemultiply: "⊗", circleplus: "⊕", circleminus: "⊖", circledot: "⊙", bulletmath: "∙",
+  equal: "=", notequal: "≠", lessequal: "≤", greaterequal: "≥", less: "<", greater: ">", equivalence: "≡", notequivalence: "≢",
+  similar: "∼", approxequal: "≈", congruent: "≅", asymptoticallyequal: "≃", lessorapproxeql: "⪅", greaterorapproxeql: "⪆",
+  lessmuch: "≪", greatermuch: "≫", precedes: "≺", follows: "≻", proportional: "∝", perpendicular: "⊥", parallel: "∥",
+  element: "∈", notelement: "∉", suchthat: "∋", propersubset: "⊂", propersuperset: "⊃", reflexsubset: "⊆", reflexsuperset: "⊇",
+  notsubset: "⊄", union: "∪", intersection: "∩", logicaland: "∧", logicalor: "∨", logicalnot: "¬", emptyset: "∅",
+  universal: "∀", existential: "∃", infinity: "∞", partialdiff: "∂", gradient: "∇", nabla: "∇",
+  summation: "∑", product: "∏", coproduct: "∐", integral: "∫", contintegral: "∮", radical: "√",
+  arrowleft: "←", arrowright: "→", arrowup: "↑", arrowdown: "↓", arrowboth: "↔", arrowupdn: "↕",
+  arrowdblleft: "⇐", arrowdblright: "⇒", arrowdblup: "⇑", arrowdbldown: "⇓", arrowdblboth: "⇔", mapsto: "↦",
+  angleleft: "⟨", angleright: "⟩", prime: "′", lozenge: "◊", triangle: "△", therefore: "∴",
+  aleph: "ℵ", weierstrass: "℘", Ifraktur: "ℑ", Rfraktur: "ℜ",
+};
+
+/** The character a glyph name names, or undefined: a name of SYMBOL_NAMES
+    (a suffix after a period dropped), or a Unicode name ("uni2A85",
+    "u1D400"). */
+export function symbolOfName(name: string): string | undefined {
+  const base = name.replace(/\..*$/, "");
+  const uni = /^uni([0-9A-Fa-f]{4})$|^u([0-9A-Fa-f]{4,6})$/.exec(base);
+  if (uni) return String.fromCodePoint(parseInt(uni[1] ?? uni[2], 16));
+  return SYMBOL_NAMES[base];
+}
+
+/** What each code of a font draws by the glyph names in the PDF's encoding
+    (symbolOfName), for the codes whose name is a symbol's; null for a font
+    with no names. */
+export function symbolNames(names: ArrayLike<string | null | undefined> | undefined): Map<number, string> | null {
+  if (!names) return null;
+  const out = new Map<number, string>();
+  for (let code = 0; code < names.length; code++) {
+    const name = names[code];
+    const char = name ? symbolOfName(name) : undefined;
+    if (char !== undefined) out.set(code, char);
+  }
+  return out.size > 0 ? out : null;
+}
+
 // The text of the page's glyphs where it is not the text layer's: every glyph
 // of a math family, and the glyphs of a composite or an accented letter. A
 // glyph that reads as nothing (a composite's second glyph, a placed accent)
@@ -844,13 +912,18 @@ export function glyphTexts(glyphs: Glyph[]): Map<Glyph, string> {
       texts.set(g, g.unicode);
       continue;
     }
-    if (g.family === null || g.family === "ot1") continue;
+    // A glyph its name reads otherwise than the text layer (symbolNames)
+    // reads by its name.
+    if (g.family === null || g.family === "ot1") {
+      if (g.symbol !== undefined) texts.set(g, g.symbol);
+      continue;
+    }
     const entry = mathGlyph(g.family, g.code);
     // A font read by its character reads as its text layer does: the
     // Math Guide's ∖ is no backslash, though TeX's code for both is one.
     // A blackboard capital the text layer reads as a plain one is \mathbb's.
     const font = unicodeFont(g.base);
-    if (!entry || (font?.kind === "tex" && !font.blackboard)) texts.set(g, g.unicode.replace(CONTROL_CHARS_RE, ""));
+    if (!entry || (font?.kind === "tex" && !font.blackboard)) texts.set(g, (g.symbol ?? g.unicode).replace(CONTROL_CHARS_RE, ""));
     else texts.set(g, entry.cls === "piece" ? (PIECE_TEXT[entry.piece ?? ""] ?? "") : entry.unicode);
   }
   const textOf = (g: Glyph) => texts.get(g) ?? g.unicode;
