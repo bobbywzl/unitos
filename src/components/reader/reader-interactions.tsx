@@ -2299,8 +2299,11 @@ export function ReaderInteractions({
     // the line at the top after a scroll — the bubbles above the toolbox
     // (Add to notes, the colors) would sit out of view: the colors drop
     // below it, and the toolbox moves down to where Add to notes fits above.
+    // On the right the stack also clears the Collapse and Extract chips,
+    // which stick to the pane's top right (reader.tsx), so both stay in
+    // reach.
     const nearTop = !pageGeo && firstLine.top - containerRect.top < 100;
-    const readerTop = nearTop ? Math.max(yTop, container.scrollTop + 48) : yTop;
+    const readerTop = nearTop ? Math.max(yTop, container.scrollTop + (side === "right" ? 100 : 48)) : yTop;
     return {
       anchor: {
         blockId,
@@ -2448,6 +2451,16 @@ export function ReaderInteractions({
           }
         }
         showTools(captured);
+        // A selection that began off the blocks (the title, the label over
+        // it) leaves the browser's own selection drawn there after the tint
+        // paints the blocks: the tint is the selection now, so the browser's
+        // goes.
+        if (captured && !richTextRef.current) {
+          const sel = window.getSelection();
+          const node = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).startContainer : null;
+          const el = node instanceof Element ? node : node?.parentElement;
+          if (el && !el.closest("[data-block-id], [data-edit-block]")) sel?.removeAllRanges();
+        }
       });
     };
     // The toolbar on a selection. A pending link waits on the next
