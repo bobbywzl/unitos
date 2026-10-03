@@ -1298,14 +1298,22 @@ function fencedGroups(atoms: Atom[], em: number): Atom[] {
       const lines = rowLines(mains, stackSize, true);
       if (!stacks(lines.length >= 2)) continue;
       // A matrix whose rows are labeled beside it, a label in a column left
-      // of its bracket on each row's baseline (a Markov chain's states):
-      // KaTeX has no \bordermatrix, and read with the formula the middle
-      // row's label is a factor ("N = 2(…)", Grinstead–Snell p. 419). The
-      // formula fails.
+      // of its bracket on each row's baseline, and its columns over it (a
+      // Markov chain's states, \bordermatrix): KaTeX has no \bordermatrix,
+      // and read with the formula the middle row's label is a factor
+      // ("N = 2(…)", Grinstead–Snell p. 419). It reads as an array of two
+      // columns: the column labels in a matrix over the fenced matrix, the
+      // row labels in a matrix beside it, each label in its row's or its
+      // column's cell (parse loop finding: the probability cheatsheet's
+      // Q = ( 1−α α; β 1−β ) with its states 0 and 1 beside and over it
+      // failed, and was a crop).
       const labels = out.filter(
         (a) => a !== open && !content.includes(a) && !isTall(a, em) && a.x2 <= open.x1 + 0.1 * em && open.x1 - a.x2 < 1.5 * em,
       );
-      if (new Set(labels.map((a) => lines.findIndex((y) => Math.abs(a.yb - y) < 0.25 * stackSize)).filter((n) => n >= 0)).size >= 2) lost++;
+      const rowOf = (a: Atom) => lines.findIndex((y) => Math.abs(a.yb - y) < 0.25 * stackSize);
+      const rowLabels = labels.filter((a) => rowOf(a) >= 0);
+      const bordered = close !== undefined && new Set(rowLabels.map(rowOf)).size >= 2;
+      if (!bordered && new Set(rowLabels.map(rowOf)).size >= 2) lost++;
       const rows = splitRows(content, lines);
       const cuts = columnCuts(rows, stackSize);
       const axis = (open.top + open.bottom) / 2;
@@ -1313,10 +1321,31 @@ function fencedGroups(atoms: Atom[], em: number): Atom[] {
       // A binomial's rows' size says its style, as a fraction's parts do
       // (fracPart; restyle).
       const extra: Partial<Atom> = { rows: lines };
+      const border: Atom[] = [];
       if (!close && open.tex === "\\{") tex = `\\begin{cases} ${cells(rows, cuts)} \\end{cases}`;
       else if (!close) {
         stacks(false);
         continue;
+      } else if (bordered) {
+        // The column labels: the atoms over the matrix's top within a line
+        // and a half, between its delimiters, each in the column its center
+        // falls in.
+        const columnLabels = out.filter(
+          (a) =>
+            a !== open && a !== close && !content.includes(a) && !labels.includes(a) && !isTall(a, em) && a.yb >= open.top - 0.1 * em && a.yb - open.top < 1.5 * em && a.x1 >= open.x1 - 0.5 * em && a.x2 <= close.x2 + 0.5 * em,
+        );
+        const columnOf = (a: Atom) => cuts.filter((c) => cx(a) > c).length;
+        const cell = (list: Atom[]) => linear([...list].sort(byX).map((a) => ({ ...a })));
+        // The fenced matrix stays on the axis, the row labels a matrix
+        // beside it (its rows at the fenced rows' heights), the column
+        // labels a matrix set over it (\overset, at the text's size: a
+        // label is no script).
+        const top = columnLabels.length > 0 ? `\\begin{matrix} ${cuts.map((_, k) => k).concat(cuts.length).map((k) => cell(columnLabels.filter((a) => columnOf(a) === k))).join(" & ")} \\end{matrix}` : "";
+        const side = `\\begin{matrix} ${lines.map((_, k) => cell(rowLabels.filter((a) => rowOf(a) === k))).join(" \\\\ ")} \\end{matrix}`;
+        const env = FENCE_ENV[open.tex] ?? "matrix";
+        const body = `\\begin{${env}} ${cells(rows, cuts)} \\end{${env}}`;
+        tex = `${side}${top ? `\\overset{\\textstyle ${top}}{${body}}` : body}`;
+        border.push(...rowLabels, ...columnLabels);
       } else if (open.tex === "(" && close.tex === ")" && rows.length === 2 && cuts.length === 0) {
         tex = `\\binom{${linear(rows[0].map((a) => ({ ...a })))}}{${linear(rows[1].map((a) => ({ ...a })))}}`;
         extra.fracPart = stackSize;
@@ -1324,8 +1353,8 @@ function fencedGroups(atoms: Atom[], em: number): Atom[] {
         const env = FENCE_ENV[open.tex] ?? "matrix";
         tex = `\\begin{${env}} ${cells(rows, cuts)} \\end{${env}}`;
       }
-      made = node([open, ...content, ...(close ? [close] : [])], tex, axis - 0.25 * em, em, extra);
-      out = out.filter((a) => a !== open && a !== close && !content.includes(a));
+      made = node([open, ...content, ...(close ? [close] : []), ...border], tex, axis - 0.25 * em, em, extra);
+      out = out.filter((a) => a !== open && a !== close && !content.includes(a) && !border.includes(a));
       out.push(made);
     }
     if (!made && !marked) return out;

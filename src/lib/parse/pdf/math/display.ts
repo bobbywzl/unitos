@@ -293,10 +293,23 @@ function limitNames(glyphs: Glyph[]): { x1: number; x2: number; y: number; size:
 // KaTeX draws).
 type Tip = { x: number; y: number; w: number };
 
-function attached(frag: Line, near: Line[], rules: Rule[], edge: boolean, braces: Tip[], display: Line[]): boolean {
+function attached(frag: Line, near: Line[], rules: Rule[], edge: boolean, braces: Tip[], display: Line[], fences: Box[] = []): boolean {
   const x1 = frag.x;
   const x2 = frag.xEnd;
   const em = frag.size;
+  // A matrix's column labels (\bordermatrix): a fragment within a line and
+  // a half over a tall delimiter's top, between the delimiters of a row of
+  // the display (parse loop finding: the probability cheatsheet's Q = (…)
+  // with its states 0 and 1 over the columns read the labels as a line of
+  // their own, and lost them).
+  const over = fences.some(
+    (f) =>
+      frag.y > f.y2 &&
+      frag.y - f.y2 < em * 1.5 &&
+      x1 >= f.x1 - em &&
+      [...near, ...display].some((l) => l !== frag && l.y >= f.y1 - l.size * 0.3 && l.y <= f.y2 + l.size * 0.3 && l.x <= f.x1 + l.size && l.xEnd > f.x2 && x2 <= l.xEnd + em),
+  );
+  if (over) return true;
   // A brace's label: the brace's pieces lie between it and a line of the
   // display, across its middle (the text layer may hold no item for them:
   // synth-math-tex (65) lost its "n times"). Nested braces set their labels
@@ -1014,7 +1027,7 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
       const reach = kinds[j] === "label" && QED_RE.test(next.text.trim()) ? 2.6 : 1.6;
       // A limit over the next row's sum stands a little farther from the
       // row above (a display of several rows, each with its sums).
-      const limit = kinds[j] === "fragment" && prev.y - next.y <= size * 2.2 && attached(next, around(next, band), rules, edge(next), braces, band);
+      const limit = kinds[j] === "fragment" && prev.y - next.y <= size * 2.2 && attached(next, around(next, band), rules, edge(next), braces, band, fences);
       // Rows a tall delimiter holds are one display, however far apart: each
       // starts just inside it, or runs across it (parse loop finding: The
       // Art of Linear Algebra's A = [a11 a12; …] = [a1 a2] = […], its first
@@ -1111,7 +1124,7 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
       // aligned row's lone "=" over its fraction's denominator).
       const after = lines[j + 1];
       const between = after !== undefined && kinds[j + 1] === "math" && next.y - after.y <= size * 1.6 && next.y < prev.y;
-      if (kinds[j] === "fragment" && !between && !limitOf(next) && !attached(next, around(next, band), rules, edge(next), braces, band)) break;
+      if (kinds[j] === "fragment" && !between && !limitOf(next) && !attached(next, around(next, band), rules, edge(next), braces, band, fences)) break;
       labels += label;
       band.push(next);
     }
@@ -1127,7 +1140,7 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
       band.pop();
     }
     // A fragment that opened the band holds only if the band holds it.
-    while (band.length > 1 && kinds[lines.indexOf(band[0])] === "fragment" && !attached(band[0], around(band[0], band), rules, edge(band[0]), braces, band)) {
+    while (band.length > 1 && kinds[lines.indexOf(band[0])] === "fragment" && !attached(band[0], around(band[0], band), rules, edge(band[0]), braces, band, fences)) {
       out.push(band.shift()!);
       last = null;
       k++;
