@@ -124,6 +124,7 @@ const en = {
   documentFallback: "document",
   // Markdown block chips
   jumpToBlock: "Jump to this block in the document",
+  showCitedNote: "Show this note in the notes tray",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -233,6 +234,7 @@ const zh: Record<keyof typeof en, string> = {
   formatCode: "代码",
   documentFallback: "文档",
   jumpToBlock: "跳转到文档中的此块",
+  showCitedNote: "在笔记栏中显示这条笔记",
 };
 
 export const panels = { en, zh } as const;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { api } from "@/lib/api";
 import type { DriveConfig } from "@/lib/drive/config";
 import { pickDriveFiles } from "@/lib/drive/picker-client";
@@ -33,6 +33,8 @@ import {
   folderPath,
   type DocumentFolderView,
 } from "@/components/reader/document-folders";
+import { DocumentsSort, useDocumentSort } from "@/components/reader/document-organize";
+import type { DocumentKind } from "@/lib/document-order";
 import {
   IngestProgress,
   advanceIngestSteps,
@@ -77,6 +79,10 @@ export type AttachedDocument = {
   // An import edited since it was imported (SPEC.md §29): Re-parse asks
   // before it replaces the edits. Absent: the server's 409 "edited" asks.
   importEdited?: boolean;
+  // The document list's Sort by (SPEC.md §6; lib/document-order.ts): what
+  // the document was made from, and when it was added.
+  kind: DocumentKind;
+  addedAt: string;
 };
 type IngestPhase = { fileLabel: string; steps: IngestStep[] };
 // Wire format from /api/documents: a stage event per line, then one terminal line.
@@ -233,6 +239,10 @@ export function DocumentBar({
   const t = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
+  // The list's Sort by (SPEC.md §6): one choice per browser. It orders every
+  // list, folders among the documents, and every sort but Added puts them
+  // in categories.
+  const [documentSort, setDocumentSort] = useDocumentSort();
   const [phase, setPhase] = useState<IngestPhase | null>(null);
   const [dialog, setDialog] = useState(false);
   // The folder the add-document dialog adds to (SPEC.md §6): the + of a
@@ -249,6 +259,16 @@ export function DocumentBar({
   const listRef = useRef<HTMLDivElement>(null);
   // The list's own element: a folder's fly-out opens from its edge.
   const [listEl, setListEl] = useState<HTMLDivElement | null>(null);
+  // On a narrow screen the list opens from a button right of the middle and
+  // ran past the window's right edge: it moves left to stay in view. Measured
+  // from its untransformed box, since it opens with a small scale.
+  const placeList = useCallback((el: HTMLDivElement | null) => {
+    setListEl(el);
+    if (!el) return;
+    const left = (el.offsetParent?.getBoundingClientRect().left ?? 0) + el.offsetLeft;
+    const over = left + el.offsetWidth - (window.innerWidth - 8);
+    if (over > 0) el.style.left = `${el.offsetLeft - Math.min(over, left - 8)}px`;
+  }, []);
   const listCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [listOpen, setListOpen] = useState(false);
   // Per-document actions, expanded inline under the document's row; Move to
@@ -1226,13 +1246,15 @@ export function DocumentBar({
           <Presence show={listOpen} exit="menu">
           {listOpen && (
             <div
-              ref={setListEl}
+              ref={placeList}
               className="menu-in absolute top-full left-0 z-40 mt-2 flex max-h-[min(60vh,480px)] w-80 max-w-[calc(100vw-96px)] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-card py-1.5 shadow-float"
             >
+              <DocumentsSort sort={documentSort} onSort={setDocumentSort} />
               <DocumentTree
                 notebookId={notebookId}
                 folders={folders}
                 documents={documents}
+                sort={documentSort}
                 activeId={activeId}
                 canEdit={canEdit}
                 panelEl={listEl}

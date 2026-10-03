@@ -14,6 +14,11 @@ export const LAYERS_BUDGET = 200_000;
 
 export type RenderBudget = { text: number; layers: number };
 
+/** What of a document a message reads when the project is past the whole
+    threshold (lib/assistant/project-reading.ts): the blocks the reading
+    passes picked for it, and the gist of the document's skeleton. */
+export type DocumentPick = { blockIds: Set<string>; gist: string };
+
 export function unlimitedBudget(): RenderBudget {
   return { text: Infinity, layers: Infinity };
 }
@@ -112,6 +117,34 @@ function documentText(doc: DigestDocument, budget: RenderBudget): string {
   return kept.join("\n\n");
 }
 
+// Only the picked blocks of a document's text, in reading order, a gap
+// between two shown blocks declared, under the document's gist.
+function pickedText(doc: DigestDocument, pick: DocumentPick, budget: RenderBudget): string {
+  const segments = doc.text ? doc.text.split(/\n\n(?=\[block )/) : [];
+  const idOf = (segment: string) => /^\[block ([^\]]+)\]/.exec(segment)?.[1] ?? null;
+  const total = segments.filter((segment) => idOf(segment) !== null).length;
+  const kept: string[] = [];
+  let shown = 0;
+  let gap = 0;
+  for (const segment of segments) {
+    const id = idOf(segment);
+    if (id === null || !pick.blockIds.has(id) || budget.text - segment.length <= 0) {
+      if (id !== null) gap++;
+      continue;
+    }
+    if (gap > 0 && shown > 0) kept.push(`(${gap} blocks not shown)`);
+    gap = 0;
+    budget.text -= segment.length;
+    kept.push(segment);
+    shown++;
+  }
+  const head = [
+    ...(pick.gist ? [`Gist: ${pick.gist}`] : []),
+    `(${shown} of ${total} blocks shown: the blocks a first read picked for this message)`,
+  ];
+  return [...head, ...kept].join("\n\n");
+}
+
 // Every layer on one document: glossary, annotations, distillations,
 // extractions, summaries, salience, links, edits.
 function layerItems(doc: DigestDocument): string[] {
@@ -200,13 +233,15 @@ function renderDocument(
   budget: RenderBudget,
   seenDocuments: Map<string, string>,
   corpusTitle: string,
+  picks?: Map<string, DocumentPick>,
 ): string {
   const chunks: string[] = [`## Document: ${doc.title} [document ${doc.id}]${documentMeta(doc)}`];
   const shownUnder = seenDocuments.get(doc.id);
   if (shownUnder) {
     chunks.push(`Text shown under project "${shownUnder}" above.`);
   } else {
-    chunks.push(documentText(doc, budget));
+    const pick = picks?.get(doc.id);
+    chunks.push(pick ? pickedText(doc, pick, budget) : documentText(doc, budget));
     seenDocuments.set(doc.id, corpusTitle);
   }
   const layers = spend(layerItems(doc), budget, "lines of this document's notes and layers");
@@ -221,6 +256,7 @@ export function renderCorpusDigest(
   parts: DigestParts,
   budget: RenderBudget = unlimitedBudget(),
   seenDocuments: Map<string, string> = new Map(),
+  picks?: Map<string, DocumentPick>,
 ): string {
   const chunks: string[] = [
     [
@@ -232,7 +268,7 @@ export function renderCorpusDigest(
     chunks.push("(no documents attached)");
   }
   for (const doc of parts.documents) {
-    chunks.push(renderDocument(doc, budget, seenDocuments, parts.corpusTitle));
+    chunks.push(renderDocument(doc, budget, seenDocuments, parts.corpusTitle, picks));
   }
   const notes = spend(parts.notes.map(noteBlock), budget, "notes");
   chunks.push(
@@ -275,6 +311,26 @@ export function corpusSystem(parts: DigestParts, budget: RenderBudget = corpusBu
   ].join("\n");
 }
 
+// The assistant's system prefix at Project scope past the whole threshold
+// (lib/assistant/project-reading.ts): each document's gist and the blocks
+// the reading passes picked for this message, every note and layer as in
+// the whole digest. A document the picks do not name renders whole.
+export function corpusPickedSystem(
+  parts: DigestParts,
+  picks: Map<string, DocumentPick>,
+  budget: RenderBudget = corpusBudget(),
+): string {
+  return [
+    "You assist a reader working through their project: its documents, and every note, annotation, distillation, extraction, and summary they made on it. All of it follows.",
+    "The project is too long to read whole for each message. Each document shows its gist and the blocks a first read of every document picked for this message; a gap between two shown blocks is declared. Every note and layer is whole.",
+    "Every document block starts with its id in the form [block <id>]; every note with [note <id>].",
+    "When you answer from a document, cite the block tag exactly as written ([block <id>]) and quote the exact words — precise recall over paraphrase.",
+    "A question about counts, spread, or absence in the documents' text may need blocks that are not shown: answer from what is shown and say that the rest of the text was not read for this message. Say plainly when the material does not answer the question.",
+    "",
+    renderCorpusDigest(parts, budget, new Map(), picks),
+  ].join("\n");
+}
+
 // The assistant's system prefix at Corpora scope: instructions + every digest.
 export function corporaSystem(all: DigestParts[], budget: RenderBudget = corporaBudget()): string {
   return [
@@ -304,7 +360,8 @@ export function renderDocumentDigest(
     ].join("\n"),
     renderDocument(doc, budget, new Map(), parts.corpusTitle),
   ];
-  const citing = parts.notes.filter((n) => n.sources.some((s) => s.documentId === documentId));
+  const cites = (n: DigestNote) => n.sources.some((s) => s.documentId === documentId);
+  const citing = parts.notes.filter(cites);
   const notes = spend(citing.map(noteBlock), budget, "notes");
   chunks.push(
     [
@@ -312,6 +369,14 @@ export function renderDocumentDigest(
       notes.length > 0 ? notes.join("\n\n") : "(no notes)",
     ].join("\n\n"),
   );
+  // The reader's other notes (SPEC.md §7): the whole reader is the context,
+  // so a question about this document can draw on what the reader thought
+  // about the rest of the project. After the citing notes, so the cut falls
+  // here first.
+  const others = spend(parts.notes.filter((n) => !cites(n)).map(noteBlock), budget, "notes");
+  if (others.length > 0) {
+    chunks.push(["## The reader's other notes in this project", others.join("\n\n")].join("\n\n"));
+  }
   return chunks.join("\n\n");
 }
 

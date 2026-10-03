@@ -1,7 +1,6 @@
 import type { ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { matchInTextLoose } from "@/lib/anchors/match";
 import { thinkingSchema } from "@/lib/assistant/thinking";
 import { bumpNotebook, sectionAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
@@ -10,8 +9,8 @@ import { featureCall, featureConfigured } from "@/lib/feature-models";
 import { documentPrefix, loadProfile, pageNames, sectionSkeleton } from "@/lib/derive/context";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
 import { currentLang, serverT } from "@/lib/i18n/server";
-import type { TFunc } from "@/lib/i18n/dictionaries";
 import { ndjsonHeartbeat, ndjsonWriter } from "@/lib/ndjson";
+import { notesPlanSchema, writePlannedNotes } from "@/lib/notes/write-planned";
 import { voicePrompt } from "@/lib/prompts/voice";
 import { geminiConfigured } from "@/lib/video/gemini";
 import { transcribe, whisperConfigured } from "@/lib/video/transcribe";
@@ -40,17 +39,7 @@ const querySchema = z.object({
   thinking: thinkingSchema.optional(),
 });
 
-const noteSchema = z.object({
-  content: z.string().min(1).max(50_000),
-  sectionId: z.string().optional(),
-  sectionTitle: z.string().max(200).optional(),
-  quotes: z.array(z.object({ blockId: z.string().min(1), quote: z.string().min(1).max(2000) })).max(30).optional(),
-});
-
-const planSchema = z.object({
-  notes: z.array(noteSchema).max(12),
-  warnings: z.array(z.string().max(300)).max(5).optional(),
-});
+const planSchema = notesPlanSchema;
 
 export type VoiceStage = "transcribe" | "plan" | "write";
 export type VoiceEvent = { stage: VoiceStage } | { notes: number; warnings: string[] } | { error: string };
@@ -162,7 +151,15 @@ export async function POST(req: Request) {
         if (!result.ok) throw new Error(t("api.voiceCommandPlanFailed", { reason: result.error }));
 
         send({ stage: "write" } satisfies VoiceEvent);
-        const written = await writeNotes(result.data, section, document, sections, access.user.id, t);
+        const writtenIds = await writePlannedNotes(result.data, {
+          section,
+          document,
+          sections,
+          userId: access.user.id,
+          derivationType: "VOICE",
+          t,
+        });
+        const written = writtenIds.length;
         const warnings = result.data.warnings ?? [];
         if (written === 0) {
           throw new Error(t("api.voiceCommandNoNotes", { reason: warnings[0] ?? "" }).trim());
@@ -209,107 +206,4 @@ async function transcribeCommand(
   }
   if (open) paragraphs.push(open);
   return paragraphs.join("\n\n").trim();
-}
-
-type PlanNote = z.infer<typeof noteSchema>;
-type DocumentBlocks = { id: string; blocks: { id: string; text: string }[] } | null;
-
-// The notes land PENDING in their sections (SPEC.md §1). A named section
-// must be the project's; a new title makes the section, or finds one with
-// that title; anything else is the section the command was spoken in. Every
-// quote resolves in its named block — exact, then whitespace-tolerant, then
-// typography-tolerant (SPEC.md §5) — else in any block, and becomes a source;
-// a quote that resolves nowhere is dropped, the note still lands.
-async function writeNotes(
-  plan: z.infer<typeof planSchema>,
-  spoken: { id: string; notebookId: string },
-  document: DocumentBlocks,
-  sections: { id: string; title: string }[],
-  userId: string,
-  t: TFunc,
-): Promise<number> {
-  const sectionIds = new Set(sections.map((s) => s.id));
-  const sectionByTitle = new Map(sections.map((s) => [s.title.trim().toLowerCase(), s.id]));
-  const blockById = new Map((document?.blocks ?? []).map((b) => [b.id, b]));
-  let written = 0;
-  for (const note of plan.notes) {
-    const content = note.content.trim();
-    if (!content) continue;
-    const sectionId = await sectionFor(note, spoken, sectionIds, sectionByTitle, t);
-    const sources = document
-      ? (note.quotes ?? []).flatMap((q) => {
-          const anchor = resolveQuote(q, blockById, document.blocks);
-          return anchor ? [{ documentId: document.id, ...anchor }] : [];
-        })
-      : [];
-    const count = await db.note.count({ where: { sectionId } });
-    await db.note.create({
-      data: {
-        sectionId,
-        content,
-        status: "PENDING",
-        derivationType: "VOICE",
-        createdById: userId,
-        order: count,
-        // Spoken in the open document: the note is that document's (SPEC.md §6).
-        ...(document ? { documentId: document.id } : {}),
-        ...(sources.length > 0 ? { sources: { create: sources } } : {}),
-      },
-    });
-    written++;
-  }
-  return written;
-}
-
-async function sectionFor(
-  note: PlanNote,
-  spoken: { id: string; notebookId: string },
-  sectionIds: Set<string>,
-  sectionByTitle: Map<string, string>,
-  t: TFunc,
-): Promise<string> {
-  if (note.sectionId && sectionIds.has(note.sectionId)) return note.sectionId;
-  const title = note.sectionTitle?.trim();
-  if (!title) return spoken.id;
-  const existing = sectionByTitle.get(title.toLowerCase());
-  if (existing) return existing;
-  const siblingCount = await db.section.count({ where: { notebookId: spoken.notebookId, parentId: null } });
-  const created = await db.section.create({
-    data: { notebookId: spoken.notebookId, title: title || t("reader.defaultSectionTitle"), parentId: null, order: siblingCount },
-  });
-  sectionIds.add(created.id);
-  sectionByTitle.set(title.toLowerCase(), created.id);
-  return created.id;
-}
-
-function resolveQuote(
-  q: { blockId: string; quote: string },
-  blockById: Map<string, { id: string; text: string }>,
-  blocks: { id: string; text: string }[],
-) {
-  const selector = { quotedText: q.quote.trim(), prefix: "", suffix: "" };
-  if (!selector.quotedText) return null;
-  const named = blockById.get(q.blockId);
-  let block = named;
-  let hit = named ? matchInTextLoose(named.text, selector) : null;
-  if (!hit) {
-    block = undefined;
-    for (const candidate of blocks) {
-      const found = matchInTextLoose(candidate.text, selector);
-      if (found) {
-        block = candidate;
-        hit = found;
-        break;
-      }
-    }
-  }
-  if (!block || !hit) return null;
-  return {
-    blockId: block.id,
-    startOffset: hit.start,
-    endOffset: hit.end,
-    quotedText: block.text.slice(hit.start, hit.end),
-    prefix: block.text.slice(Math.max(0, hit.start - 32), hit.start),
-    suffix: block.text.slice(hit.end, hit.end + 32),
-  };
 }

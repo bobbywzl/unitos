@@ -27,7 +27,7 @@ const SHELL_URLS = ["/offline", "/icon.png", "/manifest.webmanifest"];
 // and the server would finish the run — a stopped Merge with AI would
 // still merge.
 const AI_ROUTE =
-  /^\/api\/(derive|assistant(\/.*)?|notes\/gist|notes\/voice|documents\/[^/]+\/(glossary|translate|convert|reparse|transcribe|finish|article|figure|speakers)|multi(\/.*)?|notebooks\/[^/]+\/(connect|stitch)|drive\/import)$/;
+  /^\/api\/(derive|assistant(\/.*)?|notes\/gist|notes\/voice|notes\/organize|notes\/[^/]+\/assistant|documents\/[^/]+\/(glossary|translate|convert|reparse|transcribe|finish|article|figure|speakers)|multi(\/.*)?|notebooks\/[^/]+\/(connect|stitch)|drive\/import)$/;
 const LANG_KEY = "/__lang";
 const OFFLINE_AI = {
   en: "AI is off while offline. Notes, highlights, comments, and edits save on this device and sync when you are back online.",

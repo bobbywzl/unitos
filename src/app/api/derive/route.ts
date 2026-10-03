@@ -1,4 +1,4 @@
-import { streamText, type ModelMessage } from "ai";
+import { isStepCount, streamText, type ModelMessage } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { coreBlocks, layerSchema } from "@/lib/anchors/layer";
@@ -53,7 +53,7 @@ import type { TFunc } from "@/lib/i18n/dictionaries";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { checkOutput, flagOutput, quotesAsText } from "@/lib/derive/check";
 import { gatewayHeaders } from "@/lib/gateway";
-import { kimiConfigured } from "@/lib/kimi";
+import { kimiConfigured, WEB_SEARCH_MAX_USES, WEB_SEARCH_TOOL, webSearchTool, webSearchUsd } from "@/lib/kimi";
 import { resolveModelId } from "@/lib/models";
 import { promptTemplates } from "@/lib/prompts";
 import { corpusDistillPrompt } from "@/lib/prompts/distill";
@@ -82,7 +82,7 @@ import {
   type VideoFindMatch,
 } from "@/lib/video/types";
 import { ultraActive } from "@/lib/tiers";
-import { addTokens, recordUsage, sdkTokens, type TokenCounts } from "@/lib/usage";
+import { addTokens, computeCostUsd, recordUsage, sdkTokens, type TokenCounts } from "@/lib/usage";
 import { parseBody } from "@/lib/validate";
 
 // The check's retry (lib/derive/check.ts): an extraction failing this many
@@ -119,6 +119,9 @@ const deriveSchema = z
   documentIds: z.array(z.string().min(1)).length(2).optional(),
   // DISTILL only: "corpus" scans every document in the corpus (SPEC.md §13).
   scope: z.enum(["document", "corpus"]).optional(),
+  // The reader's Web toggle (SPEC.md §7): EXPLAIN, ANALYZE, and ASK may
+  // search the web. Absent reads as on, the toggle's default.
+  web: z.boolean().optional(),
   notebookId: z.string().min(1),
   anchor: z
     .object({
@@ -964,10 +967,20 @@ async function handle(req: Request, t: TFunc) {
   // default, GLM 5.3, takes text alone. An SVG chart goes to the svg-chart
   // feature's model, which reads the source whole (lib/derive/svg-chart.ts).
   const svgChart = ctx.figure?.kind === "svg" ? await svgChartCall() : null;
+  // Web access (SPEC.md §7): an explanation, an analysis, or an answer about
+  // a range may search the web, as the assistant does — the same tool, the
+  // same rules (WEB_LINES), on the web feature's model. A call with an image
+  // or an SVG chart goes to the model that reads it, without the web.
+  const web =
+    (data.web ?? true) &&
+    (data.type === "EXPLAIN" || data.type === "ANALYZE" || data.type === "ASK") &&
+    attachedImages.length === 0 &&
+    !svgChart;
+  ctx.web = web;
   const chat =
     svgChart ??
     (await featureCall(
-      attachedImages.length > 0 ? "vision" : derivationFeature(data.type),
+      web ? "web" : attachedImages.length > 0 ? "vision" : derivationFeature(data.type),
       DERIVATION_EFFORT[data.type],
     ));
   usageMeta.model = chat.modelId;
@@ -1132,6 +1145,7 @@ async function handle(req: Request, t: TFunc) {
     data.type === "ASK" ||
     data.type === "DEFINE"
   ) {
+    const searchUsd = web ? webSearchUsd(usageMeta.model) : 0;
     const result = streamText({
       model,
       maxOutputTokens,
@@ -1139,23 +1153,30 @@ async function handle(req: Request, t: TFunc) {
       headers: gatewayHeaders(usageMeta),
       allowSystemInMessages: true,
       messages,
+      ...(web
+        ? {
+            tools: { [WEB_SEARCH_TOOL]: webSearchTool(usageMeta.model) },
+            stopWhen: isStepCount(WEB_SEARCH_MAX_USES + 1),
+          }
+        : {}),
       // Stop aborts the model call too (SPEC.md §6), not just the response.
       abortSignal: req.signal,
       // Stopped: the steps that finished were billed, so they are recorded.
       // A step cut off mid-answer reports no usage at all.
       onAbort: ({ steps }) => {
-        recordUsage(
-          usageMeta,
-          steps.reduce<TokenCounts>((sum, step) => addTokens(sum, sdkTokens(step.usage)), {}),
-        );
+        const tokens = steps.reduce<TokenCounts>((sum, step) => addTokens(sum, sdkTokens(step.usage)), {});
+        const searches = steps.reduce((sum, step) => sum + step.toolCalls.length, 0);
+        recordUsage(usageMeta, tokens, searches > 0 ? computeCostUsd(usageMeta.model, tokens) + searches * searchUsd : undefined);
       },
-      onEnd: async ({ text, usage }) => {
+      onEnd: async ({ text, usage, steps }) => {
         console.log(
           `[derive] ${data.type} cacheRead=${usage.inputTokenDetails.cacheReadTokens ?? 0} ` +
             `cacheWrite=${usage.inputTokenDetails.cacheWriteTokens ?? 0} ` +
             `output=${usage.outputTokens ?? 0}`,
         );
-        recordUsage(usageMeta, sdkTokens(usage));
+        const tokens = sdkTokens(usage);
+        const searches = steps.reduce((sum, step) => sum + step.toolCalls.length, 0);
+        recordUsage(usageMeta, tokens, searches > 0 ? computeCostUsd(usageMeta.model, tokens) + searches * searchUsd : undefined);
         // SUMMARIZE persists per notebook+document+depth, so reopening the
         // Summary tab does not re-pay tokens. Regenerate overwrites the depth.
         if (data.type === "SUMMARIZE" && text.trim()) {

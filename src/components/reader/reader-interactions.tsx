@@ -77,6 +77,7 @@ import { setSideChatOpen } from "@/lib/assistant/side-chat-open";
 import type { Person } from "@/lib/person";
 import { ThinkingChips, useThinking } from "@/components/assistant/thinking-chips";
 import { useWeb, WebChip } from "@/components/assistant/web-chip";
+import { SaveAsNote } from "@/components/assistant/save-as-note";
 import { QueuedList, queuedKey, type QueuedText } from "@/components/assistant/queued-list";
 import { useLang, useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
@@ -4326,7 +4327,8 @@ export function ReaderInteractions({
   }
 
   function deriveBody(type: string, anchor: Anchor) {
-    return JSON.stringify({ type, documentId, notebookId, anchor: anchorBody(anchor), ...segmentsBody(anchor) });
+    // The Web toggle (SPEC.md §7): the route searches for EXPLAIN and ANALYZE.
+    return JSON.stringify({ type, documentId, notebookId, web, anchor: anchorBody(anchor), ...segmentsBody(anchor) });
   }
 
   // DEFINE (SPEC.md §4, §6): the meaning of the selected word in its
@@ -5746,6 +5748,7 @@ export function ReaderInteractions({
           command: request.command,
           instruction: request.instruction,
           blockIds: request.blockIds,
+          reorder: request.reorder,
           caretBlockId: typeof caret === "string" && caret ? caret : undefined,
           material: request.material,
           history: request.history,
@@ -8642,15 +8645,27 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             <ThinkingIndicator className="py-1 text-[12.5px]" />
           )}
           {bubble.noteId && !bubble.streaming && !bubble.error && bubble.declined === null && (
-            <RatingButtons
-              tool={bubble.kind}
-              input={bubble.anchor?.quotedText ?? ""}
-              output={bubble.text}
-              notebookId={notebookId}
-              documentId={documentId}
-              noteId={bubble.noteId}
-              className="mt-2 shrink-0"
-            />
+            <div className="mt-2 flex shrink-0 flex-wrap items-center gap-2">
+              <RatingButtons
+                tool={bubble.kind}
+                input={bubble.anchor?.quotedText ?? ""}
+                output={bubble.text}
+                notebookId={notebookId}
+                documentId={documentId}
+                noteId={bubble.noteId}
+              />
+              {/* Save as note (SPEC.md §7): the output organized into a note. */}
+              {bubble.kind !== "visualize" && (
+                <SaveAsNote
+                  notebookId={notebookId}
+                  documentId={documentId}
+                  origin={bubble.kind}
+                  selection={bubble.anchor?.quotedText ?? ""}
+                  answer={bubble.text}
+                  className="ml-auto"
+                />
+              )}
+            </div>
           )}
           {bubble.declined === null && toolChatFoot("explain", bubble, bubble.kind)}
         </div>
@@ -8781,15 +8796,24 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           </div>
           )}
           {simplifyCard.noteId && !simplifyCard.streaming && !simplifyCard.error && (
-            <RatingButtons
-              tool="simplify"
-              input={simplifyCard.anchor.quotedText}
-              output={simplifyCard.text}
-              notebookId={notebookId}
-              documentId={documentId}
-              noteId={simplifyCard.noteId}
-              className="mt-2 shrink-0"
-            />
+            <div className="mt-2 flex shrink-0 flex-wrap items-center gap-2">
+              <RatingButtons
+                tool="simplify"
+                input={simplifyCard.anchor.quotedText}
+                output={simplifyCard.text}
+                notebookId={notebookId}
+                documentId={documentId}
+                noteId={simplifyCard.noteId}
+              />
+              <SaveAsNote
+                notebookId={notebookId}
+                documentId={documentId}
+                origin="simplify"
+                selection={simplifyCard.anchor.quotedText}
+                answer={stripSimplifyMarkers(simplifyCard.text)}
+                className="ml-auto"
+              />
+            </div>
           )}
           {toolChatFoot("simplify", simplifyCard, "simplify")}
         </div>
@@ -9151,17 +9175,27 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   {message.suggestKey ? (
                     <SuggestionRow runKey={message.suggestKey} />
                   ) : !assistantChat.busy && (
-                    <RatingButtons
-                      tool="act"
-                      input={[assistantChat.anchor?.quotedText ?? "", list[i - 1]?.content ?? ""]
-                        .filter(Boolean)
-                        .join("\n\n")}
-                      output={message.content}
-                      notebookId={notebookId}
-                      documentId={documentId}
-                      noteId={chatNoteId}
-                      className="mt-1"
-                    />
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <RatingButtons
+                        tool="act"
+                        input={[assistantChat.anchor?.quotedText ?? "", list[i - 1]?.content ?? ""]
+                          .filter(Boolean)
+                          .join("\n\n")}
+                        output={message.content}
+                        notebookId={notebookId}
+                        documentId={documentId}
+                        noteId={chatNoteId}
+                      />
+                      <SaveAsNote
+                        notebookId={notebookId}
+                        documentId={documentId}
+                        origin="act"
+                        question={list[i - 1]?.content ?? ""}
+                        selection={assistantChat.anchor?.quotedText ?? ""}
+                        answer={message.content}
+                        className="ml-auto"
+                      />
+                    </div>
                   )}
                 </div>
               ),

@@ -16,7 +16,9 @@ import {
 import { createPortal } from "react-dom";
 import { api } from "@/lib/api";
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon, FolderIcon, MoreIcon, PlusIcon } from "@/components/icons";
-import { useT } from "@/components/lang-provider";
+import { useLang, useT } from "@/components/lang-provider";
+import { CategoryRow, categoryLabels, useFoldedCategories } from "@/components/reader/document-organize";
+import { categorizeRows, type DocumentKind, type DocumentSort, type SortRow } from "@/lib/document-order";
 import { Collapse } from "@/components/presence";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import type { TFunc } from "@/lib/i18n/dictionaries";
@@ -34,8 +36,9 @@ import { clipWords } from "@/lib/markdown-preview";
 // at the top of the list; held over a folder, the drag opens its list. The
 // rows of a list fall in one after another as it opens (tree-row-in).
 
-// One folder of a project (DocumentFolder).
-export type DocumentFolderView = { id: string; title: string; parentId: string | null };
+// One folder of a project (DocumentFolder). createdAt: when it was made, for
+// Sort by Week added and Month added.
+export type DocumentFolderView = { id: string; title: string; parentId: string | null; createdAt: string };
 
 // Titles sort as a reader expects: "Chapter 2" before "Chapter 10", case
 // aside, in the reader's language.
@@ -279,7 +282,7 @@ function FolderNameInput({
   );
 }
 
-type TreeRow = { id: string; folderId: string | null; node: ReactNode };
+type TreeRow = { id: string; folderId: string | null; title: string; kind: DocumentKind; addedAt: string; node: ReactNode };
 type TreeError = { at: string; message: string } | null;
 // What is being dragged: a document from its folder, or a folder from its
 // parent (null = the project itself).
@@ -296,6 +299,11 @@ const rowStyle = (index: number): CSSProperties => ({ ["--row" as string]: index
 // module-level (a component made inside another remounts on every render).
 type Tree = {
   t: TFunc;
+  // Sort by (SPEC.md §6): every list's order, and its categories.
+  sort: DocumentSort;
+  lang: string;
+  folded: ReadonlySet<string>;
+  toggleFolded: (key: string) => void;
   flyout: boolean;
   canEdit: boolean;
   pending: boolean;
@@ -616,40 +624,86 @@ function FolderRow({ folder, depth }: { folder: DocumentFolderView; depth: numbe
 
 // One level of the tree: its folders, then its documents, then New file
 // here (a folder's list) and New folder. Each row falls in after the one
-// above it (tree-row-in), and a document's row drags.
+// above it (tree-row-in), and a document's row drags. A sort other than
+// Added puts the folders and the documents in categories (SPEC.md §6): a
+// folder is a row like a document there, sorted by its own title and the
+// day it was made, and under Kind a kind of its own.
 function Level({ parentId, depth }: { parentId: string | null; depth: number }) {
   const tree = useTree();
-  const { t, canEdit, folders, rows, pending } = tree;
+  const { t, canEdit, folders, rows, pending, sort } = tree;
   const subfolders = childFolders(folders, parentId);
   const own = rows.filter((row) => row.folderId === parentId);
   const empty = subfolders.length === 0 && own.length === 0;
   let index = 0;
+  const folderNode = (folder: DocumentFolderView, i: number) => (
+    <div key={folder.id} className="tree-row-in" style={rowStyle(i)}>
+      <FolderRow folder={folder} depth={depth} />
+    </div>
+  );
+  const documentNode = (row: TreeRow, i: number) => (
+    <div
+      key={row.id}
+      className={`tree-row-in ${tree.drag?.id === row.id ? "opacity-50" : ""}`}
+      style={rowStyle(i)}
+      draggable={canEdit && !pending}
+      aria-roledescription={canEdit ? t("panes.dragDocumentTitle") : undefined}
+      onDragStart={(e) => {
+        e.dataTransfer.setData("text/plain", row.id);
+        e.dataTransfer.effectAllowed = "move";
+        tree.startDrag({ kind: "document", id: row.id, from: row.folderId });
+      }}
+      onDragEnd={tree.endDrag}
+    >
+      {row.node}
+    </div>
+  );
+  let list: ReactNode;
+  if (sort === "added") {
+    list = (
+      <>
+        {subfolders.map((folder) => folderNode(folder, index++))}
+        {own.map((row) => documentNode(row, index++))}
+      </>
+    );
+  } else {
+    type LevelRow = SortRow & { render: (i: number) => ReactNode };
+    const levelRows: LevelRow[] = [
+      ...subfolders.map((folder) => ({
+        id: folder.id,
+        title: folder.title,
+        kind: "folder" as const,
+        addedAt: folder.createdAt,
+        render: (i: number) => folderNode(folder, i),
+      })),
+      ...own.map((row) => ({
+        id: row.id,
+        title: row.title,
+        kind: row.kind,
+        addedAt: row.addedAt,
+        render: (i: number) => documentNode(row, i),
+      })),
+    ];
+    list = categorizeRows(levelRows, sort, tree.lang, categoryLabels(t)).map((category) => {
+      const key = `${sort}:${parentId ?? ""}:${category.key}`;
+      return (
+        <div key={key} className="tree-row-in" style={rowStyle(index++)}>
+          <CategoryRow
+            title={category.title}
+            count={category.rows.length}
+            open={!tree.folded.has(key)}
+            onToggle={() => tree.toggleFolded(key)}
+          >
+            {category.rows.map((row, i) => row.render(i))}
+          </CategoryRow>
+        </div>
+      );
+    });
+  }
   return (
     <>
       {parentId === null && <RootDropRow />}
       {parentId === null && <ErrorLine at="drag" />}
-      {subfolders.map((folder) => (
-        <div key={folder.id} className="tree-row-in" style={rowStyle(index++)}>
-          <FolderRow folder={folder} depth={depth} />
-        </div>
-      ))}
-      {own.map((row) => (
-        <div
-          key={row.id}
-          className={`tree-row-in ${tree.drag?.id === row.id ? "opacity-50" : ""}`}
-          style={rowStyle(index++)}
-          draggable={canEdit && !pending}
-          aria-roledescription={canEdit ? t("panes.dragDocumentTitle") : undefined}
-          onDragStart={(e) => {
-            e.dataTransfer.setData("text/plain", row.id);
-            e.dataTransfer.effectAllowed = "move";
-            tree.startDrag({ kind: "document", id: row.id, from: row.folderId });
-          }}
-          onDragEnd={tree.endDrag}
-        >
-          {row.node}
-        </div>
-      ))}
+      {list}
       {parentId !== null && empty && (
         <p className="tree-row-in px-4 py-2 text-[12.5px] text-sand-500" style={rowStyle(index++)}>
           {t("panes.folderEmpty")}
@@ -674,10 +728,13 @@ function Level({ parentId, depth }: { parentId: string | null; depth: number }) 
 // the document bar's rows in the order it keeps; this places each under its
 // folder, or in the project itself when it has none. `panelEl` is the root
 // list's element: the fly-outs open from its edge.
-export function DocumentTree<T extends { id: string; folderId: string | null }>({
+export function DocumentTree<
+  T extends { id: string; folderId: string | null; title: string; kind: DocumentKind; addedAt: string },
+>({
   notebookId,
   folders,
   documents,
+  sort,
   activeId,
   canEdit,
   panelEl,
@@ -687,6 +744,8 @@ export function DocumentTree<T extends { id: string; folderId: string | null }>(
   notebookId: string;
   folders: DocumentFolderView[];
   documents: T[];
+  /** Sort by (SPEC.md §6): every list's order and categories. */
+  sort: DocumentSort;
   activeId: string | null;
   canEdit: boolean;
   panelEl: HTMLElement | null;
@@ -695,12 +754,17 @@ export function DocumentTree<T extends { id: string; folderId: string | null }>(
   onAddIn?: (folderId: string) => void;
 }) {
   const t = useT();
+  const lang = useLang();
   const router = useRouter();
   const flyout = useSyncExternalStore(subscribeFlyout, readFlyout, () => false);
+  const [folded, toggleFolded] = useFoldedCategories();
   const known = new Set(folders.map((f) => f.id));
   const rows: TreeRow[] = documents.map((d) => ({
     id: d.id,
     folderId: d.folderId && known.has(d.folderId) ? d.folderId : null,
+    title: d.title,
+    kind: d.kind,
+    addedAt: d.addedAt,
     node: renderDocument(d),
   }));
   // The open folders, one per level, from the project itself down. A wide
@@ -757,6 +821,10 @@ export function DocumentTree<T extends { id: string; folderId: string | null }>(
 
   const tree: Tree = {
     t,
+    sort,
+    lang,
+    folded,
+    toggleFolded,
     flyout,
     canEdit,
     pending,

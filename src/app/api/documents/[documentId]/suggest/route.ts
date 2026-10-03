@@ -8,9 +8,12 @@ import { SUGGEST_DEADLINE_MS, SUGGEST_MAX_NEW_CHARS, SUGGEST_MAX_WINDOWS, SUGGES
 import { loadProfile } from "@/lib/derive/context";
 import { modelErrorMessage } from "@/lib/derive/json-call";
 import { runSuggest, suggestDocument } from "@/lib/derive/suggest";
+import { orderSuggestOps, richTextUnits, runOrderPass } from "@/lib/assistant/reorder-run";
+import { fitsOnePass, runOnePass } from "@/lib/assistant/one-pass";
 import type { SuggestEvent } from "@/lib/docs/assistant-suggestions";
 import { importShared, importSharedResponse } from "@/lib/docs/server";
 import { scopeOf, takesSuggestions, windowsOf } from "@/lib/docs/suggest-ops";
+import { runTargetPass } from "@/lib/assistant/target";
 import { keepVersionBeforeSuggestions } from "@/lib/docs/versions";
 import { featureConfigured } from "@/lib/feature-models";
 import { currentLang, serverT } from "@/lib/i18n/server";
@@ -28,7 +31,10 @@ export const maxDuration = 300;
 // whole document, or over more than one window, first keeps the stored text
 // as a version named "Before the assistant's suggestions". The response is
 // NDJSON (SuggestEvent): {stage: "read"}, {windows}, one line per window,
-// then {done}; a failure before the windows is one {error} line.
+// then {done}; a failure before the windows is one {error} line. A command
+// that moves blocks (reorder) runs the order pass beside the windows: its
+// moves are one more window, sent after the others, so a move carries the
+// words its blocks' windows changed.
 const requestSchema = z.object({
   notebookId: z.string().min(1),
   // The reader's message.
@@ -42,6 +48,9 @@ const requestSchema = z.object({
   material: z.string().max(20_000).optional(),
   history: z.array(chatTurnSchema).max(20).optional(),
   thinking: thinkingSchema.optional(),
+  // The command moves blocks too: the order pass runs beside the windows,
+  // and its moves land after them (lib/assistant/reorder.ts).
+  reorder: z.boolean().optional(),
 });
 
 export async function POST(req: Request, ctx: { params: Promise<{ documentId: string }> }) {
@@ -94,11 +103,81 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
         const whole = !data.blockIds?.length;
         const scope = whole ? doc.rows.map((r) => r.id) : scopeOf(doc.rows, doc.places, data.blockIds!);
         if (scope.length === 0) throw new Error(t("api.blockNotInDocument"));
-        const all = windowsOf(doc.rows, doc.places, scope);
+        let all = windowsOf(doc.rows, doc.places, scope);
+        // A scope past the windows of one command: the target pass names the
+        // blocks the command changes, and the windows run over those alone
+        // (lib/assistant/target.ts).
+        let targeted = false;
+        if (all.length > SUGGEST_MAX_WINDOWS && !fitsOnePass(doc.rows, whole ? [] : scope)) {
+          const rows = await runTargetPass({
+            userId,
+            document: { title: doc.title, references: doc.references, rows: doc.rows, pageName: doc.pageName },
+            scope,
+            whole,
+            profile,
+            command: data.command,
+            instruction: data.instruction ?? null,
+            history: data.history ?? [],
+            signal,
+          });
+          if (rows) {
+            all = windowsOf(doc.rows, doc.places, rows);
+            targeted = true;
+          }
+        }
         const windows = all.slice(0, SUGGEST_MAX_WINDOWS);
         const warnings = all.length > windows.length ? [t("api.suggestTooLong")] : [];
         if (whole || windows.length > 1) await keepVersionBeforeSuggestions(documentId, t("api.suggestVersionName"));
-        send({ windows: windows.length });
+        // A scope that fits one call: the one pass, the whole document read
+        // at once and its answer by reference (lib/assistant/one-pass.ts).
+        if (fitsOnePass(doc.rows, whole ? [] : scope)) {
+          send({ windows: 1 });
+          const units = richTextUnits(doc.richText!, doc.rows);
+          const pass = await runOnePass({
+            userId,
+            document: { title: doc.title, references: doc.references, rows: doc.rows, pageName: doc.pageName },
+            units,
+            places: doc.places,
+            scopeRowIds: whole ? [] : scope,
+            profile,
+            lang,
+            t,
+            command: data.command,
+            instruction: data.instruction ?? null,
+            material: data.material ?? null,
+            history: data.history ?? [],
+            caretBlockId: data.caretBlockId ?? null,
+            thinking: data.thinking ?? "deep",
+            plan: false,
+            signal,
+          });
+          const first = Math.max(-1, ...pass.ops.map((op) => op.i)) + 1;
+          const moves = pass.order ? orderSuggestOps(units, pass.scope, { ...pass.order, removed: [] }, doc.rows, pass.why, first) : [];
+          const ops = [...pass.ops, ...moves];
+          send({ window: 1, ops, warnings: pass.warnings, summary: pass.summary });
+          console.log(`[suggest] ${documentId}: one pass, ${ops.length} ops`);
+          send({ done: true, summary: pass.summary, warnings });
+          return;
+        }
+        send({ windows: windows.length + (data.reorder ? 1 : 0) });
+        const units = data.reorder ? richTextUnits(doc.richText!, doc.rows) : [];
+        const ordering = data.reorder
+          ? runOrderPass({
+              userId,
+              document: { title: doc.title, references: doc.references, rows: doc.rows, pageName: doc.pageName },
+              units,
+              scopeRowIds: whole ? [] : scope,
+              profile,
+              lang,
+              t,
+              command: data.command,
+              instruction: data.instruction ?? null,
+              material: data.material ?? null,
+              history: data.history ?? [],
+              thinking: data.thinking ?? "deep",
+              signal,
+            }).catch((err: unknown) => err instanceof Error ? err : new Error(String(err)))
+          : null;
 
         const budget = { chars: SUGGEST_MAX_NEW_CHARS };
         const summaries: string[] = [];
@@ -124,11 +203,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
               material: data.material ?? null,
               history: data.history ?? [],
               scope: { kind: "blocks", blockIds },
-              window: { n: i + 1, of: windows.length, whole },
+              window: { n: i + 1, of: windows.length, whole: whole && !targeted },
               caretBlockId: data.caretBlockId ?? null,
               thinking: data.thinking ?? "deep",
               budget,
               signal,
+              reorder: data.reorder,
             });
             summaries[i] = result.summary;
             if (result.ops.length > 0) changed.add(i);
@@ -139,9 +219,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
           }
         });
         if (late) warnings.push(t("api.suggestOutOfTime"));
+        // The order's moves, after the windows' words.
+        const order = ordering ? await ordering : null;
+        let moved = "";
+        if (order instanceof Error) send({ window: windows.length + 1, error: modelErrorMessage(order) });
+        else if (order) {
+          const ops = order.plan ? orderSuggestOps(units, order.scope, order.plan, doc.rows, order.why) : [];
+          if (ops.length > 0) moved = order.summary;
+          send({ window: windows.length + 1, ops, warnings: order.warnings, summary: order.summary });
+        }
         // The distinct summaries of the windows that changed something, in
         // order; with none, the first window's word on why.
-        const said = [...new Set(summaries.filter((s, i) => s && changed.has(i)))];
+        const said = [...new Set([moved, ...summaries.filter((s, i) => s && changed.has(i))].filter(Boolean))];
         const summary = said.length > 0 ? said.join(" ") : (summaries.find(Boolean) ?? "");
         console.log(`[suggest] ${documentId}: ${windows.length} windows, ${changed.size} with changes${late ? ", out of time" : ""}`);
         send({ done: true, summary, warnings });

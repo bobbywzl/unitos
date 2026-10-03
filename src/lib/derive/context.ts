@@ -213,8 +213,8 @@ export async function sectionSkeleton(notebookId: string): Promise<PromptCtx["se
 // budget. Rendered as its own system message after the cached document prefix,
 // so the prefix cache never breaks.
 const CORPUS_EXCERPT_BUDGET = 18_000;
-const CORPUS_NOTES_BUDGET = 14_000;
-const CORPUS_ANNOTATIONS_BUDGET = 10_000;
+const CORPUS_NOTES_BUDGET = 40_000;
+const CORPUS_ANNOTATIONS_BUDGET = 16_000;
 
 function focusTerms(text: string): Set<string> {
   return new Set(
@@ -315,7 +315,7 @@ export async function corpusSection(
         annotationsBudget -= rendered.length;
         annotations.push(rendered);
       } else {
-        const rendered = `[note ${n.id}] (section: ${s.title})${sources ? `\nsources: ${sources}` : ""}\n${n.content.slice(0, 800)}`;
+        const rendered = `[note ${n.id}] (section: ${s.title})${sources ? `\nsources: ${sources}` : ""}\n${n.content.slice(0, 3000)}`;
         if (notesBudget - rendered.length <= 0) continue;
         notesBudget -= rendered.length;
         notes.push(rendered);

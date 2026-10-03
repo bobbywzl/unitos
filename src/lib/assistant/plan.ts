@@ -6,6 +6,7 @@ import type { TranscriptContext } from "@/lib/assistant/transcript";
 import { REPLICA_REFUSAL, replicaEdit } from "@/lib/replica";
 import { joinRefusal, splitRefusal } from "@/lib/transcript-lines";
 import type { AssistantAction, AssistantAnchor } from "@/lib/types";
+import { groundingOf, ungrounded } from "@/lib/docs/grounding";
 
 // The assistant's actions (SPEC.md §7): what the model proposes, validated
 // and enriched against the real document before the reader sees it. The
@@ -96,6 +97,9 @@ export const actionSchema = z.discriminatedUnion("type", [
     type: z.literal("suggest"),
     instruction: z.string().min(1).max(INSTRUCTION_MAX),
     blockIds: z.array(z.string().min(1).max(64)).min(1).max(BLOCK_IDS_MAX).optional(),
+    // The change moves blocks across the document: the order pass runs
+    // beside the windows (lib/assistant/reorder.ts).
+    reorder: z.boolean().optional(),
     description,
   }),
   // A video's or an audio's transcript lines (SPEC.md §11): two lines
@@ -111,6 +115,7 @@ export const actionSchema = z.discriminatedUnion("type", [
     type: z.literal("revise"),
     instruction: z.string().min(1).max(INSTRUCTION_MAX),
     blockIds: z.array(z.string().min(1).max(64)).min(1).max(BLOCK_IDS_MAX).optional(),
+    reorder: z.boolean().optional(),
     description,
   }),
 ]);
@@ -149,6 +154,7 @@ function lenient(item: unknown, edits?: DocumentEdits): unknown {
   if (ids.length > 0 && ids.length <= BLOCK_IDS_MAX) fields.blockIds = ids;
   else delete fields.blockIds;
   if (typeof fields.instruction === "string") fields.instruction = clip(fields.instruction, INSTRUCTION_MAX);
+  if (typeof fields.reorder === "string") fields.reorder = fields.reorder.trim().toLowerCase() === "true";
   if (typeof fields.description === "string") fields.description = clip(fields.description, DESCRIPTION_MAX);
   if ((fields.type === "suggest" || fields.type === "revise") && !fields.description && typeof fields.instruction === "string") {
     fields.description = clip(fields.instruction, DESCRIPTION_MAX);
@@ -225,7 +231,7 @@ const ACTION_LINES: Record<RawAction["type"], string> = {
   style: '- style {blockId, quote, style: "bold"|"italic"|"underline", description} — bold, italicize, or underline exact text.',
   move_block: "- move_block {blockId, afterBlockId, description} — move a block after another block; afterBlockId null moves it to the document's start.",
   suggest:
-    "- suggest {instruction, blockIds?, description} — change the document's words or styles. The changes land in the document as suggestions the reader accepts or rejects. instruction: every change to make and where, in plain words, under 150 words; the suggestions write the new words, so never copy the changed text into it. blockIds: the blocks to change, only when the change concerns some blocks and not the selection or the whole document; a heading stands for its section. Leave blockIds out for the whole document.",
+    "- suggest {instruction, blockIds?, description} — change the document's words or styles. The changes land in the document as suggestions the reader accepts or rejects. instruction: every change to make and where, in plain words, under 150 words; the suggestions write the new words, so never copy the changed text into it. blockIds: the blocks to change, only when the change concerns some blocks and not the selection or the whole document; a heading stands for its section. Leave blockIds out for the whole document. reorder: true when the change moves blocks (group by theme, organize, put in order, move parts together): one pass reads the whole document and moves the blocks whole, never rewriting them, and adds a heading per group when the message asks for groups; the instruction still names every change to the words, and only those.",
   join_lines:
     "- join_lines {blockId, nextBlockId, description} — two transcript lines of one voice, the second right after the first, become one line: its time runs from the first line's start to the second line's end.",
   split_line:
@@ -233,7 +239,7 @@ const ACTION_LINES: Record<RawAction["type"], string> = {
   set_speaker: "- set_speaker {blockId, speakerId, description} — give one transcript line to another voice of the recording: an id from Speakers.",
   rename_speaker: "- rename_speaker {speakerId, name, description} — rename a voice on every line it says.",
   revise:
-    "- revise {instruction, blockIds?, description} — a change to many blocks at once: the spelling or grammar across the document, its register, a section rewritten. The document is read part by part, and the edit of each block comes to the plan card. instruction: every change to make and where, in plain words, under 150 words; never the changed text itself. blockIds: the blocks to change, only when the change concerns some blocks; a heading stands for its section. Leave blockIds out for the whole document.",
+    "- revise {instruction, blockIds?, description} — a change to many blocks at once: the spelling or grammar across the document, its register, a section rewritten. The document is read part by part, and the edit of each block comes to the plan card. instruction: every change to make and where, in plain words, under 150 words; never the changed text itself. blockIds: the blocks to change, only when the change concerns some blocks; a heading stands for its section. Leave blockIds out for the whole document. reorder: true when the change moves blocks (group by theme, organize, put in order, move parts together): one pass reads the whole document and moves the blocks whole, never rewriting them, and adds a heading per group when the message asks for groups; the instruction still names every change to the words, and only those.",
 };
 
 // A video's or an audio's transcript lines (SPEC.md §11): the rule the
@@ -294,6 +300,9 @@ export type PlanContext = {
   // Every document attached to the project, the open one included.
   attachedIds: Set<string>;
   sectionIds: Set<string>;
+  // The reader's message and the conversation: with the document, what new
+  // words may draw on. Absent: no grounding check.
+  sources?: string[];
   t: TFunc;
 };
 
@@ -309,6 +318,7 @@ function joinCommands(list: CommandAction[]): CommandAction {
     type: list[0].type,
     instruction: clip(list.map((a) => a.instruction).join("\n"), INSTRUCTION_MAX),
     ...(blockIds.length > 0 && blockIds.length <= BLOCK_IDS_MAX ? { blockIds } : {}),
+    ...(list.some((a) => a.reorder) ? { reorder: true } : {}),
     description: clip(list.map((a) => a.description).join(" "), DESCRIPTION_MAX),
   };
 }
@@ -341,7 +351,17 @@ export function enrichActions(
   const joinedAway = new Set<string>();
   const missing = (description: string) => warnings.push(t("api.warnBlockNotFound", { description }));
 
+  // New words in an edit_block or an insert_paragraph: a number or a
+  // quotation in them must stand in the document or the conversation
+  // (lib/docs/grounding.ts), else the action is a warning.
+  const grounding = ctx.sources ? groundingOf([...ctx.blocks.map((b) => b.text), ...ctx.sources]) : null;
   for (const action of raw) {
+    const fresh = action.type === "edit_block" ? action.newText : action.type === "insert_paragraph" ? action.text : null;
+    const fact = grounding && fresh !== null ? ungrounded(fresh, grounding) : null;
+    if (fact) {
+      warnings.push(t("api.warnUnsupported", { fact, description: action.description }));
+      continue;
+    }
     if (!fitsDocument(action.type, ctx.edits)) {
       refuse(action.description);
       continue;
@@ -511,106 +531,9 @@ export const planShape = (ctx: Pick<PlanContext, "format" | "blocks">): Document
   pages: ctx.blocks.filter((b) => b.type === "PAGE").length,
 });
 
-// The sidebar assistant's answer ends with its actions in a fenced block
-// (SPEC.md §7): the answer streams to the reader, the block is held back on
-// the server, read here, and sent after the answer as the plan.
-export const ACTIONS_FENCE = "```actions";
-
-// Info strings a model writes on the actions block when it does not write
-// actions: a JSON fence, or none. Such a fence counts when its JSON holds the
-// actions (FENCE_ACTIONS_PROBE).
-const LOOSE_FENCE_INFO = new Set(["", "json", "jsonc", "json5"]);
-// JSON that is actions: an object keyed "actions", or a list whose first
-// item names an action type or carries an instruction.
-const FENCE_ACTIONS_PROBE = /^\{\s*"actions"\s*:|^\[\s*\{\s*"(?:type|instruction)"\s*:/;
-// How much of a fence's body the probe waits for before it decides.
-const PROBE_CHARS = 40;
-
-export type ActionsFenceScan =
-  // An actions block opens at `at`; its JSON starts at `body`; fenced =
-  // opened with ``` (closes at the next ```), else bare JSON to the end.
-  | { at: number; body: number; fenced: boolean }
-  // Text from `at` could still turn out to be the block: a stream holds it.
-  | { at: number; pending: true }
-  | null;
-
-/** Where the actions block of an answer opens. The block is a fence whose
-    info string is actions; or a ```json or bare ``` fence, or JSON on a line
-    of its own, whose JSON is actions: a model writes it so when it forgets
-    the info string. done = the answer is whole; before that, text that could
-    still become the block reads as pending. */
-export function scanActionsFence(text: string, done: boolean): ActionsFenceScan {
-  const exact = text.indexOf(ACTIONS_FENCE);
-  const limit = exact === -1 ? text.length : exact;
-  // Every line start before the exact fence: a loose fence or bare JSON.
-  for (let lineStart = 0; lineStart < limit; ) {
-    const lineEnd = text.indexOf("\n", lineStart);
-    const indent = text.slice(lineStart).match(/^[ \t]*/)![0].length;
-    const at = lineStart + indent;
-    if (at < limit) {
-      const verdict = probeAt(text, at, done);
-      if (verdict) return verdict;
-    }
-    if (lineEnd === -1) break;
-    lineStart = lineEnd + 1;
-  }
-  if (exact !== -1) return { at: exact, body: exact + ACTIONS_FENCE.length, fenced: true };
-  return null;
-}
-
-function probeAt(text: string, at: number, done: boolean): ActionsFenceScan {
-  const rest = text.slice(at);
-  if (!done && rest.length < 3 && "```".startsWith(rest)) return { at, pending: true };
-  if (rest.startsWith("```")) {
-    const nl = rest.indexOf("\n");
-    if (nl === -1) {
-      if (done) return null;
-      const info = rest.slice(3).trim().toLowerCase();
-      return [...LOOSE_FENCE_INFO, "actions"].some((known) => known.startsWith(info)) ? { at, pending: true } : null;
-    }
-    if (!LOOSE_FENCE_INFO.has(rest.slice(3, nl).trim().toLowerCase())) return null;
-    const body = rest.slice(nl + 1);
-    return probeJson(body, done, at, at + nl + 1, true);
-  }
-  if (rest[0] === "{" || rest[0] === "[") return probeJson(rest, done, at, at, false);
-  return null;
-}
-
-function probeJson(body: string, done: boolean, at: number, bodyAt: number, fenced: boolean): ActionsFenceScan {
-  const json = body.trimStart().slice(0, 400).replace(/\s+/g, " ");
-  if (!json) return done ? null : { at, pending: true };
-  if (json[0] !== "{" && json[0] !== "[") return null;
-  if (FENCE_ACTIONS_PROBE.test(json.replace(/\s+(?=["{[:])/g, ""))) return { at, body: bodyAt, fenced };
-  // Not enough of the JSON yet to tell.
-  return !done && json.length < PROBE_CHARS ? { at, pending: true } : null;
-}
-
-/** Split an answer into the text before the actions block and the block's
-    content; content is null when the answer carries no block. A fence closes
-    at the first ``` outside a JSON string, so a code fence inside an
-    instruction stays in it; bare JSON runs to the answer's end. */
-export function splitActionsFence(text: string): { text: string; content: string | null } {
-  const scan = scanActionsFence(text, true);
-  if (!scan || "pending" in scan) return { text, content: null };
-  const rest = text.slice(scan.body);
-  if (!scan.fenced) return { text: text.slice(0, scan.at).trimEnd(), content: rest.trim() };
-  let close = -1;
-  let inString = false;
-  for (let i = 0; i < rest.length && close === -1; i++) {
-    const c = rest[i];
-    if (inString) {
-      if (c === "\\") i++;
-      else if (c === '"') inString = false;
-    } else if (c === '"') inString = true;
-    else if (rest.startsWith("```", i)) close = i;
-  }
-  // Quotes that never pair up: the last ``` closes.
-  if (close === -1) close = rest.lastIndexOf("```");
-  return {
-    text: text.slice(0, scan.at).trimEnd(),
-    content: (close === -1 ? rest : rest.slice(0, close)).trim(),
-  };
-}
+// The actions block of an answer: found and split in lib/assistant/fence.ts,
+// which the client reads too.
+export { ACTIONS_FENCE, scanActionsFence, splitActionsFence, type ActionsFenceScan } from "@/lib/assistant/fence";
 
 // What may follow a string's closing quote in JSON: the end, a closing
 // bracket, a comma before a value or a bracket, or a colon before a value,
