@@ -405,6 +405,11 @@ function texOf(char: string, families: readonly MathFamily[], variant?: MathVari
 const GREEK_VARIANTS = "ϵϑϰϕϱϖ";
 function foldChar(char: string): string {
   if ([...char].length === 1 && GREEK_VARIANTS.includes(char)) return char;
+  // The increment sign is the capital delta: a font's Unicode map names
+  // its Δ so (mathpazo's PazoMath), and NFKC keeps the two apart (parse
+  // loop finding: a quantum mechanics book's every ∆L, two dozen on its
+  // benched pages, was an unread glyph, and each display with one a crop).
+  if (char === "∆") return "Δ";
   const cp = char.codePointAt(0) ?? 0;
   const greek = ALPHABETS.find(([start, count]) => count === 58 && cp >= start + 52 && cp < start + count);
   if (greek && [...char].length === 1) return GREEK_VARIANTS[cp - greek[0] - 52];
