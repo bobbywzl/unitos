@@ -1,8 +1,8 @@
 {
  "total": {
-  "f1": 0.91,
+  "f1": 0.911,
   "precision": 0.85,
-  "recall": 0.98
+  "recall": 0.982
  },
  "pages": {
   "100noticias.com-millones.html": {
@@ -536,9 +536,9 @@
    "fn": 2
   },
   "wehranlage-horka.de.887.html": {
-   "tp": 1,
+   "tp": 2,
    "fp": 0,
-   "fn": 2
+   "fn": 1
   },
   "womencantalksports.com-top10.html": {
    "tp": 3,
@@ -4406,9 +4406,9 @@
    "fn": 0
   },
   "soundofscience.fr.1927.html": {
-   "tp": 1,
-   "fp": 0,
-   "fn": 2
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
   },
   "spdfraktion.de-Vizepräsidentin.html": {
    "tp": 3,
@@ -4801,9 +4801,9 @@
    "fn": 0
   },
   "weinkenner.de-st.magdalener.html": {
-   "tp": 0,
+   "tp": 3,
    "fp": 1,
-   "fn": 3
+   "fn": 0
   },
   "d90b19386e2b48559082547016cbe5ec.html": {
    "tp": 3,

@@ -79,7 +79,9 @@ if (limit) hashes = hashes.slice(0, limit);
 
 // ── The score (evaluate.py, word 4-gram shingles) ───────────────────────────
 
-const tokenize = (text: string) => text.match(/[\p{L}\p{N}_]+/gu) ?? [];
+// A soft hyphen (U+00AD) is drawn as nothing but at a line's end: "Pa­tien­ten"
+// reads "Patienten", one word, as the reader sees it on the page.
+const tokenize = (text: string) => text.replace(/­/g, "").match(/[\p{L}\p{N}_]+/gu) ?? [];
 function shingles(text: string, n = 4): Map<string, number> {
   const tokens = tokenize(text);
   const out = new Map<string, number>();
