@@ -1,8 +1,8 @@
 {
  "total": {
-  "f1": 0.888,
-  "precision": 0.833,
-  "recall": 0.952
+  "f1": 0.892,
+  "precision": 0.837,
+  "recall": 0.955
  },
  "pages": {
   "100noticias.com-millones.html": {
@@ -492,7 +492,7 @@
   },
   "shingon-reiki.de.schamanismus.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "silvias.net.wahlzensur.html": {
@@ -512,7 +512,7 @@
   },
   "sprechwaisen.com.sw082.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "spreeblick.com.habeck.html": {
@@ -691,9 +691,9 @@
    "fn": 1
   },
   "battery-news.de.ultium-cells.html": {
-   "tp": 0,
+   "tp": 3,
    "fp": 0,
-   "fn": 3
+   "fn": 0
   },
   "beige.de.suedfrankreich.html": {
    "tp": 3,
@@ -707,7 +707,7 @@
   },
   "beyssonmanagement.com.innovation.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "bigdata.ypart.eu.datenerhebung.html": {
@@ -892,7 +892,7 @@
   },
   "denkanstoos.com.2012.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "denkmalpraxismoderne.de.studentendorf.html": {
@@ -1247,7 +1247,7 @@
   },
   "hausinfo.ch-kondenswasser.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 2,
    "fn": 0
   },
   "heavenlynnhealthy.de.mareenburk.html": {
@@ -1287,12 +1287,12 @@
   },
   "industriemagazin.at-Luftfahrtbranche.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "insubordinant.wordpress.com.speed.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "internetchemie.info.Heliumkerne.html": {
@@ -1472,7 +1472,7 @@
   },
   "madame.lefigaro.fr.dintestin.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "majkaswelt.com.fashion.html": {
@@ -1682,7 +1682,7 @@
   },
   "pagesix.com.myers.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "pawszilla.com.celine.html": {
@@ -1941,9 +1941,9 @@
    "fn": 0
   },
   "taz.de.siemens.html": {
-   "tp": 0,
-   "fp": 1,
-   "fn": 3
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
   },
   "tegernseerstimme.de-Klimavorreiter.html": {
    "tp": 3,
@@ -2632,7 +2632,7 @@
   },
   "bmz.de-schulze.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 0,
    "fn": 0
   },
   "bondyblog.fr.paris-8.html": {
@@ -2772,7 +2772,7 @@
   },
   "chip.de.bestcrypt.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "chip.de.beef.html": {
@@ -2947,7 +2947,7 @@
   },
   "die-tagespost.de.Demut.html": {
    "tp": 0,
-   "fp": 2,
+   "fp": 1,
    "fn": 3
   },
   "digitale-exzellenz.de.gesundheitswesen.html": {
@@ -3012,7 +3012,7 @@
   },
   "Winda w chmurach _ Obyczaje _ Dwutygodnik _ Dwutygodnik.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "eawag.ch-elektron.html": {
@@ -3266,9 +3266,9 @@
    "fn": 0
   },
   "freitag.de.morgen.html": {
-   "tp": 0,
+   "tp": 3,
    "fp": 2,
-   "fn": 3
+   "fn": 0
   },
   "furche.at.achtsam.html": {
    "tp": 3,
@@ -4142,7 +4142,7 @@
   },
   "pluralsight.com.python.html": {
    "tp": 2,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "pocketpc.ch.auslieferung.html": {
@@ -4887,7 +4887,7 @@
   },
   "0a12df42d1764095989ab078ee0f940b.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "zfk.de.waermepumpen.html": {
