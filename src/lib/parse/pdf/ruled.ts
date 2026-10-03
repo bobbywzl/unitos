@@ -784,6 +784,9 @@ function tableOfRegion(region: TableRegion, page: number): Segment {
   // against the glyphs and rules the page draws (a failed check keeps the
   // words; synth-notes-tex's table of fractions read "1 36" for 1/36).
   const built: Line[] = [];
+  // Each item a stack of a cell's lines took (stackedFormulas), with the
+  // zone its line gave it.
+  const stacked = new Map<Item, MathZone | undefined>();
   const segment = (rows: TableRow[], headerRows: number, edges: number[], padding?: TableLook["padding"]) => {
     resolveZones(built, region.drawing);
     const look = { size: Math.round(textSize(region.items) * 2) / 2, columns: edges.slice(1).map((x, k) => x - edges[k]), padding };
@@ -917,8 +920,25 @@ function tableOfRegion(region: TableRegion, page: number): Segment {
     built.push(...body);
     fractionCells(body, separators, region.drawing.rules);
     let cellsOf = body.map((line) => cellsBySeparators(line, separators));
-    const starts0 = oneRow(body, cellsOf, region, drawn) ? [0] : ((drawn.length > 0 ? ruledRowStarts(body, cellsOf, [...full, ...pieceEnds(drawn, region.box)]) : null) ?? regionRowStarts(body, cellsOf));
-    const starts = stackedFormulas(body, starts0, separators);
+    // Full rules between the body's lines are the rows' edges too (a
+    // table whose rows are ruled in full and whose columns are not:
+    // langsci 385's Table 6 read a two-line label's second line as a
+    // row).
+    const inner = full.filter((y) => y < body[0].y && y > body[body.length - 1].y);
+    const starts0 =
+      oneRow(body, cellsOf, region, drawn) ? [0] : ((drawn.length > 0 ? ruledRowStarts(body, cellsOf, [...full, ...pieceEnds(drawn, region.box)]) : inner.length > 0 ? ruledRowStarts(body, cellsOf, inner) : null) ?? regionRowStarts(body, cellsOf));
+    const starts = stackedFormulas(body, starts0, separators, stacked);
+    // A stack that fails as one formula reads line by line, each line's
+    // own formula, before the cells are built from the lines (parse loop
+    // finding: the probability cheatsheet's table of distributions sets a
+    // PMF over its support in one cell, and the two read as one formula
+    // of two rows, whose \binom KaTeX sets in display style where the
+    // page sets it in text style: the check failed, and the cell lost
+    // both formulas).
+    if (stacked.size > 0) {
+      resolveZones(built, region.drawing);
+      for (const [it, zone] of stacked) if (it.zone && !it.zone.ok) it.zone = zone;
+    }
     if (starts !== starts0) cellsOf = body.map((line) => cellsBySeparators(line, separators));
     const bodyRows = rowsOf(cellsOf, starts, columnCount);
     spanValues(bodyRows, body, starts, separators, ruledAt);
@@ -959,7 +979,7 @@ function fractionCells(body: Line[], separators: number[], rules: Rule[]) {
 // probability cheatsheet's sampling table, n^k, n!/(n−k)!, and its
 // binomials, read "k n" and a row of a lone "k"). The row starts, a new
 // array when the cells changed.
-function stackedFormulas(body: Line[], starts: number[], separators: number[]): number[] {
+function stackedFormulas(body: Line[], starts: number[], separators: number[], stacked: Map<Item, MathZone | undefined>): number[] {
   const mathOnly = (it: Item) => it.math || !/\p{L}{2,}/u.test(it.str);
   const rowOf = (r: number, list: number[]) => body.slice(list[r], list[r + 1] ?? body.length);
   const merged = starts.filter((k, r) => {
@@ -979,7 +999,10 @@ function stackedFormulas(body: Line[], starts: number[], separators: number[]): 
       const glyphs = items.flatMap((it) => it.glyphs ?? []);
       if (glyphs.length === 0) continue;
       const zone: MathZone = { glyphs, size: Math.max(...items.map((it) => it.size)), latex: "", ok: false, open: false };
-      for (const it of items) it.zone = zone;
+      for (const it of items) {
+        stacked.set(it, it.zone);
+        it.zone = zone;
+      }
       changed = true;
     }
   });
