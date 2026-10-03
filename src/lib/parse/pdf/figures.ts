@@ -998,6 +998,15 @@ export function attachFigureRegions(
     if (drawingIn(drawing, at.y1 - reach, at.y2 + reach, x1, x2, (b) => Math.min(b.x2 - b.x1, b.y2 - b.y1) >= 1.5 && !inGraphic(b))) return undefined;
     const middle = (at.y1 + at.y2) / 2;
     const near = (gap: number) => gap >= -ctx.bodySize && gap <= pageWidth * 0.1;
+    // A wider gap, up to a quarter of the page, with no line of the page
+    // between the graphic and the caption's column at the graphic's rows:
+    // a margin caption beside a figure centered in the text column (parse
+    // loop finding: a Tufte textbook's "Figure 24.1:" stood 97 pt from
+    // its circle, and read as a figure of its own with nothing in it).
+    const clear = (g: Graphic) => {
+      const [a, b] = x1 > g.box.x2 ? [g.box.x2, x1] : [x2, g.box.x1];
+      return !lines.some((l) => l.y >= g.box.y1 && l.y <= g.box.y2 && l.x < b && l.xEnd > a);
+    };
     return graphics.find((g) => {
       if (g.caption.length > 0) return false;
       // Beside the caption's column, level with the graphic; or, where the
@@ -1007,7 +1016,7 @@ export function attachFigureRegions(
       const gap = Math.max(x1 - g.box.x2, g.box.x1 - x2);
       const own = Math.max(at.x1 - g.box.x2, g.box.x1 - at.x2);
       const beside =
-        (near(gap) && middle >= g.box.y1 - rowGap && middle <= g.box.y2 + rowGap) ||
+        ((near(gap) || (gap <= pageWidth * 0.25 && clear(g))) && middle >= g.box.y1 - rowGap && middle <= g.box.y2 + rowGap) ||
         (gap < -ctx.bodySize && near(own) && middle >= g.box.y1 && middle <= g.box.y2);
       if (!beside) return false;
       const others = sideCaptions.get(g);
