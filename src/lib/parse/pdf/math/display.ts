@@ -14,7 +14,7 @@
 
 import type { Glyph, Rule } from "@/lib/parse/pdf/drawing";
 import { CAPTION_RE } from "@/lib/parse/pdf/figures";
-import { isTextMath, isUnreadMath, sameFlags } from "@/lib/parse/pdf/glyphs";
+import { SPACING_ACCENTS, isTextMath, isUnreadMath, sameFlags } from "@/lib/parse/pdf/glyphs";
 import { regionOf, unionBox } from "@/lib/parse/pdf/geometry";
 import { ATTACH_PUNCT_RE, spaceGap } from "@/lib/parse/pdf/lines";
 import { drawnBulletAt } from "@/lib/parse/pdf/lists";
@@ -207,7 +207,26 @@ function kindOf(line: Line, ctx: PageContext, column: { left: number; right: num
     glyphs.every((g) => g.family !== null && (g.family !== "ot1" || small(g) || /^[0-9+=()[\]!/:;.,−-]$/.test(g.unicode)));
   // A limit or a script alone on its line is set small against the body.
   const tiny = glyphs.every((g) => g.size < ctx.bodySize * 0.85);
-  if (few && !label) return zoneChars > 0 && !tiny ? "math" : "fragment";
+  // mathpazo and the Times math sets take a formula's letters and digits
+  // from the text's fonts (isTextMath): a fraction's parts set in them are
+  // a few glyphs too, each cell of the line at most six, when the line
+  // stands in from the column's edge and holds a math glyph or a digit
+  // (parse loop finding: a quantum mechanics book's (25.1) set "2mE" and
+  // "ħk" on the line over "k² = ⋯ and ω = ⋯", the line read as text, and
+  // the display was a crop without its numerators).
+  const fewText =
+    !few &&
+    x > column.left + line.size * 1.5 &&
+    glyphs.length > 0 &&
+    line.cells.every((c) => c.text.replace(/\s/g, "").length <= 6) &&
+    glyphs.some((g) => g.family !== null || /^[0-9]$/.test(g.unicode)) &&
+    glyphs.every(
+      (g) =>
+        (g.family !== null && (g.family !== "ot1" || small(g) || /^[0-9+=()[\]!/:;.,−-]$/.test(g.unicode))) ||
+        isTextMath(g) ||
+        SPACING_ACCENTS[g.unicode] !== undefined,
+    );
+  if ((few || fewText) && !label) return zoneChars > 0 && !tiny ? "math" : "fragment";
   // A line of scripts alone, however long, is a big operator's limits: it
   // joins a display or none (arXiv 2506.06752 p. 8: "p, p′ ∈ P_conn" read
   // as a display).
