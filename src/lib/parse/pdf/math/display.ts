@@ -14,7 +14,7 @@
 
 import type { Glyph, Rule } from "@/lib/parse/pdf/drawing";
 import { CAPTION_RE } from "@/lib/parse/pdf/figures";
-import { isUnreadMath, sameFlags } from "@/lib/parse/pdf/glyphs";
+import { isTextMath, isUnreadMath, sameFlags } from "@/lib/parse/pdf/glyphs";
 import { regionOf, unionBox } from "@/lib/parse/pdf/geometry";
 import { ATTACH_PUNCT_RE, spaceGap } from "@/lib/parse/pdf/lines";
 import { drawnBulletAt } from "@/lib/parse/pdf/lists";
@@ -338,7 +338,11 @@ function attached(frag: Line, near: Line[], rules: Rule[], edge: boolean, braces
   const under = (g: Glyph) =>
     names.some((n) => g.x + g.w / 2 > n.x1 - n.size && g.x + g.w / 2 < n.x2 + n.size && n.y - g.y > n.size * 0.3 && n.y - g.y < n.size * 1.3);
   if (glyphs.length > 0 && glyphs.every((g) => g.unicode.trim() === "" || under(g))) return true;
-  if (edge) return false;
+  // A fragment on the page's first or last line stays out, unless it is
+  // math glyphs alone: a display that opens the page sets its arrow's
+  // label on the page's first line (parse loop finding: Springer's
+  // "∅ → A₁" with k₁/h_A over the arrow, (19), lost its k and was a crop).
+  if (edge && !(glyphs.length > 0 && glyphs.every((g) => g.unicode.trim() === "" || (g.family !== null && g.family !== "ot1") || isTextMath(g)))) return false;
   // The display's width is all its lines': a limit's second row, wider than
   // its first, stands past the first alone (a subarray's rows align left,
   // and the display passed with the second row left out as words).
