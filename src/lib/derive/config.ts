@@ -132,6 +132,22 @@ export const DERIVATION_EFFORT: Record<DerivationType, KimiEffort> = {
 export const VOICE_MODEL = CLAUDE_SONNET_5;
 export const VOICE_EFFORT: Record<"fast" | "deep", ClaudeEffort> = { fast: "low", deep: "high" };
 
+// Save as note (SPEC.md §7): an answer organized into one note, its quotes
+// copied verbatim from the blocks the answer cites. The voice command's
+// reasons hold: Claude Sonnet 5 copies quotes exactly and keeps every point.
+export const ORGANIZE_MODEL = CLAUDE_SONNET_5;
+export const ORGANIZE_EFFORT: ClaudeEffort = "medium";
+export const ORGANIZE_MAX_OUTPUT_TOKENS = 16384;
+
+// The note's assistant (SPEC.md §6): a message about the open note becomes
+// an answer and, when the message asks for a change, the note as it should
+// read. Claude Sonnet 5, for the same reasons: it follows an instruction to
+// the letter and keeps every quote word for word. With the web on, the web
+// feature's model answers, like every assistant surface.
+export const NOTE_ASSISTANT_MODEL = CLAUDE_SONNET_5;
+export const NOTE_ASSISTANT_EFFORT: Record<"fast" | "deep", ClaudeEffort> = { fast: "low", deep: "high" };
+export const NOTE_ASSISTANT_MAX_OUTPUT_TOKENS = 32768;
+
 // VISUALIZE (SPEC.md §20, Unitos Ultra) runs on Claude Opus 5.5 at its highest
 // reasoning effort: the model first judges whether a picture can carry the
 // passage's core idea with certainty, and draws only then. Opus 5.5 leads the
@@ -205,10 +221,21 @@ export const STITCH_MAX_OUTPUT_TOKENS = 32768; // a page of whole-block referenc
 export const STITCH_WHOLE_THRESHOLD = 120_000; // chars of document text; under it the answer pass reads the documents whole
 export const STITCH_SKELETON_BUDGET = 200_000; // chars of skeleton text one select call reads; past it the route pass runs first
 export const STITCH_SELECTED_BUDGET = 200_000; // chars of real block text the answer pass reads
+// Past STITCH_SKELETON_BUDGET the select pass reads every line in groups of
+// this many chars of skeleton, the groups at once, so no line goes unread
+// and no call reads more than a few documents' worth; the route pass runs
+// first only past STITCH_GROUPED_MAX of skeleton (about 300 articles).
+export const STITCH_SKELETON_GROUP = 60_000;
+export const STITCH_GROUPED_MAX = 1_200_000;
+export const STITCH_GROUP_CONCURRENCY = 6;
 // The model passes together get this long; the route's limit (300 s) keeps
 // the rest for storing the answer. Past it the run stops and the reader is
 // told to narrow the command instead of reading a stream that ended empty.
 export const STITCH_DEADLINE_MS = 270_000;
+// The assistant at Project scope (SPEC.md §7, lib/assistant/project-reading.ts):
+// a project with more document text than this is read the way Stitch reads
+// it, through the skeletons, for each message; under it the digest goes whole.
+export const ASSISTANT_WHOLE_THRESHOLD = STITCH_WHOLE_THRESHOLD;
 
 // The skeleton of a document (SPEC.md §22): the document collapsed for
 // Stitch — a gist, one summary per part of the contents, one line per
@@ -260,6 +287,12 @@ export const COLLAPSE_WINDOW_CHARS = 30_000;
 export const SUGGEST_MODEL = CLAUDE_SONNET_5;
 export const SUGGEST_EFFORT: Record<"fast" | "deep", ClaudeEffort> = { fast: "low", deep: "high" };
 export const SUGGEST_MAX_OUTPUT_TOKENS = 32768; // room for the reasoning and the ops
+// The one pass (lib/assistant/one-pass.ts): a scope this long or shorter is
+// read in one call, the whole document as context and the answer by
+// reference; a rewrite of all of it is about 10,000 output tokens. Longer
+// goes by the windows.
+export const ONE_PASS_MAX_CHARS = 40_000;
+export const SUGGEST_CHECK_MAX_OUTPUT_TOKENS = 8192; // the check's reasoning and the ops it drops
 export const SUGGEST_MAX_OPS = 80; // per call: a window's worth; more is a model running away
 export const SUGGEST_WINDOW_CHARS = 8_000; // a window's full rewrite is about 2,500 output tokens: under a minute
 export const SUGGEST_WINDOW_ROWS = 60; // short lines and empty paragraphs take an op each: a window's rows stay under SUGGEST_MAX_OPS

@@ -54,6 +54,8 @@ export type SuggestRequest = {
   command: string;
   instruction: string;
   blockIds?: string[];
+  /** The command moves blocks too: the order pass runs (lib/assistant/reorder.ts). */
+  reorder?: boolean;
   /** The answer, which the command may ask to use. */
   material: string;
   history: ChatTurn[];

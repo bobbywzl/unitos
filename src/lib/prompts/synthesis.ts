@@ -1,7 +1,10 @@
 import { actionLines, TRANSCRIPT_RULE, type DocumentEdits } from "@/lib/assistant/plan";
 import type { Lang } from "@/lib/i18n/config";
 import {
+  ANSWER_LENGTH,
   answerLanguage,
+  CONNECTION_RULE,
+  CORE_RULE,
   GROUNDING_RULE,
   languageName,
   profileLines,
@@ -80,12 +83,15 @@ export function synthesisAskPrompt(params: {
       : "The reader sent the attachments without a question. Say what they contain and how they relate to the material.",
     "",
     "Answer from the material above.",
-    "1. Start with the answer, in one or two sentences. Then the evidence: the passages the answer rests on, each cited as [block <id>] with the exact words quoted, and the notes it rests on as [note <id>]. Then, when the question asks for it, the reasoning that joins them.",
-    "2. A question about a passage, a term, or a claim: first gather the passages across the material that deal with it, from anywhere in the material, then answer from them. A passage that disagrees with the others is named as disagreeing, never dropped.",
+    "1. Start with the answer, in one or two sentences: the core. Then the reasoning that earns it, each step on the passage it rests on, cited as [block <id>]; quote the exact words only where the wording carries the point. Where the material complicates the answer, say so in one sentence.",
+    "2. A question about a passage, a term, or a claim: first gather the passages across the material that deal with it, from anywhere in the material, then answer from them as one answer: passages that make the same point are one point with each cited. A passage that disagrees with the others is named as disagreeing, never dropped.",
     "3. A question the material answers only in part: answer the part it answers, then say in one sentence what it does not answer. Never fill the gap with what is generally known unless the reader asked for that, and then say which sentences come from outside the material.",
+    "3a. Cite with the tags alone: [block <id>] and [note <id>] render as links. Never write an id in your own words (\"note cmuo…\"), and never write a tag where you mean the words: name the note by what it says.",
     "4. A question about counts, spread, or absence (how many, where, does it ever): the material is complete except where a cut is declared, so answer with the count and cite each instance.",
     "5. Fit the answer to the reader context above: explain what the reader is least likely to know, skip what they know, connect to their purpose when the connection is real.",
-    "Use markdown. As few words as the answer needs: under 120 unless the question needs more.",
+    ANSWER_LENGTH,
+    CORE_RULE,
+    CONNECTION_RULE,
     GROUNDING_RULE,
     SPECIFICITY_RULE,
     ...(files.length > 0 || imageCount > 0
@@ -147,9 +153,9 @@ function actLines(act: PageActions): string[] {
     "5a. When one of the reader's tools does the job better than an action (Simplify, Explain, Visualize, Define, Extract, Stitch), name the tool in the answer and say in one sentence what it will do.",
     "6. FIGURE and VIDEO blocks cannot be edited or removed. A TABLE block's words change with edit_block within its cells: the new text is the whole table, a line per row and a tab between cells, and keeps every line and every tab. In a document of handwritten pages a TABLE is the conversion's: there edit_block writes its text anew, the first line its header row, and may add or remove rows and columns, and remove_block removes it. There a PAGE block is its page's picture and keeps its text; a page's words are the blocks listed under Pages: edit_block changes them, and a new block after one of them joins its page. A SLIDE block changes with edit_block: the new text is the whole slide, a line per line of its text; an edit changes words within lines and adds or removes lines of its text boxes and of its speaker notes. A new line opens with the bullet of the lines beside it; every bullet, a table's rows, and the line Speaker notes: stay, and speaker notes a slide lacks come at its end, under the line Speaker notes:. A SHEET block changes with edit_block: the new text is the whole sheet, a line per row and a tab between cells, every row with as many cells as the first; an edit changes words in cells and adds or removes rows or columns, never rows and columns both. A line break in a cell's words stays in its cell. A formula's cell follows the cells it reads: leave its value as it is, and the sheet computes it. What a sheet keeps as it is (its frozen rows and columns, the cells formulas compute, its merged cells, a chart's data) is listed under Sheets. A SLIDE, a SHEET, or any other TABLE block is never removed, and the HEADING before a SHEET is its sheet's name and stays. A document of slides or sheets, or with a VIDEO block, takes no new block, and no block moves in it.",
     act.edits === "suggestions"
-      ? "7. A change to the document's words or styles is one suggest action, whatever its size: the whole document, a section, or a paragraph. The answer is one sentence on what will change; never write the changed text in the answer: the suggestions carry it."
+      ? "7. A change to the document's words, styles, or order is one suggest action, whatever its size: the whole document, a section, or a paragraph. A change of order (group by theme, organize, put in order) sets reorder: true on it; a message that asks for both an order and word changes (organize, then shorten the descriptions) is still one suggest action. The answer is one sentence on what will change; never write the changed text in the answer: the suggestions carry it."
       : act.edits === "blocks"
-        ? "7. A change to the words of more than five blocks (the spelling or grammar across the document, its register, a section rewritten) is one revise action, whatever its size; never more than five edit_block actions. In the answer, say what the actions change and why; for a revise action, one sentence on what will change: the plan card carries the edits."
+        ? "7. A change to the words of more than five blocks (the spelling or grammar across the document, its register, a section rewritten) is one revise action, whatever its size; never more than five edit_block actions. A change of order of more than two blocks (group by theme, organize, put in order) is a revise action with reorder: true, never move_block actions; a message that asks for both an order and word changes is still one revise action. In the answer, say what the actions change and why; for a revise action, one sentence on what will change: the plan card carries the edits."
         : "7. In the answer, say what each action changes and why. The answer stands on its own; the reader reads the actions in the plan card.",
     ...(act.edits === "none"
       ? [

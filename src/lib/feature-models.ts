@@ -21,6 +21,8 @@ import {
   VISION_MODEL,
   VISUALIZE_MODEL,
   VOICE_MODEL,
+  ORGANIZE_MODEL,
+  NOTE_ASSISTANT_MODEL,
   WEB_SEARCH_MODEL,
 } from "@/lib/derive/config";
 import { isGlmModel, resolveModelId } from "@/lib/models";
@@ -51,6 +53,8 @@ export type Feature =
   | "compare"
   | "analyze"
   | "voice"
+  | "organize"
+  | "note-assistant"
   | "suggest"
   | "visualize"
   | "assistant"
@@ -87,6 +91,8 @@ export const FEATURE_DEFAULTS: Record<Feature, string> = {
   compare: DERIVATION_MODEL.COMPARE,
   analyze: DERIVATION_MODEL.ANALYZE,
   voice: VOICE_MODEL,
+  organize: ORGANIZE_MODEL,
+  "note-assistant": NOTE_ASSISTANT_MODEL,
   suggest: SUGGEST_MODEL,
   visualize: VISUALIZE_MODEL,
   assistant: DERIVATION_MODEL.SYNTHESIS,
@@ -115,6 +121,9 @@ export const FEATURE_DEFAULTS: Record<Feature, string> = {
 const FEATURE_FALLBACKS: Partial<Record<Feature, string>> = {
   assistant: GLM_5_3,
   act: GLM_5_3,
+  // Save as note and the note's assistant are assistant surfaces too.
+  organize: GLM_5_3,
+  "note-assistant": GLM_5_3,
 };
 
 /** The order the admin page lists the features in: the reader's tools, the
@@ -131,6 +140,8 @@ export const FEATURE_ORDER: Feature[] = [
   "analyze",
   "visualize",
   "voice",
+  "organize",
+  "note-assistant",
   "suggest",
   "find",
   "ask",

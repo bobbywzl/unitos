@@ -61,6 +61,8 @@ import {
 } from "@/components/icons";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { Markdown } from "@/components/markdown";
+import { SaveAsNote } from "@/components/assistant/save-as-note";
+import { splitActionsFence } from "@/lib/assistant/fence";
 import { RatingButtons } from "@/components/rating-buttons";
 import { LoadingDots, ThinkingIndicator } from "@/components/thinking";
 
@@ -1090,6 +1092,7 @@ export function AssistantPanel({
       command: command.slice(0, 4000),
       instruction: action.instruction,
       blockIds: action.blockIds,
+      reorder: action.reorder,
       material: material.slice(0, 20_000),
       history: history
         .filter((turn) => turn.content.trim())
@@ -1524,7 +1527,9 @@ export function AssistantPanel({
                     {/* Highlighting the answer offers the side chat, the
                         quoted question, and the comment (SPEC.md §7). */}
                     <div {...{ [ANSWER_MARK]: "" }}>
-                      <Markdown>{turn.content}</Markdown>
+                      {/* An older answer may still carry its actions block:
+                          the reader never sees the JSON (SPEC.md §7). */}
+                      <Markdown>{splitActionsFence(turn.content).text}</Markdown>
                     </div>
                     {/* The plan the answer came with: the count, and the way
                         back to the plan card once it was closed. */}
@@ -1558,15 +1563,27 @@ export function AssistantPanel({
                     {/* The rating (SPEC.md §25): the question it answered and
                         the answer, once the answer is whole; the
                         suggestions' row rates a turn that asked for them. */}
-                    {!turn.suggest && !(busy && i === activeTurns.length - 1) && (
-                      <RatingButtons
-                        tool="assistant"
-                        input={activeTurns[i - 1]?.content ?? ""}
-                        output={turn.content}
-                        notebookId={notebookId}
-                        documentId={documentId ?? undefined}
-                        className="mt-2"
-                      />
+                    {!(busy && i === activeTurns.length - 1) && (
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        {!turn.suggest && (
+                          <RatingButtons
+                            tool="assistant"
+                            input={activeTurns[i - 1]?.content ?? ""}
+                            output={turn.content}
+                            notebookId={notebookId}
+                            documentId={documentId ?? undefined}
+                          />
+                        )}
+                        {/* Save as note (SPEC.md §7): the answer organized
+                            into a note of the project, pending. */}
+                        <SaveAsNote
+                          notebookId={notebookId}
+                          documentId={documentId ?? undefined}
+                          question={activeTurns[i - 1]?.content ?? ""}
+                          answer={splitActionsFence(turn.content).text}
+                          className="ml-auto"
+                        />
+                      </div>
                     )}
                   </>
                 ) : (

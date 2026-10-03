@@ -35,7 +35,8 @@ import { takesSuggestions } from "@/lib/docs/suggest-ops";
 import { HEARTBEAT_MS, streamTextTo } from "@/lib/derive/text-stream";
 import { ensureDigest } from "@/lib/digest/ensure";
 import { rankDocumentsForQuestion } from "@/lib/digest/rank";
-import { corpusSystem, documentSystem } from "@/lib/digest/render";
+import { corpusPickedSystem, corpusSystem, documentSystem } from "@/lib/digest/render";
+import { projectPicks } from "@/lib/assistant/project-reading";
 import { checkOutput } from "@/lib/derive/check";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { gatewayHeaders } from "@/lib/gateway";
@@ -159,12 +160,33 @@ async function handle(req: Request, t: TFunc) {
     scopeLabel =
       "this page: the open document in full, and every note, annotation, distillation, extraction, and summary on it";
   } else {
-    // Past the text budget, the documents render in the order the question
-    // needs them (lib/digest/rank.ts), so the cut falls on the rest.
-    const documents = await rankDocumentsForQuestion(digest.parts.documents, question, access.user.id);
-    system = corpusSystem({ ...digest.parts, documents });
-    scopeLabel =
-      "this project: every document in full, and every note, annotation, distillation, extraction, and summary in it";
+    // Past the whole threshold, the message reads the blocks it needs, found
+    // from the documents' skeletons (lib/assistant/project-reading.ts).
+    const picks = await projectPicks({
+      notebookId: data.notebookId,
+      documents: digest.parts.documents,
+      question,
+      history: data.history ?? [],
+      profile,
+      userId: access.user.id,
+      signal: req.signal,
+    }).catch((err: unknown) => {
+      // A reading that fails reads the project whole, as before.
+      console.warn("[assistant] project reading failed, reading the digest whole:", err);
+      return null;
+    });
+    if (picks) {
+      system = corpusPickedSystem(digest.parts, picks);
+      scopeLabel =
+        "this project: each document's gist and the blocks picked for this message, and every note, annotation, distillation, extraction, and summary in it";
+    } else {
+      // Past the text budget, the documents render in the order the question
+      // needs them (lib/digest/rank.ts), so the cut falls on the rest.
+      const documents = await rankDocumentsForQuestion(digest.parts.documents, question, access.user.id);
+      system = corpusSystem({ ...digest.parts, documents });
+      scopeLabel =
+        "this project: every document in full, and every note, annotation, distillation, extraction, and summary in it";
+    }
   }
 
   const lang = await currentLang();
@@ -385,6 +407,8 @@ async function handle(req: Request, t: TFunc) {
         transcript: act!.transcript,
         attachedIds: new Set(act!.attachedDocs.map((d) => d.id)),
         sectionIds: new Set(act!.sections.map((s) => s.id)),
+        // A web search's pages are not kept: with the web on, new words go unchecked.
+        sources: data.web ? undefined : [question, ...files.map((f) => f.text ?? ""), ...(data.history ?? []).map((turn) => turn.content)],
         t,
       };
       const plan = enrichActions(raw, ctx);
@@ -409,6 +433,7 @@ async function handle(req: Request, t: TFunc) {
             .slice(-20)
             .map((turn) => ({ role: turn.role, content: turn.content.slice(0, 8000) })),
           blockIds: revise.blockIds,
+          reorder: revise.reorder,
           caretBlockId: data.caretBlockId ?? null,
           thinking: data.thinking ?? "deep",
           signal: AbortSignal.any([req.signal, deadline]),
@@ -435,8 +460,10 @@ async function handle(req: Request, t: TFunc) {
             cancelled = true;
           }
         };
-        // This page scope: the answer streams up to the actions block; the
-        // block and what follows stay on the server. Text that could still
+        // The answer streams up to the actions block; the block and what
+        // follows stay on the server. This page scope reads it as the plan;
+        // Project scope proposes nothing, so a block written there anyway is
+        // dropped: the reader never sees the JSON. Text that could still
         // become the block (a fence whose JSON is not read yet) waits for
         // the next chunk (scanActionsFence).
         let relayed = "";
@@ -459,18 +486,18 @@ async function handle(req: Request, t: TFunc) {
           sent = Math.max(sent, end);
         };
         try {
-          const full = await streamTextTo(result, act ? relay : send, {
+          const full = await streamTextTo(result, relay, {
             t,
             onPart: (part) => {
               if (part.type === "tool-call" && part.toolName === WEB_SEARCH_TOOL) searches++;
             },
           });
-          const { text, content } = act ? splitActionsFence(full) : { text: full, content: null };
-          if (act) {
-            // The text before the fence, whole: the relay held back what
-            // could have been the fence's start.
-            flush();
-            if (content !== null) send(`${STREAM_PLAN_TOKEN}${JSON.stringify(await planFrom(text, content, send))}`);
+          const { text, content } = splitActionsFence(full);
+          // The text before the fence, whole: the relay held back what could
+          // have been the fence's start.
+          flush();
+          if (act && content !== null) {
+            send(`${STREAM_PLAN_TOKEN}${JSON.stringify(await planFrom(text, content, send))}`);
           }
           // The check (SPEC.md §25): the answer against its rubric, after
           // the reader has it; a weak answer is flagged for the loop.
