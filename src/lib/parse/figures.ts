@@ -146,6 +146,19 @@ export function isContentImage(img: Element): boolean {
   return true;
 }
 
+// A link to a writer's page: "/autoren/kathrin-hofmeister", "/author/jane".
+export const AUTHOR_PAGE_RX = /\/(?:authors?|autor(?:en|in)?|auteurs?|autore)\//i;
+
+/** The writer's picture: an image inside a link to the writer's page, its
+    alt the link's words (the writer's name). */
+function isAuthorPicture(media: Element): boolean {
+  if (media.tagName.toLowerCase() !== "img") return false;
+  const link = media.closest("a[href]");
+  if (!link || !AUTHOR_PAGE_RX.test(link.getAttribute("href") ?? "")) return false;
+  const alt = normalizeText(media.getAttribute("alt") ?? "");
+  return alt !== "" && alt === normalizeText(link.textContent ?? "");
+}
+
 function isMedia(el: Element): boolean {
   return /^(img|video|iframe|svg)$/i.test(el.tagName);
 }
@@ -583,6 +596,10 @@ export function svgBlock(svg: Element, ctx?: WalkCtx): ParsedBlock | null {
     (text in a box that holds the media) are neither and count as neither. */
 export function tryCompositeFigure(el: Element, ctx: WalkCtx): boolean {
   if (!hasMeaningfulMedia(el)) return false;
+  // The writer's picture is no figure's media: a paragraph beside it is the
+  // article's, never its caption (held-out set finding: an author's picture
+  // and the dek beside it read as one figure, the dek its caption).
+  if (meaningfulMediaIn(el).every(isAuthorPicture)) return false;
   if (el.querySelector("h1, h2, h3, h4, h5, h6, ul, ol, table, pre, x-math, blockquote")) return false;
   const paragraphs = captionCandidates(el).filter((p) => captionText(p).length > 0 && !isFigureWords(p, el));
   const labeled = paragraphs.filter(isLabeledCaption);
