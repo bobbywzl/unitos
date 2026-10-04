@@ -1,8 +1,8 @@
 {
  "total": {
-  "f1": 0.921,
+  "f1": 0.922,
   "precision": 0.864,
-  "recall": 0.986
+  "recall": 0.988
  },
  "pages": {
   "100noticias.com-millones.html": {
@@ -1006,9 +1006,9 @@
    "fn": 0
   },
   "emacspeak.blogspot.com.meta.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "blog.wordpress.com.diverse.html": {
    "tp": 3,
@@ -1446,9 +1446,9 @@
    "fn": 0
   },
   "link.springer.com.1007.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "literaturgefluester.wordpress.com.jahr.html": {
    "tp": 3,
@@ -2036,9 +2036,9 @@
    "fn": 0
   },
   "ukbdnews.com.23646.html": {
-   "tp": 0,
-   "fp": 1,
-   "fn": 2
+   "tp": 2,
+   "fp": 2,
+   "fn": 0
   },
   "ultimasnoticias.com.ve-ucraina.html": {
    "tp": 3,
@@ -2166,9 +2166,9 @@
    "fn": 0
   },
   "archive.org.steinzeitwissen.de.werkzeuge.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "archive.org.rent-a-pastor.com.hochzeitslokation.html": {
    "tp": 3,
@@ -2356,9 +2356,9 @@
    "fn": 0
   },
   "adac.de.kindersitze.html": {
-   "tp": 4,
+   "tp": 5,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "advents-shopping.de.weihnachtsmaerkte.html": {
    "tp": 3,
