@@ -369,6 +369,14 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     // table's cells (its prose read as tables, a quotation as rows).
     const ocr = scanned;
     if (ocr) fitOcrItems(items, drawing.glyphs);
+    // A scan's lone mark set three times the size of its words is a stroke
+    // of a drawing the OCR read as a character: NACA Report 515 p. 10 reads
+    // a contour plot's curve as a 30 pt "(" between two columns, and its
+    // size made the captions under the plots one row across the gutter.
+    if (ocr) {
+      const size = median(items.filter((i) => /\p{L}{2}/u.test(i.str)).map((i) => i.size));
+      for (let k = items.length - 1; k >= 0; k--) if (/^[^\p{L}\p{N}]$/u.test(items[k].str.trim()) && items[k].size >= size * 3) items.splice(k, 1);
+    }
     // From here on a position is taken from the page box's corner, as the
     // figure route renders the page: a region is a share of the page box.
     // The MIC white paper's box starts at (36.85, 36.85); read in the PDF's
