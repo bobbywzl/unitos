@@ -844,6 +844,19 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
   // amino acid i" over "total # of codons" = n_i/N, read their parts as
   // text lines, and both displays were crops).
   const hbars = ctx.drawing.rules.filter((r) => r.dir === "h");
+  // So is a big operator's lower script on that row, set small right of
+  // the operator at its foot ("allowed" of ∫_allowed): the row reads as
+  // the display's, its word and all (parse loop finding: a quantum
+  // mechanics book's (24.20a), P(R/2 ≤ r ≤ R, 0 ≤ θ ≤ π/2) = ∫_allowed …,
+  // read "2  2  allowed" as text, its numerators joined it as an inline
+  // row, and the display, its fractions lost, was a crop).
+  const bigOps = ctx.drawing.glyphs.flatMap((g) => {
+    const box = hangingGlyph(g);
+    return box?.display && box.top - box.bottom > ctx.bodySize * 1.5 ? [{ x1: g.x, x2: g.x + g.w, size: g.size, ...box }] : [];
+  });
+  const footScript = (g: Glyph, l: Line) =>
+    g.size < l.size * 0.85 &&
+    bigOps.some((o) => g.x >= o.x2 - o.size * 0.3 && g.x - o.x2 < o.size * 0.5 && g.y < o.bottom + o.size * 0.5 && g.y > o.bottom - o.size * 0.6);
   const beside = (r: Rule) =>
     input.some((m, k) => kinds0[k] === "math" && Math.abs(m.y - r.y1) < m.size && m.x < r.x2 + m.size * 1.5 && m.xEnd > r.x1 - m.size * 1.5);
   for (let n = 0; n < input.length; n++) {
@@ -866,11 +879,18 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
         input.some((o) => o !== l && o.y > r.y1 !== l.y > r.y1 && Math.abs(o.y - r.y1) < o.size * 1.2 && o.x < r.x2 && o.xEnd > r.x1),
     );
     const holds = new Map<Rule, Glyph[]>();
+    // An operator's script runs on as one word: each of its glyphs after
+    // the first starts within a script's space of the last.
+    const scripts = new Set<Glyph>();
+    for (const g of [...ink].sort((a, b) => a.x - b.x)) {
+      const last = [...scripts].pop();
+      if (footScript(g, l) || (last && g.size < l.size * 0.85 && Math.abs(g.y - last.y) < g.size * 0.1 && g.x - (last.x + last.w) < g.size * 0.3)) scripts.add(g);
+    }
     const barred =
       ink.every((g) => {
         const r = near.find((r) => r.x1 <= g.x + l.size * 0.2 && r.x2 >= g.x + g.w - l.size * 0.2);
         if (r) holds.set(r, [...(holds.get(r) ?? []), g]);
-        return r !== undefined || /^[=+−<>≤≥]$/.test(g.unicode);
+        return r !== undefined || /^[=+−<>≤≥]$/.test(g.unicode) || scripts.has(g);
       }) &&
       holds.size > 0 &&
       [...holds].every(
@@ -1175,6 +1195,21 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
           );
           if (!script && !fencedNext && !arrows && (!rules.some((r) => bar(r) && r.y1 < f.y && r.y1 > next.y) || rules.some((r) => bar(r) && r.y1 > f.y))) break;
           band.pop();
+        }
+        // A chain's unlabeled rows under a labeled row go with the label
+        // that ends the chain: when the next labeled row opens with a
+        // relation, so do the band's rows that open with one after its
+        // own label, with the fraction parts nearer them than the row
+        // over them (amsmath sets the tag of rows 2 and 3 on row 3).
+        const labeledAt = band.findIndex((l) => kinds[lines.indexOf(l)] === "label" || unlabeled(l).label !== null);
+        if (labeledAt >= 0 && kinds[j] === "math" && CONTINUES_RE.test(unlabeled(next).text.trim())) {
+          const row = band.findIndex((l, i) => i > labeledAt && kinds[lines.indexOf(l)] === "math" && l.size >= band[labeledAt].size * 0.9 && CONTINUES_RE.test(l.text.trim()));
+          if (row > labeledAt) {
+            let cut = row;
+            const over = (i: number) => band.slice(labeledAt, i).filter((l) => kinds[lines.indexOf(l)] !== "fragment").pop() ?? band[labeledAt];
+            while (cut - 1 > labeledAt && kinds[lines.indexOf(band[cut - 1])] === "fragment" && band[cut - 1].y - band[row].y < over(cut - 1).y - band[cut - 1].y) cut--;
+            band.splice(cut);
+          }
         }
         break;
       }
