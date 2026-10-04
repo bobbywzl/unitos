@@ -4591,7 +4591,7 @@ export function ReaderInteractions({
   // toolbox goes above the words when the room above holds it, so the words
   // stay where the reader is looking; only with room on neither side does
   // the pane scroll by the overflow, and the selection ride up with it.
-  useLayoutEffect(() => {
+  const fitToolbox = () => {
     if (!popover) return;
     const container = containerRef.current;
     const el = container?.querySelector<HTMLElement>("[data-layer-toolbar]");
@@ -4630,10 +4630,24 @@ export function ReaderInteractions({
     }
     const floor = container.scrollTop + 8;
     setPopover((p) => (p === popover ? { ...p, yTop: Math.max(floor, p.yTop - overflow) } : p));
-    // A field that opens (the assistant's box, Comment, Define) grows the
-    // stack: it is measured again, so the box stays inside the pane.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  };
+  const fitToolboxRef = useRef(fitToolbox);
+  fitToolboxRef.current = fitToolbox;
+  useLayoutEffect(() => {
+    fitToolboxRef.current();
   }, [popoverAnchorKey, submenu, definition?.text]);
+  // A field that opens (the assistant's box, Comment, Define) grows the
+  // stack as it unfolds, and a line in it (a sent question, an error) grows
+  // it again: each growth is measured, so the box stays inside the pane.
+  useEffect(() => {
+    if (!popoverAnchorKey) return;
+    const el = containerRef.current?.querySelector<HTMLElement>("[data-layer-toolbar]");
+    if (!el) return;
+    const observer = new ResizeObserver(() => fitToolboxRef.current());
+    observer.observe(el);
+    for (const child of el.children) observer.observe(child);
+    return () => observer.disconnect();
+  }, [popoverAnchorKey]);
 
   // A definition on its way stops when its popover closes or moves to
   // another selection: nobody is left to read it.
