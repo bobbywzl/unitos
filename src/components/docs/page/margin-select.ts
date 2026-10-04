@@ -151,7 +151,10 @@ export function followMarginDrag(editor: Editor, anchor: number, start: MouseEve
     nearest the pointer, and the pane scrolls near its edges by the rules
     above. A press on selected words (a drag moves them), on an object, or
     a double or triple click's drag (by words, by paragraphs) stays the
-    browser's. */
+    browser's. The browser starts moving words when the press point lies in
+    the selection at the drag's first move, and the selection grown here
+    always holds it: that move is cancelled before the page sees it, so a
+    drag that selects never moves words. */
 export function followTextDrag(editor: Editor, start: MouseEvent) {
   const pane = scrollParent(editor.view.dom);
   if (!pane || pane.scrollHeight <= pane.clientHeight || start.detail > 1) return;
@@ -191,10 +194,14 @@ export function followTextDrag(editor: Editor, start: MouseEvent) {
     select();
     edge.move(x, y);
   };
+  const onDragStart = (e: DragEvent) => {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  };
   const onUp = () => {
     window.removeEventListener("mousemove", onMove, true);
     window.removeEventListener("mouseup", onUp, true);
-    window.removeEventListener("dragstart", onUp, true);
+    window.removeEventListener("dragstart", onDragStart, true);
     edge.stop();
     if (dragging) {
       pane.removeAttribute("data-edge-drag");
@@ -204,5 +211,5 @@ export function followTextDrag(editor: Editor, start: MouseEvent) {
   window.addEventListener("mousemove", onMove, true);
   // Capture: the selection is whole before the reader's mouseup reads it.
   window.addEventListener("mouseup", onUp, true);
-  window.addEventListener("dragstart", onUp, true);
+  window.addEventListener("dragstart", onDragStart, true);
 }
