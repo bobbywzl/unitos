@@ -1,7 +1,7 @@
 "use client";
 
 import type { Editor } from "@tiptap/core";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { useT } from "@/components/lang-provider";
 import { PAGE_EVENT, pageStore, usePageState } from "@/components/docs/page/store";
 import type { PageSetup } from "@/lib/docs/schema";
@@ -83,9 +83,12 @@ export function ReflowBar({
   const pill = "rounded-full bg-clay px-3 py-1 text-[11.5px] font-semibold text-clay-fg hover:bg-clay-600";
   const quiet = "rounded-full px-2.5 py-1 text-[11.5px] font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800";
   const bar = "mb-3 flex flex-wrap items-center gap-2 rounded-2xl bg-card px-3.5 py-2 text-[12.5px] text-sand-700 shadow-soft print:hidden";
+  const shown = reflowed || (choice === null && scale < OFFER_BELOW);
+  const ref = useRef<HTMLDivElement>(null);
+  const clear = useClearOfOutline(ref, shown, scale);
   if (reflowed) {
     return (
-      <div data-reflow-bar data-edit-control className={bar}>
+      <div ref={ref} data-reflow-bar data-edit-control className={bar} style={clear}>
         <span>{t("docsPage.reflowOn")}</span>
         <button type="button" data-track="docs:show-pages" onClick={() => onChoose("pages")} className={quiet}>
           {t("docsPage.showPages")}
@@ -95,7 +98,7 @@ export function ReflowBar({
   }
   if (choice !== null || scale >= OFFER_BELOW) return null;
   return (
-    <div data-reflow-bar data-edit-control className={bar}>
+    <div ref={ref} data-reflow-bar data-edit-control className={bar} style={clear}>
       <span>{t("docsPage.reflowAsk", { n: Math.round(scale * 100) })}</span>
       <button type="button" data-track="docs:read-pageless" onClick={() => onChoose("pageless")} className={pill}>
         {t("docsPage.readPageless")}
@@ -105,4 +108,37 @@ export function ReflowBar({
       </button>
     </div>
   );
+}
+
+/** The bar's words start right of Show tabs & outlines (outline.tsx) when
+    the button stands over the bar's left end: on a narrow pane the page,
+    and the bar with it, reach the canvas's edge, where the button is. */
+function useClearOfOutline(ref: RefObject<HTMLDivElement | null>, shown: boolean, scale: number) {
+  const [pad, setPad] = useState(0);
+  useLayoutEffect(() => {
+    const bar = ref.current;
+    if (!shown || !bar) return;
+    const measure = () => {
+      const button = bar.closest("[data-docs-editor]")?.querySelector<HTMLElement>(".docs-outline-open");
+      if (!button) return setPad(0);
+      const b = button.getBoundingClientRect();
+      const r = bar.getBoundingClientRect();
+      // The room the button takes from the bar's left end, and a gap.
+      setPad(b.right > r.left && b.left < r.right ? Math.ceil(b.right - r.left) + 8 : 0);
+    };
+    measure();
+    // The button moves with the page (the cards move the page left).
+    const button = bar.closest("[data-docs-editor]")?.querySelector(".docs-outline-open");
+    const moved = new MutationObserver(measure);
+    if (button) moved.observe(button, { attributes: true, attributeFilter: ["style"] });
+    const resized = new ResizeObserver(measure);
+    resized.observe(bar);
+    window.addEventListener("resize", measure);
+    return () => {
+      moved.disconnect();
+      resized.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [ref, shown, scale]);
+  return pad > 0 ? { paddingLeft: pad } : undefined;
 }
