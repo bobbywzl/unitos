@@ -18,6 +18,7 @@ import { SelectionBar } from "@/components/outline/selection-bar";
 import { useNoteCompose } from "@/components/outline/use-note-compose";
 import { VoiceNoteButton } from "@/components/outline/voice-note";
 import { findSection, type OutlineActions } from "@/components/outline/use-outline";
+import { shownSectionTitle } from "@/lib/section-title";
 
 // A section's board (SPEC.md §6): the section's notes filling the screen as
 // tiles side by side, one grid, opened from the notes full page by a click on
@@ -189,11 +190,11 @@ export function SectionBoard({
             data-tip={t("outline.openBoardTitle")}
             className={chip}
           >
-            {parent.title}
+            {shownSectionTitle(parent.title, t)}
             <span className="text-sand-400">/</span>
           </button>
         )}
-        <span className="font-display text-[22px]">{section.title}</span>
+        <span className="font-display text-[22px]">{shownSectionTitle(section.title, t)}</span>
         <span className="text-[13px] text-sand-600">{notes.length || ""}</span>
         {section.children.length > 0 && (
           <span className="flex flex-wrap items-center gap-1.5">
@@ -208,7 +209,7 @@ export function SectionBoard({
                 data-tip={t("outline.openBoardTitle")}
                 className={chip}
               >
-                {child.title}
+                {shownSectionTitle(child.title, t)}
                 <span className="text-sand-500">{child.notes.length || ""}</span>
               </button>
             ))}

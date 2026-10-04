@@ -14,6 +14,7 @@ import { SECTION_ACTION, SECTION_ADD_NOTE } from "@/components/outline/section-a
 import { useNoteCompose } from "@/components/outline/use-note-compose";
 import { VoiceNoteButton } from "@/components/outline/voice-note";
 import { filterSections, noteMatches, type OutlineActions } from "@/components/outline/use-outline";
+import { shownSectionTitle } from "@/lib/section-title";
 
 export function SectionItem({
   section,
@@ -106,7 +107,7 @@ export function SectionItem({
               className={`text-left font-display hover:text-clay-800 ${nested ? "text-lg" : "text-[22px]"}`}
               data-tip={t("outline.openBoardTitle")}
             >
-              {section.title}
+              {shownSectionTitle(section.title, t)}
             </button>
             {canEdit && (
               <button

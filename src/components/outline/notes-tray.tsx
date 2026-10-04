@@ -25,6 +25,7 @@ import { VoiceNoteButton } from "@/components/outline/voice-note";
 import { Collapse } from "@/components/presence";
 import { SelectionBar } from "@/components/outline/selection-bar";
 import { NoteGroups, NotesOrganize, useNoteGrouping, type NoteScope } from "@/components/outline/note-groups";
+import { shownSectionTitle } from "@/lib/section-title";
 import {
   filterSections,
   findSection,
@@ -415,7 +416,7 @@ function TraySection({
           <span className="self-center text-sand-400">
             {collapsed ? <ChevronRightIcon size={11} /> : <ChevronDownIcon size={11} />}
           </span>
-          {section.title}
+          {shownSectionTitle(section.title, t)}
         </button>
         {accepted.length > 0 && <span className="text-[11px] text-sand-500">{accepted.length}</span>}
         {/* The section's actions stay visible (SPEC.md §6): a pill each, the
@@ -443,7 +444,7 @@ function TraySection({
       {/* A quote or an annotation over the section says where its note lands. */}
       {lit && (
         <p aria-live="polite" className={`text-[11.5px] font-semibold text-clay-700 ${litTop ? "" : "order-last"}`}>
-          {t(litTop ? "outline.dropQuoteSectionTop" : "outline.dropQuoteSectionEnd", { section: section.title })}
+          {t(litTop ? "outline.dropQuoteSectionTop" : "outline.dropQuoteSectionEnd", { section: shownSectionTitle(section.title, t) })}
         </p>
       )}
 
