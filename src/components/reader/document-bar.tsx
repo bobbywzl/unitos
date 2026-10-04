@@ -302,10 +302,10 @@ export function DocumentBar({
   const [opening, startOpening] = useTransition();
 
   // A press on the pill opens the list and a second press closes it. A
-  // pointer that rests on the pill opens it too, after a beat (LIST_HOVER_MS),
-  // so a pointer passing over on its way to + opens nothing. Hover keeps the
-  // list open across the gap between pill and list; leaving both closes it
-  // after a grace period.
+  // pointer that rests on the pill opens it too, once it has stood still for
+  // a beat (LIST_HOVER_MS), so a pointer passing over on its way to + opens
+  // nothing. Hover keeps the list open across the gap between pill and list;
+  // leaving both closes it after a grace period.
   const listOpenTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // When a hover opened the list: a press that lands right after is the same
   // intent to open, not a second press that closes.
@@ -325,7 +325,10 @@ export function DocumentBar({
       clearTimeout(listCloseTimer.current);
       listCloseTimer.current = null;
     }
-    if (listOpen || listOpenTimer.current) return;
+    if (listOpen) return;
+    // The pointer still moves: the beat starts over, so the list opens only
+    // where the pointer comes to rest.
+    if (listOpenTimer.current) clearTimeout(listOpenTimer.current);
     listOpenTimer.current = setTimeout(() => {
       listOpenTimer.current = null;
       hoverOpenedAt.current = Date.now();
@@ -1293,6 +1296,7 @@ export function DocumentBar({
           ref={listRef}
           className="relative min-w-0"
           onMouseEnter={hoverList}
+          onMouseMove={listOpen ? undefined : hoverList}
           onMouseLeave={scheduleCloseList}
         >
           <button
