@@ -128,7 +128,8 @@ const SIGNATURE_RE = /^\s*[—–―]/;
 // carries no parenthesis or period and stays one (partHeading). On a scan's
 // text layer a word has two letters: its page numbers and specks read "4O4",
 // "I !", "N H".
-const PANEL_LETTERS_RE = /^(?:\s*(?:\(\p{L}\)|\p{L}[.)]))+\s*$/u;
+// Panel letters stand apart: "H.V.", letters set close, are initials.
+const PANEL_LETTERS_RE = /^\s*(?:\(\p{L}\)|\p{L}[.)])(?:\s+(?:\(\p{L}\)|\p{L}[.)]))*\s*$/u;
 function wordless(text: string): boolean {
   return PANEL_LETTERS_RE.test(text) || !/\p{L}/u.test(text);
 }
@@ -680,7 +681,13 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
     l.y - n.y > 0 &&
     l.y - n.y <= l.size * ctx.leading * 1.3;
   const title = titleLike(line) || (colonOn(line, lines[i + 1]) && isCentered(lines, i, ctx) && isCentered(lines, i + 1, ctx));
-  if (!title && !labelled) return null;
+  // A short label in bold capitals closed by a period, alone on its line,
+  // heads the paragraph under it as a title does: a Frontiers case report
+  // sets each case's initials, "H.V." and "G.A.", in bold italic over it,
+  // and they read as paragraphs (parse loop finding).
+  const capsLabel =
+    styledShare(line) > 0.9 && endsStyled(line) && capsShare(text) >= 0.9 && /^\p{L}[\p{L}.\s]{1,10}\.$/u.test(text) && !CAPTION_RE.test(text);
+  if (!title && !labelled && !capsLabel) return null;
   // A contents entry ends in leader dots and a page number; a title may end
   // in a number of its own ("Risk-neutral pricing 1").
   if (/(?:\s*\.){3,}\s*\d{1,4}\s*$/.test(text)) return null;
@@ -743,7 +750,7 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
   // under it is regular type at its size.
   const edge = lineColumn(last)?.[1];
   const flushBelow =
-    title &&
+    (title || capsLabel) &&
     run.length === 1 &&
     bodyBelow &&
     Math.abs(below.x - last.x) <= last.size * 0.5 &&
@@ -756,7 +763,7 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
   // paragraph flush with it, is a subhead: a Frontiers article sets "CASE
   // REPORTS" and "PROCEDURES" in 8.5 pt bold capitals over its 9.5 pt body,
   // and they read as paragraphs (parse loop finding).
-  const capsOver = title && run.length === 1 && capsShare(text) >= 0.9 && bodyBelow && Math.abs(below.x - last.x) <= last.size * 0.5;
+  const capsOver = (title || capsLabel) && run.length === 1 && capsShare(text) >= 0.9 && bodyBelow && Math.abs(below.x - last.x) <= last.size * 0.5;
   if (small && !(headingAbove && bodyBelow) && !(gapAbove && (headingBelow || opensBelow || capsOver))) return null;
   // A centered title set apart above needs no gap under it: a statement's
   // title sits 12.8 pt over its units line ("CONDENSED CONSOLIDATED
