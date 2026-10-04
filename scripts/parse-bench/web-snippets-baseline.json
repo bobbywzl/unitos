@@ -2566,9 +2566,9 @@
    "fn": 0
   },
   "bfs.de-radon.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "biathlon-antholz.it-jubeln.html": {
    "tp": 3,
