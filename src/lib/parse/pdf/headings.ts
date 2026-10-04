@@ -778,7 +778,12 @@ function italicHeading(lines: Line[], i: number, ctx: PageContext): Step | null 
   const above = lines[i - 1];
   const below = lines[i + 1];
   if (!above || !below || !apartAbove(above, line, ctx) || !apartBelow(line, below, ctx)) return null;
-  if (Math.abs(below.x - line.x) > line.size * 2 || textShare(below, (item) => item.italic) > 0.5 || below.size < line.size * 0.9) return null;
+  // A centered label over a centered title lines up with it by their
+  // middles (parse loop finding: the Official Journal's "Article 6" over
+  // "Classification rules for high-risk AI systems" read as a paragraph,
+  // where "Article 1" over the shorter "Subject matter" read as a heading).
+  const middles = (isCentered(lines, i, ctx) || symmetric(line)) && (isCentered(lines, i + 1, ctx) || symmetric(below)) && Math.abs(below.x + below.xEnd - line.x - line.xEnd) <= line.size * 2;
+  if ((Math.abs(below.x - line.x) > line.size * 2 && !middles) || textShare(below, (item) => item.italic) > 0.5 || below.size < line.size * 0.9) return null;
   return { segments: [headingOf([line], text, line.runs)], next: i + 1 };
 }
 
