@@ -210,6 +210,22 @@ function segmentsOf(anchor: Anchor): Segment[] {
   return anchor.segments && anchor.segments.length > 0 ? anchor.segments : [anchor];
 }
 
+/** Two selections over the same words: every block's span alike. */
+function sameAnchor(a: Anchor, b: Anchor): boolean {
+  const x = segmentsOf(a);
+  const y = segmentsOf(b);
+  return (
+    x.length === y.length &&
+    x.every(
+      (s, i) =>
+        s.blockId === y[i].blockId &&
+        s.startOffset === y[i].startOffset &&
+        s.endOffset === y[i].endOffset &&
+        s.layer === y[i].layer,
+    )
+  );
+}
+
 /** The element that draws a block's words: a core key's core (SPEC.md §28),
     else the block's whole text. Null when those words are not drawn. */
 function drawnBlock(container: HTMLElement, blockId: string): HTMLElement | null {
@@ -2981,6 +2997,12 @@ export function ReaderInteractions({
       selectionTimer = setTimeout(() => {
         const captured = captureSelection();
         if (!captured) return;
+        // The same words again (the tint repaints and puts the selection
+        // back over its marks): the open toolbox stays as it stands, with
+        // the place fitToolbox gave it, above the words when the room under
+        // them ran past the bottom bar.
+        const open = popoverRef.current;
+        if (open && !open.term && !open.figure && sameAnchor(open.anchor, captured.anchor)) return;
         setPopover(captured);
         setSubmenu(null);
         yieldToSelection();
