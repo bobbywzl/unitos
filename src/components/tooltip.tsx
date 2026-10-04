@@ -15,7 +15,10 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 // sideways. It hides on press, scroll, resize, and Escape, and never shows on
 // touch. Moving from one control to the next while a bubble shows switches
 // at once, so sweeping along a toolbar reads as one tooltip following the
-// pointer.
+// pointer. A control that comes up under a pointer that has not moved (a
+// card that opens where the toolbar was, Run turning into Stop) shows no
+// tip until the pointer moves on it: the reader did not point at it, and its
+// tip would cover the answer that just opened.
 
 const SHOW_DELAY_MS = 260;
 // Leaving one control and entering the next within this window skips the
@@ -66,6 +69,10 @@ export function TooltipLayer() {
     };
     const tipTarget = (node: EventTarget | null): Element | null =>
       node instanceof Element ? node.closest("[data-tip]") : null;
+    // Where the pointer last moved to, and the control that came up under
+    // it while it stood still: that control's tip waits for a move.
+    let lastMove: { x: number; y: number } | null = null;
+    let stillOver: Element | null = null;
 
     const onPointerOver = (e: PointerEvent) => {
       if (e.pointerType === "touch" || e.buttons !== 0) return;
@@ -73,6 +80,17 @@ export function TooltipLayer() {
       const current = tipRef.current?.target ?? null;
       if (!target) return hide();
       if (target === current) return;
+      // The browser sends pointerover before the move that caused it, so a
+      // pointer that moved onto the control is somewhere new; one that stood
+      // still while the page changed under it is where it last moved to.
+      if (lastMove && e.clientX === lastMove.x && e.clientY === lastMove.y) {
+        stillOver = target;
+        return hide();
+      }
+      stillOver = null;
+      overTarget(target, current);
+    };
+    const overTarget = (target: Element, current: Element | null) => {
       const docs = isDocsTarget(target);
       if (current || performance.now() - hiddenAtRef.current < WARM_MS) {
         if (!docs) return show(target);
@@ -89,8 +107,18 @@ export function TooltipLayer() {
     };
     // The control can leave the page while hovered (a popover closing under
     // the pointer); the next move notices.
-    const onPointerMove = () => {
+    const onPointerMove = (e: PointerEvent) => {
+      const moved = !lastMove || e.clientX !== lastMove.x || e.clientY !== lastMove.y;
+      lastMove = { x: e.clientX, y: e.clientY };
       if (tipRef.current && !tipRef.current.target.isConnected) hide();
+      // The pointer moves on the control that came up under it: now it
+      // points at it.
+      if (moved && stillOver && e.pointerType !== "touch" && e.buttons === 0) {
+        const target = tipTarget(e.target);
+        const held = stillOver;
+        stillOver = null;
+        if (target === held && held.isConnected) overTarget(held, tipRef.current?.target ?? null);
+      }
     };
     const onFocusIn = (e: FocusEvent) => {
       const target = tipTarget(e.target);
