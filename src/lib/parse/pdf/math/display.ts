@@ -142,9 +142,13 @@ function wordsOf(line: Line, column: { left: number; right: number }) {
   // prose's: its words are no display's.
   // So is a line that opens with a word ("and if n = 2m + 1, then"), an
   // operator's name aside ("inf … := …"); one that opens with its formula
-  // keeps its words ("−∞, otherwise," a cases row).
+  // keeps its words ("−∞, otherwise," a cases row). A differential opens no
+  // sentence: a fraction's denominator row opens with "dx" (parse loop
+  // finding: a quantum mechanics book's (25.28) and (25.29), dψ/dx over
+  // dψ/dx, read their row of denominators as prose, and the displays were
+  // a picture and a paragraph).
   const opening = opens ? "" : (/^\s*(\p{L}+)/u.exec(outside)?.[1] ?? "");
-  const prose = /\[\d+(?:\s*[,–-]\s*\d+)*\]|[.?!]\s+\p{Lu}\p{Ll}/u.test(outside) || (opening.length >= 2 && !OPERATOR_NAMES.has(opening.toLowerCase()));
+  const prose = /\[\d+(?:\s*[,–-]\s*\d+)*\]|[.?!]\s+\p{Lu}\p{Ll}/u.test(outside) || (opening.length >= 2 && !OPERATOR_NAMES.has(opening.toLowerCase()) && !DIFFERENTIAL_RE.test(opening));
   // A differential, d and its variable (dx, dt), is a formula's, not a
   // word of prose (parse loop finding: a quantum mechanics book's triple
   // integral "… δ(z − z′) dx dy dz" read as text for its three
