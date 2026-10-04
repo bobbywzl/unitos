@@ -116,7 +116,8 @@ export function pageAt(el: HTMLElement, pitch: number, clientY: number): { page:
 export function scrollParent(el: Element | null): HTMLElement | null {
   for (let node = el?.parentElement ?? null; node; node = node.parentElement) {
     const oy = getComputedStyle(node).overflowY;
-    if (oy === "auto" || oy === "scroll") return node;
+    // A pane holding the browser's scroll off during a drag (margin-select.ts) still scrolls.
+    if (oy === "auto" || oy === "scroll" || node.hasAttribute("data-edge-drag")) return node;
   }
   return null;
 }
