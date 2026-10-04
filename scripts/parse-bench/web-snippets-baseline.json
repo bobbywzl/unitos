@@ -1,7 +1,7 @@
 {
  "total": {
   "f1": 0.916,
-  "precision": 0.858,
+  "precision": 0.859,
   "recall": 0.982
  },
  "pages": {
@@ -932,7 +932,7 @@
   },
   "disfunctions.de.podcasts.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "ditb.de-Propheten.html": {
@@ -1397,7 +1397,7 @@
   },
   "lapresse.tn.parite.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "larepublica.pe-minedu.html": {
@@ -1477,7 +1477,7 @@
   },
   "majkaswelt.com.fashion.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "makronom.de-Ressourcenschutzgesetz.html": {
