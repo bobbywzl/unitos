@@ -734,7 +734,7 @@ export function ruledTables(all: Item[], page: PageDrawing, pageWidth: number, p
       const inside = items.filter((it) => inBox(it, { ...box, x1: box.x1 - 2, x2: box.x2 + 2 }));
       const lines = buildLines(inside, 0);
       const inner = rules.filter((r) => r.y1 < box.y2 - 1 && r.y1 > box.y1 + 1 && r.x1 >= box.x1 - 3 && r.x2 <= box.x2 + 3);
-      if (!isTableRegion(lines, box.x2 - box.x1, columns, inner) || slices(box, lines, items) || framedMath(box, inside, columns)) continue;
+      if ((!isTableRegion(lines, box.x2 - box.x1, columns, inner) && !continuedTail(box, lines, items)) || slices(box, lines, items) || framedMath(box, inside, columns)) continue;
       const region = { box, items: inside, lines, grid: null, rules: inner, drawing };
       // The rules drawn between its columns are the table's, no chart's
       // (PLOS's tables rule every cell apart: forty rules read as a plot).
@@ -783,6 +783,21 @@ export function ruledTables(all: Item[], page: PageDrawing, pageWidth: number, p
     region.lines = buildLines(region.items, 0);
   }
   return regions;
+}
+
+// A table's tail on the page after it: under a caption that says it goes
+// on ("Table 2: … (Continued)"), a head row of two cells or more over lines
+// that all stand in the head's later columns, the rest of a row the page
+// before began (parse loop finding: NIST AI 100-1 p. 33, Table 2's last row
+// "MAP 5.2: …" under its repeated head, read as a picture and its caption
+// as a paragraph).
+const CONTINUED_CAPTION_RE = /^(?:table|tab\.)\s*[\p{L}\d.-]+.*\bcontinued\b/iu;
+function continuedTail(box: Box, lines: Line[], items: Item[]): boolean {
+  const [head, ...rest] = lines;
+  if (!head || rest.length === 0 || head.cells.length < 2) return false;
+  if (rest.some((l) => l.x < head.cells[1].x - head.size)) return false;
+  const over = items.filter((it) => it.y > box.y2 && it.y < box.y2 + head.size * 4);
+  return buildLines(over, 0).some((l) => CONTINUED_CAPTION_RE.test(l.text.trim()));
 }
 
 // The line right under a table that is a link alone, inside its width.
@@ -1196,7 +1211,12 @@ function headSeparators(head: Line[], body: Line[], separators: number[], box: B
         if (inside.some((p) => p.x1 < x && p.x2 > x)) across++;
         else if (inside.some((p) => p.x2 <= x) && inside.some((p) => p.x1 >= x)) both++;
       }
-      if (both >= 2 && across * 2 <= both) out.push(x);
+      // A head's column that every row of the body leaves empty is the
+      // column of a row the page before began: the body is a table's tail
+      // (NIST AI 100-1 p. 33: "Categories | Subcategories" over "MAP 5.2:
+      // …" in the second column alone read as one column).
+      const tail = body.length > 0 && body.every((row) => phrasesOf(row).every((p) => p.x1 >= x));
+      if ((both >= 2 && across * 2 <= both) || tail) out.push(x);
     }
   }
   return out;
