@@ -366,8 +366,8 @@
    "recall": 1
   },
   "686bb170ef": {
-   "f1": 0.942,
-   "precision": 0.896,
+   "f1": 0.964,
+   "precision": 0.937,
    "recall": 0.993
   },
   "6a72de37e8": {
@@ -486,8 +486,8 @@
    "recall": 1
   },
   "87bf60570e": {
-   "f1": 0.995,
-   "precision": 0.991,
+   "f1": 1,
+   "precision": 1,
    "recall": 1
   },
   "88c328b68b": {
@@ -691,8 +691,8 @@
    "recall": 1
   },
   "c50845a715": {
-   "f1": 0.954,
-   "precision": 0.927,
+   "f1": 0.976,
+   "precision": 0.968,
    "recall": 0.984
   },
   "c582d3b772": {
@@ -801,8 +801,8 @@
    "recall": 1
   },
   "e4c6a3b482": {
-   "f1": 0.995,
-   "precision": 0.989,
+   "f1": 1,
+   "precision": 1,
    "recall": 1
   },
   "e593d7fe88": {
