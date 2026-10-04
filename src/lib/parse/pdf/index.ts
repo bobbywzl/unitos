@@ -243,7 +243,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
       if (!read) continue;
       // Control characters are not text: a chart glyph mapped to NUL broke the
       // save (Postgres rejects 0x00 in text).
-      const str = normalizeGlyphs(read.str.replace(CONTROL_CHARS_RE, ""));
+      const str = normalizeGlyphs(read.str.replace(CONTROL_CHARS_RE, ""), glyphs);
       if (str.length === 0) continue;
       // Word and Google Docs draw a font with no bold face in bold by
       // stroking its outline as well as filling it (text render mode 2):
@@ -289,7 +289,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
       if (!text || first.x < viewX1 || first.x > viewX2 || y < viewY1 || y > viewY2) continue;
       const flags = flagsOf(first.font);
       items.push({
-        str: normalizeGlyphs(text.str),
+        str: normalizeGlyphs(text.str, run),
         x: text.x,
         y,
         w: text.w,

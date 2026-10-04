@@ -33,14 +33,22 @@ const RADICAL_MAP: Record<string, string> = {
 };
 // What normalizeGlyphs changes; most strings hold none of it.
 const NORMALIZED_RE = /[\u2E80-\u2FDF\u2012¨´`ˆ˜ˇ¸˚˝¯˘˙]/;
-export function normalizeGlyphs(str: string): string {
+export function normalizeGlyphs(str: string, glyphs?: Glyph[]): string {
   if (!NORMALIZED_RE.test(str)) return str;
+  const backtick = backtickOf(glyphs);
   return str
     .replace(RADICAL_RE, (ch) => RADICAL_MAP[ch] ?? ch.normalize("NFKC"))
     .replace(/\u2012/g, "\u2013")
-    .replace(/([¨´`ˆ˜ˇ¸˚˝¯˘˙])(\p{L})/gu, (_, accent: string, letter: string) =>
-      (letter + SPACING_ACCENTS[accent]).normalize("NFC"),
+    .replace(/([¨´`ˆ˜ˇ¸˚˝¯˘˙])(\p{L})/gu, (all: string, accent: string, letter: string) =>
+      accent === "`" && backtick ? all : (letter + SPACING_ACCENTS[accent]).normalize("NFC"),
     );
+}
+// A grave accent set as a character of its own, a backtick: the glyph
+// after it starts past its advance, where an accent stands over its
+// letter (parse loop finding: the Japanese Pro Git's caption "図 22.
+// `master`が`hotfix`にfast-forwardされた" read "m̀aster" and "が̀").
+function backtickOf(glyphs: Glyph[] | undefined): boolean {
+  return glyphs?.some((g, k) => g.unicode === "`" && k + 1 < glyphs.length && glyphs[k + 1].x >= g.x + g.w * 0.9) ?? false;
 }
 // A spacing accent drawn as its own glyph before the base letter (LaTeX's
 // \"u): composed with the letter it overlaps.

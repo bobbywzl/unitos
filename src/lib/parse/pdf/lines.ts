@@ -187,9 +187,12 @@ function composeAccents(items: Item[]): Item[] {
     // then "e"): composed across the split (import compare loop finding).
     const trailing = item.str.length > 1 ? SPACING_ACCENTS[item.str[item.str.length - 1]] : undefined;
     const after = items[k + 1];
-    if (trailing && after && /^\p{L}/u.test(after.str) && after.x <= item.x + item.w + item.size * 0.3) {
-      // The accent's glyph, the item's last, goes with it.
-      const accent = item.glyphs?.at(-1);
+    // The accent's glyph, the item's last, goes with it. A backtick (a
+    // grave accent the next item starts past) stays a character: glyphs.ts
+    // backtickOf.
+    const accent = item.glyphs?.at(-1);
+    const backtick = item.str.endsWith("`") && accent !== undefined && after !== undefined && after.x >= accent.x + accent.w * 0.9;
+    if (trailing && after && !backtick && /^\p{L}/u.test(after.str) && after.x <= item.x + item.w + item.size * 0.3) {
       const [letter, ...rest] = Array.from(after.str);
       out.push({ ...item, str: item.str.slice(0, -1), glyphs: accent ? item.glyphs!.slice(0, -1) : item.glyphs });
       items[k + 1] = {
