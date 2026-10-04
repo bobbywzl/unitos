@@ -1,8 +1,8 @@
 {
  "total": {
-  "f1": 0.919,
+  "f1": 0.92,
   "precision": 0.864,
-  "recall": 0.982
+  "recall": 0.983
  },
  "pages": {
   "100noticias.com-millones.html": {
@@ -3476,9 +3476,9 @@
    "fn": 3
   },
   "houzz.de-Projekte.html": {
-   "tp": 1,
-   "fp": 0,
-   "fn": 2
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
   },
   "hoy.com-daran.html": {
    "tp": 3,
@@ -4446,9 +4446,9 @@
    "fn": 0
   },
   "sports.fr.lorient.html": {
-   "tp": 0,
+   "tp": 3,
    "fp": 0,
-   "fn": 3
+   "fn": 0
   },
   "spox.com-corona-fealle.html": {
    "tp": 3,
