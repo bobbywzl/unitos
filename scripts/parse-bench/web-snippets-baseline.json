@@ -1,8 +1,8 @@
 {
  "total": {
-  "f1": 0.922,
-  "precision": 0.865,
-  "recall": 0.988
+  "f1": 0.927,
+  "precision": 0.872,
+  "recall": 0.989
  },
  "pages": {
   "100noticias.com-millones.html": {
@@ -171,9 +171,9 @@
    "fn": 0
   },
   "womencantalksports.com.top10.html": {
-   "tp": 1,
+   "tp": 2,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "zeit.de.zugverkehr.html": {
    "tp": 2,
@@ -686,9 +686,9 @@
    "fn": 1
   },
   "baike.baidu.com.tanya.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "battery-news.de.ultium-cells.html": {
    "tp": 3,
@@ -907,7 +907,7 @@
   },
   "deutsche-wirtschafts-nachrichten.de-Industriestrompreis.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 0,
    "fn": 0
   },
   "die-partei.net.luebeck.html": {
@@ -1022,7 +1022,7 @@
   },
   "Rosjanie sugerują natychmiastowe odcięcie Polski od gazu - Energetyka24.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "erfolg-magazin.de.konfliktkultur.html": {
@@ -1412,7 +1412,7 @@
   },
   "Lebensmittelpraxis.de-Stadtzentrum.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "legrandcontinent.eu.heran.html": {
@@ -1862,7 +1862,7 @@
   },
   "skateboardmsm.de.dormhagen.html": {
    "tp": 4,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "sladisworld.wordpress.com.sigma.html": {
@@ -2012,7 +2012,7 @@
   },
   "trails.de.ischgl.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "trome.pe-chollywood.html": {
@@ -2522,7 +2522,7 @@
   },
   "bbc.com.52241221.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "bdzv.de.eliasson.html": {
@@ -2592,7 +2592,7 @@
   },
   "bka.de-messengerdienste.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "blinker.de-Rostock.html": {
@@ -2612,7 +2612,7 @@
   },
   "bmel.de-zukunftsforum.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 0,
    "fn": 0
   },
   "bmfsfj.de-praesidentschaft.html": {
@@ -2717,7 +2717,7 @@
   },
   "caktusgroup.com.django.html": {
    "tp": 5,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "campograndenews.com.br-adolescente.html": {
@@ -2931,9 +2931,9 @@
    "fn": 0
   },
   "www.dhb.de-regionallehrgang.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 2,
-   "fn": 1
+   "fn": 0
   },
   "dhz-online.de-bewegung.html": {
    "tp": 3,
@@ -3347,7 +3347,7 @@
   },
   "golf.de-augusta.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "golfpost.de-premiere.html": {
@@ -3372,7 +3372,7 @@
   },
   "gruene-bundestag.de-COP26.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 2,
    "fn": 0
   },
   "guenter-pilger.de.mailaktion.html": {
@@ -3531,9 +3531,9 @@
    "fn": 0
   },
   "infobae.com-ucrania.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 2,
-   "fn": 1
+   "fn": 0
   },
   "infocomcgt.fr.caisse.html": {
    "tp": 3,
@@ -3602,7 +3602,7 @@
   },
   "journelles.de.westwing.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "jugend-forscht.de-Feuerlöschtechnik.html": {
@@ -3682,7 +3682,7 @@
   },
   "laola1.at-barisic.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "lastampa.it.temperature.html": {
@@ -3922,7 +3922,7 @@
   },
   "motorsport-magazin.com-alphatauri.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "motorsport-total.com-romeo.html": {
@@ -3987,7 +3987,7 @@
   },
   "nestle-family-com-chicken.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 2,
    "fn": 0
   },
   "nestle-marktplatz.de-produkttest.html": {
@@ -4052,7 +4052,7 @@
   },
   "otto.de.twoforfashion.html": {
    "tp": 2,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "outdoor-magazin.com-vanlife.html": {
@@ -4162,7 +4162,7 @@
   },
   "„Królowa Elżbieta” wypływa w świat. Sygnał dla Chin i Rosji - Polityka.pl.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "popsugar.co.uk.halloween.html": {
@@ -4426,9 +4426,9 @@
    "fn": 0
   },
   "spiegel.de.albtraum.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "spoe.at-mieterhöhung.html": {
    "tp": 3,
@@ -4452,7 +4452,7 @@
   },
   "spox.com-corona-fealle.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "springer.com-produkte.html": {
@@ -4597,7 +4597,7 @@
   },
   "thelocal.se.tattooed.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "theplanetarypress.com.forestlands.html": {
@@ -4857,7 +4857,7 @@
   },
   "womenshealth.de.weihnachten.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "„Sieci”_ IPN, czyli element infrastruktury krytycznej Tygodnik Sieci.html": {
@@ -4917,7 +4917,7 @@
   },
   "www1.wdr.de-Correctiv-Recherche.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "nhk.or.jp.k100.html": {
