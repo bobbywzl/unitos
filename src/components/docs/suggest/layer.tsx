@@ -27,6 +27,8 @@ import type { SuggestCommand } from "@/lib/prompts/suggest";
 const REVIEW_EVENT = "docs:review-suggestions";
 /** The space between two cards. */
 const CARD_GAP = 8;
+/** How much of the open card stays level with its words, at least. */
+const LINE_PX = 20;
 /** The column's comment and suggestion cards. */
 const COLUMN_CARD = "[data-suggestion-card], [data-comment-card]";
 /** What stands in the column and stays where it is: the toolbar and the
@@ -220,6 +222,23 @@ function placeCards(editor: Editor, pane: HTMLElement, column: HTMLElement): boo
         for (let i = o + 1; i < cards.length; i++) {
           tops[i] = clear(Math.max(cards[i].top, tops[i - 1] + heights[i - 1] + CARD_GAP), heights[i], true);
         }
+      }
+    }
+    // The cards under the open card whose words are in view end inside the
+    // pane too: they and the open card go up together, while the open card
+    // still stands beside its words, under the toolbar, and on the page.
+    if (o >= 0) {
+      let last = o;
+      while (last + 1 < cards.length && cards[last + 1].top < shownBottom) last++;
+      const over = tops[last] + heights[last] - shownBottom;
+      if (last > o && over > 0) {
+        const lifted = tops.slice();
+        lifted[last] = clear(tops[last] - over, heights[last], false);
+        for (let i = last - 1; i >= 0; i--) {
+          lifted[i] = clear(Math.min(tops[i], lifted[i + 1] - CARD_GAP - heights[i]), heights[i], false);
+        }
+        const beside = lifted[o] + heights[o] >= cards[o].top + LINE_PX;
+        if (beside && lifted[o] >= shownTop + CARD_GAP && lifted[0] >= pageTop) lifted.forEach((top, i) => (tops[i] = top));
       }
     }
   }
