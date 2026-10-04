@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
 import { Presence } from "@/components/presence";
+import { FEEDBACK_OPEN_EVENT } from "@/components/feedback-button";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // Reader views: Normal shows one document; Side by Side and Top and Bottom
@@ -410,6 +411,19 @@ export function ReaderPanes({
                 {t(VIEW_LABEL[kind])}
               </button>
             ))}
+            {/* A phone's reader has no floating Feedback pill, which would
+                lie on the article's last lines (feedback-button.tsx). */}
+            <div aria-hidden className="mx-2.5 my-1 h-px bg-line md:hidden" />
+            <button
+              onClick={() => {
+                setMenu(false);
+                window.dispatchEvent(new Event(FEEDBACK_OPEN_EVENT));
+              }}
+              data-track="feedback-open"
+              className="flex items-center gap-2.5 rounded-full px-2.5 py-1.5 text-left text-[12px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 md:hidden"
+            >
+              {t("works.feedback")}
+            </button>
           </div>
         )}
         </Presence>

@@ -24,6 +24,11 @@ function parseLink(raw: string): string | null {
   }
 }
 
+/** Opens the feedback form from elsewhere: on a phone the reader has no
+    floating Feedback pill, and its Reader view menu carries a Feedback row
+    (reader-panes.tsx). */
+export const FEEDBACK_OPEN_EVENT = "unitos:feedback-open";
+
 // Floating feedback button, mounted app-wide (release-edu pattern).
 export function FeedbackButton() {
   const pathname = usePathname();
@@ -43,6 +48,11 @@ export function FeedbackButton() {
   const [uploading, setUploading] = useState(0);
   const [note, setNote] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const onOpen = () => setOpen(true);
+    window.addEventListener(FEEDBACK_OPEN_EVENT, onOpen);
+    return () => window.removeEventListener(FEEDBACK_OPEN_EVENT, onOpen);
+  }, []);
 
   async function addPhotos(files: File[]) {
     setNote(null);
@@ -151,14 +161,16 @@ export function FeedbackButton() {
           which sits in the bottom-right corner. In the reader the pill
           would lie on the tray's last row (its select circle, the ⋯ that
           reopens a resolved comment): there, on md+, it is a round button
-          at the foot of the rail, where no control sits. */}
+          at the foot of the rail, where no control sits. On a phone's
+          reader it would lie on the article's last lines: there it is a row
+          of the Reader view menu instead (FEEDBACK_OPEN_EVENT). */}
       <button
         onClick={() => setOpen(!open)}
         aria-label={t("works.sendFeedback")}
         data-tip={t("works.sendFeedback")}
         data-feedback-button=""
         className={`fixed right-4 bottom-[calc(64px+env(safe-area-inset-bottom))] z-20 rounded-full bg-card px-4 py-2 text-sm text-sand-700 shadow-lift hover:bg-clay-100 hover:text-clay-800 md:bottom-[60px] print:hidden ${
-          inReader ? "md:right-2 md:bottom-4 md:flex md:size-9 md:items-center md:justify-center md:p-0" : ""
+          inReader ? "max-md:hidden md:right-2 md:bottom-4 md:flex md:size-9 md:items-center md:justify-center md:p-0" : ""
         }`}
       >
         <span className={inReader ? "md:hidden" : undefined}>{t("works.feedback")}</span>

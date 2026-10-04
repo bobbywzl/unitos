@@ -2894,6 +2894,15 @@ export function ReaderInteractions({
     const showTools = (captured: Popover | null) => {
       setSubmenu(null);
       setPopover(captured);
+      if (captured) yieldToSelection();
+    };
+    // A new selection's toolbar takes the place of the on-mark card and the
+    // chooser of stacked annotations, so two boxes never stand over the
+    // words. A press does this with the mouse; on a touch screen the hold
+    // that selects words presses nothing. A card with typed words stays.
+    const yieldToSelection = () => {
+      setStackChooser(null);
+      setAnnotationCard((c) => (c && !c.busy && c.draft === c.saved ? null : c));
     };
     // The page editor (SPEC.md §29): a keyboard selection opens the toolbar
     // once Shift, Ctrl, or Cmd is let go; a caret moved with the keys closes it.
@@ -2974,6 +2983,7 @@ export function ReaderInteractions({
         if (!captured) return;
         setPopover(captured);
         setSubmenu(null);
+        yieldToSelection();
       }, 500);
     };
     container.addEventListener("mousedown", onContainerMouseDown);
