@@ -752,6 +752,52 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     const titles = drawn ? titlesOf(plot, axis).filter((r) => !onBar(r)) : [];
     for (const r of [...axis, ...titles]) taken.add(r);
     let box = [...axis, ...titles].reduce((b, r) => unionBox(b, r.box), plot);
+    // Arrows drawn by the drawing's labels are the drawing's, and so are
+    // the short labels by those arrows: an arrow is a line with a small
+    // head at one end, a cluster of its own a line or two off the drawing,
+    // touched by a label the drawing holds (parse loop finding: a quantum
+    // mechanics book's margin figure of a potential step set its currents
+    // J_inc, J_trans, and J_ref by arrows 28 pt under its axis; the crop
+    // stopped at J_inc, cut the arrows, and J_ref read as a paragraph).
+    if (drawn) {
+      const arrows = groups
+        .filter((g) => {
+          if (g.length > 4 || g.some((m) => m.image)) return false;
+          const b = boxOf(g);
+          if (b.y2 - b.y1 > textSize || shareInside(b, box) >= 0.5 || merged.some((m) => m.box !== plot && shareInside(b, m.box) >= 0.5)) return false;
+          const line = g.find((m) => m.thin && m.box.x2 - m.box.x1 >= textSize * 1.5);
+          return (
+            line !== undefined &&
+            g.some(
+              (m) =>
+                !m.thin &&
+                m.box.x2 - m.box.x1 <= textSize * 0.6 &&
+                m.box.y2 - m.box.y1 <= textSize * 0.6 &&
+                (Math.abs(m.box.x1 - line.box.x1) < textSize * 0.3 || Math.abs(m.box.x2 - line.box.x2) < textSize * 0.3),
+            )
+          );
+        })
+        .map(boxOf);
+      const by = (r: Box, m: Box) => r.x1 < m.x2 && r.x2 > m.x1 && Math.max(r.y1 - m.y2, m.y1 - r.y2) <= textSize * 0.5;
+      const words = [...axis, ...titles, ...runsIn(box).filter((r) => !isPageText(r) && !taken.has(r))];
+      const held = new Set<Box>();
+      for (let grew = arrows.length > 0; grew; ) {
+        grew = false;
+        for (const m of arrows) {
+          if (held.has(m) || !words.some((r) => by(r.box, m))) continue;
+          held.add(m);
+          box = unionBox(box, m);
+          grew = true;
+        }
+        for (const r of runs) {
+          if (held.size === 0 || taken.has(r) || words.includes(r) || isPageText(r) || r.chars > 12 || LABEL_START_RE.test(textOf(r))) continue;
+          if (![...held].some((m) => by(r.box, m))) continue;
+          words.push(r);
+          box = unionBox(box, r.box);
+          grew = true;
+        }
+      }
+    }
     for (const { box: bar } of bars) {
       if (bar.x1 >= box.x2 || bar.x2 <= box.x1 || bar.y1 >= box.y2 || bar.y2 <= box.y1) continue;
       if ((bar.y1 + bar.y2) / 2 > (box.y1 + box.y2) / 2) box = { ...box, y2: Math.min(box.y2, bar.y1) };
