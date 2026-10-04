@@ -131,8 +131,11 @@ function isFigureDebris(s: Segment, ctx: PageContext): boolean {
   // more marks and digits than letters is a figure's at any size (parse
   // loop finding: NACA Report 515 p. 7, "24 .6 ~ W D ~ D '. 6" read at 15
   // pt over a 10.3 pt body, and the chart's labels over it stayed text).
+  // So is a longer part, of one line or several: the OCR reads a chart's
+  // gridlines as runs of marks ("a 00!-1-.1..1-1-!.2~.L.....3-:!-…", 85
+  // marks over Figure 5's caption, p. 7, kept the caption a paragraph).
   const letters = text.replace(/[^\p{L}]/gu, "").length;
-  if (ctx.ocr && text.length <= 60 && !s.text.includes("\n") && letters * 2 < text.replace(/\s/g, "").length) return true;
+  if (ctx.ocr && letters * 2 < text.replace(/\s/g, "").length) return true;
   // A panel title or axis label at body size: short, no sentence end. A
   // Chinese or Japanese sentence ends with "。" (MIC white paper p9: a
   // paragraph's last line over a caption read as its figure's).
