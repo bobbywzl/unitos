@@ -971,7 +971,13 @@ function isBlocks(band: Band, page: number): boolean {
   const { left, right } = band;
   if (chars(left.items) < 10 || chars(right.items) < 10 || [...left.items, ...right.items].some((i) => i.math)) return false;
   const size = median([...left.items, ...right.items].map((i) => i.size));
-  if (Math.min(...right.items.map((i) => i.x)) - Math.max(...left.items.map((i) => i.x + i.w)) < size * 3) return false;
+  // Two sides set a quarter apart in size are two text boxes, two ems
+  // apart: a table sets its columns in one size (parse loop finding: a
+  // PowerPoint deck's card sets 18 pt words beside an 11 pt note, 2.3
+  // ems apart, and their lines ran into each other row by row).
+  const [l, r] = [median(left.items.map((i) => i.size)), median(right.items.map((i) => i.size))];
+  const ems = Math.max(l, r) >= Math.min(l, r) * 1.25 ? 2 : 3;
+  if (Math.min(...right.items.map((i) => i.x)) - Math.max(...left.items.map((i) => i.x + i.w)) < size * ems) return false;
   const [a, b] = [buildLines(left.items, page), buildLines(right.items, page)];
   const paired = a.filter((l) => b.some((m) => Math.abs(m.y - l.y) <= 0.5)).length;
   return paired <= 1 && Math.max(a.length, b.length) > paired;
