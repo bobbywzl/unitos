@@ -3381,14 +3381,20 @@ export function ReaderInteractions({
         if (before !== undefined && before !== size) grown = kind;
         // A card that opens tall (reopened from its mark with its turns)
         // keeps its foot inside the pane too, not only one that grew.
-        keepCardInPane(kind);
+        if (before !== size) keepCardInPane(kind);
       }
       settleSideCards(grown);
       layoutNarrowCardsRef.current();
     });
+    // A closed card's size goes with it: the next card of its kind opens
+    // fresh, and is kept in the pane like any card that opens.
+    const open = new Set<string>();
     for (const el of container.querySelectorAll<HTMLElement>("[data-side-card]")) {
-      if (!el.closest(".presence-exit")) observer.observe(el);
+      if (el.closest(".presence-exit")) continue;
+      open.add(el.dataset.sideCard ?? "");
+      observer.observe(el);
     }
+    for (const kind of Object.keys(cardSizesRef.current)) if (!open.has(kind)) delete cardSizesRef.current[kind];
     return () => observer.disconnect();
   }, [openCards, keepCardInPane, settleSideCards]);
 
@@ -5239,6 +5245,14 @@ export function ReaderInteractions({
         hideToast();
         const box = containerRef.current ? passageBox(containerRef.current, anchor) : null;
         const top = box?.top ?? containerRef.current?.scrollTop ?? 80;
+        // The words come into view first, at once, so the card opens beside
+        // them and nothing lifts it into a pane still scrolling.
+        if (box && containerRef.current) {
+          const pane = containerRef.current;
+          if (box.top < pane.scrollTop || box.top > pane.scrollTop + pane.clientHeight - 120) {
+            pane.scrollTo({ top: Math.max(0, box.top - 120) });
+          }
+        }
         if (kind === "simplify") {
           setSimplifyCard({
             anchor,
@@ -5263,13 +5277,6 @@ export function ReaderInteractions({
             anchor,
             noteId,
           });
-        }
-        // The words come into view under the card's top.
-        if (box && containerRef.current) {
-          const pane = containerRef.current;
-          if (box.top < pane.scrollTop || box.top > pane.scrollTop + pane.clientHeight - 120) {
-            pane.scrollTo({ top: Math.max(0, box.top - 120), behavior: "smooth" });
-          }
         }
       },
     }, 12000);
@@ -6305,10 +6312,12 @@ export function ReaderInteractions({
             run: () => {
               hideToast();
               const now = containerRef.current ? passageBox(containerRef.current, anchor) : null;
-              setAssistantChat(chat(now?.top ?? sent.yTop));
+              // The words come into view first, at once, so the card opens
+              // beside them and nothing lifts it into a pane still scrolling.
               if (now && containerRef.current) {
-                containerRef.current.scrollTo({ top: Math.max(0, now.top - 120), behavior: "smooth" });
+                containerRef.current.scrollTo({ top: Math.max(0, now.top - 120) });
               }
+              setAssistantChat(chat(now?.top ?? sent.yTop));
             },
           },
           12000,
