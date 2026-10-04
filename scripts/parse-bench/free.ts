@@ -22,6 +22,29 @@ import { garblesOf, normText, PAGE_NUMBER_RE, pageNumberOf, wordsOf } from "./te
 /** A line of the page: its box, its text, and its words' boxes (pdftotext -tsv). */
 type Line = { page: number; top: number; bottom: number; left: number; right: number; text: string; words?: { left: number; right: number; text: string }[] };
 
+/** A line's text as pdftotext's -raw text reads it: -tsv splits a word
+    where its font changes (a letter and its subscript, "J" and "ref"),
+    and -raw sets the two parts with no space between them when they
+    touch (parse bench finding: a quantum mechanics book's figure labels
+    J_inc, J_trans, J_ref, inside the crop, read "J inc" in the line that
+    drops a figure's words, and "Jinc" in the words to cover). Two parts
+    join only when the page's -raw text holds the joined word: a browser's
+    PDF sets a matrix's a₁₁ with a hidden mark after the "a", and -raw
+    reads "a" and "11" apart (synth-math-html p. 7). */
+function rawText(line: Line, has: (word: string) => boolean): string {
+  if (!line.words || line.words.length === 0) return line.text;
+  // Touching: the next word starts where the last one ends, along the
+  // line (text set sideways stacks its words at one left edge).
+  const touches = (w: { left: number; right: number }, prev: { left: number; right: number }) => w.left > prev.left && Math.abs(w.left - prev.right) < 0.8;
+  const out: string[] = [];
+  line.words.forEach((w, k) => {
+    const joined = k > 0 && touches(w, line.words![k - 1]) ? wordsOf(out[out.length - 1] + w.text) : [];
+    if (joined.length === 1 && has(joined[0].w)) out[out.length - 1] += w.text;
+    else out.push(w.text);
+  });
+  return out.join(" ");
+}
+
 /** A word pdftotext reads with a symbol font's characters in it, as it
     reads it and as the page draws it, on its line (layoutOf, symbolChars). */
 type SymbolWord = { page: number; word: string; reads: string; line: Line };
@@ -1151,7 +1174,8 @@ export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word 
       return hollow[1];
     });
     const dropped = [...pdf.furniture, ...labels].filter((f) => f.page === pdf.first + p);
-    const drop = countWords(dropped.map((f) => f.text));
+    const rawWords = new Set(wordsOf(lines.join("\n")).map((w) => w.w));
+    const drop = countWords(dropped.map((f) => rawText(f, (w) => rawWords.has(w))));
     // A word read out of a symbol font counts as the page draws it (◆ read "u" is no word; Symbol's "a" is α),
     // on a line that is a word to cover.
     const symbols = pdf.symbols.filter((s) => s.page === pdf.first + p && !dropped.includes(s.line));
