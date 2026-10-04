@@ -164,7 +164,15 @@ export function fitOcrItems(items: Item[]) {
   words.forEach((a, k) => {
     const b = next(k);
     if (!b) return;
-    if (Math.abs(scale - 1) >= 0.1 && b.x - a.x < (a.w + a.size * 0.25) * 2.5) a.w = Math.max(a.w, Math.min(a.w * scale, b.x - a.x - a.size * 0.2));
+    // The scale stretches the item's last word: an item of several words
+    // is fragments the drawing joined, each set where the scan shows it,
+    // and only the last one's end is short (parse loop finding: NACA
+    // Report 515 p. 10, a left column's line read as one item 248 pt wide
+    // took a tenth more, up to the right column's first word: 14 lines on
+    // pp. 10 and 12 read across the gutter).
+    const chars = Array.from(a.str.trimEnd());
+    const tail = a.w * (chars.length - chars.lastIndexOf(" ") - 1) / Math.max(1, chars.length);
+    if (Math.abs(scale - 1) >= 0.1 && b.x - a.x < (a.w + a.size * 0.25) * 2.5) a.w = Math.max(a.w, Math.min(a.w + tail * (scale - 1), b.x - a.x - a.size * 0.2));
     if (a.x + a.w > b.x - a.size * 0.15 && b.x - a.x > a.size * 0.5 && /[\p{L}\p{N}]$/u.test(a.str) && /^[\p{L}\p{N}]/u.test(b.str)) a.w = b.x - a.x - a.size * 0.2;
   });
 }
