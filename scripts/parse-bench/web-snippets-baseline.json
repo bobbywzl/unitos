@@ -812,7 +812,7 @@
   },
   "correctiv.org.zusage.html": {
    "tp": 2,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "crazy-julia.de.tipps.html": {
@@ -3712,7 +3712,7 @@
   },
   "lbv.de-Bavaria.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "lecker.de.schneewittchen.html": {
