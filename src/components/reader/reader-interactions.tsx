@@ -4113,6 +4113,8 @@ export function ReaderInteractions({
         // The same words: the anchor object stays, so a run sent from this
         // toolbar still knows it.
         setPopover({ ...again, anchor: open.anchor });
+        // Placed again, it is fitted into the pane again.
+        requestAnimationFrame(() => requestAnimationFrame(() => fitToolboxRef.current()));
       } else {
         setPopover(null);
         setSubmenu(null);
@@ -8914,9 +8916,10 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
 
       {/* The article's band (SPEC.md §6): Contents at the left and Collapse
           and Extract at the right stand on it, and the text scrolls under
-          it, so they never sit on a word. */}
+          it, so they never sit on a word. It takes no room: the article
+          starts where it did, its first line just under the band. */}
       {!split && !transcript && !embedded && !richText && (
-        <div aria-hidden data-article-band className="pointer-events-none sticky top-0 z-[9] -mb-6 h-14 bg-paper print:hidden" />
+        <div aria-hidden data-article-band className="pointer-events-none sticky top-0 z-[9] -mb-12 h-12 bg-paper print:hidden" />
       )}
 
       {/* Not in a split pane: the card would sit over the title. Not on a
