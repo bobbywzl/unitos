@@ -74,7 +74,7 @@ export function pageLines(items: Item[], pageWidth: number, page: number, graphi
     anything but a word: XeTeX's pages carry such items too, before a
     combining mark or a closing bracket ("<յ ̵>"). */
 function markSpaces(items: Item[], text: Item[]) {
-  const spaces = items.filter((i) => i.space && i.w > 0);
+  const spaces = items.filter((i) => i.space && i.w > i.size * 0.05);
   if (spaces.length === 0) return;
   const touches = (a: Item, x: number, y: number, size: number) => Math.abs(a.x - x) <= a.size * 0.15 && Math.abs(a.y - y) <= size * 0.6;
   for (const space of spaces) {

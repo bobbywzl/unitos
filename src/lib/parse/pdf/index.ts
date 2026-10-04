@@ -1,7 +1,7 @@
 import { PDF_CMAPS } from "@/lib/pdf-runtime";
 import { getDocumentProxy } from "unpdf";
 import { pageLines } from "@/lib/parse/pdf/columns";
-import { fitOcrItems } from "@/lib/parse/pdf/lines";
+import { fitOcrItems, placeMarks } from "@/lib/parse/pdf/lines";
 import { resolveContentsLinks } from "@/lib/parse/pdf/contents";
 import { itemGlyphs, readDrawing, type FontLookup, type Glyph, type PageDrawing } from "@/lib/parse/pdf/drawing";
 import { nameShape } from "@/lib/parse/pdf/faces";
@@ -397,6 +397,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
       same.push(it);
       drawnAt.set(key, same);
     }
+    placeMarks(items);
     // From here on a position is taken from the page box's corner, as the
     // figure route renders the page: a region is a share of the page box.
     // The MIC white paper's box starts at (36.85, 36.85); read in the PDF's

@@ -225,6 +225,63 @@ function withAccent(letter: string, mark: string): string {
   return (base + mark).normalize("NFC");
 }
 
+// A letter of a script set right to left.
+const RTL_RE = /[\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}]/u;
+
+/** A right-to-left font's marks, drawn with no advance, read after the
+    letter they stand on. Typst draws a mark right before its letter, the
+    letter in an item of its own, and maps the mark's glyph to the first
+    cluster it drew, a mark and some letters: the fathatan over "ق" reads
+    "ًك" (parse loop finding: an Arabic book's "صندوقًا" read "صندو ًكقا",
+    and 47 marks stood alone between words). A letter's glyph may map to a
+    letter and a mark too: the text layer gives its item no width, and the
+    item reads the letter alone ("لساٍٍ" for "لسانٍ"). Where the text layer
+    set the letter's advance as a space item right after it, that space
+    goes ("ال ّف صل" for "الفصل"). A page's items, in place. */
+export function placeMarks(items: Item[]) {
+  const zero = (i: Item) => i.w <= i.size * 0.02 && /\p{M}/u.test(i.str) && RTL_RE.test(i.str);
+  const advance = (i: Item) => (i.glyphs ?? []).reduce((n, g) => n + g.w, 0);
+  // A letter read so: its glyph draws an advance.
+  for (let j = 0; j < items.length; j++) {
+    const glyph = items[j];
+    const drawn = advance(glyph);
+    const letters = glyph.str.replace(/[\p{M}\s]/gu, "");
+    if (!zero(glyph) || drawn < glyph.size * 0.1 || letters === "") continue;
+    items[j] = { ...glyph, str: letters, w: drawn };
+    const tol = glyph.size * 0.05;
+    const k = items.findIndex(
+      (i) =>
+        i.str.trim() === "" &&
+        Math.abs(i.y - glyph.y) <= tol &&
+        Math.abs(i.x - glyph.x) <= tol &&
+        Math.abs(i.w - drawn) <= glyph.size * 0.1,
+    );
+    if (k >= 0) {
+      items.splice(k, 1);
+      if (k < j) j--;
+    }
+  }
+  // A mark: its letter is the next item drawn with a letter, near it; the
+  // letters its own item reads go.
+  for (let j = 0; j < items.length; j++) {
+    const mark = items[j];
+    if (!zero(mark)) continue;
+    let k = j + 1;
+    while (k < items.length && items[k].str.trim() === "") k++;
+    const target = items[k];
+    const near = (i: Item) => Math.abs(i.y - mark.y) <= mark.size && mark.x >= i.x - i.size * 0.5 && mark.x <= i.x + i.w + i.size * 0.5;
+    if (!target || !/\p{L}/u.test(target.str) || !near(target)) continue;
+    // The letter drawn first is the item's left end: the last it reads.
+    const chars = Array.from(target.str);
+    let end = chars.length;
+    while (end > 0 && !/\p{L}/u.test(chars[end - 1])) end--;
+    while (end < chars.length && /\p{M}/u.test(chars[end])) end++;
+    const signs = mark.str.match(/\p{M}/gu)?.join("") ?? "";
+    items[k] = { ...target, str: [...chars.slice(0, end), signs, ...chars.slice(end)].join("") };
+    items.splice(j--, 1);
+  }
+}
+
 function composeAccents(items: Item[]): Item[] {
   const out: Item[] = [];
   for (let k = 0; k < items.length; k++) {
