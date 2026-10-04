@@ -958,8 +958,12 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
           (colEdge > 0 && sequelOf(lines, j, nextMarker)))) ||
       // "Setup." after a sentence end opens the next paragraph, and so does a
       // bold label under a line that stopped short of the column edge
-      // ("Category. mechanism" over "Summary. …" in a boxed entry).
+      // ("Category. mechanism" over "Summary. …" in a boxed entry). A label
+      // has a word: a bold number goes on its sentence (parse loop finding:
+      // a Frontiers article's citation line sets the volume "5:102." bold
+      // after "Front. Psychol.", and the line read as a paragraph).
       (startsWithBoldLead(next) &&
+        /\p{L}/u.test(next.text.slice(0, next.runs[0].end)) &&
         !endsBold(prev) &&
         (prevTerminal || prev.xEnd < colEdge - prev.size * 2)) ||
       // A theorem-like label in small caps opens its own paragraph too.
