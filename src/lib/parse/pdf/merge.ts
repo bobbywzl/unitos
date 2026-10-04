@@ -326,7 +326,7 @@ function liftFloatsOffParagraphBreaks(segments: Segment[], setting: PageSetting,
     while (k < out.length && out[k].page === out[b].page && (isPageFloat(out[k]) || isLabel(out[k], prev))) k++;
     if (k >= out.length || (k === b && a === b - 1) || !(footLine || out.slice(a + 1, k).some(isPageFloat))) continue;
     const tail = out[k];
-    if (tail.page !== out[b].page) continue;
+    if (tail.page !== out[b].page || debris(tail.text)) continue;
     // A references entry's end at the page's top goes with the list after it.
     const lift = listBreak && hangingTail(tail, out[k + 1]) ? 2 : 1;
     const opens = /^[a-z($€£0-9"'“]/.test(tail.text) && !(/[.!?:…"”)]$/.test(prev.text.trim()) && !ABBREVIATION_END_RE.test(prev.text.trim()));
@@ -339,6 +339,17 @@ function liftFloatsOffParagraphBreaks(segments: Segment[], setting: PageSetting,
     out.splice(a + floats.length + 1, 0, ...joined);
   }
   return out;
+}
+
+// A scan's debris: a part of twenty marks or more, letters less than half
+// of them. No paragraph goes on into it over a page break (parse loop
+// finding: the DTIC Datcom's "…to correctly" went on into p. 63's
+// "wr0ý4-i0r.i 6141-4ý40 4J444.w4r", the OCR's reading of a table set
+// sideways, and the lift set "interpret the results." before the
+// paragraph it ends).
+function debris(text: string): boolean {
+  const marks = text.replace(/\s/g, "");
+  return marks.length >= 20 && marks.replace(/[^\p{L}]/gu, "").length * 2 < marks.length;
 }
 
 // The end of a list's entry that a page break cut: a paragraph set at the
@@ -452,6 +463,7 @@ export function mergeAcrossPages(input: Segment[]): Segment[] {
       segment.type === "PARAGRAPH" &&
       prev.type === "PARAGRAPH" &&
       segment.page > lastPageOf(prev) &&
+      !debris(segment.text) &&
       (!prev.listItem || /^\p{Ll}/u.test(segment.text) || wrapsOver(prev, segment, setting)) &&
       !isCaptionText(prev) &&
       setAlike(prev, segment, body) &&
