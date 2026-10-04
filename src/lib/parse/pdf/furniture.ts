@@ -76,9 +76,13 @@ export function findFurniture(pages: Line[][], pageHeights: number[], pageNumber
   rows.forEach((pageRows, p) => {
     if (!scans?.[p]) return;
     const bare = (r: Row | undefined) => r !== undefined && r.text.length <= 8 && !/[\p{L}\p{N}]/u.test(r.text);
+    // A speck stands clear of the page's lines, never of the other specks
+    // beside it: DTIC's p. 9 sets "I", "ji", and "mi" one above another
+    // in the binding's margin, each in line with the next.
+    const short = (r: Row) => r.text.replace(/\s/g, "").length <= 3 && !/\p{N}/u.test(r.text);
     const mark = (r: Row | undefined) => {
-      if (r === undefined || r.text.replace(/\s/g, "").length > 3 || /\p{N}/u.test(r.text)) return false;
-      const others = pageRows.filter((o) => o !== r).flatMap((o) => o.lines);
+      if (r === undefined || !short(r)) return false;
+      const others = pageRows.filter((o) => o !== r && !short(o)).flatMap((o) => o.lines);
       if (others.length === 0) return false;
       const [x, xEnd] = [Math.min(...r.lines.map((l) => l.x)), Math.max(...r.lines.map((l) => l.xEnd))];
       const margin = xEnd < Math.min(...others.map((l) => l.x)) - r.size * 0.5 || x > Math.max(...others.map((l) => l.xEnd)) + r.size * 0.5;
