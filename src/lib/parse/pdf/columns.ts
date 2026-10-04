@@ -278,11 +278,16 @@ function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: n
       best = { g, cross };
     }
   }
-  const split = best && best.cross / total < 0.5 ? splitAt(items, graphics, page, pageWidth, depth, best.g, total) : null;
-  if (split) return split;
+  // A column of notes in the margin parts first: the column beside it is
+  // then tested on its own (parse loop finding: a LaTeX package's manual
+  // sets "Introduced in version 4.16" in the margin beside its options,
+  // and its pages split at the options' "Default: text" column instead,
+  // each note joining the option beside it).
   const margin = marginGutter(items, graphics, x0, width);
   const notes = margin === null ? null : splitAt(items, graphics, page, pageWidth, depth, margin, total);
-  if (notes || !oneBand || depth > 0) return notes;
+  if (notes) return notes;
+  const split = best && best.cross / total < 0.5 ? splitAt(items, graphics, page, pageWidth, depth, best.g, total) : null;
+  if (split || !oneBand || depth > 0) return split;
   // A page that is not two columns may still hold one band of them, or a
   // column and a note beside it: its gutter is then the one beside which
   // one clear band holds the most words on both sides (IEEE's two columns
