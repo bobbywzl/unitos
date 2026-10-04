@@ -1236,6 +1236,7 @@ export function Reader({
           banner={banner}
           translations={translations ?? null}
           collapse={collapse ?? null}
+          leftOffBlockId={leftOffBlockId ?? null}
         />
       </DocsFrameContext.Provider>
     );

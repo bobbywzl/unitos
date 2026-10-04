@@ -26,6 +26,7 @@ import { insertImageFrom } from "@/components/docs/insert/image";
 import { InsertLayer } from "@/components/docs/areas/insert";
 import { UnitosLayer } from "@/components/docs/areas/layer";
 import { CollapsedView, type PageCollapse } from "@/components/docs/layer/collapse";
+import { showLeftOff } from "@/components/docs/layer/left-off";
 import { showTranslations } from "@/components/docs/layer/reading";
 import { SuggestLayer } from "@/components/docs/suggest/layer";
 import { PageBanner, PageCanvas, PageRuler } from "@/components/docs/areas/page";
@@ -428,6 +429,7 @@ export function DocsEditor({
   banner,
   translations = null,
   collapse = null,
+  leftOffBlockId = null,
 }: {
   documentId: string;
   notebookId: string;
@@ -457,6 +459,9 @@ export function DocsEditor({
   /** Collapse (SPEC.md §28): the cores, in Viewing (layer/collapse.tsx);
       null while the document has none. */
   collapse?: PageCollapse | null;
+  /** The block of the reading position the document opened with: the
+      left-off mark stands above it (layer/left-off.ts). */
+  leftOffBlockId?: string | null;
 }) {
   const t = useT();
   useDocsFonts();
@@ -576,6 +581,12 @@ export function DocsEditor({
       if (flushRef.current === flush) flushRef.current = null;
     };
   }, [flush, flushRef]);
+
+  // The left-off mark above the block the reader left off at.
+  useEffect(() => {
+    if (!editor || editor.isDestroyed || !leftOffBlockId) return;
+    return showLeftOff(editor, leftOffBlockId, t("reader.leftOffHere"));
+  }, [editor, leftOffBlockId, t]);
 
   // The document's translations, each under its paragraph while the page is
   // read (layer/reading.ts).
