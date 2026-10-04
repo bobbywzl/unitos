@@ -61,6 +61,7 @@ import { imageFigureHtml, isImageFile } from "@/lib/images";
 import { markdownStyleKey } from "@/lib/markdown-style";
 import { reportError } from "@/lib/error-log";
 import { isOffline, offlinePremium, queueWrite, refreshWhenOnline } from "@/lib/offline/queue";
+import { addEscapeSource, nextLayerSeq } from "@/lib/escape-layers";
 import { parseYouTubeId, youtubeWatchUrl } from "@/lib/video/youtube";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import {
@@ -2555,7 +2556,6 @@ export function ReaderInteractions({
   // The layers over the article, newest first for Escape (SPEC.md §6): each
   // layer's identity, and the order the layers opened in. A card that runs
   // again or opens on other words is a new layer.
-  const layerSeqRef = useRef(0);
   const layerSeenRef = useRef<Record<string, string | null>>({});
   const layerOpenedRef = useRef<Record<string, number>>({});
   const layerKeys: Record<string, string | null> = {
@@ -2574,7 +2574,7 @@ export function ReaderInteractions({
   for (const [layer, key] of Object.entries(layerKeys)) {
     if (layerSeenRef.current[layer] === key) continue;
     layerSeenRef.current[layer] = key;
-    if (key !== null) layerOpenedRef.current[layer] = ++layerSeqRef.current;
+    if (key !== null) layerOpenedRef.current[layer] = nextLayerSeq();
   }
   // What a card's box holds that the reader typed and has not sent: kept by
   // the card's annotation, so a card closed by Escape or a click reopens from
@@ -2662,24 +2662,21 @@ export function ReaderInteractions({
   }, []);
 
   // Escape closes one layer, the newest first (SPEC.md §6): the toolbar, a
-  // pending link, a card. It stops no run. With nothing open it leaves edit
-  // mode, saving unsaved typing on the way out.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      // Escape that dismisses a pinyin candidate list stays the IME's.
-      if (isImeKey(e)) return;
-      const top = openLayersRef.current[0];
-      if (top) {
-        closeLayerRef.current(top);
-        return;
-      }
-      if (editModeRef.current) leaveEditMode();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+  // pending link, a card — or a menu of the page opened after them (the
+  // document list, History, Contents: lib/escape-layers.ts). It stops no
+  // run. With nothing open it leaves edit mode, saving unsaved typing on
+  // the way out.
+  useEffect(
+    () =>
+      addEscapeSource(() => {
+        const top = openLayersRef.current[0];
+        if (top) return { seq: layerOpenedRef.current[top] ?? 0, close: () => closeLayerRef.current(top) };
+        if (editModeRef.current) return { seq: 0, close: () => leaveEditMode() };
+        return null;
+      }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    [],
+  );
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;

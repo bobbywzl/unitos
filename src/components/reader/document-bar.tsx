@@ -7,7 +7,7 @@ import type { DriveConfig } from "@/lib/drive/config";
 import { pickDriveFiles } from "@/lib/drive/picker-client";
 import { parseDriveFileId, type DrivePickedFile } from "@/lib/drive/types";
 import { IMAGE_ACCEPT, isImageFile } from "@/lib/handwritten/image";
-import { isImeKey } from "@/lib/ime";
+import { useEscapeLayer } from "@/lib/escape-layers";
 import { useCollab } from "@/components/collab/collab-context";
 import { reportError } from "@/lib/error-log";
 import { ChevronDownIcon, SpinnerIcon } from "@/components/icons";
@@ -369,16 +369,11 @@ export function DocumentBar({
       // a press in one is a press in the list.
       if (!listRef.current?.contains(target) && !target?.closest("[data-document-flyout]")) closeList();
     };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !isImeKey(e)) closeList();
-    };
     window.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("keydown", onKeyDown);
-    };
+    return () => window.removeEventListener("pointerdown", onPointerDown);
   }, [listOpen]);
+  // Escape closes the list as one layer (lib/escape-layers.ts).
+  useEscapeLayer(listOpen, closeList);
 
   // The open document's row is the visible one when the list opens.
   useEffect(() => {

@@ -10,6 +10,7 @@ import { useLang, useT } from "@/components/lang-provider";
 import { Presence } from "@/components/presence";
 import type { TKey } from "@/lib/i18n/dictionaries";
 import { markdownPreview } from "@/lib/markdown-preview";
+import { useEscapeLayer } from "@/lib/escape-layers";
 import { api } from "@/lib/api";
 
 const KIND_KEY: Record<HistoryEntry["kind"], TKey> = {
@@ -113,16 +114,11 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
     const onPointerDown = (e: PointerEvent) => {
       if (!panelRef.current?.contains(e.target as Node)) setOpen(false);
     };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
     window.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("keydown", onKeyDown);
-    };
+    return () => window.removeEventListener("pointerdown", onPointerDown);
   }, [open]);
+  // Escape closes History as one layer (lib/escape-layers.ts).
+  useEscapeLayer(open, () => setOpen(false));
 
   const dateLocale = lang === "zh" ? "zh-CN" : undefined;
   const authors = [...new Set(history.map((e) => e.userId).filter((id): id is string => !!id))]
