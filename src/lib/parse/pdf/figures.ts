@@ -186,6 +186,9 @@ type Drawn = { images: Box[]; paths: PathBox[] };
 // each of which a caption set beside it may take (attachFigureRegions).
 export type Graphic = Placed & { labels: Item[]; caption: Item[]; pictures: Box[] };
 
+// A glyph's fill as light as white.
+const WHITE_RE = /^#(?:f[0-9a-f]){3}$/i;
+
 // A run of text: the items on one baseline that follow each other with no
 // wider gap than a word's.
 type TextRun = { items: Item[]; box: Box; size: number; chars: number; italic: number };
@@ -270,7 +273,13 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
   }
   // Page text: a run set large, or a line's worth of words. A label is short:
   // a tick, a name in a diagram, a legend entry.
-  const isPageText = (r: TextRun) => r.size >= textSize * 1.3 || r.chars >= 40;
+  // Words filled in white over a picture show only on it: they are its
+  // label, never the page's text (parse loop finding: a PowerPoint deck
+  // sets "Iris Versicolor" in white 24 pt bold over its photo; read as the
+  // page's text, it made the photo a background and the label a heading).
+  const white = (r: TextRun) => r.items.every((i) => i.glyphs !== undefined && i.glyphs.length > 0 && i.glyphs.every((g) => g.color !== undefined && WHITE_RE.test(g.color)));
+  const onPicture = (r: TextRun) => drawing.images.some((img) => shareInside(r.box, img) >= 0.7);
+  const isPageText = (r: TextRun) => (r.size >= textSize * 1.3 || r.chars >= 40) && !(white(r) && onPicture(r));
   const runsIn = (box: Box) => runs.filter((r) => shareInside(r.box, box) >= 0.7);
   const textOf = (r: TextRun) => r.items.map((i) => i.str).join(" ");
   // A number alone on its line at the page's head or foot is the page's
