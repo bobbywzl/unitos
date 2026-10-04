@@ -690,6 +690,19 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
   segments = placeFootnotes(segments, footnotes, front);
   resolveContentsLinks(segments);
 
+  // A scan's heading holds no tab: the typist's spaces between a number and
+  // its title read as a gap between two cells, and the gap as a tab stop
+  // (parse loop finding: the DTIC Datcom's "2.\tANGLE-OF-ATTACK"). A
+  // typeset heading keeps its tab: Word sets a number and its title so.
+  for (const s of segments) {
+    if (s.type !== "HEADING" || !pageFlags[firstPageOf(s)]?.ocr || !s.text.includes("\t")) continue;
+    s.text = s.text.replace(/\t/g, " ");
+    s.runs = s.runs?.map((run) => {
+      const copy = { ...run };
+      delete copy.tab;
+      return copy;
+    });
+  }
   const blocks: ParsedBlock[] = segments.map((s) => {
     const { styles, links, font } = spansFromRuns(s.text, s.runs, {
       skipBold: s.type === "HEADING",
