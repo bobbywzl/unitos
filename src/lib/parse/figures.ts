@@ -607,6 +607,23 @@ export function tryCompositeFigure(el: Element, ctx: WalkCtx): boolean {
   const columnEls = row ? mediaColumns(row) : [];
   const columns = row ? columnEls.length : 1;
   if (plain.length > columns) return false;
+  // A row's captions sit in its columns, under each column's media. A line
+  // of prose outside every column and above the media is not a caption: a
+  // caption follows its picture. It is the text the pictures illustrate
+  // (held-out set finding: a lesson's lines around its comic strips, a
+  // story's lead above its photo and audio, and a note above a story's
+  // maps, all read as one figure's caption and lost to the text).
+  if (
+    row &&
+    firstMedia &&
+    plain.some(
+      (p) =>
+        !columnEls.some((column) => column.contains(p)) &&
+        captionText(p).length >= PROSE_LINE_MIN_CHARS &&
+        (p.compareDocumentPosition(firstMedia) & 4) !== 0,
+    )
+  )
+    return false;
   // The row's columns are marked before the clone, so the text outside
   // every column can be read from the clone.
   for (const column of columnEls) column.setAttribute("data-unitos-column", "");
