@@ -581,7 +581,10 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
   // Inline-math debris: a sum limit or exponent too far from its base line
   // to join it reads as a paragraph of one or two math glyphs. The numbers
   // right after a listing, on its page, are the output it typesets, no
-  // ticks (columns.ts listingPair).
+  // ticks (columns.ts listingPair). A number of three parts or more
+  // ("1.3.150") is a section's or a sheet's, no tick (parse loop finding:
+  // DTIC's Helicopter Design Datcom lost the 56 sheet numbers of its
+  // contents, each on a line of its own).
   const output = new Set<Segment>();
   segments.forEach((s, k) => {
     const prev = segments[k - 1];
@@ -595,7 +598,8 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
         !holdsFill(s) &&
         s.text.length <= 14 &&
         /^[\d\s.,%−–-]+$/.test(s.text) &&
-        !/\d\.$/.test(s.text.trim())
+        !/\d\.$/.test(s.text.trim()) &&
+        !/^\d+(?:\.\d+){2,}$/.test(s.text.trim())
       ) &&
       !(
         s.type === "PARAGRAPH" &&
