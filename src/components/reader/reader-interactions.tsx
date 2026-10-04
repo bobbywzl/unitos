@@ -2,7 +2,7 @@
 
 import type { Editor } from "@tiptap/core";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { api } from "@/lib/api";
 import { formatKind, type BlockKind, type FormatKind } from "@/lib/block-kind";
@@ -313,6 +313,30 @@ function isTextEntry(el: HTMLElement): boolean {
 }
 
 // Without Shift, these keys drop a selection made with the keyboard.
+/** A call that needs a model, outside api() (a stream, or a call that
+    must not count in the save indicator). Offline it fails at once with the
+    plain message (SPEC.md §17), as api() does, and a request the network
+    drops while offline says the same. */
+async function fetchWithModel(path: string, init: RequestInit, offlineMessage: string): Promise<Response> {
+  if (isOffline()) throw new Error(offlineMessage);
+  try {
+    return await fetch(path, init);
+  } catch (err) {
+    if (!init.signal?.aborted && err instanceof TypeError && isOffline()) throw new Error(offlineMessage);
+    throw err;
+  }
+}
+
+/** Whether the browser is online, as React state. */
+function subscribeOnline(listener: () => void): () => void {
+  window.addEventListener("online", listener);
+  window.addEventListener("offline", listener);
+  return () => {
+    window.removeEventListener("online", listener);
+    window.removeEventListener("offline", listener);
+  };
+}
+
 const CARET_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"]);
 
 // How long a reading position waits for the page editor's words to come
@@ -2283,6 +2307,11 @@ export function ReaderInteractions({
   // The fading hint that replaces the Edit button. Shows on document open until
   // the reader double-clicks into edit mode once.
   const [editHint, setEditHint] = useState(false);
+
+  // Offline, the tools that need a model are off (SPEC.md §17): their rows
+  // are dimmed, their tooltip says why, and a press shows the plain message.
+  const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine, () => true);
+  const aiFetch = (path: string, init: RequestInit) => fetchWithModel(path, init, t("common.offlineAi"));
 
   // Coarse pointer (tablet, phone): the selection tools dock under the
   // selection, the rows are tap-sized, and the colors and Add to notes sit
@@ -5276,7 +5305,7 @@ export function ReaderInteractions({
     setDefinition({ key, text: "", streaming: true, error: null, glossary: false });
     try {
       await flushLiveBlock(anchor.blockId);
-      const res = await fetch("/api/derive", {
+      const res = await aiFetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
@@ -5428,7 +5457,7 @@ export function ReaderInteractions({
     const mine = (b: ExplainBubble | null): b is ExplainBubble => b !== null && b.run === run;
     setBubble({ ...slot, ...NO_CHAT, kind, text: "", streaming: true, error: null, declined: null, anchor, noteId: null, run });
     try {
-      const res = await fetch("/api/derive", {
+      const res = await aiFetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
@@ -5509,7 +5538,7 @@ export function ReaderInteractions({
       run,
     });
     try {
-      const res = await fetch("/api/derive", {
+      const res = await aiFetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
@@ -5597,7 +5626,7 @@ export function ReaderInteractions({
       run,
     });
     try {
-      const res = await fetch("/api/derive", {
+      const res = await aiFetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
@@ -5883,7 +5912,7 @@ export function ReaderInteractions({
     setDistillError(null);
     setDistillShownId(null);
     try {
-      const res = await fetch("/api/derive", {
+      const res = await aiFetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
@@ -6618,7 +6647,7 @@ export function ReaderInteractions({
     // A follow-up's suggestions take the place of these, still pending.
     replacing?: readonly string[],
   ): Promise<{ reply: string; noteId: string | null; suggestKey?: string }> {
-    const res = await fetch("/api/assistant/act", {
+    const res = await aiFetch("/api/assistant/act", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       signal,
@@ -6817,7 +6846,7 @@ export function ReaderInteractions({
     try {
       await flushEditRef.current?.();
       const caret = pageEditorIn(containerRef.current)?.state.selection.$from.parent.attrs.blockId;
-      const res = await fetch(`/api/documents/${documentId}/suggest`, {
+      const res = await aiFetch(`/api/documents/${documentId}/suggest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
@@ -8367,6 +8396,10 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   // A row's look: the predicted lead tool reads as recommended, like the
   // figure toolbar's Analyze; every other row is plain.
   const leads = (tool: Tool) => leadTool === tool;
+  // Offline, a row whose tool needs a model reads as off (SPEC.md §17).
+  const aiOff = !online;
+  const aiTip = (tip: string) => (aiOff ? t("common.offlineAi") : tip);
+  const aiDim = aiOff ? " opacity-50" : "";
   const rowLook = (tool: Tool) =>
     leads(tool)
       ? "bg-clay-100 font-semibold text-clay-800 hover:bg-clay-200"
@@ -9446,11 +9479,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   void define();
                 }}
                 data-track="define"
+                aria-disabled={aiOff || undefined}
                 aria-expanded={submenu === "define"}
-                data-tip={t("reader.defineTitle")}
+                data-tip={aiTip(t("reader.defineTitle"))}
                 className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left ${
                   submenu === "define" ? "bg-clay-100 text-clay-800" : rowLook("define")
-                }${defineNew.isNew ? ` ${NEW_GLOW_CLASS}` : ""}`}
+                }${defineNew.isNew ? ` ${NEW_GLOW_CLASS}` : ""}${aiDim}`}
               >
                 <span className="flex items-center gap-1.5">
                   <DefineIcon size={coarse ? 14 : 12} />
@@ -9502,13 +9536,14 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           <button
             onClick={() => (barOffered ? openBar(popover) : setSubmenu(submenu === "ai" ? null : "ai"))}
             data-track="assistant"
+            aria-disabled={aiOff || undefined}
             aria-expanded={submenu === "ai"}
-            data-tip={t("reader.assistantTitle")}
+            data-tip={aiTip(t("reader.assistantTitle"))}
             className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left font-semibold ${
               submenu === "ai"
                 ? "bg-clay-100 text-clay-800"
                 : "text-clay-700 hover:bg-clay-100 hover:text-clay-800"
-            }`}
+            }${aiDim}`}
           >
             <SparkleIcon size={coarse ? 14 : 12} />
             {t("reader.assistant")}
@@ -9592,8 +9627,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             <button
               onClick={() => void analyze()}
               data-track="analyze"
-              data-tip={t("reader.analyzeFigureTitle")}
-              className={`flex w-full items-center justify-between gap-2 rounded-full bg-clay-100 ${toolRow} text-left font-semibold text-clay-800 hover:bg-clay-200 disabled:opacity-40`}
+              aria-disabled={aiOff || undefined}
+              data-tip={aiTip(t("reader.analyzeFigureTitle"))}
+              className={`flex w-full items-center justify-between gap-2 rounded-full bg-clay-100 ${toolRow} text-left font-semibold text-clay-800 hover:bg-clay-200 disabled:opacity-40${aiDim}`}
             >
               <span className="flex items-center gap-1.5">
                 <ChartIcon size={coarse ? 14 : 12} />
@@ -9608,8 +9644,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             <button
               onClick={() => void explain()}
               data-track="explain"
-              data-tip={popoverKind === "figure" ? t("reader.explainFigureTitle") : t("reader.explainTitle")}
-              className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left ${rowLook("explain")}`}
+              aria-disabled={aiOff || undefined}
+              data-tip={aiTip(popoverKind === "figure" ? t("reader.explainFigureTitle") : t("reader.explainTitle"))}
+              className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left ${rowLook("explain")}${aiDim}`}
             >
               <span className="flex items-center gap-1.5">
                 <QuestionIcon size={coarse ? 14 : 12} />
@@ -9622,8 +9659,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             <button
               onClick={() => void simplify()}
               data-track="simplify"
-              data-tip={t("reader.simplifyTitle")}
-              className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left ${rowLook("simplify")}`}
+              aria-disabled={aiOff || undefined}
+              data-tip={aiTip(t("reader.simplifyTitle"))}
+              className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left ${rowLook("simplify")}${aiDim}`}
             >
               <span className="flex items-center gap-1.5">
                 <SummaryIcon size={coarse ? 14 : 12} />
@@ -9636,8 +9674,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             <button
               onClick={() => void visualize()}
               data-track="visualize"
-              data-tip={t("reader.visualizeTitle")}
-              className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left ${rowLook("visualize")}`}
+              aria-disabled={aiOff || undefined}
+              data-tip={aiTip(t("reader.visualizeTitle"))}
+              className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left ${rowLook("visualize")}${aiDim}`}
             >
               <span className="flex items-center gap-1.5">
                 <VisualizeIcon size={coarse ? 14 : 12} />
