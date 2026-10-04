@@ -534,9 +534,15 @@ export function DocsEditor({
     editor.view.dispatch(editor.state.tr.setMeta(annotationMarksKey, meta).setMeta("addToHistory", false));
   }, [editor, marksSignature, highlightsByBlock, t, matches, rev, saveState]);
 
+  // A switch to Editing or Suggesting gives the page the keys at its caret,
+  // the selection kept and the pane where it is.
+  const modeRef = useRef(mode);
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
     editor.setEditable(writable && mode !== "viewing");
+    const switched = modeRef.current !== mode;
+    modeRef.current = mode;
+    if (switched && writable && mode !== "viewing") editor.commands.focus(undefined, { scrollIntoView: false });
   }, [editor, writable, mode]);
 
   // The header shows while the reader is in the document: a press or the

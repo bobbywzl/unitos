@@ -129,6 +129,23 @@ export function VersionView({
   useEffect(() => {
     if (placed) rootRef.current?.focus();
   }, [placed]);
+  // Escape closes the view as Back does. An open menu or dialog takes its
+  // own Escape first, and a version's name field puts its old name back.
+  const closeRef = useRef(onClose);
+  useEffect(() => {
+    closeRef.current = onClose;
+  });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented || e.isComposing) return;
+      if (document.querySelector("[data-docs-menu], [role='dialog']")) return;
+      if (e.target instanceof HTMLInputElement && rootRef.current?.contains(e.target)) return;
+      e.preventDefault();
+      closeRef.current();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
   const entries = history ? entriesOf(history) : [];
   const index = Math.max(0, entries.findIndex((e) => e.id === selected));
