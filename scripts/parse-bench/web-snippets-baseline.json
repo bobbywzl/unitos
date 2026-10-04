@@ -1022,7 +1022,7 @@
   },
   "Rosjanie sugerują natychmiastowe odcięcie Polski od gazu - Energetyka24.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "erfolg-magazin.de.konfliktkultur.html": {
@@ -4272,7 +4272,7 @@
   },
   "rheinruhronline.de.essenwestviertel.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "rnz.de.witzel.html": {
