@@ -372,6 +372,24 @@ export function attachTableCaptions(segments: Segment[]): Segment[] {
     caption.runs = [...(caption.runs ?? []), ...(next.runs ?? []).map((r) => ({ ...r, start: r.start + at, end: r.end + at }))];
     taken.add(next);
   }
+  // A key line between a caption and its table ("E = Eligible, NE = Not
+  // Eligible, TBD = …") is the caption's: two abbreviations or more, each
+  // with "=" and its meaning, on one line, on the table's page (parse loop
+  // finding: CRS R48907, a Word export, sets Table 1's key under its
+  // caption, and the caption stood apart from its table).
+  for (const k of labeled) {
+    const caption = segments[k];
+    const key = segments[k + 1];
+    const table = segments[k + 2];
+    if (!key || key.type !== "PARAGRAPH" || key.footnote || taken.has(key) || table?.type !== "TABLE" || !table.html) continue;
+    const page = caption.breaks?.at(-1)?.page ?? caption.page;
+    const text = key.text.trim();
+    if (key.page !== page || firstPageOf(table) !== page || text.includes("\n") || text.length > 300 || (text.match(KEY_PAIR_RE) ?? []).length < 2) continue;
+    const at = caption.text.length + 1;
+    caption.text = `${caption.text}\n${key.text}`;
+    caption.runs = [...(caption.runs ?? []), ...(key.runs ?? []).map((r) => ({ ...r, start: r.start + at, end: r.end + at }))];
+    taken.add(key);
+  }
   let over = 0;
   let under = 0;
   for (const k of labeled) {
@@ -419,6 +437,10 @@ export function attachTableCaptions(segments: Segment[]): Segment[] {
   });
   return segments.filter((s) => !taken.has(s));
 }
+
+// One pair of a key line: an abbreviation, "=", and the start of its
+// meaning ("E = Eligible", "TBD = to be determined").
+const KEY_PAIR_RE = /(?:^|[,;]\s*)[^\s,;=]{1,12}\s*=\s*\p{L}/gu;
 
 /** A caption set under its table: the table's <caption> opens with this. */
 export const BELOW_CAPTION = '<caption style="caption-side: bottom">';
