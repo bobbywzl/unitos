@@ -1458,6 +1458,10 @@ export function ReaderInteractions({
       // The page editor's words are here: the hold runs from now, and its
       // page's size changes (pagination, figures loading) hold the place.
       placed = true;
+      if (!isTranscript && "blockId" in position) {
+        const top = readingPositionScroll(container, position, resume);
+        if (top !== null && top >= container.clientHeight * LEFT_OFF_MIN_SHARE) setLeftOffBlockId(position.blockId);
+      }
       clearTimeout(timer);
       timer = setTimeout(release, POSITION_HOLD_MS);
       const page = container.querySelector("article");
@@ -2522,7 +2526,7 @@ export function ReaderInteractions({
     const side = window.matchMedia("(pointer: coarse)").matches
       ? ("below" as const)
       : pageGeo
-        ? toolbarLeft(pageGeo, shift, 176) === null
+        ? toolbarLeft(pageGeo, shift, 176) === null && toolbarShift(pageGeo, shift, 176) === null
           ? ("below" as const)
           : ("right" as const)
         : toolboxSide(container, yTop);
