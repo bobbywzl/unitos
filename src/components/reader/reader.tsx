@@ -1185,6 +1185,7 @@ export function Reader({
         translation={read ? translations?.[block.id] : undefined}
         core={read && collapse ? collapse.cores[block.id] : undefined}
         showsCore={read && collapse ? collapse.on !== collapse.flipped.has(block.id) : false}
+        coreQuiet={!collapse?.on}
         coreHighlights={read && collapse ? highlightsByBlock[coreKey(block.id)] : undefined}
         text={edit ? effectiveText(block) : ""}
         kind={edit ? effectiveKind(block) : "paragraph"}
@@ -1610,6 +1611,8 @@ type BlockRowProps = {
   translation: string | undefined;
   core: string | undefined;
   showsCore: boolean;
+  /** Collapse is off: the block's core button shows only under the pointer. */
+  coreQuiet: boolean;
   coreHighlights: Highlight[] | undefined;
   /** Editing: the text, the kind, and the styles the editable shows. */
   text: string;
@@ -1672,6 +1675,7 @@ const BlockRow = memo(function BlockRow({
   translation,
   core,
   showsCore,
+  coreQuiet,
   coreHighlights,
   text,
   kind,
@@ -1755,7 +1759,7 @@ const BlockRow = memo(function BlockRow({
     // button flipped it — and the other way round.
     const view = <BlockView block={block} highlights={highlights} documentId={documentId} />;
     const toggle = core !== undefined && (
-      <CoreToggle showsCore={showsCore} onToggle={() => actions.flip(block.id)} />
+      <CoreToggle showsCore={showsCore} quiet={coreQuiet && !showsCore} onToggle={() => actions.flip(block.id)} />
     );
     const body =
       core === undefined ? (
