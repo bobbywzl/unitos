@@ -7,7 +7,7 @@ import { CAPTION_RE } from "@/lib/parse/pdf/figures";
 import { geom, lineMathShare } from "@/lib/parse/pdf/geometry";
 import { charCount } from "@/lib/parse/pdf/glyphs";
 import { BULLET_RE, isGlyphMarker, readMarker } from "@/lib/parse/pdf/markers";
-import { isCentered, leftEdge, lineAlign, readParagraph } from "@/lib/parse/pdf/paragraphs";
+import { columnEdges, isCentered, leftEdge, lineAlign, readParagraph } from "@/lib/parse/pdf/paragraphs";
 import { TextBuilder, boldShare, escapeHtml, fillsMargin, joinGroup, lineAsPart, startsWithBoldLead } from "@/lib/parse/pdf/text";
 import type { Item, Line, PageContext, Run, Segment, Step } from "@/lib/parse/pdf/types";
 
@@ -547,17 +547,24 @@ function numberedHeading(lines: Line[], i: number, ctx: PageContext, runOf: numb
   // over its paragraph, it is a heading ("3.2. Proofs of Propositions 3.2
   // and 3.3.", its number set plain and its title bold).
   const closed = /\.$/.test(line.text.trim()) && styledShare(line) > 0.8;
+  // A scan's text layer sizes each word by its own box, and a typewriter
+  // leaves the column's right edge ragged: a section's title in capitals,
+  // centered by eye over its section, reads small and off the column's
+  // middle (parse loop finding: a DTIC scan's "2. ANGLE-OF-ATTACK" read
+  // 10.8 pt over lines of 14.9 pt, 17 pt off the middle, as a paragraph).
+  const scanTitle = ctx.ocr === true && capsShare(line.text) >= 0.9 && scanMiddle(lines, i, ctx);
   if (
     !(
       line.cells.length === 1 &&
       (HEADING_NUM_STRICT_RE.test(line.text) || (lineBold && LETTER_HEADING_RE.test(line.text))) &&
-      !(BULLET_RE.test(line.text) && !styled && !centered) &&
+      !(BULLET_RE.test(line.text) && !styled && !centered && !scanTitle) &&
       !TOC_TAIL_RE.test(line.text) &&
       [...line.text].length < 120 &&
       (!/[.,;:]$/.test(line.text) || closed) &&
-      line.size >= ctx.bodySize * 0.98 &&
+      line.size >= ctx.bodySize * (scanTitle ? 0.7 : 0.98) &&
       (styled ||
         centered ||
+        scanTitle ||
         line.size >= ctx.bodySize * 1.05 ||
         !ctx.hasBold ||
         /^(\d{1,2}|[A-Z])(\.\d{1,2})+/.test(line.text))
@@ -612,6 +619,15 @@ function numberedHeading(lines: Line[], i: number, ctx: PageContext, runOf: numb
   // of imaginary zj's. If n = 1 then", its number set upright).
   if (/[?!]$/.test(text.trim()) || SENTENCE_END_RE.test(text)) return null;
   return { segments: [headingOf(run, text, runs)], next: j };
+}
+
+// Line k is set in from both edges of its column by four ems or more, and
+// its middle stands within three ems of the column's middle.
+function scanMiddle(lines: Line[], k: number, ctx: PageContext): boolean {
+  const line = lines[k];
+  const { left, right } = columnEdges(lines, k, ctx);
+  if (right <= 0 || line.x - left < line.size * 4 || right - line.xEnd < line.size * 4) return false;
+  return Math.abs((line.x + line.xEnd) / 2 - (left + right) / 2) <= line.size * 3;
 }
 
 // The line's last words are set bold or in small caps. A bold lead with a
