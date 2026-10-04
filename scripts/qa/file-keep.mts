@@ -206,6 +206,41 @@ for (const name of readdirSync(FIXTURES).filter((f) => f.endsWith(".md")).sort()
   check(`file keeps every block: fixture ${name}`, lost.length === 0, lost.join("; "));
 }
 
+// A text file's outline (markdownToHtml): a short first line standing alone
+// is the Title, and a short line in capitals standing alone is a heading. A
+// line that ends a sentence is neither, and a file with a heading of its
+// own keeps its Markdown as written.
+{
+  const shape = async (md: string, file = "notes.txt") => {
+    const parsed = await parseMarkdownDocument(md, file);
+    return {
+      title: parsed.titleFromFile ? null : parsed.title,
+      headings: parsed.blocks.filter((b) => b.type === "HEADING").map((b) => norm(b.text)),
+    };
+  };
+  const audit = await shape(`Imports audit 5\n\n${FILLER}\n\nTHE REPLAY WINDOW\n\n${SECOND}\n\nWHAT WE MEASURED\n\n${THIRD}\n`);
+  check("text file: a short first line is the Title", audit.title === "Imports audit 5", `title ${audit.title}`);
+  check(
+    "text file: a short line in capitals is a heading",
+    audit.headings.join(" | ") === "THE REPLAY WINDOW | WHAT WE MEASURED",
+    audit.headings.join(" | "),
+  );
+  const sentences = await shape(`This file opens with a sentence.\n\n${FILLER}\n\nTHE RUN STOPPED HERE.\n\n${SECOND}\n\nNOTE:\n\n${THIRD}\n`);
+  check("text file: a first line that ends a sentence is no Title", sentences.title === null, `title ${sentences.title}`);
+  check("text file: a capitals line that ends a sentence is no heading", sentences.headings.length === 0, sentences.headings.join(" | "));
+  const joined = await shape(`Notes\nfrom the second run of the cache test\n\n${FILLER}\nTHE REPLAY WINDOW\n${SECOND}\n\nA LINE IN CAPITALS THAT RUNS ON FAR TOO LONG TO BE ANY HEADING\n\n${THIRD}\n`);
+  check("text file: a line with no blank line under it is no Title", joined.title === null, `title ${joined.title}`);
+  check("text file: a capitals line inside a paragraph, or a long one, is no heading", joined.headings.length === 0, joined.headings.join(" | "));
+  const long = await shape(`A first line that runs on well past twelve words is the opening of the text\n\n${FILLER}\n`);
+  check("text file: a long first line is no Title", long.title === null, `title ${long.title}`);
+  const markdown = await shape(`# Cache notes\n\n${FILLER}\n\nTHE REPLAY WINDOW\n\n${SECOND}\n`, "notes.md");
+  check(
+    "Markdown with a heading of its own keeps its Markdown",
+    markdown.title === "Cache notes" && markdown.headings.length === 0,
+    `title ${markdown.title}; headings ${markdown.headings.join(" | ")}`,
+  );
+}
+
 // A web page: the head-duplicate rule drops a copy of the title, or of a
 // block whose first copy sits in the page's header, and never a body
 // paragraph said twice (more than three blocks apart: a line said again
