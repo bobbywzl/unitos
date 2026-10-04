@@ -8986,7 +8986,8 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
 
       {richText && <CardColumn ref={setColumnHost} split={split} comments={columnComments} />}
       {inColumn(<>
-      <Presence show={annotationCard !== null} exit="pop">
+      {/* The chooser of stacked annotations stands on its own, not in the
+          annotation card's Presence: it opens with no card open. */}
       {stackChooser && (
         <div
           data-selection-popover
@@ -9023,6 +9024,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           })}
         </div>
       )}
+      <Presence show={annotationCard !== null} exit="pop">
       {annotationCard && (
         <div
           data-selection-popover
