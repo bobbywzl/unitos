@@ -404,6 +404,18 @@ export function furnitureOf(lines: Line[], sizes: Sizes): Line[] {
   // page's index: alone it is a formula's limit or label more often (the
   // probability cheatsheet's ∑ₓ at two pages' feet).
   for (const l of candidates) if (outer(l) && PAGE_NUMBER_RE.test(l.text.trim()) && !/^[ivxIVX]$/.test(l.text.trim())) furniture.add(l);
+  // A document of one page has no other page to repeat its number: a lone
+  // number equal to the page's index, centered in the page's last two rows
+  // and in its lowest fifth, is its page number (parse bench finding: two
+  // one-page LuaLaTeX samples set "1" centered, its top 97 pt over the foot,
+  // above the outer 8%; the parse drops it, and the count read it as a
+  // word the parse missed).
+  if (sizes.size === 1) {
+    for (const l of lastRows.flat()) {
+      const middle = (l.left + l.right) / 2;
+      if (/\d/.test(l.text) && pageNumberOf(l.text) === l.page && Math.abs(middle - size(l).width / 2) < 0.05 * size(l).width && l.top > 0.8 * size(l).height) furniture.add(l);
+    }
+  }
 
   // Repeats: a line or a whole row of three letters or more (a diagram's
   // label "o3" tops pages too). A row, since pdftotext cuts a head at its
