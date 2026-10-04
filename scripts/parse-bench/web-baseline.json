@@ -1,7 +1,7 @@
 {
  "total": {
-  "f1": 0.981,
-  "precision": 0.969,
+  "f1": 0.982,
+  "precision": 0.97,
   "recall": 0.994
  },
  "pages": {
@@ -476,8 +476,8 @@
    "recall": 1
   },
   "8634d1211c": {
-   "f1": 0.966,
-   "precision": 0.935,
+   "f1": 1,
+   "precision": 0.999,
    "recall": 1
   },
   "87438a0dac": {
