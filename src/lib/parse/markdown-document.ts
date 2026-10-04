@@ -306,6 +306,60 @@ class Renderer {
   }
 }
 
+// A text file's outline (SPEC.md §2): a file whose Markdown holds no heading
+// (a .txt file, most often) has its outline in how its lines stand, and two
+// rules read it. Each reads a line that stands alone: one line, a blank line
+// under it, and a blank line above it past the file's first line.
+//   1. The file's first line, when short, is the Title ("Imports audit 5").
+//   2. A short line in capitals is a heading ("THE REPLAY WINDOW").
+// A line that ends a sentence (a period, a comma, a colon, a semicolon) is
+// neither. A file with a heading of its own, or with front matter, is
+// Markdown as written, and neither rule runs.
+const TEXT_TITLE_CHARS_MAX = 80;
+const TEXT_TITLE_WORDS_MAX = 12;
+const TEXT_HEADING_CHARS_MAX = 60;
+const TEXT_HEADING_WORDS_MAX = 8;
+const TEXT_SENTENCE_END_RX = /[.,;:。，；：]["'”’)\]]*$/;
+
+function hasHeading(node: Root | RootContent): boolean {
+  if (node.type === "heading") return true;
+  if (node.type === "html") return /<h[1-6][\s>]/i.test(node.value);
+  return "children" in node && (node.children as RootContent[]).some(hasHeading);
+}
+
+/** A top-level paragraph that stands alone and ends no sentence: its text. */
+function standingLine(nodes: RootContent[], i: number): string | null {
+  const node = nodes[i];
+  if (node.type !== "paragraph" || !node.position) return null;
+  const { start, end } = node.position;
+  if (start.line !== end.line) return null;
+  const prev = nodes[i - 1];
+  const next = nodes[i + 1];
+  if (prev?.position && prev.position.end.line >= start.line - 1) return null;
+  if (!next?.position || next.position.start.line <= end.line + 1) return null;
+  const text = plainText(node.children);
+  if (!/\p{L}/u.test(text) || TEXT_SENTENCE_END_RX.test(text)) return null;
+  return text;
+}
+
+function shapeTextOutline(root: Root) {
+  if (hasHeading(root)) return;
+  const nodes = root.children;
+  const words = (text: string) => text.split(/\s+/).filter(Boolean).length;
+  nodes.forEach((node, i) => {
+    if (node.type !== "paragraph") return;
+    const text = standingLine(nodes, i);
+    if (text === null) return;
+    const title = i === 0 && text.length <= TEXT_TITLE_CHARS_MAX && words(text) <= TEXT_TITLE_WORDS_MAX;
+    const capitals =
+      text.length <= TEXT_HEADING_CHARS_MAX &&
+      words(text) <= TEXT_HEADING_WORDS_MAX &&
+      (text.match(/\p{Lu}/gu) ?? []).length >= 2 &&
+      !/\p{Ll}/u.test(text);
+    if (title || capitals) nodes[i] = { type: "heading", depth: title ? 1 : 2, children: node.children, position: node.position };
+  });
+}
+
 /** The HTML page a Markdown file becomes, and its title: the front matter's
     title, else the file's first heading, else the file name (titleFromFile:
     the file's words name nothing, so an import opens with no Title). */
@@ -317,20 +371,27 @@ export function markdownToHtml(
   const { body, title: frontTitle } = splitFrontMatter(source);
   const { text, spans } = setAsideMath(body);
   const tree = unified().use(remarkParse).use(remarkGfm).parse(text) as Root;
+  if (body === source) shapeTextOutline(tree);
   const renderer = new Renderer(spans);
   const article = renderer.render(tree);
   const ownTitle = frontTitle ?? renderer.firstHeading;
   const title = ownTitle ?? filename.replace(MARKDOWN_EXTENSIONS, "").trim() ?? "Document";
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title></head><body><article>${article}</article></body></html>`;
+  // The page's <title> is the file's own title only: a file name there would
+  // let the walk read a first heading that says the same words as the
+  // banner, and drop it.
+  const head = ownTitle !== null ? `<title>${escapeHtml(ownTitle)}</title>` : "";
+  const html = `<!doctype html><html><head><meta charset="utf-8">${head}</head><body><article>${article}</article></body></html>`;
   return { html, title, titleFromFile: ownTitle === null };
 }
 
-/** A Markdown file's blocks: the same walk a web page takes, no model pass. */
+/** A Markdown file's blocks: the same walk a web page takes, no model pass,
+    with every block of the file kept (no furniture rule drops one). */
 export async function parseMarkdownDocument(
   markdown: string,
   filename: string,
 ): Promise<ParsedDocument & { titleFromFile: boolean }> {
   const { html, title, titleFromFile } = markdownToHtml(markdown, filename);
-  const parsed = await parseHtmlContent(html, MARKDOWN_BASE_URL);
+  // The file is the author's words: the walk keeps every block it holds.
+  const parsed = await parseHtmlContent(html, MARKDOWN_BASE_URL, undefined, { source: "file" });
   return { ...parsed, title, titleFromFile, font: undefined, columnWidth: undefined };
 }
