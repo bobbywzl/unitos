@@ -1068,6 +1068,19 @@ function printedWords(
     const parts = wordsOf(unit.text.slice(t.start, at)).concat(wordsOf(unit.text.slice(at, t.end))).map((w) => w.w);
     if (parts.length > 1) raised.push({ joined: t.w, parts });
   }
+  // A word with scripts at several edges (a chemical formula's "SO₄²⁻",
+  // a prescript's "²²·⁹⁸₁₁Na"): the text layer may read a word apart at
+  // each edge, a subscript stacked under a superscript on a line of its
+  // own (parse bench finding: chemformula's manual p. 9, pdftotext reads
+  // \ch{SO4^2-} as "SO 2–" over "4").
+  for (const t of toks) {
+    const unit = cand.units[t.unit];
+    const edges = [...new Set(unit.scripts.flatMap(([a, b]) => [a, b]).filter((e) => e > t.start && e < t.end))].sort((a, b) => a - b);
+    if (edges.length < 2) continue;
+    const cuts = [t.start, ...edges, t.end];
+    const parts = cuts.slice(1).flatMap((e, k) => wordsOf(unit.text.slice(cuts[k], e)).map((w) => w.w));
+    if (parts.length > 2) raised.push({ joined: t.w, parts });
+  }
   cand.blocks.forEach((block, b) => {
     if (block.kind === "list" && kept(b)) for (const item of block.items) words.push(...wordsOf(item.marker).map((w) => w.w));
   });
