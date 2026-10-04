@@ -360,8 +360,27 @@ function objectMarks(node: PMNode, pos: number, highlights: Highlight[], t: TFun
   return decorations;
 }
 
+/** Where each note's marks end last in the page: a passage across blocks
+    (over a page start, a paragraph the PDF split) is one passage, and its
+    chips stand once, at its end, as a passage in one paragraph has them. */
+function passageEnds(doc: PMNode, highlights: Record<string, Highlight[]>): Map<string, number> {
+  const ends = new Map<string, number>();
+  doc.descendants((node, pos) => {
+    if (!node.isTextblock) return !WHOLE.has(node.type.name);
+    const id = node.attrs.blockId as string | null;
+    for (const h of id ? (highlights[id] ?? []) : []) {
+      if (h.kind !== "anchor" || !h.noteId || h.end <= h.start) continue;
+      const at = posInBlock(node, pos, h.end, true);
+      if (at > (ends.get(h.noteId) ?? -1)) ends.set(h.noteId, at);
+    }
+    return false;
+  });
+  return ends;
+}
+
 function build(doc: PMNode, highlights: Record<string, Highlight[]>, t: TFunc, editing: boolean): DecorationSet {
   const decorations: Decoration[] = [];
+  const ends = passageEnds(doc, highlights);
   doc.descendants((node, pos) => {
     if (WHOLE.has(node.type.name)) {
       const id = node.attrs.blockId as string | null;
@@ -386,11 +405,14 @@ function build(doc: PMNode, highlights: Record<string, Highlight[]>, t: TFunc, e
         decorations.push(Decoration.inline(a, b, attrs, { inclusiveStart: false, inclusiveEnd: false }));
       }
     }
-    // The chips at each mark's end.
+    // The chips at each mark's end; a note's passage across blocks carries
+    // them once, at its last block's end (its tool's symbol too).
     let side = 1;
     for (const h of painted) {
       const at = posInBlock(node, pos, h.end, true);
-      for (const chip of chipsOf(h)) {
+      const passage = h.kind === "anchor" && h.noteId ? ends.get(h.noteId) : undefined;
+      if (passage !== undefined && passage !== at) continue;
+      for (const chip of chipsOf(passage !== undefined ? { ...h, chipless: false } : h)) {
         decorations.push(
           Decoration.widget(at, chipWidget(chip, t), {
             side: side++,
