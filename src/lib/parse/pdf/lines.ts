@@ -11,6 +11,11 @@ import type { Glyph } from "@/lib/parse/pdf/drawing";
 import type { Cell, Item, Line, Run } from "@/lib/parse/pdf/types";
 
 export const ATTACH_PUNCT_RE = /^[.,;:!?)\]…%]/;
+// A decimal fraction set a space after the word before it opens a number
+// of its own, never punctuation that attaches left (parse loop finding: a
+// NACA report's OCR'd tables set ".597" after "18.8", a space apart, and
+// read the two numbers as "18.8.597").
+export const attachesLeft = (str: string, gap: number, size: number) => ATTACH_PUNCT_RE.test(str) && !/^[.,]\d/.test(str) && gap < size * 0.7;
 const CJK_START_RE = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
 const NUMERIC_TOKEN_RE = /^[\d.,%$€£+−–-]+$/;
 
@@ -651,8 +656,7 @@ function buildLine(rawItems: Item[], page: number, rtlText = false): Line {
       cells.push(cell);
     } else if ((gap > least || crossed || (drawnSpace && gap >= 0)) && !cell.text.endsWith(" ")) {
       // Punctuation that attaches left ("PRESS" chip then ".") takes no space.
-      const attach = ATTACH_PUNCT_RE.test(item.str) && gap < size * 0.7;
-      if (!attach) cell.text += " ";
+      if (!attachesLeft(item.str, gap, size)) cell.text += " ";
     }
     const start = cell.text.length;
     cell.text += item.str;

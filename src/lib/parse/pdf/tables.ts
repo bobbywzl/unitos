@@ -5,7 +5,7 @@
 
 import { geom, lineMathShare, median } from "@/lib/parse/pdf/geometry";
 import { sameFlags } from "@/lib/parse/pdf/glyphs";
-import { ATTACH_PUNCT_RE, rightToLeftRuns } from "@/lib/parse/pdf/lines";
+import { attachesLeft, rightToLeftRuns } from "@/lib/parse/pdf/lines";
 import { isGlyphMarker, readMarker } from "@/lib/parse/pdf/markers";
 import { CAPTION_RE } from "@/lib/parse/pdf/figures";
 import { firstPageOf } from "@/lib/parse/pdf/merge";
@@ -137,8 +137,7 @@ function cellOfItems(cellItems: Item[], size: number): Cell {
   for (const item of items) {
     const gap = prevEnd === null ? 0 : item.x - prevEnd;
     if (prevEnd !== null && gap > size * 0.12 && !cell.text.endsWith(" ")) {
-      const attach = ATTACH_PUNCT_RE.test(item.str) && gap < size * 0.7;
-      if (!attach) cell.text += " ";
+      if (!attachesLeft(item.str, gap, size)) cell.text += " ";
     }
     const start = cell.text.length;
     cell.text += item.str;
