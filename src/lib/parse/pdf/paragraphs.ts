@@ -990,6 +990,12 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
   const segment: Segment = { type: "PARAGRAPH", text, ...(html ? { html } : {}), ...(indent ? { indent } : {}), page: line.page, runs, ...geom(group) };
   const last = group[group.length - 1];
   if (justifiedPage(lines, ctx) && (atEdge(last, columnEdges(lines, j - 1, ctx).right) || atEdge(last, fullEnd(lines, j - 1)))) fullLast.add(segment);
+  if (!alignedApart(segment) && !ctx.ocr) {
+    // The furthest any full line of the column reaches on the page: a
+    // ragged column's lines stop anywhere short of it.
+    const edge = Math.max(fullEnd(lines, j - 1), columnEdges(lines, j - 1, ctx).right);
+    lineEnds.set(segment, { room: edge > 0 ? edge - last.xEnd : null, size: last.size, justified: justifiedPage(lines, ctx), word: firstWord(group[0]) });
+  }
   const pitch = group.length >= 2 ? pitchOf(group, ctx) : undefined;
   if (pitch !== undefined) pitches.set(segment, pitch);
   return { segments: [segment], next: j };
@@ -1068,10 +1074,34 @@ export function endsFull(s: Segment): boolean {
   return fullLast.has(s);
 }
 
+// Where a paragraph's lines end and open: the room its last line leaves
+// before its column's edge (null where no edge shows), and the width of its
+// first line's first word. A ragged page wraps a line only where the next
+// word would not fit; a page set justified, only where the line runs to the
+// edge (merge.ts wrapsAcross).
+type LineEnds = { room: number | null; size: number; justified: boolean; word: number };
+const lineEnds = new WeakMap<Segment, LineEnds>();
+const alignedApart = (s: Segment) => /\b(?:center|right)\b/.test(s.html ?? "");
+
+/** The paragraph's last line could not take the first word of next's first
+    line: a ragged page broke the line there, so the page break may cut the
+    paragraph after a sentence ("…scored fifty." | "The gap of twenty points
+    …"). On a page set justified the line runs to the edge (endsFull). */
+export function wrapsAt(prev: Segment, next: Segment): boolean {
+  if (endsFull(prev)) return true;
+  const end = lineEnds.get(prev);
+  const open = lineEnds.get(next);
+  if (!end || !open || end.justified || end.room === null || end.room < -end.size) return false;
+  return end.room < end.size * 0.28 + open.word + 1;
+}
+
 /** A paragraph that took another's lines ends as that one does. */
 export function endAs(target: Segment, source: Segment) {
   if (fullLast.has(source)) fullLast.add(target);
   else fullLast.delete(target);
+  const [first, last] = [lineEnds.get(target), lineEnds.get(source)];
+  if (first && last) lineEnds.set(target, { ...last, word: first.word });
+  else lineEnds.delete(target);
 }
 
 // What a paragraph's lines show of its layout: the class tokens the reader

@@ -3,7 +3,7 @@
 
 import { CAPTION_RE } from "@/lib/parse/pdf/figures";
 import { BULLET_RE, follows, opensSequence, readMarker } from "@/lib/parse/pdf/markers";
-import { endAs, endsFull } from "@/lib/parse/pdf/paragraphs";
+import { endAs, endsFull, wrapsAt } from "@/lib/parse/pdf/paragraphs";
 import { joinWrapped } from "@/lib/parse/pdf/text";
 import type { PageBreak, Segment } from "@/lib/parse/pdf/types";
 
@@ -457,6 +457,33 @@ function wrapsOver(prev: Segment, next: Segment, setting: PageSetting): boolean 
   );
 }
 
+// An end mark: a remark's, an example's, or a proof's.
+const END_MARK_RE = /[♢◇◆♦□■∎▢◁▷⊣]$/u;
+
+// A paragraph's last line at a page's foot wrapped, and the paragraph at the
+// next page's top opens where the column's lines start: the page break cut
+// the paragraph after a sentence, on a page whose paragraphs open flush as
+// well as on one that sets them in (wrapsOver). A ragged page wrapped the
+// line because the next page's first word would not fit on it; a page set
+// justified ran it to the edge (wrapsAt). A paragraph that ends short of
+// that stays apart from the next page's, and so does one the next page sets
+// in (reader audit finding: "…the screen group scored fifty." | "The gap of
+// twenty points is the effect this section is about." imported as two
+// paragraphs, the page break between them).
+function wrapsAcross(prev: Segment, next: Segment): boolean {
+  return (
+    next.type === "PARAGRAPH" &&
+    !prev.listItem &&
+    // An end mark set flush right (a remark's ♢, a proof's ∎) ends its
+    // block at the line's edge: the MML book's "…b = X⊤y. ♢" is no part
+    // of the next page's "Example 9.2 (Fitting Lines)".
+    !END_MARK_RE.test(prev.text.trim()) &&
+    !/\b(?:center|right|caption|quote|footnote)\b/.test(prev.html ?? "") &&
+    !/\b(?:indent-first|indent-hanging|indent-block|center|right|caption|quote|footnote)\b/.test(next.html ?? "") &&
+    wrapsAt(prev, next)
+  );
+}
+
 export function mergeAcrossPages(input: Segment[]): Segment[] {
   const setting = pageSetting(input);
   const body = bodySizes(input);
@@ -496,7 +523,8 @@ export function mergeAcrossPages(input: Segment[]): Segment[] {
           // "… the" | "AAR only stages": a paragraph that ends without a stop
           // is unfinished, whatever the case of the next page's first word.
           (/\s[\p{L}\p{M}]+$/u.test(prev.text) && prev.text.length > 60))) ||
-        wrapsOver(prev, segment, setting))
+        wrapsOver(prev, segment, setting) ||
+        wrapsAcross(prev, segment))
     ) {
       const offset = joinWrapped(prev, segment.text);
       prev.breaks = joinBreaks(prev, segment, offset);
