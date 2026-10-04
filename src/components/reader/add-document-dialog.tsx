@@ -6,6 +6,7 @@ import { useT } from "@/components/lang-provider";
 import { BlankDocumentIcon, DriveLogo, LibraryIcon } from "@/components/icons";
 import { Presence } from "@/components/presence";
 import { classifyDriveFile, parseDriveFileId, type DriveAccess, type DrivePickedFile } from "@/lib/drive/types";
+import { DocumentDeleteConfirm, useDocumentReach } from "@/components/reader/document-delete";
 import { IngestProgress, type IngestStep } from "@/components/reader/ingest-progress";
 import {
   uploadItemTitle,
@@ -142,6 +143,9 @@ export function AddDocumentDialog({
   const [url, setUrl] = useState("");
   const [over, setOver] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  // The library row whose delete confirm is open, and where that document is.
+  const [deleteAsk, setDeleteAsk] = useState<string | null>(null);
+  const { reach: deleteReach, loading: deleteReachLoading } = useDocumentReach(deleteAsk);
   // The queue: what Continue hands to the box, in the order it was added.
   const [items, setItems] = useState<UploadItem[]>([]);
   // Each queued PDF's Pages field, and each queued PDF file's page count
@@ -171,17 +175,16 @@ export function AddDocumentDialog({
     return () => window.removeEventListener("keydown", onKey, true);
   }, [open, onClose]);
 
-  // A fresh open starts clean: no stale URL text, an empty queue, the
-  // library list collapsed.
+  // An open shows the library list collapsed. The queue and the URL box
+  // stay as the reader left them: Escape, ✕, or a closed dialog never throw
+  // away a queued file or link (CLAUDE.md rule 6). Continue empties the
+  // queue, and each item's ✕ takes it out.
   const [prevOpen, setPrevOpen] = useState(open);
   if (prevOpen !== open) {
     setPrevOpen(open);
     if (open) {
-      setUrl("");
-      setItems([]);
-      setPageText(new Map());
-      setPageCounts(new Map());
       setLibraryOpen(false);
+      setDeleteAsk(null);
       setTitleDraft(titleOf(projectTitle));
     }
   }
@@ -535,7 +538,8 @@ export function AddDocumentDialog({
                 {library
                   ?.filter((d) => !attachedIds.has(d.id))
                   .map((d) => (
-                    <li key={d.id} className="flex items-center gap-1">
+                    <li key={d.id} className="flex flex-col">
+                    <div className="flex items-center gap-1">
                       <button
                         onClick={() => onAttach(d.id)}
                         data-track="add-library-attach"
@@ -548,13 +552,29 @@ export function AddDocumentDialog({
                         </span>
                       </button>
                       <button
-                        onClick={() => onRemoveFromLibrary(d.id)}
+                        onClick={() => setDeleteAsk(deleteAsk === d.id ? null : d.id)}
                         data-track="add-library-delete"
-                        className="rounded-full px-2 py-1 text-xs text-sand-400 hover:text-red-500"
+                        aria-expanded={deleteAsk === d.id}
+                        aria-label={t("panes.deleteFromLibrary")}
+                        className="rounded-full px-2 py-1 text-xs text-sand-600 hover:text-red-500"
                         data-tip={t("panes.deleteFromLibrary")}
                       >
                         ✕
                       </button>
+                    </div>
+                    {deleteAsk === d.id && (
+                      <DocumentDeleteConfirm
+                        reach={deleteReach}
+                        loading={deleteReachLoading}
+                        notebookId={null}
+                        busy={false}
+                        onDelete={() => {
+                          setDeleteAsk(null);
+                          onRemoveFromLibrary(d.id);
+                        }}
+                        onCancel={() => setDeleteAsk(null)}
+                      />
+                    )}
                     </li>
                   ))}
               </ul>

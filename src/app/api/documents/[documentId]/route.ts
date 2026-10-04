@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { bumpDocument, bumpNotebook, documentAccess } from "@/lib/collab";
+import { bumpDocument, bumpNotebook, documentAccess, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { documentFootprint, editableNotebooks } from "@/lib/document-footprint";
 import { serverT } from "@/lib/i18n/server";
@@ -47,11 +47,24 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ documentId: s
 // then only removes it from the caller's own projects, as Remove from project
 // does: the document, its blocks, and every annotation stay, so a delete
 // never reaches a project the caller cannot edit.
-export async function DELETE(_req: Request, ctx: { params: Promise<{ documentId: string }> }) {
+//
+// ?scope=project&notebookId=… is Remove from this project: only that
+// project's attachment goes. The document, its blocks, and every annotation
+// stay, in the library and in its other projects, and adding it back from
+// Library shows the project's annotations again. A document no other
+// project holds is refused (409): removed, it would be in no project and
+// out of the reader's reach, and Delete document is the way to remove it.
+export async function DELETE(req: Request, ctx: { params: Promise<{ documentId: string }> }) {
   const t = await serverT();
   const { documentId } = await ctx.params;
   const document = await db.document.findUnique({ where: { id: documentId }, select: { title: true } });
   if (!document) return NextResponse.json({ error: t("api.documentNotFound") }, { status: 404 });
+  const params = new URL(req.url).searchParams;
+  if (params.get("scope") === "project") {
+    const notebookId = params.get("notebookId");
+    if (!notebookId) return NextResponse.json({ error: t("api.documentNotAttachedToCorpus") }, { status: 400 });
+    return removeFromProject(documentId, notebookId, document.title);
+  }
   const access = await documentAccess(documentId, "editor");
   if (access instanceof NextResponse) return access;
 
@@ -88,4 +101,26 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ documentId:
   // The projects whose notes quoted it refresh their quotes.
   for (const id of notebooks) await bumpNotebook(id);
   return NextResponse.json({ ok: true });
+}
+
+// Remove from this project: this project's NotebookDocument row only.
+async function removeFromProject(documentId: string, notebookId: string, title: string) {
+  const t = await serverT();
+  const access = await notebookAccess(notebookId, "editor");
+  if (access instanceof NextResponse) return access;
+  const attached = await db.notebookDocument.findMany({ where: { documentId }, select: { notebookId: true } });
+  if (!attached.some((a) => a.notebookId === notebookId)) {
+    return NextResponse.json({ error: t("api.documentNotAttachedToCorpus") }, { status: 404 });
+  }
+  if (attached.length < 2) {
+    return NextResponse.json({ error: t("api.documentOnlyProject") }, { status: 409 });
+  }
+  await db.$transaction([
+    db.notebookDocument.delete({ where: { notebookId_documentId: { notebookId, documentId } } }),
+    db.notebookEvent.create({
+      data: { notebookId, userId: access.user.id, kind: "DOCUMENT_DETACH", content: title },
+    }),
+  ]);
+  await bumpNotebook(notebookId);
+  return NextResponse.json({ ok: true, detached: true });
 }
