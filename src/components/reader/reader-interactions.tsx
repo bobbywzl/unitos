@@ -3254,7 +3254,18 @@ export function ReaderInteractions({
     const viewTop = container.scrollTop + PANE_EDGE_GAP;
     const viewBottom = container.scrollTop + container.clientHeight - PANE_EDGE_GAP;
     if (top >= viewBottom || top + el.offsetHeight <= viewTop) return;
-    const lifted = Math.max(viewTop, Math.min(top, viewBottom - el.offsetHeight));
+    const want = Math.max(viewTop, Math.min(top, viewBottom - el.offsetHeight));
+    // A card above it in the same column stays uncovered: the lift stops
+    // under that card's foot, and the card runs on below the pane instead.
+    let floor = -Infinity;
+    for (const other of container.querySelectorAll<HTMLElement>("[data-side-card]")) {
+      if (other === el || other.closest(".presence-exit")) continue;
+      const otherTop = parseFloat(other.style.top) || other.offsetTop;
+      const sideBySide =
+        other.offsetLeft < el.offsetLeft + el.offsetWidth && other.offsetLeft + other.offsetWidth > el.offsetLeft;
+      if (sideBySide && otherTop < top) floor = Math.max(floor, otherTop + other.offsetHeight + SETTLE_GAP);
+    }
+    const lifted = want < top ? Math.max(want, Math.min(floor, top)) : want;
     if (Math.abs(lifted - top) < 1) return;
     const move = <T extends { top: number }>(c: T | null): T | null =>
       c ? { ...c, top: lifted } : c;
