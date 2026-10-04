@@ -20,6 +20,7 @@ import {
   columnAt,
   columnSeparators,
   isProseColumns,
+  keepRowPitch,
   proseCell,
   leadIn,
   LINK_LINE_RE,
@@ -1080,6 +1081,7 @@ function tableOfRegion(region: TableRegion, page: number): Segment {
     if (starts !== starts0) cellsOf = body.map((line) => cellsBySeparators(line, separators));
     const bodyRows = rowsOf(cellsOf, starts, columnCount);
     spanValues(bodyRows, body, starts, separators, ruledAt);
+    keepRowPitch(bodyRows, body, starts);
     rows.push(...spanCenteredLabels(bodyRows, starts.map((k) => body[k].y), full));
   }
   return segment(rows, headerRows || (rows.length > 1 && boldHeaderRows(rows) > 0 ? 1 : 0), bounds);
