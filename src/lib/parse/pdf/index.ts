@@ -369,6 +369,14 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     // table's cells (its prose read as tables, a quotation as rows).
     const ocr = scanned;
     if (ocr) fitOcrItems(items, drawing.glyphs);
+    // A scan's lone mark set three times the size of its words is a stroke
+    // of a drawing the OCR read as a character: NACA Report 515 p. 10 reads
+    // a contour plot's curve as a 30 pt "(" between two columns, and its
+    // size made the captions under the plots one row across the gutter.
+    if (ocr) {
+      const size = median(items.filter((i) => /\p{L}{2}/u.test(i.str)).map((i) => i.size));
+      for (let k = items.length - 1; k >= 0; k--) if (/^[^\p{L}\p{N}]$/u.test(items[k].str.trim()) && items[k].size >= size * 3) items.splice(k, 1);
+    }
     // From here on a position is taken from the page box's corner, as the
     // figure route renders the page: a region is a share of the page box.
     // The MIC white paper's box starts at (36.85, 36.85); read in the PDF's
@@ -391,7 +399,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     // The frames the page draws (a listing's box): a third of the page wide
     // and a line tall at the least.
     const frames = drawing.paths.filter((b) => !b.clip && !inTable(b) && b.x2 - b.x1 >= viewport.width * 0.3 && b.y2 - b.y1 >= 10);
-    const lines = placeTables(pageLines(takeTables(text.filter((i) => !inGraphics.has(i)), tables), viewport.width, keep ? pages.length : -1, found, drawing.rules.filter((r) => r.dir === "h" && !inTable(r)), frames));
+    const lines = placeTables(pageLines(takeTables(text.filter((i) => !inGraphics.has(i)), tables), viewport.width, keep ? pages.length : -1, found, drawing.rules.filter((r) => r.dir === "h" && !inTable(r)), frames, drawing.rules.filter((r) => r.dir === "v" && !inTable(r))));
     // Each inline formula's LaTeX, from its glyphs and the page's rules.
     resolveZones(lines, drawing);
     // From here on only a TeX page's display equations read the page's
@@ -690,6 +698,19 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
   segments = placeFootnotes(segments, footnotes, front);
   resolveContentsLinks(segments);
 
+  // A scan's heading holds no tab: the typist's spaces between a number and
+  // its title read as a gap between two cells, and the gap as a tab stop
+  // (parse loop finding: the DTIC Datcom's "2.\tANGLE-OF-ATTACK"). A
+  // typeset heading keeps its tab: Word sets a number and its title so.
+  for (const s of segments) {
+    if (s.type !== "HEADING" || !pageFlags[firstPageOf(s)]?.ocr || !s.text.includes("\t")) continue;
+    s.text = s.text.replace(/\t/g, " ");
+    s.runs = s.runs?.map((run) => {
+      const copy = { ...run };
+      delete copy.tab;
+      return copy;
+    });
+  }
   const blocks: ParsedBlock[] = segments.map((s) => {
     const { styles, links, font } = spansFromRuns(s.text, s.runs, {
       skipBold: s.type === "HEADING",

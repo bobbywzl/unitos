@@ -105,7 +105,11 @@ export function readHeading(lines: Line[], i: number, ctx: PageContext, runOf: n
     boldHeading(lines, i, ctx, runOf) ??
     italicHeading(lines, i, ctx) ??
     partHeading(lines, i, ctx);
-  if (step?.segments.some((s) => s.type === "HEADING" && (wordless(s.text) || SIGNATURE_RE.test(s.text) || (ctx.ocr && !/\p{L}{2}/u.test(s.text))))) return null;
+  if (step?.segments.some((s) => s.type === "HEADING" && (wordless(s.text) || SIGNATURE_RE.test(s.text) || (ctx.ocr && scanDebris(s.text))))) return null;
+  // On a scan, a line in capitals with no number, the line under it a
+  // figure's caption, is the figure's axis label: DTIC's p. 31 read "MACH
+  // NUMBER, M" over "Figure 7. Drag divergence Mach number" as a heading.
+  if (step && ctx.ocr && capsShare(lines[i].text) >= 0.9 && !HEADING_NUMBER_RE.test(lines[i].text) && figureCaption(lines[step.next]?.text.trim() ?? "")) return null;
   // A heading of its own lines keeps where it stands: centered or flush
   // right in its column (a run-in lead's is its paragraph's).
   const [heading] = step?.segments ?? [];
@@ -115,6 +119,8 @@ export function readHeading(lines: Line[], i: number, ctx: PageContext, runOf: n
   }
   return step;
 }
+
+const figureCaption = (text: string) => CAPTION_RE.test(text) && !/^(?:table|tab\.|tabelle)/i.test(text);
 
 // A line that opens with a dash signs a piece or names a quotation's
 // source: no heading (the Earth Observer's "—Alan Ward [Executive Editor,
@@ -132,6 +138,17 @@ const SIGNATURE_RE = /^\s*[—–―]/;
 const PANEL_LETTERS_RE = /^\s*(?:\(\p{L}\)|\p{L}[.)])(?:\s+(?:\(\p{L}\)|\p{L}[.)]))*\s*$/u;
 function wordless(text: string): boolean {
   return PANEL_LETTERS_RE.test(text) || !/\p{L}/u.test(text);
+}
+
+// A heading on a scan's text layer holds a word of three letters, and
+// letters make half its marks: the OCR reads a chart's ticks and a speck
+// as "12.31-+--I-~4.-+-+-+-l-f-+-+", "of!", "ji", "rn............-." (parse
+// loop finding: NACA Report 515 and the DTIC Datcom read these as
+// headings).
+function scanDebris(text: string): boolean {
+  const marks = text.replace(/\s/g, "");
+  const letters = marks.replace(/[^\p{L}]/gu, "");
+  return !/\p{L}{3}/u.test(text) || letters.length * 2 < marks.length;
 }
 
 // A part's numeral or letter alone on a centered line, set apart above and

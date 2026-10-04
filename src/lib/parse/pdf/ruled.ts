@@ -729,6 +729,7 @@ export function ruledTables(all: Item[], page: PageDrawing, pageWidth: number, p
   const free = (b: Box) => !regions.some((r) => b.x1 < r.box.x2 && b.x2 > r.box.x1 && b.y1 < r.box.y2 && b.y2 > r.box.y1);
   const rules = joinedRules(drawing.rules.filter((r) => r.dir === "h" && free({ x1: r.x1, x2: r.x2, y1: r.y1 - 1, y2: r.y2 + 1 })));
   for (const stack of ruleStacks(rules, 40)) {
+    if (isCard(stack, drawing.rules)) continue;
     for (const box of stackRegions(withOpenFoot(withFoot(stack, columns), stack.x1, stack.x2, items, drawing.rules), stack.x1, stack.x2, items, columns)) {
       if (!free(box)) continue;
       const inside = items.filter((it) => inBox(it, { ...box, x1: box.x1 - 2, x2: box.x2 + 2 }));
@@ -798,6 +799,28 @@ function continuedTail(box: Box, lines: Line[], items: Item[]): boolean {
   if (rest.some((l) => l.x < head.cells[1].x - head.size)) return false;
   const over = items.filter((it) => it.y > box.y2 && it.y < box.y2 + head.size * 4);
   return buildLines(over, 0).some((l) => CONTINUED_CAPTION_RE.test(l.text.trim()));
+}
+
+// A card: one box, its two rules closed by rules down both their ends,
+// parted inside by a divider, a rule that stops short of the box's sides
+// at both its ends and spans half the box at the least. A table's rules
+// meet its frame; a card's divider stands free of it, between a title and
+// its bullets. The card's words read as the page sets them, the title
+// first (columns.ts cardParts; parse loop finding: a PowerPoint deck
+// frames a title beside its bullets, or over them, in a card, and six
+// cards read as tables of a title column and a bullet column).
+const INSET = 6;
+function isCard(stack: RuleStack, rules: Rule[]): boolean {
+  if (stack.rules.length !== 2) return false;
+  const low = Math.min(...stack.rules.map((r) => r.y1));
+  const high = Math.max(...stack.rules.map((r) => r.y1));
+  const side = (x: number) => rules.some((r) => r.dir === "v" && Math.abs(r.x1 - x) <= 3 && r.y1 <= low + 3 && r.y2 >= high - 3);
+  if (!side(stack.x1) || !side(stack.x2)) return false;
+  return rules.some((r) =>
+    r.dir === "v"
+      ? r.x1 > stack.x1 + INSET && r.x1 < stack.x2 - INSET && r.y1 > low + INSET && r.y2 < high - INSET && r.y2 - r.y1 >= (high - low) * 0.5
+      : r.y1 > low + INSET && r.y1 < high - INSET && r.x1 > stack.x1 + INSET && r.x2 < stack.x2 - INSET && r.x2 - r.x1 >= (stack.x2 - stack.x1) * 0.5,
+  );
 }
 
 // The line right under a table that is a link alone, inside its width.

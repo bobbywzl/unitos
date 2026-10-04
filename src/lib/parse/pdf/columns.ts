@@ -35,13 +35,17 @@ let pageRules: Box[] = [];
 // The boxes the page draws as paths (a listing's frame), while pageLines
 // reads it.
 let pageFrames: Box[] = [];
+// The page's vertical rules outside its tables, while pageLines reads it: a
+// card's divider (cardParts).
+let pageDividers: Box[] = [];
 
-export function pageLines(items: Item[], pageWidth: number, page: number, graphics: Placed[] = [], rules: Box[] = [], frames: Box[] = []): Line[] {
+export function pageLines(items: Item[], pageWidth: number, page: number, graphics: Placed[] = [], rules: Box[] = [], frames: Box[] = [], dividers: Box[] = []): Line[] {
   const text = items.filter((i) => i.str.trim().length > 0);
   markSpaces(items, text);
   if (text.length === 0 && graphics.length === 0) return [];
   pageRules = rules;
   pageFrames = frames;
+  pageDividers = dividers;
   const pieces = readRegion(text, graphics, page, pageWidth, 0);
   const lines: Line[] = [];
   let order = 0;
@@ -131,6 +135,22 @@ function readRegion(items: Item[], graphics: Placed[], page: number, pageWidth: 
       ...readRegion(items.filter((i) => i !== table && higher(i.y)), graphics.filter((p) => higher((p.box.y1 + p.box.y2) / 2)), page, pageWidth, depth, undefined, column),
       { items: [table], extent },
       ...readRegion(items.filter((i) => i !== table && !higher(i.y)), graphics.filter((p) => !higher((p.box.y1 + p.box.y2) / 2)), page, pageWidth, depth, undefined, column),
+    ];
+  }
+  const card = lines ? null : cardParts(items);
+  if (card) {
+    const { frame, before, after } = card;
+    const higher = (y: number) => y > frame.y2;
+    const lower = (y: number) => y < frame.y1;
+    const graphicY = (p: Placed) => (p.box.y1 + p.box.y2) / 2;
+    const inside = graphics.filter((p) => !higher(graphicY(p)) && !lower(graphicY(p)));
+    const first = (p: Placed) => (p.box.x1 + p.box.x2) / 2 < card.x;
+    const column = extent ?? [x0, x1];
+    return [
+      ...readRegion(items.filter((i) => higher(i.y)), graphics.filter((p) => higher(graphicY(p))), page, pageWidth, depth, undefined, column),
+      ...readRegion(before, inside.filter(first), page, pageWidth, depth + 1),
+      ...readRegion(after, inside.filter((p) => !first(p)), page, pageWidth, depth + 1),
+      ...readRegion(items.filter((i) => lower(i.y)), graphics.filter((p) => lower(graphicY(p))), page, pageWidth, depth, undefined, column),
     ];
   }
   const pair = lines ? null : listingPair(items, graphics);
@@ -302,6 +322,38 @@ function paragraphEnd(lines: Line[]): number | null {
   return null;
 }
 
+// A card: a frame the page draws, parted by a divider, a vertical rule that
+// stops short of the frame's top and foot and spans half its height at the
+// least (a dashed bond's ticks in a manual's example frame are no divider). What stands left of the divider
+// reads first, then what stands right of it (parse loop finding: a
+// PowerPoint deck sets a slide's title in a card beside its bullets, a
+// rule between them; read row by row, the title's words ran into the
+// bullets on their baselines: "Arrangement ▪ Can make a large difference").
+// Nothing of the region may stand beside the frame.
+const DIVIDER_INSET = 6;
+function cardParts(items: Item[]): { frame: Box; x: number; before: Item[]; after: Item[] } | null {
+  for (const frame of pageFrames) {
+    const divider = pageDividers.find(
+      (r) =>
+        r.x1 > frame.x1 + DIVIDER_INSET &&
+        r.x2 < frame.x2 - DIVIDER_INSET &&
+        r.y1 > frame.y1 + DIVIDER_INSET &&
+        r.y2 < frame.y2 - DIVIDER_INSET &&
+        r.y2 - r.y1 >= (frame.y2 - frame.y1) * 0.5,
+    );
+    if (!divider) continue;
+    const within = (i: Item) => i.x + i.w / 2 > frame.x1 && i.x + i.w / 2 < frame.x2 && i.y > frame.y1 && i.y < frame.y2;
+    const inside = items.filter(within);
+    if (items.some((i) => !within(i) && i.y >= frame.y1 && i.y <= frame.y2)) continue;
+    const x = (divider.x1 + divider.x2) / 2;
+    const before = inside.filter((i) => i.x + i.w <= x);
+    const after = inside.filter((i) => i.x + i.w > x);
+    if (before.length === 0 || after.length === 0 || after.some((i) => i.x < x)) continue;
+    return { frame, x, before, after };
+  }
+  return null;
+}
+
 // A listing beside what it typesets: inside a frame the page draws,
 // typewriter lines on the left, the output in a text face on the right, a
 // clear gap between them that no word crosses. The listing reads first, as
@@ -404,13 +456,19 @@ function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: n
 
   // The gutter: the x that the fewest characters cross, the one nearest the
   // region's middle among equals.
-  let best: { g: number; cross: number } | null = null;
+  // Among equals, the x no graphic crosses: a slide's picture stands
+  // beside its bullets, a white gap between them, and a gutter through the
+  // picture's edge made the picture a row across the page (parse loop
+  // finding: a PowerPoint deck's "Example: The Iris Data Matrix" over its
+  // picture read between two bullets of the list beside it).
+  let best: { g: number; cross: number; pictured: number } | null = null;
   const middle = x0 + width / 2;
   for (let g = x0 + width * 0.2; g <= x0 + width * 0.8; g += width * 0.01) {
     let cross = 0;
     for (const i of items) if (i.x < g && i.x + i.w > g) cross += i.str.trim().length;
-    if (!best || cross < best.cross || (cross === best.cross && Math.abs(g - middle) < Math.abs(best.g - middle))) {
-      best = { g, cross };
+    const pictured = graphics.filter((p) => p.box.x1 < g && p.box.x2 > g).length;
+    if (!best || cross < best.cross || (cross === best.cross && (pictured < best.pictured || (pictured === best.pictured && Math.abs(g - middle) < Math.abs(best.g - middle))))) {
+      best = { g, cross, pictured };
     }
   }
   // A column of notes in the margin parts first: the column beside it is
@@ -919,7 +977,13 @@ function isBlocks(band: Band, page: number): boolean {
   const { left, right } = band;
   if (chars(left.items) < 10 || chars(right.items) < 10 || [...left.items, ...right.items].some((i) => i.math)) return false;
   const size = median([...left.items, ...right.items].map((i) => i.size));
-  if (Math.min(...right.items.map((i) => i.x)) - Math.max(...left.items.map((i) => i.x + i.w)) < size * 3) return false;
+  // Two sides set a quarter apart in size are two text boxes, two ems
+  // apart: a table sets its columns in one size (parse loop finding: a
+  // PowerPoint deck's card sets 18 pt words beside an 11 pt note, 2.3
+  // ems apart, and their lines ran into each other row by row).
+  const [l, r] = [median(left.items.map((i) => i.size)), median(right.items.map((i) => i.size))];
+  const ems = Math.max(l, r) >= Math.min(l, r) * 1.25 ? 2 : 3;
+  if (Math.min(...right.items.map((i) => i.x)) - Math.max(...left.items.map((i) => i.x + i.w)) < size * ems) return false;
   const [a, b] = [buildLines(left.items, page), buildLines(right.items, page)];
   const paired = a.filter((l) => b.some((m) => Math.abs(m.y - l.y) <= 0.5)).length;
   return paired <= 1 && Math.max(a.length, b.length) > paired;

@@ -511,6 +511,7 @@ function baselineOf(items: Item[], hangs: (i: Item) => boolean): number {
   return median(pool.filter((i) => i.size >= size * 0.75).map((i) => i.y));
 }
 
+const LIST_MARK_RE = /^\s*[•▪◦‣●○■□◆❖➢➤►✓✔*·∙–—-]\s*$/;
 export function buildLines(items: Item[], page: number): Line[] {
   const { items: sorted, starts } = dropCaps(items.filter((i) => i.str.trim().length > 0));
   sorted.sort((a, b) => b.y - a.y || a.x - b.x);
@@ -581,8 +582,14 @@ export function buildLines(items: Item[], page: number): Line[] {
   // the neighboring prose in (import compare loop finding). A lone operator
   // glyph (a radical, an integral sign) inside prose joins the prose line the
   // same way; beside an equation it stays, and the equation's region takes it.
+  // A list's mark set larger than its item's words is not the line's size:
+  // PowerPoint draws a dash at 19.56 pt before 12.96 pt words, and the
+  // word alone on the line above the item ("grid" ending "measured on a
+  // spatial") read as a script of the item's line and joined its middle
+  // (parse loop finding: a PowerPoint deck's dash lists).
   const stats = grouped.map((g) => {
-    const size = Math.max(...g.map((i) => i.size));
+    const words = g.filter((i) => !LIST_MARK_RE.test(i.str));
+    const size = Math.max(...(words.length > 0 && words.length < g.length ? words : g).map((i) => i.size));
     const large = g.filter((i) => i.size >= size * 0.75);
     const chars = g.reduce((n, i) => n + charCount(i.str), 0);
     const mathChars = g.reduce((n, i) => n + (i.math ? charCount(i.str) : 0), 0);

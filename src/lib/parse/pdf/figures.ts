@@ -186,6 +186,9 @@ type Drawn = { images: Box[]; paths: PathBox[] };
 // each of which a caption set beside it may take (attachFigureRegions).
 export type Graphic = Placed & { labels: Item[]; caption: Item[]; pictures: Box[] };
 
+// A glyph's fill as light as white.
+const WHITE_RE = /^#(?:f[0-9a-f]){3}$/i;
+
 // A run of text: the items on one baseline that follow each other with no
 // wider gap than a word's.
 type TextRun = { items: Item[]; box: Box; size: number; chars: number; italic: number };
@@ -270,7 +273,13 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
   }
   // Page text: a run set large, or a line's worth of words. A label is short:
   // a tick, a name in a diagram, a legend entry.
-  const isPageText = (r: TextRun) => r.size >= textSize * 1.3 || r.chars >= 40;
+  // Words filled in white over a picture show only on it: they are its
+  // label, never the page's text (parse loop finding: a PowerPoint deck
+  // sets "Iris Versicolor" in white 24 pt bold over its photo; read as the
+  // page's text, it made the photo a background and the label a heading).
+  const white = (r: TextRun) => r.items.every((i) => i.glyphs !== undefined && i.glyphs.length > 0 && i.glyphs.every((g) => g.color !== undefined && WHITE_RE.test(g.color)));
+  const onPicture = (r: TextRun) => drawing.images.some((img) => shareInside(r.box, img) >= 0.7);
+  const isPageText = (r: TextRun) => (r.size >= textSize * 1.3 || r.chars >= 40) && !(white(r) && onPicture(r));
   const runsIn = (box: Box) => runs.filter((r) => shareInside(r.box, box) >= 0.7);
   const textOf = (r: TextRun) => r.items.map((i) => i.str).join(" ");
   // A number alone on its line at the page's head or foot is the page's
@@ -340,12 +349,28 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
       }
     }
   });
+  // A rule beside a picture, its end near the picture's edge, is the
+  // page's (a slide's line under its title, ending 3 pt short of the
+  // picture beside it, joined the picture, and the bullets under the line
+  // read as the picture's labels: a PowerPoint deck's p. 9 lost its
+  // bullets). A rule pairs with a picture when half of it lies over the
+  // picture.
+  const apart = (p: Part, q: Part) => {
+    const [rule, picture] = p.thin && q.image ? [p.box, q.box] : q.thin && p.image ? [q.box, p.box] : [null, null];
+    if (!rule || !picture) return false;
+    const across = rule.x2 - rule.x1 >= rule.y2 - rule.y1;
+    const [a1, a2, b1, b2] = across ? [rule.x1, rule.x2, picture.x1, picture.x2] : [rule.y1, rule.y2, picture.y1, picture.y2];
+    const at = across ? (rule.y1 + rule.y2) / 2 : (rule.x1 + rule.x2) / 2;
+    const within = across ? at >= picture.y1 && at <= picture.y2 : at >= picture.x1 && at <= picture.x2;
+    const over = within ? Math.max(0, Math.min(a2, b2) - Math.max(a1, b1)) : 0;
+    return over < (a2 - a1) * 0.5;
+  };
   for (const cell of cells.values()) {
     for (let a = 0; a < cell.length; a++) {
       const p = parts[cell[a]].box;
       for (let b = a + 1; b < cell.length; b++) {
         const q = parts[cell[b]].box;
-        if (cell.length > 200 || (q.x1 <= p.x2 + 6 && p.x1 <= q.x2 + 6 && q.y1 <= p.y2 + 6 && p.y1 <= q.y2 + 6)) {
+        if (cell.length > 200 || (q.x1 <= p.x2 + 6 && p.x1 <= q.x2 + 6 && q.y1 <= p.y2 + 6 && p.y1 <= q.y2 + 6 && !apart(parts[cell[a]], parts[cell[b]]))) {
           parent[find(cell[a])] = find(cell[b]);
         }
       }
