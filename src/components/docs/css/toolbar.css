@@ -359,6 +359,11 @@
   gap: 0;
   font-size: 0;
 }
+/* Folded to its symbol, a Unitos control keeps the symbol: its New pill
+   goes, and its glow stays (components/new-feature.tsx). */
+.docs-tb-right[data-folded] .docs-tb-unitos .new-pill {
+  display: none;
+}
 .docs-mode-triangle {
   position: absolute;
   right: 6px;
