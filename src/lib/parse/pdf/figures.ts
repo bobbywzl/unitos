@@ -309,8 +309,34 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
   // A picture the size of the page is a scan or a background; one that
   // leaves the page a margin or a title is the page's own (AGU slides p. 15:
   // a screenshot under the slide's title, 87% of the slide).
+  // A picture that runs into the page's top or bottom 7% may carry the
+  // running head or foot over it, a short line wholly in that band: the
+  // page's, never the picture's. The picture starts under the head, or
+  // ends over the foot (parse loop finding: the Raspberry Pi handbook sets
+  // "Project showcase" over the photos atop its pages, set large: the photo
+  // on p. 48 read as a background, and two others showed the head in their
+  // crops).
+  // A head or a foot is one line: a label of two lines reaches into the
+  // band too (a deck's "Iris" over "Versicolor" atop its photo, the
+  // license's second line under its first).
+  const alone = (r: TextRun, below: boolean) =>
+    !runs.some((o) => {
+      if (o === r || Math.abs(o.size - r.size) > 1 || o.box.x1 >= r.box.x2 || o.box.x2 <= r.box.x1) return false;
+      const gap = below ? r.box.y1 - o.box.y2 : o.box.y1 - r.box.y2;
+      return gap > -r.size * 0.5 && gap < r.size * 0.8;
+    });
+  const edgeLines = (box: Box) => {
+    const over = runs.filter((r) => r.chars <= 60 && r.box.x1 < box.x2 && r.box.x2 > box.x1 && r.box.y1 < box.y2 && r.box.y2 > box.y1);
+    const heads = box.y2 > pageHeight * 0.93 ? over.filter((r) => r.box.y1 >= pageHeight * 0.93 && alone(r, true)) : [];
+    const feet = box.y1 < pageHeight * 0.07 ? over.filter((r) => r.box.y2 <= pageHeight * 0.07 && alone(r, false)) : [];
+    const y2 = heads.length > 0 ? Math.min(...heads.map((r) => r.box.y1)) - 1 : box.y2;
+    const y1 = feet.length > 0 ? Math.max(...feet.map((r) => r.box.y2)) + 1 : box.y1;
+    return y2 - y1 >= (box.y2 - box.y1) * 0.5 ? { ...box, y1, y2 } : box;
+  };
   for (const raw of drawing.images) {
-    const box = onPage(raw);
+    const whole = onPage(raw);
+    if (area(whole) > pageArea * 0.97) continue;
+    const box = edgeLines(whole);
     if (area(box) < pageArea * 0.0005 || area(box) > pageArea * 0.97) continue;
     if (holdsText(box)) continue;
     parts.push({ box, image: true, thin: false });
@@ -875,7 +901,11 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     if (over.length > 0 && over.every((r) => (r.box.x1 + r.box.x2) / 2 < middle)) cut.x1 = Math.max(...over.map((r) => r.box.x2)) + 2;
     if (over.length > 0 && over.every((r) => (r.box.x1 + r.box.x2) / 2 > middle)) cut.x2 = Math.min(...over.map((r) => r.box.x1)) - 2;
     const kept = !panel && cut.x2 - cut.x1 >= (box.x2 - box.x1) * 0.5 ? cut : box;
-    return { box: kept, labels: labels.flatMap((r) => r.items), caption: caption.flatMap((r) => r.items), pictures };
+    // A photo's crop stops at the running head or foot over it (edgeLines),
+    // and the head is no label of it.
+    const edged = pictures.length > 0 ? edgeLines(kept) : kept;
+    const shown = edged === kept ? labels : labels.filter((r) => shareInside(r.box, edged) >= 0.7);
+    return { box: edged, labels: shown.flatMap((r) => r.items), caption: caption.flatMap((r) => r.items), pictures };
   });
 }
 
