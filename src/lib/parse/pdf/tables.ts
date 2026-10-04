@@ -5,7 +5,7 @@
 
 import { geom, lineMathShare, median } from "@/lib/parse/pdf/geometry";
 import { sameFlags } from "@/lib/parse/pdf/glyphs";
-import { ATTACH_PUNCT_RE } from "@/lib/parse/pdf/lines";
+import { ATTACH_PUNCT_RE, rightToLeftRuns } from "@/lib/parse/pdf/lines";
 import { isGlyphMarker, readMarker } from "@/lib/parse/pdf/markers";
 import { CAPTION_RE } from "@/lib/parse/pdf/figures";
 import { firstPageOf } from "@/lib/parse/pdf/merge";
@@ -129,7 +129,9 @@ export function withoutSignColumns(lines: Line[], separators: number[]): number[
 
 // Items joined into one cell's text and style runs, a space where the gap
 // between two items reads as one.
-function cellOfItems(items: Item[], size: number): Cell {
+function cellOfItems(cellItems: Item[], size: number): Cell {
+  // A run of right-to-left words reads from the right, as its line does (lines.ts rightToLeftRuns).
+  const items = rightToLeftRuns(cellItems, size);
   const cell: Cell = { x: items[0]?.x ?? 0, text: "", runs: [] };
   let prevEnd: number | null = null;
   for (const item of items) {

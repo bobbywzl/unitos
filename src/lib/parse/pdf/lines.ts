@@ -48,7 +48,11 @@ function mergeSpacedItems(items: Item[]): Item[] {
       (gap < letterGap + item.size * 0.25 || item.math || last.math) &&
       sameFlags(last, item)
     ) {
-      last.str += item.str;
+      // Right-to-left letters, one per item, read from the right: the
+      // later item's letter comes first (parse loop finding: an Arabic
+      // book's heading drew "عقد" as three items, "د", "ق", "ع", left to
+      // right, and read "دقع").
+      last.str = RTL_RE.test(item.str) && RTL_RE.test(last.str) ? item.str + last.str : last.str + item.str;
       last.w = item.x + item.w - last.x;
       if (last.glyphs && item.glyphs) last.glyphs = [...last.glyphs, ...item.glyphs];
     } else {
@@ -545,6 +549,46 @@ function readingOrder(items: Item[], size: number): { order: Item[]; gaps: Map<I
   return { order, gaps, opens };
 }
 
+/** A left-to-right line's items, or a table cell's, with each run of
+    right-to-left words read from the right, as one item: items of
+    right-to-left letters side by side, in one style, a word space apart at
+    most (a code font's space is 0.6 em). Parse loop finding: an Arabic
+    book's code listing "printf '%s\\n' \"مرحبًا $name\"" drew "مرحبًا" as
+    three items, "مرح", "بً", and "ا", and read "ابًمرح"; its comment "#
+    مرحبًا غازي" read its two words backwards. */
+export function rightToLeftRuns(items: Item[], size: number): Item[] {
+  const rtlOnly = (i: Item) => RTL_RE.test(i.str) && !/[\p{Script=Latin}\p{N}]/u.test(i.str) && !i.math;
+  if (!items.some(rtlOnly)) return items;
+  const out: Item[] = [];
+  let run: Item[] = [];
+  const flush = () => {
+    const tail: Item[] = [];
+    while (run.length > 0 && run[run.length - 1].str.trim() === "") tail.unshift(run.pop()!);
+    if (run.length > 1) {
+      let str = "";
+      for (let k = run.length - 1; k >= 0; k--) {
+        const gap = k + 1 < run.length ? run[k + 1].x - (run[k].x + run[k].w) : 0;
+        const space = (gap > size * 0.15 || run[k].str.trim() === "") && str !== "" && !str.endsWith(" ");
+        str += (space ? " " : "") + run[k].str.trim();
+      }
+      const x = run[0].x;
+      out.push({ ...run[0], str, x, w: Math.max(...run.map((i) => i.x + i.w)) - x, glyphs: run.flatMap((i) => i.glyphs ?? []) });
+    } else out.push(...run);
+    out.push(...tail);
+    run = [];
+  };
+  for (const item of items) {
+    const last = run[run.length - 1];
+    const blank = item.str.trim() === "";
+    const joins = last !== undefined && (rtlOnly(item) || blank) && sameFlags(last, item) && item.x - (last.x + last.w) < size * 0.75;
+    if (!joins) flush();
+    if (rtlOnly(item) || (joins && blank)) run.push(item);
+    else out.push(item);
+  }
+  flush();
+  return out;
+}
+
 function buildLine(rawItems: Item[], page: number, rtlText = false): Line {
   const merged = mergeSpacedItems(
     composeAccents(
@@ -574,13 +618,16 @@ function buildLine(rawItems: Item[], page: number, rtlText = false): Line {
     from = k;
   }
   // Inline formulas cut out of the items, cell by cell (math/zones.ts).
-  const items = splitZones(merged, cellStarts);
+  const zoned = splitZones(merged, cellStarts);
   // A right-to-left line reads from the right (readingOrder); its items
   // stay in the page's order for the line's place and its cells' columns.
   // Among lines set right to left, a line with a right-to-left letter
   // reads so, however many Latin letters it holds: "تعريف · عقد الأتمتة
   // (Automation contract)".
-  const rtl = rightToLeft(items) || (rtlText && items.some((i) => RTL_RE.test(i.str))) ? readingOrder(items, size) : null;
+  const rtl = rightToLeft(zoned) || (rtlText && zoned.some((i) => RTL_RE.test(i.str))) ? readingOrder(zoned, size) : null;
+  // A left-to-right line keeps its runs of right-to-left words as items read from the right: a table's
+  // cells split the line's items again (cellsBySeparators).
+  const items = rtl ? zoned : rightToLeftRuns(zoned, size);
   const read = rtl?.order ?? items;
   const cells: Cell[] = [];
   let prevEnd: number | null = null;
