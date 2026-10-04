@@ -2,7 +2,7 @@
 
 import type { Editor } from "@tiptap/core";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { api } from "@/lib/api";
 import { formatKind, type BlockKind, type FormatKind } from "@/lib/block-kind";
@@ -61,6 +61,8 @@ import { imageFigureHtml, isImageFile } from "@/lib/images";
 import { markdownStyleKey } from "@/lib/markdown-style";
 import { reportError } from "@/lib/error-log";
 import { isOffline, offlinePremium, queueWrite, refreshWhenOnline } from "@/lib/offline/queue";
+import { addEscapeSource, nextLayerSeq } from "@/lib/escape-layers";
+import { rememberCollapsedDocument } from "@/lib/collapse-memory";
 import { parseYouTubeId, youtubeWatchUrl } from "@/lib/video/youtube";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import {
@@ -313,6 +315,30 @@ function isTextEntry(el: HTMLElement): boolean {
 }
 
 // Without Shift, these keys drop a selection made with the keyboard.
+/** A call that needs a model, outside api() (a stream, or a call that
+    must not count in the save indicator). Offline it fails at once with the
+    plain message (SPEC.md §17), as api() does, and a request the network
+    drops while offline says the same. */
+async function fetchWithModel(path: string, init: RequestInit, offlineMessage: string): Promise<Response> {
+  if (isOffline()) throw new Error(offlineMessage);
+  try {
+    return await fetch(path, init);
+  } catch (err) {
+    if (!init.signal?.aborted && err instanceof TypeError && isOffline()) throw new Error(offlineMessage);
+    throw err;
+  }
+}
+
+/** Whether the browser is online, as React state. */
+function subscribeOnline(listener: () => void): () => void {
+  window.addEventListener("online", listener);
+  window.addEventListener("offline", listener);
+  return () => {
+    window.removeEventListener("online", listener);
+    window.removeEventListener("offline", listener);
+  };
+}
+
 const CARET_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"]);
 
 // How long a reading position waits for the page editor's words to come
@@ -1080,9 +1106,14 @@ export function ReaderInteractions({
   transcript,
   richText = null,
   accountPosition,
+  collapsedCores = null,
 }: {
   documentId: string;
   notebookId: string;
+  /** The document's cores when this browser reads it collapsed (SPEC.md
+      §28, lib/collapse-memory.ts), sent with the page so the article comes
+      up collapsed on the first paint; null = whole. */
+  collapsedCores?: Record<string, string> | null;
   /** The account's copy of the reading position in this document (SPEC.md
       §6), as the page read it; null = none yet. The reader opens there when
       it is newer than the tab's copy. */
@@ -2283,6 +2314,13 @@ export function ReaderInteractions({
   // The fading hint that replaces the Edit button. Shows on document open until
   // the reader double-clicks into edit mode once.
   const [editHint, setEditHint] = useState(false);
+  // Where the hint shows: beside the article, or as a row under the pane.
+  const [hintBeside, setHintBeside] = useState(true);
+
+  // Offline, the tools that need a model are off (SPEC.md §17): their rows
+  // are dimmed, their tooltip says why, and a press shows the plain message.
+  const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine, () => true);
+  const aiFetch = (path: string, init: RequestInit) => fetchWithModel(path, init, t("common.offlineAi"));
 
   // Coarse pointer (tablet, phone): the selection tools dock under the
   // selection, the rows are tap-sized, and the colors and Add to notes sit
@@ -2526,7 +2564,6 @@ export function ReaderInteractions({
   // The layers over the article, newest first for Escape (SPEC.md §6): each
   // layer's identity, and the order the layers opened in. A card that runs
   // again or opens on other words is a new layer.
-  const layerSeqRef = useRef(0);
   const layerSeenRef = useRef<Record<string, string | null>>({});
   const layerOpenedRef = useRef<Record<string, number>>({});
   const layerKeys: Record<string, string | null> = {
@@ -2545,7 +2582,7 @@ export function ReaderInteractions({
   for (const [layer, key] of Object.entries(layerKeys)) {
     if (layerSeenRef.current[layer] === key) continue;
     layerSeenRef.current[layer] = key;
-    if (key !== null) layerOpenedRef.current[layer] = ++layerSeqRef.current;
+    if (key !== null) layerOpenedRef.current[layer] = nextLayerSeq();
   }
   // What a card's box holds that the reader typed and has not sent: kept by
   // the card's annotation, so a card closed by Escape or a click reopens from
@@ -2633,24 +2670,21 @@ export function ReaderInteractions({
   }, []);
 
   // Escape closes one layer, the newest first (SPEC.md §6): the toolbar, a
-  // pending link, a card. It stops no run. With nothing open it leaves edit
-  // mode, saving unsaved typing on the way out.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      // Escape that dismisses a pinyin candidate list stays the IME's.
-      if (isImeKey(e)) return;
-      const top = openLayersRef.current[0];
-      if (top) {
-        closeLayerRef.current(top);
-        return;
-      }
-      if (editModeRef.current) leaveEditMode();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+  // pending link, a card — or a menu of the page opened after them (the
+  // document list, History, Contents: lib/escape-layers.ts). It stops no
+  // run. With nothing open it leaves edit mode, saving unsaved typing on
+  // the way out.
+  useEffect(
+    () =>
+      addEscapeSource(() => {
+        const top = openLayersRef.current[0];
+        if (top) return { seq: layerOpenedRef.current[top] ?? 0, close: () => closeLayerRef.current(top) };
+        if (editModeRef.current) return { seq: 0, close: () => leaveEditMode() };
+        return null;
+      }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    [],
+  );
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -2728,6 +2762,7 @@ export function ReaderInteractions({
       if (!canEditRef.current) return;
       const inside = event.target instanceof Node && container.contains(event.target);
       if (!inside && !pressStartedInside) return;
+      const startedInside = pressStartedInside;
       pressStartedInside = false;
       if (suppressNextMouseUp.current) {
         suppressNextMouseUp.current = false;
@@ -2743,6 +2778,11 @@ export function ReaderInteractions({
       // that is text editing, not a new selection.
       if (document.activeElement?.closest("[data-selection-popover]")) return;
       requestAnimationFrame(() => {
+        // A drag that began on the article and let go in the tray or the
+        // header selects the page between: the selection is cut to the
+        // article's blocks it crosses, as if the drag had stopped at the
+        // pane's edge.
+        if (startedInside) clipSelectionToPane(event.clientX, event.clientY);
         const captured = captureSelection();
         // The VIDEO block (the player's own block) refuses annotation: a
         // selection over it shows the refusal instead of tools. Transcript
@@ -2790,12 +2830,79 @@ export function ReaderInteractions({
         }
       });
     };
+    // The browser's selection, cut to this pane when it runs out of it: the
+    // end the press made stays, and the end outside moves to the words
+    // nearest the release point inside the pane, as if the drag had stopped
+    // at the pane's edge.
+    const clipSelectionToPane = (x: number, y: number) => {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
+      if (container.contains(selection.getRangeAt(0).commonAncestorContainer)) return;
+      const anchorNode = selection.anchorNode;
+      if (!anchorNode || !container.contains(anchorNode)) return;
+      // Only a drag that began on the article's words: one from a card's
+      // text keeps the browser's own selection.
+      const anchorEl = anchorNode instanceof Element ? anchorNode : anchorNode.parentElement;
+      if (
+        !anchorEl?.closest("article") ||
+        anchorEl.closest("[data-side-card], [data-log-card], [data-selection-popover], [data-anchor-skip]")
+      )
+        return;
+      const blocks = Array.from(container.querySelectorAll<HTMLElement>("[data-block-id], [data-edit-block]")).filter(
+        (el) => el.closest("[data-reader-root]") === container && el.getClientRects().length > 0,
+      );
+      if (blocks.length === 0) return;
+      const pane = container.getBoundingClientRect();
+      const py = Math.max(pane.top + 1, Math.min(y, pane.bottom - 1));
+      // The block level with the release point, else the nearest one.
+      let block = blocks[0];
+      let distance = Infinity;
+      for (const el of blocks) {
+        const r = el.getBoundingClientRect();
+        const d = py < r.top ? r.top - py : py > r.bottom ? py - r.bottom : 0;
+        if (d < distance) {
+          block = el;
+          distance = d;
+        }
+        if (d === 0) break;
+      }
+      const r = block.getBoundingClientRect();
+      const doc = document as Document & {
+        caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+        caretRangeFromPoint?: (x: number, y: number) => Range | null;
+      };
+      const cx = Math.max(r.left + 1, Math.min(x, r.right - 1));
+      const cy = Math.max(r.top + 1, Math.min(py, r.bottom - 1));
+      let node: Node = block;
+      let offset = x > r.left + r.width / 2 ? block.childNodes.length : 0;
+      const position = doc.caretPositionFromPoint?.(cx, cy);
+      const caret = position
+        ? { node: position.offsetNode, offset: position.offset }
+        : (() => {
+            const range = doc.caretRangeFromPoint?.(cx, cy);
+            return range ? { node: range.startContainer, offset: range.startOffset } : null;
+          })();
+      if (caret && block.contains(caret.node)) {
+        node = caret.node;
+        offset = caret.offset;
+      }
+      selection.setBaseAndExtent(anchorNode, selection.anchorOffset, node, offset);
+    };
     // The toolbar on a selection. With a link pending, Close link is its
     // first row, and pressing it closes the link there — an accidental
     // selection creates nothing.
     const showTools = (captured: Popover | null) => {
       setSubmenu(null);
       setPopover(captured);
+      if (captured) yieldToSelection();
+    };
+    // A new selection's toolbar takes the place of the on-mark card and the
+    // chooser of stacked annotations, so two boxes never stand over the
+    // words. A press does this with the mouse; on a touch screen the hold
+    // that selects words presses nothing. A card with typed words stays.
+    const yieldToSelection = () => {
+      setStackChooser(null);
+      setAnnotationCard((c) => (c && !c.busy && c.draft === c.saved ? null : c));
     };
     // The page editor (SPEC.md §29): a keyboard selection opens the toolbar
     // once Shift, Ctrl, or Cmd is let go; a caret moved with the keys closes it.
@@ -2876,6 +2983,7 @@ export function ReaderInteractions({
         if (!captured) return;
         setPopover(captured);
         setSubmenu(null);
+        yieldToSelection();
       }, 500);
     };
     container.addEventListener("mousedown", onContainerMouseDown);
@@ -3477,9 +3585,17 @@ export function ReaderInteractions({
 
   useEffect(() => {
     if (localStorage.getItem("unitos-edit-hint") === "done") return;
+    // Beside the article when its right margin holds the card (with its
+    // 20px from the pane's edge); else a row under the pane.
+    const container = containerRef.current;
+    const article = container?.querySelector("article");
+    if (container && article) {
+      const width = window.matchMedia("(pointer: coarse)").matches ? 320 : 256;
+      const room = container.getBoundingClientRect().right - article.getBoundingClientRect().right;
+      setHintBeside(room >= width + 32);
+    }
     // Post-hydration reveal on purpose: localStorage is client-only, so the
     // SSR pass must render without the hint.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setEditHint(true);
   }, [documentId]);
 
@@ -4388,8 +4504,21 @@ export function ReaderInteractions({
   // block also has its own button beside it: `flippedBlocks` holds the blocks
   // shown the other way from the article (whole in a collapsed article, as
   // their core in a whole one); it is cleared when Collapse is pressed.
-  const [collapseOn, setCollapseOn] = useState(false);
-  const [cores, setCores] = useState<Record<string, string> | null>(null);
+  // A remembered Collapse comes with the page (collapsedCores): the first
+  // render is already collapsed.
+  const sentCores = collapsedCores && Object.keys(collapsedCores).length > 0 ? collapsedCores : null;
+  const [collapseOn, setCollapseOn] = useState(sentCores !== null);
+  const [cores, setCores] = useState<Record<string, string> | null>(sentCores);
+  // Another document opened in this pane, sent with its cores: it opens
+  // collapsed too (adjust-during-render).
+  const [coresSentFor, setCoresSentFor] = useState(documentId);
+  if (coresSentFor !== documentId) {
+    setCoresSentFor(documentId);
+    if (sentCores) {
+      setCores(sentCores);
+      setCollapseOn(true);
+    }
+  }
   coresRef.current = cores;
   const [collapseBusy, setCollapseBusy] = useState(false);
   // The Collapse run on its way: the button's Stop ends it, and so does
@@ -4434,7 +4563,12 @@ export function ReaderInteractions({
   const coresReadRef = useRef(false);
   useEffect(() => {
     coresReadRef.current = false;
-    if (embedded || transcript || !collapseRemembered(collapseStoreKey)) return;
+    if (embedded || transcript) return;
+    if (sentCores) {
+      coresReadRef.current = true;
+      return;
+    }
+    if (!collapseRemembered(collapseStoreKey)) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -4443,6 +4577,9 @@ export function ReaderInteractions({
         if (cancelled || !res.ok || !body?.cores || Object.keys(body.cores).length === 0) return;
         setCores(body.cores);
         setCollapseOn(true);
+        // Remembered before the page could send the cores: from the next
+        // open on, it does.
+        rememberCollapsedDocument(documentId, true);
       } catch {
         // The article shows whole; the button collapses it again.
       } finally {
@@ -4456,6 +4593,7 @@ export function ReaderInteractions({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [documentId]);
   function rememberCollapse(on: boolean) {
+    rememberCollapsedDocument(documentId, on);
     try {
       if (on) localStorage.setItem(collapseStoreKey, "on");
       else localStorage.removeItem(collapseStoreKey);
@@ -4579,7 +4717,15 @@ export function ReaderInteractions({
   const popoverAnchorKey = popover
     ? `${popover.anchor.blockId}:${popover.anchor.startOffset}:${popover.anchor.endOffset}:${popover.term ? "t" : ""}${popover.figure ? "f" : ""}`
     : null;
-  const leadTool: Tool | null = leadAnswer && leadAnswer.key === popoverAnchorKey ? leadAnswer.tool : null;
+  // With no prediction, the kind's first tool after the assistant leads
+  // (SPEC.md §6): Explain on text and equations, Analyze on a figure.
+  const kindLead = (): Tool | null => {
+    if (!popover || popover.term) return null;
+    const tools = TOOLBARS[contentKindOf(blocks.find((b) => b.id === popover.anchor.blockId)?.type)];
+    return tools[tools.indexOf("assistant") + 1] ?? null;
+  };
+  const leadTool: Tool | null =
+    leadAnswer && leadAnswer.key === popoverAnchorKey ? leadAnswer.tool : kindLead();
   // The comment is kept per selection as a toolbar draft (lib/toolbar-drafts.ts) until the save lands.
   const [addComment, keepAddComment] = useToolbarDraft("add", documentId, popover?.anchor ?? null);
   const addMode = addDraft.key === popoverAnchorKey ? addDraft.mode : "sections";
@@ -5204,7 +5350,7 @@ export function ReaderInteractions({
     setDefinition({ key, text: "", streaming: true, error: null, glossary: false });
     try {
       await flushLiveBlock(anchor.blockId);
-      const res = await fetch("/api/derive", {
+      const res = await aiFetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
@@ -5356,7 +5502,7 @@ export function ReaderInteractions({
     const mine = (b: ExplainBubble | null): b is ExplainBubble => b !== null && b.run === run;
     setBubble({ ...slot, ...NO_CHAT, kind, text: "", streaming: true, error: null, declined: null, anchor, noteId: null, run });
     try {
-      const res = await fetch("/api/derive", {
+      const res = await aiFetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
@@ -5437,7 +5583,7 @@ export function ReaderInteractions({
       run,
     });
     try {
-      const res = await fetch("/api/derive", {
+      const res = await aiFetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
@@ -5525,7 +5671,7 @@ export function ReaderInteractions({
       run,
     });
     try {
-      const res = await fetch("/api/derive", {
+      const res = await aiFetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
@@ -5811,7 +5957,7 @@ export function ReaderInteractions({
     setDistillError(null);
     setDistillShownId(null);
     try {
-      const res = await fetch("/api/derive", {
+      const res = await aiFetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
@@ -6546,7 +6692,7 @@ export function ReaderInteractions({
     // A follow-up's suggestions take the place of these, still pending.
     replacing?: readonly string[],
   ): Promise<{ reply: string; noteId: string | null; suggestKey?: string }> {
-    const res = await fetch("/api/assistant/act", {
+    const res = await aiFetch("/api/assistant/act", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       signal,
@@ -6745,7 +6891,7 @@ export function ReaderInteractions({
     try {
       await flushEditRef.current?.();
       const caret = pageEditorIn(containerRef.current)?.state.selection.$from.parent.attrs.blockId;
-      const res = await fetch(`/api/documents/${documentId}/suggest`, {
+      const res = await aiFetch(`/api/documents/${documentId}/suggest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
@@ -8295,6 +8441,10 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   // A row's look: the predicted lead tool reads as recommended, like the
   // figure toolbar's Analyze; every other row is plain.
   const leads = (tool: Tool) => leadTool === tool;
+  // Offline, a row whose tool needs a model reads as off (SPEC.md §17).
+  const aiOff = !online;
+  const aiTip = (tip: string) => (aiOff ? t("common.offlineAi") : tip);
+  const aiDim = aiOff ? " opacity-50" : "";
   const rowLook = (tool: Tool) =>
     leads(tool)
       ? "bg-clay-100 font-semibold text-clay-800 hover:bg-clay-200"
@@ -9015,7 +9165,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           transcript: it has no edit mode. Under the toast, which may reach
           down over it. It yields while a toolbar is open: the stack beside
           the first lines would cut its words. */}
-      {editHint && !editMode && !split && !transcript && !embedded && !richText && (
+      {editHint && hintBeside && !editMode && !split && !transcript && !embedded && !richText && (
         <div
           onAnimationEnd={() => setEditHint(false)}
           className={`hint-fade pointer-events-none absolute top-16 right-5 z-[9] rounded-2xl bg-card px-4 py-2.5 leading-relaxed text-sand-700 shadow-lift print:hidden ${
@@ -9374,11 +9524,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   void define();
                 }}
                 data-track="define"
+                aria-disabled={aiOff || undefined}
                 aria-expanded={submenu === "define"}
-                data-tip={t("reader.defineTitle")}
+                data-tip={aiTip(t("reader.defineTitle"))}
                 className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left ${
                   submenu === "define" ? "bg-clay-100 text-clay-800" : rowLook("define")
-                }${defineNew.isNew ? ` ${NEW_GLOW_CLASS}` : ""}`}
+                }${defineNew.isNew ? ` ${NEW_GLOW_CLASS}` : ""}${aiDim}`}
               >
                 <span className="flex items-center gap-1.5">
                   <DefineIcon size={coarse ? 14 : 12} />
@@ -9430,13 +9581,14 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           <button
             onClick={() => (barOffered ? openBar(popover) : setSubmenu(submenu === "ai" ? null : "ai"))}
             data-track="assistant"
+            aria-disabled={aiOff || undefined}
             aria-expanded={submenu === "ai"}
-            data-tip={t("reader.assistantTitle")}
+            data-tip={aiTip(t("reader.assistantTitle"))}
             className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left font-semibold ${
               submenu === "ai"
                 ? "bg-clay-100 text-clay-800"
                 : "text-clay-700 hover:bg-clay-100 hover:text-clay-800"
-            }`}
+            }${aiDim}`}
           >
             <SparkleIcon size={coarse ? 14 : 12} />
             {t("reader.assistant")}
@@ -9520,8 +9672,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             <button
               onClick={() => void analyze()}
               data-track="analyze"
-              data-tip={t("reader.analyzeFigureTitle")}
-              className={`flex w-full items-center justify-between gap-2 rounded-full bg-clay-100 ${toolRow} text-left font-semibold text-clay-800 hover:bg-clay-200 disabled:opacity-40`}
+              aria-disabled={aiOff || undefined}
+              data-tip={aiTip(t("reader.analyzeFigureTitle"))}
+              className={`flex w-full items-center justify-between gap-2 rounded-full bg-clay-100 ${toolRow} text-left font-semibold text-clay-800 hover:bg-clay-200 disabled:opacity-40${aiDim}`}
             >
               <span className="flex items-center gap-1.5">
                 <ChartIcon size={coarse ? 14 : 12} />
@@ -9536,8 +9689,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             <button
               onClick={() => void explain()}
               data-track="explain"
-              data-tip={popoverKind === "figure" ? t("reader.explainFigureTitle") : t("reader.explainTitle")}
-              className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left ${rowLook("explain")}`}
+              aria-disabled={aiOff || undefined}
+              data-tip={aiTip(popoverKind === "figure" ? t("reader.explainFigureTitle") : t("reader.explainTitle"))}
+              className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left ${rowLook("explain")}${aiDim}`}
             >
               <span className="flex items-center gap-1.5">
                 <QuestionIcon size={coarse ? 14 : 12} />
@@ -9550,8 +9704,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             <button
               onClick={() => void simplify()}
               data-track="simplify"
-              data-tip={t("reader.simplifyTitle")}
-              className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left ${rowLook("simplify")}`}
+              aria-disabled={aiOff || undefined}
+              data-tip={aiTip(t("reader.simplifyTitle"))}
+              className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left ${rowLook("simplify")}${aiDim}`}
             >
               <span className="flex items-center gap-1.5">
                 <SummaryIcon size={coarse ? 14 : 12} />
@@ -9564,8 +9719,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             <button
               onClick={() => void visualize()}
               data-track="visualize"
-              data-tip={t("reader.visualizeTitle")}
-              className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left ${rowLook("visualize")}`}
+              aria-disabled={aiOff || undefined}
+              data-tip={aiTip(t("reader.visualizeTitle"))}
+              className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left ${rowLook("visualize")}${aiDim}`}
             >
               <span className="flex items-center gap-1.5">
                 <VisualizeIcon size={coarse ? 14 : 12} />
@@ -10664,6 +10820,21 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       </Presence>
 
     </div>
+      {/* The hint where the article's margin cannot hold it (a tablet, a
+          phone, a narrow window): a row under the pane, which takes its
+          height from the pane's foot, so it covers no word and the lines
+          the reader reads stay where they are. */}
+      {editHint && !hintBeside && !editMode && !split && !transcript && !embedded && !richText && (
+        <div
+          data-edit-hint
+          onAnimationEnd={() => setEditHint(false)}
+          className={`hint-fade pointer-events-none shrink-0 border-t border-line bg-card px-4 py-2.5 leading-relaxed text-sand-700 print:hidden ${
+            coarse ? "text-[13px]" : "text-[12px]"
+          }`}
+        >
+          {t(coarse ? "reader.touchHint" : "reader.editHint")}
+        </div>
+      )}
       {/* The assistant's bar (SPEC.md §29), over the page at the bottom of
           the pane: the status of its edit, the field, and the commands. */}
       <Presence show={bar !== null} exit="fade">

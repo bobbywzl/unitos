@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { ContentsEntry } from "@/lib/contents";
+import { useEscapeLayer } from "@/lib/escape-layers";
 import { useCollab } from "@/components/collab/collab-context";
 import { ContentsIcon, SparkleIcon, SpinnerIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
@@ -141,16 +142,11 @@ export function ContentsMenu({
       if (target?.closest("[data-contents]")) return;
       onOpenChange(false);
     };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onOpenChange(false);
-    };
     window.addEventListener("mousedown", onMouseDown);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("mousedown", onMouseDown);
-      window.removeEventListener("keydown", onKey);
-    };
+    return () => window.removeEventListener("mousedown", onMouseDown);
   }, [open, onOpenChange]);
+  // Escape closes the list as one layer (lib/escape-layers.ts).
+  useEscapeLayer(open, () => onOpenChange(false));
 
   // A part lands on the core of a collapsed block (SPEC.md §28).
   function jump(blockId: string) {

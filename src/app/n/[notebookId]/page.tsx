@@ -71,6 +71,9 @@ import { accountTier } from "@/lib/tiers";
 import { linkScanRunsLeft } from "@/lib/connect";
 import { isTextStyle, type TextStyle } from "@/lib/text-style";
 import { coreBlocks } from "@/lib/anchors/layer";
+import { currentCores, readCollapse } from "@/lib/collapse";
+import { COLLAPSE_COOKIE, collapsedDocuments } from "@/lib/collapse-memory";
+import { cookies } from "next/headers";
 import { READING_LINE_PX, type BlockPosition } from "@/lib/reading-position";
 import { storedPdfPages } from "@/lib/pdf-pages";
 import type { DocumentKind } from "@/lib/document-order";
@@ -1341,6 +1344,14 @@ export default async function NotebookPage(props: {
       browser: browserConfigured(),
     },
   });
+  // A document this browser reads collapsed (SPEC.md §28) comes with its
+  // cores, so the article is drawn collapsed on the first paint.
+  const collapsedIds = collapsedDocuments((await cookies()).get(COLLAPSE_COOKIE)?.value);
+  const collapsedCoresOf = (document: NonNullable<typeof paneOne>["document"]): Record<string, string> | null => {
+    if (!collapsedIds.has(document.id)) return null;
+    const { cores } = currentCores(readCollapse(document.collapse), document.blocks, document.richText);
+    return Object.keys(cores).length > 0 ? cores : null;
+  };
   // A split view (SPEC.md §6): each pane's header carries the pane's
   // document, and the pane's tool cards stay collapsed to their symbols until
   // the reader clicks one.
@@ -1420,6 +1431,7 @@ export default async function NotebookPage(props: {
           }))}
           translationAvailable={deeplConfigured()}
           accountPosition={accountPositionOf(pane.document.id)}
+          collapsedCores={collapsedCoresOf(pane.document)}
           {...textLayer(pane)}
         />
       )}
