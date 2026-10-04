@@ -149,6 +149,22 @@ function readRegion(items: Item[], graphics: Placed[], page: number, pageWidth: 
   }
   const split = depth < 3 ? findSplit(items, graphics, page, pageWidth, depth) : null;
   if (!split) return leaf(items, graphics, lines, extent);
+  // A run of rows across the gutter that parts at a gutter of its own, with
+  // prose on both sides: two columns under a block that stands beside a
+  // sidebar. The region above the run and the run read apart, each at its
+  // own gutter (parse loop finding: a Frontiers article's first page sets
+  // its abstract beside a column of editors and its body in two columns
+  // under them; split at the sidebar's gutter, the body's two columns read
+  // as rows, line by line across the page).
+  const cut = lines ? null : columnsUnder(split.bands, items, graphics, page, pageWidth, depth);
+  if (cut !== null) {
+    const higher = (y: number) => y > cut;
+    const graphicY = (p: Placed) => (p.box.y1 + p.box.y2) / 2;
+    return [
+      ...readRegion(items.filter((i) => higher(i.y)), graphics.filter((p) => higher(graphicY(p))), page, pageWidth, depth, undefined, extent),
+      ...readRegion(items.filter((i) => !higher(i.y)), graphics.filter((p) => !higher(graphicY(p))), page, pageWidth, depth, undefined, extent),
+    ];
+  }
   const out: Piece[] = [];
   let aboveWhole = false;
   const own = extent ?? extentOf(items);
@@ -216,6 +232,53 @@ function readRegion(items: Item[], graphics: Placed[], page: number, pageWidth: 
   }
   flush();
   return out;
+}
+
+// Where a region parts above its last run of rows across the gutter, when
+// those rows part at a gutter of their own with prose on both sides: the
+// white gap over the run (or over the line or two right above it, a
+// heading), or null. The run holds six rows or more, most of what stands
+// under its top, and the region above holds something on both sides of
+// the first gutter.
+function columnsUnder(bands: Band[], items: Item[], graphics: Placed[], page: number, pageWidth: number, depth: number): number | null {
+  const rows = bands.flatMap((b) => (b.separator && "items" in b.separator ? [b.separator.items] : []));
+  if (rows.length < 6) return null;
+  // The run: the rows from the first band down from which rows hold seven
+  // tenths of the characters.
+  const rowsOf = (list: Band[]) => list.flatMap((b) => (b.separator && "items" in b.separator ? [b.separator.items] : []));
+  const k = bands.findIndex((_, j) => {
+    const rest = bands.slice(j);
+    const inRows = chars(rowsOf(rest).flat());
+    return rowsOf(rest).length >= 6 && inRows * 10 >= (inRows + chars(rest.flatMap((b) => [...b.left.items, ...b.right.items]))) * 7;
+  });
+  if (k <= 0) return null;
+  const run = rowsOf(bands.slice(k));
+  const top = Math.max(...run.flat().map((i) => i.y));
+  // The white gap over the run: the lowest gap between the region's lines
+  // over its top that is wider than two of their sizes, with two lines at
+  // most between it and the run.
+  const all = buildLines(items, page).sort((a, b) => b.y - a.y);
+  const first = all.findIndex((l) => l.y <= top + 0.5);
+  if (first <= 0) return null;
+  let cut: number | null = null;
+  for (let j = first; j >= Math.max(1, first - 2); j--) {
+    const [a, b] = [all[j - 1], all[j]];
+    if (a.y - b.y > Math.max(a.size, b.size) * 2) {
+      cut = (a.y + b.y) / 2;
+      break;
+    }
+  }
+  if (cut === null) return null;
+  const below = items.filter((i) => i.y < cut!);
+  const above = items.filter((i) => i.y > cut!);
+  if (above.length === 0) return null;
+  const own = findSplit(below, graphics.filter((p) => (p.box.y1 + p.box.y2) / 2 < cut!), page, pageWidth, depth, false);
+  if (!own) return null;
+  const two = own.bands.filter((b) => b.left.items.length > 0 && b.right.items.length > 0);
+  const left = two.flatMap((b) => b.left.items);
+  const right = two.flatMap((b) => b.right.items);
+  if (!isProse(buildLines(left, page), 3) || !isProse(buildLines(right, page), 3)) return null;
+  return cut;
 }
 
 // A line that runs on: it ends in no stop (a sentence's period, a colon).
