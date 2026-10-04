@@ -1,6 +1,6 @@
 {
  "total": {
-  "f1": 0.926,
+  "f1": 0.927,
   "precision": 0.872,
   "recall": 0.989
  },
@@ -4426,9 +4426,9 @@
    "fn": 0
   },
   "spiegel.de.albtraum.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "spoe.at-mieterhöhung.html": {
    "tp": 3,
