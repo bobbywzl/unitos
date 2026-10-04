@@ -222,6 +222,66 @@ function layoutOf(pdf: string): Layout {
   return { lines, furniture: furnitureOf(lines, sizes), sizes, symbols: symbols.filter((w) => !steps.has(w.page)), steps };
 }
 
+/** The words pdftotext reads with a right-to-left ligature in them, as the
+    page draws them (a SymbolWord each). A font maps a ligature's glyph to its
+    letters in reading order, and pdftotext, turning a line's characters from
+    the page's order to reading order, turns the ligature's letters too: the
+    Arabic book's "في" (in), one glyph whose map reads "في", reads "يف", and
+    "التي" reads "اليت" (parse bench finding: the parse that reads the glyph's
+    letters as the map gives them lost each such word to the coverage). A
+    ligature counts in the word whose box holds its middle, turned back once
+    there. pdftotext's -tsv gives such a word's letters in the page's order,
+    each ligature's letters as the map gives them; turned, they are the -raw
+    reading. */
+export function ligatureWords(text: Pick<PdfText, "lines">, paint: PagePaint[]): SymbolWord[] {
+  const out: SymbolWord[] = [];
+  const escape = (c: string) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  for (const line of text.lines) {
+    const ligatures = paint[line.page - 1]?.ligatures ?? [];
+    if (ligatures.length === 0) continue;
+    for (const word of line.words ?? []) {
+      const own = ligatures.filter((l) => {
+        const [x, y] = [(l.x1 + l.x2) / 2, (l.y1 + l.y2) / 2];
+        return x >= word.left - 1 && x <= word.right + 1 && y >= line.top - 1 && y <= line.bottom + 1;
+      });
+      if (own.length === 0) continue;
+      // The word's characters in the page's order (-tsv), a ligature's
+      // letters among them in reading order, a mark drawn over it perhaps
+      // between them ("لًا" in "كاماًل"). Of the places its letters stand,
+      // the ligature's is the one nearest its middle along the word.
+      const chars = Array.from(word.text);
+      const units: string[][] = chars.map((c) => [c]);
+      const taken = new Set<number>();
+      for (const l of own) {
+        const letters = Array.from(l.text);
+        if ([...letters].reverse().join("") === l.text) continue;
+        const re = new RegExp(letters.map(escape).join("\\p{M}*"), "gu");
+        const flat = chars.join("");
+        const want = ((l.x1 + l.x2) / 2 - word.left) / Math.max(1, word.right - word.left);
+        let best: { at: number; n: number; off: number } | null = null;
+        for (const m of flat.matchAll(re)) {
+          const at = Array.from(flat.slice(0, m.index)).length;
+          const n = Array.from(m[0]).length;
+          if ([...Array(n).keys()].some((j) => taken.has(at + j))) continue;
+          const off = Math.abs((at + n / 2) / chars.length - want);
+          if (!best || off < best.off) best = { at, n, off };
+        }
+        if (!best) continue;
+        const span = chars.slice(best.at, best.at + best.n);
+        // The ligature reads as one unit: its letters, then the marks over it.
+        units[best.at] = [...span.filter((c) => !/\p{M}/u.test(c)), ...span.filter((c) => /\p{M}/u.test(c))];
+        for (let j = 1; j < best.n; j++) units[best.at + j] = [];
+        for (let j = 0; j < best.n; j++) taken.add(best.at + j);
+      }
+      if (taken.size === 0) continue;
+      const read = [...chars].reverse().join("");
+      const reads = [...units].reverse().map((u) => u.join("")).join("");
+      if (reads !== read) out.push({ page: line.page, word: read, reads, line });
+    }
+  }
+  return out;
+}
+
 /** The families of TeX's math fonts whose codes the tables name (glyphs.ts MATH). */
 const MATH_FAMILIES = new Set(["oml", "oms", "omx", "msa", "msb", "euf", "rsfs", "lasy"]);
 

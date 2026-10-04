@@ -18,14 +18,20 @@ export type Rect = { x1: number; y1: number; x2: number; y2: number };
 /** A run of text as pdf.js's text layer reads it: its box (from its baseline, 0.8 of its size above and 0.2
     below; a column of vertical writing, its width about its origin) and its words. */
 export type TextItem = Rect & { text: string; vertical?: true };
-export type PagePaint = { width: number; height: number; images: Rect[]; items: TextItem[] };
+/** A ligature's glyph in a right-to-left script: its box, as a TextItem's, and its letters as the font's map
+    gives them, in reading order ("في", "تي", "لا"). */
+export type Ligature = Rect & { text: string };
+export type PagePaint = { width: number; height: number; images: Rect[]; items: TextItem[]; ligatures?: Ligature[] };
 
 /** The walk's pages kept between runs (never committed), named by the PDF's
     bytes and the walk's code, as the glyph checks keep theirs (glyphs.ts). */
 const DISK = join(ROOT, ".bench", "cache", "paint");
 const WALK_CODE = join(ROOT, "src", "lib", "parse", "pdf", "drawing.ts");
 /** This file's own reading of the walk: a change to it reads every PDF anew. */
-const FORMAT = "2";
+const FORMAT = "3";
+
+/** Letters of a right-to-left script only, no marks. */
+const RTL_LETTERS_RE = /^[\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}]+$/u;
 
 const memo = new Map<string, Promise<PagePaint[]>>();
 
@@ -71,6 +77,11 @@ export function pdfPaint(path: string): Promise<PagePaint[]> {
             const ys = corners.map((c) => c[1]);
             const rect = { x1: Math.max(0, Math.min(...xs)), y1: Math.max(0, Math.min(...ys)), x2: Math.min(viewport.width, Math.max(...xs)), y2: Math.min(viewport.height, Math.max(...ys)) };
             if (rect.x2 - rect.x1 >= 2 && rect.y2 - rect.y1 >= 2) out.images.push(rect);
+          }
+          for (const g of drawing.glyphs) {
+            if (Array.from(g.unicode).length < 2 || !RTL_LETTERS_RE.test(g.unicode)) continue;
+            const [[x1, y], [x2]] = [at(g.x, g.y), at(g.x + g.w, g.y)];
+            (out.ligatures ??= []).push({ x1: Math.min(x1, x2), y1: y - 0.8 * g.size, x2: Math.max(x1, x2), y2: y + 0.2 * g.size, text: g.unicode });
           }
           const content = (await page.getTextContent()) as { items: { str?: string; transform?: number[]; width?: number; height?: number; dir?: string }[] };
           for (const item of content.items) {
