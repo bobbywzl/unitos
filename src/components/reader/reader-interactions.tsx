@@ -62,6 +62,7 @@ import { markdownStyleKey } from "@/lib/markdown-style";
 import { reportError } from "@/lib/error-log";
 import { isOffline, offlinePremium, queueWrite, refreshWhenOnline } from "@/lib/offline/queue";
 import { addEscapeSource, nextLayerSeq } from "@/lib/escape-layers";
+import { rememberCollapsedDocument } from "@/lib/collapse-memory";
 import { parseYouTubeId, youtubeWatchUrl } from "@/lib/video/youtube";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import {
@@ -1105,9 +1106,14 @@ export function ReaderInteractions({
   transcript,
   richText = null,
   accountPosition,
+  collapsedCores = null,
 }: {
   documentId: string;
   notebookId: string;
+  /** The document's cores when this browser reads it collapsed (SPEC.md
+      §28, lib/collapse-memory.ts), sent with the page so the article comes
+      up collapsed on the first paint; null = whole. */
+  collapsedCores?: Record<string, string> | null;
   /** The account's copy of the reading position in this document (SPEC.md
       §6), as the page read it; null = none yet. The reader opens there when
       it is newer than the tab's copy. */
@@ -4478,8 +4484,21 @@ export function ReaderInteractions({
   // block also has its own button beside it: `flippedBlocks` holds the blocks
   // shown the other way from the article (whole in a collapsed article, as
   // their core in a whole one); it is cleared when Collapse is pressed.
-  const [collapseOn, setCollapseOn] = useState(false);
-  const [cores, setCores] = useState<Record<string, string> | null>(null);
+  // A remembered Collapse comes with the page (collapsedCores): the first
+  // render is already collapsed.
+  const sentCores = collapsedCores && Object.keys(collapsedCores).length > 0 ? collapsedCores : null;
+  const [collapseOn, setCollapseOn] = useState(sentCores !== null);
+  const [cores, setCores] = useState<Record<string, string> | null>(sentCores);
+  // Another document opened in this pane, sent with its cores: it opens
+  // collapsed too (adjust-during-render).
+  const [coresSentFor, setCoresSentFor] = useState(documentId);
+  if (coresSentFor !== documentId) {
+    setCoresSentFor(documentId);
+    if (sentCores) {
+      setCores(sentCores);
+      setCollapseOn(true);
+    }
+  }
   coresRef.current = cores;
   const [collapseBusy, setCollapseBusy] = useState(false);
   // The Collapse run on its way: the button's Stop ends it, and so does
@@ -4524,7 +4543,12 @@ export function ReaderInteractions({
   const coresReadRef = useRef(false);
   useEffect(() => {
     coresReadRef.current = false;
-    if (embedded || transcript || !collapseRemembered(collapseStoreKey)) return;
+    if (embedded || transcript) return;
+    if (sentCores) {
+      coresReadRef.current = true;
+      return;
+    }
+    if (!collapseRemembered(collapseStoreKey)) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -4533,6 +4557,9 @@ export function ReaderInteractions({
         if (cancelled || !res.ok || !body?.cores || Object.keys(body.cores).length === 0) return;
         setCores(body.cores);
         setCollapseOn(true);
+        // Remembered before the page could send the cores: from the next
+        // open on, it does.
+        rememberCollapsedDocument(documentId, true);
       } catch {
         // The article shows whole; the button collapses it again.
       } finally {
@@ -4546,6 +4573,7 @@ export function ReaderInteractions({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [documentId]);
   function rememberCollapse(on: boolean) {
+    rememberCollapsedDocument(documentId, on);
     try {
       if (on) localStorage.setItem(collapseStoreKey, "on");
       else localStorage.removeItem(collapseStoreKey);
