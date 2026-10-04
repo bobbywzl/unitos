@@ -25,20 +25,23 @@
   --sand-200: #eee7db;
   --sand-300: #dcd3c4;
   --sand-400: #c0b6a5;
-  --sand-500: #a19786;
-  --sand-600: #82796a;
+  /* Small labels read at 4.5:1 or more on --sand-100 (WCAG AA): the two
+     faint text tones sit at the lightest shade that does. */
+  --sand-500: #796f5e;
+  --sand-600: #6d6559;
   --sand-700: #645c50;
   --sand-800: #474238;
   --sand-900: #2e2b25;
 
-  --clay: #c67139;
+  /* White words on a clay button read at 4.5:1. */
+  --clay: #ae6332;
   --clay-fg: #ffffff;
   --clay-100: #fff2eb;
   --clay-200: #ffe1d0;
   --clay-300: #ffc6a5;
   --clay-400: #f6a06b;
   --clay-500: #d67f48;
-  --clay-600: #b2622d;
+  --clay-600: #a05828;
   --clay-700: #8c491a;
   --clay-800: #643312;
   --clay-900: #402310;
@@ -90,7 +93,8 @@
   --sand-200: #2c2721;
   --sand-300: #3d372e;
   --sand-400: #565044;
-  --sand-500: #7c7263;
+  /* 4.5:1 on --card. */
+  --sand-500: #8f8473;
   --sand-600: #a2988a;
   --sand-700: #c2b8a8;
   --sand-800: #ddd3c3;
@@ -1083,7 +1087,7 @@ ellipse.anchor-flash {
    or its one div, lib/parse/figure-style.ts) was painted for dark words: in
    dark mode its captions and links keep the light theme's colors. */
 .dark .reader-figure :is(figure, div)[style*="background"] {
-  --sand-600: #82796a;
+  --sand-600: #6d6559;
   --weblink: #1d4ed8;
 }
 .reader-figure .center {
@@ -3498,7 +3502,8 @@ li[data-checked] > .note-box::before {
   margin-left: 4px;
   padding: 0 6px;
   border-radius: 999px;
-  background: var(--sage-500);
+  /* --sage-700: the 9.5px label reads at 4.5:1 or more in both themes. */
+  background: var(--sage-700);
   color: var(--sage-fg);
   font-size: 9.5px;
   font-weight: 700;
