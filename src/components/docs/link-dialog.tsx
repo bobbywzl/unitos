@@ -10,7 +10,7 @@ import { ArrowBackIcon, BookmarkIcon, ChevronRightIcon, CopyIcon, LinkOffIcon, T
 import { openLinkHref, placeOf, placePos, projectDocOf } from "@/components/docs/insert/links";
 import { tocEntries } from "@/components/docs/insert/toc";
 import { anchorAt, FloatingBox, focusSoon, useViewportTick, type Anchor } from "@/components/docs/insert/ui";
-import { DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
+import { CLOSE_TOOLBAR_EVENT, DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
 
 // Links in the page editor (SPEC.md §29), as Google Docs does them: Insert
 // link (Ctrl+K) opens a box under the selection: the link field (and the
@@ -90,6 +90,8 @@ export function LinkDialog({ editor }: { editor: Editor }) {
       setShowText(!selected || Boolean(current));
       setPlaces(false);
       setRange({ from, to });
+      // The link box takes the selection toolbar's place.
+      dom.dispatchEvent(new CustomEvent(CLOSE_TOOLBAR_EVENT, { bubbles: true }));
     };
     const dom = editor.view.dom;
     dom.addEventListener(DOCS_EVENT.link, onOpen);

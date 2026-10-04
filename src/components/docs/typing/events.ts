@@ -29,3 +29,8 @@ export const TYPING_EVENT = {
 export function fireDocs(editor: Editor, name: string, detail?: unknown): void {
   editor.view.dom.dispatchEvent(new CustomEvent(name, { bubbles: true, detail }));
 }
+
+/** Asks the reader's pane to close its selection toolbar: the link box
+    (Ctrl+K) takes its place, so one box stands at the selection. The
+    reader's pane hears it as it bubbles (reader-interactions.tsx). */
+export const CLOSE_TOOLBAR_EVENT = "dissect:close-toolbar";
