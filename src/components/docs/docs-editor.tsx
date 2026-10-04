@@ -587,13 +587,20 @@ export function DocsEditor({
   // repaint waits until the screen holds that copy (typing saved, the page's
   // revision caught up); meanwhile the painted marks move with the typing.
   const marksSignature = useMemo(() => JSON.stringify(highlightsByBlock), [highlightsByBlock]);
-  const paintedRef = useRef<{ editor: Editor | null; signature: string; rev: number }>({ editor: null, signature: "", rev: -1 });
+  const paintedRef = useRef<{ editor: Editor | null; signature: string; rev: number; editing: boolean }>({
+    editor: null,
+    signature: "",
+    rev: -1,
+    editing: false,
+  });
+  // The marks' tips say how a mark opens in the mode the page is in.
+  const marksEditing = writable && mode !== "viewing";
   // The marks made on this screen and painted ahead of the stored copy.
   const aheadRef = useRef(new Set<string>());
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
     const painted = paintedRef.current;
-    if (painted.editor === editor && painted.signature === marksSignature && painted.rev === rev) return;
+    if (painted.editor === editor && painted.signature === marksSignature && painted.rev === rev && painted.editing === marksEditing) return;
     if (!matches(rev)) {
       // A mark made on this screen and not stored yet (a new comment or
       // highlight) paints at once from its anchor, which reads the screen.
@@ -607,7 +614,7 @@ export function DocsEditor({
         }
       }
       if (Object.keys(ahead).length > 0) {
-        const meta: MarksMeta = { highlights: ahead, t, add: true };
+        const meta: MarksMeta = { highlights: ahead, t, add: true, editing: marksEditing };
         editor.view.dispatch(editor.state.tr.setMeta(annotationMarksKey, meta).setMeta("addToHistory", false));
       }
       // Saved, but the page's revision is behind (its own saves need no
@@ -616,10 +623,10 @@ export function DocsEditor({
       return;
     }
     aheadRef.current.clear();
-    paintedRef.current = { editor, signature: marksSignature, rev };
-    const meta: MarksMeta = { highlights: highlightsByBlock, t };
+    paintedRef.current = { editor, signature: marksSignature, rev, editing: marksEditing };
+    const meta: MarksMeta = { highlights: highlightsByBlock, t, editing: marksEditing };
     editor.view.dispatch(editor.state.tr.setMeta(annotationMarksKey, meta).setMeta("addToHistory", false));
-  }, [editor, marksSignature, highlightsByBlock, t, matches, rev, saveState]);
+  }, [editor, marksSignature, highlightsByBlock, t, matches, rev, saveState, marksEditing]);
 
   // A switch to Editing or Suggesting gives the page the keys at its caret,
   // the selection kept and the pane where it is.
@@ -688,10 +695,12 @@ export function DocsEditor({
     [editor],
   );
 
-  // A press on a mark or a chip opens what it opens in the reader; a drag
-  // over a mark is a selection like any other. A click inside the selection
-  // is a plain click (a drag ends at its edge): the page, taking the focus,
-  // put its old selection back. The mark opens and the caret goes there.
+  // A press on a chip opens what it opens in the reader; so does a press on
+  // a mark in Viewing (while the reader writes, a click on marked words
+  // places the caret: annotation-marks.tsx). A drag over a mark is a
+  // selection like any other. A click inside the selection is a plain click
+  // (a drag ends at its edge): the page, taking the focus, put its old
+  // selection back. The mark opens and the caret goes there.
   const onPageClick = useCallback(
     (e: React.MouseEvent) => {
       if (!editor) return;
@@ -700,6 +709,7 @@ export function DocsEditor({
         openMarkAt(target);
         return;
       }
+      if (editor.isEditable) return;
       const { from, to, empty } = editor.state.selection;
       const at = editor.view.posAtCoords({ left: e.clientX, top: e.clientY })?.pos ?? -1;
       if ((empty || (e.detail === 1 && at > from && at < to)) && openMarkAt(target) && !empty) {

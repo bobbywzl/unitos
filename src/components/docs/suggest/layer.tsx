@@ -203,6 +203,25 @@ function placeCards(editor: Editor, pane: HTMLElement, column: HTMLElement): boo
       tops[0] = pageTop;
       pushDown(0);
     }
+    // The open card stays in reach: pushed down past the pane's bottom by a
+    // card that stands where it is (an Explanation, the assistant's card),
+    // it goes above that card instead, inside the pane, and the cards
+    // around it make way.
+    const o = cards.findIndex((c) => c.open);
+    const shownTop = Math.max(paneRect.top, pane.querySelector(".docs-header")?.getBoundingClientRect().bottom ?? paneRect.top) - paneTop;
+    const shownBottom = paneRect.top + pane.clientHeight - paneTop - CARD_GAP;
+    if (o >= 0 && tops[o] + heights[o] > shownBottom && cards[o].top < shownBottom) {
+      const up = clear(Math.min(cards[o].top, shownBottom - heights[o]), heights[o], false);
+      if (up >= shownTop + CARD_GAP) {
+        tops[o] = up;
+        for (let i = o - 1; i >= 0; i--) {
+          tops[i] = clear(Math.min(cards[i].top, tops[i + 1] - CARD_GAP - heights[i]), heights[i], false);
+        }
+        for (let i = o + 1; i < cards.length; i++) {
+          tops[i] = clear(Math.max(cards[i].top, tops[i - 1] + heights[i - 1] + CARD_GAP), heights[i], true);
+        }
+      }
+    }
   }
   cards.forEach(({ el }, i) => Object.assign(el.style, { left: `${left}px`, width: `${width}px`, top: `${tops[i]}px` }));
   const end = pane.querySelector<HTMLElement>("[data-docs-column-end]");
