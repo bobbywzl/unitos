@@ -388,10 +388,21 @@ export function furnitureOf(lines: Line[], sizes: Sizes): Line[] {
   // number at the foot, the others' in the head); a lone number in the
   // page's outer 8% (no lone letter). Roman numbers count apart from
   // arabic ones.
+  // A number closed by a period with words beside it on its row, within
+  // four of its heights, is a section's number before its title, no page
+  // number (parse bench finding: a DTIC scan sets "4.  CENTER-OF-PRESSURE"
+  // centered atop p. 27 under its page label "1.1.30-6", and the sections
+  // "1." to "8." on pp. 23–31 counted as page numbers, their titles as
+  // furniture beside them).
+  const rowOf = new Map<Line, Line[]>();
+  for (const row of edgeRows) for (const l of row) rowOf.set(l, row);
+  const titled = (l: Line) =>
+    /\d\.$/.test(l.text.trim()) &&
+    (rowOf.get(l) ?? []).some((o) => o !== l && /\p{L}{2}/u.test(o.text) && o.left > l.right && o.left - l.right <= 4 * (l.bottom - l.top));
   const numbered = candidates.flatMap((l) => {
     const n = pageNumberOf(l.text);
     const roman = !/\d/.test(l.text);
-    if (n === null || (roman && l.text !== l.text.toLowerCase())) return [];
+    if (n === null || (roman && l.text !== l.text.toLowerCase()) || titled(l)) return [];
     return [{ line: l, offset: `${roman ? "roman" : "arabic"} ${n - l.page}` }];
   });
   for (const { line, offset } of numbered) {
