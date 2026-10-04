@@ -253,10 +253,26 @@ function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[],
     const hangs = item.lines.slice(1).every((l) => l.x > item.markerX + next.size * 0.5);
     const inSequence =
       mark !== null && mark.family !== "bullet" && mark.family !== "box" && hangs && follows(item.marker, mark) && Math.abs(next.x - item.markerX) <= next.size * 0.3;
+    // A numbered item whose wrapped lines come back under its marker is a
+    // numbered paragraph: under a one-line item, the next item's second
+    // line tells, and items set apart wider than their lines are such
+    // paragraphs, never a list (parse loop finding: the Official Journal's
+    // "7. Testing procedures …", one line, and "8. The testing of …", its
+    // lines back at the "8.", read as a list between paragraphs "6." and
+    // "1.").
+    const after = lines[j + 1];
+    const comesBack = (l: Line, under: Line) => readMarker(under) === null && under.cells.length === 1 && Math.abs(under.x - l.x) <= l.size * 0.3 && l.y - under.y <= l.size * ctx.leading * 1.3;
+    const paragraphs =
+      mark !== null &&
+      mark.family !== "bullet" &&
+      mark.family !== "box" &&
+      gap > next.size * ctx.leading * 1.5 &&
+      (item.lines.length === 1 ? after !== undefined && runOf[j + 1] === -1 && comesBack(next, after) : !hangs);
     const spaced =
-      gap <= next.size * ctx.leading * 2.2 ||
+      !paragraphs &&
+      (gap <= next.size * ctx.leading * 2.2 ||
       (spacing.length > 0 && gap <= Math.max(...spacing) * 1.2) ||
-      (spacing.length === 0 && inSequence && gap <= next.size * ctx.leading * 3.5);
+      (spacing.length === 0 && inSequence && gap <= next.size * ctx.leading * 3.5));
     if (mark && !wrap && spaced && joinsList(items, next, mark, drawn ?? next.x)) {
       spacing.push(gap);
       items.push(itemOf(next, mark, drawn ?? next.x));
