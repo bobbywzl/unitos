@@ -1,8 +1,8 @@
 {
  "total": {
-  "f1": 0.92,
+  "f1": 0.921,
   "precision": 0.864,
-  "recall": 0.985
+  "recall": 0.986
  },
  "pages": {
   "100noticias.com-millones.html": {
@@ -3471,9 +3471,9 @@
    "fn": 0
   },
   "homify.de-Tischdecke.html": {
-   "tp": 0,
+   "tp": 3,
    "fp": 0,
-   "fn": 3
+   "fn": 0
   },
   "houzz.de-Projekte.html": {
    "tp": 3,
