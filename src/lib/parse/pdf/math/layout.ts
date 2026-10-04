@@ -846,7 +846,13 @@ function structure(atoms: Atom[], rules: Rule[], depth = 0): Atom[] {
       const idx = index.length ? `[${linear(structure(index, [], depth + 1))}]` : "";
       pool = pool.filter((a) => a !== rad && !inner.includes(a) && !index.includes(a));
       const size = inner.length ? maxSize(inner) : rad.size;
-      nodes.push(node([rad, ...inner], `\\sqrt${idx}{${body}}`, base, size, { x2: r.x2, top: y + r.thickness }));
+      // A radicand that is one fraction says the fraction's style as a
+      // fraction alone would (fracPart; restyle): in a cell of cases, a
+      // root of a fraction whose parts are the text's size is \sqrt{\dfrac…}
+      // (parse loop finding: a quantum mechanics book's (24.21), cases
+      // with √(12/(7πR³)) in a cell, read its parts a level small).
+      const lead = depth === 0 && built.length === 1 && /^\\(frac|binom)\b/.test(built[0].tex);
+      nodes.push(node([rad, ...inner], `\\sqrt${idx}{${body}}`, base, size, { x2: r.x2, top: y + r.thickness, ...(lead ? { fracPart: size } : {}) }));
       continue;
     }
     // A fraction bar: glyphs above and below within its extent.
@@ -1305,11 +1311,11 @@ function columnCuts(rows: Atom[][], em: number, least = Math.min(0.9 * em, 9.5),
 // the probability cheatsheet's sampling table sets its binomials' rows at
 // the text's size in a table's cell, and read as \binom they failed the
 // check on every row glyph's level).
-const restyle = (tex: string, prefix: "d" | "t") => tex.replace(/^\\(frac|binom)\b/, `\\${prefix}$1`);
+const restyle = (tex: string, prefix: "d" | "t") => tex.replace(/^(\\sqrt(?:\[[^\]]*\])?\{)?\\(frac|binom)\b/, `$1\\${prefix}$2`);
 
 // A cell of cases or a matrix is set in text style: a fraction whose parts
 // are the text's size there is \dfrac (arXiv 2502.02648 (14)).
-function cells(rows: Atom[][], cuts: number[]): string {
+function cells(rows: Atom[][], cuts: number[], gaps: string[] = []): string {
   const cell = (a: Atom): Atom => ({ ...a, tex: a.fracPart !== undefined && a.fracPart >= style.size * 0.9 ? restyle(a.tex, "d") : a.tex });
   return rows
     .map((r) => {
@@ -1321,7 +1327,25 @@ function cells(rows: Atom[][], cuts: number[]): string {
       while (parts.length < cuts.length + 1) parts.push([]);
       return parts.map((p) => linear(p.map(cell))).join(" & ");
     })
-    .join(" \\\\ ");
+    .map((row, k) => (k > 0 ? ` \\\\${gaps[k - 1] ?? ""} ${row}` : row))
+    .join("");
+}
+
+// The space a page adds between two rows of cases (\\[2ex]): the ink of
+// one row stands more than a line's strut from the next. TeX's array
+// skip leaves about half an em between short rows' ink, and tall rows
+// touch it; past that, the row break carries the rest (parse loop
+// finding: a quantum mechanics book's (24.21) set its "0, elsewhere."
+// 3.6 em under the row over it, and read without the space every glyph
+// of the first row's fractions stood off its row).
+function rowGaps(rows: Atom[][], em: number): string[] {
+  return rows.slice(1).map((row, k) => {
+    const over = rows[k];
+    if (over.length === 0 || row.length === 0) return "";
+    const gap = Math.min(...over.map((a) => a.bottom)) - Math.max(...row.map((a) => a.top));
+    const extra = gap / em - 0.5;
+    return extra >= 0.3 ? `[${extra.toFixed(1)}em]` : "";
+  });
 }
 
 // A tall delimiter pair around stacked content is its own node, innermost
@@ -1424,7 +1448,7 @@ function fencedGroups(atoms: Atom[], em: number): Atom[] {
       // (fracPart; restyle).
       const extra: Partial<Atom> = { rows: lines };
       const border: Atom[] = [];
-      if (!close && open.tex === "\\{") tex = `\\begin{cases} ${cells(rows, cuts)} \\end{cases}`;
+      if (!close && open.tex === "\\{") tex = `\\begin{cases} ${cells(rows, cuts, rowGaps(rows, stackSize))} \\end{cases}`;
       else if (!close) {
         stacks(false);
         continue;

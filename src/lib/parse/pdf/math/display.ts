@@ -808,7 +808,7 @@ export function displayLines(input: Line[], ctx: PageContext): Line[] {
   const opening = fences.filter((f) =>
     input.some((l, m) => {
       const { xEnd } = unlabeled(l);
-      return kinds0[m] === "math" && l.y > f.y1 && l.y < f.y2 && xEnd >= f.x1 && xEnd <= f.x2 + l.size * 0.3;
+      return kinds0[m] === "math" && l.y > f.y1 && l.y < f.y2 && xEnd >= f.x1 - l.size * 0.5 && xEnd <= f.x2 + l.size * 0.3;
     }),
   );
   for (let n = 0; n < input.length; n++) {
