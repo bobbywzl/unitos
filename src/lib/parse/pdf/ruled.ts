@@ -400,6 +400,41 @@ function withFoot(stack: RuleStack, columns: Rule[]): Rule[] {
   return [...stack.rules, { dir: "h", x1: stack.x1, x2: stack.x2, y1: end, y2: end, thickness: 0 }];
 }
 
+// A table the page break leaves open at its foot: two rules on this page,
+// its top rule and the rule under its head, its rows under the head rule
+// down to the end of the page's text, its foot rule on the next page. The
+// rule its last row would have closes it. Its rows start right under the
+// head rule, stand close together, and set words in two columns at least
+// on most of them; under the last row nothing stands but what a rule of
+// the page sets apart (the footnotes, the running foot). Parse loop
+// finding: CRS R48907, a Word export, sets Table 1's head and first rows on
+// p. 7 and the rest under the head again on p. 8; p. 7's head read as a
+// table of its own and its rows as another.
+function withOpenFoot(rules: Rule[], x1: number, x2: number, items: Item[], pageRules: Rule[]): Rule[] {
+  if (rules.length !== 2) return rules;
+  const top = Math.max(...rules.map((r) => r.y1));
+  const low = Math.min(...rules.map((r) => r.y1));
+  const within = (it: Item) => it.x >= x1 - 2 && it.x + it.w <= x2 + 2;
+  const head = buildLines(items.filter((it) => it.y < top && it.y > low && within(it)), 0);
+  if (head.length === 0 || !head.some((l) => l.cells.length >= 2)) return rules;
+  const under = buildLines(items.filter((it) => it.y + it.size < low && within(it)), 0).sort((a, b) => b.y - a.y);
+  const across = (hi: number, lo: number) => pageRules.some((r) => r.dir === "h" && r.y1 < hi && r.y1 > lo && r.x2 > x1 && r.x1 < x2);
+  const rows: Line[] = [];
+  for (const line of under) {
+    const prev = rows.at(-1);
+    const gap = (prev ? prev.yMin : low) - line.yMax;
+    if (gap > line.size * 3.5 || across(prev ? prev.yMin : low, line.yMax + line.size)) break;
+    if (isProseLine(line, x2 - x1)) break;
+    rows.push(line);
+  }
+  if (rows.length < 2 || rows.filter((l) => l.cells.length >= 2).length * 2 < rows.length) return rules;
+  const last = rows[rows.length - 1];
+  const foot = last.yMin - last.size * 0.4;
+  const rest = items.filter((it) => it.str.trim() && it.y + it.size < foot);
+  if (!rest.every((it) => across(foot, it.y + it.size))) return rules;
+  return [...rules, { dir: "h", x1, x2, y1: foot, y2: foot, thickness: 0 }];
+}
+
 // A rule stack as wide as one column of a table bounds no table of its
 // own: most of its lines run on past its sides, with words on their
 // baselines on both sides of it (a row's label and its other values) or an
@@ -629,7 +664,7 @@ export function ruledTables(all: Item[], page: PageDrawing, pageWidth: number, p
   // grid inside the frame around the sample).
   const columns = drawing.rules.filter((r) => r.dir === "v");
   const wide = ruleStacks(joinedRules(drawing.rules.filter((r) => r.dir === "h")), 40).flatMap((stack) =>
-    stackRegions(withFoot(stack, columns), stack.x1, stack.x2, items, columns).map((box) => ({ box, ys: stack.rules.map((r) => r.y1) })),
+    stackRegions(withOpenFoot(withFoot(stack, columns), stack.x1, stack.x2, items, drawing.rules), stack.x1, stack.x2, items, columns).map((box) => ({ box, ys: stack.rules.map((r) => r.y1) })),
   );
   const grids = latticeGrids(drawing.rules, drawing.fills)
     .map((raw) => closeSlivers(raw, items))
@@ -681,7 +716,7 @@ export function ruledTables(all: Item[], page: PageDrawing, pageWidth: number, p
   const free = (b: Box) => !regions.some((r) => b.x1 < r.box.x2 && b.x2 > r.box.x1 && b.y1 < r.box.y2 && b.y2 > r.box.y1);
   const rules = joinedRules(drawing.rules.filter((r) => r.dir === "h" && free({ x1: r.x1, x2: r.x2, y1: r.y1 - 1, y2: r.y2 + 1 })));
   for (const stack of ruleStacks(rules, 40)) {
-    for (const box of stackRegions(withFoot(stack, columns), stack.x1, stack.x2, items, columns)) {
+    for (const box of stackRegions(withOpenFoot(withFoot(stack, columns), stack.x1, stack.x2, items, drawing.rules), stack.x1, stack.x2, items, columns)) {
       if (!free(box)) continue;
       const inside = items.filter((it) => inBox(it, { ...box, x1: box.x1 - 2, x2: box.x2 + 2 }));
       const lines = buildLines(inside, 0);
