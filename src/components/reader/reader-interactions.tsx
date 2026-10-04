@@ -361,6 +361,10 @@ function collapseRemembered(storeKey: string): boolean {
 // over the article must never cover them — and below the surfaces that take
 // the whole window (z-50: the dialogs, the graph, the distilled page).
 const TOOL_LAYER = "z-40";
+// The selection toolbox is the newest layer whenever it is open: it stands
+// over the cards, so a card under it never hides a row the reader is about
+// to press (the narrow reader puts cards in the text, under the words).
+const TOOLBOX_LAYER = "z-[41]";
 
 // One toolbar per content kind (SPEC.md §6). The popover shows the tools of
 // the kind under the selection and nothing else: a tool missing from a
@@ -9277,7 +9281,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             e.preventDefault();
           }}
           // Beside the page editor's page it fades in (docs/css/layer.css).
-          className={`${popover.page && popover.side === "right" ? "docs-toolbar-in" : "pop-in"} absolute ${TOOL_LAYER} flex flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float`}
+          className={`${popover.page && popover.side === "right" ? "docs-toolbar-in" : "pop-in"} absolute ${TOOLBOX_LAYER} flex flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float`}
           style={popoverBox}
         >
           {popover.truncated && (
