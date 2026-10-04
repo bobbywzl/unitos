@@ -523,6 +523,12 @@ function cutHeadNotes(column: Line[], rules: Rule[], bodySize: number, raised: S
   return { kept: column, cuts: [] };
 }
 
+/** The notice Word sets at the end of a footnote the next page finishes
+    (parse loop finding: a CRS report's notes end "… Title 10, United
+    States (continued...)", and their ends read as notes of their own at
+    the next page's foot, after its last note). */
+const CONTINUED_RE = /\s*\(continued(?:\.{3}|…)?\)\s*$/i;
+
 /** Cut the footnotes out of every page's lines (the pages keep the rest) and
     return them as blocks in reading order, a footnote that runs onto the
     next page joined with its end there. `rules` are each page's drawn rules;
@@ -555,7 +561,7 @@ export function cutFootnotes(pages: Line[][], rules: Rule[][], bodySize: number,
     const kept: Line[] = [];
     columns.forEach((column) => {
       const last = footnotes.at(-1);
-      const continuing = last !== undefined && (last.breaks?.at(-1)?.page ?? last.page) === p - 1 && !/[.!?)\]”"’]$/.test(last.text.trim());
+      const continuing = last !== undefined && (last.breaks?.at(-1)?.page ?? last.page) === p - 1 && (!/[.!?)\]”"’]$/.test(last.text.trim()) || CONTINUED_RE.test(last.text));
       const notes = cutTableNotes(column, pageRules, bodySize);
       for (const one of notes.cuts) {
         const { text, runs } = wordsOf(one);
@@ -581,6 +587,11 @@ export function cutFootnotes(pages: Line[][], rules: Rule[][], bodySize: number,
         // Words with no label at the top of a foot finish the last footnote
         // of the page before (LaTeX splits a long footnote).
         if (!one.label && continuing && last) {
+          const notice = CONTINUED_RE.exec(last.text);
+          if (notice) {
+            last.text = last.text.slice(0, notice.index);
+            last.runs = last.runs?.map((r) => ({ ...r, end: Math.min(r.end, notice.index) })).filter((r) => r.end > r.start);
+          }
           const offset = last.text.length + 1;
           last.breaks = [...(last.breaks ?? []), { offset, page: p }];
           last.text = `${last.text} ${text}`;
