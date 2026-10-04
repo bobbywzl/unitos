@@ -488,7 +488,11 @@ function capsHeading(lines: Line[], i: number, ctx: PageContext): Step | null {
     const text = line.text.trim();
     const letters = text.replace(/[^\p{L}]/gu, "").length;
     if (line.cells.length !== 1 || letters < 3 || [...text].length > 60 || capsShare(text) < 0.9) return false;
-    if (line.size < ctx.bodySize * 0.85 || line.size > ctx.bodySize * (ctx.ocr ? 1.3 : 1.14)) return false;
+    // A scan's text layer sizes a line by its box: a line of capitals has no
+    // descenders, and its box reads a sixth smaller than the text's (parse
+    // loop finding: NACA Report 515's SUMMARY and INTRODUCTION read 8.5 pt
+    // over 10.3 pt text, and were paragraphs).
+    if (line.size < ctx.bodySize * (ctx.ocr ? 0.78 : 0.85) || line.size > ctx.bodySize * (ctx.ocr ? 1.3 : 1.14)) return false;
     return !(/[,;:]$/.test(text) || INITIAL_RE.test(text) || LABEL_RE.test(text) || CAPTION_RE.test(text));
   };
   const line = lines[i];
