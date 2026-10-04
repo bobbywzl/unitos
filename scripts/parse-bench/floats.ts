@@ -127,9 +127,18 @@ export type CaptionScores = { captions: number; alone: number; score: number | n
     after its 10 pt "Figure 11.2:"; the parse ended the caption at the size
     change, and the tail ("is approximately linear.") read as a paragraph
     of its own, which no count saw (the caption itself opens as a caption
-    should). */
+    should). An entry of a list of figures or tables is no caption: it
+    repeats the words a later block opens with, the caption it names (parse
+    bench finding: a CRS report's p. 3 lists "Table 1. Character of
+    Discharge Eligibility Criteria …" under "Tables", and each entry, a
+    paragraph once its list read as one, counted as a caption apart). */
 export function captionScores(cand: Flat, pdf?: PdfText, placed?: number[][]): CaptionScores {
   const text = (b: number) => cand.unitsOf[b].map((u) => cand.units[u].text).join(" ");
+  const squash = (t: string) => t.replace(/\s+/g, " ").trim().toLowerCase();
+  const opening = cand.blocks.map((block, b) =>
+    squash(block.kind === "figure" || block.kind === "table" ? (block.caption?.map((s) => s.text).join("") ?? "") : block.kind === "paragraph" ? text(b) : ""),
+  );
+  const entry = (b: number) => opening[b].length > 0 && opening.some((t, k) => k > b && t.startsWith(opening[b]));
   let kept = 0;
   const found: CaptionScores["found"] = [];
   cand.blocks.forEach((block, b) => {
@@ -137,7 +146,7 @@ export function captionScores(cand: Flat, pdf?: PdfText, placed?: number[][]): C
       const caption = block.caption?.map((s) => s.text).join("") ?? "";
       if (CAPTION_OPENING_RE.test(caption) || LABELED_RE.test(caption)) kept++;
     }
-    if (block.kind === "paragraph" && CAPTION_OPENING_RE.test(text(b))) found.push({ text: text(b).slice(0, 100) });
+    if (block.kind === "paragraph" && CAPTION_OPENING_RE.test(text(b)) && !entry(b)) found.push({ text: text(b).slice(0, 100) });
     if (block.kind === "figure" && pdf && placed && cand.blocks[b + 1]?.kind === "paragraph" && /^\s*\p{Ll}/u.test(text(b + 1))) {
       const caption = cand.unitsOf[b][0];
       const tail = cand.unitsOf[b + 1][0];
