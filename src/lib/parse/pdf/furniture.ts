@@ -244,11 +244,21 @@ export function findFurniture(pages: Line[][], pageHeights: number[], pageNumber
     if (mark && outside(c)) dropped.set(c.row, "mark");
   }
 
+  // 5. A long table's "Continued on next page" as its page's last line of
+  // text, over the foot the steps above dropped: the other pages' text
+  // reaches lower, so it stood inside them (parse loop finding: NIST AI
+  // 100-1 sets it under each page of a table, over "Page 22", and it
+  // stayed in the text seven times).
+  for (const pageRows of rows) {
+    const last = [...pageRows].reverse().find((r) => !dropped.has(r));
+    if (last && CONTINUED_RE.test(last.text)) dropped.set(last, "continued");
+  }
+
   const drops: FurnitureDrop[] = [];
   for (const row of specks) dropped.set(row, "mark");
   for (const [row, why] of dropped) for (const line of row.lines) drops.push({ page: row.page, line, why });
 
-  // 5. A line of one to four digits in the top or bottom 8% of its page.
+  // 6. A line of one to four digits in the top or bottom 8% of its page.
   // One between two of TeX's sized delimiters of a line just over or under
   // it is their lower or upper row (parse loop finding: the probability
   // cheatsheet's binomial (n 2) at a page's foot lost its "2", and the
