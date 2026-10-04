@@ -1,7 +1,7 @@
 {
  "total": {
-  "f1": 0.933,
-  "precision": 0.882,
+  "f1": 0.934,
+  "precision": 0.884,
   "recall": 0.989
  },
  "pages": {
@@ -1657,7 +1657,7 @@
   },
   "omr.com-Schuhbrand.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "OnlineMarketing.de-Instagram.html": {
@@ -2402,7 +2402,7 @@
   },
   "amnesty.de-waffensysteme.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "anchor.ch.lanka.html": {
@@ -3942,7 +3942,7 @@
   },
   "munich2022.com-topathleten.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "0af99c85f22b451a93a75bbf99ac412e.html": {
@@ -4722,7 +4722,7 @@
   },
   "unterwegsinberlin.de.friedrichsfelde.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "urania.de.freiheit.html": {
