@@ -19,7 +19,7 @@ import {
   slotFor,
 } from "@/components/docs/page/header-footer";
 import { PageIndicator } from "@/components/docs/page/indicator";
-import { followMarginDrag, nearestPos, selectRange } from "@/components/docs/page/margin-select";
+import { followMarginDrag, followTextDrag, nearestPos, selectRange } from "@/components/docs/page/margin-select";
 import { OutlineButton, OutlinePanel } from "@/components/docs/page/outline";
 import type { PaginationConfig } from "@/components/docs/page/paginate";
 import { HorizontalRuler, VerticalRuler } from "@/components/docs/page/ruler";
@@ -425,7 +425,12 @@ export function PageCanvas({
     const target = e.target as Element;
     if (target.closest("[data-docs-hf], [data-edit-control], button, a, input, textarea, select")) return;
     if (store.get().editing) store.set({ editing: null });
-    if (editor.view.dom.contains(target)) return;
+    // A press on the words selects as the browser does; the pane's scroll
+    // near its edges is margin-select.ts's.
+    if (editor.view.dom.contains(target)) {
+      followTextDrag(editor, e.nativeEvent);
+      return;
+    }
     // The canvas's own scrollbars keep their press.
     const canvas = canvasRef.current;
     if (canvas) {

@@ -18,6 +18,7 @@ import {
   anchorClass,
   type Highlight,
 } from "@/components/reader/block-view";
+import { keys } from "@/components/docs/keys";
 import { aroundPageStarts, FIGURE, findIndexed, posInBlock } from "@/components/docs/layer/anchor";
 import { PAGE_FLASH_EVENT } from "@/components/docs/layer/events";
 import { annotationKindColor, LINK_KIND_VAR } from "@/lib/annotations/kind";
@@ -30,8 +31,10 @@ import { MARK_SWEPT_EVENT, type MarkSweptDetail } from "@/lib/mark-sweep";
 // (block-view.tsx markedText). The text never changes: a mark's chips are
 // data-anchor-skip widgets, and a press opens what it opens in the reader.
 
-/** `add`: paint these over the painted marks instead of in their place. */
-export type MarksMeta = { highlights: Record<string, Highlight[]>; t: TFunc; add?: boolean };
+/** `add`: paint these over the painted marks instead of in their place.
+    `editing`: the page is in Editing or Suggesting, where a click on marked
+    words places the caret and Ctrl+click (⌘ on a Mac) opens the mark. */
+export type MarksMeta = { highlights: Record<string, Highlight[]>; t: TFunc; add?: boolean; editing?: boolean };
 
 export const annotationMarksKey = new PluginKey<DecorationSet>("docsAnnotationMarks");
 
@@ -88,7 +91,7 @@ export const PAINTED = new Set<Highlight["kind"]>(["anchor", "pending-link", "sa
 
 /** One stretch of words under the same highlights, drawn as block-view.tsx
     markedText draws it: a link wins, else the smallest anchor names the mark. */
-function segmentAttrs(covering: Highlight[], blockId: string, t: TFunc): Record<string, string> {
+function segmentAttrs(covering: Highlight[], blockId: string, t: TFunc, editing: boolean): Record<string, string> {
   const link = covering.find((h) => h.kind === "link");
   const anchors = covering.filter((h) => h.kind === "anchor");
   const anchor =
@@ -113,14 +116,16 @@ function segmentAttrs(covering: Highlight[], blockId: string, t: TFunc): Record<
   const focusable = Boolean(anchor?.annotation && anchor.sourceId && !leaving);
   const noteMark = !anchor?.annotation && anchor?.noteId && !leaving ? anchor.noteId : null;
   const extractMark = extract && !focusable && !noteMark ? extract : null;
-  // A click on the words opens what the mark names.
+  // A click on the words opens what the mark names; while the reader
+  // writes, a Ctrl+click (⌘ on a Mac) does, and a click places the caret.
+  const mod = editing ? keys("Mod") : "";
   if (focusable) {
     attrs["data-docs-open"] = "annotation";
-    attrs["data-tip"] = t("panes.viewAnnotation");
+    attrs["data-tip"] = editing ? t("docsLayer.modClickAnnotation", { keys: mod }) : t("panes.viewAnnotation");
   } else if (noteMark) {
     attrs["data-docs-open"] = "note";
     attrs["data-note-id"] = noteMark;
-    attrs["data-tip"] = t("panes.viewNote");
+    attrs["data-tip"] = editing ? t("docsLayer.modClickNote", { keys: mod }) : t("panes.viewNote");
   } else if (extractMark) {
     attrs["data-docs-open"] = "extract";
     attrs["data-extract-id"] = extractMark.extractId ?? "";
@@ -355,7 +360,7 @@ function objectMarks(node: PMNode, pos: number, highlights: Highlight[], t: TFun
   return decorations;
 }
 
-function build(doc: PMNode, highlights: Record<string, Highlight[]>, t: TFunc): DecorationSet {
+function build(doc: PMNode, highlights: Record<string, Highlight[]>, t: TFunc, editing: boolean): DecorationSet {
   const decorations: Decoration[] = [];
   doc.descendants((node, pos) => {
     if (WHOLE.has(node.type.name)) {
@@ -376,7 +381,7 @@ function build(doc: PMNode, highlights: Record<string, Highlight[]>, t: TFunc): 
       const to = posInBlock(node, pos, end, true);
       if (to <= from) continue;
       // A mark paints the words on both sides of a page start, never the page start.
-      const attrs = segmentAttrs(covering, id, t);
+      const attrs = segmentAttrs(covering, id, t, editing);
       for (const [a, b] of aroundPageStarts(doc, from, to)) {
         decorations.push(Decoration.inline(a, b, attrs, { inclusiveStart: false, inclusiveEnd: false }));
       }
@@ -579,8 +584,8 @@ export const AnnotationMarks = Extension.create({
           init: () => DecorationSet.empty,
           apply(tr, set) {
             const meta = tr.getMeta(annotationMarksKey) as MarksMeta | undefined;
-            if (meta?.add) return set.add(tr.doc, build(tr.doc, meta.highlights, meta.t).find());
-            if (meta) return build(tr.doc, meta.highlights, meta.t);
+            if (meta?.add) return set.add(tr.doc, build(tr.doc, meta.highlights, meta.t, meta.editing ?? false).find());
+            if (meta) return build(tr.doc, meta.highlights, meta.t, meta.editing ?? false);
             return tr.docChanged ? keepMoved(tr, set, set.map(tr.mapping, tr.doc)) : set;
           },
         },
@@ -589,10 +594,25 @@ export const AnnotationMarks = Extension.create({
             return annotationMarksKey.getState(state);
           },
           handleDOMEvents: {
-            // A click on a mark opens what it opens; the browser's selection
-            // tells a click from the end of a drag (the editor's is stale).
-            // A chip is the page's own click handler's.
-            click(_view, event) {
+            // While the reader writes (Editing, Suggesting), a click on
+            // marked words places the caret, and a Ctrl+click (⌘ on a Mac)
+            // opens what the mark opens, before the browser or the page
+            // takes the press for a selection. A chip opens it on a click.
+            mousedown(view, event) {
+              if (!view.editable || event.button !== 0 || !(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) {
+                return false;
+              }
+              const target = event.target instanceof Element ? event.target : null;
+              if (!target?.closest("[data-docs-open]") || target.closest("[data-anchor-skip]")) return false;
+              event.preventDefault();
+              openMarkAt(target);
+              return true;
+            },
+            // In Viewing a click on a mark opens what it opens; the
+            // browser's selection tells a click from the end of a drag (the
+            // editor's is stale). A chip is the page's own click handler's.
+            click(view, event) {
+              if (view.editable) return false;
               const target = event.target instanceof Element ? event.target : null;
               if (!target?.closest("[data-docs-open]") || target.closest("[data-anchor-skip]")) return false;
               if (!(window.getSelection()?.isCollapsed ?? true)) return false;

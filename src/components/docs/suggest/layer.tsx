@@ -27,6 +27,8 @@ import type { SuggestCommand } from "@/lib/prompts/suggest";
 const REVIEW_EVENT = "docs:review-suggestions";
 /** The space between two cards. */
 const CARD_GAP = 8;
+/** How much of the open card stays level with its words, at least. */
+const LINE_PX = 20;
 /** The column's comment and suggestion cards. */
 const COLUMN_CARD = "[data-suggestion-card], [data-comment-card]";
 /** What stands in the column and stays where it is: the toolbar and the
@@ -202,6 +204,42 @@ function placeCards(editor: Editor, pane: HTMLElement, column: HTMLElement): boo
     if (tops[0] < pageTop) {
       tops[0] = pageTop;
       pushDown(0);
+    }
+    // The open card stays in reach: pushed down past the pane's bottom by a
+    // card that stands where it is (an Explanation, the assistant's card),
+    // it goes above that card instead, inside the pane, and the cards
+    // around it make way.
+    const o = cards.findIndex((c) => c.open);
+    const shownTop = Math.max(paneRect.top, pane.querySelector(".docs-header")?.getBoundingClientRect().bottom ?? paneRect.top) - paneTop;
+    const shownBottom = paneRect.top + pane.clientHeight - paneTop - CARD_GAP;
+    if (o >= 0 && tops[o] + heights[o] > shownBottom && cards[o].top < shownBottom) {
+      const up = clear(Math.min(cards[o].top, shownBottom - heights[o]), heights[o], false);
+      if (up >= shownTop + CARD_GAP) {
+        tops[o] = up;
+        for (let i = o - 1; i >= 0; i--) {
+          tops[i] = clear(Math.min(cards[i].top, tops[i + 1] - CARD_GAP - heights[i]), heights[i], false);
+        }
+        for (let i = o + 1; i < cards.length; i++) {
+          tops[i] = clear(Math.max(cards[i].top, tops[i - 1] + heights[i - 1] + CARD_GAP), heights[i], true);
+        }
+      }
+    }
+    // The cards under the open card whose words are in view end inside the
+    // pane too: they and the open card go up together, while the open card
+    // still stands beside its words, under the toolbar, and on the page.
+    if (o >= 0) {
+      let last = o;
+      while (last + 1 < cards.length && cards[last + 1].top < shownBottom) last++;
+      const over = tops[last] + heights[last] - shownBottom;
+      if (last > o && over > 0) {
+        const lifted = tops.slice();
+        lifted[last] = clear(tops[last] - over, heights[last], false);
+        for (let i = last - 1; i >= 0; i--) {
+          lifted[i] = clear(Math.min(tops[i], lifted[i + 1] - CARD_GAP - heights[i]), heights[i], false);
+        }
+        const beside = lifted[o] + heights[o] >= cards[o].top + LINE_PX;
+        if (beside && lifted[o] >= shownTop + CARD_GAP && lifted[0] >= pageTop) lifted.forEach((top, i) => (tops[i] = top));
+      }
     }
   }
   cards.forEach(({ el }, i) => Object.assign(el.style, { left: `${left}px`, width: `${width}px`, top: `${tops[i]}px` }));

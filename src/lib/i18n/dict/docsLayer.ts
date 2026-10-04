@@ -17,6 +17,10 @@ const en = {
   nextComment: "Next comment",
   previousComment: "Previous comment",
   backToText: "Back to the text",
+  // A mark's tooltip while the reader writes (Editing, Suggesting): a click
+  // places the caret, so the mark opens with the modifier.
+  modClickAnnotation: "{keys}+click to view the annotation",
+  modClickNote: "{keys}+click to view the note",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -31,6 +35,8 @@ const zh: Record<keyof typeof en, string> = {
   nextComment: "下一条评论",
   previousComment: "上一条评论",
   backToText: "返回正文",
+  modClickAnnotation: "{keys}+点击查看批注",
+  modClickNote: "{keys}+点击查看笔记",
 };
 
 export const docsLayer = { en, zh } as const;
