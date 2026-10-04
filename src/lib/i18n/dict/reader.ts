@@ -315,6 +315,13 @@ const en = {
   linkSkipTitle: "Keep the link without a description",
   // The font picker's sans option (reader-interactions.tsx)
   fontSans: "Sans",
+  // A tool's run lands while another run holds its card (SPEC.md §6).
+  explanationReady: "Explanation ready",
+  analysisReady: "Analysis ready",
+  visualizationReady: "Visualization ready",
+  simplifiedReady: "Simplified text ready",
+  answerReady: "Answer ready",
+  showCard: "Show",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -602,6 +609,12 @@ const zh: Record<keyof typeof en, string> = {
   linkSkip: "跳过",
   linkSkipTitle: "保留链接，不加说明",
   fontSans: "无衬线",
+  explanationReady: "解释已完成",
+  analysisReady: "分析已完成",
+  visualizationReady: "可视化图已完成",
+  simplifiedReady: "简化已完成",
+  answerReady: "回答已完成",
+  showCard: "查看",
 };
 
 export const reader = { en, zh } as const;

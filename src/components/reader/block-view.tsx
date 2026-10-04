@@ -251,6 +251,44 @@ export function layoutClass(tokens: Set<LayoutToken>, base: string): string {
 
 // Split block text into plain and <mark> segments. Declarative painting: highlights are part
 // of the React tree, never DOM mutation after render (anchor offsets stay stable).
+/** The caret under a point: where a selection may start or end. */
+function caretAt(x: number, y: number): { node: Node; offset: number } | null {
+  const doc = document as Document & {
+    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+    caretRangeFromPoint?: (x: number, y: number) => Range | null;
+  };
+  if (doc.caretPositionFromPoint) {
+    const p = doc.caretPositionFromPoint(x, y);
+    return p ? { node: p.offsetNode, offset: p.offset } : null;
+  }
+  const r = doc.caretRangeFromPoint?.(x, y);
+  return r ? { node: r.startContainer, offset: r.startOffset } : null;
+}
+
+/** A press on a link mark. The browser starts no selection on a link, so a
+    drag that starts there selects its words here: the selection follows the
+    pointer until it lifts, and the selection toolbar opens on the words as
+    for any drag (SPEC.md §6). A plain click still follows the link. */
+function pressLink(e: React.MouseEvent<HTMLAnchorElement>): void {
+  pressMark(e);
+  if (e.button !== 0 || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
+  const start = caretAt(e.clientX, e.clientY);
+  const selection = window.getSelection();
+  if (!start || !selection) return;
+  e.preventDefault();
+  selection.collapse(start.node, start.offset);
+  const onMove = (ev: MouseEvent) => {
+    const at = caretAt(ev.clientX, ev.clientY);
+    if (at) selection.extend(at.node, at.offset);
+  };
+  const onUp = () => {
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp, true);
+  };
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp, true);
+}
+
 export function markedText(blockId: string, text: string, highlights: Highlight[], t: TFunc) {
   const bounds = new Set<number>([0, text.length]);
   for (const h of highlights) {
@@ -317,6 +355,16 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
           data-link-id={link.linkId}
           data-source-id={anchor?.sourceId ?? undefined}
           data-tip={linkTip || undefined}
+          // A drag that starts on a link selects its words, as a drag inside
+          // any mark does (SPEC.md §6): the link is not dragged away, and the
+          // click that ends a drag follows no link.
+          draggable={false}
+          onMouseDown={pressLink}
+          onClick={(e) => {
+            if (!clickEndsDrag(e)) return;
+            e.preventDefault();
+            e.stopPropagation();
+          }}
           className={`link-mark rounded-[4px]${link.fresh ? " mark-sweep" : ""}${selectionClass}${editedClass}`}
           onAnimationEnd={
             link.fresh
@@ -458,9 +506,17 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
               ? (e) => {
                   if (clickEndsDrag(e)) return;
                   e.stopPropagation();
+                  // Stacked annotations: the reader picks which one opens
+                  // (SPEC.md §6), in a chooser at the click.
+                  const stacked = anchors
+                    .filter((h) => h.annotation && h.sourceId && !h.leaving)
+                    .map((h) => h.sourceId as string);
                   window.dispatchEvent(
                     new CustomEvent("dissect:open-annotation", {
-                      detail: { sourceId: anchor.sourceId },
+                      detail: {
+                        sourceId: anchor.sourceId,
+                        ...(stacked.length > 1 ? { sources: stacked, x: e.clientX, y: e.clientY } : {}),
+                      },
                     }),
                   );
                 }
