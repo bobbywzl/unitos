@@ -249,7 +249,7 @@ const en = {
   linkingBanner: "Linking “{quote}” from {source} — select the other end, then press Close link",
   thisDocument: "this document",
   anotherDocument: "another document",
-  cancelLink: "Cancel the link",
+  cancelLink: "Cancel the link (Esc)",
 
   // Toasts and errors
   completeLinkToast: "Select the other end — in this or another document — then press Close link.",
@@ -538,7 +538,7 @@ const zh: Record<keyof typeof en, string> = {
   linkingBanner: "正在链接来自{source}的“{quote}”——选中另一端，再按“闭合链接”",
   thisDocument: "本文档",
   anotherDocument: "另一文档",
-  cancelLink: "取消链接",
+  cancelLink: "取消链接（Esc）",
 
   // Toasts and errors
   completeLinkToast: "在本文档或其他文档中选中另一端，再按“闭合链接”。",

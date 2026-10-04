@@ -210,9 +210,6 @@ type Popover = {
   y: number;
   yTop: number;
   textLeft: number;
-  // Container coords of the end of the selection: the Close link chip sits there.
-  endLeft: number;
-  endTop: number;
   truncated: boolean; // the selection crossed an equation or a page, which the passage leaves out
   figure?: boolean; // opened by the hold-and-circle gesture on a figure, equation, or table: the anchor is the whole block
   term?: boolean; // opened by clicking a key term; Extract leads, recommended
@@ -223,6 +220,11 @@ type Popover = {
   side: "right" | "left" | "below";
   rightBase: number;
   cw: number;
+  // Container coords of the top of the words' first line. A toolbox under
+  // the words with no room below them goes above them (above), its bottom
+  // over this line.
+  wordsTop?: number;
+  above?: boolean;
 };
 
 // Where the browser's own editing commands belong: a text box, or any
@@ -454,6 +456,27 @@ function measureSideCards(container: HTMLElement | null, excludeKind?: string) {
       };
     });
   return { rects, articleLeft, articleRight, wordsLeft, wordsRight, cw };
+}
+
+/** The toolbox's side for words whose first line starts at `top` (container
+    coords), in the block reader (SPEC.md §6): right of the words when that
+    side is clear, else left, else directly below them. A side takes the
+    toolbox only with the room for it beside the words: in a narrow pane (a
+    split pane, a small window) the toolbox landed on the words it was opened
+    for. The toolbox at rest is 176px with a 6px edge margin; pressed against
+    the pane's edge it may ride over the words' box by a sliver (the last line
+    rarely reaches the box's edge), never by more. */
+function toolboxSide(container: HTMLElement, top: number): "right" | "left" | "below" {
+  const { rects, articleLeft, articleRight, wordsLeft, wordsRight, cw } = measureSideCards(container);
+  const articleMid = (articleLeft + articleRight) / 2;
+  const POPOVER_ESTIMATE = 280;
+  const TOOLBOX_EDGE = 176 + 6;
+  const SLIVER = 40;
+  const roomRight = wordsRight - (cw - TOOLBOX_EDGE) <= SLIVER;
+  const roomLeft = TOOLBOX_EDGE + 10 - wordsLeft <= SLIVER;
+  if (roomRight && blocksOnSide(rects, articleMid, "right", top, POPOVER_ESTIMATE).length === 0) return "right";
+  if (roomLeft && blocksOnSide(rects, articleMid, "left", top, POPOVER_ESTIMATE).length === 0) return "left";
+  return "below";
 }
 
 function blocksOnSide(
@@ -1581,15 +1604,6 @@ export function ReaderInteractions({
   pendingLinkRef.current = pendingLink;
   const documentIdRef = useRef(documentId);
   documentIdRef.current = documentId;
-  // With a link pending, highlighting text shows this chip at the end of the
-  // highlight; pressing it closes the link there.
-  const [closeLink, setCloseLink] = useState<{
-    anchor: Anchor;
-    left: number;
-    top: number;
-  } | null>(null);
-  const closeLinkRef = useRef(closeLink);
-  closeLinkRef.current = closeLink;
 
   // A card over the article holds an annotation once it is persisted, and an
   // annotation goes into a note as an annotation reference (SPEC.md §6,
@@ -1668,7 +1682,6 @@ export function ReaderInteractions({
       const next = (e as CustomEvent<PendingLink | null>).detail;
       setPendingLink(next ?? null);
       pendingLinkRef.current = next ?? null;
-      if (!next) setCloseLink(null);
     };
     window.addEventListener("dissect:pending-link", onPending);
     return () => window.removeEventListener("dissect:pending-link", onPending);
@@ -1854,8 +1867,7 @@ export function ReaderInteractions({
     annotationCard !== null ||
     commentCard !== null ||
     linkCard !== null ||
-    extractCard !== null ||
-    closeLink !== null;
+    extractCard !== null;
   // The mouseup that ends a hold-and-circle gesture must not run selection
   // capture — it would replace the figure popover it just opened.
   const suppressNextMouseUp = useRef(false);
@@ -2029,9 +2041,9 @@ export function ReaderInteractions({
   }
 
   // Ctrl/Cmd+C copies the highlighted text (SPEC.md §6). The article tints the
-  // highlighted text itself while a tool is open on it — the toolbar or the
-  // Close link chip — and painting that tint replaces the block's marks, which
-  // takes the browser's own selection with it (the comment on
+  // highlighted text itself while the toolbar is open on it, and painting
+  // that tint replaces the block's marks, which takes the browser's own
+  // selection with it (the comment on
   // highlightsByBlock's "selection" kind explains why), so the system copy
   // would have nothing left to act on. The anchor's quotedText is the same
   // text, so this copies exactly what a working native copy would have.
@@ -2041,7 +2053,7 @@ export function ReaderInteractions({
     // Read through the refs, not the state: the Ctrl/Cmd+C effect below closes
     // over this function once, at mount, so a direct read would stay the
     // initial null forever.
-    const quote = (popoverRef.current ?? closeLinkRef.current)?.anchor.quotedText;
+    const quote = popoverRef.current?.anchor.quotedText;
     if (!quote) return;
     try {
       await navigator.clipboard.writeText(quote);
@@ -2054,7 +2066,7 @@ export function ReaderInteractions({
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.altKey || e.key.toLowerCase() !== "c") return;
-      if (!popoverRef.current && !closeLinkRef.current) return;
+      if (!popoverRef.current) return;
       const active = document.activeElement as HTMLElement | null;
       if (active && !active.closest("[data-edit-block]") && isTextEntry(active)) return;
       // A real native selection anywhere — the article's own editable while
@@ -2127,7 +2139,6 @@ export function ReaderInteractions({
     setPrevDocumentId(documentId);
     setPopover(null);
     setSubmenu(null);
-    setCloseLink(null);
     setBubble(null);
     setSimplifyCard(null);
     setAssistantChat(null);
@@ -2211,6 +2222,7 @@ export function ReaderInteractions({
       container.querySelectorAll<HTMLElement>("[data-block-id], [data-edit-block]"),
     ).filter((el) => own(el) && (el === startBlock || el === endBlock || range.intersectsNode(el)));
     const segments: Segment[] = pageSegments ?? [];
+    const segmentEls: HTMLElement[] = [];
     let truncated = pageSelection?.truncated ?? false;
     // A core's words (SPEC.md §28) take the core key: their anchor is in the
     // collapsed view's layer. A passage stays in one layer — the first
@@ -2251,45 +2263,41 @@ export function ReaderInteractions({
         prefix: text.slice(Math.max(0, start - 32), start),
         suffix: text.slice(end, end + 32),
       });
+      segmentEls.push(el);
     }
     if (segments.length === 0) return null;
     const first = segments[0];
     const { blockId, startOffset, endOffset, quotedText, prefix, suffix } = first;
 
-    const rect = range.getBoundingClientRect();
     const containerRect = container.getBoundingClientRect();
-    // The end of the selection is the last drawn line's right edge — the
-    // bounding rect's right is the widest line, not the end.
-    const lineRects = Array.from(range.getClientRects()).filter((r) => r.width > 0 && r.height > 0);
-    const endRect = lineRects[lineRects.length - 1] ?? rect;
-    const endLeft = Math.max(
-      8,
-      Math.min(endRect.right - containerRect.left + 6, containerRect.width - 110),
+    // The words' own lines: a drag that starts on the title or the label
+    // over it reads from the first block (above), and the toolbox stands
+    // level with that block's words, not with the title. The range's lines
+    // are cut to the blocks the passage reads.
+    const spanTop = segmentEls[0]?.getBoundingClientRect().top ?? -Infinity;
+    const spanBottom = segmentEls[segmentEls.length - 1]?.getBoundingClientRect().bottom ?? Infinity;
+    const lineRects = Array.from(range.getClientRects()).filter(
+      (r) => r.width > 0 && r.height > 0 && r.bottom > spanTop && r.top < spanBottom,
     );
-    const endTop = endRect.top + endRect.height / 2 - containerRect.top + container.scrollTop;
+    const rect =
+      lineRects.length > 0
+        ? (() => {
+            const left = Math.min(...lineRects.map((r) => r.left));
+            const top = Math.min(...lineRects.map((r) => r.top));
+            const right = Math.max(...lineRects.map((r) => r.right));
+            const bottom = Math.max(...lineRects.map((r) => r.bottom));
+            return new DOMRect(left, top, right - left, bottom - top);
+          })()
+        : range.getBoundingClientRect();
     const rawX = rect.left + rect.width / 2 - containerRect.left;
     const margin = Math.min(240, containerRect.width / 2);
     const articleRect = container.querySelector("article")?.getBoundingClientRect();
     const textLeft = articleRect ? articleRect.left - containerRect.left + 24 : 24;
     const yTop = Math.max(8, rect.top - containerRect.top + container.scrollTop);
-    // The rail's side follows the tool blocks nearby: right of the text when
-    // that side is clear, else left, else directly below the highlight.
-    const { rects, articleLeft, articleRight, wordsLeft, wordsRight, cw } = measureSideCards(container);
-    const articleMid = (articleLeft + articleRight) / 2;
-    const POPOVER_ESTIMATE = 280;
-    // A side takes the toolbox only with the room for it beside the words:
-    // in a narrow pane (a split pane, a small window) the toolbox landed on
-    // the words it was opened for. Without the room it goes below the
-    // selection, as the page editor's does under its page.
-    // The toolbox at rest is 176px with a 6px edge margin; pressed against
-    // the pane's edge it may ride over the words' box by a sliver (the last
-    // line rarely reaches the box's edge), never by more.
-    const TOOLBOX_EDGE = 176 + 6;
-    const SLIVER = 40;
-    const roomRight = wordsRight - (cw - TOOLBOX_EDGE) <= SLIVER;
-    const roomLeft = TOOLBOX_EDGE + 10 - wordsLeft <= SLIVER;
-    // The page editor (SPEC.md §29): beside the page's right edge, else over
-    // its margin, else under the words.
+    // The rail's side follows the tool blocks nearby and the room beside
+    // the words (toolboxSide). The page editor (SPEC.md §29): beside the
+    // page's right edge, else over its margin, else under the words.
+    const { articleRight, cw } = measureSideCards(container);
     const shift = docsShiftRef.current;
     const pageGeo = pageEditor ? pageGeometry(container, shift) : null;
     const side = window.matchMedia("(pointer: coarse)").matches
@@ -2298,11 +2306,7 @@ export function ReaderInteractions({
         ? toolbarLeft(pageGeo, shift, 176) === null
           ? ("below" as const)
           : ("right" as const)
-        : roomRight && blocksOnSide(rects, articleMid, "right", yTop, POPOVER_ESTIMATE).length === 0
-          ? ("right" as const)
-          : roomLeft && blocksOnSide(rects, articleMid, "left", yTop, POPOVER_ESTIMATE).length === 0
-            ? ("left" as const)
-            : ("below" as const);
+        : toolboxSide(container, yTop);
     // The toolbox's first row centers on the selection's first line, as
     // Google Docs' buttons do.
     const firstLine = lineRects[0] ?? rect;
@@ -2310,8 +2314,7 @@ export function ReaderInteractions({
     const headerBottom = pageGeo
       ? container.querySelector(".docs-header")?.getBoundingClientRect().bottom
       : undefined;
-    // Under the page editor's toolbar, and under the words, the bubbles drop
-    // below the toolbox.
+    // Under the page editor's toolbar the bubbles drop below the toolbox.
     const pageTop = headerBottom !== undefined ? Math.max(lineTop, headerBottom + 56) : lineTop;
     const pageBelow = Boolean(pageGeo) && side === "below";
     // Near the pane's top edge on screen — the document's first lines, or
@@ -2321,8 +2324,7 @@ export function ReaderInteractions({
     // On the right the stack also clears the Collapse and Extract chips,
     // which stick to the pane's top right (reader.tsx), so both stay in
     // reach.
-    // Below the words the bubbles drop under the toolbox too, and the
-    // toolbox leaves the room above it for Add to notes, as under a page.
+    // Below the words the toolbox is compact (the bubbles are its rows).
     const readerBelow = !pageGeo && side === "below";
     const nearTop = !pageGeo && (readerBelow || firstLine.top - containerRect.top < 100);
     const readerTop = nearTop ? Math.max(yTop, container.scrollTop + (side === "right" ? 100 : 48)) : yTop;
@@ -2337,14 +2339,13 @@ export function ReaderInteractions({
         ...(segments.length > 1 ? { segments } : {}),
       },
       x: Math.max(margin, Math.min(rawX, containerRect.width - margin)),
-      y: rect.bottom - containerRect.top + container.scrollTop + (side === "below" ? 14 : 6) + (pageBelow || readerBelow ? 48 : 0),
+      y: rect.bottom - containerRect.top + container.scrollTop + (side === "below" ? 14 : 6),
+      wordsTop: firstLine.top - containerRect.top + container.scrollTop,
       yTop:
         pageGeo && side === "right"
           ? Math.max(8, pageTop - containerRect.top + container.scrollTop)
           : readerTop,
       textLeft,
-      endLeft,
-      endTop,
       truncated,
       side,
       rightBase: articleRight + 10,
@@ -2357,14 +2358,17 @@ export function ReaderInteractions({
   const captureSelectionRef = useRef(captureSelection);
   captureSelectionRef.current = captureSelection;
 
-  // Escape closes the popover and bubbles first; with nothing open it leaves
-  // edit mode, saving unsaved typing on the way out.
+  // Escape closes the popover and bubbles first, and cancels a pending link
+  // with them; with nothing open it leaves edit mode, saving unsaved typing
+  // on the way out.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       // Escape that dismisses a pinyin candidate list stays the IME's.
       if (isImeKey(e)) return;
-      if (overlayOpenRef.current) {
+      const linkPending = pendingLinkRef.current !== null;
+      if (linkPending) broadcastPendingLink(null);
+      if (overlayOpenRef.current || linkPending) {
         setPopover(null);
         setSubmenu(null);
         setBubble(null);
@@ -2377,7 +2381,6 @@ export function ReaderInteractions({
         setLinkCard(null);
         setAnnotationCard(null);
         setExtractCard(null);
-        setCloseLink(null);
         // The page editor keeps the selection, as Google Docs does.
         if (!richTextRef.current) window.getSelection()?.removeAllRanges();
         return;
@@ -2402,21 +2405,24 @@ export function ReaderInteractions({
     // there starts a drag of the passage (dragstart below).
     const onContainerMouseDown = (event: MouseEvent) => {
       if (event.button !== 0) return;
-      if (!popoverRef.current && !closeLinkRef.current) return;
+      if (!popoverRef.current) return;
       const target = event.target instanceof Element ? event.target : null;
       // The page editor's toolbar acts on the open selection: a press there keeps it.
       if (target?.closest("[data-selection-popover], .selection-mark, .link-pending-mark, [data-docs-editor] [data-edit-control]")) return;
       setPopover(null);
       setSubmenu(null);
-      setCloseLink(null);
     };
     // A drag that starts on the article and lets go outside the pane still
     // ends a selection: the mouseup listens on the document, and a press
     // that started outside the pane never opens or closes the toolbar.
     let pressStartedInside = false;
     let pressTarget: Element | null = null;
+    // The pane the reader last pressed in, not a layer inside it: its keys
+    // (Ctrl/Cmd+A) are its own.
+    let lastPressInside = false;
     const onDocumentMouseDown = (event: MouseEvent) => {
       pressStartedInside = event.target instanceof Node && container.contains(event.target);
+      lastPressInside = event.target instanceof Element && event.target.closest("[data-reader-root]") === container;
       pressTarget = event.target instanceof Element ? event.target : null;
     };
     const onMouseUp = (event: MouseEvent) => {
@@ -2485,19 +2491,12 @@ export function ReaderInteractions({
         }
       });
     };
-    // The toolbar on a selection. A pending link waits on the next
-    // highlighted text instead: the Close link chip shows at its end, and
-    // pressing it closes the link there — an accidental selection creates
-    // nothing.
+    // The toolbar on a selection. With a link pending, Close link is its
+    // first row, and pressing it closes the link there — an accidental
+    // selection creates nothing.
     const showTools = (captured: Popover | null) => {
       setSubmenu(null);
-      if (captured && pendingLinkRef.current) {
-        setPopover(null);
-        setCloseLink({ anchor: captured.anchor, left: captured.endLeft, top: captured.endTop });
-        return;
-      }
       setPopover(captured);
-      setCloseLink(null);
       setCommentDraft("");
     };
     // The page editor (SPEC.md §29): a keyboard selection opens the toolbar
@@ -2516,9 +2515,50 @@ export function ReaderInteractions({
           return;
         }
         const captured = captureSelection();
-        const open = popoverRef.current ?? closeLinkRef.current;
+        const open = popoverRef.current;
         if (captured && JSON.stringify(open?.anchor) !== JSON.stringify(captured.anchor)) showTools(captured);
       });
+    };
+    // The block reader, which has no caret: a selection the keys change —
+    // Shift with the arrows from a drag's selection, Ctrl/Cmd+A below —
+    // opens the toolbar once Shift, Ctrl, or Cmd is let go, as the page
+    // editor's does.
+    const onReaderKeyUp = (e: KeyboardEvent) => {
+      if (richTextRef.current || !canEditRef.current) return;
+      if (e.key !== "Shift" && e.key !== "Control" && e.key !== "Meta") return;
+      if (e.target instanceof HTMLElement && isTextEntry(e.target)) return;
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
+      if (!container.contains(selection.getRangeAt(0).commonAncestorContainer)) return;
+      requestAnimationFrame(() => {
+        const captured = captureSelection();
+        if (captured && JSON.stringify(popoverRef.current?.anchor) !== JSON.stringify(captured.anchor)) {
+          showTools(captured);
+        }
+      });
+    };
+    // Ctrl/Cmd+A in the block reader selects the article's blocks — not the
+    // page around them, its header and the tray — and opens the toolbar on
+    // them. In edit mode and in a field, the browser's own Select all runs.
+    const onSelectAll = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== "a") return;
+      if (!lastPressInside || richTextRef.current || editModeRef.current || !canEditRef.current) return;
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && isTextEntry(active)) return;
+      const blocks = Array.from(container.querySelectorAll<HTMLElement>("[data-block-id]")).filter(
+        (el) => el.closest("[data-reader-root]") === container && el.getClientRects().length > 0,
+      );
+      const firstBlock = blocks[0];
+      const lastBlock = blocks[blocks.length - 1];
+      if (!firstBlock || !lastBlock) return;
+      e.preventDefault();
+      const range = document.createRange();
+      range.setStart(firstBlock, 0);
+      range.setEnd(lastBlock, lastBlock.childNodes.length);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      showTools(captureSelection());
     };
     // Touch: mouseup is unreliable after long-press selection, and adjusting
     // the selection handles fires no mouseup at all. pointerup covers the
@@ -2536,12 +2576,6 @@ export function ReaderInteractions({
       selectionTimer = setTimeout(() => {
         const captured = captureSelection();
         if (!captured) return;
-        if (captured && pendingLinkRef.current) {
-          setPopover(null);
-          setSubmenu(null);
-          setCloseLink({ anchor: captured.anchor, left: captured.endLeft, top: captured.endTop });
-          return;
-        }
         setPopover(captured);
         setSubmenu(null);
       }, 500);
@@ -2551,6 +2585,8 @@ export function ReaderInteractions({
     document.addEventListener("mouseup", onMouseUp);
     container.addEventListener("pointerup", onPointerUp);
     container.addEventListener("keyup", onKeyUp);
+    document.addEventListener("keyup", onReaderKeyUp);
+    document.addEventListener("keydown", onSelectAll);
     document.addEventListener("selectionchange", onSelectionChange);
     return () => {
       container.removeEventListener("mousedown", onContainerMouseDown);
@@ -2558,6 +2594,8 @@ export function ReaderInteractions({
       document.removeEventListener("mouseup", onMouseUp);
       container.removeEventListener("pointerup", onPointerUp);
       container.removeEventListener("keyup", onKeyUp);
+      document.removeEventListener("keyup", onReaderKeyUp);
+      document.removeEventListener("keydown", onSelectAll);
       document.removeEventListener("selectionchange", onSelectionChange);
       if (selectionTimer) clearTimeout(selectionTimer);
     };
@@ -2596,7 +2634,6 @@ export function ReaderInteractions({
         setAnnotationCard(null);
         setPopover(captured);
         setSubmenu("comment");
-        setCloseLink(null);
         setCommentDraft("");
       });
     };
@@ -2632,7 +2669,6 @@ export function ReaderInteractions({
       }
       popoverRef.current = captured;
       setPopover(captured);
-      setCloseLink(null);
       setSubmenu(tool === "add-to-notes" ? "add" : tool === "assistant" ? "ai" : null);
       if (tool === "explain") setPendingExplain(true);
     };
@@ -3719,10 +3755,12 @@ export function ReaderInteractions({
     if (place && place.shift > docsShiftRef.current) setDocsShift(place.shift);
   }, [pageMargin]);
   // The toolbox's width: a submenu with a field (the comment, the assistant)
-  // or the definition under the Define row widens it; coarse pointers get
-  // wider boxes to fit the tap-sized rows.
+  // or the definition under the Define row widens it, as far as the room
+  // beside the words goes (popoverBox); coarse pointers get wider boxes to
+  // fit the tap-sized rows.
+  const restWidth = coarse ? 220 : 176;
   const toolboxWidth =
-    submenu === "ai" || submenu === "comment" || submenu === "define" ? (coarse ? 300 : 248) : coarse ? 220 : 176;
+    submenu === "ai" || submenu === "comment" || submenu === "define" ? (coarse ? 300 : 248) : restWidth;
   // A toolbar beside the page that has grown past its room moves the page
   // left, as a card does.
   const toolbarPage = popover?.side === "right" ? popover.page : undefined;
@@ -3778,15 +3816,14 @@ export function ReaderInteractions({
       window.removeEventListener("pointercancel", back);
     };
   }, [pageHeld, docsShift]);
-  // The page editor's words changed: the toolbar and the Close link chip close.
+  // The page editor's words changed: the toolbar closes.
   useEffect(() => {
     if (!blankDocument) return;
     const onEdited = (e: Event) => {
       if ((e as CustomEvent<{ documentId: string }>).detail?.documentId !== documentId) return;
-      if (!popoverRef.current && !closeLinkRef.current) return;
+      if (!popoverRef.current) return;
       setPopover(null);
       setSubmenu(null);
-      setCloseLink(null);
     };
     window.addEventListener(PAGE_EDITED_EVENT, onEdited);
     return () => window.removeEventListener(PAGE_EDITED_EVENT, onEdited);
@@ -3888,6 +3925,11 @@ export function ReaderInteractions({
       return;
     }
     setFlippedBlocks(new Set());
+    // The toolbar's words go as the article changes view: the toolbar
+    // closes with them, and so does the browser's selection under the tint.
+    setPopover(null);
+    setSubmenu(null);
+    if (!richTextRef.current) window.getSelection()?.removeAllRanges();
     if (collapseOn) {
       setCollapseOn(false);
       rememberCollapse(false);
@@ -4066,7 +4108,9 @@ export function ReaderInteractions({
   // measured against the pane's bottom edge. Beside the words the toolbox
   // moves up by the overflow: it stays beside its paragraph and covers no
   // words. Under the words, where moving up would cover the selection, the
-  // pane scrolls by the overflow instead, and the selection rides up with it.
+  // toolbox goes above the words when the room above holds it, so the words
+  // stay where the reader is looking; only with room on neither side does
+  // the pane scroll by the overflow, and the selection ride up with it.
   useLayoutEffect(() => {
     if (!popover) return;
     const container = containerRef.current;
@@ -4077,6 +4121,18 @@ export function ReaderInteractions({
     const overflow = Math.ceil(bottom - container.getBoundingClientRect().bottom + 20);
     if (overflow <= 0) return;
     if (popover.side === "below") {
+      // The room above runs from the words' first line up to the page
+      // editor's header, or to the chips at the pane's top.
+      const containerTop = container.getBoundingClientRect().top;
+      const ceiling = container.querySelector(".docs-header")?.getBoundingClientRect().bottom ?? containerTop + 48;
+      const height = bottom - el.getBoundingClientRect().top;
+      if (
+        popover.wordsTop !== undefined &&
+        popover.wordsTop - container.scrollTop + containerTop - ceiling >= height + 8
+      ) {
+        setPopover((p) => (p === popover ? { ...p, above: true } : p));
+        return;
+      }
       container.scrollBy({ top: overflow, behavior: "smooth" });
       return;
     }
@@ -4130,16 +4186,8 @@ export function ReaderInteractions({
       const margin = Math.min(240, containerRect.width / 2);
       const articleRect = container.querySelector("article")?.getBoundingClientRect();
       const yTop = Math.max(8, rect.top - containerRect.top + container.scrollTop);
-      const { rects, articleLeft, articleRight, cw } = measureSideCards(container);
-      const articleMid = (articleLeft + articleRight) / 2;
-      const POPOVER_ESTIMATE = 280;
-      const side = window.matchMedia("(pointer: coarse)").matches
-        ? ("below" as const)
-        : blocksOnSide(rects, articleMid, "right", yTop, POPOVER_ESTIMATE).length === 0
-          ? ("right" as const)
-          : blocksOnSide(rects, articleMid, "left", yTop, POPOVER_ESTIMATE).length === 0
-            ? ("left" as const)
-            : ("below" as const);
+      const { articleRight, cw } = measureSideCards(container);
+      const side = window.matchMedia("(pointer: coarse)").matches ? ("below" as const) : toolboxSide(container, yTop);
       const rawX = rect.left + rect.width / 2 - containerRect.left;
       setSubmenu(null);
       setCommentDraft("");
@@ -4155,9 +4203,8 @@ export function ReaderInteractions({
         x: Math.max(margin, Math.min(rawX, containerRect.width - margin)),
         y: rect.bottom - containerRect.top + container.scrollTop + (side === "below" ? 14 : 6),
         yTop,
+        wordsTop: yTop,
         textLeft: articleRect ? articleRect.left - containerRect.left + 24 : 24,
-        endLeft: Math.max(8, Math.min(rect.right - containerRect.left + 6, containerRect.width - 110)),
-        endTop: rect.top + rect.height / 2 - containerRect.top + container.scrollTop,
         truncated: false,
         term: true,
         side,
@@ -4356,23 +4403,59 @@ export function ReaderInteractions({
     const headerBottom = page ? container.querySelector(".docs-header")?.getBoundingClientRect().bottom : undefined;
     const lineTop = clientY - 20;
     const pageTop = headerBottom !== undefined ? Math.max(lineTop, headerBottom + 56) : lineTop;
+    // The block reader: beside the block, as a selection's toolbox stands
+    // beside its words (toolboxSide) — never over the figure, the table
+    // around it, or the caption it was opened on. Near the pane's top edge
+    // (a tall figure whose top is out of view) it stands where the bubbles
+    // over it fit, clear of the chips, as for words.
+    const blockRect = page
+      ? undefined
+      : container.querySelector(`[data-block-id="${blockId}"]`)?.getBoundingClientRect();
+    const blockTop = blockRect ? blockRect.top - containerRect.top + container.scrollTop : y;
+    const readerSide = blockRect
+      ? window.matchMedia("(pointer: coarse)").matches
+        ? ("below" as const)
+        : toolboxSide(container, blockTop)
+      : null;
+    const nearTop = blockRect !== undefined && (readerSide === "below" || blockRect.top - containerRect.top < 100);
+    const readerTop = nearTop
+      ? Math.max(blockTop, container.scrollTop + (readerSide === "right" ? 100 : 48))
+      : Math.max(8, blockTop);
     suppressNextMouseUp.current = true;
     // The page editor keeps its own selection, the figure it selected: an
     // emptied one would put the caret at the text's start on the next key.
     if (!richTextRef.current) window.getSelection()?.removeAllRanges();
     setSubmenu(null);
     setCommentDraft("");
+    const anchor = { blockId, startOffset: 0, endOffset: text.length, quotedText: text, prefix: "", suffix: "" };
+    if (blockRect && readerSide) {
+      const { articleRight, cw } = measureSideCards(container);
+      const articleRect = container.querySelector("article")?.getBoundingClientRect();
+      const margin = Math.min(240, containerRect.width / 2);
+      setPopover({
+        anchor,
+        figure: true,
+        x: Math.max(margin, Math.min(blockRect.left + blockRect.width / 2 - containerRect.left, containerRect.width - margin)),
+        y: blockRect.bottom - containerRect.top + container.scrollTop + 14,
+        yTop: readerTop,
+        wordsTop: blockTop,
+        textLeft: articleRect ? articleRect.left - containerRect.left + 24 : 24,
+        truncated: false,
+        side: readerSide,
+        rightBase: articleRight + 10,
+        cw,
+        nearTop,
+      });
+      return;
+    }
     setPopover({
-      anchor: { blockId, startOffset: 0, endOffset: text.length, quotedText: text, prefix: "", suffix: "" },
+      anchor,
       figure: true,
       x: Math.max(120, clientX - containerRect.left),
-      // Under the press, the bubbles over the toolbox clear it, as under a
-      // selection's words.
-      y: y + 8 + (page && !beside ? 48 : 0),
+      y: y + 8,
+      wordsTop: y - 8,
       yTop: beside ? Math.max(8, pageTop - containerRect.top + container.scrollTop) : Math.max(8, y - 8),
       textLeft: Math.min(clientX - containerRect.left + 130, containerRect.width - 20),
-      endLeft: Math.max(8, Math.min(clientX - containerRect.left + 6, containerRect.width - 110)),
-      endTop: y,
       truncated: false,
       side: beside ? "right" : page ? "below" : "left",
       rightBase: containerRect.width - 130,
@@ -5481,7 +5564,6 @@ export function ReaderInteractions({
         toAnchor: to,
       });
       broadcastPendingLink(null);
-      setCloseLink(null);
       window.getSelection()?.removeAllRanges();
       // Both ends paint at once, sweeping in, in every pane that shows one —
       // the event reaches the other pane of a split view. The server's copy
@@ -5539,12 +5621,6 @@ export function ReaderInteractions({
     }
   }
 
-  // The Close link chip's press: the chip's highlight is the other end. On
-  // failure the chip stays for another try; the banner's ✕ still cancels.
-  async function completeCloseLink() {
-    if (!closeLink) return;
-    await completeLinkTo(closeLink.anchor, closeLink.top - 10);
-  }
 
   // A link closed in this pane or the other one: the ends in this document
   // paint now, before the refresh delivers the server's copy.
@@ -7364,7 +7440,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   // open with its thinking indicator until the answer lands, and the reader
   // asked for the passage to be worked on, not to look at it tinted. A
   // figure keeps the tint: its tint is the ring around it, not a fill.
-  const toolbarAnchor = popover?.anchor ?? closeLink?.anchor ?? null;
+  const toolbarAnchor = popover?.anchor ?? null;
   const underToolbar = richText && !(toolbarAnchor && isCoreKey(toolbarAnchor.blockId)) ? null : toolbarAnchor;
   if (underToolbar) {
     const running = aiBusy && popover !== null && underToolbar === popover.anchor && !popover.figure;
@@ -7428,21 +7504,33 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           const left = toolbarLeft(popover.page.geo, shift ?? docsShift, width) ?? Math.max(6, popover.cw - width - 6);
           return { top: popover.yTop, left, width };
         }
+        // Beside the words, the box stands where it stands at rest, and a
+        // box widened by a field grows away from the words, into the margin,
+        // as far as the margin goes: past that it keeps its width and the
+        // field wraps. It never grows back over the words it was opened for.
         if (popover.side === "right") {
-          return { top: popover.yTop, left: Math.min(popover.rightBase, popover.cw - w - 6), width: w };
+          const left = Math.min(popover.rightBase, popover.cw - restWidth - 6);
+          return { top: popover.yTop, left, width: Math.max(restWidth, Math.min(w, popover.cw - 6 - left)) };
         }
         if (popover.side === "below") {
-          return {
-            top: popover.y,
-            left: Math.max(6, Math.min(popover.x - w / 2, popover.cw - w - 6)),
-            width: w,
-          };
+          const left = Math.max(6, Math.min(popover.x - w / 2, popover.cw - w - 6));
+          // Above the words, the box's bottom sits over their first line, and
+          // a field it opens grows it upward, off the words.
+          if (popover.above && popover.wordsTop !== undefined) {
+            return { top: popover.wordsTop - 8, left, width: w, translate: "0 -100%" };
+          }
+          return { top: popover.y, left, width: w };
         }
-        return { top: popover.yTop, left: Math.max(6, popover.textLeft - w - 10), width: w };
+        const width = Math.max(restWidth, Math.min(w, popover.textLeft - 10 - 6));
+        return { top: popover.yTop, left: Math.max(6, popover.textLeft - width - 10), width };
       })()
     : { top: 0, left: 0, width: 0 };
   // Near the top, the bubbles above the toolbox drop below it.
   const popoverNearTop = popover ? (popover.nearTop ?? popover.yTop < 54) : false;
+  // The compact toolbox — under the words, and on a coarse pointer — holds
+  // its bubbles as rows: the colors and the voice first, then Add to notes,
+  // so the stack is the toolbox alone and covers as few lines as it can.
+  const compact = coarse || popover?.side === "below";
   // One row of the toolbox. Coarse pointers get 44px-tall rows.
   const toolRow = coarse ? "px-3.5 py-2.5 text-[14px]" : "px-2.5 py-[5px] text-[12px]";
   // The assistant's bar (SPEC.md §29) takes the selection box's Assistant on
@@ -7456,12 +7544,13 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
     popover ? blocks.find((b) => b.id === popover.anchor.blockId)?.type : undefined,
   );
   // A selection in a core (SPEC.md §28) takes every tool but Link: a link
-  // joins the texts themselves.
+  // joins the texts themselves. With a link pending, Close link takes Link's
+  // place.
   const inCore = popover ? isCoreKey(popover.anchor.blockId) : false;
   // Define shows on one word alone (offersDefine).
   const has = (tool: Tool) =>
     TOOLBARS[popoverKind].includes(tool) &&
-    !(inCore && tool === "link") &&
+    !((inCore || pendingLink) && tool === "link") &&
     (tool !== "define" || (popover !== null && offersDefine(popover)));
   // The definition under the Define row: the open popover's own.
   const shownDefinition = definition && definition.key === popoverAnchorKey ? definition : null;
@@ -7479,6 +7568,33 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   // A bubble outside the toolbox (the highlight colors, Add to notes, Read
   // aloud) draws a clay ring when its tool leads.
   const leadRing = (tool: Tool) => (leads(tool) ? " ring-2 ring-clay/60" : "");
+  // Read aloud: a round bubble under the toolbox, or the last button of the
+  // colors row in the compact toolbox (inRow).
+  const voiceButton = (inRow: boolean) => (
+    <button
+      onClick={() => void speakSelection()}
+      data-track="read-aloud"
+      aria-label={voice === "idle" ? t("reader.readAloud") : t("reader.stopReading")}
+      data-tip={voice === "idle" ? t("reader.readAloud") : t("reader.stopReading")}
+      className={`flex ${
+        inRow ? (coarse ? "size-7" : "size-6") : `${coarse ? "size-11" : "size-[34px]"} shadow-float`
+      } items-center justify-center rounded-full ${
+        voice !== "idle"
+          ? "bg-clay text-clay-fg hover:bg-clay-600"
+          : inRow
+            ? "text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+            : "bg-card text-sand-700 hover:text-clay-800"
+      }${leadRing("readAloud")}`}
+    >
+      {voice === "loading" ? (
+        <SpinnerIcon size={inRow ? 12 : 14} className="motion-safe:animate-spin" />
+      ) : voice === "playing" ? (
+        <StopIcon size={inRow ? 11 : 13} />
+      ) : (
+        <VolumeIcon size={inRow ? 13 : 15} />
+      )}
+    </button>
+  );
   // Every tool card grows with its content up to the pane's height, then its
   // body scrolls (SPEC.md §6). Unmeasured (the SSR pass): no cap.
   const cardMaxHeight = paneHeight > 0 ? Math.max(200, paneHeight - 24) : undefined;
@@ -7995,6 +8111,38 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         {!split && !transcript && !embedded && !richText && collapseButton}
         {!split && !transcript && !embedded && !richText && distillButton}
       </div>
+      {/* A pending link's banner: under the controls, beside the toast, so
+          it covers no control. Escape or its ✕ cancels the link. */}
+      <Presence show={pendingLink !== null && !embedded} exit="fade">
+        {pendingLink && !embedded && (
+          <div
+            data-link-banner
+            className="pointer-events-auto flex max-w-full items-center gap-1 rounded-full bg-card py-1 pr-1 pl-4 shadow-float"
+          >
+            <span className="truncate text-[12.5px] text-sand-700">
+              {t("reader.linkingBanner", {
+                quote:
+                  pendingLink.anchor.quotedText.slice(0, 48) +
+                  (pendingLink.anchor.quotedText.length > 48 ? "…" : ""),
+                source:
+                  pendingLink.fromDocumentId === documentId
+                    ? t("reader.thisDocument")
+                    : (attachedDocuments.find((d) => d.id === pendingLink.fromDocumentId)?.title ??
+                      t("reader.anotherDocument")),
+              })}
+            </span>
+            <button
+              onClick={() => broadcastPendingLink(null)}
+              data-track="cancel-link"
+              aria-label={t("reader.cancelLink")}
+              data-tip={t("reader.cancelLink")}
+              className="flex size-7 shrink-0 items-center justify-center rounded-full text-xs text-sand-500 hover:bg-sand-100 hover:text-clay-700"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+      </Presence>
       <Presence show={toast !== null} exit="fade">
         {toast && (
           <span
@@ -8020,13 +8168,14 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
 
       {/* Not in a split pane: the card would sit over the title. Not on a
           transcript: it has no edit mode. Under the toast, which may reach
-          down over it. */}
+          down over it. It yields while a toolbar is open: the stack beside
+          the first lines would cut its words. */}
       {editHint && !editMode && !split && !transcript && !embedded && !richText && (
         <div
           onAnimationEnd={() => setEditHint(false)}
           className={`hint-fade pointer-events-none absolute top-16 right-5 z-[9] rounded-2xl bg-card px-4 py-2.5 leading-relaxed text-sand-700 shadow-lift print:hidden ${
             coarse ? "max-w-80 text-[13px]" : "max-w-64 text-[12px]"
-          }`}
+          }${popover ? " invisible" : ""}`}
         >
           {t(coarse ? "reader.touchHint" : "reader.editHint")}
         </div>
@@ -8309,25 +8458,27 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               {t("reader.keyTerm")}
             </p>
           )}
-          {pendingLink && (
+          {/* With a link pending, Close link is the toolbox's first row: the
+              selection is the link's other end once it is pressed. */}
+          {pendingLink && !inCore && (
             <button
               disabled={busy}
               onClick={() => void completeLink()}
               data-track="close-link"
               data-tip={t("reader.closeLinkTitle")}
-              className={`flex w-full items-center gap-1.5 rounded-full bg-sage-600 ${toolRow} text-left font-semibold text-sage-fg hover:bg-sage-700 disabled:opacity-40`}
+              className={`order-first flex w-full items-center gap-1.5 rounded-full bg-sage-600 ${toolRow} text-left font-semibold text-sage-fg hover:bg-sage-700 disabled:opacity-40`}
             >
-              <LinkIcon size={11} />
+              {busy ? <SpinnerIcon size={11} className="motion-safe:animate-spin" /> : <LinkIcon size={11} />}
               {t("reader.closeLink")}
             </button>
           )}
 
           {/* Define (SPEC.md §6): the first row when the selection is one
-              word, right under the highlight colors — on a
-              coarse pointer, where the colors are the toolbox's first row,
-              the row after them. The definition opens under the row. */}
+              word, right under the highlight colors — in the compact
+              toolbox, where the colors are the toolbox's first row, the row
+              after them. The definition opens under the row. */}
           {has("define") && (
-            <div className={`flex flex-col gap-0.5${coarse ? " -order-2" : ""}`}>
+            <div className={`flex flex-col gap-0.5${compact ? " -order-2" : ""}`}>
               <button
                 onClick={() => {
                   defineNew.seen();
@@ -8424,7 +8575,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 rows={2}
                 className="w-full resize-none rounded-xl bg-sand-100 p-2 text-[12px] outline-none placeholder:text-sand-500"
               />
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <ThinkingChips small />
                 <WebChip small />
               </div>
@@ -8612,12 +8763,13 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           {/* Highlight: a separate bubble right above the toolbox holds the
               color dots, as wide as the toolbox. Near the top of the page it
               drops below instead, under the voice bubble, so it never lands
-              out of reach. On a coarse pointer it is the toolbox's first row. */}
+              out of reach. In the compact toolbox it is the first row, and
+              the voice ends it. */}
           {has("highlight") && (
           <div
             className={
-              coarse
-                ? `order-first flex items-center justify-around rounded-full px-2 py-2${leadRing("highlight")}`
+              compact
+                ? `order-first flex items-center justify-around rounded-full ${coarse ? "px-2 py-2" : "px-1.5 py-1"}${leadRing("highlight")}`
                 : `absolute left-0 flex w-full items-center justify-around rounded-full bg-card px-3 py-2 shadow-float ${
                     popoverNearTop ? "top-full mt-[50px]" : "bottom-full mb-2"
                   }${leadRing("highlight")}`
@@ -8638,6 +8790,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 style={{ background: HUE_DOT[color] }}
               />
             ))}
+            {compact && has("readAloud") && voiceButton(true)}
           </div>
           )}
 
@@ -8645,12 +8798,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               toolbox. Press it, pick a section, and the highlighted text lands
               there as a quote. It sits one slot higher than the highlight
               bubble; when the highlight bubble drops below near the page top,
-              it takes the near slot. On a coarse pointer it is the toolbox's
+              it takes the near slot. In the compact toolbox it is the
               second row. */}
           {has("addToNotes") && sectionChoices.length > 0 && (
             <div
               className={
-                coarse
+                compact
                   ? `-order-1 flex flex-col gap-0.5 rounded-2xl${leadRing("addToNotes")}`
                   : `absolute bottom-full left-0 flex w-full flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float ${
                       popoverNearTop ? "mb-2" : "mb-[52px]"
@@ -8678,7 +8831,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             // content; the room is what is in view above the toolbox.
             const PANEL_ROOM = 400;
             const dropsDown =
-              !coarse &&
+              !compact &&
               (Boolean(popover.page) || popover.yTop - (containerRef.current?.scrollTop ?? 0) < PANEL_ROOM);
             const first = sectionChoices[0];
             const hasNotes = sections.some((s) =>
@@ -8768,56 +8921,15 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           )}
 
           {/* Voice: a separate bubble under the toolbar reads the highlighted
-              text aloud. Press again to stop. Text only. */}
-          {has("readAloud") && (
-          <div className="absolute top-full left-0 mt-2">
-            <button
-              onClick={() => void speakSelection()}
-              data-track="read-aloud"
-              aria-label={voice === "idle" ? t("reader.readAloud") : t("reader.stopReading")}
-              data-tip={voice === "idle" ? t("reader.readAloud") : t("reader.stopReading")}
-              className={`flex ${coarse ? "size-11" : "size-[34px]"} items-center justify-center rounded-full shadow-float ${
-                voice === "idle"
-                  ? "bg-card text-sand-700 hover:text-clay-800"
-                  : "bg-clay text-clay-fg hover:bg-clay-600"
-              }${leadRing("readAloud")}`}
-            >
-              {voice === "loading" ? (
-                <SpinnerIcon size={14} className="motion-safe:animate-spin" />
-              ) : voice === "playing" ? (
-                <StopIcon size={13} />
-              ) : (
-                <VolumeIcon size={15} />
-              )}
-            </button>
-          </div>
+              text aloud. Press again to stop. Text only. In the compact
+              toolbox it ends the colors row. */}
+          {has("readAloud") && !(compact && has("highlight")) && (
+          <div className="absolute top-full left-0 mt-2">{voiceButton(false)}</div>
           )}
         </div>
       )}
       </Presence>
 
-      <Presence show={closeLink !== null} exit="pop">
-      {closeLink && (
-        <button
-          data-selection-popover
-          data-track-surface="ai-toolbar"
-          data-track="close-link"
-          disabled={busy}
-          data-tip={t("reader.closeLinkTitle")}
-          onMouseDown={(e) => e.preventDefault()} // keep the highlight alive under the press
-          onClick={() => void completeCloseLink()}
-          className={`absolute ${TOOL_LAYER} flex -translate-y-1/2 items-center gap-1.5 rounded-full bg-sage-600 px-2.5 py-1 text-[11.5px] font-semibold text-sage-fg shadow-float hover:bg-sage-700 disabled:opacity-40`}
-          style={{ left: closeLink.left, top: closeLink.top }}
-        >
-          {busy ? (
-            <SpinnerIcon size={10} className="motion-safe:animate-spin" />
-          ) : (
-            <LinkIcon size={10} />
-          )}
-          {t("reader.closeLink")}
-        </button>
-      )}
-      </Presence>
 
       <Presence show={bubble !== null} exit="bubble">
       {bubble && (
@@ -9529,34 +9641,6 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           )}
           {t("reader.stopReading")}
         </button>
-      )}
-      </Presence>
-
-      <Presence show={pendingLink !== null} exit="fade">
-      {pendingLink && (
-        <div className="fixed top-24 left-1/2 z-40 flex max-w-[80vw] -translate-x-1/2 items-center gap-3 rounded-full bg-card px-4 py-2 shadow-float">
-          <span className="truncate text-[12.5px] text-sand-700">
-            {t("reader.linkingBanner", {
-              quote:
-                pendingLink.anchor.quotedText.slice(0, 48) +
-                (pendingLink.anchor.quotedText.length > 48 ? "…" : ""),
-              source:
-                pendingLink.fromDocumentId === documentId
-                  ? t("reader.thisDocument")
-                  : (attachedDocuments.find((d) => d.id === pendingLink.fromDocumentId)?.title ??
-                    t("reader.anotherDocument")),
-            })}
-          </span>
-          <button
-            onClick={() => broadcastPendingLink(null)}
-            data-track="cancel-link"
-            aria-label={t("reader.cancelLink")}
-            data-tip={t("reader.cancelLink")}
-            className="shrink-0 text-xs text-sand-500 hover:text-clay-700"
-          >
-            ✕
-          </button>
-        </div>
       )}
       </Presence>
 
