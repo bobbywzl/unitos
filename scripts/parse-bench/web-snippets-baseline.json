@@ -1,7 +1,7 @@
 {
  "total": {
   "f1": 0.927,
-  "precision": 0.872,
+  "precision": 0.873,
   "recall": 0.989
  },
  "pages": {
@@ -3492,7 +3492,7 @@
   },
   "hss.de-Regierung.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 2,
    "fn": 0
   },
   "humanresourcesmanager.de.diversity.html": {
@@ -3567,7 +3567,7 @@
   },
   "iwr.de.IWRpressedienst.Nordex.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 2,
    "fn": 0
   },
   "jaegermagazin.de-südtirol.html": {
