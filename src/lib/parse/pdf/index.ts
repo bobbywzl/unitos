@@ -377,6 +377,26 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
       const size = median(items.filter((i) => /\p{L}{2}/u.test(i.str)).map((i) => i.size));
       for (let k = items.length - 1; k >= 0; k--) if (/^[^\p{L}\p{N}]$/u.test(items[k].str.trim()) && items[k].size >= size * 3) items.splice(k, 1);
     }
+    // The same words drawn twice at one place and size read once, whatever
+    // font each copy names: InDesign draws a running head set over a photo
+    // a second time over itself, in a second copy of its font (parse loop
+    // finding: The MagPi's "Project showcase" and "Odyssey Lights" read
+    // "Project showcaseProject showcase", and the doubled head never
+    // matched the other pages' heads, so it stayed in the text as a
+    // heading).
+    const drawnAt = new Map<string, Item[]>();
+    for (let k = 0; k < items.length; k++) {
+      const it = items[k];
+      if (it.str.trim() === "") continue;
+      const key = `${it.str}\u0000${it.size.toFixed(2)}`;
+      const same = drawnAt.get(key) ?? [];
+      if (same.some((o) => Math.abs(o.x - it.x) <= it.size * 0.05 && Math.abs(o.y - it.y) <= it.size * 0.05)) {
+        items.splice(k--, 1);
+        continue;
+      }
+      same.push(it);
+      drawnAt.set(key, same);
+    }
     // From here on a position is taken from the page box's corner, as the
     // figure route renders the page: a region is a share of the page box.
     // The MIC white paper's box starts at (36.85, 36.85); read in the PDF's
