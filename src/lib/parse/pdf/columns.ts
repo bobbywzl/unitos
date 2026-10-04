@@ -35,13 +35,17 @@ let pageRules: Box[] = [];
 // The boxes the page draws as paths (a listing's frame), while pageLines
 // reads it.
 let pageFrames: Box[] = [];
+// The page's vertical rules outside its tables, while pageLines reads it: a
+// card's divider (cardParts).
+let pageDividers: Box[] = [];
 
-export function pageLines(items: Item[], pageWidth: number, page: number, graphics: Placed[] = [], rules: Box[] = [], frames: Box[] = []): Line[] {
+export function pageLines(items: Item[], pageWidth: number, page: number, graphics: Placed[] = [], rules: Box[] = [], frames: Box[] = [], dividers: Box[] = []): Line[] {
   const text = items.filter((i) => i.str.trim().length > 0);
   markSpaces(items, text);
   if (text.length === 0 && graphics.length === 0) return [];
   pageRules = rules;
   pageFrames = frames;
+  pageDividers = dividers;
   const pieces = readRegion(text, graphics, page, pageWidth, 0);
   const lines: Line[] = [];
   let order = 0;
@@ -131,6 +135,22 @@ function readRegion(items: Item[], graphics: Placed[], page: number, pageWidth: 
       ...readRegion(items.filter((i) => i !== table && higher(i.y)), graphics.filter((p) => higher((p.box.y1 + p.box.y2) / 2)), page, pageWidth, depth, undefined, column),
       { items: [table], extent },
       ...readRegion(items.filter((i) => i !== table && !higher(i.y)), graphics.filter((p) => !higher((p.box.y1 + p.box.y2) / 2)), page, pageWidth, depth, undefined, column),
+    ];
+  }
+  const card = lines ? null : cardParts(items);
+  if (card) {
+    const { frame, before, after } = card;
+    const higher = (y: number) => y > frame.y2;
+    const lower = (y: number) => y < frame.y1;
+    const graphicY = (p: Placed) => (p.box.y1 + p.box.y2) / 2;
+    const inside = graphics.filter((p) => !higher(graphicY(p)) && !lower(graphicY(p)));
+    const first = (p: Placed) => (p.box.x1 + p.box.x2) / 2 < card.x;
+    const column = extent ?? [x0, x1];
+    return [
+      ...readRegion(items.filter((i) => higher(i.y)), graphics.filter((p) => higher(graphicY(p))), page, pageWidth, depth, undefined, column),
+      ...readRegion(before, inside.filter(first), page, pageWidth, depth + 1),
+      ...readRegion(after, inside.filter((p) => !first(p)), page, pageWidth, depth + 1),
+      ...readRegion(items.filter((i) => lower(i.y)), graphics.filter((p) => lower(graphicY(p))), page, pageWidth, depth, undefined, column),
     ];
   }
   const pair = lines ? null : listingPair(items, graphics);
@@ -298,6 +318,38 @@ function paragraphEnd(lines: Line[]): number | null {
     if (endsOpen(line)) continue;
     const next = lines[k + 1];
     if (!next || line.y - next.y > pitch * 1.3 || line.xEnd < edge - line.size * 2) return line.y - line.size * 0.5;
+  }
+  return null;
+}
+
+// A card: a frame the page draws, parted by a divider, a vertical rule that
+// stops short of the frame's top and foot and spans half its height at the
+// least (a dashed bond's ticks in a manual's example frame are no divider). What stands left of the divider
+// reads first, then what stands right of it (parse loop finding: a
+// PowerPoint deck sets a slide's title in a card beside its bullets, a
+// rule between them; read row by row, the title's words ran into the
+// bullets on their baselines: "Arrangement ▪ Can make a large difference").
+// Nothing of the region may stand beside the frame.
+const DIVIDER_INSET = 6;
+function cardParts(items: Item[]): { frame: Box; x: number; before: Item[]; after: Item[] } | null {
+  for (const frame of pageFrames) {
+    const divider = pageDividers.find(
+      (r) =>
+        r.x1 > frame.x1 + DIVIDER_INSET &&
+        r.x2 < frame.x2 - DIVIDER_INSET &&
+        r.y1 > frame.y1 + DIVIDER_INSET &&
+        r.y2 < frame.y2 - DIVIDER_INSET &&
+        r.y2 - r.y1 >= (frame.y2 - frame.y1) * 0.5,
+    );
+    if (!divider) continue;
+    const within = (i: Item) => i.x + i.w / 2 > frame.x1 && i.x + i.w / 2 < frame.x2 && i.y > frame.y1 && i.y < frame.y2;
+    const inside = items.filter(within);
+    if (items.some((i) => !within(i) && i.y >= frame.y1 && i.y <= frame.y2)) continue;
+    const x = (divider.x1 + divider.x2) / 2;
+    const before = inside.filter((i) => i.x + i.w <= x);
+    const after = inside.filter((i) => i.x + i.w > x);
+    if (before.length === 0 || after.length === 0 || after.some((i) => i.x < x)) continue;
+    return { frame, x, before, after };
   }
   return null;
 }
