@@ -313,7 +313,10 @@ export function tableSegment(
 // A table's caption opens with its label and a mark after the number:
 // "Table 2:", "TABLE 1.", "Table II.", "Table A1 –", German's "Tabelle
 // 2:" ("Table 3 shows …" is a sentence).
-const TABLE_CAPTION_RE = /^(?:table|tab\.|tabelle)\s*(?:\d+|[A-Z]\d+|[IVXL]+)\s*[.:|–—-]/i;
+// An appendix's table takes its letter and a hyphen: "Table A-1." (parse
+// loop finding: CRS R48907's "Table A-1. Common Abbreviations" read as a
+// heading, and its table took the appendix's title into its first row).
+const TABLE_CAPTION_RE = /^(?:table|tab\.|tabelle)\s*(?:\d+|[A-Z][‐–-]?\d+|[IVXL]+)\s*[.:|–—-]/i;
 
 /** A table's caption joins its table: a paragraph that opens with a
     table's label, right over the table on its first page or right under it

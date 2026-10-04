@@ -294,7 +294,7 @@ function isProseLine(line: Line, width: number, columns: Rule[] = []): boolean {
   return words.length >= 8 || (line.text.match(CJK_RE)?.length ?? 0) >= 20;
 }
 
-const CAPTION_START_RE = /^(fig\.|figure|table|tab\.|abbildung|abb\.|tabelle)\s*([\dIVX]+|[A-Z]\d+)\b/i;
+const CAPTION_START_RE = /^(fig\.|figure|table|tab\.|abbildung|abb\.|tabelle)\s*([\dIVX]+|[A-Z][‐–-]?\d+)\b/i;
 
 // A column of labels beside a column of prose: the lines leave a gutter
 // open in the left third, a label stands left of it on the first line, and
