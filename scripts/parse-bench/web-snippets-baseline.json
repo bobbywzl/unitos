@@ -1,7 +1,7 @@
 {
  "total": {
-  "f1": 0.916,
-  "precision": 0.859,
+  "f1": 0.919,
+  "precision": 0.864,
   "recall": 0.982
  },
  "pages": {
@@ -722,7 +722,7 @@
   },
   "blog.gaijinpot.com.chikan.html": {
    "tp": 4,
-   "fp": 2,
+   "fp": 0,
    "fn": 0
   },
   "leichtathletik-ostalbkreis.de.1952007.html": {
@@ -752,7 +752,7 @@
   },
   "boingboing.net.millenials.html": {
    "tp": 2,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "bos-fahrzeuge.info-haubenfahrzeuge.html": {
@@ -982,7 +982,7 @@
   },
   "edition.cnn.com-royal.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "elavegan.com-Peanut.html": {
@@ -1122,7 +1122,7 @@
   },
   "france.attc.org-privatisations.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "frau-sabienes.de.konsumsparen.html": {
@@ -1142,7 +1142,7 @@
   },
   "futurezone.at.lyft.html": {
    "tp": 2,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "gay.ch-papst.html": {
@@ -2112,7 +2112,7 @@
   },
   "vorangedacht.de.kohleausstieg.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "archive.org-travaillent.html": {
@@ -2262,7 +2262,7 @@
   },
   "wikimediafoundation.org.turkey.html": {
    "tp": 3,
-   "fp": 4,
+   "fp": 2,
    "fn": 0
   },
   "wildundhund.de-bonn.html": {
@@ -2352,7 +2352,7 @@
   },
   "ad-magazin.de.wellness.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "adac.de.kindersitze.html": {
@@ -2612,7 +2612,7 @@
   },
   "bmel.de-zukunftsforum.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 2,
    "fn": 0
   },
   "bmfsfj.de-praesidentschaft.html": {
@@ -2637,7 +2637,7 @@
   },
   "bondyblog.fr.paris-8.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "bostonherald.com-Brothel-catering.html": {
@@ -3132,7 +3132,7 @@
   },
   "erzbstbstum-koeln.de-halskrankheiten.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "eurailpress.de-rekordniveau.html": {
@@ -3517,7 +3517,7 @@
   },
   "impulse.de.eltern.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "incurvy.de.wellness.html": {
@@ -3697,7 +3697,7 @@
   },
   "latimes.com.bloomberg.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "lavazza.de.qualita.html": {
@@ -3827,7 +3827,7 @@
   },
   "management-circle.de.glasses.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "markeich.de.impressum.html": {
@@ -3987,7 +3987,7 @@
   },
   "nestle-family-com-chicken.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 3,
    "fn": 0
   },
   "nestle-marktplatz.de-produkttest.html": {
@@ -4027,7 +4027,7 @@
   },
   "oetv.at-taucher.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "offshore-stiftung.de.offshore-windenergie.html": {
@@ -4502,7 +4502,7 @@
   },
   "swr.de-volleyball.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 0,
    "fn": 0
   },
   "tafelblog.de.europa.html": {
@@ -4847,7 +4847,7 @@
   },
   "wochenblatt.com-Heinen-Essen.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "wolfgangmichal.de.sorgfaltspflicht.html": {
