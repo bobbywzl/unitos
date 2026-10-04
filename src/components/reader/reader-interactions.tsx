@@ -2627,8 +2627,15 @@ export function ReaderInteractions({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    // Where the press started: a click that ends a drag (a card moved by
+    // its header, an annotation dragged by its grip) is no click outside.
+    let press: { x: number; y: number } | null = null;
+    const onPress = (e: PointerEvent) => {
+      press = { x: e.clientX, y: e.clientY };
+    };
     const onClick = (e: MouseEvent) => {
       if (e.button !== 0 || editModeRef.current || richTextRef.current) return;
+      if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 4) return;
       const target = e.target instanceof Element ? e.target : null;
       if (!target || !container.contains(target)) return;
       // A press on a card, a control, or a mark is its own; a drag that
@@ -2649,8 +2656,12 @@ export function ReaderInteractions({
       }
       closeIdleCardsRef.current();
     };
+    window.addEventListener("pointerdown", onPress, true);
     container.addEventListener("click", onClick);
-    return () => container.removeEventListener("click", onClick);
+    return () => {
+      window.removeEventListener("pointerdown", onPress, true);
+      container.removeEventListener("click", onClick);
+    };
   }, []);
 
   // Selection → popover, in reading AND edit mode: highlighting text while
