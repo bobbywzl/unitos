@@ -1563,7 +1563,61 @@ function linesText(lines: Line[]): { text: string; runs: Run[] } {
 // The rows of a grid: each item in the cell its center is in; an item that
 // runs across a column line is cut there (splitAt). Each cell's lines go
 // into `built`, where the table's formulas are read.
-function gridRows(grid: Grid, items: Item[], page: number, built: Line[], drawing: TableDrawing): { rows: TableRow[]; padding?: TableLook["padding"] } {
+// A grid's free room that holds words: a slot (a row line to the next, a
+// column line to the next) no cell covers, with words in it, grown down,
+// up, left, and right while the strip it grows into is free and holds
+// words too, is a cell of its own. A form draws boxes open at one side:
+// the words in them stood in no cell and were lost (parse bench finding:
+// IRS Form 1040 lost "Form 1040" left of its first column's rule, and its
+// Presidential Election Campaign box, ruled on three sides, lost all six
+// of its lines).
+function withOpenCells(grid: Grid, items: Item[]): Grid {
+  const rows = grid.ys.length - 1;
+  const cols = grid.xs.length - 1;
+  const orphans = items.filter((it) => it.str.trim() && inBox(it, grid.box) && !grid.cells.some((c) => inBox(it, c)));
+  if (orphans.length === 0) return grid;
+  const free = Array.from({ length: rows }, () => new Array<boolean>(cols).fill(true));
+  for (const c of grid.cells) for (let r = c.row; r < c.row + c.rowspan; r++) for (let k = c.col; k < c.col + c.colspan; k++) free[r][k] = false;
+  const worded = Array.from({ length: rows }, () => new Array<boolean>(cols).fill(false));
+  for (const it of orphans) {
+    const { x, y } = centerOf(it);
+    const k = grid.xs.findIndex((x0, i) => i < cols && x > x0 && x < grid.xs[i + 1]);
+    const r = grid.ys.findIndex((y0, i) => i < rows && y < y0 && y > grid.ys[i + 1]);
+    if (k >= 0 && r >= 0) worded[r][k] = true;
+  }
+  const cells = [...grid.cells];
+  for (let r = 0; r < rows; r++) {
+    for (let k = 0; k < cols; k++) {
+      if (!free[r][k] || !worded[r][k]) continue;
+      let [r0, r1, k0, k1] = [r, r, k, k];
+      const strip = (ra: number, rb: number, ka: number, kb: number) => {
+        if (ra < 0 || rb >= rows || ka < 0 || kb >= cols) return false;
+        let words = false;
+        for (let i = ra; i <= rb; i++) {
+          for (let j = ka; j <= kb; j++) {
+            if (!free[i][j]) return false;
+            words ||= worded[i][j];
+          }
+        }
+        return words;
+      };
+      for (let grew = true; grew; ) {
+        grew = false;
+        if (strip(r1 + 1, r1 + 1, k0, k1)) [r1, grew] = [r1 + 1, true];
+        if (strip(r0 - 1, r0 - 1, k0, k1)) [r0, grew] = [r0 - 1, true];
+        if (strip(r0, r1, k1 + 1, k1 + 1)) [k1, grew] = [k1 + 1, true];
+        if (strip(r0, r1, k0 - 1, k0 - 1)) [k0, grew] = [k0 - 1, true];
+      }
+      for (let i = r0; i <= r1; i++) for (let j = k0; j <= k1; j++) free[i][j] = false;
+      cells.push({ x1: grid.xs[k0], x2: grid.xs[k1 + 1], y1: grid.ys[r1 + 1], y2: grid.ys[r0], row: r0, col: k0, rowspan: r1 - r0 + 1, colspan: k1 - k0 + 1 });
+    }
+  }
+  cells.sort((a, b) => a.row - b.row || a.col - b.col);
+  return { ...grid, cells };
+}
+
+function gridRows(table: Grid, items: Item[], page: number, built: Line[], drawing: TableDrawing): { rows: TableRow[]; padding?: TableLook["padding"] } {
+  const grid = withOpenCells(table, items);
   const inner = grid.xs.slice(1, -1);
   const pieces = items.flatMap((it) => splitAt(it, inner.filter((x) => x > it.x + it.w * 0.05 && x < it.x + it.w * 0.95)));
   const cells = grid.cells.flatMap((cell) => unmerged(cell, grid.xs, items, pieces));
