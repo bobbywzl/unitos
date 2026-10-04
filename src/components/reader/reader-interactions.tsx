@@ -3346,7 +3346,7 @@ export function ReaderInteractions({
   const layoutNarrowCardsRef = useRef(layoutNarrowCards);
   layoutNarrowCardsRef.current = layoutNarrowCards;
   useLayoutEffect(() => {
-    layoutNarrowCards();
+    layoutNarrowCardsRef.current();
   });
   const openCards = `${bubble !== null}${simplifyCard !== null}${assistantChat !== null}${commentCard !== null}${linkCard !== null}${annotationCard !== null}`;
   // The room the column made for the cards goes back when the last one closes.
@@ -3354,9 +3354,11 @@ export function ReaderInteractions({
   const anyCardOpenRef = useRef(anyCardOpen);
   anyCardOpenRef.current = anyCardOpen;
   // A card opening or closing lifts the caps: the cards settle again.
-  useEffect(() => {
-    setCardCaps((caps) => (Object.keys(caps).length === 0 ? caps : {}));
-  }, [openCards]);
+  const [capsOpenCards, setCapsOpenCards] = useState(openCards);
+  if (capsOpenCards !== openCards) {
+    setCapsOpenCards(openCards);
+    if (Object.keys(cardCaps).length > 0) setCardCaps({});
+  }
   useEffect(() => {
     if (anyCardOpen || cardsRoomRef.current === 0) return;
     cardsRoomRef.current = 0;
