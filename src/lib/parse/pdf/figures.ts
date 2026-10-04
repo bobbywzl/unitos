@@ -33,15 +33,17 @@ const LABEL = String.raw`fig\.?|figure|table|tab\.|photo|visualization|image|map
 // caption). A label with no number takes a full stop ("Photo. Dr. …"): a
 // colon after it names a role ("Visualization: …", PLOS's contributions). A
 // Chinese or Japanese label takes a space for its stop ("図表Ⅰ-2-1-1 避難所デ
-// ータ…"), and a caption there holds no full stop: "图 3 示意了…。" opens a
-// paragraph (arXiv 2111.04880 p10). German labels its floats "Abbildung",
+// ータ…"), or a stop and a space ("図 9. コミットおよびそのツリー": the
+// Japanese Pro Git's 20 captions read as paragraphs), and a caption there
+// holds no full stop: "图 3 示意了…。" opens a paragraph (arXiv 2111.04880
+// p10). German labels its floats "Abbildung",
 // "Abb.", and "Tabelle" (parse loop finding: GeoTopo's "Abbildung 1.4:
 // Wenn X₁, X₂ hausdorffsch sind, …" was a paragraph, and its figure's
 // labels a table). A number with parts ("1.8a", "2-1") takes its stop
 // after its last part: "Abbildung 1.8a veranschaulicht …" opens a
 // sentence.
 export const CAPTION_RE = new RegExp(
-  String.raw`^(?:(?:${LABEL})\s*(?:\d+(?:[.‐–-]\d+)*[a-z]?|[A-Z]\d+[a-z]?|[IVXL]+\b)\s*[.:|–—-](?!\d)\s*|(?:figure|photo|visualization|image|map|chart|plate|abbildung)\.\s+\S|(?:図表|図|图|圖|表)\s*[0-9Ⅰ-Ⅻ]+(?:[-‐–.][0-9Ⅰ-Ⅻ]+)*\s(?![^]*。))`,
+  String.raw`^(?:(?:${LABEL})\s*(?:\d+(?:[.‐–-]\d+)*[a-z]?|[A-Z]\d+[a-z]?|[IVXL]+\b)\s*[.:|–—-](?!\d)\s*|(?:figure|photo|visualization|image|map|chart|plate|abbildung)\.\s+\S|(?:図表|図|图|圖|表)\s*[0-9Ⅰ-Ⅻ]+(?:[-‐–.][0-9Ⅰ-Ⅻ]+)*[.:．：]?\s(?![^]*。))`,
   "i",
 );
 // "Table 3", "Table A1", IEEE's "TABLE IV", and "表 2".
