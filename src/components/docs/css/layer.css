@@ -14,7 +14,8 @@
    column and under what opens over the pane: the Extract page and the
    conversation view (z-index 35, later in the pane), the app's menus
    (z-index 40), and the dialogs. While the reader is away from the document
-   (docs-editor.tsx sets data-away) it fades out after a pause and keeps its
+   (in the other pane or on the Extract page; the notes tray does not count;
+   docs-editor.tsx sets data-away) it fades out after a pause and keeps its
    place: the text under it shows through, and pointing at it brings it
    back. */
 [data-page-editor] .docs-header {

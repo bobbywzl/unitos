@@ -648,8 +648,10 @@ export function DocsEditor({
 
   // The header shows while the reader is in the document: a press or the
   // focus in this pane's page editor or card column, or in one of the
-  // editor's menus and dialogs. A press or the focus anywhere else (the notes
-  // tray, the app's top bar, the Extract page) fades it away (css/layer.css).
+  // editor's menus and dialogs. A press or the focus in the other pane, or
+  // in this pane outside the page (the Extract page), fades it away
+  // (css/layer.css). The notes tray and the app's top bar work on the open
+  // document: a press there leaves the header as it is.
   const [away, setAway] = useState(false);
   useEffect(() => {
     const pane = editor?.view.dom.closest("[data-reader-root]");
@@ -657,11 +659,12 @@ export function DocsEditor({
     const onEnter = (e: Event) => {
       if (!(e.target instanceof Element)) return;
       const own = e.target.closest("[data-reader-root]");
-      setAway(
-        own
-          ? own !== pane || (e.target !== pane && !e.target.closest("[data-docs-editor], [data-docs-column]"))
-          : !e.target.closest("[data-edit-control]"),
-      );
+      if (!own) {
+        // One of the page editor's menus or dialogs, drawn over the app.
+        if (e.target.closest("[data-edit-control]")) setAway(false);
+        return;
+      }
+      setAway(own !== pane || (e.target !== pane && !e.target.closest("[data-docs-editor], [data-docs-column]")));
     };
     document.addEventListener("pointerdown", onEnter, true);
     document.addEventListener("focusin", onEnter);
