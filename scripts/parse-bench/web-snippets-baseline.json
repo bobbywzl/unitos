@@ -1,7 +1,7 @@
 {
  "total": {
-  "f1": 0.931,
-  "precision": 0.88,
+  "f1": 0.932,
+  "precision": 0.881,
   "recall": 0.989
  },
  "pages": {
@@ -3152,7 +3152,7 @@
   },
   "d57cfadc540842ebb09971e28df123ec.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "fairkom.eu.about.html": {
@@ -4292,7 +4292,7 @@
   },
   "Unijne fundusze coraz bliżej. Sejm zagłosował _za_ - Polityka - rp.pl.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "rtl.de-lockdown.html": {
@@ -4737,7 +4737,7 @@
   },
   "uusisuomi.fi.angela.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 1,
    "fn": 0
   },
   "vegolosi.it.climate.html": {
