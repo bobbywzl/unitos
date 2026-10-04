@@ -986,6 +986,13 @@ function isBlocks(band: Band, page: number): boolean {
   if (Math.min(...right.items.map((i) => i.x)) - Math.max(...left.items.map((i) => i.x + i.w)) < size * ems) return false;
   const [a, b] = [buildLines(left.items, page), buildLines(right.items, page)];
   const paired = a.filter((l) => b.some((m) => Math.abs(m.y - l.y) <= 0.5)).length;
+  // Lines that pair one for one within a third of their size, four and
+  // more, are a table's rows: a scan's OCR sets a row's cells a point or
+  // two apart (parse loop finding: the DTIC Datcom's contents p. 8, its
+  // sheet numbers beside their titles, read as two blocks, the numbers
+  // apart from the titles).
+  const rows = a.filter((l) => b.some((m) => Math.abs(m.y - l.y) <= Math.min(l.size, m.size) * 0.3)).length;
+  if (rows >= 4 && rows >= Math.min(a.length, b.length) * 0.8) return false;
   return paired <= 1 && Math.max(a.length, b.length) > paired;
 }
 
