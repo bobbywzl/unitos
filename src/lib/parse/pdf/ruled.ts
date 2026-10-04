@@ -251,7 +251,16 @@ function isChart(b: Box, xs: number[], ys: number[], cells: number, drawing: Tab
   const on = (v: number, lines: number[]) => lines.some((l) => Math.abs(l - v) <= 1.5);
   const within = (r: Box) => r.x1 >= b.x1 - 1 && r.x2 <= b.x2 + 1 && r.y1 >= b.y1 - 1 && r.y2 <= b.y2 + 1;
   const inRow = (r: Box) => rows.some((l) => l.cells.length >= 2 && r.y1 >= l.yMin - l.size * 0.3 && r.y2 <= l.yMax + l.size * 0.8);
-  const stray = drawing.rules.filter((r) => within(r) && !inRow(r) && (r.dir === "h" ? !on(r.y1, ys) : !on(r.x1, xs))).length;
+  // A small square ruled on its four sides and left empty is a box to tick,
+  // no chart's data, whether or not a word stands beside it.
+  const squares = drawing.paths.filter((p) => !p.clip && p.x2 - p.x1 >= 4 && p.x2 - p.x1 <= 16 && Math.abs(p.x2 - p.x1 - (p.y2 - p.y1)) <= (p.x2 - p.x1) * 0.15 && within(p));
+  const sideOf = (r: Rule) =>
+    squares.some((p) =>
+      r.dir === "h"
+        ? (Math.abs(r.y1 - p.y1) <= 1 || Math.abs(r.y1 - p.y2) <= 1) && r.x1 >= p.x1 - 1 && r.x2 <= p.x2 + 1
+        : (Math.abs(r.x1 - p.x1) <= 1 || Math.abs(r.x1 - p.x2) <= 1) && r.y1 >= p.y1 - 1 && r.y2 <= p.y2 + 1,
+    );
+  const stray = drawing.rules.filter((r) => within(r) && !inRow(r) && !sideOf(r) && (r.dir === "h" ? !on(r.y1, ys) : !on(r.x1, xs))).length;
   if (stray > Math.max(20, cells * 2)) return true;
   const same = (p: Box, f: Box) => Math.abs(p.x1 - f.x1) <= 0.5 && Math.abs(p.x2 - f.x2) <= 0.5 && Math.abs(p.y1 - f.y1) <= 0.5 && Math.abs(p.y2 - f.y2) <= 0.5;
   const shapes = drawing.paths.filter(
@@ -1361,8 +1370,23 @@ function regionRowStarts(lines: Line[], cellsOf: Cell[][]): number[] {
   // a statement's blank rows between its groups doubled the median gap (the
   // 10-K's summary of results, p. 36, fused its rows in pairs).
   const full = (cells: Cell[]) => cells[0].text.length > 0 && cells.slice(1).some((c) => c.text.length > 0);
+  // A line with words past the first column, under lines with words in the
+  // first column alone, measures its gap from the last line over it with
+  // words past the first column: a side box's lines stand on baselines of
+  // their own between the rows (parse loop finding: IRS Form 1040's side
+  // box sets "Standard" in 6.5 pt between lines 13 and 14, 6 pt from each,
+  // and line 14 read as a wrap of line 13).
+  const valued = (cells: Cell[]) => cells.some((c, j) => j > 0 && c.text.trim().length > 0);
   for (let k = 1; k < lines.length; k++) {
-    const gap = gaps[k - 1];
+    let over = k - 1;
+    if (valued(cellsOf[k]) && !valued(cellsOf[over])) {
+      for (let j = k - 2; j >= 0; j--) {
+        if (!valued(cellsOf[j])) continue;
+        over = j;
+        break;
+      }
+    }
+    const gap = lines[over].y - lines[k].y;
     if (gap < pitch * 0.7 && !(full(cellsOf[k]) && full(cellsOf[k - 1]))) continue;
     const cells = cellsOf[k];
     const filled = cells.filter((c) => c.text.length > 0);
