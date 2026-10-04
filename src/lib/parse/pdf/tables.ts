@@ -5,7 +5,7 @@
 
 import { geom, lineMathShare, median } from "@/lib/parse/pdf/geometry";
 import { sameFlags } from "@/lib/parse/pdf/glyphs";
-import { ATTACH_PUNCT_RE } from "@/lib/parse/pdf/lines";
+import { attachesLeft, rightToLeftRuns } from "@/lib/parse/pdf/lines";
 import { isGlyphMarker, readMarker } from "@/lib/parse/pdf/markers";
 import { CAPTION_RE } from "@/lib/parse/pdf/figures";
 import { firstPageOf } from "@/lib/parse/pdf/merge";
@@ -129,14 +129,15 @@ export function withoutSignColumns(lines: Line[], separators: number[]): number[
 
 // Items joined into one cell's text and style runs, a space where the gap
 // between two items reads as one.
-function cellOfItems(items: Item[], size: number): Cell {
+function cellOfItems(cellItems: Item[], size: number): Cell {
+  // A run of right-to-left words reads from the right, as its line does (lines.ts rightToLeftRuns).
+  const items = rightToLeftRuns(cellItems, size);
   const cell: Cell = { x: items[0]?.x ?? 0, text: "", runs: [] };
   let prevEnd: number | null = null;
   for (const item of items) {
     const gap = prevEnd === null ? 0 : item.x - prevEnd;
     if (prevEnd !== null && gap > size * 0.12 && !cell.text.endsWith(" ")) {
-      const attach = ATTACH_PUNCT_RE.test(item.str) && gap < size * 0.7;
-      if (!attach) cell.text += " ";
+      if (!attachesLeft(item.str, gap, size)) cell.text += " ";
     }
     const start = cell.text.length;
     cell.text += item.str;
@@ -691,6 +692,28 @@ function rowStartsOf(run: Line[], cellsOf: Cell[][], leading: number): number[] 
   return rowStarts;
 }
 
+// A row set further from the next than its words are tall, by more than
+// 0.6 of the text size, keeps its height from its first line to the next
+// row's first line, as a ruled grid's row keeps its height rule to rule
+// (gridRows): a typed table set double-spaced (parse bench finding: the
+// DTIC Datcom's tables set their rows 23 pt apart, and the import drew
+// them 16 pt apart). The last row has no next row to measure to. The rows
+// as rowsOf gathers them from the lines at the row starts, in place.
+export function keepRowPitch(rows: TableRow[], lines: Line[], starts: number[]) {
+  const bounds = [...new Set([0, ...starts])].filter((k) => k < lines.length).sort((a, b) => a - b);
+  if (bounds.length !== rows.length || lines.length === 0) return;
+  // The table's text size, the lines' median: an OCR layer stretches each
+  // line to its own size (the Datcom's typed lines read 11 to 15 pt).
+  const size = median(lines.map((l) => l.size));
+  rows.forEach((row, i) => {
+    if (i + 1 >= bounds.length || row.height !== undefined) return;
+    const [first, next, last] = [lines[bounds[i]], lines[bounds[i + 1]], lines[bounds[i + 1] - 1]];
+    const tall = first.y - next.y;
+    const words = first.y - last.y + size;
+    if (tall - words > size * 0.6) row.height = tall;
+  });
+}
+
 // Lines split into cells, gathered into rows at the row starts.
 export function rowsOf(cellsOf: Cell[][], rowStarts: number[], columnCount: number): TableRow[] {
   const rows: TableRow[] = [];
@@ -766,7 +789,9 @@ export function tableFromRun(run: Line[], leading: number): Segment {
     return { type: "PARAGRAPH", text, page, runs, ...geom(run) };
   }
   const cellsOf = run.map((line) => cellsBySeparators(line, separators));
-  const rows = rowsOf(cellsOf, rowStartsOf(run, cellsOf, leading), columnCount);
+  const starts = rowStartsOf(run, cellsOf, leading);
+  const rows = rowsOf(cellsOf, starts, columnCount);
+  keepRowPitch(rows, run, starts);
   if (isFragmented(rows)) {
     const builder = new TextBuilder();
     for (const line of run) builder.append({ text: line.text.replace(/\t/g, " "), runs: line.runs }, " ");

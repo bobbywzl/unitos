@@ -104,6 +104,48 @@ export function joinMarkerCells(lines: Line[]): Line[] {
   });
 }
 
+// A number set half again as large as its item's words, or larger, stands
+// beside the item's first lines, its top at the first line's top: the line
+// builder reads it on the line its baseline is nearest, the item's second.
+// The line above at the item's words, within the number's height, is the
+// item's first line, and the number moves to it (parse loop finding: the
+// Raspberry Pi handbook's steps "01", "02", "03" set 15.8 pt over 8 pt
+// words read "A good knowledge of Python is useful" as a paragraph above
+// the item "02 for coding your own pinball machine.").
+export function liftTallMarkers(lines: Line[]): Line[] {
+  const out = [...lines];
+  for (let k = 1; k < out.length; k++) {
+    const [above, line] = [out[k - 1], out[k]];
+    if (line.cells.length !== 1 || above.cells.length !== 1 || line.page !== above.page) continue;
+    const marker = readMarker(line);
+    const tall = line.items[0];
+    if (!marker || marker.family === "bullet" || marker.family === "box" || !tall || tall.str.trim() !== marker.text) continue;
+    const words = line.items.slice(1).filter((i) => i.str.trim() !== "");
+    if (words.length === 0) continue;
+    const size = median(words.map((i) => i.size));
+    const rise = above.y - line.y;
+    if (
+      tall.size < size * 1.5 ||
+      Math.abs(above.size - size) > 1 ||
+      Math.abs(above.x - words[0].x) > size * 0.5 ||
+      rise < size * 0.5 ||
+      rise > tall.size * 0.85 ||
+      readMarker(above) !== null
+    )
+      continue;
+    const shift = marker.length + (/^\s*/.exec(line.text.slice(marker.length))?.[0].length ?? 0);
+    const text = line.text.slice(shift);
+    const runs = line.runs.filter((r) => r.end > shift).map((r) => ({ ...r, start: Math.max(0, r.start - shift), end: r.end - shift }));
+    const lead = `${marker.text} `;
+    const markerRuns = line.runs.filter((r) => r.start < marker.text.length).map((r) => ({ ...r, start: r.start, end: Math.min(r.end, marker.text.length) }));
+    const aboveText = lead + above.text;
+    const aboveRuns = [...markerRuns, ...above.runs.map((r) => ({ ...r, start: r.start + lead.length, end: r.end + lead.length }))];
+    out[k - 1] = { ...above, text: aboveText, runs: aboveRuns, cells: [{ x: tall.x, text: aboveText, runs: aboveRuns }], items: [tall, ...above.items], x: tall.x, size: Math.max(above.size, tall.size) };
+    out[k] = { ...line, text, runs, cells: [{ x: words[0].x, text, runs }], items: line.items.slice(1), x: words[0].x, size, firstWordWidth: words[0].w };
+  }
+  return out;
+}
+
 // ── Marked items ────────────────────────────────────────────────────────────
 
 type Item = { lines: Line[]; marker: Marker; markerX: number; bodyX: number };
@@ -301,6 +343,21 @@ function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[],
     // pitch under it: a name wraps there (the same deck's "▪ Can be
     // obtained from the UCI" over "Machine Learning Repository" read as an
     // item and a paragraph).
+    // Under a number set half again as large as its words (liftTallMarkers),
+    // a line comes back under the number once it clears it: a lowercase
+    // line there, one line's pitch under a line that stopped mid-sentence,
+    // is the item's next line, however short the line above stopped (the
+    // Raspberry Pi handbook's step "03 At the ‘heart’ of the vending machine
+    // …", set ragged, its third line "alongside an Arduino …" back at the
+    // "03" and read as a paragraph of its own).
+    const tall = item.lines[0].items[0] !== undefined && item.lines[0].items[0].size >= wordsSize(item.lines[0]) * 1.5;
+    const under =
+      tall &&
+      !next.display &&
+      Math.abs(next.x - item.markerX) <= next.size * 0.5 &&
+      /^\p{Ll}/u.test(next.text) &&
+      !/[.:;!?]["'”’)]?$/.test(prev.text.trim()) &&
+      prev.y - next.y <= next.size * ctx.leading * 1.3;
     const wrapped =
       !next.display &&
       Math.abs(next.x - item.bodyX) <= next.size * 0.3 &&
@@ -309,7 +366,7 @@ function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[],
       !/[.:;!?]["'”’)]?$/.test(prev.text.trim()) &&
       fillsMargin(prev, next, columnEdges(lines, j - 1, ctx).right);
     const atWords = !next.display && Math.abs(next.x - item.bodyX) <= next.size * 0.3 && (lineMathShare(next) >= 0.5 || lineMathShare(prev) >= 0.5 || /:$/.test(prev.text.trim()));
-    if ((atWords || wrapped || !stopsShort(lines, j - 1, ctx)) && goesOn(item, prev, next, edge, ctx)) {
+    if (under || ((atWords || wrapped || !stopsShort(lines, j - 1, ctx)) && goesOn(item, prev, next, edge, ctx))) {
       item.lines.push(next);
       j++;
       continue;

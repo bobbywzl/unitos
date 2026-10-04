@@ -9,7 +9,7 @@ import { TOC_ENTRY_RE, TOC_LABEL_RE, TOC_TAIL_RE, isContentsEntry, opensLeaderLi
 import { lineColumn } from "@/lib/parse/pdf/columns";
 import { geom, median } from "@/lib/parse/pdf/geometry";
 import { readHeading } from "@/lib/parse/pdf/headings";
-import { closeLists, joinMarkerCells, readAlgorithm, readList, readReferences } from "@/lib/parse/pdf/lists";
+import { closeLists, joinMarkerCells, liftTallMarkers, readAlgorithm, readList, readReferences } from "@/lib/parse/pdf/lists";
 import { leftEdge, markEdges, readParagraph } from "@/lib/parse/pdf/paragraphs";
 import { tableFromRegion } from "@/lib/parse/pdf/ruled";
 import { findTableRuns, isLabelLine, tableFromRun } from "@/lib/parse/pdf/tables";
@@ -25,7 +25,7 @@ const PROOF_END_RE = /^[□■∎]$/;
 
 export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
   const segments: Segment[] = [];
-  const lines = gatherAuthorGrid(joinRaisedMarks(joinMarkerCells(pageLines)), ctx);
+  const lines = gatherAuthorGrid(joinRaisedMarks(liftTallMarkers(joinMarkerCells(pageLines))), ctx);
   markEdges(lines, ctx);
   // A document's first page opens no list the last document left open.
   if (lines[0]?.page === 0) closeLists();

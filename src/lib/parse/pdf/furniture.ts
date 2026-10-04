@@ -47,6 +47,8 @@ export type FurnitureDrop = { page: number; line: Line; why: "repeat" | "page nu
 // A period may close the number: the 10-K prints "53." at each foot, and
 // its 97 page numbers stayed in the text.
 const LONE_NUMBER_RE = /^[-–—\s]*(?:(?:page|p\.)\s*)?(\d{1,4}|[ivxlc]{1,7})\.?(?:\s*(?:of|\/)\s*\d{1,4})?[-–—\s]*$/i;
+// A page's number named as one: "Page 2", "Page 2 of 6".
+const PAGE_LABEL_RE = /^page\s+(\d{1,4})(?:\s+of\s+\d{1,4})?$/i;
 // The notice a book or a thesis prints on a page it leaves empty: the only
 // words of their page on six pages of the NPS thesis.
 const BLANK_PAGE_RE = /^\(?(?:this page (?:is |has been )?(?:intentionally|deliberately) left blank|(?:page )?intentionally left blank)\.?\)?$/i;
@@ -196,6 +198,14 @@ export function findFurniture(pages: Line[][], pageHeights: number[], pageNumber
     return beside * 4 <= on.size;
   };
 
+  // A cell that says it is the page's number, "Page 2" or "Page 2 of 6",
+  // with the page's own number in the PDF, needs no other page: a form of
+  // two pages sets it in its second page's head beside the form's name, and
+  // its first page carries no number to repeat (parse bench finding: IRS
+  // Form 1040's "Form 1040 (2024)   Page 2" stayed in the text).
+  const namesPage = (row: Row): boolean =>
+    row.lines.some((l) => l.cells.some((cell) => Number(PAGE_LABEL_RE.exec(cell.text.trim())?.[1]) === row.page + 1));
+
   // 0. The notice of a page left blank, its page's only words but its number.
   for (const pageRows of rows) {
     const words = pageRows.filter((r) => !r.lone);
@@ -206,7 +216,7 @@ export function findFurniture(pages: Line[][], pageHeights: number[], pageNumber
   for (const c of strong) {
     if (dropped.has(c.row) || !outside(c)) continue;
     if (c.row.lone) dropped.set(c.row, "page number");
-    else if (tracks(c.row) >= needed) dropped.set(c.row, "page number");
+    else if (tracks(c.row) >= needed || namesPage(c.row)) dropped.set(c.row, "page number");
     else if (repeated(c)) dropped.set(c.row, "repeat");
     else if (c.side === "foot" && CONTINUED_RE.test(c.row.text)) dropped.set(c.row, "continued");
   }
