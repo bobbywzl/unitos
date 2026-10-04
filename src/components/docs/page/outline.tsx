@@ -25,7 +25,7 @@ import type { ContentsEntry } from "@/lib/contents";
 // page scrolls; a press on an item scrolls to its heading and puts the caret
 // there. On an import, the contents (SPEC.md §26) stand under the headings:
 // the stored parts, each a jump that flashes where the part starts, or the
-// ask to generate them. While the panel is closed, a small button at the
+// ask to generate them; parts that are the headings again are not listed. While the panel is closed, a small button at the
 // canvas's top left opens it.
 
 type OutlineItem = { pos: number; level: number; depth: number; text: string };
@@ -183,17 +183,22 @@ function OutlineList({
 
 /** An import's contents under the headings: the stored parts, each a jump
     that flashes where the part starts; with none stored, the ask and
-    Generate contents (an editor), as the Contents menu has them. */
+    Generate contents (an editor), as the Contents menu has them. Parts that
+    each start at one of the headings list nothing the headings do not: the
+    panel shows the headings alone. */
 function OutlineContents({
   editor,
   doc,
   documentId,
   viewTop,
+  headings,
 }: {
   editor: Editor;
   doc: PMNode;
   documentId: string;
   viewTop: number;
+  /** Where the headings listed above stand. */
+  headings: ReadonlySet<number>;
 }) {
   const t = useT();
   const { canEdit } = useCollab();
@@ -201,6 +206,7 @@ function OutlineContents({
   const parts = state?.generated ? state.parts : null;
   const items = useMemo(() => (parts ? partsOf(doc, parts) : []), [doc, parts]);
   const current = useCurrent(editor, items, viewTop);
+  if (items.length > 0 && items.every((item) => headings.has(item.pos))) return null;
   return (
     <section aria-label={t("reader.contents")}>
       <div className="docs-outline-header">{t("reader.contents")}</div>
@@ -298,6 +304,7 @@ export function OutlinePanel({
   const width = usePageState(store, (s) => s.outlineWidth);
   const doc = useDoc(editor);
   const items = useMemo(() => outlineOf(doc), [doc]);
+  const headingPlaces = useMemo(() => new Set(items.map((item) => item.pos)), [items]);
   const current = useCurrent(editor, items, viewTop);
   const imported = importedOf(editor);
   const [draftWidth, setDraftWidth] = useState<number | null>(null);
@@ -357,7 +364,9 @@ export function OutlinePanel({
         ) : (
           <OutlineList items={items} current={current} onPick={(item) => void goTo(editor, item, viewTop)} />
         )}
-        {imported && <OutlineContents editor={editor} doc={doc} documentId={imported.documentId} viewTop={viewTop} />}
+        {imported && (
+          <OutlineContents editor={editor} doc={doc} documentId={imported.documentId} viewTop={viewTop} headings={headingPlaces} />
+        )}
       </div>
       <div
         className="docs-outline-resize"

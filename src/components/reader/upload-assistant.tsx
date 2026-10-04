@@ -683,6 +683,26 @@ export function UploadAssistant({
   const saveDetail = steps?.find((s) => s.key === "save")?.detail;
   const singleDetail = phase === "done" && itemCount === 1 && saveDetail ? saveDetail : null;
   const verification = singleDetail && hasFigureCheck(singleDetail) ? ingestCounts(singleDetail) : null;
+  // The check's line: the figures and their captions when the document has
+  // either, and the page's images and videos when it has any; none for a
+  // document with neither.
+  const verificationLine = verification
+    ? [
+        ...(verification.figures > 0 || verification.captionsWithoutFigure > 0
+          ? [
+              t(verification.figures === 1 ? "panes.uploadFiguresLoaded1" : "panes.uploadFiguresLoaded", { n: verification.figures }),
+              verification.captionsWithoutFigure > 0
+                ? captionsWithoutFigureText(t, verification.captionsWithoutFigure)
+                : t("panes.uploadEveryCaptionHasFigure"),
+            ]
+          : []),
+        ...(verification.mediaLost.length > 0
+          ? [mediaLostText(t, verification)]
+          : verification.media > 0
+            ? [t("panes.uploadEveryMediaLoaded", { n: verification.media })]
+            : []),
+      ]
+    : [];
   const lostFigures =
     (verification?.captionsWithoutFigure ?? 0) > 0 || (verification?.mediaLost.length ?? 0) > 0;
   const blockDocument = keptBlockDocument(singleDetail);
@@ -783,20 +803,8 @@ export function UploadAssistant({
                 {added.length > 1 ? t("panes.uploadAddedCount", { n: added.length }) : added[0].title}
               </p>
             )}
-            {verification && (
-              <p className={lostFigures ? amberNote : "text-xs text-sand-500"}>
-                {[
-                  t("panes.uploadFiguresLoaded", { n: verification.figures }),
-                  verification.captionsWithoutFigure > 0
-                    ? captionsWithoutFigureText(t, verification.captionsWithoutFigure)
-                    : t("panes.uploadEveryCaptionHasFigure"),
-                  ...(verification.mediaLost.length > 0
-                    ? [mediaLostText(t, verification)]
-                    : verification.media > 0
-                      ? [t("panes.uploadEveryMediaLoaded", { n: verification.media })]
-                      : []),
-                ].join(" · ")}
-              </p>
+            {verificationLine.length > 0 && (
+              <p className={lostFigures ? amberNote : "text-xs text-sand-500"}>{verificationLine.join(" · ")}</p>
             )}
             {blockDocument && singleDetail && <p className="text-xs text-sand-600">{t(blockDocumentLine(singleDetail))}</p>}
             {conversionFailed !== null && (

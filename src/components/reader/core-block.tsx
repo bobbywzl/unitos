@@ -57,8 +57,10 @@ export function CoreBlock({
 }
 
 /** The button beside every block that has a core: collapses the block to its
-    core, or reads it whole, whatever the rest of the article shows. */
-export function CoreToggle({ showsCore, onToggle }: { showsCore: boolean; onToggle: () => void }) {
+    core, or reads it whole, whatever the rest of the article shows. While
+    Collapse is off (`quiet`) it shows only under the pointer: the whole
+    article carries no row of faint buttons. */
+export function CoreToggle({ showsCore, quiet = false, onToggle }: { showsCore: boolean; quiet?: boolean; onToggle: () => void }) {
   const t = useT();
   const label = t(showsCore ? "reader.coreExpandTitle" : "reader.coreFoldTitle");
   return (
@@ -69,7 +71,7 @@ export function CoreToggle({ showsCore, onToggle }: { showsCore: boolean; onTogg
       data-track={showsCore ? "collapse-expand" : "collapse-fold"}
       aria-label={label}
       data-tip={label}
-      className="absolute top-0.5 -right-8 flex size-6 items-center justify-center rounded-full text-sage-700 opacity-40 transition-opacity group-hover/block:opacity-100 hover:bg-sage-100 hover:opacity-100 focus-visible:opacity-100 print:hidden"
+      className={`absolute top-0.5 -right-8 flex size-6 items-center justify-center rounded-full text-sage-700 ${quiet ? "opacity-0" : "opacity-40"} transition-opacity group-hover/block:opacity-100 hover:bg-sage-100 hover:opacity-100 focus-visible:opacity-100 print:hidden`}
     >
       {showsCore ? <ExpandIcon size={11} /> : <CollapseIcon size={11} />}
     </button>

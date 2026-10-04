@@ -250,7 +250,7 @@ const en = {
   dragDocumentTitle: "Drag to move it into a folder",
   moveToProject: "Drop here to move it out of its folder",
   dropOrChoose: "Drop files here, or click to choose",
-  dropZoneHint: "PDF, image, video, audio, or Markdown — up to 200 MB",
+  dropZoneHint: "PDF, Word, Markdown, text, slides, sheets, image, video, or audio — up to 200 MB",
   addFromDrive: "Add from Google Drive",
   library: "Library",
   blankDocument: "Blank document",
@@ -490,6 +490,7 @@ const en = {
   uploadScriptedFigures:
     "The page draws figures with scripts. Set BROWSER_WS_ENDPOINT or CHROMIUM_PATH so the upload can render them.",
   uploadReviewAgainNote: "Review again re-checks the figures.",
+  uploadFiguresLoaded1: "1 figure loaded",
   uploadFiguresLoaded: "{n} figures loaded",
   uploadEveryCaptionHasFigure: "every caption has its figure",
   // The media check (SPEC.md §15): every image, video, and chart in the
@@ -744,7 +745,7 @@ const zh: Record<keyof typeof en, string> = {
   dragDocumentTitle: "拖动可移入文件夹",
   moveToProject: "拖到这里，移出文件夹",
   dropOrChoose: "把文件拖到这里，或点击选择",
-  dropZoneHint: "PDF、图片、视频、音频或 Markdown，最大 200 MB",
+  dropZoneHint: "PDF、Word、Markdown、文本文件、幻灯片、电子表格、图片、视频或音频，最大 200 MB",
   addFromDrive: "从 Google Drive 添加",
   library: "文档库",
   blankDocument: "空白文档",
@@ -954,6 +955,7 @@ const zh: Record<keyof typeof en, string> = {
   uploadScriptedFigures:
     "页面用脚本绘制插图。设置 BROWSER_WS_ENDPOINT 或 CHROMIUM_PATH，上传才能渲染它们。",
   uploadReviewAgainNote: "重新审阅会再次检查插图。",
+  uploadFiguresLoaded1: "已加载 1 张插图",
   uploadFiguresLoaded: "已加载 {n} 张插图",
   uploadEveryCaptionHasFigure: "每条说明都有插图",
   detailMediaLost: "页面上 {total} 个图片和视频中有 {n} 个没有加载：{names}",

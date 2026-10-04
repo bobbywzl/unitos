@@ -23,6 +23,14 @@ export function stepZoom(current: number, direction: 1 | -1): number {
 const paged = (editor: Editor) => editor.isEditable && store(editor)?.get().setup.pageless === false;
 const pageless = (editor: Editor) => store(editor)?.get().setup.pageless === true;
 
+/** A PDF import in Viewing, read pageless or in its pages (page/reflow.tsx);
+    null for every other page. */
+const reflowOf = (editor: Editor): "pageless" | "pages" | null => {
+  const shell = editor.view.dom.closest<HTMLElement>("[data-docs-editor]");
+  const reflow = shell?.dataset.reflow;
+  return reflow === "pageless" || reflow === "pages" ? reflow : null;
+};
+
 const editHeader = (area: HeaderArea) => (editor: Editor) => fireDocs(editor, PAGE_EVENT.editHeader, { area } satisfies EditHeaderDetail);
 
 const TEXT_WIDTH_LABELS = {
@@ -120,6 +128,24 @@ registerDocsCommands([
       if (s) void s.saveSetup({ ...s.get().setup, pageless: false });
     },
     enabled: (editor) => editor.isEditable && pageless(editor),
+  },
+  {
+    // A PDF import in Viewing: its words wrapped to the pane, a view of this
+    // browser that the document never stores (page/reflow.tsx).
+    id: "page:read-pageless",
+    label: "docsPage.readPageless",
+    menu: "view",
+    keywords: ["pageless", "reflow", "wrap", "small pages", "phone"],
+    run: (editor) => fireDocs(editor, PAGE_EVENT.reflow, true),
+    enabled: (editor) => reflowOf(editor) === "pages",
+  },
+  {
+    id: "page:show-pages",
+    label: "docsPage.showPages",
+    menu: "view",
+    keywords: ["pages", "pageless", "reflow"],
+    run: (editor) => fireDocs(editor, PAGE_EVENT.reflow, false),
+    enabled: (editor) => reflowOf(editor) === "pageless",
   },
   ...(["narrow", "medium", "wide", "full"] as const).map((width) => ({
     id: `page:text-width-${width}`,

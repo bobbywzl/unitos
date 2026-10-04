@@ -1298,6 +1298,11 @@ body.docs-img-moving .docs-img-toolbar {
   overflow-x: clip;
   overflow-y: visible;
 }
+/* A pageless column narrower than a table (a phone): the table scrolls
+   sideways in its place, and no cell is cut off. */
+.docs-shell .docs-page[data-narrow] .docs-prose .tableWrapper {
+  overflow-x: auto;
+}
 .docs-shell .docs-prose .tableWrapper[data-align="center"] table {
   margin-left: auto;
   margin-right: auto;

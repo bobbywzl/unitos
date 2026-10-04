@@ -14,7 +14,8 @@
    column and under what opens over the pane: the Extract page and the
    conversation view (z-index 35, later in the pane), the app's menus
    (z-index 40), and the dialogs. While the reader is away from the document
-   (docs-editor.tsx sets data-away) it fades out after a pause and keeps its
+   (in the other pane or on the Extract page; the notes tray does not count;
+   docs-editor.tsx sets data-away) it fades out after a pause and keeps its
    place: the text under it shows through, and pointing at it brings it
    back. */
 [data-page-editor] .docs-header {
@@ -277,4 +278,53 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+/* The left-off mark (layer/left-off.ts): the block reader's ribbon and
+   faint line (reader.tsx LeftOffMark) in the gap above the block of the
+   reading position the document opened with. It takes no room, the ribbon
+   stands in the left margin, and it never prints. */
+.docs-prose .docs-left-off-block {
+  position: relative;
+}
+.docs-prose .docs-left-off {
+  position: absolute;
+  top: -5px;
+  right: 0;
+  left: 0;
+  height: 0;
+  pointer-events: none;
+  user-select: none;
+  text-indent: 0;
+}
+.docs-prose .docs-left-off-line {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: -6px;
+  height: 1.5px;
+  transform: translateY(-50%);
+  background: linear-gradient(to right, color-mix(in srgb, var(--clay) 70%, transparent), transparent 85%);
+}
+.docs-prose .docs-left-off-ribbon {
+  position: absolute;
+  top: -10px;
+  left: -25px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: var(--clay);
+  pointer-events: auto;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .docs-prose .docs-left-off {
+    animation: fade-in 0.4s ease-out both;
+  }
+}
+@media print {
+  .docs-prose .docs-left-off {
+    display: none;
+  }
 }

@@ -278,6 +278,7 @@ export function CollapsedView({
             core={cores[unit.id] ?? ""}
             highlightsByBlock={highlightsByBlock}
             pageLabel={unit.core ? unit.pages.map((page) => pageStartLabel(editor, page)).join(" · ") : ""}
+            quiet={!on}
             onToggle={() => actions.current.flip?.(unit.id)}
           />,
           slotFor(editor, unit),
@@ -295,15 +296,18 @@ function UnitSlot({
   core,
   highlightsByBlock,
   pageLabel,
+  quiet,
   onToggle,
 }: {
   unit: Shown;
   core: string;
   highlightsByBlock: Record<string, Highlight[]>;
   pageLabel: string;
+  /** Collapse is off: the button shows only under the pointer. */
+  quiet: boolean;
   onToggle: () => void;
 }) {
-  if (!unit.core) return <CoreToggle showsCore={false} onToggle={onToggle} />;
+  if (!unit.core) return <CoreToggle showsCore={false} quiet={quiet} onToggle={onToggle} />;
   // The whole text's annotations paint on the words alone; the core says
   // they are there.
   const annotated = unit.rows.some((row) => (highlightsByBlock[row] ?? []).some((h) => h.kind === "anchor" && !h.leaving));
