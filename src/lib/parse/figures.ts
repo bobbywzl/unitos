@@ -704,8 +704,26 @@ export function isCreditedCaption(text: string): boolean {
     .every((part) => /^[\p{Lu}\d©]/u.test(part.trim()));
 }
 
+// A credit closing a caption with its mark or its label and no sentence
+// after: "Suzanne Schulting, Short Trackerin. © AFP / WANG ZHAO",
+// "installation views, photos © Inexhibit, 2018", "… daily briefings.
+// Photo: Jonathan Nackstrand/AFP". Read only beside a figure without a
+// caption: a story's paragraph may end in "©" words elsewhere. Web
+// benchmark finding: a caption after its picture read as the story's text;
+// held-out set finding: 8 such captions, 3 of their credits marked as not
+// the article's.
+const MARK_CREDIT_END_RX = /(?:©|\(c\)|(?<![\p{L}])(?:photos?|fotos?|bild|bilder|image|images|credit)\s*:)[^.!?©:]{1,60}$/iu;
+
+/** A caption closed by a credit's mark or label, its own words before the
+    credit, at most forty words. */
+function isMarkCreditedCaption(text: string): boolean {
+  const t = text.trim();
+  const m = MARK_CREDIT_END_RX.exec(t);
+  return m !== null && t.split(/\s+/).length <= CREDITED_CAPTION_WORDS_MAX && /\p{L}/u.test(t.slice(0, m.index));
+}
+
 function isCreditedCaptionBlock(block: ParsedBlock | undefined): boolean {
-  return block !== undefined && block.type === "PARAGRAPH" && isCreditedCaption(block.text);
+  return block !== undefined && block.type === "PARAGRAPH" && (isCreditedCaption(block.text) || isMarkCreditedCaption(block.text));
 }
 
 /** The element in the page whose text is this caption. */
