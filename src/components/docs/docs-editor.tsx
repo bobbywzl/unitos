@@ -255,9 +255,10 @@ function readingCaret(editor: Editor, pane: HTMLElement): number | null {
   if (!$hit.parent.isTextblock) return null;
   const start = $hit.start();
   if (view.coordsAtPos(start).top >= shown - 1) return start;
-  // The block began above the view: its first line in view.
+  // The block began above the view: its first line in view, whole. Half a
+  // line under the text's box is the next line (the line's box runs lower).
   const line = view.coordsAtPos(hit);
-  const next = line.top >= shown - 1 ? hit : at(line.bottom + 2);
+  const next = line.top >= shown - 1 ? hit : at(line.bottom + (line.bottom - line.top) / 2);
   return next !== null && view.state.doc.resolve(next).parent === $hit.parent ? next : hit;
 }
 
