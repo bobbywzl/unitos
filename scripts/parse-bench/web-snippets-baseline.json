@@ -686,9 +686,9 @@
    "fn": 1
   },
   "baike.baidu.com.tanya.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "battery-news.de.ultium-cells.html": {
    "tp": 3,
