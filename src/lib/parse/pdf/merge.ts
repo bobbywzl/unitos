@@ -406,6 +406,24 @@ function setAlike(a: Segment, b: Segment, body: Map<number, number>): boolean {
   return Math.max(ra, rb) <= Math.min(ra, rb) * 1.2;
 }
 
+// The face most of a part's characters are set in, as the page editor
+// names it; none when its runs carry no look.
+function faceOf(s: Segment): string | undefined {
+  const chars = new Map<string, number>();
+  for (const r of s.runs ?? []) if (r.look) chars.set(r.look.face, (chars.get(r.look.face) ?? 0) + r.end - r.start);
+  return [...chars].sort((a, b) => b[1] - a[1])[0]?.[0];
+}
+
+// Two parts set in two faces are two texts: a magazine's sidebar set in a
+// sans face is no part of the next page's paragraph set in a serif one
+// (parse loop finding: The MagPi's last Quick Facts item, "…all seasons
+// bar winter", took the next page's "a rainforest degradation monitoring
+// project…", which goes on from the page before the photo page).
+function sameFace(a: Segment, b: Segment): boolean {
+  const [fa, fb] = [faceOf(a), faceOf(b)];
+  return fa === undefined || fb === undefined || fa === fb;
+}
+
 // How the pages set their paragraphs: the pages whose paragraphs open set
 // in (a first-line indent), and each page's justified paragraphs.
 type PageSetting = { indenting: Set<number>; justified: Segment[] };
@@ -467,6 +485,7 @@ export function mergeAcrossPages(input: Segment[]): Segment[] {
       (!prev.listItem || /^\p{Ll}/u.test(segment.text) || wrapsOver(prev, segment, setting)) &&
       !isCaptionText(prev) &&
       setAlike(prev, segment, body) &&
+      sameFace(prev, segment) &&
       // A numbered heading read as a paragraph starts its own block: with
       // the running head gone from between them, "6. Relations and arrows"
       // joined the display above it (the synthetic formula sheet).

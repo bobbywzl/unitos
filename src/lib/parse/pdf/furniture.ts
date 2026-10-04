@@ -176,15 +176,24 @@ export function findFurniture(pages: Line[][], pageHeights: number[], pageNumber
   // the CS 229 refresher sets its 10 pt head and foot over 8 pt text, and
   // both stayed in the text of its two pages).
   const parted = (r: Row) => r.lines.reduce((n, l) => n + Math.max(1, l.cells.length), 0) >= 2 && Math.min(r.top, r.bottom) < (r.top + r.bottom) * 0.08;
+  // A row set larger than that is a head still when it repeats on pages
+  // that are seldom next to each other (a quarter of them at most): a
+  // magazine sets its section's head on every left-hand page over 7.5 pt
+  // text, where a deck repeats a title on the slides that run on, one
+  // after another (parse loop finding: The MagPi's 12 pt "Project
+  // showcase" stayed in the text as a heading on each left-hand page).
   const repeated = (c: Candidate): boolean => {
-    if (c.row.size > bodySize * (parted(c.row) ? 1.3 : 1.15) || (c.row.key.match(/\p{L}/gu)?.length ?? 0) < 3) return false;
+    if ((c.row.key.match(/\p{L}/gu)?.length ?? 0) < 3) return false;
+    const large = c.row.size > bodySize * (parted(c.row) ? 1.3 : 1.15);
     const on = new Set<number>([c.row.page]);
     for (const s of strong) {
       if (s.side !== c.side || on.has(s.row.page)) continue;
       if (same(c.row, s.row) && closeSize(c.row, s.row)) on.add(s.row.page);
-      if (on.size >= needed) return true;
+      if (!large && on.size >= needed) return true;
     }
-    return false;
+    if (!large || on.size < needed) return false;
+    const beside = [...on].filter((p) => on.has(p - 1) || on.has(p + 1)).length;
+    return beside * 4 <= on.size;
   };
 
   // 0. The notice of a page left blank, its page's only words but its number.
