@@ -384,14 +384,21 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     // "Project showcaseProject showcase", and the doubled head never
     // matched the other pages' heads, so it stayed in the text as a
     // heading).
+    // The copy drawn last reads, in its look: it stands over the other. The
+    // MagPi's p. 44 draws its head twice, the second copy in white over its
+    // photo; read in the first copy's color, the head made the photo hold
+    // the page's text, a background with no figure.
     const drawnAt = new Map<string, Item[]>();
     for (let k = 0; k < items.length; k++) {
       const it = items[k];
       if (it.str.trim() === "") continue;
       const key = `${it.str}\u0000${it.size.toFixed(2)}`;
       const same = drawnAt.get(key) ?? [];
-      if (same.some((o) => Math.abs(o.x - it.x) <= it.size * 0.05 && Math.abs(o.y - it.y) <= it.size * 0.05)) {
-        items.splice(k--, 1);
+      const under = same.findIndex((o) => Math.abs(o.x - it.x) <= it.size * 0.05 && Math.abs(o.y - it.y) <= it.size * 0.05);
+      if (under >= 0) {
+        items.splice(items.indexOf(same[under]), 1);
+        same[under] = it;
+        k--;
         continue;
       }
       same.push(it);
