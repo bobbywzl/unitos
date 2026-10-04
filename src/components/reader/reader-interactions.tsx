@@ -2728,6 +2728,7 @@ export function ReaderInteractions({
       if (!canEditRef.current) return;
       const inside = event.target instanceof Node && container.contains(event.target);
       if (!inside && !pressStartedInside) return;
+      const startedInside = pressStartedInside;
       pressStartedInside = false;
       if (suppressNextMouseUp.current) {
         suppressNextMouseUp.current = false;
@@ -2743,6 +2744,11 @@ export function ReaderInteractions({
       // that is text editing, not a new selection.
       if (document.activeElement?.closest("[data-selection-popover]")) return;
       requestAnimationFrame(() => {
+        // A drag that began on the article and let go in the tray or the
+        // header selects the page between: the selection is cut to the
+        // article's blocks it crosses, as if the drag had stopped at the
+        // pane's edge.
+        if (startedInside) clipSelectionToPane(event.clientX, event.clientY);
         const captured = captureSelection();
         // The VIDEO block (the player's own block) refuses annotation: a
         // selection over it shows the refusal instead of tools. Transcript
@@ -2789,6 +2795,64 @@ export function ReaderInteractions({
           if (el && !el.closest("[data-block-id], [data-edit-block]")) sel?.removeAllRanges();
         }
       });
+    };
+    // The browser's selection, cut to this pane when it runs out of it: the
+    // end the press made stays, and the end outside moves to the words
+    // nearest the release point inside the pane, as if the drag had stopped
+    // at the pane's edge.
+    const clipSelectionToPane = (x: number, y: number) => {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
+      if (container.contains(selection.getRangeAt(0).commonAncestorContainer)) return;
+      const anchorNode = selection.anchorNode;
+      if (!anchorNode || !container.contains(anchorNode)) return;
+      // Only a drag that began on the article's words: one from a card's
+      // text keeps the browser's own selection.
+      const anchorEl = anchorNode instanceof Element ? anchorNode : anchorNode.parentElement;
+      if (
+        !anchorEl?.closest("article") ||
+        anchorEl.closest("[data-side-card], [data-log-card], [data-selection-popover], [data-anchor-skip]")
+      )
+        return;
+      const blocks = Array.from(container.querySelectorAll<HTMLElement>("[data-block-id], [data-edit-block]")).filter(
+        (el) => el.closest("[data-reader-root]") === container && el.getClientRects().length > 0,
+      );
+      if (blocks.length === 0) return;
+      const pane = container.getBoundingClientRect();
+      const py = Math.max(pane.top + 1, Math.min(y, pane.bottom - 1));
+      // The block level with the release point, else the nearest one.
+      let block = blocks[0];
+      let distance = Infinity;
+      for (const el of blocks) {
+        const r = el.getBoundingClientRect();
+        const d = py < r.top ? r.top - py : py > r.bottom ? py - r.bottom : 0;
+        if (d < distance) {
+          block = el;
+          distance = d;
+        }
+        if (d === 0) break;
+      }
+      const r = block.getBoundingClientRect();
+      const doc = document as Document & {
+        caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+        caretRangeFromPoint?: (x: number, y: number) => Range | null;
+      };
+      const cx = Math.max(r.left + 1, Math.min(x, r.right - 1));
+      const cy = Math.max(r.top + 1, Math.min(py, r.bottom - 1));
+      let node: Node = block;
+      let offset = x > r.left + r.width / 2 ? block.childNodes.length : 0;
+      const position = doc.caretPositionFromPoint?.(cx, cy);
+      const caret = position
+        ? { node: position.offsetNode, offset: position.offset }
+        : (() => {
+            const range = doc.caretRangeFromPoint?.(cx, cy);
+            return range ? { node: range.startContainer, offset: range.startOffset } : null;
+          })();
+      if (caret && block.contains(caret.node)) {
+        node = caret.node;
+        offset = caret.offset;
+      }
+      selection.setBaseAndExtent(anchorNode, selection.anchorOffset, node, offset);
     };
     // The toolbar on a selection. With a link pending, Close link is its
     // first row, and pressing it closes the link there — an accidental
@@ -4579,7 +4643,15 @@ export function ReaderInteractions({
   const popoverAnchorKey = popover
     ? `${popover.anchor.blockId}:${popover.anchor.startOffset}:${popover.anchor.endOffset}:${popover.term ? "t" : ""}${popover.figure ? "f" : ""}`
     : null;
-  const leadTool: Tool | null = leadAnswer && leadAnswer.key === popoverAnchorKey ? leadAnswer.tool : null;
+  // With no prediction, the kind's first tool after the assistant leads
+  // (SPEC.md §6): Explain on text and equations, Analyze on a figure.
+  const kindLead = (): Tool | null => {
+    if (!popover || popover.term) return null;
+    const tools = TOOLBARS[contentKindOf(blocks.find((b) => b.id === popover.anchor.blockId)?.type)];
+    return tools[tools.indexOf("assistant") + 1] ?? null;
+  };
+  const leadTool: Tool | null =
+    leadAnswer && leadAnswer.key === popoverAnchorKey ? leadAnswer.tool : kindLead();
   // The comment is kept per selection as a toolbar draft (lib/toolbar-drafts.ts) until the save lands.
   const [addComment, keepAddComment] = useToolbarDraft("add", documentId, popover?.anchor ?? null);
   const addMode = addDraft.key === popoverAnchorKey ? addDraft.mode : "sections";
