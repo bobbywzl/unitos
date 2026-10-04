@@ -8,6 +8,7 @@
 
 import { median } from "@/lib/parse/pdf/geometry";
 import { buildLines } from "@/lib/parse/pdf/lines";
+import type { Fill } from "@/lib/parse/pdf/drawing";
 import type { Box, Item, Line } from "@/lib/parse/pdf/types";
 
 // A graphic in the reading order: after is the last line read before it
@@ -38,14 +39,18 @@ let pageFrames: Box[] = [];
 // The page's vertical rules outside its tables, while pageLines reads it: a
 // card's divider (cardParts).
 let pageDividers: Box[] = [];
+// The filled boxes the page draws, while pageLines reads it: a callout's
+// panel (panelApart).
+let pageFills: Fill[] = [];
 
-export function pageLines(items: Item[], pageWidth: number, page: number, graphics: Placed[] = [], rules: Box[] = [], frames: Box[] = [], dividers: Box[] = []): Line[] {
+export function pageLines(items: Item[], pageWidth: number, page: number, graphics: Placed[] = [], rules: Box[] = [], frames: Box[] = [], dividers: Box[] = [], fills: Fill[] = []): Line[] {
   const text = items.filter((i) => i.str.trim().length > 0);
   markSpaces(items, text);
   if (text.length === 0 && graphics.length === 0) return [];
   pageRules = rules;
   pageFrames = frames;
   pageDividers = dividers;
+  pageFills = fills;
   const pieces = readRegion(text, graphics, page, pageWidth, 0);
   const lines: Line[] = [];
   let order = 0;
@@ -152,6 +157,13 @@ function readRegion(items: Item[], graphics: Placed[], page: number, pageWidth: 
       ...readRegion(after, inside.filter((p) => !first(p)), page, pageWidth, depth + 1),
       ...readRegion(items.filter((i) => lower(i.y)), graphics.filter((p) => lower(graphicY(p))), page, pageWidth, depth, undefined, column),
     ];
+  }
+  const panel = lines ? null : panelApart(items);
+  if (panel) {
+    const within = (p: Placed) => inPanel(panel, (p.box.x1 + p.box.x2) / 2, (p.box.y1 + p.box.y2) / 2);
+    const inside = items.filter((i) => inPanel(panel, i.x + i.w / 2, i.y));
+    const rest = items.filter((i) => !inside.includes(i));
+    return [...readRegion(rest, graphics.filter((p) => !within(p)), page, pageWidth, depth), ...readRegion(inside, graphics.filter(within), page, pageWidth, depth + 1)];
   }
   const pair = lines ? null : listingPair(items, graphics);
   if (pair) {
@@ -350,6 +362,42 @@ function cardParts(items: Item[]): { frame: Box; x: number; before: Item[]; afte
     const after = inside.filter((i) => i.x + i.w > x);
     if (before.length === 0 || after.length === 0 || after.some((i) => i.x < x)) continue;
     return { frame, x, before, after };
+  }
+  return null;
+}
+
+// A panel: a filled box that holds words of its own, beside another of
+// another color that does too, the two apart by a gap and on shared
+// baselines. Each panel is a text of its own: the words of one never go on
+// the other's line (parse loop finding: a magazine sets a photo's callout,
+// white on a black panel, beside the Quick Facts sidebar on a white one,
+// and "30 minutes of footage" and "…and means 'pole" read as a table's
+// row, The MagPi pp. 51 and 61). A table's shaded cells touch, and a row
+// of them takes one color: no panel. The smaller panel reads apart, after
+// the rest of the region.
+const PANEL_GAP = 6;
+const inPanel = (f: Box, x: number, y: number) => x > f.x1 && x < f.x2 && y > f.y1 && y < f.y2;
+function panelApart(items: Item[]): Fill | null {
+  if (pageFills.length < 2 || items.length < 4) return null;
+  const [x0, x1] = extentOf(items);
+  const held = new Map<Fill, Item[]>();
+  for (const f of pageFills) {
+    if (!f.color || f.x2 - f.x1 < 30 || f.y2 - f.y1 < 20 || f.x2 - f.x1 > (x1 - x0) * 0.6) continue;
+    const inside = items.filter((i) => inPanel(f, i.x + i.w / 2, i.y));
+    // Its words stand wholly inside it, and it holds two lines' worth.
+    if (chars(inside) < 20 || inside.some((i) => i.x < f.x1 - 1 || i.x + i.w > f.x2 + 1)) continue;
+    held.set(f, inside);
+  }
+  const panels = [...held.keys()];
+  const area = (f: Box) => (f.x2 - f.x1) * (f.y2 - f.y1);
+  for (const a of panels) {
+    for (const b of panels) {
+      if (a === b || a.color === b.color || area(a) > area(b)) continue;
+      const apart = a.x2 + PANEL_GAP <= b.x1 || b.x2 + PANEL_GAP <= a.x1;
+      if (!apart || a.y1 >= b.y2 || b.y1 >= a.y2) continue;
+      const inB = held.get(b)!;
+      if (held.get(a)!.some((i) => inB.some((j) => Math.abs(i.y - j.y) < Math.min(i.size, j.size) * 0.5))) return a;
+    }
   }
   return null;
 }
