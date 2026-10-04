@@ -6,6 +6,7 @@ import { lineColumn } from "@/lib/parse/pdf/columns";
 import { geom, lineMathShare, median } from "@/lib/parse/pdf/geometry";
 import { BULLET_RE, GLYPH_BULLET_RE, closesParen, follows, isGlyphMarker, opensSequence, readMarker, type Marker } from "@/lib/parse/pdf/markers";
 import {
+  columnEdges,
   isCentered,
   isFirstLineIndent,
   isIndented,
@@ -290,8 +291,20 @@ function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[],
     // each line as an item of its own, and "Note that this allows us to
     // move scalar values around." under its item's formula too).
     // A display the math reader joined stays its own block.
+    // A lowercase line at the item's words goes on with it, too, under a line
+    // that stopped mid-sentence where the line's first word would not have
+    // fit: the line above wrapped, whatever the page's other lines say of
+    // its edge (parse loop finding: a PowerPoint deck's slide read as set
+    // justified, and "▪ The attribute values … on each corresponding" over
+    // "coordinate axis and the points …" read as an item and a paragraph).
+    const wrapped =
+      !next.display &&
+      Math.abs(next.x - item.bodyX) <= next.size * 0.3 &&
+      /^\p{Ll}/u.test(next.text) &&
+      !/[.:;!?]["'”’)]?$/.test(prev.text.trim()) &&
+      fillsMargin(prev, next, columnEdges(lines, j - 1, ctx).right);
     const atWords = !next.display && Math.abs(next.x - item.bodyX) <= next.size * 0.3 && (lineMathShare(next) >= 0.5 || lineMathShare(prev) >= 0.5 || /:$/.test(prev.text.trim()));
-    if ((atWords || !stopsShort(lines, j - 1, ctx)) && goesOn(item, prev, next, edge, ctx)) {
+    if ((atWords || wrapped || !stopsShort(lines, j - 1, ctx)) && goesOn(item, prev, next, edge, ctx)) {
       item.lines.push(next);
       j++;
       continue;
