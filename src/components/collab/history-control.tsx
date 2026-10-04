@@ -94,7 +94,12 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
       setRestoredHere((prev) => new Set(prev).add(entry.id));
       router.refresh();
       if (typeof done?.noteId === "string") {
-        window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: done.noteId } }));
+        // The notes take it back (a tab that deleted it hides it until told),
+        // the reader repaints its marks, and the tray shows it.
+        const detail = { noteId: done.noteId };
+        window.dispatchEvent(new CustomEvent("dissect:note-back", { detail }));
+        window.dispatchEvent(new CustomEvent("dissect:note-restored", { detail }));
+        window.dispatchEvent(new CustomEvent("dissect:show-note", { detail }));
       }
     } catch (err) {
       setRestoreError({ id: entry.id, message: err instanceof Error ? err.message : t("panes.historyRestoreFailed") });

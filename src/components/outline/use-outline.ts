@@ -421,6 +421,23 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
   // on the server, nor gone from the server while Undo is on the screen.
   const [lastDelete, setLastDelete] = useState<LastDelete | null>(null);
   const waitingDelete = useRef<{ ids: string[]; timer: ReturnType<typeof setTimeout> } | null>(null);
+  // A note History's Restore put back (lib/notes/removed.ts): if this tab
+  // deleted it, it is in hidden still; it shows again with the refresh.
+  useEffect(() => {
+    const onBack = (e: Event) => {
+      const id = (e as CustomEvent<{ noteId?: unknown }>).detail?.noteId;
+      if (typeof id !== "string") return;
+      setHidden((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      refresh();
+    };
+    window.addEventListener("dissect:note-back", onBack);
+    return () => window.removeEventListener("dissect:note-back", onBack);
+  }, [refresh]);
   const restoreNotes = useCallback((ids: string[]) => {
     setHidden((prev) => {
       const next = new Set(prev);
@@ -702,7 +719,7 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
       // the open document (SPEC.md §6). It joins the list the moment the
       // server has it, not when the refresh lands: the composer closes in
       // the same frame, so the note is never in neither place.
-      const row = await api<Partial<NoteView> & { id?: unknown }>("/api/notes", "POST", {
+      const row = await api<Partial<NoteView> & { id?: unknown; queued?: unknown }>("/api/notes", "POST", {
         ...(id ? { id } : {}),
         sectionId,
         content,
@@ -710,14 +727,17 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
         documentId: documentId ?? undefined,
       });
       if (composedSection.current === sectionId) composedSection.current = null;
-      if (row && typeof row.id === "string") {
+      // Offline the answer is the queue's ({queued, id}), not the note: the
+      // notes draw a queued note from the queue, marked Waiting to sync
+      // (lib/offline/queued-notes.ts), so it stays out of the tree.
+      if (row && typeof row.id === "string" && row.queued !== true) {
         const note = localNote(row.id, content, documentId, row);
         setTree((prev) => putBack(prev, { note, sectionId, index: 0 }));
       }
       refresh();
     },
     async addDroppedNote(sectionId, content, from) {
-      const row = await api<Partial<NoteView> & { id?: unknown }>("/api/notes", "POST", {
+      const row = await api<Partial<NoteView> & { id?: unknown; queued?: unknown }>("/api/notes", "POST", {
         sectionId,
         content,
         top: from.top,
@@ -730,6 +750,14 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
         return;
       }
       const id = row.id;
+      if (row.queued === true) {
+        // Offline: the queue draws the note (lib/offline/queued-notes.ts).
+        if (from.annotationId) {
+          await api(`/api/notes/${id}`, "PATCH", { copySourcesFrom: from.annotationId }).catch(() => {});
+        }
+        refresh();
+        return;
+      }
       setTree((prev) =>
         updateSection(prev, sectionId, (s) => {
           if (s.notes.some((n) => n.id === id)) return s;
