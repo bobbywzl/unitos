@@ -1,7 +1,7 @@
 {
  "total": {
   "f1": 0.922,
-  "precision": 0.864,
+  "precision": 0.865,
   "recall": 0.988
  },
  "pages": {
@@ -2757,7 +2757,7 @@
   },
   "chefkoch.de.mandarinen.html": {
    "tp": 6,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "chemie.de.spin-off.html": {
@@ -3417,7 +3417,7 @@
   },
   "haufe.de-ordnungsgeld.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "haus.de-Vorsatzschallung.html": {
@@ -4557,7 +4557,7 @@
   },
   "telemedicus.info.rezension.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "tennismagazin.de-viertelfinale.html": {
