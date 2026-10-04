@@ -148,7 +148,7 @@ function partOf(grid: Grid, r0: number, r1: number): Grid {
 // highlighted lines of a paragraph abut like cells and hold its sentences.
 function isTableGrid(grid: Grid, items: Item[], drawing: TableDrawing, pageWidth: number, pageHeight: number): boolean {
   const b = grid.box;
-  if (grid.ys.length < 3 || grid.xs.length < 3) return false;
+  if (grid.ys.length < 3 || grid.xs.length < 2 || (grid.xs.length < 3 && !isColumnGrid(grid, items))) return false;
   // A grid the page does not show is no table: no rule on it, every box
   // filled in the page's white (Word paints a paragraph's lines white, and
   // a Chinese paper's last three references read as a table).
@@ -172,6 +172,19 @@ function isTableGrid(grid: Grid, items: Item[], drawing: TableDrawing, pageWidth
   const filled = grid.cells.filter((c) => pieces.some((it) => inBox(it, c)));
   if (filled.length < 2 || filled.length * 3 < grid.cells.length) return false;
   return !mostlyTiny(filled.map((c) => pieces.filter((it) => inBox(it, c)).map((it) => it.str.trim()).join("")));
+}
+
+// A grid of one column is a table when it rules three rows or more, each
+// row holds words in three lines at most, and a row of bold words heads
+// it: a list of entries boxed one by one under a head. A box of prose or a
+// callout rules no such rows (parse loop finding: CRS R48907, a Word
+// export, boxes Table 2's bars one to a row under "Statutory Bars" and
+// "Regulatory Bars", and the table read as paragraphs).
+function isColumnGrid(grid: Grid, items: Item[]): boolean {
+  if (grid.ys.length < 4) return false;
+  const rows = grid.cells.map((c) => buildLines(items.filter((it) => it.str.trim() && inBox(it, c)), 0));
+  if (rows.some((lines) => lines.length === 0 || lines.length > 3)) return false;
+  return rows.some((lines) => lines.length === 1 && lines[0].items.every((it) => it.bold));
 }
 
 // A grid drawn around groups of cells, not around each: LaTeX's |l|ccc|
