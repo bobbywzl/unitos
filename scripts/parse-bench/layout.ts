@@ -597,13 +597,15 @@ export function farSpace(pdf: PdfText, ink: PageInk, cand: Flat, placed: number[
     const space = block.spaceAfter ?? 0;
     const shown = next ? next.top - last.bottom : null;
     // The blank is the page's own where the candidate's next block starts right under it (a title page's gap):
-    // its first line at the next ink, or a figure whose crop holds the next ink's top.
+    // its first line at the next ink, or a figure whose crop holds the next ink's top. A line's box stands over
+    // its letters by its face's ascent past its capitals, a fifth of its height or so (parse bench finding: a
+    // Keynote slide's 34 pt item, its box 6.4 pt over its letters' ink, did not start at the next ink).
     const after = cand.blocks.findIndex((x, k) => k > b && (x.at !== undefined || cand.unitsOf[k].some((u) => placed[u].length > 0)));
     const crop = after >= 0 && cand.blocks[after].at ? boxOf(pdf, cand.blocks[after].at) : null;
     const first = after >= 0 && !crop ? cand.unitsOf[after].flatMap((u) => placed[u]).map((i) => pdf.lines[i])[0] : undefined;
     const follows =
       next !== undefined &&
-      (crop ? crop.page === last.page && crop.y1 <= next.top + 3 && crop.y2 >= next.top : first !== undefined && first.page === last.page && first.top >= next.top - 3 && first.top <= next.bottom + 3);
+      (crop ? crop.page === last.page && crop.y1 <= next.top + 3 && crop.y2 >= next.top : first !== undefined && first.page === last.page && first.top >= next.top - Math.max(3, 0.25 * (first.bottom - first.top)) && first.top <= next.bottom + 3);
     if (shown !== null && follows && Math.abs(shown - space) <= Math.max(12, 0.25 * Math.max(space, shown))) return;
     wrong++;
     found.push({ page: last.page, space: Math.round(space), shown: shown === null ? null : Math.round(shown), text: cand.units[cand.unitsOf[b][0]].text.slice(0, 80) });
