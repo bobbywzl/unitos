@@ -321,16 +321,22 @@ export function markdownToHtml(
   const article = renderer.render(tree);
   const ownTitle = frontTitle ?? renderer.firstHeading;
   const title = ownTitle ?? filename.replace(MARKDOWN_EXTENSIONS, "").trim() ?? "Document";
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title></head><body><article>${article}</article></body></html>`;
+  // The page's <title> is the file's own title only: a file name there would
+  // let the walk read a first heading that says the same words as the
+  // banner, and drop it.
+  const head = ownTitle !== null ? `<title>${escapeHtml(ownTitle)}</title>` : "";
+  const html = `<!doctype html><html><head><meta charset="utf-8">${head}</head><body><article>${article}</article></body></html>`;
   return { html, title, titleFromFile: ownTitle === null };
 }
 
-/** A Markdown file's blocks: the same walk a web page takes, no model pass. */
+/** A Markdown file's blocks: the same walk a web page takes, no model pass,
+    with every block of the file kept (no furniture rule drops one). */
 export async function parseMarkdownDocument(
   markdown: string,
   filename: string,
 ): Promise<ParsedDocument & { titleFromFile: boolean }> {
   const { html, title, titleFromFile } = markdownToHtml(markdown, filename);
-  const parsed = await parseHtmlContent(html, MARKDOWN_BASE_URL);
+  // The file is the author's words: the walk keeps every block it holds.
+  const parsed = await parseHtmlContent(html, MARKDOWN_BASE_URL, undefined, { source: "file" });
   return { ...parsed, title, titleFromFile, font: undefined, columnWidth: undefined };
 }
