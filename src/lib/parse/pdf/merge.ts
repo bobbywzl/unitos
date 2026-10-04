@@ -48,6 +48,20 @@ function pullQuotes(segments: Segment[]): Set<Segment> {
 const isLabel = (s: Segment, paragraph: Segment) =>
   s.type !== "HEADING" && s.type !== "CODE" && paragraph.lineSize !== undefined && s.lineSize !== undefined && s.lineSize < paragraph.lineSize * 0.9;
 
+// A part set in another face and another size than a paragraph is another
+// text: a callout set beside the column, a sidebar's item, a link set in
+// the margin. Between a paragraph's halves it stands as a float does (The
+// MagPi p. 42: the callout "Each tower has DMX-controlled lights…" read
+// inside "…that fuse technology" | "and fashion."). A line of math is no
+// other text: its symbols' faces and sizes outweigh its words' (the dropout
+// paper p. 4: "with ϕ′, ϕ′′, ϕ′′′ ∈ L2(𝒩 (0, q̄∗)), and that q̄∗ and gρ have").
+const MATH_TEXT_RE = /[Ͱ-Ͽ′-‴∀-⋿\u{1d400}-\u{1d7ff}]/u;
+function otherText(s: Segment, paragraph: Segment): boolean {
+  if (s.lineSize === undefined || paragraph.lineSize === undefined || s.type !== "PARAGRAPH") return false;
+  if (MATH_TEXT_RE.test(s.text) || MATH_TEXT_RE.test(paragraph.text)) return false;
+  return !sameFace(s, paragraph) && Math.abs(s.lineSize - paragraph.lineSize) > Math.min(s.lineSize, paragraph.lineSize) * 0.03;
+}
+
 // A Chinese or Japanese character that ends a text or opens one (a stop, a
 // closing bracket, and the full-width punctuation aside).
 const CJK_END_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}ー、]$/u;
@@ -98,6 +112,11 @@ function continuesOnPage(prev: Segment, next: Segment, setting: PageSetting): bo
   if (/^\([a-h]\)\s+\p{Lu}/u.test(next.text) || /\bquote\b/.test(next.html ?? "")) return false;
   const sizes = prev.lineSize !== undefined && next.lineSize !== undefined ? [prev.lineSize, next.lineSize] : undefined;
   if (sizes && !/^[a-z]/.test(next.text) && Math.abs(sizes[0] - sizes[1]) > Math.min(...sizes) * 0.5) return false;
+  // A part set in another face and another size is another text: a
+  // sidebar's last item, "> …and means 'pole star' in German" in a sans at
+  // 7 pt, is no part of the column's "script was enough…" in a serif at 7.5
+  // pt (parse loop finding: The MagPi p. 61).
+  if (otherText(prev, next)) return false;
   // A part set smaller under the first, a line's size or more below it, is
   // a note at the page's foot: the correspondence line's "e-mail: …" went
   // on the right column's last paragraph (Nature p. 1).
@@ -150,11 +169,12 @@ export function joinOnPage(input: Segment[]): Segment[] {
   const setting = pageSetting(segments);
   for (let b = 1; b < segments.length; b++) {
     const paragraph = segments[b - 1];
-    const inRun = (s: Segment) => isFloat(s) || isLabel(s, paragraph);
+    const aside = (s: Segment) => paragraph.type === "PARAGRAPH" && otherText(s, paragraph);
+    const inRun = (s: Segment) => isFloat(s) || isLabel(s, paragraph) || aside(s);
     if (isFloat(paragraph) || !inRun(segments[b]) || segments[b].page !== paragraph.page) continue;
     let k = b;
     while (k < segments.length && segments[k].page === segments[b].page && inRun(segments[k])) k++;
-    if (!segments.slice(b, k).some(isFloat)) continue;
+    if (!segments.slice(b, k).some((s) => isFloat(s) || aside(s))) continue;
     if (k < segments.length && continuesOnPage(paragraph, segments[k], setting)) segments.splice(b, 0, ...segments.splice(k, 1));
   }
   const out: Segment[] = [];
