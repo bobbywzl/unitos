@@ -713,6 +713,13 @@ function sideNote(band: Band, page: number): Side[] | null {
   if (Math.abs(size(note.items) - size(wide.items)) < size(wide.items) * 0.1 && italic(note.items) === italic(wide.items) && !inMargin()) return null;
   const gaps = lines.slice(1).map((l, k) => lines[k].y - l.y);
   const pitch = median(gaps);
+  // A paragraph parts from the next where the gap between them is wider
+  // than the lines' pitch, a pitch scaled to the smaller line's size: a
+  // title's lines set at twice the body's size stand twice the pitch apart
+  // and are one paragraph (parse loop finding: a CRS report's summary page
+  // sets its 20 pt title beside a column of the report's number, date, and
+  // authors, and each line of the column read between two of the title's).
+  const parted = (k: number) => gaps[k] > Math.max(pitch, Math.min(lines[k].size, lines[k + 1].size) * 1.15) * 1.3;
   // A group of the note: its lines at their own pitch (a stray mark on the
   // note's side, its page number, is a group of its own).
   const noteLines = buildLines(note.items, page);
@@ -736,11 +743,11 @@ function sideNote(band: Band, page: number): Side[] | null {
   const cuts: number[] = [];
   for (const { top } of groups) {
     if (onLeft) {
-      let start = lines.findLastIndex((l, k) => l.y >= top - l.size * 0.5 && (k === 0 || gaps[k - 1] > pitch * 1.3));
+      let start = lines.findLastIndex((l, k) => l.y >= top - l.size * 0.5 && (k === 0 || parted(k - 1)));
       if (start < 0) start = 0;
       cuts.push(start === 0 ? Infinity : lines[start].y + lines[start].size * 0.5);
     } else {
-      const end = lines.findIndex((l, k) => l.y <= top && (k === lines.length - 1 || gaps[k] > pitch * 1.3));
+      const end = lines.findIndex((l, k) => l.y <= top && (k === lines.length - 1 || parted(k)));
       if (end < 0) return null;
       cuts.push(lines[end].y - lines[end].size * 0.5);
     }
