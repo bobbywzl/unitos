@@ -34,7 +34,7 @@ import { parsePdf } from "@/lib/parse/pdf";
 import type { ParsedBlock, ParsedDocument } from "@/lib/parse/types";
 import { resolveContentsLinks } from "@/lib/parse/url";
 import { fromImport, fromParse, printedNotes, type Doc } from "./adapt";
-import { blindText, forgetText, freeScores, ligatureWords, laterTitle, lookScores, mathSymbolWords, pdfText, wordBorders, type FreeScores, type PageSetup, type PdfText } from "./free";
+import { blindText, forgetText, freeScores, ligatureWords, laterTitle, lookScores, markWords, mathSymbolWords, pdfText, wordBorders, type FreeScores, type PageSetup, type PdfText } from "./free";
 import { forgetGlyphs, glyphScores, pdfGlyphs, placeCrops, placeEquations, type GlyphScores } from "./glyphs";
 import { bodyFace, labelScores, layoutScores, linesOfUnits, type PageInk } from "./layout";
 import { loadCorpus, loadRef, refPath, REF_DIRS, ROOT, type CorpusEntry } from "./load";
@@ -43,6 +43,7 @@ import { flatten, formulasByPage, lostFormulas, score, type Scores } from "./met
 import { forgetPaint, inkBands, inkRight, pdfPaint, type PagePaint } from "./paint";
 import type { RefBlock, RefDoc, Span } from "./model";
 import { detailReport } from "./report";
+import { wordsOf } from "./text";
 
 // ── Flags ───────────────────────────────────────────────────────────────────
 
@@ -297,7 +298,10 @@ async function runEntry(entry: CorpusEntry): Promise<Result> {
   // What the pages paint beyond pdftotext's lines (paint.ts): the text it cannot read, the images.
   const paint: PagePaint[] = await quietly(() => pdfPaint(pdfPath));
   const text = pdfTextOf(pdfPath, pages);
-  result.pdf = { ...text, blind: blindText(text, paint), symbols: [...text.symbols, ...ligatureWords(text, paint)] };
+  // A word read out of a right-to-left mark's glyph counts as the page draws it, its ligatures with it.
+  const marked = markWords(text, paint);
+  const ligatures = ligatureWords(text, paint).filter((l) => !marked.some((m) => m.line === l.line && wordsOf(l.word).every((w) => wordsOf(m.word).some((v) => v.w === w.w))));
+  result.pdf = { ...text, blind: blindText(text, paint), symbols: [...text.symbols, ...marked, ...ligatures] };
   // The text layer and its furniture are the reference-free checks' (a 500-page scan's took most of the time
   // the line charged to the glyph checks).
   t0 = since("free", t0);

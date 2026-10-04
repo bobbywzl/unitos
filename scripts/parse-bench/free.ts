@@ -282,6 +282,104 @@ export function ligatureWords(text: Pick<PdfText, "lines">, paint: PagePaint[]):
   return out;
 }
 
+/** A word of a right-to-left script: its letters and marks, and the punctuation beside them. */
+const RTL_WORD_RE = /^(?=.*[\p{scx=Arabic}\p{scx=Hebrew}\p{scx=Syriac}\p{scx=Thaana}\p{scx=Nko}])[\p{scx=Arabic}\p{scx=Hebrew}\p{scx=Syriac}\p{scx=Thaana}\p{scx=Nko}\p{P}]+$/u;
+
+/** The words pdftotext reads with a right-to-left mark's glyph in them, as
+    the page draws them (a SymbolWord each). Typst draws a mark over a letter
+    as a glyph of its own with no advance, and maps that glyph to the first
+    cluster it drew it in: the mark and that cluster's letters. The glyph
+    draws the mark alone; pdftotext reads its letters too, and cuts the word
+    in pieces around them (parse bench finding: the Arabic book's "واحدًا",
+    drawn once on p. 12 as و ا ح د ا with a fathatan over the د, read as
+    three words, "واحًد", "ًد", and "ا"; "ا" alone counted 82 times as a word
+    to cover). A word is the run of touching words pdftotext's lines place
+    side by side, and the zero-width words over them (the mark glyph's
+    letters, a little above the baseline); it reads as the page's glyphs in
+    it, right to left, each its letters as the font's map gives them (a
+    ligature's in reading order), each mark after the letters of the glyph
+    it stands over. The pieces it replaces are the run of words of one of
+    the page's lines of text (-raw) whose letters, marks aside, are the
+    word's letters and the mark glyphs' letters. Only a word that holds a
+    mark glyph mapped to letters reads so, and only where its pieces are
+    found; a mark that stands over no glyph leaves the word as pdftotext
+    reads it. */
+export function markWords(text: Pick<PdfText, "lines" | "raw" | "first">, paint: PagePaint[]): SymbolWord[] {
+  const out: SymbolWord[] = [];
+  const said = (t: string) => wordsOf(t).map((w) => w.w).join(" ");
+  const bare = (t: string) => t.replace(/[^\p{L}]/gu, "");
+  const tally = (t: string) => {
+    const counts = new Map<string, number>();
+    for (const c of bare(t)) counts.set(c, (counts.get(c) ?? 0) + 1);
+    return counts;
+  };
+  const within = (part: Map<string, number>, whole: Map<string, number>) => [...part].every(([c, n]) => (whole.get(c) ?? 0) >= n);
+  const same = (a: Map<string, number>, b: Map<string, number>) => a.size === b.size && within(a, b);
+  const byPage = new Map<number, Line[]>();
+  for (const line of text.lines) byPage.set(line.page, [...(byPage.get(line.page) ?? []), line]);
+  for (const [page, lines] of byPage) {
+    const glyphs = paint[page - 1]?.rtl ?? [];
+    if (!glyphs.some((g) => g.zero && /\p{L}/u.test(g.text) && /\p{M}/u.test(g.text))) continue;
+    // The page's words in its text's order (-raw, line after line: the pieces
+    // may stand on lines of their own, p. 15's "ل:", "ِش", "باورِش"), and
+    // the words a word already took.
+    const rawWords = (text.raw[page - text.first] ?? []).flatMap((l) => wordsOf(l).map((w) => w.w));
+    const taken = rawWords.map(() => false);
+    const pieces = (want: Map<string, number>): string[] | null => {
+      for (let i = 0; i < rawWords.length; i++) {
+        let have = new Map<string, number>();
+        for (let j = i; j < rawWords.length && j < i + 6 && !taken[j]; j++) {
+          have = new Map(have);
+          for (const [c, n] of tally(rawWords[j])) have.set(c, (have.get(c) ?? 0) + n);
+          if (!within(have, want)) break;
+          if (!same(have, want)) continue;
+          for (let k = i; k <= j; k++) taken[k] = true;
+          return rawWords.slice(i, j + 1);
+        }
+      }
+      return null;
+    };
+    const zeroLine = (l: Line) => (l.words ?? []).length > 0 && l.words!.every((w) => w.right - w.left < 0.05);
+    const lone = lines.filter(zeroLine);
+    const used = new Set<Line>();
+    for (const line of lines) {
+      if (zeroLine(line)) continue;
+      const words = [...(line.words ?? [])].sort((a, b) => a.left - b.left);
+      const groups: (typeof words)[] = [];
+      for (const w of words) {
+        const group = groups[groups.length - 1];
+        if (group && w.left - Math.max(...group.map((g) => g.right)) < 0.8) group.push(w);
+        else groups.push([w]);
+      }
+      for (const group of groups) {
+        if (!group.every((w) => RTL_WORD_RE.test(w.text))) continue;
+        const [left, right] = [Math.min(...group.map((w) => w.left)), Math.max(...group.map((w) => w.right))];
+        const inside = (x: number) => x >= left - 0.5 && x <= right + 0.5;
+        const own = glyphs.filter((g) => g.y2 > line.top - 1 && g.y1 < line.bottom + 1 && inside((g.x1 + g.x2) / 2));
+        const marks = own.filter((g) => g.zero && /\p{M}/u.test(g.text));
+        if (!marks.some((g) => /\p{L}/u.test(g.text))) continue;
+        const units = own.filter((g) => !g.zero).sort((a, b) => b.x1 - a.x1).map((g) => ({ g, text: g.text }));
+        let placed = true;
+        for (const m of marks) {
+          const unit = units.find((u) => m.x1 >= u.g.x1 - 0.5 && m.x1 <= u.g.x2 + 0.5);
+          if (!unit) placed = false;
+          else unit.text += (m.text.match(/\p{M}/gu) ?? []).join("");
+        }
+        if (!placed) continue;
+        const reads = units.map((u) => u.text).join("");
+        // The letters pdftotext reads there: the group's words and the zero-width words over it.
+        const height = line.bottom - line.top;
+        const over = lone.filter((l) => !used.has(l) && l !== line && Math.abs(l.top - line.top) <= height && l.words!.every((w) => inside(w.left)));
+        const read = pieces(tally([...group, ...over.flatMap((l) => l.words!)].map((w) => w.text).join("")));
+        if (read) for (const l of over) used.add(l);
+        if (!read || said(read.join(" ")) === said(reads)) continue;
+        out.push({ page, word: read.join(" "), reads, line });
+      }
+    }
+  }
+  return out;
+}
+
 /** The families of TeX's math fonts whose codes the tables name (glyphs.ts MATH). */
 const MATH_FAMILIES = new Set(["oml", "oms", "omx", "msa", "msb", "euf", "rsfs", "lasy"]);
 
