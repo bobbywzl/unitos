@@ -106,6 +106,10 @@ export function readHeading(lines: Line[], i: number, ctx: PageContext, runOf: n
     italicHeading(lines, i, ctx) ??
     partHeading(lines, i, ctx);
   if (step?.segments.some((s) => s.type === "HEADING" && (wordless(s.text) || SIGNATURE_RE.test(s.text) || (ctx.ocr && scanDebris(s.text))))) return null;
+  // On a scan, a line in capitals with no number, the line under it a
+  // figure's caption, is the figure's axis label: DTIC's p. 31 read "MACH
+  // NUMBER, M" over "Figure 7. Drag divergence Mach number" as a heading.
+  if (step && ctx.ocr && capsShare(lines[i].text) >= 0.9 && !HEADING_NUMBER_RE.test(lines[i].text) && figureCaption(lines[step.next]?.text.trim() ?? "")) return null;
   // A heading of its own lines keeps where it stands: centered or flush
   // right in its column (a run-in lead's is its paragraph's).
   const [heading] = step?.segments ?? [];
@@ -115,6 +119,8 @@ export function readHeading(lines: Line[], i: number, ctx: PageContext, runOf: n
   }
   return step;
 }
+
+const figureCaption = (text: string) => CAPTION_RE.test(text) && !/^(?:table|tab\.|tabelle)/i.test(text);
 
 // A line that opens with a dash signs a piece or names a quotation's
 // source: no heading (the Earth Observer's "—Alan Ward [Executive Editor,
