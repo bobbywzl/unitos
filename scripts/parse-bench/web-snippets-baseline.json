@@ -1,7 +1,7 @@
 {
  "total": {
-  "f1": 0.929,
-  "precision": 0.876,
+  "f1": 0.93,
+  "precision": 0.877,
   "recall": 0.989
  },
  "pages": {
@@ -337,7 +337,7 @@
   },
   "creativecommons.ch.wie.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "der-erfolg-gibt-recht.de.rinderleber.html": {
@@ -2237,7 +2237,7 @@
   },
   "Dezubekizacja – reaktywacja. Czyli daty mają znaczenie - Dziennik.pl.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 2,
    "fn": 0
   },
   "_Ziemniaki na szóstej, surówka na dziesiątej_. Jak pomagać, żeby nie zaszkodzić_ [PORADNIK W PIGUŁCE].html": {
@@ -3222,7 +3222,7 @@
   },
   "fluter.de.vorbild.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "flvw.de-hallenmeisterschaften.html": {
@@ -4712,7 +4712,7 @@
   },
   "unocero.com.marcas.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "unsere-zeitung.at.inklusion.html": {
