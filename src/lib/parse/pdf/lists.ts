@@ -203,12 +203,20 @@ function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[],
     const next = lines[j];
     const prev = lines[j - 1];
     const gap = prev.y - next.y;
+    // Sizes by the words: a slide sets its bullets larger than their words.
+    // A nested item set smaller than the list's first, and the lines of an
+    // item at its own size, stay in the list (parse loop finding: a Keynote
+    // deck sets its items in 34 pt and their sub-items in 30 pt behind a
+    // 37 pt bullet; each sub-item read as a paragraph with its bullet, and
+    // a sub-item's wrapped line as a heading).
+    const [words, first, own] = [wordsSize(next), wordsSize(line), wordsSize(items[items.length - 1].lines[0])];
+    const nested = words < first && next.x > line.x + words * 0.5 && words >= first * 0.7;
     if (
       runOf[j] !== -1 ||
       next.cells.length !== 1 ||
       gap < 0 ||
-      next.size > Math.max(ctx.bodySize * 1.15, line.size + 0.5) ||
-      Math.abs(next.size - line.size) > 1.2
+      (next.size > Math.max(ctx.bodySize * 1.15, line.size + 0.5) && words > Math.max(ctx.bodySize * 1.15, first + 0.5)) ||
+      (Math.abs(words - first) > 1.2 && !nested && Math.abs(words - own) > 1.2)
     )
       break;
     const item = items[items.length - 1];
