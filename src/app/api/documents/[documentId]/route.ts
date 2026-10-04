@@ -3,6 +3,7 @@ import { z } from "zod";
 import { bumpDocument, bumpNotebook, documentAccess, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { documentFootprint, editableNotebooks } from "@/lib/document-footprint";
+import { detachWrites } from "@/lib/documents/detach";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
 
@@ -75,17 +76,13 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ documentId: 
   const editable = await editableNotebooks(involved, access.user);
   if (involved.some((id) => !editable.has(id))) {
     const mine = footprint.attached.filter((id) => editable.has(id));
-    await db.$transaction([
-      db.notebookDocument.deleteMany({ where: { documentId, notebookId: { in: mine } } }),
-      db.notebookEvent.createMany({
-        data: mine.map((notebookId) => ({
-          notebookId,
-          userId: access.user.id,
-          kind: "DOCUMENT_DETACH",
-          content: document.title,
-        })),
-      }),
-    ]);
+    // Each project's work on the document is kept in its history event, and
+    // adding the document back puts it back (lib/documents/detach.ts).
+    await db.$transaction(
+      await detachWrites(
+        mine.map((notebookId) => ({ notebookId, documentId, userId: access.user.id, title: document.title })),
+      ),
+    );
     for (const id of mine) await bumpNotebook(id);
     return NextResponse.json({ ok: true, detached: true });
   }
@@ -115,12 +112,7 @@ async function removeFromProject(documentId: string, notebookId: string, title: 
   if (attached.length < 2) {
     return NextResponse.json({ error: t("api.documentOnlyProject") }, { status: 409 });
   }
-  await db.$transaction([
-    db.notebookDocument.delete({ where: { notebookId_documentId: { notebookId, documentId } } }),
-    db.notebookEvent.create({
-      data: { notebookId, userId: access.user.id, kind: "DOCUMENT_DETACH", content: title },
-    }),
-  ]);
+  await db.$transaction(await detachWrites([{ notebookId, documentId, userId: access.user.id, title }]));
   await bumpNotebook(notebookId);
   return NextResponse.json({ ok: true, detached: true });
 }

@@ -1125,10 +1125,13 @@ export default async function NotebookPage(props: {
       // links, both ends with their passages, the AI's reason, and the
       // replies. Accept and Dismiss live in the graph.
       documentsGraph(attached.map((d) => ({ id: d.id, title: d.title, hasVideo: d.hasVideo }))),
+      // meta is left out: a detach keeps the project's work on the document
+      // there (lib/documents/detach.ts), and the panel reads none of it.
       db.notebookEvent.findMany({
         where: { notebookId },
         orderBy: { createdAt: "desc" },
         take: 80,
+        select: { id: true, userId: true, kind: true, content: true, createdAt: true },
       }),
       db.blockEdit.findMany({
         where: { documentId: { in: attachedIdList } },

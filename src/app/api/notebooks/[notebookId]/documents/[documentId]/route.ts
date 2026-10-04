@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
+import { detachWrites } from "@/lib/documents/detach";
 import { serverT } from "@/lib/i18n/server";
 import { distillationList, extractionList } from "@/lib/types";
 import { parseBody } from "@/lib/validate";
@@ -78,7 +79,8 @@ export async function PATCH(
   return NextResponse.json({ ok: true });
 }
 
-// Detach a document from a notebook. The document stays in the library.
+// Detach a document from a notebook. The document stays in the library, and
+// the project's work on it stays in the history event.
 export async function DELETE(
   _req: Request,
   ctx: { params: Promise<{ notebookId: string; documentId: string }> },
@@ -91,18 +93,13 @@ export async function DELETE(
     where: { id: documentId },
     select: { title: true },
   });
-  const deleted = await db.notebookDocument
-    .delete({ where: { notebookId_documentId: { notebookId, documentId } } })
-    .catch(() => null);
-  if (!deleted) return NextResponse.json({ error: t("api.documentNotAttached") }, { status: 404 });
-  await db.notebookEvent.create({
-    data: {
-      notebookId,
-      userId: access.user.id,
-      kind: "DOCUMENT_DETACH",
-      content: document?.title ?? "",
-    },
-  });
+  // The project's work on the document is kept in the history event, and
+  // adding the document back puts it back (lib/documents/detach.ts).
+  const writes = await detachWrites([
+    { notebookId, documentId, userId: access.user.id, title: document?.title ?? "" },
+  ]);
+  if (writes.length === 0) return NextResponse.json({ error: t("api.documentNotAttached") }, { status: 404 });
+  await db.$transaction(writes);
   await bumpNotebook(notebookId);
   return NextResponse.json({ ok: true });
 }
