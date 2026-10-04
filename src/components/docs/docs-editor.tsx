@@ -26,6 +26,8 @@ import { insertImageFrom } from "@/components/docs/insert/image";
 import { InsertLayer } from "@/components/docs/areas/insert";
 import { UnitosLayer } from "@/components/docs/areas/layer";
 import { CollapsedView, type PageCollapse } from "@/components/docs/layer/collapse";
+import { showLeftOff } from "@/components/docs/layer/left-off";
+import { ReflowBar, useReflow } from "@/components/docs/page/reflow";
 import { showTranslations } from "@/components/docs/layer/reading";
 import { SuggestLayer } from "@/components/docs/suggest/layer";
 import { PageBanner, PageCanvas, PageRuler } from "@/components/docs/areas/page";
@@ -428,6 +430,7 @@ export function DocsEditor({
   banner,
   translations = null,
   collapse = null,
+  leftOffBlockId = null,
 }: {
   documentId: string;
   notebookId: string;
@@ -457,6 +460,9 @@ export function DocsEditor({
   /** Collapse (SPEC.md §28): the cores, in Viewing (layer/collapse.tsx);
       null while the document has none. */
   collapse?: PageCollapse | null;
+  /** The block of the reading position the document opened with: the
+      left-off mark stands above it (layer/left-off.ts). */
+  leftOffBlockId?: string | null;
 }) {
   const t = useT();
   useDocsFonts();
@@ -537,18 +543,31 @@ export function DocsEditor({
 
   // The mode: an import keeps the reader's choice. On a locked import only
   // Viewing is left, and a key or a command that asks for another mode says
-  // why.
+  // why. A mode the page passes into for the reader (`passing`: the
+  // assistant's suggestions landing in Viewing) is not kept, and the keys
+  // stay where they are.
+  const passingRef = useRef(false);
   const setMode = useCallback(
-    (next: DocsMode) => {
+    (next: DocsMode, passing = false) => {
       if (locked && next !== "viewing") {
         if (editor && !editor.isDestroyed) toast(t("api.importShared"), editor);
         return;
       }
+      passingRef.current = passing;
       setModeState(next);
-      if (isImport) storeMode(documentId, next);
+      if (isImport && !passing) storeMode(documentId, next);
     },
     [locked, editor, t, isImport, documentId],
   );
+
+  // A PDF import in pages may be read pageless in Viewing (page/reflow.tsx):
+  // a view of this browser; the document's page setup stays as it is, and
+  // Editing and Suggesting draw the pages.
+  const pdfPages = imported?.kind === "pdf" && !pageSetup.pageless;
+  const [reflowChoice, chooseReflow] = useReflow(editor, documentId, pdfPages);
+  const reflowing = pdfPages && mode === "viewing";
+  const reflowed = reflowing && reflowChoice === "pageless";
+  const shownSetup = useMemo(() => (reflowed ? { ...pageSetup, pageless: true } : pageSetup), [reflowed, pageSetup]);
 
   // The QA scripts drive the editor directly in development.
   useEffect(() => {
@@ -564,7 +583,7 @@ export function DocsEditor({
     enabled: writable,
   });
   // The header's and footer's saves show in the same status.
-  const shownSaveState = useSaveState(editor, documentId, pageSetup, saveState);
+  const shownSaveState = useSaveState(editor, documentId, shownSetup, saveState);
 
   useEffect(() => {
     flushRef.current = flush;
@@ -572,6 +591,12 @@ export function DocsEditor({
       if (flushRef.current === flush) flushRef.current = null;
     };
   }, [flush, flushRef]);
+
+  // The left-off mark above the block the reader left off at.
+  useEffect(() => {
+    if (!editor || editor.isDestroyed || !leftOffBlockId) return;
+    return showLeftOff(editor, leftOffBlockId, t("reader.leftOffHere"));
+  }, [editor, leftOffBlockId, t]);
 
   // The document's translations, each under its paragraph while the page is
   // read (layer/reading.ts).
@@ -637,13 +662,17 @@ export function DocsEditor({
     editor.setEditable(writable && mode !== "viewing");
     const switched = modeRef.current !== mode;
     modeRef.current = mode;
-    if (switched && writable && mode !== "viewing") editor.commands.focus(undefined, { scrollIntoView: false });
+    const passing = passingRef.current;
+    passingRef.current = false;
+    if (switched && writable && mode !== "viewing" && !passing) editor.commands.focus(undefined, { scrollIntoView: false });
   }, [editor, writable, mode]);
 
   // The header shows while the reader is in the document: a press or the
   // focus in this pane's page editor or card column, or in one of the
-  // editor's menus and dialogs. A press or the focus anywhere else (the notes
-  // tray, the app's top bar, the Extract page) fades it away (css/layer.css).
+  // editor's menus and dialogs. A press or the focus in the other pane, or
+  // in this pane outside the page (the Extract page), fades it away
+  // (css/layer.css). The notes tray and the app's top bar work on the open
+  // document: a press there leaves the header as it is.
   const [away, setAway] = useState(false);
   useEffect(() => {
     const pane = editor?.view.dom.closest("[data-reader-root]");
@@ -651,11 +680,12 @@ export function DocsEditor({
     const onEnter = (e: Event) => {
       if (!(e.target instanceof Element)) return;
       const own = e.target.closest("[data-reader-root]");
-      setAway(
-        own
-          ? own !== pane || (e.target !== pane && !e.target.closest("[data-docs-editor], [data-docs-column]"))
-          : !e.target.closest("[data-edit-control]"),
-      );
+      if (!own) {
+        // One of the page editor's menus or dialogs, drawn over the app.
+        if (e.target.closest("[data-edit-control]")) setAway(false);
+        return;
+      }
+      setAway(own !== pane || (e.target !== pane && !e.target.closest("[data-docs-editor], [data-docs-column]")));
     };
     document.addEventListener("pointerdown", onEnter, true);
     document.addEventListener("focusin", onEnter);
@@ -724,8 +754,8 @@ export function DocsEditor({
   // suggestions to settle, no version to restore.
   const editing = writable && mode !== "viewing";
   const area = useMemo<DocsAreaProps | null>(
-    () => (editor ? { editor, documentId, notebookId, canEdit: writable, projectEditor: canEdit, editing, pageSetup, documents } : null),
-    [editor, documentId, notebookId, writable, canEdit, editing, pageSetup, documents],
+    () => (editor ? { editor, documentId, notebookId, canEdit: writable, projectEditor: canEdit, editing, pageSetup: shownSetup, documents } : null),
+    [editor, documentId, notebookId, writable, canEdit, editing, shownSetup, documents],
   );
 
   // Every save changes the save state, which redraws the title row alone:
@@ -745,7 +775,7 @@ export function DocsEditor({
             canEdit={canEdit}
             zoom={zoom}
             onZoom={setZoom}
-            pageless={pageSetup.pageless}
+            pageless={shownSetup.pageless}
             aiControls={aiControls}
             headerHidden={headerHidden}
             onToggleHeader={() => setHeaderHidden((h) => !h)}
@@ -754,7 +784,7 @@ export function DocsEditor({
           <PageRuler {...area} />
         </ModeLock.Provider>
       ),
-    [area, hfEditor, mode, setMode, locked, canEdit, zoom, pageSetup.pageless, aiControls, headerHidden, insertImage],
+    [area, hfEditor, mode, setMode, locked, canEdit, zoom, shownSetup.pageless, aiControls, headerHidden, insertImage],
   );
   const pages = useMemo(
     () =>
@@ -782,7 +812,7 @@ export function DocsEditor({
   if (!editor || outdated) {
     return (
       <>
-        <DocsFrame title={title} pageSetup={pageSetup} />
+        <DocsFrame title={title} pageSetup={shownSetup} />
         {outdated === "stale" && (
           <p
             role="alert"
@@ -796,7 +826,14 @@ export function DocsEditor({
   }
 
   return (
-    <div className="docs-shell" data-docs-editor data-docs-mode={mode} data-import={imported?.kind} data-full-screen={fullScreen || undefined}>
+    <div
+      className="docs-shell"
+      data-docs-editor
+      data-docs-mode={mode}
+      data-import={imported?.kind}
+      data-reflow={reflowing ? (reflowed ? "pageless" : "pages") : undefined}
+      data-full-screen={fullScreen || undefined}
+    >
       <div className="docs-header" data-edit-control data-away={away || undefined}>
         {!headerHidden && !fullScreen && (
           <div className="docs-title-row @container">
@@ -819,7 +856,27 @@ export function DocsEditor({
         {/* Hidden, not taken away, in full screen: the toolbar's keys still answer. */}
         <div style={{ display: fullScreen ? "none" : "contents" }}>{chrome}</div>
       </div>
-      <PageBanner.Provider value={banner}>{pages}</PageBanner.Provider>
+      <PageBanner.Provider
+        value={
+          reflowing ? (
+            <>
+              <ReflowBar
+                editor={editor}
+                documentId={documentId}
+                setup={shownSetup}
+                choice={reflowChoice}
+                reflowed={reflowed}
+                onChoose={chooseReflow}
+              />
+              {banner}
+            </>
+          ) : (
+            banner
+          )
+        }
+      >
+        {pages}
+      </PageBanner.Provider>
       <CollapsedView editor={editor} collapse={collapse} highlightsByBlock={highlightsByBlock} editing={editing} />
       {footer}
     </div>

@@ -9,6 +9,7 @@ import type { DocsAreaProps } from "@/components/docs/areas/types";
 import type { Zoom } from "@/components/docs/toolbar/zoom";
 import { hostPagination, paginateNow, repaginate } from "@/components/docs/ext/page";
 import { stepZoom } from "@/components/docs/page/commands";
+import { CARD_REACH } from "@/components/docs/layer/margin";
 import { PAGE_PITCH_EXTRA, PAGELESS_TOP, pageAt, pageFrame, pagelessWidth, scrollParent } from "@/components/docs/page/geometry";
 import {
   HeaderFooterLayer,
@@ -198,17 +199,20 @@ export function PageCanvas({
   const side = outlineOpen ? outlineLeft + outlineWidth + 16 : FIT_GUTTER;
   const fitScale = canvasWidth > 0 ? (canvasWidth - FIT_GUTTER - side) / frame.width : 1;
   const scale = zoom === "fit" ? (pageless ? 1 : Math.max(0.25, Math.min(4, fitScale))) : zoom / 100;
-  const columnWidth = pageless ? pagelessWidth(canvasWidth || frame.width, scale, textWidth) : frame.width;
+  // A pageless column leaves the cards their room beside it, past the
+  // canvas's left padding the page can move to.
+  const columnWidth = pageless ? pagelessWidth(canvasWidth || frame.width, scale, textWidth, side + CARD_REACH) : frame.width;
 
   useEffect(() => {
     if (store.get().scale !== scale) store.set({ scale });
   }, [store, scale]);
 
   // A pane narrower than the page (the notes tray open, a phone) opens the
-  // page at Fit, so no line runs past the pane's edge.
+  // page at Fit, so no line runs past the pane's edge; so do pages that come
+  // after the document opened pageless (a PDF import read pageless).
   const fittedRef = useRef(false);
   useEffect(() => {
-    if (fittedRef.current || canvasWidth === 0) return;
+    if (fittedRef.current || canvasWidth === 0 || pageless) return;
     fittedRef.current = true;
     if (zoom === 100 && !pageless && frame.width + 2 * FIT_GUTTER > canvasWidth) store.zoomTo("fit");
   }, [canvasWidth, zoom, pageless, frame.width, store]);
@@ -537,6 +541,11 @@ export function PageCanvas({
           onDoubleClick={onPageDoubleClick}
           data-docs-page
           data-pageless={pageless || undefined}
+          // A pageless column under 600 px (a phone, a pane beside the
+          // notes tray): a table fitted to 600 px scrolls sideways in it
+          // (css/insert.css), and a page start's label stands at the line's
+          // end (css/import.css).
+          data-narrow={(pageless && columnWidth < 600) || undefined}
           data-white={white || undefined}
         >
           {!pageless && (

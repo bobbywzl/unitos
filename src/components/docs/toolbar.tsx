@@ -78,7 +78,7 @@ import {
   type Align,
 } from "@/components/docs/toolbar/styles";
 import { ZoomBox, ZOOMS, type Zoom } from "@/components/docs/toolbar/zoom";
-import { DOCS_EVENT, TYPING_EVENT, fireDocs } from "@/components/docs/typing/events";
+import { DOCS_EVENT, TYPING_EVENT, fireDocs, type ModeRequest } from "@/components/docs/typing/events";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // The page editor's toolbar (SPEC.md §29): Google Docs' controls in Google's
@@ -207,7 +207,9 @@ export function DocsToolbar({
   /** The header or footer being edited: the controls format its text. */
   header: Editor | null;
   mode: DocsMode;
-  onMode: (mode: DocsMode) => void;
+  /** `passing`: the page passes into the mode for the reader, who did not
+      choose it (typing/events.ts ModeRequest). */
+  onMode: (mode: DocsMode, passing?: boolean) => void;
   canEdit: boolean;
   zoom: Zoom;
   onZoom: (zoom: Zoom) => void;
@@ -289,9 +291,13 @@ export function DocsToolbar({
         modeRef.current.onMode("viewing");
       }
     };
-    // The right-click menu's Suggest edits.
+    // The right-click menu's Suggest edits, and the assistant's suggestions
+    // landing in Viewing.
     const onModeEvent = (e: Event) => {
-      if (modeRef.current.canEdit) modeRef.current.onMode((e as CustomEvent<DocsMode>).detail);
+      const request = (e as CustomEvent<ModeRequest>).detail;
+      if (!modeRef.current.canEdit) return;
+      if (typeof request === "string") modeRef.current.onMode(request);
+      else modeRef.current.onMode(request.mode, request.passing);
     };
     const dom = editor.view.dom;
     window.addEventListener("keydown", onKey, true);
