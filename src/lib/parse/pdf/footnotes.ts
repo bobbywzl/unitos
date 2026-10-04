@@ -555,13 +555,19 @@ export function cutFootnotes(pages: Line[][], rules: Rule[][], bodySize: number,
   // The labels other pages raise and a page does not.
   const raisedElsewhere = (page: number) => new Set([...raisedAnywhere].filter((label) => !raisedOn[page].has(label)));
   pages.forEach((lines, p) => {
+    const pageStart = footnotes.length;
     const columns = pageColumns[p];
     const raised = p === lastPage ? raisedAnywhere : raisedOn[p];
     const pageRules = joinedRules(rules[p] ?? []);
     const kept: Line[] = [];
     columns.forEach((column) => {
       const last = footnotes.at(-1);
-      const continuing = last !== undefined && (last.breaks?.at(-1)?.page ?? last.page) === p - 1 && (!/[.!?)\]”"’]$/.test(last.text.trim()) || CONTINUED_RE.test(last.text));
+      // An unfinished note goes on at the top of the next page's foot, or
+      // of the next column's on its page (parse loop finding: a Frontiers
+      // article's p. 8 runs its note 1 from the left column's foot into
+      // the right column's, and the end read as a paragraph after the note).
+      const unfinished = last !== undefined && (!/[.!?)\]”"’]$/.test(last.text.trim()) || CONTINUED_RE.test(last.text));
+      const continuing = unfinished && ((last.breaks?.at(-1)?.page ?? last.page) === p - 1 || footnotes.length > pageStart);
       const notes = cutTableNotes(column, pageRules, bodySize);
       for (const one of notes.cuts) {
         const { text, runs } = wordsOf(one);
@@ -593,7 +599,7 @@ export function cutFootnotes(pages: Line[][], rules: Rule[][], bodySize: number,
             last.runs = last.runs?.map((r) => ({ ...r, end: Math.min(r.end, notice.index) })).filter((r) => r.end > r.start);
           }
           const offset = last.text.length + 1;
-          last.breaks = [...(last.breaks ?? []), { offset, page: p }];
+          if ((last.breaks?.at(-1)?.page ?? last.page) !== p) last.breaks = [...(last.breaks ?? []), { offset, page: p }];
           last.text = `${last.text} ${text}`;
           last.runs = [...(last.runs ?? []), ...runs.map((r) => ({ ...r, start: r.start + offset, end: r.end + offset }))];
           continue;
