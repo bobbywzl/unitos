@@ -81,6 +81,8 @@ export type Unit = {
   marks: { at: number; end: number; id: string }[];
   /** Its raised runs [start, end) in `text`: a reference's footnote marks are among them. */
   raised: [number, number][];
+  /** Its sub- and superscript runs [start, end) in `text`. */
+  scripts: [number, number][];
 };
 /** The styles scored on the characters of matched words: these on or off,
     and a text color and a highlight by their color. */
@@ -144,6 +146,7 @@ function addUnit(flat: Flat, block: number, index: number, spans: Span[], opts: 
   const colors: (string | undefined)[] = new Array(length);
   const fills: (string | undefined)[] = new Array(length);
   const raised: [number, number][] = [];
+  const scripts: [number, number][] = [];
   let stretch = 0;
   // The value most of a word's characters take, or none.
   const most = (values: (string | undefined)[], start: number, end: number) => {
@@ -184,6 +187,7 @@ function addUnit(flat: Flat, block: number, index: number, spans: Span[], opts: 
     if (span.color && !sameColor(span.color, opts.color)) colors.fill(span.color, start, text.length);
     if (span.highlight) fills.fill(span.highlight, start, text.length);
     if (span.sup && text.length > start) raised.push([start, text.length]);
+    if ((span.sup || span.sub) && text.length > start) scripts.push([start, text.length]);
   }
   flush(text.length);
   const shift = opts.shift ?? 0;
@@ -193,7 +197,7 @@ function addUnit(flat: Flat, block: number, index: number, spans: Span[], opts: 
     const tok = flat.toks[t];
     if (tok.start < shift || marks.some((m) => tok.start >= m.at && tok.end <= m.end)) tok.note = true;
   }
-  flat.units.push({ block, index, row: opts.row ?? -1, col: opts.col ?? -1, text, breaks: opts.breaks ?? [], styled: opts.styled, first, end: flat.toks.length, marks, raised });
+  flat.units.push({ block, index, row: opts.row ?? -1, col: opts.col ?? -1, text, breaks: opts.breaks ?? [], styled: opts.styled, first, end: flat.toks.length, marks, raised, scripts });
   flat.unitsOf[block].push(u);
 }
 

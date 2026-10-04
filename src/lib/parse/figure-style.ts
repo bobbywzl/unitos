@@ -1333,6 +1333,17 @@ function mayHide(value: string): boolean {
   return value === "none" || value === "hidden" || value === "collapse" || value.includes("var(");
 }
 
+// The attributes a lazy-loading script reads the picture's source from.
+const LAZY_SOURCE_SELECTOR = "[data-src], [data-srcset], [data-original], [data-lazy-src], [data-lazy-srcset]";
+
+/** A picture a script loads: it, or the img inside it, carries the source
+    in a data attribute or a lazy class. */
+export function isLazyPicture(el: Element): boolean {
+  const img = el.tagName.toLowerCase() === "img" ? el : el.querySelector("img");
+  if (!img) return false;
+  return img.matches(LAZY_SOURCE_SELECTOR) || el.matches(LAZY_SOURCE_SELECTOR) || /(?:^|\s|-|_)lazy/i.test(img.getAttribute("class") ?? "");
+}
+
 /** Mark what a desktop browser hides: display none, or visibility hidden on
     a short element. Hidden subtrees stay out of every later pass. */
 function markHidden(document: Document, rules: Rule[], page: Page) {
@@ -1341,8 +1352,24 @@ function markHidden(document: Document, rules: Rule[], page: Page) {
   for (const el of candidates) {
     const tag = el.tagName.toLowerCase();
     if (SKIP_TAGS.has(tag) || el.closest("svg")) continue;
+    // A lazy picture is hidden only until its script swaps the real source
+    // in (".lazyload { visibility: hidden }", "picture.lazysize img
+    // { opacity: 0 }"): the browser shows it, and so does the parse (web
+    // benchmark finding: a news story's figures each hidden this way, their
+    // captions read as paragraphs).
+    if ((tag === "img" || tag === "picture") && isLazyPicture(el)) continue;
     const style = styleOf(el, page);
-    if (!style) return;
+    if (!style) {
+      // Past the style budget: the element's own declarations still say
+      // display none, read without its ancestors' (no var() to resolve).
+      // The loop stopped here before, and every element after it showed:
+      // a page whose 12,500 hidden menu items came first read its hidden
+      // consent dialog as the article. Web benchmark finding: no page of
+      // either set reaches the budget here (every page's marks unchanged).
+      const own = declsOf(el, page).get("display")?.value.toLowerCase();
+      if (own === "none") el.setAttribute("data-unitos-hidden", "1");
+      continue;
+    }
     const display = ownValue(style, "display");
     if (display === "none") {
       el.setAttribute("data-unitos-hidden", "1");

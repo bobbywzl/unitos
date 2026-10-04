@@ -7,7 +7,8 @@ import { regionBounds } from "@/lib/video/types";
 import type { RichNode } from "@/lib/docs/schema";
 import type { Doc, DocBlock, Side } from "./adapt";
 import { brokenNumbers, checklistWraps, displayGaps, markerPlaces, rowHeights } from "./drawn";
-import type { GlyphScores } from "./glyphs";
+import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
+import type { GlyphScores, PageGlyphs } from "./glyphs";
 import type { LayoutScores } from "./layout";
 import { inkBands, type PagePaint } from "./paint";
 import { ROOT } from "./load";
@@ -20,6 +21,29 @@ import { garblesOf, normText, PAGE_NUMBER_RE, pageNumberOf, wordsOf } from "./te
 
 /** A line of the page: its box, its text, and its words' boxes (pdftotext -tsv). */
 type Line = { page: number; top: number; bottom: number; left: number; right: number; text: string; words?: { left: number; right: number; text: string }[] };
+
+/** A line's text as pdftotext's -raw text reads it: -tsv splits a word
+    where its font changes (a letter and its subscript, "J" and "ref"),
+    and -raw sets the two parts with no space between them when they
+    touch (parse bench finding: a quantum mechanics book's figure labels
+    J_inc, J_trans, J_ref, inside the crop, read "J inc" in the line that
+    drops a figure's words, and "Jinc" in the words to cover). Two parts
+    join only when the page's -raw text holds the joined word: a browser's
+    PDF sets a matrix's a₁₁ with a hidden mark after the "a", and -raw
+    reads "a" and "11" apart (synth-math-html p. 7). */
+function rawText(line: Line, has: (word: string) => boolean): string {
+  if (!line.words || line.words.length === 0) return line.text;
+  // Touching: the next word starts where the last one ends, along the
+  // line (text set sideways stacks its words at one left edge).
+  const touches = (w: { left: number; right: number }, prev: { left: number; right: number }) => w.left > prev.left && Math.abs(w.left - prev.right) < 0.8;
+  const out: string[] = [];
+  line.words.forEach((w, k) => {
+    const joined = k > 0 && touches(w, line.words![k - 1]) ? wordsOf(out[out.length - 1] + w.text) : [];
+    if (joined.length === 1 && has(joined[0].w)) out[out.length - 1] += w.text;
+    else out.push(w.text);
+  });
+  return out.join(" ");
+}
 
 /** A word pdftotext reads with a symbol font's characters in it, as it
     reads it and as the page draws it, on its line (layoutOf, symbolChars). */
@@ -38,6 +62,8 @@ export type PdfText = {
   symbols: SymbolWord[];
   /** The text pdftotext cannot read, which pdf.js reads (blindText): words to cover. */
   blind?: { page: number; text: string }[];
+  /** A slide deck's overlay steps (overlaySteps): pages read into the page after them, with no words to cover. */
+  steps?: Set<number>;
 };
 
 function run(args: string[]): string {
@@ -61,6 +87,8 @@ const lettersOf = (text: string) => readingOf(text).letters;
     a report sets every chart's caption at one height, so the label repeats
     with its number changed, but it is the figure's, never the page's. */
 const CAPTION_LABEL_RE = /^\s*(?:図表|図|表|fig(?:ure)?\.?|table|abbildung|abb\.|tabelle)\s*[\dⅠ-Ⅻivxlc]/iu;
+/** A list item's bullet at a line's start (not a dash: a head may open with one). */
+const BULLET_RE = /^\s*[•◦▪■□‣∗*]\s/u;
 const CJK_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
 /** A line's length in words, a CJK character a quarter word (wordsOf makes
     each a word, so a chart's label "インターネット利用率" read as ten words). */
@@ -76,7 +104,7 @@ const DOUBLED_RE = /([\u{1D400}-\u{1D7FF}\p{Script=Greek}])\1/gu;
 /** A long table's foot on each page it breaks at (LaTeX's longtable, Word). */
 const CONTINUED_RE = /^\(?continued (?:on (?:the )?next page|overleaf)\)?\.?$/i;
 
-type Layout = { lines: Line[]; furniture: Line[]; sizes: Map<number, { width: number; height: number }>; symbols: SymbolWord[] };
+type Layout = { lines: Line[]; furniture: Line[]; sizes: Map<number, { width: number; height: number }>; symbols: SymbolWord[]; steps: Set<number> };
 type Sizes = Layout["sizes"];
 
 /** Fonts that draw symbols at the codes of letters: pdftotext reads a code
@@ -188,8 +216,88 @@ function layoutOf(pdf: string): Layout {
     const said = (t: string) => wordsOf(t).map((w) => w.w).join(" ");
     if (entry && said(reads) !== said(f[11])) symbols.push({ page, word: f[11], reads, line: entry });
   }
-  const lines = [...byKey.values()].filter((l) => l.text.trim());
-  return { lines, furniture: furnitureOf(lines, sizes), sizes, symbols };
+  const all = [...byKey.values()].filter((l) => l.text.trim());
+  const steps = overlaySteps(all, sizes);
+  const lines = all.filter((l) => !steps.has(l.page));
+  return { lines, furniture: furnitureOf(lines, sizes), sizes, symbols: symbols.filter((w) => !steps.has(w.page)), steps };
+}
+
+/** The families of TeX's math fonts whose codes the tables name (glyphs.ts MATH). */
+const MATH_FAMILIES = new Set(["oml", "oms", "omx", "msa", "msb", "euf", "rsfs", "lasy"]);
+
+/** The words pdftotext reads with a TeX math glyph in them, as the page
+    draws them (a SymbolWord each, as symbolChars gives for symbol fonts).
+    pdftotext reads a math font's glyph whose name it does not know by its
+    character code: Computer Modern's ∫ (cmex 90) as "Z", ⟨ and ⟩ (cmsy 104
+    and 105) as "h" and "i". The glyph's code names its symbol (math-fonts.ts):
+    a letter or a digit counts as itself, any other symbol as no word. Parse
+    bench finding: a quantum mechanics textbook's "|Ψi", "h~r |Ψi", and "Z"
+    over each ∫ counted as words to cover, which no formula's glyphs cover,
+    so a display read as LaTeX in place of a crop (whose lines are no words
+    to cover) lowered the coverage by the "Z" and "h" and "i" it drew. */
+export function mathSymbolWords(text: Pick<PdfText, "lines">, pages: PageGlyphs[]): SymbolWord[] {
+  const out: SymbolWord[] = [];
+  const byPage = new Map<number, { x: number; y: number; size: number; read: string; drawn: string }[]>();
+  pages.forEach((page, i) => {
+    const list: { x: number; y: number; size: number; read: string; drawn: string }[] = [];
+    for (const g of page.glyphs) {
+      if (g.family === null || !MATH_FAMILIES.has(g.family)) continue;
+      const entry = mathGlyph(g.family, g.code);
+      if (!entry || g.code < 33 || g.code > 126) continue;
+      const read = String.fromCharCode(g.code);
+      const drawn = /^[\p{L}\p{N}]+$/u.test(entry.unicode.normalize("NFKC")) ? entry.unicode : "";
+      if (normText(read) === normText(drawn)) continue;
+      list.push({ x: g.x + g.w / 2, y: page.height - g.y, size: g.size, read, drawn });
+    }
+    if (list.length) byPage.set(i + 1, list);
+  });
+  for (const line of text.lines) {
+    const glyphs = byPage.get(line.page)?.filter((g) => g.y - g.size * 0.3 >= line.top - 1 && g.y - g.size * 0.3 <= line.bottom + 1);
+    if (!glyphs?.length) continue;
+    for (const word of line.words ?? []) {
+      const own = glyphs.filter((g) => g.x >= word.left - 1 && g.x <= word.right + 1).sort((a, b) => a.x - b.x);
+      // The code's character stands where the glyph stands in the word (one
+      // character either way): a word read right by its font's map may hold
+      // that letter elsewhere ("|ψj" where the "|" is cmsy's 106, "j").
+      const span = Math.max(1, word.right - word.left);
+      let reads = word.text;
+      let at = 0;
+      for (const g of own) {
+        const place = Math.floor(((g.x - word.left) / span) * word.text.length) + (reads.length - word.text.length);
+        const k = reads.indexOf(g.read, at);
+        if (k < 0 || Math.abs(k - place) > 1) continue;
+        reads = reads.slice(0, k) + g.drawn + reads.slice(k + g.read.length);
+        at = k + g.drawn.length;
+      }
+      const said = (t: string) => wordsOf(t).map((w) => w.w).join(" ");
+      if (said(reads) !== said(word.text)) out.push({ page: line.page, word: word.text, reads, line });
+    }
+  }
+  return out;
+}
+
+/** A slide deck's overlay steps: in a deck (every page wider than tall),
+    a page whose lines open the next page's, in order, each the same words,
+    is the next page printed with less (beamer prints a frame once per
+    click). The parse reads the frame once, whole (lib/parse/pdf/index.ts
+    collapseOverlaySteps), so the step's lines are no words to cover and no
+    evidence of furniture (a beamer deck's alerts frame, printed three times,
+    counted its title and its last two items as furniture, which the parse
+    leaked seven times, and its words were expected three times). */
+function overlaySteps(lines: Line[], sizes: Sizes): Set<number> {
+  const steps = new Set<number>();
+  if (sizes.size < 2 || ![...sizes.values()].every((z) => z.width > z.height)) return steps;
+  const texts = new Map<number, string[]>();
+  for (const row of rowsOf(lines)) {
+    const page = row[0].page;
+    texts.set(page, [...(texts.get(page) ?? []), ...row.map((l) => normText(l.text))]);
+  }
+  for (const [page, own] of texts) {
+    const next = texts.get(page + 1);
+    if (!next || own.length === 0 || own.length > next.length || !own.every((t, i) => t === next[i])) continue;
+    steps.add(page);
+  }
+  return steps;
 }
 
 /** A line set sideways: over 30 pt tall and three times as tall as wide. */
@@ -296,6 +404,18 @@ export function furnitureOf(lines: Line[], sizes: Sizes): Line[] {
   // page's index: alone it is a formula's limit or label more often (the
   // probability cheatsheet's ∑ₓ at two pages' feet).
   for (const l of candidates) if (outer(l) && PAGE_NUMBER_RE.test(l.text.trim()) && !/^[ivxIVX]$/.test(l.text.trim())) furniture.add(l);
+  // A document of one page has no other page to repeat its number: a lone
+  // number equal to the page's index, centered in the page's last two rows
+  // and in its lowest fifth, is its page number (parse bench finding: two
+  // one-page LuaLaTeX samples set "1" centered, its top 97 pt over the foot,
+  // above the outer 8%; the parse drops it, and the count read it as a
+  // word the parse missed).
+  if (sizes.size === 1) {
+    for (const l of lastRows.flat()) {
+      const middle = (l.left + l.right) / 2;
+      if (/\d/.test(l.text) && pageNumberOf(l.text) === l.page && Math.abs(middle - size(l).width / 2) < 0.05 * size(l).width && l.top > 0.8 * size(l).height) furniture.add(l);
+    }
+  }
 
   // Repeats: a line or a whole row of three letters or more (a diagram's
   // label "o3" tops pages too). A row, since pdftotext cuts a head at its
@@ -314,11 +434,18 @@ export function furnitureOf(lines: Line[], sizes: Sizes): Line[] {
     height: Math.max(...ls.map((l) => l.bottom - l.top)),
     numbers: (text.match(/\d+/g) ?? []).map(Number),
   });
+  // A line that opens with a bullet is a list's item, however many pages
+  // set it at one height: a running head or foot carries no bullet. PDF
+  // benchmark finding: a deck's template slides each end their list with
+  // the same item ("• Ut labore et dolore magna aliqua", pmichaillat-
+  // presentation pp. 2–3, 6–7), and the count read the parse's four items
+  // as a furniture line leaked three times; a parse that dropped the item
+  // would have lost the slide's last point and scored higher.
   const units: Unit[] = [
     ...candidates.map((l) => unitOf([l], l.text)),
     ...edgeRows.filter((r) => r.length > 1).map((r) => unitOf(r, r.map((l) => l.text.trim()).join(" "))),
   ]
-    .filter((u) => u.letters.length >= 3 && !CAPTION_LABEL_RE.test(u.text))
+    .filter((u) => u.letters.length >= 3 && !CAPTION_LABEL_RE.test(u.text) && !BULLET_RE.test(u.text))
     .sort((a, b) => a.top - b.top);
   // The units near a unit's height, from the list sorted by height (a book's thousands of rows).
   const reach = 0.03 * Math.max(792, ...[...sizes.values()].map((x) => x.height));
@@ -417,6 +544,11 @@ export function pdfText(pdf: string, pages?: [number, number]): PdfText {
   if (raw.length > 1 && raw.at(-1)?.join("").trim() === "") raw.pop();
   let layout = layouts.get(pdf);
   if (!layout) layouts.set(pdf, (layout = layoutOf(pdf)));
+  // A deck's overlay step holds no words to cover (overlaySteps).
+  const first = pages?.[0] ?? 1;
+  raw.forEach((_, p) => {
+    if (layout.steps.has(first + p)) raw[p] = [];
+  });
   const inRange = (l: Line) => !pages || (l.page >= pages[0] && l.page <= pages[1]);
   const lines = layout.lines.filter(inRange);
   return {
@@ -426,6 +558,7 @@ export function pdfText(pdf: string, pages?: [number, number]): PdfText {
     lines,
     furniture: layout.furniture.filter(inRange),
     sizes: layout.sizes,
+    steps: layout.steps,
     symbols: layout.symbols.filter((s) => !pages || (s.page >= pages[0] && s.page <= pages[1])),
   };
 }
@@ -442,7 +575,8 @@ export function blindText(pdf: PdfText, paint: PagePaint[]): { page: number; tex
   const last = pdf.first + pdf.raw.length - 1;
   for (let page = pdf.first; page <= last; page++) {
     const painted = paint[page - 1];
-    if (!painted) continue;
+    // An overlay step's words are the next page's (overlaySteps).
+    if (!painted || pdf.steps?.has(page)) continue;
     const lines = pdf.lines.filter((l) => l.page === page);
     // Words the page's furniture holds are no words to cover: a title the margin's tab repeats is the page's own.
     const held = heldBy(lines.filter((l) => !furniture.has(l)).map((l) => wordsOf(l.text).map((w) => w.w)));
@@ -514,9 +648,19 @@ function picturedBy(pdf: PdfText, cand: Flat): (line: Line) => Extract<DocBlock,
     region that reaches up to the running head). */
 function leaksOf(pdf: PdfText, furniture: Line[], cand: Flat): Leaks {
   const furnitureSet = new Set(furniture);
-  const alone = aloneOnRow(pdf.lines);
+  // The page's own rows (no furniture line on them) that read a furniture
+  // string's words, by their words: a listing's row "4 {", the line number
+  // and the brace two lines of the text layer, reads the page number "4"
+  // (parse bench finding: a LaTeX package's manual numbers each listing
+  // line, and its rows "4 {" and "5 }" counted as the page numbers 4 and 5
+  // leaked into the code).
+  const said = (text: string) => wordsOf(text).map((w) => w.w).join(" ");
   const others = new Map<string, number>();
-  for (const l of pdf.lines) if (!furnitureSet.has(l) && alone.has(l)) others.set(normText(l.text), (others.get(normText(l.text)) ?? 0) + 1);
+  for (const row of rowsOf(pdf.lines)) {
+    if (row.some((l) => furnitureSet.has(l))) continue;
+    const key = said([...row].sort((a, b) => a.left - b.left).map((l) => l.text).join(" "));
+    others.set(key, (others.get(key) ?? 0) + 1);
+  }
   // The PDF's other lines and rows (a heading the text layer reads as two
   // lines on one row, "第 1 節" and its title), as words.
   const kept = pdf.lines.filter((l) => !furnitureSet.has(l));
@@ -579,7 +723,7 @@ function leaksOf(pdf: PdfText, furniture: Line[], cand: Flat): Leaks {
   strings.forEach((text, x) => {
     if (!flat.has(text)) return;
     const inPictures = pictured.get(text) ?? 0;
-    const excess = Math.max(0, matches[x].length - (others.get(normText(text)) ?? 0)) + inPictures;
+    const excess = Math.max(0, matches[x].length - (others.get(said(text)) ?? 0)) + inPictures;
     if (excess <= 0) return;
     leaked++;
     leaks += excess;
@@ -867,6 +1011,51 @@ function countWords(texts: string[]): Map<string, number> {
 /** A formula's text command and its words: "\text{ und }". */
 const TEXT_RE = /\\(?:text|textup|textrm|textit|textbf|mbox)\s*\{([^{}]*)\}/g;
 
+/** A formula's accent as the text layer reads it: a combining mark. KaTeX's
+    MathML leaves an accent as a spacing character ("^" for \hat, "~" for
+    \tilde, "ˉ" for \bar, "ˇ" for \check, "ˊ" for \acute), and pdftotext
+    reads the page's accent glyph as a combining mark on its letter ("x̂",
+    "ĥ") or, set apart from it, as a spacing modifier letter ("ˆ"). */
+const ACCENT_MARK: Record<string, string> = {
+  "^": "\u0302",
+  "ˆ": "\u0302",
+  "~": "\u0303",
+  "˜": "\u0303",
+  "ˉ": "\u0304",
+  "¯": "\u0304",
+  "\u0305": "\u0304",
+  "˙": "\u0307",
+  "¨": "\u0308",
+  "ˇ": "\u030c",
+  "ˊ": "\u0301",
+  "´": "\u0301",
+  "ˋ": "\u0300",
+  "`": "\u0300",
+  "˘": "\u0306",
+  "˚": "\u030a",
+};
+
+/** A word's characters as the page's glyphs, on both sides of the formula
+    cover: compatibility forms folded as normWord folds them (NFKC: 𝐱 is x,
+    ² is 2), then decomposed (NFD: "ĥ" is h and its hat), each accent its combining
+    mark (ACCENT_MARK), ħ its h and its macron, lower case, letters, digits,
+    and marks only. Parse bench finding: a quantum mechanics textbook set in
+    mathpazo draws \hbar as the text font's macron kerned over an italic h,
+    and \hat as the text font's circumflex over its letter; pdftotext reads
+    "h̄" (h, U+0304), "ih̄", "2πh̄", "Ĥ", "x̂j", and a hat set apart as "ˆ",
+    while the candidate's formulas read ħ and "^", so 38 words of a chapter's
+    displays counted as missing once the displays read as LaTeX, and every
+    rule that read one more display lowered its coverage. */
+export function glyphChars(text: string): string[] {
+  const out: string[] = [];
+  for (const ch of text.normalize("NFKC").normalize("NFD")) {
+    if (ch === "ħ" || ch === "ℏ") out.push("h", "\u0304");
+    else if (ACCENT_MARK[ch] !== undefined) out.push(ACCENT_MARK[ch]);
+    else if (/[\p{L}\p{N}\p{M}]/u.test(ch)) out.push(ch.toLowerCase());
+  }
+  return out;
+}
+
 /** The words the candidate prints, as the PDF's text layer holds them: its
     words and its list markers ("1.1", "(a)"). Its formulas apart, as the
     glyphs they draw (a parse's readable characters, else the glyphs KaTeX
@@ -891,6 +1080,19 @@ function printedWords(
     const parts = wordsOf(unit.text.slice(t.start, at)).concat(wordsOf(unit.text.slice(at, t.end))).map((w) => w.w);
     if (parts.length > 1) raised.push({ joined: t.w, parts });
   }
+  // A word with scripts at several edges (a chemical formula's "SO₄²⁻",
+  // a prescript's "²²·⁹⁸₁₁Na"): the text layer may read a word apart at
+  // each edge, a subscript stacked under a superscript on a line of its
+  // own (parse bench finding: chemformula's manual p. 9, pdftotext reads
+  // \ch{SO4^2-} as "SO 2–" over "4").
+  for (const t of toks) {
+    const unit = cand.units[t.unit];
+    const edges = [...new Set(unit.scripts.flatMap(([a, b]) => [a, b]).filter((e) => e > t.start && e < t.end))].sort((a, b) => a - b);
+    if (edges.length < 2) continue;
+    const cuts = [t.start, ...edges, t.end];
+    const parts = cuts.slice(1).flatMap((e, k) => wordsOf(unit.text.slice(cuts[k], e)).map((w) => w.w));
+    if (parts.length > 2) raised.push({ joined: t.w, parts });
+  }
   cand.blocks.forEach((block, b) => {
     if (block.kind === "list" && kept(b)) for (const item of block.items) words.push(...wordsOf(item.marker).map((w) => w.w));
   });
@@ -911,7 +1113,7 @@ function printedWords(
     }
     const reading = m.text?.trim() ? m.text : latex !== undefined || m.mathml !== undefined ? mathLeaves({ ...m, latex }, m.display).join(" ") : "";
     readings.set(m, reading);
-    for (const w of wordsOf(`${reading} ${m.label ?? ""}`)) for (const ch of w.w) glyphs.set(ch, (glyphs.get(ch) ?? 0) + 1);
+    for (const ch of glyphChars(`${reading} ${m.label ?? ""}`)) glyphs.set(ch, (glyphs.get(ch) ?? 0) + 1);
   }
   // A word set tight after a formula ("$n$th", "$k$th"): the text layer reads
   // the formula's glyphs and the word as one word ("nth"). parse loop
@@ -997,7 +1199,8 @@ export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word 
       return hollow[1];
     });
     const dropped = [...pdf.furniture, ...labels].filter((f) => f.page === pdf.first + p);
-    const drop = countWords(dropped.map((f) => f.text));
+    const rawWords = new Set(wordsOf(lines.join("\n")).map((w) => w.w));
+    const drop = countWords(dropped.map((f) => rawText(f, (w) => rawWords.has(w))));
     // A word read out of a symbol font counts as the page draws it (◆ read "u" is no word; Symbol's "a" is α),
     // on a line that is a word to cover.
     const symbols = pdf.symbols.filter((s) => s.page === pdf.first + p && !dropped.includes(s.line));
@@ -1034,7 +1237,7 @@ export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word 
     const short = (expected.get(joined) ?? 0) > (candBag.get(joined) ?? 0);
     const extra = parts.every((w) => (candBag.get(w) ?? 0) > (expected.get(w) ?? 0));
     const chars = countWords([]);
-    for (const ch of formula) chars.set(ch, (chars.get(ch) ?? 0) + 1);
+    for (const ch of glyphChars(formula)) chars.set(ch, (chars.get(ch) ?? 0) + 1);
     if (!short || !extra || ![...chars].every(([ch, c]) => (formulaGlyphs.get(ch) ?? 0) >= c)) continue;
     for (const [ch, c] of chars) formulaGlyphs.set(ch, (formulaGlyphs.get(ch) ?? 0) - c);
     for (const w of parts) candBag.set(w, (candBag.get(w) ?? 0) - 1);
@@ -1075,7 +1278,7 @@ export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word 
   for (const [w, n] of expected) {
     let rest = n - Math.min(n, candBag.get(w) ?? 0);
     const chars = countWords([]);
-    for (const ch of w) chars.set(ch, (chars.get(ch) ?? 0) + 1);
+    for (const ch of glyphChars(w)) chars.set(ch, (chars.get(ch) ?? 0) + 1);
     while (rest > 0 && [...w].length <= 4 && [...chars].every(([ch, c]) => (formulaGlyphs.get(ch) ?? 0) >= c)) {
       for (const [ch, c] of chars) formulaGlyphs.set(ch, (formulaGlyphs.get(ch) ?? 0) - c);
       covered.set(w, (covered.get(w) ?? 0) + 1);

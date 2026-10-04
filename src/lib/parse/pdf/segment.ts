@@ -344,6 +344,15 @@ function withDrawnSeparators(
       (r) => r.dir === "v" && [r.y1, r.y2].some((end) => Math.abs(end - y) <= 2) && [rule.x1, rule.x2].some((x) => Math.abs((r.x1 + r.x2) / 2 - x) <= 2),
     );
     if (framed || corner) continue;
+    // A chart's axis: a vertical rule crosses it in its middle, an em past
+    // either end and reaching an em over and under it. A separator stands
+    // alone (parse loop finding: a textbook's circle drawn on two axes, its
+    // x axis read as a separator under the figure).
+    const crossed = ctx.drawing.rules.some((r) => {
+      const x = (r.x1 + r.x2) / 2;
+      return r.dir === "v" && x > rule.x1 + size && x < rule.x2 - size && r.y1 < y - size && r.y2 > y + size;
+    });
+    if (crossed) continue;
     at.add(start.at);
   }
   if (at.size === 0) return segments;
@@ -377,6 +386,26 @@ function codeLineText(line: Line, left: number, advance: number): string {
 // Code listing: consecutive monospace lines, blank lines included, are one
 // CODE block with one line per PDF line and the indentation the glyph
 // offsets give.
+// A listing's empty line keeps its line number: a line that is only the
+// number after the line above's, set smaller than the code, between two
+// code lines (parse loop finding: a LaTeX package's manual numbers every
+// line of an example, and each empty line, "3" alone, cut its listing in
+// two and read as a paragraph).
+function bareLineNumber(line: Line, above: Line, below: Line | undefined): boolean {
+  const number = /^\s*(\d{1,4})\s*$/.exec(line.text);
+  const before = /^\s*(\d{1,4})\s/.exec(above.text);
+  const code = above.items.filter((it) => it.mono && it.str.trim());
+  return (
+    number !== null &&
+    before !== null &&
+    Number(number[1]) === Number(before[1]) + 1 &&
+    below !== undefined &&
+    isMonoLine(below) &&
+    code.length > 0 &&
+    line.size < Math.min(...code.map((it) => it.size)) * 0.85
+  );
+}
+
 function readCodeListing(lines: Line[], i: number, ctx: PageContext, runOf: number[]): Step | null {
   const line = lines[i];
   if (!isMonoLine(line)) return null;
@@ -385,7 +414,8 @@ function readCodeListing(lines: Line[], i: number, ctx: PageContext, runOf: numb
   while (j < lines.length) {
     const next = lines[j];
     const gap = run[run.length - 1].y - next.y;
-    if (!isMonoLine(next) || runOf[j] !== -1 || gap < 0 || gap > next.size * ctx.leading * 3.4) break;
+    const code = isMonoLine(next) || bareLineNumber(next, run[run.length - 1], lines[j + 1]);
+    if (!code || runOf[j] !== -1 || gap < 0 || gap > next.size * ctx.leading * 3.4) break;
     run.push(next);
     j++;
   }
@@ -395,7 +425,7 @@ function readCodeListing(lines: Line[], i: number, ctx: PageContext, runOf: numb
   const rows: string[] = [];
   run.forEach((l, k) => {
     if (k > 0) {
-      const blank = Math.round((run[k - 1].y - l.y) / (l.size * ctx.leading)) - 1;
+      const blank = Math.round((run[k - 1].y - l.y) / (Math.max(l.size, run[k - 1].size) * ctx.leading)) - 1;
       for (let b = 0; b < Math.min(2, blank); b++) rows.push("");
     }
     rows.push(codeLineText(l, left, advance));

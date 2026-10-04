@@ -694,7 +694,11 @@ export function isFirstLineIndent(lines: Line[], i: number, ctx: PageContext, ru
   return (
     line.cells.length === 1 &&
     !(BULLET_RE.test(line.text) && line.size <= ctx.bodySize * 1.15) &&
-    line.x > edge + line.size * 0.6 &&
+    // Set in by six tenths of an em at least, or by half of the page's own
+    // step when the page shows one (parse loop finding: langsci 385 sets
+    // one paragraph in by 0.598 em where the page steps 1 em, and it
+    // read as a one-line item over its own second line).
+    line.x > edge + Math.min(line.size * 0.6, (paragraphStep(lines, ctx) ?? Infinity) * 0.55) &&
     line.x < edge + line.size * 6 &&
     after !== undefined &&
     runOf[i + 1] === -1 &&
@@ -845,6 +849,22 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
       !BULLET_RE.test(next.text) &&
       gap <= next.size * ctx.leading * 1.3 &&
       (!prevTerminal || /^[a-z0-9(]/.test(next.text) || (otherEdge > 0 && prev.xEnd > otherEdge - prev.size * 1.5));
+    // A first line that ends in a short cell set flush right, two ems or
+    // more past the words before it, is a head line of its own: the lines
+    // under it, set in by an em, are its description, no hanging indent
+    // (parse loop finding: a LaTeX package's manual sets each option over
+    // its description, "circletype = chem|math ... Default: chem", and the
+    // two read as one paragraph).
+    const last = prev.cells[prev.cells.length - 1];
+    const before = last ? Math.max(...prev.items.filter((it) => it.x + it.w <= last.x + 0.5).map((it) => it.x + it.w)) : -Infinity;
+    const headLine =
+      group.length === 1 &&
+      prev.cells.length >= 2 &&
+      colEdge > 0 &&
+      prev.xEnd >= colEdge - prev.size &&
+      last.text.trim().split(/\s+/).length <= 4 &&
+      last.x - before >= prev.size * 2 &&
+      next.x > prev.x + next.size * 0.5;
     // A wrapped line whose stretched word gaps read as cells is still one
     // line of prose when no table run claims it.
     const stretched =
@@ -874,6 +894,7 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
       // (real-jnlp-31-47-p1).
       (next.size > body * (ctx.ocr ? 1.3 : 1.14) && !(centered && !ctx.ocr && Math.abs(next.size - prev.size) <= 0.5)) ||
       endsShort ||
+      headLine ||
       lastLine ||
       stepsIn ||
       labelled ||

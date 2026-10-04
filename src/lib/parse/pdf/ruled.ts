@@ -228,11 +228,16 @@ function mostlyTiny(texts: string[]): boolean {
 // polylines, markers — paths that are no rule, no filled box, and no box on
 // the table's own lines (xs, ys) — or its data as a staircase of rules off
 // those lines. Three shapes, or more stray rules than twice the cells, make
-// a chart.
-function isChart(b: Box, xs: number[], ys: number[], cells: number, drawing: TableDrawing): boolean {
+// a chart. rows: the region's lines, when they are known. A small drawing
+// inside the height of a row of two cells or more is that row's cell, no
+// chart's data (parse loop finding: a LaTeX package's manual draws each
+// bond of its table of bonds, "single – normal, sb", with a few short
+// rules and an arrowhead; forty such rules read as a plot).
+function isChart(b: Box, xs: number[], ys: number[], cells: number, drawing: TableDrawing, rows: Line[] = []): boolean {
   const on = (v: number, lines: number[]) => lines.some((l) => Math.abs(l - v) <= 1.5);
   const within = (r: Box) => r.x1 >= b.x1 - 1 && r.x2 <= b.x2 + 1 && r.y1 >= b.y1 - 1 && r.y2 <= b.y2 + 1;
-  const stray = drawing.rules.filter((r) => within(r) && (r.dir === "h" ? !on(r.y1, ys) : !on(r.x1, xs))).length;
+  const inRow = (r: Box) => rows.some((l) => l.cells.length >= 2 && r.y1 >= l.yMin - l.size * 0.3 && r.y2 <= l.yMax + l.size * 0.8);
+  const stray = drawing.rules.filter((r) => within(r) && !inRow(r) && (r.dir === "h" ? !on(r.y1, ys) : !on(r.x1, xs))).length;
   if (stray > Math.max(20, cells * 2)) return true;
   const same = (p: Box, f: Box) => Math.abs(p.x1 - f.x1) <= 0.5 && Math.abs(p.x2 - f.x2) <= 0.5 && Math.abs(p.y1 - f.y1) <= 0.5 && Math.abs(p.y2 - f.y2) <= 0.5;
   const shapes = drawing.paths.filter(
@@ -245,6 +250,7 @@ function isChart(b: Box, xs: number[], ys: number[], cells: number, drawing: Tab
       p.y1 >= b.y1 - 1 &&
       p.y2 <= b.y2 + 1 &&
       !drawing.fills.some((f) => same(p, f)) &&
+      !inRow(p) &&
       !(on(p.x1, xs) && on(p.x2, xs) && on(p.y1, ys) && on(p.y2, ys)),
   );
   return shapes.length >= 3;
@@ -383,14 +389,34 @@ function slices(box: Box, lines: Line[], items: Item[]): boolean {
 // A rule region is a table when its lines split into two columns or more and
 // two rows or more carry cells in two of them. A listing's frame, a figure's
 // box around one label, a region of prose, and a plot's frame are not.
-function isTableRegion(lines: Line[], width: number, columns: Rule[]): boolean {
-  if (lines.length < 2 || lines.filter((l) => isMonoLine(l)).length * 2 > lines.length) return false;
+// rules: the region's rules inside it. A region whose first line is a head
+// in a text face, two phrases or more over a rule of the region, is a
+// table however many of its rows are set in a typewriter face: a listing
+// has no head row (parse loop finding: a LaTeX package's manual lists its
+// bond names and their aliases in typewriter under "name appearance
+// aliases" and a booktabs rule; read as a listing's frame, the table broke
+// into a paragraph, two listings, a figure, and a formula).
+function isTableRegion(lines: Line[], width: number, columns: Rule[], rules: Rule[] = []): boolean {
+  if (lines.length < 2) return false;
+  const [head, next] = lines;
+  const headed =
+    !isMonoLine(head) &&
+    head.runs.every((r) => !r.mono) &&
+    head.text.trim().split(/\s+/).length >= 2 &&
+    rules.some((r) => r.y1 < head.yMin && r.y1 > next.yMax && r.x1 <= head.x + 2 && r.x2 >= head.xEnd - 2);
+  if (!headed && lines.filter((l) => isMonoLine(l)).length * 2 > lines.length) return false;
   if (lines.some((l) => isProseLine(l, width, columns))) return false;
   const separators = columnSeparators(lines);
   if (separators.length === 0) return false;
   const multi = lines.filter((l) => new Set(l.items.map((it) => columnAt(it.x + it.w / 2, separators))).size >= 2);
   if (multi.length < 2) return false;
-  return !mostlyTiny(lines.flatMap((l) => cellsBySeparators(l, separators).map((c) => c.text.trim())));
+  // A region whose every line opens with a label of letters in its first
+  // column is a table however short its values: a plot's frame holds tick
+  // labels, never a label column (parse loop finding: ICML's Table 1,
+  // "Smooth activation | 1 1 1 1 2 1/2 −1" under its head of symbols, read
+  // as a paragraph of its head and a crop of its rows).
+  const labeled = lines.every((l) => /\p{L}{3,}/u.test(cellsBySeparators(l, separators)[0]?.text ?? ""));
+  return labeled || !mostlyTiny(lines.flatMap((l) => cellsBySeparators(l, separators).map((c) => c.text.trim())));
 }
 
 // The column ranges a line's phrases cover, bounds the column edges (the
@@ -552,7 +578,7 @@ function checkboxes(drawing: PageDrawing, items: Item[]): { squares: PathBox[]; 
 
 // The ruled tables of a page, from its rules and filled boxes: grids first,
 // then the regions of rule stacks outside them.
-export function ruledTables(all: Item[], page: PageDrawing, pageWidth: number, pageHeight: number): TableRegion[] {
+export function ruledTables(all: Item[], page: PageDrawing, pageWidth: number, pageHeight: number, rotated: Item[] = []): TableRegion[] {
   // Blank items (the spaces pdf.js reports between words) say nothing of
   // where text is: one in a sliver between two cells kept the sliver open.
   const words = all.filter((it) => it.str.trim().length > 0);
@@ -627,14 +653,38 @@ export function ruledTables(all: Item[], page: PageDrawing, pageWidth: number, p
       if (!free(box)) continue;
       const inside = items.filter((it) => inBox(it, { ...box, x1: box.x1 - 2, x2: box.x2 + 2 }));
       const lines = buildLines(inside, 0);
-      if (!isTableRegion(lines, box.x2 - box.x1, columns) || slices(box, lines, items) || framedMath(box, inside, columns)) continue;
       const inner = rules.filter((r) => r.y1 < box.y2 - 1 && r.y1 > box.y1 + 1 && r.x1 >= box.x1 - 3 && r.x2 <= box.x2 + 3);
+      if (!isTableRegion(lines, box.x2 - box.x1, columns, inner) || slices(box, lines, items) || framedMath(box, inside, columns)) continue;
       const region = { box, items: inside, lines, grid: null, rules: inner, drawing };
       // The rules drawn between its columns are the table's, no chart's
       // (PLOS's tables rule every cell apart: forty rules read as a plot).
       const ruledXs = [...new Set(columnRules(region).map((r) => r.x1))];
-      if (isChart(box, [box.x1, ...ruledXs, box.x2], stack.rules.map((r) => r.y1), lines.length, drawing)) continue;
+      if (isChart(box, [box.x1, ...ruledXs, box.x2], stack.rules.map((r) => r.y1), lines.length, drawing, lines)) continue;
       regions.push(region);
+    }
+  }
+  // A cross: one rule under the head and one between the stub and the
+  // values, each running past the other on both sides. The column rule's
+  // ends are the table's top and bottom; LaTeX draws it a row at a time.
+  const runs: Rule[] = [];
+  for (const r of [...columns].sort((a, b) => a.x1 - b.x1 || a.y1 - b.y1)) {
+    const last = runs[runs.length - 1];
+    if (last && Math.abs(last.x1 - r.x1) < 0.5 && r.y1 <= last.y2 + 2) last.y2 = Math.max(last.y2, r.y2);
+    else runs.push({ ...r });
+  }
+  for (const h of rules) {
+    if (h.x2 - h.x1 < 40) continue;
+    for (const v of runs) {
+      if (v.x1 < h.x1 + 10 || v.x1 > h.x2 - 10 || v.y1 > h.y1 - 6 || v.y2 < h.y1 + 6) continue;
+      const box = { x1: h.x1, x2: h.x2, y1: v.y1 - 1, y2: v.y2 + 1 };
+      if (!free(box)) continue;
+      const inside = items.filter((it) => inBox(it, { ...box, x1: box.x1 - 2, x2: box.x2 + 2 }));
+      const lines = buildLines(inside, 0);
+      // An array of a formula, ruled the same way, is the formula's: it
+      // holds no two words of a text font (x | f(x) over 0 | 1).
+      const words = inside.filter((it) => !it.math && /\p{L}{3,}/u.test(it.str));
+      if (words.length < 2 || !isTableRegion(lines, box.x2 - box.x1, columns)) continue;
+      regions.push({ box, items: inside, lines, grid: null, rules: [h], drawing });
     }
   }
   // A table's own link under its last rule goes with it, out of the text
@@ -642,6 +692,16 @@ export function ruledTables(all: Item[], page: PageDrawing, pageWidth: number, p
   // after the table: "….t001 their results").
   const kept = new Set(regions.flatMap((r) => r.items));
   for (const region of regions) region.items.push(...linkUnder(region, items.filter((it) => !kept.has(it))));
+  // A rotated item inside a table's rules is the table's: a column head
+  // set aslant, upright at its drawn box (index.ts uprightItem), reads in
+  // its column with the heads beside it. One outside every table stays off
+  // the page.
+  for (const region of regions) {
+    const own = rotated.filter((it) => inBox(it, { ...region.box, x1: region.box.x1 - 2, x2: region.box.x2 + 2 }));
+    if (own.length === 0) continue;
+    region.items.push(...own);
+    region.lines = buildLines(region.items, 0);
+  }
   return regions;
 }
 
@@ -744,6 +804,9 @@ function tableOfRegion(region: TableRegion, page: number): Segment {
   // against the glyphs and rules the page draws (a failed check keeps the
   // words; synth-notes-tex's table of fractions read "1 36" for 1/36).
   const built: Line[] = [];
+  // Each item a stack of a cell's lines took (stackedFormulas), with the
+  // zone its line gave it.
+  const stacked = new Map<Item, MathZone | undefined>();
   const segment = (rows: TableRow[], headerRows: number, edges: number[], padding?: TableLook["padding"]) => {
     resolveZones(built, region.drawing);
     const look = { size: Math.round(textSize(region.items) * 2) / 2, columns: edges.slice(1).map((x, k) => x - edges[k]), padding };
@@ -793,7 +856,29 @@ function tableOfRegion(region: TableRegion, page: number): Segment {
     .filter((r) => r.x2 - r.x1 < width * 0.9 && phrased.filter((l) => l.y > r.y1).length >= 2 && phrased.filter((l) => l.y < r.y1).length >= 2)
     .map((r) => r.y1)
     .sort((a, b) => b - a)[0];
-  const headerRule = full.find((y) => phrased.some((l) => l.y > y) && phrased.filter((l) => l.y < y).length >= 2) ?? under;
+  // Booktabs draws a rule under each column's head (\cmidrule) where the
+  // heads are grouped: a row of two partial rules or more at one height,
+  // under the first line, with a line that starts in the first column
+  // under it, parts the head from the body when no full rule does, or
+  // when the full rules are the rows' (two or more between the lines: a
+  // table whose rows are ruled in full has one under its first row as
+  // well). Under a head of two rows, the full rule under the second row
+  // parts the head (ICML's Table 1: "Dataset /" wrapped over "model"
+  // under the cmidrules of "Lowest test loss" and "End of training").
+  // Parse loop finding: langsci 385's Table 6 read its first row as a
+  // head, and its Table 2, with no full rule under the head, had none.
+  const partial0 = region.rules.filter((r) => r.x2 - r.x1 < width * 0.9);
+  const cmid = [...new Set(partial0.map((r) => Math.round(r.y1)))]
+    .filter((y) => partial0.filter((r) => Math.abs(r.y1 - y) <= 1).length >= 2)
+    .filter((y) => phrased.some((l) => l.y > y) && phrased.filter((l) => l.y < y).length >= 2)
+    .filter((y) => {
+      const below = phrased.filter((l) => l.y < y).sort((a, b) => b.y - a.y)[0];
+      return below.x <= region.box.x1 + below.size;
+    })
+    .sort((a, b) => b - a)[0];
+  const fullRule = full.find((y) => phrased.some((l) => l.y > y) && phrased.filter((l) => l.y < y).length >= 2);
+  const rowRuled = full.filter((y) => phrased.some((l) => l.y > y) && phrased.some((l) => l.y < y)).length >= 2;
+  const headerRule = cmid !== undefined && (fullRule === undefined || (cmid > fullRule && rowRuled)) ? cmid : (fullRule ?? under);
   let head = headerRule === undefined ? [] : phrased.filter((l) => l.y > headerRule);
   let body = headerRule === undefined ? phrased : phrased.filter((l) => l.y < headerRule);
   // With no rule under the head, the lines at the top with no words in the
@@ -853,13 +938,95 @@ function tableOfRegion(region: TableRegion, page: number): Segment {
   spanHeadColumns(rows, headerRows);
   if (body.length > 0) {
     built.push(...body);
-    const cellsOf = body.map((line) => cellsBySeparators(line, separators));
-    const starts = oneRow(body, cellsOf, region, drawn) ? [0] : ((drawn.length > 0 ? ruledRowStarts(body, cellsOf, [...full, ...pieceEnds(drawn, region.box)]) : null) ?? regionRowStarts(body, cellsOf));
+    fractionCells(body, separators, region.drawing.rules);
+    let cellsOf = body.map((line) => cellsBySeparators(line, separators));
+    // Full rules between the body's lines are the rows' edges too (a
+    // table whose rows are ruled in full and whose columns are not:
+    // langsci 385's Table 6 read a two-line label's second line as a
+    // row).
+    const inner = full.filter((y) => y < body[0].y && y > body[body.length - 1].y);
+    const starts0 =
+      oneRow(body, cellsOf, region, drawn) ? [0] : ((drawn.length > 0 ? ruledRowStarts(body, cellsOf, [...full, ...pieceEnds(drawn, region.box)]) : inner.length > 0 ? ruledRowStarts(body, cellsOf, inner) : null) ?? regionRowStarts(body, cellsOf));
+    const starts = stackedFormulas(body, starts0, separators, stacked);
+    // A stack that fails as one formula reads line by line, each line's
+    // own formula, before the cells are built from the lines (parse loop
+    // finding: the probability cheatsheet's table of distributions sets a
+    // PMF over its support in one cell, and the two read as one formula
+    // of two rows, whose \binom KaTeX sets in display style where the
+    // page sets it in text style: the check failed, and the cell lost
+    // both formulas).
+    if (stacked.size > 0) {
+      resolveZones(built, region.drawing);
+      for (const [it, zone] of stacked) if (it.zone && !it.zone.ok) it.zone = zone;
+    }
+    if (starts !== starts0) cellsOf = body.map((line) => cellsBySeparators(line, separators));
     const bodyRows = rowsOf(cellsOf, starts, columnCount);
     spanValues(bodyRows, body, starts, separators, ruledAt);
     rows.push(...spanCenteredLabels(bodyRows, starts.map((k) => body[k].y), full));
   }
   return segment(rows, headerRows || (rows.length > 1 && boldHeaderRows(rows) > 0 ? 1 : 0), bounds);
+}
+
+// A cell whose glyphs stand on two baselines with a rule drawn between
+// them, inside the cell, is a fraction, one formula read from its glyphs
+// at the line's size: a fraction's parts set small join their row's line
+// (parse loop finding: ICML's Table 1 read its exponents 1/2, 3/2, and
+// 1/3 as "12", "32", and "13"). A grid's cells read theirs in fractionCell.
+function fractionCells(body: Line[], separators: number[], rules: Rule[]) {
+  for (const line of body) {
+    for (let j = 0; j <= separators.length; j++) {
+      const items = line.items.filter((it) => columnAt(it.x + it.w / 2, separators) === j && it.str.trim() !== "");
+      if (items.length < 2 || items.some((it) => it.zone)) continue;
+      const ys = items.map((it) => it.y);
+      const [low, high] = [Math.min(...ys), Math.max(...ys)];
+      if (high - low < line.size * 0.4) continue;
+      const x1 = Math.min(...items.map((it) => it.x));
+      const x2 = Math.max(...items.map((it) => it.x + it.w));
+      const bar = rules.some((r) => r.dir === "h" && r.y1 > low && r.y1 < high && r.x1 < x2 + 1 && r.x2 > x1 - 1 && r.x1 > x1 - line.size && r.x2 < x2 + line.size);
+      const glyphs = items.flatMap((it) => it.glyphs ?? []);
+      if (!bar || glyphs.length === 0 || !items.every((it) => it.math || /^[\p{L}\p{N}+\-−=(),.!]{1,12}$/u.test(it.str.trim()))) continue;
+      const zone: MathZone = { glyphs, size: line.size, latex: "", ok: false, open: false };
+      for (const it of items) it.zone = zone;
+    }
+  }
+}
+
+// A row's formulas stacked on lines of their own (a binomial's rows, a
+// power's exponent over the line, a fraction's parts): a row whose label
+// cell is empty and whose lines hold math only, a line's pitch under the
+// row over it, is that row's; and each cell whose math the row's lines
+// stack is one formula, read from its glyphs (parse loop finding: the
+// probability cheatsheet's sampling table, n^k, n!/(n−k)!, and its
+// binomials, read "k n" and a row of a lone "k"). The row starts, a new
+// array when the cells changed.
+function stackedFormulas(body: Line[], starts: number[], separators: number[], stacked: Map<Item, MathZone | undefined>): number[] {
+  const mathOnly = (it: Item) => it.math || !/\p{L}{2,}/u.test(it.str);
+  const rowOf = (r: number, list: number[]) => body.slice(list[r], list[r + 1] ?? body.length);
+  const merged = starts.filter((k, r) => {
+    if (r === 0) return true;
+    const lines = rowOf(r, starts);
+    const above = body[k - 1];
+    const labelEmpty = lines.every((l) => l.items.every((it) => columnAt(it.x + it.w / 2, separators) > 0));
+    return !(labelEmpty && lines.every((l) => l.items.every(mathOnly)) && above.y - body[k].y < above.size * 1.6);
+  });
+  let changed = merged.length !== starts.length;
+  merged.forEach((_, r) => {
+    const lines = rowOf(r, merged);
+    for (let j = 1; j <= separators.length; j++) {
+      const parts = lines.map((l) => l.items.filter((it) => columnAt(it.x + it.w / 2, separators) === j)).filter((p) => p.length > 0);
+      const items = parts.flat();
+      if (parts.length < 2 || !items.every(mathOnly)) continue;
+      const glyphs = items.flatMap((it) => it.glyphs ?? []);
+      if (glyphs.length === 0) continue;
+      const zone: MathZone = { glyphs, size: Math.max(...items.map((it) => it.size)), latex: "", ok: false, open: false };
+      for (const it of items) {
+        stacked.set(it, it.zone);
+        it.zone = zone;
+      }
+      changed = true;
+    }
+  });
+  return changed ? [...merged] : starts;
 }
 
 // The column rules a region draws: vertical rules inside it, at one x

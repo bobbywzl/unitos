@@ -1,8 +1,8 @@
 {
  "total": {
-  "f1": 0.887,
-  "precision": 0.83,
-  "recall": 0.952
+  "f1": 0.919,
+  "precision": 0.864,
+  "recall": 0.982
  },
  "pages": {
   "100noticias.com-millones.html": {
@@ -22,13 +22,13 @@
   },
   "breakingbelizenews.com-paho.html": {
    "tp": 2,
-   "fp": 0,
+   "fp": 2,
    "fn": 0
   },
   "cubadebate.cu-sesiona.html": {
-   "tp": 1,
+   "tp": 3,
    "fp": 0,
-   "fn": 2
+   "fn": 0
   },
   "diaadia.com.pa-ulpiano.html": {
    "tp": 3,
@@ -62,7 +62,7 @@
   },
   "gofeminin.de.abnehmen.html": {
    "tp": 2,
-   "fp": 2,
+   "fp": 0,
    "fn": 0
   },
   "guetemala.com-nicole.html": {
@@ -87,7 +87,7 @@
   },
   "jamaica.gleaner.com-victims.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "jamaicaobserver.com-attacks.html": {
@@ -306,9 +306,9 @@
    "fn": 0
   },
   "banyuetan.org.1000200033136171577956287380194268_1.html": {
-   "tp": 0,
+   "tp": 3,
    "fp": 0,
-   "fn": 3
+   "fn": 0
   },
   "bibliothek2null.de.mai.html": {
    "tp": 3,
@@ -447,7 +447,7 @@
   },
   "netbits.us.stunnel_rsync.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "parcoabruzzo.it.58354.html": {
@@ -492,7 +492,7 @@
   },
   "shingon-reiki.de.schamanismus.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "silvias.net.wahlzensur.html": {
@@ -512,7 +512,7 @@
   },
   "sprechwaisen.com.sw082.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "spreeblick.com.habeck.html": {
@@ -536,9 +536,9 @@
    "fn": 2
   },
   "wehranlage-horka.de.887.html": {
-   "tp": 1,
+   "tp": 2,
    "fp": 0,
-   "fn": 2
+   "fn": 1
   },
   "womencantalksports.com-top10.html": {
    "tp": 3,
@@ -652,7 +652,7 @@
   },
   "d44c5ef50718437984dca47627dee96b.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "arsnova.thm.de.frag.html": {
@@ -666,9 +666,9 @@
    "fn": 0
   },
   "auto-presse.de-minisuv.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "auto-wirtschaft.ch-camping.html": {
    "tp": 3,
@@ -691,9 +691,9 @@
    "fn": 1
   },
   "battery-news.de.ultium-cells.html": {
-   "tp": 0,
+   "tp": 3,
    "fp": 0,
-   "fn": 3
+   "fn": 0
   },
   "beige.de.suedfrankreich.html": {
    "tp": 3,
@@ -707,7 +707,7 @@
   },
   "beyssonmanagement.com.innovation.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "bigdata.ypart.eu.datenerhebung.html": {
@@ -722,7 +722,7 @@
   },
   "blog.gaijinpot.com.chikan.html": {
    "tp": 4,
-   "fp": 2,
+   "fp": 0,
    "fn": 0
   },
   "leichtathletik-ostalbkreis.de.1952007.html": {
@@ -737,7 +737,7 @@
   },
   "blog.teufel.de.leistung.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "bloghaus.hypotheses.org.2320.html": {
@@ -752,7 +752,7 @@
   },
   "boingboing.net.millenials.html": {
    "tp": 2,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "bos-fahrzeuge.info-haubenfahrzeuge.html": {
@@ -812,12 +812,12 @@
   },
   "correctiv.org.zusage.html": {
    "tp": 2,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "crazy-julia.de.tipps.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "creativecommons.org.html": {
@@ -866,14 +866,14 @@
    "fn": 0
   },
   "de.happycoffee.org.sidamo.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "de.induux.com.energiezaehler.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "motor1.de-erwischt.html": {
    "tp": 3,
@@ -892,7 +892,7 @@
   },
   "denkanstoos.com.2012.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "denkmalpraxismoderne.de.studentendorf.html": {
@@ -932,7 +932,7 @@
   },
   "disfunctions.de.podcasts.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "ditb.de-Propheten.html": {
@@ -942,7 +942,7 @@
   },
   "djz.de-amoklauf.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "docs.docker.com.install.html": {
@@ -982,7 +982,7 @@
   },
   "edition.cnn.com-royal.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "elavegan.com-Peanut.html": {
@@ -1002,7 +1002,7 @@
   },
   "elpais.com.ciencia.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "emacspeak.blogspot.com.meta.html": {
@@ -1091,9 +1091,9 @@
    "fn": 0
   },
   "fluessiggas.de.dimethylether.html": {
-   "tp": 1,
-   "fp": 1,
-   "fn": 2
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
   },
   "fogsmagazin.com.outdoor.html": {
    "tp": 3,
@@ -1122,7 +1122,7 @@
   },
   "france.attc.org-privatisations.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "frau-sabienes.de.konsumsparen.html": {
@@ -1142,7 +1142,7 @@
   },
   "futurezone.at.lyft.html": {
    "tp": 2,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "gay.ch-papst.html": {
@@ -1157,12 +1157,12 @@
   },
   "geschichtedergegenwart.ch.foucault.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "github.blog.spiceland.html": {
    "tp": 4,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "github.com.yapapi.html": {
@@ -1182,7 +1182,7 @@
   },
   "gnaur.wordpress.com.moglichkeit.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 0,
    "fn": 0
   },
   "goodnight.at.konzert.html": {
@@ -1197,7 +1197,7 @@
   },
   "gothamist.com-plagues.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "greator.com.innerezufriedenheit.html": {
@@ -1217,7 +1217,7 @@
   },
   "grossefragen.wordpress.com.projekt.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "guten-tach.de-sperrung.html": {
@@ -1247,7 +1247,7 @@
   },
   "hausinfo.ch-kondenswasser.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 2,
    "fn": 0
   },
   "heavenlynnhealthy.de.mareenburk.html": {
@@ -1262,7 +1262,7 @@
   },
   "herrpfleger.de.fuelcell.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 0,
    "fn": 0
   },
   "hildesheimer-presse.de-hund.html": {
@@ -1287,12 +1287,12 @@
   },
   "industriemagazin.at-Luftfahrtbranche.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "insubordinant.wordpress.com.speed.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "internetchemie.info.Heliumkerne.html": {
@@ -1372,7 +1372,7 @@
   },
   "knowtechie.com.rally.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "kulturnews.de-Deutschland-Tour.html": {
@@ -1397,7 +1397,7 @@
   },
   "lapresse.tn.parite.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "larepublica.pe-minedu.html": {
@@ -1472,12 +1472,12 @@
   },
   "madame.lefigaro.fr.dintestin.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "majkaswelt.com.fashion.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "makronom.de-Ressourcenschutzgesetz.html": {
@@ -1492,7 +1492,7 @@
   },
   "meedia.de.freenet.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "mein-mmo.de-MMORPG.html": {
@@ -1516,9 +1516,9 @@
    "fn": 0
   },
   "mitundvoneinander.com-Frühling.html": {
-   "tp": 0,
+   "tp": 1,
    "fp": 1,
-   "fn": 1
+   "fn": 0
   },
   "mitvergnuegen.de.herbst.html": {
    "tp": 3,
@@ -1551,9 +1551,9 @@
    "fn": 0
   },
   "mpimet.de.klimasystem.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "murdeltas.wordpress.com.politcamp.html": {
    "tp": 3,
@@ -1567,7 +1567,7 @@
   },
   "mywakenews.wordpress.com.psyop.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "n-land.de-Simmelsdorf.html": {
@@ -1597,7 +1597,7 @@
   },
   "0a962f6bcd5649f7a7e6effa338df80d.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "newrepublic.com.neoliberalism.html": {
@@ -1606,9 +1606,9 @@
    "fn": 0
   },
   "next2games.de.anno.html": {
-   "tp": 0,
+   "tp": 3,
    "fp": 0,
-   "fn": 3
+   "fn": 0
   },
   "nextkabinett.wordpress.com.garden.html": {
    "tp": 3,
@@ -1631,9 +1631,9 @@
    "fn": 0
   },
   "nurmeinstandpunkt.wordpress.com.blogposting.html": {
-   "tp": 0,
+   "tp": 3,
    "fp": 0,
-   "fn": 3
+   "fn": 0
   },
   "nwx.new-work.se.digitaler-stress.html": {
    "tp": 3,
@@ -1682,17 +1682,17 @@
   },
   "pagesix.com.myers.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "pawszilla.com.celine.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "peppermynta.de-Strickmode.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "phys.org.tool.html": {
@@ -1801,9 +1801,9 @@
    "fn": 0
   },
   "rosa-mag.de.womanking.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 1,
-   "fn": 1
+   "fn": 0
   },
   "reporternewspapers.net-Brookhaven.html": {
    "tp": 3,
@@ -1836,14 +1836,14 @@
    "fn": 0
   },
   "security.googleblog.com.protection.html": {
-   "tp": 0,
-   "fp": 1,
-   "fn": 3
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
   },
   "seglerblog.stössenseer.de.sauber.html": {
-   "tp": 0,
+   "tp": 3,
    "fp": 0,
-   "fn": 3
+   "fn": 0
   },
   "selbermachen.de-wohngewaechshaus.html": {
    "tp": 3,
@@ -1856,9 +1856,9 @@
    "fn": 0
   },
   "nmb-media.de.ebay.html": {
-   "tp": 2,
-   "fp": 0,
-   "fn": 1
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
   },
   "skateboardmsm.de.dormhagen.html": {
    "tp": 4,
@@ -1887,7 +1887,7 @@
   },
   "stackoverflow.com.rust.html": {
    "tp": 2,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "stardewvalleywiki.com.penny.html": {
@@ -1917,7 +1917,7 @@
   },
   "swim.de-ga2.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 0,
    "fn": 0
   },
   "t3n.de-Laufzeit.html": {
@@ -1941,13 +1941,13 @@
    "fn": 0
   },
   "taz.de.siemens.html": {
-   "tp": 0,
-   "fp": 1,
-   "fn": 3
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
   },
   "tegernseerstimme.de-Klimavorreiter.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "0afd671fc2b64f3caa83a91537e8d343.html": {
@@ -1956,9 +1956,9 @@
    "fn": 0
   },
   "tell-review.de.heimweh.html": {
-   "tp": 2,
-   "fp": 1,
-   "fn": 1
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
   },
   "teslamag.de-Musk.html": {
    "tp": 3,
@@ -1976,9 +1976,9 @@
    "fn": 0
   },
   "theoriginalcopy.de.baby.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "thepointsguy.com.alaska.html": {
    "tp": 3,
@@ -1987,7 +1987,7 @@
   },
   "thepostpartumparty.com.nursery.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "threatpost.com.android.html": {
@@ -2027,7 +2027,7 @@
   },
   "uepo.de.glossar.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "uk.trustpilot.com.reviews.html": {
@@ -2051,9 +2051,9 @@
    "fn": 0
   },
   "uniqz.de.katzendecke.html": {
-   "tp": 0,
+   "tp": 3,
    "fp": 0,
-   "fn": 3
+   "fn": 0
   },
   "unzensuriert.at-Zeche.html": {
    "tp": 3,
@@ -2072,7 +2072,7 @@
   },
   "verfassungsblog.de.expertinnen.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 1,
    "fn": 0
   },
   "viconsortium.com-cocaine.html": {
@@ -2112,7 +2112,7 @@
   },
   "vorangedacht.de.kohleausstieg.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 0,
    "fn": 0
   },
   "archive.org-travaillent.html": {
@@ -2122,7 +2122,7 @@
   },
   "archive.org.dimido.de.marketing.html": {
    "tp": 3,
-   "fp": 0,
+   "fp": 1,
    "fn": 0
   },
   "archive.org.dzs-clan.de.html": {
@@ -2136,9 +2136,9 @@
    "fn": 0
   },
   "archive.org.he.xinhuanet.com.25340717.html": {
-   "tp": 0,
+   "tp": 3,
    "fp": 0,
-   "fn": 3
+   "fn": 0
   },
   "archive.org.tv-orange.de.future.html": {
    "tp": 3,
@@ -2241,9 +2241,9 @@
    "fn": 0
   },
   "_Ziemniaki na szóstej, surówka na dziesiątej_. Jak pomagać, żeby nie zaszkodzić_ [PORADNIK W PIGUŁCE].html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "0a6291ebbce449b3b04256b43c73e39d.html": {
    "tp": 3,
@@ -2262,18 +2262,18 @@
   },
   "wikimediafoundation.org.turkey.html": {
    "tp": 3,
-   "fp": 4,
+   "fp": 2,
    "fn": 0
   },
   "wildundhund.de-bonn.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "winfuture.de-NASA.html": {
-   "tp": 1,
+   "tp": 3,
    "fp": 0,
-   "fn": 2
+   "fn": 0
   },
   "wirtschaftspsychologie-aktuell.de.starken.html": {
    "tp": 3,
@@ -2312,7 +2312,7 @@
   },
   "1000things.at-Wellnessoasen.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 0,
    "fn": 0
   },
   "24horas.cl-segundo.html": {
@@ -2352,12 +2352,12 @@
   },
   "ad-magazin.de.wellness.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 0,
    "fn": 0
   },
   "adac.de.kindersitze.html": {
    "tp": 4,
-   "fp": 1,
+   "fp": 0,
    "fn": 1
   },
   "advents-shopping.de.weihnachtsmaerkte.html": {
@@ -2371,13 +2371,13 @@
    "fn": 0
   },
   "ahlen.de.reparaturcafe.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "alacarte.at-purzelbaum.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 3,
    "fn": 0
   },
   "alexander-klier.net.zeitphilosophie.html": {
@@ -2397,7 +2397,7 @@
   },
   "ambito.com-paritarias.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "amnesty.de-waffensysteme.html": {
@@ -2417,7 +2417,7 @@
   },
   "arbeit-und-arbeitsrecht.de.urlaub.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "arbeitsagentur.de-arbeitsmarkt.html": {
@@ -2451,9 +2451,9 @@
    "fn": 0
   },
   "automobilwoche.de-VW-Betriebsversammlung.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "autonews.ch-Tesla.html": {
    "tp": 3,
@@ -2476,19 +2476,19 @@
    "fn": 0
   },
   "axios.com.future.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "backenmachtgluecklich.de.zitronenkuchen.html": {
    "tp": 6,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "badische-zeitung.de-Wohnungssuche.html": {
-   "tp": 0,
+   "tp": 3,
    "fp": 0,
-   "fn": 3
+   "fn": 0
   },
   "baechli-bergsport.ch-lawinen.html": {
    "tp": 3,
@@ -2517,7 +2517,7 @@
   },
   "baumev.de.Transformationslabor.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "bbc.com.52241221.html": {
@@ -2571,9 +2571,9 @@
    "fn": 1
   },
   "biathlon-antholz.it-jubeln.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "biathlonword.com-chinesisch.html": {
    "tp": 3,
@@ -2612,7 +2612,7 @@
   },
   "bmel.de-zukunftsforum.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 2,
    "fn": 0
   },
   "bmfsfj.de-praesidentschaft.html": {
@@ -2632,12 +2632,12 @@
   },
   "bmz.de-schulze.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 0,
    "fn": 0
   },
   "bondyblog.fr.paris-8.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "bostonherald.com-Brothel-catering.html": {
@@ -2652,7 +2652,7 @@
   },
   "boxen1.com-ring-rückkehr.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 1,
    "fn": 0
   },
   "brandeins.de.wahresIch.html": {
@@ -2712,12 +2712,12 @@
   },
   "bundesrat.de-erinnerungen.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 0,
    "fn": 0
   },
   "caktusgroup.com.django.html": {
    "tp": 5,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "campograndenews.com.br-adolescente.html": {
@@ -2752,7 +2752,7 @@
   },
   "changelog.blog.zwischenbilanz.html": {
    "tp": 2,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "chefkoch.de.mandarinen.html": {
@@ -2772,7 +2772,7 @@
   },
   "chip.de.bestcrypt.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "chip.de.beef.html": {
@@ -2792,7 +2792,7 @@
   },
   "cicero.de.pandemie.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "clarin.com-albertofernandez.html": {
@@ -2826,9 +2826,9 @@
    "fn": 0
   },
   "d60caba9d12c467b9708ec8981cad8aa.html": {
-   "tp": 3,
-   "fp": 1,
-   "fn": 1
+   "tp": 4,
+   "fp": 2,
+   "fn": 0
   },
   "coopbuddy.de.bee.html": {
    "tp": 3,
@@ -2842,12 +2842,12 @@
   },
   "corkbeo.ie.level.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "correio24horas.com.br-PMS.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "correiobraziliense.com.br-poderes.html": {
@@ -2901,9 +2901,9 @@
    "fn": 0
   },
   "demokratiewebstatt.at.luft.html": {
-   "tp": 1,
+   "tp": 2,
    "fp": 1,
-   "fn": 2
+   "fn": 1
   },
   "derpapierplanet.de.juni.html": {
    "tp": 3,
@@ -2946,9 +2946,9 @@
    "fn": 0
   },
   "die-tagespost.de.Demut.html": {
-   "tp": 0,
-   "fp": 2,
-   "fn": 3
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
   },
   "digitale-exzellenz.de.gesundheitswesen.html": {
    "tp": 3,
@@ -2982,7 +2982,7 @@
   },
   "dtb-tennis.de-nominiert.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 0,
    "fn": 0
   },
   "dtb.de-kulturwandel.html": {
@@ -3012,7 +3012,7 @@
   },
   "Winda w chmurach _ Obyczaje _ Dwutygodnik _ Dwutygodnik.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "eawag.ch-elektron.html": {
@@ -3102,7 +3102,7 @@
   },
   "eluniversal.com-senador.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "emotion.de.selfcare.html": {
@@ -3121,9 +3121,9 @@
    "fn": 0
   },
   "energiezukunft.eu.bioenergie.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "erneuerbareenergien.de.seeboden.html": {
    "tp": 3,
@@ -3132,7 +3132,7 @@
   },
   "erzbstbstum-koeln.de-halskrankheiten.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "eurailpress.de-rekordniveau.html": {
@@ -3146,9 +3146,9 @@
    "fn": 0
   },
   "evref.ch-ökumene.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 1,
-   "fn": 1
+   "fn": 0
   },
   "d57cfadc540842ebb09971e28df123ec.html": {
    "tp": 3,
@@ -3187,7 +3187,7 @@
   },
   "feuerwehrverband.de-vorbereitungstagung.html": {
    "tp": 3,
-   "fp": 0,
+   "fp": 1,
    "fn": 0
   },
   "fifplay.com.settings.html": {
@@ -3207,7 +3207,7 @@
   },
   "finanztip.de.altersvorsorge.html": {
    "tp": 6,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "fisch-hitparade.de-alkohhol.html": {
@@ -3266,9 +3266,9 @@
    "fn": 0
   },
   "freitag.de.morgen.html": {
-   "tp": 0,
+   "tp": 3,
    "fp": 2,
-   "fn": 3
+   "fn": 0
   },
   "furche.at.achtsam.html": {
    "tp": 3,
@@ -3357,12 +3357,12 @@
   },
   "d73e0fa055834b2dbb2036ba27d46597.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "greenpeace.de.nachhaltigleben.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "gruen-digital.de.jahrestagung.html": {
@@ -3391,9 +3391,9 @@
    "fn": 0
   },
   "handball.ch-bruderduell.html": {
-   "tp": 1,
+   "tp": 3,
    "fp": 0,
-   "fn": 2
+   "fn": 0
   },
   "handelsblatt.com.grenzschliessungen.html": {
    "tp": 3,
@@ -3421,13 +3421,13 @@
    "fn": 0
   },
   "haus.de-Vorsatzschallung.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "haustiermagazin.com-katzenspielzeug.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 0,
    "fn": 0
   },
   "healthline.com.fat.html": {
@@ -3517,7 +3517,7 @@
   },
   "impulse.de.eltern.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "incurvy.de.wellness.html": {
@@ -3547,7 +3547,7 @@
   },
   "ingenieur.de.kernfusion.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "instyle.com.cancer.html": {
@@ -3676,9 +3676,9 @@
    "fn": 0
   },
   "landwirt.com.sensortechnik.html": {
-   "tp": 1,
+   "tp": 3,
    "fp": 0,
-   "fn": 2
+   "fn": 0
   },
   "laola1.at-barisic.html": {
    "tp": 3,
@@ -3692,12 +3692,12 @@
   },
   "latercera.com-laagenda.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "latimes.com.bloomberg.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "lavazza.de.qualita.html": {
@@ -3712,7 +3712,7 @@
   },
   "lbv.de-Bavaria.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 2,
    "fn": 0
   },
   "lecker.de.schneewittchen.html": {
@@ -3791,9 +3791,9 @@
    "fn": 0
   },
   "luxuriousmagazine.com.polo.html": {
-   "tp": 1,
+   "tp": 2,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "luxuryhaven.co.hyatt.html": {
    "tp": 3,
@@ -3827,7 +3827,7 @@
   },
   "management-circle.de.glasses.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 1,
    "fn": 0
   },
   "markeich.de.impressum.html": {
@@ -3836,9 +3836,9 @@
    "fn": 0
   },
   "martinruetter.com-Winter.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 1,
-   "fn": 1
+   "fn": 0
   },
   "mdavis.xyz.supermarket.html": {
    "tp": 3,
@@ -3847,7 +3847,7 @@
   },
   "mdr.de.autohaeuser.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "medicalnewstoday.com.318674.html": {
@@ -3901,9 +3901,9 @@
    "fn": 0
   },
   "mix1.de-clio.html": {
-   "tp": 1,
+   "tp": 3,
    "fp": 0,
-   "fn": 2
+   "fn": 0
   },
   "modepilot.de.duschkopf.html": {
    "tp": 2,
@@ -3951,9 +3951,9 @@
    "fn": 0
   },
   "0b96fc66e2c94f45a1b923ec9a31fcf2.html": {
-   "tp": 1,
+   "tp": 3,
    "fp": 0,
-   "fn": 2
+   "fn": 0
   },
   "nationalgeographic.co.uk.goats.html": {
    "tp": 3,
@@ -3962,7 +3962,7 @@
   },
   "nationalrail.co.uk.disruptions.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "natuerliche-jagd.de-seminar.html": {
@@ -3987,7 +3987,7 @@
   },
   "nestle-family-com-chicken.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 3,
    "fn": 0
   },
   "nestle-marktplatz.de-produkttest.html": {
@@ -4017,7 +4017,7 @@
   },
   "oekonomenstimme.org.keynes.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "oetker.de.bienenstich.html": {
@@ -4027,7 +4027,7 @@
   },
   "oetv.at-taucher.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "offshore-stiftung.de.offshore-windenergie.html": {
@@ -4057,7 +4057,7 @@
   },
   "outdoor-magazin.com-vanlife.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 2,
    "fn": 0
   },
   "pagina12.com.ar-suprema.html": {
@@ -4086,13 +4086,13 @@
    "fn": 0
   },
   "pcmag.com.platters.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "peta.de-veterinärämter.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "petri-heil-ch-hechte.html": {
@@ -4142,13 +4142,13 @@
   },
   "pluralsight.com.python.html": {
    "tp": 2,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "pocketpc.ch.auslieferung.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "politico.com.retirement.html": {
    "tp": 3,
@@ -4232,7 +4232,7 @@
   },
   "refinery29.com.single.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "regenbogenportal.de-intersex.html": {
@@ -4251,9 +4251,9 @@
    "fn": 0
   },
   "reiterrevue.de-heulage.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 2,
-   "fn": 1
+   "fn": 0
   },
   "rent-a-salesman.eu.auslagern.html": {
    "tp": 2,
@@ -4291,9 +4291,9 @@
    "fn": 0
   },
   "Unijne fundusze coraz bliżej. Sejm zagłosował _za_ - Polityka - rp.pl.html": {
-   "tp": 1,
-   "fp": 0,
-   "fn": 2
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
   },
   "rtl.de-lockdown.html": {
    "tp": 3,
@@ -4336,9 +4336,9 @@
    "fn": 0
   },
   "scmp.com.playbook.html": {
-   "tp": 0,
-   "fp": 1,
-   "fn": 3
+   "tp": 3,
+   "fp": 2,
+   "fn": 0
   },
   "selbst.de-wurmkiste.html": {
    "tp": 3,
@@ -4387,7 +4387,7 @@
   },
   "smava.de.privatkredit.html": {
    "tp": 6,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "Solarserver.de.solarthermisches kraftwerk dubai.html": {
@@ -4397,7 +4397,7 @@
   },
   "sonnenernergie.de.Windrebell.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "sonntag-sachsen.de.emanuel.html": {
@@ -4406,9 +4406,9 @@
    "fn": 0
   },
   "soundofscience.fr.1927.html": {
-   "tp": 1,
-   "fp": 0,
-   "fn": 2
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
   },
   "spdfraktion.de-Vizepräsidentin.html": {
    "tp": 3,
@@ -4437,7 +4437,7 @@
   },
   "spontis.de.jahrzehnt.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "sportnews.bz-peking.html": {
@@ -4502,7 +4502,7 @@
   },
   "swr.de-volleyball.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 0,
    "fn": 0
   },
   "tafelblog.de.europa.html": {
@@ -4527,7 +4527,7 @@
   },
   "tagesschau.de.rheinmetall.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "tagesspiegel.de.abstandsregeln.html": {
@@ -4567,17 +4567,17 @@
   },
   "tennisnet.com-ueberraschungen.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "theatlantic.com.disasters.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "thebalance.com.coinbase.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "theguardian.com.academics.html": {
@@ -4667,12 +4667,12 @@
   },
   "toptal.com.python.html": {
    "tp": 5,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "tour-magazin.de-unfall.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 0,
    "fn": 0
   },
   "trainingline-english.de.einzeltraining.html": {
@@ -4712,7 +4712,7 @@
   },
   "unocero.com.marcas.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "unsere-zeitung.at.inklusion.html": {
@@ -4722,7 +4722,7 @@
   },
   "unterwegsinberlin.de.friedrichsfelde.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 2,
    "fn": 0
   },
   "urania.de.freiheit.html": {
@@ -4741,9 +4741,9 @@
    "fn": 0
   },
   "vegolosi.it.climate.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "verbaende.com.2023.html": {
    "tp": 3,
@@ -4751,9 +4751,9 @@
    "fn": 0
   },
   "vergleich.de.leasen.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "verivox.de.finanzierung.html": {
    "tp": 3,
@@ -4792,7 +4792,7 @@
   },
   "0a24692a9ea846c1819bd6a5f92a8874.html": {
    "tp": 5,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "wbf.admin.ch.14093.html": {
@@ -4801,9 +4801,9 @@
    "fn": 0
   },
   "weinkenner.de-st.magdalener.html": {
-   "tp": 0,
-   "fp": 2,
-   "fn": 3
+   "tp": 3,
+   "fp": 0,
+   "fn": 0
   },
   "d90b19386e2b48559082547016cbe5ec.html": {
    "tp": 3,
@@ -4826,9 +4826,9 @@
    "fn": 0
   },
   "wind-energie.de.beschleunigung.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "wired.com.burn.html": {
    "tp": 3,
@@ -4847,7 +4847,7 @@
   },
   "wochenblatt.com-Heinen-Essen.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "wolfgangmichal.de.sorgfaltspflicht.html": {
@@ -4887,7 +4887,7 @@
   },
   "0a12df42d1764095989ab078ee0f940b.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "zfk.de.waermepumpen.html": {
@@ -4902,7 +4902,7 @@
   },
   "zooroyal.de.trixie.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "0a4a8ab61c054192b1ec70cc3570cf45.html": {
@@ -4927,7 +4927,7 @@
   },
   "yle.fi.3-11212601.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 0,
    "fn": 0
   },
   "youhadmeatgardening.com.lemon.html": {

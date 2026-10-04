@@ -128,6 +128,9 @@ const ITALIC: Partial<Record<MathFamily, Record<number, number>>> = {
     0x5a: 0.079,
   },
 };
+// The integral signs' italic correction in em (cmex10: ∫ and ∮, text and
+// display): how far right of the lower limit TeX sets the upper one.
+const INT_ITALIC: Record<number, number> = { 0x48: 0.194, 0x49: 0.444, 0x52: 0.194, 0x5a: 0.444 };
 const italicOf = (a: Atom): number => ((a.fam ? ITALIC[a.fam]?.[a.code] : undefined) ?? (a.fam === null && a.italic ? 0.1 : 0)) * a.size;
 
 function variantOf(base: string): Variant {
@@ -213,7 +216,10 @@ function atomsOf(glyphs: Glyph[]): { atoms: Atom[]; unknown: Glyph[] } {
 // A CJK character (kana, kanji, hangul) is a word's letter too, and text
 // only (parse loop finding: the Japanese "L = E⁻¹ として, A = LU" lost its
 // kana, failed the check, and was a crop).
-const TEXT_CHAR_RE = /^[A-Za-z0-9,.;:()[\]=+−–·!/<>\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u017F\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}ー]$/u;
+// A question mark is a formula's close mark, as "!" is (parse loop finding:
+// a textbook's "(X̂, Ŷ, Ẑ) → (R̂, Θ̂, φ̂)?" and "d/dt ⟨Ψ|Ψ⟩?" failed on
+// their "?", and each display was a crop).
+const TEXT_CHAR_RE = /^[A-Za-z0-9,.;:()[\]=+−–·!?/<>#%&\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u017F\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}ー]$/u;
 /** A letter a word in a formula holds: ASCII, Latin with a mark, or CJK.
     A ligature of TeX's text font (ff, fi, fl, ffi, ffl) is the letters it
     joins: \mathrm{eff} read \mathrm{e}ff. */
@@ -222,12 +228,34 @@ const LETTER_RE = /^(?:[A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u017F\p{Script=H
 const MARKED_RE = /[\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u017F\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}ー]/u;
 const CM_NAME_RE = /cm(r|mi|mib|sy|bsy|ex|bx|ti|ss|tt|sl)\d/i;
 
+// A text font's spacing accent over a formula's letter: mathpazo sets
+// \hat, \tilde, \bar, and \dot with Palatino's own accents (parse loop
+// finding: a quantum mechanics book's every X̂ |xyz⟩ lost its hat, and each
+// display with an operator was a crop).
+const TEXT_ACCENTS: Record<string, string> = {
+  "ˆ": "\\hat", "^": "\\hat", "˜": "\\tilde", "~": "\\tilde", "¯": "\\bar", "˙": "\\dot", "ˇ": "\\check", "˘": "\\breve", "´": "\\acute", "`": "\\grave", "¨": "\\ddot",
+};
+
 function textAtom(g: Glyph): Atom | null {
   const ch = g.unicode;
   // A math font's glyph no table reads (MathTime's big parenthesis) is no
   // text: read as a small one, it made a row of its own over its formula.
   // Nor is a glyph of a font with no name: bbm's 𝕜 reads "k" (glyphs.ts).
-  if (!TEXT_CHAR_RE.test(ch) || CM_NAME_RE.test(g.base) || isUnreadMath(g) || isUnnamedFont(g.base)) return null;
+  // Its digit is the one exception: dsfont's and bbm's double-struck
+  // digits (\mathds{1}, \mathbbm{1}) are Metafont bitmaps that read as a
+  // plain digit, and no other digit is set in a font with no name. It
+  // reads as \mathbb (parse loop finding: a quantum mechanics book's
+  // identity operator, 1̂ = ∫ |r⟩⟨r| d³r, left every display that held it
+  // a crop).
+  if (isUnnamedFont(g.base) && /^[0-9]$/.test(ch)) {
+    return { fam: null, code: g.code, entry: null, tex: `\\mathbb{${ch}}`, cls: "ord", size: g.size, x1: g.x, x2: g.x + Math.max(g.w, 0), yb: g.y, top: g.y + 0.69 * g.size, bottom: g.y, upright: false };
+  }
+  if (CM_NAME_RE.test(g.base) || isUnreadMath(g) || isUnnamedFont(g.base)) return null;
+  const accent = TEXT_ACCENTS[ch];
+  if (accent) {
+    return { fam: null, code: g.code, entry: null, tex: accent, cls: "accent", size: g.size, x1: g.x, x2: g.x + Math.max(g.w, 0), yb: g.y, top: g.y + 0.69 * g.size, bottom: g.y, upright: false };
+  }
+  if (!TEXT_CHAR_RE.test(ch)) return null;
   const [height, depth] = /[gjpqy]/.test(ch)
     ? [0.45, 0.22]
     : /[acemnorsuvwxz]/.test(ch)
@@ -245,7 +273,7 @@ function textAtom(g: Glyph): Atom | null {
     ? "punct"
     : /[([]/.test(ch)
       ? "open"
-      : /[)\]!]/.test(ch)
+      : /[)\]!?]/.test(ch)
         ? "close"
         : /[=<>]/.test(ch)
           ? "rel"
@@ -262,7 +290,7 @@ function textAtom(g: Glyph): Atom | null {
     code: g.code,
     entry: null,
     // KaTeX draws "-" in a formula as the minus sign.
-    tex: bold ? `\\${italic ? "boldsymbol" : "mathbf"}{${ch}}` : ch === "−" || ch === "–" ? "-" : ch === "·" ? "\\cdot" : ch,
+    tex: bold ? `\\${italic ? "boldsymbol" : "mathbf"}{${ch}}` : ch === "−" || ch === "–" ? "-" : ch === "·" ? "\\cdot" : /[#%&]/.test(ch) ? `\\${ch}` : ch,
     cls,
     size: g.size,
     x1: g.x,
@@ -336,7 +364,32 @@ function assemblePieces(atoms: Atom[], rules: Rule[]): Atom[] {
   // row of an aligned display) are no absolute value.
   const bars = fences.filter((a) => a.cls === "bar").sort(byX);
   for (const tex of ["|", "\\|"]) {
-    const kind = bars.filter((b) => b.tex === tex);
+    let kind = bars.filter((b) => b.tex === tex);
+    // Bars set against each other with nothing between them are nested
+    // (\left| \left| a matrix \right| \right|: a determinant inside an
+    // absolute value): a run of them on the left pairs with the run on the
+    // right, the inner pair closing first (parse loop finding: the
+    // probability cheatsheet's ||a b; c d|| = |ad − bc| paired each outer bar
+    // with the inner bar beside it, and the display was a crop).
+    const runs: Atom[][] = [];
+    for (const b of kind) {
+      const last = runs[runs.length - 1];
+      const prev = last?.[last.length - 1];
+      const between = (a: Atom) => prev !== undefined && a.x2 > prev.x1 && a.x1 < b.x2 && a.yb < prev.top && a.yb > prev.bottom;
+      if (prev && b.x1 - prev.x2 < 0.35 * b.size && !rest.some(between)) last.push(b);
+      else runs.push([b]);
+    }
+    const overlap = (a: Atom, b: Atom) => Math.min(a.top, b.top) > Math.max(a.bottom, b.bottom);
+    for (let i = 0; i + 1 < runs.length; i++) {
+      const [a, b] = [runs[i], runs[i + 1]];
+      if (a.length < 2 || a.length !== b.length || !overlap(a[0], b[0])) continue;
+      a.forEach((d, k) => {
+        d.cls = "open";
+        b[b.length - 1 - k].cls = "close";
+      });
+      kind = kind.filter((d) => !a.includes(d) && !b.includes(d));
+      i++;
+    }
     for (let i = 0; i + 1 < kind.length; ) {
       if (Math.min(kind[i].top, kind[i + 1].top) > Math.max(kind[i].bottom, kind[i + 1].bottom)) {
         kind[i].cls = "open";
@@ -456,14 +509,20 @@ function fuseComposites(input: Atom[]): Atom[] {
       // stacked (\vdots) or on a diagonal (\ddots). LaTeX sets \vdots and
       // \ddots in the text's roman font: a page whose text font is no
       // Computer Modern stacks the text font's periods (parse loop finding:
-      // mml-book's Charter periods left (2.70) and (2.71) crops).
+      // mml-book's Charter periods left (2.70) and (2.71) crops). It stacks
+      // \vdots' periods 4 pt apart and \ddots' 3 pt, whatever the size: 0.4
+      // and 0.3 em at 10 pt, 0.57 and 0.43 em at 7 pt (parse loop finding:
+      // the CS 229 refresher's D matrix, set at 8 pt, stood its ⋮ 0.502 em
+      // apart, over the bound of 0.5; read as three periods they made two
+      // rows of their own, the last row joined the one over it, and the
+      // display was a crop).
       if (a.tex === "." || a.tex === "\\cdot") {
         const next = (p: Atom, dx: [number, number], dy: [number, number]) =>
           out.find((b) => b !== p && b.tex === a.tex && b.x1 - p.x1 >= dx[0] * em && b.x1 - p.x1 <= dx[1] * em && p.yb - b.yb >= dy[0] * em && p.yb - b.yb <= dy[1] * em);
         const shapes: [string, [number, number], [number, number]][] = [
           [a.tex === "." ? "\\ldots" : "\\cdots", [0.2, 0.6], [-0.03, 0.03]],
-          ["\\vdots", [-0.05, 0.05], [0.3, 0.5]],
-          ["\\ddots", [0.3, 0.5], [0.2, 0.4]],
+          ["\\vdots", [-0.05, 0.05], [0.3, 0.6]],
+          ["\\ddots", [0.3, 0.5], [0.2, 0.45]],
         ];
         for (const [tex, dx, dy] of shapes) {
           if (tex !== "\\ldots" && tex !== "\\cdots" && a.fam !== "ot1" && a.fam !== null) continue;
@@ -499,6 +558,8 @@ function arrowRuns(atoms: Atom[]): Atom[] {
   const out = [...atoms];
   const shafts = out.filter((a) => a.tex === "-" && a.fam === "oms");
   const bars = out.filter((a) => a.tex === "=");
+  // Each stretchy single arrow made here, its way and its labels.
+  const stretchy = new Map<Atom, { right: boolean; above: string; below: string }>();
   for (const head of out.filter((a) => /^\\(right|left|Right|Left)arrow$/.test(a.tex))) {
     const em = head.size;
     const right = /^\\(right|Right)/.test(head.tex);
@@ -538,10 +599,40 @@ function arrowRuns(atoms: Atom[]): Atom[] {
       const above = label.length ? textLabel(label) ?? linear(fuseComposites(label.map((b) => ({ ...b })))) : "";
       const below = labelBelow.length ? `[${linear(fuseComposites(labelBelow.map((b) => ({ ...b }))))}]` : "";
       made = node([...run, ...label, ...labelBelow], `\\x${name}${below}{${above}}`, head.yb, em, { cls: "rel" });
+      if (!double) stretchy.set(made, { right, above, below: below.slice(1, -1) });
       for (const b of [...label, ...labelBelow]) out.splice(out.indexOf(b), 1);
     } else continue;
     for (const r of run) out.splice(out.indexOf(r), 1);
     out.push(made);
+  }
+  // Two long arrows set one over the other, pointing the opposite ways and
+  // of one width, are one stretchy pair: a right arrow over a left one is
+  // \xrightleftarrows, its label over the upper arrow and under the lower
+  // one. Read apart, the upper arrow stood on a row of its own, and the
+  // symbol after the pair was read as its subscript (parse loop finding:
+  // Springer's chains A₁ ⇄ A₂ ⇄ … with d_A over and under each arrow read
+  // as \underset{\xleftarrow[d_A]{}}{\xrightarrow{d_A}}_{A_2}, and the
+  // display was a crop). The pair stands on the lower arrow's baseline,
+  // the row the symbols beside it stand on.
+  for (const [upper, up] of stretchy) {
+    if (!out.includes(upper) || !up.right) continue;
+    const em = upper.size;
+    const lower = [...stretchy.keys()].find(
+      (b) =>
+        b !== upper &&
+        out.includes(b) &&
+        !stretchy.get(b)!.right &&
+        upper.yb > b.yb &&
+        upper.yb - b.yb < 1.2 * em &&
+        Math.abs(b.x1 - upper.x1) < 0.3 * em &&
+        Math.abs(b.x2 - upper.x2) < 0.3 * em,
+    );
+    if (!lower) continue;
+    const above = up.above;
+    const below = stretchy.get(lower)!.below;
+    out.splice(out.indexOf(upper), 1);
+    out.splice(out.indexOf(lower), 1);
+    out.push(node([upper, lower], `\\xrightleftarrows${below ? `[${below}]` : ""}{${above}}`, lower.yb, lower.size, { cls: "rel" }));
   }
   return out;
 }
@@ -631,12 +722,59 @@ function braces(atoms: Atom[], rules: Rule[], used: Set<Rule>): Atom[] {
         (over ? b.bottom >= top - 0.2 * em && b.bottom < top + 1.5 * em : b.top <= bottom + 0.2 * em && b.top > bottom - 1.5 * em),
     );
     if (far.length === 0) continue;
+    // The label is one row: the baseline nearest the brace. A glyph of a
+    // later row within a line and a half of the brace is that row's (parse
+    // loop finding: GeoTopo p. 20 sets "⇒ ⋃ ⋃ W_i(x_j, y_i) = X × Y" 1.3 em
+    // under an underbrace's label, its ⋃ reaching up to the label; the
+    // row read as the label's second line, and the display was a crop).
+    if (near.length > 1) {
+      const row = over ? Math.min(...near.map((b) => b.yb)) : Math.max(...near.map((b) => b.yb));
+      const same = near.filter((b) => Math.abs(b.yb - row) < 0.7 * em);
+      near.splice(0, near.length, ...same);
+    }
+    // A label wider than its brace runs past the brace's ends: the word
+    // goes on at the label's size on the label's baseline, each letter
+    // against the last (parse loop finding: the CS 229 refresher's
+    // "Antisymmetric" under a brace the width of (A − A^T)/2 kept its
+    // middle, its "A" became the "+"'s subscript, its "ric" a second
+    // label, and the display was a crop).
+    if (near.length > 0) {
+      const ref = near.reduce((p, q) => (q.x2 - q.x1 > p.x2 - p.x1 ? q : p));
+      const onLabel = (b: Atom) => !near.includes(b) && !g.includes(b) && !far.includes(b) && Math.abs(b.yb - ref.yb) < 0.15 * ref.size && Math.abs(b.size - ref.size) < 0.05 * ref.size;
+      for (const dir of [-1, 1]) {
+        for (;;) {
+          const edge = dir < 0 ? Math.min(...near.map((b) => b.x1)) : Math.max(...near.map((b) => b.x2));
+          const gap = (b: Atom) => (dir < 0 ? edge - b.x2 : b.x1 - edge);
+          // A label of several words goes on past a word space too (GeoTopo
+          // p. 20's "Ein grün-oranges Kästchen" lost "Ein" before the
+          // space, and the display was a crop).
+          const next = out.filter((b) => onLabel(b) && gap(b) > -0.05 * b.size && gap(b) < 0.45 * b.size).sort((p, q) => gap(p) - gap(q))[0];
+          if (!next) break;
+          near.push(next);
+        }
+      }
+    }
     const farRules = rules.filter((r) => !used.has(r) && r.dir === "h" && r.x1 >= x1 - 0.2 * em && r.x2 <= x2 + 0.2 * em && (over ? r.y1 < bottom : r.y1 > top));
     for (const r of farRules) used.add(r);
-    const body = linear(structure(far, farRules, 1));
+    // The brace's baseline is its body's once its fractions are read: a
+    // fraction that opens the content stands its numerator leftmost (parse
+    // loop finding: the thesis's (1.41) set ½H(1/3, 1/6) under an
+    // overbrace, the brace took the numerator's baseline, stood off the
+    // row, and the display was a crop).
+    const structured = structure(far, farRules, 1);
+    const body = linear(structured);
     const label = near.length ? linear(near.map((b) => ({ ...b }))) : "";
     const tex = over ? `\\overbrace{${body}}${label ? `^{${label}}` : ""}` : `\\underbrace{${body}}${label ? `_{${label}}` : ""}`;
-    const made = node([...g, ...far, ...near], tex, mainBaseline(far), maxSize(far));
+    // The node's width is the brace's and its content's: a label wider
+    // than the brace hangs past it, as a wide script does, and takes no
+    // room from the scripts of the symbol before (GeoTopo p. 20's "Ein"
+    // reached under the ⋃'s limit "m(x_j)", and the limit's "j" and ")"
+    // had no base).
+    const span = [...g, ...far];
+    const made = node([...g, ...far, ...near], tex, mainBaseline(structured), maxSize(far), {
+      x1: Math.min(...span.map((b) => b.x1)),
+      x2: Math.max(...span.map((b) => b.x2)),
+    });
     out = out.filter((b) => !g.includes(b) && !far.includes(b) && !near.includes(b));
     out.push(made);
   }
@@ -711,7 +849,13 @@ function structure(atoms: Atom[], rules: Rule[], depth = 0): Atom[] {
       const idx = index.length ? `[${linear(structure(index, [], depth + 1))}]` : "";
       pool = pool.filter((a) => a !== rad && !inner.includes(a) && !index.includes(a));
       const size = inner.length ? maxSize(inner) : rad.size;
-      nodes.push(node([rad, ...inner], `\\sqrt${idx}{${body}}`, base, size, { x2: r.x2, top: y + r.thickness }));
+      // A radicand that is one fraction says the fraction's style as a
+      // fraction alone would (fracPart; restyle): in a cell of cases, a
+      // root of a fraction whose parts are the text's size is \sqrt{\dfrac…}
+      // (parse loop finding: a quantum mechanics book's (24.21), cases
+      // with √(12/(7πR³)) in a cell, read its parts a level small).
+      const lead = depth === 0 && built.length === 1 && /^\\(frac|binom)\b/.test(built[0].tex);
+      nodes.push(node([rad, ...inner], `\\sqrt${idx}{${body}}`, base, size, { x2: r.x2, top: y + r.thickness, ...(lead ? { fracPart: size } : {}) }));
       continue;
     }
     // A fraction bar: glyphs above and below within its extent.
@@ -720,9 +864,43 @@ function structure(atoms: Atom[], rules: Rule[], depth = 0): Atom[] {
     // A fraction in a script, its bar short, measures its gaps at its
     // parts' size: the subscript beside an exponent's fraction is no part
     // of it (v_k^{2/p}).
-    const unit = r.x2 - r.x1 < 0.6 * em ? Math.min(em, 1.5 * (r.x2 - r.x1)) : em;
-    const above = chain(pool.filter((a) => within(a) && a.bottom >= y - 0.05 * em), y, 1, em, rest, unit);
-    const below = chain(pool.filter((a) => within(a) && a.top <= y + 0.05 * em), y, -1, em, rest, unit);
+    // So does a fraction whose parts next to its bar are set smaller than
+    // the formula (a matrix of ∂u/∂x in a scriptsize Jacobian), its rows'
+    // baselines too: a matrix row of them stands 0.9 em of its own under
+    // the row over it, and the upper fraction took the lower one as its
+    // denominator (parse loop finding: the probability cheatsheet's
+    // ∂(u,v)/∂(x,y) matrix).
+    const unit0 = r.x2 - r.x1 < 0.6 * em ? Math.min(em, 1.5 * (r.x2 - r.x1)) : em;
+    const nearest = (list: Atom[], dir: 1 | -1) => {
+      const side = list.filter((a) => !hangingFamily(a.fam) && (dir > 0 ? a.bottom - y : y - a.top) < 0.9 * em);
+      return side.length > 0 ? maxSize(side) : em;
+    };
+    // A sized delimiter hangs from its origin by the depth of cmex10's
+    // glyph: another font's (txfonts' txex) is shorter, and its box,
+    // so measured, reaches past the bar. Its middle says its side, when
+    // the box crosses the bar by half an em at most (parse loop finding:
+    // a statistics book's (11.17) and (11.69), set in txfonts, left the
+    // numerator's \Big( … \Big) and \Big/ out of it, and both were crops).
+    const sized = (a: Atom) => hangingFamily(a.fam) && (a.cls === "open" || a.cls === "close" || a.entry?.size !== undefined);
+    const ups = pool.filter((a) => within(a) && (a.bottom >= y - 0.05 * em || (sized(a) && (a.top + a.bottom) / 2 > y + 0.25 * em && a.bottom > y - 0.5 * em)));
+    const downs = pool.filter((a) => within(a) && (a.top <= y + 0.05 * em || (sized(a) && (a.top + a.bottom) / 2 < y - 0.25 * em && a.top < y + 0.5 * em)));
+    const small = Math.max(nearest(ups, 1), nearest(downs, -1));
+    const partEm = small < em * 0.8 ? small : em;
+    const unit = Math.min(unit0, partEm);
+    let above = chain(ups, y, 1, partEm, rest, unit, r);
+    let below = chain(downs, y, -1, partEm, rest, unit, r);
+    // A fraction's parts are set at one size: glyphs on one side of a bar
+    // set smaller than the other side's by more than a sixth are no part
+    // of it, but the scripts of a neighbor (parse loop finding: Springer's
+    // (17) stacks \overline{A}_{K-1} over \overline{A}_K, and the K of the
+    // upper entry's subscript stood over the lower entry's bar, which read
+    // \frac{K}{A}).
+    const standing = (list: Atom[]) => list.filter((a) => !hangingFamily(a.fam));
+    if (above.length && below.length && standing(above).length && standing(below).length) {
+      const [up, down] = [maxSize(standing(above)), maxSize(standing(below))];
+      if (up < down * 0.85) above = [];
+      else if (down < up * 0.85) below = [];
+    }
     if (above.length && below.length) {
       used.add(r);
       read.add(r);
@@ -802,9 +980,22 @@ function structure(atoms: Atom[], rules: Rule[], depth = 0): Atom[] {
 // the part's size on another baseline than the part's: the rows of cases
 // set their fractions close, and one row's denominator stands just over the
 // next row's numerator (arXiv 2502.02648 (A2) read one inside the other).
-function chain(cands: Atom[], y: number, dir: 1 | -1, em: number, rules: Rule[], unit = em): Atom[] {
+// A rule in the gap that repeats the rule chained from (bar) is no
+// fraction's: it spans the same points, and the glyph across it stands off
+// it as the first glyph taken stands off the bar. The chain ends at it
+// (parse loop finding: Springer's (17) sets a column vector of
+// \overline{A}_i, each entry's bar 0.13 em over it, a row apart; the
+// first bar's chain took three rows, the bars under it read nothing, and
+// the display was a crop).
+function chain(cands: Atom[], y: number, dir: 1 | -1, em: number, rules: Rule[], unit = em, bar?: { x1: number; x2: number }): Atom[] {
   const taken: Atom[] = [];
   let edge = y;
+  const repeats = (r: Rule, a: Atom) => {
+    if (!bar || taken.length === 0 || Math.abs(r.x1 - bar.x1) > 0.1 * em || Math.abs(r.x2 - bar.x2) > 0.1 * em) return false;
+    const first = taken[0];
+    const off = (q: number, b: Atom) => (dir > 0 ? b.bottom - q : q - b.top);
+    return Math.abs(off((r.y1 + r.y2) / 2, a) - off(y, first)) < 0.04 * em;
+  };
   // The baseline of the part's glyphs at its size, since the last rule.
   let row: number | null = null;
   const sorted = cands.sort((a, b) => (dir > 0 ? a.bottom - b.bottom : b.top - a.top));
@@ -812,9 +1003,19 @@ function chain(cands: Atom[], y: number, dir: 1 | -1, em: number, rules: Rule[],
     const gap = dir > 0 ? a.bottom - edge : edge - a.top;
     if (gap > 0.9 * em) break;
     const near = dir > 0 ? a.bottom : a.top;
-    const barred = rules.some(
-      (r) => r.x1 < a.x2 && r.x2 > a.x1 && (r.y1 + r.y2) / 2 > Math.min(edge, near) && (r.y1 + r.y2) / 2 < Math.max(edge, near),
+    // A rule between the part's row and the glyph is a fraction's bar
+    // inside the part: the glyph across it is the fraction's other part,
+    // on a row of its own (parse loop finding: the thesis's (1.41) sets
+    // ½H(1/3, 1/6) under an overbrace; the chain took the numerator first,
+    // made its baseline the row, and the "2" under the bar stood too far
+    // from it once the parenthesis had moved the edge past the bar, so the
+    // display was a crop).
+    const from = row === null ? edge : dir > 0 ? Math.min(edge, row) : Math.max(edge, row);
+    const between = rules.filter(
+      (r) => r.x1 < a.x2 && r.x2 > a.x1 && (r.y1 + r.y2) / 2 > Math.min(from, near) && (r.y1 + r.y2) / 2 < Math.max(from, near),
     );
+    if (between.some((r) => repeats(r, a))) break;
+    const barred = between.length > 0;
     if (taken.length > 0 && gap > 0.25 * unit && !barred) break;
     // (A radical's sign and a sized delimiter hang from their origins: no baseline.)
     const full = a.size >= em * 0.9 && !hangingFamily(a.fam) && a.cls !== "radical" && a.cls !== "piece";
@@ -854,7 +1055,12 @@ function accents(atoms: Atom[]): Atom[] {
     if (bases.length === 0) continue;
     const pick = wide ? bases : [bases.sort((p, q) => Math.abs(cx(p) - cx(acc)) - Math.abs(cx(q) - cx(acc)))[0]];
     const body = linear(pick.map((b) => ({ ...b })));
-    const made = node(pick, `${acc.tex}{${body}}`, pick[0].yb, pick[0].size);
+    // A text font's macron drawn on an italic h's own baseline, through
+    // its ascender, is ħ: mathpazo sets \hbar as the macron kerned back
+    // over the h, never raised (parse loop finding: a quantum mechanics
+    // book's every ħ read \bar{h}).
+    const hbar = acc.tex === "\\bar" && pick.length === 1 && pick[0].tex === "h" && !pick[0].upright && Math.abs(acc.yb - pick[0].yb) < 0.1 * em;
+    const made = node(pick, hbar ? "\\hbar" : `${acc.tex}{${body}}`, pick[0].yb, pick[0].size);
     for (const b of pick) out.splice(out.indexOf(b), 1);
     out.splice(out.indexOf(acc), 1, made);
   }
@@ -965,14 +1171,23 @@ function ruledArrayOf(atoms: Atom[], vr: Rule[], rules: Rule[], em: number): Ato
 // row under it may stand half an em lower (parse loop finding: the CS 229
 // refresher's matrices set rows tight, the ⋮ row's baseline 0.8 em over
 // the last row's, and ⋮ read as the last row's superscript).
-function rowLines(atoms: Atom[], unit: number): number[] {
+function rowLines(atoms: Atom[], unit: number, fenced = false): number[] {
   const at = (a: Atom) => Math.round(a.yb * 2) / 2;
   const ys = [...new Set(atoms.map(at))].sort((p, q) => q - p);
   const dotsOnly = (y: number) => atoms.every((a) => at(a) !== y || a.tex === "\\vdots" || a.tex === "\\ddots");
+  // Between fences, two baselines with an atom over an atom (half the
+  // narrower's width or more) are two rows however close: a matrix's
+  // entries stand in a grid, and no cell holds two (parse loop finding:
+  // the CS 229 refresher's x = (x_1; x_2; ⋮; x_n) stands x_2 0.58 em under
+  // x_1, and read as one row the display was a crop). An unfenced display
+  // keeps the step: an arrow's label stands over the arrow, on no row of
+  // its own.
+  const stacked = (y1: number, y2: number) =>
+    fenced && atoms.some((a) => at(a) === y1 && atoms.some((b) => at(b) === y2 && overlapX(a, b) >= 0.5 * Math.min(a.x2 - a.x1, b.x2 - b.x1)));
   const lines: number[] = [];
   for (const y of ys) {
     const last = lines[lines.length - 1];
-    if (last !== undefined && last - y < (dotsOnly(last) ? 0.5 : 0.9) * unit) continue;
+    if (last !== undefined && last - y < (dotsOnly(last) ? 0.5 : 0.9) * unit && !stacked(last, y)) continue;
     lines.push(y);
   }
   return lines;
@@ -1000,18 +1215,56 @@ function splitRows(atoms: Atom[], lines: number[]): Atom[][] {
   // it stands nearer the row over (GeoTopo p19's "n" over ⋃ read as a
   // subscript of the row above's last word).
   // An integral sets its limits beside it, as scripts.
+  // A limit set between two operators, under one and over the other, is
+  // the nearer's: TeX sets a limit a fixed small gap from its own
+  // operator, and the next aligned row's operator stands a row's space
+  // past that (parse loop finding: in a proof's chain of three rows,
+  // "a ∈ 𝒜(s)" under the second row's ∑ read its middle as the third
+  // row's upper limit, and the display was a crop). The gap is the
+  // limit's, not the glyph's: the glyphs on the atom's baseline within a
+  // limit's width stand as one run, and the run's top is what the gap
+  // under an operator is measured to, its bottom the gap over one (a
+  // comma hangs low on its run, and alone it stood nearer the next
+  // row's ∑ top than its own ∑'s bottom).
   const ops = full.filter((o) => o.cls === "op" && hangingFamily(o.fam) && o.entry?.display && !INTEGRAL_RE.test(o.tex));
-  const limitOf = (a: Atom) =>
-    ops.find(
-      (o) =>
-        cx(a) > o.x1 &&
-        cx(a) < o.x2 &&
-        ((a.bottom >= o.top - 0.2 * em && a.bottom - o.top < 0.8 * em) || (a.top <= o.bottom + 0.2 * em && o.bottom - a.top < 0.8 * em)),
-    );
+  const limitOf = (a: Atom) => {
+    const run = atoms.filter((c) => !rowOf.has(c) && Math.abs(c.yb - a.yb) < 0.3 * Math.max(a.size, c.size) && Math.abs(cx(c) - cx(a)) < 2 * em);
+    const top = Math.max(a.top, ...run.map((c) => c.top));
+    const bottom = Math.min(a.bottom, ...run.map((c) => c.bottom));
+    let best: Atom | undefined;
+    let gap = Infinity;
+    for (const o of ops) {
+      if (cx(a) <= o.x1 || cx(a) >= o.x2) continue;
+      const over = a.bottom >= o.top - 0.2 * em && a.bottom - o.top < 0.8 * em ? Math.max(0, bottom - o.top) : Infinity;
+      const under = a.top <= o.bottom + 0.2 * em && o.bottom - a.top < 0.8 * em ? Math.max(0, o.bottom - top) : Infinity;
+      const d = Math.min(over, under);
+      if (d < gap) {
+        gap = d;
+        best = o;
+      }
+    }
+    return best;
+  };
+  // A script stands hard against its base (TeX sets it at the base's edge,
+  // an italic correction past it at most), a script's shift under or over
+  // the base's baseline; a limit stands centered on its operator. A small
+  // glyph set as a full glyph's script and centered on no operator is the
+  // glyph's, whatever operator stands under or over it (parse loop
+  // finding: in a proof's chain of three aligned rows, the π of the first
+  // row's 𝔼_π stood over the second row's ∑, 0.7 em off its center, and
+  // read as the ∑'s upper limit; the first row read alone, and the rest
+  // as a display of their own).
+  const scriptBase = (a: Atom) =>
+    full
+      .filter((b) => b.cls !== "op" && !hangingFamily(b.fam) && a.size < b.size * 0.9 && a.x1 >= b.x2 - 0.05 * em && a.x1 <= b.x2 + 0.1 * em && a.yb > b.yb - 0.45 * em && a.yb < b.yb + 0.7 * em)
+      .sort((p, q) => Math.abs(a.x1 - p.x2) - Math.abs(a.x1 - q.x2))[0];
+  const centered = (a: Atom) => ops.some((o) => Math.abs(cx(a) - cx(o)) < 0.2 * em);
   for (const a of atoms) {
     let row = rowOf.get(a);
-    const op = row === undefined ? limitOf(a) : undefined;
+    const base = row === undefined ? scriptBase(a) : undefined;
+    const op = row === undefined && !(base && !centered(a)) ? limitOf(a) : undefined;
     if (op) row = rowOf.get(op);
+    else if (base) row = rowOf.get(base);
     if (row === undefined) {
       const base = full
         .filter((b) => a.x1 >= b.x2 - 0.05 * em && a.x1 <= b.x2 + 0.2 * em && a.yb > b.yb - 0.5 * em && a.yb < b.yb + 0.7 * em)
@@ -1026,12 +1279,19 @@ function splitRows(atoms: Atom[], lines: number[]): Atom[][] {
 // Columns: gaps of 0.9 em or more open in every row that splits two cells,
 // or of 9.5 pt: TeX sets an array's columns 10 pt apart at any text size
 // (a 12 pt paper's bmatrix read each row as one cell).
-function columnCuts(rows: Atom[][], em: number, least = Math.min(0.9 * em, 9.5)): number[] {
+// Between fences, three rows or more, a channel narrower than that but
+// over a relation's space (0.28 em) parts two columns when the cells on
+// each side of it stand centered on one x down every row, as a matrix's
+// columns do and a sum's terms do not (parse loop finding: Springer's
+// (17) sets its tridiagonal S with 0.3 em between a column's "−2" and
+// the next column's "1", and each row read as one cell of spaced text).
+function columnCuts(rows: Atom[][], em: number, least = Math.min(0.9 * em, 9.5), fenced = false): number[] {
   const all = rows.flat();
   if (all.length === 0) return [];
   const x1 = Math.min(...all.map((a) => a.x1));
   const x2 = Math.max(...all.map((a) => a.x2));
-  const cuts: number[] = [];
+  const thin = fenced && rows.length >= 3 ? Math.min(0.28 * em, least) : least;
+  const channels: { x1: number; x2: number }[] = [];
   let start: number | null = null;
   for (let x = x1; x <= x2; x += 0.5) {
     const open =
@@ -1039,17 +1299,34 @@ function columnCuts(rows: Atom[][], em: number, least = Math.min(0.9 * em, 9.5))
       rows.filter((r) => r.some((a) => a.x2 <= x) && r.some((a) => a.x1 >= x)).length >= 2;
     if (open && start === null) start = x;
     if (!open && start !== null) {
-      if (x - start >= least) cuts.push((start + x) / 2);
+      if (x - start >= thin) channels.push({ x1: start, x2: x });
       start = null;
     }
   }
-  return cuts;
+  const mid = (c: { x1: number; x2: number }) => (c.x1 + c.x2) / 2;
+  if (thin >= least) return channels.map(mid);
+  const edges = channels.map(mid);
+  const cellsOf = (k: number) =>
+    rows.map((r) => r.filter((a) => (k === 0 || cx(a) > edges[k - 1]) && (k === edges.length || cx(a) < edges[k]))).filter((c) => c.length > 0);
+  const centered = (cells: Atom[][]) => {
+    if (cells.length < 2) return false;
+    const mids = cells.map((c) => (Math.min(...c.map((a) => a.x1)) + Math.max(...c.map((a) => a.x2))) / 2);
+    return Math.max(...mids) - Math.min(...mids) < 0.15 * em;
+  };
+  return channels.filter((c, k) => c.x2 - c.x1 >= least || (centered(cellsOf(k)) && centered(cellsOf(k + 1)))).map(mid);
 }
+
+// A fraction or a binomial set in the other style than its place: \dfrac
+// and \dbinom inline, \tfrac and \tbinom in a display (parse loop finding:
+// the probability cheatsheet's sampling table sets its binomials' rows at
+// the text's size in a table's cell, and read as \binom they failed the
+// check on every row glyph's level).
+const restyle = (tex: string, prefix: "d" | "t") => tex.replace(/^(\\sqrt(?:\[[^\]]*\])?\{)?\\(frac|binom)\b/, `$1\\${prefix}$2`);
 
 // A cell of cases or a matrix is set in text style: a fraction whose parts
 // are the text's size there is \dfrac (arXiv 2502.02648 (14)).
-function cells(rows: Atom[][], cuts: number[]): string {
-  const cell = (a: Atom): Atom => ({ ...a, tex: a.fracPart !== undefined && a.fracPart >= style.size * 0.9 ? a.tex.replace(/^\\frac/, "\\dfrac") : a.tex });
+function cells(rows: Atom[][], cuts: number[], gaps: string[] = []): string {
+  const cell = (a: Atom): Atom => ({ ...a, tex: a.fracPart !== undefined && a.fracPart >= style.size * 0.9 ? restyle(a.tex, "d") : a.tex });
   return rows
     .map((r) => {
       const parts: Atom[][] = [[]];
@@ -1060,7 +1337,25 @@ function cells(rows: Atom[][], cuts: number[]): string {
       while (parts.length < cuts.length + 1) parts.push([]);
       return parts.map((p) => linear(p.map(cell))).join(" & ");
     })
-    .join(" \\\\ ");
+    .map((row, k) => (k > 0 ? ` \\\\${gaps[k - 1] ?? ""} ${row}` : row))
+    .join("");
+}
+
+// The space a page adds between two rows of cases (\\[2ex]): the ink of
+// one row stands more than a line's strut from the next. TeX's array
+// skip leaves about half an em between short rows' ink, and tall rows
+// touch it; past that, the row break carries the rest (parse loop
+// finding: a quantum mechanics book's (24.21) set its "0, elsewhere."
+// 3.6 em under the row over it, and read without the space every glyph
+// of the first row's fractions stood off its row).
+function rowGaps(rows: Atom[][], em: number): string[] {
+  return rows.slice(1).map((row, k) => {
+    const over = rows[k];
+    if (over.length === 0 || row.length === 0) return "";
+    const gap = Math.min(...over.map((a) => a.bottom)) - Math.max(...row.map((a) => a.top));
+    const extra = gap / em - 0.5;
+    return extra >= 0.3 ? `[${extra.toFixed(1)}em]` : "";
+  });
 }
 
 // A tall delimiter pair around stacked content is its own node, innermost
@@ -1095,8 +1390,19 @@ function fencedGroups(atoms: Atom[], em: number): Atom[] {
         }
         return yes;
       };
-      const right = close ? close.x1 + 0.1 : Infinity;
-      let content = out.filter((a) => a !== open && a !== close && a.x1 >= open.x2 - 0.1 && a.x2 <= right && a.top <= open.top + 0.2 * em && a.bottom >= open.bottom - 0.2 * em);
+      const right = close ? close.x1 : Infinity;
+      // The rows may stand a third of an em past the delimiters' ends: a
+      // binomial set small fills its \Big parentheses to the brim (parse
+      // loop finding: the probability cheatsheet's (n−1 over i−1) in CMEX7
+      // stood its "1" 0.23 em over their top, and lost it).
+      const reach = 0.35 * em;
+      // A delimiter's pieces may stand in a box wider than their ink: the
+      // content starts a fifth of an em into it at most, its middle past
+      // the box (parse loop finding: Springer's (17) sets \overline{A}_{K-1}
+      // from 0.9 pt inside its parenthesis's box to 1.4 pt inside the
+      // closing one's, and the row was no row of the matrix).
+      const inside = (a: Atom) => a.x1 >= open.x2 - 0.2 * em && a.x2 <= right + 0.2 * em && cx(a) > open.x2 && cx(a) < right;
+      let content = out.filter((a) => a !== open && a !== close && inside(a) && a.top <= open.top + reach && a.bottom >= open.bottom - reach);
       if (!close) {
         // What follows cases on the formula's baseline, past every row's end
         // and on no row's baseline (the sentence's period), is the
@@ -1125,33 +1431,66 @@ function fencedGroups(atoms: Atom[], em: number): Atom[] {
       }
       const stackSize = maxSize(content);
       const mains = content.filter((a) => a.size >= stackSize * 0.95 && a.fam !== "omx");
-      const lines = rowLines(mains, stackSize);
+      const lines = rowLines(mains, stackSize, true);
       if (!stacks(lines.length >= 2)) continue;
       // A matrix whose rows are labeled beside it, a label in a column left
-      // of its bracket on each row's baseline (a Markov chain's states):
-      // KaTeX has no \bordermatrix, and read with the formula the middle
-      // row's label is a factor ("N = 2(…)", Grinstead–Snell p. 419). The
-      // formula fails.
+      // of its bracket on each row's baseline, and its columns over it (a
+      // Markov chain's states, \bordermatrix): KaTeX has no \bordermatrix,
+      // and read with the formula the middle row's label is a factor
+      // ("N = 2(…)", Grinstead–Snell p. 419). It reads as an array of two
+      // columns: the column labels in a matrix over the fenced matrix, the
+      // row labels in a matrix beside it, each label in its row's or its
+      // column's cell (parse loop finding: the probability cheatsheet's
+      // Q = ( 1−α α; β 1−β ) with its states 0 and 1 beside and over it
+      // failed, and was a crop).
       const labels = out.filter(
         (a) => a !== open && !content.includes(a) && !isTall(a, em) && a.x2 <= open.x1 + 0.1 * em && open.x1 - a.x2 < 1.5 * em,
       );
-      if (new Set(labels.map((a) => lines.findIndex((y) => Math.abs(a.yb - y) < 0.25 * stackSize)).filter((n) => n >= 0)).size >= 2) lost++;
+      const rowOf = (a: Atom) => lines.findIndex((y) => Math.abs(a.yb - y) < 0.25 * stackSize);
+      const rowLabels = labels.filter((a) => rowOf(a) >= 0);
+      const bordered = close !== undefined && new Set(rowLabels.map(rowOf)).size >= 2;
+      if (!bordered && new Set(rowLabels.map(rowOf)).size >= 2) lost++;
       const rows = splitRows(content, lines);
-      const cuts = columnCuts(rows, stackSize);
+      const cuts = columnCuts(rows, stackSize, undefined, true);
       const axis = (open.top + open.bottom) / 2;
       let tex: string;
-      if (!close && open.tex === "\\{") tex = `\\begin{cases} ${cells(rows, cuts)} \\end{cases}`;
+      // A binomial's rows' size says its style, as a fraction's parts do
+      // (fracPart; restyle).
+      const extra: Partial<Atom> = { rows: lines };
+      const border: Atom[] = [];
+      if (!close && open.tex === "\\{") tex = `\\begin{cases} ${cells(rows, cuts, rowGaps(rows, stackSize))} \\end{cases}`;
       else if (!close) {
         stacks(false);
         continue;
+      } else if (bordered) {
+        // The column labels: the atoms over the matrix's top within a line
+        // and a half, between its delimiters, each in the column its center
+        // falls in.
+        const columnLabels = out.filter(
+          (a) =>
+            a !== open && a !== close && !content.includes(a) && !labels.includes(a) && !isTall(a, em) && a.yb >= open.top - 0.1 * em && a.yb - open.top < 1.5 * em && a.x1 >= open.x1 - 0.5 * em && a.x2 <= close.x2 + 0.5 * em,
+        );
+        const columnOf = (a: Atom) => cuts.filter((c) => cx(a) > c).length;
+        const cell = (list: Atom[]) => linear([...list].sort(byX).map((a) => ({ ...a })));
+        // The fenced matrix stays on the axis, the row labels a matrix
+        // beside it (its rows at the fenced rows' heights), the column
+        // labels a matrix set over it (\overset, at the text's size: a
+        // label is no script).
+        const top = columnLabels.length > 0 ? `\\begin{matrix} ${cuts.map((_, k) => k).concat(cuts.length).map((k) => cell(columnLabels.filter((a) => columnOf(a) === k))).join(" & ")} \\end{matrix}` : "";
+        const side = `\\begin{matrix} ${lines.map((_, k) => cell(rowLabels.filter((a) => rowOf(a) === k))).join(" \\\\ ")} \\end{matrix}`;
+        const env = FENCE_ENV[open.tex] ?? "matrix";
+        const body = `\\begin{${env}} ${cells(rows, cuts)} \\end{${env}}`;
+        tex = `${side}${top ? `\\overset{\\textstyle ${top}}{${body}}` : body}`;
+        border.push(...rowLabels, ...columnLabels);
       } else if (open.tex === "(" && close.tex === ")" && rows.length === 2 && cuts.length === 0) {
         tex = `\\binom{${linear(rows[0].map((a) => ({ ...a })))}}{${linear(rows[1].map((a) => ({ ...a })))}}`;
+        extra.fracPart = stackSize;
       } else {
         const env = FENCE_ENV[open.tex] ?? "matrix";
         tex = `\\begin{${env}} ${cells(rows, cuts)} \\end{${env}}`;
       }
-      made = node([open, ...content, ...(close ? [close] : [])], tex, axis - 0.25 * em, em, { rows: lines });
-      out = out.filter((a) => a !== open && a !== close && !content.includes(a));
+      made = node([open, ...content, ...(close ? [close] : []), ...border], tex, axis - 0.25 * em, em, extra);
+      out = out.filter((a) => a !== open && a !== close && !content.includes(a) && !border.includes(a));
       out.push(made);
     }
     if (!made && !marked) return out;
@@ -1331,7 +1670,12 @@ function limitParts<T extends { x1: number; x2: number }>(glyphs: Atom[], owners
     const kept: typeof parts = [];
     for (const p of parts.sort((a, b) => a.off - b.off)) if (kept.every((q) => p.j <= q.i || q.j <= p.i)) kept.push(p);
     for (const p of kept) give(p.o, r.slice(p.i, p.j));
-    if (!kept.length && fit.length === 1) give(fit[0], r);
+    // A run wholly beside its one owner is a script, not a limit: an
+    // integral's scripts sit at its upper right and lower right, and the
+    // upper one is over the sign's top (parse loop finding: a slide's
+    // ∫₀^∞ took ∞ as a limit, grew by it, and lost its 0, which stood
+    // under the grown sign's right half).
+    if (!kept.length && fit.length === 1 && whole.x1 < fit[0].x2 - 0.05 * em && whole.x2 > fit[0].x1 + 0.05 * em) give(fit[0], r);
   }
   return taken;
 }
@@ -1351,6 +1695,27 @@ function limits(atoms: Atom[], em: number): Atom[] {
   const under = (op: Atom, b: Atom) => b.top <= op.bottom + 0.1 * em && small(op, b);
   const fits = (op: Atom, b: Atom) => over(op, b) || under(op, b);
   const taken = limitParts(atoms.filter((c) => !ops.includes(c) && ops.some((o) => fits(o, c))), ops, fits, 0.3 * em, em);
+  // An integral with limits (\int\limits) sets its upper limit its italic
+  // correction right of the lower one: TeX centers both on the sign's
+  // box with the correction, then shifts the upper right and the lower
+  // left by half of it. With a lower limit under it, the run over its top
+  // centered there is its upper limit (parse loop finding: a quantum
+  // mechanics book's (25.27), ∫ from −e to e three times, read the upper
+  // e of each as no part of the formula, and the display was a crop).
+  for (const op of ops) {
+    const slant = op.fam === "omx" ? (INT_ITALIC[op.code] ?? 0) * op.size : 0;
+    const mine = taken.get(op) ?? [];
+    if (slant === 0 || mine.length === 0 || !mine.every((b) => under(op, b)) || Math.abs(cx({ ...op, x1: Math.min(...mine.map((b) => b.x1)), x2: Math.max(...mine.map((b) => b.x2)) }) - cx(op)) > 0.2 * em) continue;
+    const claimed = new Set([...taken.values()].flat());
+    const free = atoms.filter((c) => c !== op && !ops.includes(c) && !claimed.has(c) && over(op, c) && c.bottom - op.top < 0.6 * em);
+    const run = free.filter((c) => Math.abs(cx(c) - (cx(op) + slant)) < 0.4 * em);
+    if (run.length === 0) continue;
+    const x1 = Math.min(...run.map((b) => b.x1));
+    const x2 = Math.max(...run.map((b) => b.x2));
+    const whole = free.filter((c) => c.x2 > x1 - 0.1 * em && c.x1 < x2 + 0.1 * em && Math.abs(c.yb - run[0].yb) < 0.3 * c.size);
+    const mid = (Math.min(...whole.map((b) => b.x1)) + Math.max(...whole.map((b) => b.x2))) / 2;
+    if (Math.abs(mid - (cx(op) + slant)) < 0.2 * em) taken.set(op, [...mine, ...whole]);
+  }
   for (const op of ops) {
     const mine = taken.get(op) ?? [];
     const up = mine.filter((b) => over(op, b));
@@ -1558,6 +1923,9 @@ function linearAt(input: Atom[]): string {
   // whether it ended a word (a name, \text): the space after it is its own.
   let tail: Atom | null = null;
   let afterWord = false;
+  // The slash of a slanted fraction (¹/ₙ: its numerator raised small
+  // before it, its denominator small on the baseline after it).
+  let slanted: Atom | null = null;
   for (let k = 0; k < main.length; k++) {
     const a = main[k];
     // A piece no composite took (a map arrow's bar whose arrow the line
@@ -1644,13 +2012,18 @@ function linearAt(input: Atom[]): string {
       if (low) tex += `${style.display ? "" : "\\limits"}_{${linear(low.map((s) => ({ ...s, claimed: false })))}}`;
     }
     // Scripts set before a symbol with no base of their own: {}^{14}_{6}C.
+    // A slanted fraction's numerator overlaps its slash by a fifth of an
+    // em (parse loop finding: GeoTopo sets ¹/ₙ and ᵋ/₂ so, and read "1/n"
+    // and "ε/2" as words, and a line of them was a crop).
     const pre = small.filter(
-      (s) => !s.claimed && s.x2 <= a.x1 + 0.1 * em && (!prev || s.x1 >= prev.x2 - 0.05 * em) && Math.abs(s.yb - a.yb) < 0.6 * em,
+      (s) => !s.claimed && s.x2 <= a.x1 + (a.tex === "/" ? 0.2 : 0.1) * em && (!prev || s.x1 >= prev.x2 - 0.05 * em) && Math.abs(s.yb - a.yb) < 0.6 * em,
     );
     if (pre.length) {
       for (const s of pre) s.claimed = true;
       out.push(`{}${scripts(pre, a.yb, em)}`);
     }
+    if (a.tex === "/" && pre.length > 0 && pre.every((s) => s.yb > a.yb + 0.1 * em)) slanted = a;
+    else if (slanted && (a.x1 - (prev?.x2 ?? a.x1) > 0.15 * em || a.size >= style.size * 0.85)) slanted = null;
     if (prev && gap > 1.9 * em) out.push("\\qquad");
     else if (spaced) out.push("\\quad");
     // A word space after a comma between formulas set in one display
@@ -1659,8 +2032,8 @@ function linearAt(input: Atom[]): string {
     // matrix row's "−1 1" read as −11 (Springer).
     else if ((prev?.cls === "punct" && gap > 0.4 * em) || apart) out.push("\\ ");
     if (a.fracPart !== undefined && nesting === 1) {
-      if (style.display && a.fracPart < style.size * 0.8) tex = tex.replace(/^\\frac/, "\\tfrac");
-      else if (!style.display && a.fracPart >= style.size * 0.9) tex = tex.replace(/^\\frac/, "\\dfrac");
+      if (style.display && a.fracPart < style.size * 0.8) tex = restyle(tex, "t");
+      else if (!style.display && a.fracPart >= style.size * 0.9) tex = restyle(tex, "d");
     }
     const next = main[k + 1];
     // A bar with a relation's space on both sides is \mid, unless it closes
@@ -1710,6 +2083,12 @@ function linearAt(input: Atom[]): string {
     if (a.upper) tex += `^{${a.upper}}`;
     if (mine.length) tex += scripts(mine, last.yb, em);
     if (style.display && nesting === displayDepth && big && !a.entry?.display) tex = `{\\textstyle ${tex}}`;
+    // A slanted fraction's denominator, set small on the baseline right
+    // after the slash, is set in \scriptstyle, its own scripts with it:
+    // the check wants it at a script's level, and KaTeX sets a glyph on
+    // the line at the text's (parse loop finding: GeoTopo p. 16's U_n =
+    // (¹/ₙ, 1 − ¹/ₙ) read its n at the text's level, and was a crop).
+    if (slanted && a !== slanted && a.code >= 0 && !hangingFamily(a.fam)) tex = `{\\scriptstyle ${tex}}`;
     out.push(tex);
     prev = { ...last, x1: a.x1, x2: Math.max(last.x2, ...mine.map((s) => s.x2), ...reach.map((s) => s.x2)) };
     tail = [last, ...mine, ...reach].reduce((t, s) => (s.x2 > t.x2 ? s : t));

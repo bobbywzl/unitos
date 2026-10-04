@@ -187,9 +187,12 @@ function composeAccents(items: Item[]): Item[] {
     // then "e"): composed across the split (import compare loop finding).
     const trailing = item.str.length > 1 ? SPACING_ACCENTS[item.str[item.str.length - 1]] : undefined;
     const after = items[k + 1];
-    if (trailing && after && /^\p{L}/u.test(after.str) && after.x <= item.x + item.w + item.size * 0.3) {
-      // The accent's glyph, the item's last, goes with it.
-      const accent = item.glyphs?.at(-1);
+    // The accent's glyph, the item's last, goes with it. A backtick (a
+    // grave accent the next item starts past) stays a character: glyphs.ts
+    // backtickOf.
+    const accent = item.glyphs?.at(-1);
+    const backtick = item.str.endsWith("`") && accent !== undefined && after !== undefined && after.x >= accent.x + accent.w * 0.9;
+    if (trailing && after && !backtick && /^\p{L}/u.test(after.str) && after.x <= item.x + item.w + item.size * 0.3) {
       const [letter, ...rest] = Array.from(after.str);
       out.push({ ...item, str: item.str.slice(0, -1), glyphs: accent ? item.glyphs!.slice(0, -1) : item.glyphs });
       items[k + 1] = {
@@ -211,7 +214,13 @@ function composeAccents(items: Item[]): Item[] {
         const chars = it ? Array.from(it.str) : [];
         if (it === undefined || chars.length === 0 || it.w <= 0) return -1;
         const advance = it.w / chars.length;
-        const idx = Math.floor((cx - it.x + advance * 0.15) / advance);
+        const at = Math.floor((cx - it.x + advance * 0.15) / advance);
+        // TeX sets an accent over an italic letter shifted right by the
+        // letter's skew: an accent whose center falls up to 0.4 of an advance
+        // past the item's end is its last letter's (parse loop finding: a
+        // statistics book's β̂₀ in txfonts set the hat's center 0.2 em right
+        // of the β's, and the text read "βˆ0", the hat apart).
+        const idx = at === chars.length && cx - (it.x + it.w) < advance * 0.4 ? chars.length - 1 : at;
         return idx >= 0 && idx < chars.length && /\p{L}/u.test(chars[idx]) ? idx : -1;
       };
       const composedAt = (base: Item, idx: number): Item => {
@@ -275,8 +284,16 @@ function opensCell(prev: Item, item: Item, size: number, next?: Item): boolean {
   const gap = item.x - (prev.x + prev.w);
   const words = next !== undefined && CJK_START_RE.test(next.str.trimStart()) && next.x - (item.x + item.w) < size * 0.5;
   const numeric = NUMERIC_TOKEN_RE.test(prev.str.trim()) && NUMERIC_TOKEN_RE.test(item.str.trim()) && !words;
-  return gap > Math.max(8, size * 1.6) || (numeric && gap > size * 1.0);
+  // An equation's label at the line's end, half an em or more past a
+  // glyph of a math font, opens a cell of its own (parse loop finding:
+  // ICML's (10) sets its label 0.6 em after the formula's comma in a
+  // column filled to its edge; read into the formula's cell, the line held
+  // no label, read as text with "Bernoulli" among its words, and the
+  // display was a crop).
+  const label = next === undefined && prev.math && !item.math && EQUATION_LABEL_RE.test(item.str.trim()) && gap > size * 0.5;
+  return gap > Math.max(8, size * 1.6) || (numeric && gap > size * 1.0) || label;
 }
+const EQUATION_LABEL_RE = /^\(\d{1,3}(?:\.\d{1,3}){0,2}[a-z]?\)$/;
 
 // A glyph set smaller than its cell's text and raised or lowered off the
 // text's baseline is a superscript or a subscript. Footnote references sit
@@ -291,8 +308,24 @@ function markShifts(items: Item[]) {
     const key = Math.round(i.size * 10) / 10;
     chars.set(key, (chars.get(key) ?? 0) + i.str.length);
   }
-  const textSize = [...chars].sort((a, b) => b[1] - a[1])[0][0];
-  const baseline = median(items.filter((i) => Math.abs(i.size - textSize) <= textSize * 0.05).map((i) => i.y));
+  let textSize = [...chars].sort((a, b) => b[1] - a[1])[0][0];
+  let baseline = median(items.filter((i) => Math.abs(i.size - textSize) <= textSize * 0.05).map((i) => i.y));
+  // A cell that opens with a letter its words' script follows, set at 0.55
+  // to 0.85 of its size and off its baseline by 0.1 to 0.4 of it, sets its
+  // text at that letter's size, however long the script (parse loop
+  // finding: a quantum mechanics book's "J_trans =" counted five letters of
+  // "trans" against one J, took the script's size for the text's, read
+  // "trans" as a word of prose, and the display (25.18b) read as three
+  // paragraphs). Small capitals stand on the letter's baseline; a drop cap
+  // is twice its words' size or more.
+  const lead = items.find((i) => i.str.trim() !== "");
+  if (lead && !lead.math && /^\p{L}$/u.test(lead.str.trim()) && textSize >= lead.size * 0.55 && textSize <= lead.size * 0.85) {
+    const shift = Math.abs(baseline - lead.y);
+    if (shift >= lead.size * 0.1 && shift <= lead.size * 0.4) {
+      textSize = lead.size;
+      baseline = lead.y;
+    }
+  }
   for (const item of items) {
     const small = !item.math && item.size <= textSize * 0.9;
     item.sup = small && item.y - baseline >= textSize * 0.15;

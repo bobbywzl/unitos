@@ -92,12 +92,19 @@ export function pictureScores(pdf: PdfText, cand: Flat, pictures: Picture[]): Pi
 
 /** A caption's opening: a figure's or a table's label, its number, and the
     stop after them ("Figure 3.", "Table 2:", "Photo 11.", "図表Ⅰ-2-1-3",
-    "Visualization.", German's "Abbildung 1.4:"); a sentence that names a
-    figure ("Figure 3 shows", "Figure 6.1 shows") has no stop there: a
-    period before a digit is the number's. */
+    German's "Abbildung 1.4:"); a sentence that names a figure ("Figure 3
+    shows", "Figure 6.1 shows") has no stop there: a period before a digit
+    is the number's. A label with no number takes a full stop
+    ("Visualization. The …", a newsletter's "Photo."), as figures.ts
+    CAPTION_RE reads it: a colon after it names a part of the text
+    ("Visualization: …", PLOS's contributions; parse loop finding: a
+    textbook's worked examples run "Model: …", "Visualization: …",
+    "Solution: …", each a paragraph with a run-in lead and no figure beside
+    it, and the two "Visualization:" paragraphs counted as captions apart
+    from their figure). */
 const NUMBER = "[\\dIVXLivxl]+(?:[.\\-–][\\dIVXLivxl]+)*[a-z]?";
 const CAPTION_OPENING_RE = new RegExp(
-  `^\\s*(?:(?:figure|table|photo|visualization|image|map|chart|plate|box|exhibit|scheme|abbildung|tabelle)\\s*(?:${NUMBER})?\\s*[.:—–](?!\\d)|(?:fig|tab|abb)\\.\\s*${NUMBER}\\s*[.:—–](?!\\d)|(?:図表?|表)\\s*[\\dⅠ-Ⅻ]+(?:[.\\-–][\\dⅠ-Ⅻ]+)*)`,
+  `^\\s*(?:(?:figure|table|photo|visualization|image|map|chart|plate|box|exhibit|scheme|abbildung|tabelle)\\s*(?:${NUMBER}\\s*[.:—–]|\\.)(?!\\d)|(?:fig|tab|abb)\\.\\s*${NUMBER}\\s*[.:—–](?!\\d)|(?:図表?|表)\\s*[\\dⅠ-Ⅻ]+(?:[.\\-–][\\dⅠ-Ⅻ]+)*)`,
   "iu",
 );
 /** A figure's or a table's caption opening with its label and number,
@@ -111,8 +118,17 @@ export type CaptionScores = { captions: number; alone: number; score: number | n
     caption does (CAPTION_OPENING_RE) is a caption the candidate did not
     give its figure or table (a figure's caption that runs into the page
     after, a table the candidate lost). The score is the share of the
-    candidate's captions set with their figure or table. */
-export function captionScores(cand: Flat): CaptionScores {
+    candidate's captions set with their figure or table. With the page's
+    lines, a caption cut in two counts too: the paragraph after a figure's
+    caption opens in lower case on the line the page sets right under the
+    caption's last line, at the caption's height (the next line, at most a
+    line and a half from top to top), so it is the caption's tail. Parse
+    bench finding: a statistics book sets each figure's caption in 9 pt
+    after its 10 pt "Figure 11.2:"; the parse ended the caption at the size
+    change, and the tail ("is approximately linear.") read as a paragraph
+    of its own, which no count saw (the caption itself opens as a caption
+    should). */
+export function captionScores(cand: Flat, pdf?: PdfText, placed?: number[][]): CaptionScores {
   const text = (b: number) => cand.unitsOf[b].map((u) => cand.units[u].text).join(" ");
   let kept = 0;
   const found: CaptionScores["found"] = [];
@@ -122,6 +138,18 @@ export function captionScores(cand: Flat): CaptionScores {
       if (CAPTION_OPENING_RE.test(caption) || LABELED_RE.test(caption)) kept++;
     }
     if (block.kind === "paragraph" && CAPTION_OPENING_RE.test(text(b))) found.push({ text: text(b).slice(0, 100) });
+    if (block.kind === "figure" && pdf && placed && cand.blocks[b + 1]?.kind === "paragraph" && /^\s*\p{Ll}/u.test(text(b + 1))) {
+      const caption = cand.unitsOf[b][0];
+      const tail = cand.unitsOf[b + 1][0];
+      const last = caption === undefined ? undefined : (placed[caption] ?? []).map((i) => pdf.lines[i]).sort((x, y) => y.top - x.top)[0];
+      const first = tail === undefined ? undefined : (placed[tail] ?? []).map((i) => pdf.lines[i]).sort((x, y) => x.top - y.top)[0];
+      if (!last || !first || last.page !== first.page) return;
+      const height = last.bottom - last.top;
+      const under = first.top >= last.bottom - height * 0.5 && first.top - last.top <= height * 1.5;
+      const level = Math.abs(first.bottom - first.top - height) <= height * 0.15;
+      const shared = Math.min(first.right, last.right) - Math.max(first.left, last.left) > 0;
+      if (under && level && shared) found.push({ text: text(b + 1).slice(0, 100) });
+    }
   });
   const captions = kept + found.length;
   return { captions, alone: found.length, score: captions > 0 ? 1 - found.length / captions : null, found };
@@ -176,8 +204,17 @@ export function captionSides(pdf: PdfText, cand: Flat, placed: number[][]): Capt
     const captionLines = units.filter((u) => cand.units[u].index === -1).flatMap((u) => placed[u]).map((i) => pdf.lines[i]);
     const first = captionLines[0];
     if (!first) return;
-    const cells: Line[] = units.filter((u) => cand.units[u].index >= 0).flatMap((u) => placed[u]).map((i) => pdf.lines[i]).filter((l) => l.page === first.page);
+    const cellUnits = units.filter((u) => cand.units[u].index >= 0 && cand.units[u].text.trim() !== "");
+    const cells: Line[] = cellUnits.flatMap((u) => placed[u]).map((i) => pdf.lines[i]).filter((l) => l.page === first.page);
     if (cells.length < 2) return;
+    // A table whose cells the text layer mostly does not place is not
+    // judged: pdftotext (-nodiag) drops a table whose head is set
+    // diagonal, rows and all, and the few cells placed land on the body's
+    // lines that cite the same words (parse benchmark finding: an IEEE
+    // paper's Table I, its head rotated 60°, placed "LangChain [5]" and
+    // "GPTCache [6]" on the paragraph over the table that cites them, and
+    // the caption set over the table read as under it).
+    if (cells.length * 3 < cellUnits.length) return;
     const top = Math.min(...cells.map((l) => l.top));
     const bottom = Math.max(...cells.map((l) => l.top));
     const side = first.top < top ? "above" : first.top > bottom ? "below" : null;

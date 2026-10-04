@@ -7,9 +7,9 @@ import type { ParsedBlock } from "@/lib/parse/types";
 import type { Glyph } from "@/lib/parse/pdf/drawing";
 import { fromImport, fromParse, printedNotes, type Doc, type DocBlock } from "./adapt";
 import { brokenNumbers, checklistWraps, displayDrawn, displayGaps, displaySpace, markerStart, rowHeight, rowHeights } from "./drawn";
-import { blindText, borderScore, formulaScaleOf, freeScores, furnitureOf, mathPart, ocrSame, type PdfText } from "./free";
+import { blindText, borderScore, formulaScaleOf, freeScores, furnitureOf, mathPart, mathSymbolWords, ocrSame, type PdfText } from "./free";
 import { captionScores, captionSides, contentImages, cropOverlaps, pictureScores } from "./floats";
-import type { PagePaint } from "./paint";
+import type { InkBand, PagePaint } from "./paint";
 import { glyphScores, placeCrops, placeEquations, type PageGlyphs } from "./glyphs";
 import { columnScores, cropScores, faceShape, farSpace, figureScores, gridProse, indentScores, labelScores, linesOfUnits, proofBoxes, runInIndents, tableScores, titleMarks, type PageInk } from "./layout";
 import { mathTokens, sequenceSimilarity } from "./math";
@@ -615,6 +615,25 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   const symbolic = freeScores(symbolPdf, flatten({ blocks: [para("◆ The yard grew α wide.")] })).coverage;
   check("free: a symbol font's character counts as the page draws it, not as the text layer's letter", near(symbolic.recall, 1) && near(symbolic.precision, 1), `recall ${symbolic.recall}, precision ${symbolic.precision}`);
   check("free: a line that is a page number and a period counts as a page-number line", numbered.numberLines.count === 1, `count ${numbered.numberLines.count}`);
+  // TeX's math glyphs the text layer reads by their codes: cmex's ∫ read "Z", cmsy's ⟩ read "i" after "xyz"; cmsy's
+  // "|" (code 106, "j") in a word read right ("|ψj") stays as the text layer reads it.
+  const mathLine = { page: 1, top: 100, bottom: 110, left: 100, right: 300, text: "Z |xyzi |ψj", words: [{ left: 100, right: 110, text: "Z" }, { left: 120, right: 160, text: "|xyzi" }, { left: 170, right: 200, text: "|ψj" }] };
+  const mathPage: PageGlyphs = {
+    width: 600,
+    height: 800,
+    shapes: [],
+    glyphs: [
+      { family: "omx", code: 90, unicode: "∫", x: 101, y: 692, w: 8, size: 10 },
+      { family: "oms", code: 105, unicode: "⟩", x: 152, y: 692, w: 6, size: 10 },
+      { family: "oms", code: 106, unicode: "|", x: 170, y: 692, w: 3, size: 10 },
+    ],
+  };
+  const mathWords = mathSymbolWords({ lines: [mathLine] }, [mathPage]);
+  check(
+    "free: a TeX math glyph the text layer reads by its code counts as the page draws it",
+    mathWords.length === 2 && mathWords[0].reads === "" && mathWords[1].reads === "|xyz",
+    JSON.stringify(mathWords.map((w) => [w.word, w.reads])),
+  );
 }
 {
   const ROLE_REF: RefBlock[] = [
@@ -855,6 +874,7 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
     width: 600,
     height: 800,
     glyphs: [g("oml", 0x78, "x", 100, 400), g("ot1", 0x32, "2", 106, 403.6, 7), g("oms", 0x36, "6", 200, 400), g("ot1", 0x3d, "=", 200, 400), g("oms", 0x46, "F", 300, 400)],
+    shapes: [],
   };
   const whole = { kind: "path" as const, points: [[0, 0], [100, 0], [100, 100], [0, 100]] as [number, number][] };
   const around = (x1: number, x2: number) => ({ kind: "path" as const, points: [[x1, 45], [x2, 45], [x2, 55], [x1, 55]] as [number, number][] });
@@ -874,7 +894,12 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   check("glyphs: \\not over = passes as \\neq", justNeq.passed === 1, JSON.stringify(justNeq.fails));
   const picture = glyphScores([page], doc("", [{ kind: "figure", at: { page: 1, region: whole } }]), undefined);
   check("glyphs: a figure over TeX math glyphs is an equation shown as a picture", picture.mathImages === 1);
-  const blackboard: PageGlyphs = { width: 600, height: 800, glyphs: [g("msb", 0x52, "R", 100, 400)] };
+  // A region that draws a shape (a chart's curve, a diagram's box) is a drawn diagram, whatever fonts its labels are set in.
+  const diagram = glyphScores([{ ...page, shapes: [{ x1: 90, y1: 380, x2: 320, y2: 420 }] }], doc("", [{ kind: "figure", at: { page: 1, region: whole } }]), undefined);
+  check("glyphs: a figure whose region draws a shape is a diagram, not an equation shown as a picture", diagram.mathImages === 0);
+  const ground = glyphScores([{ ...page, shapes: [{ x1: 0, y1: 0, x2: 600, y2: 700 }] }], doc("", [{ kind: "figure", at: { page: 1, region: around(16, 52) } }]), undefined);
+  check("glyphs: a shape that reaches past the region is the page's, and the figure stays an equation shown as a picture", ground.mathImages === 1);
+  const blackboard: PageGlyphs = { width: 600, height: 800, glyphs: [g("msb", 0x52, "R", 100, 400)], shapes: [] };
   const reals = glyphScores([blackboard], doc("", [{ kind: "equation", latex: "x \\in \\mathbb{R}" }]), undefined);
   check("glyphs: \\mathbb{R} in an equation prints ℝ", reals.hazards === 1 && reals.garbles === 0, JSON.stringify(reals.missing));
   const parsed: Doc = { blocks: [eq("x^{2}"), { kind: "equation", latex: "a \\neq b", at: { page: 1, region: around(32, 35) } }] };
@@ -892,15 +917,15 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   check("glyphs: a crop's symbols count as printed, captioned or not", cropped(undefined).garbles === 0 && cropped("6= F").garbles === 0, `${JSON.stringify(cropped(undefined).missing)} ${JSON.stringify(cropped("6= F").missing)}`);
   // A cmex brace hangs below its origin, which stands at its top: a crop whose region starts just under the top
   // holds it whole.
-  const braced: PageGlyphs = { width: 600, height: 800, glyphs: [g("omx", 40, "(", 390, 444), g("oml", 0x78, "x", 400, 400)] };
+  const braced: PageGlyphs = { width: 600, height: 800, glyphs: [g("omx", 40, "(", 390, 444), g("oml", 0x78, "x", 400, 400)], shapes: [] };
   const brace = glyphScores([braced], doc("", [{ kind: "figure", at: { page: 1, region: around(60, 70) } }]), undefined);
   check("glyphs: a crop holds the cmex brace that hangs into it", brace.hazards === 1 && brace.garbles === 0, JSON.stringify(brace.missing));
   // A cmex ∑ set at a script's size (an exponent's) is at the script's level; a norm's bars are one symbol
   // however KaTeX draws them (‖ or ∥).
-  const exponent: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x78, "x", 100, 400), g("omx", 0x50, "∑", 106, 404, 7), g("oml", 0x64, "d", 112, 404, 7)] };
+  const exponent: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x78, "x", 100, 400), g("omx", 0x50, "∑", 106, 404, 7), g("oml", 0x64, "d", 112, 404, 7)], shapes: [] };
   const scriptSum = glyphScores([exponent], doc("", [{ kind: "equation", latex: "x^{\\sum d}", at: { page: 1, region: around(15, 20) } }]), undefined);
   check("glyphs: a cmex glyph set at a script's size takes the script's level", scriptSum.checked === 1 && scriptSum.passed === 1, JSON.stringify(scriptSum.fails));
-  const bars: PageGlyphs = { width: 600, height: 800, glyphs: [g("oms", 0x6b, "k", 100, 400), g("oml", 0x78, "x", 106, 400), g("oms", 0x6b, "k", 112, 400)] };
+  const bars: PageGlyphs = { width: 600, height: 800, glyphs: [g("oms", 0x6b, "k", 100, 400), g("oml", 0x78, "x", 106, 400), g("oms", 0x6b, "k", 112, 400)], shapes: [] };
   // A candidate's LaTeX may hold ‖ itself, which KaTeX draws with a warning about its metrics: kept out of the output.
   const warn = console.warn;
   console.warn = () => {};
@@ -908,24 +933,24 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   console.warn = warn;
   check("glyphs: a norm's bars drawn as ‖ or ∥ are one symbol", norm.checked === 1 && norm.passed === 1, JSON.stringify(norm.fails));
   // ⟺ drawn as ⇐ and ⇒ overlapping by 3 mu (TeX's \Longleftrightarrow), which also opens ⟸ with "=".
-  const iff: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x61, "a", 90, 400), { ...g("oms", 0x28, "⇐", 100, 400), w: 10 }, { ...g("oms", 0x29, "⇒", 108.3, 400), w: 10 }, g("oml", 0x62, "b", 120, 400)] };
+  const iff: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x61, "a", 90, 400), { ...g("oms", 0x28, "⇐", 100, 400), w: 10 }, { ...g("oms", 0x29, "⇒", 108.3, 400), w: 10 }, g("oml", 0x62, "b", 120, 400)], shapes: [] };
   const joined = glyphScores([iff], doc("", [{ kind: "equation", latex: "a \\Longleftrightarrow b", at: { page: 1, region: around(14, 22) } }]), undefined);
   check("glyphs: ⇐ and ⇒ joined by TeX's overlap are ⟺", joined.checked === 1 && joined.passed === 1, JSON.stringify(joined.fails));
   // A display's printed number "(3)" in its region, set an em and more apart in a text font: the formula is
   // read without it, whether the candidate kept the label or not.
-  const numbered: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x78, "x", 100, 400), g("ot1", 0x28, "(", 500, 400), g("ot1", 0x33, "3", 504, 400), g("ot1", 0x29, ")", 509, 400)] };
+  const numbered: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x78, "x", 100, 400), g("ot1", 0x28, "(", 500, 400), g("ot1", 0x33, "3", 504, 400), g("ot1", 0x29, ")", 509, 400)], shapes: [] };
   const unlabelled = glyphScores([numbered], doc("", [{ kind: "equation", latex: "x", at: { page: 1, region: around(15, 90) } }]), undefined);
   const labelled = glyphScores([numbered], doc("", [{ kind: "equation", latex: "x", label: "(3)", at: { page: 1, region: around(15, 90) } }]), undefined);
   check("glyphs: a display's printed number is no symbol of its formula", unlabelled.passed === 1 && labelled.passed === 1, `${JSON.stringify(unlabelled.fails)} ${JSON.stringify(labelled.fails)}`);
   // A tall paren KaTeX draws as a picture stands for the cmex paren the page draws; a stacked brace counts once.
-  const tall: PageGlyphs = { width: 600, height: 800, glyphs: [g("omx", 0x10, "(", 100, 420), g("omx", 0x5f, "⋁", 110, 420), g("oml", 0x78, "x", 125, 400), g("omx", 0x11, ")", 135, 420)] };
+  const tall: PageGlyphs = { width: 600, height: 800, glyphs: [g("omx", 0x10, "(", 100, 420), g("omx", 0x5f, "⋁", 110, 420), g("oml", 0x78, "x", 125, 400), g("omx", 0x11, ")", 135, 420)], shapes: [] };
   const pictured = glyphScores([tall], doc("", [{ kind: "equation", latex: "\\left(\\bigvee_{q\\in Q} x\\right)", at: { page: 1, region: around(15, 25) } }]), undefined);
   check("glyphs: a delimiter KaTeX draws as a picture stands for the page's", pictured.fails.every((f) => !f.extra.some((x) => x.startsWith("(delimiter)"))) && pictured.fails.every((f) => !f.missing.some((x) => x.startsWith("(@") || x.startsWith(")@"))), JSON.stringify(pictured.fails));
-  const stacked: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x78, "x", 90, 400), g("ot1", 0x3d, "=", 96, 400), g("omx", 0x38, "", 106, 414), g("omx", 0x3c, "", 106, 404), g("omx", 0x3a, "", 106, 394), g("ot1", 0x30, "0", 116, 410), g("ot1", 0x31, "1", 116, 392)] };
+  const stacked: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x78, "x", 90, 400), g("ot1", 0x3d, "=", 96, 400), g("omx", 0x38, "", 106, 414), g("omx", 0x3c, "", 106, 404), g("omx", 0x3a, "", 106, 394), g("ot1", 0x30, "0", 116, 410), g("ot1", 0x31, "1", 116, 392)], shapes: [] };
   const cases = glyphScores([stacked], doc("", [{ kind: "equation", latex: "x = \\begin{cases} 0 \\\\ 1 \\end{cases}", at: { page: 1, region: around(14, 22) } }]), undefined);
   check("glyphs: a brace stacked from pieces is one brace on both sides", cases.fails.every((f) => !f.extra.some((x) => /^[⎧⎨⎩]/.test(x)) && !f.missing.some((x) => x.startsWith("{@"))), JSON.stringify(cases.fails));
   // An arrow KaTeX draws as a picture (\xrightarrow) stands for the arrow the page draws.
-  const arrowed: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x61, "a", 90, 400), { ...g("oms", 0x21, "→", 100, 400), w: 10 }, g("oml", 0x62, "b", 114, 400)] };
+  const arrowed: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x61, "a", 90, 400), { ...g("oms", 0x21, "→", 100, 400), w: 10 }, g("oml", 0x62, "b", 114, 400)], shapes: [] };
   const xarrow = glyphScores([arrowed], doc("", [{ kind: "equation", latex: "a \\xrightarrow{} b", at: { page: 1, region: around(14, 22) } }]), undefined);
   check("glyphs: an arrow KaTeX draws as a picture stands for the page's", xarrow.checked === 1 && xarrow.passed === 1, JSON.stringify(xarrow.fails));
   // TeX's \vdots and \ddots: three periods of the text font, in a column and stepping right.
@@ -933,11 +958,12 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
     width: 600,
     height: 800,
     glyphs: [g("ot1", 0x2e, ".", 100, 410), g("ot1", 0x2e, ".", 100, 406), g("ot1", 0x2e, ".", 100, 402), g("ot1", 0x2e, ".", 110, 407), g("ot1", 0x2e, ".", 114, 404), g("ot1", 0x2e, ".", 118, 401)],
+    shapes: [],
   };
   const stackedDots = glyphScores([dots], doc("", [{ kind: "equation", latex: "\\vdots \\ddots", at: { page: 1, region: around(14, 22) } }]), undefined);
   check("glyphs: three periods in a column are ⋮, stepping down right ⋱", stackedDots.checked === 1 && stackedDots.passed === 1, JSON.stringify(stackedDots.fails));
   // A diagram read with its own labels as its caption (no "Figure N"): its ℱ counts once, from its region.
-  const labelled2: PageGlyphs = { width: 600, height: 800, glyphs: [g("oms", 0x46, "F", 300, 400), g("oms", 0x46, "F", 300, 300)] };
+  const labelled2: PageGlyphs = { width: 600, height: 800, glyphs: [g("oms", 0x46, "F", 300, 400), g("oms", 0x46, "F", 300, 300)], shapes: [] };
   const once = glyphScores([labelled2], { blocks: [{ kind: "figure", caption: [{ text: "ℱ loss" }], at: { page: 1, region: around(45, 55) } }, { kind: "paragraph", spans: [{ text: "the ℱ of" }] }] }, undefined);
   check("glyphs: a figure whose caption is its picture's labels counts its symbols once", once.garbles === 0 && once.hazards === 2, JSON.stringify(once.missing));
   // The import's crop of a display has no caption: it is an equation picture where the parse's is one.
@@ -950,7 +976,7 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   );
   // The page sets a, b, and c on one line; LaTeX that stacks them in rows draws another formula, with every
   // symbol there at its level.
-  const line: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x61, "a", 100, 400), g("oml", 0x62, "b", 110, 400), g("oml", 0x63, "c", 120, 400)] };
+  const line: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x61, "a", 100, 400), g("oml", 0x62, "b", 110, 400), g("oml", 0x63, "c", 120, 400)], shapes: [] };
   const inRows = glyphScores([line], doc("", [{ kind: "equation", latex: "\\begin{gathered} a \\\\ b \\\\ c \\end{gathered}", at: { page: 1, region: around(15, 22) } }]), undefined);
   const onLine = glyphScores([line], doc("", [{ kind: "equation", latex: "abc", at: { page: 1, region: around(15, 22) } }]), undefined);
   check("glyphs: LaTeX that stacks in rows what the page sets on one line fails the rows check", inRows.rowsWrong === 1 && inRows.passed === 0 && onLine.rowsWrong === 0 && onLine.passed === 1, `${JSON.stringify(inRows.fails)} ${onLine.rowsWrong}`);
@@ -1378,6 +1404,8 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
   for (const [p, left] of [[4, 80], [5, 100], [6, 120]]) at(p, 60, left, "Tip");
   for (const [p, n] of [[5, 2], [6, 11], [8, 13]]) at(p, 45, 72, `Note ${n}.`);
   at(4, 58, 72, "I.");
+  // A deck's template slides each end their list with the same bulleted item at one height.
+  for (const p of [2, 3, 4, 5]) at(p, 700, 72, "• Ut labore et dolore magna aliqua");
   const found = new Set(furnitureOf(lines, new Map(Array.from({ length: 10 }, (_, k) => [k + 1, { width: 612, height: 792 }]))).map((l) => `${l.page} ${l.text}`));
   const has = (key: string) => found.has(key);
   check(
@@ -1389,6 +1417,11 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     "free: a chapter's heading on pages far apart, a label at other places, notes that do not count, and a chapter's I. are no furniture",
     !has("3 Introduction") && !has("5 Tip") && !has("6 Note 11.") && !has("4 I."),
     [...found].filter((k) => /Introduction|Tip|Note|I\./.test(k)).join(" | "),
+  );
+  check(
+    "free: a bulleted item at one height on every slide is a list's item, not furniture",
+    !has("3 • Ut labore et dolore magna aliqua"),
+    [...found].filter((k) => /labore/.test(k)).join(" | "),
   );
   // A page number next to a heading's own words is no leak; one alone is.
   const pageNumber = { page: 2, top: 740, bottom: 750, left: 300, right: 306, text: "2" };
@@ -1439,6 +1472,15 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
   // A display read as words holds a line "12": no page-number line.
   const display = freeScores({ ...numberPdf, furniture: [] }, flatten({ blocks: [para("MSE = 1\n12\nI=0")] }));
   check("free: a number on a line inside a block is no page-number line", display.numberLines.count === 0, `count ${display.numberLines.count}`);
+  // A listing's row "2 {": its line number and its brace, two lines of the text layer, read the page number's words.
+  const listingRow = [
+    { page: 1, top: 200, bottom: 206, left: 100, right: 103, text: "2" },
+    { page: 1, top: 199, bottom: 207, left: 118, right: 123, text: "{" },
+  ];
+  const listingPdf: PdfText = { ...numberPdf, lines: [...numberPdf.lines, ...listingRow] };
+  const listing: DocBlock = { kind: "code", text: "1 \\draw\n2 {\n3 }" };
+  const numbered2 = freeScores(listingPdf, flatten({ blocks: [heading, para("The telescope saw the source."), listing] })).furniture;
+  check("free: a listing's row that reads a page number's words is the page's own", numbered2.leaked === 0, `leaked ${numbered2.leaked}`);
 }
 
 // ── The page's own lines: columns, indents, tables, figures, crops, faces, labels ──
@@ -1470,6 +1512,11 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
   const falseSet = indentScores(flushPdf, indented, linesOfUnits(flushPdf, indented));
   const trueSet = indentScores(setInPdf, indented, linesOfUnits(setInPdf, indented));
   check("layout: a block indent the page does not set is false; one it sets is right", falseSet.wrong === 1 && trueSet.judged === 1 && trueSet.wrong === 0, `${JSON.stringify(falseSet.found)} ${JSON.stringify(trueSet.found)}`);
+  // A page that sets every block 20 pt in under heads at the column's edge: the heads show the edge.
+  const heads = [0, 1].map((i) => ({ page: 1, top: 80 + 200 * i, bottom: 90 + 200 * i, left: 72, right: 150, text: `Bemerkung ${i + 17}` }));
+  const blocksPdf: PdfText = { ...flushPdf, lines: [...own.map((l) => ({ ...l, left: 92 })), ...other.map((l) => ({ ...l, left: 92 })), ...heads] };
+  const underHeads = indentScores(blocksPdf, indented, linesOfUnits(blocksPdf, indented));
+  check("layout: a block set in under heads at the column's edge is set in", underHeads.judged === 1 && underHeads.wrong === 0, JSON.stringify(underHeads));
   // A drawing read as a display's crop over the captioned rest of its figure: one figure in two pieces.
   const region = (y1: number, y2: number) => ({ kind: "path" as const, points: [[20, y1], [80, y1], [80, y2], [20, y2]] as [number, number][] });
   const top: DocBlock = { kind: "figure", mathImage: "", at: { page: 1, region: region(10, 20) } };
@@ -1479,6 +1526,16 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
   check(
     "layout: a figure's top read apart from its captioned rest is a figure in two pieces; with words between them, two figures",
     figureScores(pdf, flatten({ blocks: [top, rest] })).split === 2 && figureScores(gapPdf, flatten({ blocks: [top, apart] })).split === 0,
+  );
+  // A margin caption read as a figure of its own: its region holds no ink but its caption's line.
+  const marginLine = { page: 1, top: 300, bottom: 310, left: 450, right: 520, text: "Figure 1. The dam." };
+  const marginPdf: PdfText = { ...pdf, lines: [...pdf.lines, marginLine] };
+  const margin: DocBlock = { kind: "figure", caption: [{ text: "Figure 1. The dam." }], at: { page: 1, region: { kind: "path", points: [[74, 30], [88, 30], [88, 45], [74, 45]] } } };
+  const inkOf = (bands: InkBand[]): PageInk => ({ bands: () => bands, right: () => null });
+  check(
+    "layout: a captioned figure that draws nothing but its caption is a piece; one that draws a picture is none",
+    figureScores(marginPdf, flatten({ blocks: [margin] }), inkOf([{ top: 300, bottom: 310, baseline: 308 }]), [[pdf.lines.length]]).split === 1 &&
+      figureScores(marginPdf, flatten({ blocks: [margin] }), inkOf([{ top: 250, bottom: 290, baseline: 290 }, { top: 300, bottom: 310, baseline: 308 }]), [[pdf.lines.length]]).split === 0,
   );
   // A display's crop that holds a line of the paragraph (it starts at the column's edge, words of prose) holds prose.
   const cropPdf = (text: string, left: number): PdfText => ({ ...pdf, lines: [...lines, { page: 1, top: 400, bottom: 410, left, right: left + 200, text }] });
@@ -1596,6 +1653,11 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
   const flatFloats = flatten({ blocks: floats });
   const captions = captionScores(flatFloats);
   check("floats: a paragraph that opens as a caption is a caption apart; a sentence that names a figure (\"Figure 6.1 shows\") is none; a figure's caption with no stop after its number is kept", captions.alone === 1 && captions.captions === 3, JSON.stringify(captions));
+  // A caption cut in two: its tail opens in lower case on the page's next line; a paragraph after the float's gap is none.
+  const cut = flatten({ blocks: [{ kind: "figure", caption: [{ text: "Figure 2: A plot of the flow" }], at: { page: 1, region: region(72, 100, 300, 300) } }, para("is clearly linear.")] });
+  const cutPdf = (gap: number) => pdfOf([line(300, 72, 400, "Figure 2: A plot of the flow"), line(300 + gap, 72, 160, "is clearly linear.")]);
+  const tailOf = (gap: number) => captionScores(cut, cutPdf(gap), [[0], [1]]).alone;
+  check("floats: a caption's tail on the page's next line is a caption apart; a paragraph a float's gap under it is none", tailOf(12) === 1 && tailOf(30) === 0, `${tailOf(12)} ${tailOf(30)}`);
   const overlaps = cropOverlaps(pdfOf([]), flatFloats);
   check("floats: two crops that share half their area overlap", overlaps.overlapping === 2 && overlaps.figures === 2, JSON.stringify(overlaps));
 
@@ -1612,6 +1674,26 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     return captionSides(tablePage, f, linesOfUnits(tablePage, f));
   };
   check("floats: a caption the page sets under its table is wrong over it", sideOf("above").wrong === 1 && sideOf("below").wrong === 0 && sideOf("below").tables === 1, `${JSON.stringify(sideOf("above"))}`);
+  // A caption of two lines whose last words stand in the prose half a page under the table: placed on its own lines, the cells on theirs.
+  const twoLines: DocBlock = {
+    kind: "table",
+    caption: [{ text: "TABLE III HUFFMAN COMPRESSION RATIOS ON PRODUCTION CONVERSATION ARCHIVES" }],
+    captionSide: "above",
+    rows: [{ cells: [{ spans: [{ text: "Session" }] }, { spans: [{ text: "Ratio" }] }] }, { cells: [{ spans: [{ text: "c45775-a" }] }, { spans: [{ text: "65.3%" }] }] }],
+  };
+  const twoLinesPage = pdfOf([
+    line(100, 72, 300, "TABLE III"),
+    line(112, 72, 300, "H UFFMAN COMPRESSION RATIOS ON PRODUCTION CONVERSATION"),
+    line(124, 72, 300, "ARCHIVES"),
+    line(140, 72, 300, "Session Ratio"),
+    line(152, 72, 300, "c45775-a 65.3%"),
+    line(400, 72, 300, "Session names appear in the prose too, as do these"),
+    line(412, 72, 300, "production conversation archives."),
+  ]);
+  const twoLinesFlat = flatten({ blocks: [twoLines] });
+  const twoLinesPlaced = linesOfUnits(twoLinesPage, twoLinesFlat);
+  const twoLinesSide = captionSides(twoLinesPage, twoLinesFlat, twoLinesPlaced);
+  check("layout: a caption's last words in the prose under the table do not place the caption there; its table reads over its cells", twoLinesPlaced[0].every((l) => twoLinesPage.lines[l].top < 130) && twoLinesSide.tables === 1 && twoLinesSide.wrong === 0, `${JSON.stringify(twoLinesPlaced)} ${JSON.stringify(twoLinesSide)}`);
 
   // A note mark on the Title the page's title line does not print.
   const titled = (text: string) => {

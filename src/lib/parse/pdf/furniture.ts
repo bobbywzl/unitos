@@ -249,11 +249,22 @@ export function findFurniture(pages: Line[][], pageHeights: number[], pageNumber
   for (const [row, why] of dropped) for (const line of row.lines) drops.push({ page: row.page, line, why });
 
   // 5. A line of one to four digits in the top or bottom 8% of its page.
+  // One between two of TeX's sized delimiters of a line just over or under
+  // it is their lower or upper row (parse loop finding: the probability
+  // cheatsheet's binomial (n 2) at a page's foot lost its "2", and the
+  // formula was a crop).
   const gone = new Set(drops.map((d) => d.line));
+  const delimiters = (l: Line) => l.items.flatMap((i) => i.glyphs ?? []).filter((g) => g.family === "omx" && g.code < 0x30);
+  const fenced = (line: Line, lines: Line[]) =>
+    lines.some((o) => {
+      if (o === line || Math.abs(o.y - line.y) > line.size * 1.5) return false;
+      const ds = delimiters(o);
+      return ds.some((g) => g.x + g.w <= line.x + line.size * 0.2 && line.x - g.x < line.size * 2) && ds.some((g) => g.x >= line.xEnd - line.size * 0.2 && g.x - line.xEnd < line.size * 2);
+    });
   for (const [p, lines] of pages.entries()) {
     const h = pageHeights[p];
     for (const line of lines) {
-      if (gone.has(line) || !/^\d{1,4}\.?$/.test(line.text) || (line.y >= h * 0.08 && line.y <= h * 0.92)) continue;
+      if (gone.has(line) || !/^\d{1,4}\.?$/.test(line.text) || (line.y >= h * 0.08 && line.y <= h * 0.92) || fenced(line, lines)) continue;
       drops.push({ page: pageNumbers?.[p] ?? p, line, why: "band" });
     }
   }

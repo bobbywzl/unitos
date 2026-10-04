@@ -351,6 +351,27 @@ export function attachTableCaptions(segments: Segment[]): Segment[] {
   const linkOnly = (table: Segment) => /^<table[^>]*><caption[^>]*>/.test(table.html ?? "") && LINK_LINE_RE.test(table.text.slice(0, table.text.indexOf("\n")));
   const open = (table: Segment | undefined): table is Segment => table !== undefined && (!table.html?.includes("<caption") || linkOnly(table));
   const labeled = segments.flatMap((s, k) => (isCaption(s) ? [k] : []));
+  // A caption's last line, read as a paragraph of its own: IEEE sets a
+  // table's caption centered in capitals, and a title of two lines fills
+  // its first, so the short last line stands apart from it. One line in
+  // capitals, on the caption's page, under a caption that ends in no
+  // period, is the caption's (PDF benchmark finding: ieee-elixpo-caching's
+  // "TABLE III / HUFFMAN COMPRESSION RATIOS ON PRODUCTION CONVERSATION /
+  // ARCHIVES" left ARCHIVES a paragraph between the caption and its table,
+  // and the table took no caption).
+  for (const k of labeled) {
+    const caption = segments[k];
+    const next = segments[k + 1];
+    if (!next || next.type !== "PARAGRAPH" || next.footnote || taken.has(next) || next.page !== (caption.breaks?.at(-1)?.page ?? caption.page)) continue;
+    const tail = next.text.trim();
+    if (tail.includes("\n") || tail.length > 80 || tail !== tail.toUpperCase() || !/\p{Lu}/u.test(tail) || /[.:]$/.test(caption.text.trim())) continue;
+    // Small capitals are set at four fifths of the size.
+    if (next.lineSize !== undefined && caption.lineSize !== undefined && (next.lineSize < caption.lineSize * 0.75 || next.lineSize > caption.lineSize + 0.5)) continue;
+    const at = caption.text.length + 1;
+    caption.text = `${caption.text}\n${next.text}`;
+    caption.runs = [...(caption.runs ?? []), ...(next.runs ?? []).map((r) => ({ ...r, start: r.start + at, end: r.end + at }))];
+    taken.add(next);
+  }
   let over = 0;
   let under = 0;
   for (const k of labeled) {

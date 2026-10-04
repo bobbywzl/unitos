@@ -32,11 +32,15 @@ const chars = (list: Item[]) => list.reduce((n, i) => n + i.str.trim().length, 0
 // The page's horizontal rules outside its tables, while pageLines reads it:
 // a rule across a gutter ends the band of columns above it (splitAt).
 let pageRules: Box[] = [];
+// The boxes the page draws as paths (a listing's frame), while pageLines
+// reads it.
+let pageFrames: Box[] = [];
 
-export function pageLines(items: Item[], pageWidth: number, page: number, graphics: Placed[] = [], rules: Box[] = []): Line[] {
+export function pageLines(items: Item[], pageWidth: number, page: number, graphics: Placed[] = [], rules: Box[] = [], frames: Box[] = []): Line[] {
   const text = items.filter((i) => i.str.trim().length > 0);
   if (text.length === 0 && graphics.length === 0) return [];
   pageRules = rules;
+  pageFrames = frames;
   const pieces = readRegion(text, graphics, page, pageWidth, 0);
   const lines: Line[] = [];
   let order = 0;
@@ -50,7 +54,40 @@ export function pageLines(items: Item[], pageWidth: number, page: number, graphi
     for (const line of built) columns.set(line, extent);
     lines.push(...built);
   }
-  return lines;
+  return joinRightRuns(lines, page);
+}
+
+// A short run set flush right on another line's baseline, a wide gap past
+// its end, is that line's own end: an option's "Default: chem" at the
+// right margin of its "circletype = chem|math". Read in a side of its
+// own, it stood after the description under its line (parse loop
+// finding: a LaTeX package's manual sets each option so; a line in a
+// typewriter face set smaller than its default broke away, and its
+// default read after its description). A run that starts where other
+// lines start, past the page's flush-right runs, is a column's line.
+function joinRightRuns(lines: Line[], page: number): Line[] {
+  // The right margin: the farthest line end that two other lines share.
+  const ends = lines.map((l) => l.xEnd).filter((x, k, all) => all.filter((o, j) => j !== k && Math.abs(o - x) <= 1).length >= 2);
+  if (ends.length === 0) return lines;
+  const right = Math.max(...ends);
+  const words = (l: Line) => l.text.trim().split(/\s+/).length;
+  const flush = (l: Line) => Math.abs(l.xEnd - right) <= l.size * 0.5 && words(l) <= 4;
+  const out = [...lines];
+  for (const run of lines) {
+    if (!flush(run) || run.cells.length !== 1) continue;
+    if (lines.some((l) => l !== run && !flush(l) && Math.abs(l.x - run.x) <= 1)) continue;
+    const row = out.filter((l) => l !== run && Math.abs(l.y - run.y) <= Math.min(l.size, run.size) * 0.2);
+    const owner = row.filter((l) => l.xEnd < run.x - run.size * 2).sort((a, b) => b.xEnd - a.xEnd)[0];
+    if (!owner || row.some((l) => l !== owner && l.x < run.x && l.xEnd > owner.xEnd)) continue;
+    const joined = buildLines([...owner.items, ...run.items], page);
+    if (joined.length !== 1) continue;
+    const [line] = joined;
+    const [a, b] = columns.get(owner) ?? [owner.x, owner.xEnd];
+    columns.set(line, [Math.min(a, line.x), Math.max(b, line.xEnd)]);
+    out[out.indexOf(owner)] = line;
+    out.splice(out.indexOf(run), 1);
+  }
+  return out;
 }
 
 // extent: the column the region's lines were read in, when it is not the
@@ -71,6 +108,20 @@ function readRegion(items: Item[], graphics: Placed[], page: number, pageWidth: 
       ...readRegion(items.filter((i) => i !== table && higher(i.y)), graphics.filter((p) => higher((p.box.y1 + p.box.y2) / 2)), page, pageWidth, depth, undefined, column),
       { items: [table], extent },
       ...readRegion(items.filter((i) => i !== table && !higher(i.y)), graphics.filter((p) => !higher((p.box.y1 + p.box.y2) / 2)), page, pageWidth, depth, undefined, column),
+    ];
+  }
+  const pair = lines ? null : listingPair(items, graphics);
+  if (pair) {
+    const { frame, code, output } = pair;
+    const higher = (y: number) => y > frame.y2;
+    const lower = (y: number) => y < frame.y1;
+    const inside = (p: Placed) => !higher((p.box.y1 + p.box.y2) / 2) && !lower((p.box.y1 + p.box.y2) / 2);
+    const column = extent ?? [x0, x1];
+    return [
+      ...readRegion(items.filter((i) => higher(i.y)), graphics.filter((p) => higher((p.box.y1 + p.box.y2) / 2)), page, pageWidth, depth, undefined, column),
+      { items: code, extent: column },
+      ...leaf(output, graphics.filter(inside), undefined, column),
+      ...readRegion(items.filter((i) => lower(i.y)), graphics.filter((p) => lower((p.box.y1 + p.box.y2) / 2)), page, pageWidth, depth, undefined, column),
     ];
   }
   const split = depth < 3 ? findSplit(items, graphics, page, pageWidth, depth) : null;
@@ -114,6 +165,55 @@ function readRegion(items: Item[], graphics: Placed[], page: number, pageWidth: 
     if (band.separator) out.push(band.separator);
   }
   return out;
+}
+
+// A listing beside what it typesets: inside a frame the page draws,
+// typewriter lines on the left, the output in a text face on the right, a
+// clear gap between them that no word crosses. The listing reads first, as
+// one block, then the output (parse loop finding: a LaTeX package's manual
+// sets each example's code beside its rendered result in one frame; read
+// row by row, every code line took the output on its baseline into it, and
+// the examples read as tables, lists, and paragraphs of code and formulas
+// mixed). Nothing of the region may stand beside the frame, and an output
+// line of more than six words is a table's description column, not an
+// example's output.
+function listingPair(items: Item[], graphics: Placed[]): { frame: Box; code: Item[]; output: Item[] } | null {
+  for (const frame of pageFrames) {
+    const within = (i: Item) => i.x + i.w / 2 > frame.x1 && i.x + i.w / 2 < frame.x2 && i.y > frame.y1 && i.y < frame.y2;
+    const inside = items.filter(within);
+    if (inside.length < 2) continue;
+    if (items.some((i) => !within(i) && i.y >= frame.y1 && i.y <= frame.y2)) continue;
+    const monoSizes = inside.filter((i) => i.mono && i.str.trim()).map((i) => i.size);
+    if (monoSizes.length === 0) continue;
+    const codeSize = median(monoSizes);
+    // A listing's line number, set small in a text face, counts for
+    // neither side (text.ts isMonoLine).
+    const counted = inside.filter((i) => i.mono || !/^\s*\d{1,4}\s*$/.test(i.str) || i.size >= codeSize * 0.85);
+    const share = (list: Item[]) => {
+      const all = chars(list);
+      return all === 0 ? null : chars(list.filter((i) => i.mono)) / all;
+    };
+    // The gaps between the items' spans across the frame, left to right.
+    const spans = [...inside].sort((a, b) => a.x - b.x);
+    let reach = spans[0].x + spans[0].w;
+    for (const item of spans.slice(1)) {
+      if (item.x - reach >= codeSize) {
+        const gap = reach;
+        const code = inside.filter((i) => i.x + i.w <= gap + 0.01);
+        const output = inside.filter((i) => i.x + i.w > gap + 0.01);
+        const left = share(code.filter((i) => counted.includes(i)));
+        const right = share(output);
+        if (left !== null && right !== null && left >= 0.85 && right <= 0.15) {
+          const rows = buildLines(output, 0);
+          if (rows.every((l) => l.text.trim().split(/\s+/).length <= 6) && !graphics.some((p) => p.box.x2 <= gap && p.box.y1 < frame.y2 && p.box.y2 > frame.y1)) {
+            return { frame, code, output };
+          }
+        }
+      }
+      reach = Math.max(reach, item.x + item.w);
+    }
+  }
+  return null;
 }
 
 const extentOf = (items: Item[]): [number, number] => [Math.min(...items.map((i) => i.x)), Math.max(...items.map((i) => i.x + i.w))];
@@ -496,7 +596,22 @@ function isNoteBand(band: Band, page: number): boolean {
   if (note.items.reduce((n, i) => n + i.str.replace(/[^\p{L}]/gu, "").length, 0) < 10) return false;
   const size = median(wide.items.map((i) => i.size));
   const gutter = Math.min(...band.right.items.map((i) => i.x)) - Math.max(...band.left.items.map((i) => i.x + i.w));
-  return gutter >= size && isColumn(wide.items, page) && isDense(buildLines(wide.items, page));
+  // A note set smaller than the column stands closer: three quarters of
+  // the column's size apart (parse loop finding: a LaTeX package's manual
+  // sets its "Introduced in version 4.11" notes in 9 pt, 10.6 pt left of
+  // its 10.9 pt column, and each note ran into the column's line beside
+  // it: "Introduced	chemformula offers …").
+  const smaller = median(note.items.map((i) => i.size)) <= size * 0.9;
+  // Beside smaller notes, a column whose entries stand apart (a command's
+  // line over its description, a blank line under each) is dense enough
+  // when a third of its lines follow the line above at the text's leading
+  // (parse loop finding: the same manual's list of commands, p. 11, read
+  // its notes into the lines beside them).
+  const lines = buildLines(wide.items, page);
+  const gaps = lines.slice(1).map((l, k) => lines[k].y - l.y);
+  const close = gaps.filter((g) => g <= size * 1.6).length;
+  const dense = isDense(lines) || (smaller && close * 3 >= gaps.length);
+  return gutter >= size * (smaller ? 0.75 : 1) && isColumn(wide.items, page) && dense;
 }
 
 // A region cut above and under one band: what stands above it, the band,
@@ -546,43 +661,67 @@ function withoutTail(band: Band, page: number): Band {
 
 // A note beside a column: the band's narrow side, a seventh of its
 // characters or less, set in another size or in italic, with no graphic on
-// its side (a pull quote, a side note, a label). It reads beside the wide side's
-// paragraph that holds its top, as the reader meets it: after it when it
-// stands on the right (the Earth Observer's pull quote stands beside the
-// article's first paragraph), and each of its groups before the paragraph
-// beside it when it stands on the left (PLOS's sidebar beside the page's
-// first paragraph, the 10-K's italic labels beside their paragraphs).
+// its side (a pull quote, a side note, a label), or set in the margin
+// (inMargin, a graphic there a margin figure). It reads beside the wide
+// side's paragraph that holds its top, as the reader meets it: after it
+// when it stands on the right (the Earth Observer's pull quote stands
+// beside the article's first paragraph), and each of its groups before
+// the paragraph beside it when it stands on the left (PLOS's sidebar
+// beside the page's first paragraph, the 10-K's italic labels beside
+// their paragraphs). A margin figure is a group of its own.
 function sideNote(band: Band, page: number): Side[] | null {
   const onLeft = chars(band.left.items) < chars(band.right.items);
   const [note, wide] = onLeft ? [band.left, band.right] : [band.right, band.left];
-  if (note.items.length === 0 || note.graphics.length > 0 || chars(note.items) * 7 > chars(note.items) + chars(wide.items)) return null;
+  if (note.items.length === 0 || chars(note.items) * 7 > chars(note.items) + chars(wide.items)) return null;
   const size = (list: Item[]) => median(list.map((i) => i.size));
   const italic = (list: Item[]) => list.filter((i) => i.italic).length * 2 > list.length;
-  if (Math.abs(size(note.items) - size(wide.items)) < size(wide.items) * 0.1 && italic(note.items) === italic(wide.items)) return null;
   const lines = buildLines(wide.items, page);
+  // A note set at the column's size and shape stands in the margin
+  // beyond a justified column: four lines or more of the column end at
+  // its right edge (within a quarter em: an italic letter or a hyphen
+  // reaches past it), and every word of the note starts an em or more
+  // past that edge, and so does every graphic on the note's side (parse
+  // loop finding: a Tufte textbook sets its margin notes and its margin
+  // figures' labels at the body's size; read in one pass, a paragraph
+  // beside a figure's axis labels became a table, and a display's
+  // denominator joined the note on its baseline; a figure's caption in
+  // the margin joined the display beside it once the figure was found).
+  const inMargin = () => {
+    const edge = Math.max(...lines.map((l) => l.xEnd));
+    const em = size(wide.items);
+    return (
+      !onLeft &&
+      lines.filter((l) => edge - l.xEnd <= em * 0.25).length >= 4 &&
+      note.items.every((i) => i.x >= edge + em) &&
+      note.graphics.every((p) => p.box.x1 >= edge + em)
+    );
+  };
+  if (note.graphics.length > 0 && !inMargin()) return null;
+  if (Math.abs(size(note.items) - size(wide.items)) < size(wide.items) * 0.1 && italic(note.items) === italic(wide.items) && !inMargin()) return null;
   const gaps = lines.slice(1).map((l, k) => lines[k].y - l.y);
   const pitch = median(gaps);
   // A group of the note: its lines at their own pitch (a stray mark on the
   // note's side, its page number, is a group of its own).
   const noteLines = buildLines(note.items, page);
   const notePitch = median(noteLines.slice(1).map((l, k) => noteLines[k].y - l.y));
-  const groups: Item[][] = [];
+  const groups: (Side & { top: number })[] = [];
   noteLines.forEach((l, k) => {
     // Two notes alone set their one gap as the pitch: a gap of two lines
     // of their size parts them too (the MML book's "associativity" and
     // "distributivity", four lines apart, read as one note).
-    if (k > 0 && (noteLines[k - 1].y - l.y > notePitch * 1.3 || noteLines[k - 1].y - l.y > l.size * 2.5)) groups.push([]);
-    if (groups.length === 0) groups.push([]);
-    groups[groups.length - 1].push(...l.items);
+    if (k > 0 && (noteLines[k - 1].y - l.y > notePitch * 1.3 || noteLines[k - 1].y - l.y > l.size * 2.5)) groups.push({ items: [], graphics: [], top: l.y });
+    if (groups.length === 0) groups.push({ items: [], graphics: [], top: l.y });
+    groups[groups.length - 1].items.push(...l.items);
   });
+  for (const graphic of note.graphics) groups.push({ items: [], graphics: [graphic], top: graphic.box.y2 });
+  groups.sort((a, b) => b.top - a.top);
   // Where each group reads: under the cut, a y on the wide side. On the
   // right, the paragraph's end: the first line at or under the group's top
   // whose gap to the next line is wider than the lines' pitch. On the left,
   // the paragraph's start: the last line at or over the group's top whose
   // gap to the line above is wider than the pitch, or the first line.
   const cuts: number[] = [];
-  for (const group of groups) {
-    const top = Math.max(...group.map((i) => i.y));
+  for (const { top } of groups) {
     if (onLeft) {
       let start = lines.findLastIndex((l, k) => l.y >= top - l.size * 0.5 && (k === 0 || gaps[k - 1] > pitch * 1.3));
       if (start < 0) start = 0;
@@ -600,7 +739,7 @@ function sideNote(band: Band, page: number): Side[] | null {
     const cut = Math.min(above, cuts[k]);
     const between = (y: number) => y <= above && y > cut;
     parts.push({ items: wide.items.filter((i) => between(i.y)), graphics: wide.graphics.filter((p) => between(graphicY(p))) });
-    parts.push({ items: group, graphics: [] });
+    parts.push({ items: group.items, graphics: group.graphics });
     above = cut;
   });
   parts.push({ items: wide.items.filter((i) => i.y <= above), graphics: wide.graphics.filter((p) => graphicY(p) <= above) });

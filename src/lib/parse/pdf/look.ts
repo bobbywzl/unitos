@@ -12,6 +12,12 @@ import { CONTROL_CHARS_RE, itemText, normalizeGlyphs, symbolFont, symbolText } f
 import type { Item, Look } from "@/lib/parse/pdf/types";
 import type { ParsedBlock, TextFont } from "@/lib/parse/types";
 
+// An icon font: Font Awesome, Material Icons, Glyphicons, Octicons, Ionicons,
+// IcoMoon, Bootstrap Icons. Its glyphs draw pictures at private-use codes.
+const ICON_FONT_RE = /(?:^|\+)(?:FontAwesome|fa-?(?:solid|regular|brands|light)|Material\s?Icons|Glyphicons|Octicons|Ionicons|IcoMoon|bootstrap-icons)/i;
+// A text of private-use characters and spaces only.
+const PRIVATE_USE_RE = /^[\s\uE000-\uF8FF]+$/;
+
 /** A font by pdf.js's id: its name and pdf.js's fallback name ("serif",
     "sans-serif", "monospace"). */
 export type FontObject = (id: string) => { name?: string; fallbackName?: string } | null | undefined;
@@ -213,9 +219,15 @@ export function lookItems(items: Item[], drawing: PageDrawing, fonts: FontObject
   };
   // A symbol font's codes read as the symbols it draws (glyphs.ts), and
   // small capitals drawn inside one run come apart into runs of one size.
+  // An icon font's glyph is a picture, no text: it reads as a private-use
+  // character and drops (parse loop finding: asciidoctor-pdf draws an
+  // admonition's icon in Font Awesome at the margin, and a Chinese book
+  // read each icon as a private-use character opening the paragraph
+  // beside it).
   const drawnCaps = new Map<Item, number>();
   const read: Item[] = [];
   for (const item of items) {
+    if (item.font && ICON_FONT_RE.test(baseOf(item.font)) && PRIVATE_USE_RE.test(item.str)) continue;
     const symbols = item.font ? symbolFont(baseOf(item.font)) : null;
     if (symbols) item.str = symbolText(symbols, item.str, item.glyphs);
     read.push(...((!symbols && sizeRuns(item, drawnCaps)) || [item]));
