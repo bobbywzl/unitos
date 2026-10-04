@@ -65,6 +65,15 @@ export function linesOfUnits(pdf: PdfText, cand: Flat): number[][] {
       if (found) out.push((last = next(found)));
       return out;
     }
+    // A unit of one or two words stands on a line that holds those words
+    // and no others (parse bench finding: a Keynote title slide's "Elvis
+    // Saravia", 160 pt under its subtitle, stood on no line, so the
+    // subtitle's space after it read as a blank with no block under it).
+    if (words.length > 0 && words.length < 3) {
+      const found = (runs.get(`${words.length}:${words.join(" ")}`) ?? []).filter((l) => wordsOf(pdf.lines[l].text).length === words.length);
+      if (found.length > 0) out.push((last = next(found)));
+      return out;
+    }
     const before = last;
     const held = new Set<number>();
     for (let k = 0; k + 3 <= words.length; k++) {
@@ -253,6 +262,11 @@ export function indentScores(pdf: PdfText, cand: Flat, placed: number[][]): Inde
     // The first line placed must hold the paragraph's first words; a paragraph of one line placed is one
     // line only where that line holds its words (its wrapped lines may be too short to place).
     const words = units.flatMap((u) => cand.toks.slice(cand.units[u].first, cand.units[u].end).map((t) => t.w));
+    // A paragraph of one or two words tells nothing of its column: the
+    // labels beside it on the page start at its place too (chemformula's
+    // manual p. 23, the arrow labels "ab" and "abc" stacked on one left
+    // edge read as their own column's edge).
+    if (words.length < 3) return;
     const held = wordsOf(lines[0].text).map((w) => w.w).join(" ");
     if (!held.startsWith(words.slice(0, 3).join(" "))) return;
     if (lines.length === 1 && wordsOf(lines[0].text).length < 0.9 * words.length) return;
