@@ -155,7 +155,17 @@ function wordsOf(line: Line, column: { left: number; right: number }) {
   // differentials, and the display was a crop); "de", "do", "da", "du",
   // and "di" are words.
   const exempt = (w: string) => !prose && (x > column.left + line.size * 1.5 || opens) && (MATH_WORDS.has(w.toLowerCase()) || DIFFERENTIAL_RE.test(w));
-  const all = outside.match(/\p{L}+/gu) ?? [];
+  // mathpazo and the Times math sets take a formula's letters from the
+  // text's italic: on a labeled line with a relation, set in from its
+  // column's edge, a word of two or three italic letters is a product of
+  // variables, no word of prose (parse loop finding: a quantum mechanics
+  // book's (25.31), "Cik − (Aik − Bik) = …", read as text for its three
+  // products, and the display lost its fraction).
+  const italicAt = new Uint8Array(text.length);
+  for (const r of runs) if (r.italic) italicAt.fill(1, r.start, r.end);
+  const variables = label !== null && RELATION_RE.test(text) && x > column.left + line.size * 1.5;
+  const product = (m: RegExpMatchArray) => variables && m[0].length >= 2 && m[0].length <= 3 && italicAt.subarray(m.index ?? 0, (m.index ?? 0) + m[0].length).every((v) => v === 1);
+  const all = [...outside.matchAll(/\p{L}+/gu)].filter((m) => !product(m)).map((m) => m[0]);
   const words = all.filter((w) => w.length >= 2 && !exempt(w) && !/^\p{Lu}{2,3}$/u.test(w));
   // A formula's name set in capitals (\mathrm{GOE} over a 𝒦) is no prose.
   const letters = all.filter((w) => !exempt(w) && !/^\p{Lu}{2,3}$/u.test(w)).join("").length;
