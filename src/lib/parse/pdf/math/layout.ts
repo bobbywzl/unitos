@@ -128,6 +128,9 @@ const ITALIC: Partial<Record<MathFamily, Record<number, number>>> = {
     0x5a: 0.079,
   },
 };
+// The integral signs' italic correction in em (cmex10: ∫ and ∮, text and
+// display): how far right of the lower limit TeX sets the upper one.
+const INT_ITALIC: Record<number, number> = { 0x48: 0.194, 0x49: 0.444, 0x52: 0.194, 0x5a: 0.444 };
 const italicOf = (a: Atom): number => ((a.fam ? ITALIC[a.fam]?.[a.code] : undefined) ?? (a.fam === null && a.italic ? 0.1 : 0)) * a.size;
 
 function variantOf(base: string): Variant {
@@ -1685,6 +1688,27 @@ function limits(atoms: Atom[], em: number): Atom[] {
   const under = (op: Atom, b: Atom) => b.top <= op.bottom + 0.1 * em && small(op, b);
   const fits = (op: Atom, b: Atom) => over(op, b) || under(op, b);
   const taken = limitParts(atoms.filter((c) => !ops.includes(c) && ops.some((o) => fits(o, c))), ops, fits, 0.3 * em, em);
+  // An integral with limits (\int\limits) sets its upper limit its italic
+  // correction right of the lower one: TeX centers both on the sign's
+  // box with the correction, then shifts the upper right and the lower
+  // left by half of it. With a lower limit under it, the run over its top
+  // centered there is its upper limit (parse loop finding: a quantum
+  // mechanics book's (25.27), ∫ from −e to e three times, read the upper
+  // e of each as no part of the formula, and the display was a crop).
+  for (const op of ops) {
+    const slant = op.fam === "omx" ? (INT_ITALIC[op.code] ?? 0) * op.size : 0;
+    const mine = taken.get(op) ?? [];
+    if (slant === 0 || mine.length === 0 || !mine.every((b) => under(op, b)) || Math.abs(cx({ ...op, x1: Math.min(...mine.map((b) => b.x1)), x2: Math.max(...mine.map((b) => b.x2)) }) - cx(op)) > 0.2 * em) continue;
+    const claimed = new Set([...taken.values()].flat());
+    const free = atoms.filter((c) => c !== op && !ops.includes(c) && !claimed.has(c) && over(op, c) && c.bottom - op.top < 0.6 * em);
+    const run = free.filter((c) => Math.abs(cx(c) - (cx(op) + slant)) < 0.4 * em);
+    if (run.length === 0) continue;
+    const x1 = Math.min(...run.map((b) => b.x1));
+    const x2 = Math.max(...run.map((b) => b.x2));
+    const whole = free.filter((c) => c.x2 > x1 - 0.1 * em && c.x1 < x2 + 0.1 * em && Math.abs(c.yb - run[0].yb) < 0.3 * c.size);
+    const mid = (Math.min(...whole.map((b) => b.x1)) + Math.max(...whole.map((b) => b.x2))) / 2;
+    if (Math.abs(mid - (cx(op) + slant)) < 0.2 * em) taken.set(op, [...mine, ...whole]);
+  }
   for (const op of ops) {
     const mine = taken.get(op) ?? [];
     const up = mine.filter((b) => over(op, b));
