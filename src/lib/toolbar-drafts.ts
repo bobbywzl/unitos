@@ -174,3 +174,37 @@ export function caretToEnd(e: { currentTarget: HTMLInputElement | HTMLTextAreaEl
   const end = e.currentTarget.value.length;
   e.currentTarget.setSelectionRange(end, end);
 }
+
+// Card drafts (SPEC.md §6): the words typed in a card's box over the
+// article — a comment card, a highlight's comment, a tool card's follow-up,
+// the assistant chat's next question — by the card's note id. The reader
+// keeps them in memory and here, so a reload or a crash keeps them. Cleared
+// by the reader once the box is sent or holds the saved text again.
+const CARD_DRAFTS_KEY = "unitos-card-drafts";
+const MAX_CARD_DRAFTS = 50;
+
+export function loadCardDrafts(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  try {
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(CARD_DRAFTS_KEY) ?? "{}");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed as Record<string, unknown>).filter((e): e is [string, string] => typeof e[1] === "string"),
+    );
+  } catch {
+    return {};
+  }
+}
+
+export function saveCardDrafts(drafts: Record<string, string>) {
+  if (typeof window === "undefined") return;
+  // The newest entries win when there are too many: an object keeps its
+  // keys in the order they were added.
+  const entries = Object.entries(drafts).slice(-MAX_CARD_DRAFTS);
+  try {
+    if (entries.length === 0) window.localStorage.removeItem(CARD_DRAFTS_KEY);
+    else window.localStorage.setItem(CARD_DRAFTS_KEY, JSON.stringify(Object.fromEntries(entries)));
+  } catch {
+    // Storage full or blocked: the drafts stay in memory for this visit.
+  }
+}

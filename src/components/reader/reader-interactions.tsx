@@ -158,7 +158,7 @@ import { CardColumn, CommentCard } from "@/components/docs/layer/comment-card";
 import { setCommentResolved } from "@/lib/annotations/resolve";
 import { COMMENTS_EVENT, flashInPage, PAGE_EDITED_EVENT, type CommentsView } from "@/components/docs/layer/events";
 import { registerDocumentFlush } from "@/components/docs/layer/flush";
-import { DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
+import { CLOSE_TOOLBAR_EVENT, DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
 import { matchesCombo } from "@/components/docs/keys";
 import {
   assistantAuthor,
@@ -168,7 +168,16 @@ import {
 } from "@/lib/docs/assistant-suggestions";
 import type { SuggestCommand } from "@/lib/prompts/suggest";
 import { readNdjson } from "@/lib/ndjson";
-import { caretToEnd, clearToolbarDraft, useToolbarDraft, useToolbarDraftRestore, writeToolbarDraft } from "@/lib/toolbar-drafts";
+import { saveNoteText } from "@/lib/notes/save-text";
+import {
+  caretToEnd,
+  clearToolbarDraft,
+  loadCardDrafts,
+  saveCardDrafts,
+  useToolbarDraft,
+  useToolbarDraftRestore,
+  writeToolbarDraft,
+} from "@/lib/toolbar-drafts";
 import {
   publishSuggestRun,
   SUGGEST_EVENT,
@@ -2541,11 +2550,22 @@ export function ReaderInteractions({
   // What a card's box holds that the reader typed and has not sent: kept by
   // the card's annotation, so a card closed by Escape or a click reopens from
   // its mark with the words still in its box.
-  const cardDraftsRef = useRef<Record<string, string>>({});
+  // Kept in localStorage too (unitos-card-drafts, by note id), so a reload or
+  // a crash keeps them as well (SPEC.md §6).
+  const cardDraftsRef = useRef<Record<string, string> | null>(null);
+  if (cardDraftsRef.current === null) cardDraftsRef.current = loadCardDrafts();
+  const storedCardDrafts = useRef("");
+  useEffect(() => {
+    const json = JSON.stringify(cardDraftsRef.current ?? {});
+    if (json === storedCardDrafts.current) return;
+    storedCardDrafts.current = json;
+    saveCardDrafts(cardDraftsRef.current ?? {});
+  });
   const keepCardDraft = (noteId: string | null | undefined, text: string, saved = "") => {
     if (!noteId) return;
-    if (text !== saved && text.trim()) cardDraftsRef.current[noteId] = text;
-    else delete cardDraftsRef.current[noteId];
+    const drafts = (cardDraftsRef.current ??= {});
+    if (text !== saved && text.trim()) drafts[noteId] = text;
+    else delete drafts[noteId];
   };
   if (bubble) keepCardDraft(bubble.noteId, bubble.input);
   if (simplifyCard) keepCardDraft(simplifyCard.noteId, simplifyCard.input);
@@ -2982,7 +3002,15 @@ export function ReaderInteractions({
     container.addEventListener(DOCS_EVENT.figureTools, onFigureTools);
     container.addEventListener("keydown", onKey);
     container.addEventListener("dissect:toast", onToast);
+    // The page editor's link box (Ctrl+K) takes the keys: the selection
+    // toolbar over the same words closes, so one layer is open at a time.
+    const onCloseToolbar = () => {
+      setPopover(null);
+      setSubmenu(null);
+    };
+    container.addEventListener(CLOSE_TOOLBAR_EVENT, onCloseToolbar);
     return () => {
+      container.removeEventListener(CLOSE_TOOLBAR_EVENT, onCloseToolbar);
       container.removeEventListener(DOCS_EVENT.comment, onComment);
       container.removeEventListener(DOCS_EVENT.tool, onTool);
       container.removeEventListener(DOCS_EVENT.figureTools, onFigureTools);
@@ -3920,7 +3948,7 @@ export function ReaderInteractions({
         // A pure highlight stores its quote as content; its comment starts empty.
         const comment = summary.content === (summary.quotedText ?? "") ? "" : summary.content;
         // Words typed in the card before it closed come back (SPEC.md §6).
-        const draft = cardDraftsRef.current[summary.noteId] ?? comment;
+        const draft = cardDraftsRef.current?.[summary.noteId] ?? comment;
         // The block reader: the card docks beside the words like a tool card,
         // or under the paragraph in a narrow reader — never on the words
         // (SPEC.md §6).
@@ -3988,7 +4016,7 @@ export function ReaderInteractions({
           noteId: stored.noteId,
           ...slot,
           messages: parseTranscript(stored.content),
-          input: cardDraftsRef.current[stored.noteId] ?? "",
+          input: cardDraftsRef.current?.[stored.noteId] ?? "",
           busy: false,
         });
         return;
@@ -3999,7 +4027,7 @@ export function ReaderInteractions({
         setCommentCard({
           ...slot,
           noteId: summary?.noteId ?? null,
-          draft: (summary?.noteId ? cardDraftsRef.current[summary.noteId] : undefined) ?? stored.content,
+          draft: (summary?.noteId ? cardDraftsRef.current?.[summary.noteId] : undefined) ?? stored.content,
           saved: stored.content,
           busy: false,
           anchor,
@@ -4013,7 +4041,7 @@ export function ReaderInteractions({
       // lose them. Whichever copy is longer is the newer one.
       const local = toolConversationsRef.current[stored.noteId] ?? [];
       const conversation = local.length > stored.conversation.length ? local : stored.conversation;
-      const typed = cardDraftsRef.current[stored.noteId] ?? "";
+      const typed = cardDraftsRef.current?.[stored.noteId] ?? "";
       const chat: ToolChat = {
         ...NO_CHAT,
         conversation,
@@ -5581,10 +5609,14 @@ export function ReaderInteractions({
     }
     setAnnotationCard({ ...card, busy: true });
     try {
-      await api(`/api/notes/${card.noteId}`, "PATCH", { content });
+      // Made from the text the card opened on (a pure highlight stores its
+      // quote): a note changed elsewhere meanwhile keeps both sides' words
+      // (lib/notes/save-text.ts, SPEC.md §6).
+      const base = card.saved === "" ? (card.quotedText ?? "") : card.saved;
+      const saved = await saveNoteText(card.noteId, content, base);
       router.refresh();
       setAnnotationCard(null);
-      showToast(t("common.saved"));
+      showToast(t(saved.conflict ? "outline.savedBoth" : "common.saved"));
     } catch (err) {
       showError(err instanceof Error ? err.message : t("reader.saveFailed"));
       setAnnotationCard((c) => (c ? { ...c, busy: false } : c));
@@ -5612,10 +5644,15 @@ export function ReaderInteractions({
     }
     setCommentCard({ ...card, busy: true });
     try {
-      await api(`/api/notes/${card.noteId}`, "PATCH", { content });
+      // Made from the comment the card opened on: a comment changed elsewhere
+      // meanwhile keeps both sides' words (lib/notes/save-text.ts, SPEC.md §6).
+      const saved = await saveNoteText(card.noteId, content, card.saved);
       router.refresh();
-      setCommentCard((c) => (c ? { ...c, saved: content, busy: false } : c));
-      showToast(t("common.saved"));
+      // Words typed while the save ran stay in the box.
+      setCommentCard((c) =>
+        c ? { ...c, draft: c.draft.trim() === content ? saved.content : c.draft, saved: saved.content, busy: false } : c,
+      );
+      showToast(t(saved.conflict ? "outline.savedBoth" : "common.saved"));
     } catch (err) {
       showError(err instanceof Error ? err.message : t("reader.saveFailed"));
       setCommentCard((c) => (c ? { ...c, busy: false } : c));
