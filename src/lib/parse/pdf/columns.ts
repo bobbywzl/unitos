@@ -152,18 +152,45 @@ function readRegion(items: Item[], graphics: Placed[], page: number, pageWidth: 
   const out: Piece[] = [];
   let aboveWhole = false;
   const own = extent ?? extentOf(items);
+  // A note at the foot of its band beside a paragraph that runs on under
+  // the band: it waits for that paragraph's end.
+  let waiting: Side | null = null;
+  const flush = () => {
+    if (waiting) out.push(...readRegion(waiting.items, waiting.graphics, page, pageWidth, depth + 1));
+    waiting = null;
+  };
   for (const band of split.bands) {
     const note = band.kind === "columns" ? sideNote(band, page) : null;
+    if (!band.kind || band.kind === "columns") flush();
     if (note) {
-      // A note reads beside the paragraph that holds its top.
-      for (const part of note) out.push(...readRegion(part.items, part.graphics, page, pageWidth, depth + 1));
+      // A note reads beside the paragraph that holds its top. The last
+      // note, read after the band's last line, waits when that line runs
+      // on under the band: it reads where the paragraph ends (parse loop
+      // finding: CRS R48907's summary page sets its last author beside the
+      // foot of a paragraph that goes on under the sidebar, and the
+      // author's name read inside the paragraph).
+      const last = note.at(-1);
+      const wide = chars(band.left.items) < chars(band.right.items) ? band.right : band.left;
+      const runsOn = last !== undefined && note.length >= 2 && !last.items.some((i) => wide.items.includes(i)) && endsOpen(buildLines(note[note.length - 2].items, page).at(-1));
+      for (const part of runsOn ? note.slice(0, -1) : note) out.push(...readRegion(part.items, part.graphics, page, pageWidth, depth + 1));
+      if (runsOn && last) waiting = last;
       aboveWhole = false;
       continue;
     }
     if (band.kind && band.kind !== "columns") {
       // A part reads as a region of its own, a block in the region's column.
       for (const side of [band.left, band.right]) {
-        if (side.items.length + side.graphics.length > 0) out.push(...readRegion(side.items, side.graphics, page, pageWidth, depth + 1, undefined, band.kind === "blocks" ? own : extent));
+        if (side.items.length + side.graphics.length === 0) continue;
+        const column = band.kind === "blocks" ? own : extent;
+        const cut = waiting ? paragraphEnd(buildLines(side.items, page)) : null;
+        if (cut === null) {
+          out.push(...readRegion(side.items, side.graphics, page, pageWidth, depth + 1, undefined, column));
+          continue;
+        }
+        const graphicY = (p: Placed) => (p.box.y1 + p.box.y2) / 2;
+        out.push(...readRegion(side.items.filter((i) => i.y > cut), side.graphics.filter((p) => graphicY(p) > cut), page, pageWidth, depth + 1, undefined, column));
+        flush();
+        out.push(...readRegion(side.items.filter((i) => i.y <= cut), side.graphics.filter((p) => graphicY(p) <= cut), page, pageWidth, depth + 1, undefined, column));
       }
       aboveWhole = false;
       continue;
@@ -187,7 +214,29 @@ function readRegion(items: Item[], graphics: Placed[], page: number, pageWidth: 
     aboveWhole = whole;
     if (band.separator) out.push(band.separator);
   }
+  flush();
   return out;
+}
+
+// A line that runs on: it ends in no stop (a sentence's period, a colon).
+function endsOpen(line: Line | undefined): boolean {
+  return line !== undefined && !/[.!?:;]["'”’)\]]*$/.test(line.text.trim());
+}
+
+// Where the paragraph that opens a run of lines ends: under its first line
+// that ends a sentence and stands apart from the next line (a gap wider
+// than the lines' pitch) or ends short of the column's edge (two ems). Null
+// when no line ends it.
+function paragraphEnd(lines: Line[]): number | null {
+  const pitch = median(lines.slice(1).map((l, k) => lines[k].y - l.y));
+  const edge = Math.max(...lines.map((l) => l.xEnd));
+  for (let k = 0; k < lines.length; k++) {
+    const line = lines[k];
+    if (endsOpen(line)) continue;
+    const next = lines[k + 1];
+    if (!next || line.y - next.y > pitch * 1.3 || line.xEnd < edge - line.size * 2) return line.y - line.size * 0.5;
+  }
+  return null;
 }
 
 // A listing beside what it typesets: inside a frame the page draws,
