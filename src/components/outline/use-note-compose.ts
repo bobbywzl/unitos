@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { api } from "@/lib/api";
 import { ACCOUNT_HEADER } from "@/lib/constants";
 import { clearComposeDraft, readComposeDraft, writeComposeDraft } from "@/lib/note-drafts";
+import { newNoteId } from "@/lib/notes/client-id";
+import { saveNoteText } from "@/lib/notes/save-text";
 import { isOffline } from "@/lib/offline/queue";
 import { beginWrite, clearDirty, endWrite, markDirty } from "@/lib/save-state";
 import { tabAccount } from "@/lib/tab-account";
@@ -22,6 +23,12 @@ import type { OutlineActions } from "@/components/outline/use-outline";
 // losing power keeps the note: the next load reopens the composer on the local
 // draft, with the note it created. The tray and the notes full page share this
 // hook.
+//
+// The create carries an id chosen here (lib/notes/client-id.ts), written to
+// the local draft before the create leaves: a reload while the create is on
+// its way reopens the composer on the note it made, and a create sent again
+// answers with that note, never a second copy. Every later save names the
+// text it was made from (lib/notes/save-text.ts).
 export function useNoteCompose({
   sectionId,
   notes,
@@ -40,6 +47,12 @@ export function useNoteCompose({
   const draftRef = useRef(draft);
   const noteIdRef = useRef<string | null>(null);
   const lastSavedRef = useRef("");
+  // The note's text as the server last confirmed it: what the next save is made from.
+  const baseRef = useRef("");
+  // The id the create carries; made once per new note.
+  const createIdRef = useRef<string | null>(null);
+  // The saves, one after another.
+  const chainRef = useRef<Promise<unknown>>(Promise.resolve());
   // The create in flight: Save and Cancel wait for it, so the note is never
   // created twice or left behind.
   const creatingRef = useRef<Promise<void> | null>(null);
@@ -57,13 +70,19 @@ export function useNoteCompose({
     if (!canEdit) return;
     const stored = readComposeDraft(sectionId);
     if (!stored) return;
-    const owned = stored.noteId ? notes.find((n) => n.id === stored.noteId) ?? null : null;
+    // The note it created: by the id the server answered with, else by the
+    // id the create carried (the reload came before the answer).
+    const ownedId = stored.noteId ?? stored.createId ?? null;
+    const owned = ownedId ? notes.find((n) => n.id === ownedId) ?? null : null;
     if (!stored.content.trim() && !owned) {
       clearComposeDraft(sectionId);
       return;
     }
     noteIdRef.current = owned?.id ?? null;
+    // Not here yet: the next create carries the same id.
+    createIdRef.current = owned ? null : (stored.createId ?? null);
     lastSavedRef.current = owned?.content ?? "";
+    baseRef.current = owned?.content.trim() ?? "";
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setNoteId(owned?.id ?? null);
     setConfirmed(owned?.content.trim() ?? "");
@@ -80,12 +99,37 @@ export function useNoteCompose({
       clearComposeDraft(sectionId);
       return;
     }
-    writeComposeDraft(sectionId, draft, noteId);
+    writeComposeDraft(sectionId, draft, noteId, createIdRef.current ?? undefined);
   }, [draft, noteId, composing, sectionId]);
+
+  function createId(): string {
+    createIdRef.current ??= newNoteId();
+    return createIdRef.current;
+  }
+
+  /** Save `trimmed` to the note, after the saves before it, made from the text the last one left. */
+  function patch(id: string, trimmed: string): Promise<void> {
+    const run = chainRef.current.then(async () => {
+      const saved = await saveNoteText(id, trimmed, baseRef.current);
+      baseRef.current = saved.content;
+      // The note changed elsewhere: the composer shows the text as saved.
+      if (saved.changed && draftRef.current.trim() === trimmed) {
+        lastSavedRef.current = saved.content;
+        draftRef.current = saved.content;
+        setDraft(saved.content);
+      }
+      setConfirmed(saved.content);
+    });
+    chainRef.current = run.catch(() => {});
+    return run;
+  }
 
   function create(trimmed: string): Promise<void> {
     if (creatingRef.current) return creatingRef.current;
     const account = tabAccount();
+    const id = createId();
+    // The id is in the local draft before the create leaves.
+    writeComposeDraft(sectionId, draftRef.current, null, id);
     // A plain fetch, not api(): a create that queues offline returns no id,
     // and the composer must never own a note it cannot name. It counts in
     // the save indicator like every write.
@@ -98,19 +142,29 @@ export function useNoteCompose({
       },
       // The note is written in the open document (SPEC.md §6): the tray's
       // composer names it; the notes full page's names none.
-      body: JSON.stringify({ sectionId, content: trimmed, top: true, documentId: actions.documentId ?? undefined }),
+      body: JSON.stringify({ id, sectionId, content: trimmed, top: true, documentId: actions.documentId ?? undefined }),
     })
       .then(async (res) => {
         endWrite(res.ok);
         if (!res.ok) return;
-        const note = (await res.json()) as { id?: unknown };
+        const note = (await res.json()) as { id?: unknown; content?: unknown };
         if (typeof note.id !== "string") return;
+        // The note a create sent before made holds the text it was made with.
+        const stored = typeof note.content === "string" ? note.content.trim() : trimmed;
         noteIdRef.current = note.id;
-        lastSavedRef.current = trimmed;
+        createIdRef.current = null;
+        lastSavedRef.current = stored;
+        baseRef.current = stored;
         writeComposeDraft(sectionId, draftRef.current, note.id);
         setNoteId(note.id);
-        setConfirmed(trimmed);
+        setConfirmed(stored);
         await flushQuotes(note.id);
+        // Words typed since the create left save to the note.
+        const typed = draftRef.current.trim();
+        if (typed && typed !== stored) {
+          lastSavedRef.current = typed;
+          await patch(note.id, typed).catch(() => setFailed(typed));
+        }
       })
       .catch(() => {
         // Not created: the next keystroke tries again; Save creates it itself.
@@ -151,8 +205,7 @@ export function useNoteCompose({
       if (id) {
         const before = lastSavedRef.current;
         lastSavedRef.current = trimmed;
-        void api(`/api/notes/${id}`, "PATCH", { content: trimmed })
-          .then(() => setConfirmed(trimmed))
+        void patch(id, trimmed)
           .catch(() => {
             // Failed quiet save: the next keystroke or the flush retries.
             if (lastSavedRef.current === trimmed) lastSavedRef.current = before;
@@ -187,7 +240,9 @@ export function useNoteCompose({
           "Content-Type": "application/json",
           ...(account ? { [ACCOUNT_HEADER]: account } : {}),
         },
-        body: JSON.stringify({ content: trimmed }),
+        // The tab is going away and cannot read a 409: the route puts the
+        // texts together (lib/notes/conflict.ts).
+        body: JSON.stringify({ content: trimmed, baseContent: baseRef.current, onConflict: "keep" }),
       }).catch(() => {});
     };
     window.addEventListener("pagehide", flush);
@@ -203,7 +258,9 @@ export function useNoteCompose({
     pendingQuotesRef.current = [];
     clearComposeDraft(sectionId);
     noteIdRef.current = null;
+    createIdRef.current = null;
     lastSavedRef.current = "";
+    baseRef.current = "";
     draftRef.current = "";
     setNoteId(null);
     setDraft("");
@@ -221,19 +278,16 @@ export function useNoteCompose({
     const trimmed = draftRef.current.trim();
     if (!trimmed) return;
     if (creatingRef.current) await creatingRef.current;
+    // Not created yet: create it here (its quotes attach), then the save
+    // that lists it. Offline the create queues instead, with its id.
+    if (!noteIdRef.current && !isOffline()) await create(trimmed);
     const id = noteIdRef.current;
     if (id) {
       lastSavedRef.current = trimmed;
-      await actions.saveNote(id, trimmed);
-    } else if (pendingQuotesRef.current.length > 0) {
-      // Quotes wait on the note's id: create it here, attach them, then the
-      // save that lists it.
-      await create(trimmed);
-      const created = noteIdRef.current;
-      if (created) await actions.saveNote(created, trimmed);
-      else await actions.addNote(sectionId, trimmed);
+      await chainRef.current;
+      await actions.saveNote(id, trimmed, baseRef.current);
     } else {
-      await actions.addNote(sectionId, trimmed);
+      await actions.addNote(sectionId, trimmed, createId());
     }
     reset();
   }
@@ -241,7 +295,8 @@ export function useNoteCompose({
   /** Cancel: the draft is dropped, and the note the composer created is deleted. */
   async function cancel() {
     if (creatingRef.current) await creatingRef.current;
-    const id = noteIdRef.current;
+    // A create whose answer never came may still have made the note: its id names it.
+    const id = noteIdRef.current ?? createIdRef.current;
     reset();
     if (id) await actions.deleteNote(id).catch(() => {});
   }

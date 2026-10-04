@@ -19,8 +19,14 @@ const COMPOSE_PREFIX = "unitos-note-compose:";
 // section is gone.
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
-export type NoteDraft = { content: string; savedAt: number };
-export type ComposeDraft = { content: string; noteId: string | null; savedAt: number };
+// base: the note's text the draft was made from (lib/notes/save-text.ts);
+// sent: the text of a save that was on its way when the draft was written —
+// when the note holds it, the save landed and the draft was made from it.
+// Both absent in a draft written before they existed.
+export type NoteDraft = { content: string; savedAt: number; base?: string; sent?: string };
+// createId: the id the composer's create carries (lib/notes/client-id.ts),
+// written before the create leaves, so a reload adopts the note it made.
+export type ComposeDraft = { content: string; noteId: string | null; savedAt: number; createId?: string };
 
 function read<T>(key: string): T | null {
   try {
@@ -52,11 +58,30 @@ function remove(key: string) {
 
 export function readNoteDraft(noteId: string): NoteDraft | null {
   const draft = read<NoteDraft>(NOTE_PREFIX + noteId);
-  return draft && typeof draft.content === "string" ? draft : null;
+  if (!draft || typeof draft.content !== "string") return null;
+  return {
+    content: draft.content,
+    savedAt: draft.savedAt,
+    ...(typeof draft.base === "string" ? { base: draft.base } : {}),
+    ...(typeof draft.sent === "string" ? { sent: draft.sent } : {}),
+  };
 }
 
-export function writeNoteDraft(noteId: string, content: string) {
-  write(NOTE_PREFIX + noteId, { content, savedAt: Date.now() } satisfies NoteDraft);
+export function writeNoteDraft(noteId: string, content: string, base?: string, sent?: string | null) {
+  write(NOTE_PREFIX + noteId, {
+    content,
+    savedAt: Date.now(),
+    ...(base !== undefined ? { base } : {}),
+    ...(sent ? { sent } : {}),
+  } satisfies NoteDraft);
+}
+
+/** The text a draft was made from, given the note's text now: the save that
+    was on its way when the note holds it, else the base. Undefined for a
+    draft written before drafts kept their base. */
+export function noteDraftBase(draft: NoteDraft, stored: string): string | undefined {
+  if (draft.sent !== undefined && draft.sent.trim() === stored.trim()) return draft.sent;
+  return draft.base;
 }
 
 export function clearNoteDraft(noteId: string) {
@@ -72,11 +97,21 @@ export function confirmNoteDraft(noteId: string, content: string) {
 export function readComposeDraft(sectionId: string): ComposeDraft | null {
   const draft = read<ComposeDraft>(COMPOSE_PREFIX + sectionId);
   if (!draft || typeof draft.content !== "string") return null;
-  return { ...draft, noteId: typeof draft.noteId === "string" ? draft.noteId : null };
+  return {
+    content: draft.content,
+    savedAt: draft.savedAt,
+    noteId: typeof draft.noteId === "string" ? draft.noteId : null,
+    ...(typeof draft.createId === "string" ? { createId: draft.createId } : {}),
+  };
 }
 
-export function writeComposeDraft(sectionId: string, content: string, noteId: string | null) {
-  write(COMPOSE_PREFIX + sectionId, { content, noteId, savedAt: Date.now() } satisfies ComposeDraft);
+export function writeComposeDraft(sectionId: string, content: string, noteId: string | null, createId?: string) {
+  write(COMPOSE_PREFIX + sectionId, {
+    content,
+    noteId,
+    savedAt: Date.now(),
+    ...(createId ? { createId } : {}),
+  } satisfies ComposeDraft);
 }
 
 export function clearComposeDraft(sectionId: string) {

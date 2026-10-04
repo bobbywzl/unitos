@@ -7,6 +7,7 @@ import { layerBlocks } from "@/lib/anchors/layer";
 import { bumpNotebook, noteAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
+import { reconcileNoteText } from "@/lib/notes/conflict";
 import { recordNoteEdit } from "@/lib/notes/edits";
 import { sourcesLeftByQuotes } from "@/lib/notes/quote-sources";
 import { normalizeNoteOrders, movedOrder } from "@/lib/order";
@@ -16,6 +17,15 @@ const MAX_CONTENT = 50_000;
 
 const patchSchema = z.object({
   content: z.string().min(1).max(MAX_CONTENT).optional(),
+  // The note's text as the editor had it when this edit began (SPEC.md §6):
+  // when the stored text has changed since — another tab, a collaborator —
+  // the write is refused with 409 and the stored text, and the editor puts
+  // the two together (lib/notes/conflict.ts). A write without it saves as
+  // it always did.
+  baseContent: z.string().max(MAX_CONTENT).optional(),
+  // "keep": a write that cannot read a 409 (the offline queue, the closing
+  // flush) is put together with the stored text here instead of refused.
+  onConflict: z.enum(["refuse", "keep"]).optional(),
   // Text added at the end of the note (Add to notes into an existing note):
   // the note's words stay as they are, then one blank line, then this. Never
   // sent with `content`.
@@ -62,6 +72,30 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: strin
   if (data.append !== undefined) {
     const head = note.content.replace(/\n+$/, "");
     content = head ? `${head}\n\n${data.append}` : data.append;
+    if (content.length > MAX_CONTENT) {
+      return NextResponse.json({ error: t("api.noteTooLong") }, { status: 400 });
+    }
+  }
+
+  // A write made from text that is no longer the note's (SPEC.md §6): never
+  // saved over the words it did not see.
+  if (
+    data.content !== undefined &&
+    data.baseContent !== undefined &&
+    data.baseContent.trim() !== note.content.trim() &&
+    data.content.trim() !== note.content.trim()
+  ) {
+    if (data.onConflict !== "keep") {
+      return NextResponse.json(
+        { error: t("api.noteChanged"), current: { content: note.content, updatedAt: note.updatedAt } },
+        { status: 409 },
+      );
+    }
+    content = reconcileNoteText(data.baseContent.trim(), note.content.trim(), data.content.trim(), {
+      other: t("outline.conflictOther"),
+      yours: t("outline.conflictYours"),
+      end: t("outline.conflictEnd"),
+    }).text;
     if (content.length > MAX_CONTENT) {
       return NextResponse.json({ error: t("api.noteTooLong") }, { status: 400 });
     }
@@ -154,7 +188,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: strin
       // An append keeps every quote, so it leaves every source.
       if (data.content !== undefined) {
         const sources = await db.source.findMany({ where: { noteId }, select: { id: true, quotedText: true } });
-        const left = sourcesLeftByQuotes(note.content, data.content, sources);
+        const left = sourcesLeftByQuotes(note.content, content, sources);
         if (left.length > 0) await db.source.deleteMany({ where: { id: { in: left }, noteId } });
       }
     }

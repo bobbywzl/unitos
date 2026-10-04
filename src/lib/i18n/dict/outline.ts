@@ -33,6 +33,13 @@ const en = {
   saved: "Saved",
   saveFailed: "Not saved",
   savedOffline: "Saved on this device · syncs when online",
+  waitingSync: "Waiting to sync",
+  // Two saves of one note from the same text (lib/notes/conflict.ts): lines
+  // both changed are kept twice, under these marker lines.
+  savedBoth: "Saved · both versions kept",
+  conflictOther: "Changed in two places at once. The other version:",
+  conflictYours: "Your version:",
+  conflictEnd: "End of the two versions. Keep one, then delete these marker lines.",
   // Hold to drag (SPEC.md §6): a hold anywhere on a note picks it up. One
   // short line: the tip sits on the cards around the one under the pointer.
   holdToDrag: "Hold to move, merge, or float the note",
@@ -258,6 +265,11 @@ const zh: Record<keyof typeof en, string> = {
   saved: "已保存",
   saveFailed: "未保存",
   savedOffline: "已保存在此设备 · 联网后同步",
+  waitingSync: "待同步",
+  savedBoth: "已保存 · 两个版本都已保留",
+  conflictOther: "此处同时在两个地方被修改。另一个版本：",
+  conflictYours: "你的版本：",
+  conflictEnd: "两个版本到此结束。保留一个，再删除这几行标记。",
   holdToDrag: "按住即可移动、合并或浮动笔记",
   holdToDragPage: "按住即可移动或合并笔记",
   holdToMoveCard: "按住即可移动此卡片。放到笔记栏上即把笔记放回。",
