@@ -297,10 +297,15 @@ function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[],
     // its edge (parse loop finding: a PowerPoint deck's slide read as set
     // justified, and "▪ The attribute values … on each corresponding" over
     // "coordinate axis and the points …" read as an item and a paragraph).
+    // A capital goes on too after a line that ends in a word, one line's
+    // pitch under it: a name wraps there (the same deck's "▪ Can be
+    // obtained from the UCI" over "Machine Learning Repository" read as an
+    // item and a paragraph).
     const wrapped =
       !next.display &&
       Math.abs(next.x - item.bodyX) <= next.size * 0.3 &&
-      /^\p{Ll}/u.test(next.text) &&
+      (/^\p{Ll}/u.test(next.text) ||
+        (/^\p{Lu}/u.test(next.text) && /\p{L}$/u.test(prev.text.trim()) && prev.y - next.y <= next.size * ctx.leading * 1.1)) &&
       !/[.:;!?]["'”’)]?$/.test(prev.text.trim()) &&
       fillsMargin(prev, next, columnEdges(lines, j - 1, ctx).right);
     const atWords = !next.display && Math.abs(next.x - item.bodyX) <= next.size * 0.3 && (lineMathShare(next) >= 0.5 || lineMathShare(prev) >= 0.5 || /:$/.test(prev.text.trim()));
