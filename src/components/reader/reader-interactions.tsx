@@ -167,7 +167,7 @@ import {
 } from "@/lib/docs/assistant-suggestions";
 import type { SuggestCommand } from "@/lib/prompts/suggest";
 import { readNdjson } from "@/lib/ndjson";
-import { clearToolbarDraft, useToolbarDraft, useToolbarDraftRestore, writeToolbarDraft } from "@/lib/toolbar-drafts";
+import { caretToEnd, clearToolbarDraft, useToolbarDraft, useToolbarDraftRestore, writeToolbarDraft } from "@/lib/toolbar-drafts";
 import {
   publishSuggestRun,
   SUGGEST_EVENT,
@@ -8409,6 +8409,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               <textarea
                 autoFocus
                 value={aiCommand}
+                onFocus={caretToEnd}
                 onChange={(e) => {
                   setAiCommand(e.target.value);
                   if (popover) writeToolbarDraft("assistant", documentId, popover.anchor, e.target.value);
@@ -8562,6 +8563,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               <textarea
                 autoFocus
                 value={commentDraft}
+                onFocus={caretToEnd}
                 onChange={(e) => setCommentDraft(e.target.value)}
                 {...ime.props}
                 onKeyDown={(e) => {
@@ -8702,6 +8704,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 <input
                   autoFocus={!coarse}
                   value={addComment}
+                  onFocus={caretToEnd}
                   onChange={(e) => setAddComment(e.target.value)}
                   {...ime.props}
                   onKeyDown={(e) => {

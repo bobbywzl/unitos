@@ -5,7 +5,7 @@ import { useT } from "@/components/lang-provider";
 // The save state at the top of a note being edited (SPEC.md §6): "Saving…"
 // while the draft differs from what the server holds, "Saved" once the server
 // confirmed it, "Not saved" when the last save failed (the next keystroke
-// retries), "Saved · … both versions kept" when the note changed in another
+// retries), "Saved · both versions kept" when the note changed in another
 // tab or by a collaborator meanwhile and some lines are kept twice
 // (lib/notes/conflict.ts). One line, the same on the tray card, the floating
 // card, and a section's composer. "Saved on this device · syncs when online"

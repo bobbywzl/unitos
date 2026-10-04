@@ -167,3 +167,10 @@ export function useToolbarDraftRestore(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, kind, documentId, blockId, start, end]);
 }
+
+/** A field showing a kept draft takes the caret after its words, so the
+    next keystroke adds to them. */
+export function caretToEnd(e: { currentTarget: HTMLInputElement | HTMLTextAreaElement }) {
+  const end = e.currentTarget.value.length;
+  e.currentTarget.setSelectionRange(end, end);
+}
