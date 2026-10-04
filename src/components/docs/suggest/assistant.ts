@@ -7,7 +7,7 @@ import { TableMap } from "@tiptap/pm/tables";
 import { ReplaceStep } from "@tiptap/pm/transform";
 import { isSuggestionMark, newId, readSuggestions, settle, suggest } from "@/components/docs/ext/suggest";
 import { aroundPageStarts, FIGURE, findBlock, findIndexed, PAGE_START, posInBlock } from "@/components/docs/layer/anchor";
-import { DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
+import { DOCS_EVENT, fireDocs, type ModeRequest } from "@/components/docs/typing/events";
 import { isList, isListItem } from "@/components/docs/typing/lists";
 import { markdownToHtml } from "@/components/docs/typing/markdown";
 import { diffSegments } from "@/lib/anchors/remap";
@@ -57,8 +57,9 @@ export function applyAssistantOps(editor: Editor, ops: readonly ResolvedOp[], au
   }
   if (!tr.docChanged) return { ids: [], skipped };
   editor.view.dispatch(closeHistory(tr).setMeta(suggestChangesKey, { skip: true }));
-  // Viewing mode hides suggestions: the page shows them in Editing mode.
-  if (!editor.isEditable) fireDocs(editor, DOCS_EVENT.mode, "editing");
+  // Viewing mode hides suggestions: the page passes into Suggesting mode to
+  // show them, for this visit, and the keys stay where they are.
+  if (!editor.isEditable) fireDocs(editor, DOCS_EVENT.mode, { mode: "suggesting", passing: true } satisfies ModeRequest);
   return { ids: readSuggestions(tr.doc).flatMap((s) => (made.includes(s.id) ? [s.id] : [])), skipped };
 }
 

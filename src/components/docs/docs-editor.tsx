@@ -537,15 +537,19 @@ export function DocsEditor({
 
   // The mode: an import keeps the reader's choice. On a locked import only
   // Viewing is left, and a key or a command that asks for another mode says
-  // why.
+  // why. A mode the page passes into for the reader (`passing`: the
+  // assistant's suggestions landing in Viewing) is not kept, and the keys
+  // stay where they are.
+  const passingRef = useRef(false);
   const setMode = useCallback(
-    (next: DocsMode) => {
+    (next: DocsMode, passing = false) => {
       if (locked && next !== "viewing") {
         if (editor && !editor.isDestroyed) toast(t("api.importShared"), editor);
         return;
       }
+      passingRef.current = passing;
       setModeState(next);
-      if (isImport) storeMode(documentId, next);
+      if (isImport && !passing) storeMode(documentId, next);
     },
     [locked, editor, t, isImport, documentId],
   );
@@ -637,7 +641,9 @@ export function DocsEditor({
     editor.setEditable(writable && mode !== "viewing");
     const switched = modeRef.current !== mode;
     modeRef.current = mode;
-    if (switched && writable && mode !== "viewing") editor.commands.focus(undefined, { scrollIntoView: false });
+    const passing = passingRef.current;
+    passingRef.current = false;
+    if (switched && writable && mode !== "viewing" && !passing) editor.commands.focus(undefined, { scrollIntoView: false });
   }, [editor, writable, mode]);
 
   // The header shows while the reader is in the document: a press or the
