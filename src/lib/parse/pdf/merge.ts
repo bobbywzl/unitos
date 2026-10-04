@@ -2,7 +2,7 @@
 // half on the next page, and the block keeps where each later page begins.
 
 import { CAPTION_RE } from "@/lib/parse/pdf/figures";
-import { BULLET_RE, follows, readMarker } from "@/lib/parse/pdf/markers";
+import { BULLET_RE, follows, opensSequence, readMarker } from "@/lib/parse/pdf/markers";
 import { endAs, endsFull } from "@/lib/parse/pdf/paragraphs";
 import { joinWrapped } from "@/lib/parse/pdf/text";
 import type { PageBreak, Segment } from "@/lib/parse/pdf/types";
@@ -537,8 +537,17 @@ export function mergeAcrossPages(input: Segment[]): Segment[] {
       continue;
     }
 
-    // A lone item cut off at the page end joins the LIST that follows.
-    if (segment.type === "LIST" && prev.type === "PARAGRAPH" && prev.listItem && !segment.tocEntries && itemOfList(prev, segment, true)) {
+    // A lone item cut off at the page end joins the LIST that follows. So
+    // does a paragraph at the page's end that opens with a first marker
+    // ("(a)", "1.") the list's first item follows: a one-line item at the
+    // column's edge reads as a paragraph alone (parse loop finding: the
+    // Official Journal's point "(a) harmonised rules …;" at the foot of a
+    // page stood apart from points (b) to (g) on the next).
+    const opensList = (s: Segment) => {
+      const marker = readMarker({ text: s.text, runs: s.runs ?? [] });
+      return marker !== null && opensSequence(marker) && !s.text.includes("\n") && segment.page > lastPageOf(s);
+    };
+    if (segment.type === "LIST" && prev.type === "PARAGRAPH" && (prev.listItem || opensList(prev)) && !segment.tocEntries && itemOfList(prev, segment, true)) {
       const marker = BULLET_RE.test(prev.text) ? "" : "• ";
       const offset = marker.length;
       // The list now starts with the item's words, on the item's page; its
