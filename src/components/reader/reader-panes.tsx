@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
 import { Presence } from "@/components/presence";
@@ -270,6 +271,17 @@ export function ReaderPanes({
   const router = useRouter();
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  // Below md the Reader view button is a button of the bottom bar
+  // (workspace.tsx, data-reader-view-slot): floating, it stood on the
+  // article's bottom-left lines.
+  const phone = useSyncExternalStore(subscribePhone, readPhone, () => false);
+  const [barSlot, setBarSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    // The bar mounts with the reader, in the same commit.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setBarSlot(document.querySelector<HTMLElement>("[data-reader-view-slot]"));
+  }, []);
+  const inBar = phone && barSlot !== null;
   const containerRef = useRef<HTMLDivElement>(null);
   const paneOneRef = useRef<HTMLDivElement>(null);
   const paneTwoRef = useRef<HTMLDivElement>(null);
@@ -357,6 +369,81 @@ export function ReaderPanes({
     );
   }
 
+  // Bottom-left: clear of the article menu (top-left) and the sticky
+  // Extract controls (top-right). Below md with the sheet open
+  // (data-sheet-open, workspace.tsx), bottom-right: the sheet cuts the
+  // reader short, which brings its bottom-left up to the page editor's
+  // Show tabs & outlines at the canvas's top-left. While the menu is open it
+  // stands at z-40, the layer of the app's menus (docs/css/layer.css), over
+  // the page editor's header, which a short reader brings under the menu.
+  // Below md it is a button of the bottom bar instead (inBar), its menu
+  // opening above the bar.
+  const viewControl = (
+    <div
+      ref={menuRef}
+      className={
+        inBar
+          ? "relative"
+          : `absolute bottom-4 left-4 max-md:in-data-sheet-open:right-4 max-md:in-data-sheet-open:left-auto print:hidden ${
+              menu ? "z-40" : "z-30"
+            }`
+      }
+    >
+      <button
+        onClick={() => setMenu((v) => !v)}
+        data-track="view"
+        aria-label={t("panes.readerView")}
+        data-tip={t("panes.readerView")}
+        aria-expanded={menu}
+        className={
+          inBar
+            ? "flex size-[38px] items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+            : "flex items-center justify-center rounded-full bg-sand-100 p-2 text-sand-600 shadow-soft hover:text-clay-800"
+        }
+      >
+        <ViewGlyph kind={view} />
+      </button>
+      <Presence show={menu} exit="menu">
+      {menu && (
+        <div
+          className={`menu-in absolute bottom-full flex w-44 flex-col rounded-2xl bg-card p-1.5 shadow-float ${
+            inBar ? "right-0 mb-2.5" : "left-0 mb-1.5 max-md:in-data-sheet-open:right-0 max-md:in-data-sheet-open:left-auto"
+          }`}
+        >
+          {(["normal", "side", "stack"] as const).map((kind) => (
+            <button
+              key={kind}
+              onClick={() => go(kind)}
+              data-track={`view:${kind}`}
+              className={`flex items-center gap-2.5 rounded-full px-2.5 py-1.5 text-left text-[12px] ${
+                view === kind
+                  ? "bg-clay-100 font-semibold text-clay-800"
+                  : "text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+              }`}
+            >
+              <ViewGlyph kind={kind} size={13} />
+              {t(VIEW_LABEL[kind])}
+            </button>
+          ))}
+          {/* A phone's reader has no floating Feedback pill, which would
+              lie on the article's last lines (feedback-button.tsx). */}
+          <div aria-hidden className="mx-2.5 my-1 h-px bg-line md:hidden" />
+          <button
+            onClick={() => {
+              setMenu(false);
+              window.dispatchEvent(new Event(FEEDBACK_OPEN_EVENT));
+            }}
+            data-track="feedback-open"
+            className="flex items-center gap-2.5 rounded-full px-2.5 py-1.5 text-left text-[12px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 md:hidden"
+          >
+            {t("works.feedback")}
+          </button>
+        </div>
+      )}
+      </Presence>
+    </div>
+  );
+
   return (
     <div
       ref={containerRef}
@@ -370,64 +457,7 @@ export function ReaderPanes({
       }
       className={`relative flex h-full min-h-0 min-w-0 ${view === "stack" ? "flex-col" : "flex-row"}`}
     >
-      {/* Bottom-left: clear of the article menu (top-left) and the sticky
-          Extract controls (top-right). Below md with the sheet open
-          (data-sheet-open, workspace.tsx), bottom-right: the sheet cuts the
-          reader short, which brings its bottom-left up to the page editor's
-          Show tabs & outlines at the canvas's top-left. While the menu is
-          open it stands at z-40, the layer of the app's menus
-          (docs/css/layer.css), over the page editor's header, which a short
-          reader brings under the menu. */}
-      <div
-        ref={menuRef}
-        className={`absolute bottom-4 left-4 max-md:in-data-sheet-open:right-4 max-md:in-data-sheet-open:left-auto print:hidden ${
-          menu ? "z-40" : "z-30"
-        }`}
-      >
-        <button
-          onClick={() => setMenu((v) => !v)}
-          data-track="view"
-          aria-label={t("panes.readerView")}
-          data-tip={t("panes.readerView")}
-          className="flex items-center justify-center rounded-full bg-sand-100 p-2 text-sand-600 shadow-soft hover:text-clay-800"
-        >
-          <ViewGlyph kind={view} />
-        </button>
-        <Presence show={menu} exit="menu">
-        {menu && (
-          <div className="menu-in absolute bottom-full left-0 mb-1.5 flex w-44 flex-col rounded-2xl bg-card p-1.5 shadow-float max-md:in-data-sheet-open:right-0 max-md:in-data-sheet-open:left-auto">
-            {(["normal", "side", "stack"] as const).map((kind) => (
-              <button
-                key={kind}
-                onClick={() => go(kind)}
-                data-track={`view:${kind}`}
-                className={`flex items-center gap-2.5 rounded-full px-2.5 py-1.5 text-left text-[12px] ${
-                  view === kind
-                    ? "bg-clay-100 font-semibold text-clay-800"
-                    : "text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-                }`}
-              >
-                <ViewGlyph kind={kind} size={13} />
-                {t(VIEW_LABEL[kind])}
-              </button>
-            ))}
-            {/* A phone's reader has no floating Feedback pill, which would
-                lie on the article's last lines (feedback-button.tsx). */}
-            <div aria-hidden className="mx-2.5 my-1 h-px bg-line md:hidden" />
-            <button
-              onClick={() => {
-                setMenu(false);
-                window.dispatchEvent(new Event(FEEDBACK_OPEN_EVENT));
-              }}
-              data-track="feedback-open"
-              className="flex items-center gap-2.5 rounded-full px-2.5 py-1.5 text-left text-[12px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 md:hidden"
-            >
-              {t("works.feedback")}
-            </button>
-          </div>
-        )}
-        </Presence>
-      </div>
+      {inBar && barSlot ? createPortal(viewControl, barSlot) : viewControl}
 
       {/* Each pane is a column: the pane header (a split view) above the
           scroller. In a split view the first pane takes its share and the
@@ -501,4 +531,15 @@ export function ReaderPanes({
       )}
     </div>
   );
+}
+
+// Below md (Tailwind's md, 48rem): a phone's layout, with the bottom bar.
+const PHONE_QUERY = "(width < 48rem)";
+function subscribePhone(onChange: () => void) {
+  const query = window.matchMedia(PHONE_QUERY);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+function readPhone() {
+  return window.matchMedia(PHONE_QUERY).matches;
 }

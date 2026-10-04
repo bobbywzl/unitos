@@ -5,8 +5,9 @@
 // came back at the top and the tray reopened on notes (reader report). And a
 // reader who comes back to a document another day starts where they left off.
 //
-// The position is the block at the reading line (READING_LINE_PX under the
-// pane's top edge, below the controls that float there) and the offset from
+// The position is the block at the reading line (readingLine: READING_LINE_PX under the
+// pane's top edge, below the controls that float there; in the page editor,
+// under its header) and the offset from
 // the line to the block's top. A block, not a pixel count: a figure above the
 // position that loads after the restore moves a pixel count off by its
 // height, and the reader lands paragraphs away. Two copies are kept:
@@ -103,7 +104,8 @@ function blockElement(container: HTMLElement, blockId: string): HTMLElement | nu
 
 /** The block at the reading line and the offset from the line to its top. */
 export function readReadingPosition(container: HTMLElement, at: number): ReadingPosition {
-  const line = container.getBoundingClientRect().top + READING_LINE_PX;
+  const lineAt = readingLine(container);
+  const line = container.getBoundingClientRect().top + lineAt;
   const blocks = container.querySelectorAll<HTMLElement>(BLOCK_SELECTOR);
   // Blocks run top to bottom: binary search for the first whose bottom edge
   // is under the reading line.
@@ -117,7 +119,7 @@ export function readReadingPosition(container: HTMLElement, at: number): Reading
   const block = blocks[lo];
   if (!block) return { top: container.scrollTop, at };
   const rect = block.getBoundingClientRect();
-  return { blockId: blockIdOf(block), offset: rect.top - line, line: READING_LINE_PX, height: rect.height, at };
+  return { blockId: blockIdOf(block), offset: rect.top - line, line: lineAt, height: rect.height, at };
 }
 
 // Where the block's top goes, px under the pane's top edge. A block of
@@ -127,8 +129,30 @@ export function readReadingPosition(container: HTMLElement, at: number): Reading
 function blockTarget(container: HTMLElement, block: HTMLElement, p: BlockPosition, resume: boolean): number {
   const height = block.getBoundingClientRect().height;
   const offset = p.offset < 0 && p.height > 0 && height > 0 ? (p.offset * height) / p.height : p.offset;
-  if (resume && offset < 0 && p.line - offset <= container.clientHeight * RESUME_DEPTH_SHARE) return p.line;
-  return p.line + offset;
+  // The page editor's reading line is its own (readingLine): a position
+  // read before it was, or from the account's copy, which keeps no line,
+  // lands on the line the pane reads with now.
+  const line = pageEditorHeader(container) ? readingLine(container) : p.line;
+  if (resume && offset < 0 && line - offset <= container.clientHeight * RESUME_DEPTH_SHARE) return line;
+  return line + offset;
+}
+
+// Room for the left-off mark between the page editor's header and the block.
+const LEFT_OFF_ROOM_PX = 32;
+
+function pageEditorHeader(container: HTMLElement): Element | null {
+  return container.querySelector("[data-docs-editor] .docs-header");
+}
+
+/** The reading line, px under the pane's top edge: READING_LINE_PX, or in
+    the page editor under its header (the title row and the toolbar stand
+    over the pane's top), so the block at the line and the left-off mark
+    above it show. */
+export function readingLine(container: HTMLElement): number {
+  const header = pageEditorHeader(container);
+  if (!header) return READING_LINE_PX;
+  const under = header.getBoundingClientRect().bottom - container.getBoundingClientRect().top;
+  return Math.max(READING_LINE_PX, Math.round(under + LEFT_OFF_ROOM_PX));
 }
 
 /** The scrollTop that shows the position; null when its block is gone (a

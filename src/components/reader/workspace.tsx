@@ -990,6 +990,10 @@ export function Workspace({
             <EditsIcon />
           </button>
 
+          {/* Below md the Reader view button stands here, the bar's last
+              button (reader-panes.tsx); floating, it lay on the article's
+              bottom-left lines. */}
+          <div data-reader-view-slot className="empty:hidden md:hidden" />
         </nav>
       </div>
 

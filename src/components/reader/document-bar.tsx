@@ -35,12 +35,14 @@ import {
 } from "@/components/reader/document-folders";
 import { DocumentsSort, useDocumentSort } from "@/components/reader/document-organize";
 import { DocumentDeleteConfirm, inAnotherProject, useDocumentReach } from "@/components/reader/document-delete";
+import { ReparseLossList, useReparseLosses } from "@/components/reader/reparse-losses";
 import type { DocumentKind } from "@/lib/document-order";
 import {
   IngestProgress,
   advanceIngestSteps,
   completeIngestSteps,
   initialIngestSteps,
+  type IngestKind,
   type IngestStep,
 } from "@/components/reader/ingest-progress";
 import {
@@ -269,7 +271,9 @@ export function DocumentBar({
     setListEl(el);
     if (!el) return;
     const left = (el.offsetParent?.getBoundingClientRect().left ?? 0) + el.offsetLeft;
-    const over = left + el.offsetWidth - (window.innerWidth - 8);
+    // The page's own width, not innerWidth: a phone's browser widens the
+    // window to the list's overflow before this runs.
+    const over = left + el.offsetWidth - (document.documentElement.clientWidth - 8);
     if (over > 0) el.style.left = `${el.offsetLeft - Math.min(over, left - 8)}px`;
   }, []);
   const listCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -290,6 +294,10 @@ export function DocumentBar({
   const [deleteAsk, setDeleteAsk] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const { reach: menuReach, loading: menuReachLoading } = useDocumentReach(canEdit ? pillMenu : null);
+  // The ask before Replace the edits names the quotes it costs.
+  const { losing: reparseLosing, loading: reparseLosingLoading } = useReparseLosses(
+    canEdit ? (editedAsk?.id ?? null) : null,
+  );
   const [library, setLibrary] = useState<LibraryDocument[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Every error the bar shows also lands in the error log, on the open
@@ -515,7 +523,8 @@ export function DocumentBar({
     if (figures) setFigureCapture({ documentId: doc.id, status: "running", error: null });
     try {
       const body = { ...(as ? { as } : {}), ...(replaceEdits ? { replaceEdits } : {}) };
-      const result = await runIngest(doc.title, doc.sourceUrl ? "url" : "pdf", () =>
+      // A stored file uploads nothing: the card starts at Parsing.
+      const result = await runIngest(doc.title, doc.sourceUrl ? "url" : "reparse", () =>
         fetch(`/api/documents/${doc.id}/reparse`, {
           method: "POST",
           ...(as || replaceEdits
@@ -647,7 +656,7 @@ export function DocumentBar({
   // (SPEC.md §29): its line, which the bar shows once the document opens.
   async function runIngest(
     fileLabel: string,
-    kind: "pdf" | "url" | "video" | "youtube" | "media" | "drive",
+    kind: IngestKind,
     send: (emit: (stage: string, detail?: string) => void) => Promise<Response>,
   ): Promise<{ id: string; title: string; deduped: boolean; blockDocument: ReturnType<typeof blockDocumentLine> | null }> {
     setPhase({ fileLabel, steps: initialIngestSteps(kind) });
@@ -1177,6 +1186,7 @@ export function DocumentBar({
           {canEdit && editedAsk?.id === d.id && (
             <div role="group" className="flex flex-col gap-1.5 border-y border-line bg-sand-50/60 px-4 py-2">
               <p className="text-[11.5px] leading-snug text-sand-600">{t("panes.reparseEditedAsk")}</p>
+              {reparseLosing && reparseLosing.length > 0 && <ReparseLossList losing={reparseLosing} />}
               <div className="flex flex-wrap gap-1.5">
                 <button
                   onClick={() => {
@@ -1186,7 +1196,8 @@ export function DocumentBar({
                     void reparse(d, shape, true);
                   }}
                   data-track="document-reparse-replace"
-                  disabled={phase !== null || transcribing !== null}
+                  // Not before the ask can say what the replace costs.
+                  disabled={phase !== null || transcribing !== null || reparseLosingLoading}
                   className="rounded-full bg-clay px-3 py-1 text-[12px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
                 >
                   {t("panes.reparseReplaceEdits")}
@@ -1289,7 +1300,9 @@ export function DocumentBar({
       {documents.length > 0 && (
         <div
           ref={listRef}
-          className="relative min-w-0"
+          // A flex box, so the pill shrinks with it: a narrow header (a
+          // phone) truncates the title instead of laying the pill over the +.
+          className="relative flex min-w-0"
           onMouseEnter={hoverList}
           onMouseMove={listOpen ? undefined : hoverList}
           onMouseLeave={scheduleCloseList}

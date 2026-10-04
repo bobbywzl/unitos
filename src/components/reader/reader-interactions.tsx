@@ -210,6 +210,22 @@ function segmentsOf(anchor: Anchor): Segment[] {
   return anchor.segments && anchor.segments.length > 0 ? anchor.segments : [anchor];
 }
 
+/** Two selections over the same words: every block's span alike. */
+function sameAnchor(a: Anchor, b: Anchor): boolean {
+  const x = segmentsOf(a);
+  const y = segmentsOf(b);
+  return (
+    x.length === y.length &&
+    x.every(
+      (s, i) =>
+        s.blockId === y[i].blockId &&
+        s.startOffset === y[i].startOffset &&
+        s.endOffset === y[i].endOffset &&
+        s.layer === y[i].layer,
+    )
+  );
+}
+
 /** The element that draws a block's words: a core key's core (SPEC.md §28),
     else the block's whole text. Null when those words are not drawn. */
 function drawnBlock(container: HTMLElement, blockId: string): HTMLElement | null {
@@ -1442,6 +1458,10 @@ export function ReaderInteractions({
       // The page editor's words are here: the hold runs from now, and its
       // page's size changes (pagination, figures loading) hold the place.
       placed = true;
+      if (!isTranscript && "blockId" in position) {
+        const top = readingPositionScroll(container, position, resume);
+        if (top !== null && top >= container.clientHeight * LEFT_OFF_MIN_SHARE) setLeftOffBlockId(position.blockId);
+      }
       clearTimeout(timer);
       timer = setTimeout(release, POSITION_HOLD_MS);
       const page = container.querySelector("article");
@@ -2506,7 +2526,7 @@ export function ReaderInteractions({
     const side = window.matchMedia("(pointer: coarse)").matches
       ? ("below" as const)
       : pageGeo
-        ? toolbarLeft(pageGeo, shift, 176) === null
+        ? toolbarLeft(pageGeo, shift, 176) === null && toolbarShift(pageGeo, shift, 176) === null
           ? ("below" as const)
           : ("right" as const)
         : toolboxSide(container, yTop);
@@ -2981,6 +3001,12 @@ export function ReaderInteractions({
       selectionTimer = setTimeout(() => {
         const captured = captureSelection();
         if (!captured) return;
+        // The same words again (the tint repaints and puts the selection
+        // back over its marks): the open toolbox stays as it stands, with
+        // the place fitToolbox gave it, above the words when the room under
+        // them ran past the bottom bar.
+        const open = popoverRef.current;
+        if (open && !open.term && !open.figure && sameAnchor(open.anchor, captured.anchor)) return;
         setPopover(captured);
         setSubmenu(null);
         yieldToSelection();
@@ -3694,12 +3720,33 @@ export function ReaderInteractions({
         void flushEditRef.current?.();
       }
     };
+    // In Editing and Suggesting, a press outside the page (the notes tray,
+    // a button) takes the browser's selection out of the page, while the
+    // page still draws its selection and the toolbox stays open on it. A
+    // press on those words then started a new selection, and the quote drag
+    // never began. The page's selection goes back into the browser before
+    // the press is handled, so a press on it and a move drag the quote, as
+    // in Viewing; a click without a move still puts the caret there.
+    const onPressSelection = (e: MouseEvent) => {
+      if (e.button !== 0 || e.detail > 1 || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+      const editor = pageEditorIn(container);
+      if (!editor?.isEditable || !(e.target instanceof Node) || !editor.view.dom.contains(e.target)) return;
+      const { from, to, empty } = editor.state.selection;
+      if (empty) return;
+      const live = window.getSelection();
+      if (live && !live.isCollapsed && live.anchorNode && editor.view.dom.contains(live.anchorNode)) return;
+      const at = editor.view.posAtCoords({ left: e.clientX, top: e.clientY })?.pos;
+      if (at === undefined || at <= from || at >= to) return;
+      editor.view.focus();
+    };
     container.addEventListener("pointerdown", onDown);
     container.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
+    container.addEventListener("mousedown", onPressSelection, true);
     container.addEventListener("dragstart", onDragStart);
     return () => {
+      container.removeEventListener("mousedown", onPressSelection, true);
       container.removeEventListener("pointerdown", onDown);
       container.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
