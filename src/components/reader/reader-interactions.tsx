@@ -3251,7 +3251,10 @@ export function ReaderInteractions({
     const el = container.querySelector<HTMLElement>(`[data-side-card="${grown}"]`);
     if (!el || el.closest(".presence-exit")) return;
     const top = parseFloat(el.style.top) || el.offsetTop;
-    const viewTop = container.scrollTop + PANE_EDGE_GAP;
+    // The article's band holds Contents, Collapse and Extract: a lifted card
+    // stops under it, so it never covers them.
+    const band = container.querySelector<HTMLElement>("[data-article-band]")?.offsetHeight ?? 0;
+    const viewTop = container.scrollTop + band + PANE_EDGE_GAP;
     const viewBottom = container.scrollTop + container.clientHeight - PANE_EDGE_GAP;
     if (top >= viewBottom || top + el.offsetHeight <= viewTop) return;
     const want = Math.max(viewTop, Math.min(top, viewBottom - el.offsetHeight));
@@ -8269,7 +8272,10 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   );
   // Every tool card grows with its content up to the pane's height, then its
   // body scrolls (SPEC.md §6). Unmeasured (the SSR pass): no cap.
-  const cardMaxHeight = paneHeight > 0 ? Math.max(200, paneHeight - 24) : undefined;
+  // A pane with the article's band (h-12) gives the band's 48px too, so a
+  // card the pane's height sits under it.
+  const bandRoom = !split && !transcript && !embedded && !richText ? 48 : 0;
+  const cardMaxHeight = paneHeight > 0 ? Math.max(200, paneHeight - 24 - bandRoom) : undefined;
   // The full conversation view lies over the pane (SPEC.md §21): the cards
   // stay open under it, out of sight, so none covers the view.
   const underView = conversationView !== null ? " invisible" : "";
