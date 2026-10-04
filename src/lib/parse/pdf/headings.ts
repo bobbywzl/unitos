@@ -752,7 +752,12 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
     edge - last.xEnd > last.size * 4 &&
     below.xEnd - below.x > (edge - below.x) * 0.6;
   const small = line.size < ctx.bodySize * 0.98;
-  if (small && !(headingAbove && bodyBelow) && !(gapAbove && (headingBelow || opensBelow))) return null;
+  // A title in capitals set a size under the body, apart above, over a
+  // paragraph flush with it, is a subhead: a Frontiers article sets "CASE
+  // REPORTS" and "PROCEDURES" in 8.5 pt bold capitals over its 9.5 pt body,
+  // and they read as paragraphs (parse loop finding).
+  const capsOver = title && run.length === 1 && capsShare(text) >= 0.9 && bodyBelow && Math.abs(below.x - last.x) <= last.size * 0.5;
+  if (small && !(headingAbove && bodyBelow) && !(gapAbove && (headingBelow || opensBelow || capsOver))) return null;
   // A centered title set apart above needs no gap under it: a statement's
   // title sits 12.8 pt over its units line ("CONDENSED CONSOLIDATED
   // STATEMENTS OF OPERATIONS (Unaudited)" read as a paragraph).
