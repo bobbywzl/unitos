@@ -26,7 +26,11 @@ import type { Box, Item, Line, PageContext, Run, Segment } from "@/lib/parse/pdf
 // "Visualization", "Map", …) or a table's. Earth Observer labels its photos
 // "Photo 1." and "Photo.": 15 captions read as paragraphs, and two ran into
 // the next page's text.
-const LABEL = String.raw`fig\.?|figure|table|tab\.|photo|visualization|image|map|chart|plate|box|abbildung|abb\.|tabelle`;
+// A scan's OCR misreads "FIGURE" as "FLGURE", "F IGURE", "j'IGURE", and
+// "\FIGURE" (parse loop finding: NACA Report 515's captions read as
+// paragraphs and headings): those spellings are the label too. No
+// typeset page spells them.
+const LABEL = String.raw`fig\.?|figure|\\?f ?[il1!|]gure|j['’]igure|table|tab\.|photo|visualization|image|map|chart|plate|box|abbildung|abb\.|tabelle`;
 // A caption's label and its stop: "Figure 2:", "Fig. 3a.", PLOS's "Fig 1.",
 // "Table A1 |", "Photo 3.", and the roman numbers of REVTeX and IEEE ("TABLE
 // II. Fitting parameters …", arXiv 2502.02648, read as a paragraph with no
