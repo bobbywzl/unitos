@@ -283,6 +283,33 @@ function isProseLine(line: Line, width: number, columns: Rule[] = []): boolean {
 
 const CAPTION_START_RE = /^(fig\.|figure|table|tab\.|abbildung|abb\.|tabelle)\s*([\dIVX]+|[A-Z]\d+)\b/i;
 
+// A column of labels beside a column of prose: the lines leave a gutter
+// open in the left third, a label stands left of it on the first line, and
+// two lines or more hold words there. A line of prose whose words stand on
+// either side of the gutter, none across it, is a row's cells, no text
+// across the table (parse loop finding: NIST AI 100-1's tables set each
+// category on the left beside its subcategories in sentences; the
+// sentences read as prose between the rules, and the tables as headings
+// and paragraphs).
+function labelGutter(lines: Line[], left: number, width: number): number | null {
+  if (lines.length < 3) return null;
+  const open = (x: number) =>
+    lines.every((l) => l.items.every((it) => it.x >= x || it.x + it.w <= x)) &&
+    lines[0].items.some((it) => it.x + it.w <= x) &&
+    lines.filter((l) => l.items.some((it) => it.x + it.w <= x)).length >= 2 &&
+    lines.filter((l) => l.items.some((it) => it.x >= x)).length >= 2;
+  let from: number | null = null;
+  for (let x = left + width * 0.15; x <= left + width * 0.35; x += 1) {
+    if (open(x)) from ??= x;
+    else if (from !== null) {
+      if (x - from >= 5) return (from + x) / 2;
+      from = null;
+    }
+  }
+  return null;
+}
+const besideGutter = (line: Line, gutter: number | null): boolean => gutter !== null && line.items.every((it) => it.x + it.w <= gutter + 1 || it.x >= gutter - 1);
+
 // The regions a stack of same-width rules bounds: the bands between
 // consecutive rules, joined while they read as one table. A band that holds
 // a caption or prose ends a region (two tables stacked at one width with a
@@ -303,8 +330,12 @@ function stackRegions(rules: Rule[], x1: number, x2: number, items: Item[], colu
   for (let k = 0; k + 1 < sorted.length; k++) {
     const band = { x1: x1 - 2, x2: x2 + 2, y1: sorted[k + 1].y1, y2: sorted[k].y1 };
     const lines = buildLines(items.filter((it) => inBox(it, band)), 0);
+    // A band of the prose column alone (the rest of a row the page before
+    // began) stands right of the gutter.
+    const inset = Math.min(...lines.map((l) => l.x));
+    const gutter = labelGutter(lines, x1, x2 - x1) ?? (inset >= x1 + (x2 - x1) * 0.15 && inset <= x1 + (x2 - x1) * 0.35 ? inset - 1 : null);
     const breaks =
-      lines.some((l) => isProseLine(l, x2 - x1, columns) || CAPTION_START_RE.test(l.text)) ||
+      lines.some((l) => (isProseLine(l, x2 - x1, columns) && !besideGutter(l, gutter)) || CAPTION_START_RE.test(l.text)) ||
       isProseColumns(lines.filter((l) => l.cells.length >= 2), false) ||
       proseHalves(lines, x1, x2, items, band);
     if (breaks) {
@@ -405,7 +436,8 @@ function isTableRegion(lines: Line[], width: number, columns: Rule[], rules: Rul
     head.text.trim().split(/\s+/).length >= 2 &&
     rules.some((r) => r.y1 < head.yMin && r.y1 > next.yMax && r.x1 <= head.x + 2 && r.x2 >= head.xEnd - 2);
   if (!headed && lines.filter((l) => isMonoLine(l)).length * 2 > lines.length) return false;
-  if (lines.some((l) => isProseLine(l, width, columns))) return false;
+  const gutter = labelGutter(lines, Math.min(...lines.map((l) => l.x)), width);
+  if (lines.some((l) => isProseLine(l, width, columns) && !besideGutter(l, gutter))) return false;
   const separators = columnSeparators(lines);
   if (separators.length === 0) return false;
   const multi = lines.filter((l) => new Set(l.items.map((it) => columnAt(it.x + it.w / 2, separators))).size >= 2);
@@ -1227,6 +1259,8 @@ function spanHeadColumns(rows: TableRow[], count: number) {
 // fit of the photohadronic model to independent | This work"; arXiv
 // 2506.06752's variables and their descriptions fill every column: rows).
 function regionRowStarts(lines: Line[], cellsOf: Cell[][]): number[] {
+  const labeled = labelRows(cellsOf);
+  if (labeled) return labeled;
   const gaps = lines.slice(1).map((l, k) => lines[k].y - l.y);
   const pitch = median(gaps);
   const starts = [0];
@@ -1249,6 +1283,39 @@ function regionRowStarts(lines: Line[], cellsOf: Cell[][]): number[] {
     if (!wrap) starts.push(k);
   }
   return starts;
+}
+
+// A column of labels, each a sentence wrapped over two lines or more,
+// beside a column of prose: a label's lines, and the prose beside them up
+// to the next label, are one row. Each label ends its sentence on its last
+// line (parse loop finding: NIST AI 100-1 sets each category, "GOVERN 2:
+// Accountability structures are in place … managing AI risks.", beside its
+// subcategories in sentences, and each line read as a row). null when a
+// label takes one line, when the last label ends no sentence, when the
+// other columns hold fewer than five words a line, or when a cell holds an
+// amount.
+function labelRows(cellsOf: Cell[][]): number[] | null {
+  if (cellsOf.length < 3 || cellsOf.some((cells) => cells.length < 2)) return null;
+  const starts: number[] = [];
+  let open = true;
+  let count = 0;
+  for (let k = 0; k < cellsOf.length; k++) {
+    const label = cellsOf[k][0].text.trim();
+    if (!label) continue;
+    if (open) {
+      if (starts.length > 0 && count < 2) return null;
+      starts.push(k);
+      count = 0;
+    }
+    count++;
+    open = /[.!?]["'”’)\]]?$/.test(label);
+  }
+  if (starts.length === 0 || count < 2 || !open) return null;
+  const words = cellsOf.flatMap((cells) => cells.slice(1)).filter((c) => c.text.trim()).map((c) => c.text.trim().split(/\s+/).length);
+  if (words.length === 0 || median(words) < 5 || cellsOf.flat().some((c) => NUMERIC_CELL_RE.test(c.text.trim()))) return null;
+  // The prose over the first label is the rest of a row the page before
+  // began: a row of its own.
+  return starts[0] === 0 ? starts : [0, ...starts];
 }
 
 // A band ruled over and under, its columns ruled from rule to rule, is one
