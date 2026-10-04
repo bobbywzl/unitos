@@ -31,7 +31,10 @@ const GAP = 2.5;
     read as one note and a line of the body (arXiv 2503.22874). */
 const SYMBOLS = "*∗⋆†‡§¶‖∥";
 const SYMBOL = `[${SYMBOLS}]`;
-const SYMBOL_LABEL_RE = new RegExp(`^(${SYMBOL}{1,4})`);
+/** A section or paragraph sign before a number is a citation, never a
+    label: a Word export's table note ran on a line that opened "§ 3.12(d),
+    respectively", and that line read as a note of its own (CRS R48907). */
+const SYMBOL_LABEL_RE = new RegExp(`^(?![§¶]+\\s?\\d)(${SYMBOL}{1,4})`);
 /** A raised label: a number, a letter, or note symbols. */
 const RAISED_LABEL_RE = new RegExp(`^[\\p{L}\\p{N}${SYMBOLS}]{1,4}$`, "u");
 /** A table row's first cell that is a note's label. */
