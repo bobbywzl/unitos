@@ -5,7 +5,7 @@
 // one index on and says where it stopped; the first that takes the line
 // makes its segments.
 
-import { TOC_ENTRY_RE, TOC_LABEL_RE, TOC_TAIL_RE, isContentsEntry, readContentsEntries, twoColumnList } from "@/lib/parse/pdf/contents";
+import { TOC_ENTRY_RE, TOC_LABEL_RE, TOC_TAIL_RE, isContentsEntry, opensLeaderList, readContentsEntries, twoColumnList } from "@/lib/parse/pdf/contents";
 import { lineColumn } from "@/lib/parse/pdf/columns";
 import { geom, median } from "@/lib/parse/pdf/geometry";
 import { readHeading } from "@/lib/parse/pdf/headings";
@@ -53,7 +53,7 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
       continue;
     }
 
-    if (tocMode && isContentsEntry(line)) {
+    if ((tocMode && isContentsEntry(line)) || opensLeaderList(lines, i, ctx.leading)) {
       const step = readContentsEntries(lines, i, ctx.leading);
       segments.push(...step.segments);
       tocMode = false;

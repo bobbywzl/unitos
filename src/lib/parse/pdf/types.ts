@@ -46,6 +46,8 @@ export type Item = Flags & {
   font?: string;
   glyphs?: Glyph[];
   table?: TableRegion; // a ruled table's place in the text flow (ruled.ts takeTables)
+  space?: true; // a space item on a page TeX did not set: the page draws it (index.ts)
+  spaced?: boolean; // the page draws a space right before it (columns.ts pageLines)
 };
 // A run over a tab (text.ts) carries its stop, and fill when the page
 // draws a fill-in rule under it (an underlined tab).

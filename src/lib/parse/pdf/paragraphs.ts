@@ -916,8 +916,12 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
         Math.abs(prev.x - next.x - (next.xEnd - prev.xEnd)) <= next.size * 0.5) ||
       // Centered lines set wholly bold, each short of its column, are lines
       // of their own: a statement's company, title, and units lines ran
-      // into one paragraph (real-sec-10k-goog-2024-p54).
+      // into one paragraph (real-sec-10k-goog-2024-p54). A caption's lines
+      // are one caption (parse loop finding: a CRS report's "Table 1.
+      // Character of … Department of" over "Veterans Affairs (VA)
+      // Benefits" read as two paragraphs, the caption's end alone).
       (centered &&
+        !CAPTION_RE.test(group[0].text.trim()) &&
         boldShare(prev.runs, prev.text.length) > 0.9 &&
         boldShare(next.runs, next.text.length) > 0.9 &&
         prev.xEnd + prev.size * 1.28 + next.firstWordWidth < (lineColumn(prev)?.[1] ?? 0)) ||

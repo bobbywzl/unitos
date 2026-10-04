@@ -7,6 +7,7 @@ import { OPERATOR_GLYPH_RE, SPACING_ACCENTS, charCount, isUnicodeMathFont, sameF
 import { hangingBox } from "@/lib/parse/pdf/math/layout";
 import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
 import { splitZones } from "@/lib/parse/pdf/math/zones";
+import type { Glyph } from "@/lib/parse/pdf/drawing";
 import type { Cell, Item, Line, Run } from "@/lib/parse/pdf/types";
 
 export const ATTACH_PUNCT_RE = /^[.,;:!?)\]…%]/;
@@ -144,8 +145,12 @@ function dropCaps(items: Item[]): { items: Item[]; starts: { item: Item; x: numb
     itself sets none). The layer's stock font is no face of the page: a
     scan set in Courier is no listing (a 1922 report read as code, its words
     run together at the font's character widths). */
-export function fitOcrItems(items: Item[]) {
+export function fitOcrItems(items: Item[], glyphs: Glyph[] = []) {
   for (const item of items) item.mono = false;
+  // A layer that draws a space glyph after its words says where its words
+  // end; one that draws none keeps the text layer's spaces.
+  const spaces = glyphs.filter((g) => g.unicode === " ");
+  if (spaces.length * 20 >= glyphs.length) for (const item of items) unspaceOcrItem(item, spaces);
   const text = median(items.map((i) => i.size));
   for (let k = items.length - 1; k >= 0; k--) if (charCount(items[k].str) <= 2 && items[k].size > text * 4) items.splice(k, 1);
   const words = items.filter((i) => i.str.trim()).sort((a, b) => b.y - a.y || a.x - b.x);
@@ -164,9 +169,50 @@ export function fitOcrItems(items: Item[]) {
   words.forEach((a, k) => {
     const b = next(k);
     if (!b) return;
-    if (Math.abs(scale - 1) >= 0.1 && b.x - a.x < (a.w + a.size * 0.25) * 2.5) a.w = Math.max(a.w, Math.min(a.w * scale, b.x - a.x - a.size * 0.2));
+    // The scale stretches the item's last word: an item of several words
+    // is fragments the drawing joined, each set where the scan shows it,
+    // and only the last one's end is short (parse loop finding: NACA
+    // Report 515 p. 10, a left column's line read as one item 248 pt wide
+    // took a tenth more, up to the right column's first word: 14 lines on
+    // pp. 10 and 12 read across the gutter).
+    const chars = Array.from(a.str.trimEnd());
+    const tail = a.w * (chars.length - chars.lastIndexOf(" ") - 1) / Math.max(1, chars.length);
+    if (Math.abs(scale - 1) >= 0.1 && b.x - a.x < (a.w + a.size * 0.25) * 2.5) a.w = Math.max(a.w, Math.min(a.w + tail * (scale - 1), b.x - a.x - a.size * 0.2));
     if (a.x + a.w > b.x - a.size * 0.15 && b.x - a.x > a.size * 0.5 && /[\p{L}\p{N}]$/u.test(a.str) && /^[\p{L}\p{N}]/u.test(b.str)) a.w = b.x - a.x - a.size * 0.2;
   });
+}
+
+/** An OCR item's word spaces where the layer sets them. An OCR layer
+    draws a space glyph after each word, and sets a word the scan breaks
+    in fragments, each where the scan shows it: the text layer reads a
+    space between two fragments a tenth of an em apart (parse loop finding:
+    NACA Report 515, "th e ro tor", "r educe", "ca uses" on every page;
+    pdftotext reads "the rotor"). Between two of the item's glyphs, a space
+    stays where a space glyph stands between them on their baseline, or
+    where they stand a third of an em apart or more. */
+function unspaceOcrItem(item: Item, spaces: Glyph[]) {
+  const glyphs = item.glyphs;
+  const chars = Array.from(item.str);
+  if (!glyphs || glyphs.length < 2 || !/\S\s+\S/u.test(item.str)) return;
+  if (chars.filter((c) => !/\s/u.test(c)).length !== glyphs.length) return;
+  let k = 0;
+  let out = "";
+  let pending = "";
+  for (const c of chars) {
+    if (/\s/u.test(c)) {
+      pending += c;
+      continue;
+    }
+    if (pending && k > 0) {
+      const [a, b] = [glyphs[k - 1], glyphs[k]];
+      const set = spaces.some((s) => Math.abs(s.y - a.y) <= a.size * 0.3 && s.x >= a.x && s.x <= b.x);
+      if (set || b.x - (a.x + a.w) >= a.size * 0.33) out += pending;
+    } else out += pending;
+    pending = "";
+    out += c;
+    k++;
+  }
+  item.str = out + pending;
 }
 
 // ── Line building ───────────────────────────────────────────────────────────
@@ -380,7 +426,7 @@ function buildLine(rawItems: Item[], page: number): Line {
     if (!cell || wide) {
       cell = { x: item.x, text: "", runs: [] };
       cells.push(cell);
-    } else if ((gap > least || crossed) && !cell.text.endsWith(" ")) {
+    } else if ((gap > least || crossed || (item.spaced && gap >= 0)) && !cell.text.endsWith(" ")) {
       // Punctuation that attaches left ("PRESS" chip then ".") takes no space.
       const attach = ATTACH_PUNCT_RE.test(item.str) && gap < size * 0.7;
       if (!attach) cell.text += " ";

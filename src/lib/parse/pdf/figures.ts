@@ -121,6 +121,13 @@ function isFigureDebris(s: Segment, ctx: PageContext): boolean {
   if ((s.lineSize ?? ctx.bodySize) < ctx.bodySize * 0.92) return true;
   const text = s.text.trim();
   if (text.length <= 12) return true;
+  // An OCR layer sizes each mark from the scan: a chart's ticks and the
+  // specks read beside them come out at any size. On an OCR page a line of
+  // more marks and digits than letters is a figure's at any size (parse
+  // loop finding: NACA Report 515 p. 7, "24 .6 ~ W D ~ D '. 6" read at 15
+  // pt over a 10.3 pt body, and the chart's labels over it stayed text).
+  const letters = text.replace(/[^\p{L}]/gu, "").length;
+  if (ctx.ocr && text.length <= 60 && !s.text.includes("\n") && letters * 2 < text.replace(/\s/g, "").length) return true;
   // A panel title or axis label at body size: short, no sentence end. A
   // Chinese or Japanese sentence ends with "。" (MIC white paper p9: a
   // paragraph's last line over a caption read as its figure's).

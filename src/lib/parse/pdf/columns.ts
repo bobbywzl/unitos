@@ -38,6 +38,7 @@ let pageFrames: Box[] = [];
 
 export function pageLines(items: Item[], pageWidth: number, page: number, graphics: Placed[] = [], rules: Box[] = [], frames: Box[] = []): Line[] {
   const text = items.filter((i) => i.str.trim().length > 0);
+  markSpaces(items, text);
   if (text.length === 0 && graphics.length === 0) return [];
   pageRules = rules;
   pageFrames = frames;
@@ -55,6 +56,28 @@ export function pageLines(items: Item[], pageWidth: number, page: number, graphi
     lines.push(...built);
   }
   return joinRightRuns(lines, page);
+}
+
+/** The words a space item stands right before, on their baseline or a
+    script's: the page draws a space there, however narrow. Word sets the
+    space after a footnote's mark at the mark's size, a fifth of the text's
+    em, and the gap read no space after a script (parse loop finding: a CRS
+    report's "discharge status.4 Although" read "status.4Although", and the
+    footnote's reference went unfound: notes stood out of order on ten pages).
+    TeX draws no space: its text layer's space items stand at gaps a
+    formula leaves ("px /m" in a quantum mechanics book), and they count
+    nowhere, nor do the ones beside a math font's glyph, nor one before
+    anything but a word: XeTeX's pages carry such items too, before a
+    combining mark or a closing bracket ("<յ ̵>"). */
+function markSpaces(items: Item[], text: Item[]) {
+  const spaces = items.filter((i) => i.space && i.w > 0);
+  if (spaces.length === 0) return;
+  const touches = (a: Item, x: number, y: number, size: number) => Math.abs(a.x - x) <= a.size * 0.15 && Math.abs(a.y - y) <= size * 0.6;
+  for (const space of spaces) {
+    const next = text.find((i) => touches(i, space.x + space.w, space.y, Math.max(i.size, space.size)));
+    const before = text.find((i) => Math.abs(i.x + i.w - space.x) <= i.size * 0.15 && Math.abs(i.y - space.y) <= Math.max(i.size, space.size) * 0.6);
+    if (next && before && !next.math && !before.math && /^[\p{L}\p{N}“‘"(]/u.test(next.str)) next.spaced = true;
+  }
 }
 
 // A short run set flush right on another line's baseline, a wide gap past
@@ -402,7 +425,13 @@ function splitAt(items: Item[], graphics: Placed[], page: number, pageWidth: num
   // centered author line whose third name stands at the edge: arXiv
   // 2411.19946). The Federal Register sets its three columns 1.0 em apart,
   // and each line of a column that ran near the gutter took the next
-  // column's line into a row across the page.
+  // column's line into a row across the page. A list set with a hanging
+  // indent has two edges: its entries' first lines start out from the
+  // rest, and the first lines' edge is the column's too, when four lines
+  // start there, up to two ems out (parse loop finding: a Frontiers
+  // article's p. 14 sets its references 11.4 pt over the gutter from the
+  // last paragraphs, under 1.2 em, at 303 pt with their lines run on at
+  // 313: each entry's first line joined the paragraph's line beside it).
   const edgeOf = (right: boolean) => {
     const starts = new Map<number, number>();
     for (const item of items) {
@@ -413,16 +442,18 @@ function splitAt(items: Item[], graphics: Placed[], page: number, pageWidth: num
       starts.set(x, (starts.get(x) ?? 0) + 1);
     }
     const counted = (x: number) => (starts.get(x - 1) ?? 0) + (starts.get(x) ?? 0) + (starts.get(x + 1) ?? 0);
-    return [...starts.keys()].map((x) => ({ x, n: counted(x) })).filter((e) => e.n >= 4).sort((a, b) => b.n - a.n)[0]?.x;
+    const edges = [...starts.keys()].map((x) => ({ x, n: counted(x) })).filter((e) => e.n >= 4).sort((a, b) => b.n - a.n);
+    const top = edges[0]?.x;
+    return { top, hang: edges.filter((e) => top !== undefined && e.x < top - 1.5 && e.x >= top - maxSize * 2).map((e) => e.x) };
   };
-  const [leftEdge, rightEdge] = [edgeOf(false), edgeOf(true)];
+  const [{ top: leftEdge }, { top: rightEdge, hang: rightHang }] = [edgeOf(false), edgeOf(true)];
   const lineStart = (a: Item) => Math.min(a.x, ...beside(a).filter((j) => j.x + j.w <= g).map((j) => j.x));
   const opens = (a: Item, b: Item, size: number) =>
     rightEdge !== undefined &&
     leftEdge !== undefined &&
     a.x + a.w <= g &&
     b.x >= g &&
-    Math.abs(b.x - rightEdge) <= 1.5 &&
+    [rightEdge, ...rightHang].some((x) => Math.abs(b.x - x) <= 1.5) &&
     b.x - (a.x + a.w) > size * 0.5 &&
     Math.abs(lineStart(a) - leftEdge) <= size * 2;
   const near = (s: Item) =>
@@ -705,6 +736,13 @@ function sideNote(band: Band, page: number): Side[] | null {
   if (Math.abs(size(note.items) - size(wide.items)) < size(wide.items) * 0.1 && italic(note.items) === italic(wide.items) && !inMargin()) return null;
   const gaps = lines.slice(1).map((l, k) => lines[k].y - l.y);
   const pitch = median(gaps);
+  // A paragraph parts from the next where the gap between them is wider
+  // than the lines' pitch, a pitch scaled to the smaller line's size: a
+  // title's lines set at twice the body's size stand twice the pitch apart
+  // and are one paragraph (parse loop finding: a CRS report's summary page
+  // sets its 20 pt title beside a column of the report's number, date, and
+  // authors, and each line of the column read between two of the title's).
+  const parted = (k: number) => gaps[k] > Math.max(pitch, Math.min(lines[k].size, lines[k + 1].size) * 1.15) * 1.3;
   // A group of the note: its lines at their own pitch (a stray mark on the
   // note's side, its page number, is a group of its own).
   const noteLines = buildLines(note.items, page);
@@ -728,11 +766,11 @@ function sideNote(band: Band, page: number): Side[] | null {
   const cuts: number[] = [];
   for (const { top } of groups) {
     if (onLeft) {
-      let start = lines.findLastIndex((l, k) => l.y >= top - l.size * 0.5 && (k === 0 || gaps[k - 1] > pitch * 1.3));
+      let start = lines.findLastIndex((l, k) => l.y >= top - l.size * 0.5 && (k === 0 || parted(k - 1)));
       if (start < 0) start = 0;
       cuts.push(start === 0 ? Infinity : lines[start].y + lines[start].size * 0.5);
     } else {
-      const end = lines.findIndex((l, k) => l.y <= top && (k === lines.length - 1 || gaps[k] > pitch * 1.3));
+      const end = lines.findIndex((l, k) => l.y <= top && (k === lines.length - 1 || parted(k)));
       if (end < 0) return null;
       cuts.push(lines[end].y - lines[end].size * 0.5);
     }
