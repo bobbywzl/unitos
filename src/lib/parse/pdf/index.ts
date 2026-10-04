@@ -355,7 +355,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     // third wider than their text, and the gaps between them read as a
     // table's cells (its prose read as tables, a quotation as rows).
     const ocr = isOcrLayer(drawing.glyphs);
-    if (ocr) fitOcrItems(items);
+    if (ocr) fitOcrItems(items, drawing.glyphs);
     // From here on a position is taken from the page box's corner, as the
     // figure route renders the page: a region is a share of the page box.
     // The MIC white paper's box starts at (36.85, 36.85); read in the PDF's
