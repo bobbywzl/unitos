@@ -251,7 +251,40 @@ export function placeMarks(items: Item[]) {
   readLigatures(items);
   const zero = (i: Item) => i.w <= i.size * 0.02 && /\p{M}/u.test(i.str) && RTL_RE.test(i.str);
   const advance = (i: Item) => (i.glyphs ?? []).reduce((n, g) => n + g.w, 0);
-  // A letter read so: its glyph draws an advance.
+  // A mark's glyph inside a letter's item: the text layer put the two in
+  // one item, which reads the mark's letters too (parse loop finding: the
+  // Arabic book's "خيارًا" read "خيارًكا", its "ر" and the fathatan's glyph
+  // one item "رًك"). The mark's glyph becomes an item of its own, before
+  // its letter's, as Typst draws it.
+  for (let j = 0; j < items.length; j++) {
+    const item = items[j];
+    const glyphs = item.glyphs;
+    if (!glyphs || glyphs.length < 2 || !RTL_RE.test(item.str)) continue;
+    const marks = glyphs.filter((g) => g.w <= item.size * 0.02 && /\p{M}/u.test(g.unicode) && /\p{L}/u.test(g.unicode));
+    if (marks.length !== 1) continue;
+    // The text layer may have turned the glyph's letters ("كً" read "ًك").
+    const read = [marks[0].unicode, Array.from(marks[0].unicode).reverse().join("")].find((t) => item.str.includes(t)) ?? "";
+    const at = read === "" ? -1 : item.str.indexOf(read);
+    const rest = at < 0 ? "" : item.str.slice(0, at) + item.str.slice(at + read.length);
+    if (!/\p{L}/u.test(rest)) continue;
+    items.splice(j, 1, { ...item, str: marks[0].unicode, x: marks[0].x, w: 0, glyphs: [marks[0]] }, { ...item, str: rest, glyphs: glyphs.filter((g) => g !== marks[0]) });
+    j++;
+  }
+  // A letter read so: its glyph draws an advance. The text layer may set
+  // the advances of two such letters side by side as one space item (the
+  // Arabic book's heading "مصفوفة" drew "و" and "ف" so, under one space
+  // 11.8 pt wide, and read "مص فوفة"): the space goes when the letters'
+  // advances from its left end fill it.
+  const lettered = (i: Item) => zero(i) && advance(i) >= i.size * 0.1 && i.str.replace(/[\p{M}\s]/gu, "") !== "";
+  const run = items.filter(lettered).map((i) => ({ x: i.x, y: i.y, w: advance(i) }));
+  const filled = (from: Item, y: number, tol: number) => {
+    let at = from.x;
+    for (let step = run.find((r) => Math.abs(r.x - at) <= tol && Math.abs(r.y - y) <= tol); step; step = run.find((r) => Math.abs(r.x - at) <= tol && Math.abs(r.y - y) <= tol)) {
+      at += step.w;
+      if (Math.abs(at - (from.x + from.w)) <= from.size * 0.1) return true;
+    }
+    return false;
+  };
   for (let j = 0; j < items.length; j++) {
     const glyph = items[j];
     const drawn = advance(glyph);
@@ -264,7 +297,7 @@ export function placeMarks(items: Item[]) {
         i.str.trim() === "" &&
         Math.abs(i.y - glyph.y) <= tol &&
         Math.abs(i.x - glyph.x) <= tol &&
-        Math.abs(i.w - drawn) <= glyph.size * 0.1,
+        (Math.abs(i.w - drawn) <= glyph.size * 0.1 || filled(i, glyph.y, tol)),
     );
     if (k >= 0) {
       items.splice(k, 1);
@@ -282,14 +315,38 @@ export function placeMarks(items: Item[]) {
     const near = (i: Item) => Math.abs(i.y - mark.y) <= mark.size && mark.x >= i.x - i.size * 0.5 && mark.x <= i.x + i.w + i.size * 0.5;
     if (!target || !/\p{L}/u.test(target.str) || !near(target)) continue;
     // The letter drawn first is the item's left end: the last it reads.
+    // Over a glyph of two letters or more (a ligature), the mark stands
+    // where its letter starts (markedLetter).
     const chars = Array.from(target.str);
-    let end = chars.length;
+    const marked = markedLetter(target, mark.x);
+    let end = marked !== null ? marked + 1 : chars.length;
     while (end > 0 && !/\p{L}/u.test(chars[end - 1])) end--;
     while (end < chars.length && /\p{M}/u.test(chars[end])) end++;
     const signs = mark.str.match(/\p{M}/gu)?.join("") ?? "";
     items[k] = { ...target, str: [...chars.slice(0, end), signs, ...chars.slice(end)].join("") };
     items.splice(j--, 1);
   }
+}
+
+/** The index in an item's text of the letter a mark drawn at x stands
+    on: each glyph's letters from the right, a like share of its advance
+    each, and the mark at its letter's start, at most a tenth of an em left
+    of it, or inside it (parse loop finding: the Arabic book's "تميّز" drew
+    "يز" as one glyph, the shadda over its right half, and read "تميزّ").
+    Null where the glyphs' letters are not the item's. */
+function markedLetter(target: Item, x: number): number | null {
+  const glyphs = target.glyphs;
+  if (!glyphs || glyphs.length === 0) return null;
+  const parts: { x1: number; x2: number }[] = [];
+  for (const g of [...glyphs].sort((a, b) => b.x - a.x)) {
+    const n = Array.from(g.unicode).filter((c) => /\p{L}/u.test(c)).length;
+    for (let k = 0; k < n; k++) parts.push({ x1: g.x + g.w - ((k + 1) * g.w) / n, x2: g.x + g.w - (k * g.w) / n });
+  }
+  const letters = Array.from(target.str).flatMap((c, i) => (/\p{L}/u.test(c) ? [i] : []));
+  if (letters.length !== parts.length) return null;
+  const em = target.size * 0.1;
+  const at = parts.findIndex((q) => x >= q.x1 - em && x < q.x2 - em);
+  return at < 0 ? null : letters[at];
 }
 
 /** A right-to-left item's ligatures read in their own order. A font maps
