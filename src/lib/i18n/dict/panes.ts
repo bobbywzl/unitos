@@ -213,6 +213,11 @@ const en = {
   reparseEditedAsk: "Re-parse replaces the edits since the import. Version history keeps them.",
   reparseReplaceEdits: "Replace the edits",
   reparseKeepEdits: "Keep the edits",
+  reparseLosesNotes: "{n} notes quote words added since the import. Their quotes will lose their place:",
+  reparseLosesNotesOne: "1 note quotes words added since the import. Its quote will lose its place:",
+  reparseLosesAnnotations: "{n} annotations mark words added since the import. They will lose their place:",
+  reparseLosesAnnotationsOne: "1 annotation marks words added since the import. It will lose its place:",
+  reparseLosesMore: "and {n} more",
 
   // Handwritten documents (SPEC.md §16): pages, conversion, Circle & ask.
   circleAsk: "Circle & ask",
@@ -704,6 +709,11 @@ const zh: Record<keyof typeof en, string> = {
   reparseEditedAsk: "重新解析会替换导入后的编辑。版本历史记录会保留它们。",
   reparseReplaceEdits: "替换这些编辑",
   reparseKeepEdits: "保留这些编辑",
+  reparseLosesNotes: "{n} 条笔记引用了导入后添加的文字。替换后它们的引文将无法定位：",
+  reparseLosesNotesOne: "1 条笔记引用了导入后添加的文字。替换后它的引文将无法定位：",
+  reparseLosesAnnotations: "{n} 条批注标在导入后添加的文字上。替换后它们将无法定位：",
+  reparseLosesAnnotationsOne: "1 条批注标在导入后添加的文字上。替换后它将无法定位：",
+  reparseLosesMore: "还有 {n} 条",
 
   circleAsk: "圈选并提问",
   pageDrawHint: "按住鼠标在页面上圈选一处——即可提问、解释、评论，或选颜色圈选高亮",

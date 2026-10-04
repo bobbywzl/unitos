@@ -35,6 +35,7 @@ import {
 } from "@/components/reader/document-folders";
 import { DocumentsSort, useDocumentSort } from "@/components/reader/document-organize";
 import { DocumentDeleteConfirm, inAnotherProject, useDocumentReach } from "@/components/reader/document-delete";
+import { ReparseLossList, useReparseLosses } from "@/components/reader/reparse-losses";
 import type { DocumentKind } from "@/lib/document-order";
 import {
   IngestProgress,
@@ -292,6 +293,10 @@ export function DocumentBar({
   const [deleteAsk, setDeleteAsk] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const { reach: menuReach, loading: menuReachLoading } = useDocumentReach(canEdit ? pillMenu : null);
+  // The ask before Replace the edits names the quotes it costs.
+  const { losing: reparseLosing, loading: reparseLosingLoading } = useReparseLosses(
+    canEdit ? (editedAsk?.id ?? null) : null,
+  );
   const [library, setLibrary] = useState<LibraryDocument[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Every error the bar shows also lands in the error log, on the open
@@ -1179,6 +1184,7 @@ export function DocumentBar({
           {canEdit && editedAsk?.id === d.id && (
             <div role="group" className="flex flex-col gap-1.5 border-y border-line bg-sand-50/60 px-4 py-2">
               <p className="text-[11.5px] leading-snug text-sand-600">{t("panes.reparseEditedAsk")}</p>
+              {reparseLosing && reparseLosing.length > 0 && <ReparseLossList losing={reparseLosing} />}
               <div className="flex flex-wrap gap-1.5">
                 <button
                   onClick={() => {
@@ -1188,7 +1194,8 @@ export function DocumentBar({
                     void reparse(d, shape, true);
                   }}
                   data-track="document-reparse-replace"
-                  disabled={phase !== null || transcribing !== null}
+                  // Not before the ask can say what the replace costs.
+                  disabled={phase !== null || transcribing !== null || reparseLosingLoading}
                   className="rounded-full bg-clay px-3 py-1 text-[12px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
                 >
                   {t("panes.reparseReplaceEdits")}
