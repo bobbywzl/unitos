@@ -3716,12 +3716,33 @@ export function ReaderInteractions({
         void flushEditRef.current?.();
       }
     };
+    // In Editing and Suggesting, a press outside the page (the notes tray,
+    // a button) takes the browser's selection out of the page, while the
+    // page still draws its selection and the toolbox stays open on it. A
+    // press on those words then started a new selection, and the quote drag
+    // never began. The page's selection goes back into the browser before
+    // the press is handled, so a press on it and a move drag the quote, as
+    // in Viewing; a click without a move still puts the caret there.
+    const onPressSelection = (e: MouseEvent) => {
+      if (e.button !== 0 || e.detail > 1 || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+      const editor = pageEditorIn(container);
+      if (!editor?.isEditable || !(e.target instanceof Node) || !editor.view.dom.contains(e.target)) return;
+      const { from, to, empty } = editor.state.selection;
+      if (empty) return;
+      const live = window.getSelection();
+      if (live && !live.isCollapsed && live.anchorNode && editor.view.dom.contains(live.anchorNode)) return;
+      const at = editor.view.posAtCoords({ left: e.clientX, top: e.clientY })?.pos;
+      if (at === undefined || at <= from || at >= to) return;
+      editor.view.focus();
+    };
     container.addEventListener("pointerdown", onDown);
     container.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
+    container.addEventListener("mousedown", onPressSelection, true);
     container.addEventListener("dragstart", onDragStart);
     return () => {
+      container.removeEventListener("mousedown", onPressSelection, true);
       container.removeEventListener("pointerdown", onDown);
       container.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
