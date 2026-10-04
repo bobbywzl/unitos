@@ -27,6 +27,7 @@ const en = {
   savingOffline: "Saving for offline…",
   savingOfflinePages: "Saving pages…",
   savingOfflineFiles: "Saving images…",
+  progressCounting: "Counting…",
   offlineBadge: "Offline",
   offlineNeedsUltra: "Save for offline is Unitos Ultra.",
   offlineSaved: "Saved for offline. It opens without a connection.",
@@ -128,9 +129,22 @@ const en = {
   guideCollapseBody:
     "The Collapse button at the top right of the article, beside Extract. Every paragraph, list, figure, table, and equation shows its core: what it really says, in plain words, at a tenth to a third of its length, written in the light of the whole article.",
   guideCollapseWholeBody:
-    "Click a collapsed block to read it whole; the chip under it folds it again. Press Collapse again to show the article whole. Contents, at the top left, lists the article's parts and stays there as you scroll.",
+    "The button to the right of a collapsed block reads it whole; the same button collapses it to its core again. Press Collapse again to show the article whole. Contents, at the top left, lists the article's parts and stays there as you scroll.",
   // The reading position and the left-off mark (SPEC.md §6).
   guideLeftOffHeader: "Where you left off",
+  // Keys (guide-dialog.tsx): every key the reader answers to.
+  guideKeysHeader: "Keys",
+  guideKeyEscape: "Close the open card, list, or dialog. In the graph, leave the Stitch box first; the typed command stays.",
+  guideKeyUndo: "Undo the last edit in the article.",
+  guideKeyRedo: "Redo it.",
+  guideKeyCopy: "Copy the selected passage while the toolbar is open.",
+  guideKeyEnter: "Send in the Assistant box and the Stitch box. Shift + Enter starts a new line.",
+  guideKeySaveNote: "Save the note you are editing.",
+  guideKeyIndent: "Indent or outdent the list lines of a note.",
+  guideKeyPick: "Pick a document in the graph for Stitch, or drop it from the pick.",
+  guideKeyPlay: "Play or pause a video or audio document.",
+  guideKeySeek: "Go back or forward 5 seconds.",
+  guideKeyFullscreen: "Show the video full screen.",
   guideLeftOffBody:
     "A document opens where you left off, in any tab and on any device you sign in on. A small ribbon above the block marks the place, so you can find it again after you scroll away.",
   // The release notifications (SPEC.md §18, lib/releases.ts): one per release, on the dashboard.
@@ -209,6 +223,7 @@ const zh: Record<keyof typeof en, string> = {
   savingOffline: "正在离线保存…",
   savingOfflinePages: "正在保存页面…",
   savingOfflineFiles: "正在保存图片…",
+  progressCounting: "正在统计…",
   offlineBadge: "离线",
   offlineNeedsUltra: "离线保存是 Unitos Ultra 功能。",
   offlineSaved: "已离线保存。无网络时也能打开。",
@@ -295,8 +310,20 @@ const zh: Record<keyof typeof en, string> = {
   guideCollapseBody:
     "文章右上角、提取旁边的折叠按钮。每个段落、列表、插图、表格和公式都显示为它的核心：它真正要说的，用大白话，长度是原文的十分之一到三分之一，结合整篇文章写成。",
   guideCollapseWholeBody:
-    "点击折叠后的块可读全文；块下方的小标签把它重新折叠。再按一次折叠，文章恢复完整。左上角的目录列出文章的各个部分，滚动时一直停在原处。",
+    "折叠后的块右侧的按钮可读全文；同一个按钮把它重新折叠为核心。再按一次折叠，文章恢复完整。左上角的目录列出文章的各个部分，滚动时一直停在原处。",
   guideLeftOffHeader: "上次读到的位置",
+  guideKeysHeader: "按键",
+  guideKeyEscape: "关闭打开的卡片、列表或对话框。在图谱中先离开缝合框；输入的指令保留。",
+  guideKeyUndo: "撤销文章中的上一次编辑。",
+  guideKeyRedo: "重做。",
+  guideKeyCopy: "工具栏打开时，复制选中的片段。",
+  guideKeyEnter: "在助手框和缝合框中发送。Shift + Enter 换行。",
+  guideKeySaveNote: "保存正在编辑的笔记。",
+  guideKeyIndent: "缩进或取消缩进笔记中的列表行。",
+  guideKeyPick: "在图谱中为缝合选取文档，或取消选取。",
+  guideKeyPlay: "播放或暂停视频或音频文档。",
+  guideKeySeek: "后退或前进 5 秒。",
+  guideKeyFullscreen: "全屏显示视频。",
   guideLeftOffBody:
     "文档会在你上次读到的位置打开，无论在哪个标签页，还是在你登录的任何设备上。块上方的小书签标出这个位置，滚动离开后也能找回来。",
   release20260924Title: "新功能：折叠、整页批注、按文档、对话列表",

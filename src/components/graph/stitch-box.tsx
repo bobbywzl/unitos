@@ -30,6 +30,58 @@ import { transcriptErrorKey } from "@/lib/video/types";
 type Turn = { role: "user" | "assistant"; content: string; result?: StitchResult };
 const threads = new Map<string, Turn[]>();
 
+// The typed command and the pick, per project for the browser tab: Escape,
+// a closed graph, or a reload never throws away a command being typed or
+// the documents picked for it (CLAUDE.md rule 6). Session storage, with
+// the memory as the fallback when the store is blocked.
+const drafts = new Map<string, string>();
+const picks = new Map<string, string[]>();
+const draftKey = (notebookId: string) => `unitos-stitch-draft-${notebookId}`;
+const pickKey = (notebookId: string) => `unitos-stitch-pick-${notebookId}`;
+
+function readDraft(notebookId: string): string {
+  try {
+    const stored = sessionStorage.getItem(draftKey(notebookId));
+    if (stored !== null) return stored;
+  } catch {
+    // Blocked store: the memory's copy.
+  }
+  return drafts.get(notebookId) ?? "";
+}
+
+function writeDraft(notebookId: string, text: string) {
+  drafts.set(notebookId, text);
+  try {
+    if (text) sessionStorage.setItem(draftKey(notebookId), text);
+    else sessionStorage.removeItem(draftKey(notebookId));
+  } catch {
+    // Blocked store: the memory keeps it for this tab.
+  }
+}
+
+export function readStitchPick(notebookId: string): Set<string> {
+  try {
+    const stored = sessionStorage.getItem(pickKey(notebookId));
+    if (stored !== null) {
+      const ids: unknown = JSON.parse(stored);
+      if (Array.isArray(ids)) return new Set(ids.filter((id): id is string => typeof id === "string"));
+    }
+  } catch {
+    // Blocked store or a bad value: the memory's copy.
+  }
+  return new Set(picks.get(notebookId) ?? []);
+}
+
+export function writeStitchPick(notebookId: string, ids: Set<string>) {
+  picks.set(notebookId, [...ids]);
+  try {
+    if (ids.size > 0) sessionStorage.setItem(pickKey(notebookId), JSON.stringify([...ids]));
+    else sessionStorage.removeItem(pickKey(notebookId));
+  } catch {
+    // Blocked store: the memory keeps it for this tab.
+  }
+}
+
 const SUGGESTIONS = [
   "stitch.stitchSuggestGather",
   "stitch.stitchSuggestConnect",
@@ -62,7 +114,11 @@ export function StitchBox({
   const ime = useImeGuard();
   const { canEdit } = useCollab();
   const [turns, setTurnsState] = useState<Turn[]>(() => threads.get(notebookId) ?? []);
-  const [command, setCommand] = useState("");
+  const [command, setCommandState] = useState(() => readDraft(notebookId));
+  function setCommand(text: string) {
+    setCommandState(text);
+    writeDraft(notebookId, text);
+  }
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(true);
@@ -166,8 +222,7 @@ export function StitchBox({
     >
       <div className="flex items-center gap-2 px-4 pt-3">
         <SparkleIcon size={15} className="shrink-0 text-clay" />
-        <span className="font-display text-[16px]">{t("stitch.stitch")}</span>
-        <span className="min-w-0 flex-1 truncate text-xs text-sand-500">{t("stitch.stitchHint")}</span>
+        <span className="mr-auto font-display text-[16px]">{t("stitch.stitch")}</span>
         {turns.length > 0 && !running && (
           <button
             onClick={() => setTurns(() => [])}
@@ -191,13 +246,21 @@ export function StitchBox({
         </button>
       </div>
 
+      {/* What Stitch does, whole, until the first command: a line cut with
+          an ellipsis hid most of it. */}
+      {turns.length === 0 && (
+        <p className="px-4 pt-1 text-xs leading-snug text-sand-600">{t("stitch.stitchHint")}</p>
+      )}
+
       {/* The scope: which documents the command reads. */}
       {canEdit && (
         <div className="flex flex-wrap items-center gap-1.5 px-4 pt-2 text-[11px] text-sand-600">
           <span className="font-semibold text-sand-700">
-            {picked.length > 0
-              ? t("stitch.stitchScopePicked", { n: picked.length })
-              : t("stitch.stitchScopeAll", { n: nodes.length })}
+            {picked.length === 0
+              ? t("stitch.stitchScopeAll", { n: nodes.length })
+              : picked.length === 1
+                ? t("stitch.stitchScopePickedOne")
+                : t("stitch.stitchScopePicked", { n: picked.length })}
           </span>
           {picked.map((n) => (
             <button

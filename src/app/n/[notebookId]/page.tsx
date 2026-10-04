@@ -1233,6 +1233,8 @@ export default async function NotebookPage(props: {
                 (e.meta as { to?: string } | null)?.to ??
                 ""),
         documentTitle: e.document.title,
+        documentId: e.documentId,
+        blockId: e.blockId,
         createdAt: e.createdAt.toISOString(),
         trivial: trivial.get(e.id) ?? false,
       }),

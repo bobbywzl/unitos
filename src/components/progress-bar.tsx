@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/components/lang-provider";
+
 // Work in progress: a bottom-fixed bar, the same shape as every other
 // bottom-fixed status in the reader (the toast, the Extract composer). The
 // label says the stage, the title says what the work is on, and the fill is
@@ -18,7 +20,11 @@ export function ProgressBar({
   done: number;
   total: number;
 }) {
-  const percent = total > 0 ? Math.min(100, (done / total) * 100) : 0;
+  const t = useT();
+  // Until the work is counted (Save for offline asks the server for the
+  // pages first) the count reads a word, never "0/0".
+  const counted = total > 0;
+  const percent = counted ? Math.min(100, (done / total) * 100) : 0;
   return (
     <div
       role="status"
@@ -27,7 +33,7 @@ export function ProgressBar({
       <div className="flex items-center gap-2">
         <p className="min-w-0 flex-1 truncate text-[13px] font-semibold text-sand-800">{label}</p>
         <span className="shrink-0 text-xs tabular-nums text-sand-500">
-          {done}/{total}
+          {counted ? `${done}/${total}` : t("works.progressCounting")}
         </span>
       </div>
       {title && <p className="truncate text-xs text-sand-500">{title}</p>}

@@ -298,6 +298,10 @@ export type HistoryEntry = {
   // document title, the linked quote.
   content: string;
   documentTitle: string | null; // BlockEdit entries: the document it happened in
+  // BlockEdit entries: where the edit is, for the row's jump (the block may
+  // be gone: then the row opens the document).
+  documentId?: string;
+  blockId?: string | null;
   createdAt: string; // ISO
 };
 

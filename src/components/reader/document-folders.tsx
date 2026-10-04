@@ -5,6 +5,7 @@ import {
   createContext,
   useContext,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -299,6 +300,8 @@ const rowStyle = (index: number): CSSProperties => ({ ["--row" as string]: index
 // module-level (a component made inside another remounts on every render).
 type Tree = {
   t: TFunc;
+  // The list's header row (Sort by): the root drop zone draws over it.
+  header: boolean;
   // Sort by (SPEC.md §6): every list's order, and its categories.
   sort: DocumentSort;
   lang: string;
@@ -393,9 +396,9 @@ function NewFolderRow({ parentId }: { parentId: string | null }) {
   );
 }
 
-// New file here, at the foot of a folder's list: the + bubble opens the add
+// New document here, at the foot of a folder's list: the + bubble opens the add
 // dialog, and what it adds lands in this folder (SPEC.md §6).
-function NewFileRow({ folderId }: { folderId: string }) {
+function NewDocumentRow({ folderId }: { folderId: string }) {
   const { t, pending, addIn } = useTree();
   if (!addIn) return null;
   return (
@@ -415,13 +418,16 @@ function NewFileRow({ folderId }: { folderId: string }) {
 }
 
 // Move to the project, at the top of the root list while something in a
-// folder is dragged: the drop target for the project itself.
-function RootDropRow() {
+// folder is dragged: the drop target for the project itself. `overlay`:
+// drawn over the list's header row, so no row moves under the pointer
+// mid-drag; without a header it takes its own line.
+function RootDropRow({ overlay = false }: { overlay?: boolean }) {
   const tree = useTree();
   if (!tree.drag || !tree.canDropOn(null)) return null;
   const over = tree.dragOver === ROOT_TARGET;
   return (
     <div
+      data-track="folder-root-drop"
       onDragOver={(e) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
@@ -432,9 +438,9 @@ function RootDropRow() {
         e.preventDefault();
         tree.dropOn(null);
       }}
-      className={`mx-2 my-1 rounded-lg border border-dashed px-3 py-2 text-[12.5px] ${
-        over ? "border-clay bg-clay-100 text-clay-800" : "border-line text-sand-500"
-      }`}
+      className={`rounded-lg border border-dashed px-3 text-[12.5px] ${
+        overlay ? "absolute inset-x-2 inset-y-0.5 z-10 flex items-center bg-card" : "mx-2 my-1 py-2"
+      } ${over ? "border-clay bg-clay-100 text-clay-800" : "border-line text-sand-600"}`}
     >
       {tree.t("panes.moveToProject")}
     </div>
@@ -701,7 +707,7 @@ function Level({ parentId, depth }: { parentId: string | null; depth: number }) 
   }
   return (
     <>
-      {parentId === null && <RootDropRow />}
+      {parentId === null && !tree.header && <RootDropRow />}
       {parentId === null && <ErrorLine at="drag" />}
       {list}
       {parentId !== null && empty && (
@@ -712,7 +718,7 @@ function Level({ parentId, depth }: { parentId: string | null; depth: number }) 
       {canEdit && !empty && <div className="mx-3 my-1 border-t border-line" />}
       {canEdit && parentId !== null && (
         <div className="tree-row-in" style={rowStyle(index++)}>
-          <NewFileRow folderId={parentId} />
+          <NewDocumentRow folderId={parentId} />
         </div>
       )}
       {canEdit && (
@@ -732,7 +738,7 @@ export function DocumentTree<
   T extends { id: string; folderId: string | null; title: string; kind: DocumentKind; addedAt: string },
 >({
   notebookId,
-  folders,
+  folders: storedFolders,
   documents,
   sort,
   activeId,
@@ -740,6 +746,7 @@ export function DocumentTree<
   panelEl,
   renderDocument,
   onAddIn,
+  header,
 }: {
   notebookId: string;
   folders: DocumentFolderView[];
@@ -750,23 +757,50 @@ export function DocumentTree<
   canEdit: boolean;
   panelEl: HTMLElement | null;
   renderDocument: (document: T) => ReactNode;
-  /** New file here: open the add dialog set to this folder. */
+  /** New document here: open the add dialog set to this folder. */
   onAddIn?: (folderId: string) => void;
+  /** The row over the root list (Sort by): it stays at the top as the list
+      scrolls, and a drag draws the move-out drop zone over it. */
+  header?: ReactNode;
 }) {
   const t = useT();
   const lang = useLang();
   const router = useRouter();
   const flyout = useSyncExternalStore(subscribeFlyout, readFlyout, () => false);
   const [folded, toggleFolded] = useFoldedCategories();
+  // A move shows at once (SPEC.md §6): the dropped document or folder sits
+  // in its new place while the route runs, and goes back, with the error
+  // under the list, when the route refuses. An entry leaves once the page's
+  // own data says the same.
+  const [docMoves, setDocMoves] = useState<ReadonlyMap<string, string | null>>(() => new Map());
+  const [folderMoves, setFolderMoves] = useState<ReadonlyMap<string, string | null>>(() => new Map());
+  const [seen, setSeen] = useState({ documents, storedFolders });
+  if (seen.documents !== documents || seen.storedFolders !== storedFolders) {
+    setSeen({ documents, storedFolders });
+    const pendingDocs = [...docMoves].filter(([id, to]) => documents.find((d) => d.id === id)?.folderId !== to);
+    if (pendingDocs.length !== docMoves.size) setDocMoves(new Map(pendingDocs));
+    const pendingFolders = [...folderMoves].filter(([id, to]) => storedFolders.find((f) => f.id === id)?.parentId !== to);
+    if (pendingFolders.length !== folderMoves.size) setFolderMoves(new Map(pendingFolders));
+  }
+  const folders = useMemo(
+    () =>
+      folderMoves.size === 0
+        ? storedFolders
+        : storedFolders.map((f) => (folderMoves.has(f.id) ? { ...f, parentId: folderMoves.get(f.id) ?? null } : f)),
+    [storedFolders, folderMoves],
+  );
   const known = new Set(folders.map((f) => f.id));
-  const rows: TreeRow[] = documents.map((d) => ({
+  const rows: TreeRow[] = documents.map((d) => {
+    const folderId = docMoves.has(d.id) ? (docMoves.get(d.id) ?? null) : d.folderId;
+    return {
     id: d.id,
-    folderId: d.folderId && known.has(d.folderId) ? d.folderId : null,
+    folderId: folderId && known.has(folderId) ? folderId : null,
     title: d.title,
     kind: d.kind,
     addedAt: d.addedAt,
     node: renderDocument(d),
-  }));
+    };
+  });
   // The open folders, one per level, from the project itself down. A wide
   // screen opens on hover; a narrow one opens on the open document's path,
   // so the reader sees where they are.
@@ -802,8 +836,11 @@ export function DocumentTree<
     setOpenPath(flyout ? [] : activePath);
   }
 
-  async function run(at: string, call: () => Promise<unknown>, after?: () => void) {
-    if (busy.current) return;
+  async function run(at: string, call: () => Promise<unknown>, after?: () => void, undo?: () => void) {
+    if (busy.current) {
+      undo?.();
+      return;
+    }
     busy.current = true;
     setPending(true);
     setError(null);
@@ -812,6 +849,7 @@ export function DocumentTree<
       after?.();
       router.refresh();
     } catch (err) {
+      undo?.();
       setError({ at, message: err instanceof Error ? err.message : t("common.requestFailed") });
     } finally {
       busy.current = false;
@@ -821,6 +859,7 @@ export function DocumentTree<
 
   const tree: Tree = {
     t,
+    header: header !== undefined,
     sort,
     lang,
     folded,
@@ -896,14 +935,29 @@ export function DocumentTree<
       setDrag(null);
       setDragOver(null);
       if (!moving || moving.from === target) return;
+      const place = <V,>(set: (update: (m: ReadonlyMap<string, V>) => ReadonlyMap<string, V>) => void, value: V | undefined) =>
+        set((m) => {
+          const next = new Map(m);
+          if (value === undefined) next.delete(moving.id);
+          else next.set(moving.id, value);
+          return next;
+        });
       if (moving.kind === "document") {
-        void run("drag", () =>
-          api(`/api/notebooks/${notebookId}/documents/${moving.id}`, "PATCH", { folderId: target }),
+        place(setDocMoves, target);
+        void run(
+          "drag",
+          () => api(`/api/notebooks/${notebookId}/documents/${moving.id}`, "PATCH", { folderId: target }),
+          undefined,
+          () => place<string | null>(setDocMoves, undefined),
         );
       } else {
         if (target !== null && folderSubtree(folders, moving.id).has(target)) return;
-        void run("drag", () =>
-          api(`/api/notebooks/${notebookId}/folders/${moving.id}`, "PATCH", { parentId: target }),
+        place(setFolderMoves, target);
+        void run(
+          "drag",
+          () => api(`/api/notebooks/${notebookId}/folders/${moving.id}`, "PATCH", { parentId: target }),
+          undefined,
+          () => place<string | null>(setFolderMoves, undefined),
         );
       }
     },
@@ -926,6 +980,14 @@ export function DocumentTree<
   return (
     <TreeContext.Provider value={tree}>
       <PanelContext.Provider value={panelEl}>
+        {header && (
+          // Sticks at the list's very top, over its 6px padding (py-1.5 in
+          // document-bar.tsx), so no row shows above it as the list scrolls.
+          <div className="sticky -top-1.5 z-10 bg-card">
+            {header}
+            <RootDropRow overlay />
+          </div>
+        )}
         <Level parentId={null} depth={0} />
       </PanelContext.Provider>
     </TreeContext.Provider>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { HistoryEntry } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
@@ -8,6 +9,7 @@ import { HistoryIcon } from "@/components/icons";
 import { useLang, useT } from "@/components/lang-provider";
 import { Presence } from "@/components/presence";
 import type { TKey } from "@/lib/i18n/dictionaries";
+import { markdownPreview } from "@/lib/markdown-preview";
 
 const KIND_KEY: Record<HistoryEntry["kind"], TKey> = {
   TEXT_EDIT: "panes.historyTextEdit",
@@ -69,6 +71,8 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
   const t = useT();
   const lang = useLang();
   const { authOn, people } = useCollab();
+  const router = useRouter();
+  const { notebookId } = useParams<{ notebookId: string }>();
   const panelRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [personFilter, setPersonFilter] = useState<string | null>(null);
@@ -97,11 +101,24 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
     .filter((p) => p !== undefined);
   const shown = personFilter ? history.filter((e) => e.userId === personFilter) : history;
 
-  // One entry as a row: the person, the kind, the time, the snippet.
+  // An edit's row opens its document at the edited block (the block of a
+  // removal is gone: the document opens). A removed note, section, or
+  // document has nowhere to open, so its row stays as it is.
+  const jumpOf = (entry: HistoryEntry): string | null => {
+    if (!entry.documentId || !notebookId) return null;
+    const block = entry.blockId && entry.kind !== "BLOCK_REMOVE" ? `&block=${entry.blockId}` : "";
+    return `/n/${notebookId}?doc=${entry.documentId}${block}`;
+  };
+
+  // One entry as a row: the person, the kind, the time, the snippet as the
+  // reader sees it (markdown markers off). A row with a place opens it.
   const row = (entry: HistoryEntry) => {
     const person = entry.userId ? people[entry.userId] : undefined;
-    return (
-      <div key={entry.id} className="flex items-start gap-2.5">
+    const href = jumpOf(entry);
+    const snippet = entry.content ? markdownPreview(entry.content) : "";
+    const className = `flex items-start gap-2.5 text-left ${href ? "-mx-1.5 rounded-lg px-1.5 py-1 hover:bg-clay-100" : ""}`;
+    const body = (
+      <>
         {person ? (
           <PersonBadge person={person} size={20} />
         ) : (
@@ -128,19 +145,38 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
               })}
             </span>
           </div>
-          {entry.content && (
+          {snippet && (
             <p
               className={`line-clamp-2 text-[11.5px] text-sand-600 ${
                 REMOVALS.has(entry.kind) ? "line-through decoration-sand-400" : ""
               }`}
             >
-              {entry.content}
+              {snippet}
             </p>
           )}
           {entry.documentTitle && (
-            <p className="truncate text-[10px] text-sand-500">{entry.documentTitle}</p>
+            <p className="truncate text-[10px] text-sand-600">{entry.documentTitle}</p>
           )}
         </div>
+      </>
+    );
+    return href ? (
+      <button
+        key={entry.id}
+        type="button"
+        onClick={() => {
+          setOpen(false);
+          router.push(href);
+        }}
+        data-track="history-open"
+        data-tip={t("panes.historyOpenTitle")}
+        className={className}
+      >
+        {body}
+      </button>
+    ) : (
+      <div key={entry.id} className={className}>
+        {body}
       </div>
     );
   };

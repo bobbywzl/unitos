@@ -34,6 +34,7 @@ import {
   type DocumentFolderView,
 } from "@/components/reader/document-folders";
 import { DocumentsSort, useDocumentSort } from "@/components/reader/document-organize";
+import { DocumentDeleteConfirm, inAnotherProject, useDocumentReach } from "@/components/reader/document-delete";
 import type { DocumentKind } from "@/lib/document-order";
 import {
   IngestProgress,
@@ -105,6 +106,8 @@ function sleep(ms: number) {
 // reload while one runs, or after one failed, must not start another; the
 // document's actions in the list still re-parse on demand.
 const REPARSE_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+// How long the pointer rests on the document pill before the list opens.
+const LIST_HOVER_MS = 300;
 function reparseKey(documentId: string): string {
   return `unitos:reparse:${documentId}:${PARSER_VERSION}`;
 }
@@ -280,6 +283,13 @@ export function DocumentBar({
   // picked.
   const [editedAsk, setEditedAsk] = useState<{ id: string; as?: "article" | "handwritten" } | null>(null);
   const [moveError, setMoveError] = useState<string | null>(null);
+  // Delete document opens its confirm under the row (document-delete.tsx).
+  // Where the document is — this project, its other projects — is read when
+  // the row's actions open, so Remove from this project and the confirm
+  // both know it.
+  const [deleteAsk, setDeleteAsk] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const { reach: menuReach, loading: menuReachLoading } = useDocumentReach(canEdit ? pillMenu : null);
   const [library, setLibrary] = useState<LibraryDocument[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Every error the bar shows also lands in the error log, on the open
@@ -291,31 +301,64 @@ export function DocumentBar({
   // Opening a document is a server round trip; the pill shows it is on its way.
   const [opening, startOpening] = useTransition();
 
-  // Hover keeps the list open across the gap between pill and list; leaving
-  // both closes it after a grace period.
+  // A press on the pill opens the list and a second press closes it. A
+  // pointer that rests on the pill opens it too, once it has stood still for
+  // a beat (LIST_HOVER_MS), so a pointer passing over on its way to + opens
+  // nothing. Hover keeps the list open across the gap between pill and list;
+  // leaving both closes it after a grace period.
+  const listOpenTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // When a hover opened the list: a press that lands right after is the same
+  // intent to open, not a second press that closes.
+  const hoverOpenedAt = useRef(0);
+  function clearListTimers() {
+    if (listCloseTimer.current) clearTimeout(listCloseTimer.current);
+    if (listOpenTimer.current) clearTimeout(listOpenTimer.current);
+    listCloseTimer.current = null;
+    listOpenTimer.current = null;
+  }
   function openList() {
-    if (listCloseTimer.current) {
-      clearTimeout(listCloseTimer.current);
-      listCloseTimer.current = null;
-    }
+    clearListTimers();
     setListOpen(true);
   }
-  function closeList() {
+  function hoverList() {
     if (listCloseTimer.current) {
       clearTimeout(listCloseTimer.current);
       listCloseTimer.current = null;
     }
+    if (listOpen) return;
+    // The pointer still moves: the beat starts over, so the list opens only
+    // where the pointer comes to rest.
+    if (listOpenTimer.current) clearTimeout(listOpenTimer.current);
+    listOpenTimer.current = setTimeout(() => {
+      listOpenTimer.current = null;
+      hoverOpenedAt.current = Date.now();
+      setListOpen(true);
+    }, LIST_HOVER_MS);
+  }
+  function pressList() {
+    if (listOpen && Date.now() - hoverOpenedAt.current > LIST_HOVER_MS * 2) closeList();
+    else openList();
+  }
+  function closeList() {
+    clearListTimers();
     setListOpen(false);
     setPillMenu(null);
     setMoveChoice(null);
     setEditedAsk(null);
+    setDeleteAsk(null);
   }
   function scheduleCloseList() {
+    if (listOpenTimer.current) {
+      clearTimeout(listOpenTimer.current);
+      listOpenTimer.current = null;
+    }
+    if (!listOpen) return;
     if (listCloseTimer.current) clearTimeout(listCloseTimer.current);
     listCloseTimer.current = setTimeout(closeList, 220);
   }
   useEffect(() => () => {
     if (listCloseTimer.current) clearTimeout(listCloseTimer.current);
+    if (listOpenTimer.current) clearTimeout(listOpenTimer.current);
   }, []);
 
   useEffect(() => {
@@ -936,37 +979,41 @@ export function DocumentBar({
     router.refresh();
   }
 
-  // Delete document: the document leaves the project and the library
-  // (DELETE /api/documents/[documentId]; its annotations go with it, and
-  // notes that quote it keep their quotes).
+  // Delete document, after its confirm under the row: the document leaves
+  // the library and every project that holds it (DELETE
+  // /api/documents/[documentId]; its annotations go with it, and notes that
+  // quote it keep their quotes). The confirm named every project first.
   async function deleteDocument(documentId: string) {
-    closeList();
-    if (!confirm(await deleteMessage(documentId))) return;
     setError(null);
+    setDeleting(true);
     try {
       await api(`/api/documents/${documentId}`, "DELETE");
+      closeList();
       if (documentId === activeId) router.push(`/n/${notebookId}`);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("panes.deleteFailed"));
+    } finally {
+      setDeleting(false);
     }
   }
 
-  // The delete's confirm names what it reaches: how many annotations go and
-  // how many notes stay, or that a shared document only leaves the reader's
-  // projects. Offline, or when the count fails, the plain message stands.
-  async function deleteMessage(
-    documentId: string,
-    fallback: "panes.confirmDeleteDocument" | "panes.confirmDeleteFromLibrary" = "panes.confirmDeleteDocument",
-  ): Promise<string> {
+  // Remove from this project: only this project's attachment goes. The
+  // document stays in the library and its other projects, every annotation
+  // with it, and Library adds it back.
+  async function removeFromProject(documentId: string) {
+    setError(null);
+    setDeleting(true);
     try {
-      const res = await fetch(`/api/documents/${documentId}/footprint`);
-      if (!res.ok) return t(fallback);
-      const reach = (await res.json()) as { annotations: number; notes: number; shared: boolean };
-      if (reach.shared) return t("panes.confirmDeleteDocumentShared");
-      return t("panes.confirmDeleteDocumentCounts", { annotations: reach.annotations, notes: reach.notes });
-    } catch {
-      return t(fallback);
+      await api(`/api/documents/${documentId}?scope=project&notebookId=${notebookId}`, "DELETE");
+      closeList();
+      if (documentId === activeId) router.push(`/n/${notebookId}`);
+      router.refresh();
+      showNotice(t("panes.removeFromProjectDone"));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("panes.deleteFailed"));
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -983,8 +1030,9 @@ export function DocumentBar({
     }
   }
 
+  // The library's delete: the dialog's own confirm under the row named the
+  // projects it leaves.
   async function removeFromLibrary(documentId: string) {
-    if (!confirm(await deleteMessage(documentId, "panes.confirmDeleteFromLibrary"))) return;
     setError(null);
     try {
       await api(`/api/documents/${documentId}`, "DELETE");
@@ -1027,6 +1075,7 @@ export function DocumentBar({
         <button
           onClick={() => {
             setMoveChoice(null);
+            setDeleteAsk(null);
             setPillMenu(pillMenu === d.id ? null : d.id);
           }}
           data-track="document-actions"
@@ -1199,13 +1248,40 @@ export function DocumentBar({
           </button>
           {canEdit && (
             <button
-              onClick={() => void deleteDocument(d.id)}
+              onClick={() => void removeFromProject(d.id)}
+              data-track="document-remove"
+              disabled={deleting || !inAnotherProject(menuReach, notebookId)}
+              className={`${rowAction} disabled:opacity-40`}
+              data-tip={
+                menuReachLoading || inAnotherProject(menuReach, notebookId)
+                  ? t("panes.removeFromProjectTitle")
+                  : t("panes.removeFromProjectOnly")
+              }
+            >
+              {t("panes.removeFromProject")}
+            </button>
+          )}
+          {canEdit && (
+            <button
+              onClick={() => setDeleteAsk(deleteAsk === d.id ? null : d.id)}
               data-track="document-delete"
+              aria-expanded={deleteAsk === d.id}
               className="px-4 py-1.5 text-left text-[12.5px] text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
               data-tip={t("panes.deleteDocumentTitle")}
             >
               {t("panes.deleteDocument")}
             </button>
+          )}
+          {canEdit && deleteAsk === d.id && (
+            <DocumentDeleteConfirm
+              reach={menuReach}
+              loading={menuReachLoading}
+              notebookId={notebookId}
+              busy={deleting}
+              onDelete={() => void deleteDocument(d.id)}
+              onRemove={() => void removeFromProject(d.id)}
+              onCancel={() => setDeleteAsk(null)}
+            />
           )}
         </div>
       )}
@@ -1219,11 +1295,12 @@ export function DocumentBar({
         <div
           ref={listRef}
           className="relative min-w-0"
-          onMouseEnter={openList}
+          onMouseEnter={hoverList}
+          onMouseMove={listOpen ? undefined : hoverList}
           onMouseLeave={scheduleCloseList}
         >
           <button
-            onClick={openList}
+            onClick={pressList}
             data-track="document-list"
             aria-expanded={listOpen}
             aria-label={t("panes.documentList")}
@@ -1249,8 +1326,8 @@ export function DocumentBar({
               ref={placeList}
               className="menu-in absolute top-full left-0 z-40 mt-2 flex max-h-[min(60vh,480px)] w-80 max-w-[calc(100vw-96px)] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-card py-1.5 shadow-float"
             >
-              <DocumentsSort sort={documentSort} onSort={setDocumentSort} />
               <DocumentTree
+                header={<DocumentsSort sort={documentSort} onSort={setDocumentSort} />}
                 notebookId={notebookId}
                 folders={folders}
                 documents={documents}
