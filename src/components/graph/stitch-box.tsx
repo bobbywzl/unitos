@@ -256,9 +256,11 @@ export function StitchBox({
       {canEdit && (
         <div className="flex flex-wrap items-center gap-1.5 px-4 pt-2 text-[11px] text-sand-600">
           <span className="font-semibold text-sand-700">
-            {picked.length > 0
-              ? t("stitch.stitchScopePicked", { n: picked.length })
-              : t("stitch.stitchScopeAll", { n: nodes.length })}
+            {picked.length === 0
+              ? t("stitch.stitchScopeAll", { n: nodes.length })
+              : picked.length === 1
+                ? t("stitch.stitchScopePickedOne")
+                : t("stitch.stitchScopePicked", { n: picked.length })}
           </span>
           {picked.map((n) => (
             <button

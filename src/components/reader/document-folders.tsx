@@ -981,7 +981,9 @@ export function DocumentTree<
     <TreeContext.Provider value={tree}>
       <PanelContext.Provider value={panelEl}>
         {header && (
-          <div className="sticky top-0 z-10 bg-card">
+          // Sticks at the list's very top, over its 6px padding (py-1.5 in
+          // document-bar.tsx), so no row shows above it as the list scrolls.
+          <div className="sticky -top-1.5 z-10 bg-card">
             {header}
             <RootDropRow overlay />
           </div>

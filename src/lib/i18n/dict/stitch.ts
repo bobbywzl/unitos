@@ -30,6 +30,7 @@ const en = {
   // every document when none is picked.
   stitchScopeAll: "Every document ({n})",
   stitchScopePicked: "{n} documents picked",
+  stitchScopePickedOne: "1 document picked",
   stitchPick: "Pick documents",
   stitchPickTitle: "Click nodes in the graph to pick the documents Stitch reads. ⇧-click picks without this.",
   stitchPickDone: "Done",
@@ -90,6 +91,7 @@ const zh: Record<keyof typeof en, string> = {
   stitchNew: "新对话",
   stitchScopeAll: "全部文档（{n}）",
   stitchScopePicked: "已选取 {n} 篇文档",
+  stitchScopePickedOne: "已选取 1 篇文档",
   stitchPick: "选取文档",
   stitchPickTitle: "点击图谱中的节点，选取缝合要读的文档。按住 ⇧ 点击可直接选取。",
   stitchPickDone: "完成",
