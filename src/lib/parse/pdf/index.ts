@@ -201,6 +201,13 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
       const key = `${Math.round(g.x)} ${Math.round(g.y)}`;
       untaken.set(key, [...(untaken.get(key) ?? []), k]);
     });
+    // An OCR layer stretches each word across to the scan's word: a word
+    // stretched a third wider than it is tall takes its height as its size.
+    // Taken across, a short word stretched wide read as large type (parse
+    // loop finding: NACA Report 515 sets "It" 15.3 pt across and 10 pt tall
+    // in a 10.3 pt line, and five lines of its body read as headings:
+    // "conditions. It is thought that the accurate determi-").
+    const scanned = isOcrLayer(drawing.glyphs);
     for (const raw of content.items) {
       if (!("str" in raw) || typeof raw.str !== "string") continue;
       if (verticalShare < 0.25 && vertical(raw)) continue;
@@ -213,7 +220,9 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
       const drawn = runOf.get(raw) === undefined ? drawnRunAt(raw.str, t[4], t[5], drawing.glyphs, taken, untaken) : undefined;
       const fontName = drawn ? drawn[0].font : String(raw.fontName ?? "");
       const flags = flagsOf(fontName);
-      const size = Math.hypot(t[0], t[1]) || Math.hypot(t[2], t[3]) || 10;
+      const across = Math.hypot(t[0], t[1]);
+      const tall = Math.hypot(t[2], t[3]);
+      const size = (scanned && tall > 0 && across > tall * 1.3 ? tall : across || tall) || 10;
       // Text under a point both ways is not on the page for a reader: LaTeXiT
       // stores a formula's source as text at 3e-7 pt, and its glyph advance
       // made a code line's indent hundreds of millions of spaces (arXiv
@@ -358,7 +367,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     // whose advances need not span the word: a scanned book's words run a
     // third wider than their text, and the gaps between them read as a
     // table's cells (its prose read as tables, a quotation as rows).
-    const ocr = isOcrLayer(drawing.glyphs);
+    const ocr = scanned;
     if (ocr) fitOcrItems(items, drawing.glyphs);
     // From here on a position is taken from the page box's corner, as the
     // figure route renders the page: a region is a share of the page box.
