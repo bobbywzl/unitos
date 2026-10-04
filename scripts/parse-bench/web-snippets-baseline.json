@@ -1,7 +1,7 @@
 {
  "total": {
-  "f1": 0.927,
-  "precision": 0.872,
+  "f1": 0.931,
+  "precision": 0.88,
   "recall": 0.989
  },
  "pages": {
@@ -122,12 +122,12 @@
   },
   "nationnews.com-schools.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "nationnews.com-tridents.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "nowgrenada.com-pm.html": {
@@ -137,7 +137,7 @@
   },
   "panamaamerica.com.pa-apropiarse.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "pcgamer.com.skyrim.html": {
@@ -237,7 +237,7 @@
   },
   "love-hina.ch.0409.html": {
    "tp": 1,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "marktplatz.die-besserwisser.org.zeit.html": {
@@ -282,7 +282,7 @@
   },
   "simmeltalzeitung.ch-Trinkwasser.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "thenervousbreakdown.com.loneliest.html": {
@@ -337,7 +337,7 @@
   },
   "creativecommons.ch.wie.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "der-erfolg-gibt-recht.de.rinderleber.html": {
@@ -1022,7 +1022,7 @@
   },
   "Rosjanie sugerują natychmiastowe odcięcie Polski od gazu - Energetyka24.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "erfolg-magazin.de.konfliktkultur.html": {
@@ -1052,7 +1052,7 @@
   },
   "exxpress.at-zaehne.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 0,
    "fn": 0
   },
   "finanzmarktwelt.de-Benko-Firma.html": {
@@ -1802,7 +1802,7 @@
   },
   "rosa-mag.de.womanking.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "reporternewspapers.net-Brookhaven.html": {
@@ -2072,7 +2072,7 @@
   },
   "verfassungsblog.de.expertinnen.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "viconsortium.com-cocaine.html": {
@@ -2222,7 +2222,7 @@
   },
   "weinlachgummis.blogspot.com.rezi.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "weisser-ring.de-Erfolgsgechichte.html": {
@@ -2237,7 +2237,7 @@
   },
   "Dezubekizacja – reaktywacja. Czyli daty mają znaczenie - Dziennik.pl.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 2,
    "fn": 0
   },
   "_Ziemniaki na szóstej, surówka na dziesiątej_. Jak pomagać, żeby nie zaszkodzić_ [PORADNIK W PIGUŁCE].html": {
@@ -2292,7 +2292,7 @@
   },
   "wordsmith.org.maudlin.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "world.kbs.co.kr-Temperatures.html": {
@@ -2302,7 +2302,7 @@
   },
   "Jest zgoda PE na umowę handlową między UE a Londynem.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "wsvn.com-crash.html": {
@@ -2582,12 +2582,12 @@
   },
   "bike-magazin.de-strava.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "biobiochile.cl-gremios.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "bka.de-messengerdienste.html": {
@@ -3222,7 +3222,7 @@
   },
   "fluter.de.vorbild.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "flvw.de-hallenmeisterschaften.html": {
@@ -3277,7 +3277,7 @@
   },
   "gala.fr.surnom.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "galore.de.buch.html": {
@@ -3492,7 +3492,7 @@
   },
   "hss.de-Regierung.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 2,
    "fn": 0
   },
   "humanresourcesmanager.de.diversity.html": {
@@ -3512,7 +3512,7 @@
   },
   "ihrwebprofi.at.publikumsvoting.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "impulse.de.eltern.html": {
@@ -3562,12 +3562,12 @@
   },
   "it-finanzmagazin.de.creditshelf.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "iwr.de.IWRpressedienst.Nordex.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 2,
    "fn": 0
   },
   "jaegermagazin.de-südtirol.html": {
@@ -3782,7 +3782,7 @@
   },
   "lostiempos.com-juicio.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "lsvd.de-afghanistan.html": {
@@ -3937,7 +3937,7 @@
   },
   "mtb-news.de-tubeless.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "munich2022.com-topathleten.html": {
@@ -3997,7 +3997,7 @@
   },
   "neues-deutschland.de.mietenstreik.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "nytimes.com.blackouts.html": {
@@ -4262,7 +4262,7 @@
   },
   "reuters.com.parasite.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "rhein-neckar-loewen.de-vorverkauf.html": {
@@ -4272,7 +4272,7 @@
   },
   "rheinruhronline.de.essenwestviertel.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "rnz.de.witzel.html": {
@@ -4292,7 +4292,7 @@
   },
   "Unijne fundusze coraz bliżej. Sejm zagłosował _za_ - Polityka - rp.pl.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "rtl.de-lockdown.html": {
@@ -4622,7 +4622,7 @@
   },
   "d32ad974a4b04657bb6e4d91852bd52d.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "tierschutzpartei.de-wildvogelauffang.html": {
@@ -4712,7 +4712,7 @@
   },
   "unocero.com.marcas.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "unsere-zeitung.at.inklusion.html": {
