@@ -300,7 +300,23 @@ async function runEntry(entry: CorpusEntry): Promise<Result> {
   const text = pdfTextOf(pdfPath, pages);
   // A word read out of a right-to-left mark's glyph counts as the page draws it, its ligatures with it.
   const marked = markWords(text, paint);
-  const ligatures = ligatureWords(text, paint).filter((l) => !marked.some((m) => m.line === l.line && wordsOf(l.word).every((w) => wordsOf(m.word).some((v) => v.w === w.w))));
+  // A ligature word whose pieces a mark word took is that word's: each piece
+  // once, anywhere on its page (a mark glyph's letters may stand on the line
+  // over its word's).
+  const pool = new Map<number, string[]>();
+  for (const m of marked) pool.set(m.page, [...(pool.get(m.page) ?? []), ...wordsOf(m.word).map((w) => w.w)]);
+  const ligatures = ligatureWords(text, paint).filter((l) => {
+    const left = pool.get(l.page) ?? [];
+    const need = wordsOf(l.word).map((w) => w.w);
+    const rest = [...left];
+    for (const w of need) {
+      const k = rest.indexOf(w);
+      if (k < 0) return true;
+      rest.splice(k, 1);
+    }
+    pool.set(l.page, rest);
+    return false;
+  });
   result.pdf = { ...text, blind: blindText(text, paint), symbols: [...text.symbols, ...marked, ...ligatures] };
   // The text layer and its furniture are the reference-free checks' (a 500-page scan's took most of the time
   // the line charged to the glyph checks).

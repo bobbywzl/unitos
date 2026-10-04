@@ -57,7 +57,10 @@ function rawText(line: Line, has: (word: string) => boolean): string {
 
 /** A word pdftotext reads with a symbol font's characters in it, as it
     reads it and as the page draws it, on its line (layoutOf, symbolChars). */
-type SymbolWord = { page: number; word: string; reads: string; line: Line };
+/** A word pdftotext reads otherwise than the page draws it: the words it
+    reads, what the page draws, and the line. A mark word's pieces may stand
+    on other lines than its own (markWords). */
+type SymbolWord = { page: number; word: string; reads: string; line: Line; mark?: true };
 
 /** The PDF's text by pdftotext: each page's lines in content order (-raw:
     the words to cover), each line with its place (-tsv) with the furniture
@@ -335,26 +338,38 @@ export function markWords(text: Pick<PdfText, "lines" | "raw" | "first">, paint:
     // the words a word already took.
     const rawWords = (text.raw[page - text.first] ?? []).flatMap((l) => wordsOf(l).map((w) => w.w));
     const taken = rawWords.map(() => false);
-    const pieces = (want: Map<string, number>): string[] | null => {
+    // The pieces hold the marks too: pdftotext reads each mark glyph's mark
+    // (parse bench finding: with letters alone to match, the mark word
+    // "فشلاً؛" on p. 27 took the page's "الفشل", and p. 22's "لاً" took the
+    // article "ال" of another word).
+    const markTally = (t: string) => {
+      const counts = new Map<string, number>();
+      for (const c of t.match(/\p{M}/gu) ?? []) counts.set(c, (counts.get(c) ?? 0) + 1);
+      return counts;
+    };
+    const pieces = (want: Map<string, number>, marks: Map<string, number>): string[] | null => {
       for (let i = 0; i < rawWords.length; i++) {
         let have = new Map<string, number>();
         for (let j = i; j < rawWords.length && j < i + 6 && !taken[j]; j++) {
           have = new Map(have);
           for (const [c, n] of tally(rawWords[j])) have.set(c, (have.get(c) ?? 0) + n);
           if (!within(have, want)) break;
-          if (!same(have, want)) continue;
+          if (!same(have, want) || !within(marks, markTally(rawWords.slice(i, j + 1).join("")))) continue;
           for (let k = i; k <= j; k++) taken[k] = true;
           return rawWords.slice(i, j + 1);
         }
       }
       return null;
     };
-    const zeroLine = (l: Line) => (l.words ?? []).length > 0 && l.words!.every((w) => w.right - w.left < 0.05);
-    const lone = lines.filter(zeroLine);
-    const used = new Set<Line>();
+    // The zero-width words: a mark glyph's letters, a little above the
+    // baseline. pdftotext sets one on a line of its own, or on the line
+    // above its word's (p. 22: "لًا" of "قابلاً" on the line over it, where
+    // alone it read as a word "لاً" of its own).
+    const zero = (w: { left: number; right: number }) => w.right - w.left < 0.05;
+    const lone = lines.flatMap((l) => (l.words ?? []).filter(zero).map((w) => ({ w, top: l.top })));
+    const used = new Set<(typeof lone)[number]>();
     for (const line of lines) {
-      if (zeroLine(line)) continue;
-      const words = [...(line.words ?? [])].sort((a, b) => a.left - b.left);
+      const words = (line.words ?? []).filter((w) => !zero(w)).sort((a, b) => a.left - b.left);
       const groups: (typeof words)[] = [];
       for (const w of words) {
         const group = groups[groups.length - 1];
@@ -362,28 +377,52 @@ export function markWords(text: Pick<PdfText, "lines" | "raw" | "first">, paint:
         else groups.push([w]);
       }
       for (const group of groups) {
-        if (!group.every((w) => RTL_WORD_RE.test(w.text))) continue;
+        // A period touching the word's left end (the end of its sentence)
+        // stays with it (p. 22's "فعلاً."); punctuation between two words
+        // keeps them apart (p. 21's "باش/زِد").
+        const inner = group.slice(1, -1);
+        const apart = (t: string) => /\p{L}\p{M}*\p{P}+\p{L}/u.test(t);
+        if (!group.every((w) => RTL_WORD_RE.test(w.text) || /^\p{P}+$/u.test(w.text)) || !inner.every((w) => RTL_WORD_RE.test(w.text)) || group.some((w) => apart(w.text)) || !group.some((w) => RTL_WORD_RE.test(w.text))) continue;
         const [left, right] = [Math.min(...group.map((w) => w.left)), Math.max(...group.map((w) => w.right))];
         const inside = (x: number) => x >= left - 0.5 && x <= right + 0.5;
         const own = glyphs.filter((g) => g.y2 > line.top - 1 && g.y1 < line.bottom + 1 && inside((g.x1 + g.x2) / 2));
         const marks = own.filter((g) => g.zero && /\p{M}/u.test(g.text));
         if (!marks.some((g) => /\p{L}/u.test(g.text))) continue;
-        const units = own.filter((g) => !g.zero).sort((a, b) => b.x1 - a.x1).map((g) => ({ g, text: g.text }));
+        // Each glyph's letters from the right, a like share of its width each
+        // (a ligature's letters), each with the marks it carries. A mark
+        // glyph stands where the letter it marks starts, at most a tenth of
+        // an em left of it, or inside it (p. 20's kasra 0.7 pt left of the
+        // ز of "زِد", inside the د; p. 12's tanween 0.3 pt inside the ت of
+        // "أوقاتًا"; p. 12's shadda inside the ي of the ligature "يز").
+        const letters = own
+          .filter((g) => !g.zero)
+          .sort((a, b) => b.x1 - a.x1)
+          .flatMap((g) => {
+            const parts = g.text.match(/\p{L}\p{M}*|\P{L}/gu) ?? [g.text];
+            const share = (g.x2 - g.x1) / Math.max(1, parts.filter((t) => /\p{L}/u.test(t)).length);
+            let right = g.x2;
+            return parts.map((text) => {
+              if (!/\p{L}/u.test(text)) return { text, x1: right, x2: right, em: g.y2 - g.y1 };
+              right -= share;
+              return { text, x1: right, x2: right + share, em: g.y2 - g.y1 };
+            });
+          });
         let placed = true;
         for (const m of marks) {
-          const unit = units.find((u) => m.x1 >= u.g.x1 - 0.5 && m.x1 <= u.g.x2 + 0.5);
-          if (!unit) placed = false;
-          else unit.text += (m.text.match(/\p{M}/gu) ?? []).join("");
+          const at = letters.find((l) => l.x2 > l.x1 && m.x1 >= l.x1 - l.em * 0.1 && m.x1 < l.x2 - l.em * 0.1);
+          // A mark the letter's own glyph draws already is not drawn twice (p. 20's heading "بأيّ", its "يّ" one glyph).
+          if (!at) placed = false;
+          else at.text += (m.text.match(/\p{M}/gu) ?? []).filter((c) => !at.text.includes(c)).join("");
         }
         if (!placed) continue;
-        const reads = units.map((u) => u.text).join("");
+        const reads = letters.map((l) => l.text).join("");
         // The letters pdftotext reads there: the group's words and the zero-width words over it.
         const height = line.bottom - line.top;
-        const over = lone.filter((l) => !used.has(l) && l !== line && Math.abs(l.top - line.top) <= height && l.words!.every((w) => inside(w.left)));
-        const read = pieces(tally([...group, ...over.flatMap((l) => l.words!)].map((w) => w.text).join("")));
-        if (read) for (const l of over) used.add(l);
+        const over = lone.filter((z) => !used.has(z) && Math.abs(z.top - line.top) <= height && inside(z.w.left));
+        const read = pieces(tally([...group, ...over.map((z) => z.w)].map((w) => w.text).join("")), markTally(marks.map((g) => g.text).join("")));
+        if (read) for (const z of over) used.add(z);
         if (!read || said(read.join(" ")) === said(reads)) continue;
-        out.push({ page, word: read.join(" "), reads, line });
+        out.push({ page, word: read.join(" "), reads, line, mark: true });
       }
     }
   }
@@ -1407,6 +1446,10 @@ export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word 
     // on a line that is a word to cover.
     const symbols = pdf.symbols.filter((s) => s.page === pdf.first + p && !dropped.includes(s.line));
     for (const s of symbols) for (const w of wordsOf(s.word)) drop.set(w.w, (drop.get(w.w) ?? 0) + 1);
+    // A mark word of a furniture line is furniture: its pieces go with it, on
+    // whatever line pdftotext set them (the Arabic book's running head "بأيّ
+    // لسان" on pp. 21-23, its "ّي" twice on lines of their own).
+    for (const s of pdf.symbols) if (s.mark && s.page === pdf.first + p && dropped.includes(s.line)) for (const w of wordsOf(s.word)) drop.set(w.w, (drop.get(w.w) ?? 0) + 1);
     for (const s of symbols) for (const w of wordsOf(s.reads)) expected.set(w.w, (expected.get(w.w) ?? 0) + 1);
     // The words pdftotext cannot read are the page's words all the same.
     for (const b of pdf.blind ?? []) if (b.page === pdf.first + p) for (const w of wordsOf(b.text)) expected.set(w.w, (expected.get(w.w) ?? 0) + 1);
