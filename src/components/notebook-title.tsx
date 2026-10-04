@@ -46,11 +46,13 @@ export function NotebookTitle({ id, title }: { id: string; title: string }) {
     );
   }
 
+  // On a phone the title gives up its room before the document pill does:
+  // the pill names the open document.
   return (
     <button
       onClick={() => setEditing(true)}
       data-track="project-title"
-      className="max-w-[120px] shrink-0 truncate font-display text-lg sm:max-w-64 sm:text-xl"
+      className="max-w-[120px] min-w-14 shrink-[3] truncate font-display text-lg sm:max-w-64 sm:shrink-0 sm:text-xl"
       data-tip={t("works.renameCorpus")}
     >
       {title}

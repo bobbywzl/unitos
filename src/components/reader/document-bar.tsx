@@ -269,7 +269,9 @@ export function DocumentBar({
     setListEl(el);
     if (!el) return;
     const left = (el.offsetParent?.getBoundingClientRect().left ?? 0) + el.offsetLeft;
-    const over = left + el.offsetWidth - (window.innerWidth - 8);
+    // The page's own width, not innerWidth: a phone's browser widens the
+    // window to the list's overflow before this runs.
+    const over = left + el.offsetWidth - (document.documentElement.clientWidth - 8);
     if (over > 0) el.style.left = `${el.offsetLeft - Math.min(over, left - 8)}px`;
   }, []);
   const listCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1289,7 +1291,9 @@ export function DocumentBar({
       {documents.length > 0 && (
         <div
           ref={listRef}
-          className="relative min-w-0"
+          // A flex box, so the pill shrinks with it: a narrow header (a
+          // phone) truncates the title instead of laying the pill over the +.
+          className="relative flex min-w-0"
           onMouseEnter={hoverList}
           onMouseMove={listOpen ? undefined : hoverList}
           onMouseLeave={scheduleCloseList}
