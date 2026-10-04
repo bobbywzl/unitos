@@ -16,7 +16,7 @@ import { useGist } from "@/lib/gist-client";
 import { useMergeTarget, type HandleProps } from "@/components/sortable";
 import { quoteLanded, useNoteDrop } from "@/components/use-note-drop";
 import { referenceMarkdownForDrop } from "@/components/outline/reference-drop";
-import { quoteMarkdown } from "@/lib/quote-drag";
+import { quoteMarkdown, type QuoteDrag } from "@/lib/quote-drag";
 import { useAnnotationSide } from "@/components/outline/annotation-side";
 import { imageMarkdown } from "@/lib/images";
 import { linkMarkdown } from "@/lib/note-links";
@@ -158,6 +158,7 @@ export function NoteCard({
 type NoteCommands = Pick<
   OutlineActions,
   | "attachSource"
+  | "appendQuote"
   | "attachAnnotationSources"
   | "mergeNotes"
   | "toggleCollapsed"
@@ -182,6 +183,7 @@ function useCommands(actions: OutlineActions): NoteCommands {
   return useMemo<NoteCommands>(
     () => ({
       attachSource: (...args) => latest.current.attachSource(...args),
+      appendQuote: (...args) => latest.current.appendQuote(...args),
       attachAnnotationSources: (...args) => latest.current.attachAnnotationSources(...args),
       mergeNotes: (...args) => latest.current.mergeNotes(...args),
       toggleCollapsed: (...args) => latest.current.toggleCollapsed(...args),
@@ -355,8 +357,7 @@ const NoteCardBody = memo(function NoteCardBody({
       if (drag.kind === "quote") {
         if (!drag.quote) return;
         quoteLanded();
-        await addToNote(quoteMarkdown(drag.quote.text));
-        await commands.attachSource(note.id, drag.quote);
+        await addQuote(drag.quote);
         return;
       }
       if (drag.kind === "annotation") {
@@ -526,6 +527,17 @@ const NoteCardBody = memo(function NoteCardBody({
     }
     await commands.saveNote(note.id, appendToBody(note.content, markdown));
   }
+  // A quote dropped on the note: into the draft while the editor is open,
+  // its source attached at once; else its words and its source in one write.
+  async function addQuote(drag: QuoteDrag) {
+    setDropError(null);
+    if (editing) {
+      await addToNote(quoteMarkdown(drag.text));
+      await commands.attachSource(note.id, drag);
+      return;
+    }
+    await commands.appendQuote(note.id, quoteMarkdown(drag.text), drag);
+  }
   const noteDrop = useNoteDrop({
     premium,
     enabled: canEdit && !floating,
@@ -538,8 +550,7 @@ const NoteCardBody = memo(function NoteCardBody({
     // editor the text takes the drop itself, at the caret.
     onQuote: async (drag) => {
       quoteLanded();
-      await addToNote(quoteMarkdown(drag.text));
-      await commands.attachSource(note.id, drag);
+      await addQuote(drag);
     },
   });
   const dropRing = noteDrop.over ? " outline-2 outline-dashed outline-clay-400" : "";

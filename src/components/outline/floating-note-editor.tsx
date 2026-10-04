@@ -20,7 +20,7 @@ import { NoteTitleField, focusBodyEditor, useNoteParts } from "@/components/outl
 import { SaveStateLabel } from "@/components/outline/save-state";
 import { useNoteDrop } from "@/components/use-note-drop";
 import { referenceMarkdownForDrop } from "@/components/outline/reference-drop";
-import { quoteMarkdown } from "@/lib/quote-drag";
+import { quoteMarkdown, type QuoteDrag } from "@/lib/quote-drag";
 import { useCardDropTarget } from "@/components/outline/use-card-drop";
 import { useNoteDraft } from "@/components/outline/use-note-draft";
 import { NoteAssistant } from "@/components/outline/note-assistant";
@@ -280,6 +280,18 @@ export function FloatingNoteEditor({
     await actions.saveNote(edit.id, shown.title ? `# ${shown.title}\n\n${body}` : body);
   }
 
+  // A quote dropped on the card: into the draft while editing, its source
+  // attached at once; else its words and its source in one write.
+  async function addQuote(drag: QuoteDrag) {
+    if (editing || !note) {
+      await addToNote(quoteMarkdown(drag.text));
+      if (note) await actions.attachSource(note.id, drag);
+      return;
+    }
+    setDropError(null);
+    await actions.appendQuote(note.id, quoteMarkdown(drag.text), drag);
+  }
+
   // A note dropped on the card joins its text into the note (SPEC.md §6).
   // The card's own words are saved first, so the merge reads what is on
   // screen; while editing, the merged text then takes the draft's place,
@@ -296,8 +308,7 @@ export function FloatingNoteEditor({
       const { quote, reference } = end.drag;
       try {
         if (end.drag.kind === "quote" && quote) {
-          await addToNote(quoteMarkdown(quote.text));
-          if (note) await actions.attachSource(note.id, quote);
+          await addQuote(quote);
         } else if (reference) {
           await addToNote(await referenceMarkdownForDrop(actions.notebookId, reference, t));
           // The quote it landed points back to the reader: the annotation's
@@ -462,10 +473,7 @@ export function FloatingNoteEditor({
     onError: setDropError,
     onImages: (images) => addToNote(images.map((i) => imageMarkdown(i.id, i.name)).join("\n\n")),
     onLinks: (links) => addToNote(links.map(linkMarkdown).join("\n\n")),
-    onQuote: async (drag) => {
-      await addToNote(quoteMarkdown(drag.text));
-      if (note) await actions.attachSource(note.id, drag);
-    },
+    onQuote: (drag) => addQuote(drag),
   });
 
   // Hold to drag (lib/hold-drag.ts): in the draggable mode a hold anywhere

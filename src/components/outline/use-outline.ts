@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { arrayMove } from "@dnd-kit/sortable";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { ACCOUNT_HEADER } from "@/lib/constants";
 import { tabAccount } from "@/lib/tab-account";
 import { refreshWhenOnline } from "@/lib/offline/queue";
@@ -13,6 +13,7 @@ import { clearNoteDraft, confirmNoteDraft, noteDraftBase, readNoteDraft, sweepSt
 import { saveNoteText } from "@/lib/notes/save-text";
 import { joinNoteContents } from "@/lib/notes/join";
 import type { QuoteDrag } from "@/lib/quote-drag";
+import { appendToBody } from "@/lib/note-title";
 import type { NotebookView, NoteView, SectionView } from "@/lib/types";
 import { useT } from "@/components/lang-provider";
 import { useCollapsedView, type CollapsedView } from "@/components/use-collapsed-view";
@@ -90,6 +91,9 @@ export type OutlineActions = {
   /** A quote dropped into the note (lib/quote-drag.ts): its anchor becomes
       a source of the note, so the quote points back to the reader. */
   attachSource: (id: string, drag: QuoteDrag) => Promise<void>;
+  /** A quote dropped on a note that is not open: the quote's words added at
+      the end of the note and its source, in one write. */
+  appendQuote: (id: string, markdown: string, drag: QuoteDrag) => Promise<void>;
   /** An annotation dropped into the note (lib/annotation-reference.ts):
       copies of its anchors become sources of the note, so the quote it
       landed points back to the reader. */
@@ -811,6 +815,45 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
       await api(`/api/notes/${id}`, "PATCH", {
         addSource: { source: drag.source, ...(drag.segments ? { segments: drag.segments } : {}) },
       });
+      refresh();
+    },
+    async appendQuote(id, markdown, drag) {
+      // The words and the source go in one write: with two, a tab closed
+      // between them keeps the quote with no source to point back. A note
+      // open in an editor saves through the editor, then takes the source.
+      const before = placeOf(treeRef.current, id)?.note.content;
+      if (before !== undefined && openDraftSave(id)) {
+        await actions.saveNote(id, appendToBody(before, markdown));
+        await actions.attachSource(id, drag);
+        return;
+      }
+      // The route adds the words to the note's stored text.
+      const setContent = (text: string) =>
+        setTree((prev) =>
+          mapSections(prev, (s) =>
+            s.notes.some((n) => n.id === id)
+              ? { ...s, notes: s.notes.map((n) => (n.id === id ? { ...n, content: text } : n)) }
+              : s,
+          ),
+        );
+      if (before !== undefined) setContent(appendToBody(before, markdown));
+      try {
+        await api(`/api/notes/${id}`, "PATCH", {
+          append: markdown,
+          addSource: { source: drag.source, ...(drag.segments ? { segments: drag.segments } : {}) },
+        });
+      } catch (err) {
+        // A quote whose place the document no longer has: its words still
+        // land, as they did before the source was sent with them, and the
+        // caller hears why it has no source.
+        if (err instanceof ApiError && err.status === 400) {
+          await api(`/api/notes/${id}`, "PATCH", { append: markdown }).catch(() => {
+            if (before !== undefined) setContent(before);
+          });
+          refresh();
+        } else if (before !== undefined) setContent(before);
+        throw err;
+      }
       refresh();
     },
     async attachAnnotationSources(id, annotationId) {
