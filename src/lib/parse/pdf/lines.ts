@@ -436,7 +436,77 @@ function markShifts(items: Item[]) {
   }
 }
 
-function buildLine(rawItems: Item[], page: number): Line {
+// ── Right-to-left lines ─────────────────────────────────────────────────────
+
+const RTL_LETTER_RE = /[\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}]/gu;
+const LETTER_RE = /\p{L}/gu;
+// A run that keeps its own left-to-right order inside a right-to-left
+// line: Latin words, digits, and the marks between them.
+const LTR_RE = /[\p{L}\p{N}]/u;
+
+/** Items whose letters are most of them of a right-to-left script. */
+function rightToLeft(items: Item[]): boolean {
+  let rtl = 0;
+  let all = 0;
+  for (const i of items) {
+    if (i.math) continue;
+    rtl += i.str.match(RTL_LETTER_RE)?.length ?? 0;
+    all += i.str.match(LETTER_RE)?.length ?? 0;
+  }
+  return rtl > 0 && rtl * 2 > all;
+}
+
+/** A right-to-left line's items in reading order, cell by cell: the cells
+    and the items run from the right, and a run of left-to-right items
+    (a Latin word, a number, the spaces and marks between them) keeps its
+    own order. Each item's gap is the space the page leaves between it and
+    the item read before it; opens: the items that open a cell. The page
+    draws the items in visual order, left to right, and pdf.js gives each
+    its letters in reading order (parse loop finding: an Arabic book's
+    every line read its words backwards, "مرتين طلبتها التي المهمة" for
+    "المهمة التي طلبتها مرتين"). */
+function readingOrder(items: Item[], size: number): { order: Item[]; gaps: Map<Item, number>; opens: Set<Item> } {
+  const cells: Item[][] = [];
+  items.forEach((item, k) => {
+    if (k === 0 || opensCell(items[k - 1], item, size, items[k + 1])) cells.push([item]);
+    else cells[cells.length - 1].push(item);
+  });
+  const order: Item[] = [];
+  const gaps = new Map<Item, number>();
+  const opens = new Set<Item>();
+  for (const cell of cells.reverse()) {
+    // The cell's units, left to right: an item with a right-to-left letter
+    // stands alone; left-to-right items and the neutral items between two
+    // of them make one unit.
+    const ltr = cell.map((i) => !RTL_RE.test(i.str) && LTR_RE.test(i.str));
+    const units: Item[][] = [];
+    let k = 0;
+    while (k < cell.length) {
+      if (!ltr[k]) {
+        units.push([cell[k++]]);
+        continue;
+      }
+      let end = k;
+      for (let j = k + 1; j < cell.length && !RTL_RE.test(cell[j].str); j++) if (ltr[j]) end = j;
+      units.push(cell.slice(k, end + 1));
+      k = end + 1;
+    }
+    let prev: Item[] | null = null;
+    for (const unit of units.reverse()) {
+      unit.forEach((item, n) => {
+        if (n > 0) gaps.set(item, item.x - (unit[n - 1].x + unit[n - 1].w));
+        else if (prev) gaps.set(item, prev[0].x - Math.max(...unit.map((i) => i.x + i.w)));
+        else gaps.set(item, 0);
+        order.push(item);
+      });
+      prev = unit;
+    }
+    if (order.length > cell.length) opens.add(order[order.length - cell.length]);
+  }
+  return { order, gaps, opens };
+}
+
+function buildLine(rawItems: Item[], page: number, rtlText = false): Line {
   const merged = mergeSpacedItems(
     composeAccents(
       rawItems
@@ -466,24 +536,34 @@ function buildLine(rawItems: Item[], page: number): Line {
   }
   // Inline formulas cut out of the items, cell by cell (math/zones.ts).
   const items = splitZones(merged, cellStarts);
+  // A right-to-left line reads from the right (readingOrder); its items
+  // stay in the page's order for the line's place and its cells' columns.
+  // Among lines set right to left, a line with a right-to-left letter
+  // reads so, however many Latin letters it holds: "تعريف · عقد الأتمتة
+  // (Automation contract)".
+  const rtl = rightToLeft(items) || (rtlText && items.some((i) => RTL_RE.test(i.str))) ? readingOrder(items, size) : null;
+  const read = rtl?.order ?? items;
   const cells: Cell[] = [];
   let prevEnd: number | null = null;
   let prevItem: Item | null = null;
-  for (const [n, item] of items.entries()) {
-    const gap = prevEnd === null ? 0 : item.x - prevEnd;
+  for (const [n, item] of read.entries()) {
+    const gap = rtl ? (rtl.gaps.get(item) ?? 0) : prevEnd === null ? 0 : item.x - prevEnd;
     // An end-of-proof mark set flush right closes the line's text, not a cell
     // of its own (read by its code, □ turned "as claimed." and a running
     // head into a table).
     const proofEnd = item === items[items.length - 1] && QED_RE.test(item.str.trim());
-    const wide = prevItem !== null && !proofEnd && opensCell(prevItem, item, size, items[n + 1]);
+    const wide = rtl ? rtl.opens.has(item) : prevItem !== null && !proofEnd && opensCell(prevItem, item, size, items[n + 1]);
     const least = prevItem !== null ? spaceGap(prevItem, item, size) : size * 0.12;
-    const crossed = prevItem !== null && crossesBack(prevItem, item);
+    const crossed = !rtl && prevItem !== null && crossesBack(prevItem, item);
+    // A space the page draws stands at an item's left (markSpaces): read
+    // right to left, it comes after the item, before the next one read.
+    const drawnSpace = rtl ? prevItem?.spaced === true : item.spaced === true;
     prevItem = item;
     let cell = cells[cells.length - 1];
     if (!cell || wide) {
       cell = { x: item.x, text: "", runs: [] };
       cells.push(cell);
-    } else if ((gap > least || crossed || (item.spaced && gap >= 0)) && !cell.text.endsWith(" ")) {
+    } else if ((gap > least || crossed || (drawnSpace && gap >= 0)) && !cell.text.endsWith(" ")) {
       // Punctuation that attaches left ("PRESS" chip then ".") takes no space.
       const attach = ATTACH_PUNCT_RE.test(item.str) && gap < size * 0.7;
       if (!attach) cell.text += " ";
@@ -871,7 +951,8 @@ export function buildLines(items: Item[], page: number): Line[] {
   for (const op of pending) standalone.push([op, ...(inlineLimits.get(op) ?? [])]);
   const regrouped = [...kept.map((g, k) => [...g, ...moved[k]]), ...standalone].filter((g) => g.length > 0);
   regrouped.sort((a, b) => baselineOf(b, (i) => boxes.has(i)) - baselineOf(a, (i) => boxes.has(i)));
-  const lines = regrouped.map((g) => buildLine(g, page)).filter((l) => l.text.length > 0);
+  const rtlText = rightToLeft(items);
+  const lines = regrouped.map((g) => buildLine(g, page, rtlText)).filter((l) => l.text.length > 0);
   // The lines beside a drop cap start where its paragraph's lines do.
   for (const { item, x } of starts) {
     const line = lines.find((l) => l.x === item.x && Math.abs(l.y - item.y) < item.size * 0.3);
