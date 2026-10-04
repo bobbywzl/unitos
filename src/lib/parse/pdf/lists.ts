@@ -228,10 +228,15 @@ function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[],
     // edge mid-sentence and at no level the list has, is the item's next
     // line ("… are either" over "(1) in the public domain or (2) …": a
     // nested item "(1)", real-gslides-oer-5rs p3), and so is a number that
-    // closes a parenthesis the line above left open.
+    // closes a parenthesis the line above left open. A bullet glyph never
+    // opens a wrapped line: at the item's words it opens a sub-item (parse
+    // loop finding: a Keynote deck sets each sub-item's bullet where its
+    // item's words start, and under an item that ran to the slide's edge
+    // "• Few-shot prompts" read as the item's last words).
     const here = { markerX: drawn ?? next.x, bodyX: mark ? bodyXOf(next, mark) : next.x };
     const wrap =
       mark !== null &&
+      !isGlyphMarker(mark) &&
       (closesParen(prev, next) ||
         (Math.abs(next.x - item.bodyX) <= next.size * 0.3 &&
           !/[.:;!?]$/.test(prev.text.trim()) &&
