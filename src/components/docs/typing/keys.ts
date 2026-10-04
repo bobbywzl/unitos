@@ -559,7 +559,8 @@ function nest(view: EditorView, item: ItemAt, shift: boolean): true {
 }
 
 /** Tab (and Shift+Tab), in Docs' order: table cells, several paragraphs,
-    list nesting, the first-line indent, then a tab character. */
+    list nesting, the first-line indent, then a tab character. Shift+Tab
+    never types a tab. */
 export function tab(editor: Editor, shift: boolean): boolean {
   const view = editor.view;
   const state = view.state;
@@ -575,7 +576,8 @@ export function tab(editor: Editor, shift: boolean): boolean {
     return true;
   }
   if (sel.$from.parent.type.spec.code) {
-    dispatch(view, groupEdit(view, state.tr.insertText("\t"), "insert"));
+    // Shift+Tab never types.
+    if (!shift) dispatch(view, groupEdit(view, state.tr.insertText("\t"), "insert"));
     return true;
   }
   const blocks = touchedBlocks(state);
@@ -586,6 +588,9 @@ export function tab(editor: Editor, shift: boolean): boolean {
   const $from = sel.$from;
   const atStart = $from.parentOffset === 0;
   const item = listItemAt($from);
+  // Shift+Tab never types a tab: anywhere in a list line it lifts the line,
+  // anywhere in a paragraph it takes back the paragraph's indent, if any.
+  if (shift) return item ? nest(view, item, true) : firstLineIndent(view, $from.before(), $from.parent, true);
   if (!sel.empty) {
     if (!atStart) return insertTab(view);
     if (item) return nest(view, item, shift);
