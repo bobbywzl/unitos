@@ -868,6 +868,13 @@ function sideNote(band: Band, page: number): Side[] | null {
     if (groups.length === 0) groups.push({ items: [], graphics: [], top: l.y });
     groups[groups.length - 1].items.push(...l.items);
   });
+  // Three groups or more stacked close, each under the one before within
+  // three and a half lines, are one column of entries, read together where
+  // the first one reads (parse loop finding: CRS R48907's summary page sets
+  // its number, its date, and four authors down a sidebar, and each author
+  // read between two paragraphs of the summary).
+  const stacked = groups.length >= 3 && noteLines.every((l, k) => k === 0 || noteLines[k - 1].y - l.y <= Math.min(l.size, noteLines[k - 1].size) * 3.5);
+  if (stacked) groups.splice(0, groups.length, { items: noteLines.flatMap((l) => l.items), graphics: [], top: groups[0].top });
   for (const graphic of note.graphics) groups.push({ items: [], graphics: [graphic], top: graphic.box.y2 });
   groups.sort((a, b) => b.top - a.top);
   // Where each group reads: under the cut, a y on the wide side. On the

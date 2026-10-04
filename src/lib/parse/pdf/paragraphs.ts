@@ -197,7 +197,7 @@ export function isIndented(line: Line, ctx: PageContext): boolean {
 // statement's title over its table read as not centered: the table is its
 // column's only full line, apple-fy24q4 p1). A line read alone across a
 // page's columns (a title over two columns) stands in the page's width.
-function columnEdges(lines: Line[], k: number, ctx: PageContext): { left: number; right: number } {
+export function columnEdges(lines: Line[], k: number, ctx: PageContext): { left: number; right: number } {
   const line = lines[k];
   const column = lineColumn(line);
   const alone = column !== undefined && (columnLines(lines).get(column) ?? 0) <= 1;

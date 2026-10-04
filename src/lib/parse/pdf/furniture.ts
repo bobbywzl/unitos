@@ -65,12 +65,28 @@ export function findFurniture(pages: Line[][], pageHeights: number[], pageNumber
   // letter or digit (the OCR read the paper's edge or a smudge as "—" or
   // "'") stood over the running head or under the page number, and they
   // were no first or last row of their page (NASA SP-4408).
+  // So does a row of three letters or fewer and no digit that stands in the
+  // margin, clear of every other line of its page, or spells a word no
+  // other line of the document holds: the OCR read the dark edge of a
+  // scanned report's binding as "V", "C.", "rI", and "SEI" under the text
+  // (DTIC's Helicopter Design Datcom).
   const specks: Row[] = [];
+  const said = new Map<string, number>();
+  for (const row of rows.flat()) for (const w of new Set(wordsOf(row.text))) said.set(w, (said.get(w) ?? 0) + 1);
   rows.forEach((pageRows, p) => {
     if (!scans?.[p]) return;
     const bare = (r: Row | undefined) => r !== undefined && r.text.length <= 8 && !/[\p{L}\p{N}]/u.test(r.text);
-    while (bare(pageRows[0])) specks.push(pageRows.shift()!);
-    while (bare(pageRows[pageRows.length - 1])) specks.push(pageRows.pop()!);
+    const mark = (r: Row | undefined) => {
+      if (r === undefined || r.text.replace(/\s/g, "").length > 3 || /\p{N}/u.test(r.text)) return false;
+      const others = pageRows.filter((o) => o !== r).flatMap((o) => o.lines);
+      if (others.length === 0) return false;
+      const [x, xEnd] = [Math.min(...r.lines.map((l) => l.x)), Math.max(...r.lines.map((l) => l.xEnd))];
+      const margin = xEnd < Math.min(...others.map((l) => l.x)) - r.size * 0.5 || x > Math.max(...others.map((l) => l.xEnd)) + r.size * 0.5;
+      const words = wordsOf(r.text);
+      return margin || (words.length > 0 && words.every((w) => said.get(w) === 1));
+    };
+    while (bare(pageRows[0]) || mark(pageRows[0])) specks.push(pageRows.shift()!);
+    while (bare(pageRows[pageRows.length - 1]) || mark(pageRows[pageRows.length - 1])) specks.push(pageRows.pop()!);
   });
   const { lead, bodySize } = measures(pages, rows);
   const candidates = rows.flatMap((pageRows) => candidatesOf(pageRows, lead));

@@ -7,7 +7,7 @@ import { CAPTION_RE } from "@/lib/parse/pdf/figures";
 import { geom, lineMathShare } from "@/lib/parse/pdf/geometry";
 import { charCount } from "@/lib/parse/pdf/glyphs";
 import { BULLET_RE, isGlyphMarker, readMarker } from "@/lib/parse/pdf/markers";
-import { isCentered, leftEdge, lineAlign, readParagraph } from "@/lib/parse/pdf/paragraphs";
+import { columnEdges, isCentered, leftEdge, lineAlign, readParagraph } from "@/lib/parse/pdf/paragraphs";
 import { TextBuilder, boldShare, escapeHtml, fillsMargin, joinGroup, lineAsPart, startsWithBoldLead } from "@/lib/parse/pdf/text";
 import type { Item, Line, PageContext, Run, Segment, Step } from "@/lib/parse/pdf/types";
 
@@ -128,7 +128,8 @@ const SIGNATURE_RE = /^\s*[—–―]/;
 // carries no parenthesis or period and stays one (partHeading). On a scan's
 // text layer a word has two letters: its page numbers and specks read "4O4",
 // "I !", "N H".
-const PANEL_LETTERS_RE = /^(?:\s*(?:\(\p{L}\)|\p{L}[.)]))+\s*$/u;
+// Panel letters stand apart: "H.V.", letters set close, are initials.
+const PANEL_LETTERS_RE = /^\s*(?:\(\p{L}\)|\p{L}[.)])(?:\s+(?:\(\p{L}\)|\p{L}[.)]))*\s*$/u;
 function wordless(text: string): boolean {
   return PANEL_LETTERS_RE.test(text) || !/\p{L}/u.test(text);
 }
@@ -546,17 +547,24 @@ function numberedHeading(lines: Line[], i: number, ctx: PageContext, runOf: numb
   // over its paragraph, it is a heading ("3.2. Proofs of Propositions 3.2
   // and 3.3.", its number set plain and its title bold).
   const closed = /\.$/.test(line.text.trim()) && styledShare(line) > 0.8;
+  // A scan's text layer sizes each word by its own box, and a typewriter
+  // leaves the column's right edge ragged: a section's title in capitals,
+  // centered by eye over its section, reads small and off the column's
+  // middle (parse loop finding: a DTIC scan's "2. ANGLE-OF-ATTACK" read
+  // 10.8 pt over lines of 14.9 pt, 17 pt off the middle, as a paragraph).
+  const scanTitle = ctx.ocr === true && capsShare(line.text) >= 0.9 && scanMiddle(lines, i, ctx);
   if (
     !(
       line.cells.length === 1 &&
       (HEADING_NUM_STRICT_RE.test(line.text) || (lineBold && LETTER_HEADING_RE.test(line.text))) &&
-      !(BULLET_RE.test(line.text) && !styled && !centered) &&
+      !(BULLET_RE.test(line.text) && !styled && !centered && !scanTitle) &&
       !TOC_TAIL_RE.test(line.text) &&
       [...line.text].length < 120 &&
       (!/[.,;:]$/.test(line.text) || closed) &&
-      line.size >= ctx.bodySize * 0.98 &&
+      line.size >= ctx.bodySize * (scanTitle ? 0.7 : 0.98) &&
       (styled ||
         centered ||
+        scanTitle ||
         line.size >= ctx.bodySize * 1.05 ||
         !ctx.hasBold ||
         /^(\d{1,2}|[A-Z])(\.\d{1,2})+/.test(line.text))
@@ -611,6 +619,15 @@ function numberedHeading(lines: Line[], i: number, ctx: PageContext, runOf: numb
   // of imaginary zj's. If n = 1 then", its number set upright).
   if (/[?!]$/.test(text.trim()) || SENTENCE_END_RE.test(text)) return null;
   return { segments: [headingOf(run, text, runs)], next: j };
+}
+
+// Line k is set in from both edges of its column by four ems or more, and
+// its middle stands within three ems of the column's middle.
+function scanMiddle(lines: Line[], k: number, ctx: PageContext): boolean {
+  const line = lines[k];
+  const { left, right } = columnEdges(lines, k, ctx);
+  if (right <= 0 || line.x - left < line.size * 4 || right - line.xEnd < line.size * 4) return false;
+  return Math.abs((line.x + line.xEnd) / 2 - (left + right) / 2) <= line.size * 3;
 }
 
 // The line's last words are set bold or in small caps. A bold lead with a
@@ -680,7 +697,13 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
     l.y - n.y > 0 &&
     l.y - n.y <= l.size * ctx.leading * 1.3;
   const title = titleLike(line) || (colonOn(line, lines[i + 1]) && isCentered(lines, i, ctx) && isCentered(lines, i + 1, ctx));
-  if (!title && !labelled) return null;
+  // A short label in bold capitals closed by a period, alone on its line,
+  // heads the paragraph under it as a title does: a Frontiers case report
+  // sets each case's initials, "H.V." and "G.A.", in bold italic over it,
+  // and they read as paragraphs (parse loop finding).
+  const capsLabel =
+    styledShare(line) > 0.9 && endsStyled(line) && capsShare(text) >= 0.9 && /^\p{L}[\p{L}.\s]{1,10}\.$/u.test(text) && !CAPTION_RE.test(text);
+  if (!title && !labelled && !capsLabel) return null;
   // A contents entry ends in leader dots and a page number; a title may end
   // in a number of its own ("Risk-neutral pricing 1").
   if (/(?:\s*\.){3,}\s*\d{1,4}\s*$/.test(text)) return null;
@@ -743,7 +766,7 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
   // under it is regular type at its size.
   const edge = lineColumn(last)?.[1];
   const flushBelow =
-    title &&
+    (title || capsLabel) &&
     run.length === 1 &&
     bodyBelow &&
     Math.abs(below.x - last.x) <= last.size * 0.5 &&
@@ -756,7 +779,7 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
   // paragraph flush with it, is a subhead: a Frontiers article sets "CASE
   // REPORTS" and "PROCEDURES" in 8.5 pt bold capitals over its 9.5 pt body,
   // and they read as paragraphs (parse loop finding).
-  const capsOver = title && run.length === 1 && capsShare(text) >= 0.9 && bodyBelow && Math.abs(below.x - last.x) <= last.size * 0.5;
+  const capsOver = (title || capsLabel) && run.length === 1 && capsShare(text) >= 0.9 && bodyBelow && Math.abs(below.x - last.x) <= last.size * 0.5;
   if (small && !(headingAbove && bodyBelow) && !(gapAbove && (headingBelow || opensBelow || capsOver))) return null;
   // A centered title set apart above needs no gap under it: a statement's
   // title sits 12.8 pt over its units line ("CONDENSED CONSOLIDATED
