@@ -9,6 +9,8 @@ import { ThumbsDownIcon, ThumbsUpIcon } from "@/components/icons";
 // line for what was wrong, optional. The row it writes (POST /api/ratings)
 // carries the input the tool ran on and the output it gave, so the tool
 // quality loop (scripts/eval) can read the poor answers back as eval cases.
+// A second press on the pressed thumb takes the rating back, and a press on
+// the other thumb changes it (PATCH, DELETE on the same row).
 // Fire-and-forget: a failed post changes nothing on screen.
 export type RatingTool =
   | "define"
@@ -49,9 +51,47 @@ export function RatingButtons({
   const [comment, setComment] = useState("");
   const [commentSent, setCommentSent] = useState(false);
 
+  const [posting, setPosting] = useState(false);
+
   async function rate(rating: "up" | "down") {
-    if (rated) return;
+    if (posting) return;
+    // The same thumb again: the rating is taken back.
+    if (rated === rating) {
+      setRated(null);
+      setComment("");
+      setCommentSent(false);
+      const id = rowId;
+      setRowId(null);
+      if (!id) return;
+      try {
+        await fetch("/api/ratings", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+      } catch {
+        // Never a toast for telemetry.
+      }
+      return;
+    }
+    // The other thumb: the same row changes its rating.
+    if (rated && rowId) {
+      setRated(rating);
+      setComment("");
+      setCommentSent(false);
+      try {
+        await fetch("/api/ratings", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: rowId, rating }),
+        });
+      } catch {
+        // Never a toast for telemetry.
+      }
+      return;
+    }
     setRated(rating);
+    setPosting(true);
     try {
       const res = await fetch("/api/ratings", {
         method: "POST",
@@ -62,6 +102,8 @@ export function RatingButtons({
       if (json?.id) setRowId(json.id);
     } catch {
       // The thumb stays; the row is lost. Never a toast for telemetry.
+    } finally {
+      setPosting(false);
     }
   }
 
@@ -83,12 +125,13 @@ export function RatingButtons({
   const button = (rating: "up" | "down") => (
     <button
       onClick={() => void rate(rating)}
-      disabled={rated !== null}
+      disabled={posting}
+      aria-pressed={rated === rating}
       data-track={`rate:${tool}:${rating}`}
-      aria-label={t(rating === "up" ? "common.rateUp" : "common.rateDown")}
-      data-tip={t(rating === "up" ? "common.rateUp" : "common.rateDown")}
+      aria-label={t(rated === rating ? "common.rateTakeBack" : rating === "up" ? "common.rateUp" : "common.rateDown")}
+      data-tip={t(rated === rating ? "common.rateTakeBack" : rating === "up" ? "common.rateUp" : "common.rateDown")}
       className={`rounded-full transition-colors ${
-        rated === rating ? "text-clay-800" : rated ? "text-sand-300" : "text-sand-500 hover:text-clay-800"
+        rated === rating ? "text-clay-800" : rated ? "text-sand-300 hover:text-clay-800" : "text-sand-500 hover:text-clay-800"
       } disabled:cursor-default`}
     >
       {rating === "up" ? <ThumbsUpIcon size={13} /> : <ThumbsDownIcon size={13} />}
