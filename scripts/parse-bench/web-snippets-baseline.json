@@ -3531,9 +3531,9 @@
    "fn": 0
   },
   "infobae.com-ucrania.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 2,
-   "fn": 1
+   "fn": 0
   },
   "infocomcgt.fr.caisse.html": {
    "tp": 3,
