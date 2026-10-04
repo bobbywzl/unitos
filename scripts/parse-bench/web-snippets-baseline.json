@@ -122,12 +122,12 @@
   },
   "nationnews.com-schools.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "nationnews.com-tridents.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "nowgrenada.com-pm.html": {
@@ -2582,7 +2582,7 @@
   },
   "bike-magazin.de-strava.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "biobiochile.cl-gremios.html": {
