@@ -456,13 +456,19 @@ function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: n
 
   // The gutter: the x that the fewest characters cross, the one nearest the
   // region's middle among equals.
-  let best: { g: number; cross: number } | null = null;
+  // Among equals, the x no graphic crosses: a slide's picture stands
+  // beside its bullets, a white gap between them, and a gutter through the
+  // picture's edge made the picture a row across the page (parse loop
+  // finding: a PowerPoint deck's "Example: The Iris Data Matrix" over its
+  // picture read between two bullets of the list beside it).
+  let best: { g: number; cross: number; pictured: number } | null = null;
   const middle = x0 + width / 2;
   for (let g = x0 + width * 0.2; g <= x0 + width * 0.8; g += width * 0.01) {
     let cross = 0;
     for (const i of items) if (i.x < g && i.x + i.w > g) cross += i.str.trim().length;
-    if (!best || cross < best.cross || (cross === best.cross && Math.abs(g - middle) < Math.abs(best.g - middle))) {
-      best = { g, cross };
+    const pictured = graphics.filter((p) => p.box.x1 < g && p.box.x2 > g).length;
+    if (!best || cross < best.cross || (cross === best.cross && (pictured < best.pictured || (pictured === best.pictured && Math.abs(g - middle) < Math.abs(best.g - middle))))) {
+      best = { g, cross, pictured };
     }
   }
   // A column of notes in the margin parts first: the column beside it is
