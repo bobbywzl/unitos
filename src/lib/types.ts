@@ -302,6 +302,10 @@ export type HistoryEntry = {
   // be gone: then the row opens the document).
   documentId?: string;
   blockId?: string | null;
+  // NOTE_REMOVE entries: the note was kept whole, so Restore can put it back
+  // (lib/notes/removed.ts); restored once it is back.
+  restorable?: boolean;
+  restored?: boolean;
   createdAt: string; // ISO
 };
 

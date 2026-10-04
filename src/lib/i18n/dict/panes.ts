@@ -402,6 +402,10 @@ const en = {
   historySectionRemove: "removed a section",
   historyDocumentDetach: "removed a document from this project",
   historyOpenTitle: "Open the document at this edit",
+  historyRestore: "Restore",
+  historyRestoreTitle: "Put the note back in its section, with its sources and replies",
+  historyRestoredLabel: "Restored",
+  historyRestoreFailed: "Not restored",
   historyNoteMerge: "merged notes into one",
   historyReparse: "re-parsed a document",
 
@@ -870,6 +874,10 @@ const zh: Record<keyof typeof en, string> = {
   historySectionRemove: "删除了一个章节",
   historyDocumentDetach: "移出了一个文档",
   historyOpenTitle: "打开这处编辑所在的文档",
+  historyRestore: "恢复",
+  historyRestoreTitle: "把笔记放回原来的章节，连同出处和回复",
+  historyRestoredLabel: "已恢复",
+  historyRestoreFailed: "未恢复",
   historyNoteMerge: "把几条笔记合并为一条",
   historyReparse: "重新解析了一个文档",
 

@@ -10,6 +10,7 @@ import { useLang, useT } from "@/components/lang-provider";
 import { Presence } from "@/components/presence";
 import type { TKey } from "@/lib/i18n/dictionaries";
 import { markdownPreview } from "@/lib/markdown-preview";
+import { api } from "@/lib/api";
 
 const KIND_KEY: Record<HistoryEntry["kind"], TKey> = {
   TEXT_EDIT: "panes.historyTextEdit",
@@ -70,7 +71,7 @@ function foldRuns(entries: HistoryEntry[]): HistoryItem[] {
 export function HistoryControl({ history }: { history: HistoryEntry[] }) {
   const t = useT();
   const lang = useLang();
-  const { authOn, people } = useCollab();
+  const { authOn, people, canEdit } = useCollab();
   const router = useRouter();
   const { notebookId } = useParams<{ notebookId: string }>();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -78,6 +79,29 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
   const [personFilter, setPersonFilter] = useState<string | null>(null);
   // The folded runs of small edits the reader opened, by their first entry.
   const [openRuns, setOpenRuns] = useState<Set<string>>(new Set());
+  // Restore of a removed note (lib/notes/removed.ts): the row in flight,
+  // the rows restored in this visit, and the last failure, by row.
+  const [restoring, setRestoring] = useState<string | null>(null);
+  const [restoredHere, setRestoredHere] = useState<Set<string>>(new Set());
+  const [restoreError, setRestoreError] = useState<{ id: string; message: string } | null>(null);
+
+  const restore = async (entry: HistoryEntry) => {
+    if (!notebookId || restoring) return;
+    setRestoring(entry.id);
+    setRestoreError(null);
+    try {
+      const done = await api<{ noteId?: unknown }>(`/api/notebooks/${notebookId}/history/${entry.id}`, "POST");
+      setRestoredHere((prev) => new Set(prev).add(entry.id));
+      router.refresh();
+      if (typeof done?.noteId === "string") {
+        window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: done.noteId } }));
+      }
+    } catch (err) {
+      setRestoreError({ id: entry.id, message: err instanceof Error ? err.message : t("panes.historyRestoreFailed") });
+    } finally {
+      setRestoring(null);
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -103,7 +127,7 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
 
   // An edit's row opens its document at the edited block (the block of a
   // removal is gone: the document opens). A removed note, section, or
-  // document has nowhere to open, so its row stays as it is.
+  // document has nowhere to open; a removed note kept whole has Restore.
   const jumpOf = (entry: HistoryEntry): string | null => {
     if (!entry.documentId || !notebookId) return null;
     const block = entry.blockId && entry.kind !== "BLOCK_REMOVE" ? `&block=${entry.blockId}` : "";
@@ -156,6 +180,29 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
           )}
           {entry.documentTitle && (
             <p className="truncate text-[10px] text-sand-600">{entry.documentTitle}</p>
+          )}
+          {entry.restorable && !href && (
+            <div className="mt-1 flex items-center gap-2">
+              {entry.restored || restoredHere.has(entry.id) ? (
+                <span className="text-[11px] font-semibold text-sage-700">{t("panes.historyRestoredLabel")}</span>
+              ) : (
+                canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => void restore(entry)}
+                    disabled={restoring !== null}
+                    data-track="history-restore"
+                    data-tip={t("panes.historyRestoreTitle")}
+                    className="rounded-full border border-line px-2.5 py-0.5 text-[11px] font-semibold text-clay-800 hover:bg-clay-100 disabled:opacity-60"
+                  >
+                    {restoring === entry.id ? t("common.loading") : t("panes.historyRestore")}
+                  </button>
+                )
+              )}
+              {restoreError?.id === entry.id && (
+                <span className="text-[11px] text-clay-700">{restoreError.message}</span>
+              )}
+            </div>
           )}
         </div>
       </>

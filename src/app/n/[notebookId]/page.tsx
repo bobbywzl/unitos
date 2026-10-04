@@ -1211,6 +1211,16 @@ export default async function NotebookPage(props: {
   // merged with every attached document's edits, newest first, attributed.
   // Small edits are marked (lib/history/trivial.ts) so the panel folds them.
   const trivial = await trivialEdits(allEdits);
+  // A removed note kept whole can be restored (lib/notes/removed.ts): read
+  // as two flags, never the kept note itself.
+  const removals = events.filter((e) => e.kind === "NOTE_REMOVE").map((e) => e.id);
+  const restorable =
+    removals.length === 0
+      ? []
+      : await db.$queryRaw<{ id: string; kept: boolean; restored: boolean }[]>`
+          SELECT "id", ("meta" -> 'kept') IS NOT NULL AS "kept", ("meta" -> 'restoredAt') IS NOT NULL AS "restored"
+          FROM "NotebookEvent" WHERE "id" = ANY(${removals})`;
+  const restoreOf = new Map(restorable.map((r) => [r.id, r]));
   const history: HistoryEntry[] = [
     ...events.map(
       (e): HistoryEntry => ({
@@ -1219,6 +1229,7 @@ export default async function NotebookPage(props: {
         kind: e.kind as HistoryEntry["kind"],
         content: e.content,
         documentTitle: null,
+        ...(restoreOf.get(e.id)?.kept ? { restorable: true, restored: restoreOf.get(e.id)!.restored } : {}),
         createdAt: e.createdAt.toISOString(),
       }),
     ),

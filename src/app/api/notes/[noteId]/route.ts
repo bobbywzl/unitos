@@ -8,6 +8,7 @@ import { bumpNotebook, noteAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { reconcileNoteText } from "@/lib/notes/conflict";
+import { keepNote } from "@/lib/notes/removed";
 import { recordNoteEdit } from "@/lib/notes/edits";
 import { sourcesLeftByQuotes } from "@/lib/notes/quote-sources";
 import { normalizeNoteOrders, movedOrder } from "@/lib/order";
@@ -229,6 +230,9 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ noteId: str
   const { noteId } = await ctx.params;
   const access = await noteAccess(noteId, "editor");
   if (access instanceof NextResponse) return access;
+  // The note whole, sources, replies, edits, and side chats, for its
+  // history event: History's Restore puts it back (lib/notes/removed.ts).
+  const kept = await keepNote(noteId);
   const note = await db.note.delete({ where: { id: noteId } }).catch(() => null);
   if (!note) return NextResponse.json({ error: t("api.noteNotFound") }, { status: 404 });
   await normalizeNoteOrders(note.sectionId);
@@ -245,7 +249,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ noteId: str
         userId: access.user.id,
         kind: "NOTE_REMOVE",
         content: note.content.slice(0, 500),
-        meta: { sectionTitle: section.title },
+        meta: { sectionTitle: section.title, ...(kept ? { kept: kept as unknown as Prisma.InputJsonValue } : {}) },
       },
     });
     await bumpNotebook(section.notebookId);
