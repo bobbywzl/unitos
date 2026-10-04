@@ -402,7 +402,13 @@ function splitAt(items: Item[], graphics: Placed[], page: number, pageWidth: num
   // centered author line whose third name stands at the edge: arXiv
   // 2411.19946). The Federal Register sets its three columns 1.0 em apart,
   // and each line of a column that ran near the gutter took the next
-  // column's line into a row across the page.
+  // column's line into a row across the page. A list set with a hanging
+  // indent has two edges: its entries' first lines start out from the
+  // rest, and the first lines' edge is the column's too, when four lines
+  // start there, up to two ems out (parse loop finding: a Frontiers
+  // article's p. 14 sets its references 11.4 pt over the gutter from the
+  // last paragraphs, under 1.2 em, at 303 pt with their lines run on at
+  // 313: each entry's first line joined the paragraph's line beside it).
   const edgeOf = (right: boolean) => {
     const starts = new Map<number, number>();
     for (const item of items) {
@@ -413,16 +419,18 @@ function splitAt(items: Item[], graphics: Placed[], page: number, pageWidth: num
       starts.set(x, (starts.get(x) ?? 0) + 1);
     }
     const counted = (x: number) => (starts.get(x - 1) ?? 0) + (starts.get(x) ?? 0) + (starts.get(x + 1) ?? 0);
-    return [...starts.keys()].map((x) => ({ x, n: counted(x) })).filter((e) => e.n >= 4).sort((a, b) => b.n - a.n)[0]?.x;
+    const edges = [...starts.keys()].map((x) => ({ x, n: counted(x) })).filter((e) => e.n >= 4).sort((a, b) => b.n - a.n);
+    const top = edges[0]?.x;
+    return { top, hang: edges.filter((e) => top !== undefined && e.x < top - 1.5 && e.x >= top - maxSize * 2).map((e) => e.x) };
   };
-  const [leftEdge, rightEdge] = [edgeOf(false), edgeOf(true)];
+  const [{ top: leftEdge }, { top: rightEdge, hang: rightHang }] = [edgeOf(false), edgeOf(true)];
   const lineStart = (a: Item) => Math.min(a.x, ...beside(a).filter((j) => j.x + j.w <= g).map((j) => j.x));
   const opens = (a: Item, b: Item, size: number) =>
     rightEdge !== undefined &&
     leftEdge !== undefined &&
     a.x + a.w <= g &&
     b.x >= g &&
-    Math.abs(b.x - rightEdge) <= 1.5 &&
+    [rightEdge, ...rightHang].some((x) => Math.abs(b.x - x) <= 1.5) &&
     b.x - (a.x + a.w) > size * 0.5 &&
     Math.abs(lineStart(a) - leftEdge) <= size * 2;
   const near = (s: Item) =>
