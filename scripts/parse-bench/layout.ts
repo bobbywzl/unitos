@@ -422,8 +422,22 @@ export function faceShape(name: string): "serif" | "sans" | "mono" | null {
 export type FaceTally = { shape: "serif" | "sans" | "mono" | null; family: string; chars: number };
 const faceMemo = new Map<string, FaceTally | null>();
 
+/** A family's name as one family: its PostScript suffix ("MT", "PSMT") and
+    its style ("-Bold", "-Italic", "-Medium") aside. pdftohtml names the
+    regular and the bold of one face apart ("ArialMT", "Arial"; parse bench
+    finding: a Keynote deck sets its bullets in Arial, regular and bold, and
+    its prompts in Courier; counted as two families, the bullets lost to the
+    prompts, and the body's face read as Courier). */
+export function familyKey(name: string): string {
+  return name
+    .replace(SUBSET_PREFIX_RE, "")
+    .replace(/(?:PS)?MT$/, "")
+    .replace(/[-,]?(?:Bold|Italic|Oblique|Regular|Medium|Light|Semibold|SemiBold|Black)+$/, "")
+    .replace(/PS$/, "");
+}
+
 /** The face that sets most of a PDF's characters on its pages (pdftohtml's
-    fonts, by family), with its shape: the body's own face. */
+    fonts, by family: familyKey), with its shape: the body's own face. */
 export function bodyFace(path: string, pages: [number, number] | undefined): FaceTally | null {
   const key = `${path}|${pages?.join("-") ?? ""}`;
   if (faceMemo.has(key)) return faceMemo.get(key) ?? null;
@@ -435,7 +449,7 @@ export function bodyFace(path: string, pages: [number, number] | undefined): Fac
     xml = "";
   }
   const families = new Map<string, string>();
-  for (const m of xml.matchAll(/<fontspec id="(\d+)"[^>]*family="([^"]*)"/g)) families.set(m[1], m[2].replace(SUBSET_PREFIX_RE, ""));
+  for (const m of xml.matchAll(/<fontspec id="(\d+)"[^>]*family="([^"]*)"/g)) families.set(m[1], familyKey(m[2]));
   const chars = new Map<string, number>();
   for (const m of xml.matchAll(/<text [^>]*font="(\d+)"[^>]*>([\s\S]*?)<\/text>/g)) {
     const family = families.get(m[1]);
