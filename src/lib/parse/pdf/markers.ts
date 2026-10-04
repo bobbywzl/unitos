@@ -48,6 +48,10 @@ const BULLET_WORD_RE = /^([-–—*·∙])\s+/;
 // words at the tab right after it; "—Helping to select …" ran into the item
 // over it as its words).
 const DASH_DRAWN_RE = /^([-–—])(?=\p{L})/u;
+// A ">" set bold before words: a magazine draws its bullet so (parse loop
+// finding: The MagPi's Quick Facts set each fact after a ">" in Raleway
+// Black, and the facts read as paragraphs opening ">").
+const CHEVRON_RE = /^>\s+(?=\S)/;
 // Word's second-level bullet: a letter "o" set in Courier New before words
 // that are not monospace (nested Word list items read as lines of text).
 const COURIER_O_RE = /^o\s+(?=\S)/;
@@ -114,6 +118,7 @@ export function readMarker(line: { text: string; runs: Run[]; items?: Item[] }, 
   if ((m = BULLET_GLYPH_RE.exec(text)) || (m = BULLET_WORD_RE.exec(text))) return make(m, "bullet", "", 0);
   if ((m = DASH_DRAWN_RE.exec(text)) && drawnAlone(line.items, m[1])) return make(m, "bullet", "", 0);
   if ((m = COURIER_O_RE.exec(text)) && setApart(line, lead, 1, "mono")) return make(m, "bullet", "", 0);
+  if ((m = CHEVRON_RE.exec(text)) && setApart(line, lead, 1, "bold")) return make(m, "bullet", "", 0);
   if ((m = CITE_RE.exec(text))) return make(m, "cite", "[x]", /^\d+$/.test(m[1]) ? Number(m[1]) : 0);
   if ((m = LEGAL_RE.exec(text))) return make(m, "legal", m[1], Number(m[2]));
   if ((m = PREFIXED_RE.exec(text))) return make(m, "prefixed", `${m[1]}x.`, Number(m[2]));
