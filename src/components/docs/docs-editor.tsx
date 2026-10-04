@@ -4,6 +4,7 @@ import "./docs.css";
 // After the page's styles, where Tiptap put its own sheet: its rules win a tie.
 import "./css/prosemirror.css";
 import type { JSONContent } from "@tiptap/core";
+import { TextSelection } from "@tiptap/pm/state";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import { useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -29,6 +30,7 @@ import { showTranslations } from "@/components/docs/layer/reading";
 import { SuggestLayer } from "@/components/docs/suggest/layer";
 import { PageBanner, PageCanvas, PageRuler } from "@/components/docs/areas/page";
 import { StatusPopup } from "@/components/docs/page/status-popup";
+import { scrollParent } from "@/components/docs/page/geometry";
 import { PAGE_EVENT, useSaveState } from "@/components/docs/page/store";
 import { TypingLayer } from "@/components/docs/areas/typing";
 import { VersionHistory, VersionHistoryButton } from "@/components/docs/versions/version-history";
@@ -38,6 +40,7 @@ import { api } from "@/lib/api";
 import { inlineText } from "@/lib/docs/blocks";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
 import { pageRangesLabel, type PageRange } from "@/lib/pdf-pages";
+import { POSITION_HOLD_MS, READING_LINE_PX } from "@/lib/reading-position";
 
 // The page editor (SPEC.md §29): a blank document is written here the way a
 // Google Doc is written — a title row, the toolbar, and white pages on a gray
@@ -232,6 +235,86 @@ function SaveStatus({ state }: { state: SaveState }) {
       {open && <StatusPopup state={state} anchorRef={buttonRef} onClose={() => setOpen(false)} />}
     </>
   );
+}
+
+/** Where the caret goes when the page opens scrolled: the start of the
+    block at the reading line (READING_LINE_PX under the pane's top), or,
+    when that start is under the title row and the toolbar, the start of
+    the block's first line in view. Null at the top of the document. */
+function readingCaret(editor: Editor, pane: HTMLElement): number | null {
+  if (pane.scrollTop < 1) return null;
+  const view = editor.view;
+  const paneTop = pane.getBoundingClientRect().top;
+  const header = editor.view.dom.closest("[data-docs-editor]")?.querySelector(".docs-header");
+  const shown = Math.max(paneTop, header?.getBoundingClientRect().bottom ?? paneTop);
+  const box = view.dom.getBoundingClientRect();
+  const at = (top: number) => view.posAtCoords({ left: box.left + 1, top })?.pos ?? null;
+  const hit = at(Math.max(paneTop + READING_LINE_PX, shown) + 2);
+  if (hit === null) return null;
+  const $hit = view.state.doc.resolve(hit);
+  if (!$hit.parent.isTextblock) return null;
+  const start = $hit.start();
+  if (view.coordsAtPos(start).top >= shown - 1) return start;
+  // The block began above the view: its first line in view.
+  const line = view.coordsAtPos(hit);
+  const next = line.top >= shown - 1 ? hit : at(line.bottom + 2);
+  return next !== null && view.state.doc.resolve(next).parent === $hit.parent ? next : hit;
+}
+
+/** While the reading position holds the pane (the pages still settling
+    under it, POSITION_HOLD_MS at most), the caret follows it; the reader's
+    first press, key, wheel, or touch, or a selection the reader made, ends
+    that. Returns the cleanup. */
+function caretAtReadingPosition(editor: Editor): () => void {
+  const pane = scrollParent(editor.view.dom);
+  if (!pane) return () => {};
+  let own = false;
+  const place = () => {
+    if (editor.isDestroyed) return;
+    const pos = readingCaret(editor, pane);
+    const sel = editor.state.selection;
+    if (pos === null || (sel.empty && sel.from === pos)) return;
+    own = true;
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, pos)).setMeta("addToHistory", false));
+    own = false;
+  };
+  let frame = 0;
+  const onScroll = () => {
+    if (!frame) frame = requestAnimationFrame(() => ((frame = 0), place()));
+  };
+  const onSelection = () => {
+    if (!own) stop();
+  };
+  // A key types at the caret placed for the pane as it stands now.
+  const onKey = () => {
+    cancelAnimationFrame(frame);
+    frame = 0;
+    place();
+    stop();
+  };
+  const stop = () => {
+    cancelAnimationFrame(frame);
+    clearTimeout(timer);
+    pane.removeEventListener("scroll", onScroll);
+    pane.removeEventListener("pointerdown", stop, true);
+    pane.removeEventListener("wheel", stop);
+    pane.removeEventListener("touchmove", stop);
+    editor.view.dom.removeEventListener("keydown", onKey, true);
+    editor.off("selectionUpdate", onSelection);
+    editor.off("blur", stop);
+  };
+  // Now, and once the page has the focus (the focus command waits a frame).
+  place();
+  frame = requestAnimationFrame(() => ((frame = 0), place()));
+  pane.addEventListener("scroll", onScroll, { passive: true });
+  pane.addEventListener("pointerdown", stop, true);
+  pane.addEventListener("wheel", stop, { passive: true });
+  pane.addEventListener("touchmove", stop, { passive: true });
+  editor.view.dom.addEventListener("keydown", onKey, true);
+  editor.on("selectionUpdate", onSelection);
+  editor.on("blur", stop);
+  const timer = setTimeout(stop, POSITION_HOLD_MS);
+  return stop;
 }
 
 /** The first line's words once a line follows it, else "". */
@@ -439,12 +522,16 @@ export function DocsEditor({
   );
 
   // A document opens with the caret at the page's start, as in Google Docs,
-  // unless something else already has the focus. In Viewing the page takes
-  // no focus: the pending queue's keys reach the notes tray.
+  // unless something else already has the focus. A document that opens at
+  // the reading position (reader-interactions.tsx holds it while the pages
+  // settle) has the caret there: at the start of the block at the reading
+  // line, so the first key types where the reader looks and the pane stays.
+  // In Viewing the page takes no focus: the pending queue's keys reach the
+  // notes tray.
   useEffect(() => {
-    if (editor && writable && openedIn !== "viewing" && document.activeElement === document.body) {
-      editor.commands.focus("start", { scrollIntoView: false });
-    }
+    if (!editor || !writable || openedIn === "viewing" || document.activeElement !== document.body) return;
+    editor.commands.focus("start", { scrollIntoView: false });
+    return caretAtReadingPosition(editor);
   }, [editor, writable, openedIn]);
 
   // The mode: an import keeps the reader's choice. On a locked import only
