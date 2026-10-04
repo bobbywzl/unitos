@@ -875,8 +875,15 @@ function structure(atoms: Atom[], rules: Rule[], depth = 0): Atom[] {
       const side = list.filter((a) => !hangingFamily(a.fam) && (dir > 0 ? a.bottom - y : y - a.top) < 0.9 * em);
       return side.length > 0 ? maxSize(side) : em;
     };
-    const ups = pool.filter((a) => within(a) && a.bottom >= y - 0.05 * em);
-    const downs = pool.filter((a) => within(a) && a.top <= y + 0.05 * em);
+    // A sized delimiter hangs from its origin by the depth of cmex10's
+    // glyph: another font's (txfonts' txex) is shorter, and its box,
+    // so measured, reaches past the bar. Its middle says its side, when
+    // the box crosses the bar by half an em at most (parse loop finding:
+    // a statistics book's (11.17) and (11.69), set in txfonts, left the
+    // numerator's \Big( … \Big) and \Big/ out of it, and both were crops).
+    const sized = (a: Atom) => hangingFamily(a.fam) && (a.cls === "open" || a.cls === "close" || a.entry?.size !== undefined);
+    const ups = pool.filter((a) => within(a) && (a.bottom >= y - 0.05 * em || (sized(a) && (a.top + a.bottom) / 2 > y + 0.25 * em && a.bottom > y - 0.5 * em)));
+    const downs = pool.filter((a) => within(a) && (a.top <= y + 0.05 * em || (sized(a) && (a.top + a.bottom) / 2 < y - 0.25 * em && a.top < y + 0.5 * em)));
     const small = Math.max(nearest(ups, 1), nearest(downs, -1));
     const partEm = small < em * 0.8 ? small : em;
     const unit = Math.min(unit0, partEm);

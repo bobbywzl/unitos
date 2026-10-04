@@ -335,8 +335,10 @@ export function misplaced(latex: string, atoms: Atom[], display: boolean, size: 
     // delimiter too: KaTeX draws it as pieces, which the tree walk leaves
     // out, so the bar's glyph had no symbol to stand on (parse loop
     // finding: a quantum mechanics book's ⟨r⃗| R̂ \big| r⃗′⟩ failed on its
-    // bar's row).
-    if (!a.tex || a.cls === "piece" || a.cls === "radical" || (a.fam === "omx" && (a.cls === "open" || a.cls === "close" || a.tex === "|" || a.tex === "\\|"))) continue;
+    // bar's row). So is a sized slash (\Big/): its origin is its top, no
+    // baseline (parse loop finding: a statistics book's (11.69) failed on
+    // the row of its two \Big/).
+    if (!a.tex || a.cls === "piece" || a.cls === "radical" || (a.fam === "omx" && (a.cls === "open" || a.cls === "close" || a.tex === "|" || a.tex === "\\|" || a.entry?.size !== undefined))) continue;
     const own = placedSymbols(a.cls === "accent" ? `${a.tex}{}` : a.tex, display) ?? [];
     // A node of several symbols (a long arrow's label) is placed as a
     // whole: its symbols stay out of the comparison.
