@@ -1,7 +1,7 @@
 {
  "total": {
   "f1": 0.983,
-  "precision": 0.971,
+  "precision": 0.972,
   "recall": 0.995
  },
  "pages": {
@@ -146,8 +146,8 @@
    "recall": 0.983
   },
   "30b771a40a": {
-   "f1": 0.922,
-   "precision": 0.856,
+   "f1": 0.96,
+   "precision": 0.922,
    "recall": 1
   },
   "3252222e61": {
@@ -331,8 +331,8 @@
    "recall": 0.976
   },
   "612cd29826": {
-   "f1": 0.948,
-   "precision": 0.901,
+   "f1": 1,
+   "precision": 1,
    "recall": 1
   },
   "624fcd903d": {
