@@ -856,12 +856,16 @@ function drawingIn(drawing: Drawn, y1: number, y2: number, x1: number, x2: numbe
 // whole model." went into Fig. 1's crop and left the text). A drawing
 // around the caption as well is a frame or the page's white ground, no
 // figure over the caption (MIC white paper p2: a white box under the whole
-// text took the paragraph over a caption into its figure).
-function overlapsDrawing(box: Box, drawing: Drawn, cap: Box): boolean {
+// text took the paragraph over a caption into its figure). With `framed`,
+// a drawing around the box whole is the box's own ground: a code listing
+// on its shaded box is no label inside a figure (parse loop finding: the
+// Japanese Pro Git p. 72, a listing over Figure 20 went into its crop).
+function overlapsDrawing(box: Box, drawing: Drawn, cap: Box, framed = false): boolean {
   return [...drawing.paths, ...drawing.images].some(
     (b) =>
       !("clip" in b && b.clip) &&
       !(b.x1 <= cap.x1 && b.x2 >= cap.x2 && b.y1 <= cap.y1 && b.y2 >= cap.y2) &&
+      !(framed && b.x1 <= box.x1 + 1 && b.x2 >= box.x2 - 1 && b.y1 <= box.y1 + 1 && b.y2 >= box.y2 - 1) &&
       b.x1 < box.x2 && b.x2 > box.x1 && b.y1 < box.y2 && b.y2 > box.y1 && (b.x2 - b.x1 > 2 || b.y2 - b.y1 > 2),
   );
 }
@@ -1296,7 +1300,7 @@ export function attachFigureRegions(
         !(prev.type === "FIGURE" && prev.region) &&
         (prev.type !== "EQUATION" || label) &&
         (prev.text.length < 80 || oneLine || isTicks(prev.text)) &&
-        overlapsDrawing(label ? grow(prev.box, ctx.bodySize) : prev.box, drawing, cap.box);
+        overlapsDrawing(label ? grow(prev.box, ctx.bodySize) : prev.box, drawing, cap.box, prev.type === "CODE");
       // A display's crop inside a diagram (over its boxes, arrows, and
       // pictures, or over a chart's lines) is a part of it: TeX's fonts in
       // its labels read as an equation, and the figure drew in two pieces
