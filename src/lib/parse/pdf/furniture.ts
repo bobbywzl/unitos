@@ -274,6 +274,18 @@ export function findFurniture(pages: Line[][], pageHeights: number[], pageNumber
     if (last && CONTINUED_RE.test(last.text)) dropped.set(last, "continued");
   }
 
+  // A table's head repeats on each page the table runs over, under the
+  // page's number: it is no running head. Its cells stand over the cells of
+  // the row under it, each at its column's start or set in from it by a few
+  // ems (parse loop finding: the DTIC Datcom's "DESCRIPTION LIMITATIONS AND
+  // MAIN EFFECTS ON DATA" tops seven pages of Table III, and six dropped).
+  for (const pageRows of rows) {
+    pageRows.forEach((row, k) => {
+      const why = dropped.get(row);
+      if ((why === "repeat" || why === "place" || why === "cell") && headsTable(row, pageRows[k + 1])) dropped.delete(row);
+    });
+  }
+
   const drops: FurnitureDrop[] = [];
   for (const row of specks) dropped.set(row, "mark");
   for (const [row, why] of dropped) for (const line of row.lines) drops.push({ page: row.page, line, why });
@@ -430,6 +442,21 @@ function measures(pages: Line[][], rows: Row[][]): { lead: number; bodySize: num
 
 // A page's first and last rows. Up to two rows each: the Supreme Court sets
 // its head in two ("2 TRUMP v. ANDERSON", then "Per Curiam").
+// A row of two cells or more over a row of as many cells: the first cells
+// start within two ems of each other, each later cell of the head within
+// an em left and six ems right of the cell under it.
+function headsTable(row: Row, next: Row | undefined): boolean {
+  if (next === undefined) return false;
+  const cellsOf = (r: Row) => r.lines.flatMap((l) => l.cells).sort((a, b) => a.x - b.x);
+  const [head, under] = [cellsOf(row), cellsOf(next)];
+  if (head.length < 2 || head.length !== under.length) return false;
+  const em = row.size;
+  return head.every((cell, k) => {
+    const dx = cell.x - under[k].x;
+    return k === 0 ? Math.abs(dx) <= em * 2 : dx >= -em && dx <= em * 6;
+  });
+}
+
 function candidatesOf(rows: Row[], lead: number): Candidate[] {
   const n = rows.length;
   if (n === 0) return [];
