@@ -43,9 +43,10 @@ function pullQuotes(segments: Segment[]): Set<Segment> {
 // A figure's labels the figure did not take, read as lines or as a
 // display's crop, are set smaller than the paragraph around them: next to a
 // float, they are the float's ("ac-" | labels, a figure | "cessible": arXiv
-// 2411.19946).
+// 2411.19946). A listing is no figure's label: set smaller than the text,
+// it carried the output read beside it to the next page's paragraph.
 const isLabel = (s: Segment, paragraph: Segment) =>
-  s.type !== "HEADING" && paragraph.lineSize !== undefined && s.lineSize !== undefined && s.lineSize < paragraph.lineSize * 0.9;
+  s.type !== "HEADING" && s.type !== "CODE" && paragraph.lineSize !== undefined && s.lineSize !== undefined && s.lineSize < paragraph.lineSize * 0.9;
 
 // A Chinese or Japanese character that ends a text or opens one (a stop, a
 // closing bracket, and the full-width punctuation aside).

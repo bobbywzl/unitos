@@ -110,7 +110,12 @@ const inkMemo = new Map<string, { counts: Uint16Array; top: number } | null>();
 /** The ink in a box of a page (1-based): each pixel row's count of dark
     pixels (under 150 of 255), poppler drawing the page at SCALE pixels a
     point; the rows start at `top` (points). pdftoppm writes the picture to
-    its output only (no file). */
+    its output only (no file). A fill's inside is no ink: rows of one gray
+    across the box, three points tall or more, count none (parse bench
+    finding: a Keynote deck's slides are purple, 138 of 255, and a callout
+    box on a slide is purple too; every row under a block read as ink, and
+    a title slide's subtitle, 150 pt over its author, as a block whose
+    space no ink under it shows). A rule, thinner, stays ink. */
 export function inkRows(path: string, page: number, box: Rect): { counts: Uint16Array; top: number } | null {
   const [x, y] = [Math.max(0, Math.floor(box.x1 * SCALE)), Math.max(0, Math.floor(box.y1 * SCALE))];
   const [w, h] = [Math.ceil(box.x2 * SCALE) - x, Math.ceil(box.y2 * SCALE) - y];
@@ -129,10 +134,27 @@ export function inkRows(path: string, page: number, box: Rect): { counts: Uint16
         const [width, height] = [Number(head[1]), Number(head[2])];
         const start = head[0].length;
         const counts = new Uint16Array(height);
+        const even = new Uint8Array(height);
         for (let r = 0; r < height; r++) {
           let n = 0;
-          for (let c = 0; c < width; c++) if (pgm[start + r * width + c] < 150) n++;
+          let [lo, hi] = [255, 0];
+          for (let c = 0; c < width; c++) {
+            const v = pgm[start + r * width + c];
+            if (v < 150) n++;
+            if (v < lo) lo = v;
+            if (v > hi) hi = v;
+          }
           counts[r] = n;
+          even[r] = n > 0 && hi - lo <= 30 ? 1 : 0;
+        }
+        for (let r = 0; r < height; ) {
+          if (!even[r]) {
+            r++;
+            continue;
+          }
+          const from = r;
+          while (r < height && even[r]) r++;
+          if (r - from >= 3 * SCALE) counts.fill(0, from, r);
         }
         out = { counts, top: y / SCALE };
       }

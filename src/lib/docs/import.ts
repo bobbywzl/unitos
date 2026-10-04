@@ -905,7 +905,11 @@ class Converter {
   private readonly looks: Partial<Record<DocStyle, NamedStyle>>;
   /** The page's most common space after a paragraph, for a paragraph whose
       own it did not measure (a page's last); null where it measured none
-      (a web page, a text file). */
+      (a web page, a text file), or where no two paragraphs share one: a
+      space that stands once is that paragraph's own, no page's (parse loop
+      finding: a slide deck measured two paragraphs, a title slide's 150 pt
+      and a slide's 59 pt, and every slide's last block took 59 pt after
+      it). */
   private readonly spacing: number | null;
   /** The blocks right over a display equation: their space after is the
       space over the display. And the block right under each display. */
@@ -933,7 +937,10 @@ class Converter {
       above = block;
     });
     // A space over a display is to its glyphs: no paragraph's space.
-    this.spacing = mostCommon(input.blocks.filter((b) => b.type === "PARAGRAPH" && !this.overDisplay.has(b)).map((b) => b.spaceAfter));
+    this.spacing = mostCommon(
+      input.blocks.filter((b) => b.type === "PARAGRAPH" && !this.overDisplay.has(b)).map((b) => b.spaceAfter),
+      2,
+    );
     this.displaySpacing = {
       over: mostCommon([...this.overDisplay].map((b) => b.spaceAfter)),
       under: mostCommon(input.blocks.filter((b) => b.type === "EQUATION").map((b) => b.spaceAfter)),
@@ -1718,11 +1725,12 @@ class Converter {
 }
 
 /** The value most blocks take (the smaller of two as common), or null when
-    none has one. */
-function mostCommon(values: (number | undefined)[]): number | null {
+    none has one, or none is taken `least` times. */
+function mostCommon(values: (number | undefined)[], least = 1): number | null {
   const counts = new Map<number, number>();
   for (const v of values) if (v !== undefined) counts.set(v, (counts.get(v) ?? 0) + 1);
-  return [...counts].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? null;
+  const [top] = [...counts].sort((a, b) => b[1] - a[1] || a[0] - b[0]);
+  return top && top[1] >= least ? top[0] : null;
 }
 
 /** A table's text size in points, when every word of it carries one (the
