@@ -317,6 +317,16 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
           data-link-id={link.linkId}
           data-source-id={anchor?.sourceId ?? undefined}
           data-tip={linkTip || undefined}
+          // A drag that starts on a link selects its words, as a drag inside
+          // any mark does (SPEC.md §6): the link is not dragged away, and the
+          // click that ends a drag follows no link.
+          draggable={false}
+          onMouseDown={pressMark}
+          onClick={(e) => {
+            if (!clickEndsDrag(e)) return;
+            e.preventDefault();
+            e.stopPropagation();
+          }}
           className={`link-mark rounded-[4px]${link.fresh ? " mark-sweep" : ""}${selectionClass}${editedClass}`}
           onAnimationEnd={
             link.fresh
@@ -458,9 +468,17 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
               ? (e) => {
                   if (clickEndsDrag(e)) return;
                   e.stopPropagation();
+                  // Stacked annotations: the reader picks which one opens
+                  // (SPEC.md §6), in a chooser at the click.
+                  const stacked = anchors
+                    .filter((h) => h.annotation && h.sourceId && !h.leaving)
+                    .map((h) => h.sourceId as string);
                   window.dispatchEvent(
                     new CustomEvent("dissect:open-annotation", {
-                      detail: { sourceId: anchor.sourceId },
+                      detail: {
+                        sourceId: anchor.sourceId,
+                        ...(stacked.length > 1 ? { sources: stacked, x: e.clientX, y: e.clientY } : {}),
+                      },
                     }),
                   );
                 }

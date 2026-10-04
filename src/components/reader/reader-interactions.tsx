@@ -6,7 +6,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import { createPortal, flushSync } from "react-dom";
 import { api } from "@/lib/api";
 import { formatKind, type BlockKind, type FormatKind } from "@/lib/block-kind";
-import { defineKey, definableSelection } from "@/lib/define";
+import { defineKey, defineWord, definableSelection } from "@/lib/define";
 import { MARK_SWEPT_EVENT, type MarkSweptDetail } from "@/lib/mark-sweep";
 import {
   ACCOUNT_SAVE_MAX_MS,
@@ -17,6 +17,7 @@ import {
   LEFT_OFF_MIN_SHARE,
   parseReadingPosition,
   POSITION_HOLD_MS,
+  READING_LINE_PX,
   readingPositionKey,
   readingPositionScroll,
   readReadingPosition,
@@ -26,7 +27,7 @@ import {
 import { ACCOUNT_HEADER } from "@/lib/constants";
 import { tabAccount } from "@/lib/tab-account";
 import type { SourceInput } from "@/lib/anchors/input";
-import { anchorableOffset, anchorableText } from "@/lib/anchors/dom";
+import { anchorableOffset, anchorablePieces, anchorableText } from "@/lib/anchors/dom";
 import {
   parseSimplified,
   splitSentences,
@@ -123,7 +124,7 @@ import type { PageMark } from "@/components/reader/page-block";
 import type { PageSize } from "@/lib/handwritten/pages";
 import { useCollab } from "@/components/collab/collab-context";
 import { TierMark } from "@/components/tier-mark";
-import { useNoteDrop, type DroppedImage } from "@/components/use-note-drop";
+import { QUOTE_LANDED_EVENT, useNoteDrop, type DroppedImage } from "@/components/use-note-drop";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { ConversationView } from "@/components/reader/conversation-view";
 import { DistillPage } from "@/components/reader/distill-page";
@@ -195,6 +196,70 @@ type Anchor = Segment & { segments?: Segment[] };
     selection stayed in one block. */
 function segmentsOf(anchor: Anchor): Segment[] {
   return anchor.segments && anchor.segments.length > 0 ? anchor.segments : [anchor];
+}
+
+/** The element that draws a block's words: a core key's core (SPEC.md §28),
+    else the block's whole text. Null when those words are not drawn. */
+function drawnBlock(container: HTMLElement, blockId: string): HTMLElement | null {
+  const el = isCoreKey(blockId)
+    ? container.querySelector<HTMLElement>(`[data-block-id="${CSS.escape(blockIdOfKey(blockId))}"][data-collapsed]`)
+    : container.querySelector<HTMLElement>(
+        `[data-block-id="${CSS.escape(blockId)}"]:not([data-collapsed]), [data-edit-block="${CSS.escape(blockId)}"]`,
+      );
+  return el && el.getClientRects().length > 0 ? el : null;
+}
+
+/** Where a passage is drawn, in the container's coordinates: the top of its
+    first line, the bottom of its last line, and the bottom of the block that
+    holds its last line. Null when no segment's block is drawn. */
+function passageBox(
+  container: HTMLElement,
+  anchor: Anchor,
+): { top: number; bottom: number; blockBottom: number; blockId: string } | null {
+  const crect = container.getBoundingClientRect();
+  const toY = (y: number) => y - crect.top + container.scrollTop;
+  let top = Infinity;
+  let bottom = -Infinity;
+  let blockBottom = -Infinity;
+  let blockId = "";
+  for (const segment of segmentsOf(anchor)) {
+    const el = drawnBlock(container, segment.blockId);
+    if (!el) continue;
+    const b = el.getBoundingClientRect();
+    // The words' own line boxes when the text is walkable; else the block's box.
+    let first = b.top;
+    let last = b.bottom;
+    try {
+      const pieces = anchorablePieces(el);
+      const at = (offset: number, end: boolean) => {
+        const piece = pieces.find((p) =>
+          p.node && (end ? offset > p.start && offset <= p.start + p.text.length : offset >= p.start && offset < p.start + p.text.length),
+        );
+        return piece?.node ? { node: piece.node, offset: offset - piece.start } : null;
+      };
+      const from = at(segment.startOffset, false);
+      const to = at(segment.endOffset, true);
+      if (from && to) {
+        const range = document.createRange();
+        range.setStart(from.node, from.offset);
+        range.setEnd(to.node, to.offset);
+        const rects = [...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
+        if (rects.length > 0) {
+          first = Math.min(...rects.map((r) => r.top));
+          last = Math.max(...rects.map((r) => r.bottom));
+        }
+      }
+    } catch {
+      // The block's box stands in.
+    }
+    top = Math.min(top, toY(first));
+    if (toY(last) >= bottom) {
+      bottom = toY(last);
+      blockBottom = toY(b.bottom);
+      blockId = segment.blockId;
+    }
+  }
+  return Number.isFinite(top) ? { top, bottom, blockBottom, blockId } : null;
 }
 
 /** The passage's text: the segments' quotes, one paragraph each. */
@@ -627,6 +692,7 @@ type ExplainBubble = ToolChat & {
   declined: string | null;
   anchor: Anchor | null; // the highlighted text this bubble explains
   noteId: string | null; // the persisted annotation; Delete removes it and its mark
+  run?: number; // the run streaming into this card (toolRunsRef); none once reopened from a mark
 };
 
 // suggestKey: an answer that landed suggestions in the text (SPEC.md §29);
@@ -716,6 +782,7 @@ type AssistantBar = {
   key: string;
   anchor: Anchor;
   yTop: number;
+  wordsBottom: number; // the selection's last line's bottom, container coords
   noteId: string | null;
   messages: ChatMessage[];
   input: string;
@@ -757,6 +824,7 @@ type SimplifyCard = ToolChat & {
   // per simplified sentence. active = the pressed sentence, mirrored in the text.
   sentences: SimplifiedSentence[] | null;
   active: number | null;
+  run?: number; // the run streaming into this card (toolRunsRef); none once reopened from a mark
 };
 
 // The card that opens once a link closes: the two ends, and a box for what
@@ -802,7 +870,9 @@ type AnnotationCard = {
   saved: string; // comment as loaded; Save enables on change
   top: number;
   left: number;
-  width?: number; // set by the page editor's margin (SPEC.md §29); else 300
+  width?: number; // set by the page editor's margin (SPEC.md §29) and the side dock; else 300
+  side?: "right" | "left"; // the block reader docks it beside the words like a side card
+  anchor?: Anchor | null; // the marked words, for the dock under them in a narrow reader
   busy: boolean;
 };
 
@@ -810,29 +880,69 @@ type AnnotationCard = {
 // omit {s}.
 const plural = (n: number) => (n === 1 ? "" : "s");
 
-/** Horizontal dock for a side card: right next to the article on its side. */
-function dockSideCard(
-  side: "right" | "left",
-  articleLeft: number,
-  articleRight: number,
-  cw: number,
-) {
-  const margin = side === "right" ? cw - articleRight - 24 : articleLeft - 24;
-  const width = Math.max(260, Math.min(320, margin));
-  const left =
-    side === "right"
-      ? Math.min(articleRight + 16, cw - width - 8)
-      : Math.max(8, articleLeft - width - 16);
+// A side card never covers a word (SPEC.md §6): it is 260-320 wide and
+// keeps 12px from the words and 8px from the pane's edge.
+const CARD_MIN = 260;
+const CARD_MAX = 320;
+const CARD_EDGE = 8;
+const CARD_WORDS_GAP = 12;
+
+/** The column as it stands at rest with no room made for cards: what
+    measureSideCards reads, less the shift the pane made (--cards-room). */
+type ColumnAtRest = {
+  articleLeft: number;
+  articleRight: number;
+  wordsLeft: number;
+  wordsRight: number;
+  cw: number;
+};
+function columnAtRest(
+  m: { articleLeft: number; articleRight: number; wordsLeft: number; wordsRight: number; cw: number },
+  shift: number,
+): ColumnAtRest {
+  return {
+    articleLeft: m.articleLeft + shift,
+    articleRight: m.articleRight + shift,
+    wordsLeft: m.wordsLeft + shift,
+    wordsRight: m.wordsRight + shift,
+    cw: m.cw,
+  };
+}
+
+/** Where cards fit beside the words (SPEC.md §6): a side whose margin holds a
+    card takes one; when neither does, the column moves left (shift) to make
+    the room on the right; when even that leaves no room, null — the narrow
+    reader, where a card opens under the paragraph and the text below makes
+    room for it. */
+function cardRoom(col: ColumnAtRest): { right: boolean; left: boolean; shift: number } | null {
+  const right = col.cw - col.wordsRight - CARD_WORDS_GAP - CARD_EDGE;
+  const left = col.wordsLeft - CARD_WORDS_GAP - CARD_EDGE;
+  if (right >= CARD_MIN || left >= CARD_MIN) return { right: right >= CARD_MIN, left: left >= CARD_MIN, shift: 0 };
+  const need = Math.ceil(CARD_MIN - right);
+  // The words keep 16px from the pane's left edge.
+  if (col.wordsLeft - need >= 16) return { right: true, left: false, shift: need };
+  return null;
+}
+
+/** Horizontal dock for a side card beside the words on its side, with the
+    column moved left by `shift`. */
+function dockSideCard(side: "right" | "left", col: ColumnAtRest, shift = 0) {
+  if (side === "right") {
+    const wordsRight = col.wordsRight - shift;
+    const margin = col.cw - wordsRight - CARD_WORDS_GAP - CARD_EDGE;
+    const width = Math.max(CARD_MIN, Math.min(CARD_MAX, margin));
+    const left = Math.max(wordsRight + CARD_WORDS_GAP, Math.min(col.articleRight - shift + 16, col.cw - width - CARD_EDGE));
+    return { left, width };
+  }
+  const margin = col.wordsLeft - CARD_WORDS_GAP - CARD_EDGE;
+  const width = Math.max(CARD_MIN, Math.min(CARD_MAX, margin));
+  const left = Math.min(col.wordsLeft - CARD_WORDS_GAP - width, Math.max(CARD_EDGE, col.articleLeft - width - 16));
   return { left, width };
 }
 
-// Narrow reader: the gutter beside the article is under this, so a docked
-// side card would cover the text (cards are 260-320 wide). Tool cards dock
-// below the highlighted text instead, and stored AI annotations rest as tool
-// icons next to their text (block-view.tsx) rather than open cards.
-const NARROW_GUTTER = 140;
-
-/** Horizontal dock for a narrow reader: over the article, at article width. */
+/** Horizontal dock for a narrow reader: under the paragraph, at the column's
+    width. The text below the paragraph moves down to make the room
+    (layoutNarrowCards), so the card covers no word. */
 function dockBelowCard(articleLeft: number, articleRight: number, cw: number) {
   const width = Math.min(Math.max(280, articleRight - articleLeft), cw - 16);
   const left = Math.max(8, Math.min(articleLeft, cw - width - 8));
@@ -1163,6 +1273,11 @@ export function ReaderInteractions({
   const [bubble, setBubble] = useState<ExplainBubble | null>(null);
   const [busy, setBusy] = useState(false);
   const [simplifyCard, setSimplifyCard] = useState<SimplifyCard | null>(null);
+  // The cards as last drawn, for a run that lands after a later run took its card.
+  const bubbleRef = useRef(bubble);
+  bubbleRef.current = bubble;
+  const simplifyCardRef = useRef(simplifyCard);
+  simplifyCardRef.current = simplifyCard;
   // The distilled page: ask view (shownId null) or one distillation. A fresh
   // result shows from local state until the refresh delivers it as a prop.
   const [distillOpen, setDistillOpen] = useState(false);
@@ -1402,10 +1517,19 @@ export function ReaderInteractions({
   // the ask view for editing; nothing persists from an aborted run.
   const distillAbortRef = useRef<AbortController | null>(null);
   const distillReturnScroll = useRef<number | null>(null);
-  // The running Explain, Simplify, and Extract, so Stop can abort them. A
-  // stopped stream keeps what arrived; nothing persists (SPEC.md §6).
-  const explainAbortRef = useRef<AbortController | null>(null);
-  const simplifyAbortRef = useRef<AbortController | null>(null);
+  // Every run of Explain, Analyze, Visualize, and Simplify, by its run number,
+  // so Stop and ✕ abort the run of the card they sit on. A stopped stream
+  // keeps what arrived; nothing persists (SPEC.md §6). A run whose card a new
+  // run took over is not stopped: it lands its annotation, and a toast offers
+  // its card (SPEC.md §6). A card carries the run that writes into it, and a
+  // run writes only into its own card.
+  const toolRunsRef = useRef(new Map<number, AbortController>());
+  const toolRunSeqRef = useRef(0);
+  function abortToolRun(run: number | undefined) {
+    if (run === undefined) return;
+    toolRunsRef.current.get(run)?.abort();
+    toolRunsRef.current.delete(run);
+  }
   // The span a jump landed on (a distilled quote, an extract origin): tinted
   // while the reader arrives.
   const [spanFlash, setSpanFlash] = useState<{
@@ -1745,9 +1869,17 @@ export function ReaderInteractions({
   const web = useWeb();
   const [aiCommand, setAiCommand] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
+  // The toolbar's question while it runs, and a failed run's message: shown
+  // in the box of the toolbar that sent it (SPEC.md §6). The field itself is
+  // free for the next question as soon as one is sent.
+  const [aiSent, setAiSent] = useState<{ text: string; from: Anchor } | null>(null);
+  const [aiError, setAiError] = useState<{ text: string; from: Anchor } | null>(null);
   const [aiListening, setAiListening] = useState(false);
   const [aiPlan, setAiPlan] = useState<AssistantPlan | null>(null);
   const [planChecked, setPlanChecked] = useState<Set<number>>(new Set());
+  // Where the plan came from: the selection's chat card shows it under its
+  // answer (SPEC.md §7); the panel's plan takes the card at the window's foot.
+  const [planFrom, setPlanFrom] = useState<"chat" | "panel">("panel");
   // The sidebar assistant's plan (SPEC.md §7): the panel sends the actions
   // the server validated for this document; the plan card takes them. A
   // split reader has two of these; the document id picks the one.
@@ -1756,6 +1888,7 @@ export function ReaderInteractions({
       const detail = (e as CustomEvent<{ documentId: string; actions: AssistantAction[]; warnings: string[] }>).detail;
       if (!detail || detail.documentId !== documentId) return;
       setAiPlan({ reply: null, actions: detail.actions, warnings: detail.warnings, conversationNoteId: null });
+      setPlanFrom("panel");
       setPlanChecked(new Set(detail.actions.map((_, i) => i)));
     };
     window.addEventListener("dissect:assistant-plan", onPlan);
@@ -1802,11 +1935,20 @@ export function ReaderInteractions({
   const annotationsBySourceRef = useRef(annotationsBySource);
   annotationsBySourceRef.current = annotationsBySource;
   const [annotationCard, setAnnotationCard] = useState<AnnotationCard | null>(null);
+  // The chooser a click on stacked annotations opens: every annotation under
+  // the click, by source id, at the click (container coords).
+  const [stackChooser, setStackChooser] = useState<{ sources: string[]; left: number; top: number } | null>(null);
   const anchorHighlightsRef = useRef(anchorHighlights);
   anchorHighlightsRef.current = anchorHighlights;
-  // Narrow reader (see NARROW_GUTTER), and every split pane: open cards dock
+  // Narrow reader (no card room, cardRoom), and every split pane: open cards dock
   // below the highlight, and stored cards collapse to their symbols.
   const narrowRef = useRef(false);
+  // How far the column moves left so a side card covers no word (SPEC.md
+  // §6): set when a card opens on a pane whose margin is too narrow for it,
+  // back to 0 when the last card closes.
+  const [cardsRoom, setCardsRoom] = useState(0);
+  const cardsRoomRef = useRef(0);
+  cardsRoomRef.current = cardsRoom;
   const splitRef = useRef(split);
   splitRef.current = split;
   // How far the page editor's page moves left for the cards in its margin
@@ -1857,17 +1999,6 @@ export function ReaderInteractions({
   // The pane's visible height: every tool card grows with its content up to
   // this, then its body scrolls (SPEC.md §6). 0 until measured.
   const [paneHeight, setPaneHeight] = useState(0);
-  const overlayOpenRef = useRef(false);
-  overlayOpenRef.current =
-    popover !== null ||
-    bubble !== null ||
-    simplifyCard !== null ||
-    assistantChat !== null ||
-    bar !== null ||
-    annotationCard !== null ||
-    commentCard !== null ||
-    linkCard !== null ||
-    extractCard !== null;
   // The mouseup that ends a hold-and-circle gesture must not run selection
   // capture — it would replace the figure popover it just opened.
   const suppressNextMouseUp = useRef(false);
@@ -1879,10 +2010,15 @@ export function ReaderInteractions({
   const CARD_ESTIMATE = 360;
   const CARD_GAP = 14;
   function claimSideSlot(
-    kind: "explain" | "simplify" | "assistant" | "comment" | "link" | "log",
+    kind: "explain" | "simplify" | "assistant" | "comment" | "link" | "log" | "annotation",
     preferredTop: number,
+    // The words the card is about: under them when there is no room beside.
+    anchor?: Anchor | null,
   ) {
-    const { rects, articleLeft, articleRight, cw } = measureSideCards(containerRef.current, kind);
+    const measured = measureSideCards(containerRef.current, kind);
+    const { rects, articleLeft, articleRight, cw } = measured;
+    const words = anchor && containerRef.current ? passageBox(containerRef.current, anchor) : null;
+    const underWords = words ? words.bottom + 10 : Math.max(8, preferredTop) + 34;
     // The page editor (SPEC.md §29): one column in the page's right margin,
     // each card level with its words or below the card above; the page moves
     // left to make room, but not for a log card. No room: under the words.
@@ -1891,7 +2027,7 @@ export function ReaderInteractions({
     if (page) {
       const kept = kind === "log" ? slotAt(page, shift) : null;
       const place = splitRef.current ? null : kind === "log" ? (kept ? { shift, ...kept } : null) : marginPlace(page);
-      if (!place) return { ...belowSlot(page, shift), top: Math.max(8, preferredTop) + 34, side: "right" as const };
+      if (!place) return { ...belowSlot(page, shift), top: underWords, side: "right" as const };
       const pageMid = (page.pageLeft + page.pageRight) / 2 - shift;
       let top = Math.max(8, preferredTop);
       for (let step = 0; step < 12; step++) {
@@ -1902,45 +2038,51 @@ export function ReaderInteractions({
       if (place.shift !== shift) setDocsShift(place.shift);
       return { left: place.left, width: place.width, top, side: "right" as const };
     }
-    // Narrow reader: no room beside the article — dock below the highlight.
-    if (narrowRef.current) {
+    // Narrow reader: no room beside the words — the card opens under the
+    // paragraph, and the text under it makes room (layoutNarrowCards).
+    const col = columnAtRest(measured, cardsRoomRef.current);
+    const room = narrowRef.current ? null : cardRoom(col);
+    if (!room) {
       return {
-        ...dockBelowCard(articleLeft, articleRight, cw),
-        top: Math.max(8, preferredTop) + 34,
+        ...dockBelowCard(col.articleLeft, col.articleRight, cw),
+        top: words ? words.blockBottom + 8 : underWords,
         side: "right" as const,
       };
     }
+    // A margin too narrow for a card: the column moves left to make it
+    // (SPEC.md §6), and stays there while a card is open.
+    if (room.shift > 0 && room.shift !== cardsRoomRef.current) {
+      cardsRoomRef.current = room.shift;
+      setCardsRoom(room.shift);
+    }
+    const sides = (["right", "left"] as const).filter((s) => room[s]);
     const articleMid = (articleLeft + articleRight) / 2;
     let top = Math.max(8, preferredTop);
-    let side: "right" | "left" = "right";
+    let side: "right" | "left" = sides[0];
     for (let step = 0; step < 12; step++) {
-      if (blocksOnSide(rects, articleMid, "right", top, CARD_ESTIMATE).length === 0) {
-        side = "right";
+      const free = sides.find((s) => blocksOnSide(rects, articleMid, s, top, CARD_ESTIMATE).length === 0);
+      if (free) {
+        side = free;
         break;
       }
-      if (blocksOnSide(rects, articleMid, "left", top, CARD_ESTIMATE).length === 0) {
-        side = "left";
-        break;
-      }
-      // Both sides busy at this height: drop below whichever clears first.
-      const clears = (["right", "left"] as const).map((s) =>
+      // Every side busy at this height: drop below whichever clears first.
+      const clears = sides.map((s) =>
         Math.max(...blocksOnSide(rects, articleMid, s, top, CARD_ESTIMATE).map((r) => r.bottom)),
       );
       top = Math.min(...clears) + CARD_GAP;
-      side = "right";
+      side = sides[0];
     }
-    return { ...dockSideCard(side, articleLeft, articleRight, cw), top, side };
+    return { ...dockSideCard(side, col, cardsRoomRef.current), top, side };
   }
   // Closing a card mid-stream stops its run: nobody will read the rest. A
   // tool conversation's turn in flight stops with its card too.
   function closeExplain() {
-    explainAbortRef.current?.abort();
-    explainAbortRef.current = null;
+    abortToolRun(bubble?.run);
     stopToolChat("explain");
     setBubble(null);
   }
   function stopExplain() {
-    explainAbortRef.current?.abort();
+    abortToolRun(bubble?.run);
   }
   // Deleting is optimistic: the card leaves and the mark fades at once; the
   // server's refresh confirms, and a failure puts the mark back with a toast.
@@ -1984,13 +2126,12 @@ export function ReaderInteractions({
     );
   }
   function closeSimplify() {
-    simplifyAbortRef.current?.abort();
-    simplifyAbortRef.current = null;
+    abortToolRun(simplifyCard?.run);
     stopToolChat("simplify");
     setSimplifyCard(null);
   }
   function stopSimplify() {
-    simplifyAbortRef.current?.abort();
+    abortToolRun(simplifyCard?.run);
   }
   async function deleteSimplify() {
     const card = simplifyCard;
@@ -2098,7 +2239,15 @@ export function ReaderInteractions({
       // makes (globals.css [data-side-card]) is off while the drag lasts.
       const card = (e.currentTarget as HTMLElement).closest<HTMLElement>("[data-side-card]");
       card?.setAttribute("data-dragging", "");
+      // A card the reader moved stays where they put it: the narrow reader's
+      // layout leaves it alone (layoutNarrowCards).
+      const kind = card?.dataset.sideCard;
+      let moved = false;
       const onMove = (ev: PointerEvent) => {
+        if (!moved && kind) {
+          moved = true;
+          movedCardsRef.current.add(`${kind}:${layerSeenRef.current[kind] ?? ""}`);
+        }
         const maxLeft = (container?.clientWidth ?? 1200) - 80;
         apply(
           Math.max(4, Math.min(start.left + ev.clientX - fromX, maxLeft)),
@@ -2161,8 +2310,8 @@ export function ReaderInteractions({
     setLocalExtractions([]);
     setExtractCard(null);
     distillAbortRef.current?.abort();
-    explainAbortRef.current?.abort();
-    simplifyAbortRef.current?.abort();
+    for (const controller of toolRunsRef.current.values()) controller.abort();
+    toolRunsRef.current.clear();
     distillReturnScroll.current = null;
     voiceRunRef.current += 1;
     voiceAudioRef.current?.pause();
@@ -2358,31 +2507,115 @@ export function ReaderInteractions({
   const captureSelectionRef = useRef(captureSelection);
   captureSelectionRef.current = captureSelection;
 
-  // Escape closes the popover and bubbles first, and cancels a pending link
-  // with them; with nothing open it leaves edit mode, saving unsaved typing
-  // on the way out.
+  // The layers over the article, newest first for Escape (SPEC.md §6): each
+  // layer's identity, and the order the layers opened in. A card that runs
+  // again or opens on other words is a new layer.
+  const layerSeqRef = useRef(0);
+  const layerSeenRef = useRef<Record<string, string | null>>({});
+  const layerOpenedRef = useRef<Record<string, number>>({});
+  const layerKeys: Record<string, string | null> = {
+    popover: popover ? `${popover.anchor.blockId}:${popover.anchor.startOffset}:${popover.anchor.endOffset}` : null,
+    pendingLink: pendingLink ? "pending" : null,
+    explain: bubble ? `${bubble.run ?? ""}:${bubble.noteId ?? ""}:${bubble.kind}` : null,
+    simplify: simplifyCard ? `${simplifyCard.run ?? ""}:${simplifyCard.noteId ?? ""}` : null,
+    assistant: assistantChat ? `${assistantChat.noteId ?? ""}:${assistantChat.anchor?.blockId ?? ""}:${assistantChat.anchor?.startOffset ?? ""}` : null,
+    bar: bar ? bar.key : null,
+    comment: commentCard ? `${commentCard.noteId ?? ""}:${commentCard.anchor?.blockId ?? ""}` : null,
+    link: linkCard ? linkCard.linkId : null,
+    annotation: annotationCard ? annotationCard.sourceId : null,
+    extract: extractCard ? extractCard.id : null,
+    chooser: stackChooser ? stackChooser.sources.join(",") : null,
+  };
+  for (const [layer, key] of Object.entries(layerKeys)) {
+    if (layerSeenRef.current[layer] === key) continue;
+    layerSeenRef.current[layer] = key;
+    if (key !== null) layerOpenedRef.current[layer] = ++layerSeqRef.current;
+  }
+  // What a card's box holds that the reader typed and has not sent: kept by
+  // the card's annotation, so a card closed by Escape or a click reopens from
+  // its mark with the words still in its box.
+  const cardDraftsRef = useRef<Record<string, string>>({});
+  const keepCardDraft = (noteId: string | null | undefined, text: string, saved = "") => {
+    if (!noteId) return;
+    if (text !== saved && text.trim()) cardDraftsRef.current[noteId] = text;
+    else delete cardDraftsRef.current[noteId];
+  };
+  if (bubble) keepCardDraft(bubble.noteId, bubble.input);
+  if (simplifyCard) keepCardDraft(simplifyCard.noteId, simplifyCard.input);
+  if (assistantChat) keepCardDraft(assistantChat.noteId, assistantChat.input);
+  if (commentCard) keepCardDraft(commentCard.noteId, commentCard.draft, commentCard.saved);
+  if (annotationCard) keepCardDraft(annotationCard.noteId, annotationCard.draft, annotationCard.saved);
+  // Close one layer. A run in it goes on: Stop stops a run, never Escape or a
+  // click; what lands is kept on the annotation and its mark reopens it.
+  function closeLayer(layer: string) {
+    if (layer === "popover") {
+      setPopover(null);
+      setSubmenu(null);
+      // The page editor keeps the selection, as Google Docs does.
+      if (!richTextRef.current) window.getSelection()?.removeAllRanges();
+    } else if (layer === "pendingLink") broadcastPendingLink(null);
+    else if (layer === "explain") setBubble(null);
+    else if (layer === "simplify") setSimplifyCard(null);
+    else if (layer === "assistant") {
+      clearAnswerSelection();
+      setAssistantChat(null);
+    } else if (layer === "bar") setBar(null);
+    else if (layer === "comment") setCommentCard(null);
+    else if (layer === "link") setLinkCard(null);
+    else if (layer === "annotation") setAnnotationCard(null);
+    else if (layer === "extract") setExtractCard(null);
+    else if (layer === "chooser") setStackChooser(null);
+  }
+  const closeLayerRef = useRef(closeLayer);
+  closeLayerRef.current = closeLayer;
+  const openLayersRef = useRef<string[]>([]);
+  openLayersRef.current = Object.entries(layerKeys)
+    .filter(([, key]) => key !== null)
+    .map(([layer]) => layer)
+    .sort((a, b) => (layerOpenedRef.current[b] ?? 0) - (layerOpenedRef.current[a] ?? 0));
+  // A click on the pane outside every card closes the cards that have
+  // nothing left to do: no run in flight, no typed words in their box.
+  function closeIdleCards() {
+    setBubble((b) => (b && !b.streaming && !b.busy && !b.input.trim() ? null : b));
+    setSimplifyCard((c) => (c && !c.streaming && !c.busy && !c.input.trim() ? null : c));
+    setAssistantChat((c) => {
+      if (!c || c.busy || c.input.trim() || (c.queue?.length ?? 0) > 0) return c;
+      clearAnswerSelection();
+      return null;
+    });
+    setCommentCard((c) => (c && !c.busy && c.draft === c.saved ? null : c));
+    setLinkCard((c) => (c && !c.busy && !c.draft.trim() ? null : c));
+    setAnnotationCard((c) => (c && !c.busy && c.draft === c.saved ? null : c));
+    setExtractCard(null);
+    setStackChooser(null);
+  }
+  const closeIdleCardsRef = useRef(closeIdleCards);
+  closeIdleCardsRef.current = closeIdleCards;
+
+  // A quote dragged from the selection landed in a note: the selection was
+  // used, so its toolbar and tint go (SPEC.md §6).
+  useEffect(() => {
+    const onLanded = () => {
+      if (!popoverRef.current || popoverRef.current.figure) return;
+      setPopover(null);
+      setSubmenu(null);
+      if (!richTextRef.current) window.getSelection()?.removeAllRanges();
+    };
+    window.addEventListener(QUOTE_LANDED_EVENT, onLanded);
+    return () => window.removeEventListener(QUOTE_LANDED_EVENT, onLanded);
+  }, []);
+
+  // Escape closes one layer, the newest first (SPEC.md §6): the toolbar, a
+  // pending link, a card. It stops no run. With nothing open it leaves edit
+  // mode, saving unsaved typing on the way out.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       // Escape that dismisses a pinyin candidate list stays the IME's.
       if (isImeKey(e)) return;
-      const linkPending = pendingLinkRef.current !== null;
-      if (linkPending) broadcastPendingLink(null);
-      if (overlayOpenRef.current || linkPending) {
-        setPopover(null);
-        setSubmenu(null);
-        setBubble(null);
-        setSimplifyCard(null);
-        chatAbortRef.current?.abort();
-        chatAbortRef.current = null;
-        setAssistantChat(null);
-        setBar(null);
-        setCommentCard(null);
-        setLinkCard(null);
-        setAnnotationCard(null);
-        setExtractCard(null);
-        // The page editor keeps the selection, as Google Docs does.
-        if (!richTextRef.current) window.getSelection()?.removeAllRanges();
+      const top = openLayersRef.current[0];
+      if (top) {
+        closeLayerRef.current(top);
         return;
       }
       if (editModeRef.current) leaveEditMode();
@@ -2390,6 +2623,34 @@ export function ReaderInteractions({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const onClick = (e: MouseEvent) => {
+      if (e.button !== 0 || editModeRef.current || richTextRef.current) return;
+      const target = e.target instanceof Element ? e.target : null;
+      if (!target || !container.contains(target)) return;
+      // A press on a card, a control, or a mark is its own; a drag that
+      // selected words opens the toolbar.
+      if (
+        target.closest(
+          "[data-selection-popover], [data-side-card], [data-log-card], [data-annotation-card], [data-anchor-skip], mark, a, button, input, textarea, select, [role=dialog], [contenteditable=true]",
+        )
+      )
+        return;
+      if (window.getSelection()?.isCollapsed === false) return;
+      // A click on a core reads its block whole (SPEC.md §28); the button
+      // beside it folds it again.
+      const core = target.closest<HTMLElement>("[data-collapsed]");
+      if (core?.dataset.blockId) {
+        readWholeRef.current(core.dataset.blockId);
+        return;
+      }
+      closeIdleCardsRef.current();
+    };
+    container.addEventListener("click", onClick);
+    return () => container.removeEventListener("click", onClick);
   }, []);
 
   // Selection → popover, in reading AND edit mode: highlighting text while
@@ -2795,6 +3056,7 @@ export function ReaderInteractions({
     comment: commentCard?.anchor,
     link: linkCard?.anchor,
     log: logCard?.anchor,
+    annotation: annotationCard?.anchor,
   };
   const measureConnectors = useCallback(() => {
     const container = containerRef.current;
@@ -2806,8 +3068,11 @@ export function ReaderInteractions({
     const lines: { x1: number; y1: number; x2: number; y2: number }[] = [];
     // The log card (data-log-card) gets its line too; it is not a side card,
     // so it never takes a slot or pushes a card.
+    // The narrow reader's cards sit right under their paragraphs: no line.
+    const narrowText = narrowRef.current && !richTextRef.current;
     for (const el of container.querySelectorAll<HTMLElement>("[data-side-card], [data-log-card]")) {
       if (el.closest(".presence-exit")) continue;
+      if (narrowText && el.dataset.sideCard) continue;
       const anchor = cardAnchorsRef.current[el.dataset.sideCard ?? el.dataset.logCard ?? ""];
       if (!anchor) continue;
       const blockEl = container.querySelector<HTMLElement>(
@@ -2894,9 +3159,17 @@ export function ReaderInteractions({
   // come from the cards' boxes; targets from their inline top, so a card
   // mid-slide still counts where it will rest.
   const cardSizesRef = useRef<Record<string, string>>({});
+  // A card that grows into the card under it keeps that card in its place
+  // (SPEC.md §6): it stops at the room above it and scrolls inside, so a card
+  // the reader is reading never jumps when another answer lands. cap = the
+  // grown card's height limit, by kind; it lifts when a card opens or closes.
+  const [cardCaps, setCardCaps] = useState<Record<string, number>>({});
+  const CAP_MIN = 160;
   const settleSideCards = useCallback((grown: string | null) => {
     const container = containerRef.current;
     if (!container) return;
+    // The narrow reader places its cards under their paragraphs (layoutNarrowCards).
+    if (narrowRef.current && !richTextRef.current) return;
     type Box = { kind: string; top: number; left: number; right: number; height: number };
     const boxes: Box[] = [];
     for (const el of container.querySelectorAll<HTMLElement>("[data-side-card]")) {
@@ -2911,6 +3184,21 @@ export function ReaderInteractions({
       });
     }
     if (boxes.length < 2) return;
+    // A grown card that reaches a card under it stops above that card, when
+    // that leaves it room to read; else it pushes as before.
+    const grownBox = boxes.find((b) => b.kind === grown);
+    if (grownBox) {
+      const below = boxes
+        .filter((b) => b !== grownBox && b.left < grownBox.right && b.right > grownBox.left && b.top > grownBox.top)
+        .sort((a, b) => a.top - b.top)[0];
+      if (below && grownBox.top + grownBox.height + SETTLE_GAP > below.top) {
+        const room = below.top - SETTLE_GAP - grownBox.top;
+        if (room >= CAP_MIN) {
+          grownBox.height = room;
+          setCardCaps((caps) => (caps[grownBox.kind] === room ? caps : { ...caps, [grownBox.kind]: room }));
+        }
+      }
+    }
     // The grown card is placed first and stays; the rest settle top to bottom.
     const order = [
       ...boxes.filter((b) => b.kind === grown),
@@ -2942,6 +3230,7 @@ export function ReaderInteractions({
     if (moved.assistant !== undefined) setAssistantChat(lift<AssistantChat>("assistant"));
     if (moved.comment !== undefined) setCommentCard(lift<NonNullable<typeof commentCard>>("comment"));
     if (moved.link !== undefined) setLinkCard(lift<LinkCard>("link"));
+    if (moved.annotation !== undefined) setAnnotationCard(lift<AnnotationCard>("annotation"));
   }, []);
   // A card grows with its content up to the pane's height, then its body
   // scrolls (SPEC.md §6). A card anchored low in the pane still grows past the
@@ -2954,6 +3243,8 @@ export function ReaderInteractions({
   const keepCardInPane = useCallback((grown: string | null) => {
     const container = containerRef.current;
     if (!container || !grown) return;
+    // The narrow reader's cards sit in the text, under their paragraphs.
+    if (narrowRef.current && !richTextRef.current) return;
     // A page over the pane scrolls it to the top while it is open; that is not
     // where the cards under it sit, so nothing moves until it closes.
     if (distillOpenRef.current || conversationViewRef.current) return;
@@ -2972,8 +3263,105 @@ export function ReaderInteractions({
     else if (grown === "assistant") setAssistantChat(move<AssistantChat>);
     else if (grown === "comment") setCommentCard(move<NonNullable<typeof commentCard>>);
     else if (grown === "link") setLinkCard(move<LinkCard>);
+    else if (grown === "annotation") setAnnotationCard(move<AnnotationCard>);
   }, []);
-  const openCards = `${bubble !== null}${simplifyCard !== null}${assistantChat !== null}${commentCard !== null}${linkCard !== null}`;
+  // The narrow reader (SPEC.md §6): no room beside the words, so each card
+  // opens under the paragraph that ends its passage, and that paragraph's
+  // bottom margin grows by the cards' height, so the text after it moves down
+  // and no card covers a word. Two cards under one paragraph stack, the
+  // older first. A card the reader dragged elsewhere keeps its place and
+  // takes no room. A new card below the window brings itself into view,
+  // keeping the passage's first line on screen.
+  const movedCardsRef = useRef(new Set<string>());
+  const narrowShownRef = useRef(new Set<string>());
+  const layoutNarrowCards = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const narrow = narrowRef.current && !richTextRef.current && !distillOpenRef.current && !conversationViewRef.current;
+    const hosts = new Map<HTMLElement, { kind: string; el: HTMLElement; anchorTop: number }[]>();
+    if (narrow) {
+      for (const el of container.querySelectorAll<HTMLElement>("[data-side-card]")) {
+        if (el.closest(".presence-exit")) continue;
+        const kind = el.dataset.sideCard ?? "";
+        if (movedCardsRef.current.has(`${kind}:${layerSeenRef.current[kind] ?? ""}`)) continue;
+        const anchor = cardAnchorsRef.current[kind];
+        const box = anchor ? passageBox(container, anchor) : null;
+        if (!box) continue;
+        const host = drawnBlock(container, box.blockId);
+        if (!host) continue;
+        const list = hosts.get(host) ?? [];
+        list.push({ kind, el, anchorTop: box.top });
+        hosts.set(host, list);
+      }
+    }
+    // Paragraphs that no longer hold a card give their room back.
+    for (const el of container.querySelectorAll<HTMLElement>("[data-card-room]")) {
+      if (hosts.has(el)) continue;
+      el.style.marginBottom = el.dataset.cardRoom ?? "";
+      delete el.dataset.cardRoom;
+      delete el.dataset.cardRoomBase;
+    }
+    const crect = container.getBoundingClientRect();
+    const tops: Record<string, number> = {};
+    const ordered = [...hosts.keys()].sort((a, b) =>
+      a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
+    );
+    for (const host of ordered) {
+      const cards = hosts
+        .get(host)!
+        .sort((a, b) => (layerOpenedRef.current[a.kind] ?? 0) - (layerOpenedRef.current[b.kind] ?? 0));
+      // The paragraph's own margin, kept to give back when its cards close.
+      if (host.dataset.cardRoom === undefined) {
+        host.dataset.cardRoom = host.style.marginBottom;
+        host.dataset.cardRoomBase = String(parseFloat(getComputedStyle(host).marginBottom) || 0);
+      }
+      const base = parseFloat(host.dataset.cardRoomBase ?? "0") || 0;
+      const room = 8 + cards.reduce((sum, c) => sum + c.el.offsetHeight + CARD_GAP, 0);
+      host.style.marginBottom = `${base + room}px`;
+      let y = host.getBoundingClientRect().bottom - crect.top + container.scrollTop + 8;
+      for (const card of cards) {
+        tops[card.kind] = y;
+        y += card.el.offsetHeight + CARD_GAP;
+        // A card that just opened under the window comes into view.
+        const key = `${card.kind}:${layerSeenRef.current[card.kind] ?? ""}`;
+        if (!narrowShownRef.current.has(key)) {
+          narrowShownRef.current.add(key);
+          const viewBottom = container.scrollTop + container.clientHeight;
+          const want = tops[card.kind] + Math.min(card.el.offsetHeight, 220) - (viewBottom - 16);
+          const keep = card.anchorTop - container.scrollTop - 16;
+          const by = Math.min(want, keep);
+          if (by > 0) container.scrollBy({ top: by, behavior: "smooth" });
+        }
+      }
+    }
+    const place = <T extends { top: number }>(kind: string) => (c: T | null): T | null =>
+      c && tops[kind] !== undefined && Math.abs(c.top - tops[kind]) > 1 ? { ...c, top: tops[kind] } : c;
+    if (tops.explain !== undefined) setBubble(place<ExplainBubble>("explain"));
+    if (tops.simplify !== undefined) setSimplifyCard(place<SimplifyCard>("simplify"));
+    if (tops.assistant !== undefined) setAssistantChat(place<AssistantChat>("assistant"));
+    if (tops.comment !== undefined) setCommentCard(place<NonNullable<typeof commentCard>>("comment"));
+    if (tops.link !== undefined) setLinkCard(place<LinkCard>("link"));
+    if (tops.annotation !== undefined) setAnnotationCard(place<AnnotationCard>("annotation"));
+  }, []);
+  const layoutNarrowCardsRef = useRef(layoutNarrowCards);
+  layoutNarrowCardsRef.current = layoutNarrowCards;
+  useLayoutEffect(() => {
+    layoutNarrowCards();
+  });
+  const openCards = `${bubble !== null}${simplifyCard !== null}${assistantChat !== null}${commentCard !== null}${linkCard !== null}${annotationCard !== null}`;
+  // The room the column made for the cards goes back when the last one closes.
+  const anyCardOpen = openCards.includes("true");
+  const anyCardOpenRef = useRef(anyCardOpen);
+  anyCardOpenRef.current = anyCardOpen;
+  // A card opening or closing lifts the caps: the cards settle again.
+  useEffect(() => {
+    setCardCaps((caps) => (Object.keys(caps).length === 0 ? caps : {}));
+  }, [openCards]);
+  useEffect(() => {
+    if (anyCardOpen || cardsRoomRef.current === 0) return;
+    cardsRoomRef.current = 0;
+    setCardsRoom(0);
+  }, [anyCardOpen]);
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -2989,9 +3377,12 @@ export function ReaderInteractions({
         const before = cardSizesRef.current[kind];
         cardSizesRef.current[kind] = size;
         if (before !== undefined && before !== size) grown = kind;
+        // A card that opens tall (reopened from its mark with its turns)
+        // keeps its foot inside the pane too, not only one that grew.
+        keepCardInPane(kind);
       }
-      keepCardInPane(grown);
       settleSideCards(grown);
+      layoutNarrowCardsRef.current();
     });
     for (const el of container.querySelectorAll<HTMLElement>("[data-side-card]")) {
       if (!el.closest(".presence-exit")) observer.observe(el);
@@ -3381,7 +3772,7 @@ export function ReaderInteractions({
       const stored = annotationBubblesRef.current[sourceId];
       if (!stored || stored.kind === "comment" || stored.conversation.length === 0) return;
       if (openNoteIdsRef.current.has(stored.noteId)) return; // the card itself is open
-      const slot = claimSideSlot("log", markTop(sourceId));
+      const slot = claimSideSlot("log", markTop(sourceId), anchorOfSource(sourceId));
       const key = `${stored.noteId}:${stored.conversation.length}`;
       const cached = logCache.get(key)?.log ?? null;
       setLogCard({
@@ -3456,10 +3847,24 @@ export function ReaderInteractions({
   // the Annotations tab.
   useEffect(() => {
     const onOpen = (e: Event) => {
-      const { sourceId } = (e as CustomEvent<{ sourceId: string }>).detail;
+      const { sourceId, sources, x, y } = (
+        e as CustomEvent<{ sourceId: string; sources?: string[]; x?: number; y?: number }>
+      ).detail;
       const container = containerRef.current;
       // Another pane owns marks this pane does not paint.
       if (!container?.querySelector(`[data-source-id="${sourceId}"]`)) return;
+      // Words under two annotations or more: a small chooser at the click
+      // lists every one, and the one picked opens (SPEC.md §6).
+      if (sources && sources.length > 1 && x !== undefined && y !== undefined) {
+        const crect = container.getBoundingClientRect();
+        setStackChooser({
+          sources,
+          left: Math.max(8, Math.min(x - crect.left, container.clientWidth - 248)),
+          top: y - crect.top + container.scrollTop + 12,
+        });
+        return;
+      }
+      setStackChooser(null);
       const stored = annotationBubblesRef.current[sourceId];
       if (!stored) {
         // Highlight or comment: the on-mark card, right below the mark.
@@ -3476,6 +3881,28 @@ export function ReaderInteractions({
         const width = 300;
         // A pure highlight stores its quote as content; its comment starts empty.
         const comment = summary.content === (summary.quotedText ?? "") ? "" : summary.content;
+        // Words typed in the card before it closed come back (SPEC.md §6).
+        const draft = cardDraftsRef.current[summary.noteId] ?? comment;
+        // The block reader: the card docks beside the words like a tool card,
+        // or under the paragraph in a narrow reader — never on the words
+        // (SPEC.md §6).
+        if (!richTextRef.current) {
+          const anchor = anchorOfSource(sourceId);
+          const slot = claimSideSlot("annotation", markTop(sourceId), anchor);
+          setAnnotationCard({
+            sourceId,
+            noteId: summary.noteId,
+            kind: summary.kind,
+            color: summary.color,
+            quotedText: summary.quotedText,
+            draft,
+            saved: comment,
+            ...slot,
+            anchor,
+            busy: false,
+          });
+          return;
+        }
         // The page editor: the card docks in the margin, level with its words.
         const page =
           richTextRef.current && !splitRef.current ? pageGeometry(container, docsShiftRef.current) : null;
@@ -3487,7 +3914,7 @@ export function ReaderInteractions({
           kind: summary.kind,
           color: summary.color,
           quotedText: summary.quotedText,
-          draft: comment,
+          draft,
           saved: comment,
           // Clamped so the action row never lands under the mobile bottom bar.
           top: Math.min(
@@ -3517,24 +3944,24 @@ export function ReaderInteractions({
       // needs it, and SIMPLIFY's sentence mirroring maps against it.
       const anchor = anchorOfSource(sourceId);
       if (stored.kind === "assistant") {
-        const slot = claimSideSlot("assistant", top);
+        const slot = claimSideSlot("assistant", top, anchor);
         setAssistantChat({
           anchor,
           noteId: stored.noteId,
           ...slot,
           messages: parseTranscript(stored.content),
-          input: "",
+          input: cardDraftsRef.current[stored.noteId] ?? "",
           busy: false,
         });
         return;
       }
       if (stored.kind === "comment") {
-        const slot = claimSideSlot("comment", top);
+        const slot = claimSideSlot("comment", top, anchor);
         const summary = annotationsBySourceRef.current[sourceId];
         setCommentCard({
           ...slot,
           noteId: summary?.noteId ?? null,
-          draft: stored.content,
+          draft: (summary?.noteId ? cardDraftsRef.current[summary.noteId] : undefined) ?? stored.content,
           saved: stored.content,
           busy: false,
           anchor,
@@ -3548,13 +3975,15 @@ export function ReaderInteractions({
       // lose them. Whichever copy is longer is the newer one.
       const local = toolConversationsRef.current[stored.noteId] ?? [];
       const conversation = local.length > stored.conversation.length ? local : stored.conversation;
+      const typed = cardDraftsRef.current[stored.noteId] ?? "";
       const chat: ToolChat = {
         ...NO_CHAT,
         conversation,
-        chatOpen: conversation.length > 0,
+        input: typed,
+        chatOpen: conversation.length > 0 || typed !== "",
       };
       if (stored.kind === "explain" || stored.kind === "analyze" || stored.kind === "visualize") {
-        const slot = claimSideSlot("explain", top);
+        const slot = claimSideSlot("explain", top, anchor);
         setBubble({
           ...slot,
           ...chat,
@@ -3574,7 +4003,7 @@ export function ReaderInteractions({
         );
         return;
       }
-      const slot = claimSideSlot("simplify", top);
+      const slot = claimSideSlot("simplify", top, anchor);
       setSimplifyCard({
         anchor,
         ...slot,
@@ -3609,7 +4038,7 @@ export function ReaderInteractions({
     const page = richTextRef.current ? pageGeometry(container, docsShiftRef.current) : null;
     const isNarrow =
       splitRef.current ||
-      (page ? marginPlace(page) === null : measured.cw - measured.articleRight < NARROW_GUTTER);
+      (page ? marginPlace(page) === null : cardRoom(columnAtRest(measured, cardsRoomRef.current)) === null);
     if (isNarrow !== narrowRef.current) {
       narrowRef.current = isNarrow;
       if (isNarrow) {
@@ -3617,6 +4046,10 @@ export function ReaderInteractions({
         setSimplifyCard((c) => (c && !c.streaming && !c.busy && c.noteId ? null : c));
         setAssistantChat((c) => (c && !c.busy && c.noteId ? null : c));
         setCommentCard((c) => (c && !c.busy && c.noteId && c.draft === c.saved ? null : c));
+        setAnnotationCard((c) => (c && !c.busy && c.draft === c.saved ? null : c));
+        // No room to make beside the words: the column goes back.
+        cardsRoomRef.current = 0;
+        setCardsRoom(0);
       }
     }
     return measured;
@@ -3639,7 +4072,14 @@ export function ReaderInteractions({
       lastWidth = width;
       const measured = applyNarrow();
       if (!measured) return;
-      const { articleLeft, articleRight, cw } = measured;
+      // The column at rest at the new width, and the room it makes now.
+      const col = columnAtRest(measured, cardsRoomRef.current);
+      const room = richTextRef.current || narrowRef.current ? null : cardRoom(col);
+      const shift = room && anyCardOpenRef.current ? room.shift : 0;
+      if (!richTextRef.current && shift !== cardsRoomRef.current) {
+        cardsRoomRef.current = shift;
+        setCardsRoom(shift);
+      }
       // The page editor: the margin at the new width, else under the words.
       const page = richTextRef.current ? pageGeometry(container, docsShiftRef.current) : null;
       const place = page && !narrowRef.current ? marginPlace(page) : null;
@@ -3649,17 +4089,32 @@ export function ReaderInteractions({
           ? place
             ? { left: place.left, width: place.width }
             : belowSlot(page, 0)
-          : narrowRef.current
-            ? dockBelowCard(articleLeft, articleRight, cw)
-            : dockSideCard(side, articleLeft, articleRight, cw);
-      setBubble((b) => (b ? { ...b, ...redock(b.side) } : b));
-      setSimplifyCard((c) => (c ? { ...c, ...redock(c.side) } : c));
-      setAssistantChat((c) => (c ? { ...c, ...redock(c.side) } : c));
-      setCommentCard((c) => (c ? { ...c, ...redock(c.side) } : c));
-      setLinkCard((c) => (c ? { ...c, ...redock(c.side) } : c));
-      setAnnotationCard(null);
-      setPopover(null);
-      setSubmenu(null);
+          : !room
+            ? dockBelowCard(col.articleLeft, col.articleRight, col.cw)
+            : dockSideCard(room[side] ? side : "right", col, shift);
+      const sideOf = (side: "right" | "left") => (room && !room[side] ? "right" : side);
+      setBubble((b) => (b ? { ...b, ...redock(b.side), side: sideOf(b.side) } : b));
+      setSimplifyCard((c) => (c ? { ...c, ...redock(c.side), side: sideOf(c.side) } : c));
+      setAssistantChat((c) => (c ? { ...c, ...redock(c.side), side: sideOf(c.side) } : c));
+      setCommentCard((c) => (c ? { ...c, ...redock(c.side), side: sideOf(c.side) } : c));
+      setLinkCard((c) => (c ? { ...c, ...redock(c.side), side: sideOf(c.side) } : c));
+      // The on-mark card docks like a side card in the block reader; the
+      // page editor's margin moves it on its own (below).
+      if (page) setAnnotationCard(null);
+      else setAnnotationCard((c) => (c ? { ...c, ...redock(c.side ?? "right"), side: sideOf(c.side ?? "right") } : c));
+      // The toolbar follows its words to their new place (SPEC.md §6): the
+      // selection is still there, so it is measured again. A toolbar with no
+      // live selection under it (a figure, a key term) closes.
+      const open = popoverRef.current;
+      const again = open && !open.figure && !open.term ? captureSelectionRef.current() : null;
+      if (open && again && again.anchor.blockId === open.anchor.blockId && again.anchor.startOffset === open.anchor.startOffset && again.anchor.endOffset === open.anchor.endOffset) {
+        // The same words: the anchor object stays, so a run sent from this
+        // toolbar still knows it.
+        setPopover({ ...again, anchor: open.anchor });
+      } else {
+        setPopover(null);
+        setSubmenu(null);
+      }
     });
     observer.observe(container);
     return () => observer.disconnect();
@@ -3882,6 +4337,29 @@ export function ReaderInteractions({
   // The New glow (SPEC.md §18) on the Collapse button until it is pressed.
   const collapseNew = useNewFeature("collapse");
   const [flippedBlocks, setFlippedBlocks] = useState<ReadonlySet<string>>(() => new Set());
+  // Collapse on or off, or one block read whole or folded, draws other
+  // words: a card about words no longer drawn closes, and its mark reopens
+  // it on the layer it was made on (SPEC.md §28). A card with a run in
+  // flight or typed words stays.
+  const collapseView = `${collapseOn}:${[...flippedBlocks].join(",")}:${cores !== null}`;
+  const collapseViewRef = useRef(collapseView);
+  useEffect(() => {
+    if (collapseViewRef.current === collapseView) return;
+    collapseViewRef.current = collapseView;
+    const container = containerRef.current;
+    if (!container) return;
+    const drawn = (anchor: Anchor | null | undefined) =>
+      !anchor || segmentsOf(anchor).some((segment) => drawnBlock(container, segment.blockId) !== null);
+    const idle = (c: { streaming?: boolean; busy: boolean; input?: string }) =>
+      !c.streaming && !c.busy && !(c.input ?? "").trim();
+    setBubble((b) => (b && !drawn(b.anchor) && idle(b) ? null : b));
+    setSimplifyCard((c) => (c && !drawn(c.anchor) && idle(c) ? null : c));
+    setAssistantChat((c) => (c && !drawn(c.anchor) && idle(c) ? null : c));
+    setCommentCard((c) => (c && !drawn(c.anchor) && !c.busy && c.draft === c.saved ? null : c));
+    setLinkCard((c) => (c && !drawn(c.anchor) && !c.busy && !c.draft.trim() ? null : c));
+    setAnnotationCard((c) => (c && !drawn(c.anchor) && !c.busy && c.draft === c.saved ? null : c));
+    setLogCard(null);
+  }, [collapseView]);
   const collapseStoreKey = `unitos-collapse-${documentId}`;
   // Whether the cores the article opens with have been read (a jump waits
   // for them: coresComingRef).
@@ -4119,6 +4597,18 @@ export function ReaderInteractions({
     let bottom = el.getBoundingClientRect().bottom;
     for (const child of el.children) bottom = Math.max(bottom, child.getBoundingClientRect().bottom);
     const overflow = Math.ceil(bottom - container.getBoundingClientRect().bottom + 20);
+    // The page editor under the words (SPEC.md §29): the compact toolbox
+    // stands above the words whenever the room above holds it, so it covers
+    // lines already read, and the pane never scrolls on its own for it.
+    if (popover.side === "below" && popover.page && !popover.above) {
+      const containerTop = container.getBoundingClientRect().top;
+      const ceiling = container.querySelector(".docs-header")?.getBoundingClientRect().bottom ?? containerTop + 48;
+      const height = bottom - el.getBoundingClientRect().top;
+      if (popover.wordsTop !== undefined && popover.wordsTop - container.scrollTop + containerTop - ceiling >= height + 8) {
+        setPopover((p) => (p === popover ? { ...p, above: true } : p));
+      }
+      return;
+    }
     if (overflow <= 0) return;
     if (popover.side === "below") {
       // The room above runs from the words' first line up to the page
@@ -4138,8 +4628,10 @@ export function ReaderInteractions({
     }
     const floor = container.scrollTop + 8;
     setPopover((p) => (p === popover ? { ...p, yTop: Math.max(floor, p.yTop - overflow) } : p));
+    // A field that opens (the assistant's box, Comment, Define) grows the
+    // stack: it is measured again, so the box stays inside the pane.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [popoverAnchorKey]);
+  }, [popoverAnchorKey, submenu, definition?.text]);
 
   // A definition on its way stops when its popover closes or moves to
   // another selection: nobody is left to read it.
@@ -4307,7 +4799,12 @@ export function ReaderInteractions({
         jumpToWords(blockId, 10);
         return;
       }
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      // A part lands with its heading at the reading line, where a reader
+      // starts reading (SPEC.md §6), not mid-pane.
+      if (container) {
+        const top = el.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
+        container.scrollTo({ top: Math.max(0, top - READING_LINE_PX), behavior: "smooth" });
+      } else el.scrollIntoView({ behavior: "smooth", block: "start" });
       flashElement(el);
     };
     window.addEventListener("dissect:flash-block", onFlashBlock);
@@ -4523,9 +5020,10 @@ export function ReaderInteractions({
         ...segmentsBody(popover.anchor),
       });
       addedToNotes(popover.anchor);
-      // A blank document opens with the tray folded (SPEC.md §29): the tray
-      // opens on the new note, so the reader sees where it went.
-      if (richTextRef.current) window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: note.id } }));
+      // The tray opens on the new note, so the reader sees where it went
+      // (SPEC.md §6): every document, and a blank one whose tray starts
+      // folded (SPEC.md §29).
+      window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: note.id } }));
     } catch (err) {
       showError(err instanceof Error ? err.message : t("reader.addFailed"));
     } finally {
@@ -4691,7 +5189,72 @@ export function ReaderInteractions({
     setPopover(null);
     window.getSelection()?.removeAllRanges();
     markFreshAnchor(anchor);
-    await runBubble(kind, anchor, claimSideSlot("explain", yTop));
+    await runBubble(kind, anchor, claimSideSlot("explain", yTop, anchor));
+  }
+  // A new run of a card. Runs are never stopped by another run (SPEC.md §6):
+  // only Stop or ✕ on their own card stops them.
+  function startToolRun(): { run: number; controller: AbortController } {
+    const run = ++toolRunSeqRef.current;
+    const controller = new AbortController();
+    toolRunsRef.current.set(run, controller);
+    return { run, controller };
+  }
+  // A run whose card a later run took over lands its annotation all the
+  // same: the mark paints, and a toast offers the card where its words are.
+  function landedAway(
+    kind: ExplainBubble["kind"] | "simplify",
+    anchor: Anchor,
+    text: string,
+    noteId: string,
+  ) {
+    const ready =
+      kind === "simplify"
+        ? "reader.simplifiedReady"
+        : kind === "analyze"
+          ? "reader.analysisReady"
+          : kind === "visualize"
+            ? "reader.visualizationReady"
+            : "reader.explanationReady";
+    showToast(t(ready), {
+      label: t("reader.showCard"),
+      run: () => {
+        hideToast();
+        const box = containerRef.current ? passageBox(containerRef.current, anchor) : null;
+        const top = box?.top ?? containerRef.current?.scrollTop ?? 80;
+        if (kind === "simplify") {
+          setSimplifyCard({
+            anchor,
+            ...claimSideSlot("simplify", top, anchor),
+            ...NO_CHAT,
+            text,
+            streaming: false,
+            error: null,
+            noteId,
+            sentences: parseSimplified(text),
+            active: null,
+          });
+        } else {
+          setBubble({
+            ...claimSideSlot("explain", top, anchor),
+            ...NO_CHAT,
+            kind,
+            text,
+            streaming: false,
+            error: null,
+            declined: null,
+            anchor,
+            noteId,
+          });
+        }
+        // The words come into view under the card's top.
+        if (box && containerRef.current) {
+          const pane = containerRef.current;
+          if (box.top < pane.scrollTop || box.top > pane.scrollTop + pane.clientHeight - 120) {
+            pane.scrollTo({ top: Math.max(0, box.top - 120), behavior: "smooth" });
+          }
+        }
+      },
+    }, 12000);
   }
   // replaceNoteId: the annotation this run regenerates. It goes only once the
   // new one is stored, so a failed run never loses what stands (SPEC.md §4).
@@ -4705,10 +5268,9 @@ export function ReaderInteractions({
       await runVisualize(anchor, slot, replaceNoteId);
       return;
     }
-    setBubble({ ...slot, ...NO_CHAT, kind, text: "", streaming: true, error: null, declined: null, anchor, noteId: null });
-    explainAbortRef.current?.abort();
-    const controller = new AbortController();
-    explainAbortRef.current = controller;
+    const { run, controller } = startToolRun();
+    const mine = (b: ExplainBubble | null): b is ExplainBubble => b !== null && b.run === run;
+    setBubble({ ...slot, ...NO_CHAT, kind, text: "", streaming: true, error: null, declined: null, anchor, noteId: null, run });
     try {
       const res = await fetch("/api/derive", {
         method: "POST",
@@ -4728,17 +5290,18 @@ export function ReaderInteractions({
         if (done) break;
         raw += decoder.decode(value, { stream: true });
         const live = splitStreamNote(splitStreamError(raw).text).text;
-        setBubble((b) => (b ? { ...b, text: live } : b));
+        setBubble((b) => (mine(b) ? { ...b, text: live } : b));
       }
       // A failure mid-stream arrives in-band; an empty stream is a failure too.
       // The note id trailer means the annotation persisted before the stream
       // closed, so the refresh below always finds the stored mark; the mark
-      // paints from here until then, card open or closed.
+      // paints from here until then, card open or closed, as the tool's mark.
       const { text: withoutError, error } = splitStreamError(raw);
       const { text, noteId } = splitStreamNote(withoutError);
-      if (noteId) addLocalAnchor(anchor);
+      if (noteId) addLocalAnchor(anchor, kind);
+      if (noteId && !error && text.trim() && bubbleRef.current?.run !== run) landedAway(kind, anchor, text, noteId);
       setBubble((b) =>
-        b
+        mine(b)
           ? {
               ...b,
               text,
@@ -4753,13 +5316,13 @@ export function ReaderInteractions({
     } catch (err) {
       // Stopped, not failed: what streamed in stays; an empty card closes.
       if (controller.signal.aborted) {
-        setBubble((b) => (b && b.text.trim() ? { ...b, streaming: false } : null));
+        setBubble((b) => (mine(b) ? (b.text.trim() ? { ...b, streaming: false } : null) : b));
         return;
       }
       const message = err instanceof Error ? err.message : t("reader.deriveFailed");
-      setBubble((b) => (b ? { ...b, streaming: false, error: message } : b));
+      setBubble((b) => (mine(b) ? { ...b, streaming: false, error: message } : b));
     } finally {
-      if (explainAbortRef.current === controller) explainAbortRef.current = null;
+      toolRunsRef.current.delete(run);
     }
   }
 
@@ -4772,9 +5335,11 @@ export function ReaderInteractions({
     setPopover(null);
     window.getSelection()?.removeAllRanges();
     markFreshAnchor(anchor);
-    await runSimplify(anchor, claimSideSlot("simplify", yTop));
+    await runSimplify(anchor, claimSideSlot("simplify", yTop, anchor));
   }
   async function runSimplify(anchor: Anchor, slot: SideSlot, replaceNoteId?: string | null) {
+    const { run, controller } = startToolRun();
+    const mine = (c: SimplifyCard | null): c is SimplifyCard => c !== null && c.run === run;
     setSimplifyCard({
       anchor,
       ...slot,
@@ -4785,10 +5350,8 @@ export function ReaderInteractions({
       noteId: null,
       sentences: null,
       active: null,
+      run,
     });
-    simplifyAbortRef.current?.abort();
-    const controller = new AbortController();
-    simplifyAbortRef.current = controller;
     try {
       const res = await fetch("/api/derive", {
         method: "POST",
@@ -4808,16 +5371,17 @@ export function ReaderInteractions({
         if (done) break;
         raw += decoder.decode(value, { stream: true });
         const live = splitStreamNote(splitStreamError(raw).text).text;
-        setSimplifyCard((c) => (c ? { ...c, text: live } : c));
+        setSimplifyCard((c) => (mine(c) ? { ...c, text: live } : c));
       }
       // A failure mid-stream arrives in-band; an empty stream is a failure too.
       // The note id trailer means the annotation persisted before the stream
       // closed, so the refresh below always finds the stored mark.
       const { text: withoutError, error } = splitStreamError(raw);
       const { text, noteId } = splitStreamNote(withoutError);
-      if (noteId) addLocalAnchor(anchor);
+      if (noteId) addLocalAnchor(anchor, "simplify");
+      if (noteId && !error && text.trim() && simplifyCardRef.current?.run !== run) landedAway("simplify", anchor, text, noteId);
       setSimplifyCard((c) =>
-        c
+        mine(c)
           ? {
               ...c,
               text,
@@ -4834,13 +5398,13 @@ export function ReaderInteractions({
     } catch (err) {
       // Stopped, not failed: what streamed in stays; an empty card closes.
       if (controller.signal.aborted) {
-        setSimplifyCard((c) => (c && c.text.trim() ? { ...c, streaming: false } : null));
+        setSimplifyCard((c) => (mine(c) ? (c.text.trim() ? { ...c, streaming: false } : null) : c));
         return;
       }
       const message = err instanceof Error ? err.message : t("reader.simplifyFailed");
-      setSimplifyCard((c) => (c ? { ...c, streaming: false, error: message } : c));
+      setSimplifyCard((c) => (mine(c) ? { ...c, streaming: false, error: message } : c));
     } finally {
-      if (simplifyAbortRef.current === controller) simplifyAbortRef.current = null;
+      toolRunsRef.current.delete(run);
     }
   }
 
@@ -4859,9 +5423,11 @@ export function ReaderInteractions({
     setPopover(null);
     window.getSelection()?.removeAllRanges();
     markFreshAnchor(anchor);
-    await runVisualize(anchor, claimSideSlot("explain", yTop));
+    await runVisualize(anchor, claimSideSlot("explain", yTop, anchor));
   }
   async function runVisualize(anchor: Anchor, slot: SideSlot, replaceNoteId?: string | null) {
+    const { run, controller } = startToolRun();
+    const mine = (b: ExplainBubble | null): b is ExplainBubble => b !== null && b.run === run;
     setBubble({
       ...slot,
       ...NO_CHAT,
@@ -4872,10 +5438,8 @@ export function ReaderInteractions({
       declined: null,
       anchor,
       noteId: null,
+      run,
     });
-    explainAbortRef.current?.abort();
-    const controller = new AbortController();
-    explainAbortRef.current = controller;
     try {
       const res = await fetch("/api/derive", {
         method: "POST",
@@ -4906,26 +5470,27 @@ export function ReaderInteractions({
       if (!payload) throw new Error(t("reader.emptyResponse"));
       if (payload.declined) {
         const reason = payload.reason ?? "";
-        setBubble((b) => (b ? { ...b, streaming: false, declined: reason } : b));
+        setBubble((b) => (mine(b) ? { ...b, streaming: false, declined: reason } : b));
         return;
       }
       const content = payload.content ?? "";
       const noteId = payload.noteId ?? null;
       if (!content.trim()) throw new Error(t("reader.emptyResponse"));
-      if (noteId) addLocalAnchor(anchor);
-      setBubble((b) => (b ? { ...b, text: content, noteId, streaming: false } : b));
+      if (noteId) addLocalAnchor(anchor, "visualize");
+      if (noteId && bubbleRef.current?.run !== run) landedAway("visualize", anchor, content, noteId);
+      setBubble((b) => (mine(b) ? { ...b, text: content, noteId, streaming: false } : b));
       if (replaceNoteId && noteId) await discardNote(replaceNoteId);
       router.refresh();
     } catch (err) {
       // Stopped, not failed: nothing to keep, the card closes.
       if (controller.signal.aborted) {
-        setBubble(null);
+        setBubble((b) => (mine(b) ? null : b));
         return;
       }
       const message = err instanceof Error ? err.message : t("reader.visualizeFailed");
-      setBubble((b) => (b ? { ...b, streaming: false, error: message } : b));
+      setBubble((b) => (mine(b) ? { ...b, streaming: false, error: message } : b));
     } finally {
-      if (explainAbortRef.current === controller) explainAbortRef.current = null;
+      toolRunsRef.current.delete(run);
     }
   }
 
@@ -5591,7 +6156,7 @@ export function ReaderInteractions({
         }),
       );
       // The link card: what is this link about?
-      const slot = claimSideSlot("link", top);
+      const slot = claimSideSlot("link", top, to);
       setLinkCard({
         linkId: created.id,
         anchor: to,
@@ -5671,25 +6236,34 @@ export function ReaderInteractions({
   async function runAssistant(commandText?: string) {
     const command = (commandText ?? aiCommandRef.current).trim();
     if (!command || aiBusy || !popover) return;
-    const { anchor, yTop } = popover;
+    const sent = popover;
+    const { anchor } = sent;
     setAiBusy(true);
+    // The question leaves the field for the line above it: the next one can
+    // be typed while this one runs (SPEC.md §6).
+    setAiSent({ text: command, from: anchor });
+    setAiError(null);
+    if (!commandText) setAiCommand("");
     const controller = new AbortController();
     chatAbortRef.current = controller;
     try {
       await flushLiveBlock(anchor.blockId);
       const turn = await assistantTurn(command, anchor, [], null, controller.signal);
-      setPopover(null);
-      setSubmenu(null);
-      setAiCommand("");
-      window.getSelection()?.removeAllRanges();
+      // The reader may have moved on to other words while the answer ran:
+      // their toolbar and selection stay. Only the toolbar that sent the
+      // question closes.
+      if (popoverRef.current?.anchor === sent.anchor) {
+        setPopover(null);
+        setSubmenu(null);
+        window.getSelection()?.removeAllRanges();
+      }
       // The conversation continues in a chat card docked beside the article.
       markFreshAnchor(anchor);
       if (turn.noteId) addLocalAnchor(anchor, "assistant");
-      const slot = claimSideSlot("assistant", yTop);
-      setAssistantChat({
+      const chat = (top: number): AssistantChat => ({
         anchor,
         noteId: turn.noteId,
-        ...slot,
+        ...claimSideSlot("assistant", top, anchor),
         messages: [
           { role: "user", content: command },
           { role: "assistant", content: turn.reply, suggestKey: turn.suggestKey },
@@ -5697,13 +6271,46 @@ export function ReaderInteractions({
         input: "",
         busy: false,
       });
+      // The card opens beside the words where they are now; words the reader
+      // scrolled away from get a toast that brings the card and the words back.
+      const pane = containerRef.current;
+      const box = pane ? passageBox(pane, anchor) : null;
+      const inView =
+        !pane || !box || (box.bottom > pane.scrollTop + 24 && box.top < pane.scrollTop + pane.clientHeight - 24);
+      if (inView) {
+        setAssistantChat(chat(box?.top ?? sent.yTop));
+      } else {
+        showToast(
+          t("reader.answerReady"),
+          {
+            label: t("reader.showCard"),
+            run: () => {
+              hideToast();
+              const now = containerRef.current ? passageBox(containerRef.current, anchor) : null;
+              setAssistantChat(chat(now?.top ?? sent.yTop));
+              if (now && containerRef.current) {
+                containerRef.current.scrollTo({ top: Math.max(0, now.top - 120), behavior: "smooth" });
+              }
+            },
+          },
+          12000,
+        );
+      }
     } catch (err) {
-      // Stopped, not failed: the command stays in the box to edit or resend.
+      // Stopped, not failed: the question comes back to the box to edit or
+      // resend, unless the reader typed a new one meanwhile.
+      if (!commandText) setAiCommand((c) => (c.trim() ? c : command));
       if (controller.signal.aborted) return;
-      showError(err instanceof Error ? err.message : t("reader.assistantFailed"));
+      const message = err instanceof Error ? err.message : t("reader.assistantFailed");
+      // The error shows in the box that asked; with that box gone, as a toast.
+      if (popoverRef.current?.anchor === sent.anchor) {
+        setAiError({ text: message, from: anchor });
+        reportError(message, documentId);
+      } else showError(message);
     } finally {
       if (chatAbortRef.current === controller) chatAbortRef.current = null;
       setAiBusy(false);
+      setAiSent(null);
     }
   }
 
@@ -5721,6 +6328,7 @@ export function ReaderInteractions({
       key: queuedKey(),
       anchor: target.anchor,
       yTop: target.yTop,
+      wordsBottom: target.y - (target.side === "below" ? 14 : 6),
       noteId: null,
       messages: [],
       input: "",
@@ -5746,6 +6354,12 @@ export function ReaderInteractions({
     const replacing = pending ? suggestRunsRef.current.get(pending)?.ids : undefined;
     const same = (b: AssistantBar | null): b is AssistantBar => b?.key === key;
     setBar({ ...current, busy: true, error: null, input: chip ? current.input : "" });
+    // The passage keeps the thin mark alone while the command runs (SPEC.md
+    // §6): the selection's gray fill goes as the command is sent.
+    const editor = pageEditorIn(containerRef.current);
+    if (editor && !editor.isDestroyed && !editor.state.selection.empty) {
+      editor.commands.setTextSelection(editor.state.selection.to);
+    }
     const controller = new AbortController();
     barAbortRef.current = controller;
     try {
@@ -5774,9 +6388,28 @@ export function ReaderInteractions({
   // The bar's conversation goes on in the chat card beside the words.
   function barToCard(b: AssistantBar) {
     setBar(null);
-    const slot = claimSideSlot("assistant", b.yTop);
+    const slot = claimSideSlot("assistant", b.yTop, b.anchor);
     setAssistantChat({ anchor: b.anchor, noteId: b.noteId, ...slot, messages: b.messages, input: "", busy: false });
   }
+
+  // The bar never covers the words it acts on (SPEC.md §29): when it opens
+  // over them, the pane scrolls until their last line stands 16px above the
+  // bar, and the suggestions land in view.
+  const barOpenKey = bar?.key ?? null;
+  useEffect(() => {
+    if (!barOpenKey) return;
+    const raf = requestAnimationFrame(() => {
+      const container = containerRef.current;
+      const el = container?.querySelector<HTMLElement>("[data-assistant-bar]");
+      const current = barRef.current;
+      if (!container || !el || !current) return;
+      const crect = container.getBoundingClientRect();
+      const wordsBottom = current.wordsBottom - container.scrollTop + crect.top;
+      const over = wordsBottom - (el.getBoundingClientRect().top - 16);
+      if (over > 0) container.scrollBy({ top: over, behavior: "smooth" });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [barOpenKey]);
 
   // A press anywhere but the bar closes it.
   const barOpen = bar !== null;
@@ -5841,6 +6474,7 @@ export function ReaderInteractions({
       // Every plan waits for approval (SPEC.md §1: nothing applies unaccepted).
       setAiPlan(plan);
       setPlanChecked(new Set(plan.actions.map((_, i) => i)));
+      setPlanFrom("chat");
       parts.push(t("reader.proposedActions", { n, s: plural(n) }));
     }
     // The assistant's suggestions land in the text: pending by construction
@@ -7598,6 +8232,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   // Every tool card grows with its content up to the pane's height, then its
   // body scrolls (SPEC.md §6). Unmeasured (the SSR pass): no cap.
   const cardMaxHeight = paneHeight > 0 ? Math.max(200, paneHeight - 24) : undefined;
+  // The full conversation view lies over the pane (SPEC.md §21): the cards
+  // stay open under it, out of sight, so none covers the view.
+  const underView = conversationView !== null ? " invisible" : "";
+  // A card capped above the card under it (settleSideCards) scrolls inside.
+  const cardHeight = (kind: string) =>
+    cardCaps[kind] !== undefined ? Math.min(cardMaxHeight ?? Infinity, cardCaps[kind]) : cardMaxHeight;
 
   // A tool conversation's turns, under the output inside the card's scroll
   // body (SPEC.md §21): the reader's messages as chat bubbles, the assistant's
@@ -7994,6 +8634,88 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           content: commentCard.saved,
         })
       : null;
+  // The plan's checklist and its buttons: under the answer in the chat card
+  // that proposed it, or in the card at the window's foot for the panel's.
+  const planBody = aiPlan ? (
+    <>
+      <div className="mb-2 flex items-center gap-2">
+        <SparkleIcon size={15} className="text-clay" />
+        <span className="font-display text-[15px]">{t("reader.assistantPlan")}</span>
+        <span className="ml-auto rounded-full bg-sand-200 px-2.5 py-0.5 text-[10px] font-semibold text-sand-600">
+          {t("reader.askFirst")}
+        </span>
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      {aiPlan.reply && (
+        <div className="mb-2 text-[13px]">
+          <Markdown>{aiPlan.reply}</Markdown>
+        </div>
+      )}
+      <div className="flex flex-col gap-1.5">
+        {aiPlan.actions.map((action, i) => (
+          <label
+            key={i}
+            className="flex cursor-pointer items-start gap-2 rounded-xl bg-sand-100 px-3 py-2 text-[12.5px]"
+          >
+            <input
+              type="checkbox"
+              className="mt-0.5 accent-clay"
+              checked={planChecked.has(i)}
+              onChange={() =>
+                setPlanChecked((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(i)) next.delete(i);
+                  else next.add(i);
+                  return next;
+                })
+              }
+            />
+            <span className="min-w-0">
+              <span className="mr-1.5 rounded-full bg-sand-200 px-2 py-0.5 text-[10px] font-semibold text-sand-700">
+                {t(ACTION_LABEL_KEY[action.type])}
+              </span>
+              {action.description}
+              {actionDetail(action, blocks, attachedDocuments, t) && (
+                <span className="mt-0.5 block text-[11px] text-sand-500">
+                  {actionDetail(action, blocks, attachedDocuments, t)}
+                </span>
+              )}
+            </span>
+          </label>
+        ))}
+      </div>
+      </div>
+      {aiPlan.warnings.length > 0 && (
+        <ul className="mt-2 flex flex-col gap-1 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+          {aiPlan.warnings.map((w, i) => (
+            <li key={i} className="text-[11.5px] font-medium text-amber-700 dark:text-amber-400">
+              ⚠ {w}
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-3 flex items-center gap-2">
+        <button
+          disabled={planChecked.size === 0}
+          onClick={() => void approvePlan()}
+          data-track="plan-apply"
+          data-tip={t("reader.applyActionsTitle")}
+          className="rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+        >
+          {t("reader.applyActions", { n: planChecked.size, s: plural(planChecked.size) })}
+        </button>
+        <button
+          onClick={() => setAiPlan(null)}
+          data-track="plan-cancel"
+          data-tip={t("reader.discardPlanTitle")}
+          className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+        >
+          {t("common.cancel")}
+        </button>
+      </div>
+    </>
+  ) : null;
+  const planInCard = aiPlan !== null && planFrom === "chat" && assistantChat !== null;
   const barKey = bar ? barRunKey(bar) : null;
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
@@ -8040,7 +8762,15 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       data-page-editor={richText ? "" : undefined}
       data-import={richText?.imported ? "" : undefined}
       data-docs-shift={richText && docsShift > 0 ? "" : undefined}
-      style={richText ? ({ "--docs-shift": `${docsShift}px` } as React.CSSProperties) : undefined}
+      // The column moves left to make room for a side card (SPEC.md §6, globals.css).
+      data-cards-room={!richText && cardsRoom > 0 ? "" : undefined}
+      style={
+        richText
+          ? ({ "--docs-shift": `${docsShift}px` } as React.CSSProperties)
+          : cardsRoom > 0
+            ? ({ "--cards-room": `${cardsRoom}px` } as React.CSSProperties)
+            : undefined
+      }
       // While the extract page is open it scrolls itself; the article
       // underneath must not scroll away, so the pane clips instead. An
       // embedded layer scrolls with the pane around it.
@@ -8166,6 +8896,13 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       </div>
       </div>
 
+      {/* The article's band (SPEC.md §6): Contents at the left and Collapse
+          and Extract at the right stand on it, and the text scrolls under
+          it, so they never sit on a word. */}
+      {!split && !transcript && !embedded && !richText && (
+        <div aria-hidden data-article-band className="pointer-events-none sticky top-0 z-[9] -mb-6 h-14 bg-paper print:hidden" />
+      )}
+
       {/* Not in a split pane: the card would sit over the title. Not on a
           transcript: it has no edit mode. Under the toast, which may reach
           down over it. It yields while a toolbar is open: the stack beside
@@ -8248,12 +8985,50 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       {richText && <CardColumn ref={setColumnHost} split={split} comments={columnComments} />}
       {inColumn(<>
       <Presence show={annotationCard !== null} exit="pop">
+      {stackChooser && (
+        <div
+          data-selection-popover
+          data-stack-chooser
+          role="menu"
+          className={`pop-in absolute ${TOOL_LAYER} flex w-60 flex-col gap-0.5 rounded-2xl border border-line bg-card p-1.5 shadow-float`}
+          style={{ left: stackChooser.left, top: stackChooser.top }}
+        >
+          {stackChooser.sources.map((sid) => {
+            const tool = annotationBubbles[sid];
+            const summary = annotationsBySource[sid];
+            const kind = tool?.kind ?? summary?.kind ?? "highlight";
+            const quote = summary?.quotedText ?? anchorOfSource(sid)?.quotedText ?? "";
+            return (
+              <button
+                key={sid}
+                role="menuitem"
+                data-track="stack-chooser-open"
+                onClick={() => {
+                  setStackChooser(null);
+                  window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId: sid } }));
+                }}
+                className="flex min-w-0 flex-col items-start rounded-xl px-2.5 py-1.5 text-left hover:bg-sand-100"
+              >
+                <span
+                  className="text-[10.5px] font-bold tracking-[0.08em] uppercase"
+                  style={{ color: annotationKindColor(kind, summary?.color ?? null) }}
+                >
+                  {t(ANNOTATION_KIND_KEY[kind])}
+                </span>
+                <span className="line-clamp-2 text-[12px] text-sand-700">{quote}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
       {annotationCard && (
         <div
           data-selection-popover
           data-annotation-card
+          // The block reader docks it like a tool card (SPEC.md §6).
+          data-side-card={richText ? undefined : "annotation"}
           onPointerDown={holdAnnotation(annotationCardReference)}
-          className={`pop-in absolute ${TOOL_LAYER} w-[300px] rounded-2xl border bg-card p-3 shadow-float`}
+          className={`pop-in absolute ${TOOL_LAYER} w-[300px] rounded-2xl border bg-card p-3 shadow-float${underView}`}
           // The card's border and label carry the annotation's kind color (SPEC.md §6).
           style={{
             top: annotationCard.top,
@@ -8310,7 +9085,11 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 setAnnotationCard((c) => (c ? { ...c, draft: styled } : c));
                 return;
               }
-              if (e.key === "Escape") setAnnotationCard(null);
+              if (e.key === "Escape") {
+                // This card closes, and only this card (SPEC.md §6).
+                e.stopPropagation();
+                setAnnotationCard(null);
+              }
             }}
             placeholder={t("reader.addCommentPlaceholder")}
             rows={3}
@@ -8347,7 +9126,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           return (
             <div
               data-selection-popover
-              className={`pop-in absolute ${TOOL_LAYER} w-[300px] rounded-2xl bg-card p-3 shadow-float`}
+              className={`pop-in absolute ${TOOL_LAYER} w-[300px] rounded-2xl bg-card p-3 shadow-float${underView}`}
               style={{ top: extractCard.top, left: extractCard.left }}
             >
               <div className="mb-2 flex items-center justify-between">
@@ -8502,7 +9281,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 {shownDefinition && (
                   <div data-definition className="flex flex-col gap-1 px-2.5 pt-0.5 pb-1.5">
                     <span className="text-[12px] font-semibold break-words text-sand-900">
-                      {popover.anchor.quotedText.trim()}
+                      {defineWord(popover.anchor.quotedText)}
                     </span>
                     {shownDefinition.text && (
                       <p className="text-[12.5px] leading-snug break-words whitespace-pre-line text-sand-800">
@@ -8555,6 +9334,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           <Collapse open={submenu === "ai"}>
           {submenu === "ai" && (
             <div className="flex flex-col gap-1.5 p-1">
+              {/* The question that runs, out of the field (SPEC.md §6). */}
+              {aiSent && aiSent.from === popover.anchor && (
+                <p data-assistant-sent className="line-clamp-3 rounded-xl border-l-2 border-clay-300 bg-sand-50 px-2 py-1 text-[12px] text-sand-700">
+                  {aiSent.text}
+                </p>
+              )}
               <textarea
                 autoFocus
                 value={aiCommand}
@@ -8605,6 +9390,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 </button>
               </div>
               {aiBusy && <ThinkingIndicator className="px-1 pb-0.5 text-[11.5px]" />}
+              {/* A failed run says so here, where the reader asked (SPEC.md §6). */}
+              {!aiBusy && aiError && aiError.from === popover.anchor && (
+                <p data-assistant-error role="alert" className="px-1 pb-0.5 text-[12px] font-medium text-red-600">
+                  {aiError.text}
+                </p>
+              )}
             </div>
           )}
           </Collapse>
@@ -8910,7 +9701,13 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                       <ChevronLeftIcon size={coarse ? 14 : 12} />
                       {t("reader.addPickNote")}
                     </button>
-                    <NotePicker sections={sections} onPick={(note) => void addToNote(note)} disabled={busy} />
+                    <NotePicker
+                      sections={sections}
+                      onPick={(note) => void addToNote(note)}
+                      disabled={busy}
+                      // Escape in the search goes back to the sections, not out of the bubble.
+                      onEscape={() => setAddMode("sections")}
+                    />
                   </>
                 )}
               </div>
@@ -8937,12 +9734,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           data-selection-popover
           data-side-card="explain"
           onPointerDown={holdAnnotation(bubbleReference)}
-          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border bg-card/90 p-4 shadow-float backdrop-blur-md`}
+          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border bg-card p-4 shadow-float${underView}`}
           style={{
             left: bubble.left,
             top: bubble.top,
             width: bubble.width,
-            maxHeight: cardMaxHeight,
+            maxHeight: cardHeight("explain"),
             borderColor: annotationKindColor(bubble.kind, null),
           }}
         >
@@ -9095,12 +9892,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           data-selection-popover
           data-side-card="simplify"
           onPointerDown={holdAnnotation(simplifyReference)}
-          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border bg-card/80 p-4 shadow-float backdrop-blur-md`}
+          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border bg-card p-4 shadow-float${underView}`}
           style={{
             top: simplifyCard.top,
             left: simplifyCard.left,
             width: simplifyCard.width,
-            maxHeight: cardMaxHeight,
+            maxHeight: cardHeight("simplify"),
             borderColor: annotationKindColor("simplify", null),
           }}
         >
@@ -9243,7 +10040,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         <div
           data-log-card="log"
           data-selection-popover
-          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border bg-card/90 p-4 shadow-float backdrop-blur-md`}
+          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border bg-card p-4 shadow-float${underView}`}
           style={{
             left: logCard.left,
             top: logCard.top,
@@ -9306,7 +10103,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           busy={commentCard.busy}
           grip={annotationGrip(commentReference)}
           // Its place is the card column's (suggest/layer.tsx).
-          className={`bubble-in absolute ${TOOL_LAYER}`}
+          className={`bubble-in absolute ${TOOL_LAYER}${underView}`}
           style={{ maxHeight: cardMaxHeight, borderColor: annotationKindColor("comment", null) }}
           onPointerDown={holdAnnotation(commentReference)}
           onDraft={(draft) => setCommentCard((c) => (c ? { ...c, draft } : c))}
@@ -9319,12 +10116,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           data-selection-popover
           data-side-card="comment"
           onPointerDown={holdAnnotation(commentReference)}
-          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border bg-card/90 p-4 shadow-float backdrop-blur-md`}
+          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border bg-card p-4 shadow-float${underView}`}
           style={{
             left: commentCard.left,
             top: commentCard.top,
             width: commentCard.width,
-            maxHeight: cardMaxHeight,
+            maxHeight: cardHeight("comment"),
             borderColor: annotationKindColor("comment", null),
           }}
         >
@@ -9350,11 +10147,10 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               <button
                 onClick={() => void resolveCommentCard()}
                 data-track="comment-card-resolve"
-                className="mr-2.5 ml-auto text-xs text-sand-500 hover:text-sage-700"
-                aria-label={t("common.resolve")}
+                className="mr-2 ml-auto rounded-full border border-line px-2.5 py-0.5 text-[11px] font-semibold text-sand-600 hover:bg-sage-100 hover:text-sage-700"
                 data-tip={t("docsLayer.resolveTitle")}
               >
-                ✓
+                {t("common.resolve")}
               </button>
             )}
             <button
@@ -9381,7 +10177,11 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                     setCommentCard((c) => (c ? { ...c, draft: styled } : c));
                     return;
                   }
-                  if (e.key === "Escape") setCommentCard(null);
+                  if (e.key === "Escape") {
+                    // This card closes, and only this card (SPEC.md §6).
+                    e.stopPropagation();
+                    setCommentCard(null);
+                  }
                 }}
                 rows={4}
                 className="field-sizing-content min-h-0 w-full flex-1 resize-none rounded-xl bg-sand-100 px-2.5 py-2 text-[13px] outline-none placeholder:text-sand-500"
@@ -9435,8 +10235,8 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         <div
           data-selection-popover
           data-side-card="link"
-          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border border-line bg-card/90 p-4 shadow-float backdrop-blur-md`}
-          style={{ left: linkCard.left, top: linkCard.top, width: linkCard.width, maxHeight: cardMaxHeight }}
+          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border border-line bg-card p-4 shadow-float${underView}`}
+          style={{ left: linkCard.left, top: linkCard.top, width: linkCard.width, maxHeight: cardHeight("link") }}
         >
           <div
             onPointerDown={dragCard(
@@ -9480,7 +10280,11 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   e.preventDefault();
                   void saveLinkCard();
                 }
-                if (e.key === "Escape") closeLinkCard();
+                if (e.key === "Escape") {
+                  // This card closes, and only this card (SPEC.md §6).
+                  e.stopPropagation();
+                  closeLinkCard();
+                }
               }}
               placeholder={t("reader.linkAboutPlaceholder")}
               rows={2}
@@ -9516,14 +10320,14 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           data-selection-popover
           data-side-card="assistant"
           onPointerDown={holdAnnotation(assistantReference)}
-          className={`bubble-in absolute ${TOOL_LAYER} flex resize flex-col overflow-hidden rounded-[20px] border bg-card/95 shadow-float backdrop-blur-md`}
+          className={`bubble-in absolute ${TOOL_LAYER} flex resize flex-col overflow-hidden rounded-[20px] border bg-card shadow-float${underView}`}
           style={{
             left: assistantChat.left,
             top: assistantChat.top,
             width: assistantChat.width,
             minWidth: 260,
             maxWidth: 680,
-            maxHeight: cardMaxHeight,
+            maxHeight: cardHeight("assistant"),
             borderColor: annotationKindColor("assistant", null),
           }}
         >
@@ -9619,6 +10423,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             {assistantChat.busy && <ThinkingIndicator className="py-0.5 text-[12px]" />}
             <QueuedList items={chatQueueShown(assistantChat)} onRemove={removeQueuedChat} />
           </div>
+          {/* The plan this conversation proposed, under its answer (SPEC.md §7). */}
+          {planInCard && (
+            <div data-plan-in-card className="mx-3 mb-2 flex max-h-[45%] shrink-0 flex-col rounded-2xl border border-line bg-sand-50 p-3">
+              {planBody}
+            </div>
+          )}
           {assistantChatFoot(assistantChat, "flex items-end gap-1.5 px-3 pb-3", "px-3 pb-1.5")}
         </div>
       )}
@@ -9644,86 +10454,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       )}
       </Presence>
 
-      <Presence show={aiPlan !== null} exit="pop">
+      <Presence show={aiPlan !== null && !planInCard} exit="pop">
       {/* The plan card grows with the reply and the actions up to the
           window's height, then scrolls inside. */}
-      {aiPlan && (
+      {aiPlan && !planInCard && (
         <div className="fixed bottom-6 left-1/2 z-40 flex max-h-[calc(100vh-3rem)] w-[440px] max-w-[92vw] -translate-x-1/2 flex-col rounded-[24px] bg-card p-4 shadow-float">
-          <div className="mb-2 flex items-center gap-2">
-            <SparkleIcon size={15} className="text-clay" />
-            <span className="font-display text-[15px]">{t("reader.assistantPlan")}</span>
-            <span className="ml-auto rounded-full bg-sand-200 px-2.5 py-0.5 text-[10px] font-semibold text-sand-600">
-              {t("reader.askFirst")}
-            </span>
-          </div>
-          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-          {aiPlan.reply && (
-            <div className="mb-2 text-[13px]">
-              <Markdown>{aiPlan.reply}</Markdown>
-            </div>
-          )}
-          <div className="flex flex-col gap-1.5">
-            {aiPlan.actions.map((action, i) => (
-              <label
-                key={i}
-                className="flex cursor-pointer items-start gap-2 rounded-xl bg-sand-100 px-3 py-2 text-[12.5px]"
-              >
-                <input
-                  type="checkbox"
-                  className="mt-0.5 accent-clay"
-                  checked={planChecked.has(i)}
-                  onChange={() =>
-                    setPlanChecked((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(i)) next.delete(i);
-                      else next.add(i);
-                      return next;
-                    })
-                  }
-                />
-                <span className="min-w-0">
-                  <span className="mr-1.5 rounded-full bg-sand-200 px-2 py-0.5 text-[10px] font-semibold text-sand-700">
-                    {t(ACTION_LABEL_KEY[action.type])}
-                  </span>
-                  {action.description}
-                  {actionDetail(action, blocks, attachedDocuments, t) && (
-                    <span className="mt-0.5 block text-[11px] text-sand-500">
-                      {actionDetail(action, blocks, attachedDocuments, t)}
-                    </span>
-                  )}
-                </span>
-              </label>
-            ))}
-          </div>
-          </div>
-          {aiPlan.warnings.length > 0 && (
-            <ul className="mt-2 flex flex-col gap-1 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2">
-              {aiPlan.warnings.map((w, i) => (
-                <li key={i} className="text-[11.5px] font-medium text-amber-700 dark:text-amber-400">
-                  ⚠ {w}
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="mt-3 flex items-center gap-2">
-            <button
-              disabled={planChecked.size === 0}
-              onClick={() => void approvePlan()}
-              data-track="plan-apply"
-              data-tip={t("reader.applyActionsTitle")}
-              className="rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
-            >
-              {t("reader.applyActions", { n: planChecked.size, s: plural(planChecked.size) })}
-            </button>
-            <button
-              onClick={() => setAiPlan(null)}
-              data-track="plan-cancel"
-              data-tip={t("reader.discardPlanTitle")}
-              className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-            >
-              {t("common.cancel")}
-            </button>
-          </div>
+          {planBody}
         </div>
       )}
       </Presence>

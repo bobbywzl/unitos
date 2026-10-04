@@ -1230,6 +1230,15 @@ ellipse.anchor-flash {
   );
   margin-right: 0;
 }
+/* A side card covers no word (SPEC.md §6): while one is open on a pane whose
+   margin is too narrow for it, the column moves left by --cards-room
+   (reader-interactions.tsx), and slides back when the last card closes. */
+[data-cards-room] .reader-column {
+  margin-left: max(
+    var(--reader-cut, 0px),
+    calc(var(--reader-cut, 0px) / 2 + 50% - var(--reader-column-w) / 2 - var(--cards-room, 0px))
+  );
+}
 [data-note-floating] .reader-column {
   margin-left: min(0.5rem, max(0px, calc(50% - var(--reader-column-w) / 2)));
 }
