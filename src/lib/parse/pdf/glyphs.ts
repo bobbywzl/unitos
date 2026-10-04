@@ -1114,20 +1114,27 @@ export function glyphTexts(glyphs: Glyph[]): Map<Glyph, string> {
   // wide hat over Ω on the last letter of the word before it). A text font's
   // accent (\hat from OT1) does the same over a math letter; over a text
   // letter it is the text layer's (lines.ts composeAccents).
+  // An OpenType math font's mark that no table names does the same: Word
+  // draws x̄'s bar in Cambria Math as U+0305 with no advance, and ȳ's as a
+  // glyph its map reads as U+FFFD (parse loop finding: a PowerPoint deck's
+  // Pearson correlation read "(xi − ̅x)(yi − �y)"). A glyph the map reads
+  // as U+FFFD over a letter is a mark no map names: it reads as nothing.
   for (const a of glyphs) {
     const entry = entryOf(a);
-    if (entry?.cls !== "accent" || !/\p{M}/u.test(entry.unicode)) continue;
+    const unnamed = a.family === null && /^(?:\p{M}+|\uFFFD)$/u.test(a.unicode) && unicodeFont(a.base)?.kind === "opentype";
+    if (!unnamed && (entry?.cls !== "accent" || !/\p{M}/u.test(entry.unicode))) continue;
+    const mark = unnamed ? a.unicode.replace(/\uFFFD/gu, "") : entry!.unicode;
     let base: Glyph | null = null;
     for (const b of around(a)) {
       const rise = a.y - b.y;
       if (rise < -a.size * 0.1 || center(a) < b.x || center(a) > b.x + b.w) continue;
       if (a.family === "ot1" && rise > a.size * 0.6) continue;
-      if (textOf(b) === "" || entryOf(b)?.cls === "accent" || /^\s*$/.test(textOf(b))) continue;
+      if (textOf(b) === "" || entryOf(b)?.cls === "accent" || /^(?:\s*|\p{M}+|\uFFFD)$/u.test(textOf(b))) continue;
       if (!base || rise < a.y - base.y) base = b;
     }
     if (a.family === "ot1" && (base === null || base.family === null || base.family === "ot1")) continue;
-    if (base) texts.set(base, (textOf(base) + entry.unicode).normalize("NFC"));
-    texts.set(a, "");
+    if (base) texts.set(base, (textOf(base) + mark).normalize("NFC"));
+    if (base || !unnamed) texts.set(a, "");
   }
   return texts;
 }
