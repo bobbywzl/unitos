@@ -426,7 +426,7 @@ function buildLine(rawItems: Item[], page: number): Line {
     if (!cell || wide) {
       cell = { x: item.x, text: "", runs: [] };
       cells.push(cell);
-    } else if ((gap > least || crossed) && !cell.text.endsWith(" ")) {
+    } else if ((gap > least || crossed || (item.spaced && gap >= 0)) && !cell.text.endsWith(" ")) {
       // Punctuation that attaches left ("PRESS" chip then ".") takes no space.
       const attach = ATTACH_PUNCT_RE.test(item.str) && gap < size * 0.7;
       if (!attach) cell.text += " ";

@@ -38,6 +38,7 @@ let pageFrames: Box[] = [];
 
 export function pageLines(items: Item[], pageWidth: number, page: number, graphics: Placed[] = [], rules: Box[] = [], frames: Box[] = []): Line[] {
   const text = items.filter((i) => i.str.trim().length > 0);
+  markSpaces(items, text);
   if (text.length === 0 && graphics.length === 0) return [];
   pageRules = rules;
   pageFrames = frames;
@@ -55,6 +56,28 @@ export function pageLines(items: Item[], pageWidth: number, page: number, graphi
     lines.push(...built);
   }
   return joinRightRuns(lines, page);
+}
+
+/** The words a space item stands right before, on their baseline or a
+    script's: the page draws a space there, however narrow. Word sets the
+    space after a footnote's mark at the mark's size, a fifth of the text's
+    em, and the gap read no space after a script (parse loop finding: a CRS
+    report's "discharge status.4 Although" read "status.4Although", and the
+    footnote's reference went unfound: notes stood out of order on ten pages).
+    TeX draws no space: its text layer's space items stand at gaps a
+    formula leaves ("px /m" in a quantum mechanics book), and they count
+    nowhere, nor do the ones beside a math font's glyph, nor one before
+    anything but a word: XeTeX's pages carry such items too, before a
+    combining mark or a closing bracket ("<յ ̵>"). */
+function markSpaces(items: Item[], text: Item[]) {
+  const spaces = items.filter((i) => i.space && i.w > 0);
+  if (spaces.length === 0) return;
+  const touches = (a: Item, x: number, y: number, size: number) => Math.abs(a.x - x) <= a.size * 0.15 && Math.abs(a.y - y) <= size * 0.6;
+  for (const space of spaces) {
+    const next = text.find((i) => touches(i, space.x + space.w, space.y, Math.max(i.size, space.size)));
+    const before = text.find((i) => Math.abs(i.x + i.w - space.x) <= i.size * 0.15 && Math.abs(i.y - space.y) <= Math.max(i.size, space.size) * 0.6);
+    if (next && before && !next.math && !before.math && /^[\p{L}\p{N}“‘"(]/u.test(next.str)) next.spaced = true;
+  }
 }
 
 // A short run set flush right on another line's baseline, a wide gap past

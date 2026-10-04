@@ -157,6 +157,9 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
       drawing.glyphs,
     );
     const runOf = new Map(textItems.map((raw, i) => [raw, glyphRuns[i]]));
+    // A space item stands where the page draws a space, unless TeX set the
+    // page: TeX draws none (columns.ts markSpaces).
+    const drawsSpaces = !isTexPage(drawing.glyphs);
     const glyphText = glyphTexts(drawing.glyphs);
     const flagsOf = (fontName: string): FontFlags => {
       let flags = flagsByFont.get(fontName);
@@ -269,6 +272,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
           href: hrefAt(part.x, y, part.w, size),
           font: fontName,
           glyphs: part.glyphs,
+          ...(drawsSpaces && part.str.trim() === "" ? { space: true as const } : {}),
         });
       }
     }
