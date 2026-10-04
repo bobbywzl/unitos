@@ -27,6 +27,7 @@ import { InsertLayer } from "@/components/docs/areas/insert";
 import { UnitosLayer } from "@/components/docs/areas/layer";
 import { CollapsedView, type PageCollapse } from "@/components/docs/layer/collapse";
 import { showLeftOff } from "@/components/docs/layer/left-off";
+import { ReflowBar, useReflow } from "@/components/docs/page/reflow";
 import { showTranslations } from "@/components/docs/layer/reading";
 import { SuggestLayer } from "@/components/docs/suggest/layer";
 import { PageBanner, PageCanvas, PageRuler } from "@/components/docs/areas/page";
@@ -559,6 +560,15 @@ export function DocsEditor({
     [locked, editor, t, isImport, documentId],
   );
 
+  // A PDF import in pages may be read pageless in Viewing (page/reflow.tsx):
+  // a view of this browser; the document's page setup stays as it is, and
+  // Editing and Suggesting draw the pages.
+  const pdfPages = imported?.kind === "pdf" && !pageSetup.pageless;
+  const [reflowChoice, chooseReflow] = useReflow(editor, documentId, pdfPages);
+  const reflowing = pdfPages && mode === "viewing";
+  const reflowed = reflowing && reflowChoice === "pageless";
+  const shownSetup = useMemo(() => (reflowed ? { ...pageSetup, pageless: true } : pageSetup), [reflowed, pageSetup]);
+
   // The QA scripts drive the editor directly in development.
   useEffect(() => {
     if (process.env.NODE_ENV === "production" || !editor) return;
@@ -573,7 +583,7 @@ export function DocsEditor({
     enabled: writable,
   });
   // The header's and footer's saves show in the same status.
-  const shownSaveState = useSaveState(editor, documentId, pageSetup, saveState);
+  const shownSaveState = useSaveState(editor, documentId, shownSetup, saveState);
 
   useEffect(() => {
     flushRef.current = flush;
@@ -744,8 +754,8 @@ export function DocsEditor({
   // suggestions to settle, no version to restore.
   const editing = writable && mode !== "viewing";
   const area = useMemo<DocsAreaProps | null>(
-    () => (editor ? { editor, documentId, notebookId, canEdit: writable, projectEditor: canEdit, editing, pageSetup, documents } : null),
-    [editor, documentId, notebookId, writable, canEdit, editing, pageSetup, documents],
+    () => (editor ? { editor, documentId, notebookId, canEdit: writable, projectEditor: canEdit, editing, pageSetup: shownSetup, documents } : null),
+    [editor, documentId, notebookId, writable, canEdit, editing, shownSetup, documents],
   );
 
   // Every save changes the save state, which redraws the title row alone:
@@ -765,7 +775,7 @@ export function DocsEditor({
             canEdit={canEdit}
             zoom={zoom}
             onZoom={setZoom}
-            pageless={pageSetup.pageless}
+            pageless={shownSetup.pageless}
             aiControls={aiControls}
             headerHidden={headerHidden}
             onToggleHeader={() => setHeaderHidden((h) => !h)}
@@ -774,7 +784,7 @@ export function DocsEditor({
           <PageRuler {...area} />
         </ModeLock.Provider>
       ),
-    [area, hfEditor, mode, setMode, locked, canEdit, zoom, pageSetup.pageless, aiControls, headerHidden, insertImage],
+    [area, hfEditor, mode, setMode, locked, canEdit, zoom, shownSetup.pageless, aiControls, headerHidden, insertImage],
   );
   const pages = useMemo(
     () =>
@@ -802,7 +812,7 @@ export function DocsEditor({
   if (!editor || outdated) {
     return (
       <>
-        <DocsFrame title={title} pageSetup={pageSetup} />
+        <DocsFrame title={title} pageSetup={shownSetup} />
         {outdated === "stale" && (
           <p
             role="alert"
@@ -816,7 +826,14 @@ export function DocsEditor({
   }
 
   return (
-    <div className="docs-shell" data-docs-editor data-docs-mode={mode} data-import={imported?.kind} data-full-screen={fullScreen || undefined}>
+    <div
+      className="docs-shell"
+      data-docs-editor
+      data-docs-mode={mode}
+      data-import={imported?.kind}
+      data-reflow={reflowing ? (reflowed ? "pageless" : "pages") : undefined}
+      data-full-screen={fullScreen || undefined}
+    >
       <div className="docs-header" data-edit-control data-away={away || undefined}>
         {!headerHidden && !fullScreen && (
           <div className="docs-title-row @container">
@@ -839,7 +856,27 @@ export function DocsEditor({
         {/* Hidden, not taken away, in full screen: the toolbar's keys still answer. */}
         <div style={{ display: fullScreen ? "none" : "contents" }}>{chrome}</div>
       </div>
-      <PageBanner.Provider value={banner}>{pages}</PageBanner.Provider>
+      <PageBanner.Provider
+        value={
+          reflowing ? (
+            <>
+              <ReflowBar
+                editor={editor}
+                documentId={documentId}
+                setup={shownSetup}
+                choice={reflowChoice}
+                reflowed={reflowed}
+                onChoose={chooseReflow}
+              />
+              {banner}
+            </>
+          ) : (
+            banner
+          )
+        }
+      >
+        {pages}
+      </PageBanner.Provider>
       <CollapsedView editor={editor} collapse={collapse} highlightsByBlock={highlightsByBlock} editing={editing} />
       {footer}
     </div>

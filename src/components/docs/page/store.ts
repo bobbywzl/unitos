@@ -24,6 +24,9 @@ export const PAGE_EVENT = {
   pageCount: "docs:page-count",
   /** View > Full screen: the page alone, the header hidden (docs-editor.tsx). */
   fullScreen: "docs:full-screen",
+  /** Read pageless (true) or Show pages (false): a PDF import's view in
+      Viewing (page/reflow.tsx). */
+  reflow: "docs:page-reflow",
 } as const;
 
 export type EditHeaderDetail = { area: HeaderArea };

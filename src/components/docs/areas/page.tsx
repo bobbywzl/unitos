@@ -208,10 +208,11 @@ export function PageCanvas({
   }, [store, scale]);
 
   // A pane narrower than the page (the notes tray open, a phone) opens the
-  // page at Fit, so no line runs past the pane's edge.
+  // page at Fit, so no line runs past the pane's edge; so do pages that come
+  // after the document opened pageless (a PDF import read pageless).
   const fittedRef = useRef(false);
   useEffect(() => {
-    if (fittedRef.current || canvasWidth === 0) return;
+    if (fittedRef.current || canvasWidth === 0 || pageless) return;
     fittedRef.current = true;
     if (zoom === 100 && !pageless && frame.width + 2 * FIT_GUTTER > canvasWidth) store.zoomTo("fit");
   }, [canvasWidth, zoom, pageless, frame.width, store]);
