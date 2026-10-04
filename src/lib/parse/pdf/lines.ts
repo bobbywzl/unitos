@@ -239,6 +239,7 @@ const RTL_RE = /[\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Syriac}\p{Script=Th
     set the letter's advance as a space item right after it, that space
     goes ("ال ّف صل" for "الفصل"). A page's items, in place. */
 export function placeMarks(items: Item[]) {
+  readLigatures(items);
   const zero = (i: Item) => i.w <= i.size * 0.02 && /\p{M}/u.test(i.str) && RTL_RE.test(i.str);
   const advance = (i: Item) => (i.glyphs ?? []).reduce((n, g) => n + g.w, 0);
   // A letter read so: its glyph draws an advance.
@@ -281,6 +282,44 @@ export function placeMarks(items: Item[]) {
     items.splice(j--, 1);
   }
 }
+
+/** A right-to-left item's ligatures read in their own order. A font maps
+    a ligature's glyph to its letters in reading order ("في", "تي", "لا"),
+    and the text layer, turning the item's letters from the page's order to
+    reading order, turns each ligature's letters too: the Arabic book read
+    "يف" for "في", "اليت" for "التي", and "مدخالت" for "مدخلات" (parse
+    loop finding). Where the item's text holds as many characters as its
+    glyphs' maps, each ligature's letters, turned at its glyph's place, turn
+    back. A page's items, in place. */
+function readLigatures(items: Item[]) {
+  for (const [k, item] of items.entries()) {
+    const glyphs = item.glyphs;
+    if (!glyphs || glyphs.length === 0 || !RTL_RE.test(item.str)) continue;
+    // The glyphs in reading order, from the right, and where each one's
+    // letters stand in the item's text: the text layer turned them all.
+    // Spaces aside: the text layer sets a word gap the font draws no glyph for.
+    const read = [...glyphs].sort((a, b) => b.x - a.x).map((g) => Array.from(g.unicode.replace(/\s/gu, "")));
+    const chars = Array.from(item.str);
+    const places = chars.flatMap((c, n) => (/\s/u.test(c) ? [] : [n]));
+    if (read.reduce((n, letters) => n + letters.length, 0) !== places.length) continue;
+    let at = 0;
+    let turned = false;
+    for (const letters of read) {
+      const own = places.slice(at, at + letters.length);
+      const text = letters.join("");
+      const back = [...letters].reverse().join("");
+      if (letters.length >= 2 && LIGATURE_RE.test(text) && back !== text && own.map((n) => chars[n]).join("") === back) {
+        own.forEach((n, j) => (chars[n] = letters[j]));
+        turned = true;
+      }
+      at += letters.length;
+    }
+    if (turned) items[k] = { ...item, str: chars.join("") };
+  }
+}
+
+// A ligature's letters: two or more of a right-to-left script, no marks.
+const LIGATURE_RE = /^[\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}]+$/u;
 
 function composeAccents(items: Item[]): Item[] {
   const out: Item[] = [];

@@ -598,7 +598,18 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
       .sort((a, b) => b.box.y2 - a.box.y2);
     const out: TextRun[] = [];
     let bottom = graphic.y1;
+    // A step's number, set larger, beside the first line under the graphic:
+    // the lines are the step's text, no caption (parse loop finding: The
+    // MagPi's step boxes set "01" beside "If you want to make your own
+    // pinball machine," under the step's photo, and the line read as the
+    // photo's caption, the step's other lines as an item of their own).
+    // The number may stand on the first line's baseline or on the second's.
+    const besideNumber = (first: TextRun, r: TextRun) =>
+      r.items.some(
+        (i) => i.size >= textSize * 1.3 && /^\d{1,2}$/.test(i.str.trim()) && i.x + i.w <= first.box.x1 + i.size * 0.5 && i.y + i.size * 0.7 > first.box.y1 && i.y < first.box.y2,
+      );
     for (const r of under) {
+      if (out.length > 0 && besideNumber(out[0], r)) return [];
       if (bottom - r.box.y2 > r.size * (out.length === 0 ? 1.2 : 0.8)) break;
       if (out.length >= 3 || r.size >= textSize * 1.3 || LABEL_START_RE.test(textOf(r))) break;
       out.push(r);

@@ -3,7 +3,7 @@
 
 import { CAPTION_RE } from "@/lib/parse/pdf/figures";
 import { BULLET_RE, follows, opensSequence, readMarker } from "@/lib/parse/pdf/markers";
-import { endAs, endsFull } from "@/lib/parse/pdf/paragraphs";
+import { endAs, endsFull, wrapsAt } from "@/lib/parse/pdf/paragraphs";
 import { joinWrapped } from "@/lib/parse/pdf/text";
 import type { PageBreak, Segment } from "@/lib/parse/pdf/types";
 
@@ -47,6 +47,20 @@ function pullQuotes(segments: Segment[]): Set<Segment> {
 // it carried the output read beside it to the next page's paragraph.
 const isLabel = (s: Segment, paragraph: Segment) =>
   s.type !== "HEADING" && s.type !== "CODE" && paragraph.lineSize !== undefined && s.lineSize !== undefined && s.lineSize < paragraph.lineSize * 0.9;
+
+// A part set in another face and another size than a paragraph is another
+// text: a callout set beside the column, a sidebar's item, a link set in
+// the margin. Between a paragraph's halves it stands as a float does (The
+// MagPi p. 42: the callout "Each tower has DMX-controlled lights…" read
+// inside "…that fuse technology" | "and fashion."). A line of math is no
+// other text: its symbols' faces and sizes outweigh its words' (the dropout
+// paper p. 4: "with ϕ′, ϕ′′, ϕ′′′ ∈ L2(𝒩 (0, q̄∗)), and that q̄∗ and gρ have").
+const MATH_TEXT_RE = /[Ͱ-Ͽ′-‴∀-⋿\u{1d400}-\u{1d7ff}]/u;
+function otherText(s: Segment, paragraph: Segment): boolean {
+  if (s.lineSize === undefined || paragraph.lineSize === undefined || s.type !== "PARAGRAPH") return false;
+  if (MATH_TEXT_RE.test(s.text) || MATH_TEXT_RE.test(paragraph.text)) return false;
+  return !sameFace(s, paragraph) && Math.abs(s.lineSize - paragraph.lineSize) > Math.min(s.lineSize, paragraph.lineSize) * 0.03;
+}
 
 // A Chinese or Japanese character that ends a text or opens one (a stop, a
 // closing bracket, and the full-width punctuation aside).
@@ -98,6 +112,11 @@ function continuesOnPage(prev: Segment, next: Segment, setting: PageSetting): bo
   if (/^\([a-h]\)\s+\p{Lu}/u.test(next.text) || /\bquote\b/.test(next.html ?? "")) return false;
   const sizes = prev.lineSize !== undefined && next.lineSize !== undefined ? [prev.lineSize, next.lineSize] : undefined;
   if (sizes && !/^[a-z]/.test(next.text) && Math.abs(sizes[0] - sizes[1]) > Math.min(...sizes) * 0.5) return false;
+  // A part set in another face and another size is another text: a
+  // sidebar's last item, "> …and means 'pole star' in German" in a sans at
+  // 7 pt, is no part of the column's "script was enough…" in a serif at 7.5
+  // pt (parse loop finding: The MagPi p. 61).
+  if (otherText(prev, next)) return false;
   // A part set smaller under the first, a line's size or more below it, is
   // a note at the page's foot: the correspondence line's "e-mail: …" went
   // on the right column's last paragraph (Nature p. 1).
@@ -150,11 +169,12 @@ export function joinOnPage(input: Segment[]): Segment[] {
   const setting = pageSetting(segments);
   for (let b = 1; b < segments.length; b++) {
     const paragraph = segments[b - 1];
-    const inRun = (s: Segment) => isFloat(s) || isLabel(s, paragraph);
+    const aside = (s: Segment) => paragraph.type === "PARAGRAPH" && otherText(s, paragraph);
+    const inRun = (s: Segment) => isFloat(s) || isLabel(s, paragraph) || aside(s);
     if (isFloat(paragraph) || !inRun(segments[b]) || segments[b].page !== paragraph.page) continue;
     let k = b;
     while (k < segments.length && segments[k].page === segments[b].page && inRun(segments[k])) k++;
-    if (!segments.slice(b, k).some(isFloat)) continue;
+    if (!segments.slice(b, k).some((s) => isFloat(s) || aside(s))) continue;
     if (k < segments.length && continuesOnPage(paragraph, segments[k], setting)) segments.splice(b, 0, ...segments.splice(k, 1));
   }
   const out: Segment[] = [];
@@ -457,6 +477,33 @@ function wrapsOver(prev: Segment, next: Segment, setting: PageSetting): boolean 
   );
 }
 
+// An end mark: a remark's, an example's, or a proof's.
+const END_MARK_RE = /[♢◇◆♦□■∎▢◁▷⊣]$/u;
+
+// A paragraph's last line at a page's foot wrapped, and the paragraph at the
+// next page's top opens where the column's lines start: the page break cut
+// the paragraph after a sentence, on a page whose paragraphs open flush as
+// well as on one that sets them in (wrapsOver). A ragged page wrapped the
+// line because the next page's first word would not fit on it; a page set
+// justified ran it to the edge (wrapsAt). A paragraph that ends short of
+// that stays apart from the next page's, and so does one the next page sets
+// in (reader audit finding: "…the screen group scored fifty." | "The gap of
+// twenty points is the effect this section is about." imported as two
+// paragraphs, the page break between them).
+function wrapsAcross(prev: Segment, next: Segment): boolean {
+  return (
+    next.type === "PARAGRAPH" &&
+    !prev.listItem &&
+    // An end mark set flush right (a remark's ♢, a proof's ∎) ends its
+    // block at the line's edge: the MML book's "…b = X⊤y. ♢" is no part
+    // of the next page's "Example 9.2 (Fitting Lines)".
+    !END_MARK_RE.test(prev.text.trim()) &&
+    !/\b(?:center|right|caption|quote|footnote)\b/.test(prev.html ?? "") &&
+    !/\b(?:indent-first|indent-hanging|indent-block|center|right|caption|quote|footnote)\b/.test(next.html ?? "") &&
+    wrapsAt(prev, next)
+  );
+}
+
 export function mergeAcrossPages(input: Segment[]): Segment[] {
   const setting = pageSetting(input);
   const body = bodySizes(input);
@@ -496,7 +543,8 @@ export function mergeAcrossPages(input: Segment[]): Segment[] {
           // "… the" | "AAR only stages": a paragraph that ends without a stop
           // is unfinished, whatever the case of the next page's first word.
           (/\s[\p{L}\p{M}]+$/u.test(prev.text) && prev.text.length > 60))) ||
-        wrapsOver(prev, segment, setting))
+        wrapsOver(prev, segment, setting) ||
+        wrapsAcross(prev, segment))
     ) {
       const offset = joinWrapped(prev, segment.text);
       prev.breaks = joinBreaks(prev, segment, offset);

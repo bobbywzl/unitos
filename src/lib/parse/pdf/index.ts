@@ -427,7 +427,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     // The frames the page draws (a listing's box): a third of the page wide
     // and a line tall at the least.
     const frames = drawing.paths.filter((b) => !b.clip && !inTable(b) && b.x2 - b.x1 >= viewport.width * 0.3 && b.y2 - b.y1 >= 10);
-    const lines = placeTables(pageLines(takeTables(text.filter((i) => !inGraphics.has(i)), tables), viewport.width, keep ? pages.length : -1, found, drawing.rules.filter((r) => r.dir === "h" && !inTable(r)), frames, drawing.rules.filter((r) => r.dir === "v" && !inTable(r))));
+    const lines = placeTables(pageLines(takeTables(text.filter((i) => !inGraphics.has(i)), tables), viewport.width, keep ? pages.length : -1, found, drawing.rules.filter((r) => r.dir === "h" && !inTable(r)), frames, drawing.rules.filter((r) => r.dir === "v" && !inTable(r)), drawing.fills.filter((f) => !inTable(f))));
     // Each inline formula's LaTeX, from its glyphs and the page's rules.
     resolveZones(lines, drawing);
     // From here on only a TeX page's display equations read the page's
