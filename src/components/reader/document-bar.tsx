@@ -42,6 +42,7 @@ import {
   advanceIngestSteps,
   completeIngestSteps,
   initialIngestSteps,
+  type IngestKind,
   type IngestStep,
 } from "@/components/reader/ingest-progress";
 import {
@@ -522,7 +523,8 @@ export function DocumentBar({
     if (figures) setFigureCapture({ documentId: doc.id, status: "running", error: null });
     try {
       const body = { ...(as ? { as } : {}), ...(replaceEdits ? { replaceEdits } : {}) };
-      const result = await runIngest(doc.title, doc.sourceUrl ? "url" : "pdf", () =>
+      // A stored file uploads nothing: the card starts at Parsing.
+      const result = await runIngest(doc.title, doc.sourceUrl ? "url" : "reparse", () =>
         fetch(`/api/documents/${doc.id}/reparse`, {
           method: "POST",
           ...(as || replaceEdits
@@ -654,7 +656,7 @@ export function DocumentBar({
   // (SPEC.md §29): its line, which the bar shows once the document opens.
   async function runIngest(
     fileLabel: string,
-    kind: "pdf" | "url" | "video" | "youtube" | "media" | "drive",
+    kind: IngestKind,
     send: (emit: (stage: string, detail?: string) => void) => Promise<Response>,
   ): Promise<{ id: string; title: string; deduped: boolean; blockDocument: ReturnType<typeof blockDocumentLine> | null }> {
     setPhase({ fileLabel, steps: initialIngestSteps(kind) });

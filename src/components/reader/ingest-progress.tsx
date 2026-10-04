@@ -12,8 +12,10 @@ export type IngestStep = { key: string; labelKey: TKey; detail?: string; status:
 // Ordered step templates, one per source. Keys match the stage events the server
 // sends (see /api/documents); the first step is active from the moment the
 // request leaves, before any event arrives.
+export type IngestKind = "pdf" | "url" | "video" | "youtube" | "media" | "drive" | "reparse";
+
 const STEP_TEMPLATES: Record<
-  "pdf" | "url" | "video" | "youtube" | "media" | "drive",
+  IngestKind,
   { key: string; labelKey: TKey }[]
 > = {
   pdf: [
@@ -45,6 +47,12 @@ const STEP_TEMPLATES: Record<
     { key: "fetch", labelKey: "panes.stepFetchingVideoInfo" },
     { key: "save", labelKey: "panes.stepSaving" },
   ],
+  // A re-parse of a stored file (SPEC.md §16): nothing uploads; the server
+  // parses the bytes it keeps. A web page's re-parse fetches it again (url).
+  reparse: [
+    { key: "parse", labelKey: "panes.stepParsing" },
+    { key: "save", labelKey: "panes.stepSaving" },
+  ],
   // A direct video or audio file link: the server downloads and stores it.
   media: [
     { key: "fetch", labelKey: "panes.stepFetchingMedia" },
@@ -52,9 +60,7 @@ const STEP_TEMPLATES: Record<
   ],
 };
 
-export function initialIngestSteps(
-  kind: "pdf" | "url" | "video" | "youtube" | "media" | "drive",
-): IngestStep[] {
+export function initialIngestSteps(kind: IngestKind): IngestStep[] {
   return STEP_TEMPLATES[kind].map((s, i) => ({
     ...s,
     status: i === 0 ? "active" : "pending",
