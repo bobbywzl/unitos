@@ -2314,6 +2314,8 @@ export function ReaderInteractions({
   // The fading hint that replaces the Edit button. Shows on document open until
   // the reader double-clicks into edit mode once.
   const [editHint, setEditHint] = useState(false);
+  // Where the hint shows: beside the article, or as a row under the pane.
+  const [hintBeside, setHintBeside] = useState(true);
 
   // Offline, the tools that need a model are off (SPEC.md §17): their rows
   // are dimmed, their tooltip says why, and a press shows the plain message.
@@ -3573,9 +3575,17 @@ export function ReaderInteractions({
 
   useEffect(() => {
     if (localStorage.getItem("unitos-edit-hint") === "done") return;
+    // Beside the article when its right margin holds the card (with its
+    // 20px from the pane's edge); else a row under the pane.
+    const container = containerRef.current;
+    const article = container?.querySelector("article");
+    if (container && article) {
+      const width = window.matchMedia("(pointer: coarse)").matches ? 320 : 256;
+      const room = container.getBoundingClientRect().right - article.getBoundingClientRect().right;
+      setHintBeside(room >= width + 32);
+    }
     // Post-hydration reveal on purpose: localStorage is client-only, so the
     // SSR pass must render without the hint.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setEditHint(true);
   }, [documentId]);
 
@@ -9145,7 +9155,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           transcript: it has no edit mode. Under the toast, which may reach
           down over it. It yields while a toolbar is open: the stack beside
           the first lines would cut its words. */}
-      {editHint && !editMode && !split && !transcript && !embedded && !richText && (
+      {editHint && hintBeside && !editMode && !split && !transcript && !embedded && !richText && (
         <div
           onAnimationEnd={() => setEditHint(false)}
           className={`hint-fade pointer-events-none absolute top-16 right-5 z-[9] rounded-2xl bg-card px-4 py-2.5 leading-relaxed text-sand-700 shadow-lift print:hidden ${
@@ -10800,6 +10810,21 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       </Presence>
 
     </div>
+      {/* The hint where the article's margin cannot hold it (a tablet, a
+          phone, a narrow window): a row under the pane, which takes its
+          height from the pane's foot, so it covers no word and the lines
+          the reader reads stay where they are. */}
+      {editHint && !hintBeside && !editMode && !split && !transcript && !embedded && !richText && (
+        <div
+          data-edit-hint
+          onAnimationEnd={() => setEditHint(false)}
+          className={`hint-fade pointer-events-none shrink-0 border-t border-line bg-card px-4 py-2.5 leading-relaxed text-sand-700 print:hidden ${
+            coarse ? "text-[13px]" : "text-[12px]"
+          }`}
+        >
+          {t(coarse ? "reader.touchHint" : "reader.editHint")}
+        </div>
+      )}
       {/* The assistant's bar (SPEC.md §29), over the page at the bottom of
           the pane: the status of its edit, the field, and the commands. */}
       <Presence show={bar !== null} exit="fade">
