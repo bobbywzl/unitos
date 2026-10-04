@@ -33,6 +33,7 @@ const en = {
   saved: "Saved",
   saveFailed: "Not saved",
   savedOffline: "Saved on this device · syncs when online",
+  waitingSync: "Waiting to sync",
   // Two saves of one note from the same text (lib/notes/conflict.ts): lines
   // both changed are kept twice, under these marker lines.
   savedBoth: "Saved · both versions kept",
@@ -260,6 +261,7 @@ const zh: Record<keyof typeof en, string> = {
   saved: "已保存",
   saveFailed: "未保存",
   savedOffline: "已保存在此设备 · 联网后同步",
+  waitingSync: "待同步",
   savedBoth: "已保存 · 两个版本都已保留",
   conflictOther: "此处同时在两个地方被修改。另一个版本：",
   conflictYours: "你的版本：",
