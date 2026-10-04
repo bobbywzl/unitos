@@ -1,6 +1,6 @@
 {
  "total": {
-  "f1": 0.922,
+  "f1": 0.923,
   "precision": 0.865,
   "recall": 0.988
  },
@@ -2931,9 +2931,9 @@
    "fn": 0
   },
   "www.dhb.de-regionallehrgang.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 2,
-   "fn": 1
+   "fn": 0
   },
   "dhz-online.de-bewegung.html": {
    "tp": 3,
