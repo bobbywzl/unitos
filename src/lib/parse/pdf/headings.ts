@@ -488,7 +488,11 @@ function capsHeading(lines: Line[], i: number, ctx: PageContext): Step | null {
     const text = line.text.trim();
     const letters = text.replace(/[^\p{L}]/gu, "").length;
     if (line.cells.length !== 1 || letters < 3 || [...text].length > 60 || capsShare(text) < 0.9) return false;
-    if (line.size < ctx.bodySize * 0.85 || line.size > ctx.bodySize * (ctx.ocr ? 1.3 : 1.14)) return false;
+    // A scan's text layer sizes a line by its box: a line of capitals has no
+    // descenders, and its box reads a sixth smaller than the text's (parse
+    // loop finding: NACA Report 515's SUMMARY and INTRODUCTION read 8.5 pt
+    // over 10.3 pt text, and were paragraphs).
+    if (line.size < ctx.bodySize * (ctx.ocr ? 0.78 : 0.85) || line.size > ctx.bodySize * (ctx.ocr ? 1.3 : 1.14)) return false;
     return !(/[,;:]$/.test(text) || INITIAL_RE.test(text) || LABEL_RE.test(text) || CAPTION_RE.test(text));
   };
   const line = lines[i];
@@ -773,8 +777,18 @@ function italicHeading(lines: Line[], i: number, ctx: PageContext): Step | null 
   if (Math.abs(line.size - ctx.bodySize) > ctx.bodySize * 0.1) return null;
   const above = lines[i - 1];
   const below = lines[i + 1];
-  if (!above || !below || !apartAbove(above, line, ctx) || !apartBelow(line, below, ctx)) return null;
-  if (Math.abs(below.x - line.x) > line.size * 2 || textShare(below, (item) => item.italic) > 0.5 || below.size < line.size * 0.9) return null;
+  if (!below || !apartBelow(line, below, ctx)) return null;
+  // A centered label over a centered title lines up with it by their
+  // middles (parse loop finding: the Official Journal's "Article 6" over
+  // "Classification rules for high-risk AI systems" read as a paragraph,
+  // where "Article 1" over the shorter "Subject matter" read as a heading).
+  const middles = (isCentered(lines, i, ctx) || symmetric(line)) && (isCentered(lines, i + 1, ctx) || symmetric(below)) && Math.abs(below.x + below.xEnd - line.x - line.xEnd) <= line.size * 2;
+  // The page's first line has no line above it to stand apart from: a
+  // centered label over its centered title is a heading there as well
+  // (parse loop finding: the Official Journal's "Article 4" at the top of
+  // its page read as a paragraph).
+  if (above ? !apartAbove(above, line, ctx) : !middles) return null;
+  if ((Math.abs(below.x - line.x) > line.size * 2 && !middles) || textShare(below, (item) => item.italic) > 0.5 || below.size < line.size * 0.9) return null;
   return { segments: [headingOf([line], text, line.runs)], next: i + 1 };
 }
 

@@ -631,7 +631,11 @@ export function isOcrLayer(glyphs: Glyph[]): boolean {
     the other, of one size and starting at one place or stepping out from
     an indent, stand two sizes apart or more (under three). Then it is the
     middle of those: a report's body set 2.35 sizes apart read a paragraph
-    to a line, its first lines' 36 pt indents lost. */
+    to a line, its first lines' 36 pt indents lost. A pair whose upper line
+    ends a sentence or a clause is two paragraphs, no double spacing (parse
+    loop finding: the Official Journal sets its one-line points "(b) …;"
+    and "(c) …;" 2.8 sizes apart, the page read as double-spaced, and its
+    headings "Article 13" over their titles as paragraphs). */
 export function pageLeading(lines: Line[], leading: number): number {
   const single: number[] = [];
   const double: number[] = [];
@@ -640,6 +644,7 @@ export function pageLeading(lines: Line[], leading: number): number {
     const gap = a.y - b.y;
     if (a.cells.length !== 1 || b.cells.length !== 1 || [...a.text].length < 40 || [...b.text].length < 40) continue;
     if (Math.abs(a.size - b.size) >= 0.6 || b.x > a.x + 1 || gap <= b.size * 1.05 || gap >= b.size * 3) continue;
+    if (gap >= b.size * 2 && /[.;:!?]["'”’)\]]?$/.test(a.text.trim())) continue;
     (gap < b.size * 2 ? single : double).push(gap / b.size);
   }
   return double.length >= 4 && double.length > single.length * 2 ? Math.max(leading, median(double)) : leading;

@@ -242,8 +242,21 @@ function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[],
           !/[.:;!?]$/.test(prev.text.trim()) &&
           fillsMargin(prev, next, edge) &&
           !items.some((it) => sameLevel(it, here, next.size))));
-    // Marked items sit farther apart than wrapped lines (itemsep).
-    const spaced = gap <= next.size * ctx.leading * 2.2 || (spacing.length > 0 && gap <= Math.max(...spacing) * 1.2);
+    // Marked items sit farther apart than wrapped lines (itemsep). The next
+    // number or letter of the item's sequence, at the item's marker, opens
+    // the next item from further down (parse loop finding: the Official
+    // Journal sets the points of an article two and a half lines apart, and
+    // its one-line points "(a) …; (b) …" ran together as one paragraph).
+    // An item whose lines come back under its marker is a numbered paragraph
+    // ("1. The purpose of this Regulation …"), which the wider gap leaves
+    // apart.
+    const hangs = item.lines.slice(1).every((l) => l.x > item.markerX + next.size * 0.5);
+    const inSequence =
+      mark !== null && mark.family !== "bullet" && mark.family !== "box" && hangs && follows(item.marker, mark) && Math.abs(next.x - item.markerX) <= next.size * 0.3;
+    const spaced =
+      gap <= next.size * ctx.leading * 2.2 ||
+      (spacing.length > 0 && gap <= Math.max(...spacing) * 1.2) ||
+      (spacing.length === 0 && inSequence && gap <= next.size * ctx.leading * 3.5);
     if (mark && !wrap && spaced && joinsList(items, next, mark, drawn ?? next.x)) {
       spacing.push(gap);
       items.push(itemOf(next, mark, drawn ?? next.x));
