@@ -216,9 +216,9 @@
    "recall": 1
   },
   "3ce1c8fdf6": {
-   "f1": 0.928,
-   "precision": 0.915,
-   "recall": 0.942
+   "f1": 0.958,
+   "precision": 0.92,
+   "recall": 1
   },
   "3d8f3404cf": {
    "f1": 0.994,
