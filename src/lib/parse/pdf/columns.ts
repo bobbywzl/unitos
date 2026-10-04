@@ -602,7 +602,16 @@ function isNoteBand(band: Band, page: number): boolean {
   // its 10.9 pt column, and each note ran into the column's line beside
   // it: "Introduced	chemformula offers …").
   const smaller = median(note.items.map((i) => i.size)) <= size * 0.9;
-  return gutter >= size * (smaller ? 0.75 : 1) && isColumn(wide.items, page) && isDense(buildLines(wide.items, page));
+  // Beside smaller notes, a column whose entries stand apart (a command's
+  // line over its description, a blank line under each) is dense enough
+  // when a third of its lines follow the line above at the text's leading
+  // (parse loop finding: the same manual's list of commands, p. 11, read
+  // its notes into the lines beside them).
+  const lines = buildLines(wide.items, page);
+  const gaps = lines.slice(1).map((l, k) => lines[k].y - l.y);
+  const close = gaps.filter((g) => g <= size * 1.6).length;
+  const dense = isDense(lines) || (smaller && close * 3 >= gaps.length);
+  return gutter >= size * (smaller ? 0.75 : 1) && isColumn(wide.items, page) && dense;
 }
 
 // A region cut above and under one band: what stands above it, the band,
