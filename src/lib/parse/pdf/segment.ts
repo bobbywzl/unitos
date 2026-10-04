@@ -115,7 +115,7 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
     const step =
       readSplitLine(lines, i) ??
       readCodeListing(lines, i, ctx, runOf) ??
-      readRuleLine(lines, i) ??
+      readRuleLine(lines, i, ctx) ??
       readLabelLine(lines, i, ctx) ??
       readAlgorithm(lines, i, ctx, runOf) ??
       readHeading(lines, i, ctx, runOf) ??
@@ -269,11 +269,17 @@ function separatorOf(page: number): Segment {
 
 // A line of rule glyphs alone ("———————", "- - - - - - - -"): the writer's
 // separator (a Google Docs note's line of dashes read as a paragraph).
-// Underscores are a form's blanks, not a separator.
+// Underscores are a form's blanks, not a separator. A scan's dashed rule
+// reads so too, its dashes in cells apart and a speck or two among them
+// (parse loop finding: DTIC's Helicopter Design Datcom p. 8 read its
+// dashed rule as a paragraph, "- - - - ----- ----- '-").
 const RULE_LINE_RE = /^[-–—─━═=~]{8,}$/;
-function readRuleLine(lines: Line[], i: number): Step | null {
+function readRuleLine(lines: Line[], i: number, ctx: PageContext): Step | null {
   const line = lines[i];
-  if (line.cells.length !== 1 || !RULE_LINE_RE.test(line.text.replace(/\s/g, ""))) return null;
+  const text = line.text.replace(/\s/g, "");
+  const dashes = text.match(/[-–—]/g)?.length ?? 0;
+  const scanRule = ctx.ocr && dashes >= 8 && text.length - dashes <= 2 && /^[-–—'’.,`]+$/.test(text);
+  if (!(line.cells.length === 1 && RULE_LINE_RE.test(text)) && !scanRule) return null;
   return { segments: [separatorOf(line.page)], next: i + 1 };
 }
 
