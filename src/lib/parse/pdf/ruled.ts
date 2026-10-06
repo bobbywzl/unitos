@@ -790,6 +790,12 @@ export function ruledTables(all: Item[], page: PageDrawing, pageWidth: number, p
   for (const region of regions) {
     const own = rotated.filter((it) => inBox(it, { ...region.box, x1: region.box.x1 - 2, x2: region.box.x2 + 2 }));
     if (own.length === 0) continue;
+    // A word set upright right after a rotated one is a word of its own:
+    // the two share no letter spacing (parse loop finding: IRS Form 1040's
+    // "Form", set sideways against its 20 pt "1040", read "Form1040").
+    for (const r of own)
+      for (const it of region.items)
+        if (it.x >= r.x + r.w - 1 && it.x - (r.x + r.w) < r.size * 0.5 && it.y <= r.y + r.w + it.size && it.y >= r.y - it.size) it.spaced = true;
     region.items.push(...own);
     region.lines = buildLines(region.items, 0);
   }
