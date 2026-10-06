@@ -419,9 +419,16 @@ function TraySection({
           {shownSectionTitle(section.title, t)}
         </button>
         {accepted.length > 0 && <span className="text-[11px] text-sand-500">{accepted.length}</span>}
+        {/* A quote or an annotation over the title row: the row itself says
+            where its note lands, so the notes under it stay where they are. */}
+        {litTop && (
+          <span aria-live="polite" className="ml-auto min-w-0 truncate text-[11.5px] font-semibold text-clay-700">
+            {t("outline.dropQuoteSectionTop", { section: shownSectionTitle(section.title, t) })}
+          </span>
+        )}
         {/* The section's actions stay visible (SPEC.md §6): a pill each, the
             same on the notes full page. */}
-        {!collapsed && canEdit && (
+        {!collapsed && canEdit && !litTop && (
           <button
             onClick={() => {
               // A second press while the composer is open puts the caret back in it.
@@ -436,15 +443,15 @@ function TraySection({
             {t("outline.addNoteBtn")}
           </button>
         )}
-        {!collapsed && canEdit && (
+        {!collapsed && canEdit && !litTop && (
           <VoiceNoteButton sectionId={section.id} onError={setVoiceError} className={SECTION_ACTION} />
         )}
       </div>
       {voiceError && <p className="text-xs text-red-500">{voiceError}</p>}
       {/* A quote or an annotation over the section says where its note lands. */}
-      {lit && (
-        <p aria-live="polite" className={`text-[11.5px] font-semibold text-clay-700 ${litTop ? "" : "order-last"}`}>
-          {t(litTop ? "outline.dropQuoteSectionTop" : "outline.dropQuoteSectionEnd", { section: shownSectionTitle(section.title, t) })}
+      {lit && !litTop && (
+        <p aria-live="polite" className="order-last text-[11.5px] font-semibold text-clay-700">
+          {t("outline.dropQuoteSectionEnd", { section: shownSectionTitle(section.title, t) })}
         </p>
       )}
 
