@@ -42,12 +42,39 @@ function anchorClass(color: string | null | undefined): string {
   return "anchor-mark";
 }
 
+/** The order of the anchors on one stretch of words: the innermost (the
+    shortest) first, then by source id. Source ids are made in time order,
+    so equal spans keep the order they were made in on every load. */
+function byStack(a: Highlight, b: Highlight): number {
+  return a.end - a.start - (b.end - b.start) || (a.sourceId ?? "").localeCompare(b.sourceId ?? "");
+}
+
+/** The notes and annotations on one stretch of words (SPEC.md §6), for a
+    paragraph's marks, a table's, and a figure's label alike. anchors: every
+    one, innermost first. anchor: the one the mark paints — the innermost,
+    except that a plain note's mark is the default clay, so where a
+    highlight or a comment also covers the words the reader's own color
+    shows. stack: every one a click can open; more than one, and the click
+    opens the chooser. */
+export function markStack(covering: Highlight[]): {
+  anchors: Highlight[];
+  anchor: Highlight | undefined;
+  stack: Highlight[];
+} {
+  const anchors = covering.filter((h) => h.kind === "anchor").sort(byStack);
+  const inner = anchors[0];
+  const anchor =
+    inner && !inner.annotation ? (anchors.find((h) => h.annotation && (h.color || h.comment)) ?? inner) : inner;
+  const stack = anchors.filter((h) => h.sourceId && (h.annotation || h.noteId) && !h.leaving);
+  return { anchors, anchor, stack };
+}
+
 /** What the paint depends on: the same string, the same paint. */
 export function marksSignature(highlights: Highlight[]): string {
   return JSON.stringify(
     highlights
       .filter((h) => PAINTED.has(h.kind))
-      .map((h) => [h.kind, h.start, h.end, h.sourceId, h.color, h.fresh, h.leaving, h.noteId, h.annotation, h.extractId, h.extractLabel, h.extractOrigin, h.definition]),
+      .map((h) => [h.kind, h.start, h.end, h.sourceId, h.color, h.fresh, h.leaving, h.noteId, h.annotation, h.comment, h.extractId, h.extractLabel, h.extractOrigin, h.definition]),
   );
 }
 
@@ -153,9 +180,7 @@ export function paintTableMarks(container: HTMLElement, blockId: string, text: s
     if (from === to) continue;
     const covering = painted.filter((h) => h.start <= from && h.end >= to);
     if (covering.length === 0) continue;
-    const anchors = covering.filter((h) => h.kind === "anchor");
-    const anchor =
-      anchors.length > 1 ? anchors.reduce((n, h) => (h.end - h.start < n.end - n.start ? h : n)) : anchors[0];
+    const { anchors, anchor, stack } = markStack(covering);
     const salience = covering.find((h) => h.kind === "salience");
     const simplify = covering.find((h) => h.kind === "simplify");
     const extract = covering.find((h) => h.kind === "extract");
@@ -163,8 +188,9 @@ export function paintTableMarks(container: HTMLElement, blockId: string, text: s
     const selection = covering.find((h) => h.kind === "selection" || h.kind === "pending-link");
     if (anchor || salience || simplify || extract || selection) {
       const leaving = Boolean(anchor?.leaving);
-      const focusable = Boolean(anchor?.annotation && anchor.sourceId && !leaving);
-      const noteMark = !anchor?.annotation && anchor?.noteId && !leaving ? anchor.noteId : null;
+      const stacked = stack.length > 1;
+      const focusable = Boolean(anchor?.annotation && anchor.sourceId && !leaving) || (stacked && !leaving);
+      const noteMark = !focusable && !anchor?.annotation && anchor?.noteId && !leaving ? anchor.noteId : null;
       const extractMark = extract && !focusable && !noteMark ? extract : null;
       const markClass = simplify
         ? "simplify-mark"
@@ -182,9 +208,10 @@ export function paintTableMarks(container: HTMLElement, blockId: string, text: s
       const painter = shown ? (origin.get(shown) ?? shown) : undefined;
       const sweep = Boolean(painter?.fresh && !leaving);
       const className = `${markClass}${selectionClass}${anchors.length > 1 ? " hl-stacked" : ""}${sweep ? " mark-sweep" : ""}${leaving ? " mark-out" : ""} rounded-[4px] ${focusable || noteMark || extractMark ? "annotation-mark" : ""}`;
-      const tip = focusable
-        ? t("panes.viewAnnotation")
-        : noteMark
+      const tip =
+        focusable && (anchor?.annotation || stack.some((h) => h.annotation))
+          ? t("panes.viewAnnotation")
+          : focusable || noteMark
           ? t("panes.viewNote")
           : extractMark
             ? t("panes.extractOpenCard", { label: extractMark.extractLabel ?? "" })
@@ -194,6 +221,8 @@ export function paintTableMarks(container: HTMLElement, blockId: string, text: s
         mark.setAttribute(MARK, "");
         mark.className = className.replace(/\s+/g, " ").trim();
         if (anchor?.sourceId) mark.dataset.sourceId = anchor.sourceId;
+        // Stacked words: every source on them (block-view.tsx data-source-ids).
+        if (stacked) mark.dataset.sourceIds = stack.map((h) => h.sourceId).join(" ");
         if (tip) mark.dataset.tip = tip;
         if (sweep && painter?.freshDelay) mark.style.animationDelay = `${painter.freshDelay}ms`;
         if (sweep && painter) {
@@ -204,7 +233,8 @@ export function paintTableMarks(container: HTMLElement, blockId: string, text: s
             endSweep(mark, { blockId, start: painter.start, end: painter.end });
           });
         }
-        if (focusable && anchor?.sourceId) mark.dataset.openAnnotation = anchor.sourceId;
+        const opens = anchor?.sourceId ?? stack[0]?.sourceId;
+        if (focusable && opens) mark.dataset.openAnnotation = opens;
         else if (noteMark) mark.dataset.openNote = noteMark;
         else if (extractMark) mark.dataset.openExtract = extractMark.extractId ?? "";
         return mark;
@@ -255,10 +285,19 @@ export function bindTableMarkClicks(container: HTMLElement): () => void {
   const onClick = (e: MouseEvent) => {
     const mark = (e.target as Element | null)?.closest<HTMLElement>(`[${MARK}]`);
     if (!mark || clickEndsDrag(e)) return;
-    const { openAnnotation, openNote, openExtract } = mark.dataset;
+    const { openAnnotation, openNote, openExtract, sourceIds } = mark.dataset;
     if (openAnnotation) {
       e.stopPropagation();
-      window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId: openAnnotation } }));
+      // Stacked words: the chooser at the click lists every one (SPEC.md §6).
+      const sources = sourceIds?.split(" ") ?? [];
+      window.dispatchEvent(
+        new CustomEvent("dissect:open-annotation", {
+          detail: {
+            sourceId: openAnnotation,
+            ...(sources.length > 1 ? { sources, x: e.clientX, y: e.clientY } : {}),
+          },
+        }),
+      );
     } else if (openNote) {
       e.stopPropagation();
       window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: openNote } }));

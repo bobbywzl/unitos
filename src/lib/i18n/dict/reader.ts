@@ -27,6 +27,8 @@ const en = {
   visualizeNeedsUltra: "Visualize is Unitos Ultra.",
   comment: "Comment",
   highlight: "Highlight",
+  // The stacked chooser's row for a plain note on the clicked words.
+  note: "Note",
   addToNotes: "Add to notes",
   addToNotesTitle: "Add the selection to a section as a quote",
   // The Add to notes bubble: a comment field, the sections for a new note,
@@ -340,6 +342,7 @@ const zh: Record<keyof typeof en, string> = {
   visualizeNeedsUltra: "可视化是 Unitos Ultra 功能。",
   comment: "评论",
   highlight: "高亮",
+  note: "笔记",
   addToNotes: "添加到笔记",
   addToNotesTitle: "把选中内容作为引文添加到某个章节",
   addCommentTitle: "可选。评论放在引文下方。按 Enter 添加到 {section}。",
