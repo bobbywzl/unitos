@@ -85,7 +85,8 @@ import { useWeb, WebChip } from "@/components/assistant/web-chip";
 import { SaveAsNote } from "@/components/assistant/save-as-note";
 import { QueuedList, queuedKey, type QueuedText } from "@/components/assistant/queued-list";
 import { useLang, useT } from "@/components/lang-provider";
-import { clipWords } from "@/lib/markdown-preview";
+import { clipWords, markdownPreview } from "@/lib/markdown-preview";
+import { noteTitle } from "@/lib/note-title";
 import { AnnotationGrip } from "@/components/outline/annotation-grip";
 import { useCardDropOpen } from "@/components/outline/use-card-drop";
 import {
@@ -366,6 +367,15 @@ const CARET_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "
 // How long a reading position waits for the page editor's words to come
 // (its code loads on demand; a long import takes a while to stand).
 const PAGE_WAIT_MS = 30_000;
+
+/** The mark a source paints on: its own, or, on stacked words, the mark
+    whose words it shares (block-view.tsx data-source-ids). */
+function markOfSource(root: ParentNode, sourceId: string): HTMLElement | null {
+  return (
+    root.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`) ??
+    root.querySelector<HTMLElement>(`[data-source-ids~="${sourceId}"]`)
+  );
+}
 
 // A jump flashes the mark or the block it lands on; the page editor paints it.
 function flashElement(el: HTMLElement) {
@@ -3973,7 +3983,7 @@ export function ReaderInteractions({
           rows ??= unitRows(pane, unit, richTextRef.current !== null);
           found = (rows ?? []).flatMap((row) => wordsOf(pane, row) ?? []);
         } else if (!wordsHidden(pane, keys.filter((key) => !isCoreKey(key)), readWholeRef.current)) {
-          const el = pane.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
+          const el = markOfSource(pane, sourceId);
           if (el) found = [el];
         }
       }
@@ -4026,7 +4036,7 @@ export function ReaderInteractions({
     let attempts = 0;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const tryOpen = () => {
-      const el = containerRef.current?.querySelector<HTMLElement>(`[data-source-id="${src}"]`);
+      const el = containerRef.current ? markOfSource(containerRef.current, src) : null;
       // Drawn: a mark in a collapsed unit waits for the unit read whole.
       if (el && el.getClientRects().length > 0) {
         window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId: src } }));
@@ -4088,11 +4098,31 @@ export function ReaderInteractions({
   const markTop = useCallback((sourceId: string) => {
     const container = containerRef.current;
     if (!container) return 80;
-    const markEl = container.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
+    const markEl = markOfSource(container, sourceId);
     return markEl
       ? markEl.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop
       : 80;
   }, []);
+  // The plain note a source quotes for, when it is no annotation's: the
+  // chooser's Note row (SPEC.md §6).
+  const noteOfSource = (sourceId: string): string | null => {
+    for (const list of Object.values(anchorHighlights)) {
+      const hit = list.find((h) => h.sourceId === sourceId);
+      if (hit) return hit.annotation ? null : (hit.noteId ?? null);
+    }
+    return null;
+  };
+  const notesById = useMemo(() => {
+    const byId = new Map<string, NoteView>();
+    const walk = (list: SectionView[]) => {
+      for (const section of list) {
+        for (const note of section.notes) byId.set(note.id, note);
+        walk(section.children);
+      }
+    };
+    walk(sections);
+    return byId;
+  }, [sections]);
   // The anchor a stored mark paints, rebuilt from its highlight entry.
   const anchorOfSource = useCallback((sourceId: string): Anchor | null => {
     for (const [blockId, list] of Object.entries(anchorHighlightsRef.current)) {
@@ -4116,11 +4146,13 @@ export function ReaderInteractions({
   }, []);
 
   // A hold on a highlight in the text lifts its passage (SPEC.md §6,
-  // lib/card-drag.ts): the pointer stays on the mark for HOLD_MS, the quote
-  // follows the pointer as a ghost, and let go on a note — a note card of
-  // the tray, or the floating card — it lands there as a quote, the mark's
-  // anchor its source. A press that moves first is a selection, as ever, and
-  // a shorter press is the click that opens the annotation. The article
+  // lib/card-drag.ts): the mouse stays on the mark for WORDS_HOLD_MS, the
+  // mark lifts (data-held), and the move that follows carries the quote as
+  // a ghost; let go on a note — a note card of the tray, or the floating
+  // card — it lands there as a quote, the mark's anchor its source. A press
+  // that moves first is a selection, as ever, and a press that ends where
+  // it began is the click that opens the annotation, however long. A touch
+  // never lifts from the words: its long press selects them. The article
   // stops selecting while the ghost is out: the press already started a
   // selection, and it would otherwise grow under the pointer.
   useEffect(() => {
@@ -4155,7 +4187,7 @@ export function ReaderInteractions({
             },
           );
         },
-        { pull: false },
+        { pull: false, words: true, armed: (on) => mark.toggleAttribute("data-held", on) },
       );
     };
     container.addEventListener("pointerdown", onDown);
@@ -4272,9 +4304,9 @@ export function ReaderInteractions({
       ).detail;
       const container = containerRef.current;
       // Another pane owns marks this pane does not paint.
-      if (!container?.querySelector(`[data-source-id="${sourceId}"]`)) return;
-      // Words under two annotations or more: a small chooser at the click
-      // lists every one, and the one picked opens (SPEC.md §6).
+      if (!container || !markOfSource(container, sourceId)) return;
+      // Words under more than one note or annotation: a small chooser at the
+      // click lists every one, and the one picked opens (SPEC.md §6).
       if (sources && sources.length > 1 && x !== undefined && y !== undefined) {
         const crect = container.getBoundingClientRect();
         setStackChooser({
@@ -4289,7 +4321,7 @@ export function ReaderInteractions({
       if (!stored) {
         // Highlight or comment: the on-mark card, right below the mark.
         const summary = annotationsBySourceRef.current[sourceId];
-        const markEl = container.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
+        const markEl = markOfSource(container, sourceId);
         if (!summary || !markEl) {
           window.dispatchEvent(
             new CustomEvent("dissect:focus-annotation", { detail: { sourceId } }),
@@ -9809,6 +9841,31 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           {stackChooser.sources.map((sid) => {
             const tool = annotationBubbles[sid];
             const summary = annotationsBySource[sid];
+            // A plain note on the words: its row opens the note in the tray.
+            const noteId = tool || summary ? null : noteOfSource(sid);
+            if (noteId) {
+              const note = notesById.get(noteId);
+              const line = note
+                ? noteTitle(note.content) || note.gist || markdownPreview(note.content)
+                : (anchorOfSource(sid)?.quotedText ?? "");
+              return (
+                <button
+                  key={sid}
+                  role="menuitem"
+                  data-track="stack-chooser-note"
+                  onClick={() => {
+                    setStackChooser(null);
+                    window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId } }));
+                  }}
+                  className="flex min-w-0 flex-col items-start rounded-xl px-2.5 py-1.5 text-left hover:bg-sand-100"
+                >
+                  <span className="text-[10.5px] font-bold tracking-[0.08em] text-clay-600 uppercase">
+                    {t("reader.note")}
+                  </span>
+                  <span className="line-clamp-2 text-[12px] text-sand-700">{line}</span>
+                </button>
+              );
+            }
             const kind = tool?.kind ?? summary?.kind ?? "highlight";
             const quote = summary?.quotedText ?? anchorOfSource(sid)?.quotedText ?? "";
             return (
