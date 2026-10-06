@@ -16,7 +16,7 @@ import { pageStore, usePageState } from "@/components/docs/page/store";
 import { DialogButton, ToolbarDialog } from "@/components/docs/toolbar/dialog";
 import { namedStyleSheet } from "@/components/docs/toolbar/styles";
 import { markChanges } from "@/components/docs/versions/diff";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { setVersionsOpen } from "@/lib/assistant/side-chat-open";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
 import { KATEX_MACROS } from "@/lib/katex";
@@ -229,7 +229,7 @@ export function VersionView({
     try {
       if (e.id) await api(`/api/documents/${documentId}/versions/${e.id}`, "PATCH", { name: name || null });
       else if (name) {
-        await flushDocument(documentId);
+        if (!(await flushDocument(documentId))) throw new Error(t("docsVersions.notSaved"));
         await api(`/api/documents/${documentId}/versions`, "POST", { name });
       }
       await load();
@@ -238,13 +238,31 @@ export function VersionView({
     }
   };
 
-  // Restore this version: the text on screen is kept as a version first,
-  // then the version's text becomes the document's, one change to undo.
+  // Restore this version: the text on screen is saved and kept as a
+  // version first, then the version's text becomes the document's, one
+  // change to undo. When the text cannot be kept (offline, a refused save),
+  // nothing is restored: the page keeps its text and the panel says why.
+  const [restoring, setRestoring] = useState(false);
   const restore = async () => {
-    if (!doc) return;
+    if (!doc || restoring) return;
     setConfirming(false);
-    await flushDocument(documentId);
-    if (!editor.isEmpty) await api(`/api/documents/${documentId}/versions`, "POST", {}).catch(() => {});
+    setRestoring(true);
+    setError(null);
+    try {
+      if (!(await flushDocument(documentId))) throw new Error("not saved");
+      if (!editor.isEmpty) {
+        await api(`/api/documents/${documentId}/versions`, "POST", {}).catch((err: unknown) => {
+          // A text with no words has nothing to keep.
+          const empty = err instanceof ApiError && (err.detail as { reason?: string } | null)?.reason === "empty";
+          if (!empty) throw err;
+        });
+      }
+    } catch {
+      setError(t("docsVersions.restoreNotKept"));
+      setRestoring(false);
+      return;
+    }
+    if (editor.isDestroyed) return;
     const node = editor.schema.nodeFromJSON(doc);
     const tr = editor.state.tr.replaceWith(0, editor.state.doc.content.size, node.content);
     for (const [name, value] of Object.entries(node.attrs)) tr.setDocAttribute(name, value);
@@ -299,7 +317,7 @@ export function VersionView({
             </div>
           )}
           {restorable && (
-            <DialogButton primary onClick={() => setConfirming(true)}>
+            <DialogButton primary disabled={restoring} onClick={() => setConfirming(true)}>
               {t("docsVersions.restore")}
             </DialogButton>
           )}

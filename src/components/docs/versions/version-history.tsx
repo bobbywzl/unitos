@@ -99,7 +99,7 @@ function NameDialog({ editor, documentId, onClose }: { editor: Editor; documentI
   const save = async () => {
     if (!name.trim()) return;
     try {
-      await flushDocument(documentId);
+      if (!(await flushDocument(documentId))) throw new Error(t("docsVersions.notSaved"));
       await api(`/api/documents/${documentId}/versions`, "POST", { name });
       onClose();
     } catch (err) {

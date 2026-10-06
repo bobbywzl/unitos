@@ -27,6 +27,7 @@ import { InsertLayer } from "@/components/docs/areas/insert";
 import { UnitosLayer } from "@/components/docs/areas/layer";
 import { CollapsedView, type PageCollapse } from "@/components/docs/layer/collapse";
 import { showLeftOff } from "@/components/docs/layer/left-off";
+import { registerDocumentFlush } from "@/components/docs/layer/flush";
 import { ReflowBar, useReflow } from "@/components/docs/page/reflow";
 import { showTranslations } from "@/components/docs/layer/reading";
 import { SuggestLayer } from "@/components/docs/suggest/layer";
@@ -586,11 +587,17 @@ export function DocsEditor({
   const shownSaveState = useSaveState(editor, documentId, shownSetup, saveState);
 
   useEffect(() => {
-    flushRef.current = flush;
+    const settle = async () => {
+      await flush();
+    };
+    flushRef.current = settle;
     return () => {
-      if (flushRef.current === flush) flushRef.current = null;
+      if (flushRef.current === settle) flushRef.current = null;
     };
   }, [flush, flushRef]);
+  // Version history and the voice command save this page's typing first
+  // (layer/flush.ts), and learn whether the save went through.
+  useEffect(() => (writable ? registerDocumentFlush(documentId, flush) : undefined), [writable, documentId, flush]);
 
   // The left-off mark above the block the reader left off at.
   useEffect(() => {
