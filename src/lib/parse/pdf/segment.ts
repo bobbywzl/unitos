@@ -272,6 +272,55 @@ function markPullQuotes(segments: Segment[]): void {
   }
 }
 
+/** A heading set plain that says again a sentence of the text, on its page
+    or within three pages of it, is a pull quote set large: a heading's
+    words are its own. A magazine sets a story's pull quotes over a spread
+    of pages, away from the paragraph they quote (parse loop finding: The
+    MagPi's pull quotes, 16 pt between drawn quote marks, "A realistic
+    driving experience that predated arcade games" on p. 49 from p. 46's
+    paragraph, read as headings among the section heads). */
+export function markPullQuoteHeadings(segments: Segment[]): void {
+  const wordsOf = (text: string) => text.toLowerCase().match(/\p{L}{3,}/gu) ?? [];
+  const tokensOf = (text: string) => text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+  // The most of the heading's words the paragraph says in a row: a pull
+  // quote says five or more as the paragraph does.
+  const run = (mine: string[], theirs: string[]) => {
+    let best = 0;
+    for (let i = 0; i < mine.length; i++)
+      for (let j = 0; j < theirs.length; j++) {
+        let k = 0;
+        while (i + k < mine.length && j + k < theirs.length && mine[i + k] === theirs[j + k]) k++;
+        best = Math.max(best, k);
+      }
+    return best;
+  };
+  const paragraphs = segments.filter((t) => t.type === "PARAGRAPH" && !/\bquote\b/.test(t.html ?? ""));
+  for (const s of segments) {
+    if (s.type !== "HEADING" || s.headingNum !== undefined || (s.runs ?? []).some((r) => r.bold) || s.text.length > 240) continue;
+    // A section's head is numbered ("33.3 Raising and Lowering …"), in
+    // capitals, or in title case ("IntelliJ / PyCharm / … 中的 Git"); a
+    // pull quote is a sentence, set plain and in sentence case.
+    const text = s.text.trim();
+    if (!/^[“"‘']?\p{L}/u.test(text) || /^(?:fig\.?|figure|table)\s*\d/i.test(text)) continue;
+    const later = (text.match(/\p{L}{3,}/gu) ?? []).slice(1);
+    if (later.filter((w) => /^\p{Ll}/u.test(w)).length < later.length * 0.5) continue;
+    const words = wordsOf(text);
+    if (words.length < 6) continue;
+    const tokens = tokensOf(text);
+    const quoted = paragraphs.some((t) => {
+      if (Math.abs(t.page - s.page) > 3 || t.text.length <= text.length) return false;
+      const theirs = new Set(wordsOf(t.text));
+      return words.filter((w) => theirs.has(w)).length >= words.length * 0.8 && run(tokens, tokensOf(t.text)) >= 5;
+    });
+    if (!quoted) continue;
+    s.type = "PARAGRAPH";
+    s.html = '<p class="quote"></p>';
+    delete s.rawSize;
+    delete s.headingNum;
+    delete s.align;
+  }
+}
+
 // ── Separators ──────────────────────────────────────────────────────────────
 
 function separatorOf(page: number): Segment {
