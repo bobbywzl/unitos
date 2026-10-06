@@ -8,6 +8,9 @@ import { clipWords } from "@/lib/markdown-preview";
 import { Presence } from "@/components/presence";
 import { FEEDBACK_OPEN_EVENT } from "@/components/feedback-button";
 import type { TKey } from "@/lib/i18n/dictionaries";
+import { useJumpParamCleanup } from "@/components/reader/jump-param";
+import { useEscapeLayer } from "@/lib/escape-layers";
+import { api } from "@/lib/api";
 
 // Reader views: Normal shows one document; Side by Side and Top and Bottom
 // show two panes, each with the full tool set. The choice lives in the URL —
@@ -258,6 +261,7 @@ export function ReaderPanes({
   documents,
   paneOne,
   paneTwo,
+  missing = null,
 }: {
   notebookId: string;
   view: ReaderViewKind;
@@ -266,6 +270,10 @@ export function ReaderPanes({
   documents: { id: string; title: string }[];
   paneOne: React.ReactNode;
   paneTwo: React.ReactNode | null;
+  // The address named a document this project does not hold (page.tsx):
+  // its title and Add back when the project held it once, else the plain
+  // notice. The first document opens in its place.
+  missing?: { documentId: string; title: string | null; canAddBack: boolean } | null;
 }) {
   const t = useT();
   const router = useRouter();
@@ -275,14 +283,48 @@ export function ReaderPanes({
   // (workspace.tsx, data-reader-view-slot): floating, it stood on the
   // article's bottom-left lines.
   const phone = useSyncExternalStore(subscribePhone, readPhone, () => false);
+  // Below md the button is the bottom bar's last button (the slot); at md and
+  // up it is the rail's last button, under Edit history: floating at the
+  // pane's bottom left it lay on the first words of the last lines on a
+  // tablet and a landscape phone.
   const [barSlot, setBarSlot] = useState<HTMLElement | null>(null);
+  const [rail, setRail] = useState<HTMLElement | null>(null);
   useEffect(() => {
     // The bar mounts with the reader, in the same commit.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setBarSlot(document.querySelector<HTMLElement>("[data-reader-view-slot]"));
+    setRail(document.querySelector<HTMLElement>('nav[data-nudge="rail"]'));
   }, []);
   const inBar = phone && barSlot !== null;
+  const inRail = !phone && rail !== null;
+  const portalTo = inBar ? barSlot : inRail ? rail : null;
+  // A phone has no room for Side by Side (195 and 147 px columns): the menu
+  // offers Normal and Top and Bottom, and a Side by Side address opens as
+  // Top and Bottom.
+  const views: ReaderViewKind[] = phone ? ["normal", "stack"] : ["normal", "side", "stack"];
+  useEffect(() => {
+    if (!phone || view !== "side") return;
+    router.replace(viewHref(notebookId, "stack", paneOneId, paneTwoId));
+  }, [phone, view, router, notebookId, paneOneId, paneTwoId]);
+  const [missingClosed, setMissingClosed] = useState<string | null>(null);
+  const [addingBack, setAddingBack] = useState(false);
+  const [addBackError, setAddBackError] = useState<string | null>(null);
+  async function addBack(documentId: string) {
+    if (addingBack) return;
+    setAddingBack(true);
+    setAddBackError(null);
+    try {
+      await api(`/api/notebooks/${notebookId}/documents`, "POST", { documentId });
+      router.refresh();
+    } catch (err) {
+      setAddBackError(err instanceof Error ? err.message : t("common.requestFailed"));
+    } finally {
+      setAddingBack(false);
+    }
+  }
   const containerRef = useRef<HTMLDivElement>(null);
+  // A jump's ?src, ?block, ?link drop once the reader moves on (jump-param.ts).
+  useJumpParamCleanup(containerRef);
   const paneOneRef = useRef<HTMLDivElement>(null);
   const paneTwoRef = useRef<HTMLDivElement>(null);
   // The first pane's share of the reader. Post-hydration restore on purpose:
@@ -346,16 +388,11 @@ export function ReaderPanes({
     const onPointerDown = (e: PointerEvent) => {
       if (!menuRef.current?.contains(e.target as Node)) setMenu(false);
     };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenu(false);
-    };
     window.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("keydown", onKeyDown);
-    };
+    return () => window.removeEventListener("pointerdown", onPointerDown);
   }, [menu]);
+  // Escape closes the menu as one layer (lib/escape-layers.ts).
+  useEscapeLayer(menu, () => setMenu(false));
 
   function go(next: ReaderViewKind) {
     setMenu(false);
@@ -382,7 +419,7 @@ export function ReaderPanes({
     <div
       ref={menuRef}
       className={
-        inBar
+        portalTo
           ? "relative"
           : `absolute bottom-4 left-4 max-md:in-data-sheet-open:right-4 max-md:in-data-sheet-open:left-auto print:hidden ${
               menu ? "z-40" : "z-30"
@@ -396,7 +433,7 @@ export function ReaderPanes({
         data-tip={t("panes.readerView")}
         aria-expanded={menu}
         className={
-          inBar
+          portalTo
             ? "flex size-[38px] items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800"
             : "flex items-center justify-center rounded-full bg-sand-100 p-2 text-sand-600 shadow-soft hover:text-clay-800"
         }
@@ -406,11 +443,15 @@ export function ReaderPanes({
       <Presence show={menu} exit="menu">
       {menu && (
         <div
-          className={`menu-in absolute bottom-full flex w-44 flex-col rounded-2xl bg-card p-1.5 shadow-float ${
-            inBar ? "right-0 mb-2.5" : "left-0 mb-1.5 max-md:in-data-sheet-open:right-0 max-md:in-data-sheet-open:left-auto"
+          className={`menu-in absolute z-40 flex w-44 flex-col rounded-2xl bg-card p-1.5 shadow-float ${
+            inBar
+              ? "right-0 bottom-full mb-2.5"
+              : inRail
+                ? "right-full bottom-0 mr-2"
+                : "bottom-full left-0 mb-1.5 max-md:in-data-sheet-open:right-0 max-md:in-data-sheet-open:left-auto"
           }`}
         >
-          {(["normal", "side", "stack"] as const).map((kind) => (
+          {views.map((kind) => (
             <button
               key={kind}
               onClick={() => go(kind)}
@@ -457,7 +498,42 @@ export function ReaderPanes({
       }
       className={`relative flex h-full min-h-0 min-w-0 ${view === "stack" ? "flex-col" : "flex-row"}`}
     >
-      {inBar && barSlot ? createPortal(viewControl, barSlot) : viewControl}
+      {portalTo ? createPortal(viewControl, portalTo) : viewControl}
+
+      {missing && missingClosed !== missing.documentId && (
+        <div
+          role="status"
+          className="absolute inset-x-0 top-3 z-30 flex justify-center px-4 print:hidden"
+        >
+          <div className="pop-in flex max-w-lg flex-wrap items-center gap-2 rounded-2xl bg-card px-4 py-2.5 text-[13px] text-sand-700 shadow-float">
+            <span className="min-w-0">
+              {missing.title
+                ? t("panes.missingDocumentNamed", { title: missing.title })
+                : t("panes.missingDocument")}
+            </span>
+            {missing.canAddBack && (
+              <button
+                type="button"
+                onClick={() => void addBack(missing.documentId)}
+                disabled={addingBack}
+                data-track="missing-add-back"
+                className="rounded-full bg-clay px-3 py-1 text-[12px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-60"
+              >
+                {addingBack ? t("common.loading") : t("panes.historyAddBack")}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setMissingClosed(missing.documentId)}
+              aria-label={t("common.close")}
+              className="rounded-full px-1.5 text-sand-500 hover:text-clay-800"
+            >
+              ✕
+            </button>
+            {addBackError && <span className="w-full text-[11px] text-clay-700">{addBackError}</span>}
+          </div>
+        </div>
+      )}
 
       {/* Each pane is a column: the pane header (a split view) above the
           scroller. In a split view the first pane takes its share and the

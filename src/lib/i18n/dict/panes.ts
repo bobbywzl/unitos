@@ -416,6 +416,8 @@ const en = {
   historyAddBack: "Add back",
   historyAddBackTitle: "Put the document back in this project, with this project's work on it",
   historyAddedBack: "Added back",
+  missingDocumentNamed: "“{title}” is no longer in this project. The first document opened in its place.",
+  missingDocument: "The document in the address is not in this project. The first document opened in its place.",
   historyNoteMerge: "merged notes into one",
   historyReparse: "re-parsed a document",
 
@@ -899,6 +901,8 @@ const zh: Record<keyof typeof en, string> = {
   historyAddBack: "加回",
   historyAddBackTitle: "把文档放回此项目，连同此项目对它的工作",
   historyAddedBack: "已加回",
+  missingDocumentNamed: "“{title}”已不在此项目中。已打开第一个文档。",
+  missingDocument: "地址中的文档不在此项目中。已打开第一个文档。",
   historyNoteMerge: "把几条笔记合并为一条",
   historyReparse: "重新解析了一个文档",
 

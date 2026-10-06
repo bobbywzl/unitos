@@ -208,6 +208,22 @@ export default async function NotebookPage(props: {
     addedAt: nd.document.createdAt.toISOString(),
   }));
   const activeId = doc && attached.some((d) => d.id === doc) ? doc : (attached[0]?.id ?? null);
+  // The address named a document this project does not hold (a note's jump
+  // or a History row after Remove from this project, an old link): the
+  // first document opens, and the reader says so (reader-panes.tsx). A
+  // document the project held once, by its DOCUMENT_DETACH event, is named
+  // and offers Add back; any other id is not named.
+  const missingDoc =
+    doc && doc !== activeId
+      ? await (async () => {
+          const held = await db.notebookEvent.findFirst({
+            where: { notebookId, kind: "DOCUMENT_DETACH", meta: { path: ["documentId"], equals: doc } },
+            select: { id: true },
+          });
+          const row = held ? await db.document.findUnique({ where: { id: doc }, select: { title: true } }) : null;
+          return { documentId: doc, title: row?.title ?? null, held: row !== null };
+        })()
+      : null;
   // The reader view is a per-visit choice carried in the URL; a fresh open is Normal.
   const readerView: ReaderViewKind =
     viewParam === "side" || viewParam === "stack" ? viewParam : "normal";
@@ -1467,6 +1483,15 @@ export default async function NotebookPage(props: {
             documents={attached.map((d) => ({ id: d.id, title: d.title }))}
             paneOne={paneNode(paneOne, `one:${paneOne.document.id}`, "one")}
             paneTwo={paneTwo ? paneNode(paneTwo, `two:${paneTwo.document.id}`, "two") : null}
+            missing={
+              missingDoc
+                ? {
+                    documentId: missingDoc.documentId,
+                    title: missingDoc.title,
+                    canAddBack: missingDoc.held && myRole !== "viewer",
+                  }
+                : null
+            }
           />
         ) : (
           <div key="empty" className="content-in flex h-full flex-col items-center justify-center gap-5">
