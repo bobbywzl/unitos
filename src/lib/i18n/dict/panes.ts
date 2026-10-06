@@ -156,7 +156,7 @@ const en = {
   removeFromProject: "Remove from this project",
   removeFromProjectTitle:
     "Take the document out of this project. It stays in the library and in its other projects, with its annotations. Library adds it back.",
-  removeFromProjectOnly: "This document is in no other project. Delete document removes it.",
+  removeFromProjectOnly: "This document is in no other project you can open. Delete document removes it.",
   removeFromProjectDone: "Removed from this project. Library adds it back.",
   documentActions: "Document actions",
   documentList: "Documents in this project",
@@ -671,7 +671,7 @@ const zh: Record<keyof typeof en, string> = {
   listSeparator: "、",
   removeFromProject: "从此项目移出",
   removeFromProjectTitle: "把文档移出此项目。它仍在文档库和其他项目中，批注也保留。可从文档库重新加入。",
-  removeFromProjectOnly: "此文档不在其他项目中。要移除它，请删除文档。",
+  removeFromProjectOnly: "此文档不在你能打开的其他项目中。要移除它，请删除文档。",
   removeFromProjectDone: "已从此项目移出。可从文档库重新加入。",
   documentActions: "文档操作",
   documentList: "此项目的文档",
