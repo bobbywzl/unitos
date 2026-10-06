@@ -50,6 +50,13 @@ export const CAPTION_RE = new RegExp(
   String.raw`^(?:(?:${LABEL})\s*(?:\d+(?:[.‐–-]\d+)*[a-z]?|[A-Z][‐–-]?\d+[a-z]?|[IVXL]+\b)\s*[.:|–—-](?!\d)\s*|(?:figure|photo|visualization|image|map|chart|plate|abbildung)\.\s+\S|(?:図表|図|图|圖|表)\s*[0-9Ⅰ-Ⅻ]+(?:[-‐–.][0-9Ⅰ-Ⅻ]+)*[.:．：]?\s(?![^]*。))`,
   "i",
 );
+// On an OCR page a figure's number reads as the letters and marks its digits
+// look like ("FIGUREIS.-" for 15, "\FIGURE!i.-" for 17, "FIGURE H.-" for
+// 11), its stop the period and dash a scan's caption sets (parse loop
+// finding: NACA Report 515 p. 10, Figures 15 and 17's captions read as a
+// heading). Read so on OCR pages only: a typeset page spells its numbers.
+export const OCR_CAPTION_RE = new RegExp(String.raw`^(?:${LABEL})\s?[\dIlSsOoHi!|]{1,3}\s?\.\s?[-–—]`, "i");
+export const isOcrCaption = (text: string, ctx: PageContext) => ctx.ocr && OCR_CAPTION_RE.test(text.trim());
 // "Table 3", "Table A1", an appendix's "Table A-1", IEEE's "TABLE IV", and
 // "表 2".
 const TABLE_CAPTION_RE = /^(?:(?:table|tab\.|tabelle)\s*(?:\d+|[A-Z][‐–-]?\d+|[IVXL]+\b)|表\s*[0-9Ⅰ-Ⅻ])/i;
@@ -1366,7 +1373,7 @@ export function attachFigureRegions(
     if (
       cap.type !== "PARAGRAPH" ||
       !cap.box ||
-      !isCaption(cap.text, cap.runs) ||
+      !(isCaption(cap.text, cap.runs) || isOcrCaption(cap.text, ctx)) ||
       TABLE_CAPTION_RE.test(cap.text)
     ) {
       out.push(cap);
@@ -1638,7 +1645,22 @@ export function attachFigureRegions(
         }
       }
     }
-    let { text, runs, box: captionBox } = withFollower(cap, next.find((s) => !consumed.has(s)));
+    // On an OCR page a speck under the caption (a lone "(", no letter or
+    // digit) stands between it and its last line: the caption reads past it,
+    // and drops it once it takes the line (parse loop finding: NACA Report
+    // 515 p. 10, Figure 15's "rotor, μ=0.44, …" under a speck read as a
+    // paragraph of its own).
+    const specks: Segment[] = [];
+    const follower = next.find((s) => {
+      if (consumed.has(s)) return false;
+      if (ctx.ocr && s.type === "PARAGRAPH" && !/[\p{L}\p{N}]/u.test(s.text)) {
+        specks.push(s);
+        return false;
+      }
+      return true;
+    });
+    let { text, runs, box: captionBox } = withFollower(cap, follower);
+    if (follower && consumed.has(follower)) for (const s of specks) consumed.add(s);
     // A figure's own link printed under its caption (PLOS prints each
     // figure's DOI there) ends the caption: a paragraph of its own, it ran
     // into the next page's first words ("….g007 durations are …").
