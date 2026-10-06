@@ -16,7 +16,14 @@ import {
 import { useT } from "@/components/lang-provider";
 import { Equation } from "@/components/reader/equation";
 import { MediaHtml } from "@/components/reader/figure-media";
-import { bindTableMarkClicks, clickEndsDrag, marksSignature, paintTableMarks, pressMark } from "@/components/reader/table-marks";
+import {
+  bindTableMarkClicks,
+  clickEndsDrag,
+  markStack,
+  marksSignature,
+  paintTableMarks,
+  pressMark,
+} from "@/components/reader/table-marks";
 import { pageImageUrl } from "@/lib/handwritten/page-url";
 import { endSweep } from "@/lib/mark-sweep";
 import { OFFICE_CSS } from "@/lib/office-css";
@@ -324,11 +331,9 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
     // A wheel color or a highlight is inline CSS on the words themselves.
     const custom = customCss(colored, highlighted);
     const inner = custom ? <span style={custom}>{segment}</span> : segment;
-    const anchors = covering.filter((h) => h.kind === "anchor");
-    const anchor =
-      anchors.length > 1
-        ? anchors.reduce((n, h) => (h.end - h.start < n.end - n.start ? h : n))
-        : anchors[0];
+    // The notes and annotations on these words: the one the mark paints, and
+    // every one a click can open (table-marks.ts markStack).
+    const { anchors, anchor, stack } = markStack(covering);
     const salience = covering.find((h) => h.kind === "salience");
     const simplify = covering.find((h) => h.kind === "simplify");
     const term = covering.find((h) => h.kind === "term");
@@ -455,10 +460,11 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
     } else if (anchor || salience || simplify || extract || selection) {
       // A leaving mark (its note just deleted) fades and takes no clicks.
       const leaving = Boolean(anchor?.leaving);
-      const focusable = anchor?.annotation && anchor.sourceId && !leaving;
+      const stacked = stack.length > 1;
+      const focusable = (anchor?.annotation && anchor.sourceId && !leaving) || (stacked && !leaving);
       // A regular note's mark: click jumps to the note in the tray — the
       // link between quote and note works both ways.
-      const noteMark = !anchor?.annotation && anchor?.noteId && !leaving ? anchor.noteId : null;
+      const noteMark = !focusable && !anchor?.annotation && anchor?.noteId && !leaving ? anchor.noteId : null;
       // A comment's icon sits right after its span; SVG only, so the block's
       // DOM text stays exactly the stored text (SPEC.md §5).
       const commentEnding = covering.find(
@@ -489,10 +495,13 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
         <mark
           key={from}
           data-source-id={anchor?.sourceId ?? undefined}
+          // Stacked words: every source on them, so an annotation or a note
+          // whose words another mark paints is still found by its id.
+          data-source-ids={stacked ? stack.map((h) => h.sourceId).join(" ") : undefined}
           data-tip={
-            focusable
+            focusable && (anchor?.annotation || stack.some((h) => h.annotation))
               ? t("panes.viewAnnotation")
-              : noteMark
+              : focusable || noteMark
                 ? t("panes.viewNote")
                 : extractMark
                   ? t("panes.extractOpenCard", { label: extractMark.extractLabel ?? "" })
@@ -506,16 +515,15 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
               ? (e) => {
                   if (clickEndsDrag(e)) return;
                   e.stopPropagation();
-                  // Stacked annotations: the reader picks which one opens
-                  // (SPEC.md §6), in a chooser at the click.
-                  const stacked = anchors
-                    .filter((h) => h.annotation && h.sourceId && !h.leaving)
-                    .map((h) => h.sourceId as string);
+                  // Stacked words: the reader picks which annotation or
+                  // note opens (SPEC.md §6), in a chooser at the click.
                   window.dispatchEvent(
                     new CustomEvent("dissect:open-annotation", {
                       detail: {
-                        sourceId: anchor.sourceId,
-                        ...(stacked.length > 1 ? { sources: stacked, x: e.clientX, y: e.clientY } : {}),
+                        sourceId: anchor?.sourceId ?? stack[0]?.sourceId,
+                        ...(stacked
+                          ? { sources: stack.map((h) => h.sourceId as string), x: e.clientX, y: e.clientY }
+                          : {}),
                       },
                     }),
                   );
@@ -729,6 +737,10 @@ function HighlightLabel({ anchors }: { anchors: Highlight[] }) {
   const t = useT();
   const focusable = anchors.find((h) => h.annotation && h.sourceId);
   const noteMark = anchors.find((h) => !h.annotation && h.noteId);
+  // Notes and annotations on the same figure: the chooser lists them all,
+  // as on stacked words (SPEC.md §6). The block carries the first one's id.
+  const { stack } = markStack(anchors);
+  const blockSourceId = anchors.find((h) => h.sourceId)?.sourceId;
   const color = anchors.find((h) => h.color)?.color ?? "clay";
   const toolAnchor = anchors.find((h) => h.tool);
   const tool = toolAnchor?.tool;
@@ -739,7 +751,19 @@ function HighlightLabel({ anchors }: { anchors: Highlight[] }) {
       data-track="figure-label"
       data-hover-source={focusable?.sourceId ?? undefined}
       onClick={
-        focusable?.sourceId
+        stack.length > 1 && blockSourceId
+          ? (e) =>
+              window.dispatchEvent(
+                new CustomEvent("dissect:open-annotation", {
+                  detail: {
+                    sourceId: blockSourceId,
+                    sources: stack.map((h) => h.sourceId as string),
+                    x: e.clientX,
+                    y: e.clientY,
+                  },
+                }),
+              )
+          : focusable?.sourceId
           ? () =>
               window.dispatchEvent(
                 new CustomEvent("dissect:open-annotation", {
