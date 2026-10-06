@@ -56,6 +56,7 @@ import { NotesTray } from "@/components/outline/notes-tray";
 import { useNoteScope } from "@/components/outline/note-groups";
 import { Presence } from "@/components/presence";
 import { flattenNotes, useOutline } from "@/components/outline/use-outline";
+import { MergeUndoBar } from "@/components/outline/merge-undo";
 import { DocumentBar, type AttachedDocument } from "@/components/reader/document-bar";
 import type { DocumentFolderView } from "@/components/reader/document-folders";
 import type { ReaderViewKind } from "@/components/reader/reader-panes";
@@ -854,19 +855,10 @@ export function Workspace({
               {tab === "edits" && editsPanel}
             </div>
 
-            {lastRejected && (
-              <div className="flex shrink-0 items-center gap-3 rounded-full bg-card px-4 py-2.5 shadow-soft">
-                <span className="text-[13px] text-sand-600">{t("panes.noteRejected")}</span>
-                <button
-                  onClick={() => void undoReject()}
-                  data-track="undo-reject"
-                  data-tip={t("outline.undoRejectTitle")}
-                  className="ml-auto rounded-full bg-clay px-3.5 py-1 text-xs font-semibold text-clay-fg hover:bg-clay-600"
-                >
-                  {t("panes.undo")}
-                </button>
-              </div>
-            )}
+            {/* One Undo pill on the body for a merge, a delete, and a
+                reject, the newest taking it: it shows with the tray open on
+                any tab or folded (SPEC.md §6). */}
+            <MergeUndoBar actions={actions} rejected={lastRejected} onUndoReject={() => void undoReject()} />
 
           </aside>
         </div>

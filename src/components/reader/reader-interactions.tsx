@@ -85,7 +85,8 @@ import { useWeb, WebChip } from "@/components/assistant/web-chip";
 import { SaveAsNote } from "@/components/assistant/save-as-note";
 import { QueuedList, queuedKey, type QueuedText } from "@/components/assistant/queued-list";
 import { useLang, useT } from "@/components/lang-provider";
-import { clipWords } from "@/lib/markdown-preview";
+import { clipWords, markdownPreview } from "@/lib/markdown-preview";
+import { noteTitle } from "@/lib/note-title";
 import { AnnotationGrip } from "@/components/outline/annotation-grip";
 import { useCardDropOpen } from "@/components/outline/use-card-drop";
 import {
@@ -138,6 +139,7 @@ import { Reader, type TranscriptVariant } from "@/components/reader/reader";
 import { openVisualization } from "@/components/reader/visualization-viewer";
 import { setQuoteDragImage, writeQuoteDrag, type QuoteDrag } from "@/lib/quote-drag";
 import { blockIdOfKey, coreKey, isCoreKey } from "@/lib/anchors/core-key";
+import { MAX_SEGMENTS } from "@/lib/anchors/passage-limit";
 import { collapseUnits } from "@/lib/collapse-units";
 import { deriveBlocks } from "@/lib/docs/blocks";
 import { coreHiding } from "@/components/docs/layer/core-slot";
@@ -160,7 +162,7 @@ import { CardColumn, CommentCard } from "@/components/docs/layer/comment-card";
 import { setCommentResolved } from "@/lib/annotations/resolve";
 import { COMMENTS_EVENT, flashInPage, PAGE_EDITED_EVENT, type CommentsView } from "@/components/docs/layer/events";
 import { registerDocumentFlush } from "@/components/docs/layer/flush";
-import { CLOSE_TOOLBAR_EVENT, DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
+import { CLOSE_TOOLBAR_EVENT, DOCS_EVENT, fireDocs, type ModeRequest } from "@/components/docs/typing/events";
 import { matchesCombo } from "@/components/docs/keys";
 import {
   assistantAuthor,
@@ -170,14 +172,19 @@ import {
 } from "@/lib/docs/assistant-suggestions";
 import type { SuggestCommand } from "@/lib/prompts/suggest";
 import { readNdjson } from "@/lib/ndjson";
-import { saveNoteText } from "@/lib/notes/save-text";
+import { conflictLabels, saveNoteText } from "@/lib/notes/save-text";
+import { reconcileNoteText } from "@/lib/notes/conflict";
 import {
+  cardCommentKey,
   caretToEnd,
   clearToolbarDraft,
+  loadCardDraftBases,
   loadCardDrafts,
-  saveCardDrafts,
+  onCardDraftsChange,
+  readToolbarDraft,
   useToolbarDraft,
   useToolbarDraftRestore,
+  writeCardDrafts,
   writeToolbarDraft,
 } from "@/lib/toolbar-drafts";
 import {
@@ -360,6 +367,15 @@ const CARET_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "
 // How long a reading position waits for the page editor's words to come
 // (its code loads on demand; a long import takes a while to stand).
 const PAGE_WAIT_MS = 30_000;
+
+/** The mark a source paints on: its own, or, on stacked words, the mark
+    whose words it shares (block-view.tsx data-source-ids). */
+function markOfSource(root: ParentNode, sourceId: string): HTMLElement | null {
+  return (
+    root.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`) ??
+    root.querySelector<HTMLElement>(`[data-source-ids~="${sourceId}"]`)
+  );
+}
 
 // A jump flashes the mark or the block it lands on; the page editor paints it.
 function flashElement(el: HTMLElement) {
@@ -724,14 +740,33 @@ const SUGGEST_CHIPS: Chip[] = [
 // A tool's output continued into a conversation — Explain+, Simplify+,
 // Analyze+, Visualize+ (SPEC.md §21). Continue opens the box; the turns
 // persist on the tool's annotation (Note.conversation) and reopen with it.
+// How far the left-off mark's ribbon reaches above its block (reader.tsx
+// LeftOffMark): a block whose top is less than this under the pane's top
+// edge would hide the mark.
+const LEFT_OFF_RIBBON_PX = 16;
+
+// The tinted words of the open toolbar (.selection-mark) as one range.
+function tintRange(container: HTMLElement): Range | null {
+  const marks = container.querySelectorAll(".selection-mark");
+  if (marks.length === 0) return null;
+  const last = marks[marks.length - 1];
+  const range = document.createRange();
+  range.setStart(marks[0], 0);
+  range.setEnd(last, last.childNodes.length);
+  return range;
+}
+
 type ToolChat = {
   conversation: ChatTurn[];
   chatOpen: boolean; // the box is open: Continue was pressed, or turns exist
   input: string;
   busy: boolean; // a turn is in flight
   queue: QueuedText[]; // messages sent while a turn runs; they go out in order (SPEC.md §7)
+  // Why the last message did not go: a failed request, or offline. Its words
+  // are back in the box (rule zero: nothing typed is lost).
+  sendError?: string | null;
 };
-const NO_CHAT: ToolChat = { conversation: [], chatOpen: false, input: "", busy: false, queue: [] };
+const NO_CHAT: ToolChat = { conversation: [], chatOpen: false, input: "", busy: false, queue: [], sendError: null };
 
 // The card EXPLAIN and ANALYZE stream into (SPEC.md §4, §6): one card, the
 // kind sets its title and glyph.
@@ -749,6 +784,7 @@ type ExplainBubble = ToolChat & {
   anchor: Anchor | null; // the highlighted text this bubble explains
   noteId: string | null; // the persisted annotation; Delete removes it and its mark
   run?: number; // the run streaming into this card (toolRunsRef); none once reopened from a mark
+  runError?: string | null; // a Regenerate that did not land: why, under the output that stands
 };
 
 // suggestKey: an answer that landed suggestions in the text (SPEC.md §29);
@@ -806,7 +842,49 @@ type AssistantChat = {
   // Messages sent while an answer runs (SPEC.md §7): each goes out, in
   // order, into the thread that was open when it was queued.
   queue?: (QueuedText & { openKey: string | null })[];
+  // The box's words of the threads not on screen, by thread ("" the
+  // conversation, else the side chat's key): each thread keeps its own.
+  inputs?: Record<string, string>;
+  // Why the last message did not go; its words are back in the box.
+  sendError?: string | null;
 };
+
+// Two lots of the reader's words in one box, the older first.
+function joinWords(first: string, then: string): string {
+  if (!first.trim()) return then;
+  if (!then.trim()) return first;
+  return `${first.trim()}\n\n${then}`;
+}
+// A card's draft: the messages queued under it, which never went out, then
+// the box's words. A card closed before its queue went out reopens with them
+// in its box (SPEC.md §7).
+function withQueued(input: string, queued: readonly QueuedText[]): string {
+  return queued.reduceRight((text, q) => joinWords(q.content, text), input);
+}
+// A thread of the assistant card: null the conversation, else a side chat.
+function threadInput(chat: AssistantChat, key: string | null): string {
+  return (chat.openKey ?? null) === key ? chat.input : (chat.inputs?.[key ?? ""] ?? "");
+}
+function queuedIn(chat: AssistantChat, key: string | null): QueuedText[] {
+  return (chat.queue ?? []).filter((q) => q.openKey === key);
+}
+// The box shows another thread: the words on screen stay with the thread
+// they were typed in, and the other thread's words come back (or `kept`,
+// its stored draft).
+function switchThread(chat: AssistantChat, key: string | null, kept = ""): AssistantChat {
+  const from = chat.openKey ?? null;
+  if (from === key) return chat;
+  const inputs = { ...chat.inputs, [from ?? ""]: chat.input };
+  const input = inputs[key ?? ""] ?? kept;
+  delete inputs[key ?? ""];
+  return { ...chat, inputs, input, openKey: key, quote: null, sendError: null };
+}
+// The user message a failed request pushed, taken back out: its words go
+// back to the box, never into a turn nobody stored.
+function withoutSent<T extends ChatTurn>(turns: T[], sent: string): T[] {
+  const last = turns[turns.length - 1];
+  return last && last.role === "user" && last.content === sent ? turns.slice(0, -1) : turns;
+}
 type ReaderSideChat = {
   key: string;
   noteId: string | null;
@@ -881,6 +959,7 @@ type SimplifyCard = ToolChat & {
   sentences: SimplifiedSentence[] | null;
   active: number | null;
   run?: number; // the run streaming into this card (toolRunsRef); none once reopened from a mark
+  runError?: string | null; // a Regenerate that did not land: why, under the output that stands
 };
 
 // The card that opens once a link closes: the two ends, and a box for what
@@ -1411,6 +1490,27 @@ export function ReaderInteractions({
     }
     if (jumpOnOpen.current) return;
     let expected = applyReadingPosition(container, position, resume);
+    // The tab's copy restores the exact place, which can leave the block's
+    // top above the pane's edge (the reader was past its first lines): the
+    // mark then stands above the first block whose top shows, the block the
+    // reader reads into next, as the page editor's does (docs/layer/left-off.ts).
+    // A block that runs past the pane's bottom keeps it. The scroll never
+    // moves for the mark.
+    if (expected !== null && !resume && !isTranscript && !richTextRef.current && "blockId" in position) {
+      const crect = container.getBoundingClientRect();
+      const blockEls = [...container.querySelectorAll<HTMLElement>("article [data-block-id]")];
+      const at = blockEls.findIndex((el) => el.dataset.blockId === position.blockId);
+      const block = at >= 0 ? blockEls[at] : null;
+      if (block && block.getBoundingClientRect().top < crect.top + LEFT_OFF_RIBBON_PX) {
+        const next = blockEls
+          .slice(at + 1)
+          .find((el) => el.getClientRects().length > 0 && el.getBoundingClientRect().top >= crect.top + LEFT_OFF_RIBBON_PX);
+        const nextId = next?.dataset.blockId;
+        if (next && nextId && next.getBoundingClientRect().top < crect.bottom && block.getBoundingClientRect().bottom < crect.bottom) {
+          setLeftOffBlockId((shown) => (shown === position.blockId ? nextId : shown));
+        }
+      }
+    }
     // The page editor's words come after the pane: its code loads on demand,
     // and the editor stands a moment later. Until then the position waits
     // for its block (PAGE_WAIT_MS at most), then holds as on any document.
@@ -1940,12 +2040,18 @@ export function ReaderInteractions({
   // free for the next question as soon as one is sent.
   const [aiSent, setAiSent] = useState<{ text: string; from: Anchor } | null>(null);
   const [aiError, setAiError] = useState<{ text: string; from: Anchor } | null>(null);
+  // A Comment whose save failed: the toolbar opens again on its words with
+  // the box, the kept draft, and this reason under it (SPEC.md §6).
+  const [commentError, setCommentError] = useState<{ text: string; from: Anchor } | null>(null);
   const [aiListening, setAiListening] = useState(false);
   const [aiPlan, setAiPlan] = useState<AssistantPlan | null>(null);
   const [planChecked, setPlanChecked] = useState<Set<number>>(new Set());
-  // Where the plan came from: the selection's chat card shows it under its
-  // answer (SPEC.md §7); the panel's plan takes the card at the window's foot.
-  const [planFrom, setPlanFrom] = useState<"chat" | "panel">("panel");
+  // Where the plan came from: the selection's chat card, or an Explain or
+  // Simplify card's conversation, shows it under its answer, and only while
+  // that card is open (SPEC.md §7); the panel's plan takes the card at the
+  // window's foot. planNoteId is the conversation that proposed it.
+  const [planFrom, setPlanFrom] = useState<"chat" | "tool" | "panel">("panel");
+  const [planNoteId, setPlanNoteId] = useState<string | null>(null);
   // The sidebar assistant's plan (SPEC.md §7): the panel sends the actions
   // the server validated for this document; the plan card takes them. A
   // split reader has two of these; the document id picks the one.
@@ -1955,6 +2061,7 @@ export function ReaderInteractions({
       if (!detail || detail.documentId !== documentId) return;
       setAiPlan({ reply: null, actions: detail.actions, warnings: detail.warnings, conversationNoteId: null });
       setPlanFrom("panel");
+      setPlanNoteId(null);
       setPlanChecked(new Set(detail.actions.map((_, i) => i)));
     };
     window.addEventListener("dissect:assistant-plan", onPlan);
@@ -2034,6 +2141,8 @@ export function ReaderInteractions({
   const [columnHost, setColumnHost] = useState<HTMLDivElement | null>(null);
   const inColumn = (cards: React.ReactNode) => (columnHost ? createPortal(cards, columnHost) : cards);
   const [assistantChat, setAssistantChat] = useState<AssistantChat | null>(null);
+  const assistantChatRef = useRef(assistantChat);
+  assistantChatRef.current = assistantChat;
   // The assistant's bar at the bottom of the pane (SPEC.md §29).
   const [bar, setBar] = useState<AssistantBar | null>(null);
   // Highlighting an answer in the chat card (SPEC.md §7): Start side chat,
@@ -2067,6 +2176,9 @@ export function ReaderInteractions({
   // The pane's visible height: every tool card grows with its content up to
   // this, then its body scrolls (SPEC.md §6). 0 until measured.
   const [paneHeight, setPaneHeight] = useState(0);
+  // The pane's width: a card resized by its corner stops 8px short of the
+  // pane's right edge, so its buttons stay in view.
+  const [paneWidth, setPaneWidth] = useState(0);
   // The mouseup that ends a hold-and-circle gesture must not run selection
   // capture — it would replace the figure popover it just opened.
   const suppressNextMouseUp = useRef(false);
@@ -2217,23 +2329,22 @@ export function ReaderInteractions({
       showToast(t("reader.visualizeNeedsUltra"), plansAction);
       return;
     }
-    const { kind, anchor, noteId } = card;
+    const { kind, anchor } = card;
     const slot: SideSlot = { left: card.left, top: card.top, width: card.width, side: card.side };
-    await runBubble(kind, anchor, slot, noteId);
+    await runBubble(kind, anchor, slot, card);
   }
   async function regenerateSimplify() {
     const card = simplifyCard;
     if (!card || card.streaming || card.busy) return;
-    const { anchor, noteId } = card;
+    const { anchor } = card;
     const slot: SideSlot = { left: card.left, top: card.top, width: card.width, side: card.side };
-    await runSimplify(anchor, slot, noteId);
+    await runSimplify(anchor, slot, card);
   }
   function closeAssistantChat() {
     clearAnswerSelection();
-    // A turn still in flight aborts too — closing the card means nobody will
-    // read the reply, so there is nothing left for it to finish for.
-    chatAbortRef.current?.abort();
-    chatAbortRef.current = null;
+    // A turn in flight goes on: it lands on the conversation, and the mark
+    // reopens the card with it. Stop stops a run, never a close (SPEC.md §6);
+    // a message queued under it waits in the card's draft.
     setAssistantChat(null);
   }
   async function deleteAssistantConversation() {
@@ -2396,7 +2507,9 @@ export function ReaderInteractions({
 
   // Selection → block-relative offsets via data-block-id (SPEC.md §5). DOM ranges are never persisted.
   // Edit mode marks blocks with data-edit-block instead; both carry the block id.
-  const captureSelection = useCallback((): Popover | null => {
+  // `given`: a range to read in place of the browser's selection — the
+  // tint's, when the focus sits in a toolbar field (tintRange).
+  const captureSelection = useCallback((given?: Range | null): Popover | null => {
     const container = containerRef.current;
     if (!container) return null;
     // A page editor's passage is read from its document (SPEC.md §29); a
@@ -2404,13 +2517,14 @@ export function ReaderInteractions({
     // passage.
     const pageEditor = richTextRef.current ? pageEditorIn(container) : null;
     const selection = window.getSelection();
-    const selected = selection && !selection.isCollapsed && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+    const selected =
+      given ?? (selection && !selection.isCollapsed && selection.rangeCount > 0 ? selection.getRangeAt(0) : null);
     // A selection that starts in a core (SPEC.md §28) is the collapsed view's
     // words, drawn over the page's text: it is read as the block reader
     // reads it.
     const start = selected?.startContainer;
     const inCore = Boolean((start instanceof Element ? start : start?.parentElement)?.closest("[data-collapsed]"));
-    const cells = pageEditor && !inCore ? pageCellSelection(pageEditor) : null;
+    const cells = pageEditor && !inCore && !given ? pageCellSelection(pageEditor) : null;
     const range = cells?.range ?? selected;
     if (!range || !container.contains(range.commonAncestorContainer)) return null;
     const pageSelection = cells ?? (pageEditor && !inCore ? pageSelectionOfRange(pageEditor, range) : null);
@@ -2608,25 +2722,95 @@ export function ReaderInteractions({
   // the card's annotation, so a card closed by Escape or a click reopens from
   // its mark with the words still in its box.
   // Kept in localStorage too (unitos-card-drafts, by note id), so a reload or
-  // a crash keeps them as well (SPEC.md §6).
+  // a crash keeps them as well (SPEC.md §6). A comment's draft keeps the
+  // text it was typed on (its base), so a reopen after a change made
+  // elsewhere puts the two together instead of showing stale words.
+  // This tab writes only the drafts it changed, over what storage holds now:
+  // another tab on the same document keeps its own (toolbar-drafts.ts).
   const cardDraftsRef = useRef<Record<string, string> | null>(null);
+  const cardBasesRef = useRef<Record<string, string> | null>(null);
   if (cardDraftsRef.current === null) cardDraftsRef.current = loadCardDrafts();
-  const storedCardDrafts = useRef("");
+  if (cardBasesRef.current === null) cardBasesRef.current = loadCardDraftBases();
+  const draftChangesRef = useRef(new Map<string, string | null>());
+  const baseChangesRef = useRef(new Map<string, string | null>());
+  // What this tab's open cards last held, by key: a card that shows the
+  // same words again writes nothing, so it never undoes another tab's draft.
+  const draftShownRef = useRef(new Map<string, string | null>());
   useEffect(() => {
-    const json = JSON.stringify(cardDraftsRef.current ?? {});
-    if (json === storedCardDrafts.current) return;
-    storedCardDrafts.current = json;
-    saveCardDrafts(cardDraftsRef.current ?? {});
+    if (draftChangesRef.current.size === 0 && baseChangesRef.current.size === 0) return;
+    writeCardDrafts(draftChangesRef.current, baseChangesRef.current);
+    draftChangesRef.current = new Map();
+    baseChangesRef.current = new Map();
   });
-  const keepCardDraft = (noteId: string | null | undefined, text: string, saved = "") => {
-    if (!noteId) return;
+  // Another tab wrote: its drafts come in, and this tab's unwritten ones stay.
+  useEffect(
+    () =>
+      onCardDraftsChange(() => {
+        const drafts = loadCardDrafts();
+        const bases = loadCardDraftBases();
+        for (const [key, text] of draftChangesRef.current) {
+          if (text === null) delete drafts[key];
+          else drafts[key] = text;
+        }
+        for (const [key, base] of baseChangesRef.current) {
+          if (base === null) delete bases[key];
+          else bases[key] = base;
+        }
+        cardDraftsRef.current = drafts;
+        cardBasesRef.current = bases;
+      }),
+    [],
+  );
+  /** Keep `text` as the draft under `key` (null drops it), with the text it
+      was typed on when it has one. */
+  function setCardDraft(key: string, text: string | null, base: string | null = null) {
     const drafts = (cardDraftsRef.current ??= {});
-    if (text !== saved && text.trim()) drafts[noteId] = text;
-    else delete drafts[noteId];
+    const bases = (cardBasesRef.current ??= {});
+    if (text === null) delete drafts[key];
+    else drafts[key] = text;
+    if (text === null || base === null) delete bases[key];
+    else bases[key] = base;
+    draftChangesRef.current.set(key, text);
+    baseChangesRef.current.set(key, text === null ? null : base);
+  }
+  const keepCardDraft = (noteId: string | null | undefined, text: string, saved: string | null = null) => {
+    if (!noteId) return;
+    const next = text !== (saved ?? "") && text.trim() ? text : null;
+    if (draftShownRef.current.has(noteId) && draftShownRef.current.get(noteId) === next) return;
+    draftShownRef.current.set(noteId, next);
+    setCardDraft(noteId, next, saved);
   };
-  if (bubble) keepCardDraft(bubble.noteId, bubble.input);
-  if (simplifyCard) keepCardDraft(simplifyCard.noteId, simplifyCard.input);
-  if (assistantChat) keepCardDraft(assistantChat.noteId, assistantChat.input);
+  // Words that never reached the server go back to the card's draft when the
+  // card is closed: they show in its box when its mark opens it again.
+  const returnToCardDraft = (key: string, text: string) => {
+    const kept = cardDraftsRef.current?.[key] ?? "";
+    const next = joinWords(text, kept);
+    draftShownRef.current.delete(key);
+    setCardDraft(key, next, cardBasesRef.current?.[key] ?? null);
+  };
+  // A comment's draft when its card opens again (SPEC.md §6): as typed while
+  // the stored comment is still the one it was typed on; after a change made
+  // elsewhere, put together with the stored comment, as a note's editor does,
+  // so the next Save never writes the old words over the change.
+  const reopenedDraft = (noteId: string, stored: string): string => {
+    const draft = cardDraftsRef.current?.[noteId];
+    if (draft === undefined) return stored;
+    const base = cardBasesRef.current?.[noteId];
+    if (base === undefined || base.trim() === stored.trim()) return draft;
+    return reconcileNoteText(base.trim(), stored.trim(), draft.trim(), conflictLabels()).text;
+  };
+  const reopenedDraftRef = useRef(reopenedDraft);
+  reopenedDraftRef.current = reopenedDraft;
+  if (bubble) keepCardDraft(bubble.noteId, withQueued(bubble.input, bubble.queue));
+  if (simplifyCard) keepCardDraft(simplifyCard.noteId, withQueued(simplifyCard.input, simplifyCard.queue));
+  if (assistantChat) {
+    // Each thread keeps its own words: the conversation's, and each side
+    // chat's under its own note.
+    keepCardDraft(assistantChat.noteId, withQueued(threadInput(assistantChat, null), queuedIn(assistantChat, null)));
+    for (const side of assistantChat.sideChats ?? []) {
+      keepCardDraft(side.noteId, withQueued(threadInput(assistantChat, side.key), queuedIn(assistantChat, side.key)));
+    }
+  }
   if (commentCard) keepCardDraft(commentCard.noteId, commentCard.draft, commentCard.saved);
   if (annotationCard) keepCardDraft(annotationCard.noteId, annotationCard.draft, annotationCard.saved);
   // Close one layer. A run in it goes on: Stop stops a run, never Escape or a
@@ -3494,6 +3678,11 @@ export function ReaderInteractions({
       delete el.dataset.cardRoomBase;
     }
     const crect = container.getBoundingClientRect();
+    // On a phone the bottom bar lies over the pane's foot: the view ends at
+    // its top edge.
+    const rail = narrow ? document.querySelector<HTMLElement>('nav[data-nudge="rail"]') : null;
+    const railTop = rail && getComputedStyle(rail).position === "fixed" ? rail.getBoundingClientRect().top : Infinity;
+    const shownHeight = Math.min(crect.bottom, railTop) - crect.top;
     const tops: Record<string, number> = {};
     const ordered = [...hosts.keys()].sort((a, b) =>
       a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
@@ -3514,12 +3703,15 @@ export function ReaderInteractions({
       for (const card of cards) {
         tops[card.kind] = y;
         y += card.el.offsetHeight + CARD_GAP;
-        // A card that just opened under the window comes into view.
+        // A card that just opened under the window comes into view, its foot
+        // too (its buttons), as far as its words stay in view. A run that
+        // lands is a new layer key: the card, grown, is checked again.
         const key = `${card.kind}:${layerSeenRef.current[card.kind] ?? ""}`;
         if (!narrowShownRef.current.has(key)) {
           narrowShownRef.current.add(key);
-          const viewBottom = container.scrollTop + container.clientHeight;
-          const want = tops[card.kind] + Math.min(card.el.offsetHeight, 220) - (viewBottom - 16);
+          const viewBottom = container.scrollTop + shownHeight;
+          const want =
+            tops[card.kind] + Math.min(card.el.offsetHeight, Math.max(220, shownHeight - 32)) - (viewBottom - 16);
           const keep = card.anchorTop - container.scrollTop - 16;
           const by = Math.min(want, keep);
           if (by > 0) container.scrollBy({ top: by, behavior: "smooth" });
@@ -3609,6 +3801,15 @@ export function ReaderInteractions({
     if (el && simplifyTurnCount > 0) el.scrollTop = el.scrollHeight;
   }, [simplifyTurnCount]);
 
+  // The hint plays to its end once, then never again on any document.
+  const hintPlayed = () => {
+    setEditHint(false);
+    try {
+      localStorage.setItem("unitos-edit-hint", "done");
+    } catch {
+      // Storage blocked: the hint shows again on the next open.
+    }
+  };
   useEffect(() => {
     if (localStorage.getItem("unitos-edit-hint") === "done") return;
     // Beside the article when its right margin holds the card (with its
@@ -3782,7 +3983,7 @@ export function ReaderInteractions({
           rows ??= unitRows(pane, unit, richTextRef.current !== null);
           found = (rows ?? []).flatMap((row) => wordsOf(pane, row) ?? []);
         } else if (!wordsHidden(pane, keys.filter((key) => !isCoreKey(key)), readWholeRef.current)) {
-          const el = pane.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
+          const el = markOfSource(pane, sourceId);
           if (el) found = [el];
         }
       }
@@ -3835,7 +4036,7 @@ export function ReaderInteractions({
     let attempts = 0;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const tryOpen = () => {
-      const el = containerRef.current?.querySelector<HTMLElement>(`[data-source-id="${src}"]`);
+      const el = containerRef.current ? markOfSource(containerRef.current, src) : null;
       // Drawn: a mark in a collapsed unit waits for the unit read whole.
       if (el && el.getClientRects().length > 0) {
         window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId: src } }));
@@ -3897,11 +4098,31 @@ export function ReaderInteractions({
   const markTop = useCallback((sourceId: string) => {
     const container = containerRef.current;
     if (!container) return 80;
-    const markEl = container.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
+    const markEl = markOfSource(container, sourceId);
     return markEl
       ? markEl.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop
       : 80;
   }, []);
+  // The plain note a source quotes for, when it is no annotation's: the
+  // chooser's Note row (SPEC.md §6).
+  const noteOfSource = (sourceId: string): string | null => {
+    for (const list of Object.values(anchorHighlights)) {
+      const hit = list.find((h) => h.sourceId === sourceId);
+      if (hit) return hit.annotation ? null : (hit.noteId ?? null);
+    }
+    return null;
+  };
+  const notesById = useMemo(() => {
+    const byId = new Map<string, NoteView>();
+    const walk = (list: SectionView[]) => {
+      for (const section of list) {
+        for (const note of section.notes) byId.set(note.id, note);
+        walk(section.children);
+      }
+    };
+    walk(sections);
+    return byId;
+  }, [sections]);
   // The anchor a stored mark paints, rebuilt from its highlight entry.
   const anchorOfSource = useCallback((sourceId: string): Anchor | null => {
     for (const [blockId, list] of Object.entries(anchorHighlightsRef.current)) {
@@ -3925,11 +4146,13 @@ export function ReaderInteractions({
   }, []);
 
   // A hold on a highlight in the text lifts its passage (SPEC.md §6,
-  // lib/card-drag.ts): the pointer stays on the mark for HOLD_MS, the quote
-  // follows the pointer as a ghost, and let go on a note — a note card of
-  // the tray, or the floating card — it lands there as a quote, the mark's
-  // anchor its source. A press that moves first is a selection, as ever, and
-  // a shorter press is the click that opens the annotation. The article
+  // lib/card-drag.ts): the mouse stays on the mark for WORDS_HOLD_MS, the
+  // mark lifts (data-held), and the move that follows carries the quote as
+  // a ghost; let go on a note — a note card of the tray, or the floating
+  // card — it lands there as a quote, the mark's anchor its source. A press
+  // that moves first is a selection, as ever, and a press that ends where
+  // it began is the click that opens the annotation, however long. A touch
+  // never lifts from the words: its long press selects them. The article
   // stops selecting while the ghost is out: the press already started a
   // selection, and it would otherwise grow under the pointer.
   useEffect(() => {
@@ -3964,7 +4187,7 @@ export function ReaderInteractions({
             },
           );
         },
-        { pull: false },
+        { pull: false, words: true, armed: (on) => mark.toggleAttribute("data-held", on) },
       );
     };
     container.addEventListener("pointerdown", onDown);
@@ -4081,9 +4304,9 @@ export function ReaderInteractions({
       ).detail;
       const container = containerRef.current;
       // Another pane owns marks this pane does not paint.
-      if (!container?.querySelector(`[data-source-id="${sourceId}"]`)) return;
-      // Words under two annotations or more: a small chooser at the click
-      // lists every one, and the one picked opens (SPEC.md §6).
+      if (!container || !markOfSource(container, sourceId)) return;
+      // Words under more than one note or annotation: a small chooser at the
+      // click lists every one, and the one picked opens (SPEC.md §6).
       if (sources && sources.length > 1 && x !== undefined && y !== undefined) {
         const crect = container.getBoundingClientRect();
         setStackChooser({
@@ -4098,7 +4321,7 @@ export function ReaderInteractions({
       if (!stored) {
         // Highlight or comment: the on-mark card, right below the mark.
         const summary = annotationsBySourceRef.current[sourceId];
-        const markEl = container.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
+        const markEl = markOfSource(container, sourceId);
         if (!summary || !markEl) {
           window.dispatchEvent(
             new CustomEvent("dissect:focus-annotation", { detail: { sourceId } }),
@@ -4111,7 +4334,7 @@ export function ReaderInteractions({
         // A pure highlight stores its quote as content; its comment starts empty.
         const comment = summary.content === (summary.quotedText ?? "") ? "" : summary.content;
         // Words typed in the card before it closed come back (SPEC.md §6).
-        const draft = cardDraftsRef.current?.[summary.noteId] ?? comment;
+        const draft = reopenedDraftRef.current(summary.noteId, comment);
         // The block reader: the card docks beside the words like a tool card,
         // or under the paragraph in a narrow reader — never on the words
         // (SPEC.md §6).
@@ -4190,7 +4413,7 @@ export function ReaderInteractions({
         setCommentCard({
           ...slot,
           noteId: summary?.noteId ?? null,
-          draft: (summary?.noteId ? cardDraftsRef.current?.[summary.noteId] : undefined) ?? stored.content,
+          draft: summary?.noteId ? reopenedDraftRef.current(summary.noteId, stored.content) : stored.content,
           saved: stored.content,
           busy: false,
           anchor,
@@ -4259,6 +4482,39 @@ export function ReaderInteractions({
   // the moment the layout shifts. A split pane counts as narrow whatever its
   // width: in a split view a tool card opens only when the reader clicks its
   // highlight or symbol (SPEC.md §6).
+  // The toolbar follows its words to their new place (SPEC.md §6): they are
+  // measured again, from the browser's selection, or from the tint when the
+  // focus is in a toolbar field (Comment, Add to notes, the assistant's box)
+  // and the selection lives there. False when the words are not found: a
+  // toolbar with no words under it (a figure, a key term) cannot follow.
+  const placeToolboxAgain = (): boolean => {
+    const open = popoverRef.current;
+    const container = containerRef.current;
+    if (!open || open.figure || open.term || !container) return false;
+    const same = (p: Popover | null): p is Popover =>
+      p !== null &&
+      p.anchor.blockId === open.anchor.blockId &&
+      p.anchor.startOffset === open.anchor.startOffset &&
+      p.anchor.endOffset === open.anchor.endOffset;
+    let again = captureSelectionRef.current();
+    if (!same(again)) again = captureSelectionRef.current(tintRange(container));
+    if (!same(again)) return false;
+    // The same words: the anchor object stays, so a run sent from this
+    // toolbar still knows it.
+    setPopover({ ...again, anchor: open.anchor });
+    // Placed again, it is fitted into the pane again.
+    requestAnimationFrame(() => requestAnimationFrame(() => fitToolboxRef.current()));
+    return true;
+  };
+  const placeToolboxAgainRef = useRef(placeToolboxAgain);
+  placeToolboxAgainRef.current = placeToolboxAgain;
+  // The column slides when a card opens or closes beside it (--cards-room,
+  // 0.35 s): once it is still, an open toolbar stands beside its words again.
+  useEffect(() => {
+    if (!popoverRef.current) return;
+    const timer = window.setTimeout(() => placeToolboxAgainRef.current(), 400);
+    return () => window.clearTimeout(timer);
+  }, [cardsRoom]);
   const applyNarrow = useCallback(() => {
     const container = containerRef.current;
     if (!container) return null;
@@ -4271,9 +4527,15 @@ export function ReaderInteractions({
     if (isNarrow !== narrowRef.current) {
       narrowRef.current = isNarrow;
       if (isNarrow) {
-        setBubble((b) => (b && !b.streaming && !b.busy && b.noteId ? null : b));
-        setSimplifyCard((c) => (c && !c.streaming && !c.busy && c.noteId ? null : c));
-        setAssistantChat((c) => (c && !c.busy && c.noteId ? null : c));
+        // A card with words typed in its box, or messages waiting, stays: the
+        // reader is writing in it.
+        const typed = (c: { input: string; queue?: readonly unknown[] }) =>
+          c.input.trim() !== "" || (c.queue ?? []).length > 0;
+        setBubble((b) => (b && !b.streaming && !b.busy && b.noteId && !typed(b) ? null : b));
+        setSimplifyCard((c) => (c && !c.streaming && !c.busy && c.noteId && !typed(c) ? null : c));
+        setAssistantChat((c) =>
+          c && !c.busy && c.noteId && !typed(c) && !Object.values(c.inputs ?? {}).some((v) => v.trim()) ? null : c,
+        );
         setCommentCard((c) => (c && !c.busy && c.noteId && c.draft === c.saved ? null : c));
         setAnnotationCard((c) => (c && !c.busy && c.draft === c.saved ? null : c));
         // No room to make beside the words: the column goes back.
@@ -4297,6 +4559,7 @@ export function ReaderInteractions({
         setPaneHeight(height);
       }
       const width = container.clientWidth;
+      setPaneWidth(width);
       if (width === lastWidth) return;
       lastWidth = width;
       const measured = applyNarrow();
@@ -4334,15 +4597,7 @@ export function ReaderInteractions({
       // The toolbar follows its words to their new place (SPEC.md §6): the
       // selection is still there, so it is measured again. A toolbar with no
       // live selection under it (a figure, a key term) closes.
-      const open = popoverRef.current;
-      const again = open && !open.figure && !open.term ? captureSelectionRef.current() : null;
-      if (open && again && again.anchor.blockId === open.anchor.blockId && again.anchor.startOffset === open.anchor.startOffset && again.anchor.endOffset === open.anchor.endOffset) {
-        // The same words: the anchor object stays, so a run sent from this
-        // toolbar still knows it.
-        setPopover({ ...again, anchor: open.anchor });
-        // Placed again, it is fitted into the pane again.
-        requestAnimationFrame(() => requestAnimationFrame(() => fitToolboxRef.current()));
-      } else {
+      if (!placeToolboxAgainRef.current()) {
         setPopover(null);
         setSubmenu(null);
       }
@@ -4530,17 +4785,31 @@ export function ReaderInteractions({
   }, [blankDocument]);
 
   // The on-mark card closes on a click anywhere else. A click on another mark
-  // stays: the open handler replaces the card.
+  // stays: the open handler replaces the card. A press that drags is a
+  // selection, not a click: closing the card inside it would re-render the
+  // column and drop the new selection, so the card waits, and the selection
+  // toolbar closes it when it opens (yieldToSelection).
+  const annotationCardOpen = annotationCard !== null;
   useEffect(() => {
-    if (!annotationCard) return;
+    if (!annotationCardOpen) return;
+    let press: { x: number; y: number; target: Element | null } | null = null;
     const onMouseDown = (e: MouseEvent) => {
-      const target = e.target as Element | null;
-      if (target?.closest("[data-selection-popover], [data-source-id]")) return;
+      press = { x: e.clientX, y: e.clientY, target: e.target as Element | null };
+    };
+    const onMouseUp = (e: MouseEvent) => {
+      const down = press;
+      press = null;
+      if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4) return;
+      if (down.target?.closest?.("[data-selection-popover], [data-source-id]")) return;
       setAnnotationCard(null);
     };
     window.addEventListener("mousedown", onMouseDown);
-    return () => window.removeEventListener("mousedown", onMouseDown);
-  }, [annotationCard]);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [annotationCardOpen]);
 
   // The contents list (SPEC.md §26), opened from the Contents button at the
   // top left of the article.
@@ -5289,12 +5558,17 @@ export function ReaderInteractions({
     setBusy(true);
     try {
       await flushLiveBlock(popover.anchor.blockId);
-      const note = await api<{ id: string }>("/api/notes", "POST", {
+      // A quote whose place is gone by the time the write lands (an edit
+      // elsewhere, a queued write replayed later) still lands its words,
+      // without the source, and the reader is told.
+      const note = await api<{ id: string; sourceDropped?: boolean }>("/api/notes", "POST", {
         sectionId,
         content: addToNotesText(popover.anchor),
         source: { documentId, ...anchorBody(popover.anchor) },
         ...segmentsBody(popover.anchor),
+        onSourceLost: "keep",
       });
+      if (note.sourceDropped === true) showToast(t("outline.quoteSourceLost"));
       addedToNotes(popover.anchor);
       // The tray opens on the new note, so the reader sees where it went
       // (SPEC.md §6): every document, and a blank one whose tray starts
@@ -5315,13 +5589,15 @@ export function ReaderInteractions({
     setBusy(true);
     try {
       await flushLiveBlock(popover.anchor.blockId);
-      await api(`/api/notes/${note.id}`, "PATCH", {
+      const answer = await api<{ sourceDropped?: boolean } | null>(`/api/notes/${note.id}`, "PATCH", {
         append: addToNotesText(popover.anchor),
         addSource: {
           source: { documentId, ...anchorBody(popover.anchor) },
           ...segmentsBody(popover.anchor),
         },
+        onSourceLost: "keep",
       });
+      if (answer?.sourceDropped === true) showToast(t("outline.quoteSourceLost"));
       addedToNotes(popover.anchor);
       window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: note.id } }));
     } catch (err) {
@@ -5356,9 +5632,19 @@ export function ReaderInteractions({
     return segments.length > 1 ? { segments: segments.map(anchorBody) } : {};
   }
 
-  function deriveBody(type: string, anchor: Anchor) {
+  // conversationOf: Regenerate on an annotation with a conversation (SPEC.md
+  // §4, §21): the new annotation takes its turns.
+  function deriveBody(type: string, anchor: Anchor, conversationOf?: string | null) {
     // The Web toggle (SPEC.md §7): the route searches for EXPLAIN and ANALYZE.
-    return JSON.stringify({ type, documentId, notebookId, web, anchor: anchorBody(anchor), ...segmentsBody(anchor) });
+    return JSON.stringify({
+      type,
+      documentId,
+      notebookId,
+      web,
+      anchor: anchorBody(anchor),
+      ...segmentsBody(anchor),
+      ...(conversationOf ? { conversationOf } : {}),
+    });
   }
 
   // DEFINE (SPEC.md §4, §6): the meaning of the selected word in its
@@ -5533,27 +5819,55 @@ export function ReaderInteractions({
       },
     }, 12000);
   }
-  // replaceNoteId: the annotation this run regenerates. It goes only once the
-  // new one is stored, so a failed run never loses what stands (SPEC.md §4).
+  // A Regenerate keeps the card's conversation: its turns, whether its box
+  // is open, the box's words and the messages queued under it.
+  const chatCarried = (replacing: ToolChat | null | undefined): ToolChat =>
+    replacing
+      ? {
+          ...NO_CHAT,
+          conversation: replacing.conversation,
+          chatOpen: replacing.chatOpen,
+          input: replacing.input,
+          queue: replacing.queue,
+        }
+      : NO_CHAT;
+  // The annotation whose turns the new one takes: only one with turns.
+  const turnsOf = (replacing: (ToolChat & { noteId: string | null }) | null | undefined) =>
+    replacing?.noteId && replacing.conversation.length > 0 ? replacing.noteId : null;
+  // The new annotation holds the turns now; the old one's draft moves to it.
+  function carryTurns(replacing: (ToolChat & { noteId: string | null }) | null | undefined, noteId: string) {
+    if (!replacing?.noteId) return;
+    if (replacing.conversation.length > 0) toolConversationsRef.current[noteId] = replacing.conversation;
+    draftShownRef.current.delete(replacing.noteId);
+    setCardDraft(replacing.noteId, null);
+  }
+  // Where a card stands now: a card moved while its run ran stays there.
+  const slotOf = (c: SideSlot): SideSlot => ({ left: c.left, top: c.top, width: c.width, side: c.side });
+  // replacing: the card this run regenerates (SPEC.md §4). Its annotation
+  // goes only once the new one is stored, so a failed or stopped run never
+  // loses what stands: the card shows the old output again, with why under
+  // it. Its conversation goes on under the new output (§21): the new
+  // annotation takes its turns, and the box keeps its words.
   async function runBubble(
     kind: ExplainBubble["kind"],
     anchor: Anchor,
     slot: SideSlot,
-    replaceNoteId?: string | null,
+    replacing?: ExplainBubble | null,
   ) {
     if (kind === "visualize") {
-      await runVisualize(anchor, slot, replaceNoteId);
+      await runVisualize(anchor, slot, replacing);
       return;
     }
     const { run, controller } = startToolRun();
     const mine = (b: ExplainBubble | null): b is ExplainBubble => b !== null && b.run === run;
-    setBubble({ ...slot, ...NO_CHAT, kind, text: "", streaming: true, error: null, declined: null, anchor, noteId: null, run });
+    const replaceNoteId = replacing?.noteId ?? null;
+    setBubble({ ...slot, ...chatCarried(replacing), kind, text: "", streaming: true, error: null, declined: null, anchor, noteId: null, run });
     try {
       const res = await aiFetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
-        body: deriveBody(kind === "analyze" ? "ANALYZE" : "EXPLAIN", anchor),
+        body: deriveBody(kind === "analyze" ? "ANALYZE" : "EXPLAIN", anchor, turnsOf(replacing)),
       });
       if (!res.ok || !res.body) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -5577,6 +5891,12 @@ export function ReaderInteractions({
       const { text, noteId } = splitStreamNote(withoutError);
       if (noteId) addLocalAnchor(anchor, kind);
       if (noteId && !error && text.trim() && bubbleRef.current?.run !== run) landedAway(kind, anchor, text, noteId);
+      const failed = error ?? (text.trim() ? null : t("reader.emptyResponse"));
+      if (replacing && (!noteId || failed)) {
+        setBubble((b) => (mine(b) ? { ...replacing, ...slotOf(b), run, runError: failed ?? t("reader.deriveFailed") } : b));
+        return;
+      }
+      if (noteId) carryTurns(replacing, noteId);
       setBubble((b) =>
         mine(b)
           ? {
@@ -5584,19 +5904,24 @@ export function ReaderInteractions({
               text,
               noteId: noteId ?? b.noteId,
               streaming: false,
-              error: error ?? (text.trim() ? null : t("reader.emptyResponse")),
+              error: failed,
             }
           : b,
       );
       if (replaceNoteId && noteId) await discardNote(replaceNoteId);
       router.refresh();
     } catch (err) {
+      const message = controller.signal.aborted ? null : err instanceof Error ? err.message : t("reader.deriveFailed");
+      // Regenerate stopped or failed: the output that stands comes back.
+      if (replacing) {
+        setBubble((b) => (mine(b) ? { ...replacing, ...slotOf(b), run, runError: message } : b));
+        return;
+      }
       // Stopped, not failed: what streamed in stays; an empty card closes.
-      if (controller.signal.aborted) {
+      if (message === null) {
         setBubble((b) => (mine(b) ? (b.text.trim() ? { ...b, streaming: false } : null) : b));
         return;
       }
-      const message = err instanceof Error ? err.message : t("reader.deriveFailed");
       setBubble((b) => (mine(b) ? { ...b, streaming: false, error: message } : b));
     } finally {
       toolRunsRef.current.delete(run);
@@ -5614,13 +5939,14 @@ export function ReaderInteractions({
     markFreshAnchor(anchor);
     await runSimplify(anchor, claimSideSlot("simplify", yTop, anchor));
   }
-  async function runSimplify(anchor: Anchor, slot: SideSlot, replaceNoteId?: string | null) {
+  async function runSimplify(anchor: Anchor, slot: SideSlot, replacing?: SimplifyCard | null) {
     const { run, controller } = startToolRun();
     const mine = (c: SimplifyCard | null): c is SimplifyCard => c !== null && c.run === run;
+    const replaceNoteId = replacing?.noteId ?? null;
     setSimplifyCard({
       anchor,
       ...slot,
-      ...NO_CHAT,
+      ...chatCarried(replacing),
       text: "",
       streaming: true,
       error: null,
@@ -5634,7 +5960,7 @@ export function ReaderInteractions({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
-        body: deriveBody("SIMPLIFY", anchor),
+        body: deriveBody("SIMPLIFY", anchor, turnsOf(replacing)),
       });
       if (!res.ok || !res.body) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -5657,6 +5983,12 @@ export function ReaderInteractions({
       const { text, noteId } = splitStreamNote(withoutError);
       if (noteId) addLocalAnchor(anchor, "simplify");
       if (noteId && !error && text.trim() && simplifyCardRef.current?.run !== run) landedAway("simplify", anchor, text, noteId);
+      const failed = error ?? (text.trim() ? null : t("reader.emptyResponse"));
+      if (replacing && (!noteId || failed)) {
+        setSimplifyCard((c) => (mine(c) ? { ...replacing, ...slotOf(c), run, runError: failed ?? t("reader.simplifyFailed") } : c));
+        return;
+      }
+      if (noteId) carryTurns(replacing, noteId);
       setSimplifyCard((c) =>
         mine(c)
           ? {
@@ -5664,8 +5996,8 @@ export function ReaderInteractions({
               text,
               noteId: noteId ?? c.noteId,
               streaming: false,
-              error: error ?? (text.trim() ? null : t("reader.emptyResponse")),
-              sentences: error || !text.trim() ? null : parseSimplified(text),
+              error: failed,
+              sentences: failed ? null : parseSimplified(text),
               active: null,
             }
           : c,
@@ -5673,12 +6005,17 @@ export function ReaderInteractions({
       if (replaceNoteId && noteId) await discardNote(replaceNoteId);
       router.refresh();
     } catch (err) {
+      const message = controller.signal.aborted ? null : err instanceof Error ? err.message : t("reader.simplifyFailed");
+      // Regenerate stopped or failed: the output that stands comes back.
+      if (replacing) {
+        setSimplifyCard((c) => (mine(c) ? { ...replacing, ...slotOf(c), run, runError: message } : c));
+        return;
+      }
       // Stopped, not failed: what streamed in stays; an empty card closes.
-      if (controller.signal.aborted) {
+      if (message === null) {
         setSimplifyCard((c) => (mine(c) ? (c.text.trim() ? { ...c, streaming: false } : null) : c));
         return;
       }
-      const message = err instanceof Error ? err.message : t("reader.simplifyFailed");
       setSimplifyCard((c) => (mine(c) ? { ...c, streaming: false, error: message } : c));
     } finally {
       toolRunsRef.current.delete(run);
@@ -5702,12 +6039,13 @@ export function ReaderInteractions({
     markFreshAnchor(anchor);
     await runVisualize(anchor, claimSideSlot("explain", yTop, anchor));
   }
-  async function runVisualize(anchor: Anchor, slot: SideSlot, replaceNoteId?: string | null) {
+  async function runVisualize(anchor: Anchor, slot: SideSlot, replacing?: ExplainBubble | null) {
     const { run, controller } = startToolRun();
     const mine = (b: ExplainBubble | null): b is ExplainBubble => b !== null && b.run === run;
+    const replaceNoteId = replacing?.noteId ?? null;
     setBubble({
       ...slot,
-      ...NO_CHAT,
+      ...chatCarried(replacing),
       kind: "visualize",
       text: "",
       streaming: true,
@@ -5722,7 +6060,7 @@ export function ReaderInteractions({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
-        body: deriveBody("VISUALIZE", anchor),
+        body: deriveBody("VISUALIZE", anchor, turnsOf(replacing)),
       });
       if (!res.ok || !res.body) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -5747,6 +6085,12 @@ export function ReaderInteractions({
       if (!payload) throw new Error(t("reader.emptyResponse"));
       if (payload.declined) {
         const reason = payload.reason ?? "";
+        // A Regenerate that declines keeps the picture that stands (SPEC.md §20).
+        if (replacing) {
+          const why = [t("reader.visualizeDeclined"), reason].filter(Boolean).join(" ");
+          setBubble((b) => (mine(b) ? { ...replacing, ...slotOf(b), run, runError: why } : b));
+          return;
+        }
         setBubble((b) => (mine(b) ? { ...b, streaming: false, declined: reason } : b));
         return;
       }
@@ -5755,12 +6099,20 @@ export function ReaderInteractions({
       if (!content.trim()) throw new Error(t("reader.emptyResponse"));
       if (noteId) addLocalAnchor(anchor, "visualize");
       if (noteId && bubbleRef.current?.run !== run) landedAway("visualize", anchor, content, noteId);
+      if (noteId) carryTurns(replacing, noteId);
       setBubble((b) => (mine(b) ? { ...b, text: content, noteId, streaming: false } : b));
       if (replaceNoteId && noteId) await discardNote(replaceNoteId);
       router.refresh();
     } catch (err) {
+      const stopped = controller.signal.aborted;
+      // Regenerate stopped or failed: the picture that stands comes back.
+      if (replacing) {
+        const why = stopped ? null : err instanceof Error ? err.message : t("reader.visualizeFailed");
+        setBubble((b) => (mine(b) ? { ...replacing, ...slotOf(b), run, runError: why } : b));
+        return;
+      }
       // Stopped, not failed: nothing to keep, the card closes.
-      if (controller.signal.aborted) {
+      if (stopped) {
         setBubble((b) => (mine(b) ? null : b));
         return;
       }
@@ -5808,6 +6160,9 @@ export function ReaderInteractions({
       const base = card.saved === "" ? (card.quotedText ?? "") : card.saved;
       const saved = await saveNoteText(card.noteId, content, base);
       router.refresh();
+      // Saved: the draft is done (a later reopen shows the stored comment).
+      draftShownRef.current.delete(card.noteId);
+      setCardDraft(card.noteId, null);
       setAnnotationCard(null);
       showToast(t(saved.conflict ? "outline.savedBoth" : "common.saved"));
     } catch (err) {
@@ -6293,7 +6648,9 @@ export function ReaderInteractions({
   async function annotate(input: { color?: string; comment?: string }) {
     if (!popover || busy) return;
     if (input.comment !== undefined && !input.comment.trim()) return;
+    const shown = popover;
     const { anchor } = popover;
+    setCommentError(null);
     await flushLiveBlock(anchor.blockId);
     markFreshAnchor(anchor);
     // Every segment of the passage paints at once, a comment as a comment.
@@ -6323,12 +6680,16 @@ export function ReaderInteractions({
       color: input.color,
       comment: input.comment,
     };
+    // False until the server answered: a fetch that throws before then is a
+    // dropped connection, which queues as offline does.
+    let answered = false;
     try {
       const res = await fetch("/api/annotations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
+      answered = true;
       if (!res.ok) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
         throw new Error(detail?.error ?? t("reader.annotationFailedStatus", { status: res.status }));
@@ -6358,9 +6719,10 @@ export function ReaderInteractions({
       });
       router.refresh();
     } catch (err) {
-      // Offline (SPEC.md §17, Unitos Premium): a highlight or comment is a
-      // non-AI annotation — queue it, keep the optimistic paint, sync later.
-      if (isOffline() && offlinePremium()) {
+      // Offline or a dropped connection (SPEC.md §17, Unitos Premium): a
+      // highlight or comment is a non-AI annotation — queue it, keep the
+      // optimistic paint, sync later, as a note's write does (lib/api.ts).
+      if (offlinePremium() && (isOffline() || (!answered && err instanceof TypeError))) {
         await queueWrite("/api/annotations", "POST", body);
         if (input.comment) clearToolbarDraft("comment", documentId, anchor);
         showToast(t("reader.annotationQueuedOffline"));
@@ -6374,7 +6736,13 @@ export function ReaderInteractions({
         }
         return next;
       });
-      showError(err instanceof Error ? err.message : t("reader.annotationFailed"));
+      const reason = err instanceof Error ? err.message : t("reader.annotationFailed");
+      if (input.comment) {
+        // The words are still in the draft: the box opens again with them.
+        setPopover(shown);
+        setSubmenu("comment");
+        setCommentError({ text: reason, from: anchor });
+      } else showError(reason);
     } finally {
       setBusy(false);
     }
@@ -6620,6 +6988,15 @@ export function ReaderInteractions({
   barRef.current = bar;
   const barAbortRef = useRef<AbortController | null>(null);
 
+  // The bar's field is a toolbar draft (SPEC.md §6, §29): each keystroke is
+  // kept by the words it is on, so Escape, a press elsewhere, or a reload
+  // never throws the instruction away, and the bar opens on the same words
+  // with it. It goes once the command's answer lands.
+  function setBarInput(input: string) {
+    const open = barRef.current;
+    if (open) writeToolbarDraft("assistant", documentId, open.anchor, input);
+    setBar((b) => (b ? { ...b, input } : b));
+  }
   function openBar(target: Popover): AssistantBar {
     const opened: AssistantBar = {
       key: queuedKey(),
@@ -6628,7 +7005,7 @@ export function ReaderInteractions({
       wordsBottom: target.y - (target.side === "below" ? 14 : 6),
       noteId: null,
       messages: [],
-      input: "",
+      input: readToolbarDraft("assistant", documentId, target.anchor) ?? "",
       busy: false,
       error: null,
     };
@@ -6662,6 +7039,8 @@ export function ReaderInteractions({
     try {
       await flushLiveBlock(anchor.blockId);
       const turn = await assistantTurn(text, anchor, messages, noteId, controller.signal, undefined, undefined, chip?.name, replacing);
+      // The instruction has its answer: its draft is done.
+      if (!chip) clearToolbarDraft("assistant", documentId, anchor, text);
       if (turn.noteId) addLocalAnchor(anchor, "assistant");
       const done: AssistantBar = {
         ...current,
@@ -6771,8 +7150,9 @@ export function ReaderInteractions({
       // Every plan waits for approval (SPEC.md §1: nothing applies unaccepted).
       setAiPlan(plan);
       setPlanChecked(new Set(plan.actions.map((_, i) => i)));
-      setPlanFrom("chat");
-      parts.push(t("reader.proposedActions", { n, s: plural(n) }));
+      setPlanFrom(toolNoteId ? "tool" : "chat");
+      setPlanNoteId(toolNoteId ?? plan.conversationNoteId ?? conversationNoteId);
+      parts.push(t("assistant.proposedActions", { n, s: plural(n) }));
     }
     // The assistant's suggestions land in the text: pending by construction
     // until an editor accepts them.
@@ -7034,6 +7414,11 @@ export function ReaderInteractions({
     ? ((assistantChat.sideChats ?? []).find((s) => s.key === assistantChat.openKey) ?? null)
     : null;
   const chatNoteId = chatOpenSide ? chatOpenSide.noteId : (assistantChat?.noteId ?? null);
+  // A comment on an answer keeps its draft by the thread's note and the quote.
+  const chatCommentKey = chatNoteId && chatCommentQuote ? cardCommentKey(chatNoteId, chatCommentQuote) : null;
+  // The comment box closes with its card; its words wait in the draft for
+  // the same words of the answer.
+  if (assistantChat === null && chatCommentQuote !== null) setChatCommentQuote(null);
 
   // A conversation reopened from its mark brings its side chats with it.
   useEffect(() => {
@@ -7120,9 +7505,10 @@ export function ReaderInteractions({
     setAssistantChat((c) =>
       c
         ? {
-            ...c,
-            sideChats: [...(c.sideChats ?? []), { key, noteId: null, quote: text, messages: [] }],
-            openKey: key,
+            ...switchThread(
+              { ...c, sideChats: [...(c.sideChats ?? []), { key, noteId: null, quote: text, messages: [] }] },
+              key,
+            ),
             quote: text,
           }
         : c,
@@ -7151,6 +7537,8 @@ export function ReaderInteractions({
       });
       const json = (await res.json().catch(() => null)) as (AnswerComment & { error?: string }) | null;
       if (!res.ok || !json?.id) throw new Error(json?.error ?? t("assistant.commentFailed"));
+      // Posted: the comment's draft is done.
+      setCardDraft(cardCommentKey(chatNoteId, chatCommentQuote ?? ""), null);
       setChatComments((list) => [...list, json]);
       setChatCommentQuote(null);
       clearAnswerSelection();
@@ -7172,6 +7560,46 @@ export function ReaderInteractions({
     }
   }
 
+  // A message of the assistant card that did not go (a failed request, Stop,
+  // offline): its words go back to the box of the thread it was sent in, with
+  // the reason under the box; with the card closed, to the thread's draft
+  // (rule zero: typed words are kept until the server has them).
+  function returnChatWords(
+    sentFrom: { noteId: string | null; openKey: string | null; sideNoteId: string | null },
+    text: string,
+    typed: string,
+    quote: string | null,
+    error: string | null,
+  ) {
+    const open = assistantChatRef.current;
+    const sameCard =
+      open !== null &&
+      (open.noteId === sentFrom.noteId || (sentFrom.noteId === null && open.anchor !== null)) &&
+      (sentFrom.openKey === null || (open.sideChats ?? []).some((s) => s.key === sentFrom.openKey));
+    if (!sameCard) {
+      const key = sentFrom.openKey ? sentFrom.sideNoteId : sentFrom.noteId;
+      if (key) returnToCardDraft(key, text);
+      return;
+    }
+    setAssistantChat((c) => {
+      if (!c) return c;
+      const key = sentFrom.openKey;
+      const unsent: AssistantChat = key
+        ? {
+            ...c,
+            sideChats: (c.sideChats ?? []).map((s) => (s.key === key ? { ...s, messages: withoutSent(s.messages, text) } : s)),
+          }
+        : { ...c, messages: withoutSent(c.messages, text) };
+      const back = { ...unsent, busy: false };
+      // The thread on screen takes the words (and the quote they were on);
+      // another thread keeps them for when it opens.
+      if ((c.openKey ?? null) === key) {
+        return { ...back, input: joinWords(typed, c.input), quote: quote ?? c.quote ?? null, sendError: error };
+      }
+      return { ...back, inputs: { ...c.inputs, [key ?? ""]: joinWords(text, c.inputs?.[key ?? ""] ?? "") } };
+    });
+  }
+
   async function sendChatMessage(queued?: QueuedText & { openKey: string | null }) {
     const chat = assistantChat;
     const typed = queued ? queued.content : chat?.input.trim();
@@ -7187,6 +7615,7 @@ export function ReaderInteractions({
               ...c,
               input: "",
               quote: null,
+              sendError: null,
               queue: [...(c.queue ?? []), { key: queuedKey(), content, openKey: c.openKey ?? null }],
             }
           : c,
@@ -7194,6 +7623,22 @@ export function ReaderInteractions({
       return;
     }
     if (chat.busy) return;
+    // Offline nothing goes: the words stay in the box, and the box says why
+    // (SPEC.md §17). A queued message comes back to its thread's box.
+    if (isOffline()) {
+      const offline = t("common.offlineAi");
+      if (queued) {
+        setAssistantChat((c) => (c ? { ...c, queue: (c.queue ?? []).filter((q) => q.key !== queued.key) } : c));
+        returnChatWords(
+          { noteId: chat.noteId, openKey: queued.openKey, sideNoteId: (chat.sideChats ?? []).find((s) => s.key === queued.openKey)?.noteId ?? null },
+          queued.content,
+          queued.content,
+          null,
+          offline,
+        );
+      } else setAssistantChat((c) => (c ? { ...c, sendError: offline } : c));
+      return;
+    }
     // The quote the reader took from an answer rides in the message.
     const text = queued ? queued.content : chat.quote ? quoteMessage(chat.quote, typed) : typed;
     const openKey = queued ? queued.openKey : (chat.openKey ?? null);
@@ -7211,6 +7656,7 @@ export function ReaderInteractions({
             ...c,
             ...(queued ? { queue } : { input: "", quote: null }),
             busy: true,
+            sendError: null,
             sideChats: (c.sideChats ?? []).map((s) =>
               s.key === open.key ? { ...s, messages: [...s.messages, { role: "user", content: text }] } : s,
             ),
@@ -7219,6 +7665,7 @@ export function ReaderInteractions({
             ...c,
             ...(queued ? { queue } : { input: "", quote: null }),
             busy: true,
+            sendError: null,
             messages: [...c.messages, { role: "user", content: text }],
           };
     setAssistantChat((c) => (c ? pushUser(c) : c));
@@ -7264,27 +7711,20 @@ export function ReaderInteractions({
         };
       });
     } catch (err) {
-      // Stopped, not failed: the sent message stays, no reply lands.
-      if (controller.signal.aborted) {
-        setAssistantChat((c) => (c ? { ...c, busy: false } : c));
-        return;
-      }
-      const message = err instanceof Error ? err.message : t("reader.assistantFailed");
-      setAssistantChat((c) => {
-        if (!c) return c;
-        if (open) {
-          return {
-            ...c,
-            busy: false,
-            sideChats: (c.sideChats ?? []).map((s) =>
-              s.key === open.key
-                ? { ...s, messages: [...s.messages, { role: "assistant", content: message }] }
-                : s,
-            ),
-          };
-        }
-        return { ...c, busy: false, messages: [...c.messages, { role: "assistant", content: message }] };
-      });
+      // Stopped or failed: nothing was stored, so the words go back to the
+      // box (Stop says nothing more; a failure says why).
+      const message = controller.signal.aborted
+        ? null
+        : err instanceof Error
+          ? err.message
+          : t("reader.assistantFailed");
+      returnChatWords(
+        { noteId: chat.noteId, openKey, sideNoteId: open?.noteId ?? null },
+        text,
+        queued ? text : typed,
+        queued ? null : (chat.quote ?? null),
+        message,
+      );
     } finally {
       if (chatAbortRef.current === controller) chatAbortRef.current = null;
     }
@@ -7298,9 +7738,37 @@ export function ReaderInteractions({
   // The turns sent this session, by the tool annotation's note id: what a
   // reopened card shows until the refresh delivers the server's copy.
   const toolConversationsRef = useRef<Record<string, ChatTurn[]>>({});
-  function setToolChat(kind: "explain" | "simplify", update: (c: ToolChat) => Partial<ToolChat>) {
-    if (kind === "explain") setBubble((b) => (b ? { ...b, ...update(b) } : b));
-    else setSimplifyCard((c) => (c ? { ...c, ...update(c) } : c));
+  // noteId: change the card only while it shows that annotation; a card
+  // reopened on other words since is another conversation.
+  function setToolChat(
+    kind: "explain" | "simplify",
+    update: (c: ToolChat) => Partial<ToolChat>,
+    noteId?: string,
+  ) {
+    const mine = (c: { noteId: string | null }) => noteId === undefined || c.noteId === noteId;
+    if (kind === "explain") setBubble((b) => (b && mine(b) ? { ...b, ...update(b) } : b));
+    else setSimplifyCard((c) => (c && mine(c) ? { ...c, ...update(c) } : c));
+  }
+  // A message that did not go (a failed request, Stop, offline): its words
+  // go back to the box of the card it was sent from, with the reason under
+  // the box; with that card closed, to the card's draft, which its mark
+  // opens with (rule zero: typed words are kept until the server has them).
+  function returnToolWords(kind: "explain" | "simplify", noteId: string, text: string, error: string | null) {
+    const open = kind === "explain" ? bubbleRef.current : simplifyCardRef.current;
+    if (open?.noteId !== noteId) {
+      returnToCardDraft(noteId, text);
+      return;
+    }
+    setToolChat(
+      kind,
+      (c) => ({
+        busy: false,
+        sendError: error,
+        conversation: withoutSent(c.conversation, text),
+        input: joinWords(text, c.input),
+      }),
+      noteId,
+    );
   }
   // Continuing a tool's output into a conversation is Unitos Ultra (TIERS.md):
   // the button and the box are offered to every account, and a non-Ultra
@@ -7325,40 +7793,61 @@ export function ReaderInteractions({
     const card = kind === "explain" ? bubble : simplifyCard;
     const text = queued ? queued.content : card?.input.trim();
     if (!card || !text || !card.noteId) return;
+    const noteId = card.noteId;
     // While a turn runs the message queues (SPEC.md §7).
     if ((card.busy || card.streaming) && !queued) {
-      setToolChat(kind, (c) => ({ input: "", queue: [...c.queue, { key: queuedKey(), content: text }] }));
+      setToolChat(kind, (c) => ({ input: "", sendError: null, queue: [...c.queue, { key: queuedKey(), content: text }] }), noteId);
       return;
     }
     if (card.busy || card.streaming) return;
-    const noteId = card.noteId;
+    // Offline nothing goes: the words stay in the box, and the box says why
+    // (SPEC.md §17). A queued message waits in the queue.
+    if (isOffline()) {
+      if (queued) {
+        setToolChat(kind, (c) => ({ queue: c.queue.filter((q) => q.key !== queued.key), input: joinWords(text, c.input), sendError: t("common.offlineAi") }), noteId);
+      } else setToolChat(kind, () => ({ sendError: t("common.offlineAi") }), noteId);
+      return;
+    }
     const history = card.conversation;
-    setToolChat(kind, (c) => ({
-      ...(queued ? { queue: c.queue.filter((q) => q.key !== queued.key) } : { input: "" }),
-      busy: true,
-      chatOpen: true,
-      conversation: [...c.conversation, { role: "user", content: text }],
-    }));
+    setToolChat(
+      kind,
+      (c) => ({
+        ...(queued ? { queue: c.queue.filter((q) => q.key !== queued.key) } : { input: "" }),
+        busy: true,
+        chatOpen: true,
+        sendError: null,
+        conversation: [...c.conversation, { role: "user", content: text }],
+      }),
+      noteId,
+    );
     const controller = new AbortController();
     toolChatAbortRef.current[kind] = controller;
     try {
       const turn = await assistantTurn(text, card.anchor, history, null, controller.signal, noteId);
-      setToolChat(kind, (c) => {
-        const conversation: ChatTurn[] = [...c.conversation, { role: "assistant", content: turn.reply }];
-        toolConversationsRef.current[noteId] = conversation;
-        return { busy: false, conversation };
-      });
+      // The turn is stored on the annotation; the card shows it if open.
+      toolConversationsRef.current[noteId] = [
+        ...history,
+        { role: "user", content: text },
+        { role: "assistant", content: turn.reply },
+      ];
+      setToolChat(
+        kind,
+        (c) => {
+          const conversation: ChatTurn[] = [...c.conversation, { role: "assistant", content: turn.reply }];
+          toolConversationsRef.current[noteId] = conversation;
+          return { busy: false, conversation };
+        },
+        noteId,
+      );
     } catch (err) {
-      // Stopped, not failed: the sent message stays, no reply lands.
-      if (controller.signal.aborted) {
-        setToolChat(kind, () => ({ busy: false }));
-        return;
-      }
-      const message = err instanceof Error ? err.message : t("reader.assistantFailed");
-      setToolChat(kind, (c) => ({
-        busy: false,
-        conversation: [...c.conversation, { role: "assistant", content: message }],
-      }));
+      // Stopped or failed: nothing was stored, so the words go back to the
+      // box (Stop says nothing more; a failure says why).
+      const message = controller.signal.aborted
+        ? null
+        : err instanceof Error
+          ? err.message
+          : t("reader.assistantFailed");
+      returnToolWords(kind, noteId, text, message);
     } finally {
       if (toolChatAbortRef.current[kind] === controller) toolChatAbortRef.current[kind] = null;
     }
@@ -8478,6 +8967,8 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   // joins the texts themselves. With a link pending, Close link takes Link's
   // place.
   const inCore = popover ? isCoreKey(popover.anchor.blockId) : false;
+  // The passage spans more blocks than a save takes (lib/anchors/passage.ts).
+  const passageTooLong = popover !== null && (popover.anchor.segments?.length ?? 1) > MAX_SEGMENTS;
   // Define shows on one word alone (offersDefine).
   const has = (tool: Tool) =>
     TOOLBARS[popoverKind].includes(tool) &&
@@ -8551,7 +9042,14 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   // The queued messages of the thread on screen: the side chat's, or the
   // conversation's own.
   const chatQueueShown = (chat: AssistantChat) => (chat.queue ?? []).filter((q) => q.openKey === (chat.openKey ?? null));
-  const toolChatTurns = (card: ToolChat) =>
+  // The plan a tool conversation proposed, under its turns in its own card.
+  const toolPlan = (card: ToolChat & { noteId: string | null }) =>
+    aiPlan !== null && planFrom === "tool" && card.noteId !== null && card.noteId === planNoteId ? (
+      <div data-plan-in-card className="flex flex-col rounded-2xl border border-line bg-sand-50 p-3">
+        {planBody}
+      </div>
+    ) : null;
+  const toolChatTurns = (card: ToolChat & { noteId: string | null }) =>
     card.conversation.length > 0 || card.busy ? (
       <div className="mt-3 flex flex-col gap-2 border-t border-line pt-3">
         {card.conversation.map((message, i) =>
@@ -8570,6 +9068,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         )}
         {card.busy && <ThinkingIndicator className="py-0.5 text-[12px]" />}
         <QueuedList items={card.queue} onRemove={(key) => removeQueuedTool(kindOfCard(card), key)} />
+        {toolPlan(card)}
       </div>
     ) : null;
   // The card's foot: Continue, which opens the box, or the box itself once
@@ -8618,6 +9117,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       );
     }
     return (
+      <>
       <form
         className={`${inView ? "" : "mt-2"} flex items-end gap-1.5`}
         onSubmit={(e) => {
@@ -8629,9 +9129,10 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           autoFocus
           value={card.input}
           rows={1}
+          onFocus={caretToEnd}
           onChange={(e) => {
             const value = e.target.value;
-            setToolChat(kind, () => ({ input: value }));
+            setToolChat(kind, () => ({ input: value, sendError: null }));
           }}
           {...ime.props}
           onKeyDown={(e) => {
@@ -8663,6 +9164,13 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           {card.busy ? (card.input.trim() ? t("assistant.queue") : <StopIcon size={11} />) : t("reader.send")}
         </button>
       </form>
+      {/* Why the last message did not go; its words are back in the box. */}
+      {card.sendError && (
+        <p data-send-error role="alert" className="mt-1 shrink-0 text-[12px] font-medium text-red-600">
+          {card.sendError}
+        </p>
+      )}
+      </>
     );
   };
   // The assistant card's foot: the box that sends the next turn. The card
@@ -8672,13 +9180,20 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
     {chat.openKey ? (
       <SideChatHeader
         quote={chatOpenSide?.quote ?? ""}
-        onBack={() => setAssistantChat((c) => (c ? { ...c, openKey: null, quote: null } : c))}
+        onBack={() => setAssistantChat((c) => (c ? switchThread(c, null) : c))}
         className={chipsClassName}
       />
     ) : (
       <SideChatChips
-        sideChats={(chat.sideChats ?? []).filter((s) => s.messages.length > 0)}
-        onOpen={(key) => setAssistantChat((c) => (c ? { ...c, openKey: key } : c))}
+        // A side chat with turns, or with words typed in its box and not sent.
+        sideChats={(chat.sideChats ?? []).filter((s) => s.messages.length > 0 || (chat.inputs?.[s.key] ?? "").trim())}
+        onOpen={(key) =>
+          setAssistantChat((c) => {
+            if (!c) return c;
+            const side = (c.sideChats ?? []).find((s) => s.key === key);
+            return switchThread(c, key, side?.noteId ? (cardDraftsRef.current?.[side.noteId] ?? "") : "");
+          })
+        }
         className={chipsClassName}
       />
     )}
@@ -8697,9 +9212,16 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       <QuoteChip quote={chat.quote} onClear={dropChatQuote} className={chipsClassName} />
     )}
     {chatCommentQuote ? (
+      // The comment's words are a card draft under the conversation and the
+      // quote: Escape, Cancel, a closed card, or a reload keeps them.
       <CommentBox
+        key={chatCommentKey ?? ""}
         quote={chatCommentQuote}
         busy={chatCommentBusy}
+        draft={(chatCommentKey && cardDraftsRef.current?.[chatCommentKey]) || ""}
+        onDraft={(text) => {
+          if (chatCommentKey) setCardDraft(chatCommentKey, text.trim() ? text : null);
+        }}
         onCancel={() => {
           setChatCommentQuote(null);
           clearAnswerSelection();
@@ -8708,6 +9230,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         className={chipsClassName}
       />
     ) : (
+    <>
     <form
       className={className}
       onSubmit={(e) => {
@@ -8718,7 +9241,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       <textarea
         value={chat.input}
         rows={1}
-        onChange={(e) => setAssistantChat((c) => (c ? { ...c, input: e.target.value } : c))}
+        onChange={(e) => setAssistantChat((c) => (c ? { ...c, input: e.target.value, sendError: null } : c))}
         {...ime.props}
         onKeyDown={(e) => {
           if (ime.isImeEnter(e)) return;
@@ -8749,6 +9272,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         {chat.busy ? (chat.input.trim() ? t("assistant.queue") : <StopIcon size={11} />) : t("reader.send")}
       </button>
     </form>
+    {chat.sendError && (
+      <p data-send-error role="alert" className={`${chipsClassName} text-[12px] font-medium text-red-600`}>
+        {chat.sendError}
+      </p>
+    )}
+    </>
     )}
     <AnswerTint rects={answerTintRects} />
     {answerSelection && (
@@ -8864,7 +9393,8 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         collapseNew.seen();
         // A page editor collapses in Viewing: Editing needs the words.
         const page = richText && !collapseOn ? pageEditorIn(containerRef.current) : null;
-        if (page?.isEditable) fireDocs(page, DOCS_EVENT.mode, "viewing");
+        // Collapse off goes back to the mode it left.
+        if (page?.isEditable) fireDocs(page, DOCS_EVENT.mode, { mode: "viewing", collapse: true } satisfies ModeRequest);
         void toggleCollapse();
       }}
       data-track={collapseBusy ? "collapse-stop" : collapseOn ? "collapse-off" : "collapse"}
@@ -9019,7 +9549,16 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       </div>
     </>
   ) : null;
-  const planInCard = aiPlan !== null && planFrom === "chat" && assistantChat !== null;
+  // The card that shows the plan; a plan whose card is closed waits for it.
+  const planInCard =
+    aiPlan !== null &&
+    planFrom === "chat" &&
+    assistantChat !== null &&
+    (planNoteId === null ||
+      assistantChat.noteId === null ||
+      assistantChat.noteId === planNoteId ||
+      (assistantChat.sideChats ?? []).some((s) => s.noteId === planNoteId));
+  const planFloats = aiPlan !== null && planFrom === "panel";
   const barKey = bar ? barRunKey(bar) : null;
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
@@ -9214,7 +9753,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           the first lines would cut its words. */}
       {editHint && hintBeside && !editMode && !split && !transcript && !embedded && !richText && (
         <div
-          onAnimationEnd={() => setEditHint(false)}
+          onAnimationEnd={hintPlayed}
           className={`hint-fade pointer-events-none absolute top-16 right-5 z-[9] rounded-2xl bg-card px-4 py-2.5 leading-relaxed text-sand-700 shadow-lift print:hidden ${
             coarse ? "max-w-80 text-[13px]" : "max-w-64 text-[12px]"
           }${popover ? " invisible" : ""}`}
@@ -9302,6 +9841,31 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           {stackChooser.sources.map((sid) => {
             const tool = annotationBubbles[sid];
             const summary = annotationsBySource[sid];
+            // A plain note on the words: its row opens the note in the tray.
+            const noteId = tool || summary ? null : noteOfSource(sid);
+            if (noteId) {
+              const note = notesById.get(noteId);
+              const line = note
+                ? noteTitle(note.content) || note.gist || markdownPreview(note.content)
+                : (anchorOfSource(sid)?.quotedText ?? "");
+              return (
+                <button
+                  key={sid}
+                  role="menuitem"
+                  data-track="stack-chooser-note"
+                  onClick={() => {
+                    setStackChooser(null);
+                    window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId } }));
+                  }}
+                  className="flex min-w-0 flex-col items-start rounded-xl px-2.5 py-1.5 text-left hover:bg-sand-100"
+                >
+                  <span className="text-[10.5px] font-bold tracking-[0.08em] text-clay-600 uppercase">
+                    {t("reader.note")}
+                  </span>
+                  <span className="line-clamp-2 text-[12px] text-sand-700">{line}</span>
+                </button>
+              );
+            }
             const kind = tool?.kind ?? summary?.kind ?? "highlight";
             const quote = summary?.quotedText ?? anchorOfSource(sid)?.quotedText ?? "";
             return (
@@ -9529,6 +10093,14 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           className={`${popover.page && popover.side === "right" ? "docs-toolbar-in" : "pop-in"} absolute ${TOOLBOX_LAYER} flex flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float`}
           style={popoverBox}
         >
+          {/* A passage over more blocks than an annotation or a note takes
+              (MAX_SEGMENTS) says so in place of the tools, before a press
+              that could only fail. */}
+          {passageTooLong ? (
+            <p data-passage-too-long className="max-w-56 px-2.5 py-1.5 text-[12px] leading-snug text-sand-700">
+              {t("reader.passageTooLong", { n: MAX_SEGMENTS })}
+            </p>
+          ) : (<>
           {popover.truncated && (
             <p className="px-2.5 py-1 text-[10.5px] leading-snug text-sand-500">
               {t(popover.page ? "docsLayer.leftOut" : "reader.anchorsFirstParagraph")}
@@ -9817,7 +10389,10 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 autoFocus
                 value={commentDraft}
                 onFocus={caretToEnd}
-                onChange={(e) => setCommentDraft(e.target.value)}
+                onChange={(e) => {
+                  setCommentDraft(e.target.value);
+                  setCommentError(null);
+                }}
                 {...ime.props}
                 onKeyDown={(e) => {
                   if (ime.isImeEnter(e) || isImeKey(e)) return;
@@ -9840,6 +10415,11 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 rows={2}
                 className="w-full resize-none rounded-xl bg-sand-100 p-2 text-[12px] outline-none placeholder:text-sand-500"
               />
+              {commentError && commentError.from === popover.anchor && (
+                <p data-comment-error role="alert" className="px-1 text-[12px] font-medium text-red-600">
+                  {commentError.text}
+                </p>
+              )}
               <button
                 type="submit"
                 data-track="comment-save"
@@ -9969,6 +10549,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                       e.preventDefault();
                       void addToSection(first.id);
                     }
+                    // Escape folds the box and leaves the toolbar, as Comment's does.
+                    if (e.key === "Escape") {
+                      e.stopPropagation();
+                      setSubmenu(null);
+                      focusPageAfterComment();
+                    }
                   }}
                   placeholder={t("reader.addCommentPlaceholder")}
                   aria-label={t("reader.addCommentPlaceholder")}
@@ -10043,6 +10629,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           {has("readAloud") && !(compact && has("highlight")) && (
           <div className="absolute top-full left-0 mt-2">{voiceButton(false)}</div>
           )}
+          </>)}
         </div>
       )}
       </Presence>
@@ -10172,6 +10759,11 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           ) : bubble.text ? (
             <div ref={explainBodyRef} className="min-h-0 flex-1 overflow-y-auto text-sm">
               <Markdown>{bubble.text}</Markdown>
+              {bubble.runError && (
+                <p data-run-error role="alert" className="mt-2 text-[12px] font-medium text-red-600">
+                  {bubble.runError}
+                </p>
+              )}
               {toolChatTurns(bubble)}
             </div>
           ) : (
@@ -10323,6 +10915,11 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               {stripSimplifyMarkers(simplifyCard.text) || (
                 <ThinkingIndicator className="py-1 text-[12.5px]" />
               )}
+            </p>
+          )}
+          {simplifyCard.runError && (
+            <p data-run-error role="alert" className="mt-2 text-[12px] font-medium text-red-600">
+              {simplifyCard.runError}
             </p>
           )}
           {toolChatTurns(simplifyCard)}
@@ -10646,7 +11243,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             top: assistantChat.top,
             width: assistantChat.width,
             minWidth: 260,
-            maxWidth: 680,
+            maxWidth: paneWidth > 0 ? Math.max(260, Math.min(680, paneWidth - assistantChat.left - 8)) : 680,
             maxHeight: cardHeight("assistant"),
             borderColor: annotationKindColor("assistant", null),
           }}
@@ -10774,10 +11371,10 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       )}
       </Presence>
 
-      <Presence show={aiPlan !== null && !planInCard} exit="pop">
+      <Presence show={planFloats} exit="pop">
       {/* The plan card grows with the reply and the actions up to the
           window's height, then scrolls inside. */}
-      {aiPlan && !planInCard && (
+      {planFloats && (
         <div className="fixed bottom-6 left-1/2 z-40 flex max-h-[calc(100vh-3rem)] w-[440px] max-w-[92vw] -translate-x-1/2 flex-col rounded-[24px] bg-card p-4 shadow-float">
           {planBody}
         </div>
@@ -10815,7 +11412,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           output={bubble.text}
           messages={bubble.conversation}
           busy={bubble.busy}
-          after={<QueuedList items={bubble.queue} onRemove={(key) => removeQueuedTool("explain", key)} />}
+          after={
+            <>
+              <QueuedList items={bubble.queue} onRemove={(key) => removeQueuedTool("explain", key)} />
+              {toolPlan(bubble)}
+            </>
+          }
           foot={
             bubble.declined === null ? toolChatFoot("explain", bubble, bubble.kind, true) : null
           }
@@ -10829,7 +11431,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           output={stripSimplifyMarkers(simplifyCard.text)}
           messages={simplifyCard.conversation}
           busy={simplifyCard.busy}
-          after={<QueuedList items={simplifyCard.queue} onRemove={(key) => removeQueuedTool("simplify", key)} />}
+          after={
+            <>
+              <QueuedList items={simplifyCard.queue} onRemove={(key) => removeQueuedTool("simplify", key)} />
+              {toolPlan(simplifyCard)}
+            </>
+          }
           foot={toolChatFoot("simplify", simplifyCard, "simplify", true)}
           onClose={closeConversationView}
         />
@@ -10874,7 +11481,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       {editHint && !hintBeside && !editMode && !split && !transcript && !embedded && !richText && (
         <div
           data-edit-hint
-          onAnimationEnd={() => setEditHint(false)}
+          onAnimationEnd={hintPlayed}
           className={`hint-fade pointer-events-none shrink-0 border-t border-line bg-card px-4 py-2.5 leading-relaxed text-sand-700 print:hidden ${
             coarse ? "text-[13px]" : "text-[12px]"
           }`}
@@ -10916,10 +11523,8 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             <input
               autoFocus
               value={bar.input}
-              onChange={(e) => {
-                const input = e.target.value;
-                setBar((b) => (b ? { ...b, input } : b));
-              }}
+              onFocus={caretToEnd}
+              onChange={(e) => setBarInput(e.target.value)}
               {...ime.props}
               onKeyDown={(e) => {
                 if (ime.isImeEnter(e) || isImeKey(e) || e.key !== "Enter") return;
@@ -10932,7 +11537,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             />
             <button
               type="button"
-              onClick={() => toggleVoice((input) => setBar((b) => (b ? { ...b, input } : b)))}
+              onClick={() => toggleVoice(setBarInput)}
               data-track="assistant-voice"
               aria-label={aiListening ? t("reader.stopListening") : t("reader.speakCommand")}
               data-tip={aiListening ? t("reader.stopListening") : t("reader.speakCommand")}

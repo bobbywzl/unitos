@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_SEGMENTS } from "@/lib/anchors/passage-limit";
 import { layerSchema, type Layer } from "@/lib/anchors/layer";
 import { resolveAnchor, type AnchorInput, type ResolvedAnchor } from "@/lib/anchors/resolve";
 
@@ -25,8 +26,8 @@ export const anchorInputSchema = z.object({
   layer: layerSchema,
 });
 
-// Blocks a selection may cross, at most.
-export const MAX_SEGMENTS = 40;
+// Blocks a selection may cross, at most (lib/anchors/passage-limit.ts).
+export { MAX_SEGMENTS };
 
 export const segmentsSchema = z.array(anchorInputSchema).min(1).max(MAX_SEGMENTS).optional();
 

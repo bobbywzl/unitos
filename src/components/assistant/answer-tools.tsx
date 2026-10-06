@@ -382,22 +382,29 @@ export type AnswerComment = {
   createdAt: string;
 };
 
-/** The box a comment is written in: the quote it is on, then the words. */
+/** The box a comment is written in: the quote it is on, then the words.
+    `draft` and `onDraft` keep the words typed and not yet posted (SPEC.md
+    §6): the box opens with them, and each keystroke hands them on, so
+    Escape, Cancel, or a closed card never throws them away. */
 export function CommentBox({
   quote,
   busy,
   onCancel,
   onSubmit,
+  draft = "",
+  onDraft,
   className = "",
 }: {
   quote: string;
   busy: boolean;
   onCancel: () => void;
   onSubmit: (text: string) => void;
+  draft?: string;
+  onDraft?: (text: string) => void;
   className?: string;
 }) {
   const t = useT();
-  const [text, setText] = useState("");
+  const [text, setText] = useState(draft);
   return (
     <form
       onSubmit={(e) => {
@@ -410,13 +417,21 @@ export function CommentBox({
       <textarea
         autoFocus
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onFocus={(e) => e.currentTarget.setSelectionRange(e.currentTarget.value.length, e.currentTarget.value.length)}
+        onChange={(e) => {
+          setText(e.target.value);
+          onDraft?.(e.target.value);
+        }}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             if (text.trim() && !busy) onSubmit(text);
           }
-          if (e.key === "Escape") onCancel();
+          // Escape closes this box and only this box: the card under it stays.
+          if (e.key === "Escape") {
+            e.stopPropagation();
+            onCancel();
+          }
         }}
         rows={2}
         placeholder={t("assistant.commentPlaceholder")}
