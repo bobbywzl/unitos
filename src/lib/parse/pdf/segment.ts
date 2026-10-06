@@ -1,6 +1,7 @@
 // A page's lines cut into segments. Readers are tried in this order:
 // contents lists, tables, code listings, label lines, an algorithm's lines
-// (lists.ts), headings (headings.ts), references and lists (lists.ts), and
+// (lists.ts), headings (headings.ts), references (lists.ts), a right-to-left
+// line's list or paragraph on the page mirrored (mirror.ts), lists, and
 // paragraphs (paragraphs.ts). Each takes the lines from
 // one index on and says where it stopped; the first that takes the line
 // makes its segments.
@@ -10,6 +11,7 @@ import { lineColumn } from "@/lib/parse/pdf/columns";
 import { geom, median } from "@/lib/parse/pdf/geometry";
 import { readHeading } from "@/lib/parse/pdf/headings";
 import { closeLists, joinMarkerCells, liftTallMarkers, readAlgorithm, readList, readReferences } from "@/lib/parse/pdf/lists";
+import { type Mirror, mirrorPage, readsRightToLeft, unmirror } from "@/lib/parse/pdf/mirror";
 import { leftEdge, markEdges, readParagraph } from "@/lib/parse/pdf/paragraphs";
 import { tableFromRegion } from "@/lib/parse/pdf/ruled";
 import { findTableRuns, isLabelLine, tableFromRun } from "@/lib/parse/pdf/tables";
@@ -34,6 +36,14 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
   const fills = markTabs(lines, (k) => runOf[k] === -1, (l) => leftEdge(l, ctx), ctx.drawing, !ctx.tex);
   let tocMode = tocCarry && lines.length > 0 && TOC_ENTRY_RE.test(lines[0].text) && TOC_TAIL_RE.test(lines[0].text);
   tocCarry = false;
+  // A right-to-left line's list or paragraph reads on the page mirrored
+  // (mirror.ts), its blocks back at the page's place.
+  let mirror: Mirror | null = null;
+  const readMirrored = (k: number): Step | null => {
+    if (!readsRightToLeft(lines[k])) return null;
+    mirror ??= mirrorPage(lines, ctx);
+    return unmirror(readList(mirror.lines, k, mirror.ctx, runOf) ?? readParagraph(mirror.lines, k, mirror.ctx, runOf), mirror.axis);
+  };
   // Where each reader's segments begin: its first line and its first segment.
   const starts: { line: number; at: number }[] = [];
   let i = 0;
@@ -120,6 +130,7 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
       readAlgorithm(lines, i, ctx, runOf) ??
       readHeading(lines, i, ctx, runOf) ??
       readReferences(lines, i, ctx, runOf) ??
+      readMirrored(i) ??
       readList(lines, i, ctx, runOf) ??
       readParagraph(lines, i, ctx, runOf);
     const heading = step.segments.findLast((s) => s.type === "HEADING");

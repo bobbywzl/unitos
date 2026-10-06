@@ -41,7 +41,9 @@ export type Marker = {
 // A glyph bullet opens an item before words; a dash or an asterisk only with
 // a space after it ("-5 °C" and "*15" are words). A glyph alone on its line
 // is no item: a proof's end mark (□) after a display read as an empty list.
-const BULLET_GLYPH_RE = /^([•▪◦‣●○■□◆❖➢➤►✓✔])\s*(?=\S)/;
+// A right-to-left list points its triangles left (◂, ◄): an Arabic book's
+// "◂" items read as paragraphs.
+const BULLET_GLYPH_RE = /^([•▪◦‣●○■□◆❖➢➤►◂◄▸✓✔])\s*(?=\S)/;
 const BULLET_WORD_RE = /^([-–—*·∙])\s+/;
 // A dash drawn as a run of its own, its words starting where it ends (parse
 // loop finding: PowerPoint draws a sub-item's "—" bullet alone and its
