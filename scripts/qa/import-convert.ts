@@ -154,22 +154,38 @@ const clip = (s: string, n = 70) => {
 const unescapeHtml = (s: string) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
 const INLINE_MATH_HTML = /<span data-type="inline-math" data-latex="([^"]*)">([^<]*)<\/span>/g;
 /** A table's inline formulas over its text, from its html (whose DOM text
-    is its text, SPEC.md §5): the converter makes a cell's formulas, and its
+    is its text, SPEC.md §5; a web page's or a Markdown file's table sets its
+    cells apart in its text with a tab and its rows with a newline, which its
+    html does not hold): the converter makes a cell's formulas, and its
     caption's, inline equations (lib/docs/import-table.ts). */
 function tableMath(b: ParsedBlock): { start: number; end: number; words: string }[] {
-  const out: { start: number; end: number; words: string }[] = [];
-  let at = 0;
+  const found: { start: number; end: number; words: string }[] = [];
+  let html = "";
   for (const m of (b.html ?? "").matchAll(/<span data-type="inline-math" data-latex="([^"]*)">([^<]*)<\/span>|<[^>]+>|[^<]+/g)) {
     if (m[1] === undefined) {
-      if (!m[0].startsWith("<")) at += unescapeHtml(m[0]).length;
+      if (!m[0].startsWith("<")) html += unescapeHtml(m[0]);
       continue;
     }
     const tex = unescapeHtml(m[1]).trim();
-    const end = at + unescapeHtml(m[2]).length;
-    if (tex && tex.length <= 2000) out.push({ start: at, end, words: mathWords(tex) });
-    at = end;
+    const start = html.length;
+    html += unescapeHtml(m[2]);
+    if (tex && tex.length <= 2000) found.push({ start, end: html.length, words: mathWords(tex) });
   }
-  return out;
+  // The html's offsets onto the text: a character the two share moves both;
+  // white space only one of them holds moves that one.
+  const at = new Array<number>(html.length + 1);
+  let j = 0;
+  for (let i = 0; i < html.length; i++) {
+    while (j < b.text.length && b.text[j] !== html[i] && /\s/.test(b.text[j])) j++;
+    at[i] = j;
+    if (b.text[j] === html[i]) j++;
+  }
+  at[html.length] = j;
+  return found.flatMap((m) => {
+    const start = at[m.start];
+    const end = at[m.end - 1] + 1;
+    return b.text.slice(start, end) === html.slice(m.start, m.end) ? [{ start, end, words: m.words }] : [];
+  });
 }
 /** Where a table's caption line ends in its text (-1 with no caption line):
     a PDF's or a Word file's table opens its text with its caption's line; a
@@ -1565,7 +1581,22 @@ async function checkFixture(f: Fixture): Promise<Report> {
     );
   }
   // Citations: the mark, derived into Block.citations.
-  const citeWant = f.blocks.filter((b) => b.type !== "FIGURE").flatMap((b) => (b.citations ?? []).map((c) => `${c.refId} ${norm(c.quotedText)}`));
+  // An inline equation takes no mark (lib/docs/import.ts inline): a citation
+  // over an inline formula quotes its words around the formula.
+  const citedWords = (b: ParsedBlock, c: { start: number; end: number; quotedText: string }) => {
+    if (b.text.slice(c.start, c.end) !== c.quotedText) return c.quotedText;
+    let out = "";
+    let at = c.start;
+    for (const m of keptMath(b)) {
+      if (m.end <= c.start || m.start >= c.end) continue;
+      out += `${b.text.slice(at, Math.max(at, m.start))} `;
+      at = Math.max(at, Math.min(c.end, m.end));
+    }
+    return out + b.text.slice(at, c.end);
+  };
+  const citeWant = f.blocks
+    .filter((b) => b.type !== "FIGURE")
+    .flatMap((b) => (b.citations ?? []).map((c) => `${c.refId} ${norm(citedWords(b, c))}`));
   const citeHave = rows.flatMap((r) => (r.citations ?? []).map((c) => `${c.refId} ${norm(c.quotedText)}`));
   let citationMarks = 0;
   const refs = new Set(f.references.map((r) => r.id));
@@ -1914,6 +1945,9 @@ Intro paragraph with **bold**, *italic*, \`code\`, a [link](https://example.com/
 |------|-------|
 | a    | 1     |
 | b    | 2     |
+| $\\sigma$ | costs $3 |
+
+The square $x^2$ grows, and \\(a_i\\) is an item; it costs $5 and $10, and an escaped \\$ stays a dollar.
 
 \`\`\`js
 console.log("hi");

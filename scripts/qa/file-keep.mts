@@ -8,8 +8,12 @@
 // Each probe is parsed the way the add parses it (parseMarkdownDocument),
 // and every leaf block of the file's Markdown tree is counted in the parse's
 // title and blocks: a block said twice in the file is said twice in the
-// parse. Every scripts/eval/fixtures/*.md is held to the same check. Nothing
-// is stored. Run: npx tsx --tsconfig tsconfig.json scripts/qa/file-keep.mts
+// parse. Every scripts/eval/fixtures/*.md is held to the same check. An
+// inline formula ($x^2$, \(a_i\)) is kept as its readable characters (x²)
+// with its TeX as an inline formula of the block (ParsedBlock.math), which
+// an import draws as an inline equation; a dollar amount and an escaped \$
+// stay words. Nothing is stored.
+// Run: npx tsx --tsconfig tsconfig.json scripts/qa/file-keep.mts
 import "../eval/env";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -17,7 +21,10 @@ import type { Root, RootContent } from "mdast";
 import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
-import { parseMarkdownDocument } from "@/lib/parse/markdown-document";
+import { deriveBlocks } from "@/lib/docs/blocks";
+import type { RichNode } from "@/lib/docs/schema";
+import { richTextFromImport } from "@/lib/docs/import";
+import { mathAsWords, mathAsWritten, parseMarkdownDocument, setAsideMath } from "@/lib/parse/markdown-document";
 import { parseHtmlContent } from "@/lib/parse/url";
 
 let failed = 0;
@@ -28,13 +35,16 @@ function check(name: string, ok: boolean, detail = "") {
 
 const norm = (s: string) => s.replace(/[☐☑]/g, " ").replace(/\s+/g, " ").trim();
 
-// The file's leaf blocks, as plain text: what the parse must keep.
+// The file's leaf blocks, as plain text: what the parse must keep. Math is
+// set aside first, as the parse sets it aside, and each formula counts as
+// its words: an inline formula's readable characters, display math's TeX.
 function leafTexts(markdown: string): string[] {
-  const body = markdown.replace(/^---\n[\s\S]*?\n---\n?/, "");
+  const { text: body, spans } = setAsideMath(markdown.replace(/^---\n[\s\S]*?\n---\n?/, ""));
   const tree = unified().use(remarkParse).use(remarkGfm).parse(body) as Root;
   const out: string[] = [];
   const text = (node: RootContent): string => {
-    if (node.type === "text" || node.type === "inlineCode") return node.value;
+    if (node.type === "text") return mathAsWords(node.value, spans);
+    if (node.type === "inlineCode") return node.value;
     if (node.type === "image") return "";
     if (node.type === "break") return " ";
     if ("children" in node) return (node.children as RootContent[]).map(text).join("");
@@ -47,11 +57,11 @@ function leafTexts(markdown: string): string[] {
       return;
     }
     if (node.type === "code") {
-      for (const line of node.value.split("\n")) if (line.trim()) out.push(norm(line));
+      for (const line of mathAsWritten(node.value, spans).split("\n")) if (line.trim()) out.push(norm(line));
       return;
     }
     if (node.type === "html") {
-      const t = norm(node.value.replace(/<[^>]+>/g, " "));
+      const t = norm(mathAsWords(node.value, spans).replace(/<[^>]+>/g, " "));
       if (t) out.push(t);
       return;
     }
@@ -189,6 +199,11 @@ const PROBES: { name: string; file: string; md: string }[] = [
     md: `## Intro\n\n${FILLER}\n\n${SECOND}\n\n${THIRD}\n`,
   },
   {
+    name: "inline math, display math, and dollar amounts",
+    file: "math.md",
+    md: `# Energy $E=mc^2$\n\n${FILLER}\n\nThe square $x^2$ grows, and $\\alpha + \\beta$ is a sum, and \\(a_i\\) is an item.\n\nIt costs $5 and $10, and an escaped \\$ stays a dollar.\n\n- A list item with $e^{i\\pi} = -1$ inside.\n\n| Term | Value |\n| --- | --- |\n| $\\sigma$ | costs $3 |\n\n$$\\int_0^1 f(x)\\,dx$$\n\n    an indented code line with $x$\n\n${SECOND}\n`,
+  },
+  {
     name: "label and value rows",
     file: "fields.md",
     md: `# Fields\n\n${FILLER}\n\nAuthor: Mia Chen\n\nSource: field notebook\n\nFiled under: caching\n\n${SECOND}\n\n${THIRD}\n\nWords: 120\n\nCategory: notes\n`,
@@ -204,6 +219,80 @@ const FIXTURES = join(process.cwd(), "scripts", "eval", "fixtures");
 for (const name of readdirSync(FIXTURES).filter((f) => f.endsWith(".md")).sort()) {
   const lost = await lostLeaves(readFileSync(join(FIXTURES, name), "utf8"), name);
   check(`file keeps every block: fixture ${name}`, lost.length === 0, lost.join("; "));
+}
+
+// Inline math (EDGE11-12 of the reader audit): $…$ and \(…\) read as
+// math. A block keeps the formula's readable characters and carries its TeX
+// as an inline formula (ParsedBlock.math), as a PDF's block does; the import
+// draws each as an inline equation, and the paragraph index reads it as its
+// TeX between dollar signs. A dollar amount, an escaped \$, a code span, and
+// TeX KaTeX cannot draw stay words.
+{
+  type Rich = RichNode & { content?: Rich[] };
+  const read = async (md: string) => {
+    const parsed = await parseMarkdownDocument(md, "math.md");
+    const rich = richTextFromImport({ kind: "markdown", title: parsed.title, titleFromOriginal: !parsed.titleFromFile, blocks: parsed.blocks }).richText as Rich;
+    const equations: string[] = [];
+    const visit = (node: Rich) => {
+      if (node.type === "inlineMath") equations.push(String(node.attrs?.latex));
+      for (const child of node.content ?? []) visit(child);
+    };
+    visit(rich);
+    return { parsed, equations, rows: deriveBlocks(rich).map((b) => b.text) };
+  };
+  const formulas = (b: { text: string; math?: { start: number; end: number; latex: string }[] } | undefined) =>
+    (b?.math ?? []).map((m) => `${b?.text.slice(m.start, m.end)}=${m.latex}`).join(" | ");
+
+  const prose = await read(`# Notes\n\nThe square $x^2$ grows, and $\\alpha + \\beta$ is a sum, and \\(a_i\\) is an item.\n`);
+  const p = prose.parsed.blocks.find((b) => b.type === "PARAGRAPH");
+  check("inline math: a block keeps the readable characters", p?.text === "The square x² grows, and α + β is a sum, and aᵢ is an item.", p?.text);
+  check("inline math: a block carries each formula's TeX", formulas(p) === "x²=x^2 | α + β=\\alpha + \\beta | aᵢ=a_i", formulas(p));
+  check("inline math: the import draws inline equations", prose.equations.join(" | ") === "x^2 | \\alpha + \\beta | a_i", prose.equations.join(" | "));
+  check(
+    "inline math: the paragraph index reads each formula as its TeX",
+    prose.rows.includes("The square $x^2$ grows, and $\\alpha + \\beta$ is a sum, and $a_i$ is an item."),
+    prose.rows.join(" / "),
+  );
+
+  const words = [
+    ["dollar amounts", "It costs $5 and $10 today.", "It costs $5 and $10 today."],
+    ["a range of dollar amounts", "It rose from $5 to $6 a share.", "It rose from $5 to $6 a share."],
+    ["escaped dollars", "Prices: \\$5 and \\$10, and an escaped pair \\$x\\$ stays.", "Prices: $5 and $10, and an escaped pair $x$ stays."],
+    ["an escaped dollar that opens", "A note \\$x$ here.", "A note $x$ here."],
+    ["dollars after letters", "US$5 and US$6 in a row.", "US$5 and US$6 in a row."],
+    ["a code span", "Code `$x^2$` stays code.", "Code $x^2$ stays code."],
+    ["TeX KaTeX cannot draw", "Bad TeX $\\frac{a$ stays.", "Bad TeX $\\frac{a$ stays."],
+  ] as const;
+  for (const [name, line, want] of words) {
+    const { parsed, equations } = await read(`# Notes\n\n${line}\n`);
+    const b = parsed.blocks.find((x) => x.type === "PARAGRAPH");
+    check(`inline math: no formula in ${name}`, b?.text === want && !b?.math && equations.length === 0, `${b?.text} ${formulas(b)}`);
+  }
+  const mixed = await read(`# Notes\n\nPay $5, then $x$ is the rest.\n`);
+  const m = mixed.parsed.blocks.find((b) => b.type === "PARAGRAPH");
+  check("inline math: a dollar amount beside a formula", m?.text === "Pay $5, then x is the rest." && formulas(m) === "x=x", `${m?.text} ${formulas(m)}`);
+
+  const shapes = await read(
+    `# Energy $E=mc^2$\n\n- A list item with $e^{i\\pi} = -1$ inside.\n\n## Part $n$\n\n> A quote with $q^2$.\n\n| Term | Value |\n| --- | --- |\n| $\\sigma$ | costs $3 |\n\n![The curve $y=x^2$](https://example.com/a.png "Plot of $y$")\n`,
+  );
+  const blocks = shapes.parsed.blocks;
+  check("inline math: a title reads its formula", shapes.parsed.title === "Energy E = mc²" && !blocks.some((b) => b.type === "HEADING" && b.text === "Energy E = mc²"), `title ${shapes.parsed.title}`);
+  check("inline math: a list item", formulas(blocks.find((b) => b.type === "LIST")) === "e^(iπ) = −1=e^{i\\pi} = -1", formulas(blocks.find((b) => b.type === "LIST")));
+  check("inline math: a heading", formulas(blocks.find((b) => b.type === "HEADING")) === "n=n", formulas(blocks.find((b) => b.type === "HEADING")));
+  check("inline math: a quote", formulas(blocks.find((b) => b.text.startsWith("A quote"))) === "q²=q^2", formulas(blocks.find((b) => b.text.startsWith("A quote"))));
+  const table = blocks.find((b) => b.type === "TABLE");
+  check(
+    "inline math: a table cell keeps its TeX, and a dollar amount stays words",
+    table?.text === "Term\tValue\nσ\tcosts $3" && (table?.html ?? "").includes('data-latex="\\sigma"'),
+    `${table?.text} ${table?.html}`,
+  );
+  check("inline math: the import draws a table cell's inline equation", shapes.equations.includes("\\sigma"), shapes.equations.join(" | "));
+  const figure = blocks.find((b) => b.type === "FIGURE");
+  check(
+    "inline math: an image's alt and caption read their formulas",
+    (figure?.html ?? "").includes('alt="The curve y = x²"') && figure?.text === "Plot of y",
+    `${figure?.text} ${figure?.html}`,
+  );
 }
 
 // A text file's outline (markdownToHtml): a short first line standing alone

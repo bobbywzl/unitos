@@ -12,7 +12,7 @@ import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { MARKDOWN_EXTENSIONS } from "@/lib/markdown-file";
 import type { ParsedDocument } from "@/lib/parse/types";
-import { parseHtmlContent } from "@/lib/parse/url";
+import { inlineTexText, parseHtmlContent } from "@/lib/parse/url";
 
 // A Markdown file → blocks (SPEC.md §2). The file becomes one HTML page and
 // the URL walk (lib/parse/url.ts) reads it: headings, paragraphs, lists,
@@ -22,7 +22,10 @@ import { parseHtmlContent } from "@/lib/parse/url";
 //
 // Math is set aside before the markdown parse — its underscores and stars
 // are not emphasis. $$…$$ and \[…\] become EQUATION blocks (an x-math marker,
-// as a page's KaTeX does); $…$ and \(…\) stay as written, in the text.
+// as a page's KaTeX does); $…$ and \(…\) become inline formulas (the page
+// editor's <span data-type="inline-math">, which the walk reads into
+// ParsedBlock.math, as a PDF's inline formula is). A dollar amount ("$5 and
+// $10") and an escaped \$ stay words.
 //
 // The page has no base URL: an image or link with an absolute http(s) URL
 // keeps it; an image with a relative path has no file to show and is its
@@ -30,19 +33,21 @@ import { parseHtmlContent } from "@/lib/parse/url";
 
 const MARKDOWN_BASE_URL = "https://markdown.invalid/";
 
-type MathSpan = { tex: string; display: boolean };
+export type TexSpan = { tex: string; display: boolean; source: string };
 
 // Math set aside: one private-use placeholder per span.
 const PLACEHOLDER_RX = /(\d+)/g;
 // A code span (left alone), then display math, then inline math. Inline
-// math opens and closes on non-space and does not close before a digit
-// ("$5 and $6" is prose).
+// math opens and closes on non-space, does not open on an escaped \$, and
+// does not close before a digit ("$5 and $6" is prose).
 const MATH_RX =
-  /(`+)[\s\S]*?\1|\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\(([^\n]+?)\\\)|\$(?![\s$])((?:\\\$|[^$\n])+?)(?<![\s\\])\$(?!\d)/g;
+  /(`+)[\s\S]*?\1|\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\(([^\n]+?)\\\)|(?<!\\)\$(?![\s$])((?:\\\$|[^$\n])+?)(?<![\s\\])\$(?!\d)/g;
 const FENCE_RX = /^\s{0,3}(`{3,}|~{3,})/;
 
-function setAsideMath(source: string): { text: string; spans: MathSpan[] } {
-  const spans: MathSpan[] = [];
+/** The file's math set aside: the text with one placeholder per span, and
+    the spans. Exported for scripts/qa/file-keep.mts. */
+export function setAsideMath(source: string): { text: string; spans: TexSpan[] } {
+  const spans: TexSpan[] = [];
   const out: string[] = [];
   let prose: string[] = [];
   let fence: string | null = null;
@@ -52,7 +57,7 @@ function setAsideMath(source: string): { text: string; spans: MathSpan[] } {
       prose.join("\n").replace(MATH_RX, (m, _code, display, bracket, paren, inline) => {
         if (m.startsWith("`")) return m;
         const tex: string = display ?? bracket ?? paren ?? inline;
-        spans.push({ tex: tex.trim(), display: display !== undefined || bracket !== undefined });
+        spans.push({ tex: tex.trim(), display: display !== undefined || bracket !== undefined, source: m });
         return `${spans.length - 1}`;
       }),
     );
@@ -75,6 +80,26 @@ function setAsideMath(source: string): { text: string; spans: MathSpan[] } {
   }
   flush();
   return { text: out.join("\n"), spans };
+}
+
+/** Text with each placeholder put back as words: an inline formula as its
+    readable characters (inlineTexText), display math as its TeX (an
+    EQUATION block's words), TeX KaTeX cannot draw as written. For text that
+    holds words only: a title, a heading's id, an image's alt and caption.
+    Exported for scripts/qa/file-keep.mts. */
+export function mathAsWords(value: string, spans: TexSpan[]): string {
+  return value.replace(PLACEHOLDER_RX, (_, index: string) => {
+    const span = spans[Number(index)];
+    if (!span) return "";
+    if (span.display) return span.tex;
+    return inlineTexText(span.tex) ?? span.source;
+  });
+}
+
+/** Text with each placeholder put back as the file wrote it: a code block's
+    lines, an indented one's among them. */
+export function mathAsWritten(value: string, spans: TexSpan[]): string {
+  return value.replace(PLACEHOLDER_RX, (_, index: string) => spans[Number(index)]?.source ?? "");
 }
 
 // Front matter: the title line, when there is one; the rest drops.
@@ -131,7 +156,7 @@ class Renderer {
   private readonly slugs = new Map<string, number>();
   firstHeading: string | null = null;
 
-  constructor(private readonly spans: MathSpan[]) {}
+  constructor(private readonly spans: TexSpan[]) {}
 
   render(root: Root): string {
     const collect = (node: RootContent | Root) => {
@@ -141,7 +166,7 @@ class Renderer {
     };
     collect(root);
     const first = root.children.find((n) => n.type !== "definition" && n.type !== "footnoteDefinition" && n.type !== "html");
-    if (first && first.type === "heading" && first.depth === 1) this.firstHeading = plainText(first.children) || null;
+    if (first && first.type === "heading" && first.depth === 1) this.firstHeading = this.words(plainText(first.children)) || null;
     let html = root.children.map((node) => this.block(node)).join("\n");
     if (this.footnoteOrder.length > 0) {
       const items = this.footnoteOrder.map((id, i) => {
@@ -157,7 +182,7 @@ class Renderer {
   private block(node: RootContent): string {
     switch (node.type) {
       case "heading": {
-        const id = slugOf(plainText(node.children), this.slugs);
+        const id = slugOf(this.words(plainText(node.children)), this.slugs);
         return `<h${node.depth} id="${escapeAttr(id)}">${this.inline(node.children)}</h${node.depth}>`;
       }
       case "paragraph": {
@@ -175,12 +200,12 @@ class Renderer {
       }
       case "code": {
         const lang = node.lang ? ` class="language-${escapeAttr(node.lang)}"` : "";
-        return `<pre><code${lang}>${escapeHtml(node.value)}</code></pre>`;
+        return `<pre><code${lang}>${escapeHtml(mathAsWritten(node.value, this.spans))}</code></pre>`;
       }
       case "thematicBreak":
         return "<hr>";
       case "html":
-        return node.value;
+        return this.html(node.value);
       case "table":
         return this.table(node);
       case "definition":
@@ -227,11 +252,12 @@ class Renderer {
   }
 
   private resolveImage(node: PhrasingContent): { url: string | null; alt: string; title: string | null } | null {
-    if (node.type === "image") return { url: node.url, alt: node.alt ?? "", title: node.title ?? null };
+    const alt = this.words(node.type === "image" || node.type === "imageReference" ? (node.alt ?? "") : "");
+    if (node.type === "image") return { url: node.url, alt, title: node.title ? this.words(node.title) : null };
     if (node.type === "imageReference") {
       const definition = this.definitions.get(node.identifier.toLowerCase());
-      if (!definition) return { url: null, alt: node.alt ?? "", title: null };
-      return { url: definition.url, alt: node.alt ?? "", title: definition.title ?? null };
+      if (!definition) return { url: null, alt, title: null };
+      return { url: definition.url, alt, title: definition.title ? this.words(definition.title) : null };
     }
     return null;
   }
@@ -255,7 +281,7 @@ class Renderer {
       case "break":
         return "<br>";
       case "html":
-        return node.value;
+        return this.html(node.value);
       case "link":
         return this.link(node.url, node.children);
       case "linkReference": {
@@ -294,15 +320,27 @@ class Renderer {
     return inner;
   }
 
+  private words(value: string): string {
+    return mathAsWords(value, this.spans);
+  }
+
+  // Raw HTML, with the math set aside put back as text puts it back.
+  private html(value: string): string {
+    return value.replace(PLACEHOLDER_RX, (_, index: string) => this.math(Number(index)));
+  }
+
+  private math(index: number): string {
+    const span = this.spans[index];
+    if (!span) return "";
+    if (span.display) return `<x-math data-tex="${escapeAttr(span.tex)}"></x-math>`;
+    return `<span data-type="inline-math" data-latex="${escapeAttr(span.tex)}">${escapeHtml(span.source)}</span>`;
+  }
+
   // Text, with the math set aside put back: display math as the marker the
-  // walk turns into an EQUATION block, inline math as written.
+  // walk turns into an EQUATION block, inline math as an inline formula that
+  // holds the words as written until the walk reads its TeX.
   private text(value: string): string {
-    return escapeHtml(value).replace(PLACEHOLDER_RX, (_, index: string) => {
-      const span = this.spans[Number(index)];
-      if (!span) return "";
-      if (span.display) return `<x-math data-tex="${escapeAttr(span.tex)}"></x-math>`;
-      return escapeHtml(`$${span.tex}$`);
-    });
+    return escapeHtml(value).replace(PLACEHOLDER_RX, (_, index: string) => this.math(Number(index)));
   }
 }
 

@@ -63,6 +63,8 @@ const ALLOWED: Record<string, Set<string>> = {
   source: new Set(["src", "type"]),
 };
 
+const INLINE_MATH_ATTRS = new Set(["data-type", "data-latex"]);
+
 const DROP_ENTIRELY = new Set(["script", "style", "iframe", "object", "embed", "noscript", "form", "input", "button", "link", "meta"]);
 
 // Embedded players kept as iframes; anything else is dropped by DROP_ENTIRELY.
@@ -286,8 +288,11 @@ export function sanitizeHtml(html: string, baseUrl?: string): string {
         continue;
       }
       const allowed = ALLOWED[tag];
+      // An inline formula keeps its TeX (lib/parse/url.ts normalizeInlineMath):
+      // an import's table cell draws it as an inline equation.
+      const inlineMath = tag === "span" && child.getAttribute("data-type") === "inline-math";
       for (const attr of [...child.attributes]) {
-        if (!allowed.has(attr.name)) child.removeAttribute(attr.name);
+        if (!allowed.has(attr.name) && !(inlineMath && INLINE_MATH_ATTRS.has(attr.name))) child.removeAttribute(attr.name);
       }
       if ((tag === "p" || tag === "figcaption") && centered && child.closest("figure")) child.setAttribute("class", "center");
       if (wordStyle) child.setAttribute("style", wordStyle);
