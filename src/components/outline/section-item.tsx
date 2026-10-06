@@ -71,7 +71,7 @@ export function SectionItem({
       <div
         data-drop-header={notesList(section.id)}
         data-drop-first={notes[0]?.id ?? ""}
-        className={`-mx-2 flex items-baseline gap-2.5 rounded-full px-2 transition-colors ${
+        className={`-mx-2 flex flex-wrap items-baseline gap-x-2.5 gap-y-1 rounded-[22px] px-2 transition-colors ${
           headerLit ? "bg-clay-100 ring-2 ring-clay-400" : ""
         }`}
       >

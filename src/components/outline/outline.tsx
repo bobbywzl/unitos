@@ -95,7 +95,8 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
         <span className="text-[11px] text-sand-500">{t("outline.pageKeyHint")}</span>
       </div>
 
-      <div className="mt-2 flex items-center gap-2">
+      {/* Wraps on a phone, where the row is wider than the screen. */}
+      <div className="mt-2 flex flex-wrap items-center gap-2">
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -103,7 +104,7 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
           placeholder={t("outline.searchNotes")}
           aria-label={t("outline.searchNotes")}
           type="search"
-          className="w-72 rounded-full bg-card px-4 py-2 text-[13px] shadow-soft outline-none placeholder:text-sand-500"
+          className="w-full min-w-0 rounded-full bg-card px-4 py-2 text-[13px] shadow-soft outline-none placeholder:text-sand-500 sm:w-72"
         />
         <CollapsedViewToggle view={actions.notesView} onChange={actions.setNotesView} track="notes-view" />
         <NotesOrganize grouping={grouping} onGrouping={setGrouping} />
