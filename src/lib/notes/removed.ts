@@ -76,7 +76,8 @@ export type RestoreResult =
 
 /** Put a kept note back in its project: in its section when the section is
     still there, else in the section of the same title, else the project's
-    first section. It lands at the end of the section. */
+    first section. In its own section it takes its place again; in
+    another it lands at the end. */
 export async function restoreNote(kept: KeptNote, notebookId: string, sectionTitle: string | null): Promise<RestoreResult> {
   if (await db.note.findUnique({ where: { id: kept.id }, select: { id: true } })) {
     return { ok: false, reason: "restored" };
@@ -97,8 +98,13 @@ export async function restoreNote(kept: KeptNote, notebookId: string, sectionTit
     (await db.document.findMany({ where: { id: { in: [...new Set(docIds)] } }, select: { id: true } })).map((d) => d.id),
   );
   const count = await db.note.count({ where: { sectionId: section.id } });
+  // Back in its own section, the note takes its place again: the row it
+  // had, the notes from there down one row lower. In another section it
+  // lands at the end.
+  const at = section.id === kept.sectionId ? Math.max(0, Math.min(kept.order, count)) : count;
   await db.$transaction([
-    ...noteWrites(kept, section.id, count, documents),
+    db.note.updateMany({ where: { sectionId: section.id, order: { gte: at } }, data: { order: { increment: 1 } } }),
+    ...noteWrites(kept, section.id, at, documents),
     ...kept.sideChats.flatMap((chat, i) => noteWrites(chat, section.id, count + 1 + i, documents)),
   ]);
   await normalizeNoteOrders(section.id);
