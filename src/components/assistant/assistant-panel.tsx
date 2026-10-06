@@ -613,8 +613,31 @@ export function AssistantPanel({
     if (!text || !activeNoteId) return;
     setCommentQuote(text);
   }
+  // The words of a comment not yet posted (SPEC.md §6), one per conversation
+  // and quote, in localStorage: Escape, Cancel, a closed panel, or a reload
+  // keeps them, and only the server's confirmation clears them.
+  const commentDraftKey =
+    activeNoteId && commentQuote ? `unitos-answer-comment:${activeNoteId}:${commentQuote.slice(0, 200)}` : null;
+  function readCommentDraft(key: string | null): string {
+    if (!key) return "";
+    try {
+      return localStorage.getItem(key) ?? "";
+    } catch {
+      return "";
+    }
+  }
+  function writeCommentDraft(key: string | null, text: string) {
+    if (!key) return;
+    try {
+      if (text.trim()) localStorage.setItem(key, text);
+      else localStorage.removeItem(key);
+    } catch {
+      // Storage blocked: the box still holds the words while it is open.
+    }
+  }
   async function postComment(text: string) {
     if (!activeNoteId || commentBusy) return;
+    const draftKey = commentDraftKey;
     setCommentBusy(true);
     try {
       const res = await fetch("/api/replies", {
@@ -628,6 +651,7 @@ export function AssistantPanel({
       const json = (await res.json().catch(() => null)) as (AnswerComment & { error?: string }) | null;
       if (!res.ok || !json?.id) throw new Error(json?.error ?? t("assistant.commentFailed"));
       setComments((list) => [...list, json]);
+      writeCommentDraft(draftKey, "");
       setCommentQuote(null);
       clearSelection();
       // The Annotations tab lists the comment under the conversation.
@@ -1650,8 +1674,11 @@ export function AssistantPanel({
         )}
         {commentQuote ? (
           <CommentBox
+            key={commentDraftKey ?? ""}
             quote={commentQuote}
             busy={commentBusy}
+            draft={readCommentDraft(commentDraftKey)}
+            onDraft={(text) => writeCommentDraft(commentDraftKey, text)}
             onCancel={() => {
               setCommentQuote(null);
               clearSelection();
