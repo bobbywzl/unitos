@@ -46,6 +46,10 @@ export type NoteView = {
   // Saved on this device and waiting for the offline queue to sync (SPEC.md
   // §17, lib/offline/queued-notes.ts): drawn from the queue, not the server.
   queued?: boolean;
+  // Words a local draft keeps that the server never confirmed (a failed
+  // save, then a reload): drawn on the card, marked Not saved, until a save
+  // lands (SPEC.md §6, use-outline.ts).
+  unsaved?: boolean;
 };
 
 export type SectionView = {

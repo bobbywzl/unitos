@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { clearDirty, markDirty } from "@/lib/save-state";
 import { ACCOUNT_HEADER } from "@/lib/constants";
-import { clearNoteDraft, confirmNoteDraft, readNoteDraft, writeNoteDraft } from "@/lib/note-drafts";
+import { clearNoteDraft, confirmNoteDraft, noteDraftBase, readNoteDraft, writeNoteDraft } from "@/lib/note-drafts";
 import { reconcileNoteText } from "@/lib/notes/conflict";
 import { conflictLabels, saveNoteText, type SavedText } from "@/lib/notes/save-text";
 import { tabAccount } from "@/lib/tab-account";
@@ -99,16 +99,45 @@ export function useNoteDraft({
   const sendingRef = useRef<string | null>(null);
   // The saves of this editor, one after another.
   const chainRef = useRef<Promise<unknown>>(Promise.resolve());
+  // The text of the last save that waits in the offline queue: the save
+  // state reads Waiting to sync, not Saved, until the queue syncs.
+  const [queued, setQueued] = useState<string | null>(null);
+  // Words a local draft kept that the server never confirmed, put into the
+  // editor as it opens: until the editor shows them, no keystroke writes
+  // the local draft, so the kept words are never written over.
+  const adoptingRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!active) return;
     lastSavedRef.current = original;
     originalRef.current = original;
     baseRef.current = original.trim();
+    adoptingRef.current = null;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setConfirmed(original.trim());
     setFailed(null);
     setBoth(null);
+    setQueued(null);
+    // A local draft that holds words the server never confirmed (a save that
+    // failed, then a reload): the editor opens on those words, marked Not
+    // saved, and saves them made from the text they were made from — never
+    // the note's old text with the words gone (SPEC.md §6). The notes show
+    // the same words on the card (use-outline.ts).
+    const kept = readNoteDraft(noteId);
+    if (canEdit && kept && kept.base !== undefined && kept.content.trim() && kept.content.trim() !== kept.base.trim()) {
+      // The note's text as the server has it: the card shows the kept words
+      // in its place, so the draft's base stands for it then.
+      const stored = original.trim() === kept.content.trim() ? kept.base : original;
+      const base = (noteDraftBase(kept, stored) ?? stored).trim();
+      lastSavedRef.current = base;
+      baseRef.current = base;
+      originalRef.current = kept.content;
+      setConfirmed(base);
+      setFailed(kept.content.trim());
+      adoptingRef.current = kept.content;
+      draftRef.current = kept.content;
+      setDraft(kept.content);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
@@ -120,6 +149,7 @@ export function useNoteDraft({
         try {
           const saved = await saveNoteText(noteId, trimmed, baseRef.current);
           baseRef.current = saved.content;
+          setQueued(saved.queued ? saved.content : null);
           confirmNoteDraft(noteId, trimmed);
           confirmNoteDraft(noteId, saved.content);
           // Words typed since stay in the local draft, made from this save now.
@@ -151,6 +181,10 @@ export function useNoteDraft({
   useEffect(() => {
     draftRef.current = draft;
     if (!active || !canEdit) return;
+    if (adoptingRef.current !== null) {
+      if (draft.trim() !== adoptingRef.current.trim()) return;
+      adoptingRef.current = null;
+    }
     const trimmed = draft.trim();
     if (!trimmed || trimmed === lastSavedRef.current) return;
     // The local draft first: synchronous, so it is there whatever happens next.
@@ -274,7 +308,9 @@ export function useNoteDraft({
     !trimmed || trimmed === confirmed
       ? trimmed && trimmed === both
         ? "both"
-        : "saved"
+        : trimmed && trimmed === queued
+          ? "offline"
+          : "saved"
       : trimmed === failed
         ? "failed"
         : "saving";

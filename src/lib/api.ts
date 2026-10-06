@@ -75,7 +75,10 @@ export async function api<T = unknown>(
   method: "POST" | "PUT" | "PATCH" | "DELETE",
   body?: unknown,
   // signal: Stop aborts the request; the caller checks signal.aborted.
-  init?: { signal?: AbortSignal },
+  // refusalIsAnswer: a refusal (409, a 4xx) answers a question, such as
+  // whether an undo can still run; nothing went unsaved, so the save
+  // indicator does not read Not saved.
+  init?: { signal?: AbortSignal; refusalIsAnswer?: boolean },
 ): Promise<T> {
   beginWrite();
   try {
@@ -83,7 +86,8 @@ export async function api<T = unknown>(
     endWrite(true);
     return result;
   } catch (err) {
-    endWrite(Boolean(init?.signal?.aborted));
+    const answered = Boolean(init?.refusalIsAnswer) && err instanceof ApiError && err.status >= 400 && err.status < 500;
+    endWrite(Boolean(init?.signal?.aborted) || answered);
     throw err;
   }
 }

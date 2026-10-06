@@ -114,7 +114,7 @@ export function overlayQueuedNotes(
           return head ? `${head}\n\n${words}` : words;
         })()
       : text;
-    return { ...note, content, queued: true };
+    return { ...note, content, gist: null, queued: true };
   };
   const shown = new Set<string>();
   const walk = (s: SectionView): SectionView => {

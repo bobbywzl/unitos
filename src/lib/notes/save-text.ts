@@ -3,6 +3,7 @@
 import { api, ApiError, clientLang } from "@/lib/api";
 import { translate } from "@/lib/i18n/dictionaries";
 import { reconcileNoteText } from "@/lib/notes/conflict";
+import { NOTE_KEPT_EVENT } from "@/lib/offline/queue";
 
 // Saving a note's text from an editor (SPEC.md §6). Every save names the text
 // it was made from (base). When the note changed since — the same note saved
@@ -19,7 +20,17 @@ export type SavedText = {
   changed: boolean;
   /** True when some lines are kept twice under marker lines. */
   conflict: boolean;
+  /** True when the save waits in the offline queue (SPEC.md §17). */
+  queued?: boolean;
 };
+
+/** Tell the page that words written to a gone note were kept as a new note
+    (lib/notes/gone.ts): the notes put the new note in its place. */
+export function announceKept(from: string, answer: unknown) {
+  const to = (answer as { keptAs?: unknown } | null)?.keptAs;
+  if (typeof to !== "string" || to === from || typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(NOTE_KEPT_EVENT, { detail: { from, to } }));
+}
 
 const MAX_TRIES = 3;
 
@@ -39,23 +50,32 @@ export function conflictLabels() {
 }
 
 /** Save `content`, made from `base` (the note's text when the edit began).
-    A null base saves over whatever the note holds, as a write always did. */
-export async function saveNoteText(noteId: string, content: string, base: string | null): Promise<SavedText> {
+    A null base saves over whatever the note holds, as a write always did.
+    onlyIfGone: the save lands only when the note is gone and its words go
+    to a new note (lib/notes/gone.ts); a note that still exists refuses it. */
+export async function saveNoteText(
+  noteId: string,
+  content: string,
+  base: string | null,
+  opts?: { onlyIfGone?: boolean },
+): Promise<SavedText> {
   let text = content.trim();
   let from = base === null ? null : base.trim();
   let conflict = false;
   for (let tries = 0; ; tries++) {
     try {
-      const saved = await api<{ content?: unknown }>(`/api/notes/${noteId}`, "PATCH", {
+      const saved = await api<{ content?: unknown; queued?: unknown }>(`/api/notes/${noteId}`, "PATCH", {
         content: text,
         ...(from === null ? {} : { baseContent: from }),
         // The last try puts the texts together on the server, so a busy note
         // never leaves the reader's words unsaved.
         ...(tries >= MAX_TRIES ? { onConflict: "keep" } : {}),
+        ...(opts?.onlyIfGone ? { onlyIfGone: true } : {}),
       });
       // The stored text as the route answers it; a queued save answers none.
       if (typeof saved?.content === "string") text = saved.content;
-      return { content: text, changed: text !== content.trim(), conflict };
+      announceKept(noteId, saved);
+      return { content: text, changed: text !== content.trim(), conflict, ...(saved?.queued === true ? { queued: true } : {}) };
     } catch (err) {
       const stored = storedText(err);
       if (stored === null || from === null || tries >= MAX_TRIES) throw err;
