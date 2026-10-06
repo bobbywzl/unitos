@@ -200,7 +200,7 @@ export function ContentsMenu({
           <nav
             data-contents
             aria-label={t("reader.contents")}
-            className="pop-in pointer-events-auto flex w-full max-w-[400px] origin-top-left flex-col gap-2 rounded-[24px] bg-card/85 py-3 shadow-float backdrop-blur-md"
+            className="pop-in pointer-events-auto flex w-full max-w-[400px] origin-top-left flex-col gap-2 rounded-[24px] bg-card py-3 shadow-float"
           >
             {reading && (
               <p className={`flex items-center gap-2 ${note}`}>
