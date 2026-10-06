@@ -198,7 +198,13 @@ export function squiggleAt(state: EditorState, pos: number): Squiggle | null {
   if (!s) return null;
   const hit = (set: DecorationSet) => set.find(pos, pos).find((d) => d.from <= pos && pos <= d.to && d.from < d.to && !isNode(d));
   const grammar = hit(s.grammar);
-  if (grammar) return { kind: "grammar", from: grammar.from, to: grammar.to, issue: grammar.spec.issue, text: grammar.spec.text };
+  if (grammar) {
+    // The paragraph's text now, not as it was checked: an Accept or a word
+    // typed elsewhere in it since must not send Ignore to the old text.
+    const $pos = state.doc.resolve(grammar.from);
+    const text = $pos.parent.isTextblock && $pos.depth > 0 ? paragraphText($pos.parent, $pos.before()).text : grammar.spec.text;
+    return { kind: "grammar", from: grammar.from, to: grammar.to, issue: grammar.spec.issue, text };
+  }
   const spell = hit(s.spell);
   if (spell?.spec.word !== undefined) return { kind: "spelling", from: spell.from, to: spell.to, word: spell.spec.word };
   return null;

@@ -29,6 +29,11 @@ const issuesSchema = z.array(grammarIssueSchema);
 const responseSchema = z.object({ paragraphs: z.array(z.object({ id: z.string(), issues: issuesSchema })) });
 
 let cache: Map<string, GrammarIssue[]> | null = null;
+// Ignore, by paragraph text: kept apart from the answers, so an issue ignored
+// before its paragraph's new answer arrives stays ignored when it does.
+const IGNORED_KEY = "unitos-grammar-ignored-v1";
+const ignoredSchema = z.array(z.object({ wrong: z.string(), replacement: z.string() }));
+let ignoredCache: Map<string, { wrong: string; replacement: string }[]> | null = null;
 const queue: string[] = [];
 const queued = new Set<string>();
 const listeners = new Set<(texts: ReadonlySet<string>) => void>();
@@ -55,14 +60,41 @@ function store(): Map<string, GrammarIssue[]> {
   return cache;
 }
 
+function ignored(): Map<string, { wrong: string; replacement: string }[]> {
+  if (ignoredCache) return ignoredCache;
+  ignoredCache = new Map();
+  try {
+    const raw = window.localStorage.getItem(IGNORED_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    if (parsed && typeof parsed === "object") {
+      for (const [key, list] of Object.entries(parsed as Record<string, unknown>)) {
+        const read = ignoredSchema.safeParse(list);
+        if (read.success) ignoredCache.set(key, read.data);
+      }
+    }
+  } catch {
+    // Storage is off: Ignore holds until the page closes.
+  }
+  return ignoredCache;
+}
+
+function notIgnored(key: string, issues: GrammarIssue[]): GrammarIssue[] {
+  const list = ignored().get(key);
+  if (!list?.length) return issues;
+  return issues.filter((i) => !list.some((x) => x.wrong === i.wrong && x.replacement === i.replacement));
+}
+
 function save(): void {
   if (saveTimer) return;
   saveTimer = setTimeout(() => {
     saveTimer = null;
     const kept = store();
     while (kept.size > MAX_KEPT) kept.delete(kept.keys().next().value as string);
+    const skip = ignored();
+    while (skip.size > MAX_KEPT) skip.delete(skip.keys().next().value as string);
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(Object.fromEntries(kept)));
+      window.localStorage.setItem(IGNORED_KEY, JSON.stringify(Object.fromEntries(skip)));
     } catch {
       // Storage is full or off: the answers hold until the page closes.
     }
@@ -71,19 +103,18 @@ function save(): void {
 
 /** The issues of a paragraph's text, or undefined when it has not been checked. */
 export function cachedIssues(text: string): GrammarIssue[] | undefined {
-  const issues = store().get(textKey(text));
-  return issues && keptIssues(text, issues);
+  const key = textKey(text);
+  const issues = store().get(key);
+  return issues && notIgnored(key, keptIssues(text, issues));
 }
 
 /** Ignore: the issue is gone from this paragraph text's answer. */
 export function ignoreIssue(text: string, issue: GrammarIssue): void {
   const key = textKey(text);
-  const issues = store().get(key);
-  if (!issues) return;
-  store().set(
-    key,
-    issues.filter((i) => !(i.wrong === issue.wrong && i.replacement === issue.replacement)),
-  );
+  const list = ignored().get(key) ?? [];
+  if (!list.some((x) => x.wrong === issue.wrong && x.replacement === issue.replacement)) {
+    ignored().set(key, [...list, { wrong: issue.wrong, replacement: issue.replacement }]);
+  }
   save();
   emit(new Set([text]));
 }
