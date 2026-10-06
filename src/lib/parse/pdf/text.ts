@@ -687,6 +687,8 @@ export function boldShare(runs: Run[], length: number): number {
   return bold / length;
 }
 
+const RTL_SCRIPT_RE = /[\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}\p{M}]/gu;
+
 // Monospace line: a listing's line (import compare loop finding: a python
 // listing shattered into lists, paragraphs and joined lines).
 export function isMonoLine(line: Line): boolean {
@@ -706,6 +708,14 @@ export function isMonoLine(line: Line): boolean {
   const code = rest.filter((it) => it.mono && it.str.trim());
   if (first && !first.mono && /^\s*\d{1,4}\s*$/.test(first.str) && code.length > 0 && first.size < Math.min(...code.map((it) => it.size)) * 0.85) {
     chars -= first.str.trim().length;
+  }
+  // A string in a right-to-left script, in a line that opens in the
+  // typewriter face, is set in another face (the typewriter face has no
+  // Arabic letters): its letters count for neither side (parse loop
+  // finding: an Arabic book's listing lines "printf 'تقرير تجريبي\n' > …"
+  // read as paragraphs between its code).
+  if (first?.mono) {
+    for (const r of line.runs) if (!r.mono) chars -= (line.text.slice(r.start, r.end).match(RTL_SCRIPT_RE) ?? []).length;
   }
   return chars > 0 && mono / chars >= 0.85;
 }

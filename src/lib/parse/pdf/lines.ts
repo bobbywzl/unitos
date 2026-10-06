@@ -561,6 +561,22 @@ function rightToLeft(items: Item[]): boolean {
   return rtl > 0 && rtl * 2 > all;
 }
 
+// A line of code among right-to-left text: its leftmost item set in a
+// monospace face, and its characters other than right-to-left letters, three
+// or more, all in that face.
+function codeLine(items: Item[]): boolean {
+  const first = items.find((i) => i.str.trim() !== "");
+  if (!first?.mono) return false;
+  let mono = 0;
+  let other = 0;
+  for (const i of items) {
+    const n = i.str.replace(RTL_LETTER_RE, "").replace(/[\s\p{M}]/gu, "").length;
+    if (i.mono) mono += n;
+    else other += n;
+  }
+  return mono >= 3 && other === 0;
+}
+
 /** A right-to-left line's items in reading order, cell by cell: the cells
     and the items run from the right, and a run of left-to-right items
     (a Latin word, a number, the spaces and marks between them) keeps its
@@ -686,7 +702,16 @@ function buildLine(rawItems: Item[], page: number, rtlText = false): Line {
   // Among lines set right to left, a line with a right-to-left letter
   // reads so, however many Latin letters it holds: "تعريف · عقد الأتمتة
   // (Automation contract)".
-  const rtl = rightToLeft(zoned) || (rtlText && zoned.some((i) => RTL_RE.test(i.str))) ? readingOrder(zoned, size) : null;
+  // A line that opens at its left in a monospace face, every character of
+  // it that is no right-to-left letter set in that face, is code, which
+  // reads left to right whatever its strings hold (parse loop finding: an
+  // Arabic book's listing line "printf 'تقرير تجريبي\n' >
+  // "$lab/inbox/report-2026-01.txt"" read from the right, its words
+  // backwards and the file name run into the Arabic, and its lines fell
+  // out of the listing as paragraphs). A line of prose sets its stops and
+  // commas in its own face.
+  const code = codeLine(zoned);
+  const rtl = !code && (rightToLeft(zoned) || (rtlText && zoned.some((i) => RTL_RE.test(i.str)))) ? readingOrder(zoned, size) : null;
   // A left-to-right line keeps its runs of right-to-left words as items read from the right: a table's
   // cells split the line's items again (cellsBySeparators).
   const items = rtl ? zoned : rightToLeftRuns(zoned, size);
