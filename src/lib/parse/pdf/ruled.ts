@@ -1044,7 +1044,16 @@ function tableOfRegion(region: TableRegion, page: number): Segment {
   // "EN-FR" under "Training Cost (FLOPs)" over "3.3 · 10^18" set across
   // both (arXiv 1706.03762's Table 2).
   const ruledAt = [...new Set(drawn.map((r) => r.x1))];
-  const open = (a: number, b: number) => !body.some((l) => l.items.some((it) => it.x < Math.max(a, b) && it.x + it.w > Math.min(a, b)));
+  // A phrase across the places of two column rules or more (the rules stop
+  // short of its line) is a row across the columns, a note under the
+  // values: it keeps no gap beside a rule open (parse loop finding: the
+  // NICS table's notes and disclaimers, in its frame under the rows, kept
+  // a gap 1–4 pt beside each of its 24 column rules, and the table read 43
+  // columns, 19 of them empty slivers). A phrase across one is a line
+  // beside a block's bar (an algorithm's "for … do" over its indented
+  // body), and its indent is a column.
+  const across = (it: Item) => ruledAt.filter((d) => d > it.x + 1 && d < it.x + it.w - 1).length >= 2;
+  const open = (a: number, b: number) => !body.some((l) => l.items.some((it) => !across(it) && it.x < Math.max(a, b) && it.x + it.w > Math.min(a, b)));
   // A group's label over its rows, a phrase from the table's left edge (and
   // a value at its end), crosses the gutters the rows leave open: the scan
   // reads the rows of three phrases or more where two or more hold them,
