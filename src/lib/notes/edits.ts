@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 
 // A note's own history (SPEC.md §12): every change to its text is recorded
@@ -7,15 +8,21 @@ import { db } from "@/lib/db";
 // with.
 const SITTING_MS = 10 * 60 * 1000;
 
-export async function recordNoteEdit(noteId: string, userId: string | null, content: string): Promise<void> {
-  const last = await db.noteEdit.findFirst({
+export async function recordNoteEdit(
+  noteId: string,
+  userId: string | null,
+  content: string,
+  // The transaction the note's write runs in, when it runs in one.
+  client: Prisma.TransactionClient = db,
+): Promise<void> {
+  const last = await client.noteEdit.findFirst({
     where: { noteId },
     orderBy: { createdAt: "desc" },
     select: { id: true, userId: true, updatedAt: true },
   });
   if (last && last.userId === userId && Date.now() - last.updatedAt.getTime() < SITTING_MS) {
-    await db.noteEdit.update({ where: { id: last.id }, data: { content } });
+    await client.noteEdit.update({ where: { id: last.id }, data: { content } });
     return;
   }
-  await db.noteEdit.create({ data: { noteId, userId, content } });
+  await client.noteEdit.create({ data: { noteId, userId, content } });
 }

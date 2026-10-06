@@ -44,12 +44,25 @@ const patchSchema = z.object({
   // of the annotation's anchors become sources of the note, so the quote the
   // drop landed points back to the reader. The annotation keeps its own.
   copySourcesFrom: z.string().min(1).optional(),
+  // "keep": a quote whose anchor no longer resolves still lands its words,
+  // without the source, and the answer carries sourceDropped (the offline
+  // queue, the drop on a closed note). Unset, the write is refused whole.
+  onSourceLost: z.enum(["refuse", "keep"]).optional(),
   color: z.enum(["clay", "sage", "gold", "plum"]).optional(), // highlight hue
   order: z.number().int().min(0).optional(),
   sectionId: z.string().min(1).optional(),
   status: z.enum(["PENDING", "ACCEPTED", "REJECTED"]).optional(),
   pinned: z.boolean().optional(),
 });
+
+type SourceRow = Prisma.SourceCreateManyInput;
+
+/** What the locked write answered: the note's new state, or a refusal. */
+type Written =
+  | { kind: "ok" }
+  | { kind: "gone" }
+  | { kind: "changed"; current: { content: string; updatedAt: Date } }
+  | { kind: "tooLong" };
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: string }> }) {
   const t = await serverT();
@@ -58,50 +71,23 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: strin
   if (error) return error;
 
   const note = await db.note.findUnique({ where: { id: noteId } });
-  if (!note) return NextResponse.json({ error: t("api.noteNotFound") }, { status: 404 });
+  if (!note) return NextResponse.json({ error: t("api.noteNotFound"), code: "noteGone" }, { status: 404 });
   const access = await noteAccess(noteId, "editor");
   if (access instanceof NextResponse) return access;
 
   const fromSectionId = note.sectionId;
 
-  // The note's next text: the whole replacement, or the current text with the
-  // appended words after a blank line (an empty note becomes the words).
   if (data.append !== undefined && data.content !== undefined) {
     return NextResponse.json({ error: t("api.appendWithContent") }, { status: 400 });
   }
-  let content = data.content;
-  if (data.append !== undefined) {
-    const head = note.content.replace(/\n+$/, "");
-    content = head ? `${head}\n\n${data.append}` : data.append;
-    if (content.length > MAX_CONTENT) {
-      return NextResponse.json({ error: t("api.noteTooLong") }, { status: 400 });
-    }
-  }
 
-  // A write made from text that is no longer the note's (SPEC.md §6): never
-  // saved over the words it did not see.
-  if (
-    data.content !== undefined &&
-    data.baseContent !== undefined &&
-    data.baseContent.trim() !== note.content.trim() &&
-    data.content.trim() !== note.content.trim()
-  ) {
-    if (data.onConflict !== "keep") {
-      return NextResponse.json(
-        { error: t("api.noteChanged"), current: { content: note.content, updatedAt: note.updatedAt } },
-        { status: 409 },
-      );
-    }
-    content = reconcileNoteText(data.baseContent.trim(), note.content.trim(), data.content.trim(), {
-      other: t("outline.conflictOther"),
-      yours: t("outline.conflictYours"),
-      end: t("outline.conflictEnd"),
-    }).text;
-    if (content.length > MAX_CONTENT) {
-      return NextResponse.json({ error: t("api.noteTooLong") }, { status: 400 });
-    }
-  }
-
+  // The sources first, outside the lock: resolving a quote reads the
+  // document's blocks, and never depends on the note's text.
+  let sourceRows: SourceRow[] = [];
+  // A quote whose place the document no longer has (an edit, a re-parse):
+  // with onSourceLost "keep" its words still land, without the source, and
+  // the answer says so. Without it the write is refused whole, as before.
+  let sourceDropped = false;
   if (data.addSource) {
     const { source, segments } = data.addSource;
     if (source.endOffset <= source.startOffset) {
@@ -110,13 +96,16 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: strin
     const layer = source.layer ?? null;
     const passage = resolvePassage(await layerBlocks(source.documentId, layer), source, segments);
     if (passage.length === 0) {
-      return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
+      if (data.onSourceLost !== "keep") {
+        return NextResponse.json({ error: t("api.anchorNotResolvedInDocument"), code: "sourceLost" }, { status: 400 });
+      }
+      sourceDropped = true;
+    } else {
+      sourceRows = passageSources(source.documentId, passage, layer).map((row) => ({ ...row, noteId }));
     }
-    await db.source.createMany({
-      data: passageSources(source.documentId, passage, layer).map((row) => ({ ...row, noteId })),
-    });
   }
 
+  let copyRows: SourceRow[] = [];
   if (data.copySourcesFrom) {
     const [annotation, own] = await Promise.all([
       db.note.findUnique({
@@ -128,30 +117,21 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: strin
     if (!annotation || !annotation.section.hidden || annotation.section.notebookId !== own?.notebookId) {
       return NextResponse.json({ error: t("api.noteNotFound") }, { status: 404 });
     }
-    // An anchor the note already holds is not copied twice.
-    const held = await db.source.findMany({
-      where: { noteId },
-      select: { blockId: true, startOffset: true, endOffset: true },
-    });
-    const keys = new Set(held.map((s) => `${s.blockId}:${s.startOffset}:${s.endOffset}`));
-    const rows = annotation.sources
-      .filter((s) => !keys.has(`${s.blockId}:${s.startOffset}:${s.endOffset}`))
-      .map((s) => ({
-        noteId,
-        documentId: s.documentId,
-        blockId: s.blockId,
-        startOffset: s.startOffset,
-        endOffset: s.endOffset,
-        quotedText: s.quotedText,
-        prefix: s.prefix,
-        suffix: s.suffix,
-        orphaned: s.orphaned,
-        layer: s.layer,
-        startTime: s.startTime,
-        endTime: s.endTime,
-        ...(s.region === null ? {} : { region: s.region as Prisma.InputJsonValue }),
-      }));
-    if (rows.length > 0) await db.source.createMany({ data: rows });
+    copyRows = annotation.sources.map((s) => ({
+      noteId,
+      documentId: s.documentId,
+      blockId: s.blockId,
+      startOffset: s.startOffset,
+      endOffset: s.endOffset,
+      quotedText: s.quotedText,
+      prefix: s.prefix,
+      suffix: s.suffix,
+      orphaned: s.orphaned,
+      layer: s.layer,
+      startTime: s.startTime,
+      endTime: s.endTime,
+      ...(s.region === null ? {} : { region: s.region as Prisma.InputJsonValue }),
+    }));
   }
 
   if (data.sectionId && data.sectionId !== note.sectionId) {
@@ -164,35 +144,96 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: strin
     });
   }
 
-  if (
-    content !== undefined ||
-    data.status !== undefined ||
-    data.color !== undefined ||
-    data.pinned !== undefined
-  ) {
-    await db.note.update({
-      where: { id: noteId },
-      data: {
-        // A content edit clears the gist; the next collapsed render asks for a
-        // new one (SPEC.md §6).
-        ...(content !== undefined ? { content, gist: null } : {}),
-        ...(data.status !== undefined ? { status: data.status } : {}),
-        ...(data.color !== undefined ? { color: data.color } : {}),
-        ...(data.pinned !== undefined ? { pinned: data.pinned } : {}),
-      },
-    });
-    // A changed text is the note's history (SPEC.md §12).
-    if (content !== undefined && content !== note.content) {
-      await recordNoteEdit(noteId, access.user.id || null, content);
-      // A quote deleted from the note takes its source with it: the mark in
-      // the reader no longer points at a note that lost the words (SPEC.md §6).
-      // An append keeps every quote, so it leaves every source.
-      if (data.content !== undefined) {
-        const sources = await db.source.findMany({ where: { noteId }, select: { id: true, quotedText: true } });
-        const left = sourcesLeftByQuotes(note.content, content, sources);
-        if (left.length > 0) await db.source.deleteMany({ where: { id: { in: left }, noteId } });
+  // The note's text is read, checked, and written with its row locked
+  // (SPEC.md §6): two writes at once — two quotes dropped, an append beside
+  // an editor's save, two tabs saving — run one after the other, and the
+  // second is built from the text the first left. Without the lock both
+  // read the same text and the later write drops the earlier one's words.
+  const written = await db.$transaction(
+    async (tx): Promise<Written> => {
+      const [row] = await tx.$queryRaw<{ content: string; updatedAt: Date }[]>`
+        SELECT "content", "updatedAt" FROM "Note" WHERE "id" = ${noteId} FOR UPDATE`;
+      if (!row) return { kind: "gone" };
+      const stored = row.content;
+
+      // The note's next text: the whole replacement, or the stored text with
+      // the appended words after a blank line (an empty note becomes the words).
+      let content = data.content;
+      if (data.append !== undefined) {
+        const head = stored.replace(/\n+$/, "");
+        content = head ? `${head}\n\n${data.append}` : data.append;
+        if (content.length > MAX_CONTENT) return { kind: "tooLong" };
       }
-    }
+
+      // A write made from text that is no longer the note's (SPEC.md §6):
+      // never saved over the words it did not see.
+      if (
+        data.content !== undefined &&
+        data.baseContent !== undefined &&
+        data.baseContent.trim() !== stored.trim() &&
+        data.content.trim() !== stored.trim()
+      ) {
+        if (data.onConflict !== "keep") return { kind: "changed", current: { content: stored, updatedAt: row.updatedAt } };
+        content = reconcileNoteText(data.baseContent.trim(), stored.trim(), data.content.trim(), {
+          other: t("outline.conflictOther"),
+          yours: t("outline.conflictYours"),
+          end: t("outline.conflictEnd"),
+        }).text;
+        if (content.length > MAX_CONTENT) return { kind: "tooLong" };
+      }
+
+      if (sourceRows.length > 0) await tx.source.createMany({ data: sourceRows });
+      if (copyRows.length > 0) {
+        // An anchor the note already holds is not copied twice.
+        const held = await tx.source.findMany({
+          where: { noteId },
+          select: { blockId: true, startOffset: true, endOffset: true },
+        });
+        const keys = new Set(held.map((s) => `${s.blockId}:${s.startOffset}:${s.endOffset}`));
+        const rows = copyRows.filter((s) => !keys.has(`${s.blockId}:${s.startOffset}:${s.endOffset}`));
+        if (rows.length > 0) await tx.source.createMany({ data: rows });
+      }
+
+      if (
+        content !== undefined ||
+        data.status !== undefined ||
+        data.color !== undefined ||
+        data.pinned !== undefined
+      ) {
+        await tx.note.update({
+          where: { id: noteId },
+          data: {
+            // A content edit clears the gist; the next collapsed render asks
+            // for a new one (SPEC.md §6).
+            ...(content !== undefined ? { content, gist: null } : {}),
+            ...(data.status !== undefined ? { status: data.status } : {}),
+            ...(data.color !== undefined ? { color: data.color } : {}),
+            ...(data.pinned !== undefined ? { pinned: data.pinned } : {}),
+          },
+        });
+        // A changed text is the note's history (SPEC.md §12).
+        if (content !== undefined && content !== stored) {
+          await recordNoteEdit(noteId, access.user.id || null, content, tx);
+          // A quote deleted from the note takes its source with it: the mark
+          // in the reader no longer points at a note that lost the words
+          // (SPEC.md §6). An append keeps every quote, so it leaves every source.
+          if (data.content !== undefined) {
+            const sources = await tx.source.findMany({ where: { noteId }, select: { id: true, quotedText: true } });
+            const left = sourcesLeftByQuotes(stored, content, sources);
+            if (left.length > 0) await tx.source.deleteMany({ where: { id: { in: left }, noteId } });
+          }
+        }
+      }
+      return { kind: "ok" };
+    },
+    { timeout: 20_000, maxWait: 20_000 },
+  );
+  if (written.kind === "gone") {
+    return NextResponse.json({ error: t("api.noteNotFound"), code: "noteGone" }, { status: 404 });
+  }
+  if (written.kind === "tooLong") return NextResponse.json({ error: t("api.noteTooLong") }, { status: 400 });
+  if (written.kind === "changed") {
+    return NextResponse.json({ error: t("api.noteChanged"), current: written.current }, { status: 409 });
   }
 
   // Pinning moves the note to the top of its section; unpinning leaves it in place.
@@ -222,7 +263,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ noteId: strin
     select: { notebookId: true },
   });
   if (section) await bumpNotebook(section.notebookId);
-  return NextResponse.json(updated);
+  return NextResponse.json(updated ? { ...updated, ...(sourceDropped ? { sourceDropped: true } : {}) } : updated);
 }
 
 export async function DELETE(_req: Request, ctx: { params: Promise<{ noteId: string }> }) {

@@ -56,6 +56,11 @@ const createSchema = z
     // sent by the tray's composer. A note with a source, a video range, or
     // an annotation takes that document; the notes full page sends none.
     documentId: z.string().min(1).optional(),
+    // "keep": a source whose anchor no longer resolves leaves the note
+    // without it, and the answer carries sourceDropped: the words land (the
+    // offline queue replaying Add to notes, a quote dropped on a section).
+    // Unset, the create is refused whole.
+    onSourceLost: z.enum(["refuse", "keep"]).optional(),
   })
   .refine((d) => !(d.source && d.video), { message: "Provide source or video, not both" })
   .refine((d) => Boolean(d.content) !== Boolean(d.fromAnnotationId), {
@@ -85,6 +90,7 @@ export async function POST(req: Request) {
   // re-parse gives every block a new id while an open reader still sends the
   // old ones.
   let sources: (ResolvedAnchor & { documentId: string; layer: string | null })[] = [];
+  let sourceDropped = false;
   if (data.source) {
     if (data.source.endOffset <= data.source.startOffset) {
       return NextResponse.json({ error: t("api.anchorOffsetsInvalid") }, { status: 400 });
@@ -92,10 +98,11 @@ export async function POST(req: Request) {
     // A core anchor (SPEC.md §28) resolves against the cores.
     const layer = data.source.layer ?? null;
     const passage = resolvePassage(await layerBlocks(data.source.documentId, layer), data.source, data.segments);
-    if (passage.length === 0) {
-      return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
+    if (passage.length > 0) sources = passageSources(data.source.documentId, passage, layer);
+    else if (data.onSourceLost === "keep") sourceDropped = true;
+    else {
+      return NextResponse.json({ error: t("api.anchorNotResolvedInDocument"), code: "sourceLost" }, { status: 400 });
     }
-    sources = passageSources(data.source.documentId, passage, layer);
   }
 
   let videoSource: {
@@ -186,7 +193,12 @@ export async function POST(req: Request) {
   // the annotation's first anchor's, else the one the composer named — when
   // it is attached to this project; a document that is not is nobody's.
   let documentId: string | null =
-    sources[0]?.documentId ?? videoSource?.documentId ?? copiedSources[0]?.documentId ?? data.documentId ?? null;
+    sources[0]?.documentId ??
+    videoSource?.documentId ??
+    copiedSources[0]?.documentId ??
+    (sourceDropped ? data.source?.documentId : undefined) ??
+    data.documentId ??
+    null;
   if (documentId) {
     const attached = await db.notebookDocument.findUnique({
       where: { notebookId_documentId: { notebookId: section.notebookId, documentId } },
@@ -239,7 +251,7 @@ export async function POST(req: Request) {
   });
   if (data.top) await normalizeNoteOrders(data.sectionId);
   await bumpNotebook(section.notebookId);
-  return NextResponse.json(note, { status: 201 });
+  return NextResponse.json(sourceDropped ? { ...note, sourceDropped: true } : note, { status: 201 });
 }
 
 /** The note an earlier copy of this create made: null when there is none,
