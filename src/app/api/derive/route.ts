@@ -1,5 +1,6 @@
 import { isStepCount, streamText, type ModelMessage } from "ai";
 import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { coreBlocks, layerSchema } from "@/lib/anchors/layer";
 import { passageSources, resolvePassage, segmentsSchema } from "@/lib/anchors/passage";
@@ -149,6 +150,10 @@ const deriveSchema = z
   // stored, and the new one counts the runs; at DISTILL_REGENERATE_MAX the
   // run is refused (SPEC.md §4).
   replaceId: z.string().min(1).optional(),
+  // EXPLAIN, SIMPLIFY, ANALYZE, VISUALIZE: Regenerate on an annotation with a
+  // tool conversation (SPEC.md §4, §21). The annotation this run replaces:
+  // its turns go on under the new output, copied onto the new annotation.
+  conversationOf: z.string().min(1).optional(),
   format: z.enum(FORMALIZE_FORMATS).optional(), // FORMALIZE only
   sectionId: z.string().min(1).optional(), // FORMALIZE notes, COMPARE: where the notes land
   // EXPLAIN on a video moment (SPEC.md §11): the time range, the drawn region,
@@ -745,10 +750,13 @@ async function handle(req: Request, t: TFunc) {
     return NextResponse.json({ error: t("api.defineNeedsWord") }, { status: 400 });
   }
 
-  const [profile, skeleton] = await Promise.all([
+  const [profile, skeleton, carried] = await Promise.all([
     loadProfile(data.notebookId),
     sectionSkeleton(data.notebookId),
+    data.conversationOf ? carriedConversation(data.conversationOf, data.notebookId, documentId) : null,
   ]);
+  // The new annotation takes the replaced one's turns (Regenerate, SPEC.md §4).
+  const keptTurns = carried === null ? {} : { conversation: carried };
 
   const depth = data.depth ?? "layman";
   const ctx: PromptCtx = {
@@ -1119,6 +1127,7 @@ async function handle(req: Request, t: TFunc) {
             createdById: user.id,
             order: count,
             sources: { create: passageSources(documentId, passage, layer) },
+            ...keptTurns,
           },
         });
         await bumpNotebook(data.notebookId);
@@ -1262,6 +1271,7 @@ async function handle(req: Request, t: TFunc) {
                   order: count,
                   // One source per segment: the marks cover the whole passage.
                   sources: { create: passageSources(documentId, passage, layer) },
+                  ...keptTurns,
                 },
               });
               await bumpNotebook(data.notebookId);
@@ -1745,4 +1755,27 @@ async function handle(req: Request, t: TFunc) {
   return new Response(stream, {
     headers: { "Content-Type": "text/plain; charset=utf-8" },
   });
+}
+
+// The turns of the annotation a Regenerate replaces (SPEC.md §4, §21): read
+// only from an annotation of this project on this document, so a run never
+// reaches another project's notes. The replaced annotation itself is left as
+// it is; the reader deletes it once the new one is stored, and History keeps
+// it.
+async function carriedConversation(
+  noteId: string,
+  notebookId: string,
+  documentId: string,
+): Promise<Prisma.InputJsonValue | null> {
+  const note = await db.note.findUnique({
+    where: { id: noteId },
+    select: {
+      conversation: true,
+      section: { select: { notebookId: true } },
+      sources: { where: { documentId }, select: { id: true }, take: 1 },
+    },
+  });
+  if (!note || note.section.notebookId !== notebookId || note.sources.length === 0) return null;
+  if (!Array.isArray(note.conversation) || note.conversation.length === 0) return null;
+  return note.conversation as Prisma.InputJsonValue;
 }
