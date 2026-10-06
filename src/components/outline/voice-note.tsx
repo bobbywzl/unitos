@@ -10,6 +10,7 @@ import { readThinking } from "@/lib/assistant/thinking";
 import { readNdjson } from "@/lib/ndjson";
 import type { VoiceEvent, VoiceStage } from "@/app/api/notes/voice/route";
 import { flushDocument } from "@/components/docs/layer/flush";
+import { isOffline } from "@/lib/offline/queue";
 
 // The voice command (SPEC.md §6): press to record, press again to stop. The
 // recording goes to /api/notes/voice with the section and the open document;
@@ -19,6 +20,9 @@ import { flushDocument } from "@/components/docs/layer/flush";
 // the reader to read over and accept. The route streams its three stages,
 // and the bottom progress bar shows them. Recording stops on its own at five
 // minutes; the low bitrate keeps five minutes under the request cap.
+// Offline, Command does not record: it says AI is off (SPEC.md §17). A send
+// that fails keeps the recording, and Send again sends it once more, so a
+// command is never spoken twice.
 const MAX_SECONDS = 300;
 const STAGES: VoiceStage[] = ["transcribe", "plan", "write"];
 const BITS_PER_SECOND = 32_000;
@@ -60,6 +64,8 @@ export function VoiceNoteButton({
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const supported = useSyncExternalStore(noop, canRecord, () => false);
+  // The recording whose send failed: Send again sends it.
+  const [failed, setFailed] = useState<Blob | null>(null);
 
   useEffect(() => {
     return () => {
@@ -78,6 +84,11 @@ export function VoiceNoteButton({
 
   async function start() {
     onError?.(null);
+    // The command needs a model: offline, nothing is recorded.
+    if (isOffline()) {
+      onError?.(t("common.offlineAi"));
+      return;
+    }
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -129,8 +140,13 @@ export function VoiceNoteButton({
   async function send(blob: Blob) {
     setState("sending");
     setStage("transcribe");
+    onError?.(null);
     try {
       if (blob.size === 0) throw new Error(t("outline.voiceNoteEmpty"));
+      if (isOffline()) {
+        setFailed(blob);
+        throw new Error(t("common.offlineAi"));
+      }
       const params = new URLSearchParams({ sectionId, thinking: readThinking() });
       if (documentId) {
         params.set("documentId", documentId);
@@ -150,8 +166,13 @@ export function VoiceNoteButton({
         if ("error" in event) throw new Error(event.error);
         if ("stage" in event) setStage(event.stage);
       }
+      setFailed(null);
       router.refresh();
     } catch (err) {
+      // The recording stays for Send again: a lost connection, a server
+      // error, or an answer the route could not finish. An empty recording
+      // has nothing to send again.
+      if (blob.size > 0) setFailed(blob);
       onError?.(err instanceof Error ? err.message : t("outline.voiceNoteFailed"));
     } finally {
       setState("idle");
@@ -193,6 +214,36 @@ export function VoiceNoteButton({
           {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}
         </span>
       </button>
+    );
+  }
+  if (failed) {
+    return (
+      <span className="inline-flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => void send(failed)}
+          data-track="voice-note-send-again"
+          aria-label={t("outline.sendCommandAgain")}
+          data-tip={t("outline.sendCommandAgainTitle")}
+          className={`${base} inline-flex items-center gap-1`}
+        >
+          <MicIcon size={11} />
+          {t("outline.sendCommandAgain")}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setFailed(null);
+            onError?.(null);
+          }}
+          data-track="voice-note-discard"
+          aria-label={t("outline.discardCommand")}
+          data-tip={t("outline.discardCommand")}
+          className="text-[11px] text-sand-500 hover:text-clay-700"
+        >
+          ✕
+        </button>
+      </span>
     );
   }
   return (
