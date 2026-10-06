@@ -70,7 +70,7 @@ const en = {
   compare: "Compare",
   comparing: "Comparing…",
   comparisonOf: "Comparison of {a} and {b}",
-  copySuggestions: "Copy comments and suggestions",
+  copySuggestions: "Copy suggestions",
   // File > Details (page/details-dialog.tsx).
   details: "Details",
   documentDetails: "Document details",
@@ -239,7 +239,7 @@ const zh: Record<keyof typeof en, string> = {
   compare: "比较",
   comparing: "正在比较…",
   comparisonOf: "{a} 与 {b} 的比较",
-  copySuggestions: "复制评论和建议",
+  copySuggestions: "复制建议",
   details: "详细信息",
   documentDetails: "文档详细信息",
   detailsLocation: "位置",

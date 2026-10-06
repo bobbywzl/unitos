@@ -513,12 +513,15 @@ export function useDocsSave({
       waits to be saved and no save runs. */
   const matches = useCallback((rev: number) => !dirtyRef.current && !inFlightRef.current && revRef.current === rev, []);
 
-  /** Save now and resolve once the stored copy matches the screen. */
-  const flush = useCallback(async () => {
+  /** Save now and resolve once the stored copy matches the screen: true
+      when it does, false when the save failed (offline, refused) and the
+      words wait on screen and in the draft. */
+  const flush = useCallback(async (): Promise<boolean> => {
     for (let i = 0; i < 4 && (dirtyRef.current || inFlightRef.current); i++) {
       if (inFlightRef.current) await inFlightRef.current;
       if (dirtyRef.current) await save();
     }
+    return !dirtyRef.current && !inFlightRef.current;
   }, [save]);
 
   return { state, flush, matches, outdated };

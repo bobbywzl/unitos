@@ -209,7 +209,7 @@ export function DocsToolbar({
   mode: DocsMode;
   /** `passing`: the page passes into the mode for the reader, who did not
       choose it (typing/events.ts ModeRequest). */
-  onMode: (mode: DocsMode, passing?: boolean) => void;
+  onMode: (mode: DocsMode, passing?: boolean, collapse?: boolean) => void;
   canEdit: boolean;
   zoom: Zoom;
   onZoom: (zoom: Zoom) => void;
@@ -297,6 +297,7 @@ export function DocsToolbar({
       const request = (e as CustomEvent<ModeRequest>).detail;
       if (!modeRef.current.canEdit) return;
       if (typeof request === "string") modeRef.current.onMode(request);
+      else if ("collapse" in request) modeRef.current.onMode(request.mode, false, true);
       else modeRef.current.onMode(request.mode, request.passing);
     };
     const dom = editor.view.dom;

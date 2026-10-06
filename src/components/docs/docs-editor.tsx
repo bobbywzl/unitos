@@ -27,6 +27,8 @@ import { InsertLayer } from "@/components/docs/areas/insert";
 import { UnitosLayer } from "@/components/docs/areas/layer";
 import { CollapsedView, type PageCollapse } from "@/components/docs/layer/collapse";
 import { showLeftOff } from "@/components/docs/layer/left-off";
+import { registerDocumentFlush } from "@/components/docs/layer/flush";
+import { useKeepPlace } from "@/components/docs/page/keep-place";
 import { ReflowBar, useReflow } from "@/components/docs/page/reflow";
 import { showTranslations } from "@/components/docs/layer/reading";
 import { SuggestLayer } from "@/components/docs/suggest/layer";
@@ -239,10 +241,12 @@ function SaveStatus({ state }: { state: SaveState }) {
   );
 }
 
-/** Where the caret goes when the page opens scrolled: the start of the
-    block at the reading line (READING_LINE_PX under the pane's top), or,
-    when that start is under the title row and the toolbar, the start of
-    the block's first line in view. Null at the top of the document. */
+/** Where the caret goes when the page opens scrolled, or leaves Viewing
+    with the caret out of view: the start of the block at the reading line
+    (READING_LINE_PX under the pane's top), or, when that start is under the
+    title row and the toolbar, the start of the block's first line in view,
+    or of the next block when no line of it is in view whole. Null at the
+    top of the document. */
 function readingCaret(editor: Editor, pane: HTMLElement): number | null {
   if (pane.scrollTop < 1) return null;
   const view = editor.view;
@@ -261,7 +265,28 @@ function readingCaret(editor: Editor, pane: HTMLElement): number | null {
   // line under the text's box is the next line (the line's box runs lower).
   const line = view.coordsAtPos(hit);
   const next = line.top >= shown - 1 ? hit : at(line.bottom + (line.bottom - line.top) / 2);
-  return next !== null && view.state.doc.resolve(next).parent === $hit.parent ? next : hit;
+  if (next !== null && view.state.doc.resolve(next).parent === $hit.parent && view.coordsAtPos(next).top >= shown - 1) return next;
+  // The block's line under the header was its last: the next block's start.
+  let after: number | null = null;
+  view.state.doc.nodesBetween($hit.after(), view.state.doc.content.size, (node, pos) => {
+    if (after !== null) return false;
+    if (node.isTextblock) after = pos + 1;
+    return !node.isTextblock;
+  });
+  return after !== null && view.coordsAtPos(after).top >= shown - 1 ? after : hit;
+}
+
+/** The caret, or the selection's head, shows in the pane under the header. */
+function caretInView(editor: Editor, pane: HTMLElement): boolean {
+  const paneRect = pane.getBoundingClientRect();
+  const header = editor.view.dom.closest("[data-docs-editor]")?.querySelector(".docs-header");
+  const top = Math.max(paneRect.top, header?.getBoundingClientRect().bottom ?? paneRect.top);
+  try {
+    const caret = editor.view.coordsAtPos(editor.state.selection.head);
+    return caret.bottom > top && caret.top < paneRect.bottom;
+  } catch {
+    return false;
+  }
 }
 
 /** While the reading position holds the pane (the pages still settling
@@ -547,18 +572,39 @@ export function DocsEditor({
   // assistant's suggestions landing in Viewing) is not kept, and the keys
   // stay where they are.
   const passingRef = useRef(false);
+  // The mode Collapse pressed in Editing or Suggesting left for Viewing:
+  // Collapse off goes back to it, unless the reader chose a mode since.
+  const collapseLeftRef = useRef<DocsMode | null>(null);
+  const chosenModeRef = useRef(chosenMode);
+  useEffect(() => {
+    chosenModeRef.current = chosenMode;
+  }, [chosenMode]);
   const setMode = useCallback(
-    (next: DocsMode, passing = false) => {
+    (next: DocsMode, passing = false, collapse = false) => {
       if (locked && next !== "viewing") {
         if (editor && !editor.isDestroyed) toast(t("api.importShared"), editor);
         return;
       }
+      if (collapse) {
+        if (chosenModeRef.current !== "viewing") collapseLeftRef.current = chosenModeRef.current;
+      } else if (!passing) collapseLeftRef.current = null;
       passingRef.current = passing;
       setModeState(next);
       if (isImport && !passing) storeMode(documentId, next);
     },
     [locked, editor, t, isImport, documentId],
   );
+  // Collapse off: back to the mode Collapse left, the caret where it was.
+  const collapseOn = collapse?.on ?? false;
+  const collapseOnRef = useRef(collapseOn);
+  useEffect(() => {
+    const was = collapseOnRef.current;
+    collapseOnRef.current = collapseOn;
+    const back = collapseLeftRef.current;
+    if (!was || collapseOn || !back) return;
+    collapseLeftRef.current = null;
+    if (chosenModeRef.current === "viewing") setMode(back);
+  }, [collapseOn, setMode]);
 
   // A PDF import in pages may be read pageless in Viewing (page/reflow.tsx):
   // a view of this browser; the document's page setup stays as it is, and
@@ -568,6 +614,8 @@ export function DocsEditor({
   const reflowing = pdfPages && mode === "viewing";
   const reflowed = reflowing && reflowChoice === "pageless";
   const shownSetup = useMemo(() => (reflowed ? { ...pageSetup, pageless: true } : pageSetup), [reflowed, pageSetup]);
+  // Pages to pageless and back keep the block at the reading line in view.
+  useKeepPlace(editor, shownSetup.pageless ? "pageless" : "pages");
 
   // The QA scripts drive the editor directly in development.
   useEffect(() => {
@@ -586,11 +634,17 @@ export function DocsEditor({
   const shownSaveState = useSaveState(editor, documentId, shownSetup, saveState);
 
   useEffect(() => {
-    flushRef.current = flush;
+    const settle = async () => {
+      await flush();
+    };
+    flushRef.current = settle;
     return () => {
-      if (flushRef.current === flush) flushRef.current = null;
+      if (flushRef.current === settle) flushRef.current = null;
     };
   }, [flush, flushRef]);
+  // Version history and the voice command save this page's typing first
+  // (layer/flush.ts), and learn whether the save went through.
+  useEffect(() => (writable ? registerDocumentFlush(documentId, flush) : undefined), [writable, documentId, flush]);
 
   // The left-off mark above the block the reader left off at.
   useEffect(() => {
@@ -655,7 +709,10 @@ export function DocsEditor({
   }, [editor, marksSignature, highlightsByBlock, t, matches, rev, saveState, marksEditing]);
 
   // A switch to Editing or Suggesting gives the page the keys at its caret,
-  // the selection kept and the pane where it is.
+  // the selection kept and the pane where it is. A caret out of view (an
+  // import read in Viewing keeps it at the start) goes to the start of the
+  // block at the reading line first, so the first key types where the
+  // reader looks.
   const modeRef = useRef(mode);
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
@@ -664,7 +721,15 @@ export function DocsEditor({
     modeRef.current = mode;
     const passing = passingRef.current;
     passingRef.current = false;
-    if (switched && writable && mode !== "viewing" && !passing) editor.commands.focus(undefined, { scrollIntoView: false });
+    if (!switched || !writable || mode === "viewing" || passing) return;
+    const pane = scrollParent(editor.view.dom);
+    if (pane && !caretInView(editor, pane)) {
+      const pos = readingCaret(editor, pane);
+      if (pos !== null) {
+        editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, pos)).setMeta("addToHistory", false));
+      }
+    }
+    editor.commands.focus(undefined, { scrollIntoView: false });
   }, [editor, writable, mode]);
 
   // The header shows while the reader is in the document: a press or the
@@ -737,13 +802,13 @@ export function DocsEditor({
       if (!editor) return;
       const target = e.target as Element;
       if (target.closest("[data-anchor-skip]")) {
-        openMarkAt(target);
+        openMarkAt(target, { x: e.clientX, y: e.clientY });
         return;
       }
       if (editor.isEditable) return;
       const { from, to, empty } = editor.state.selection;
       const at = editor.view.posAtCoords({ left: e.clientX, top: e.clientY })?.pos ?? -1;
-      if ((empty || (e.detail === 1 && at > from && at < to)) && openMarkAt(target) && !empty) {
+      if ((empty || (e.detail === 1 && at > from && at < to)) && openMarkAt(target, { x: e.clientX, y: e.clientY }) && !empty) {
         editor.commands.setTextSelection(at);
       }
     },
