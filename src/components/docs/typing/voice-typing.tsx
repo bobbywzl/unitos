@@ -1,9 +1,11 @@
 "use client";
 
 import type { Editor } from "@tiptap/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { useLang, useT } from "@/components/lang-provider";
+import { useT } from "@/components/lang-provider";
+import { useSpeech } from "@/components/voice/use-speech";
+import { glueBefore, recognitionCtor, spokenPieces, VOICE_LANGUAGES } from "@/lib/voice-typing";
 import { CloseIcon } from "@/components/docs/icons";
 import { keepFocus } from "@/components/docs/menu";
 import { DragIcon } from "@/components/docs/insert/icons";
@@ -11,167 +13,30 @@ import { DragIcon } from "@/components/docs/insert/icons";
 // Voice typing (Ctrl+Shift+S), as Google Docs does it (SPEC.md §29, typing):
 // a microphone box at the left of the page; a click starts or stops
 // listening. What the browser's speech service hears goes in at the caret;
-// "period", "comma", "new line", and the like type what they name.
+// "period", "comma", "new line", and the like type what they name. The
+// listening and the words are shared with every surface's microphone
+// button (lib/voice-typing.ts, components/voice/use-speech.ts).
 
-type Recognition = {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  start: () => void;
-  stop: () => void;
-  abort: () => void;
-  onresult: ((e: RecognitionEvent) => void) | null;
-  onerror: ((e: { error: string }) => void) | null;
-  onend: (() => void) | null;
-};
-type RecognitionEvent = {
-  resultIndex: number;
-  results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }>;
-};
-type RecognitionCtor = new () => Recognition;
-
-function recognitionCtor(): RecognitionCtor | null {
-  if (typeof window === "undefined") return null;
-  const w = window as unknown as { SpeechRecognition?: RecognitionCtor; webkitSpeechRecognition?: RecognitionCtor };
-  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
-}
-
-const LANGUAGES: { code: string; name: string }[] = [
-  { code: "en-US", name: "English (US)" },
-  { code: "en-GB", name: "English (UK)" },
-  { code: "zh-CN", name: "中文（简体）" },
-  { code: "zh-TW", name: "中文（繁體）" },
-  { code: "es-ES", name: "Español" },
-  { code: "fr-FR", name: "Français" },
-  { code: "de-DE", name: "Deutsch" },
-  { code: "it-IT", name: "Italiano" },
-  { code: "pt-BR", name: "Português (Brasil)" },
-  { code: "ja-JP", name: "日本語" },
-  { code: "ko-KR", name: "한국어" },
-];
-
-const LANG_KEY = "unitos-docs-voice-lang";
-
-/** The words Docs types as punctuation, in English. */
-const SPOKEN: [RegExp, string][] = [
-  [/\s*\bperiod\b/gi, "."],
-  [/\s*\bfull stop\b/gi, "."],
-  [/\s*\bcomma\b/gi, ","],
-  [/\s*\bquestion mark\b/gi, "?"],
-  [/\s*\bexclamation (point|mark)\b/gi, "!"],
-];
-
-type Piece = { text: string } | { lineBreak: true } | { paragraph: true };
-
-/** A heard phrase as what to type: text, line breaks, new paragraphs. */
-function spokenPieces(phrase: string, english: boolean): Piece[] {
-  let text = phrase;
-  if (english) for (const [re, mark] of SPOKEN) text = text.replace(re, mark);
-  const out: Piece[] = [];
-  const parts = english ? text.split(/\s*\b(new line|new paragraph)\b\s*/i) : [text];
-  for (const part of parts) {
-    const lower = part.toLowerCase();
-    if (lower === "new line") out.push({ lineBreak: true });
-    else if (lower === "new paragraph") out.push({ paragraph: true });
-    else if (part) out.push({ text: part });
-  }
-  return out;
-}
-
-function typeHeard(editor: Editor, phrase: string, english: boolean): void {
-  const { state } = editor;
-  const before = state.selection.$from.nodeBefore?.text?.slice(-1) ?? "";
+/** Types a heard phrase at the editor's caret. */
+export function typeHeard(editor: Editor, phrase: string, english: boolean): void {
+  const before = editor.state.selection.$from.nodeBefore?.text?.slice(-1) ?? "";
   let first = true;
   for (const piece of spokenPieces(phrase.trim(), english)) {
     if ("lineBreak" in piece) editor.chain().setHardBreak().run();
     else if ("paragraph" in piece) editor.chain().splitBlock().run();
-    else {
-      const glue = first && before && !/\s/.test(before) && !/^[.,?!]/.test(piece.text) ? " " : "";
-      editor.chain().insertContent(glue + piece.text).run();
-    }
+    else editor.chain().insertContent((first ? glueBefore(before, piece.text) : "") + piece.text).run();
     first = false;
   }
 }
 
 export function VoiceTyping({ editor, open, onClose }: { editor: Editor; open: boolean; onClose: () => void }) {
   const t = useT();
-  const lang = useLang();
-  const [listening, setListening] = useState(false);
-  const [status, setStatus] = useState<"" | "unsupported" | "trouble" | "blocked">("");
-  const [interim, setInterim] = useState("");
-  const [language, setLanguage] = useState(() => {
-    try {
-      const saved = typeof window !== "undefined" ? window.localStorage.getItem(LANG_KEY) : null;
-      if (saved) return saved;
-    } catch {
-      // Storage is off: the page's language.
-    }
-    return lang === "zh" ? "zh-CN" : "en-US";
-  });
+  const speech = useSpeech((phrase, english) => typeHeard(editor, phrase, english));
+  const { listening, status, setStatus, interim, language, stop } = speech;
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
-  const recRef = useRef<Recognition | null>(null);
-  const wantRef = useRef(false);
-
-  const stop = useCallback(() => {
-    wantRef.current = false;
-    recRef.current?.stop();
-    setListening(false);
-    setInterim("");
-  }, []);
-
-  const start = useCallback(() => {
-    const Ctor = recognitionCtor();
-    if (!Ctor) {
-      setStatus("unsupported");
-      return;
-    }
-    const rec = new Ctor();
-    rec.lang = language;
-    rec.continuous = true;
-    rec.interimResults = true;
-    rec.onresult = (e) => {
-      let heard = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const result = e.results[i];
-        if (result.isFinal) typeHeard(editor, result[0].transcript, language.startsWith("en"));
-        else heard += result[0].transcript;
-      }
-      setInterim(heard);
-      setStatus("");
-    };
-    rec.onerror = (e) => {
-      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
-        wantRef.current = false;
-        setStatus("blocked");
-      } else if (e.error !== "aborted" && e.error !== "no-speech") {
-        setStatus("trouble");
-      }
-    };
-    rec.onend = () => {
-      // The service stops after a pause; listening goes on until the reader stops it.
-      if (wantRef.current) {
-        try {
-          rec.start();
-          return;
-        } catch {
-          // Could not restart: fall through and stop.
-        }
-      }
-      setListening(false);
-      setInterim("");
-    };
-    recRef.current = rec;
-    wantRef.current = true;
-    try {
-      rec.start();
-      setListening(true);
-      setStatus("");
-      editor.commands.focus();
-    } catch {
-      wantRef.current = false;
-      setStatus("trouble");
-    }
-  }, [editor, language]);
+  const start = () => {
+    if (speech.start()) editor.commands.focus();
+  };
 
   // The box opens at the left of the page, near its top.
   useEffect(() => {
@@ -184,11 +49,9 @@ export function VoiceTyping({ editor, open, onClose }: { editor: Editor; open: b
     });
     return () => {
       cancelAnimationFrame(frame);
-      wantRef.current = false;
-      recRef.current?.abort();
-      recRef.current = null;
+      stop();
     };
-  }, [open, editor]);
+  }, [open, editor, stop, setStatus]);
 
   const drag = (e: React.PointerEvent) => {
     if (!pos) return;
@@ -244,20 +107,9 @@ export function VoiceTyping({ editor, open, onClose }: { editor: Editor; open: b
         className="docs-voice-lang"
         aria-label={t("docsTyping.voiceLanguage")}
         value={language}
-        onChange={(e) => {
-          const next = e.target.value;
-          setLanguage(next);
-          try {
-            window.localStorage.setItem(LANG_KEY, next);
-          } catch {
-            // Storage is off: the choice holds for this page.
-          }
-          if (listening) {
-            stop();
-          }
-        }}
+        onChange={(e) => speech.setLanguage(e.target.value)}
       >
-        {LANGUAGES.map((l) => (
+        {VOICE_LANGUAGES.map((l) => (
           <option key={l.code} value={l.code}>
             {l.name}
           </option>

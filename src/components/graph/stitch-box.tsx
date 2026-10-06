@@ -11,6 +11,7 @@ import { runHeartbeat } from "@/lib/derive/heartbeat-client";
 import { useImeGuard } from "@/lib/ime";
 import type { GraphNode, StitchDocument, StitchResult } from "@/lib/types";
 import { transcriptErrorKey } from "@/lib/video/types";
+import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 
 // Stitch (SPEC.md §22): the box at the foot of the graph, ready for any
 // command across the project's documents — gather every passage on a
@@ -294,6 +295,7 @@ export function StitchBox({
             aria-label={t("stitch.stitch")}
             className="min-h-[38px] flex-1 resize-none rounded-2xl bg-sand-100 px-4 py-2.5 text-sm outline-none placeholder:text-sand-500"
           />
+          <VoiceTypingButton field={inputRef} track="stitch-voice-typing" className="size-[38px]" size={15} />
           {running ? (
             <button
               type="button"

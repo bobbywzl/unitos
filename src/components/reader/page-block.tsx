@@ -11,6 +11,7 @@ import type { PageSize } from "@/lib/handwritten/pages";
 import { pageImageUrl } from "@/lib/handwritten/page-url";
 import { splitStreamError, splitStreamNote } from "@/lib/derive/config";
 import { regionBounds, regionPathD, type Region } from "@/lib/video/types";
+import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 
 // One page of a handwritten document (SPEC.md §16): the page image the page
 // image route serves, the stored marks drawn over it, and Circle & ask —
@@ -445,6 +446,7 @@ export function PageBlock({
                 >
                   {busy === "comment" ? t("common.saving") : t("panes.pageComment")}
                 </button>
+                <VoiceTypingButton track="page-voice-typing" />
                 <span
                   className="ml-auto flex items-center gap-1.5"
                   data-tip={t("panes.pageHighlightTitle")}

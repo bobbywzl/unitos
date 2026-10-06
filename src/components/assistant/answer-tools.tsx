@@ -6,6 +6,7 @@ import type { Person } from "@/lib/person";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { useT } from "@/components/lang-provider";
 import { SparkleIcon, CommentIcon } from "@/components/icons";
+import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 
 // Highlighting an assistant answer (SPEC.md §7) offers three things: Start
 // side chat, Ask about this, and Comment. Every assistant surface uses the
@@ -431,11 +432,12 @@ export function CommentBox({
         >
           {t("common.cancel")}
         </button>
+        <VoiceTypingButton track="assistant-comment-voice-typing" className="ml-auto size-7" />
         <button
           type="submit"
           disabled={busy || !text.trim()}
           data-track="assistant-comment-send"
-          className="ml-auto rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+          className="rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
         >
           {t("assistant.comment")}
         </button>
