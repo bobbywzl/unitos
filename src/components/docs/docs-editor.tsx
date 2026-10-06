@@ -572,18 +572,39 @@ export function DocsEditor({
   // assistant's suggestions landing in Viewing) is not kept, and the keys
   // stay where they are.
   const passingRef = useRef(false);
+  // The mode Collapse pressed in Editing or Suggesting left for Viewing:
+  // Collapse off goes back to it, unless the reader chose a mode since.
+  const collapseLeftRef = useRef<DocsMode | null>(null);
+  const chosenModeRef = useRef(chosenMode);
+  useEffect(() => {
+    chosenModeRef.current = chosenMode;
+  }, [chosenMode]);
   const setMode = useCallback(
-    (next: DocsMode, passing = false) => {
+    (next: DocsMode, passing = false, collapse = false) => {
       if (locked && next !== "viewing") {
         if (editor && !editor.isDestroyed) toast(t("api.importShared"), editor);
         return;
       }
+      if (collapse) {
+        if (chosenModeRef.current !== "viewing") collapseLeftRef.current = chosenModeRef.current;
+      } else if (!passing) collapseLeftRef.current = null;
       passingRef.current = passing;
       setModeState(next);
       if (isImport && !passing) storeMode(documentId, next);
     },
     [locked, editor, t, isImport, documentId],
   );
+  // Collapse off: back to the mode Collapse left, the caret where it was.
+  const collapseOn = collapse?.on ?? false;
+  const collapseOnRef = useRef(collapseOn);
+  useEffect(() => {
+    const was = collapseOnRef.current;
+    collapseOnRef.current = collapseOn;
+    const back = collapseLeftRef.current;
+    if (!was || collapseOn || !back) return;
+    collapseLeftRef.current = null;
+    if (chosenModeRef.current === "viewing") setMode(back);
+  }, [collapseOn, setMode]);
 
   // A PDF import in pages may be read pageless in Viewing (page/reflow.tsx):
   // a view of this browser; the document's page setup stays as it is, and

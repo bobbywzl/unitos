@@ -16,11 +16,12 @@ export const DOCS_EVENT = {
   figureTools: "docs:figure-tools",
 } as const;
 
-/** What DOCS_EVENT.mode asks for: a mode the reader chose, or a mode the
+/** What DOCS_EVENT.mode asks for: a mode the reader chose, a mode the
     page passes into for the reader (the assistant's suggestions landing in
     Viewing), which the document does not keep and which leaves the keys
-    where they are. */
-export type ModeRequest = DocsMode | { mode: DocsMode; passing: true };
+    where they are, or Viewing for Collapse (SPEC.md §28), which Collapse off
+    leaves for the mode it came from. */
+export type ModeRequest = DocsMode | { mode: DocsMode; passing: true } | { mode: "viewing"; collapse: true };
 
 /** The typing area's windows (areas/typing.tsx, word-count.tsx). */
 export const TYPING_EVENT = {
