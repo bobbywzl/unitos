@@ -11,6 +11,7 @@ import { runHeartbeat } from "@/lib/derive/heartbeat-client";
 import { useImeGuard } from "@/lib/ime";
 import type { GraphNode, StitchDocument, StitchResult } from "@/lib/types";
 import { transcriptErrorKey } from "@/lib/video/types";
+import { graphNavigate } from "@/components/graph/graph-history";
 
 // Stitch (SPEC.md §22): the box at the foot of the graph, ready for any
 // command across the project's documents — gather every passage on a
@@ -189,7 +190,7 @@ export function StitchBox({
   }
 
   function openDocument(documentId: string) {
-    router.push(`/n/${notebookId}?doc=${documentId}`);
+    graphNavigate(router, `/n/${notebookId}?doc=${documentId}`);
     onOpenDocument();
   }
 

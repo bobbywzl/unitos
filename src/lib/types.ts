@@ -306,6 +306,9 @@ export type HistoryEntry = {
   // (lib/notes/removed.ts); restored once it is back.
   restorable?: boolean;
   restored?: boolean;
+  // DOCUMENT_DETACH entries: the removed document, while it is out of the
+  // project and still exists, so the row can offer Add back.
+  addBackDocumentId?: string;
   createdAt: string; // ISO
 };
 

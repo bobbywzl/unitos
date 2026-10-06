@@ -6,13 +6,15 @@ import { useT } from "@/components/lang-provider";
 // Where a document is and what a delete reaches (SPEC.md §5): the footprint
 // route's answer. `projects` are the reader's own projects that hold it (the
 // ones they can edit), by name; `otherProjects` counts the projects of other
-// accounts that hold it.
+// accounts that hold it; `openProjects` are the ids of the projects holding
+// it that the reader can open, at any role.
 export type DocumentReach = {
   annotations: number;
   notes: number;
   shared: boolean;
   projects: { id: string; title: string }[];
   otherProjects: number;
+  openProjects?: string[];
 };
 
 /** The footprint of one document, read when `documentId` is set (a menu or a
@@ -52,12 +54,15 @@ export function otherPlaces(reach: DocumentReach, notebookId: string | null) {
   return { names: reach.projects.filter((p) => p.id !== notebookId).map((p) => p.title), others: reach.otherProjects };
 }
 
-/** Remove from this project can run: another project, the reader's or
-    another account's, still holds the document, so it stays in reach. */
+/** Remove from this project can run: another project the reader can open
+    still holds the document, so it stays in the reader's reach. A project of
+    another account the reader cannot open does not count: removed, the
+    document would be out of the reader's reach, and Delete document is the
+    way, its confirm naming what goes. */
 export function inAnotherProject(reach: DocumentReach | null, notebookId: string): boolean {
   if (!reach) return false;
-  const { names, others } = otherPlaces(reach, notebookId);
-  return names.length + others > 0;
+  const open = reach.openProjects ?? reach.projects.map((p) => p.id);
+  return open.some((id) => id !== notebookId);
 }
 
 // "QA Student, QA Skimmer and 1 project of another account".

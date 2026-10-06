@@ -168,6 +168,8 @@ function readFlyout() {
 const PanelContext = createContext<HTMLElement | null>(null);
 
 const FLYOUT_WIDTH = 320; // w-80
+// The id a new folder's row carries until the route answers.
+const NEW_FOLDER_PREFIX = "new-folder:";
 const FLYOUT_MAX_HEIGHT = 480;
 // The wrapper's transparent margin: the card sits inside it, and the wrapper
 // touches the panel, so the pointer never leaves the list on its way over.
@@ -227,6 +229,12 @@ function Flyout({ rowEl, children }: { rowEl: HTMLElement; children: ReactNode }
     </div>,
     document.body,
   );
+}
+
+/** Whether a fly-out fits beside the panel, on its right or its left. */
+function roomBeside(panelEl: HTMLElement): boolean {
+  const panel = panelEl.getBoundingClientRect();
+  return panel.right + FLYOUT_WIDTH + 8 <= window.innerWidth || panel.left - FLYOUT_WIDTH - 8 >= 0;
 }
 
 // The name box for a new folder or a rename. Enter keeps it, Escape drops
@@ -452,8 +460,18 @@ function RootDropRow({ overlay = false }: { overlay?: boolean }) {
 // screen, under it on a narrow one.
 function FolderRow({ folder, depth }: { folder: DocumentFolderView; depth: number }) {
   const tree = useTree();
-  const { t, flyout, canEdit, pending, folders, counts, activePath, openPath } = tree;
+  const { t, pending, folders, counts, activePath, openPath } = tree;
   const [rowEl, setRowEl] = useState<HTMLElement | null>(null);
+  // Beside the row when a side of the panel has room for the list (a wide
+  // screen); else under the row, as on a phone: at 820 px neither side of
+  // the list holds another list, and one opened to the left was cut off.
+  const panelEl = useContext(PanelContext);
+  const flyout = tree.flyout && (!panelEl || roomBeside(panelEl));
+  // A folder just made shows at once (SPEC.md §6); until the route answers
+  // with its id it takes no action.
+  const placeholder = folder.id.startsWith(NEW_FOLDER_PREFIX);
+  const canEdit = tree.canEdit && !placeholder;
+  const [deleteAsk, setDeleteAsk] = useState(false);
   const open = openPath[depth] === folder.id;
   const onActivePath = activePath[depth] === folder.id;
   const count = counts.get(folder.id) ?? 0;
@@ -605,14 +623,41 @@ function FolderRow({ folder, depth }: { folder: DocumentFolderView; depth: numbe
               />
             )}
             <button
-              onClick={() => tree.deleteFolder(folder)}
+              onClick={() => setDeleteAsk(!deleteAsk)}
               data-track="folder-delete"
               disabled={pending}
+              aria-expanded={deleteAsk}
               className="px-4 py-1.5 text-left text-[12.5px] text-red-600 hover:bg-red-50 disabled:opacity-40 dark:hover:bg-red-950"
               data-tip={t("panes.deleteFolderTitle")}
             >
               {t("panes.deleteFolder")}
             </button>
+            {/* The confirm under the row, in the app's own look, as for a
+                document: what the folder holds moves up one level. */}
+            {deleteAsk && (
+              <div className="mx-2 mb-1 flex flex-col gap-2 rounded-lg bg-card px-3 py-2">
+                <p className="text-[12px] leading-snug text-sand-700">{t("panes.confirmDeleteFolder")}</p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setDeleteAsk(false);
+                      tree.deleteFolder(folder);
+                    }}
+                    data-track="folder-delete-confirm"
+                    disabled={pending}
+                    className="rounded-full bg-red-600 px-3 py-1 text-[12px] font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {t("panes.deleteFolder")}
+                  </button>
+                  <button
+                    onClick={() => setDeleteAsk(false)}
+                    className="rounded-full px-3 py-1 text-[12px] text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                  >
+                    {t("common.cancel")}
+                  </button>
+                </div>
+              </div>
+            )}
             <ErrorLine at={`folder:${folder.id}`} />
           </div>
         )}
@@ -782,13 +827,21 @@ export function DocumentTree<
     const pendingFolders = [...folderMoves].filter(([id, to]) => storedFolders.find((f) => f.id === id)?.parentId !== to);
     if (pendingFolders.length !== folderMoves.size) setFolderMoves(new Map(pendingFolders));
   }
-  const folders = useMemo(
-    () =>
+  // Folders made here that the page's data does not hold yet.
+  const [newFolders, setNewFolders] = useState<DocumentFolderView[]>([]);
+  const [seenFolders, setSeenFolders] = useState(storedFolders);
+  if (seenFolders !== storedFolders) {
+    setSeenFolders(storedFolders);
+    const left = newFolders.filter((f) => !storedFolders.some((g) => g.id === f.id));
+    if (left.length !== newFolders.length) setNewFolders(left);
+  }
+  const folders = useMemo(() => {
+    const moved =
       folderMoves.size === 0
         ? storedFolders
-        : storedFolders.map((f) => (folderMoves.has(f.id) ? { ...f, parentId: folderMoves.get(f.id) ?? null } : f)),
-    [storedFolders, folderMoves],
-  );
+        : storedFolders.map((f) => (folderMoves.has(f.id) ? { ...f, parentId: folderMoves.get(f.id) ?? null } : f));
+    return newFolders.length === 0 ? moved : [...moved, ...newFolders.filter((f) => !moved.some((g) => g.id === f.id))];
+  }, [storedFolders, folderMoves, newFolders]);
   const known = new Set(folders.map((f) => f.id));
   const rows: TreeRow[] = documents.map((d) => {
     const folderId = docMoves.has(d.id) ? (docMoves.get(d.id) ?? null) : d.folderId;
@@ -889,9 +942,24 @@ export function DocumentTree<
     setMoving,
     setCreatingIn,
     setError,
+    // The new folder's row shows at once, then takes the route's id; a
+    // refused create takes it off, with the error under the level.
     createFolder: (parentId, title) => {
-      void run(`new:${parentId ?? ""}`, () =>
-        api(`/api/notebooks/${notebookId}/folders`, "POST", { title, parentId }),
+      const tempId = `${NEW_FOLDER_PREFIX}${Date.now()}`;
+      const temp: DocumentFolderView = { id: tempId, title, parentId, createdAt: new Date().toISOString() };
+      setNewFolders((list) => [...list, temp]);
+      let madeId: string | null = null;
+      void run(
+        `new:${parentId ?? ""}`,
+        async () => {
+          const made = await api<{ id?: unknown }>(`/api/notebooks/${notebookId}/folders`, "POST", { title, parentId });
+          if (typeof made?.id === "string") madeId = made.id;
+        },
+        () => {
+          const id = madeId;
+          setNewFolders((list) => (id ? list.map((f) => (f.id === tempId ? { ...f, id } : f)) : list.filter((f) => f.id !== tempId)));
+        },
+        () => setNewFolders((list) => list.filter((f) => f.id !== tempId)),
       );
     },
     renameFolder: (folder, title) => {
@@ -963,7 +1031,6 @@ export function DocumentTree<
     },
     // What the folder holds moves up one level; the route does it.
     deleteFolder: (folder) => {
-      if (!confirm(t("panes.confirmDeleteFolder"))) return;
       void run(
         `folder:${folder.id}`,
         () => api(`/api/notebooks/${notebookId}/folders/${folder.id}`, "DELETE"),

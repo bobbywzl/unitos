@@ -1,6 +1,7 @@
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { ownTrace } from "@/lib/documents/orphans";
 import { authEnabled, currentUser } from "@/lib/auth";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { runConversion } from "@/lib/handwritten/convert";
@@ -30,7 +31,9 @@ export const maxDuration = 300;
 
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
 
-// The library: the documents attached to corpora the reader can open.
+// The library: the documents attached to corpora the reader can open, and
+// the documents in no project the reader read or wrote in — a deleted
+// project's own documents among them (lib/documents/orphans.ts).
 export async function GET() {
   const t = await serverT();
   const user = await currentUser();
@@ -38,16 +41,21 @@ export async function GET() {
   const documents = await db.document.findMany({
     where: authEnabled()
       ? {
-          notebooks: {
-            some: {
-              notebook: {
-                OR: [
-                  { userId: user.id },
-                  { collaborators: { some: { email: user.email } } },
-                ],
+          OR: [
+            {
+              notebooks: {
+                some: {
+                  notebook: {
+                    OR: [
+                      { userId: user.id },
+                      { collaborators: { some: { email: user.email } } },
+                    ],
+                  },
+                },
               },
             },
-          },
+            ownTrace(user.id),
+          ],
         }
       : undefined,
     orderBy: { createdAt: "desc" },

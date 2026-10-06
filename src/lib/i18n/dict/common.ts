@@ -130,6 +130,8 @@ const en = {
   offlineAi:
     "AI is off while offline. Notes, highlights, comments, and edits save on this device and sync when you are back online.",
   offlineSyncing: "Syncing {n} offline changes…",
+  offlineShort: "Offline",
+  offlineShortQueued: "Offline · {n} to sync",
   // The offline page (SPEC.md §17, Unitos Ultra): what loads without a network
   offlineTitle: "Offline",
   offlinePageBody: "Only projects saved for offline are shown. Everything else needs a connection.",
@@ -221,6 +223,8 @@ const zh: Record<keyof typeof en, string> = {
   // service worker's answer (public/sw.js)
   offlineAi: "离线时 AI 不可用。笔记、高亮、评论和编辑会保存在此设备上，联网后同步。",
   offlineSyncing: "正在同步 {n} 项离线更改…",
+  offlineShort: "离线",
+  offlineShortQueued: "离线 · {n} 项待同步",
   // The offline page (SPEC.md §17, Unitos Ultra): what loads without a network
   offlineTitle: "离线",
   offlinePageBody: "只显示已离线保存的项目。其他内容需要网络。",

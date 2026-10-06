@@ -324,8 +324,13 @@ export function DocumentBar({
     listCloseTimer.current = null;
     listOpenTimer.current = null;
   }
+  // How the list opened: a list the reader pressed open (the pill, or a
+  // press inside a list the hover opened) closes on a press outside or
+  // Escape only; a list the hover opened closes when the pointer leaves.
+  const listPressed = useRef(false);
   function openList() {
     clearListTimers();
+    listPressed.current = true;
     setListOpen(true);
   }
   function hoverList() {
@@ -340,6 +345,7 @@ export function DocumentBar({
     listOpenTimer.current = setTimeout(() => {
       listOpenTimer.current = null;
       hoverOpenedAt.current = Date.now();
+      listPressed.current = false;
       setListOpen(true);
     }, LIST_HOVER_MS);
   }
@@ -349,6 +355,10 @@ export function DocumentBar({
   }
   function closeList() {
     clearListTimers();
+    // Focus inside the list goes back to the pill, not to the page.
+    if (listRef.current?.contains(document.activeElement) || document.activeElement?.closest("[data-document-flyout]")) {
+      listRef.current?.querySelector<HTMLElement>('[data-track="document-list"]')?.focus();
+    }
     setListOpen(false);
     setPillMenu(null);
     setMoveChoice(null);
@@ -360,9 +370,37 @@ export function DocumentBar({
       clearTimeout(listOpenTimer.current);
       listOpenTimer.current = null;
     }
-    if (!listOpen) return;
+    if (!listOpen || listPressed.current) return;
     if (listCloseTimer.current) clearTimeout(listCloseTimer.current);
     listCloseTimer.current = setTimeout(closeList, 220);
+  }
+  // ArrowDown and ArrowUp move between the list's rows (a folder's row, a
+  // document's row); from the pill, ArrowDown opens the list and goes to the
+  // first row.
+  function moveInList(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    const target = e.target as HTMLElement;
+    if (target.closest("input, textarea, select")) return;
+    const rows = [
+      ...(listRef.current?.querySelectorAll<HTMLElement>('[data-track="document-open"], [data-track="folder-open"]') ?? []),
+    ].filter((el) => el.getClientRects().length > 0);
+    const onPill = target.getAttribute("data-track") === "document-list";
+    if (onPill && !listOpen) {
+      if (e.key !== "ArrowDown") return;
+      e.preventDefault();
+      openList();
+      setTimeout(() => {
+        listRef.current
+          ?.querySelector<HTMLElement>('[data-track="document-open"], [data-track="folder-open"]')
+          ?.focus();
+      }, 0);
+      return;
+    }
+    if (rows.length === 0) return;
+    e.preventDefault();
+    const at = rows.indexOf(target);
+    const next = at < 0 ? (e.key === "ArrowDown" ? 0 : rows.length - 1) : at + (e.key === "ArrowDown" ? 1 : -1);
+    rows[Math.max(0, Math.min(rows.length - 1, next))]?.focus();
   }
   useEffect(() => () => {
     if (listCloseTimer.current) clearTimeout(listCloseTimer.current);
@@ -1306,6 +1344,11 @@ export function DocumentBar({
           onMouseEnter={hoverList}
           onMouseMove={listOpen ? undefined : hoverList}
           onMouseLeave={scheduleCloseList}
+          onPointerDown={() => {
+            // A press in the list keeps it open while the pointer moves away.
+            if (listOpen) listPressed.current = true;
+          }}
+          onKeyDown={moveInList}
         >
           <button
             onClick={pressList}

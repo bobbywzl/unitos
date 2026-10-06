@@ -208,3 +208,36 @@
   margin: 0 24px 8px;
   font-size: 12px;
 }
+
+/* A narrow pane (a phone): the page over the list, each the pane's width;
+   the list takes the lower part and scrolls. */
+.docs-versions[data-narrow] {
+  flex-direction: column;
+}
+.docs-versions[data-narrow] .docs-versions-main {
+  min-height: 0;
+}
+.docs-versions[data-narrow] .docs-versions-bar {
+  padding-right: 12px;
+}
+.docs-versions[data-narrow] .docs-versions-canvas {
+  padding: 8px 12px 12px;
+}
+.docs-versions[data-narrow] .docs-versions-panel {
+  max-height: 45%;
+  border-top: 1px solid var(--docs-sep);
+  border-left: none;
+}
+.docs-versions[data-narrow] .docs-versions-panel-title {
+  padding: 10px 16px 6px;
+  font-size: 18px;
+  line-height: 24px;
+}
+.docs-versions[data-narrow] .docs-versions-check {
+  padding-right: 16px;
+  padding-left: 16px;
+}
+.docs-versions[data-narrow] .docs-versions-foot {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}

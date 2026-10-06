@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import {
   listSaved,
@@ -15,6 +15,7 @@ import {
 import { useT } from "@/components/lang-provider";
 import { ProgressBar } from "@/components/progress-bar";
 import { WorkCard, type WorkItem } from "@/components/works/work-card";
+import { useEscapeLayer } from "@/lib/escape-layers";
 
 export type { WorkItem };
 
@@ -40,6 +41,7 @@ export function WorksShelf({
   const router = useRouter();
   const t = useT();
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState<{ id: string; title: string } | null>(null);
 
   // Offline copies (SPEC.md §17): which projects this browser holds, which one
   // is saving now, and the one-line toast a press answers with.
@@ -117,10 +119,11 @@ export function WorksShelf({
     }
   }
 
-  async function remove(id: string) {
-    if (!confirm(t("works.deleteCorpusConfirm"))) return;
-    await api(`/api/notebooks/${id}`, "DELETE");
-    router.refresh();
+  // Delete project opens an in-app confirm that names the documents only
+  // this project holds: they stay in the library (lib/documents/orphans.ts).
+  function remove(id: string) {
+    const work = works.find((w) => w.id === id);
+    if (work) setDeleting({ id, title: work.title });
   }
 
   async function rename(id: string, current: string) {
@@ -202,6 +205,17 @@ export function WorksShelf({
         />
       )}
 
+      {deleting && (
+        <DeleteProjectConfirm
+          project={deleting}
+          onClose={() => setDeleting(null)}
+          onDeleted={() => {
+            setDeleting(null);
+            router.refresh();
+          }}
+        />
+      )}
+
       {toast && (
         <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-6">
           <span
@@ -221,5 +235,110 @@ export function WorksShelf({
         </div>
       )}
     </>
+  );
+}
+
+/** The confirm Delete project opens over the dashboard: what goes (the
+    project, its sections, its notes), and by name the documents only this
+    project holds, which stay in the library. Delete project and Cancel. */
+function DeleteProjectConfirm({
+  project,
+  onClose,
+  onDeleted,
+}: {
+  project: { id: string; title: string };
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const t = useT();
+  const [onlyHere, setOnlyHere] = useState<{ id: string; title: string }[] | null>(null);
+  const [working, setWorking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  useEscapeLayer(true, onClose);
+
+  useEffect(() => {
+    cancelRef.current?.focus();
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/notebooks/${project.id}`);
+        const body = (await res.json()) as { onlyHere?: { id: string; title: string }[]; error?: string };
+        if (cancelled) return;
+        if (!res.ok || !body.onlyHere) setError(body.error ?? t("common.requestFailed"));
+        else setOnlyHere(body.onlyHere);
+      } catch {
+        if (!cancelled) setError(t("common.requestFailed"));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id, t]);
+
+  async function confirmDelete() {
+    if (working) return;
+    setWorking(true);
+    setError(null);
+    try {
+      await api(`/api/notebooks/${project.id}`, "DELETE");
+      onDeleted();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("common.requestFailed"));
+      setWorking(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 px-4"
+      onPointerDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("works.deleteProject")}
+        className="pop-in flex max-h-[calc(100dvh-4rem)] w-full max-w-md flex-col gap-3 overflow-y-auto rounded-[28px] bg-card p-6 shadow-float"
+      >
+        <p className="text-[17px] font-semibold text-sand-800">{t("works.deleteProjectTitle", { title: project.title })}</p>
+        <p className="text-sm text-sand-700">{t("works.deleteProjectNotes")}</p>
+        {onlyHere === null && !error && <p className="text-sm text-sand-500">{t("common.loading")}</p>}
+        {onlyHere !== null &&
+          (onlyHere.length > 0 ? (
+            <>
+              <p className="text-sm text-sand-700">{t("works.deleteProjectKeeps")}</p>
+              <ul className="flex flex-col gap-1 rounded-2xl bg-sand-100 px-4 py-3 text-sm text-sand-800">
+                {onlyHere.map((d) => (
+                  <li key={d.id} className="truncate">
+                    {d.title}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p className="text-sm text-sand-700">{t("works.deleteProjectKeepsNone")}</p>
+          ))}
+        {error && <p className="text-xs text-red-600">{error}</p>}
+        <div className="mt-1 flex items-center justify-end gap-2">
+          <button
+            ref={cancelRef}
+            onClick={onClose}
+            className="rounded-full px-4 py-2 text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+          >
+            {t("common.cancel")}
+          </button>
+          <button
+            onClick={() => void confirmDelete()}
+            disabled={working || onlyHere === null}
+            data-track="project-delete-confirm"
+            className="rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+          >
+            {working ? t("common.working") : t("works.deleteProject")}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
