@@ -1,6 +1,7 @@
 // Sort by in the document list (SPEC.md §6). One choice orders every list —
-// the project itself and each folder's own list — and a sort other than
-// Added puts the list's rows in categories: a letter for Title, a kind for
+// the project itself and each folder's own list. Last edited, the default,
+// lists the rows newest edit first; Added is the list as it was before
+// sorts existed. Every other sort puts the list's rows in categories: a letter for Title, a kind for
 // Kind, a week or a month for Week added and Month added. A folder is a row
 // like a document: its own title and the day it was made sort it, not what
 // it holds; under Kind, folders are a kind of their own. Read only: nothing
@@ -39,14 +40,18 @@ export const ROW_KINDS: RowKind[] = [
   "text",
 ];
 
-// added: the list as it has always been — folders by title, then documents
-// oldest first — with no categories.
-export type DocumentSort = "added" | "title" | "kind" | "week" | "month";
-export const DOCUMENT_SORTS: DocumentSort[] = ["added", "title", "kind", "week", "month"];
+// edited: the rows newest edit first, folders among the documents, with no
+// categories; the default. added: the list as it was before sorts existed —
+// folders by title, then documents oldest first — with no categories.
+export type DocumentSort = "edited" | "added" | "title" | "kind" | "week" | "month";
+export const DOCUMENT_SORTS: DocumentSort[] = ["edited", "added", "title", "kind", "week", "month"];
 
 // One row of a list: a folder or a document. addedAt: when the folder was
 // made or the document added (DocumentFolder.createdAt, Document.createdAt).
-export type SortRow = { id: string; title: string; kind: RowKind; addedAt: string };
+// editedAt: the row's last edit — a document's from documentEditedAt, a
+// folder's the newest of the documents in it, at any depth, else the day it
+// was made.
+export type SortRow = { id: string; title: string; kind: RowKind; addedAt: string; editedAt: string };
 
 export type RowCategory<T> = { key: string; title: string; rows: T[] };
 
@@ -68,8 +73,27 @@ function weekStart(ms: number): Date {
   return d;
 }
 
-/** A list's rows in categories, for every sort but Added. `rows` come in the
-    list's own order (folders by title, then documents in the order they
+/** A document's last edit in a project: the newest of its rich text's last
+    save (a blank document or an import), the last change to a note or an
+    annotation of the project written in it or quoting it, and the day it
+    was added. */
+export function documentEditedAt(addedAt: string, edits: (string | null | undefined)[]): string {
+  let newest = addedAt;
+  for (const at of edits) if (at && time(at) > time(newest)) newest = at;
+  return newest;
+}
+
+/** A list's rows newest edit first, for Last edited. Ties keep the list's
+    own order. */
+export function sortByEdited<T extends SortRow>(rows: T[]): T[] {
+  return rows
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) => time(b.row.editedAt) - time(a.row.editedAt) || a.index - b.index)
+    .map(({ row }) => row);
+}
+
+/** A list's rows in categories, for every sort but Last edited and Added.
+    `rows` come in the list's own order (folders by title, then documents in the order they
     were added); ties keep it.
     - Title: rows A to Z, in a category per first letter or digit; # for
       any other first mark, No title last.
@@ -79,7 +103,7 @@ function weekStart(ms: number): Date {
       first. */
 export function categorizeRows<T extends SortRow>(
   rows: T[],
-  sort: Exclude<DocumentSort, "added">,
+  sort: Exclude<DocumentSort, "edited" | "added">,
   lang: string,
   labels: { kind: (kind: RowKind) => string; untitled: string; weekOf: (date: string) => string },
 ): RowCategory<T>[] {

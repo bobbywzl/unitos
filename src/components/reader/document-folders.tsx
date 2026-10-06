@@ -18,7 +18,7 @@ import { api } from "@/lib/api";
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon, FolderIcon, MoreIcon, PlusIcon } from "@/components/icons";
 import { useLang, useT } from "@/components/lang-provider";
 import { CategoryRow, categoryLabels, useFoldedCategories } from "@/components/reader/document-organize";
-import { categorizeRows, type DocumentKind, type DocumentSort, type SortRow } from "@/lib/document-order";
+import { categorizeRows, sortByEdited, type DocumentKind, type DocumentSort, type SortRow } from "@/lib/document-order";
 import { Collapse } from "@/components/presence";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import type { TFunc } from "@/lib/i18n/dictionaries";
@@ -64,6 +64,23 @@ export function folderPath(folders: DocumentFolderView[], folderId: string | nul
     cursor = byId.get(cursor)!.parentId;
   }
   return path;
+}
+
+// A folder's last edit, for Last edited (SPEC.md §6): the newest of the
+// documents in it, the folders under it counted in; the day it was made
+// when it holds none.
+function folderEditedAt(
+  folder: DocumentFolderView,
+  folders: DocumentFolderView[],
+  rows: { folderId: string | null; editedAt: string }[],
+): string {
+  let newest = folder.createdAt;
+  for (const row of rows) {
+    if (Date.parse(row.editedAt) > Date.parse(newest) && folderPath(folders, row.folderId).includes(folder.id)) {
+      newest = row.editedAt;
+    }
+  }
+  return newest;
 }
 
 // The folder and every folder under it: where a folder cannot move.
@@ -282,7 +299,15 @@ function FolderNameInput({
   );
 }
 
-type TreeRow = { id: string; folderId: string | null; title: string; kind: DocumentKind; addedAt: string; node: ReactNode };
+type TreeRow = {
+  id: string;
+  folderId: string | null;
+  title: string;
+  kind: DocumentKind;
+  addedAt: string;
+  editedAt: string;
+  node: ReactNode;
+};
 type TreeError = { at: string; message: string } | null;
 // What is being dragged: a document from its folder, or a folder from its
 // parent (null = the project itself).
@@ -624,7 +649,9 @@ function FolderRow({ folder, depth }: { folder: DocumentFolderView; depth: numbe
 
 // One level of the tree: its folders, then its documents, then New file
 // here (a folder's list) and New folder. Each row falls in after the one
-// above it (tree-row-in), and a document's row drags. A sort other than
+// above it (tree-row-in), and a document's row drags. Last edited lists the
+// folders among the documents, newest edit first: a folder's last edit is
+// the newest of the documents in it. A sort other than Last edited and
 // Added puts the folders and the documents in categories (SPEC.md §6): a
 // folder is a row like a document there, sorted by its own title and the
 // day it was made, and under Kind a kind of its own.
@@ -673,6 +700,7 @@ function Level({ parentId, depth }: { parentId: string | null; depth: number }) 
         title: folder.title,
         kind: "folder" as const,
         addedAt: folder.createdAt,
+        editedAt: folderEditedAt(folder, folders, rows),
         render: (i: number) => folderNode(folder, i),
       })),
       ...own.map((row) => ({
@@ -680,10 +708,14 @@ function Level({ parentId, depth }: { parentId: string | null; depth: number }) 
         title: row.title,
         kind: row.kind,
         addedAt: row.addedAt,
+        editedAt: row.editedAt,
         render: (i: number) => documentNode(row, i),
       })),
     ];
-    list = categorizeRows(levelRows, sort, tree.lang, categoryLabels(t)).map((category) => {
+    list =
+      sort === "edited"
+        ? sortByEdited(levelRows).map((row) => row.render(index++))
+        : categorizeRows(levelRows, sort, tree.lang, categoryLabels(t)).map((category) => {
       const key = `${sort}:${parentId ?? ""}:${category.key}`;
       return (
         <div key={key} className="tree-row-in" style={rowStyle(index++)}>
@@ -729,7 +761,7 @@ function Level({ parentId, depth }: { parentId: string | null; depth: number }) 
 // folder, or in the project itself when it has none. `panelEl` is the root
 // list's element: the fly-outs open from its edge.
 export function DocumentTree<
-  T extends { id: string; folderId: string | null; title: string; kind: DocumentKind; addedAt: string },
+  T extends { id: string; folderId: string | null; title: string; kind: DocumentKind; addedAt: string; editedAt: string },
 >({
   notebookId,
   folders,
@@ -765,6 +797,7 @@ export function DocumentTree<
     title: d.title,
     kind: d.kind,
     addedAt: d.addedAt,
+    editedAt: d.editedAt,
     node: renderDocument(d),
   }));
   // The open folders, one per level, from the project itself down. A wide

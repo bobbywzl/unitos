@@ -147,6 +147,7 @@ const en = {
   // one column per document, one row per section.
   byDocument: "By document",
   groupBy: "Group by",
+  groupByEdited: "Last edited",
   groupBySection: "Section",
   groupByDocument: "Document",
   groupByWeek: "Week made",
@@ -171,6 +172,7 @@ const en = {
 
   collapseSectionTitle: "Collapse or expand this section",
   addNoteTitle: "Write a note in this section",
+  addNoteInTitle: "Write a note in {section}",
   // Voice command (SPEC.md §6)
   speakNote: "Command",
   speakNoteTitle:
@@ -342,6 +344,7 @@ const zh: Record<keyof typeof en, string> = {
   pendingElsewhereTitle: "其他文档和项目的待定笔记在整页笔记里",
   byDocument: "按文档",
   groupBy: "分组",
+  groupByEdited: "最后编辑",
   groupBySection: "章节",
   groupByDocument: "文档",
   groupByWeek: "创建周",
@@ -366,6 +369,7 @@ const zh: Record<keyof typeof en, string> = {
 
   collapseSectionTitle: "收起或展开此章节",
   addNoteTitle: "在此章节写一条笔记",
+  addNoteInTitle: "在“{section}”里写一条笔记",
   speakNote: "指令",
   speakNoteTitle: "说出一条指令：笔记要写什么、怎么写。助手读取当前文档，引用它，写出笔记。笔记以待定状态落在此章节",
   stopRecording: "停止录音；指令开始执行",
