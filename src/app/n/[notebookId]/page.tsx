@@ -17,7 +17,7 @@ import { documentReferences } from "@/lib/parse/types";
 import { resolveDocumentSources } from "@/lib/anchors/resolve";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { trivialEdits } from "@/lib/history/trivial";
+import { historyPage } from "@/lib/history/list";
 import { documentsGraph, listGenerated } from "@/lib/graph/view";
 import {
   corpusDistillationList,
@@ -1097,8 +1097,7 @@ export default async function NotebookPage(props: {
     editRows,
     corpusQuoteDocs,
     graph,
-    events,
-    allEdits,
+    historyFirst,
     generated,
     positionRows,
   ] =
@@ -1128,20 +1127,9 @@ export default async function NotebookPage(props: {
       // links, both ends with their passages, the AI's reason, and the
       // replies. Accept and Dismiss live in the graph.
       documentsGraph(attached.map((d) => ({ id: d.id, title: d.title, hasVideo: d.hasVideo }))),
-      // meta is left out: a detach keeps the project's work on the document
-      // there (lib/documents/detach.ts), and the panel reads none of it.
-      db.notebookEvent.findMany({
-        where: { notebookId },
-        orderBy: { createdAt: "desc" },
-        take: 80,
-        select: { id: true, userId: true, kind: true, content: true, createdAt: true },
-      }),
-      db.blockEdit.findMany({
-        where: { documentId: { in: attachedIdList } },
-        orderBy: { createdAt: "desc" },
-        take: 80,
-        include: { document: { select: { title: true } } },
-      }),
+      // The History panel (SPEC.md §12): its newest page; Show older reads
+      // the rest (lib/history/list.ts).
+      historyPage(notebookId, attachedIdList),
       // The pages Stitch wrote for the project (SPEC.md §22): the graph's
       // Generated content list.
       listGenerated(notebookId),
@@ -1210,55 +1198,7 @@ export default async function NotebookPage(props: {
   const graphEdges = graph.edges;
   const recommendedLinks = graph.recommended;
 
-  // The History panel (SPEC.md §12): corpus events (deletions, detachments)
-  // merged with every attached document's edits, newest first, attributed.
-  // Small edits are marked (lib/history/trivial.ts) so the panel folds them.
-  const trivial = await trivialEdits(allEdits);
-  // A removed note kept whole can be restored (lib/notes/removed.ts): read
-  // as two flags, never the kept note itself.
-  const removals = events.filter((e) => e.kind === "NOTE_REMOVE").map((e) => e.id);
-  const restorable =
-    removals.length === 0
-      ? []
-      : await db.$queryRaw<{ id: string; kept: boolean; restored: boolean }[]>`
-          SELECT "id", ("meta" -> 'kept') IS NOT NULL AS "kept", ("meta" -> 'restoredAt') IS NOT NULL AS "restored"
-          FROM "NotebookEvent" WHERE "id" = ANY(${removals})`;
-  const restoreOf = new Map(restorable.map((r) => [r.id, r]));
-  const history: HistoryEntry[] = [
-    ...events.map(
-      (e): HistoryEntry => ({
-        id: e.id,
-        userId: e.userId,
-        kind: e.kind as HistoryEntry["kind"],
-        content: e.content,
-        documentTitle: null,
-        ...(restoreOf.get(e.id)?.kept ? { restorable: true, restored: restoreOf.get(e.id)!.restored } : {}),
-        createdAt: e.createdAt.toISOString(),
-      }),
-    ),
-    ...allEdits.map(
-      (e): HistoryEntry => ({
-        id: e.id,
-        userId: e.userId,
-        kind: e.kind as HistoryEntry["kind"],
-        content:
-          e.kind === "TEXT_EDIT" || e.kind === "BLOCK_ADD"
-            ? (e.after ?? e.before ?? "")
-            : e.kind === "BLOCK_REMOVE"
-              ? (e.before ?? "")
-              : ((e.meta as { quotedText?: string; to?: string } | null)?.quotedText ??
-                (e.meta as { to?: string } | null)?.to ??
-                ""),
-        documentTitle: e.document.title,
-        documentId: e.documentId,
-        blockId: e.blockId,
-        createdAt: e.createdAt.toISOString(),
-        trivial: trivial.get(e.id) ?? false,
-      }),
-    ),
-  ]
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, 100);
+  const history: HistoryEntry[] = historyFirst.entries;
 
   // Everyone whose work is on this page: owner, collaborators, and every
   // author referenced by a note, edit, link, reply, distillation, extraction,

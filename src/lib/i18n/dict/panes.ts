@@ -411,6 +411,11 @@ const en = {
   historyRestoreTitle: "Put the note back in its section, with its sources and replies",
   historyRestoredLabel: "Restored",
   historyRestoreFailed: "Not restored",
+  historyOlder: "Show older",
+  historyOlderFailed: "Older rows did not load",
+  historyAddBack: "Add back",
+  historyAddBackTitle: "Put the document back in this project, with this project's work on it",
+  historyAddedBack: "Added back",
   historyNoteMerge: "merged notes into one",
   historyReparse: "re-parsed a document",
 
@@ -889,6 +894,11 @@ const zh: Record<keyof typeof en, string> = {
   historyRestoreTitle: "把笔记放回原来的章节，连同出处和回复",
   historyRestoredLabel: "已恢复",
   historyRestoreFailed: "未恢复",
+  historyOlder: "显示更早",
+  historyOlderFailed: "更早的记录没有载入",
+  historyAddBack: "加回",
+  historyAddBackTitle: "把文档放回此项目，连同此项目对它的工作",
+  historyAddedBack: "已加回",
   historyNoteMerge: "把几条笔记合并为一条",
   historyReparse: "重新解析了一个文档",
 
