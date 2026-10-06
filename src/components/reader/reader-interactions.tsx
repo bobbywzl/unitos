@@ -161,7 +161,7 @@ import { CardColumn, CommentCard } from "@/components/docs/layer/comment-card";
 import { setCommentResolved } from "@/lib/annotations/resolve";
 import { COMMENTS_EVENT, flashInPage, PAGE_EDITED_EVENT, type CommentsView } from "@/components/docs/layer/events";
 import { registerDocumentFlush } from "@/components/docs/layer/flush";
-import { CLOSE_TOOLBAR_EVENT, DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
+import { CLOSE_TOOLBAR_EVENT, DOCS_EVENT, fireDocs, type ModeRequest } from "@/components/docs/typing/events";
 import { matchesCombo } from "@/components/docs/keys";
 import {
   assistantAuthor,
@@ -730,6 +730,11 @@ const SUGGEST_CHIPS: Chip[] = [
 // A tool's output continued into a conversation — Explain+, Simplify+,
 // Analyze+, Visualize+ (SPEC.md §21). Continue opens the box; the turns
 // persist on the tool's annotation (Note.conversation) and reopen with it.
+// How far the left-off mark's ribbon reaches above its block (reader.tsx
+// LeftOffMark): a block whose top is less than this under the pane's top
+// edge would hide the mark.
+const LEFT_OFF_RIBBON_PX = 16;
+
 // The tinted words of the open toolbar (.selection-mark) as one range.
 function tintRange(container: HTMLElement): Range | null {
   const marks = container.querySelectorAll(".selection-mark");
@@ -1475,6 +1480,27 @@ export function ReaderInteractions({
     }
     if (jumpOnOpen.current) return;
     let expected = applyReadingPosition(container, position, resume);
+    // The tab's copy restores the exact place, which can leave the block's
+    // top above the pane's edge (the reader was past its first lines): the
+    // mark then stands above the first block whose top shows, the block the
+    // reader reads into next, as the page editor's does (docs/layer/left-off.ts).
+    // A block that runs past the pane's bottom keeps it. The scroll never
+    // moves for the mark.
+    if (expected !== null && !resume && !isTranscript && !richTextRef.current && "blockId" in position) {
+      const crect = container.getBoundingClientRect();
+      const blockEls = [...container.querySelectorAll<HTMLElement>("article [data-block-id]")];
+      const at = blockEls.findIndex((el) => el.dataset.blockId === position.blockId);
+      const block = at >= 0 ? blockEls[at] : null;
+      if (block && block.getBoundingClientRect().top < crect.top + LEFT_OFF_RIBBON_PX) {
+        const next = blockEls
+          .slice(at + 1)
+          .find((el) => el.getClientRects().length > 0 && el.getBoundingClientRect().top >= crect.top + LEFT_OFF_RIBBON_PX);
+        const nextId = next?.dataset.blockId;
+        if (next && nextId && next.getBoundingClientRect().top < crect.bottom && block.getBoundingClientRect().bottom < crect.bottom) {
+          setLeftOffBlockId((shown) => (shown === position.blockId ? nextId : shown));
+        }
+      }
+    }
     // The page editor's words come after the pane: its code loads on demand,
     // and the editor stands a moment later. Until then the position waits
     // for its block (PAGE_WAIT_MS at most), then holds as on any document.
@@ -9328,7 +9354,8 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         collapseNew.seen();
         // A page editor collapses in Viewing: Editing needs the words.
         const page = richText && !collapseOn ? pageEditorIn(containerRef.current) : null;
-        if (page?.isEditable) fireDocs(page, DOCS_EVENT.mode, "viewing");
+        // Collapse off goes back to the mode it left.
+        if (page?.isEditable) fireDocs(page, DOCS_EVENT.mode, { mode: "viewing", collapse: true } satisfies ModeRequest);
         void toggleCollapse();
       }}
       data-track={collapseBusy ? "collapse-stop" : collapseOn ? "collapse-off" : "collapse"}
