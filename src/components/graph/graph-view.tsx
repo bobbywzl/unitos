@@ -24,6 +24,7 @@ import { FilmIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
 import { LinkDetail } from "@/components/graph/link-detail";
+import { graphNavigate } from "@/components/graph/graph-history";
 
 // The corpus graph (SPEC.md §13; the release-edu canvas patterns): documents
 // as nodes on a pan/zoom canvas, links between them as swept curves. The more
@@ -437,7 +438,7 @@ function GraphCanvas({
   useEffect(() => cancelClear, [cancelClear]);
   const openLink = useCallback(
     (link: GraphEdgeLink, documentId: string) => {
-      router.push(`/n/${notebookId}?doc=${documentId}&link=${link.id}`);
+      graphNavigate(router, `/n/${notebookId}?doc=${documentId}&link=${link.id}`);
       onOpenDocument();
     },
     [router, notebookId, onOpenDocument],
@@ -578,7 +579,7 @@ function GraphCanvas({
             onToggleSelect(node.id);
             return;
           }
-          router.push(docHref ? docHref(node.id) : `/n/${notebookId}?doc=${node.id}`);
+          graphNavigate(router, docHref ? docHref(node.id) : `/n/${notebookId}?doc=${node.id}`);
           onOpenDocument();
         }}
         onNodeMouseEnter={(_, node) => hoverNode(node.id)}

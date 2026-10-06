@@ -17,6 +17,7 @@ import { LinkDetail } from "@/components/graph/link-detail";
 import { readStitchPick, StitchBox, writeStitchPick } from "@/components/graph/stitch-box";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { isImeKey } from "@/lib/ime";
+import { enterGraphHistory, graphNavigate, leaveGraphHistory } from "@/components/graph/graph-history";
 
 // reactflow loads only when the graph opens — the workspace bundle stays lean.
 const GraphView = dynamic(() => import("@/components/graph/graph-view"), {
@@ -153,6 +154,13 @@ export function GraphOverlay({
     }
   }
 
+  // Back closes the graph as it would a page (graph-history.ts).
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+  useEffect(() => enterGraphHistory(() => onCloseRef.current()), []);
+
   // Escape takes one layer at a time: in a text box (the Stitch box, a
   // reply) it leaves the box, the typed words kept; then an open list beside
   // the canvas closes; then the graph. An IME's Escape is the IME's.
@@ -169,7 +177,7 @@ export function GraphOverlay({
         setList(null);
         return;
       }
-      onClose();
+      leaveGraphHistory(onClose);
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
@@ -252,7 +260,7 @@ export function GraphOverlay({
           </button>
         </div>
         <button
-          onClick={onClose}
+          onClick={() => leaveGraphHistory(onClose)}
           data-track="graph-close"
           aria-label={t("common.close")}
           data-tip={t("common.close")}
@@ -344,7 +352,7 @@ export function RecommendedLinkList({
   }
 
   function openDocument(documentId: string, linkId: string) {
-    router.push(`/n/${notebookId}?doc=${documentId}&link=${linkId}`);
+    graphNavigate(router, `/n/${notebookId}?doc=${documentId}&link=${linkId}`);
     onOpenDocument();
   }
 
