@@ -62,15 +62,22 @@ export function OfflineStatus() {
       ? t("common.offlineSyncing", { n: queued })
       : null;
   if (!label) return null;
+  // Below md the header has no room for the sentence: the pill says Offline
+  // (and the queued count), the sentence is its tooltip, and the pill
+  // shrinks before it widens the page.
+  const short = offline ? (queued > 0 ? t("common.offlineShortQueued", { n: queued }) : t("common.offlineShort")) : label;
 
   return (
     <span
       role="status"
-      className={`shrink-0 truncate rounded-full px-3 py-1 text-[11px] font-semibold ${
+      data-tip={label}
+      aria-label={label}
+      className={`min-w-0 truncate rounded-full px-3 py-1 text-[11px] font-semibold ${
         offline ? "bg-sand-200 text-sand-700" : "bg-sage-200 text-sage-800"
       }`}
     >
-      {label}
+      <span className="md:hidden">{short}</span>
+      <span className="max-md:hidden">{label}</span>
     </span>
   );
 }
