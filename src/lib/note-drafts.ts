@@ -84,8 +84,38 @@ export function noteDraftBase(draft: NoteDraft, stored: string): string | undefi
   return draft.base;
 }
 
+/** Fired on window when a note's draft is cleared (detail: { noteId }): the
+    notes stop drawing its kept words (use-outline.ts). */
+export const NOTE_DRAFT_CLEARED_EVENT = "unitos:note-draft-cleared";
+
 export function clearNoteDraft(noteId: string) {
   remove(NOTE_PREFIX + noteId);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(NOTE_DRAFT_CLEARED_EVENT, { detail: { noteId } }));
+  }
+}
+
+/** True when the draft holds words the server never confirmed: the text it
+    was made from is known, and the draft differs from it. */
+export function draftHoldsWords(draft: NoteDraft): boolean {
+  return draft.base !== undefined && draft.content.trim() !== "" && draft.content.trim() !== draft.base.trim();
+}
+
+/** Every note draft in this browser, by note id. */
+export function listNoteDrafts(): { noteId: string; draft: NoteDraft }[] {
+  const out: { noteId: string; draft: NoteDraft }[] = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key?.startsWith(NOTE_PREFIX)) continue;
+      const noteId = key.slice(NOTE_PREFIX.length);
+      const draft = readNoteDraft(noteId);
+      if (draft) out.push({ noteId, draft });
+    }
+  } catch {
+    // Storage blocked: no drafts.
+  }
+  return out;
 }
 
 /** Clear the note's draft when it holds this content: the server has it now. */

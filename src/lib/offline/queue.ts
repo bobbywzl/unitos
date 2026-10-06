@@ -15,7 +15,12 @@ import { MEDIA_EXTENSIONS, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 // stays for the next attempt on a network failure, a 401 (signed out: it
 // waits for the sign-in), or a 5xx — a 5xx drops only on its MAX_ATTEMPTS-th
 // try, so one bad record cannot hold the queue forever. One tab drains at a
-// time (a Web Lock), so two open tabs never send a record twice.
+// time (a Web Lock), so two open tabs never send a record twice. A note write
+// is never refused for a part of it: a quote whose anchor no longer resolves
+// lands its words without the source (replayBody), and words written to a
+// note deleted meanwhile land in a new note (lib/notes/gone.ts). While
+// records wait and the browser says online, a write that did not reach the
+// server runs again after a growing wait (retryLater).
 
 const PREMIUM_KEY = "unitos-premium";
 const SINGLE_REQUEST_BYTES = 4 * 1024 * 1024;
@@ -23,6 +28,18 @@ const MAX_ATTEMPTS = 5;
 const SYNC_LOCK = "unitos-offline-sync";
 /** Fired on window when a drain sent at least one record. */
 export const QUEUE_SYNCED_EVENT = "unitos:queue-synced";
+/** Fired on window when a note write's quote landed without its source: the
+    anchor no longer resolves (detail: { noteId }). */
+export const SOURCE_LOST_EVENT = "unitos:source-lost";
+/** Fired on window when words written to a gone note were kept as a new
+    note (detail: { from, to }; lib/notes/gone.ts). */
+export const NOTE_KEPT_EVENT = "unitos:note-kept";
+// While records wait and the browser says online, the drain runs again
+// after a growing wait: a write that failed with the browser online (a
+// Wi-Fi handover, a proxy reset) sends no online event. Only a write that
+// did not reach the server runs again this way; a 5xx counts against its
+// MAX_ATTEMPTS, so a timer never spends those tries.
+const RETRY_MS = [2_000, 4_000, 8_000, 15_000, 30_000];
 
 export type QueuedWrite = {
   path: string;
@@ -165,13 +182,45 @@ function outcome(res: Response, record: QueuedWrite | QueuedUpload, label: strin
   return "done";
 }
 
+const NOTE_WRITE = /^\/api\/notes(?:\/([^/]+))?$/;
+
+/** The body a record replays with. A note write with a quote's source keeps
+    its words when the anchor no longer resolves (onSourceLost "keep"): the
+    words land without the source, never dropped with it. Records queued
+    before this rule replay the same way. */
+function replayBody(record: QueuedWrite): unknown {
+  const body = record.body;
+  if (!body || typeof body !== "object" || !NOTE_WRITE.test(record.path)) return body;
+  if (record.method === "DELETE") return body;
+  if ("source" in body || "addSource" in body) return { ...body, onSourceLost: "keep" };
+  return body;
+}
+
+/** Tell the page what a note write's answer says: a quote that lost its
+    source, words kept as a new note. */
+async function announce(record: QueuedWrite, res: Response): Promise<void> {
+  if (typeof window === "undefined" || !NOTE_WRITE.test(record.path) || record.method === "DELETE") return;
+  const answer = (await res.json().catch(() => null)) as { id?: unknown; sourceDropped?: unknown; keptAs?: unknown } | null;
+  if (!answer) return;
+  const from = NOTE_WRITE.exec(record.path)?.[1];
+  const id = typeof answer.id === "string" ? answer.id : from;
+  if (answer.sourceDropped === true && id) {
+    window.dispatchEvent(new CustomEvent(SOURCE_LOST_EVENT, { detail: { noteId: id } }));
+  }
+  if (typeof answer.keptAs === "string" && from && from !== answer.keptAs) {
+    window.dispatchEvent(new CustomEvent(NOTE_KEPT_EVENT, { detail: { from, to: answer.keptAs } }));
+  }
+}
+
 async function sendWrite(record: QueuedWrite): Promise<Sent> {
   try {
+    const body = replayBody(record);
     const res = await fetch(record.path, {
       method: record.method,
-      headers: headers(record.account, record.body !== undefined),
-      body: record.body !== undefined ? JSON.stringify(record.body) : undefined,
+      headers: headers(record.account, body !== undefined),
+      body: body !== undefined ? JSON.stringify(body) : undefined,
     });
+    if (res.ok) await announce(record, res);
     return outcome(res, record, record.path);
   } catch {
     return "wait";
@@ -249,6 +298,19 @@ function firstRecord<T>(store: string): Promise<{ key: IDBValidKey; record: T } 
 }
 
 let syncing = false;
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+let retries = 0;
+
+/** Run the drain again after a growing wait, while the browser says online. */
+function retryLater() {
+  if (typeof window === "undefined" || retryTimer || isOffline()) return;
+  const wait = RETRY_MS[Math.min(retries, RETRY_MS.length - 1)];
+  retries++;
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    void syncQueue();
+  }, wait);
+}
 
 // Drain the queue in order, writes before uploads. Called on the online event,
 // on app start, and after new records land while online. One tab at a time:
@@ -268,24 +330,27 @@ export async function syncQueue(): Promise<void> {
             store === WRITES
               ? await sendWrite(head.record as QueuedWrite)
               : await sendUpload(head.record as QueuedUpload);
-          if (result === "wait") return false;
+          if (result === "wait") return "wait" as const;
           if (result === "retry") {
             const attempts = (head.record.attempts ?? 0) + 1;
             await tx(store, "readwrite", (s) => s.put({ ...head.record, attempts }, head.key));
-            return false;
+            return "retry" as const;
           }
           await tx(store, "readwrite", (s) => s.delete(head.key));
           sent++;
           notify();
         }
       }
-      return true;
+      return "drained" as const;
     };
-    const drained =
+    const ended =
       typeof navigator !== "undefined" && navigator.locks
         ? await navigator.locks.request(SYNC_LOCK, drain)
         : await drain();
-    if (drained) queuedSinceSync = false;
+    if (ended === "drained") {
+      queuedSinceSync = false;
+      retries = 0;
+    } else if (ended === "wait") retryLater();
   } finally {
     syncing = false;
     notify();

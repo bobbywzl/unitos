@@ -3,14 +3,24 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { arrayMove } from "@dnd-kit/sortable";
-import { api, ApiError } from "@/lib/api";
+import { api } from "@/lib/api";
 import { ACCOUNT_HEADER } from "@/lib/constants";
 import { tabAccount } from "@/lib/tab-account";
-import { refreshWhenOnline } from "@/lib/offline/queue";
+import { isOffline, NOTE_KEPT_EVENT, refreshWhenOnline, SOURCE_LOST_EVENT } from "@/lib/offline/queue";
 import { overlayQueuedNotes, useQueuedNoteWrites } from "@/lib/offline/queued-notes";
 import type { MergeMode } from "@/lib/card-drag";
-import { clearNoteDraft, confirmNoteDraft, noteDraftBase, readNoteDraft, sweepStaleDrafts } from "@/lib/note-drafts";
-import { saveNoteText } from "@/lib/notes/save-text";
+import {
+  clearNoteDraft,
+  confirmNoteDraft,
+  draftHoldsWords,
+  listNoteDrafts,
+  NOTE_DRAFT_CLEARED_EVENT,
+  noteDraftBase,
+  readNoteDraft,
+  sweepStaleDrafts,
+  writeNoteDraft,
+} from "@/lib/note-drafts";
+import { announceKept, saveNoteText } from "@/lib/notes/save-text";
 import { joinNoteContents } from "@/lib/notes/join";
 import type { QuoteDrag } from "@/lib/quote-drag";
 import { appendToBody } from "@/lib/note-title";
@@ -49,6 +59,8 @@ export type LastMerge = {
   undoId: string;
   targetId: string;
   count: number;
+  /** The text the merge wrote: Undo runs only while the note holds it. */
+  content: string;
   before?: { target: NoteView; sources: Placed[] };
 };
 const MERGE_UNDO_MS = 12_000;
@@ -90,7 +102,7 @@ export type OutlineActions = {
   saveNote: (id: string, content: string, base?: string) => Promise<void>;
   /** A quote dropped into the note (lib/quote-drag.ts): its anchor becomes
       a source of the note, so the quote points back to the reader. */
-  attachSource: (id: string, drag: QuoteDrag) => Promise<void>;
+  attachSource: (id: string, drag: QuoteDrag) => Promise<string[]>;
   /** A quote dropped on a note that is not open: the quote's words added at
       the end of the note and its source, in one write. */
   appendQuote: (id: string, markdown: string, drag: QuoteDrag) => Promise<void>;
@@ -98,6 +110,13 @@ export type OutlineActions = {
       copies of its anchors become sources of the note, so the quote it
       landed points back to the reader. */
   attachAnnotationSources: (id: string, annotationId: string) => Promise<void>;
+  /** An annotation dropped on a note that is not open: the annotation
+      reference added at the end of the note and copies of the annotation's
+      anchors, in one write. */
+  appendAnnotation: (id: string, markdown: string, annotationId: string) => Promise<void>;
+  /** Give up sources a quote dropped into the open editor attached: the
+      editor's Cancel took the quote's words back out. */
+  dropSources: (id: string, sourceIds: string[]) => Promise<void>;
   /** Delete at once, no Undo: the composer's Cancel, for the note it made. */
   deleteNote: (id: string) => Promise<void>;
   /** Delete with Undo (SPEC.md §6): the notes leave the list at once, and
@@ -128,6 +147,8 @@ export type OutlineActions = {
   stopMerge: (targetId: string) => void;
   /** The last merge, while Undo is offered. */
   lastMerge: LastMerge | null;
+  /** False once the merged note changed since the merge: Undo cannot run. */
+  mergeUndoable: boolean;
   /** Undo the last merge. Resolves to the reason when it could not run. */
   undoMerge: () => Promise<string | null>;
   /** The pill's ✕: the merge stays, and a delete waiting on Undo runs now. */
@@ -205,6 +226,30 @@ function putBack(sections: SectionView[], placed: Placed): SectionView[] {
 function withoutNotes(sections: SectionView[], ids: ReadonlySet<string>): SectionView[] {
   return mapSections(sections, (s) =>
     s.notes.some((n) => ids.has(n.id)) ? { ...s, notes: s.notes.filter((n) => !ids.has(n.id)) } : s,
+  );
+}
+
+/** The tree with the words this tab holds drawn over the server's copy
+    (useOutline's localTexts). */
+function overlayLocalTexts(
+  sections: SectionView[],
+  texts: ReadonlyMap<string, { content: string; unsaved: boolean }>,
+): SectionView[] {
+  if (texts.size === 0) return sections;
+  return mapSections(sections, (s) =>
+    s.notes.some((n) => texts.has(n.id))
+      ? {
+          ...s,
+          notes: s.notes.map((n) => {
+            const local = texts.get(n.id);
+            if (!local) return n;
+            if (!local.unsaved && local.content.trim() === n.content.trim()) return n;
+            // The gist was written for the server's text: the row shows the
+            // first words of these until a save lands.
+            return { ...n, content: local.content, gist: null, ...(local.unsaved ? { unsaved: true } : {}) };
+          }),
+        }
+      : s,
   );
 }
 
@@ -314,6 +359,37 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
     (err: unknown) => setNotice(err instanceof Error && err.message ? err.message : t("common.requestFailed")),
     [t],
   );
+  // Words this tab holds for a note that the server's copy may not show
+  // yet: a save on its way (a document switch brings the server's copy
+  // before the save lands), or a local draft whose save failed (`unsaved`:
+  // drawn marked Not saved until a save lands). Drawn over the tree.
+  const [localTexts, setLocalTexts] = useState<ReadonlyMap<string, { content: string; unsaved: boolean }>>(new Map());
+  const setLocalText = useCallback((id: string, entry: { content: string; unsaved: boolean } | null) => {
+    setLocalTexts((prev) => {
+      if (entry === null && !prev.has(id)) return prev;
+      const next = new Map(prev);
+      if (entry === null) next.delete(id);
+      else next.set(id, entry);
+      return next;
+    });
+  }, []);
+  // A draft cleared (its save landed, or Cancel): its kept words are no
+  // longer the reader's only copy.
+  useEffect(() => {
+    const onCleared = (e: Event) => {
+      const id = (e as CustomEvent<{ noteId?: unknown }>).detail?.noteId;
+      if (typeof id !== "string") return;
+      setLocalTexts((prev) => {
+        const entry = prev.get(id);
+        if (!entry?.unsaved) return prev;
+        const next = new Map(prev);
+        next.delete(id);
+        return next;
+      });
+    };
+    window.addEventListener(NOTE_DRAFT_CLEARED_EVENT, onCleared);
+    return () => window.removeEventListener(NOTE_DRAFT_CLEARED_EVENT, onCleared);
+  }, []);
   // The composer letting its note go (expectComposed), by section.
   const composedSection = useRef<string | null>(null);
   const [focusIndex, setFocusIndex] = useState(0);
@@ -342,7 +418,9 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
     sweepStaleDrafts();
     if (!canEdit) return;
     const replay: { id: string; content: string; base: string }[] = [];
+    const inTree = new Set<string>();
     for (const note of flattenNotes(tree)) {
+      inTree.add(note.id);
       const draft = readNoteDraft(note.id);
       if (!draft) continue;
       const content = draft.content.trim();
@@ -353,29 +431,87 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
       }
       replay.push({ id: note.id, content, base: base ?? note.content });
     }
-    if (replay.length === 0) return;
-    const byId = new Map(replay.map((r) => [r.id, r.content]));
-    setTree((prev) =>
-      prev.map(function walk(s): SectionView {
-        return {
-          ...s,
-          notes: s.notes.map((n) => (byId.has(n.id) ? { ...n, content: byId.get(n.id)! } : n)),
-          children: s.children.map(walk),
-        };
-      }),
-    );
-    void Promise.all(
-      replay.map((r) =>
+    // A draft with words whose note is not in the project's notes: the note
+    // was deleted or merged away elsewhere while the words waited, or it is
+    // another project's. A gone note's words become a new note in its place
+    // (lib/notes/gone.ts); a note that still exists refuses the save
+    // (onlyIfGone), and its own project's load saves the draft. Online only:
+    // the draft stays until the server answers.
+    const orphans = isOffline()
+      ? []
+      : listNoteDrafts().filter(({ noteId, draft }) => !inTree.has(noteId) && draftHoldsWords(draft));
+    if (replay.length === 0 && orphans.length === 0) return;
+    // The words show at once, and stay on the card, marked Not saved, when
+    // the save fails: a refresh never puts the old text over them.
+    setLocalTexts((prev) => {
+      const next = new Map(prev);
+      for (const r of replay) next.set(r.id, { content: r.content, unsaved: false });
+      return next;
+    });
+    void Promise.all([
+      ...replay.map((r) =>
         saveNoteText(r.id, r.content, r.base)
-          .then(() => confirmNoteDraft(r.id, r.content))
+          .then((saved) => {
+            confirmNoteDraft(r.id, r.content);
+            confirmNoteDraft(r.id, saved.content);
+            setLocalText(r.id, null);
+          })
           .catch(() => {
-            // Still unsaved: the draft stays for the next load.
+            // Still unsaved: the draft stays for the editor and the next load.
+            setLocalText(r.id, { content: r.content, unsaved: true });
           }),
       ),
-    ).then(refresh);
+      ...orphans.map(({ noteId, draft }) => {
+        const base = noteDraftBase(draft, draft.base ?? "") ?? draft.base ?? "";
+        return saveNoteText(noteId, draft.content, base, { onlyIfGone: true })
+          .then((saved) => {
+            if (!saved.queued) clearNoteDraft(noteId);
+          })
+          .catch(() => {});
+      }),
+    ]).then(refresh);
     // Once per load: the tree at mount is the server's state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Words written to a note that went elsewhere were kept as a new note in
+  // its place (lib/notes/gone.ts): the new note takes the old one's place
+  // in the list, its local draft and its open editor follow it, and the
+  // pill says so.
+  useEffect(() => {
+    const seen = new Set<string>();
+    const onKept = (e: Event) => {
+      const detail = (e as CustomEvent<{ from?: unknown; to?: unknown }>).detail;
+      const from = detail?.from;
+      const to = detail?.to;
+      if (typeof from !== "string" || typeof to !== "string" || seen.has(from)) return;
+      seen.add(from);
+      const draft = readNoteDraft(from);
+      const open = openDraftSave(from) !== null;
+      if (draft) {
+        writeNoteDraft(to, draft.content, draft.base, draft.sent);
+        clearNoteDraft(from);
+      }
+      setTree((prev) =>
+        mapSections(prev, (s) =>
+          s.notes.some((n) => n.id === from)
+            ? { ...s, notes: s.notes.map((n) => (n.id === from ? { ...n, id: to } : n)) }
+            : s,
+        ),
+      );
+      if (open) setEditRequest({ id: to, ...(draft ? { draft: draft.content } : {}) });
+      setNotice(t("outline.keptAsNewNote"));
+      refresh();
+    };
+    // A quote landed without its source: its passage changed in the document.
+    const onSourceLost = () => setNotice(t("outline.quoteSourceLost"));
+    window.addEventListener(NOTE_KEPT_EVENT, onKept);
+    window.addEventListener(SOURCE_LOST_EVENT, onSourceLost);
+    return () => {
+      window.removeEventListener(NOTE_KEPT_EVENT, onKept);
+      window.removeEventListener(SOURCE_LOST_EVENT, onSourceLost);
+    };
+  }, [refresh, t]);
 
   // The notes the AI is merging right now: their cards say so while it runs.
   const [merging, setMergingIds] = useState<ReadonlySet<string>>(new Set());
@@ -395,9 +531,22 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
   // note back with the refresh, and the pill says why.
   const undoMerge = useCallback(async (): Promise<string | null> => {
     if (!lastMerge) return null;
-    const { undoId, targetId, before } = lastMerge;
+    const { undoId, targetId, before, content } = lastMerge;
+    // The merged note open in its editor: what it holds is saved first, so
+    // the route reads the note as it is.
+    await flushNoteDrafts([targetId]).catch(() => {});
+    const now = placeOf(treeRef.current, targetId)?.note.content;
+    // The notes come back on screen before the answer only when the undo
+    // will run: the merged note still holds what the merge wrote, and no
+    // editor is open on it. Else the answer decides, and nothing flickers.
+    const sure = openDraftSave(targetId) === null && now !== undefined && now.trim() === content.trim();
+    if (!sure && now !== undefined && now.trim() !== content.trim()) {
+      setLastMerge(null);
+      return t("outline.mergeEditedSince");
+    }
     setLastMerge(null);
-    if (before) {
+    const putBackNow = () => {
+      if (!before) return;
       setTree((prev) => {
         let next = mapSections(prev, (s) =>
           s.notes.some((n) => n.id === targetId)
@@ -407,16 +556,19 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
         for (const placed of [...before.sources].sort((a, b) => a.index - b.index)) next = putBack(next, placed);
         return next;
       });
-    }
+    };
+    if (sure) putBackNow();
     try {
-      await api("/api/notes/merge/undo", "POST", { undoId });
+      // A refused undo is an answer, not a failed save: the header stays.
+      await api("/api/notes/merge/undo", "POST", { undoId }, { refusalIsAnswer: true });
     } catch (err) {
       refresh();
       return err instanceof Error ? err.message : String(err);
     }
+    if (!sure) putBackNow();
     refresh();
     return null;
-  }, [lastMerge, refresh]);
+  }, [lastMerge, refresh, t]);
 
   // Delete with Undo (SPEC.md §6). The notes leave the list at once; the
   // server deletes them when the pill goes. Until then nothing is deleted,
@@ -472,6 +624,11 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
       }
       void Promise.allSettled(waiting.ids.map((id) => api(`/api/notes/${id}`, "DELETE"))).then((results) => {
         const failed = waiting.ids.filter((_, i) => results[i].status === "rejected");
+        // The reader deleted these notes: a draft left of one is not words
+        // to keep as a new note on the next load.
+        waiting.ids.forEach((id, i) => {
+          if (results[i].status === "fulfilled") clearNoteDraft(id);
+        });
         const reason = results.find((r): r is PromiseRejectedResult => r.status === "rejected")?.reason;
         if (failed.length > 0) {
           restoreNotes(failed);
@@ -548,7 +705,10 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
   // The tree on screen: the open document's notes, or the whole project —
   // with the notes saved offline drawn in, marked, until the queue syncs.
   const queued = useQueuedNoteWrites();
-  const shownTree = useMemo(() => overlayQueuedNotes(tree, queued.writes, queued.landed), [tree, queued]);
+  const shownTree = useMemo(
+    () => overlayLocalTexts(overlayQueuedNotes(tree, queued.writes, queued.landed), localTexts),
+    [tree, queued, localTexts],
+  );
   const scopedTree = useMemo(
     () => (documentId && scopeToDocument ? scopeSections(shownTree, documentId) : shownTree),
     [shownTree, documentId, scopeToDocument],
@@ -639,9 +799,34 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
     refresh();
   }, [lastRejected, refresh, failure]);
 
+  // The pending queue's keys act only while the reader works the queue
+  // (SPEC.md §6): the last press or focus was inside the pending queue or on
+  // a pending card. A key pressed after a click in the article, the graph,
+  // or anywhere else never accepts or rejects a note.
+  const workingQueue = useRef(false);
+  const pendingRef = useRef(pending);
+  useLayoutEffect(() => {
+    pendingRef.current = pending;
+  });
+  useEffect(() => {
+    const inQueue = (e: Event) => {
+      const el = e.target instanceof Element ? e.target : null;
+      workingQueue.current = Boolean(el?.closest('[data-pending-queue], [data-note-status="PENDING"]'));
+      // A pending card pressed becomes the one the keys act on.
+      const card = el?.closest<HTMLElement>('[data-note-status="PENDING"]');
+      const index = card ? pendingRef.current.findIndex((n) => n.id === card.dataset.noteId) : -1;
+      if (index !== -1) setFocusIndex(index);
+    };
+    window.addEventListener("pointerdown", inQueue, true);
+    window.addEventListener("focusin", inQueue, true);
+    return () => {
+      window.removeEventListener("pointerdown", inQueue, true);
+      window.removeEventListener("focusin", inQueue, true);
+    };
+  }, []);
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (pending.length === 0) return;
+      if (pending.length === 0 || !workingQueue.current) return;
       const target = e.target as HTMLElement | null;
       if (
         target &&
@@ -687,6 +872,36 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [pending, focusIndex, notebook.id, router, acceptNote, rejectNote, canEdit]);
+
+  // Words added at the end of a note that is not open, with what rides
+  // along (a quote's source, an annotation's anchors), in one write. The
+  // route adds the words to the note's stored text.
+  async function appendWords(id: string, markdown: string, extra: Record<string, unknown>) {
+    const before = placeOf(treeRef.current, id)?.note.content;
+    const setContent = (text: string) =>
+      setTree((prev) =>
+        mapSections(prev, (s) =>
+          s.notes.some((n) => n.id === id)
+            ? { ...s, notes: s.notes.map((n) => (n.id === id ? { ...n, content: text } : n)) }
+            : s,
+        ),
+      );
+    if (before !== undefined) setContent(appendToBody(before, markdown));
+    try {
+      const answer = await api<{ sourceDropped?: unknown; keptAs?: unknown }>(`/api/notes/${id}`, "PATCH", {
+        append: markdown,
+        ...extra,
+      });
+      if (answer?.sourceDropped === true) setNotice(t("outline.quoteSourceLost"));
+      announceKept(id, answer);
+      // The card blooms as the words land in it: the drop shows it landed.
+      window.dispatchEvent(new CustomEvent(NOTE_ABSORBED_EVENT, { detail: { noteId: id } }));
+    } catch (err) {
+      if (before !== undefined) setContent(before);
+      throw err;
+    }
+    refresh();
+  }
 
   const actions: OutlineActions = {
     notebookId: notebook.id,
@@ -746,9 +961,16 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
         content,
         top: from.top,
         ...(from.quote
-          ? { source: from.quote.source, ...(from.quote.segments ? { segments: from.quote.segments } : {}) }
+          ? {
+              source: from.quote.source,
+              ...(from.quote.segments ? { segments: from.quote.segments } : {}),
+              // A quote whose place the document no longer has still makes
+              // its note, without the source; the pill says why.
+              onSourceLost: "keep",
+            }
           : { documentId: documentId ?? undefined }),
       });
+      if ((row as { sourceDropped?: unknown } | null)?.sourceDropped === true) setNotice(t("outline.quoteSourceLost"));
       if (!row || typeof row.id !== "string") {
         refresh();
         return;
@@ -790,15 +1012,26 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
           ),
         );
       if (before !== undefined && before !== content) setContent(content);
+      // Drawn over the server's copy while the save is on its way: a
+      // refresh that lands first (another document opened) never shows the
+      // old text.
+      setLocalText(id, { content, unsaved: false });
       try {
         const save = openDraftSave(id);
         if (base !== undefined) await saveNoteText(id, content, base);
         else if (save) await save(content);
         else await saveNoteText(id, content, before ?? null);
       } catch (err) {
-        if (before !== undefined && before !== content) setContent(before);
+        // Words the local draft holds stay on the card, marked Not saved;
+        // anything else goes back to what the note held.
+        if (readNoteDraft(id)?.content.trim() === content.trim()) setLocalText(id, { content, unsaved: true });
+        else {
+          setLocalText(id, null);
+          if (before !== undefined && before !== content) setContent(before);
+        }
         throw err;
       }
+      setLocalText(id, null);
       // The composer's own note, let go by Save or Escape: it joins the top
       // of its section now, as the composer closes.
       const composed = composedSection.current;
@@ -812,9 +1045,19 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
       composedSection.current = sectionId;
     },
     async attachSource(id, drag) {
-      await api(`/api/notes/${id}`, "PATCH", {
+      const answer = await api<{ addedSourceIds?: unknown; sourceDropped?: unknown }>(`/api/notes/${id}`, "PATCH", {
         addSource: { source: drag.source, ...(drag.segments ? { segments: drag.segments } : {}) },
+        onSourceLost: "keep",
       });
+      if (answer?.sourceDropped === true) setNotice(t("outline.quoteSourceLost"));
+      refresh();
+      return Array.isArray(answer?.addedSourceIds)
+        ? answer.addedSourceIds.filter((s): s is string => typeof s === "string")
+        : [];
+    },
+    async dropSources(id, sourceIds) {
+      if (sourceIds.length === 0) return;
+      await api(`/api/notes/${id}`, "PATCH", { removeSources: sourceIds });
       refresh();
     },
     async appendQuote(id, markdown, drag) {
@@ -827,34 +1070,23 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
         await actions.attachSource(id, drag);
         return;
       }
-      // The route adds the words to the note's stored text.
-      const setContent = (text: string) =>
-        setTree((prev) =>
-          mapSections(prev, (s) =>
-            s.notes.some((n) => n.id === id)
-              ? { ...s, notes: s.notes.map((n) => (n.id === id ? { ...n, content: text } : n)) }
-              : s,
-          ),
-        );
-      if (before !== undefined) setContent(appendToBody(before, markdown));
-      try {
-        await api(`/api/notes/${id}`, "PATCH", {
-          append: markdown,
-          addSource: { source: drag.source, ...(drag.segments ? { segments: drag.segments } : {}) },
-        });
-      } catch (err) {
+      await appendWords(id, markdown, {
+        addSource: { source: drag.source, ...(drag.segments ? { segments: drag.segments } : {}) },
         // A quote whose place the document no longer has: its words still
-        // land, as they did before the source was sent with them, and the
-        // caller hears why it has no source.
-        if (err instanceof ApiError && err.status === 400) {
-          await api(`/api/notes/${id}`, "PATCH", { append: markdown }).catch(() => {
-            if (before !== undefined) setContent(before);
-          });
-          refresh();
-        } else if (before !== undefined) setContent(before);
-        throw err;
+        // land, without the source, and the pill says why.
+        onSourceLost: "keep",
+      });
+    },
+    async appendAnnotation(id, markdown, annotationId) {
+      // The annotation reference and copies of the annotation's anchors in
+      // one write, as a quote's words and its source go (SPEC.md §6).
+      const before = placeOf(treeRef.current, id)?.note.content;
+      if (before !== undefined && openDraftSave(id)) {
+        await actions.saveNote(id, appendToBody(before, markdown));
+        await actions.attachAnnotationSources(id, annotationId);
+        return;
       }
-      refresh();
+      await appendWords(id, markdown, { copySourcesFrom: annotationId });
     },
     async attachAnnotationSources(id, annotationId) {
       await api(`/api/notes/${id}`, "PATCH", { copySourcesFrom: annotationId });
@@ -908,6 +1140,9 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
       });
       await api(`/api/notes/${id}`, "PATCH", { sectionId, ...(toIndex === undefined ? {} : { order: toIndex }) });
       refresh();
+      // The tray shows where the note went: a folded section unfolds on it,
+      // and the note flashes.
+      window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: id } }));
     },
     async mergeNotes(targetId, sourceIds, mode = "join") {
       const all = flattenNotes(tree);
@@ -971,8 +1206,16 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
         );
         refresh();
         const undoId = typeof merged?.undoId === "string" ? merged.undoId : null;
-        if (undoId) setLastMerge({ undoId, targetId, count: ids.length + 1, before });
         const content = merged?.content ?? joined;
+        // The merged note shows the text the merge wrote, which Undo checks against.
+        setTree((prev) =>
+          mapSections(prev, (s) =>
+            s.notes.some((n) => n.id === targetId)
+              ? { ...s, notes: s.notes.map((n) => (n.id === targetId ? { ...n, content } : n)) }
+              : s,
+          ),
+        );
+        if (undoId) setLastMerge({ undoId, targetId, count: ids.length + 1, content, before });
         // The target open in its editor: the merged text takes the draft's
         // place, saved and ready to keep editing.
         if (mode === "join") replaceNoteDraft(targetId, content);
@@ -1001,6 +1244,9 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
       mergeAborts.current.get(targetId)?.abort();
     },
     lastMerge,
+    mergeUndoable:
+      lastMerge !== null &&
+      (placeOf(tree, lastMerge.targetId)?.note.content.trim() ?? lastMerge.content.trim()) === lastMerge.content.trim(),
     undoMerge,
     dismissMerge() {
       setLastMerge(null);

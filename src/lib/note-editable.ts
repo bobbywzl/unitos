@@ -261,8 +261,12 @@ export function newlineFor(text: string, caret: number): { insert: string; from:
     return { insert: `\n${indent.slice(0, Math.max(0, caret - lineStart))}`, from: caret };
   }
   if (line.slice(lead[0].length).trim() === "") {
-    // An empty item: the marker goes, the caret stays on a plain line.
-    return { insert: lead[1], from: lineStart };
+    // An empty item: the marker goes, the caret stays on a plain line. At
+    // the top level a blank line comes first: in Markdown a line right
+    // under a quote or a list item is part of it, so the next words would
+    // save inside the quote or the last item.
+    const blank = lead[1] === "" && lineStart > 0 && text[lineStart - 2] !== "\n" ? "\n" : "";
+    return { insert: `${blank}${lead[1]}`, from: lineStart };
   }
   const marker = lead[2]
     ? `${lead[2]} ${lead[3] ? "[ ] " : ""}`
@@ -484,7 +488,9 @@ export function attachNoteEditable(
     const collapsed = sel.start === sel.end;
     let { insert, from } = plain || !collapsed ? { insert: "\n", from: Math.min(sel.start, sel.end) } : newlineFor(text, sel.start);
     let to = Math.max(sel.start, sel.end);
-    if (insert.startsWith("\n") && collapsed) {
+    // An empty item ending its list (from at the line's start) replaces the
+    // marker whole; only a break at the caret moves around a run's markers.
+    if (insert.startsWith("\n") && collapsed && from === sel.start) {
       const run = runAt(lines, from);
       if (run) {
         // Spaces beside the break would sit against a marker; markdown wants

@@ -1,0 +1,195 @@
+# loop/r11-notes
+
+**Intent:** Fix the round 11 notes package: every NOTE11 finding in `.qa-tmp/audit/r11/notes.md`, plus NAV11-01, EDGE11-01, EDGE11-03, EDGE11-05, and EDGE11-10. The blocking findings come first, each proved with the database.
+
+## Findings
+
+Screenshots are under `.qa-tmp/fix/` in the worktree. They are not committed, because `.qa-tmp` is ignored. Every after was taken on this worktree's server (:3131), in the test project "Fix r11 notes". Where a before says "audit's", it is the audit's own shot of the same code, copied from `/home/user/unitos/.qa-tmp/audit/r11/`.
+
+- **NOTE11-01 (blocking): fixed.**
+  - What changed: a note write accepts `onSourceLost: "keep"`. With it, a quote whose anchor no longer resolves lands its words without the source, and the answer carries `sourceDropped`. The offline queue replays every note write that carries a source with "keep", including records queued before this change. The tray's own quote drops send "keep" too. A pill says the quote has no source.
+  - Database check, offline drop then paragraph edit: the quote's words are in the note and the source is not.
+  - Database check, offline Add to notes: the note is created with 0 sources.
+  - Screenshots: `NOTE11-01-before.png` and `-after.png`; `NOTE11-01-add-before.png` and `-add-after.png`.
+- **NOTE11-02 (blocking): fixed** in commit 622f10b.
+  - What changed: the note PATCH and the merge read and write the note with its row locked (`SELECT … FOR UPDATE` in one transaction).
+  - Database check, two appends at once: both quotes kept, 4 runs out of 4.
+  - Database check, save beside append: both kept.
+  - Two saves from one base: the second answers 409.
+  - Screenshots: `NOTE11-02-before.png` and `-after.png`.
+- **NOTE11-03 (blocking): fixed.**
+  - What changed: an annotation dropped on a closed note is one PATCH `{append, copySourcesFrom}`.
+  - Database check: one request; the reference and the remark are added; the sources go from 4 to 5.
+  - Screenshots: `NOTE11-03-before.png` (audit's) and `-after.png`.
+- **NOTE11-04 (blocking) and EDGE11-03 (blocking): fixed.**
+  - What changed: a write with words to a note that is gone makes a new note in its section, at its place, and the answer carries `keptAs`. The note's NOTE_REMOVE or NOTE_MERGE event remembers the new note. Every later write, and a delete, of the gone note goes to that note. The open editor moves to the new note with its draft, and a pill says so. Done no longer throws. A draft left on load whose note is not in the project is sent with `onlyIfGone`, so it rescues only a gone note.
+  - Database check, online: "base early late" is in the new note.
+  - Database check, offline: "base offline-…" is in the new note.
+  - API check: `onlyIfGone` on a live note answers 409 and changes nothing; on a gone note it makes one new note; a second write goes to the same note.
+  - Screenshots: `NOTE11-04-before.png` and `-after.png`; `EDGE11-03-before.png` (audit's) and `-after.png`.
+- **EDGE11-01 (blocking): fixed.**
+  - What changed: on load, a draft the server never confirmed is drawn on the card, marked Not saved, and is never reverted by a refresh. The editor opens with it, and the next keystroke builds on it.
+  - Database check: after "server back, Done", both "first" and "second" are in the note.
+  - Screenshots: `EDGE11-01-before.png` (audit's) and `-after.png`.
+- **EDGE11-05: fixed.**
+  - What changed: while records wait and the browser says online, a write that never reached the server is tried again after 2, 4, 8, 15, then every 30 s. A 5xx keeps its old rule, so the timer never spends its five tries. The editor reads "Waiting to sync" for a queued save, not Saved.
+  - Database check: the words are in the note within 20 s, with no reload.
+  - Screenshots: `EDGE11-05-before.png` (audit's) and `-after.png`.
+- **EDGE11-10: fixed.**
+  - What changed: a save on its way is drawn over the server's copy until it lands.
+  - Check: switching document during a save, the words stay on screen throughout.
+  - Screenshots: `EDGE11-10-before.png` (audit's) and `-after.png`.
+- **NAV11-01 (blocking): fixed.**
+  - What changed: the pending keys act only when the last press or focus was in the pending queue or on a pending card. A pressed pending card becomes the one the keys act on.
+  - Checked with `.qa-tmp/fix/nav-stray-keys.mjs` against the database:
+    - Backspace and Enter after a click in the article change nothing.
+    - On a pending card, Backspace rejects and Enter accepts.
+    - With the tray folded, Backspace changes nothing.
+  - Screenshots: `NAV11-01-before.png` (audit's) and `-after.png`.
+- **NOTE11-05: fixed.**
+  - What changed: Enter on an empty top-level item leaves a blank line before the caret.
+  - Database check, quote: `"> A quote line from the article.\n\nMy own thought…"`, which renders outside the quote.
+  - Database check, checklist: `"- [ ] Task one\n\nMy own thought…"`, outside the item.
+  - Screenshots: `NOTE11-05-before.png` (audit's), `-after.png`, `-after-checklist.png`, `-editor-after.png`.
+- **NOTE11-06: fixed.**
+  - What changed: Undo flushes the open editor first and checks the note against what the merge wrote. If the note changed, the pill gives the reason with no flicker, and the header stays Saved (a refused undo is an answer, not a failed save). The pill reads "Edited since the merge" in place of Undo.
+  - Database check: TYPED-AFTER-MERGE is in the note.
+  - Screenshots: `NOTE11-06-before.png` (audit's) and `-after.png`.
+- **NOTE11-07: fixed.**
+  - What changed: Cancel gives up the sources its sitting's drops attached (`removeSources`, only that note's ids).
+  - Database check: sources 4, then 5 after the drop, then 4 after Cancel.
+  - Screenshots: `NOTE11-07-before.png` (audit's) and `-after.png`.
+- **NOTE11-08: fixed.**
+  - What changed: offline, Command does not record and says AI is off. A failed send keeps the recording, with Send again and a discard button.
+  - Screenshots: `NOTE11-08-before.png` (audit's) and `-after.png`.
+- **NOTE11-09: fixed.**
+  - What changed: the floating note calls `quoteLanded()`, so the tint clears.
+  - Screenshots: `NOTE11-09-before.png` (audit's) and `-after.png`.
+- **NOTE11-10: not fixed.** The reject's Undo bar is in `workspace.tsx`, which this package does not own (Needs).
+- **NOTE11-11: fixed.**
+  - What changed: the title-row hint takes the place of + Note and Command on the row itself.
+  - Check: the cards stay at y 335 / 399 / 463 / 527 while the quote is held.
+  - Screenshots: `NOTE11-11-before.png` (audit's) and `-after.png`.
+- **NOTE11-12: fixed.**
+  - What changed: a move to another section sends `dissect:show-note`, so the tray unfolds the section.
+  - Check: `aria-expanded` is true after the drop.
+  - Screenshots: `NOTE11-12-before.png` (audit's) and `-after.png`.
+- **NOTE11-13: fixed.**
+  - What changed: the card blooms (`note-absorb`) when the dropped words land.
+  - Check: the class is seen on the target card, and the database has the quote.
+  - Screenshots: `NOTE11-13-before.png` (audit's) and `-after.png`. The bloom is brief in a still picture.
+- **NOTE11-14: fixed.**
+  - What changed: a collapsed row shows the offline or failed state as its icon, with the words in the tooltip.
+  - Database check: the words land after going online.
+  - Screenshots: `NOTE11-14-before.png` (audit's) and `-after.png`.
+- **NOTE11-15: fixed.**
+  - What changed: the tooltip reads "8 sources · How Reading Shapes Memory (r11 notes)", with each document once; zh "4 处出处 · …".
+  - Screenshot: `NOTE11-15-after.png`. There is no before image; the audit's `21-zh` log is the before.
+- **NOTE11-16: fixed.**
+  - What changed: a note restored in its own section takes its old row.
+  - Database check: A | C, then A | B | C after Restore.
+  - Screenshots: `NOTE11-16-before.png` (audit's) and `-after.png`.
+
+The whole notes script set was run again (`.qa-tmp/fix/run2`, `run3`). Every script passes. Some scripts had hard-coded ids or positions, so this project's own notes were made again for them with `.qa-tmp/fix/reseed.mjs`. Scripts 08b and 17 waited less time than this slow dev server needed, so they were given longer waits. With those, the merge on the board, its pill, and its Undo pass. `npx tsc --noEmit` and eslint on every changed file are clean.
+
+## Files
+
+- `src/app/api/notes/[noteId]/route.ts`:
+  - the row lock;
+  - `onSourceLost`;
+  - writes to a gone note (`writeGoneNote`, `keptAs`, `onlyIfGone`);
+  - `removeSources`;
+  - `addedSourceIds`;
+  - a DELETE of a gone note goes to the note that kept its words.
+- `src/app/api/notes/route.ts`: `onSourceLost` on create (622f10b).
+- `src/app/api/notes/merge/route.ts`: the merge locks its notes and refuses when one changed (622f10b).
+- `src/lib/notes/edits.ts`: `recordNoteEdit` takes a transaction (622f10b).
+- `src/lib/notes/gone.ts` (new): where a gone note stood, and the new note that keeps words written to it.
+- `src/lib/notes/save-text.ts`:
+  - `announceKept`;
+  - the queued flag;
+  - `onlyIfGone`.
+- `src/lib/notes/removed.ts`: Restore puts the note back at its row.
+- `src/lib/offline/queue.ts`:
+  - replay with `onSourceLost: "keep"`;
+  - the source-lost and note-kept events;
+  - the timed retry.
+- `src/lib/offline/queued-notes.ts`: a queued text drops the stale gist.
+- `src/lib/api.ts`: `refusalIsAnswer`.
+- `src/lib/note-drafts.ts`:
+  - the draft-cleared event;
+  - `draftHoldsWords`;
+  - `listNoteDrafts`.
+- `src/lib/note-editable.ts`: Enter on an empty item (NOTE11-05). Not in this package's list; no other package claims it.
+- `src/lib/types.ts`: `NoteView.unsaved`. Not in this package's list; one optional field.
+- `src/lib/i18n/dict/outline.ts`: new en and zh strings:
+  - keptAsNewNote
+  - quoteSourceLost
+  - mergeEditedSince
+  - sendCommandAgain
+  - sendCommandAgainTitle
+  - discardCommand
+  - sourceTitle
+  - sourcesTitle
+- `src/components/outline/use-outline.ts`:
+  - local texts drawn over the tree;
+  - draft replay on load;
+  - the note-kept and source-lost listeners;
+  - merge Undo;
+  - pending keys scoped to the queue;
+  - one-write drops (`appendWords`, `appendAnnotation`);
+  - `dropSources`;
+  - the show-note event after a move.
+- `src/components/outline/use-note-draft.ts`:
+  - a draft the server never confirmed is adopted;
+  - the queued state.
+- `src/components/outline/note-card.tsx`:
+  - Cancel gives up the sitting's sources;
+  - Done catches its error;
+  - an annotation drop is one write;
+  - `data-note-status`;
+  - compact save state;
+  - the source tooltip.
+- `src/components/outline/floating-note-editor.tsx`:
+  - `quoteLanded()`;
+  - Cancel gives up the sitting's sources;
+  - an annotation drop is one write;
+  - Done catches its error.
+- `src/components/outline/merge-undo.tsx`: "Edited since the merge".
+- `src/components/outline/save-state.tsx`: the compact icon form.
+- `src/components/outline/sources-tip.ts` (new) and `note-tile.tsx`: the source count's tooltip.
+- `src/components/outline/notes-tray.tsx`: the title-row hint.
+- `src/components/outline/voice-note.tsx`:
+  - offline start;
+  - Send again;
+  - discard.
+- `SPEC.md`, §6 lines on:
+  - the title-row drop;
+  - merge Undo;
+  - drafts and gone notes;
+  - Enter on an empty item;
+  - drops and Cancel;
+  - the source tooltip;
+  - the voice command;
+  - the keyboard queue.
+- `SPEC.md`, also:
+  - §12 Restore;
+  - §17 the offline queue.
+
+## Decisions
+
+- **NOTE11-04: the words are kept automatically, as a new note in the gone note's place.** The other option was to refuse the write and offer Restore. That needs a hidden step: the reader would have to know to open History. A new note in place needs none, and works the same for a write that waited in the offline queue. The decision is made on the server, so a replay from the queue, a second tab, and a reload all land in the same note (`keptAs`).
+- **The queue sets `onSourceLost: "keep"` when it replays.** It is not set when the write is queued, so records queued before this change are covered too.
+- **The timed retry runs only for writes that never reached the server.** A 5xx keeps its existing drop on the fifth try. If the timer also retried 5xx answers, a server down for half a minute would use up the five tries and drop typed words.
+- **Orphan drafts are sent with `onlyIfGone`.** A draft whose note is in another project is not saved from this project's load: that note's own project saves it, as before. This also avoids writing over an editor open in another tab.
+- **Pending keys need a press or focus in the queue**, as the brief said, not a check on where focus is right now. A pressed pending card becomes the focused one.
+- **Merge Undo reads the tree, not only the server.** When the note differs from what the merge wrote, the pill gives the reason at once with no request. When the note matches, the notes come back at once. In every other case the server answers first.
+- **Commits.** The blocking fixes and the friction and polish fixes that live in the same files (use-outline, note-card, the floating editor) are one commit, f01ea49. Splitting `use-outline.ts` by hunk would leave commits that do not build.
+- **Unused strings.** Commit f01ea49 adds the voice command's three strings, which commit 70533c9 uses.
+
+## Needs
+
+- **NOTE11-10, in `src/components/reader/workspace.tsx`:** move the reject's Undo bar (about lines 857-869) into the one pill on the body (`MergeUndoBar` in `merge-undo.tsx`), the newest Undo replacing the one before. NAV11-01's "with the tray folded no Undo shows" is the same bar.
+- **`src/components/reader/reader-interactions.tsx`:** Add to notes and Add to a note… could send `onSourceLost: "keep"` with their source, so a quote whose passage changed while the toolbar was open still lands its words. The offline queue already covers these writes when they are queued.
+- **NAV11-15, in `src/lib/i18n/dict/works.ts`:** the guide's Keys card could list the pending queue's keys (Enter, Backspace, j, k, e, g), now that NAV11-01 scopes them to the queue.
+- **Observation:** in one run, the dev server restarted itself for memory just as Done was pressed, and the test browser was then torn down. The save was queued (correct), but the test could not confirm it landed. A run on a warm server lands it within 20 s (`.qa-tmp/fix/t11-500.log`). The same body sent by hand lands. It is worth one more look on a production build.
