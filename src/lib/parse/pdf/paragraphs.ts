@@ -100,6 +100,13 @@ export function markEdges(lines: Line[], ctx: PageContext) {
     if (lines[0].page <= markedPage) justifiedDocument = false;
     markedPage = lines[0].page;
   }
+  markLineEdges(lines, ctx);
+}
+
+/** Each line's column edge (markEdges), for a page's lines or for their
+    mirrored copies (mirror.ts): a right-to-left line's edge is where its
+    column's lines end, read as a start once mirrored. */
+export function markLineEdges(lines: Line[], ctx: PageContext) {
   const near = (a: number, b: number, tolerance: number) => Math.abs(a - b) <= tolerance;
   for (const line of lines) {
     const size = line.size;

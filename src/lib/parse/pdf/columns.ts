@@ -28,6 +28,12 @@ export function lineColumn(line: Line): [number, number] | undefined {
   return columns.get(line);
 }
 
+/** A mirrored line's column (mirror.ts): its line's, mirrored across the axis. */
+export function mirrorColumn(from: Line, to: Line, axis: number) {
+  const column = columns.get(from);
+  if (column) columns.set(to, [axis - column[1], axis - column[0]]);
+}
+
 const chars = (list: Item[]) => list.reduce((n, i) => n + i.str.trim().length, 0);
 
 // The page's horizontal rules outside its tables, while pageLines reads it:

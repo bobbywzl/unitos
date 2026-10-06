@@ -50,6 +50,13 @@ export const CAPTION_RE = new RegExp(
   String.raw`^(?:(?:${LABEL})\s*(?:\d+(?:[.‐–-]\d+)*[a-z]?|[A-Z][‐–-]?\d+[a-z]?|[IVXL]+\b)\s*[.:|–—-](?!\d)\s*|(?:figure|photo|visualization|image|map|chart|plate|abbildung)\.\s+\S|(?:図表|図|图|圖|表)\s*[0-9Ⅰ-Ⅻ]+(?:[-‐–.][0-9Ⅰ-Ⅻ]+)*[.:．：]?\s(?![^]*。))`,
   "i",
 );
+// On an OCR page a figure's number reads as the letters and marks its digits
+// look like ("FIGUREIS.-" for 15, "\FIGURE!i.-" for 17, "FIGURE H.-" for
+// 11), its stop the period and dash a scan's caption sets (parse loop
+// finding: NACA Report 515 p. 10, Figures 15 and 17's captions read as a
+// heading). Read so on OCR pages only: a typeset page spells its numbers.
+export const OCR_CAPTION_RE = new RegExp(String.raw`^(?:${LABEL})\s?[\dIlSsOoHi!|]{1,3}\s?\.\s?[-–—]`, "i");
+export const isOcrCaption = (text: string, ctx: PageContext) => ctx.ocr && OCR_CAPTION_RE.test(text.trim());
 // "Table 3", "Table A1", an appendix's "Table A-1", IEEE's "TABLE IV", and
 // "表 2".
 const TABLE_CAPTION_RE = /^(?:(?:table|tab\.|tabelle)\s*(?:\d+|[A-Z][‐–-]?\d+|[IVXL]+\b)|表\s*[0-9Ⅰ-Ⅻ])/i;
@@ -113,6 +120,19 @@ function withPanels(figure: Segment, panels: CaptionPart[]) {
   figure.captionBox = parts.map((p) => p.box).reduce((a, b) => unionBox(a, b));
 }
 
+// The most words in a row a line holds: runs of three letters or more with a
+// vowel, apart by spaces or commas alone. A chart's labels and an OCR's
+// specks ("I N I (J Curve") hold one at a time; a sentence holds several.
+function wordRun(line: string): number {
+  let best = 0;
+  let run = 0;
+  for (const token of line.split(/[\s,;]+/)) {
+    run = /^\p{L}{3,}[.:]?$/u.test(token) && /[aeiouy]/i.test(token) ? run + 1 : 0;
+    best = Math.max(best, run);
+  }
+  return best;
+}
+
 // Chart text, equation glyphs, ticks: what a figure leaves in the text layer.
 // A panel's letter alone ("(b)") is its figure's label whatever it read as:
 // set bold, it read as a heading, and every label over it stayed text
@@ -131,8 +151,18 @@ function isFigureDebris(s: Segment, ctx: PageContext): boolean {
   // more marks and digits than letters is a figure's at any size (parse
   // loop finding: NACA Report 515 p. 7, "24 .6 ~ W D ~ D '. 6" read at 15
   // pt over a 10.3 pt body, and the chart's labels over it stayed text).
+  // So is a longer part, of one line or several: the OCR reads a chart's
+  // gridlines as runs of marks ("a 00!-1-.1..1-1-!.2~.L.....3-:!-…", 85
+  // marks over Figure 5's caption, p. 7, kept the caption a paragraph).
   const letters = text.replace(/[^\p{L}]/gu, "").length;
-  if (ctx.ocr && text.length <= 60 && !s.text.includes("\n") && letters * 2 < text.replace(/\s/g, "").length) return true;
+  if (ctx.ocr && letters * 2 < text.replace(/\s/g, "").length) return true;
+  // A line of a chart's lone letters (its curves' labels, a speck read as
+  // "I") holds no word: no run of three letters with a vowel in it. On an
+  // OCR page it is the chart's at any size (parse loop finding: NACA
+  // Report 515 p. 8, "CI, ~ /V L V L" read at 13 pt over Figures 8 and
+  // 10's captions, and the six lines of the charts' ticks over it stayed
+  // text).
+  if (ctx.ocr && !s.text.includes("\n") && text.length <= 60 && !(text.match(/\p{L}{3,}/gu) ?? []).some((w) => /[aeiouy]/i.test(w))) return true;
   // A panel title or axis label at body size: short, no sentence end. A
   // Chinese or Japanese sentence ends with "。" (MIC white paper p9: a
   // paragraph's last line over a caption read as its figure's).
@@ -1343,7 +1373,7 @@ export function attachFigureRegions(
     if (
       cap.type !== "PARAGRAPH" ||
       !cap.box ||
-      !isCaption(cap.text, cap.runs) ||
+      !(isCaption(cap.text, cap.runs) || isOcrCaption(cap.text, ctx)) ||
       TABLE_CAPTION_RE.test(cap.text)
     ) {
       out.push(cap);
@@ -1435,6 +1465,13 @@ export function attachFigureRegions(
       // no debris of a figure in it.
       if (prev.box && (prev.box.x1 < x1 - ctx.bodySize * 2 || prev.box.x2 > x2 + ctx.bodySize * 2)) break;
       if (prev.type === "TABLE" && column.length >= 2 && TABLE_CAPTION_RE.test(column[column.length - 2].text)) break;
+      // On an OCR page a table whose first line holds a sentence's words
+      // (three words of letters in a row) is the text's: a caption's last
+      // line the OCR read on one row with the chart's ticks under it (NACA
+      // Report 515 p. 8: Figure 7's "N=150 r. p. m., protuberances faired
+      // and exposed." beside the next chart's "36 .9"). Swept, the caption
+      // lost its words to the crop under it.
+      if (ctx.ocr && prev.type === "TABLE" && wordRun(prev.text.split("\n")[0]) >= 3) break;
       swept.unshift(column.pop()!);
     }
     const above = column[column.length - 1];
@@ -1608,7 +1645,22 @@ export function attachFigureRegions(
         }
       }
     }
-    let { text, runs, box: captionBox } = withFollower(cap, next.find((s) => !consumed.has(s)));
+    // On an OCR page a speck under the caption (a lone "(", no letter or
+    // digit) stands between it and its last line: the caption reads past it,
+    // and drops it once it takes the line (parse loop finding: NACA Report
+    // 515 p. 10, Figure 15's "rotor, μ=0.44, …" under a speck read as a
+    // paragraph of its own).
+    const specks: Segment[] = [];
+    const follower = next.find((s) => {
+      if (consumed.has(s)) return false;
+      if (ctx.ocr && s.type === "PARAGRAPH" && !/[\p{L}\p{N}]/u.test(s.text)) {
+        specks.push(s);
+        return false;
+      }
+      return true;
+    });
+    let { text, runs, box: captionBox } = withFollower(cap, follower);
+    if (follower && consumed.has(follower)) for (const s of specks) consumed.add(s);
     // A figure's own link printed under its caption (PLOS prints each
     // figure's DOI there) ends the caption: a paragraph of its own, it ran
     // into the next page's first words ("….g007 durations are …").

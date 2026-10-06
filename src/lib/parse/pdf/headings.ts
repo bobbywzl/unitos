@@ -3,7 +3,7 @@
 
 import { lineColumn } from "@/lib/parse/pdf/columns";
 import { TOC_TAIL_RE } from "@/lib/parse/pdf/contents";
-import { CAPTION_RE } from "@/lib/parse/pdf/figures";
+import { CAPTION_RE, isOcrCaption } from "@/lib/parse/pdf/figures";
 import { geom, lineMathShare } from "@/lib/parse/pdf/geometry";
 import { charCount } from "@/lib/parse/pdf/glyphs";
 import { BULLET_RE, isGlyphMarker, readMarker } from "@/lib/parse/pdf/markers";
@@ -105,7 +105,7 @@ export function readHeading(lines: Line[], i: number, ctx: PageContext, runOf: n
     boldHeading(lines, i, ctx, runOf) ??
     italicHeading(lines, i, ctx) ??
     partHeading(lines, i, ctx);
-  if (step?.segments.some((s) => s.type === "HEADING" && (wordless(s.text) || SIGNATURE_RE.test(s.text) || (ctx.ocr && scanDebris(s.text))))) return null;
+  if (step?.segments.some((s) => s.type === "HEADING" && (wordless(s.text) || SIGNATURE_RE.test(s.text) || (ctx.ocr && scanDebris(s.text)) || isOcrCaption(s.text, ctx)))) return null;
   // On a scan, a line in capitals with no number, the line under it a
   // figure's caption, is the figure's axis label: DTIC's p. 31 read "MACH
   // NUMBER, M" over "Figure 7. Drag divergence Mach number" as a heading.

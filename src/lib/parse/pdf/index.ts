@@ -26,7 +26,7 @@ import { mathSpans, resolveZones } from "@/lib/parse/pdf/math/zones";
 import { firstPageOf, joinOnPage, mergeAcrossPages, shiftSpansInto } from "@/lib/parse/pdf/merge";
 import { isOcrLayer, measureSpacing, pageLeading } from "@/lib/parse/pdf/paragraphs";
 import { placeTables, ruledTables, takeTables } from "@/lib/parse/pdf/ruled";
-import { segmentPage } from "@/lib/parse/pdf/segment";
+import { markPullQuoteHeadings, segmentPage } from "@/lib/parse/pdf/segment";
 import { attachTableCaptions, isWrappedRowLine } from "@/lib/parse/pdf/tables";
 import { collectHyphenation, holdsFill, spansFromRuns, tabStopsOf } from "@/lib/parse/pdf/text";
 import type { Box, Item, Line, Segment, UriRegion } from "@/lib/parse/pdf/types";
@@ -579,6 +579,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
   // A FIGURE with a region and no caption is an embedded image; every other
   // empty segment drops.
   segments = segments.filter((s) => s.text.trim().length > 0 || holdsFill(s) || (s.type === "FIGURE" && s.region));
+  markPullQuoteHeadings(segments);
   // A slide deck: every page wider than tall, two or more of them (a slide
   // program's 960 × 540, beamer's 364 × 272).
   const slides = pageWidths.length >= 2 && pageWidths.every((w, p) => w > pageHeights[p]);

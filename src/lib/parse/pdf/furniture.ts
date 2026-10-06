@@ -95,7 +95,10 @@ export function findFurniture(pages: Line[][], pageHeights: number[], pageNumber
     while (bare(pageRows[pageRows.length - 1]) || mark(pageRows[pageRows.length - 1])) specks.push(pageRows.pop()!);
   });
   const { lead, bodySize } = measures(pages, rows);
-  const candidates = rows.flatMap((pageRows) => candidatesOf(pageRows, lead));
+  // A ruled table stands in the flow as one line without words (placeTables):
+  // its own lines' baselines say how far it is from a row beside it.
+  const tables = pages.map((lines) => lines.flatMap((l) => (l.table && l.table.lines.length > 0 ? [{ top: Math.max(...l.table.lines.map((t) => t.y)), bottom: Math.min(...l.table.lines.map((t) => t.y)) }] : [])));
+  const candidates = rows.flatMap((pageRows, p) => candidatesOf(pageRows, lead, tables[p]));
   const strong = candidates.filter((c) => c.strong);
   const strongRows = new Set(strong.map((c) => c.row));
   const pageCount = pages.length;
@@ -220,6 +223,10 @@ export function findFurniture(pages: Line[][], pageHeights: number[], pageNumber
     else if (repeated(c)) dropped.set(c.row, "repeat");
     else if (c.side === "foot" && CONTINUED_RE.test(c.row.text)) dropped.set(c.row, "continued");
   }
+  // A first or last row with a cell that names its own page needs no gap
+  // either: the 1040 sets "Form 1040 (2024)   Page 2" right over the rules
+  // of its second page's table.
+  for (const c of candidates) if (!c.strong && !dropped.has(c.row) && namesPage(c.row) && outside(c)) dropped.set(c.row, "page number");
 
   // 2. Candidates at the place of the furniture of other pages: the same
   // distance from the edge, size, and weight. A strong one is short and no
@@ -476,15 +483,31 @@ function headsTable(row: Row, next: Row | undefined): boolean {
   });
 }
 
-function candidatesOf(rows: Row[], lead: number): Candidate[] {
+// tables: the page's ruled tables, by their top and bottom baselines. A
+// table between a page's last row and the row over it is the text the row
+// stands under: the row is set apart only by its own gap to the table's
+// last line (parse loop finding: IRS Form 1040's income lines read as a
+// table, and its first page's foot, 14 pt under them, read as set apart
+// from the filing status 440 pt up, and dropped).
+function candidatesOf(rows: Row[], lead: number, tables: { top: number; bottom: number }[] = []): Candidate[] {
   const n = rows.length;
   if (n === 0) return [];
-  if (n === 1) return [{ row: rows[0], side: "head", strong: true }, { row: rows[0], side: "foot", strong: true }];
   const out: Candidate[] = [];
   const apart = (a: Row, b: Row) => Math.abs(a.y - b.y) > 1.4 * lead;
   const close = (a: Row, b: Row) => Math.abs(a.y - b.y) <= 1.2 * lead;
   for (const side of ["head", "foot"] as const) {
     const [r0, r1, r2] = side === "head" ? [rows[0], rows[1], rows[2]] : [rows[n - 1], rows[n - 2], rows[n - 3]];
+    // The table's line next to the row, between it and the next row.
+    const next = side === "head" ? tables.filter((t) => t.top < r0.y && (!r1 || t.top > r1.y)).map((t) => t.top) : tables.filter((t) => t.bottom > r0.y && (!r1 || t.bottom < r1.y)).map((t) => t.bottom);
+    if (next.length > 0) {
+      const edge = side === "head" ? Math.max(...next) : Math.min(...next);
+      out.push({ row: r0, side, strong: Math.abs(r0.y - edge) > 1.4 * lead });
+      continue;
+    }
+    if (n === 1) {
+      out.push({ row: r0, side, strong: true });
+      continue;
+    }
     if (apart(r0, r1)) {
       out.push({ row: r0, side, strong: true });
       if (r2) out.push({ row: r1, side, strong: apart(r1, r2) });

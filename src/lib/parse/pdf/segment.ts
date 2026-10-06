@@ -1,6 +1,7 @@
 // A page's lines cut into segments. Readers are tried in this order:
 // contents lists, tables, code listings, label lines, an algorithm's lines
-// (lists.ts), headings (headings.ts), references and lists (lists.ts), and
+// (lists.ts), headings (headings.ts), references (lists.ts), a right-to-left
+// line's list or paragraph on the page mirrored (mirror.ts), lists, and
 // paragraphs (paragraphs.ts). Each takes the lines from
 // one index on and says where it stopped; the first that takes the line
 // makes its segments.
@@ -10,6 +11,7 @@ import { lineColumn } from "@/lib/parse/pdf/columns";
 import { geom, median } from "@/lib/parse/pdf/geometry";
 import { readHeading } from "@/lib/parse/pdf/headings";
 import { closeLists, joinMarkerCells, liftTallMarkers, readAlgorithm, readList, readReferences } from "@/lib/parse/pdf/lists";
+import { type Mirror, mirrorPage, readsRightToLeft, unmirror } from "@/lib/parse/pdf/mirror";
 import { leftEdge, markEdges, readParagraph } from "@/lib/parse/pdf/paragraphs";
 import { tableFromRegion } from "@/lib/parse/pdf/ruled";
 import { findTableRuns, isLabelLine, tableFromRun } from "@/lib/parse/pdf/tables";
@@ -34,6 +36,14 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
   const fills = markTabs(lines, (k) => runOf[k] === -1, (l) => leftEdge(l, ctx), ctx.drawing, !ctx.tex);
   let tocMode = tocCarry && lines.length > 0 && TOC_ENTRY_RE.test(lines[0].text) && TOC_TAIL_RE.test(lines[0].text);
   tocCarry = false;
+  // A right-to-left line's list or paragraph reads on the page mirrored
+  // (mirror.ts), its blocks back at the page's place.
+  let mirror: Mirror | null = null;
+  const readMirrored = (k: number): Step | null => {
+    if (!readsRightToLeft(lines[k])) return null;
+    mirror ??= mirrorPage(lines, ctx);
+    return unmirror(readList(mirror.lines, k, mirror.ctx, runOf) ?? readParagraph(mirror.lines, k, mirror.ctx, runOf), mirror.axis);
+  };
   // Where each reader's segments begin: its first line and its first segment.
   const starts: { line: number; at: number }[] = [];
   let i = 0;
@@ -120,6 +130,7 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
       readAlgorithm(lines, i, ctx, runOf) ??
       readHeading(lines, i, ctx, runOf) ??
       readReferences(lines, i, ctx, runOf) ??
+      readMirrored(i) ??
       readList(lines, i, ctx, runOf) ??
       readParagraph(lines, i, ctx, runOf);
     const heading = step.segments.findLast((s) => s.type === "HEADING");
@@ -258,6 +269,55 @@ function markPullQuotes(segments: Segment[]): void {
     const tokens = /class="([^"]*)"/.exec(s.html ?? "")?.[1].split(/\s+/).filter(Boolean) ?? [];
     s.html = `<p class="${[...tokens.filter((t) => !t.startsWith("indent")), "quote"].join(" ")}"></p>`;
     delete s.indent;
+  }
+}
+
+/** A heading set plain that says again a sentence of the text, on its page
+    or within three pages of it, is a pull quote set large: a heading's
+    words are its own. A magazine sets a story's pull quotes over a spread
+    of pages, away from the paragraph they quote (parse loop finding: The
+    MagPi's pull quotes, 16 pt between drawn quote marks, "A realistic
+    driving experience that predated arcade games" on p. 49 from p. 46's
+    paragraph, read as headings among the section heads). */
+export function markPullQuoteHeadings(segments: Segment[]): void {
+  const wordsOf = (text: string) => text.toLowerCase().match(/\p{L}{3,}/gu) ?? [];
+  const tokensOf = (text: string) => text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+  // The most of the heading's words the paragraph says in a row: a pull
+  // quote says five or more as the paragraph does.
+  const run = (mine: string[], theirs: string[]) => {
+    let best = 0;
+    for (let i = 0; i < mine.length; i++)
+      for (let j = 0; j < theirs.length; j++) {
+        let k = 0;
+        while (i + k < mine.length && j + k < theirs.length && mine[i + k] === theirs[j + k]) k++;
+        best = Math.max(best, k);
+      }
+    return best;
+  };
+  const paragraphs = segments.filter((t) => t.type === "PARAGRAPH" && !/\bquote\b/.test(t.html ?? ""));
+  for (const s of segments) {
+    if (s.type !== "HEADING" || s.headingNum !== undefined || (s.runs ?? []).some((r) => r.bold) || s.text.length > 240) continue;
+    // A section's head is numbered ("33.3 Raising and Lowering …"), in
+    // capitals, or in title case ("IntelliJ / PyCharm / … 中的 Git"); a
+    // pull quote is a sentence, set plain and in sentence case.
+    const text = s.text.trim();
+    if (!/^[“"‘']?\p{L}/u.test(text) || /^(?:fig\.?|figure|table)\s*\d/i.test(text)) continue;
+    const later = (text.match(/\p{L}{3,}/gu) ?? []).slice(1);
+    if (later.filter((w) => /^\p{Ll}/u.test(w)).length < later.length * 0.5) continue;
+    const words = wordsOf(text);
+    if (words.length < 6) continue;
+    const tokens = tokensOf(text);
+    const quoted = paragraphs.some((t) => {
+      if (Math.abs(t.page - s.page) > 3 || t.text.length <= text.length) return false;
+      const theirs = new Set(wordsOf(t.text));
+      return words.filter((w) => theirs.has(w)).length >= words.length * 0.8 && run(tokens, tokensOf(t.text)) >= 5;
+    });
+    if (!quoted) continue;
+    s.type = "PARAGRAPH";
+    s.html = '<p class="quote"></p>';
+    delete s.rawSize;
+    delete s.headingNum;
+    delete s.align;
   }
 }
 
