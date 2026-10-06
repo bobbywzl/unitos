@@ -16,17 +16,51 @@ export function onBody(node: React.ReactNode): React.ReactNode {
 export const BOTTOM_PILL =
   "fixed bottom-[calc(66px+env(safe-area-inset-bottom))] left-1/2 z-[55] flex max-w-[calc(100vw-32px)] -translate-x-1/2 items-center gap-3 rounded-full bg-card px-5 py-2.5 whitespace-nowrap shadow-float md:bottom-6";
 
-// The pill after a merge or a delete (SPEC.md §6): what happened, and Undo,
-// which puts the notes back as they were. It stays for a while after each
-// change, and the next merge or delete takes it. A change that did not reach
-// the server says so here. Rendered by the tray, the notes full page, and a
-// section's board.
-export function MergeUndoBar({ actions }: { actions: OutlineActions }) {
+// The pill after a merge, a delete, or a reject (SPEC.md §6): what
+// happened, and Undo, which puts the notes back as they were. It stays for a
+// while after each change, and the newest change takes it. A change that
+// did not reach the server says so here. Rendered by the workspace (the
+// tray open or folded), the notes full page, and a section's board.
+// rejected: the pending note the reader rejected last, and its Undo; only
+// the workspace passes it.
+export function MergeUndoBar({
+  actions,
+  rejected = null,
+  onUndoReject,
+}: {
+  actions: OutlineActions;
+  rejected?: string | null;
+  onUndoReject?: () => void;
+}) {
   const t = useT();
   const [error, setError] = useState<string | null>(null);
-  const merge = actions.lastMerge;
-  const removed = actions.lastDelete;
   const notice = error ?? actions.notice;
+  // The newest change wins the pill: each one is newest from the moment it
+  // shows until another one shows.
+  const [seen, setSeen] = useState<{ merge: unknown; removed: unknown; rejected: unknown; newest: "merge" | "delete" | "reject" | null }>(
+    { merge: null, removed: null, rejected: null, newest: null },
+  );
+  if (seen.merge !== actions.lastMerge || seen.removed !== actions.lastDelete || seen.rejected !== rejected) {
+    const newest =
+      rejected !== null && rejected !== seen.rejected
+        ? "reject"
+        : actions.lastDelete !== null && actions.lastDelete !== seen.removed
+          ? "delete"
+          : actions.lastMerge !== null && actions.lastMerge !== seen.merge
+            ? "merge"
+            : seen.newest;
+    setSeen({ merge: actions.lastMerge, removed: actions.lastDelete, rejected, newest });
+  }
+  const order = [seen.newest, "reject", "delete", "merge"] as const;
+  const shown = order.find(
+    (kind) =>
+      (kind === "reject" && rejected !== null) ||
+      (kind === "delete" && actions.lastDelete !== null) ||
+      (kind === "merge" && actions.lastMerge !== null),
+  );
+  const merge = shown === "merge" ? actions.lastMerge : null;
+  const removed = shown === "delete" ? actions.lastDelete : null;
+  const reject = shown === "reject" ? rejected : null;
 
   useEffect(() => {
     if (!error) return;
@@ -34,10 +68,22 @@ export function MergeUndoBar({ actions }: { actions: OutlineActions }) {
     return () => clearTimeout(timer);
   }, [error]);
 
-  if (!merge && !removed && !notice) return null;
+  if (!merge && !removed && !reject && !notice) return null;
   return onBody(
     <div role="status" data-undo-pill="" className={BOTTOM_PILL}>
-      {removed ? (
+      {reject ? (
+        <>
+          <span className="text-[13px] text-sand-600">{t("panes.noteRejected")}</span>
+          <button
+            onClick={() => onUndoReject?.()}
+            data-track="undo-reject"
+            data-tip={t("outline.undoRejectTitle")}
+            className="rounded-full bg-clay px-3.5 py-1 text-xs font-semibold text-clay-fg hover:bg-clay-600"
+          >
+            {t("outline.undo")}
+          </button>
+        </>
+      ) : removed ? (
         <>
           <span className="text-[13px] text-sand-600">
             {removed.ids.length === 1 ? t("outline.noteDeleted") : t("outline.notesDeleted", { n: removed.ids.length })}

@@ -5526,12 +5526,17 @@ export function ReaderInteractions({
     setBusy(true);
     try {
       await flushLiveBlock(popover.anchor.blockId);
-      const note = await api<{ id: string }>("/api/notes", "POST", {
+      // A quote whose place is gone by the time the write lands (an edit
+      // elsewhere, a queued write replayed later) still lands its words,
+      // without the source, and the reader is told.
+      const note = await api<{ id: string; sourceDropped?: boolean }>("/api/notes", "POST", {
         sectionId,
         content: addToNotesText(popover.anchor),
         source: { documentId, ...anchorBody(popover.anchor) },
         ...segmentsBody(popover.anchor),
+        onSourceLost: "keep",
       });
+      if (note.sourceDropped === true) showToast(t("outline.quoteSourceLost"));
       addedToNotes(popover.anchor);
       // The tray opens on the new note, so the reader sees where it went
       // (SPEC.md §6): every document, and a blank one whose tray starts
@@ -5552,13 +5557,15 @@ export function ReaderInteractions({
     setBusy(true);
     try {
       await flushLiveBlock(popover.anchor.blockId);
-      await api(`/api/notes/${note.id}`, "PATCH", {
+      const answer = await api<{ sourceDropped?: boolean } | null>(`/api/notes/${note.id}`, "PATCH", {
         append: addToNotesText(popover.anchor),
         addSource: {
           source: { documentId, ...anchorBody(popover.anchor) },
           ...segmentsBody(popover.anchor),
         },
+        onSourceLost: "keep",
       });
+      if (answer?.sourceDropped === true) showToast(t("outline.quoteSourceLost"));
       addedToNotes(popover.anchor);
       window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: note.id } }));
     } catch (err) {

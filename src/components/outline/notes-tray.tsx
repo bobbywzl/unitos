@@ -16,7 +16,6 @@ import { quoteLanded } from "@/components/use-note-drop";
 import { referenceMarkdownForDrop } from "@/components/outline/reference-drop";
 import { dropIndex, notesList, parseListId } from "@/components/outline/board-lists";
 import { landingLeft } from "@/components/outline/floating-note-editor";
-import { MergeUndoBar } from "@/components/outline/merge-undo";
 import { NoteCard } from "@/components/outline/note-card";
 import { NoteComposer, focusComposer } from "@/components/outline/note-composer";
 import { SECTION_ACTION, SECTION_ADD_NOTE } from "@/components/outline/section-action";
@@ -323,7 +322,6 @@ export function NotesTray({
       )}
 
       <SelectionBar tree={tree} actions={actions} />
-      <MergeUndoBar actions={actions} />
     </div>
   );
 }
