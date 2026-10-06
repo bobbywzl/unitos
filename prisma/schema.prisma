@@ -531,6 +531,7 @@ model Document {
   video         VideoAsset? // set = video document; the reader renders the video pane (SPEC.md §11)
   images        ImageAsset[] // images the parse captured (chart animations)
   readingPositions ReadingPosition[]
+  kept             KeptDocument[]
   // A generated document (SPEC.md §22): Stitch wrote it from the project's
   // documents. generatedCommand is the command that made it; a document with
   // one is a generated document of the project it is attached to.
@@ -626,6 +627,22 @@ model ReadingPosition {
   offset     Float
   height     Float
   at         DateTime
+
+  @@id([userId, documentId])
+  @@index([documentId])
+}
+
+// A document kept for an account after the project that held it was
+// deleted (SPEC.md §6): the deleting owner's claim on each document only that
+// project held, written in the delete's transaction, so the document stays in
+// the owner's Library while it is in no project. Only the owner gets one;
+// reading a document is no claim. userId is a soft reference like
+// Notebook.userId. Deleting the document deletes its rows.
+model KeptDocument {
+  userId     String
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  keptAt     DateTime @default(now())
 
   @@id([userId, documentId])
   @@index([documentId])

@@ -3,6 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { HistoryEntry } from "@/lib/types";
+import type { Person } from "@/lib/person";
 import { useCollab } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { HistoryIcon } from "@/components/icons";
@@ -12,6 +13,10 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 import { markdownPreview } from "@/lib/markdown-preview";
 import { useEscapeLayer } from "@/lib/escape-layers";
 import { api } from "@/lib/api";
+
+// One page of History rows (lib/history/list.ts HISTORY_PAGE): a first page
+// this long may have older rows under it.
+const HISTORY_PAGE = 100;
 
 const KIND_KEY: Record<HistoryEntry["kind"], TKey> = {
   TEXT_EDIT: "panes.historyTextEdit",
@@ -85,6 +90,18 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
   const [restoring, setRestoring] = useState<string | null>(null);
   const [restoredHere, setRestoredHere] = useState<Set<string>>(new Set());
   const [restoreError, setRestoreError] = useState<{ id: string; message: string } | null>(null);
+  // Show older (SPEC.md §12): the pages read under the first one, the
+  // people who signed them, and whether more remain.
+  const [older, setOlder] = useState<HistoryEntry[]>([]);
+  const [olderPeople, setOlderPeople] = useState<Record<string, Person>>({});
+  const [olderMore, setOlderMore] = useState<boolean | null>(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [olderError, setOlderError] = useState(false);
+  // Add back on a removed document's row: the row in flight and the rows
+  // added back in this visit.
+  const [addingBack, setAddingBack] = useState<string | null>(null);
+  const [addedBackHere, setAddedBackHere] = useState<Set<string>>(new Set());
+  const [addBackError, setAddBackError] = useState<{ id: string; message: string } | null>(null);
 
   const restore = async (entry: HistoryEntry) => {
     if (!notebookId || restoring) return;
@@ -109,6 +126,50 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
     }
   };
 
+  // Every row the panel holds: the first page as the server last drew it,
+  // then the older pages, each row once.
+  const firstIds = new Set(history.map((e) => e.id));
+  const all = [...history, ...older.filter((e) => !firstIds.has(e.id))];
+  const more = olderMore ?? history.length >= HISTORY_PAGE;
+
+  const loadOlder = async () => {
+    if (!notebookId || loadingOlder) return;
+    const last = all[all.length - 1];
+    if (!last) return;
+    setLoadingOlder(true);
+    setOlderError(false);
+    try {
+      const q = new URLSearchParams({ beforeAt: last.createdAt, beforeId: last.id });
+      const res = await fetch(`/api/notebooks/${notebookId}/history?${q}`);
+      if (!res.ok) throw new Error(String(res.status));
+      const page = (await res.json()) as { entries: HistoryEntry[]; more: boolean; people: Record<string, Person> };
+      setOlder((prev) => [...prev, ...page.entries]);
+      setOlderPeople((prev) => ({ ...prev, ...page.people }));
+      setOlderMore(page.more);
+    } catch {
+      setOlderError(true);
+    } finally {
+      setLoadingOlder(false);
+    }
+  };
+
+  // Add back (SPEC.md §12): the removed document returns to the project
+  // with the project's work on it (lib/documents/detach.ts), as Library does.
+  const addBack = async (entry: HistoryEntry) => {
+    if (!notebookId || !entry.addBackDocumentId || addingBack) return;
+    setAddingBack(entry.id);
+    setAddBackError(null);
+    try {
+      await api(`/api/notebooks/${notebookId}/documents`, "POST", { documentId: entry.addBackDocumentId });
+      setAddedBackHere((prev) => new Set(prev).add(entry.id));
+      router.refresh();
+    } catch (err) {
+      setAddBackError({ id: entry.id, message: err instanceof Error ? err.message : t("panes.historyRestoreFailed") });
+    } finally {
+      setAddingBack(null);
+    }
+  };
+
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (e: PointerEvent) => {
@@ -121,10 +182,11 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
   useEscapeLayer(open, () => setOpen(false));
 
   const dateLocale = lang === "zh" ? "zh-CN" : undefined;
-  const authors = [...new Set(history.map((e) => e.userId).filter((id): id is string => !!id))]
-    .map((id) => people[id])
+  const personOf = (id: string | null): Person | undefined => (id ? (people[id] ?? olderPeople[id]) : undefined);
+  const authors = [...new Set(all.map((e) => e.userId).filter((id): id is string => !!id))]
+    .map((id) => personOf(id))
     .filter((p) => p !== undefined);
-  const shown = personFilter ? history.filter((e) => e.userId === personFilter) : history;
+  const shown = personFilter ? all.filter((e) => e.userId === personFilter) : all;
 
   // An edit's row opens its document at the edited block (the block of a
   // removal is gone: the document opens). A removed note, section, or
@@ -138,7 +200,7 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
   // One entry as a row: the person, the kind, the time, the snippet as the
   // reader sees it (markdown markers off). A row with a place opens it.
   const row = (entry: HistoryEntry) => {
-    const person = entry.userId ? people[entry.userId] : undefined;
+    const person = personOf(entry.userId);
     const href = jumpOf(entry);
     const snippet = entry.content ? markdownPreview(entry.content) : "";
     const className = `flex items-start gap-2.5 text-left ${href ? "-mx-1.5 rounded-lg px-1.5 py-1 hover:bg-clay-100" : ""}`;
@@ -202,6 +264,29 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
               )}
               {restoreError?.id === entry.id && (
                 <span className="text-[11px] text-clay-700">{restoreError.message}</span>
+              )}
+            </div>
+          )}
+          {entry.addBackDocumentId && (
+            <div className="mt-1 flex items-center gap-2">
+              {addedBackHere.has(entry.id) ? (
+                <span className="text-[11px] font-semibold text-sage-700">{t("panes.historyAddedBack")}</span>
+              ) : (
+                canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => void addBack(entry)}
+                    disabled={addingBack !== null}
+                    data-track="history-add-back"
+                    data-tip={t("panes.historyAddBackTitle")}
+                    className="rounded-full border border-line px-2.5 py-0.5 text-[11px] font-semibold text-clay-800 hover:bg-clay-100 disabled:opacity-60"
+                  >
+                    {addingBack === entry.id ? t("common.loading") : t("panes.historyAddBack")}
+                  </button>
+                )
+              )}
+              {addBackError?.id === entry.id && (
+                <span className="text-[11px] text-clay-700">{addBackError.message}</span>
               )}
             </div>
           )}
@@ -279,7 +364,7 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
                 // A run of small edits by one person in one document, folded
                 // into one row (SPEC.md §12); Show opens it.
                 const first = item.entries[0];
-                const person = first.userId ? people[first.userId] : undefined;
+                const person = personOf(first.userId);
                 const opened = openRuns.has(first.id);
                 return (
                   <div key={`run-${first.id}`} className="flex flex-col gap-2.5">
@@ -324,6 +409,20 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
               }
               return row(item.entry);
             })}
+            {more && (
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => void loadOlder()}
+                  disabled={loadingOlder}
+                  data-track="history-older"
+                  className="rounded-full border border-line px-3 py-1 text-[11.5px] font-semibold text-clay-800 hover:bg-clay-100 disabled:opacity-60"
+                >
+                  {loadingOlder ? t("common.loading") : t("panes.historyOlder")}
+                </button>
+                {olderError && <span className="text-[11px] text-clay-700">{t("panes.historyOlderFailed")}</span>}
+              </div>
+            )}
           </div>
         </div>
       )}

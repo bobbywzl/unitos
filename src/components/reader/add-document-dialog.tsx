@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
-import { BlankDocumentIcon, DriveLogo, LibraryIcon } from "@/components/icons";
+import { BlankDocumentIcon, DriveLogo, LibraryIcon, MoreIcon } from "@/components/icons";
 import { Presence } from "@/components/presence";
 import { classifyDriveFile, parseDriveFileId, type DriveAccess, type DrivePickedFile } from "@/lib/drive/types";
 import { DocumentDeleteConfirm, useDocumentReach } from "@/components/reader/document-delete";
@@ -145,6 +145,13 @@ export function AddDocumentDialog({
   const [libraryOpen, setLibraryOpen] = useState(false);
   // The library row whose delete confirm is open, and where that document is.
   const [deleteAsk, setDeleteAsk] = useState<string | null>(null);
+  // The Library's search, and the row whose ⋯ is open.
+  const [libraryQuery, setLibraryQuery] = useState("");
+  const [libraryMenu, setLibraryMenu] = useState<string | null>(null);
+  const libraryNeedle = libraryQuery.trim().toLowerCase();
+  const libraryRows = (library ?? []).filter(
+    (d) => !attachedIds.has(d.id) && d.title.toLowerCase().includes(libraryNeedle),
+  );
   const { reach: deleteReach, loading: deleteReachLoading } = useDocumentReach(deleteAsk);
   // The queue: what Continue hands to the box, in the order it was added.
   const [items, setItems] = useState<UploadItem[]>([]);
@@ -525,59 +532,87 @@ export function AddDocumentDialog({
             )}
 
             {libraryOpen && (
-              <ul className="max-h-40 flex-1 overflow-y-auto rounded-2xl bg-sand-100 p-1">
-                {library === null && (
-                  <li className="px-3 py-2 text-sm text-sand-500">{t("common.loading")}</li>
-                )}
-                {library !== null &&
-                  library.filter((d) => !attachedIds.has(d.id)).length === 0 && (
+              <div className="flex min-h-0 flex-1 flex-col gap-2">
+                {/* A search over the titles: a library runs to dozens of documents. */}
+                <input
+                  type="search"
+                  value={libraryQuery}
+                  onChange={(e) => setLibraryQuery(e.target.value)}
+                  placeholder={t("panes.librarySearch")}
+                  aria-label={t("panes.librarySearch")}
+                  data-track="add-library-search"
+                  className="rounded-full border border-line bg-card px-3.5 py-1.5 text-sm outline-none placeholder:text-sand-500 focus:border-clay"
+                />
+                <ul className="max-h-[min(18rem,40dvh)] flex-1 overflow-y-auto rounded-2xl bg-sand-100 p-1">
+                  {library === null && (
+                    <li className="px-3 py-2 text-sm text-sand-500">{t("common.loading")}</li>
+                  )}
+                  {library !== null && libraryRows.length === 0 && (
                     <li className="px-3 py-2 text-sm text-sand-500">
-                      {t("panes.noOtherDocuments")}
+                      {libraryQuery.trim() ? t("panes.librarySearchNone") : t("panes.noOtherDocuments")}
                     </li>
                   )}
-                {library
-                  ?.filter((d) => !attachedIds.has(d.id))
-                  .map((d) => (
+                  {libraryRows.map((d) => (
                     <li key={d.id} className="flex flex-col">
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => onAttach(d.id)}
-                        data-track="add-library-attach"
-                        data-tip={t("panes.attachTitle")}
-                        className="min-w-0 flex-1 truncate rounded-full px-3 py-2 text-left text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-                      >
-                        {d.title}{" "}
-                        <span className="text-xs text-sand-500">
-                          {t("panes.blockCount", { n: d._count.blocks })}
-                        </span>
-                      </button>
-                      <button
-                        onClick={() => setDeleteAsk(deleteAsk === d.id ? null : d.id)}
-                        data-track="add-library-delete"
-                        aria-expanded={deleteAsk === d.id}
-                        aria-label={t("panes.deleteFromLibrary")}
-                        className="rounded-full px-2 py-1 text-xs text-sand-600 hover:text-red-500"
-                        data-tip={t("panes.deleteFromLibrary")}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                    {deleteAsk === d.id && (
-                      <DocumentDeleteConfirm
-                        reach={deleteReach}
-                        loading={deleteReachLoading}
-                        notebookId={null}
-                        busy={false}
-                        onDelete={() => {
-                          setDeleteAsk(null);
-                          onRemoveFromLibrary(d.id);
-                        }}
-                        onCancel={() => setDeleteAsk(null)}
-                      />
-                    )}
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => onAttach(d.id)}
+                          data-track="add-library-attach"
+                          data-tip={t("panes.attachTitle")}
+                          className="min-w-0 flex-1 truncate rounded-full px-3 py-2 text-left text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                        >
+                          {d.title}{" "}
+                          <span className="text-xs text-sand-500">
+                            {t(d._count.blocks === 1 ? "panes.blockCountOne" : "panes.blockCount", { n: d._count.blocks })}
+                          </span>
+                        </button>
+                        {/* Delete sits behind the row's ⋯, not on every row. */}
+                        <button
+                          onClick={() => {
+                            setDeleteAsk(null);
+                            setLibraryMenu(libraryMenu === d.id ? null : d.id);
+                          }}
+                          data-track="add-library-actions"
+                          aria-expanded={libraryMenu === d.id}
+                          aria-label={t("panes.libraryActionsFor", { title: d.title })}
+                          className="flex size-7 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800"
+                        >
+                          <MoreIcon size={14} />
+                        </button>
+                      </div>
+                      {libraryMenu === d.id && deleteAsk !== d.id && (
+                        <div className="mx-2 mb-1 flex flex-col rounded-xl bg-card py-1">
+                          <button
+                            onClick={() => setDeleteAsk(d.id)}
+                            data-track="add-library-delete"
+                            className="px-4 py-1.5 text-left text-[12.5px] text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+                            data-tip={t("panes.deleteFromLibrary")}
+                          >
+                            {t("panes.deleteFromLibrary")}
+                          </button>
+                        </div>
+                      )}
+                      {deleteAsk === d.id && (
+                        <DocumentDeleteConfirm
+                          reach={deleteReach}
+                          loading={deleteReachLoading}
+                          notebookId={null}
+                          busy={false}
+                          onDelete={() => {
+                            setDeleteAsk(null);
+                            setLibraryMenu(null);
+                            onRemoveFromLibrary(d.id);
+                          }}
+                          onCancel={() => {
+                            setDeleteAsk(null);
+                            setLibraryMenu(null);
+                          }}
+                        />
+                      )}
                     </li>
                   ))}
-              </ul>
+                </ul>
+              </div>
             )}
           </>
         )}

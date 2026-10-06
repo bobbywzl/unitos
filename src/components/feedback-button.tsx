@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { IMAGE_ACCEPT, MAX_IMAGE_BYTES } from "@/lib/images";
+import { useEscapeLayer } from "@/lib/escape-layers";
 import { isImeKey } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
 import { Presence } from "@/components/presence";
@@ -104,15 +105,9 @@ export function FeedbackButton() {
     setNote(null);
   }
 
-  // Escape closes the dialog, like every popover.
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !isImeKey(e)) setOpen(false);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open]);
+  // Escape closes the dialog as one layer (lib/escape-layers.ts): a card
+  // under it stays open for the next Escape.
+  useEscapeLayer(open, () => setOpen(false));
 
   if (pathname.startsWith("/admin")) return null;
 

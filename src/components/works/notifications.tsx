@@ -19,9 +19,9 @@ export type NotificationItem = {
   feedback: { message: string } | null;
 };
 
-// The account's open notifications (SPEC.md §18) as one pop-up over the
-// dashboard, top right under the header: the newest open notification — kind,
-// date, title, body — and "1 of 3" when more are open. A reply to feedback
+// The account's open notifications (SPEC.md §18) as one card above Projects,
+// in the page's flow, so it covers no project card: the newest open
+// notification — kind, date, title, body — and "1 of 3" when more are open. A reply to feedback
 // (kind "feedback") reads "Reply to your feedback", the feedback's message,
 // then the reply. Dismiss takes this one off and shows the next; Dismiss all
 // takes every one off. A dismissed notification leaves at once and comes back
@@ -68,7 +68,7 @@ export function Notifications({ items }: { items: NotificationItem[] }) {
         <aside
           role="status"
           aria-label={t("works.notifications")}
-          className="pop-in fixed top-20 right-4 left-4 z-40 max-h-[calc(100dvh-7rem)] overflow-y-auto rounded-[28px] bg-card p-5 shadow-float sm:left-auto sm:w-96 print:hidden"
+          className="pop-in mb-10 max-h-[50dvh] overflow-y-auto rounded-[28px] bg-card p-5 shadow-soft print:hidden"
         >
           <div className="flex items-center gap-2 text-xs text-sand-600">
             <NotificationKindChip kind={n.kind} />

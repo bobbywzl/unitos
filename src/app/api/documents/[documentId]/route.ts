@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { bumpDocument, bumpNotebook, documentAccess, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
-import { documentFootprint, editableNotebooks } from "@/lib/document-footprint";
+import { documentFootprint, editableNotebooks, openableNotebooks } from "@/lib/document-footprint";
 import { detachWrites } from "@/lib/documents/detach";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
@@ -53,7 +53,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ documentId: s
 // project's attachment goes. The document, its blocks, and every annotation
 // stay, in the library and in its other projects, and adding it back from
 // Library shows the project's annotations again. A document no other
-// project holds is refused (409): removed, it would be in no project and
+// project the caller can open holds is refused (409): removed, it would be in no project and
 // out of the reader's reach, and Delete document is the way to remove it.
 export async function DELETE(req: Request, ctx: { params: Promise<{ documentId: string }> }) {
   const t = await serverT();
@@ -109,7 +109,13 @@ async function removeFromProject(documentId: string, notebookId: string, title: 
   if (!attached.some((a) => a.notebookId === notebookId)) {
     return NextResponse.json({ error: t("api.documentNotAttachedToCorpus") }, { status: 404 });
   }
-  if (attached.length < 2) {
+  // Another project the caller can open must still hold it: a project of
+  // another account the caller cannot open does not keep it in reach.
+  const open = await openableNotebooks(
+    attached.map((a) => a.notebookId).filter((id) => id !== notebookId),
+    access.user,
+  );
+  if (open.size === 0) {
     return NextResponse.json({ error: t("api.documentOnlyProject") }, { status: 409 });
   }
   await db.$transaction(await detachWrites([{ notebookId, documentId, userId: access.user.id, title }]));
