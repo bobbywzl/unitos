@@ -398,6 +398,16 @@ mark,
 .annotation-mark:hover {
   background-color: color-mix(in srgb, var(--mark-bg) 78%, var(--ink));
 }
+/* A mouse held still on a mark (WORDS_HOLD_MS, lib/hold-drag.ts): the
+   quote is ready to carry, and the next move lifts it. The mark rises off
+   the page with a shadow, line by line, and takes the grab cursor. */
+mark[data-held] {
+  cursor: grab;
+  background-color: color-mix(in srgb, var(--mark-bg) 70%, var(--ink));
+  box-shadow: var(--elev-md);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
 /* A mark whose note was just deleted (block-view.tsx leaving): the tint and
    the underline fade, then the mark unpaints. The sweep's background-image
    goes at once so a mark deleted right after it was made fades too. */
