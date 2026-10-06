@@ -1,8 +1,8 @@
 {
  "total": {
-  "f1": 0.935,
-  "precision": 0.887,
-  "recall": 0.989
+  "f1": 0.937,
+  "precision": 0.89,
+  "recall": 0.99
  },
  "pages": {
   "100noticias.com-millones.html": {
@@ -607,7 +607,7 @@
   },
   "aktion-hummelschutz.de.hummeln.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "alexanderlasch.wordpress.com.sprachgeschichte.html": {
@@ -812,7 +812,7 @@
   },
   "correctiv.org.zusage.html": {
    "tp": 2,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "crazy-julia.de.tipps.html": {
@@ -1002,7 +1002,7 @@
   },
   "elpais.com.ciencia.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "emacspeak.blogspot.com.meta.html": {
@@ -1367,7 +1367,7 @@
   },
   "knowledge-on-air.de.koa039.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "knowtechie.com.rally.html": {
@@ -1882,7 +1882,7 @@
   },
   "sprechblase.wordpress.com.zapfsaeulen.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "stackoverflow.com.rust.html": {
@@ -2217,7 +2217,7 @@
   },
   "archive.org.przepisy.pl.pierogi.html": {
    "tp": 3,
-   "fp": 3,
+   "fp": 1,
    "fn": 0
   },
   "weinlachgummis.blogspot.com.rezi.html": {
@@ -2657,7 +2657,7 @@
   },
   "brandeins.de.wahresIch.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "brasil247.com-militares.html": {
@@ -2972,7 +2972,7 @@
   },
   "drk.de-Glasgow.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "dsv.de-synchronschwimmen.html": {
@@ -3161,9 +3161,9 @@
    "fn": 0
   },
   "falstaff.de-burgenland.html": {
-   "tp": 2,
-   "fp": 2,
-   "fn": 1
+   "tp": 3,
+   "fp": 1,
+   "fn": 0
   },
   "familie.de.montessori.html": {
    "tp": 3,
@@ -3712,7 +3712,7 @@
   },
   "lbv.de-Bavaria.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "lecker.de.schneewittchen.html": {
@@ -3827,7 +3827,7 @@
   },
   "management-circle.de.glasses.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "markeich.de.impressum.html": {
