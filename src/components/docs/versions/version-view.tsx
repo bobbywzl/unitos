@@ -31,6 +31,8 @@ type History = { current: Omit<Version, "id" | "name">; versions: Version[]; peo
 type Entry = Version & { current: boolean };
 
 const SCOPE = 'html .docs-prose[data-docs-styles="version"]';
+/** A pane narrower than this stacks the list under the page. */
+const NARROW_BELOW = 600;
 
 function entriesOf(history: History): Entry[] {
   const kept = history.versions.map((v, i) => ({ ...v, current: i === 0 && v.rev === history.current.rev }));
@@ -273,10 +275,15 @@ export function VersionView({
 
   if (!rect) return null;
   const frame = pageFrame(setup);
-  const panelWidth = Math.min(320, rect.width / 2);
-  const canvasWidth = rect.width - panelWidth;
-  // The page fits the canvas, down to half its size; a narrower canvas scrolls.
-  const scale = Math.max(0.5, Math.min(1, (canvasWidth - 64) / frame.width));
+  // A narrow pane (a phone) stacks the list under the page, each the pane's
+  // width; a wider one has the panel at the right.
+  const narrow = rect.width < NARROW_BELOW;
+  const panelWidth = narrow ? undefined : Math.min(320, rect.width / 2);
+  const canvasWidth = rect.width - (panelWidth ?? 0);
+  // The page fits the canvas, down to half its size (on a narrow pane, down
+  // to the pane's width); a narrower canvas scrolls.
+  const fit = (canvasWidth - (narrow ? 24 : 64)) / frame.width;
+  const scale = Math.min(1, narrow ? fit : Math.max(0.5, fit));
   const white = setup.pageless || /^#f{3}(f{3})?$/i.test(setup.color);
   const pageStyle: React.CSSProperties = setup.pageless
     ? { width: pagelessWidth(canvasWidth, 1, textWidth) }
@@ -296,6 +303,7 @@ export function VersionView({
       ref={rootRef}
       tabIndex={-1}
       className="docs-versions"
+      data-narrow={narrow || undefined}
       data-edit-control
       style={{ top: rect.top, left: rect.left, width: rect.width, height: rect.height }}
     >
