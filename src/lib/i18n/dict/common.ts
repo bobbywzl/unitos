@@ -75,6 +75,7 @@
 //   page start(导入的 PDF 某页开始处，页边显示页码) 页首 · import line(标题后说明导入来源的一行) 导入行 ·
 //   Pages(添加 PDF 时选择要导入的页，如 45–60) 页码 ·
 //   spelling suggestion(右键菜单给拼错的英文单词的替换词) 拼写建议 ·
+//   grammar suggestion(蓝色波浪线下的一处语法修改，不是建议模式的建议) 语法建议 ·
 //   reading position 阅读位置 · left-off mark(上次读到的块上方的小书签) 阅读标记
 // highlight 高亮 仅指高亮功能；表示选取文字一律用 选中。
 

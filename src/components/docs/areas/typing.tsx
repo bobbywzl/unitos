@@ -18,17 +18,20 @@ import { listenNavigation, lookUpWord } from "@/components/docs/typing/navigate"
 import { listenImageDrop, type DropState } from "@/components/docs/typing/drop";
 import { copyMarkdown, pasteMarkdown, setImagePremium } from "@/components/docs/typing/paste";
 import { DictionaryDialog } from "@/components/docs/typing/dictionary-dialog";
-import { subscribeTypingPrefs, typingPrefs } from "@/components/docs/typing/prefs";
+import { setTypingPrefs, subscribeTypingPrefs, typingPrefs } from "@/components/docs/typing/prefs";
 import { PreferencesDialog } from "@/components/docs/typing/preferences-dialog";
+import { setProofing } from "@/components/docs/typing/proofing";
+import { ProofingLayer } from "@/components/docs/typing/proofing-layer";
 import { acceptedWords, setAcceptedWords } from "@/components/docs/typing/spelling";
 import { ShortcutsDialog } from "@/components/docs/typing/shortcuts-dialog";
 import { VoiceTyping } from "@/components/docs/typing/voice-typing";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // The typing area (SPEC.md §29): find and find and replace, Tools >
-// Preferences, the keyboard shortcuts, voice typing, the spelling switch,
-// the personal dictionary and the words ignored in the document
-// (typing/spelling.ts), and images dropped anywhere on the page
+// Preferences, the keyboard shortcuts, voice typing, the spelling and
+// grammar switches and their squiggles (typing/proofing.ts), the personal
+// dictionary and the words ignored in the document (typing/spelling.ts),
+// and images dropped anywhere on the page
 // (typing/drop.ts); in Search the
 // menus also Format > Text, View > Show non-printing characters, and Edit's
 // clipboard items. Their keys answer when the page
@@ -114,6 +117,13 @@ registerDocsCommands([
     keywords: ["markdown", "copy"],
     run: (editor) => void copyMarkdown(editor),
     enabled: (editor) => typingPrefs().markdown && !editor.state.selection.empty,
+  },
+  {
+    id: "typing:grammar",
+    label: "docsTyping.showGrammar",
+    menu: "tools",
+    keywords: ["grammar", "spelling and grammar", "grammar check", "show grammar suggestions", "语法", "语法建议"],
+    run: (editor) => fireDocs(editor, TYPING_EVENT.grammar),
   },
   {
     id: "typing:personal-dictionary",
@@ -204,6 +214,17 @@ export function TypingLayer({ editor, documentId, canEdit, projectEditor, editin
     return subscribeTypingPrefs(send);
   }, [editor, documentId]);
 
+  // The squiggles: in Editing and Suggesting, as the preferences say; the
+  // grammar check on Unitos Premium and Ultra.
+  useEffect(() => {
+    const send = () => {
+      const prefs = typingPrefs();
+      setProofing(editor, { spelling: editing && prefs.showSpelling, grammar: editing && premium && prefs.showGrammar });
+    };
+    send();
+    return subscribeTypingPrefs(send);
+  }, [editor, editing, premium]);
+
   // Google Docs' navigation keys: the chords, the misspellings, Dictionary.
   // A layout effect: the chords' listener is the window's first, so the key
   // after a chord's first key never reaches the modes' keys (toolbar.tsx) or
@@ -221,10 +242,17 @@ export function TypingLayer({ editor, documentId, canEdit, projectEditor, editin
       setFindMode(mode);
       setFocusToken((n) => n + 1);
     };
-    // Spelling and grammar check: the browser's underlines on or off.
+    // Show spelling suggestions and Show grammar suggestions: the red and
+    // the blue squiggles on or off, kept in this browser.
     const toggleSpelling = () => {
-      view.dom.spellcheck = !view.dom.spellcheck;
-      toast(t(view.dom.spellcheck ? "docsTyping.spellingOn" : "docsTyping.spellingOff"), editor);
+      const on = !typingPrefs().showSpelling;
+      setTypingPrefs({ showSpelling: on });
+      toast(t(on ? "docsTyping.spellingOn" : "docsTyping.spellingOff"), editor);
+    };
+    const toggleGrammar = () => {
+      const on = !typingPrefs().showGrammar;
+      setTypingPrefs({ showGrammar: on });
+      toast(t(on ? "docsTyping.grammarOn" : "docsTyping.grammarOff"), editor);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.isComposing || !docsActive(editor)) return;
@@ -256,6 +284,7 @@ export function TypingLayer({ editor, documentId, canEdit, projectEditor, editin
       [TYPING_EVENT.shortcuts, () => setShortcutsOpen(true)],
       [TYPING_EVENT.voice, () => setVoiceOpen(true)],
       [TYPING_EVENT.spelling, toggleSpelling],
+      [TYPING_EVENT.grammar, toggleGrammar],
       [TYPING_EVENT.personalDictionary, () => setDictionaryOpen(true)],
     ];
     window.addEventListener("keydown", onKey);
@@ -309,6 +338,7 @@ export function TypingLayer({ editor, documentId, canEdit, projectEditor, editin
       )}
       <VoiceTyping editor={editor} open={voiceOpen} onClose={() => setVoiceOpen(false)} />
       <AutocorrectBubble editor={editor} />
+      <ProofingLayer editor={editor} documentId={documentId} />
     </>
   );
 }

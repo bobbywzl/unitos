@@ -544,7 +544,10 @@ export function DocsEditor({
       editorProps: {
         attributes: {
           class: "docs-prose",
-          spellcheck: "true",
+          // Unitos draws the spelling squiggles (typing/proofing.ts); a
+          // paragraph that does not read as English turns the browser's
+          // check back on for itself.
+          spellcheck: "false",
           "aria-label": t("docs.documentBody"),
           "data-docs-body": "",
         },
