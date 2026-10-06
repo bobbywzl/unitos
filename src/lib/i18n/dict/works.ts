@@ -149,6 +149,12 @@ const en = {
   guideKeyPlay: "Play or pause a video or audio document.",
   guideKeySeek: "Go back or forward 5 seconds.",
   guideKeyFullscreen: "Show the video full screen.",
+  guideKeySelectAll: "Select the article's text and open the toolbar on it.",
+  guideKeyExtend: "Grow or shrink the selection; the toolbar opens on it.",
+  guideKeyQueueDecide: "In the pending queue: accept or reject the pending note.",
+  guideKeyQueueMove: "In the pending queue: go to the next or the previous pending note.",
+  guideKeyQueueEdit: "In the pending queue: edit the pending note.",
+  guideKeyQueueJump: "In the pending queue: jump to the pending note's quote in the article.",
   guideLeftOffBody:
     "A document opens where you left off, in any tab and on any device you sign in on. A small ribbon above the block marks the place, so you can find it again after you scroll away.",
   // The release notifications (SPEC.md §18, lib/releases.ts): one per release, on the dashboard.
@@ -332,6 +338,12 @@ const zh: Record<keyof typeof en, string> = {
   guideKeyPlay: "播放或暂停视频或音频文档。",
   guideKeySeek: "后退或前进 5 秒。",
   guideKeyFullscreen: "全屏显示视频。",
+  guideKeySelectAll: "选中文章的文字，并在其上打开工具栏。",
+  guideKeyExtend: "扩大或缩小选中内容；工具栏随之打开。",
+  guideKeyQueueDecide: "在待定队列中：接受或拒绝待定笔记。",
+  guideKeyQueueMove: "在待定队列中：转到下一条或上一条待定笔记。",
+  guideKeyQueueEdit: "在待定队列中：编辑待定笔记。",
+  guideKeyQueueJump: "在待定队列中：跳到待定笔记在文章中的引文。",
   guideLeftOffBody:
     "文档会在你上次读到的位置打开，无论在哪个标签页，还是在你登录的任何设备上。块上方的小书签标出这个位置，滚动离开后也能找回来。",
   release20260924Title: "新功能：折叠、整页批注、按文档、对话列表",
