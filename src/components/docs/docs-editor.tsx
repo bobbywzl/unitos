@@ -28,6 +28,7 @@ import { UnitosLayer } from "@/components/docs/areas/layer";
 import { CollapsedView, type PageCollapse } from "@/components/docs/layer/collapse";
 import { showLeftOff } from "@/components/docs/layer/left-off";
 import { registerDocumentFlush } from "@/components/docs/layer/flush";
+import { useKeepPlace } from "@/components/docs/page/keep-place";
 import { ReflowBar, useReflow } from "@/components/docs/page/reflow";
 import { showTranslations } from "@/components/docs/layer/reading";
 import { SuggestLayer } from "@/components/docs/suggest/layer";
@@ -240,10 +241,12 @@ function SaveStatus({ state }: { state: SaveState }) {
   );
 }
 
-/** Where the caret goes when the page opens scrolled: the start of the
-    block at the reading line (READING_LINE_PX under the pane's top), or,
-    when that start is under the title row and the toolbar, the start of
-    the block's first line in view. Null at the top of the document. */
+/** Where the caret goes when the page opens scrolled, or leaves Viewing
+    with the caret out of view: the start of the block at the reading line
+    (READING_LINE_PX under the pane's top), or, when that start is under the
+    title row and the toolbar, the start of the block's first line in view,
+    or of the next block when no line of it is in view whole. Null at the
+    top of the document. */
 function readingCaret(editor: Editor, pane: HTMLElement): number | null {
   if (pane.scrollTop < 1) return null;
   const view = editor.view;
@@ -262,7 +265,28 @@ function readingCaret(editor: Editor, pane: HTMLElement): number | null {
   // line under the text's box is the next line (the line's box runs lower).
   const line = view.coordsAtPos(hit);
   const next = line.top >= shown - 1 ? hit : at(line.bottom + (line.bottom - line.top) / 2);
-  return next !== null && view.state.doc.resolve(next).parent === $hit.parent ? next : hit;
+  if (next !== null && view.state.doc.resolve(next).parent === $hit.parent && view.coordsAtPos(next).top >= shown - 1) return next;
+  // The block's line under the header was its last: the next block's start.
+  let after: number | null = null;
+  view.state.doc.nodesBetween($hit.after(), view.state.doc.content.size, (node, pos) => {
+    if (after !== null) return false;
+    if (node.isTextblock) after = pos + 1;
+    return !node.isTextblock;
+  });
+  return after !== null && view.coordsAtPos(after).top >= shown - 1 ? after : hit;
+}
+
+/** The caret, or the selection's head, shows in the pane under the header. */
+function caretInView(editor: Editor, pane: HTMLElement): boolean {
+  const paneRect = pane.getBoundingClientRect();
+  const header = editor.view.dom.closest("[data-docs-editor]")?.querySelector(".docs-header");
+  const top = Math.max(paneRect.top, header?.getBoundingClientRect().bottom ?? paneRect.top);
+  try {
+    const caret = editor.view.coordsAtPos(editor.state.selection.head);
+    return caret.bottom > top && caret.top < paneRect.bottom;
+  } catch {
+    return false;
+  }
 }
 
 /** While the reading position holds the pane (the pages still settling
@@ -569,6 +593,8 @@ export function DocsEditor({
   const reflowing = pdfPages && mode === "viewing";
   const reflowed = reflowing && reflowChoice === "pageless";
   const shownSetup = useMemo(() => (reflowed ? { ...pageSetup, pageless: true } : pageSetup), [reflowed, pageSetup]);
+  // Pages to pageless and back keep the block at the reading line in view.
+  useKeepPlace(editor, shownSetup.pageless ? "pageless" : "pages");
 
   // The QA scripts drive the editor directly in development.
   useEffect(() => {
@@ -662,7 +688,10 @@ export function DocsEditor({
   }, [editor, marksSignature, highlightsByBlock, t, matches, rev, saveState, marksEditing]);
 
   // A switch to Editing or Suggesting gives the page the keys at its caret,
-  // the selection kept and the pane where it is.
+  // the selection kept and the pane where it is. A caret out of view (an
+  // import read in Viewing keeps it at the start) goes to the start of the
+  // block at the reading line first, so the first key types where the
+  // reader looks.
   const modeRef = useRef(mode);
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
@@ -671,7 +700,15 @@ export function DocsEditor({
     modeRef.current = mode;
     const passing = passingRef.current;
     passingRef.current = false;
-    if (switched && writable && mode !== "viewing" && !passing) editor.commands.focus(undefined, { scrollIntoView: false });
+    if (!switched || !writable || mode === "viewing" || passing) return;
+    const pane = scrollParent(editor.view.dom);
+    if (pane && !caretInView(editor, pane)) {
+      const pos = readingCaret(editor, pane);
+      if (pos !== null) {
+        editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, pos)).setMeta("addToHistory", false));
+      }
+    }
+    editor.commands.focus(undefined, { scrollIntoView: false });
   }, [editor, writable, mode]);
 
   // The header shows while the reader is in the document: a press or the
