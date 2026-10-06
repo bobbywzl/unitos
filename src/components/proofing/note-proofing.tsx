@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useReducer, useRef, useState, useSyncExternalStore, type RefObject } from "react";
-import "@/components/proofing/proofing.css";
 import { useCollab } from "@/components/collab/collab-context";
 import { serverTypingPrefs, subscribeTypingPrefs, typingPrefs } from "@/components/docs/typing/prefs";
 import { acceptedWords, addToDictionary, ignoreAll } from "@/components/docs/typing/spelling";
@@ -17,7 +16,7 @@ import { wordsInText } from "@/lib/spell-words";
 // grammar or wording problem as the page editor, with the same card. The
 // note editor paints its text again after every edit (lib/note-editable.ts),
 // so the squiggles are not in its text: they are ranges the browser draws
-// over it (the CSS Custom Highlight API, proofing.css), worked out again a
+// over it (the CSS Custom Highlight API, HIGHLIGHT_CSS), worked out again a
 // moment after each paint. Accept selects the wrong words and types the
 // replacement, so the note editor makes it one edit with its own undo. A
 // browser without the API keeps its own spelling check.
@@ -42,10 +41,30 @@ function highlightApi(): HighlightApi | null {
   return { highlights: css.highlights as HighlightApi["highlights"], Highlight };
 }
 
+// The squiggles' look: the page editor's red and blue (docs/css/typing.css).
+// Added as a style element, not a CSS file: the bundler's CSS reader does not
+// parse ::highlight() and warns on every build. A highlight does not read
+// custom properties everywhere, so the dark colors are written out.
+const HIGHLIGHT_CSS = `
+::highlight(${SPELLING}) { text-decoration: underline wavy #dd0000; text-decoration-thickness: 1px; text-decoration-skip-ink: none; }
+::highlight(${GRAMMAR}) { text-decoration: underline wavy #4285f4; text-decoration-thickness: 1px; text-decoration-skip-ink: none; }
+.dark ::highlight(${SPELLING}) { text-decoration-color: #f28b82; }
+.dark ::highlight(${GRAMMAR}) { text-decoration-color: #8ab4f8; }
+`;
+
+function addHighlightStyle() {
+  if (document.getElementById("unitos-proofing-style")) return;
+  const style = document.createElement("style");
+  style.id = "unitos-proofing-style";
+  style.textContent = HIGHLIGHT_CSS;
+  document.head.appendChild(style);
+}
+
 /** The highlight of a name, shared by every note editor on the page. */
 function registry(name: string): Registry | null {
   const api = highlightApi();
   if (!api) return null;
+  addHighlightStyle();
   let h = api.highlights.get(name);
   if (!h) {
     h = new api.Highlight();
