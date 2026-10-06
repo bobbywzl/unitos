@@ -25,8 +25,9 @@ import type { RichNode } from "@/lib/docs/schema";
 // written into the rich text: the unit's nodes are not drawn (a node
 // decoration) and the core stands before them (a widget), the block reader's
 // own core (core-block.tsx), so its marks, its selection, and its anchors are
-// the collapsed view's, as in the block reader. Each unit has the block
-// reader's button at its right: it reads the unit whole, or folds it again.
+// the collapsed view's, as in the block reader. A click on a core reads the
+// unit whole; each unit has the block reader's button at its right: it reads
+// the unit whole, or folds it again.
 // Viewing only: Editing, Suggesting, and Find need the words, so they turn
 // Collapse off. The pages lay a core out as one piece (page/paginate.ts).
 
@@ -245,6 +246,31 @@ export function CollapsedView({
     window.addEventListener("selectionchange", onSelectionChange, true);
     return () => window.removeEventListener("selectionchange", onSelectionChange, true);
   }, [active]);
+  // A click on a core reads its unit whole, as in the block reader (SPEC.md
+  // §28): a press that did not move, with no words selected, outside the
+  // core's marks and chips, which open what they open.
+  useEffect(() => {
+    if (!active) return;
+    const dom = editor.view.dom;
+    let press: { x: number; y: number } | null = null;
+    const onPress = (e: PointerEvent) => {
+      press = { x: e.clientX, y: e.clientY };
+    };
+    const onClick = (e: MouseEvent) => {
+      if (e.button !== 0 || !(e.target instanceof Element)) return;
+      if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 4) return;
+      const core = e.target.closest<HTMLElement>(".docs-core-slot [data-collapsed]");
+      if (!core?.dataset.blockId || e.target.closest("[data-anchor-skip], mark, a, button")) return;
+      if (document.getSelection()?.isCollapsed === false) return;
+      actions.current.flip?.(core.dataset.blockId);
+    };
+    dom.addEventListener("pointerdown", onPress, true);
+    dom.addEventListener("click", onClick);
+    return () => {
+      dom.removeEventListener("pointerdown", onPress, true);
+      dom.removeEventListener("click", onClick);
+    };
+  }, [editor, active]);
   const cores = collapse?.cores ?? null;
   const flipped = collapse?.flipped ?? null;
   const { doc, shown } = useMemo(() => {
