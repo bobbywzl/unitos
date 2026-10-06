@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
-import { documentsOnlyIn, keepTraceWrites } from "@/lib/documents/orphans";
+import { documentsOnlyIn, keepDocuments } from "@/lib/documents/orphans";
 import { serverT } from "@/lib/i18n/server";
 import { corpusDistillationList } from "@/lib/types";
 import { parseBody } from "@/lib/validate";
@@ -91,7 +91,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ notebookId:
   const onlyHere = await documentsOnlyIn(notebookId);
   const deleted = await db
     .$transaction([
-      ...keepTraceWrites(
+      ...keepDocuments(
         access.user.id,
         onlyHere.map((d) => d.id),
       ),
