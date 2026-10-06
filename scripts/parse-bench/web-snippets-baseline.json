@@ -2,7 +2,7 @@
  "total": {
   "f1": 0.936,
   "precision": 0.888,
-  "recall": 0.989
+  "recall": 0.99
  },
  "pages": {
   "100noticias.com-millones.html": {
@@ -3161,9 +3161,9 @@
    "fn": 0
   },
   "falstaff.de-burgenland.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 2,
-   "fn": 1
+   "fn": 0
   },
   "familie.de.montessori.html": {
    "tp": 3,
