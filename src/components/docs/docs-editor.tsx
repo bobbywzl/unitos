@@ -802,13 +802,13 @@ export function DocsEditor({
       if (!editor) return;
       const target = e.target as Element;
       if (target.closest("[data-anchor-skip]")) {
-        openMarkAt(target);
+        openMarkAt(target, { x: e.clientX, y: e.clientY });
         return;
       }
       if (editor.isEditable) return;
       const { from, to, empty } = editor.state.selection;
       const at = editor.view.posAtCoords({ left: e.clientX, top: e.clientY })?.pos ?? -1;
-      if ((empty || (e.detail === 1 && at > from && at < to)) && openMarkAt(target) && !empty) {
+      if ((empty || (e.detail === 1 && at > from && at < to)) && openMarkAt(target, { x: e.clientX, y: e.clientY }) && !empty) {
         editor.commands.setTextSelection(at);
       }
     },

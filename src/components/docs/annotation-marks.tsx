@@ -89,13 +89,31 @@ function chipWidget({ kind, highlight: h }: Chip, t: TFunc) {
 /** The kinds the layer paints; formatting, terms, and web links are the editor's. */
 export const PAINTED = new Set<Highlight["kind"]>(["anchor", "pending-link", "salience", "simplify", "extract", "link"]);
 
+/** The smaller of two anchors; of two alike, an annotation's before a plain
+    note's, then the lower source id, so the pick never turns on row order. */
+function smaller(a: Highlight, b: Highlight): Highlight {
+  const size = a.end - a.start - (b.end - b.start);
+  if (size !== 0) return size < 0 ? a : b;
+  if (Boolean(a.annotation) !== Boolean(b.annotation)) return a.annotation ? a : b;
+  return (a.sourceId ?? "") <= (b.sourceId ?? "") ? a : b;
+}
+
 /** One stretch of words under the same highlights, drawn as block-view.tsx
-    markedText draws it: a link wins, else the smallest anchor names the mark. */
+    markedText draws it: a link wins, else the smallest anchor names the mark.
+    An annotation's color paints over a plain note's clay. Words under two
+    annotations or notes or more carry every one's source (data-stack-sources):
+    a click opens the reader's chooser of them (SPEC.md §6). */
 function segmentAttrs(covering: Highlight[], blockId: string, t: TFunc, editing: boolean): Record<string, string> {
   const link = covering.find((h) => h.kind === "link");
   const anchors = covering.filter((h) => h.kind === "anchor");
-  const anchor =
-    anchors.length > 1 ? anchors.reduce((n, h) => (h.end - h.start < n.end - n.start ? h : n)) : anchors[0];
+  const anchor = anchors.length > 1 ? anchors.reduce(smaller) : anchors[0];
+  const annotations = anchors.filter((h) => h.annotation && !h.leaving);
+  const painted = anchor && !anchor.annotation && annotations.length > 0 ? annotations.reduce(smaller) : anchor;
+  const stacked = [
+    ...new Set(
+      anchors.filter((h) => h.sourceId && !h.leaving && (h.annotation || h.noteId)).map((h) => h.sourceId as string),
+    ),
+  ];
   const salience = covering.find((h) => h.kind === "salience");
   const simplify = covering.find((h) => h.kind === "simplify");
   const extract = covering.find((h) => h.kind === "extract");
@@ -112,6 +130,7 @@ function segmentAttrs(covering: Highlight[], blockId: string, t: TFunc, editing:
     return " mark-sweep";
   };
   if (anchor?.sourceId) attrs["data-source-id"] = anchor.sourceId;
+  if (stacked.length > 1) attrs["data-stack-sources"] = stacked.join(" ");
   const leaving = Boolean(anchor?.leaving);
   const focusable = Boolean(anchor?.annotation && anchor.sourceId && !leaving);
   const noteMark = !anchor?.annotation && anchor?.noteId && !leaving ? anchor.noteId : null;
@@ -144,8 +163,8 @@ function segmentAttrs(covering: Highlight[], blockId: string, t: TFunc, editing:
   }
   const markClass = simplify
     ? "simplify-mark"
-    : anchor
-      ? anchorClass(anchor)
+    : painted
+      ? anchorClass(painted)
       : extract
         ? extract.extractOrigin
           ? "extract-origin-mark"
@@ -627,7 +646,7 @@ export const AnnotationMarks = Extension.create({
               const target = event.target instanceof Element ? event.target : null;
               if (!target?.closest("[data-docs-open]") || target.closest("[data-anchor-skip]")) return false;
               event.preventDefault();
-              openMarkAt(target);
+              openMarkAt(target, { x: event.clientX, y: event.clientY });
               return true;
             },
             // In Viewing a click on a mark opens what it opens; the
@@ -638,7 +657,7 @@ export const AnnotationMarks = Extension.create({
               const target = event.target instanceof Element ? event.target : null;
               if (!target?.closest("[data-docs-open]") || target.closest("[data-anchor-skip]")) return false;
               if (!(window.getSelection()?.isCollapsed ?? true)) return false;
-              if (openMarkAt(target)) event.stopPropagation();
+              if (openMarkAt(target, { x: event.clientX, y: event.clientY })) event.stopPropagation();
               return false;
             },
           },
@@ -652,11 +671,22 @@ export const AnnotationMarks = Extension.create({
 
 /** A press on a mark or a chip: what it opens in the reader, it opens here —
     an annotation's card, a note in the tray, an extraction's match card, a
-    link's other end. Returns true when the press was a mark's. */
-export function openMarkAt(target: EventTarget | null): boolean {
+    link's other end; on words under two annotations or notes or more, the
+    reader's chooser of them at the press (`at`). Returns true when the press
+    was a mark's. */
+export function openMarkAt(target: EventTarget | null, at?: { x: number; y: number }): boolean {
   const el = target instanceof Element ? target.closest<HTMLElement>("[data-docs-open]") : null;
   if (!el) return false;
   const kind = el.dataset.docsOpen;
+  const stacked = el.dataset.stackSources?.split(" ").filter(Boolean) ?? [];
+  if ((kind === "annotation" || kind === "note") && el.dataset.sourceId && stacked.length > 1 && at) {
+    window.dispatchEvent(
+      new CustomEvent("dissect:open-annotation", {
+        detail: { sourceId: el.dataset.sourceId, sources: stacked, x: at.x, y: at.y },
+      }),
+    );
+    return true;
+  }
   // An object's label chip names its annotation by data-hover-source alone.
   const sourceId = el.dataset.sourceId ?? el.dataset.hoverSource;
   if (kind === "annotation" && sourceId) {
