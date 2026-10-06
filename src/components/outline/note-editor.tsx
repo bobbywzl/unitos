@@ -9,6 +9,7 @@ import { hasQuoteDrag, quoteMarkdown, readQuoteDrag, type QuoteDrag } from "@/li
 import { quoteLanded } from "@/components/use-note-drop";
 import { RedoIcon, UndoIcon } from "@/components/icons";
 import { useCollab } from "@/components/collab/collab-context";
+import { NoteProofing } from "@/components/proofing/note-proofing";
 import { useT } from "@/components/lang-provider";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 
@@ -573,6 +574,8 @@ export function NoteEditor({
           onKeyDown={handleKeyDown}
           className="note-doc prose prose-sm max-w-none prose-p:my-1.5 prose-headings:my-2 prose-ul:my-1.5 prose-ol:my-1.5 min-h-[4.5em] min-w-0 flex-1 overflow-y-auto outline-none"
         />
+        {/* The red and blue squiggles, as in the page editor (SPEC.md §29). */}
+        <NoteProofing target={ref} />
         {dropCaret && (
           <div
             aria-hidden

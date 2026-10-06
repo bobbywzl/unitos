@@ -319,7 +319,7 @@ export function DocsToolbar({
     undo: { id: "undo", key: "docs.undo", combo: "Mod+Z", Icon: UndoIcon, where: "edit", run: () => run((c) => c.undo()), on: s.canUndo },
     redo: { id: "redo", key: "docs.redo", combo: "Mod+Y", Icon: RedoIcon, where: "edit", run: () => run((c) => c.redo()), on: s.canRedo },
     print: { id: "print", key: "docs.print", combo: "Mod+P", Icon: PrintIcon, where: "file", words: ["printer", "print preview"], run: () => window.print() },
-    spelling: { id: "spelling", key: "docs.spellcheck", combo: "Mod+Alt+X", Icon: SpellcheckIcon, where: "tools", run: () => fireDocs(editor, TYPING_EVENT.spelling) },
+    spelling: { id: "spelling", key: "docsTyping.showSpelling", combo: "Mod+Alt+X", Icon: SpellcheckIcon, where: "tools", run: () => fireDocs(editor, TYPING_EVENT.spelling) },
     paint: { id: "paint-format", key: "docs.paintFormat", Icon: PaintFormatIcon, words: ["copy formatting"], run: paint.press, on: !inHeader },
     bold: { id: "bold", key: "docs.bold", combo: "Mod+B", Icon: BoldIcon, words: ["strong", "dark"], run: () => run((c) => c.toggleBold()) },
     italic: { id: "italic", key: "docs.italic", combo: "Mod+I", Icon: ItalicIcon, words: ["emphasis", "emphasized", "italicize"], run: () => run((c) => c.toggleItalic()) },

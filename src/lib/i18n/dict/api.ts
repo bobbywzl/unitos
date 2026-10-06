@@ -292,6 +292,10 @@ const en = {
   // Collapse (SPEC.md §28)
   collapseNeedsKey: "No model is configured for Collapse.",
   collapseFailed: "The article could not be collapsed",
+  // The grammar check (SPEC.md §29)
+  grammarNeedsKey: "No model is configured for the grammar check.",
+  grammarNeedsPremium: "Grammar suggestions need Unitos Premium.",
+  grammarFailed: "The grammar check failed",
   videoNoReparse: "Video documents do not re-parse",
   reparseRunning: "A re-parse of this document is already running",
   shapeSwitchNeedsPdf: "This document has no stored PDF to switch from",
@@ -652,6 +656,9 @@ const zh: Record<keyof typeof en, string> = {
   contentsFailed: "目录无法生成",
   collapseNeedsKey: "未配置折叠所用的模型。",
   collapseFailed: "文章无法折叠",
+  grammarNeedsKey: "未配置语法检查所用的模型。",
+  grammarNeedsPremium: "语法建议需要 Unitos Premium。",
+  grammarFailed: "语法检查失败",
   videoNoReparse: "视频文档不能重新解析",
   reparseRunning: "此文档正在重新解析",
   shapeSwitchNeedsPdf: "此文档没有存储的 PDF，无法切换",

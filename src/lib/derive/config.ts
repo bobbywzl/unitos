@@ -312,6 +312,14 @@ export const MERGE_EFFORT: KimiEffort = DEFAULT_EFFORT;
 export const GIST_MODEL = GLM_5_3_FLASH;
 export const GIST_EFFORT: KimiEffort = "low";
 
+// The grammar check of the page editor and the note editor (SPEC.md §29): a
+// few paragraphs per call, each paragraph's mistakes as the exact wrong
+// words, the replacement, and why. It runs in the background as the reader
+// writes, so the cheapest reader at the lowest effort.
+export const GRAMMAR_MODEL = GLM_5_3_FLASH;
+export const GRAMMAR_EFFORT: KimiEffort = "low";
+export const GRAMMAR_MAX_OUTPUT_TOKENS = 8192; // the short reasoning and a few issues per paragraph
+
 // The parse passes — the URL core, structure, and layout passes (SPEC.md §2)
 // — run on Claude Opus 5.5 at max effort, the strongest reader of a page's
 // own HTML. The passes answer with ops by block index, and what the parse

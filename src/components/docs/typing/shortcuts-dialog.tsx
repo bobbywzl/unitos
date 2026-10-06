@@ -91,7 +91,7 @@ const SECTIONS: { title: TKey; rows: Row[] }[] = [
       { label: "docsTyping.scWordCount", pc: ["Mod+Shift+C"] },
       { label: "docsTyping.scFootnote", pc: ["Mod+Alt+F"] },
       { label: "docsTyping.scEnterFootnote", pc: ["Mod+Alt+E F"] },
-      { label: "docs.spellcheck", pc: ["Mod+Alt+X", "F7"] },
+      { label: "docsTyping.showSpelling", pc: ["Mod+Alt+X", "F7"] },
       { label: "docsTyping.scMoveTo", what: "docsTyping.navMisspelling", pc: ["Mod+'", "Mod+;"] },
       { label: "docsTyping.dictionary", pc: ["Mod+Shift+Y"] },
       { label: "docsPage.header", pc: ["Mod+Alt+O H"] },

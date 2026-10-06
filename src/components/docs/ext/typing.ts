@@ -25,6 +25,7 @@ import {
 import { markStylePlugin, TYPING_RESTORE_META, validMarkStyle } from "@/components/docs/typing/mark-style";
 import { NonPrinting } from "@/components/docs/typing/non-printing";
 import { armPlainPaste, imageFiles, insertImageFiles, notePaste, pastedHtml, plainTextSlice, uploadsPlugin } from "@/components/docs/typing/paste";
+import { proofingPlugins } from "@/components/docs/typing/proofing";
 import { spellingExceptions } from "@/components/docs/typing/spelling";
 import { repeatLastAction, repeatPlugin } from "@/components/docs/typing/repeat";
 import { tracePlugin } from "@/components/docs/typing/trace";
@@ -284,7 +285,7 @@ const DocsTyping = Extension.create({
           .setMeta(TYPING_RESTORE_META, true);
       },
     });
-    return [plugin, findPlugin(), tracePlugin(), repeatPlugin(), markStylePlugin(), urlChipPlugin(editor), uploadsPlugin(), spellingExceptions()];
+    return [plugin, findPlugin(), tracePlugin(), repeatPlugin(), markStylePlugin(), urlChipPlugin(editor), uploadsPlugin(), spellingExceptions(), ...proofingPlugins()];
   },
 });
 

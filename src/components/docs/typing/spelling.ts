@@ -4,6 +4,8 @@ import { Plugin, PluginKey, TextSelection, type EditorState } from "@tiptap/pm/s
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import type NSpell from "nspell";
 import { setTypingPrefs, typingPrefs } from "@/components/docs/typing/prefs";
+import { checkParagraphs, spellingSuggestions } from "@/components/proofing/spell-service";
+import { wordsInText, type TextWord } from "@/lib/spell-words";
 
 // "Automatically correct spelling" (SPEC.md §29, typing). Google Docs asks its
 // spelling service; Unitos keeps the everyday English typos it fixes on its
@@ -114,18 +116,19 @@ export function spellingFix(word: string, trigger: string): string | null {
   return fix;
 }
 
-// Spelling suggestions (SPEC.md §29, typing). The browser draws the red
-// underline, in the reader's languages. Unitos adds what the page cannot ask
-// the browser for — spelling suggestions in the right-click menu, and the
-// next and previous misspelling — in English: nspell with the English
-// Hunspell dictionary in public/spelling, loaded on first use.
+// Spelling suggestions (SPEC.md §29, typing). Unitos draws the red squiggle
+// under a misspelled English word (typing/proofing.ts) and offers the
+// spelling suggestions — on the word's card, in the right-click menu — and
+// the next and previous misspelling: nspell with the English Hunspell
+// dictionary in public/spelling, in a worker (components/proofing).
 
-type Word = { word: string; from: number; to: number };
+type Word = TextWord;
 export type Misspelling = Word & { suggestions: string[] };
 
 let checker: Promise<NSpell | null> | null = null;
 
-/** The English checker, loaded once per page; null when it cannot load. */
+/** The English checker on the page's thread, loaded once per page (the next
+    and previous misspelling); null when it cannot load. */
 export function loadChecker(): Promise<NSpell | null> {
   const text = (url: string) => fetch(url).then((res) => (res.ok ? res.text() : Promise.reject(new Error(url))));
   checker ??= Promise.all([import("nspell"), text("/spelling/en.aff"), text("/spelling/en.dic")])
@@ -137,32 +140,23 @@ export function loadChecker(): Promise<NSpell | null> {
   return checker;
 }
 
-/** Letters, with apostrophes inside ("don't"). */
-const WORD = /[\p{L}\p{M}]+(?:['’][\p{L}\p{M}]+)*/gu;
-const LATIN = /^[\p{Script=Latin}\p{M}'’]+$/u;
-/** What the browser leaves unchecked too: an address, a number, a file name. */
-const UNCHECKED = /[@/\\_\d]|\p{L}\.\p{L}/u;
+/** Words a suggested deletion strikes are not in the text. */
+const struck = (node: PMNode) => node.marks.some((m) => m.type.name === "deletion");
 
 /** The words of a paragraph the checker reads, with their positions: Latin
-    words of two letters or more, outside code. */
-function wordsOf(block: PMNode, blockPos: number): Word[] {
+    words of two letters or more, outside code and outside the words a
+    suggestion removes. */
+export function wordsOf(block: PMNode, blockPos: number): Word[] {
   const words: Word[] = [];
   let run = "";
   let start = 0;
   const flush = () => {
-    for (const chunk of run.matchAll(/\S+/g)) {
-      if (UNCHECKED.test(chunk[0])) continue;
-      for (const m of chunk[0].matchAll(WORD)) {
-        if (m[0].length < 2 || !LATIN.test(m[0])) continue;
-        const from = start + chunk.index + m.index;
-        words.push({ word: m[0], from, to: from + m[0].length });
-      }
-    }
+    for (const w of wordsInText(run)) words.push({ word: w.word, from: start + w.from, to: start + w.to });
     run = "";
   };
   if (!block.type.spec.code) {
     block.forEach((child, offset) => {
-      if (!child.isText || child.marks.some((m) => m.type.name === "code")) return flush();
+      if (!child.isText || struck(child) || child.marks.some((m) => m.type.name === "code")) return flush();
       if (!run) start = blockPos + 1 + offset;
       run += child.text;
     });
@@ -171,33 +165,19 @@ function wordsOf(block: PMNode, blockPos: number): Word[] {
   return words;
 }
 
-/** Up to five spelling suggestions: two neighboring letters swapped first,
-    then the words that keep the first letter — the slips typing makes most. */
-function ranked(word: string, suggestions: string[]): string[] {
-  const typed = word.toLowerCase();
-  const rank = (suggestion: string) => {
-    const s = suggestion.toLowerCase();
-    let i = 0;
-    while (i < s.length && s[i] === typed[i]) i++;
-    const swapped = s.length === typed.length && s[i] === typed[i + 1] && s[i + 1] === typed[i] && s.slice(i + 2) === typed.slice(i + 2);
-    return swapped ? 0 : s[0] === typed[0] ? 1 : 2;
-  };
-  return [...suggestions].sort((a, b) => rank(a) - rank(b)).slice(0, 5);
-}
-
 /** The misspelled English word at a position and its spelling suggestions
     (none, for a name the dictionary does not know), for the right-click
-    menu; null at once where there is none to check, where the word is one
-    of the reader's own, or while the page is not editable or its spelling
-    check is off. */
+    menu and the word's card; null at once where there is none to check,
+    where the word is one of the reader's own, or while the page is not
+    editable or its spelling check is off. */
 export function misspellingAt(editor: Editor, pos: number): Promise<Misspelling | null> | null {
   const $pos = editor.state.doc.resolve(pos);
-  if (!editor.isEditable || !editor.view.dom.spellcheck || !$pos.parent.isTextblock) return null;
+  if (!editor.isEditable || !typingPrefs().showSpelling || !$pos.parent.isTextblock) return null;
   const word = wordsOf($pos.parent, $pos.before()).find((w) => w.from <= pos && pos <= w.to);
   if (!word || acceptedIn(editor.state).has(word.word.toLowerCase())) return null;
-  return loadChecker().then((spell) => {
-    if (!spell || spell.correct(word.word)) return null;
-    return { ...word, suggestions: ranked(word.word, spell.suggest(word.word)) };
+  return checkParagraphs([{ text: word.word, words: [{ word: word.word, from: 0, to: word.word.length }] }], NONE).then(async (found) => {
+    if (!found || found[0].misspelled.length === 0) return null;
+    return { ...word, suggestions: await spellingSuggestions(word.word) };
   });
 }
 

@@ -44,6 +44,28 @@
   text-decoration-color: #8ab4f8;
 }
 
+/* Unitos's own squiggles (typing/proofing.ts): red under a misspelled
+   English word, blue under a grammar or wording problem, in the browser's
+   colors above. A click opens the squiggle's card (typing/proofing-card.tsx). */
+.docs-misspelled {
+  text-decoration: underline wavy #dd0000;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  text-decoration-skip-ink: none;
+}
+.docs-grammar {
+  text-decoration: underline wavy #4285f4;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  text-decoration-skip-ink: none;
+}
+.dark .docs-misspelled {
+  text-decoration-color: #f28b82;
+}
+.dark .docs-grammar {
+  text-decoration-color: #8ab4f8;
+}
+
 /* A word Docs corrected: a dashed gray underline. */
 .docs-autocorrected {
   text-decoration: underline dashed var(--docs-autocorrect);
@@ -523,10 +545,13 @@
   .docs-wc-anchor,
   .docs-voice,
   .docs-ac-bubble,
+  .docs-proof-card,
   .docs-tab-hint {
     display: none !important;
   }
-  .docs-autocorrected {
+  .docs-autocorrected,
+  .docs-misspelled,
+  .docs-grammar {
     text-decoration: none;
   }
   .tiptap-invisible-character {
