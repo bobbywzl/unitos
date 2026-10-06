@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
+import { documentsOnlyIn, keepTraceWrites } from "@/lib/documents/orphans";
 import { serverT } from "@/lib/i18n/server";
 import { corpusDistillationList } from "@/lib/types";
 import { parseBody } from "@/lib/validate";
@@ -68,13 +69,35 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ notebookId: s
   return NextResponse.json(notebook);
 }
 
+// What a delete of the project would leave in no project (SPEC.md §6): the
+// documents this project holds and no other. The dashboard's confirm names
+// them. The owner's alone, as the delete is.
+export async function GET(_req: Request, ctx: { params: Promise<{ notebookId: string }> }) {
+  const { notebookId } = await ctx.params;
+  const access = await notebookAccess(notebookId, "owner");
+  if (access instanceof NextResponse) return access;
+  return NextResponse.json({ onlyHere: await documentsOnlyIn(notebookId) });
+}
+
 // Deleting a corpus is the owner's alone; an editor edits, never removes.
+// The project's sections and notes go with it. A document only this project
+// holds stays whole, in no project, and in the owner's Library
+// (lib/documents/orphans.ts): no document is deleted here.
 export async function DELETE(_req: Request, ctx: { params: Promise<{ notebookId: string }> }) {
   const t = await serverT();
   const { notebookId } = await ctx.params;
   const access = await notebookAccess(notebookId, "owner");
   if (access instanceof NextResponse) return access;
-  const notebook = await db.notebook.delete({ where: { id: notebookId } }).catch(() => null);
-  if (!notebook) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
-  return NextResponse.json({ ok: true });
+  const onlyHere = await documentsOnlyIn(notebookId);
+  const deleted = await db
+    .$transaction([
+      ...keepTraceWrites(
+        access.user.id,
+        onlyHere.map((d) => d.id),
+      ),
+      db.notebook.delete({ where: { id: notebookId } }),
+    ])
+    .catch(() => null);
+  if (!deleted) return NextResponse.json({ error: t("api.corpusNotFound") }, { status: 404 });
+  return NextResponse.json({ ok: true, keptDocuments: onlyHere });
 }
