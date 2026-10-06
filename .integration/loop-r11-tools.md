@@ -6,7 +6,7 @@ Screenshots are under `.qa-tmp/fix/` in this worktree (`<ID>-before.png`, `<ID>-
 
 ## Findings
 
-Rule zero, for every blocking finding: the typed words were checked across a reload, Escape, a failed request (a 500 and offline), and a second tab (`v01`, `v03`, `v05`, `v06`, `x13c`, `x23`, `x26`; re-run after each merge of the loop branch, all pass).
+Rule zero, for every blocking finding: the typed words were checked across a reload, Escape, a failed request (a 500 and offline), and a second tab (`v01`, `v03`, `v05`, `v06`, `x13c`, `x26`, `d03`; re-run after the last merge of the loop branch, all pass).
 
 - **TOOL11-01 (blocking): fixed.** A follow-up or a Reply that fails, or is sent offline, goes back into the box with the reason under it (`data-send-error`); kept after Escape, reopen, and reload; sends once the request works. `TOOL11-01-before*.png` / `TOOL11-01-after*.png` (failed, offline, reload, assistant reload).
 - **TOOL11-02 (blocking): fixed.** Queued messages are kept in the card's draft; ✕ and Escape stop no run, and the turn in flight is stored. `TOOL11-02-before*.png` / `TOOL11-02-after*.png`.
