@@ -75,8 +75,8 @@ function weekStart(ms: number): Date {
       any other first mark, No title last.
     - Kind: Folder first, then each kind of document; a category keeps the
       list's own order.
-    - Week added, Month added: newest first, the rows in a category newest
-      first. */
+    - Week added, Month added: oldest first, the rows in a category oldest
+      first, as Added lists them: every date order runs one way. */
 export function categorizeRows<T extends SortRow>(
   rows: T[],
   sort: Exclude<DocumentSort, "added">,
@@ -107,7 +107,7 @@ export function categorizeRows<T extends SortRow>(
     }
     return [...byKey.values()].sort((a, b) => (a.key === "" ? 1 : b.key === "" ? -1 : collator.compare(a.key, b.key)));
   }
-  indexed.sort((a, b) => time(b.row.addedAt) - time(a.row.addedAt) || a.index - b.index);
+  indexed.sort((a, b) => time(a.row.addedAt) - time(b.row.addedAt) || a.index - b.index);
   for (const { row } of indexed) {
     const d = new Date(time(row.addedAt));
     if (sort === "week") {
@@ -125,5 +125,5 @@ export function categorizeRows<T extends SortRow>(
       );
     }
   }
-  return [...byKey.values()].sort((a, b) => b.key.localeCompare(a.key));
+  return [...byKey.values()].sort((a, b) => a.key.localeCompare(b.key));
 }

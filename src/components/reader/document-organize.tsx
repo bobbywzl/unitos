@@ -87,7 +87,8 @@ const KIND_KEY: Record<RowKind, TKey> = {
   pdf: "panes.uploadItemPdf",
   page: "panes.uploadItemPage",
   word: "panes.uploadItemWord",
-  markdown: "panes.uploadItemMarkdown",
+  // The import line's name for a Markdown or text file (docs-editor.tsx).
+  markdown: "docsPage.importTextFile",
   slides: "panes.uploadItemSlides",
   sheets: "panes.uploadItemSheets",
   media: "panes.uploadItemMediaFile",
