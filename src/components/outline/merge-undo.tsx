@@ -63,18 +63,23 @@ export function MergeUndoBar({ actions }: { actions: OutlineActions }) {
       ) : merge ? (
         <>
           <span className="text-[13px] text-sand-600">{t("outline.mergedNotes", { n: merge.count })}</span>
-          <button
-            onClick={() => {
-              void actions.undoMerge().then((reason) => {
-                if (reason) setError(reason);
-              });
-            }}
-            data-track="undo-merge"
-            data-tip={t("outline.undoMergeTitle")}
-            className="rounded-full bg-clay px-3.5 py-1 text-xs font-semibold text-clay-fg hover:bg-clay-600"
-          >
-            {t("outline.undo")}
-          </button>
+          {/* Edited since: the undo would refuse, so it is not offered. */}
+          {!actions.mergeUndoable ? (
+            <span className="text-[13px] text-sand-500">{t("outline.mergeEditedSince")}</span>
+          ) : (
+            <button
+              onClick={() => {
+                void actions.undoMerge().then((reason) => {
+                  if (reason) setError(reason);
+                });
+              }}
+              data-track="undo-merge"
+              data-tip={t("outline.undoMergeTitle")}
+              className="rounded-full bg-clay px-3.5 py-1 text-xs font-semibold text-clay-fg hover:bg-clay-600"
+            >
+              {t("outline.undo")}
+            </button>
+          )}
           <button
             onClick={() => actions.dismissMerge()}
             data-track="dismiss-merge"

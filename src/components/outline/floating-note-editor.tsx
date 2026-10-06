@@ -18,7 +18,7 @@ import { NoteEditor } from "@/components/outline/note-editor";
 import { NoteId } from "@/components/outline/note-id";
 import { NoteTitleField, focusBodyEditor, useNoteParts } from "@/components/outline/note-title-field";
 import { SaveStateLabel } from "@/components/outline/save-state";
-import { useNoteDrop } from "@/components/use-note-drop";
+import { quoteLanded, useNoteDrop } from "@/components/use-note-drop";
 import { referenceMarkdownForDrop } from "@/components/outline/reference-drop";
 import { quoteMarkdown, type QuoteDrag } from "@/lib/quote-drag";
 import { useCardDropTarget } from "@/components/outline/use-card-drop";
@@ -280,12 +280,18 @@ export function FloatingNoteEditor({
     await actions.saveNote(edit.id, shown.title ? `# ${shown.title}\n\n${body}` : body);
   }
 
+  // Sources a quote dropped into the open editor attached in this sitting:
+  // Cancel takes the quote's words back out, so it gives them up too.
+  const sitting = useRef<string[]>([]);
+
   // A quote dropped on the card: into the draft while editing, its source
-  // attached at once; else its words and its source in one write.
+  // attached at once; else its words and its source in one write. The
+  // selection and its toolbar go as the quote lands, as on a tray card.
   async function addQuote(drag: QuoteDrag) {
+    quoteLanded();
     if (editing || !note) {
       await addToNote(quoteMarkdown(drag.text));
-      if (note) await actions.attachSource(note.id, drag);
+      if (note) sitting.current.push(...(await actions.attachSource(note.id, drag)));
       return;
     }
     setDropError(null);
@@ -310,10 +316,16 @@ export function FloatingNoteEditor({
         if (end.drag.kind === "quote" && quote) {
           await addQuote(quote);
         } else if (reference) {
-          await addToNote(await referenceMarkdownForDrop(actions.notebookId, reference, t));
+          const markdown = await referenceMarkdownForDrop(actions.notebookId, reference, t);
           // The quote it landed points back to the reader: the annotation's
-          // anchors become sources of the note.
-          if (note && reference.quote) await actions.attachAnnotationSources(note.id, reference.annotationId);
+          // anchors become sources of the note, in the same write as the
+          // reference when the note is not open.
+          if (note && reference.quote && !editing) {
+            await actions.appendAnnotation(note.id, markdown, reference.annotationId);
+          } else {
+            await addToNote(markdown);
+            if (note && reference.quote) await actions.attachAnnotationSources(note.id, reference.annotationId);
+          }
         }
       } catch (err) {
         setMergeError(err instanceof Error ? err.message : t("common.requestFailed"));
@@ -368,6 +380,9 @@ export function FloatingNoteEditor({
   function cancelEdit() {
     cancel();
     setEditing(false);
+    const ids = sitting.current;
+    sitting.current = [];
+    if (note && ids.length > 0) void actions.dropSources(note.id, ids).catch(() => {});
   }
 
   // Done: the content is already saved by then; the card returns to its
@@ -380,8 +395,15 @@ export function FloatingNoteEditor({
     }
     markSaved(trimmed);
     setEditing(false);
-    await actions.saveNote(edit.id, trimmed);
-    confirmSaved(trimmed);
+    sitting.current = [];
+    try {
+      await actions.saveNote(edit.id, trimmed);
+      confirmSaved(trimmed);
+    } catch (err) {
+      // The words stay on the card, marked Not saved (use-outline.ts), and
+      // the local draft keeps them for the next load.
+      setDropError(err instanceof Error ? err.message : t("common.requestFailed"));
+    }
   }
 
   const dockRef = useRef(dock);
@@ -604,7 +626,13 @@ export function FloatingNoteEditor({
               if (e.key === "Escape") cancelEdit();
             }}
             moreHref={`/n/${actions.notebookId}/notes`}
-            onQuoteDrop={(drag) => (note ? actions.attachSource(note.id, drag) : undefined)}
+            onQuoteDrop={(drag) =>
+              note
+                ? actions.attachSource(note.id, drag).then((ids) => {
+                    sitting.current.push(...ids);
+                  })
+                : undefined
+            }
             title={
               <NoteTitleField
                 value={parts.title}

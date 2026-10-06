@@ -28,6 +28,7 @@ import { useCardDropTarget } from "@/components/outline/use-card-drop";
 import { ThinkingIndicator } from "@/components/thinking";
 import { NoteEditor } from "@/components/outline/note-editor";
 import { NoteHistory } from "@/components/outline/note-history";
+import { sourcesTip } from "@/components/outline/sources-tip";
 import { NoteId } from "@/components/outline/note-id";
 import { NoteTitleField, focusBodyEditor, useNoteParts } from "@/components/outline/note-title-field";
 import { SaveStateLabel } from "@/components/outline/save-state";
@@ -160,6 +161,8 @@ type NoteCommands = Pick<
   | "attachSource"
   | "appendQuote"
   | "attachAnnotationSources"
+  | "appendAnnotation"
+  | "dropSources"
   | "mergeNotes"
   | "toggleCollapsed"
   | "saveNote"
@@ -185,6 +188,8 @@ function useCommands(actions: OutlineActions): NoteCommands {
       attachSource: (...args) => latest.current.attachSource(...args),
       appendQuote: (...args) => latest.current.appendQuote(...args),
       attachAnnotationSources: (...args) => latest.current.attachAnnotationSources(...args),
+      appendAnnotation: (...args) => latest.current.appendAnnotation(...args),
+      dropSources: (...args) => latest.current.dropSources(...args),
       mergeNotes: (...args) => latest.current.mergeNotes(...args),
       toggleCollapsed: (...args) => latest.current.toggleCollapsed(...args),
       saveNote: (...args) => latest.current.saveNote(...args),
@@ -362,9 +367,16 @@ const NoteCardBody = memo(function NoteCardBody({
       }
       if (drag.kind === "annotation") {
         if (!drag.reference) return;
-        await addToNote(await referenceMarkdownForDrop(notebookId, drag.reference, t));
+        const markdown = await referenceMarkdownForDrop(notebookId, drag.reference, t);
         // The quote it landed points back to the reader: the annotation's
-        // anchors become sources of the note.
+        // anchors become sources of the note — in the same write as the
+        // reference when the note is not open, so no tab closed between two
+        // writes leaves the quote without them.
+        if (drag.reference.quote && !editing) {
+          await commands.appendAnnotation(note.id, markdown, drag.reference.annotationId);
+          return;
+        }
+        await addToNote(markdown);
         if (drag.reference.quote) await commands.attachAnnotationSources(note.id, drag.reference.annotationId);
         return;
       }
@@ -491,10 +503,17 @@ const NoteCardBody = memo(function NoteCardBody({
     cardRef.current?.querySelector<HTMLElement>('[data-track="note-edit"]')?.focus({ preventScroll: true });
   }, [editing]);
 
+  // Sources a quote dropped into the open editor attached in this sitting:
+  // Cancel takes the quote's words back out, so it gives them up too.
+  const sitting = useRef<string[]>([]);
+
   function cancel() {
     cancelDraft();
     refocus.current = true;
     setEditing(false);
+    const ids = sitting.current;
+    sitting.current = [];
+    if (ids.length > 0) void commands.dropSources(note.id, ids).catch(() => {});
   }
 
   // Done closes the editor; the content is already saved by then.
@@ -507,8 +526,15 @@ const NoteCardBody = memo(function NoteCardBody({
     markSaved(trimmed);
     refocus.current = true;
     setEditing(false);
-    await commands.saveNote(note.id, trimmed);
-    confirmSaved(trimmed);
+    sitting.current = [];
+    try {
+      await commands.saveNote(note.id, trimmed);
+      confirmSaved(trimmed);
+    } catch (err) {
+      // The words stay on the card, marked Not saved (use-outline.ts), and
+      // the local draft keeps them for the next load.
+      setDropError(err instanceof Error ? err.message : t("common.requestFailed"));
+    }
   }
 
   function openEditor() {
@@ -533,7 +559,7 @@ const NoteCardBody = memo(function NoteCardBody({
     setDropError(null);
     if (editing) {
       await addToNote(quoteMarkdown(drag.text));
-      await commands.attachSource(note.id, drag);
+      sitting.current.push(...(await commands.attachSource(note.id, drag)));
       return;
     }
     await commands.appendQuote(note.id, quoteMarkdown(drag.text), drag);
@@ -646,7 +672,7 @@ const NoteCardBody = memo(function NoteCardBody({
       {collapsed && note.sources.length > 0 && (
         <span
           className="flex shrink-0 items-center gap-1 text-[11px] text-sand-500"
-          data-tip={note.sources.map((s) => s.documentTitle).join(", ")}
+          data-tip={sourcesTip(note.sources, t)}
         >
           <AnchorIcon />
           {note.sources.length}
@@ -666,7 +692,9 @@ const NoteCardBody = memo(function NoteCardBody({
         {/* The save state, while editing (SPEC.md §6). */}
         {editing && <SaveStateLabel state={saveState} />}
         {/* Saved offline, waiting for the queue (lib/offline/queued-notes.ts). */}
-        {!editing && note.queued && <SaveStateLabel state="offline" />}
+        {!editing && note.queued && <SaveStateLabel state="offline" compact={collapsed} />}
+        {/* Words a local draft keeps that no save has landed (use-outline.ts). */}
+        {!editing && !note.queued && note.unsaved && <SaveStateLabel state="failed" compact={collapsed} />}
         {canEdit && !editing && !merging && (
           <button
             onClick={openEditor}
@@ -727,6 +755,7 @@ const NoteCardBody = memo(function NoteCardBody({
     return (
       <div
         data-note-id={note.id}
+        data-note-status={note.status}
         className="rounded-2xl border border-dashed border-clay-300 bg-card/60 p-3.5 text-[13px]"
       >
         <div className="flex items-center gap-2">
@@ -757,6 +786,7 @@ const NoteCardBody = memo(function NoteCardBody({
       <div
         ref={editCardRef}
         data-note-id={note.id}
+        data-note-status={note.status}
         data-note-editing=""
         data-note-drop-target={takesDrop ? note.id : undefined}
         {...noteDrop.handlers}
@@ -794,7 +824,11 @@ const NoteCardBody = memo(function NoteCardBody({
           }}
           full={!tray}
           moreHref={tray ? `/n/${notebookId}/notes` : undefined}
-          onQuoteDrop={(drag) => commands.attachSource(note.id, drag)}
+          onQuoteDrop={(drag) =>
+            commands.attachSource(note.id, drag).then((ids) => {
+              sitting.current.push(...ids);
+            })
+          }
           title={
             <NoteTitleField
               value={edit.title}
@@ -862,6 +896,7 @@ const NoteCardBody = memo(function NoteCardBody({
     <div
       ref={cardRef}
       data-note-id={note.id}
+      data-note-status={note.status}
       data-note-drop-target={takesDrop ? note.id : undefined}
       // The onboarding nudges on the first note (components/nudges.tsx): a
       // ghost card slides onto the note below and joins it, then one slides

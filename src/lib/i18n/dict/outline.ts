@@ -75,6 +75,16 @@ const en = {
   notesDeleted: "{n} notes deleted",
   undoDeleteTitle: "Put the deleted notes back",
   deleteFailed: "The note was not deleted and is back in its place: {reason}",
+  // Words kept when their note went (SPEC.md §6, lib/notes/gone.ts).
+  keptAsNewNote: "This note was deleted elsewhere. Your words are kept in a new note in its place.",
+  // A quote whose place the document no longer has (SPEC.md §6).
+  quoteSourceLost: "The quote is in the note. Its passage changed in the document, so it has no source.",
+  // The merge's Undo, once the merged note changed (SPEC.md §6).
+  mergeEditedSince: "Edited since the merge",
+  // The voice command's recording, kept after a send that failed (SPEC.md §6).
+  sendCommandAgain: "Send again",
+  sendCommandAgainTitle: "Send the recorded command again",
+  discardCommand: "Discard the recording",
   anchorUnresolvedTitle: "Anchor unresolved. Quoted text: {quote}",
   unresolvedLabel: "unresolved:",
 
@@ -235,6 +245,9 @@ const en = {
   historyShow: "Show text",
   historyHide: "Hide text",
   repliesTitle: "{n} replies under this note",
+  // The source count's tooltip: how many, then each document once.
+  sourceTitle: "1 source · {titles}",
+  sourcesTitle: "{n} sources · {titles}",
   taskToggleTitle: "Tick or clear this item",
 };
 
@@ -300,6 +313,12 @@ const zh: Record<keyof typeof en, string> = {
   notesDeleted: "已删除 {n} 条笔记",
   undoDeleteTitle: "把删除的笔记放回原处",
   deleteFailed: "笔记没有删除，已放回原处：{reason}",
+  keptAsNewNote: "这条笔记已在别处删除。你写的字已保存为原位置的一条新笔记。",
+  quoteSourceLost: "引文已加入笔记。文档中的这段文字已改动，所以引文没有出处。",
+  mergeEditedSince: "合并后已修改",
+  sendCommandAgain: "再次发送",
+  sendCommandAgainTitle: "再次发送录好的命令",
+  discardCommand: "丢弃这段录音",
   anchorUnresolvedTitle: "锚点无法定位。引文：{quote}",
   unresolvedLabel: "无法定位：",
 
@@ -432,6 +451,8 @@ const zh: Record<keyof typeof en, string> = {
   historyShow: "显示内容",
   historyHide: "隐藏内容",
   repliesTitle: "这条笔记下有 {n} 条回复",
+  sourceTitle: "1 处出处 · {titles}",
+  sourcesTitle: "{n} 处出处 · {titles}",
   taskToggleTitle: "打勾或取消",
 };
 

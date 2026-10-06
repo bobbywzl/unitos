@@ -10,6 +10,7 @@ import { Markdown } from "@/components/markdown";
 import { useMergeTarget, type HandleProps } from "@/components/sortable";
 import { splitNote } from "@/lib/note-title";
 import { NoteId } from "@/components/outline/note-id";
+import { sourcesTip } from "@/components/outline/sources-tip";
 import { NOTE_ABSORBED_EVENT, type OutlineActions } from "@/components/outline/use-outline";
 
 function AnchorIcon({ size = 11 }: { size?: number }) {
@@ -166,7 +167,7 @@ export function NoteTile({
       {(note.sources.length > 0 || note.replies.length > 0 || author) && (
         <div className="mt-2 flex shrink-0 items-center gap-2.5 text-[11px] text-sand-500">
           {note.sources.length > 0 && (
-            <span className="flex items-center gap-1" data-tip={note.sources.map((s) => s.documentTitle).join(", ")}>
+            <span className="flex items-center gap-1" data-tip={sourcesTip(note.sources, t)}>
               <AnchorIcon />
               {note.sources.length}
             </span>

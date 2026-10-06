@@ -1,6 +1,7 @@
 "use client";
 
 import { useT } from "@/components/lang-provider";
+import { OfflineIcon, WarningIcon } from "@/components/icons";
 
 // The save state at the top of a note being edited (SPEC.md §6): "Saving…"
 // while the draft differs from what the server holds, "Saved" once the server
@@ -13,7 +14,9 @@ import { useT } from "@/components/lang-provider";
 // "Saved on this device · syncs when online".
 export type SaveState = "saving" | "saved" | "failed" | "both" | "offline";
 
-export function SaveStateLabel({ state }: { state: SaveState | null }) {
+// compact: a collapsed row's one line has no room for the words; the state
+// shows as its icon, the words in its tooltip (Waiting to sync, Not saved).
+export function SaveStateLabel({ state, compact = false }: { state: SaveState | null; compact?: boolean }) {
   const t = useT();
   if (!state) return null;
   const key =
@@ -26,6 +29,20 @@ export function SaveStateLabel({ state }: { state: SaveState | null }) {
           : state === "offline"
             ? "outline.waitingSync"
             : "outline.saveFailed";
+  if (compact && (state === "offline" || state === "failed")) {
+    const tip = state === "offline" ? `${t(key)} · ${t("outline.savedOffline")}` : t(key);
+    return (
+      <span
+        role="status"
+        aria-label={t(key)}
+        data-save-state={state}
+        data-tip={tip}
+        className={`flex shrink-0 items-center ${state === "failed" ? "text-red-500" : "text-sand-500"}`}
+      >
+        {state === "offline" ? <OfflineIcon size={13} /> : <WarningIcon size={13} />}
+      </span>
+    );
+  }
   return (
     <span
       role="status"
