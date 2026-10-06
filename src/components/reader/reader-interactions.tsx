@@ -138,6 +138,7 @@ import { Reader, type TranscriptVariant } from "@/components/reader/reader";
 import { openVisualization } from "@/components/reader/visualization-viewer";
 import { setQuoteDragImage, writeQuoteDrag, type QuoteDrag } from "@/lib/quote-drag";
 import { blockIdOfKey, coreKey, isCoreKey } from "@/lib/anchors/core-key";
+import { MAX_SEGMENTS } from "@/lib/anchors/passage-limit";
 import { collapseUnits } from "@/lib/collapse-units";
 import { deriveBlocks } from "@/lib/docs/blocks";
 import { coreHiding } from "@/components/docs/layer/core-slot";
@@ -729,6 +730,17 @@ const SUGGEST_CHIPS: Chip[] = [
 // A tool's output continued into a conversation — Explain+, Simplify+,
 // Analyze+, Visualize+ (SPEC.md §21). Continue opens the box; the turns
 // persist on the tool's annotation (Note.conversation) and reopen with it.
+// The tinted words of the open toolbar (.selection-mark) as one range.
+function tintRange(container: HTMLElement): Range | null {
+  const marks = container.querySelectorAll(".selection-mark");
+  if (marks.length === 0) return null;
+  const last = marks[marks.length - 1];
+  const range = document.createRange();
+  range.setStart(marks[0], 0);
+  range.setEnd(last, last.childNodes.length);
+  return range;
+}
+
 type ToolChat = {
   conversation: ChatTurn[];
   chatOpen: boolean; // the box is open: Continue was pressed, or turns exist
@@ -1992,12 +2004,18 @@ export function ReaderInteractions({
   // free for the next question as soon as one is sent.
   const [aiSent, setAiSent] = useState<{ text: string; from: Anchor } | null>(null);
   const [aiError, setAiError] = useState<{ text: string; from: Anchor } | null>(null);
+  // A Comment whose save failed: the toolbar opens again on its words with
+  // the box, the kept draft, and this reason under it (SPEC.md §6).
+  const [commentError, setCommentError] = useState<{ text: string; from: Anchor } | null>(null);
   const [aiListening, setAiListening] = useState(false);
   const [aiPlan, setAiPlan] = useState<AssistantPlan | null>(null);
   const [planChecked, setPlanChecked] = useState<Set<number>>(new Set());
-  // Where the plan came from: the selection's chat card shows it under its
-  // answer (SPEC.md §7); the panel's plan takes the card at the window's foot.
-  const [planFrom, setPlanFrom] = useState<"chat" | "panel">("panel");
+  // Where the plan came from: the selection's chat card, or an Explain or
+  // Simplify card's conversation, shows it under its answer, and only while
+  // that card is open (SPEC.md §7); the panel's plan takes the card at the
+  // window's foot. planNoteId is the conversation that proposed it.
+  const [planFrom, setPlanFrom] = useState<"chat" | "tool" | "panel">("panel");
+  const [planNoteId, setPlanNoteId] = useState<string | null>(null);
   // The sidebar assistant's plan (SPEC.md §7): the panel sends the actions
   // the server validated for this document; the plan card takes them. A
   // split reader has two of these; the document id picks the one.
@@ -2007,6 +2025,7 @@ export function ReaderInteractions({
       if (!detail || detail.documentId !== documentId) return;
       setAiPlan({ reply: null, actions: detail.actions, warnings: detail.warnings, conversationNoteId: null });
       setPlanFrom("panel");
+      setPlanNoteId(null);
       setPlanChecked(new Set(detail.actions.map((_, i) => i)));
     };
     window.addEventListener("dissect:assistant-plan", onPlan);
@@ -2121,6 +2140,9 @@ export function ReaderInteractions({
   // The pane's visible height: every tool card grows with its content up to
   // this, then its body scrolls (SPEC.md §6). 0 until measured.
   const [paneHeight, setPaneHeight] = useState(0);
+  // The pane's width: a card resized by its corner stops 8px short of the
+  // pane's right edge, so its buttons stay in view.
+  const [paneWidth, setPaneWidth] = useState(0);
   // The mouseup that ends a hold-and-circle gesture must not run selection
   // capture — it would replace the figure popover it just opened.
   const suppressNextMouseUp = useRef(false);
@@ -2449,7 +2471,9 @@ export function ReaderInteractions({
 
   // Selection → block-relative offsets via data-block-id (SPEC.md §5). DOM ranges are never persisted.
   // Edit mode marks blocks with data-edit-block instead; both carry the block id.
-  const captureSelection = useCallback((): Popover | null => {
+  // `given`: a range to read in place of the browser's selection — the
+  // tint's, when the focus sits in a toolbar field (tintRange).
+  const captureSelection = useCallback((given?: Range | null): Popover | null => {
     const container = containerRef.current;
     if (!container) return null;
     // A page editor's passage is read from its document (SPEC.md §29); a
@@ -2457,13 +2481,14 @@ export function ReaderInteractions({
     // passage.
     const pageEditor = richTextRef.current ? pageEditorIn(container) : null;
     const selection = window.getSelection();
-    const selected = selection && !selection.isCollapsed && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+    const selected =
+      given ?? (selection && !selection.isCollapsed && selection.rangeCount > 0 ? selection.getRangeAt(0) : null);
     // A selection that starts in a core (SPEC.md §28) is the collapsed view's
     // words, drawn over the page's text: it is read as the block reader
     // reads it.
     const start = selected?.startContainer;
     const inCore = Boolean((start instanceof Element ? start : start?.parentElement)?.closest("[data-collapsed]"));
-    const cells = pageEditor && !inCore ? pageCellSelection(pageEditor) : null;
+    const cells = pageEditor && !inCore && !given ? pageCellSelection(pageEditor) : null;
     const range = cells?.range ?? selected;
     if (!range || !container.contains(range.commonAncestorContainer)) return null;
     const pageSelection = cells ?? (pageEditor && !inCore ? pageSelectionOfRange(pageEditor, range) : null);
@@ -3617,6 +3642,11 @@ export function ReaderInteractions({
       delete el.dataset.cardRoomBase;
     }
     const crect = container.getBoundingClientRect();
+    // On a phone the bottom bar lies over the pane's foot: the view ends at
+    // its top edge.
+    const rail = narrow ? document.querySelector<HTMLElement>('nav[data-nudge="rail"]') : null;
+    const railTop = rail && getComputedStyle(rail).position === "fixed" ? rail.getBoundingClientRect().top : Infinity;
+    const shownHeight = Math.min(crect.bottom, railTop) - crect.top;
     const tops: Record<string, number> = {};
     const ordered = [...hosts.keys()].sort((a, b) =>
       a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
@@ -3637,12 +3667,15 @@ export function ReaderInteractions({
       for (const card of cards) {
         tops[card.kind] = y;
         y += card.el.offsetHeight + CARD_GAP;
-        // A card that just opened under the window comes into view.
+        // A card that just opened under the window comes into view, its foot
+        // too (its buttons), as far as its words stay in view. A run that
+        // lands is a new layer key: the card, grown, is checked again.
         const key = `${card.kind}:${layerSeenRef.current[card.kind] ?? ""}`;
         if (!narrowShownRef.current.has(key)) {
           narrowShownRef.current.add(key);
-          const viewBottom = container.scrollTop + container.clientHeight;
-          const want = tops[card.kind] + Math.min(card.el.offsetHeight, 220) - (viewBottom - 16);
+          const viewBottom = container.scrollTop + shownHeight;
+          const want =
+            tops[card.kind] + Math.min(card.el.offsetHeight, Math.max(220, shownHeight - 32)) - (viewBottom - 16);
           const keep = card.anchorTop - container.scrollTop - 16;
           const by = Math.min(want, keep);
           if (by > 0) container.scrollBy({ top: by, behavior: "smooth" });
@@ -3732,6 +3765,15 @@ export function ReaderInteractions({
     if (el && simplifyTurnCount > 0) el.scrollTop = el.scrollHeight;
   }, [simplifyTurnCount]);
 
+  // The hint plays to its end once, then never again on any document.
+  const hintPlayed = () => {
+    setEditHint(false);
+    try {
+      localStorage.setItem("unitos-edit-hint", "done");
+    } catch {
+      // Storage blocked: the hint shows again on the next open.
+    }
+  };
   useEffect(() => {
     if (localStorage.getItem("unitos-edit-hint") === "done") return;
     // Beside the article when its right margin holds the card (with its
@@ -4382,6 +4424,39 @@ export function ReaderInteractions({
   // the moment the layout shifts. A split pane counts as narrow whatever its
   // width: in a split view a tool card opens only when the reader clicks its
   // highlight or symbol (SPEC.md §6).
+  // The toolbar follows its words to their new place (SPEC.md §6): they are
+  // measured again, from the browser's selection, or from the tint when the
+  // focus is in a toolbar field (Comment, Add to notes, the assistant's box)
+  // and the selection lives there. False when the words are not found: a
+  // toolbar with no words under it (a figure, a key term) cannot follow.
+  const placeToolboxAgain = (): boolean => {
+    const open = popoverRef.current;
+    const container = containerRef.current;
+    if (!open || open.figure || open.term || !container) return false;
+    const same = (p: Popover | null): p is Popover =>
+      p !== null &&
+      p.anchor.blockId === open.anchor.blockId &&
+      p.anchor.startOffset === open.anchor.startOffset &&
+      p.anchor.endOffset === open.anchor.endOffset;
+    let again = captureSelectionRef.current();
+    if (!same(again)) again = captureSelectionRef.current(tintRange(container));
+    if (!same(again)) return false;
+    // The same words: the anchor object stays, so a run sent from this
+    // toolbar still knows it.
+    setPopover({ ...again, anchor: open.anchor });
+    // Placed again, it is fitted into the pane again.
+    requestAnimationFrame(() => requestAnimationFrame(() => fitToolboxRef.current()));
+    return true;
+  };
+  const placeToolboxAgainRef = useRef(placeToolboxAgain);
+  placeToolboxAgainRef.current = placeToolboxAgain;
+  // The column slides when a card opens or closes beside it (--cards-room,
+  // 0.35 s): once it is still, an open toolbar stands beside its words again.
+  useEffect(() => {
+    if (!popoverRef.current) return;
+    const timer = window.setTimeout(() => placeToolboxAgainRef.current(), 400);
+    return () => window.clearTimeout(timer);
+  }, [cardsRoom]);
   const applyNarrow = useCallback(() => {
     const container = containerRef.current;
     if (!container) return null;
@@ -4394,9 +4469,15 @@ export function ReaderInteractions({
     if (isNarrow !== narrowRef.current) {
       narrowRef.current = isNarrow;
       if (isNarrow) {
-        setBubble((b) => (b && !b.streaming && !b.busy && b.noteId ? null : b));
-        setSimplifyCard((c) => (c && !c.streaming && !c.busy && c.noteId ? null : c));
-        setAssistantChat((c) => (c && !c.busy && c.noteId ? null : c));
+        // A card with words typed in its box, or messages waiting, stays: the
+        // reader is writing in it.
+        const typed = (c: { input: string; queue?: readonly unknown[] }) =>
+          c.input.trim() !== "" || (c.queue ?? []).length > 0;
+        setBubble((b) => (b && !b.streaming && !b.busy && b.noteId && !typed(b) ? null : b));
+        setSimplifyCard((c) => (c && !c.streaming && !c.busy && c.noteId && !typed(c) ? null : c));
+        setAssistantChat((c) =>
+          c && !c.busy && c.noteId && !typed(c) && !Object.values(c.inputs ?? {}).some((v) => v.trim()) ? null : c,
+        );
         setCommentCard((c) => (c && !c.busy && c.noteId && c.draft === c.saved ? null : c));
         setAnnotationCard((c) => (c && !c.busy && c.draft === c.saved ? null : c));
         // No room to make beside the words: the column goes back.
@@ -4420,6 +4501,7 @@ export function ReaderInteractions({
         setPaneHeight(height);
       }
       const width = container.clientWidth;
+      setPaneWidth(width);
       if (width === lastWidth) return;
       lastWidth = width;
       const measured = applyNarrow();
@@ -4457,15 +4539,7 @@ export function ReaderInteractions({
       // The toolbar follows its words to their new place (SPEC.md §6): the
       // selection is still there, so it is measured again. A toolbar with no
       // live selection under it (a figure, a key term) closes.
-      const open = popoverRef.current;
-      const again = open && !open.figure && !open.term ? captureSelectionRef.current() : null;
-      if (open && again && again.anchor.blockId === open.anchor.blockId && again.anchor.startOffset === open.anchor.startOffset && again.anchor.endOffset === open.anchor.endOffset) {
-        // The same words: the anchor object stays, so a run sent from this
-        // toolbar still knows it.
-        setPopover({ ...again, anchor: open.anchor });
-        // Placed again, it is fitted into the pane again.
-        requestAnimationFrame(() => requestAnimationFrame(() => fitToolboxRef.current()));
-      } else {
+      if (!placeToolboxAgainRef.current()) {
         setPopover(null);
         setSubmenu(null);
       }
@@ -4653,17 +4727,31 @@ export function ReaderInteractions({
   }, [blankDocument]);
 
   // The on-mark card closes on a click anywhere else. A click on another mark
-  // stays: the open handler replaces the card.
+  // stays: the open handler replaces the card. A press that drags is a
+  // selection, not a click: closing the card inside it would re-render the
+  // column and drop the new selection, so the card waits, and the selection
+  // toolbar closes it when it opens (yieldToSelection).
+  const annotationCardOpen = annotationCard !== null;
   useEffect(() => {
-    if (!annotationCard) return;
+    if (!annotationCardOpen) return;
+    let press: { x: number; y: number; target: Element | null } | null = null;
     const onMouseDown = (e: MouseEvent) => {
-      const target = e.target as Element | null;
-      if (target?.closest("[data-selection-popover], [data-source-id]")) return;
+      press = { x: e.clientX, y: e.clientY, target: e.target as Element | null };
+    };
+    const onMouseUp = (e: MouseEvent) => {
+      const down = press;
+      press = null;
+      if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4) return;
+      if (down.target?.closest?.("[data-selection-popover], [data-source-id]")) return;
       setAnnotationCard(null);
     };
     window.addEventListener("mousedown", onMouseDown);
-    return () => window.removeEventListener("mousedown", onMouseDown);
-  }, [annotationCard]);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [annotationCardOpen]);
 
   // The contents list (SPEC.md §26), opened from the Contents button at the
   // top left of the article.
@@ -6495,7 +6583,9 @@ export function ReaderInteractions({
   async function annotate(input: { color?: string; comment?: string }) {
     if (!popover || busy) return;
     if (input.comment !== undefined && !input.comment.trim()) return;
+    const shown = popover;
     const { anchor } = popover;
+    setCommentError(null);
     await flushLiveBlock(anchor.blockId);
     markFreshAnchor(anchor);
     // Every segment of the passage paints at once, a comment as a comment.
@@ -6525,12 +6615,16 @@ export function ReaderInteractions({
       color: input.color,
       comment: input.comment,
     };
+    // False until the server answered: a fetch that throws before then is a
+    // dropped connection, which queues as offline does.
+    let answered = false;
     try {
       const res = await fetch("/api/annotations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
+      answered = true;
       if (!res.ok) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
         throw new Error(detail?.error ?? t("reader.annotationFailedStatus", { status: res.status }));
@@ -6560,9 +6654,10 @@ export function ReaderInteractions({
       });
       router.refresh();
     } catch (err) {
-      // Offline (SPEC.md §17, Unitos Premium): a highlight or comment is a
-      // non-AI annotation — queue it, keep the optimistic paint, sync later.
-      if (isOffline() && offlinePremium()) {
+      // Offline or a dropped connection (SPEC.md §17, Unitos Premium): a
+      // highlight or comment is a non-AI annotation — queue it, keep the
+      // optimistic paint, sync later, as a note's write does (lib/api.ts).
+      if (offlinePremium() && (isOffline() || (!answered && err instanceof TypeError))) {
         await queueWrite("/api/annotations", "POST", body);
         if (input.comment) clearToolbarDraft("comment", documentId, anchor);
         showToast(t("reader.annotationQueuedOffline"));
@@ -6576,7 +6671,13 @@ export function ReaderInteractions({
         }
         return next;
       });
-      showError(err instanceof Error ? err.message : t("reader.annotationFailed"));
+      const reason = err instanceof Error ? err.message : t("reader.annotationFailed");
+      if (input.comment) {
+        // The words are still in the draft: the box opens again with them.
+        setPopover(shown);
+        setSubmenu("comment");
+        setCommentError({ text: reason, from: anchor });
+      } else showError(reason);
     } finally {
       setBusy(false);
     }
@@ -6984,8 +7085,9 @@ export function ReaderInteractions({
       // Every plan waits for approval (SPEC.md §1: nothing applies unaccepted).
       setAiPlan(plan);
       setPlanChecked(new Set(plan.actions.map((_, i) => i)));
-      setPlanFrom("chat");
-      parts.push(t("reader.proposedActions", { n, s: plural(n) }));
+      setPlanFrom(toolNoteId ? "tool" : "chat");
+      setPlanNoteId(toolNoteId ?? plan.conversationNoteId ?? conversationNoteId);
+      parts.push(t("assistant.proposedActions", { n, s: plural(n) }));
     }
     // The assistant's suggestions land in the text: pending by construction
     // until an editor accepts them.
@@ -8800,6 +8902,8 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   // joins the texts themselves. With a link pending, Close link takes Link's
   // place.
   const inCore = popover ? isCoreKey(popover.anchor.blockId) : false;
+  // The passage spans more blocks than a save takes (lib/anchors/passage.ts).
+  const passageTooLong = popover !== null && (popover.anchor.segments?.length ?? 1) > MAX_SEGMENTS;
   // Define shows on one word alone (offersDefine).
   const has = (tool: Tool) =>
     TOOLBARS[popoverKind].includes(tool) &&
@@ -8873,7 +8977,14 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   // The queued messages of the thread on screen: the side chat's, or the
   // conversation's own.
   const chatQueueShown = (chat: AssistantChat) => (chat.queue ?? []).filter((q) => q.openKey === (chat.openKey ?? null));
-  const toolChatTurns = (card: ToolChat) =>
+  // The plan a tool conversation proposed, under its turns in its own card.
+  const toolPlan = (card: ToolChat & { noteId: string | null }) =>
+    aiPlan !== null && planFrom === "tool" && card.noteId !== null && card.noteId === planNoteId ? (
+      <div data-plan-in-card className="flex flex-col rounded-2xl border border-line bg-sand-50 p-3">
+        {planBody}
+      </div>
+    ) : null;
+  const toolChatTurns = (card: ToolChat & { noteId: string | null }) =>
     card.conversation.length > 0 || card.busy ? (
       <div className="mt-3 flex flex-col gap-2 border-t border-line pt-3">
         {card.conversation.map((message, i) =>
@@ -8892,6 +9003,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         )}
         {card.busy && <ThinkingIndicator className="py-0.5 text-[12px]" />}
         <QueuedList items={card.queue} onRemove={(key) => removeQueuedTool(kindOfCard(card), key)} />
+        {toolPlan(card)}
       </div>
     ) : null;
   // The card's foot: Continue, which opens the box, or the box itself once
@@ -9371,7 +9483,16 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       </div>
     </>
   ) : null;
-  const planInCard = aiPlan !== null && planFrom === "chat" && assistantChat !== null;
+  // The card that shows the plan; a plan whose card is closed waits for it.
+  const planInCard =
+    aiPlan !== null &&
+    planFrom === "chat" &&
+    assistantChat !== null &&
+    (planNoteId === null ||
+      assistantChat.noteId === null ||
+      assistantChat.noteId === planNoteId ||
+      (assistantChat.sideChats ?? []).some((s) => s.noteId === planNoteId));
+  const planFloats = aiPlan !== null && planFrom === "panel";
   const barKey = bar ? barRunKey(bar) : null;
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
@@ -9566,7 +9687,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           the first lines would cut its words. */}
       {editHint && hintBeside && !editMode && !split && !transcript && !embedded && !richText && (
         <div
-          onAnimationEnd={() => setEditHint(false)}
+          onAnimationEnd={hintPlayed}
           className={`hint-fade pointer-events-none absolute top-16 right-5 z-[9] rounded-2xl bg-card px-4 py-2.5 leading-relaxed text-sand-700 shadow-lift print:hidden ${
             coarse ? "max-w-80 text-[13px]" : "max-w-64 text-[12px]"
           }${popover ? " invisible" : ""}`}
@@ -9881,6 +10002,14 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           className={`${popover.page && popover.side === "right" ? "docs-toolbar-in" : "pop-in"} absolute ${TOOLBOX_LAYER} flex flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float`}
           style={popoverBox}
         >
+          {/* A passage over more blocks than an annotation or a note takes
+              (MAX_SEGMENTS) says so in place of the tools, before a press
+              that could only fail. */}
+          {passageTooLong ? (
+            <p data-passage-too-long className="max-w-56 px-2.5 py-1.5 text-[12px] leading-snug text-sand-700">
+              {t("reader.passageTooLong", { n: MAX_SEGMENTS })}
+            </p>
+          ) : (<>
           {popover.truncated && (
             <p className="px-2.5 py-1 text-[10.5px] leading-snug text-sand-500">
               {t(popover.page ? "docsLayer.leftOut" : "reader.anchorsFirstParagraph")}
@@ -10169,7 +10298,10 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 autoFocus
                 value={commentDraft}
                 onFocus={caretToEnd}
-                onChange={(e) => setCommentDraft(e.target.value)}
+                onChange={(e) => {
+                  setCommentDraft(e.target.value);
+                  setCommentError(null);
+                }}
                 {...ime.props}
                 onKeyDown={(e) => {
                   if (ime.isImeEnter(e) || isImeKey(e)) return;
@@ -10192,6 +10324,11 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 rows={2}
                 className="w-full resize-none rounded-xl bg-sand-100 p-2 text-[12px] outline-none placeholder:text-sand-500"
               />
+              {commentError && commentError.from === popover.anchor && (
+                <p data-comment-error role="alert" className="px-1 text-[12px] font-medium text-red-600">
+                  {commentError.text}
+                </p>
+              )}
               <button
                 type="submit"
                 data-track="comment-save"
@@ -10321,6 +10458,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                       e.preventDefault();
                       void addToSection(first.id);
                     }
+                    // Escape folds the box and leaves the toolbar, as Comment's does.
+                    if (e.key === "Escape") {
+                      e.stopPropagation();
+                      setSubmenu(null);
+                      focusPageAfterComment();
+                    }
                   }}
                   placeholder={t("reader.addCommentPlaceholder")}
                   aria-label={t("reader.addCommentPlaceholder")}
@@ -10395,6 +10538,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           {has("readAloud") && !(compact && has("highlight")) && (
           <div className="absolute top-full left-0 mt-2">{voiceButton(false)}</div>
           )}
+          </>)}
         </div>
       )}
       </Presence>
@@ -11008,7 +11152,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             top: assistantChat.top,
             width: assistantChat.width,
             minWidth: 260,
-            maxWidth: 680,
+            maxWidth: paneWidth > 0 ? Math.max(260, Math.min(680, paneWidth - assistantChat.left - 8)) : 680,
             maxHeight: cardHeight("assistant"),
             borderColor: annotationKindColor("assistant", null),
           }}
@@ -11136,10 +11280,10 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       )}
       </Presence>
 
-      <Presence show={aiPlan !== null && !planInCard} exit="pop">
+      <Presence show={planFloats} exit="pop">
       {/* The plan card grows with the reply and the actions up to the
           window's height, then scrolls inside. */}
-      {aiPlan && !planInCard && (
+      {planFloats && (
         <div className="fixed bottom-6 left-1/2 z-40 flex max-h-[calc(100vh-3rem)] w-[440px] max-w-[92vw] -translate-x-1/2 flex-col rounded-[24px] bg-card p-4 shadow-float">
           {planBody}
         </div>
@@ -11177,7 +11321,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           output={bubble.text}
           messages={bubble.conversation}
           busy={bubble.busy}
-          after={<QueuedList items={bubble.queue} onRemove={(key) => removeQueuedTool("explain", key)} />}
+          after={
+            <>
+              <QueuedList items={bubble.queue} onRemove={(key) => removeQueuedTool("explain", key)} />
+              {toolPlan(bubble)}
+            </>
+          }
           foot={
             bubble.declined === null ? toolChatFoot("explain", bubble, bubble.kind, true) : null
           }
@@ -11191,7 +11340,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           output={stripSimplifyMarkers(simplifyCard.text)}
           messages={simplifyCard.conversation}
           busy={simplifyCard.busy}
-          after={<QueuedList items={simplifyCard.queue} onRemove={(key) => removeQueuedTool("simplify", key)} />}
+          after={
+            <>
+              <QueuedList items={simplifyCard.queue} onRemove={(key) => removeQueuedTool("simplify", key)} />
+              {toolPlan(simplifyCard)}
+            </>
+          }
           foot={toolChatFoot("simplify", simplifyCard, "simplify", true)}
           onClose={closeConversationView}
         />
@@ -11236,7 +11390,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       {editHint && !hintBeside && !editMode && !split && !transcript && !embedded && !richText && (
         <div
           data-edit-hint
-          onAnimationEnd={() => setEditHint(false)}
+          onAnimationEnd={hintPlayed}
           className={`hint-fade pointer-events-none shrink-0 border-t border-line bg-card px-4 py-2.5 leading-relaxed text-sand-700 print:hidden ${
             coarse ? "text-[13px]" : "text-[12px]"
           }`}

@@ -45,6 +45,7 @@ const en = {
   videoNoEditAnnotate: "Video content cannot be edited or annotated.",
   openAsVideoDoc: "Open as a video document",
   anchorsFirstParagraph: "Equations and pages in the selection are left out",
+  passageTooLong: "Select at most {n} paragraphs to use the tools.",
   run: "Run",
   assistantPlaceholder: "Tell the assistant what to do with this selection…",
   stopAssistant: "Stop the assistant. Your message stays; no reply lands.",
@@ -147,7 +148,7 @@ const en = {
   editHint:
     "Double-click any paragraph to edit it. Click the title to edit it. Hold and draw a small circle on a figure or a table for its tools.",
   touchHint:
-    "Hold a word and drag the handles to select text. The tools open under the selection. Double-tap any paragraph to edit it. Tap the title to edit it. Hold and draw a small circle on a figure or a table for its tools.",
+    "Hold a word and drag the handles to select text. The tools open next to the selection. Double-tap any paragraph to edit it. Tap the title to edit it. Hold and draw a small circle on a figure or a table for its tools.",
   documentTitle: "Document title",
   renameDocumentTitle: "Click to edit the title",
 
@@ -356,6 +357,7 @@ const zh: Record<keyof typeof en, string> = {
   videoNoEditAnnotate: "视频内容无法编辑或批注。",
   openAsVideoDoc: "作为视频文档打开",
   anchorsFirstParagraph: "选中内容中的公式和页面不计入",
+  passageTooLong: "选中不超过 {n} 个段落即可使用工具。",
   run: "运行",
   assistantPlaceholder: "告诉助手要对选中内容做什么…",
   stopAssistant: "停止助手。你的消息保留，不会收到回复。",
@@ -445,7 +447,7 @@ const zh: Record<keyof typeof en, string> = {
   editHint:
     "双击任意段落即可编辑。点击标题即可编辑。在插图或表格上按住并画一个小圈，可打开它的工具。",
   touchHint:
-    "长按一个词并拖动选择柄以选中文本，工具出现在选中内容下方。双击任意段落即可编辑。点击标题即可编辑。在插图或表格上按住并画一个小圈，可打开它的工具。",
+    "长按一个词并拖动选择柄以选中文本，工具出现在选中内容旁边。双击任意段落即可编辑。点击标题即可编辑。在插图或表格上按住并画一个小圈，可打开它的工具。",
   documentTitle: "文档标题",
   renameDocumentTitle: "点击编辑标题",
 
