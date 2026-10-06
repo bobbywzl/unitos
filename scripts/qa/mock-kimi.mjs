@@ -12,7 +12,8 @@
 import { readFileSync } from "node:fs";
 import http from "node:http";
 
-const PORT = 3399;
+// MOCK_PORT runs a second mock beside the shared one (a worker's own).
+const PORT = Number(process.env.MOCK_PORT) || 3399;
 
 function textOf(content) {
   if (typeof content === "string") return content;
@@ -101,10 +102,36 @@ function scripted(all) {
   return null;
 }
 
+// The grammar check (lib/prompts/grammar.ts): a few plain rules a careful
+// editor would apply, each issue the exact wrong words of its paragraph.
+const GRAMMAR_RULES = [
+  [/\b([A-Za-z]+) \1\b/i, (m) => m[1], "Repeated word"],
+  [/\b([Aa]) ([aeiouAEIOU][a-z]+)/, (m) => `${m[1]}n ${m[2]}`, "Use \u201can\u201d before a vowel sound"],
+  [/\b(could|would|should) of\b/i, (m) => `${m[1]} have`, "Use \u201chave\u201d after a modal verb"],
+  [/\b([Tt])heir (is|are|was|were)\b/, (m) => `${m[1]}here ${m[2]}`, "\u201cThere\u201d points to a place or fact"],
+  [/\bless (people|things|words|notes|books|errors)\b/i, (m) => `fewer ${m[1]}`, "Use \u201cfewer\u201d for things you count"],
+  [/\bit's own\b/i, () => "its own", "\u201cIts\u201d is the possessive"],
+  [/\b(he|she|it) (go|have|do|make|say|want|need)\b/i, (m) => `${m[1]} ${{ go: "goes", have: "has", do: "does", make: "makes", say: "says", want: "wants", need: "needs" }[m[2].toLowerCase()]}`, "The verb must agree with its subject"],
+];
+function grammarIssues(all) {
+  const paragraphs = [...all.matchAll(/\[paragraph ([^\]]+)\]\n([\s\S]*?)(?=\n\n\[paragraph |\n\nRules:)/g)].map((m) => ({ id: m[1], text: m[2] }));
+  const out = paragraphs.map(({ id, text }) => {
+    const issues = [];
+    for (const [rx, fix, reason] of GRAMMAR_RULES) {
+      const m = text.match(rx);
+      if (m) issues.push({ wrong: m[0], replacement: fix(m), reason });
+    }
+    return { id, issues };
+  });
+  console.log("[mock grammar]", out.length, "paragraphs", out.reduce((n, p) => n + p.issues.length, 0), "issues");
+  return JSON.stringify({ paragraphs: out });
+}
+
 function buildResponse(all) {
   const script = scripted(all);
   if (script !== null) return script;
   if (all.includes("Suggest edits to the document above.")) return suggestOps(all);
+  if (all.includes("Check each paragraph below for grammar and wording problems.")) return grammarIssues(all);
   // The panel at This page scope: the answer, then the actions fence.
   if (all.includes("Rules for actions:") && all.includes("- suggest {") && CHANGE_RX.test(all.match(/^Question: (.*)$/m)?.[1] ?? "")) {
     const action = { type: "suggest", instruction: "Make the whole document formal.", description: "Make the document formal" };
