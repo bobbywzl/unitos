@@ -364,18 +364,14 @@ export function AnnotationsPanel({
     <div className="flex flex-col gap-3.5">
       {conversationOverlay}
       {errorText && <p className="text-[13px] text-red-600">{errorText}</p>}
-      {removed && (
-        <p
-          role="status"
-          data-link-removed={removed}
-          className="sticky top-0 z-10 flex items-center gap-2 rounded-xl bg-sand-200 px-3 py-1.5 text-[12px] text-sand-800 shadow-soft"
-        >
-          {t("panels.linkRemoved")}
+      {removed && !errorText && (
+        <p role="status" data-link-removed={removed} className="text-[13px] text-sand-700">
+          {t("panels.linkRemoved")}{" "}
           <button
             onClick={() => void undoRemove(removed)}
             disabled={busyId !== null}
             data-track="link-remove-undo"
-            className="ml-auto rounded-full bg-card px-2.5 py-0.5 text-[11.5px] font-semibold text-clay-800 hover:bg-clay-100 disabled:opacity-50 pointer-coarse:min-h-11 pointer-coarse:px-4"
+            className="font-semibold text-clay-700 underline-offset-2 hover:underline disabled:opacity-50 pointer-coarse:min-h-11"
           >
             {t("panels.linkRemovedUndo")}
           </button>

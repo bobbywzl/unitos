@@ -28,7 +28,7 @@ export function confirmLinkRemoval(
               : "panes.confirmDismissLinkReplies",
           { count: replyCount },
         );
-  return window.confirm(madeBy ? `${t("panes.confirmLinkMadeBy", { name: madeBy })} ${question}` : question);
+  return window.confirm(madeBy ? t("panes.confirmLinkMadeBy", { name: madeBy, question }) : question);
 }
 
 /** The viewer may remove or dismiss the link: the server refuses everyone

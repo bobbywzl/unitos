@@ -62,26 +62,26 @@ export function OfflineStatus() {
     return () => clearTimeout(timer);
   }, [kept]);
 
-  // Over the graph too (it covers the header): a toast at the top.
-  const keptNotice = kept > 0 && (
-    <p
-      role="status"
-      data-offline-quotes-kept={kept}
-      className="fixed top-3 left-1/2 z-[60] flex w-max max-w-[calc(100vw-32px)] -translate-x-1/2 items-center gap-2 rounded-2xl bg-ink/90 px-3.5 py-2 text-xs leading-snug text-paper shadow-float"
-    >
-      {kept === 1
-        ? t("common.offlineQuoteKeptOne")
-        : t("common.offlineQuotesKept", { n: kept })}
-      <button
-        onClick={() => setKept(0)}
-        aria-label={t("common.close")}
-        className="shrink-0 rounded-full px-1.5 text-paper/80 hover:bg-paper/20 hover:text-paper pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+  // A quote kept as text on replay (REV5-06): said in this same pill.
+  if (kept > 0 && !offline) {
+    return (
+      <span
+        role="status"
+        data-offline-quotes-kept={kept}
+        className="min-w-0 shrink truncate rounded-full bg-sand-200 px-3 py-1 text-[11px] font-semibold text-sand-700"
+        title={
+          kept === 1
+            ? t("common.offlineQuoteKeptOne")
+            : t("common.offlineQuotesKept", { n: kept })
+        }
       >
-        ✕
-      </button>
-    </p>
-  );
-  if (!offline && queued === 0) return keptNotice || null;
+        {kept === 1
+          ? t("common.offlineQuoteKeptOne")
+          : t("common.offlineQuotesKept", { n: kept })}
+      </span>
+    );
+  }
+  if (!offline && queued === 0) return null;
 
   const label = offline
     ? premium
@@ -92,19 +92,16 @@ export function OfflineStatus() {
     : syncing || queued > 0
       ? t("common.offlineSyncing", { n: queued })
       : null;
-  if (!label) return keptNotice || null;
+  if (!label) return null;
 
   return (
-    <>
-      {keptNotice}
-      <span
-        role="status"
-        className={`shrink-0 truncate rounded-full px-3 py-1 text-[11px] font-semibold ${
-          offline ? "bg-sand-200 text-sand-700" : "bg-sage-200 text-sage-800"
-        }`}
-      >
-        {label}
-      </span>
-    </>
+    <span
+      role="status"
+      className={`shrink-0 truncate rounded-full px-3 py-1 text-[11px] font-semibold ${
+        offline ? "bg-sand-200 text-sand-700" : "bg-sage-200 text-sage-800"
+      }`}
+    >
+      {label}
+    </span>
   );
 }

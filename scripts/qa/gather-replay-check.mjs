@@ -145,6 +145,10 @@ try {
   const pill = await page.locator("[data-offline-quotes-kept]").first().textContent({ timeout: 5000 }).catch(() => null);
   check("the offline status says a quote was kept as text", !!pill && /1/.test(pill), String(pill));
   console.log("status:", pill);
+  // The pill sits in the header, under the graph: close the graph to see it.
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(800);
   if (OUT) await page.screenshot({ path: `${OUT}/REV5-06-after-${LANG}-${WIDTH}.png` });
   const left = await page.evaluate(
     () =>
