@@ -149,25 +149,32 @@ for (const lang of ["en", "zh"]) {
     const seeded = sql(`select count(*) from "Reply" where "docLinkId"='${LINK_AB}' and "resolvedById" is null`);
     check(thread.split("\n").filter((l) => l.trim()).length >= Number(seeded), `${tag} thread shows the seeded replies`, JSON.stringify(thread.slice(0, 160)));
     await page.screenshot({ path: `${OUT}/link-pinned-${tag}-${MODE}.png` });
+    if (!SESSION) {
+      // Sign-in off: the replies show, and there is no Reply (as in the reader).
+      check((await list.locator(`[data-graph-link-thread="${LINK_AB}"] [data-track="reply"]`).count()) === 0, `${tag} sign-in off: no Reply`);
+    }
 
     if (SESSION && lang === "en" && width === 1440) {
       // Send a reply on the graph, then resolve it.
+      const REPLY = `graph reply ${Date.now()}`;
       await list.locator(`[data-graph-link-thread="${LINK_AB}"] [data-track="reply"]`).click();
-      await list.locator(`[data-graph-link-thread="${LINK_AB}"] textarea`).fill("graph reply");
+      await list.locator(`[data-graph-link-thread="${LINK_AB}"] textarea`).fill(REPLY);
       await list.locator(`[data-graph-link-thread="${LINK_AB}"] [data-track="reply-send"]`).click();
-      await page.waitForTimeout(2500);
+      // The reply shows once the refresh lands (the first call compiles the route in dev).
+      await list.locator(`[data-graph-link-thread="${LINK_AB}"]`, { hasText: REPLY }).waitFor({ timeout: 30000 }).catch(() => {});
+      await abEdge.locator('[data-graph-curve-mark="replies"] text', { hasText: "3" }).waitFor({ timeout: 15000 }).catch(() => {});
       const sent = await list.locator(`[data-graph-link-thread="${LINK_AB}"]`).innerText().catch(() => "");
-      check(sent.includes("graph reply"), "signed in: the sent reply shows in the thread");
-      check(sql(`select count(*) from "Reply" where "docLinkId"='${LINK_AB}' and content='graph reply'`) === "1", "signed in: SQL finds the reply on the A–B link");
+      check(sent.includes(REPLY), "signed in: the sent reply shows in the thread");
+      check(sql(`select count(*) from "Reply" where "docLinkId"='${LINK_AB}' and content='${REPLY}'`) === "1", "signed in: SQL finds the reply on the A–B link");
       const mark = await abEdge.locator('[data-graph-curve-mark="replies"] text').textContent().catch(() => "");
       check(mark?.trim() === "3", "signed in: the curve mark counts 3", mark ?? "");
       await page.screenshot({ path: `${OUT}/reply-sent-${tag}.png` });
-      const row = list.locator(`[data-graph-link-thread="${LINK_AB}"] div.flex.items-start`, { hasText: "graph reply" });
+      const row = list.locator(`[data-graph-link-thread="${LINK_AB}"] div.flex.items-start`, { hasText: REPLY });
       await row.locator('[data-track="reply-resolve"]').click();
-      await page.waitForTimeout(2500);
+      await abEdge.locator('[data-graph-curve-mark="replies"] text', { hasText: "2" }).waitFor({ timeout: 20000 }).catch(() => {});
       const mark2 = await abEdge.locator('[data-graph-curve-mark="replies"] text').textContent().catch(() => "");
       check(mark2?.trim() === "2", "signed in: resolved, the curve mark counts 2", mark2 ?? "");
-      check(sql(`select count(*) from "Reply" where "docLinkId"='${LINK_AB}' and content='graph reply' and "resolvedById" is not null`) === "1", "signed in: SQL finds the reply resolved");
+      check(sql(`select count(*) from "Reply" where "docLinkId"='${LINK_AB}' and content='${REPLY}' and "resolvedById" is not null`) === "1", "signed in: SQL finds the reply resolved");
       await page.screenshot({ path: `${OUT}/reply-resolved-${tag}.png` });
     }
 
