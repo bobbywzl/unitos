@@ -90,8 +90,10 @@ import { noteTitle } from "@/lib/note-title";
 import { AnnotationGrip } from "@/components/outline/annotation-grip";
 import { useCardDropOpen } from "@/components/outline/use-card-drop";
 import {
+  ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  CheckIcon,
   CollapseIcon,
   CommentIcon,
   DefineIcon,
@@ -313,7 +315,6 @@ type Popover = {
   truncated: boolean; // the selection crossed an equation or a page, which the passage leaves out
   figure?: boolean; // opened by the hold-and-circle gesture on a figure, equation, or table: the anchor is the whole block
   term?: boolean; // opened by clicking a key term; Extract leads, recommended
-  nearTop?: boolean; // the bubbles above the toolbox drop below it; unset: the article's top decides
   page?: { geo: PageGeometry }; // the page editor's page as the toolbar opened (SPEC.md §29)
   // Placement, by proximity to open tool blocks: right of the text first, then
   // left, then directly below the highlighted text. Bases are container coords.
@@ -2640,18 +2641,13 @@ export function ReaderInteractions({
       : undefined;
     // Under the page editor's toolbar the bubbles drop below the toolbox.
     const pageTop = headerBottom !== undefined ? Math.max(lineTop, headerBottom + 56) : lineTop;
-    const pageBelow = Boolean(pageGeo) && side === "below";
     // Near the pane's top edge on screen — the document's first lines, or
-    // the line at the top after a scroll — the bubbles above the toolbox
-    // (Add to notes, the colors) would sit out of view: the colors drop
-    // below it, and the toolbox moves down to where Add to notes fits above.
-    // On the right the stack also clears the Collapse and Extract chips,
-    // which stick to the pane's top right (reader.tsx), so both stay in
-    // reach.
-    // Below the words the toolbox is compact (the bubbles are its rows).
+    // the line at the top after a scroll — the toolbox moves down clear of
+    // the Collapse and Extract chips, which stick to the pane's top
+    // (reader.tsx), so both stay in reach.
     const readerBelow = !pageGeo && side === "below";
     const nearTop = !pageGeo && (readerBelow || firstLine.top - containerRect.top < 100);
-    const readerTop = nearTop ? Math.max(yTop, container.scrollTop + (side === "right" ? 100 : 48)) : yTop;
+    const readerTop = nearTop ? Math.max(yTop, container.scrollTop + (side === "right" ? 56 : 48)) : yTop;
     return {
       anchor: {
         blockId,
@@ -2674,7 +2670,6 @@ export function ReaderInteractions({
       side,
       rightBase: articleRight + 10,
       cw,
-      ...(headerBottom !== undefined ? { nearTop: pageBelow || lineTop - headerBottom < 96 } : { nearTop }),
       ...(pageGeo ? { page: { geo: pageGeo } } : {}),
     };
   }, []);
@@ -5116,16 +5111,35 @@ export function ReaderInteractions({
     if (!container || !el) return;
     let bottom = el.getBoundingClientRect().bottom;
     for (const child of el.children) bottom = Math.max(bottom, child.getBoundingClientRect().bottom);
-    const overflow = Math.ceil(bottom - container.getBoundingClientRect().bottom + 20);
-    // The page editor under the words (SPEC.md §29): the compact toolbox
-    // stands above the words whenever the room above holds it, so it covers
-    // lines already read, and the pane never scrolls on its own for it.
-    if (popover.side === "below" && popover.page && !popover.above) {
+    // On a phone the bottom bar lies over the pane's foot: the view ends at
+    // its top edge.
+    const rail = document.querySelector<HTMLElement>('nav[data-nudge="rail"]');
+    const railTop = rail && getComputedStyle(rail).position === "fixed" ? rail.getBoundingClientRect().top : Infinity;
+    const overflow = Math.ceil(bottom - Math.min(container.getBoundingClientRect().bottom, railTop) + 20);
+    // The page editor under the words (SPEC.md §29): the toolbox stands
+    // above the words whenever the room above holds it, so it covers lines
+    // already read. With room on neither side the pane scrolls by the
+    // overflow, as the block reader's does, so every row is in reach.
+    if (popover.side === "below" && popover.page) {
       const containerTop = container.getBoundingClientRect().top;
       const ceiling = container.querySelector(".docs-header")?.getBoundingClientRect().bottom ?? containerTop + 48;
       const height = bottom - el.getBoundingClientRect().top;
-      if (popover.wordsTop !== undefined && popover.wordsTop - container.scrollTop + containerTop - ceiling >= height + 8) {
+      const fitsAbove =
+        popover.wordsTop !== undefined && popover.wordsTop - container.scrollTop + containerTop - ceiling >= height + 8;
+      if (popover.above) {
+        // A field opened above the words grows the toolbox past the header:
+        // it goes back under the words, and the pane scrolls it into view.
+        if (fitsAbove) return;
+        setPopover((p) => (p === popover ? { ...p, above: false } : p));
+        const floor = Math.min(container.getBoundingClientRect().bottom, railTop);
+        const under = popover.y - container.scrollTop + containerTop + height - floor + 20;
+        if (under > 0) container.scrollBy({ top: under, behavior: "smooth" });
+        return;
+      }
+      if (fitsAbove) {
         setPopover((p) => (p === popover ? { ...p, above: true } : p));
+      } else if (overflow > 0) {
+        container.scrollBy({ top: overflow, behavior: "smooth" });
       }
       return;
     }
@@ -5435,8 +5449,8 @@ export function ReaderInteractions({
     // The block reader: beside the block, as a selection's toolbox stands
     // beside its words (toolboxSide) — never over the figure, the table
     // around it, or the caption it was opened on. Near the pane's top edge
-    // (a tall figure whose top is out of view) it stands where the bubbles
-    // over it fit, clear of the chips, as for words.
+    // (a tall figure whose top is out of view) it stands clear of the
+    // chips, as for words.
     const blockRect = page
       ? undefined
       : container.querySelector(`[data-block-id="${blockId}"]`)?.getBoundingClientRect();
@@ -5448,7 +5462,7 @@ export function ReaderInteractions({
       : null;
     const nearTop = blockRect !== undefined && (readerSide === "below" || blockRect.top - containerRect.top < 100);
     const readerTop = nearTop
-      ? Math.max(blockTop, container.scrollTop + (readerSide === "right" ? 100 : 48))
+      ? Math.max(blockTop, container.scrollTop + (readerSide === "right" ? 56 : 48))
       : Math.max(8, blockTop);
     suppressNextMouseUp.current = true;
     // The page editor keeps its own selection, the figure it selected: an
@@ -5472,7 +5486,6 @@ export function ReaderInteractions({
         side: readerSide,
         rightBase: articleRight + 10,
         cw,
-        nearTop,
       });
       return;
     }
@@ -8885,14 +8898,16 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         return { top: popover.yTop, left: Math.max(6, popover.textLeft - width - 10), width };
       })()
     : { top: 0, left: 0, width: 0 };
-  // Near the top, the bubbles above the toolbox drop below it.
-  const popoverNearTop = popover ? (popover.nearTop ?? popover.yTop < 54) : false;
-  // The compact toolbox — under the words, and on a coarse pointer — holds
-  // its bubbles as rows: the colors and the voice first, then Add to notes,
-  // so the stack is the toolbox alone and covers as few lines as it can.
-  const compact = coarse || popover?.side === "below";
+  // The toolbox is one card at every width: the colors and the voice are
+  // its first row, Add to notes its second, then the tools, so it covers as
+  // few lines as it can.
   // One row of the toolbox. Coarse pointers get 44px-tall rows.
   const toolRow = coarse ? "px-3.5 py-2.5 text-[14px]" : "px-2.5 py-[5px] text-[12px]";
+  // On a coarse pointer two short tools share a row, each one tap: Explain
+  // and Simplify, Visualize and Comment. Elsewhere the rows stand one under
+  // the other (the pair's box is display: contents).
+  const pairRow = (both: boolean) => (coarse && both ? "grid grid-cols-2 gap-0.5" : "contents");
+  const halfRow = "px-2.5 py-2.5 text-[14px]";
   // The assistant's bar (SPEC.md §29) takes the selection box's Assistant on
   // a blank document or an import, for a reader who can edit it, out of
   // Viewing mode. A figure has no words to change: its Assistant keeps the
@@ -8927,37 +8942,28 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
     leads(tool)
       ? "bg-clay-100 font-semibold text-clay-800 hover:bg-clay-200"
       : "text-sand-800 hover:bg-clay-100 hover:text-clay-800";
-  const leadBadge = (tool: Tool) =>
-    leads(tool) ? (
-      <span className="text-[9px] font-bold tracking-[0.06em] text-clay-700 uppercase">{t("reader.recommended")}</span>
-    ) : null;
-  // A bubble outside the toolbox (the highlight colors, Add to notes, Read
-  // aloud) draws a clay ring when its tool leads.
+  // The lead row's tint says it leads; its tooltip says so in words.
+  const leadTip = (tool: Tool, tip: string) => (leads(tool) ? `${tip}\n${t("reader.recommended")}` : tip);
+  // The highlight colors, Add to notes, and Read aloud draw a clay ring
+  // when their tool leads.
   const leadRing = (tool: Tool) => (leads(tool) ? " ring-2 ring-clay/60" : "");
-  // Read aloud: a round bubble under the toolbox, or the last button of the
-  // colors row in the compact toolbox (inRow).
-  const voiceButton = (inRow: boolean) => (
+  // Read aloud: the last button of the colors row.
+  const voiceButton = (
     <button
       onClick={() => void speakSelection()}
       data-track="read-aloud"
       aria-label={voice === "idle" ? t("reader.readAloud") : t("reader.stopReading")}
       data-tip={voice === "idle" ? t("reader.readAloud") : t("reader.stopReading")}
-      className={`flex ${
-        inRow ? (coarse ? "size-7" : "size-6") : `${coarse ? "size-11" : "size-[34px]"} shadow-float`
-      } items-center justify-center rounded-full ${
-        voice !== "idle"
-          ? "bg-clay text-clay-fg hover:bg-clay-600"
-          : inRow
-            ? "text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-            : "bg-card text-sand-700 hover:text-clay-800"
+      className={`flex ${coarse ? "size-7" : "size-6"} items-center justify-center rounded-full ${
+        voice !== "idle" ? "bg-clay text-clay-fg hover:bg-clay-600" : "text-sand-700 hover:bg-clay-100 hover:text-clay-800"
       }${leadRing("readAloud")}`}
     >
       {voice === "loading" ? (
-        <SpinnerIcon size={inRow ? 12 : 14} className="motion-safe:animate-spin" />
+        <SpinnerIcon size={12} className="motion-safe:animate-spin" />
       ) : voice === "playing" ? (
-        <StopIcon size={inRow ? 11 : 13} />
+        <StopIcon size={11} />
       ) : (
-        <VolumeIcon size={inRow ? 13 : 15} />
+        <VolumeIcon size={13} />
       )}
     </button>
   );
@@ -10081,7 +10087,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               toolbox, where the colors are the toolbox's first row, the row
               after them. The definition opens under the row. */}
           {has("define") && (
-            <div className={`flex flex-col gap-0.5${compact ? " -order-2" : ""}`}>
+            <div className="-order-2 flex flex-col gap-0.5">
               <button
                 onClick={() => {
                   defineNew.seen();
@@ -10090,7 +10096,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 data-track="define"
                 aria-disabled={aiOff || undefined}
                 aria-expanded={submenu === "define"}
-                data-tip={aiTip(t("reader.defineTitle"))}
+                data-tip={aiTip(leadTip("define", t("reader.defineTitle")))}
                 className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left ${
                   submenu === "define" ? "bg-clay-100 text-clay-800" : rowLook("define")
                 }${defineNew.isNew ? ` ${NEW_GLOW_CLASS}` : ""}${aiDim}`}
@@ -10100,7 +10106,6 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   {t("reader.define")}
                   {defineNew.isNew && <NewPill />}
                 </span>
-                {leadBadge("define")}
               </button>
               <Collapse open={submenu === "define" && shownDefinition !== null}>
                 {shownDefinition && (
@@ -10155,7 +10160,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             }${aiDim}`}
           >
             <SparkleIcon size={coarse ? 14 : 12} />
-            {t("reader.assistant")}
+            {t(barOffered ? "reader.editWithAssistant" : "reader.assistant")}
           </button>
           <Collapse open={submenu === "ai"}>
           {submenu === "ai" && (
@@ -10225,31 +10230,28 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               onClick={() => void analyze()}
               data-track="analyze"
               aria-disabled={aiOff || undefined}
-              data-tip={aiTip(t("reader.analyzeFigureTitle"))}
-              className={`flex w-full items-center justify-between gap-2 rounded-full bg-clay-100 ${toolRow} text-left font-semibold text-clay-800 hover:bg-clay-200 disabled:opacity-40${aiDim}`}
+              data-tip={aiTip(`${t("reader.analyzeFigureTitle")}\n${t("reader.recommended")}`)}
+              className={`flex w-full items-center gap-1.5 rounded-full bg-clay-100 ${toolRow} text-left font-semibold text-clay-800 hover:bg-clay-200 disabled:opacity-40${aiDim}`}
             >
-              <span className="flex items-center gap-1.5">
-                <ChartIcon size={coarse ? 14 : 12} />
-                {t("reader.analyzeFigure")}
-              </span>
-              <span className="text-[9px] font-bold tracking-[0.06em] text-clay-700 uppercase">
-                {t("reader.recommended")}
-              </span>
+              <ChartIcon size={coarse ? 14 : 12} />
+              {t("reader.analyzeFigure")}
             </button>
           )}
+          <div className={pairRow(has("explain") && has("simplify"))}>
           {has("explain") && (
             <button
               onClick={() => void explain()}
               data-track="explain"
               aria-disabled={aiOff || undefined}
-              data-tip={aiTip(popoverKind === "figure" ? t("reader.explainFigureTitle") : t("reader.explainTitle"))}
-              className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left ${rowLook("explain")}${aiDim}`}
+              data-tip={aiTip(
+                leadTip("explain", popoverKind === "figure" ? t("reader.explainFigureTitle") : t("reader.explainTitle")),
+              )}
+              className={`flex w-full min-w-0 items-center gap-1.5 rounded-full ${
+                coarse && has("simplify") ? halfRow : toolRow
+              } text-left ${rowLook("explain")}${aiDim}`}
             >
-              <span className="flex items-center gap-1.5">
-                <QuestionIcon size={coarse ? 14 : 12} />
-                {t("reader.explain")}
-              </span>
-              {leadBadge("explain")}
+              <QuestionIcon size={coarse ? 14 : 12} />
+              {t("reader.explain")}
             </button>
           )}
           {has("simplify") && (
@@ -10257,40 +10259,45 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               onClick={() => void simplify()}
               data-track="simplify"
               aria-disabled={aiOff || undefined}
-              data-tip={aiTip(t("reader.simplifyTitle"))}
-              className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left ${rowLook("simplify")}${aiDim}`}
+              data-tip={aiTip(leadTip("simplify", t("reader.simplifyTitle")))}
+              className={`flex w-full min-w-0 items-center gap-1.5 rounded-full ${
+                coarse && has("explain") ? halfRow : toolRow
+              } text-left ${rowLook("simplify")}${aiDim}`}
             >
-              <span className="flex items-center gap-1.5">
-                <SummaryIcon size={coarse ? 14 : 12} />
-                {t("reader.simplify")}
-              </span>
-              {leadBadge("simplify")}
+              <SummaryIcon size={coarse ? 14 : 12} />
+              {t("reader.simplify")}
             </button>
           )}
+          </div>
+          <div className={pairRow(has("visualize") && has("comment"))}>
           {has("visualize") && (
             <button
               onClick={() => void visualize()}
               data-track="visualize"
               aria-disabled={aiOff || undefined}
-              data-tip={aiTip(t("reader.visualizeTitle"))}
-              className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left ${rowLook("visualize")}${aiDim}`}
+              data-tip={aiTip(leadTip("visualize", t("reader.visualizeTitle")))}
+              className={`flex w-full min-w-0 items-center justify-between gap-1.5 rounded-full ${
+                coarse && has("comment") ? halfRow : toolRow
+              } text-left ${rowLook("visualize")}${aiDim}`}
             >
               <span className="flex items-center gap-1.5">
                 <VisualizeIcon size={coarse ? 14 : 12} />
                 {t("reader.visualize")}
               </span>
-              <span className="flex items-center gap-2">
-                {leadBadge("visualize")}
-                <span className="flex items-center gap-1 text-[9px] font-bold tracking-[0.06em] text-sand-500 uppercase">
+              {/* Visualize is Unitos Ultra: an account without it sees the
+                  tier mark (its word too, where the row has the room). */}
+              {!ultra && (
+                <span
+                  data-tip={t("reader.ultra")}
+                  className="flex items-center gap-1 text-[9px] font-bold tracking-[0.06em] text-sand-500 uppercase"
+                >
                   <TierMark state="ultra" size={10} />
-                  {t("reader.ultra")}
+                  {!(coarse && has("comment")) && t("reader.ultra")}
                 </span>
-              </span>
+              )}
             </button>
           )}
-
           {has("comment") && (
-          <>
           <button
             onClick={() => {
               if (submenu === "comment") focusPageAfterComment();
@@ -10298,17 +10305,18 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             }}
             data-track="comment"
             aria-expanded={submenu === "comment"}
-            data-tip={t("reader.commentTitle")}
-            className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left ${
-              submenu === "comment" ? "bg-clay-100 text-clay-800" : rowLook("comment")
-            }`}
+            data-tip={leadTip("comment", t("reader.commentTitle"))}
+            className={`flex w-full min-w-0 items-center gap-1.5 rounded-full ${
+              coarse && has("visualize") ? halfRow : toolRow
+            } text-left ${submenu === "comment" ? "bg-clay-100 text-clay-800" : rowLook("comment")}`}
           >
-            <span className="flex items-center gap-1.5">
-              <CommentIcon size={coarse ? 14 : 12} />
-              {t("reader.comment")}
-            </span>
-            {leadBadge("comment")}
+            <CommentIcon size={coarse ? 14 : 12} />
+            {t("reader.comment")}
           </button>
+          )}
+          </div>
+
+          {has("comment") && (
           <Collapse open={submenu === "comment"}>
           {submenu === "comment" && (
             <form
@@ -10367,38 +10375,25 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             </form>
           )}
           </Collapse>
-          </>
           )}
 
           {has("link") && (
           <button
             onClick={beginLink}
             data-track="link"
-            data-tip={t("reader.linkTitle")}
-            className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left ${rowLook("link")}`}
+            data-tip={leadTip("link", t("reader.linkTitle"))}
+            className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left ${rowLook("link")}`}
           >
-            <span className="flex items-center gap-1.5">
-              <UnlinkIcon size={coarse ? 14 : 12} />
-              {t("reader.linkAcrossTexts")}
-            </span>
-            {leadBadge("link")}
+            <UnlinkIcon size={coarse ? 14 : 12} />
+            {t("reader.linkAcrossTexts")}
           </button>
           )}
 
-          {/* Highlight: a separate bubble right above the toolbox holds the
-              color dots, as wide as the toolbox. Near the top of the page it
-              drops below instead, under the voice bubble, so it never lands
-              out of reach. In the compact toolbox it is the first row, and
-              the voice ends it. */}
+          {/* Highlight: the color dots are the toolbox's first row, and the
+              voice ends it. */}
           {has("highlight") && (
           <div
-            className={
-              compact
-                ? `order-first flex items-center justify-around rounded-full ${coarse ? "px-2 py-2" : "px-1.5 py-1"}${leadRing("highlight")}`
-                : `absolute left-0 flex w-full items-center justify-around rounded-full bg-card px-3 py-2 shadow-float ${
-                    popoverNearTop ? "top-full mt-[50px]" : "bottom-full mb-2"
-                  }${leadRing("highlight")}`
-            }
+            className={`order-first flex items-center justify-around rounded-full ${coarse ? "px-2 py-2" : "px-1.5 py-1"}${leadRing("highlight")}`}
           >
             {HIGHLIGHT_HUES.map((color) => (
               <button
@@ -10416,62 +10411,49 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 style={{ background: HUE_DOT[color] }}
               />
             ))}
-            {compact && has("readAloud") && voiceButton(true)}
+            {has("readAloud") && voiceButton}
           </div>
           )}
 
-          {/* Add to notes: a separate bubble above the toolbar, as wide as the
-              toolbox. Press it, pick a section, and the highlighted text lands
-              there as a quote. It sits one slot higher than the highlight
-              bubble; when the highlight bubble drops below near the page top,
-              it takes the near slot. In the compact toolbox it is the
-              second row. */}
+          {/* Add to notes: the toolbox's second row. One press makes a new
+              note in the first section with the words as its quote, as Enter
+              in its field does; the ▾ half opens the panel: the field for the
+              note's words, the sections, and Add to a note…. */}
           {has("addToNotes") && sectionChoices.length > 0 && (
-            <div
-              className={
-                compact
-                  ? `-order-1 flex flex-col gap-0.5 rounded-2xl${leadRing("addToNotes")}`
-                  : `absolute bottom-full left-0 flex w-full flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float ${
-                      popoverNearTop ? "mb-2" : "mb-[52px]"
-                    }${leadRing("addToNotes")}`
-              }
-            >
-              <button
-                onClick={() => setSubmenu(submenu === "add" ? null : "add")}
-                data-track="add-to-notes"
-                aria-expanded={submenu === "add"}
-                data-tip={t("reader.addToNotesTitle")}
-                className={`flex w-full items-center gap-1.5 rounded-full bg-clay ${toolRow} text-left font-semibold text-clay-fg hover:bg-clay-600`}
-              >
-                <NotesIcon size={coarse ? 14 : 12} />
-                {t("reader.addToNotes")}
-              </button>
+            <div className={`-order-1 flex flex-col gap-0.5 rounded-2xl${leadRing("addToNotes")}`}>
+              <div className="flex w-full items-stretch gap-px">
+                <button
+                  disabled={busy}
+                  onClick={() => void addToSection(sectionChoices[0].id)}
+                  data-track="add-to-notes"
+                  data-tip={t("reader.addToNotesTitle", { section: sectionChoices[0].label })}
+                  className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-l-full bg-clay ${toolRow} text-left font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-60`}
+                >
+                  <NotesIcon size={coarse ? 14 : 12} />
+                  {t("reader.addToNotes")}
+                </button>
+                <button
+                  onClick={() => setSubmenu(submenu === "add" ? null : "add")}
+                  data-track="add-to-notes-more"
+                  aria-expanded={submenu === "add"}
+                  aria-label={t("reader.addToNotesMoreTitle")}
+                  data-tip={t("reader.addToNotesMoreTitle")}
+                  className={`flex items-center justify-center rounded-r-full bg-clay ${coarse ? "w-11" : "w-7"} text-clay-fg hover:bg-clay-600`}
+                >
+                  <ChevronDownIcon size={coarse ? 14 : 12} className={submenu === "add" ? "rotate-180" : undefined} />
+                </button>
+              </div>
           {(() => {
-            // The bubble's panel: the comment field on top, then the
+            // The panel: the field for the note's words on top, then the
             // sections for a new note under "New note in", then Add to a
-            // note…, which swaps the sections for the note picker. Beside the
-            // page editor's page, and wherever the room above the toolbox is
-            // short for it, the panel drops down over the tools: growing
-            // upward, it would go under the page editor's header, or off the
-            // top of the pane. yTop counts from the top of the scrolled
-            // content; the room is what is in view above the toolbox.
-            const PANEL_ROOM = 400;
-            const dropsDown =
-              !compact &&
-              (Boolean(popover.page) || popover.yTop - (containerRef.current?.scrollTop ?? 0) < PANEL_ROOM);
+            // note…, which swaps the sections for the note picker.
             const first = sectionChoices[0];
             const hasNotes = sections.some((s) =>
               [s, ...s.children].some((x) => x.notes.some((n) => n.status === "ACCEPTED")),
             );
             const smallLabel = `${coarse ? "text-[11px]" : "text-[10px]"} font-bold tracking-[0.08em] text-sand-500 uppercase`;
             const panel = submenu === "add" && (
-              <div
-                className={
-                  dropsDown
-                    ? "absolute top-full left-0 z-10 mt-1 flex w-full flex-col gap-0.5 rounded-2xl bg-card p-1.5 shadow-float"
-                    : "flex flex-col gap-0.5"
-                }
-              >
+              <div className="flex flex-col gap-0.5">
                 <input
                   autoFocus={!coarse}
                   value={addComment}
@@ -10492,8 +10474,8 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                       focusPageAfterComment();
                     }
                   }}
-                  placeholder={t("reader.addCommentPlaceholder")}
-                  aria-label={t("reader.addCommentPlaceholder")}
+                  placeholder={t("reader.addNotePlaceholder")}
+                  aria-label={t("reader.addNotePlaceholder")}
                   data-tip={t("reader.addCommentTitle", { section: first.label })}
                   data-track="add-to-notes-comment"
                   className={`w-full rounded-full bg-sand-100 ${
@@ -10554,17 +10536,11 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 )}
               </div>
             );
-            return dropsDown ? panel : <Collapse open={submenu === "add"}>{panel}</Collapse>;
+            return <Collapse open={submenu === "add"}>{panel}</Collapse>;
           })()}
             </div>
           )}
 
-          {/* Voice: a separate bubble under the toolbar reads the highlighted
-              text aloud. Press again to stop. Text only. In the compact
-              toolbox it ends the colors row. */}
-          {has("readAloud") && !(compact && has("highlight")) && (
-          <div className="absolute top-full left-0 mt-2">{voiceButton(false)}</div>
-          )}
           </>)}
         </div>
       )}
