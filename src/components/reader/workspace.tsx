@@ -29,7 +29,7 @@ import { OfflineStatus } from "@/components/offline-status";
 import { useNotebookSync } from "@/components/collab/use-sync";
 import { GraphOverlayLoader } from "@/components/graph/graph-data";
 import { withoutGraphParams } from "@/components/graph/graph-content";
-import { GRAPH_NOTE_PARAM, OPEN_GRAPH_EVENT, type GraphFocus } from "@/components/graph/graph-keep";
+import { GRAPH_FROM_PARAM, GRAPH_NOTE_PARAM, OPEN_GRAPH_EVENT, type GraphFocus } from "@/components/graph/graph-keep";
 import { VisualizationViewer } from "@/components/reader/visualization-viewer";
 import { CorpusDistillPage } from "@/components/reader/corpus-distill-page";
 import { GuideDialog } from "@/components/guide-dialog";
@@ -353,8 +353,17 @@ export function Workspace({
     window.history.pushState(null, "", url);
     graphPushed.current = true;
   }, []);
+  // The graph came from the notes full page (graphFrom=notes): closing it
+  // goes back there, the entry before this one (WALK4-06).
+  const graphFromNotes = useRef(false);
   const closeGraph = useCallback(() => {
     setGraphOpen(false);
+    if (graphFromNotes.current) {
+      graphFromNotes.current = false;
+      graphPushed.current = false;
+      window.history.back();
+      return;
+    }
     if (!graphInUrl()) return;
     if (graphPushed.current) {
       graphPushed.current = false;
@@ -391,6 +400,7 @@ export function Workspace({
   // graph's entry stays behind it for Back.
   const leaveGraph = useCallback(() => {
     graphPushed.current = false;
+    graphFromNotes.current = false;
     setGraphOpen(false);
   }, []);
   useEffect(() => {
@@ -404,12 +414,17 @@ export function Workspace({
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setGraphFocus({ noteId });
         url.searchParams.delete(GRAPH_NOTE_PARAM);
+        // Only a page this tab came from: a reload or a shared link has no
+        // notes full page behind it.
+        graphFromNotes.current = url.searchParams.get(GRAPH_FROM_PARAM) === "notes" && window.history.length > 1;
+        url.searchParams.delete(GRAPH_FROM_PARAM);
         window.history.replaceState(window.history.state, "", url);
       }
       setGraphOpen(true);
     }
     const onPop = () => {
       graphPushed.current = false;
+      graphFromNotes.current = false;
       setGraphFocus(null);
       setGraphOpen(graphInUrl());
     };

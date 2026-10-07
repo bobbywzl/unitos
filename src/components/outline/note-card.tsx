@@ -34,7 +34,7 @@ import { SaveStateLabel } from "@/components/outline/save-state";
 import { useNoteDraft } from "@/components/outline/use-note-draft";
 import { NoteAssistant } from "@/components/outline/note-assistant";
 import { NOTE_ABSORBED_EVENT, type OutlineActions } from "@/components/outline/use-outline";
-import { GRAPH_NOTE_PARAM, requestGraph } from "@/components/graph/graph-keep";
+import { GRAPH_FROM_PARAM, GRAPH_NOTE_PARAM, requestGraph } from "@/components/graph/graph-keep";
 
 /** The nearest ancestor that scrolls: the tray's panel. Null on the notes full page, where the window scrolls. */
 function scrollPane(el: HTMLElement): HTMLElement | null {
@@ -946,12 +946,13 @@ const NoteCardBody = memo(function NoteCardBody({
           </button>
           {/* Show on graph (VIEW3-04): the graph opens with the note's
               documents lit and the Notes list on the note. The tray asks
-              the workspace; the notes full page goes to the reader's graph. */}
+              the workspace; the notes full page goes to the reader's graph,
+              and closing it comes back here (WALK4-06). */}
           {(note.documentId !== null || note.sources.some((s) => s.documentId)) && (
             <button
               onClick={() => {
                 if (!requestGraph({ noteId: note.id })) {
-                  router.push(`/n/${notebookId}?graph=1&${GRAPH_NOTE_PARAM}=${note.id}`);
+                  router.push(`/n/${notebookId}?graph=1&${GRAPH_NOTE_PARAM}=${note.id}&${GRAPH_FROM_PARAM}=notes`);
                 }
               }}
               data-track="note-show-on-graph"
