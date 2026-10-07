@@ -90,20 +90,28 @@ const LIST = '[data-track-surface="graph-links"]';
     const near = list && ((dist < 40 && mid.x >= list.x - 20 && mid.x <= list.x + list.w + 20) || beside);
     log(near && list.w >= 280 && !overlap(list, box) ? "PASS" : "FAIL", `link list ${name} at its curve, screen-sized, clear of the box`, { mid, list, box, rowLineHeight: font });
     await page.screenshot({ path: `${SHOT}GR-04-${name}-${lang}-${tag}.png` });
-    // Expand the first link: the reason shows once.
+    // Open the first link: it opens in the side panel (WALK2-05), the reason
+    // once, at full height, clear of the box; the curve stays pinned.
     await page.mouse.click(mid.x, mid.y);
     await page.waitForTimeout(300);
     await page.locator(`${LIST} button[aria-expanded]`).first().click();
-    await page.waitForTimeout(400);
-    const whyCount = await page.locator(`${LIST} [data-track-surface="link-detail"]`).count();
-    const listOpen = await rect(page, LIST);
-    log(listOpen && listOpen.w >= 390 && !overlap(listOpen, await rect(page, BOX)) ? "PASS" : "FAIL", `expanded link ${name} 400px wide, clear of the box`, { listOpen, whyCount });
+    await page.waitForTimeout(600);
+    const PANEL = '[data-track-surface="graph-link-panel"]';
+    const whyCount = await page.locator(`${PANEL} [data-track-surface="link-detail"]`).count();
+    const inPlace = await page.locator(`${LIST} [data-track-surface="link-detail"]`).count();
+    const panel = await rect(page, PANEL);
+    log(panel && panel.w >= 390 && panel.h >= 500 && whyCount === 1 && inPlace === 0 && !overlap(panel, await rect(page, BOX)) ? "PASS" : "FAIL", `link ${name} opens in the side panel, 400px wide, full height, clear of the box`, { panel, whyCount, inPlace });
     await page.screenshot({ path: `${SHOT}GR-13-${name}-expanded-${lang}-${tag}.png` });
-    // Escape closes the pinned list, not the graph (GR-11).
+    // Escape closes the pinned list, then the panel, never the graph (GR-11).
     await page.mouse.move(5, 300);
     await page.keyboard.press("Escape");
     await page.waitForTimeout(400);
     log((await overlayOpen(page)) && (await page.locator(LIST).count()) === 0 ? "PASS" : "FAIL", `Escape closes the pinned ${name} list first, the graph stays`);
+    if (await page.locator(PANEL).count()) {
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(400);
+    }
+    log((await overlayOpen(page)) && (await page.locator(PANEL).count()) === 0 ? "PASS" : "FAIL", `Escape then closes the ${name} link panel, the graph stays`);
   }
   await page.close();
 }
@@ -198,12 +206,18 @@ const LIST = '[data-track-surface="graph-links"]';
   const xy = (s) => (tr(s) || "").split(",").map((v) => parseFloat(v));
   const same = (a, b) => xy(a).every((v, i) => Math.abs(v - xy(b)[i]) <= 1);
   log(same(reopened, dragged) && !same(dragged, before) ? "PASS" : "FAIL", "dragged node keeps its place after close and reopen", { before: tr(before), dragged: tr(dragged), reopened: tr(reopened) });
-  // Enter on a focused node opens it (GR-16).
+  // Enter on a focused node selects it and pins its card; Enter on the
+  // selected node opens it (GR-16, VIEW2 CLICK_SELECTS).
   const target = page.locator(".react-flow__node", { hasText: "Search Market" }).first();
+  const targetId = await target.getAttribute("data-id");
+  await target.focus();
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(800);
+  log((await overlayOpen(page)) && (await page.locator(`aside[data-graph-node-card="${targetId}"], [data-graph-node-card="${targetId}"]:not([role="tooltip"])`).count()) > 0 ? "PASS" : "FAIL", "Enter on a focused node pins its card", page.url());
   await target.focus();
   await page.keyboard.press("Enter");
   await page.waitForTimeout(1500);
-  log(!(await overlayOpen(page)) && /doc=/.test(page.url()) ? "PASS" : "FAIL", "Enter on a focused node opens the document", page.url());
+  log(!(await overlayOpen(page)) && /doc=/.test(page.url()) ? "PASS" : "FAIL", "Enter on the selected node opens the document", page.url());
   await page.goBack();
   await page.waitForTimeout(2500);
   log(await overlayOpen(page) ? "PASS" : "FAIL", "Back from the document reopens the graph", page.url());

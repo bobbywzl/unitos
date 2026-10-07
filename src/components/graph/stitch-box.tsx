@@ -92,6 +92,8 @@ export function StitchBox({
   onOpenDocument,
   onShowRecommended,
   onCited,
+  onProposed,
+  prefill,
   open: openProp,
   onOpenChange,
 }: {
@@ -115,6 +117,11 @@ export function StitchBox({
   onShowRecommended?: () => void;
   // After each reply: the documents it cites, for the graph to light.
   onCited?: (documentIds: string[]) => void;
+  // [view2] After each reply: the recommended links it proposed, for the
+  // graph to light; and a command Find hands over (seq: one per hand-over),
+  // put in the box for the reader to send.
+  onProposed?: (linkIds: string[]) => void;
+  prefill?: { text: string; seq: number } | null;
 }) {
   const t = useT();
   const router = useRouter();
@@ -151,6 +158,21 @@ export function StitchBox({
     drafts.set(notebookId, value);
     setCommandState(value);
   }
+
+  // [view2] Find's Ask Stitch: the question goes in the box after any words
+  // already typed (never over them), and the cursor waits at its end.
+  const [prefillSeq, setPrefillSeq] = useState(prefill?.seq ?? 0);
+  if (prefill && prefill.seq !== prefillSeq) {
+    setPrefillSeq(prefill.seq);
+    setCommand(command.trim() ? `${command.trimEnd()}\n${prefill.text}` : prefill.text);
+  }
+  useEffect(() => {
+    if (prefillSeq === 0) return;
+    const input = inputRef.current;
+    if (!input) return;
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  }, [prefillSeq]);
 
   // Esc in the box: the passage card closes first, then picking ends, then
   // the text box lets go of focus. Only an Esc none of these takes reaches
@@ -230,6 +252,7 @@ export function StitchBox({
     onPickingChange(false);
     // The graph drops the last reply's cited documents.
     onCited?.([]);
+    onProposed?.([]); // [view2]
     // Only a command that got its reply is in `turns`, so the history holds
     // no failed or stopped command. A turn with no text (an answer that was
     // only links or a page) has nothing for the model to read, and the
@@ -259,6 +282,7 @@ export function StitchBox({
       ]);
       setPending(null);
       onCited?.(citedDocumentIds(result));
+      onProposed?.(result.linkIds ?? []); // [view2]
       // The graph's new curves and the generated list arrive with a refresh.
       if (result.linkCount > 0 || result.document) router.refresh();
     } catch (err) {

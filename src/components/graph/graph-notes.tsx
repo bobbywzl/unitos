@@ -12,8 +12,8 @@ import { readGraphKeep, writeGraphKeep } from "@/components/graph/graph-keep";
 import { noteLine, notesOnGraph, pairKey, type GraphNote, type NotesOnGraph } from "@/lib/graph/notes";
 
 // The project's notes on the graph (SPEC.md §13). The document stays the
-// node; a note shows where it is: a chip on each node it belongs to, a card
-// of its notes on a node's hover, a sage pill on a curve whose two documents
+// node; a note shows where it is: a chip on each node it belongs to, its
+// lines in the node's card (node-card.tsx), a sage pill on a curve whose two documents
 // one note quotes, and a sage dotted curve where only a note joins two
 // documents. The Notes list beside the canvas (graph-notes-list.tsx) is a
 // lens on the same data: a hovered row lights the documents it quotes, and
@@ -275,7 +275,7 @@ export function useNoteOnlyEdges(edges: GraphEdge[]): FlowEdge<NoteEdgeData>[] {
   }, [view, edges, titleOf, t]);
 }
 
-// ── Node chip and hover card ───────────────────────────────────────────────
+// ── Node chip ──────────────────────────────────────────────────────────────
 
 const CARD_ROWS = 5;
 
@@ -314,7 +314,7 @@ export function NodeNotesRows({ documentId }: { documentId: string }) {
   if (!ctx || !notes || notes.length === 0) return null;
   const shown = notes.slice(0, CARD_ROWS);
   return (
-    <div data-track-surface="graph-node-notes" className="-mx-1.5 mt-1 flex flex-col gap-0.5 border-t border-line pt-1.5">
+    <div data-track-surface="graph-node-notes" data-graph-hover-notes className="-mx-1.5 mt-1 flex flex-col gap-0.5 border-t border-line pt-1.5">
       <p className="px-2 pb-0.5 text-[11px] font-bold tracking-[0.06em] text-sage-700 uppercase">
         {notes.length === 1 ? t("graphNotes.nodeNotesOne") : t("graphNotes.nodeNotesMany", { n: notes.length })}
       </p>

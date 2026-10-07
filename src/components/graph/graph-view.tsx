@@ -43,6 +43,9 @@ import {
 } from "@/components/graph/graph-notes";
 import { LinkReplyCount } from "@/components/graph/link-replies";
 // [/graph-notes]
+// [view2] The node card, Find's counts, and the last Stitch answer's links.
+import { useGraphContent } from "@/components/graph/graph-content";
+import { NodeCardExtras } from "@/components/graph/node-card";
 
 // The corpus graph (SPEC.md §13; the release-edu canvas patterns): documents
 // as nodes on a pan/zoom canvas, links between them as swept curves. The more
@@ -194,10 +197,13 @@ function DocumentNode({ id, data }: NodeProps<DocumentNodeData>) {
   const { citedIds, plain } = useContext(SpotlightContext);
   const cited = citedIds?.has(id) ?? false;
   const sectionDim = useNodeSectionDim(id); // [graph-notes]
+  const findHits = useGraphContent().findHits; // [view2]
+  const found = findHits?.get(id) ?? 0;
   // Cited documents (the last Stitch answer) stay bright while the rest
-  // fade; so do the documents a section filter keeps [graph-notes]. The
-  // hover spotlight is the canvas's CSS, on the node's wrapper.
-  const opacity = sectionDim || (citedIds && !cited) ? 0.35 : 1;
+  // fade; so do the documents a section filter keeps [graph-notes], and the
+  // documents Find finds [view2]. The hover spotlight is the canvas's CSS,
+  // on the node's wrapper.
+  const opacity = sectionDim || (citedIds && !cited) || (findHits && found === 0) ? 0.35 : 1;
   const size = data.size + (data.active ? 2 : 0);
   const breathing = data.breathing && !plain;
   const breatheDelay = `${(Math.abs(seeded(id, 5)) * 3).toFixed(2)}s`;
@@ -252,6 +258,16 @@ function DocumentNode({ id, data }: NodeProps<DocumentNodeData>) {
       <span className="absolute top-1/2 -translate-y-1/2" style={{ left: `calc(50% + ${size / 2 + 4}px)` }}>
         <NodeNotes documentId={id} />
       </span>
+      {/* [view2] Find's passages in this document: a clay count left of the dot. */}
+      {found > 0 && (
+        <span
+          data-graph-find-count={found}
+          className="absolute top-1/2 -translate-x-full -translate-y-1/2 rounded-full bg-clay px-1.5 py-px text-[10px] font-semibold tabular-nums text-clay-fg"
+          style={{ left: `calc(50% - ${size / 2 + 4}px)` }}
+        >
+          {found}
+        </span>
+      )}
     </div>
   );
 }
@@ -310,8 +326,22 @@ function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data
   const gradientId = `edge-${id.replace(/[^a-zA-Z0-9]/g, "-")}`;
   const label = String(count);
   const pillWidth = 14 + label.length * 7;
+  // [view2] A pair holding a link the last Stitch answer proposed: a violet halo.
+  const { proposedLinkIds } = useGraphContent();
+  const proposed = proposedLinkIds.size > 0 && links.some((l) => proposedLinkIds.has(l.id));
   return (
     <g className="graph-curve" data-rec={recommendedOnly ? "" : undefined}>
+      {proposed && (
+        <path
+          d={path}
+          fill="none"
+          data-graph-proposed={id}
+          stroke="var(--kind-assistant)"
+          strokeOpacity={0.35}
+          strokeLinecap="round"
+          style={{ strokeWidth: width + 9 }}
+        />
+      )}
       {gradient && (
         <defs>
           <linearGradient
@@ -483,6 +513,7 @@ function CurveListFrame({
 function EdgeLinkList({ edgeId, loop, anchor, links }: { edgeId: string; loop: boolean; anchor: Point; links: GraphEdgeLink[] }) {
   const { pinEdge, expandLink, expandedLinkId } = useContext(SpotlightContext);
   const t = useT();
+  const { proposedLinkIds } = useGraphContent(); // [view2]
   // A recommended link accepted or dismissed from the list (SPEC.md §13):
   // the row answers at once, before the server does, and comes back if the
   // server refuses; the refresh brings the graph's own data.
@@ -527,12 +558,21 @@ function EdgeLinkList({ edgeId, loop, anchor, links }: { edgeId: string; loop: b
             : t("panes.graphPairLinks", { count })}
       </p>
       {decideError && <p className="px-2 text-[11px] text-red-500">{decideError}</p>}
-      {links.map((l) => {
+      {(proposedLinkIds.size > 0
+        ? [...links].sort((a, b) => Number(proposedLinkIds.has(b.id)) - Number(proposedLinkIds.has(a.id)))
+        : links
+      ).map((l) => {
         if (dismissed.has(l.id)) return null;
         const open = expandedLinkId === l.id;
         const recommended = l.recommended && !accepted.has(l.id);
         return (
           <div key={l.id} className={open ? "rounded-xl bg-sand-100/70" : undefined}>
+            {/* [view2] The last Stitch answer's links come first, marked. */}
+            {proposedLinkIds.has(l.id) && (
+              <p data-graph-from-answer className="px-2 pt-1 text-[10.5px] font-semibold text-[var(--kind-assistant)]">
+                {t("graphView.fromLastAnswer")}
+              </p>
+            )}
             <button
               onClick={() => {
                 pinEdge(edgeId);
@@ -633,6 +673,7 @@ function NodeCard({
 }) {
   const { floatHost, insets } = useContext(SpotlightContext);
   const t = useT();
+  const { clickSelects } = useGraphContent(); // [view2]
   // The card waits a beat, so a pointer crossing the canvas does not flash a
   // card on every node it passes. Its own state: the canvas does not render
   // again when it shows.
@@ -678,7 +719,11 @@ function NodeCard({
       <p className="text-[13px] leading-snug font-semibold text-ink">{node.title}</p>
       {facts1.length > 0 && <p className="text-[11.5px] text-sand-600">{facts1.join(" · ")}</p>}
       <p className="text-[11.5px] text-sand-600">{linkLine.join(" · ")}</p>
-      <p className="mt-0.5 text-[11px] text-sand-500">{t(picking ? "panes.graphCardPick" : "panes.graphCardOpen")}</p>
+      {/* [view2] The gist's first words; the notes as rows: one card per node (VIEW2-01). */}
+      <NodeCardExtras documentId={node.id} notes={false} />
+      <p className="mt-0.5 text-[11px] text-sand-500">
+        {t(picking ? "panes.graphCardPick" : clickSelects ? "graphView.cardHintSelect" : "graphView.cardHintOpen")}
+      </p>
       {!picking && <NodeNotesRows documentId={node.id} />}
     </div>,
     floatHost,
@@ -689,6 +734,7 @@ function NodeCard({
 // button with the zoom controls, so it never sits under the Stitch box.
 function GraphKey({ onClose }: { onClose: () => void }) {
   const t = useT();
+  const { clickSelects } = useGraphContent(); // [view2]
   const row = (mark: ReactNode, key: Parameters<typeof t>[0]) => (
     <li className="flex items-center gap-2.5">
       <span className="flex w-7 shrink-0 items-center justify-center">{mark}</span>
@@ -747,7 +793,9 @@ function GraphKey({ onClose }: { onClose: () => void }) {
           "graphNotes.nodeNotesTitle",
         )}
       </ul>
-      <p className="mt-2.5 border-t border-line pt-2 text-[11.5px] leading-relaxed text-sand-600">{t("panes.graphGestures")}</p>
+      <p className="mt-2.5 border-t border-line pt-2 text-[11.5px] leading-relaxed text-sand-600">
+        {t(clickSelects ? "graphView.gesturesSelect" : "graphView.gesturesOpen") /* [view2] */}
+      </p>
     </div>
   );
 }
@@ -984,10 +1032,13 @@ function GraphCanvas({
   );
   useSyncPinnedPair(pinnedEdgeId); // [graph-notes]
   const notesLit = useNotesLit(); // [graph-notes]
-  // Nothing hovered: a pinned curve keeps its pair in the spotlight.
+  const content = useGraphContent(); // [view2]
+  const focusedId = content.focusedId;
+  // Nothing hovered: a pinned curve keeps its pair in the spotlight, and
+  // then the node whose card is pinned [view2].
   const shown = useMemo<HoverState>(
-    () => hover ?? (pinnedEdgeId ? { edgeId: pinnedEdgeId } : null),
-    [hover, pinnedEdgeId],
+    () => hover ?? (pinnedEdgeId ? { edgeId: pinnedEdgeId } : focusedId ? { nodeId: focusedId } : null),
+    [hover, pinnedEdgeId, focusedId],
   );
   // The curves read which list is open from the store, never from a render.
   const [store] = useState(createCanvasStore);
@@ -1359,10 +1410,24 @@ function GraphCanvas({
         onToggleSelect(id);
         return;
       }
+      // [view2] A click selects and pins the card; on the selected node it opens.
+      if (content.clickSelects && content.focusedId !== id) {
+        content.select(id);
+        return;
+      }
       router.push(docHref ? docHref(id) : `/n/${notebookId}?doc=${id}`);
       onOpenDocument();
     },
-    [onClearCited, onToggleSelect, picking, router, docHref, notebookId, onOpenDocument],
+    [onClearCited, onToggleSelect, picking, router, docHref, notebookId, onOpenDocument, content],
+  );
+  // [view2] Option B's way to the card (CLICK_SELECTS false), and a second
+  // way in A: a right-click, or a long press on touch.
+  const onNodeContextMenu = useCallback(
+    (e: ReactMouseEvent, node: FlowNode) => {
+      e.preventDefault();
+      content.select(node.id);
+    },
+    [content],
   );
 
   // Keyboard (GR-16, REV2-10): the canvas is one Tab stop — the roving node
@@ -1529,6 +1594,9 @@ function GraphCanvas({
         activate(nodeId, e.key === " " || e.shiftKey);
         return;
       }
+      // [view2] With a card pinned, ← and → walk the card's links
+      // (node-card.tsx); ↑ and ↓ still move between documents.
+      if (nodeId && content.focusedId && (e.key === "ArrowLeft" || e.key === "ArrowRight")) return;
       if (nodeId && e.key.startsWith("Arrow")) {
         e.preventDefault();
         e.stopPropagation();
@@ -1561,8 +1629,16 @@ function GraphCanvas({
         if (pinning) focusList(edgeId);
       }
     },
-    [activate, focusNode, flowEdges, hoverEdge, edgeEl, pinnedEdgeId, focusList],
+    [activate, focusNode, flowEdges, hoverEdge, edgeEl, pinnedEdgeId, focusList, content.focusedId],
   );
+  // [view2] The card walked to another document while focus sat on a node:
+  // focus follows the card, so Enter opens the document it shows.
+  useEffect(() => {
+    if (!focusedId) return;
+    const active = document.activeElement;
+    if (!(active instanceof Element) || !active.matches(".react-flow__node")) return;
+    if (active.getAttribute("data-id") !== focusedId) focusNode(focusedId);
+  }, [focusedId, focusNode]);
   const onFocusCapture = useCallback(
     (e: FocusEvent) => {
       if (!(e.target instanceof Element)) return;
@@ -1655,6 +1731,7 @@ function GraphCanvas({
         onNodeDragStart={onNodeDragStart}
         onNodeDragStop={onNodeDragStopAll}
         onNodeClick={onNodeClick}
+        onNodeContextMenu={onNodeContextMenu /* [view2] */}
         onNodeMouseEnter={onNodeMouseEnter}
         onNodeMouseLeave={scheduleClear}
         onEdgeMouseEnter={onEdgeMouseEnter}
@@ -1730,7 +1807,7 @@ function GraphCanvas({
           </ControlButton>
         </Controls>
       </ReactFlow>
-      {hoveredNodeId && !dragging && (
+      {hoveredNodeId && hoveredNodeId !== focusedId /* [view2] its card is pinned */ && !dragging && (
         <NodeCard
           key={hoveredNodeId}
           node={nodes.find((n) => n.id === hoveredNodeId) ?? null}

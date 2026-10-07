@@ -9,7 +9,8 @@
    - A page load: network first. Online, a page a saved copy holds is
      refreshed in that copy. Offline, the saved copy answers; anything else
      answers with the offline page, which lists the saved projects.
-   - An image of a document or a note: network first, the saved copy second.
+   - An image of a document or a note, and the graph's data (the graph and
+     outline routes): network first, the saved copy second.
    - RSC fetches (the router's soft navigations) are never answered from the
      cache: when one fails offline the router falls back to a full load, and
      that load is what the cache answers. */
@@ -123,6 +124,12 @@ function isAsset(url) {
   return /^\/api\/(images\/[^/]+|documents\/[^/]+\/(figure|page)\/[^/]+)$/.test(url.pathname);
 }
 
+// The graph's data (SPEC.md §13), which a saved copy holds: the graph and
+// each document's outline. Network first, the saved copy second.
+function isGraphData(url) {
+  return /^\/api\/notebooks\/[^/]+\/(graph|outline)$/.test(url.pathname);
+}
+
 function isShell(url) {
   return SHELL_URLS.includes(url.pathname);
 }
@@ -208,7 +215,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (request.headers.has("RSC") || request.headers.has("Next-Router-Prefetch")) return;
-  if (isAsset(url) || isShell(url)) {
+  if (isAsset(url) || isShell(url) || isGraphData(url)) {
     event.respondWith(networkFirst(request, false));
   }
 });

@@ -11,6 +11,7 @@ import { docsPage } from "@/lib/i18n/dict/docsPage";
 import { docsSuggest } from "@/lib/i18n/dict/docsSuggest";
 import { docsTyping } from "@/lib/i18n/dict/docsTyping";
 import { graphNotes } from "@/lib/i18n/dict/graphNotes";
+import { graphView } from "@/lib/i18n/dict/graphView";
 import { legal } from "@/lib/i18n/dict/legal";
 import { outline } from "@/lib/i18n/dict/outline";
 import { panels } from "@/lib/i18n/dict/panels";
@@ -50,6 +51,7 @@ const NAMESPACES = {
   plans,
   stitch,
   graphNotes,
+  graphView,
   video,
   settings,
   admin,

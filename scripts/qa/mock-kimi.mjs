@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import http from "node:http";
 
-const PORT = 3399;
+const PORT = Number(process.env.MOCK_KIMI_PORT ?? 3399);
 
 function textOf(content) {
   if (typeof content === "string") return content;
@@ -397,13 +397,28 @@ function buildResponse(all) {
   // Notebook tasks: no issues found.
   // Gists: the first five words of each listed note.
   // The skeleton (SPEC.md §22): every block's first eight words as its
-  // line, every listed part's title as its summary, the title as the gist.
+  // line; each listed part's summary is the first sentence of the part's
+  // first paragraph; the gist is the window's first heading, else its first
+  // 20 words. Each document gets its own gist and summaries, so a view that
+  // shows them can tell the documents apart (VIEW2-05).
   if (all.includes('"lines"') && all.includes("Write the document's skeleton")) {
     const blocks = parseBlocks(all);
     const lines = blocks.map((b) => ({ blockId: b.id, text: b.text.split(/\s+/).slice(0, 8).join(" ") }));
-    const parts = [...all.matchAll(/\[part ([^\]]+)\] "([^"]*)"/g)].map((m) => ({ blockId: m[1], summary: `About ${m[2]}.` }));
+    const firstSentence = (text) =>
+      (text.trim().match(/^[\s\S]*?[.!?。！？](?=\s|$)/)?.[0] ?? text.trim()).split(/\s+/).slice(0, 40).join(" ");
+    const parts = [...all.matchAll(/\[part ([^\]]+)\] "([^"]*)"/g)].map((m) => {
+      const at = blocks.findIndex((b) => b.id === m[1]);
+      const body = blocks.slice(Math.max(0, at)).find((b) => b.type !== "HEADING" && b.text.trim().length > 20);
+      return { blockId: m[1], summary: body ? firstSentence(body.text) : `About ${m[2]}.` };
+    });
+    const heading = blocks.find((b) => b.type === "HEADING" && b.text.trim());
+    const firstText = blocks.find((b) => b.type !== "HEADING" && b.text.trim().length > 20);
+    const words = firstText ? firstText.text.trim().split(/\s+/).slice(0, 20).join(" ") : "";
+    const gist = all.includes("3. gist: an empty string")
+      ? ""
+      : [heading?.text.trim(), words].filter(Boolean).join(": ") || "Mock gist of the document.";
     console.log("[mock skeleton]", lines.length, "lines,", parts.length, "parts");
-    return JSON.stringify({ gist: "Mock gist of the document.", parts, lines });
+    return JSON.stringify({ gist, parts, lines });
   }
 
   // Stitch, the route pass: every part named.
