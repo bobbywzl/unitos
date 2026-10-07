@@ -55,6 +55,7 @@ import { profileLines } from "@/lib/prompts/types";
 import { estTokens } from "@/lib/tokens";
 import type { StitchCommandKind, StitchDocument, StitchResult } from "@/lib/types";
 import { transcriptIsStale } from "@/lib/video/types";
+import { COMMAND_CHAIN } from "@/lib/graph/generated-label";
 
 // Stitch (SPEC.md §22): one command over the project's documents, from the
 // graph — the documents the reader selected in the graph, or every attached
@@ -1559,7 +1560,7 @@ export async function stitch(input: {
     document = await materializeGenerated({
       notebookId: input.notebookId,
       userId: input.userId,
-      command: previous ? `${previous.content.trim()} → ${input.command}` : input.command,
+      command: previous ? `${previous.content.trim()}${COMMAND_CHAIN}${input.command}` : input.command,
       title: result.data.document.title.trim(),
       parts: result.data.document.parts.slice(0, MAX_PARTS),
       blockById: blockByRef,
