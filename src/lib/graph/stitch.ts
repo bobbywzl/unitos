@@ -1309,7 +1309,9 @@ async function loadRecords(turns: StitchTurn[], notebookId: string): Promise<{ l
         d.blocks.map((b) => {
           const from = byBlock.get(b.id) ?? [];
           const sources = from.flatMap((l) => (l.toBlockId ? [{ blockId: l.toBlockId, title: l.toDocument.title }] : []));
-          return { quote: from.length === 1 && (from[0].toQuotedText ?? "").trim() === b.text.trim(), sources };
+          // A quote part is a copy of its one source; its markdown
+          // emphasis parsed away (_pity_ is pity), so compared folded.
+          return { quote: from.length === 1 && foldQuote(from[0].toQuotedText ?? "").replace(/-/g, "") === foldQuote(b.text).replace(/-/g, ""), sources };
         }),
       );
     }
@@ -1323,13 +1325,15 @@ async function loadRecords(turns: StitchTurn[], notebookId: string): Promise<{ l
     (historyWithAliases). Only blocks of documents attached to the project
     are named by title. */
 export async function stitchHistory(turns: StitchTurn[], reading: Reading, notebookId: string): Promise<ModelMessage[]> {
-  const kept = turns.filter((t) => t.content.trim()).slice(-STITCH_HISTORY_MAX);
+  // A turn with no text but a record (an answer that was only links or a
+  // page) is kept: its record is what the model reads of it.
+  const kept = turns.filter((t) => t.content.trim() || t.record?.links.length || t.record?.document).slice(-STITCH_HISTORY_MAX);
   const records = await loadRecords(kept.filter((t) => t.role === "assistant"), notebookId);
   const contents = kept.map((t) => {
     if (t.role !== "assistant" || !t.record) return t.content;
     const page = t.record.document ? (records.pages.get(t.record.document.id) ?? null) : null;
     const text = recordText(t.record, records.links, page);
-    return text ? `${t.content}\n\n${text}` : t.content;
+    return [t.content.trim(), text].filter(Boolean).join("\n\n");
   });
   const unknown = new Set<string>();
   for (const c of contents) for (const m of c.matchAll(BLOCK_TAG)) if (!reading.blockByRef.has(m[1])) unknown.add(m[1]);
@@ -1649,6 +1653,9 @@ export async function stitch(input: {
   history: StitchTurn[];
   signal?: AbortSignal;
   onFailure: (reason: string) => Error;
+  // The answer pass's history-first threshold, for a check that compares
+  // the two layouts; STITCH_HISTORY_FIRST_MIN when absent.
+  historyFirstMin?: number;
 }): Promise<StitchResult> {
   const docs = await loadDocuments(input.notebookId, input.documentIds, { generated: STITCH_READS_GENERATED });
   const reading = readingOf(docs);
@@ -1716,6 +1723,7 @@ export async function stitch(input: {
       command: input.command,
       names: selected ? nameHits(input.command, read.flatMap((r) => r.blocks), read.map((r) => r.doc.title)) : undefined,
       links: existingAliases,
+      historyFirstMin: input.historyFirstMin,
     }),
     maxOutputTokens: STITCH_MAX_OUTPUT_TOKENS,
     providerOptions: answer.providerOptions,
@@ -1786,7 +1794,12 @@ export async function stitch(input: {
   // A page made by a follow-up records the earlier command it continues
   // too (pageCommand), so Generated content says what "make that a page"
   // made a page of.
-  const titles = new Set(rendered.map((r) => r.doc.title));
+  // Titles in quote marks are not quotes: the documents read, and the
+  // pages the earlier turns stored.
+  const titles = new Set([
+    ...rendered.map((r) => r.doc.title),
+    ...input.history.flatMap((t) => (t.record?.document ? [t.record.document.title] : [])),
+  ]);
   let document: StitchResult["document"] = null;
   if (result.data.document && !input.signal?.aborted) {
     const parts = result.data.document.parts.slice(0, MAX_PARTS);

@@ -56,7 +56,7 @@ const requestSchema = z.object({
     )
     .max(200)
     .default([])
-    .transform((turns) => turns.filter((t) => t.content.trim()).slice(-STITCH_HISTORY_MAX)),
+    .transform((turns) => turns.filter((t) => t.content.trim() || t.record?.links.length || t.record?.document).slice(-STITCH_HISTORY_MAX)),
 });
 
 class StitchFailure extends Error {}

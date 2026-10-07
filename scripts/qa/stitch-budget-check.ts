@@ -548,14 +548,16 @@ check("replyLanguage command: a mixed or short command keeps the UI's", replyLan
 
   // COST4-01: history before the blocks only past STITCH_HISTORY_FIRST_MIN tokens.
   const short = [{ role: "user" as const, content: "What is pity?" }, { role: "assistant" as const, content: "x ".repeat(400) }];
-  const long = [{ role: "user" as const, content: "What is pity?" }, { role: "assistant" as const, content: "x ".repeat(4 * STITCH_HISTORY_FIRST_MIN) }];
-  const lay = (history: typeof short, selected: Set<string> | null) => answerMessages({ reading: gReading, selected, lang: "en", profile: prof, history, command: "And then?" });
+  const long = [{ role: "user" as const, content: "What is pity?" }, { role: "assistant" as const, content: "x ".repeat(4 * 3_000) }];
+  // The layout at a 3k line (the config ships it off: Infinity).
+  const lay = (history: typeof short, selected: Set<string> | null, historyFirstMin = 3_000) => answerMessages({ reading: gReading, selected, lang: "en", profile: prof, history, command: "And then?", historyFirstMin });
   const s1 = lay(short, new Set(["A1"]));
   const l1 = lay(long, new Set(["A1"]));
   check("answer layout: a short history comes after the blocks", String(s1[0].content).includes("[block A1]") && s1.length === 4 && !String(s1[3].content).includes("[block A1]"));
   check("answer layout: past the threshold the history comes first, the blocks last", !String(l1[0].content).includes("[block A1]") && String(l1[3].content).includes("[block A1]") && String(l1[3].content).includes("And then?"));
   check("answer layout: the whole read never moves", String(lay(long, null)[0].content).includes("[block A1]"));
   check("answer layout: the history-first system message is the same bytes every turn", String(l1[0].content) === String(lay([...long, ...long], new Set(["A1", "B1"]))[0].content));
+  check("answer layout: off by default (STITCH_HISTORY_FIRST_MIN), a long history still after the blocks", STITCH_HISTORY_FIRST_MIN === Infinity && String(answerMessages({ reading: gReading, selected: new Set(["A1"]), lang: "en", profile: prof, history: long, command: "And then?" })[0].content).includes("[block A1]"));
 }
 
 // ── Round 3 (ANS3-03): a cut where no line shares a word with the query ──

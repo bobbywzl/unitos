@@ -279,11 +279,13 @@ export const STITCH_READ_HISTORY = 6; // a bare "make that a page" at turn 9 sti
 // conversation after them (nothing of the conversation caches, since the
 // blocks change every command); past it, the conversation first and the
 // blocks in the last message, so each turn reads the turns before it from
-// the cache (COST4-01). The short conversations keep the first layout: on
-// six turns of ~2.7k tokens history-first saved 0.6–1.1% (round 3). Past
-// ~3k tokens it saves about 70% of the history's input dollars.
-// Infinity turns it off.
-export const STITCH_HISTORY_FIRST_MIN = 3_000;
+// the cache (COST4-01). Off (Infinity): judged blind on four turns of a
+// 10-turn conversation, history-first lost 3 of 4 and was terser, as in
+// round 3; and a 10-turn conversation of Linda's shape holds ~2.2k tokens
+// of history, under a 3k line. On at 3_000 it would save 5–7% of a 10-turn
+// conversation of long English replies, ~15% in Chinese (round 4 cost
+// audit). Engine4 RESULT.md.
+export const STITCH_HISTORY_FIRST_MIN = Infinity;
 // The model passes together get this long; the route's limit (300 s) keeps
 // the rest for storing the answer. Past it the run stops and the reader is
 // told to narrow the command instead of reading a stream that ended empty.
