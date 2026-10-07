@@ -64,8 +64,8 @@ export function ReplyThread({
   const { authOn, canEdit, myId, role, people } = useCollab();
   const key = draftTarget(target);
   // The kept draft: null on the server and while hydrating, then what this
-  // browser holds. Typing takes over (typed !== null).
-  const kept = useSyncExternalStore(noSubscribe, () => readReplyDraft(key), () => null);
+  // browser holds for this account (another account's draft never shows). Typing takes over (typed !== null).
+  const kept = useSyncExternalStore(noSubscribe, () => readReplyDraft(myId, key), () => null);
   const [typed, setTyped] = useState<string | null>(null);
   const draft = typed ?? kept ?? "";
   const [composingState, setComposing] = useState<boolean | null>(null);
@@ -102,7 +102,7 @@ export function ReplyThread({
 
   function setDraft(content: string) {
     setTyped(content);
-    writeReplyDraft(key, content);
+    writeReplyDraft(myId, key, content);
   }
 
   async function run(fn: () => Promise<unknown>) {

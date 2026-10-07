@@ -238,9 +238,11 @@ export type AnnotationItem = {
 /** Set on a link with no project whose documents sit in projects of more
     than one account (SPEC.md §13): no one deletes another account's reply on
     it. outside = the viewer is not in a project of the link's maker: it
-    reads the link and changes only its own replies. Absent = a link of one
-    project, or of one account. */
-export type CrossAccountView = { outside: boolean };
+    reads the link and changes only its own replies. removable = the viewer
+    made the link: only the maker removes or dismisses it, and the removal
+    hides it in the maker's projects only. Absent = a link of one project,
+    or of one account. */
+export type CrossAccountView = { outside: boolean; removable: boolean };
 
 export type LinkOut = {
   id: string;

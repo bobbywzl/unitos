@@ -6,6 +6,7 @@ import { useState } from "react";
 import type { AnnotationItem, LinkIn, LinkOut, SectionView } from "@/lib/types";
 import { api } from "@/lib/api";
 import { linkPath } from "@/lib/link-scope";
+import { confirmLinkRemoval, linkRemovable } from "@/components/collab/confirm-link-removal";
 import { LINK_KIND_VAR } from "@/lib/annotations/kind";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
@@ -221,7 +222,10 @@ export function AnnotationsPanel({
     });
   }
 
-  async function removeLink(id: string) {
+  // A link with replies asks first (SPEC.md §13): the replies leave the
+  // project with it.
+  async function removeLink(id: string, replyCount: number) {
+    if (!confirmLinkRemoval(t, replyCount, "remove")) return;
     await mutate(id, () => api(linkPath(id, notebookId), "DELETE"));
   }
 
@@ -398,9 +402,9 @@ export function AnnotationsPanel({
                   </span>
                 )}
                 <AuthorChip createdById={l.createdById} nameless />
-                {canEdit && (
+                {canEdit && linkRemovable(l.crossAccount) && (
                   <button
-                    onClick={() => void removeLink(l.id)}
+                    onClick={() => void removeLink(l.id, l.replies.length)}
                     data-track="link-remove"
                     data-tip={t("panels.removeLinkTitle")}
                     className="text-xs text-red-500 hover:text-red-700"
@@ -442,9 +446,9 @@ export function AnnotationsPanel({
                   </span>
                 )}
                 <AuthorChip createdById={l.createdById} nameless />
-                {canEdit && (
+                {canEdit && linkRemovable(l.crossAccount) && (
                   <button
-                    onClick={() => void removeLink(l.id)}
+                    onClick={() => void removeLink(l.id, l.replies.length)}
                     data-track="link-remove"
                     data-tip={t("panels.removeLinkTitle")}
                     className="text-xs text-red-500 hover:text-red-700"

@@ -1510,7 +1510,7 @@ export async function stitch(input: {
 
   // ── Links: block to block across docs, stored recommended ─────────────
   const existing = await db.docLink.findMany({
-    where: { fromDocumentId: { in: docs.map((m) => m.id) }, ...projectLinks(input.notebookId) },
+    where: { fromDocumentId: { in: docs.map((m) => m.id) }, ...projectLinks(input.notebookId, { withHidden: true }) },
     select: { fromBlockId: true, quotedText: true, toDocumentId: true, toBlockId: true },
   });
   const seen = new Set(existing.map((l) => `${l.fromBlockId}|${l.quotedText}|${l.toBlockId ?? l.toDocumentId}`));

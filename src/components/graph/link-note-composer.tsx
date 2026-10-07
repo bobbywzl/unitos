@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/api";
+import { readLinkNoteDraft, writeLinkNoteDraft } from "@/lib/note-drafts";
 import { refreshWhenOnline } from "@/lib/offline/queue";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import { useCollab } from "@/components/collab/collab-context";
@@ -14,42 +15,19 @@ import { useGraphNotes } from "@/components/graph/graph-notes";
 // note of their own words that quotes both ends of the link
 // (`POST /api/notes` with `fromLinkId`). It lands accepted, in the section
 // the reader picks — by default the one they last wrote a note in. What is
-// typed is kept in the browser (graph-link-note:<linkId>) until the server
+// typed is kept in the browser for the account (lib/note-drafts.ts) until the server
 // has the note, so a reload, a closed graph, or a failed save never loses
 // it; Cancel keeps nothing. Offline (Unitos Premium) the note waits in the
 // offline queue: the line says so, and Show comes once the note lands.
-
-const draftKey = (linkId: string) => `graph-link-note:${linkId}`;
-
-function readDraft(linkId: string): { content: string; sectionId: string | null } | null {
-  try {
-    const raw = window.localStorage.getItem(draftKey(linkId));
-    if (!raw) return null;
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== "object" || parsed === null) return null;
-    const { content, sectionId } = parsed as { content?: unknown; sectionId?: unknown };
-    if (typeof content !== "string" || !content) return null;
-    return { content, sectionId: typeof sectionId === "string" ? sectionId : null };
-  } catch {
-    return null;
-  }
-}
-
-function writeDraft(linkId: string, content: string, sectionId: string | null) {
-  try {
-    if (content) window.localStorage.setItem(draftKey(linkId), JSON.stringify({ content, sectionId }));
-    else window.localStorage.removeItem(draftKey(linkId));
-  } catch {
-    /* storage off: the text stays in the box while it is open */
-  }
-}
 
 export function LinkNoteComposer({ linkId }: { linkId: string }) {
   const t = useT();
   const router = useRouter();
   const ime = useImeGuard();
-  const { canEdit } = useCollab();
+  const { canEdit, myId } = useCollab();
   const ctx = useGraphNotes();
+  const readDraft = (id: string) => readLinkNoteDraft(myId, id);
+  const writeDraft = (id: string, text: string, section: string | null) => writeLinkNoteDraft(myId, id, text, section);
   // A draft left from before opens the composer on it. The composer renders
   // in the browser only (the graph loads there), so the draft is read at once.
   const [initial] = useState(() => (typeof window === "undefined" ? null : readDraft(linkId)));

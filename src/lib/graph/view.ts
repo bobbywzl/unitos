@@ -105,7 +105,7 @@ export async function documentsGraph(
   const crossAccount = await crossAccountLinks([...links, ...recommendedRows], viewer);
   const crossAccountOf = (id: string) => {
     const rule = crossAccount.get(id);
-    return rule ? { crossAccount: { outside: rule.outside } } : {};
+    return rule ? { crossAccount: { outside: rule.outside, removable: rule.removable } } : {};
   };
   const titleOf = new Map(documents.map((d) => [d.id, d.title]));
   const nodes: GraphNode[] = documents.map((d) => ({

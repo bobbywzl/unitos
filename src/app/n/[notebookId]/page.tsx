@@ -649,7 +649,7 @@ export default async function NotebookPage(props: {
     const crossAccount = await crossAccountLinks([...outgoing, ...incoming], user);
     const crossAccountOf = (id: string) => {
       const rule = crossAccount.get(id);
-      return rule ? { crossAccount: { outside: rule.outside } } : {};
+      return rule ? { crossAccount: { outside: rule.outside, removable: rule.removable } } : {};
     };
     for (const link of outgoing) {
       // Same ladder as resolveDocumentSources: stored offsets, re-find in the

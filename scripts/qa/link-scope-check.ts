@@ -227,6 +227,13 @@ const digestHas = async (nb: string) =>
   (await buildDigest(nb))!.parts.documents.flatMap((d) => d.links).some((l) => l.quote === fromAnchor.quotedText && l.toQuote === toAnchor.quotedText);
 // legacyA has the same quotes and no project, so it shows in B's digest; move it out of the way first.
 check("A removes A's own link with no project, though B's project holds both documents (the maker may)", (await call(A, "DELETE", `/api/links/${legacyA}`)).status === 200);
+// B's project still shows it (REV3-02): the removal hides it in A's projects only.
+check(
+  "the removed link stays in B's project: hidden in A's projects, not in B's",
+  (await db.docLinkHidden.count({ where: { docLinkId: legacyA } })) > 0 &&
+    (await db.docLinkHidden.count({ where: { docLinkId: legacyA, notebookId: PB } })) === 0,
+);
+await db.docLink.delete({ where: { id: legacyA } }); // this run's row
 check("digest: A's project lists A's link, B's does not", (await digestHas(PA)) && !(await digestHas(PB)));
 
 const rA = await call(A, "POST", "/api/replies", { docLinkId: linkA, notebookId: PA, content: "A's reply on A's link" });

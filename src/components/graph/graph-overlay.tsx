@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import { linkPath } from "@/lib/link-scope";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
+import { confirmLinkRemoval, linkRemovable } from "@/components/collab/confirm-link-removal";
 import { ReplyThread } from "@/components/collab/reply-thread";
 import { LinkIcon, PageIcon, SparkleIcon, UnlinkIcon } from "@/components/icons";
 import { useLang, useT } from "@/components/lang-provider";
@@ -825,16 +826,16 @@ export function RecommendedLinkList({
   const t = useT();
   const router = useRouter();
   const { canEdit } = useCollab();
-  const [busyId, setBusyId] = useState<string | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   // Accepted or dismissed here: the card leaves at once, before the server
-  // answers, and comes back if the server refuses (SPEC.md §13).
+  // answers, and comes back if the server refuses (SPEC.md §13). Each card
+  // is decided on its own: the next card's Accept works while one is in
+  // flight.
   const [gone, setGone] = useState<Set<string>>(() => new Set());
 
   async function mutate(id: string, run: () => Promise<unknown>) {
-    if (busyId) return;
-    setBusyId(id);
+    if (gone.has(id)) return;
     setErrorText(null);
     setGone((prev) => new Set(prev).add(id));
     try {
@@ -847,8 +848,6 @@ export function RecommendedLinkList({
         return next;
       });
       setErrorText(err instanceof Error ? err.message : t("common.requestFailed"));
-    } finally {
-      setBusyId(null);
     }
   }
   const shown = links.filter((l) => !gone.has(l.id));
@@ -940,21 +939,24 @@ export function RecommendedLinkList({
                     void mutate(l.id, () => api(linkPath(l.id, notebookId), "PATCH", { accept: true }))
                   }
                   data-track="link-accept"
-                  disabled={busyId !== null}
                   data-tip={t("panes.acceptLinkTitle")}
                   className="rounded-full bg-sage-600 px-3 py-1 text-[11px] font-semibold text-sage-fg hover:bg-sage-700 disabled:opacity-40"
                 >
                   {t("panes.acceptLink")}
                 </button>
-                <button
-                  onClick={() => void mutate(l.id, () => api(linkPath(l.id, notebookId), "DELETE"))}
-                  data-track="link-dismiss"
-                  disabled={busyId !== null}
-                  data-tip={t("panes.dismissLinkTitle")}
-                  className="rounded-full border border-line px-2.5 py-1 text-[11px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
-                >
-                  {t("panes.dismissLink")}
-                </button>
+                {linkRemovable(l.crossAccount) && (
+                  <button
+                    onClick={() => {
+                      if (!confirmLinkRemoval(t, l.replies.length, "dismiss")) return;
+                      void mutate(l.id, () => api(linkPath(l.id, notebookId), "DELETE"));
+                    }}
+                    data-track="link-dismiss"
+                    data-tip={t("panes.dismissLinkTitle")}
+                    className="rounded-full border border-line px-2.5 py-1 text-[11px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+                  >
+                    {t("panes.dismissLink")}
+                  </button>
+                )}
               </span>
             )}
           </div>

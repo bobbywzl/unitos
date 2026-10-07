@@ -669,6 +669,9 @@ model DocLink {
   // deleted: the row and its replies are kept, and no project reads them.
   formerNotebookId String?
   replies        Reply[]
+  // Projects the link was removed from while its row had to stay: another
+  // account's reply is on it, or another account's project shows it.
+  hiddenIn       DocLinkHidden[]
   fromDocumentId String
   fromDocument   Document @relation("DocLinkFrom", fields: [fromDocumentId], references: [id], onDelete: Cascade)
   fromBlockId    String
@@ -696,6 +699,22 @@ model DocLink {
   @@index([toDocumentId])
   @@index([notebookId])
   @@index([formerNotebookId])
+}
+
+// A link removed from one project while its row stays (SPEC.md §13):
+// another account replied on it, or another account's project shows it.
+// The project reads it no more; the row and every reply are kept, and every
+// other project reads it as before. notebookId has no foreign key: a hide
+// survives a project delete and its restore.
+model DocLinkHidden {
+  docLinkId  String
+  docLink    DocLink  @relation(fields: [docLinkId], references: [id], onDelete: Cascade)
+  notebookId String
+  userId     String // account that removed it
+  createdAt  DateTime @default(now())
+
+  @@id([docLinkId, notebookId])
+  @@index([notebookId])
 }
 
 model NotebookDocument {

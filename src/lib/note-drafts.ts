@@ -84,33 +84,115 @@ export function clearComposeDraft(sectionId: string) {
 }
 
 // A reply draft belongs to the reply box under one note, one edit, or one
-// link (ReplyThread): what is typed there is kept until the server has the
-// reply, or the offline queue holds it (SPEC.md §12).
+// link (ReplyThread), and to the account that typed it: what is typed there
+// is kept until the server has the reply, or the offline queue holds it
+// (SPEC.md §12). The key names the account, so on a browser two accounts
+// share, one account's draft never opens in the other's reply box. Sign out
+// keeps the draft for its account (rule zero item 6).
+//
+// A Note on this link draft (LinkNoteComposer) is keyed the same way.
+//
+// Keys from before drafts named their account (unitos-reply-draft:<target>,
+// graph-link-note:<linkId>) are moved to the signed-in account: on Sign out
+// (claimLegacyDrafts), or when that account opens the box first.
 const REPLY_PREFIX = "unitos-reply-draft:";
+const LINK_NOTE_PREFIX = "graph-link-note:";
 
 export type ReplyDraft = { content: string; savedAt: number };
+export type LinkNoteDraft = { content: string; sectionId: string | null; savedAt: number };
 
-/** The reply box's key: "note:<id>", "edit:<id>", or "link:<id>". */
-export function readReplyDraft(target: string): string | null {
-  const draft = read<ReplyDraft>(REPLY_PREFIX + target);
+// The account part of a key: the signed-in id, or "local" with sign-in off.
+const accountPart = (account: string) => account || "local";
+const replyKey = (account: string, target: string) => `${REPLY_PREFIX}${accountPart(account)}:${target}`;
+const linkNoteKey = (account: string, linkId: string) => `${LINK_NOTE_PREFIX}${accountPart(account)}:${linkId}`;
+
+/** A key from before drafts named their account. */
+function legacyKey(key: string): boolean {
+  if (key.startsWith(REPLY_PREFIX)) return /^(note|edit|link):/.test(key.slice(REPLY_PREFIX.length));
+  if (key.startsWith(LINK_NOTE_PREFIX)) return !key.slice(LINK_NOTE_PREFIX.length).includes(":");
+  return false;
+}
+
+/** The key one account's copy of a legacy key moves to. */
+function claimedKey(key: string, account: string): string {
+  return key.startsWith(REPLY_PREFIX)
+    ? replyKey(account, key.slice(REPLY_PREFIX.length))
+    : linkNoteKey(account, key.slice(LINK_NOTE_PREFIX.length));
+}
+
+/** Move one legacy key to the account. When the account has its own draft
+    for the same box (a tab from before the change kept writing the old
+    key), the newer of the two stays: both are the same box's words, typed
+    on this browser. A legacy link-note draft carries no savedAt: it gets
+    one now. */
+function claim(key: string, account: string) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === null) return;
+    const to = claimedKey(key, account);
+    const value = JSON.parse(raw) as Record<string, unknown>;
+    const savedAt = typeof value.savedAt === "number" ? value.savedAt : Date.now();
+    const own = read<{ savedAt: number }>(to);
+    if (!own || own.savedAt < savedAt) localStorage.setItem(to, JSON.stringify({ ...value, savedAt }));
+    localStorage.removeItem(key);
+  } catch {
+    // Storage blocked, or the value does not parse: it stays where it is.
+  }
+}
+
+/** Sign out (settings-form.tsx): every legacy draft goes to the account
+    signing out, which typed it, so the next account never sees it. */
+export function claimLegacyDrafts(account: string) {
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && legacyKey(key)) keys.push(key);
+    }
+    for (const key of keys) claim(key, account);
+  } catch {
+    // Storage blocked: nothing to claim.
+  }
+}
+
+/** The reply box's draft. target: "note:<id>", "edit:<id>", or "link:<id>". */
+export function readReplyDraft(account: string, target: string): string | null {
+  claim(REPLY_PREFIX + target, account);
+  const draft = read<ReplyDraft>(replyKey(account, target));
   return draft && typeof draft.content === "string" && draft.content ? draft.content : null;
 }
 
-export function writeReplyDraft(target: string, content: string) {
-  if (content) write(REPLY_PREFIX + target, { content, savedAt: Date.now() } satisfies ReplyDraft);
-  else remove(REPLY_PREFIX + target);
+export function writeReplyDraft(account: string, target: string, content: string) {
+  if (content) write(replyKey(account, target), { content, savedAt: Date.now() } satisfies ReplyDraft);
+  else remove(replyKey(account, target));
 }
 
-/** Drop drafts older than MAX_AGE_MS. Runs once per load (use-outline.ts). */
+/** Note on this link's draft: the text and the section picked. */
+export function readLinkNoteDraft(account: string, linkId: string): { content: string; sectionId: string | null } | null {
+  claim(LINK_NOTE_PREFIX + linkId, account);
+  const draft = read<LinkNoteDraft>(linkNoteKey(account, linkId));
+  if (!draft || typeof draft.content !== "string" || !draft.content) return null;
+  return { content: draft.content, sectionId: typeof draft.sectionId === "string" ? draft.sectionId : null };
+}
+
+export function writeLinkNoteDraft(account: string, linkId: string, content: string, sectionId: string | null) {
+  if (content) write(linkNoteKey(account, linkId), { content, sectionId, savedAt: Date.now() } satisfies LinkNoteDraft);
+  else remove(linkNoteKey(account, linkId));
+}
+
+/** Drop drafts older than MAX_AGE_MS: note, compose, reply, and Note on this
+    link drafts. Runs once per load (use-outline.ts). A legacy draft with
+    no savedAt (a Note on this link draft) is kept: it waits for its
+    account to claim it. */
 export function sweepStaleDrafts() {
   try {
     const now = Date.now();
     const stale: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (!key || (!key.startsWith(NOTE_PREFIX) && !key.startsWith(COMPOSE_PREFIX))) continue;
+      if (!key || ![NOTE_PREFIX, COMPOSE_PREFIX, REPLY_PREFIX, LINK_NOTE_PREFIX].some((p) => key.startsWith(p))) continue;
       const draft = read<{ savedAt: number }>(key);
-      if (!draft || now - draft.savedAt > MAX_AGE_MS) stale.push(key);
+      if (draft ? now - draft.savedAt > MAX_AGE_MS : !legacyKey(key)) stale.push(key);
     }
     for (const key of stale) remove(key);
   } catch {

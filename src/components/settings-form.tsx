@@ -6,6 +6,7 @@ import { LangSwitcher } from "@/components/lang-switcher";
 import { useLang, useT } from "@/components/lang-provider";
 import { PersonBadge } from "@/components/collab/person-badge";
 import type { AccountData } from "@/lib/account-data";
+import { claimLegacyDrafts } from "@/lib/note-drafts";
 import type { DriveAccess } from "@/lib/drive/types";
 import type { TKey } from "@/lib/i18n/dictionaries";
 import { PERSON_COLORS, personOf, type Person } from "@/lib/person";
@@ -439,10 +440,12 @@ export function SettingsForm({
                 href="/api/auth/logout"
                 // Sign out removes the account's offline copies first
                 // (SPEC.md §17): the next reader of this browser does not
-                // open them.
+                // open them. Reply drafts stay, keyed by this account: the
+                // ones from before drafts named their account go to it.
                 onClick={(e) => {
                   e.preventDefault();
                   const target = e.currentTarget.href;
+                  claimLegacyDrafts(account.id);
                   void clearSaved().finally(() => window.location.assign(target));
                 }}
                 className="ml-auto rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
