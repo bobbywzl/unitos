@@ -36,7 +36,7 @@ import { SuggestLayer } from "@/components/docs/suggest/layer";
 import { PageBanner, PageCanvas, PageRuler } from "@/components/docs/areas/page";
 import { StatusPopup } from "@/components/docs/page/status-popup";
 import { scrollParent } from "@/components/docs/page/geometry";
-import { PAGE_EVENT, useSaveState } from "@/components/docs/page/store";
+import { PAGE_EVENT, useOutlineRoom, useSaveState } from "@/components/docs/page/store";
 import { TypingLayer } from "@/components/docs/areas/typing";
 import { VersionHistory, VersionHistoryButton } from "@/components/docs/versions/version-history";
 import type { DocsAreaProps } from "@/components/docs/areas/types";
@@ -666,6 +666,9 @@ export function DocsEditor({
   });
   // The header's and footer's saves show in the same status.
   const shownSaveState = useSaveState(editor, documentId, shownSetup, saveState);
+  // The outline button stands beside the text column when the margin has
+  // the room for it; else the toolbar's row carries it (areas/page.tsx).
+  const outlineRoom = useOutlineRoom(editor, documentId, shownSetup);
 
   useEffect(() => {
     const settle = async () => {
@@ -878,7 +881,7 @@ export function DocsEditor({
             aiControls={aiControls}
             headerHidden={headerHidden}
             onToggleHeader={() => setHeaderHidden((h) => !h)}
-            narrowPane={narrow}
+            narrowPane={!outlineRoom}
             status={
               <>
                 {writable && <SaveStatus state={shownSaveState} />}
@@ -890,7 +893,7 @@ export function DocsEditor({
           {!narrow && <PageRuler {...area} />}
         </ModeLock.Provider>
       ),
-    [area, hfEditor, mode, setMode, locked, canEdit, zoom, shownSetup.pageless, aiControls, headerHidden, insertImage, writable, shownSaveState, narrow],
+    [area, hfEditor, mode, setMode, locked, canEdit, zoom, shownSetup.pageless, aiControls, headerHidden, insertImage, writable, shownSaveState, outlineRoom, narrow],
   );
   const pages = useMemo(
     () =>

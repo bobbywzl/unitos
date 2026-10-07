@@ -47,6 +47,8 @@ const PAGELESS_RUNOUT = 300;
 const FIT_GUTTER = 24;
 /** A pane narrower than this (a phone) draws no vertical ruler. */
 const NARROW_PANE = 600;
+/** The outline button's width and the gap it keeps from the text column. */
+const OUTLINE_BUTTON = 44;
 /** The canvas's padding above the first page. */
 const CANVAS_TOP = 11;
 
@@ -491,6 +493,13 @@ export function PageCanvas({
   // scrolls sideways when the page runs past the pane: no text sits under
   // the outline, as in Google Docs.
   const pageVisual = columnWidth * scale;
+  // The outline button beside the text column, or in the toolbar's row when
+  // the margin beside the column is thinner than the button: there the
+  // button would stand over the first letters of the lines (EDGE12-13).
+  const outlineRoom = canvasWidth === 0 || (canvasWidth - pageVisual) / 2 >= outlineLeft + OUTLINE_BUTTON;
+  useEffect(() => {
+    if (store.get().outlineRoom !== outlineRoom) store.set({ outlineRoom });
+  }, [store, outlineRoom]);
   const centered = (canvasWidth - pageVisual) / 2 >= side;
   const padRight = centered ? side : FIT_GUTTER;
   // A page wider than the pane scrolls sideways with the bar at the pane's
@@ -526,10 +535,10 @@ export function PageCanvas({
         {outlineOpen ? (
           <OutlinePanel editor={editor} store={store} left={outlineLeft} height={view.height} viewTop={view.top} />
         ) : (
-          // On a pane too narrow for the page the button would stand over
-          // the first letters of the lines: there it is in the toolbar's
-          // row instead (toolbar.tsx).
-          canvasWidth >= NARROW_PANE && <OutlineButton editor={editor} store={store} ruler={vruler} />
+          // With no room beside the text column the button would stand
+          // over the first letters of the lines: there it is in the
+          // toolbar's row instead (toolbar.tsx).
+          outlineRoom && <OutlineButton editor={editor} store={store} ruler={vruler} />
         )}
       </div>
       <div

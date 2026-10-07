@@ -45,6 +45,11 @@ type PageState = {
   /** The outline panel: open, and its width in px. */
   outlineOpen: boolean;
   outlineWidth: number;
+  /** Whether the canvas has the room for the outline button beside the text
+      column (SPEC.md §29). With no room the button would stand over the
+      first letters of the lines, so the toolbar's row carries it instead
+      (areas/page.tsx measures it, toolbar.tsx draws it). */
+  outlineRoom: boolean;
   textWidth: TextWidth;
   dialog: "setup" | "pageNumbers" | "headerFormat" | "copy" | "compare" | "watermark" | "details" | "lineNumbers" | "translate" | null;
   /** The header or footer being edited, and on which page. */
@@ -125,6 +130,7 @@ function createStore(editor: Editor, documentId: string, setup: PageSetup): Page
     dialog: null,
     editing: null,
     setupSave: "saved",
+    outlineRoom: true,
   };
   const listeners = new Set<Listener>();
   let saving: Promise<void> = Promise.resolve();
@@ -256,6 +262,17 @@ export function usePageState<T>(store: PageStore, select: (state: PageState) => 
 }
 
 const noStore = () => () => {};
+
+/** Whether the outline button fits beside the text column; false puts it in
+    the toolbar's row (SPEC.md §29). */
+export function useOutlineRoom(editor: Editor | null, documentId: string, setup: PageSetup): boolean {
+  const store = editor ? pageStore(editor, documentId, setup) : null;
+  return useSyncExternalStore<boolean>(
+    store?.subscribe ?? noStore,
+    () => store?.get().outlineRoom ?? true,
+    () => true,
+  );
+}
 
 /** The title row's save state: the text's (use-docs-save.ts) until the text
     is saved, then the page setup's. */
