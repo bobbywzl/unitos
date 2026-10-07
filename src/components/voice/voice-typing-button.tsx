@@ -140,7 +140,25 @@ export function VoiceTypingButton({
     const onDown = (e: PointerEvent) => {
       const target = e.target instanceof Node ? e.target : null;
       if (target && (buttonRef.current?.contains(target) || targetRef.current?.contains(target))) return;
+      const heard = speech.interim.trim();
       flush();
+      // The words typed can move what was pressed (Done drops a line), and
+      // the click then lands beside it: it is clicked once the words are in.
+      const pressed = heard && target instanceof Element ? target.closest<HTMLElement>("button, a, [role=button]") : null;
+      if (!pressed) return;
+      let landed = false;
+      const onClick = (c: MouseEvent) => {
+        if (c.target instanceof Node && pressed.contains(c.target)) landed = true;
+      };
+      const onUp = () => {
+        document.removeEventListener("pointerup", onUp, true);
+        window.setTimeout(() => {
+          document.removeEventListener("click", onClick, true);
+          if (!landed && pressed.isConnected) pressed.click();
+        }, 0);
+      };
+      document.addEventListener("click", onClick, true);
+      document.addEventListener("pointerup", onUp, true);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || !e.isTrusted || !speech.interim.trim()) return;
