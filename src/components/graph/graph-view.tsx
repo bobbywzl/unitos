@@ -1364,6 +1364,8 @@ function GraphCanvas({
   // between documents, ] and [ go through the focused document's curves.
   const rovingRef = useRef<string | null>(null);
   const curveOrigin = useRef<{ nodeId: string; index: number } | null>(null);
+  // Set while Escape puts focus back on a curve, so that focus opens no list.
+  const quietFocus = useRef(false);
   const applyRoving = useCallback(() => {
     const root = wrapRef.current;
     if (!root) return;
@@ -1487,7 +1489,12 @@ function GraphCanvas({
         const curve = pinnedEdgeId;
         setPinnedEdgeId(null);
         setHover(null);
-        if (inList) edgeEl(curve)?.focus();
+        if (inList) {
+          // Back on the curve, without its focus opening the list again.
+          quietFocus.current = true;
+          edgeEl(curve)?.focus();
+          quietFocus.current = false;
+        }
       } else if (onCurve && curveOrigin.current) {
         setHover(null);
         focusNode(curveOrigin.current.nodeId);
@@ -1563,7 +1570,7 @@ function GraphCanvas({
         hoverNode(id);
       } else if (e.target.matches(".react-flow__edge")) {
         const id = e.target.getAttribute("data-testid")?.replace(/^rf__edge-/, "");
-        if (id) hoverEdge(id);
+        if (id && !quietFocus.current) hoverEdge(id);
       }
     },
     [hoverNode, hoverEdge, applyRoving],
