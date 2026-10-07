@@ -9,6 +9,7 @@ import { useCollab } from "@/components/collab/collab-context";
 import { CommentIcon, NotesIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { readGraphKeep, writeGraphKeep } from "@/components/graph/graph-keep";
+import { withoutGraphParams } from "@/components/graph/graph-content";
 import { noteLine, notesOnGraph, pairKey, type GraphNote, type NotesOnGraph } from "@/lib/graph/notes";
 
 // The project's notes on the graph (SPEC.md §13). The document stays the
@@ -186,8 +187,15 @@ export function GraphNotesProvider({
       const first = note?.sources.find((s) => s.documentId && !s.orphaned && titleOf.has(s.documentId));
       if (first) router.push(`/n/${notebookId}?doc=${first.documentId}&src=${first.id}`);
       else if (note?.documentId && titleOf.has(note.documentId)) router.push(`/n/${notebookId}?doc=${note.documentId}`);
-      if (first || (note?.documentId && titleOf.has(note.documentId))) (onNavigate ?? onClose)();
-      else onClose();
+      else {
+        // A note with no document (WALK3-05): the page stays, a new entry
+        // without the graph is pushed, and Back opens the graph again, as
+        // after a note with a source.
+        const url = withoutGraphParams(new URL(window.location.href));
+        url.searchParams.delete("graph");
+        router.push(`${url.pathname}${url.search}`);
+      }
+      (onNavigate ?? onClose)();
       // The tray sits under the graph: it opens on the note once the graph is gone.
       window.setTimeout(
         () => window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId } })),
