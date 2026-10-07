@@ -79,9 +79,16 @@ export function ReplyThread({
   const [resolvedNow, setResolvedNow] = useState<Record<string, string | null>>({});
   const [removedNow, setRemovedNow] = useState<Set<string>>(() => new Set());
   const [inFlight, setInFlight] = useState<Set<string>>(() => new Set());
+  // A reply sent here shows at once, marked Sending… until the server has
+  // it, then stays until the thread's replies bring it (WALK4-15). Its words
+  // stay in the draft until the server confirms.
+  const [sent, setSent] = useState<{ content: string; at: string; done: boolean; id: string | null } | null>(null);
+  const isSent = (r: ReplyView) =>
+    sent !== null && sent.done && (r.id === sent.id || (r.userId === myId && r.content.trim() === sent.content));
   const [prevReplies, setPrevReplies] = useState(replies);
   if (prevReplies !== replies) {
     setPrevReplies(replies);
+    if (replies.some(isSent)) setSent(null);
     setResolvedNow((prev) => Object.fromEntries(Object.entries(prev).filter(([id]) => inFlight.has(id))));
     setRemovedNow((prev) => new Set([...prev].filter((id) => inFlight.has(id))));
   }
@@ -148,12 +155,23 @@ export function ReplyThread({
 
   const send = () => {
     const content = draft.trim();
-    if (!content) return;
+    if (!content || busy) return;
+    setSent({ content, at: new Date().toISOString(), done: false, id: null });
+    setComposing(false);
     void run(async () => {
-      await api("/api/replies", "POST", { ...target, content });
+      let made: unknown;
+      try {
+        made = await api("/api/replies", "POST", { ...target, content });
+      } catch (err) {
+        // Refused: the row goes, and the box opens again on the kept draft.
+        setSent(null);
+        setComposing(true);
+        throw err;
+      }
       // The server has it, or the offline queue does: the draft goes.
+      const id = made && typeof made === "object" && "id" in made && typeof made.id === "string" ? made.id : null;
+      setSent((prev) => (prev ? { ...prev, done: true, id } : prev));
       setDraft("");
-      setComposing(false);
     });
   };
   const remove = (id: string) =>
@@ -239,6 +257,20 @@ export function ReplyThread({
       className={`flex flex-col gap-2 ${shown.length > 0 ? "mt-2.5 border-t border-line pt-2.5" : "mt-1.5"}`}
     >
       {openReplies.map(row)}
+      {sent && !shown.some(isSent) && (
+        <div data-reply-sent={sent.done ? "" : "sending"} className="flex items-start gap-2">
+          {people[myId] && <PersonBadge person={people[myId]} size={16} />}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline gap-2">
+              <span className="truncate text-[11px] font-semibold text-sand-700">{people[myId]?.name ?? "?"}</span>
+              <span suppressHydrationWarning className="text-[10px] text-sand-500">
+                {sent.done ? replyTime(sent.at, lang) : t("common.replySending")}
+              </span>
+            </div>
+            <p className="text-[12.5px] leading-relaxed whitespace-pre-wrap">{sent.content}</p>
+          </div>
+        </div>
+      )}
 
       {resolvedReplies.length > 0 && (
         <button

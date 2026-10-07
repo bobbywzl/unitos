@@ -156,6 +156,7 @@ const en = {
   // Replies: the discussion under a note, an edit, or a link.
   reply: "Reply",
   replyPlaceholder: "Reply…",
+  replySending: "Sending…",
   resolve: "Resolve",
   reopen: "Reopen",
   resolveTitle: "Close this reply; it moves under Resolved",
@@ -241,6 +242,7 @@ const zh: Record<keyof typeof en, string> = {
   notFoundHome: "返回全部项目",
   reply: "回复",
   replyPlaceholder: "回复…",
+  replySending: "发送中…",
   resolve: "解决",
   reopen: "重新打开",
   resolveTitle: "关闭此回复；它会移到“已解决”下",

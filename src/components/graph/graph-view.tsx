@@ -24,12 +24,14 @@ import { api } from "@/lib/api";
 import { linkPath } from "@/lib/link-scope";
 import { useCollab } from "@/components/collab/collab-context";
 import { confirmLinkRemoval, linkRemovable } from "@/components/collab/confirm-link-removal";
-import { FilmIcon, MaximizeIcon, NotesIcon, PageIcon, PlusIcon, QuestionIcon } from "@/components/icons";
+import { CommentIcon, FilmIcon, MaximizeIcon, NotesIcon, PageIcon, PlusIcon, QuestionIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
 import { extendLayout, graphLayout, layoutAspect, seeded, type Point } from "@/components/graph/graph-layout";
 import { nodeRoom, placeMarks, type MarkCurve } from "@/lib/graph/curve-place";
+import { labelStarts } from "@/lib/graph/label-start";
 import { useWantProvenance } from "@/components/graph/provenance-want";
+import { markAccepted, unmarkAccepted } from "@/components/graph/accepted-now";
 import { categoryLabels } from "@/components/reader/document-organize";
 // [graph-notes] The notes and the link replies on the graph (graph-notes.tsx).
 import {
@@ -110,6 +112,21 @@ const lodKeep = (w: number, h: number) => Math.max(4, Math.min(12, Math.round((w
 const LABEL_SCALE_MAX = 1 / FIT_MIN_ZOOM;
 const LABEL_WIDTH_SCALE_MAX = 1.35;
 const labelScale = (zoom: number) => Math.min(LABEL_SCALE_MAX, Math.max(1, 1 / zoom));
+// Below this zoom the canvas is quiet (VIEW4-06): no notes chip on a node,
+// and a curve's link count and notes pill only while it is lit; the replies
+// mark always draws. The counts stay in the cards.
+const FAR_ZOOM = 0.7;
+
+/** A node's extent in flow units around its dot's center, label included,
+    at a zoom: what the fit frames and what a pinned card keeps in view. */
+function nodeExtent(cx: number, cy: number, zoom: number, large: boolean, loop: boolean) {
+  const lod = large && zoom < LOD_ZOOM;
+  const s = lod ? 1 : labelScale(zoom);
+  const halfLabel = (NODE_W / 2) * Math.min(s, LABEL_WIDTH_SCALE_MAX);
+  // A kept label at a far zoom is 11px on screen, two lines at most.
+  const labelH = lod ? 34 / zoom : 40 * s;
+  return { x0: cx - halfLabel, x1: cx + halfLabel, y0: cy - 20 - (loop ? LOOP_HEIGHT : 0), y1: cy + 20 + labelH };
+}
 
 // Which curve's list is open: the hovered curve, or the pinned one. A tiny
 // store outside React state, so a hover renders only the one or two curves
@@ -541,11 +558,14 @@ function EdgeLinkList({ edgeId, loop, anchor, links }: { edgeId: string; loop: b
     setDecideError(null);
     const mark = accept ? setAccepted : setDismissed;
     mark((prev) => new Set(prev).add(linkId));
+    // The header counts it at once (WALK4-15).
+    if (accept) markAccepted(linkId);
     try {
       if (accept) await api(linkPath(linkId, notebookId), "PATCH", { accept: true });
       else await api(linkPath(linkId, notebookId), "DELETE");
       router.refresh();
     } catch (err) {
+      unmarkAccepted(linkId);
       mark((prev) => {
         const next = new Set(prev);
         next.delete(linkId);
@@ -771,7 +791,7 @@ function GraphKey({ onClose }: { onClose: () => void }) {
     <div
       role="dialog"
       aria-label={t("panes.graphKeyTitle")}
-      className="graph-float-in pointer-events-auto absolute top-3 left-14 z-30 w-[300px] max-w-[calc(100%-72px)] rounded-2xl border border-line bg-card/95 p-3.5 text-[12px] text-sand-700 shadow-float backdrop-blur-md"
+      className="graph-float-in pointer-events-auto absolute top-3 left-14 z-30 max-h-[calc(100%-24px)] w-[300px] max-w-[calc(100%-72px)] overflow-y-auto overscroll-contain rounded-2xl border border-line bg-card/95 p-3.5 text-[12px] text-sand-700 shadow-float backdrop-blur-md"
     >
       <div className="mb-2 flex items-center">
         <p className="flex-1 text-[11px] font-bold tracking-[0.06em] text-sand-600 uppercase">{t("panes.graphKeyTitle")}</p>
@@ -812,7 +832,32 @@ function GraphKey({ onClose }: { onClose: () => void }) {
           </span>,
           "graphNotes.nodeNotesTitle",
         )}
+        {row(
+          <span className="flex items-center gap-1 rounded-full bg-sage-100 px-1.5 py-px text-[10px] font-semibold tabular-nums text-sage-800">
+            <NotesIcon size={10} />2<span className="size-1.5 rounded-full bg-clay" />
+          </span>,
+          "graphNotes.keyPending",
+        )}
+        {/* The marks on a curve (WALK4-13): the link count, the open
+            replies, the notes that quote both documents. */}
+        {row(
+          <span className="flex h-[18px] items-center rounded-full border border-line bg-card px-1.5 text-[10px] font-semibold tabular-nums text-sand-700">3</span>,
+          "graphNotes.keyCurveCount",
+        )}
+        {row(
+          <span className="flex h-[18px] items-center gap-1 rounded-full border-[1.5px] border-[var(--kind-comment)] bg-card px-1.5 text-[10px] font-bold tabular-nums text-[var(--kind-comment)]">
+            <CommentIcon size={11} />2
+          </span>,
+          "graphNotes.keyCurveReplies",
+        )}
+        {row(
+          <span className="flex h-[18px] items-center gap-1 rounded-full border border-dashed border-sage-500 bg-sage-100 px-1.5 text-[10px] font-semibold tabular-nums text-sage-800">
+            <NotesIcon size={11} />2
+          </span>,
+          "graphNotes.keyCurveNotes",
+        )}
       </ul>
+      <p className="mt-2 text-[11.5px] leading-relaxed text-sand-600">{t("graphNotes.keyFar")}</p>
       <p className="mt-2.5 border-t border-line pt-2 text-[11.5px] leading-relaxed text-sand-600">
         {t(clickSelects ? "graphView.gesturesSelect" : "graphView.gesturesOpen") /* [view2] */}
       </p>
@@ -896,7 +941,48 @@ function LabelScale({ target, large }: { target: RefObject<HTMLDivElement | null
     el.style.setProperty("--graph-zoom", zoom.toFixed(3));
     if (lod) el.setAttribute("data-lod", "");
     else el.removeAttribute("data-lod");
+    if (zoom < FAR_ZOOM) el.setAttribute("data-far", "");
+    else el.removeAttribute("data-far");
   }, [zoom, target, large]);
+  return null;
+}
+
+/** Labels stay inside the canvas (VIEW4-05): a label that would run past
+    the canvas's left or right edge slides in, off its dot's center. Its
+    text is measured once per label scale and title; a pan moves numbers. */
+function LabelEdges({ target }: { target: RefObject<HTMLDivElement | null> }) {
+  const [tx, , zoom] = useStore((s) => s.transform);
+  const paneW = useStore((s) => s.width);
+  const nodeInternals = useStore((s) => s.nodeInternals);
+  const measured = useRef(new Map<string, { key: string; w: number }>());
+  useEffect(() => {
+    const el = target.current;
+    if (!el || paneW <= 0) return;
+    const frame = requestAnimationFrame(() => {
+      const scale = el.style.getPropertyValue("--graph-label-scale");
+      for (const [id, n] of nodeInternals) {
+        const label = el.querySelector<HTMLElement>(`.react-flow__node[data-id=${JSON.stringify(id)}] [data-graph-label]`);
+        if (!label) continue;
+        const key = `${scale}|${label.textContent ?? ""}`;
+        let m = measured.current.get(id);
+        if (!m || m.key !== key) {
+          const range = document.createRange();
+          range.selectNodeContents(label);
+          m = { key, w: range.getBoundingClientRect().width / zoom };
+          // A hidden label (a far zoom's) is measured when it shows.
+          if (m.w > 0) measured.current.set(id, m);
+        }
+        const x = n.positionAbsolute?.x ?? n.position.x;
+        const center = (x + NODE_W / 2) * zoom + tx;
+        const half = (m.w * zoom) / 2;
+        const pad = 6;
+        const shift = m.w === 0 ? 0 : center - half < pad ? pad - (center - half) : center + half > paneW - pad ? paneW - pad - (center + half) : 0;
+        const next = Math.abs(shift) < 0.5 ? "" : `calc(-50% + ${(shift / zoom).toFixed(1)}px) 0`;
+        if (label.style.translate !== next) label.style.translate = next;
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [target, tx, zoom, paneW, nodeInternals]);
   return null;
 }
 
@@ -1021,6 +1107,14 @@ function GraphCanvas({
     },
     [],
   );
+  // A view the canvas moves itself (a refit, or a pan that keeps a pinned
+  // card's node in view) slides nodes and curves under a pointer that did
+  // not move: no hover card opens until the pointer moves (WALK4-01).
+  const lastPointer = useRef<Point | null>(null);
+  const frozenAt = useRef<Point | null>(null);
+  const freezeHover = useCallback(() => {
+    if (lastPointer.current) frozenAt.current = lastPointer.current;
+  }, []);
   // Dragging a node hides its card until the pointer rests again.
   const [dragging, setDragging] = useState(false);
   const [keyOpen, setKeyOpen] = useState(false);
@@ -1058,6 +1152,12 @@ function GraphCanvas({
     [cancelClear],
   );
   useEffect(() => cancelClear, [cancelClear]);
+  const pointerHoverEdge = useCallback(
+    (edgeId: string) => {
+      if (!frozenAt.current) hoverEdge(edgeId);
+    },
+    [hoverEdge],
+  );
   const pinEdge = useCallback((edgeId: string) => setPinnedEdgeId(edgeId), []);
   // A link opens in the overlay's side panel at full height (WALK2-05); with
   // no panel, the reader at the link.
@@ -1080,11 +1180,27 @@ function GraphCanvas({
   // switch kept with the view (WALK3-13).
   const { showProvenance, setShowProvenance, generatedCommands } = content;
   useWantProvenance(showProvenance, "switch"); // COST3-03: their links load when the switch turns on
-  // Nothing hovered: a pinned curve keeps its pair in the spotlight, and
-  // then the node whose card is pinned [view2].
+  // The curve of the link open in the side panel, however it opened (Show
+  // on graph, the Links list, a card's row): its two documents and the
+  // curve stay lit while the panel is open (WALK4-04).
+  const expandedEdgeId = useMemo(() => {
+    if (!expandedLinkId) return null;
+    const e = edges.find((x) => x.links.some((l) => l.id === expandedLinkId));
+    return e ? `${e.a}|${e.b}` : null;
+  }, [edges, expandedLinkId]);
+  // Nothing hovered: a pinned curve keeps its pair in the spotlight, then
+  // the open link's curve, then the node whose card is pinned [view2].
   const shown = useMemo<HoverState>(
-    () => hover ?? (pinnedEdgeId ? { edgeId: pinnedEdgeId } : focusedId ? { nodeId: focusedId } : null),
-    [hover, pinnedEdgeId, focusedId],
+    () =>
+      hover ??
+      (pinnedEdgeId
+        ? { edgeId: pinnedEdgeId }
+        : expandedEdgeId
+          ? { edgeId: expandedEdgeId }
+          : focusedId
+            ? { nodeId: focusedId }
+            : null),
+    [hover, pinnedEdgeId, expandedEdgeId, focusedId],
   );
   // The curves read which list is open from the store, never from a render.
   const [store] = useState(createCanvasStore);
@@ -1216,12 +1332,18 @@ function GraphCanvas({
   }, [insets, loops, layoutKey, nodes]);
   // What the last fit framed: the refit below runs when the free area or the
   // documents changed since, whenever that fit ran (WALK2-15).
-  const lastFit = useRef<{ key: string; w: number; h: number; ins: GraphInsets } | null>(null);
+  const lastFit = useRef<{ key: string; w: number; h: number; ins: GraphInsets; focus: boolean } | null>(null);
+  // A pinned card or an open link panel: the view the reader clicked in stays.
+  const focusOn = Boolean(focusedId || expandedEdgeId);
+  const focusOnRef = useRef(focusOn);
+  useLayoutEffect(() => {
+    focusOnRef.current = focusOn;
+  }, [focusOn]);
   const fitTo = useCallback(
     (positions: { id: string; x: number; y: number }[], duration = 0) => {
       if (positions.length === 0 || paneW <= 0 || paneH <= 0) return;
       const ins = insetsRef.current;
-      lastFit.current = { key: layoutKeyRef.current, w: paneW, h: paneH, ins };
+      lastFit.current = { key: layoutKeyRef.current, w: paneW, h: paneH, ins, focus: focusOnRef.current };
       const pad = 28;
       const freeL = ins.left + pad;
       const freeR = paneW - ins.right - pad;
@@ -1238,19 +1360,13 @@ function GraphCanvas({
       let zoom = 1;
       let bounds = { x0: 0, x1: 0, y0: 0, y1: 0 };
       for (let pass = 0; pass < 3; pass++) {
-        const lod = large && zoom < LOD_ZOOM;
-        const s = lod ? 1 : labelScale(zoom);
-        const halfLabel = (NODE_W / 2) * Math.min(s, LABEL_WIDTH_SCALE_MAX);
-        // A kept label at a far zoom is 11px on screen, two lines at most.
-        const labelH = lod ? 34 / zoom : 40 * s;
         bounds = { x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity };
         for (const p of positions) {
-          const cx = p.x + NODE_W / 2;
-          const cy = p.y + NODE_H / 2;
-          bounds.x0 = Math.min(bounds.x0, cx - halfLabel);
-          bounds.x1 = Math.max(bounds.x1, cx + halfLabel);
-          bounds.y0 = Math.min(bounds.y0, cy - 20 - (loopsRef.current.has(p.id) ? LOOP_HEIGHT : 0));
-          bounds.y1 = Math.max(bounds.y1, cy + 20 + labelH);
+          const b = nodeExtent(p.x + NODE_W / 2, p.y + NODE_H / 2, zoom, large, loopsRef.current.has(p.id));
+          bounds.x0 = Math.min(bounds.x0, b.x0);
+          bounds.x1 = Math.max(bounds.x1, b.x1);
+          bounds.y0 = Math.min(bounds.y0, b.y0);
+          bounds.y1 = Math.max(bounds.y1, b.y1);
         }
         const bw = bounds.x1 - bounds.x0;
         const bh = bounds.y1 - bounds.y0;
@@ -1260,13 +1376,14 @@ function GraphCanvas({
       const bh = (bounds.y1 - bounds.y0) * zoom;
       const x = freeL + (aw - bw) / 2 - bounds.x0 * zoom;
       const y = bh <= ah ? freeT + (ah - bh) / 2 - bounds.y0 * zoom : freeT - bounds.y0 * zoom;
+      if (duration) freezeHover();
       try {
         flowRef.current.setViewport({ x, y, zoom }, duration ? { duration } : undefined);
       } catch {
         /* non-critical */
       }
     },
-    [paneW, paneH, large],
+    [paneW, paneH, large, freezeHover],
   );
   // The fit frames where the nodes are going, not where a settle has them now.
   const fitNow = useCallback(
@@ -1275,11 +1392,13 @@ function GraphCanvas({
   );
 
   // Generated documents that share a title (five "Stitched page"s): each
-  // label takes its command's first words (WALK3-09).
+  // label takes its command's first words (WALK3-09). Titles that share a
+  // long start keep a head of it and the words that differ (VIEW4-05).
   const labelOf = useMemo(() => {
     const seen = new Map<string, number>();
     for (const n of nodes) if (n.kind === "generated") seen.set(n.title, (seen.get(n.title) ?? 0) + 1);
     const out = new Map<string, string>();
+    for (const [i, label] of labelStarts(nodes.map((n) => n.title))) out.set(nodes[i].id, label);
     for (const n of nodes) {
       const command = generatedCommands.get(n.id);
       if (n.kind === "generated" && (seen.get(n.title) ?? 0) > 1 && command) {
@@ -1390,11 +1509,94 @@ function GraphCanvas({
       Math.abs(prev.ins.bottom - insets.bottom) > 40 ||
       prev.ins.right !== insets.right ||
       prev.ins.top !== insets.top;
-    if (changed) {
-      const timer = window.setTimeout(() => fitNow(300), prev.key !== layoutKey ? 120 : 0);
-      return () => window.clearTimeout(timer);
+    if (!changed) return;
+    // A card or a link panel opening or closing beside the canvas moves no
+    // node: the view stays where the reader clicked (WALK4-01), and the
+    // reveal below pans only when the card would cover its node.
+    const insetsOnly = prev.key === layoutKey && Math.abs(prev.w - paneW) <= 8 && Math.abs(prev.h - paneH) <= 8;
+    if (insetsOnly && !settling && (focusOn || prev.focus)) {
+      lastFit.current = { ...prev, ins: insets, focus: focusOn };
+      return;
     }
-  }, [insets, paneW, paneH, layoutKey, fitNow, settling]);
+    const timer = window.setTimeout(() => fitNow(300), prev.key !== layoutKey ? 120 : 0);
+    return () => window.clearTimeout(timer);
+  }, [insets, paneW, paneH, layoutKey, fitNow, settling, focusOn]);
+
+  // Keep the focus in view (WALK4-01, WALK4-10): the pinned card's node —
+  // on a narrow screen with its linked documents, above the card's sheet —
+  // or the open link's two documents. Nothing moves when they are in the
+  // free area already; else the view pans just enough, zooming out (down to
+  // the fit's least zoom) only when they do not fit, and the node first.
+  const narrowPane = paneW > 0 && paneW < 640;
+  const revealIds = useMemo(() => {
+    if (expandedEdgeId) return [...new Set(expandedEdgeId.split("|"))];
+    if (!focusedId) return null;
+    return narrowPane ? [focusedId, ...(adjacency.get(focusedId) ?? [])] : [focusedId];
+  }, [expandedEdgeId, focusedId, narrowPane, adjacency]);
+  const revealKey = revealIds?.join(",") ?? "";
+  useEffect(() => {
+    if (!revealKey || settling || paneW <= 0 || paneH <= 0) return;
+    const ids = revealKey.split(",");
+    const timer = window.setTimeout(() => {
+      const f = flowRef.current;
+      const ins = insetsRef.current;
+      const pad = 12;
+      const free = { l: ins.left + pad, r: paneW - ins.right - pad, t: ins.top + pad, b: paneH - ins.bottom - pad };
+      if (free.r - free.l < 80 || free.b - free.t < 60) return;
+      let view: { x: number; y: number; zoom: number };
+      try {
+        view = f.getViewport();
+      } catch {
+        return;
+      }
+      const centers = ids.flatMap((id) => {
+        const n = f.getNode(id);
+        return n ? [{ id, x: n.position.x + NODE_W / 2, y: n.position.y + NODE_H / 2 }] : [];
+      });
+      if (centers.length === 0) return;
+      const extent = (list: typeof centers, zoom: number) => {
+        const b = { x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity };
+        for (const c of list) {
+          const e = nodeExtent(c.x, c.y, zoom, large, loopsRef.current.has(c.id));
+          b.x0 = Math.min(b.x0, e.x0);
+          b.x1 = Math.max(b.x1, e.x1);
+          b.y0 = Math.min(b.y0, e.y0);
+          b.y1 = Math.max(b.y1, e.y1);
+        }
+        return b;
+      };
+      const fits = (b: ReturnType<typeof extent>, zoom: number) =>
+        (b.x1 - b.x0) * zoom <= free.r - free.l && (b.y1 - b.y0) * zoom <= free.b - free.t;
+      let zoom = view.zoom;
+      let keep = centers;
+      let b = extent(keep, zoom);
+      if (!fits(b, zoom)) {
+        const minZoom = large ? FIT_MIN_ZOOM_LARGE : FIT_MIN_ZOOM;
+        const z = Math.max(minZoom, Math.min(zoom, (free.r - free.l) / (b.x1 - b.x0), (free.b - free.t) / (b.y1 - b.y0)));
+        if (fits(extent(keep, z), z)) zoom = z;
+        else keep = centers.slice(0, 1);
+        b = extent(keep, zoom);
+      }
+      // A zoom change keeps the first node's screen point.
+      const first = centers[0];
+      const sx = first.x * view.zoom + view.x;
+      const sy = first.y * view.zoom + view.y;
+      let x = sx - first.x * zoom;
+      let y = sy - first.y * zoom;
+      const shift = (lo: number, hi: number, min: number, max: number) =>
+        hi - lo > max - min ? min - lo : lo < min ? min - lo : hi > max ? max - hi : 0;
+      x += shift(b.x0 * zoom + x, b.x1 * zoom + x, free.l, free.r);
+      y += shift(b.y0 * zoom + y, b.y1 * zoom + y, free.t, free.b);
+      if (Math.abs(x - view.x) < 1 && Math.abs(y - view.y) < 1 && Math.abs(zoom - view.zoom) < 0.001) return;
+      freezeHover();
+      try {
+        f.setViewport({ x, y, zoom }, { duration: 300 });
+      } catch {
+        /* non-critical */
+      }
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [revealKey, insets, settling, paneW, paneH, large, freezeHover]);
 
   const noteEdges = useNoteOnlyEdges(visibleEdges); // [graph-notes]
   const flowEdges = useMemo<FlowEdge<LinkEdgeData | NoteEdgeData | undefined>[]>(
@@ -1490,12 +1692,12 @@ function GraphCanvas({
       plain: large,
       showProvenance,
       expandedLinkId,
-      hoverEdge,
+      hoverEdge: pointerHoverEdge,
       pinEdge,
       scheduleClear,
       expandLink,
     }),
-    [store, citedIds, floatHost, insets, large, showProvenance, expandedLinkId, hoverEdge, pinEdge, scheduleClear, expandLink],
+    [store, citedIds, floatHost, insets, large, showProvenance, expandedLinkId, pointerHoverEdge, pinEdge, scheduleClear, expandLink],
   );
 
   const onNodeDragStop = useCallback(
@@ -1778,11 +1980,11 @@ function GraphCanvas({
   );
   const onNodeMouseEnter = useCallback(
     (_: ReactMouseEvent, node: FlowNode) => {
-      if (!touchInput.current) hoverNode(node.id);
+      if (!touchInput.current && !frozenAt.current) hoverNode(node.id);
     },
     [hoverNode],
   );
-  const onEdgeMouseEnter = useCallback((_: ReactMouseEvent, edge: FlowEdge) => hoverEdge(edge.id), [hoverEdge]);
+  const onEdgeMouseEnter = useCallback((_: ReactMouseEvent, edge: FlowEdge) => pointerHoverEdge(edge.id), [pointerHoverEdge]);
   const onEdgeClick = useCallback(
     (_: ReactMouseEvent, edge: FlowEdge) => {
       if (edge.type === "provenance") return;
@@ -1833,7 +2035,11 @@ function GraphCanvas({
       onKeyDown={onKeyDown}
       onPointerDownCapture={onPointerDownCapture}
       onPointerMoveCapture={(e) => {
-        if (e.pointerType === "mouse") touchInput.current = false;
+        if (e.pointerType !== "mouse") return;
+        touchInput.current = false;
+        lastPointer.current = { x: e.clientX, y: e.clientY };
+        const f = frozenAt.current;
+        if (f && Math.hypot(e.clientX - f.x, e.clientY - f.y) >= 4) frozenAt.current = null;
       }}
       onFocusCapture={onFocusCapture}
       onBlurCapture={scheduleClear}
@@ -1884,6 +2090,7 @@ function GraphCanvas({
         onlyRenderVisibleElements={large}
       >
         <LabelScale target={wrapRef} large={large} />
+        <LabelEdges target={wrapRef} />
         <Background gap={26} size={1.5} color="var(--sand-300)" />
         {/* Top left, clear of the Stitch box at the foot of the canvas. The
             zoom buttons carry the UI language's names (WALK2-17). */}

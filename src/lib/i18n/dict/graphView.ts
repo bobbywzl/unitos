@@ -13,6 +13,9 @@ const en = {
   cardPicked: "Picked for Stitch",
   cardNotes: "{n} note{s}",
   cardContents: "Contents",
+  // The Documents list's parts line past PARTS_CAP parts (VIEW4-06, P4).
+  partsMoreOne: "1 more part",
+  partsMore: "{n} more parts",
   cardLinks: "Links",
   cardNotesHead: "Notes",
   cardWithin: "Within this document",
@@ -73,6 +76,8 @@ const zh: Record<keyof typeof en, string> = {
   cardPicked: "已为缝合选取",
   cardNotes: "{n} 条笔记",
   cardContents: "目录",
+  partsMoreOne: "还有 1 个部分",
+  partsMore: "还有 {n} 个部分",
   cardLinks: "链接",
   cardNotesHead: "笔记",
   cardWithin: "本文档内",

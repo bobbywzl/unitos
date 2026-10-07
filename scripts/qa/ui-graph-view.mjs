@@ -276,7 +276,21 @@ for (const lang of ["en", "zh"]) {
       await page.screenshot({ path: `${OUT}/P3-proposed-${MODE}-${tag}.png` });
       const pair = await page.locator("[data-graph-proposed]").first().getAttribute("data-graph-proposed");
       if (pair) {
-        await page.locator(`[data-testid="rf__edge-${pair}"]`).click({ force: true }).catch(() => {});
+        // A point on the curve itself: its box's center can sit on another curve's marks.
+        const onCurve = await page.evaluate((id) => {
+          const path = document.querySelector(`[data-graph-proposed="${CSS.escape(id)}"]`);
+          if (!(path instanceof SVGPathElement)) return null;
+          // The first point along it that no mark or node covers.
+          const edge = path.closest(".react-flow__edge");
+          for (const f of [0.5, 0.4, 0.6, 0.3, 0.7, 0.25, 0.75]) {
+            const p = path.getPointAtLength(path.getTotalLength() * f).matrixTransform(path.getScreenCTM());
+            const hit = document.elementFromPoint(p.x, p.y);
+            if (hit && edge?.contains(hit)) return { x: p.x, y: p.y };
+          }
+          return null;
+        }, pair);
+        if (onCurve) await page.mouse.click(onCurve.x, onCurve.y);
+        else await page.locator(`[data-testid="rf__edge-${pair}"]`).click({ force: true }).catch(() => {});
         await page.waitForTimeout(700);
         const marked = await page.locator("[data-graph-from-answer]").count();
         check(`${tag} Stitch: the curve's list marks the answer's link first`, marked > 0);
