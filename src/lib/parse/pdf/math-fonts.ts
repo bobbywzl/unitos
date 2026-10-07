@@ -838,6 +838,13 @@ const TABLE: Record<MathFamily, Record<number, Row>> = {
     0x08: ["\\Phi", "Φ", "ord", 0.683, 0.0],
     0x09: ["\\Psi", "Ψ", "ord", 0.683, 0.0],
     0x0a: ["\\Omega", "Ω", "ord", 0.683, 0.0],
+    // The ligatures: \mathrm{eff} sets its ff as one glyph (ICML's ξ_eff
+    // read with no ff, and two displays were crops: parse loop finding).
+    0x0b: ["ff", "ff", "ord", 0.694, 0.0, {"upright": true}],
+    0x0c: ["fi", "fi", "ord", 0.694, 0.0, {"upright": true}],
+    0x0d: ["fl", "fl", "ord", 0.694, 0.0, {"upright": true}],
+    0x0e: ["ffi", "ffi", "ord", 0.694, 0.0, {"upright": true}],
+    0x0f: ["ffl", "ffl", "ord", 0.694, 0.0, {"upright": true}],
     0x12: ["\\grave", "̀", "accent", 0.694, 0.0],
     0x13: ["\\acute", "́", "accent", 0.694, 0.0],
     0x14: ["\\check", "̌", "accent", 0.628, 0.0],
@@ -1811,6 +1818,65 @@ const OPENTYPE_BY_CHAR = new Map(
     "STIXSizeTwoSym-Regular") as TeX's. */
 export function sizeFontGlyph(font: string, char: string): TexCode | null {
   return SIZE_BY_CHAR.get(font)?.get(char) ?? null;
+}
+
+// TeX's extension font's advances in em (cmex10's, as KaTeX's size fonts
+// keep them) for each character at each size, \big to \Bigg.
+const SIZE_ADVANCES: Record<string, number[]> = {
+  "(": [0.458, 0.597, 0.736, 0.792], ")": [0.458, 0.597, 0.736, 0.792],
+  "[": [0.417, 0.472, 0.528, 0.583], "]": [0.417, 0.472, 0.528, 0.583],
+  "{": [0.583, 0.667, 0.75, 0.806], "}": [0.583, 0.667, 0.75, 0.806],
+  "⟨": [0.472, 0.611, 0.75, 0.806], "⟩": [0.472, 0.611, 0.75, 0.806],
+  "⌈": [0.472, 0.528, 0.583, 0.639], "⌉": [0.472, 0.528, 0.583, 0.639],
+  "⌊": [0.472, 0.528, 0.583, 0.639], "⌋": [0.472, 0.528, 0.583, 0.639],
+  "/": [0.578, 0.811, 1.044, 1.278], "\\": [0.578, 0.811, 1.044, 1.278],
+  "∑": [1.056, 1.444], "∏": [0.944, 1.278], "∐": [0.944, 1.278], "∫": [0.472, 0.556], "∮": [0.472, 0.556],
+  "⋃": [0.833, 1.111], "⋂": [0.833, 1.111], "⋀": [0.833, 1.111], "⋁": [0.833, 1.111], "⨄": [0.833, 1.111], "⨆": [0.833, 1.111],
+  "⨁": [1.111, 1.511], "⨂": [1.111, 1.511], "⨀": [1.111, 1.511],
+  "̂": [0.556, 1, 1.444, 1.889], "̃": [0.556, 1, 1.444, 1.889], "ˆ": [0.556, 1, 1.444, 1.889], "˜": [0.556, 1, 1.444, 1.889],
+  "∣": [0.333],
+};
+
+/** A glyph of an extension font that numbers its glyphs anew in each PDF
+    (MathTime's MTEX: Springer's ∑ at 0x08) read by its character as TeX's
+    extension font's: a piece of a tall delimiter by its character, a sized
+    delimiter, a big operator, or a wide accent at the size whose advance is
+    nearest its own. Its box is TeX's (MTEX hangs its glyphs from their
+    origin as cmex10 does: a \big( stands 0.8 em over the baseline). A
+    radical's sizes share one advance, and stay unread. */
+export function extensionGlyph(char: string, advance: number): { family: MathFamily; code: number } | null {
+  if (/^[\u239b-\u23b7]$/u.test(char)) {
+    const piece = SIZE_BY_CHAR.get("Size4-Regular")?.get(char);
+    return piece ? { family: piece.family, code: piece.code } : null;
+  }
+  const advances = SIZE_ADVANCES[char];
+  if (!advances) return null;
+  let best = 0;
+  advances.forEach((a, i) => {
+    if (Math.abs(a - advance) < Math.abs(advances[best] - advance)) best = i;
+  });
+  const hit = SIZE_BY_CHAR.get(`Size${best + 1}-Regular`)?.get(char);
+  return hit ? { family: hit.family, code: hit.code } : null;
+}
+
+/** A sized character (a big operator, a delimiter) of an OpenType math
+    font the tables do not know (Cambria Math, Word's) read by its advance
+    as the size whose advance is nearest its own, with the size font's box:
+    an OpenType font stands its glyphs on the baseline, as KaTeX's size
+    fonts do. A delimiter narrower than its first size is the text's own
+    ("(" of the prose's size), and stays unread here. Parse loop finding:
+    Word's display ∑ read as TeX's text ∑, hung from its origin; its lower
+    limit fell outside its box and the display became a crop. */
+export function openTypeSizedByAdvance(char: string, advance: number): TexCode | null {
+  const advances = SIZE_ADVANCES[char];
+  if (!advances || /^[\u239b-\u23b7]$/u.test(char)) return null;
+  const operator = /^[∑∏∐∫∮⋃⋂⋀⋁⨄⨆⨁⨂⨀]$/u.test(char);
+  if (!operator && advance < advances[0] * 0.95) return null;
+  let best = 0;
+  advances.forEach((a, i) => {
+    if (Math.abs(a - advance) < Math.abs(advances[best] - advance)) best = i;
+  });
+  return SIZE_BY_CHAR.get(`Size${best + 1}-Regular`)?.get(char) ?? null;
 }
 
 export type OpenTypeGlyph = TexCode & { gid: number; advance: number };

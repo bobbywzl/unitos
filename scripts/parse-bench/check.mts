@@ -1589,11 +1589,13 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     { kind: "figure", caption: [{ text: "Figure 1. The upper dam." }], at: { page: 1, region: region(72, 100, 300, 200) } },
     { kind: "paragraph", spans: [{ text: "Photo 2. Crews on the levee at dawn." }] },
     { kind: "paragraph", spans: [{ text: "Figure 1 shows the dam before the flood." }] },
+    { kind: "paragraph", spans: [{ text: "Figure 6.1 shows the dam after the flood." }] },
     { kind: "figure", at: { page: 1, region: region(72, 150, 300, 250) } },
+    { kind: "figure", caption: [{ text: "Figure 2.6 Not all subsets are subspaces." }] },
   ];
   const flatFloats = flatten({ blocks: floats });
   const captions = captionScores(flatFloats);
-  check("floats: a paragraph that opens as a caption is a caption apart; a sentence that names a figure is none", captions.alone === 1 && captions.captions === 2, JSON.stringify(captions));
+  check("floats: a paragraph that opens as a caption is a caption apart; a sentence that names a figure (\"Figure 6.1 shows\") is none; a figure's caption with no stop after its number is kept", captions.alone === 1 && captions.captions === 3, JSON.stringify(captions));
   const overlaps = cropOverlaps(pdfOf([]), flatFloats);
   check("floats: two crops that share half their area overlap", overlaps.overlapping === 2 && overlaps.figures === 2, JSON.stringify(overlaps));
 
@@ -1658,6 +1660,8 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     "layout: a grid of numbers read as a paragraph is prose; read as a table it is not",
     gridProse(gridPage, asProse).prose === 1 && gridProse(gridPage, asTable).prose === 0 && gridProse(gridPage, asTable).grids === 1,
   );
+  const asCode = flatten({ blocks: [{ kind: "code", text: "0 1\n1 1\n2 2\n3 6" }] });
+  check("layout: a grid of numbers in a code listing keeps its rows: it is no prose", gridProse(gridPage, asCode).prose === 0 && gridProse(gridPage, asCode).grids === 1);
   // Numbers in columns 5 pt apart, a little over a word space ("40,000 45,050"): a grid all the same.
   const close = [0, 1, 2].map((r) => line(100 + 12 * r, 72, 150, `${40 + r},000 ${45 + r},050 .${r}25`, [{ left: 72, right: 96, text: `${40 + r},000` }, { left: 101, right: 125, text: `${45 + r},050` }, { left: 130, right: 150, text: `.${r}25` }]));
   const closeText = close.map((l) => l.text).join(" ");

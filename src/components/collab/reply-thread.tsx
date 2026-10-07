@@ -9,6 +9,7 @@ import type { ReplyView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { useLang, useT } from "@/components/lang-provider";
+import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 
 /** When a reply, or the comment it answers, was written, as the thread prints it. */
 export function replyTime(iso: string, lang: string): string {
@@ -186,6 +187,7 @@ export function ReplyThread({
             rows={1}
             className="min-w-0 flex-1 resize-none rounded-2xl bg-sand-100 px-3 py-1.5 text-[12.5px] outline-none placeholder:text-sand-500"
           />
+          <VoiceTypingButton track="reply-voice-typing" />
           <button
             type="submit"
             data-track="reply-send"

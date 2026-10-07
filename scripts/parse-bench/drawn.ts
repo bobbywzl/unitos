@@ -263,7 +263,8 @@ function formulaLineHeight(): number {
     KaTeX's display margin), and the formula's ink in its line box (KaTeX's
     struts in a line of `.katex`'s height: formulaBox). Right within 2 pt or
     a quarter. A display whose neighbor is no paragraph, or whose page
-    leaves more than 36 pt, is not judged. `bandsOf`: the page's ink in a
+    leaves more than 36 pt, is not judged; nor is the space over one with
+    the running head over it. `bandsOf`: the page's ink in a
     box (paint.ts inkBands). */
 export function displayGaps(rich: RichNode, parse: Doc, pdf: PdfText, bandsOf: (page: number, box: Rect) => InkBand[]): DisplayGaps {
   const placed = parse.blocks.filter((b) => b.kind === "equation" && b.at);
@@ -300,7 +301,11 @@ export function displayGaps(rich: RichNode, parse: Doc, pdf: PdfText, bandsOf: (
       if (Math.abs(drawnPt - page) <= Math.max(2, 0.25 * page)) right++;
       else misses.push(`p${at.page}: ${what} ${Math.round(drawnPt)} pt, the page's ${Math.round(page)} pt`);
     };
-    judge(above ? inkTop - above.baseline : null, drawn.above, "above");
+    // A display that opens its column has the running head over it: the
+    // space over it is the page's margin, not a display's.
+    const over = column.filter((l) => l.bottom <= y1 + 1).sort((a, b) => b.bottom - a.bottom)[0];
+    const opens = over !== undefined && pdf.furniture.includes(over);
+    judge(above && !opens ? inkTop - above.baseline : null, drawn.above, "above");
     judge(below ? below.baseline - inkBottom : null, drawn.below, "below");
   });
   return { edges, right, score: edges > 0 ? right / edges : null, misses };
@@ -416,7 +421,14 @@ export function rowHeights(cand: Flat, placed: number[][], pdf: PdfText): RowHei
     for (const [row, units] of [...rows].sort((a, c) => a[0] - c[0])) {
       if (!units.every(oneLine)) continue;
       const lines = units.map((u) => pdf.lines[placed[u][0]]);
-      tops.push({ row, top: Math.min(...lines.map((l) => l.top)), page: lines[0].page });
+      // parse loop finding: a grid of small numbers ("0", "1.0") places a cell on another row's line that
+      // holds the same words (tracemonkey's Figure 13 measured its 10 pt rows 20 pt apart): the row stands
+      // where most of its cells are placed, and a row with no such majority is not measured.
+      const height = Math.min(...lines.map((l) => l.bottom - l.top));
+      const onRow = (l: (typeof lines)[number]) => lines.filter((m) => m.page === l.page && Math.abs(m.top - l.top) <= height / 2);
+      const most = lines.map(onRow).reduce((a, b) => (b.length > a.length ? b : a));
+      if (most.length * 2 <= lines.length) continue;
+      tops.push({ row, top: Math.min(...most.map((l) => l.top)), page: most[0].page });
     }
     const pairs = tops.slice(1).flatMap((t, k) => (t.row === tops[k].row + 1 && t.page === tops[k].page && t.top > tops[k].top ? [{ page: t.top - tops[k].top, drawn: Math.max(line, least[tops[k].row] ?? 0) }] : []));
     if (pairs.length < 2) return;

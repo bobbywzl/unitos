@@ -36,6 +36,7 @@ import {
   TextColorGlyph,
   UnderlineIcon,
   UndoIcon,
+  VoiceTypingIcon,
 } from "@/components/docs/icons";
 import { BorderButtons, ColorButton } from "@/components/docs/insert/colors";
 import { emitInsert } from "@/components/docs/insert/context";
@@ -320,6 +321,8 @@ export function DocsToolbar({
     redo: { id: "redo", key: "docs.redo", combo: "Mod+Y", Icon: RedoIcon, where: "edit", run: () => run((c) => c.redo()), on: s.canRedo },
     print: { id: "print", key: "docs.print", combo: "Mod+P", Icon: PrintIcon, where: "file", words: ["printer", "print preview"], run: () => window.print() },
     spelling: { id: "spelling", key: "docsTyping.showSpelling", combo: "Mod+Alt+X", Icon: SpellcheckIcon, where: "tools", run: () => fireDocs(editor, TYPING_EVENT.spelling) },
+    // Voice typing (SPEC.md §29, typing): opens the microphone box at the left of the page.
+    voice: { id: "voice-typing", key: "docsTyping.voiceTyping", combo: "Mod+Shift+S", Icon: VoiceTypingIcon, where: "tools", run: () => fireDocs(editor, TYPING_EVENT.voice), on: !inHeader },
     paint: { id: "paint-format", key: "docs.paintFormat", Icon: PaintFormatIcon, words: ["copy formatting"], run: paint.press, on: !inHeader },
     bold: { id: "bold", key: "docs.bold", combo: "Mod+B", Icon: BoldIcon, words: ["strong", "dark"], run: () => run((c) => c.toggleBold()) },
     italic: { id: "italic", key: "docs.italic", combo: "Mod+I", Icon: ItalicIcon, words: ["emphasis", "emphasized", "italicize"], run: () => run((c) => c.toggleItalic()) },
@@ -589,6 +592,7 @@ export function DocsToolbar({
               {button(A.redo)}
               {button(A.print)}
               {button(A.spelling)}
+              {button(A.voice)}
               {button(A.paint, paint.active)}
               {zoomBox}
             </>

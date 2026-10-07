@@ -100,7 +100,6 @@ import {
   TrashIcon,
   ExtractIcon,
   LinkIcon,
-  MicIcon,
   NotesIcon,
   QuestionIcon,
   QuoteIcon,
@@ -202,6 +201,7 @@ import {
   toolbarShift,
   type PageGeometry,
 } from "@/components/docs/layer/margin";
+import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 
 // One block's span of a selection (SPEC.md §5).
 type Segment = Omit<SourceInput, "documentId">;
@@ -629,17 +629,6 @@ function blocksOnSide(
     return onSide && r.top < top + height && r.bottom > top;
   });
 }
-
-type SpeechRec = {
-  lang: string;
-  interimResults: boolean;
-  continuous: boolean;
-  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
-  onend: (() => void) | null;
-  onerror: (() => void) | null;
-  start(): void;
-  stop(): void;
-};
 
 const clip = (s: string, n = 90) => (s.length > n ? `${s.slice(0, n)}…` : s);
 
@@ -2043,7 +2032,6 @@ export function ReaderInteractions({
   // A Comment whose save failed: the toolbar opens again on its words with
   // the box, the kept draft, and this reason under it (SPEC.md §6).
   const [commentError, setCommentError] = useState<{ text: string; from: Anchor } | null>(null);
-  const [aiListening, setAiListening] = useState(false);
   const [aiPlan, setAiPlan] = useState<AssistantPlan | null>(null);
   const [planChecked, setPlanChecked] = useState<Set<number>>(new Set());
   // Where the plan came from: the selection's chat card, or an Explain or
@@ -2084,7 +2072,6 @@ export function ReaderInteractions({
   const [logCard, setLogCard] = useState<LogCard | null>(null);
   const logCardRef = useRef(logCard);
   logCardRef.current = logCard;
-  const recognitionRef = useRef<SpeechRec | null>(null);
   const editModeRef = useRef(editMode);
   editModeRef.current = editMode;
   // Opened in edit mode: the caret lands in the first block once its editable
@@ -8123,53 +8110,6 @@ export function ReaderInteractions({
     await executePlan(actions, aiPlan.warnings);
   }
 
-  // Voice command: browser speech recognition fills the box.
-  // The spoken command goes to the selection box's field, or to the bar's.
-  function toggleVoice(
-    write = (text: string) => {
-      aiCommandRef.current = text;
-      setAiCommand(text);
-    },
-  ) {
-    if (aiListening) {
-      recognitionRef.current?.stop();
-      return;
-    }
-    const w = window as unknown as {
-      SpeechRecognition?: new () => SpeechRec;
-      webkitSpeechRecognition?: new () => SpeechRec;
-    };
-    const Ctor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
-    if (!Ctor) {
-      showToast(t("reader.voiceInputUnavailable"));
-      return;
-    }
-    const rec = new Ctor();
-    // Spoken commands come in the app language; the browser locale only
-    // decides the English variant.
-    rec.lang = langRef.current === "zh" ? "zh-CN" : navigator.language || "en-US";
-    rec.interimResults = true;
-    rec.continuous = false;
-    rec.onresult = (e) => {
-      const transcript = Array.from(
-        e.results as ArrayLike<ArrayLike<{ transcript: string }>>,
-        (r) => r[0].transcript,
-      ).join(" ");
-      write(transcript);
-    };
-    rec.onend = () => {
-      setAiListening(false);
-      recognitionRef.current = null;
-    };
-    rec.onerror = () => {
-      setAiListening(false);
-      recognitionRef.current = null;
-    };
-    recognitionRef.current = rec;
-    setAiListening(true);
-    rec.start();
-  }
-
   // Leaving edit mode: whatever is being typed saves first, then the mode and
   // its toolbar go. Escape, Done, and a press outside the article all come
   // here, so the bar never outlives the mode.
@@ -9146,6 +9086,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           aria-label={t("reader.messageAssistant")}
           className="field-sizing-content max-h-40 min-h-8 flex-1 resize-none rounded-xl bg-sand-100 px-3 py-1.5 text-[12.5px] outline-none placeholder:text-sand-500"
         />
+        <VoiceTypingButton track={`${tool}-continue-voice-typing`} className="size-8" size={14} />
         {/* While a turn runs the button is Stop, or Queue once a message is
             composed (SPEC.md §7). */}
         <button
@@ -9254,6 +9195,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         aria-label={t("reader.messageAssistant")}
         className="field-sizing-content max-h-40 min-h-8 flex-1 resize-none rounded-xl bg-sand-100 px-3 py-1.5 text-[12.5px] outline-none placeholder:text-sand-500"
       />
+      <VoiceTypingButton track="assistant-card-voice-typing" className="size-8" size={14} />
       {/* While an answer runs the button is Stop, or Queue once a message is
           composed (SPEC.md §7). */}
       <button
@@ -9976,14 +9918,17 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             >
               {t("common.delete")}
             </button>
-            <button
-              onClick={() => void saveAnnotation()}
-              data-track="annotation-save"
-              disabled={annotationCard.busy || annotationCard.draft.trim() === annotationCard.saved.trim()}
-              className="rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
-            >
-              {t("common.save")}
-            </button>
+            <span className="flex items-center gap-1.5">
+              <VoiceTypingButton track="annotation-voice-typing" />
+              <button
+                onClick={() => void saveAnnotation()}
+                data-track="annotation-save"
+                disabled={annotationCard.busy || annotationCard.draft.trim() === annotationCard.saved.trim()}
+                className="rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+              >
+                {t("common.save")}
+              </button>
+            </span>
           </div>
         </div>
       )}
@@ -10250,19 +10195,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 <WebChip small />
               </div>
               <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => toggleVoice()}
-                  data-track="assistant-voice"
-                  aria-label={aiListening ? t("reader.stopListening") : t("reader.speakCommand")}
-                  data-tip={aiListening ? t("reader.stopListening") : t("reader.speakCommand")}
-                  className={`flex size-7 items-center justify-center rounded-full ${
-                    aiListening
-                      ? "animate-pulse bg-red-500 text-white"
-                      : "text-sand-600 hover:bg-clay-100 hover:text-clay-800"
-                  }`}
-                >
-                  <MicIcon size={13} />
-                </button>
+                <VoiceTypingButton track="assistant-voice" />
                 <button
                   disabled={!aiBusy && !aiCommand.trim()}
                   onClick={() => (aiBusy ? stopAssistantChat() : void runAssistant())}
@@ -10420,14 +10353,17 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   {commentError.text}
                 </p>
               )}
-              <button
-                type="submit"
-                data-track="comment-save"
-                disabled={busy || !commentDraft.trim()}
-                className="self-end rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
-              >
-                {t("common.save")}
-              </button>
+              <span className="flex items-center justify-end gap-1.5">
+                <VoiceTypingButton track="comment-voice-typing" />
+                <button
+                  type="submit"
+                  data-track="comment-save"
+                  disabled={busy || !commentDraft.trim()}
+                  className="rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+                >
+                  {t("common.save")}
+                </button>
+              </span>
             </form>
           )}
           </Collapse>
@@ -11118,14 +11054,17 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 >
                   {t("common.delete")}
                 </button>
-                <button
-                  onClick={() => void saveCommentCard()}
-                  data-track="comment-card-save"
-                  disabled={commentCard.busy || commentCard.draft.trim() === commentCard.saved.trim()}
-                  className="rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
-                >
-                  {t("common.save")}
-                </button>
+                <span className="flex items-center gap-1.5">
+                  <VoiceTypingButton track="comment-card-voice-typing" />
+                  <button
+                    onClick={() => void saveCommentCard()}
+                    data-track="comment-card-save"
+                    disabled={commentCard.busy || commentCard.draft.trim() === commentCard.saved.trim()}
+                    className="rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+                  >
+                    {t("common.save")}
+                  </button>
+                </span>
               </div>
             </>
           ) : (
@@ -11217,15 +11156,18 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             >
               {t("reader.linkSkip")}
             </button>
-            <button
-              onClick={() => void saveLinkCard()}
-              data-track="link-card-save"
-              disabled={linkCard.busy || !linkCard.draft.trim()}
-              data-tip={t("reader.linkAboutSaveTitle")}
-              className="rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
-            >
-              {t("common.save")}
-            </button>
+            <span className="flex items-center gap-1.5">
+              <VoiceTypingButton track="link-card-voice-typing" />
+              <button
+                onClick={() => void saveLinkCard()}
+                data-track="link-card-save"
+                disabled={linkCard.busy || !linkCard.draft.trim()}
+                data-tip={t("reader.linkAboutSaveTitle")}
+                className="rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+              >
+                {t("common.save")}
+              </button>
+            </span>
           </div>
         </div>
       )}
@@ -11535,18 +11477,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               aria-label={t("reader.barPlaceholder")}
               className="min-w-0 flex-1 rounded-xl bg-sand-100 px-3 py-1.5 text-[13px] outline-none placeholder:text-sand-500"
             />
-            <button
-              type="button"
-              onClick={() => toggleVoice(setBarInput)}
-              data-track="assistant-voice"
-              aria-label={aiListening ? t("reader.stopListening") : t("reader.speakCommand")}
-              data-tip={aiListening ? t("reader.stopListening") : t("reader.speakCommand")}
-              className={`flex size-7 shrink-0 items-center justify-center rounded-full ${
-                aiListening ? "animate-pulse bg-red-500 text-white" : "text-sand-600 hover:bg-clay-100 hover:text-clay-800"
-              }`}
-            >
-              <MicIcon size={13} />
-            </button>
+            <VoiceTypingButton track="assistant-voice" />
             <button
               type="button"
               disabled={bar.busy || !bar.input.trim()}

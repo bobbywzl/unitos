@@ -33,7 +33,11 @@ export type Atom = {
   upper?: string;
   lower?: string;
   claimed?: boolean;
+  // A big operator's own left edge, where its limits widen x1: the line's
+  // order goes by it.
+  ownX1?: number;
   fracPart?: number; // a fraction outside any other structure: its parts' size
+  rows?: number[]; // an array's or a matrix's row baselines, top first
 };
 
 const OPNAMES = new Set([
@@ -140,10 +144,23 @@ function variantOf(base: string): Variant {
     depth: a big operator or delimiter hangs below its origin; a text font's
     letter, digit, or bracket too. Other glyphs come back apart (the check
     fails on them). */
+const LIGATURES: Record<string, string> = { "ﬀ": "ff", "ﬁ": "fi", "ﬂ": "fl", "ﬃ": "ffi", "ﬄ": "ffl" };
+
 function atomsOf(glyphs: Glyph[]): { atoms: Atom[]; unknown: Glyph[] } {
   const atoms: Atom[] = [];
   const unknown: Glyph[] = [];
   for (const g of glyphs) {
+    // A text font's ligature is its letters, each a share of its advance:
+    // T1's ﬀ (cm-super, at 0x1b) has no glyph in OT1's table, and GeoTopo's
+    // "𝔘 = {U_i} mit U_i offen in X" was a crop (parse loop finding).
+    const letters = LIGATURES[g.unicode];
+    if (letters && (g.family === null || g.family === "ot1")) {
+      const w = Math.max(g.w, 0) / letters.length;
+      const parts = [...letters].map((ch, k) => textAtom({ ...g, unicode: ch, family: null, x: g.x + k * w, w }));
+      if (parts.every((a) => a !== null)) atoms.push(...(parts as Atom[]));
+      else unknown.push(g);
+      continue;
+    }
     const entry = g.family ? mathGlyph(g.family, g.code) : null;
     if (!entry || (!entry.latex && entry.cls !== "piece" && entry.cls !== "radical")) {
       const text = g.family === null ? textAtom(g) : null;
@@ -189,7 +206,20 @@ function atomsOf(glyphs: Glyph[]): { atoms: Atom[]; unknown: Glyph[] } {
 // Computer Modern font under another name (arXiv 2502.02648's "mwa_cmmi10")
 // is no text font: its letters are math italic, and the formula stays a
 // picture.
-const TEXT_CHAR_RE = /^[A-Za-z0-9,.;:()[\]=+−–·!/<>]$/;
+// A Latin letter with a mark (ü, ß, é) is a word's letter: it reads in
+// \text, as math has no such letter (parse loop finding: GeoTopo's "für"
+// and "überdecken" in its displays failed the check on their ü and ß, and
+// each display was a crop).
+// A CJK character (kana, kanji, hangul) is a word's letter too, and text
+// only (parse loop finding: the Japanese "L = E⁻¹ として, A = LU" lost its
+// kana, failed the check, and was a crop).
+const TEXT_CHAR_RE = /^[A-Za-z0-9,.;:()[\]=+−–·!/<>\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u017F\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}ー]$/u;
+/** A letter a word in a formula holds: ASCII, Latin with a mark, or CJK.
+    A ligature of TeX's text font (ff, fi, fl, ffi, ffl) is the letters it
+    joins: \mathrm{eff} read \mathrm{e}ff. */
+const LETTER_RE = /^(?:[A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u017F\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}ー]|ff|fi|fl|ffi|ffl)$/u;
+/** A Latin letter with a mark, or a CJK character: no math letter, so text only. */
+const MARKED_RE = /[\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u017F\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}ー]/u;
 const CM_NAME_RE = /cm(r|mi|mib|sy|bsy|ex|bx|ti|ss|tt|sl)\d/i;
 
 function textAtom(g: Glyph): Atom | null {
@@ -226,6 +256,7 @@ function textAtom(g: Glyph): Atom | null {
   // A bold letter or digit is \mathbf (Springer's vectors n, m in Times
   // Bold read as \mathrm), a bold italic one \boldsymbol.
   const bold = /[A-Za-z0-9]/.test(ch) && isBoldFont(g.base);
+  // A bold letter with a mark reads as an upright one: \mathbf has no ü.
   return {
     fam: null,
     code: g.code,
@@ -239,10 +270,10 @@ function textAtom(g: Glyph): Atom | null {
     yb: g.y,
     top: g.y + height * g.size,
     bottom: g.y - depth * g.size,
-    upright: /[A-Za-z]/.test(ch) && !italic && !bold,
+    upright: LETTER_RE.test(ch) && !italic && !bold,
     // PLOS sets every formula's letters in Minion's italic ("dP_k/dt"):
     // those are math letters (isTextMath), not words.
-    italic: /[A-Za-z]/.test(ch) && italic && !bold && !isTextMath(g),
+    italic: LETTER_RE.test(ch) && italic && !bold && !isTextMath(g),
   };
 }
 
@@ -253,11 +284,32 @@ const PIECE_DELIM: Record<string, string> = { lparen: "(", rparen: ")", lbrack: 
 function assemblePieces(atoms: Atom[], rules: Rule[]): Atom[] {
   const pieces = atoms.filter((a) => a.fam === "omx" && (/^(l|r)(paren|brack|brace)-|^brace-rep$/.test(a.entry?.piece ?? "") || isPiece(a, "vrep")));
   const rest = atoms.filter((a) => !pieces.includes(a));
-  const columns: Atom[][] = [];
+  const stacks: Atom[][] = [];
   for (const p of pieces.sort(byX)) {
-    const col = columns.find((c) => Math.abs(c[0].x1 - p.x1) < 0.15 * p.size && isPiece(c[0], "vrep") === isPiece(p, "vrep"));
+    const col = stacks.find((c) => Math.abs(c[0].x1 - p.x1) < 0.15 * p.size && isPiece(c[0], "vrep") === isPiece(p, "vrep"));
     if (col) col.push(p);
-    else columns.push([p]);
+    else stacks.push([p]);
+  }
+  // Delimiters stacked at one x are each their own: a top piece under a
+  // bottom piece starts the next (parse loop finding: the MML book's three
+  // augmented matrices one under another, joined by ⇝, read their brackets
+  // as one bracket around all three).
+  const columns: Atom[][] = [];
+  for (const stack of stacks) {
+    let cur: Atom[] = [];
+    // (Each delimiter keeps its pieces in the stack's order: its first
+    // piece gives its baseline.)
+    const keep = (list: Atom[]) => columns.push(stack.filter((p) => list.includes(p)));
+    for (const p of [...stack].sort((a, b) => b.top - a.top)) {
+      const prev = cur[cur.length - 1];
+      const ends = prev && /-bot$/.test(prev.entry?.piece ?? "") && /-top$/.test(p.entry?.piece ?? "");
+      if (ends) {
+        keep(cur);
+        cur = [];
+      }
+      cur.push(p);
+    }
+    if (cur.length) keep(cur);
   }
   const fences: Atom[] = [];
   for (const col of columns) {
@@ -401,7 +453,10 @@ function fuseComposites(input: Atom[]): Atom[] {
         }
       }
       // Dots: three periods or three centered dots in a row; three periods
-      // stacked (\vdots) or on a diagonal (\ddots).
+      // stacked (\vdots) or on a diagonal (\ddots). LaTeX sets \vdots and
+      // \ddots in the text's roman font: a page whose text font is no
+      // Computer Modern stacks the text font's periods (parse loop finding:
+      // mml-book's Charter periods left (2.70) and (2.71) crops).
       if (a.tex === "." || a.tex === "\\cdot") {
         const next = (p: Atom, dx: [number, number], dy: [number, number]) =>
           out.find((b) => b !== p && b.tex === a.tex && b.x1 - p.x1 >= dx[0] * em && b.x1 - p.x1 <= dx[1] * em && p.yb - b.yb >= dy[0] * em && p.yb - b.yb <= dy[1] * em);
@@ -411,7 +466,7 @@ function fuseComposites(input: Atom[]): Atom[] {
           ["\\ddots", [0.3, 0.5], [0.2, 0.4]],
         ];
         for (const [tex, dx, dy] of shapes) {
-          if (tex !== "\\ldots" && tex !== "\\cdots" && a.fam !== "ot1") continue;
+          if (tex !== "\\ldots" && tex !== "\\cdots" && a.fam !== "ot1" && a.fam !== null) continue;
           if ((tex === "\\ldots" || tex === "\\cdots") && a.tex === "." && a.fam !== "oml") continue;
           const b = next(a, dx, dy);
           const c = b ? next(b, dx, dy) : undefined;
@@ -437,16 +492,23 @@ function fuseComposites(input: Atom[]): Atom[] {
 // set small over it makes \xrightarrow{label}; content under it,
 // \overrightarrow{content}. Two glyphs overlapping by \joinrel's 3mu and
 // nothing over them are \longrightarrow, a composite.
+// A double arrow (\xRightarrow) is drawn the same way from equals signs
+// and a double arrowhead (parse loop finding: GeoTopo's "==⇒" under
+// "o. B. d. A." read as \overset{…}{=}====\Rightarrow).
 function arrowRuns(atoms: Atom[]): Atom[] {
   const out = [...atoms];
   const shafts = out.filter((a) => a.tex === "-" && a.fam === "oms");
-  for (const head of out.filter((a) => a.tex === "\\rightarrow" || a.tex === "\\leftarrow")) {
+  const bars = out.filter((a) => a.tex === "=");
+  for (const head of out.filter((a) => /^\\(right|left|Right|Left)arrow$/.test(a.tex))) {
     const em = head.size;
-    const right = head.tex === "\\rightarrow";
+    const right = /^\\(right|Right)/.test(head.tex);
+    const double = /^\\[RL]/.test(head.tex);
+    const name = `${double ? (right ? "Right" : "Left") : right ? "right" : "left"}arrow`;
+    const pieces = double ? bars : shafts;
     const run: Atom[] = [head];
     for (;;) {
       const edge = run[run.length - 1];
-      const next = shafts.find(
+      const next = pieces.find(
         (s) =>
           !run.includes(s) &&
           Math.abs(s.yb - head.yb) < 0.05 * em &&
@@ -461,23 +523,42 @@ function arrowRuns(atoms: Atom[]): Atom[] {
     const inside = (b: Atom) => !run.includes(b) && cx(b) > x1 - 0.1 * em && cx(b) < x2 + 0.1 * em;
     const bottom = Math.min(...run.map((a) => a.bottom));
     const under = out.filter((b) => inside(b) && b.top <= bottom + 0.2 * em && b.top >= bottom - 0.5 * em && b.size >= em * 0.9);
-    const label = out.filter((b) => inside(b) && b.bottom >= head.yb && b.yb > head.yb + 0.1 * em && b.size < em * 0.9);
-    const labelBelow = out.filter((b) => inside(b) && b.top <= head.yb && b.yb < head.yb - 0.1 * em && b.size < em * 0.9);
+    // A label stands within an em of the arrow: the row over it in an
+    // aligned display is no label (GeoTopo's rows of labeled arrows).
+    const label = out.filter((b) => inside(b) && b.bottom >= head.yb && b.yb > head.yb + 0.1 * em && b.yb < head.yb + em && b.size < em * 0.9);
+    const labelBelow = out.filter((b) => inside(b) && b.top <= head.yb && b.yb < head.yb - 0.1 * em && b.yb > head.yb - em && b.size < em * 0.9);
     let made: Atom;
-    if (under.length > 0 && label.length === 0) {
+    if (under.length > 0 && label.length === 0 && !double) {
       const body = linear(under.map((b) => ({ ...b })));
       made = node([...run, ...under], `\\over${right ? "right" : "left"}arrow{${body}}`, under[0].yb, under[0].size);
       for (const b of under) out.splice(out.indexOf(b), 1);
     } else if (label.length > 0 || labelBelow.length > 0 || run.length > 2) {
-      const above = label.length ? linear(label.map((b) => ({ ...b }))) : "";
-      const below = labelBelow.length ? `[${linear(labelBelow.map((b) => ({ ...b })))}]` : "";
-      made = node([...run, ...label, ...labelBelow], `\\x${right ? "right" : "left"}arrow${below}{${above}}`, head.yb, em, { cls: "rel" });
+      // A label's own composites are read first: "A ∩ B ≠ ∅" over an arrow
+      // holds \not over "=".
+      const above = label.length ? textLabel(label) ?? linear(fuseComposites(label.map((b) => ({ ...b })))) : "";
+      const below = labelBelow.length ? `[${linear(fuseComposites(labelBelow.map((b) => ({ ...b }))))}]` : "";
+      made = node([...run, ...label, ...labelBelow], `\\x${name}${below}{${above}}`, head.yb, em, { cls: "rel" });
       for (const b of [...label, ...labelBelow]) out.splice(out.indexOf(b), 1);
     } else continue;
     for (const r of run) out.splice(out.indexOf(r), 1);
     out.push(made);
   }
   return out;
+}
+
+// A label set in the text font alone is a phrase: \text{Def. 12.a}, its
+// word spaces kept (read as math, "Def" was \operatorname{Def} and the
+// spaces were lost). A label with a math glyph ("f stetig") is a formula.
+const LABEL_CHAR_RE = /^[\p{L}\p{N}.,:;!?()'-]$/u;
+function textLabel(label: Atom[]): string | null {
+  if (!label.every((b) => b.fam === "ot1" && !b.italic && LABEL_CHAR_RE.test(b.tex)) || !label.some((b) => LETTER_RE.test(b.tex))) return null;
+  const sorted = [...label].sort(byX);
+  let text = "";
+  sorted.forEach((b, k) => {
+    if (k > 0 && b.x1 - sorted[k - 1].x2 > 0.2 * b.size) text += " ";
+    text += b.tex;
+  });
+  return `\\text{${text}}`;
 }
 
 // \overbrace and \underbrace: the brace tips and cusp are four pieces on
@@ -530,7 +611,18 @@ function braces(atoms: Atom[], rules: Rule[], used: Set<Rule>): Atom[] {
     const within = (b: Atom) => !g.includes(b) && cx(b) > x1 - 0.1 * em && cx(b) < x2 + 0.1 * em;
     const top = Math.max(...g.map((a) => a.top));
     const bottom = Math.min(...g.map((a) => a.bottom));
-    const far = out.filter((b) => within(b) && (over ? b.top <= bottom + 0.1 * em : b.bottom >= top - 0.1 * em));
+    // The content is the glyphs stacked against the brace, as a fraction's
+    // part against its bar: in an aligned display the rows over an
+    // underbrace lie within its width too (parse loop finding: GeoTopo's
+    // "⇒ ⋃ (U_{i_j} ∩ A) ∪ ((X∖A) ∩ A) = A" took the row over it into
+    // its braces, and the display was a crop).
+    const far = chain(
+      out.filter((b) => within(b) && (over ? b.top <= bottom + 0.1 * em : b.bottom >= top - 0.1 * em)),
+      over ? bottom : top,
+      over ? -1 : 1,
+      em,
+      rules.filter((r) => !used.has(r)),
+    );
     const near = out.filter(
       (b) =>
         within(b) &&
@@ -590,7 +682,9 @@ function structure(atoms: Atom[], rules: Rule[], depth = 0): Atom[] {
       // An index is set smaller than the radicand and raised over its
       // baseline; a letter before the sign on the radicand's baseline is
       // the formula's (T_{i\sqrt{p}}, arXiv 2506.08494 (2.10), read as a
-      // cube root's i).
+      // cube root's i). TeX raises it to 0.6 of the sign's height: a
+      // script of the glyph before a tall sign stands under its middle
+      // (Springer's "k₁√(k₂/D_A)" read k\sqrt[1]{…}).
       const innerSize = inner.length ? maxSize(inner) : rad.size;
       const innerBase = inner.length ? mainBaseline(inner) : rad.yb;
       const index = pool.filter(
@@ -603,6 +697,7 @@ function structure(atoms: Atom[], rules: Rule[], depth = 0): Atom[] {
           a.size < innerSize * 0.9 &&
           a.yb > innerBase + 0.2 * innerSize &&
           a.bottom > rad.bottom &&
+          a.yb > (rad.top + rad.bottom) / 2 &&
           a.top <= y + 0.3 * em,
       );
       const innerRules = hr.filter((q) => q !== r && !used.has(q) && q.x1 >= r.x1 - 0.1 && q.x2 <= r.x2 + 0.1 && ry(q) < y);
@@ -662,7 +757,12 @@ function structure(atoms: Atom[], rules: Rule[], depth = 0): Atom[] {
       // fraction in a script set at the script's size (MathJax's
       // e^{-\frac{1}{2}…} in OpenStax's f(x)): its own size is theirs, and
       // \tfrac keeps its parts at that size.
-      const part = Math.max(maxSize(above), maxSize(below));
+      // A big operator in a part hangs at its own size, larger than the
+      // part's letters: the part's size is theirs (the CS 229 refresher's
+      // Bayes rule, a ∑ under its bar, made the fraction larger than the
+      // "P(A_k|B) =" before it, which then read as its prescript).
+      const partSize = (list: Atom[]) => maxSize(list.some((a) => !hangingFamily(a.fam)) ? list.filter((a) => !hangingFamily(a.fam)) : list);
+      const part = Math.max(partSize(above), partSize(below));
       const script = pool.some(
         (a) =>
           !above.includes(a) &&
@@ -770,16 +870,40 @@ function accents(atoms: Atom[]): Atom[] {
     (60)). The atoms by the vertical rules, and those set on with them,
     become one node; the rules it holds are read. */
 function ruledArray(atoms: Atom[], rules: Rule[]): Atom[] {
-  const vr = rules.filter((r) => r.dir === "v" && !read.has(r));
-  if (vr.length === 0 || atoms.length === 0) return atoms;
+  const all = rules.filter((r) => r.dir === "v" && !read.has(r));
+  if (all.length === 0 || atoms.length === 0) return atoms;
   const em = maxSize(atoms);
+  // Arrays stacked in one display are each their own: vertical rules that
+  // touch from row to row are one array's (parse loop finding: the MML
+  // book's three augmented matrices joined by ⇝ read as one array of
+  // twelve rows).
+  const groups: Rule[][] = [];
+  for (const r of [...all].sort((a, b) => b.y2 - a.y2)) {
+    const last = groups[groups.length - 1];
+    if (last && r.y2 >= Math.min(...last.map((q) => q.y1)) - 0.3 * em) last.push(r);
+    else groups.push([r]);
+  }
+  let out = atoms;
+  for (const vr of groups) out = ruledArrayOf(out, vr, rules, em);
+  return out;
+}
+
+function ruledArrayOf(atoms: Atom[], vr: Rule[], rules: Rule[], em: number): Atom[] {
   const y1 = Math.min(...vr.map((r) => r.y1));
   const y2 = Math.max(...vr.map((r) => r.y2));
-  const band = atoms.filter((a) => a.yb > y1 - 0.3 * em && a.yb < y2 + 0.3 * em).sort(byX);
-  // The array runs from the rules out to the first gap wider than a
-  // column's (an em and a half): the formula's other atoms stand apart.
   const rx1 = Math.min(...vr.map((r) => r.x1));
   const rx2 = Math.max(...vr.map((r) => r.x1));
+  // Tall delimiters around the rules are the array's fences, not its
+  // cells: the array runs between them (parse loop finding: the MML book's
+  // augmented matrices [A | I] read "\Biggl[1 & …" with the bracket in the
+  // first cell and the comma after the matrix in a row).
+  const fences = atoms.filter((a) => isTall(a, em) && a.bottom <= y1 + 0.5 * em && a.top >= y2 - 0.5 * em);
+  const open = fences.filter((a) => a.x2 <= rx1).sort((p, q) => q.x2 - p.x2)[0];
+  const close = fences.filter((a) => a.x1 >= rx2).sort((p, q) => p.x1 - q.x1)[0];
+  const inside = (a: Atom) => !open || !close || (a.x1 >= open.x2 - 0.1 && a.x2 <= close.x1 + 0.1 && a !== open && a !== close);
+  const band = atoms.filter((a) => a.yb > y1 - 0.3 * em && a.yb < y2 + 0.3 * em && inside(a)).sort(byX);
+  // The array runs from the rules out to the first gap wider than a
+  // column's (an em and a half): the formula's other atoms stand apart.
   const left = band.filter((a) => cx(a) < rx1);
   const right = band.filter((a) => cx(a) > rx2);
   if (left.length === 0 && right.length === 0) return atoms;
@@ -787,7 +911,9 @@ function ruledArray(atoms: Atom[], rules: Rule[]): Atom[] {
   let hi = band.indexOf(right[0] ?? left[left.length - 1]);
   while (lo > 0 && band[lo].x1 - band[lo - 1].x2 < 1.5 * em) lo--;
   while (hi < band.length - 1 && band[hi + 1].x1 - band[hi].x2 < 1.5 * em) hi++;
-  const content = band.slice(lo, hi + 1);
+  // Between its fences the array is all there is, however wide its columns
+  // stand (the MML book's [A | b] sets them two ems apart).
+  const content = open && close ? band : band.slice(lo, hi + 1);
   const mains = content.filter((a) => a.size >= em * 0.95);
   const lines = rowLines(mains.length ? mains : content, em);
   // One row between rules is a table's row, not an array (arXiv
@@ -800,7 +926,10 @@ function ruledArray(atoms: Atom[], rules: Rule[]): Atom[] {
   // in every row.
   const ruleXs = [...new Set(vr.filter((r) => r.x1 > x1 && r.x1 < x2).map((r) => Math.round(r.x1)))].sort((p, q) => p - q);
   if (ruleXs.length === 0) return atoms;
-  const cuts = [...ruleXs, ...columnCuts(rows, em).filter((c) => ruleXs.every((x) => Math.abs(x - c) > 0.5 * em))].sort((p, q) => p - q);
+  // A ruled array's columns may stand closer than a matrix's: half an em
+  // open in every row is a column gap, more than any space TeX sets inside
+  // a cell (the MML book's [A | A⁻¹] sets −1 and 2 6.6 pt apart).
+  const cuts = [...ruleXs, ...columnCuts(rows, em, 0.5 * em).filter((c) => ruleXs.every((x) => Math.abs(x - c) > 0.5 * em))].sort((p, q) => p - q);
   const spec = ["c", ...cuts.map((c) => (ruleXs.includes(c) ? "|c" : "c"))].join("");
   // Horizontal rules across the columns: \hline over the row under them.
   const hr = rules.filter((r) => r.dir === "h" && r.x1 <= x1 + 0.5 * em && r.x2 >= x2 - 0.5 * em && r.y1 > y1 - 0.3 * em && r.y1 < y2 + 0.3 * em);
@@ -825,32 +954,71 @@ function ruledArray(atoms: Atom[], rules: Rule[]): Atom[] {
   for (const r of [...hr, ...vr]) read.add(r);
   const top = Math.max(...content.map((a) => a.top), y2);
   const bottom = Math.min(...content.map((a) => a.bottom), y1);
-  const made = node(content, `\\begin{array}{${spec}} ${body.trim()} \\end{array}`, (top + bottom) / 2 - 0.25 * em, em, { top, bottom });
+  const made = node(content, `\\begin{array}{${spec}} ${body.trim()} \\end{array}`, (top + bottom) / 2 - 0.25 * em, em, { top, bottom, rows: lines });
   return [...atoms.filter((a) => !content.includes(a)), made];
 }
 
 // ── Rows: matrices, binomials, cases, aligned lines ────────────────────────
 
-// Baselines of main-size atoms at least 0.9 em apart, top first.
+// Baselines of main-size atoms at least 0.9 em apart, top first. A row of
+// vertical or diagonal dots alone hangs nothing under its baseline: the
+// row under it may stand half an em lower (parse loop finding: the CS 229
+// refresher's matrices set rows tight, the ⋮ row's baseline 0.8 em over
+// the last row's, and ⋮ read as the last row's superscript).
 function rowLines(atoms: Atom[], unit: number): number[] {
-  const ys = [...new Set(atoms.map((a) => Math.round(a.yb * 2) / 2))].sort((p, q) => q - p);
+  const at = (a: Atom) => Math.round(a.yb * 2) / 2;
+  const ys = [...new Set(atoms.map(at))].sort((p, q) => q - p);
+  const dotsOnly = (y: number) => atoms.every((a) => at(a) !== y || a.tex === "\\vdots" || a.tex === "\\ddots");
   const lines: number[] = [];
   for (const y of ys) {
     const last = lines[lines.length - 1];
-    if (last !== undefined && last - y < 0.9 * unit) continue;
+    if (last !== undefined && last - y < (dotsOnly(last) ? 0.5 : 0.9) * unit) continue;
     lines.push(y);
   }
   return lines;
 }
 
+// Each atom goes to the row whose baseline is nearest, and a script to its
+// base's row: a block entry set between two rows (A₂ in the corner of a
+// 3×3 matrix, its baseline midway) stands as near one row as the other,
+// and its script nearer the lower (parse loop finding: The Art of Linear
+// Algebra's Japanese edition, Figure 13, put A in the second row and its
+// "2" in the third, and the display was a crop).
 function splitRows(atoms: Atom[], lines: number[]): Atom[][] {
   const rows: Atom[][] = lines.map(() => []);
-  for (const a of atoms) {
+  const em = maxSize(atoms);
+  const nearest = (a: Atom) => {
     let best = 0;
     lines.forEach((ly, i) => {
       if (Math.abs(ly - a.yb) < Math.abs(lines[best] - a.yb)) best = i;
     });
-    rows[best].push(a);
+    return best;
+  };
+  const full = atoms.filter((a) => a.size >= em * 0.85);
+  const rowOf = new Map(full.map((a) => [a, nearest(a)]));
+  // A limit goes to its operator's row: set over a ⋃ of the row under,
+  // it stands nearer the row over (GeoTopo p19's "n" over ⋃ read as a
+  // subscript of the row above's last word).
+  // An integral sets its limits beside it, as scripts.
+  const ops = full.filter((o) => o.cls === "op" && hangingFamily(o.fam) && o.entry?.display && !INTEGRAL_RE.test(o.tex));
+  const limitOf = (a: Atom) =>
+    ops.find(
+      (o) =>
+        cx(a) > o.x1 &&
+        cx(a) < o.x2 &&
+        ((a.bottom >= o.top - 0.2 * em && a.bottom - o.top < 0.8 * em) || (a.top <= o.bottom + 0.2 * em && o.bottom - a.top < 0.8 * em)),
+    );
+  for (const a of atoms) {
+    let row = rowOf.get(a);
+    const op = row === undefined ? limitOf(a) : undefined;
+    if (op) row = rowOf.get(op);
+    if (row === undefined) {
+      const base = full
+        .filter((b) => a.x1 >= b.x2 - 0.05 * em && a.x1 <= b.x2 + 0.2 * em && a.yb > b.yb - 0.5 * em && a.yb < b.yb + 0.7 * em)
+        .sort((p, q) => a.x1 - p.x2 - (a.x1 - q.x2))[0];
+      row = base ? rowOf.get(base)! : nearest(a);
+    }
+    rows[row].push(a);
   }
   return rows;
 }
@@ -858,7 +1026,7 @@ function splitRows(atoms: Atom[], lines: number[]): Atom[][] {
 // Columns: gaps of 0.9 em or more open in every row that splits two cells,
 // or of 9.5 pt: TeX sets an array's columns 10 pt apart at any text size
 // (a 12 pt paper's bmatrix read each row as one cell).
-function columnCuts(rows: Atom[][], em: number): number[] {
+function columnCuts(rows: Atom[][], em: number, least = Math.min(0.9 * em, 9.5)): number[] {
   const all = rows.flat();
   if (all.length === 0) return [];
   const x1 = Math.min(...all.map((a) => a.x1));
@@ -871,7 +1039,7 @@ function columnCuts(rows: Atom[][], em: number): number[] {
       rows.filter((r) => r.some((a) => a.x2 <= x) && r.some((a) => a.x1 >= x)).length >= 2;
     if (open && start === null) start = x;
     if (!open && start !== null) {
-      if (x - start >= Math.min(0.9 * em, 9.5)) cuts.push((start + x) / 2);
+      if (x - start >= least) cuts.push((start + x) / 2);
       start = null;
     }
   }
@@ -932,14 +1100,18 @@ function fencedGroups(atoms: Atom[], em: number): Atom[] {
       if (!close) {
         // What follows cases on the formula's baseline, past every row's end
         // and on no row's baseline (the sentence's period), is the
-        // formula's, not a row's: arXiv 2502.02648 (25) read "γ < 1_{.}".
+        // formula's, not a row's: arXiv 2502.02648 (25) read "γ < 1_{.}",
+        // and ICML's (33) "x = ℓ/L." after its cases read as the first
+        // row's subscript. The longest such run goes.
         const base = (open.top + open.bottom) / 2 - 0.25 * em;
-        for (;;) {
-          const last = [...content].sort((p, q) => q.x2 - p.x2)[0];
-          const rest = content.filter((a) => a !== last);
-          if (!last || rest.length === 0 || Math.abs(last.yb - base) > 0.2 * em) break;
-          if (rest.some((a) => a.x2 > last.x1 + 0.1 * em || Math.abs(a.yb - last.yb) < 0.1 * em)) break;
-          content = rest;
+        const sorted = [...content].sort((p, q) => p.x1 - q.x1);
+        for (let k = 1; k < sorted.length; k++) {
+          const tail = sorted.slice(k);
+          const rest = sorted.slice(0, k);
+          if (tail.some((a) => Math.abs(a.yb - base) > 0.2 * em)) continue;
+          if (rest.some((a) => a.x2 > tail[0].x1 + 0.1 * em || tail.some((t) => Math.abs(a.yb - t.yb) < 0.1 * em))) continue;
+          content = content.filter((a) => rest.includes(a));
+          break;
         }
       }
       // Cases take no cases set after them on the line: two side by side
@@ -978,12 +1150,45 @@ function fencedGroups(atoms: Atom[], em: number): Atom[] {
         const env = FENCE_ENV[open.tex] ?? "matrix";
         tex = `\\begin{${env}} ${cells(rows, cuts)} \\end{${env}}`;
       }
-      made = node([open, ...content, ...(close ? [close] : [])], tex, axis - 0.25 * em, em);
+      made = node([open, ...content, ...(close ? [close] : [])], tex, axis - 0.25 * em, em, { rows: lines });
       out = out.filter((a) => a !== open && a !== close && !content.includes(a));
       out.push(made);
     }
     if (!made && !marked) return out;
   }
+}
+
+// Notes set beside a matrix's rows ("Swap with R₃", "−4R₁", "·(−1)"): the
+// atoms right of the matrix, within its height, each on one of its rows'
+// baselines, are a column of their own beside it, one row to each of its
+// rows (parse loop finding: the MML book's elimination steps read each
+// note as a row of a gathered display or a subscript of the matrix, and
+// were crops). A mark after the matrix on its axis stays after the notes.
+function rowNotes(atoms: Atom[], em: number): Atom[] {
+  let out = atoms;
+  for (const grid of atoms.filter((a) => a.rows && a.rows.length >= 2)) {
+    const lines = grid.rows!;
+    // The matrix's closing delimiter, when the array is set between two,
+    // comes first.
+    const fence = out.find((a) => isTall(a, em) && a.cls === "close" && a.x1 >= grid.x2 - 0.1 * em && a.x1 - grid.x2 < em);
+    const edge = fence ? fence.x2 : grid.x2;
+    const right = out.filter((a) => a !== grid && a !== fence && a.x1 >= edge - 0.1 * em && a.yb > grid.bottom && a.yb < grid.top);
+    const rowOf = (a: Atom) => lines.findIndex((y) => Math.abs(a.yb - y) < 0.3 * em);
+    const notes = right.filter((a) => rowOf(a) >= 0);
+    if (notes.length === 0) continue;
+    // A note starts within a few ems of the matrix and nothing else stands
+    // among the notes; a mark on the axis after them all is the sentence's.
+    const x2 = Math.max(...notes.map((a) => a.x2));
+    if (Math.min(...notes.map((a) => a.x1)) - edge > 3 * em) continue;
+    if (right.some((a) => !notes.includes(a) && a.x1 < x2)) continue;
+    // One note on the axis alone is the matrix's script or the formula's
+    // next symbol, no column.
+    if (new Set(notes.map(rowOf)).size === 1 && notes.every((a) => Math.abs(a.yb - grid.yb) < 0.3 * em)) continue;
+    const cells = lines.map((_, k) => linear(notes.filter((a) => rowOf(a) === k).map((a) => ({ ...a }))));
+    const column = node(notes, `\\quad\\begin{matrix} ${cells.join(" \\\\ ")} \\end{matrix}`, grid.yb, grid.size, { top: grid.top, bottom: grid.bottom });
+    out = [...out.filter((a) => !notes.includes(a)), column];
+  }
+  return out;
 }
 
 // Unfenced rows: aligned when every row's first relation sits at one x,
@@ -994,6 +1199,23 @@ function alignedRows(atoms: Atom[], em: number): string | null {
   const mains = atoms.filter((a) => a.size >= em * 0.95 && !hangingFamily(a.fam) && !(a.fam === null && a.limits) && a.cls !== "open" && a.cls !== "close");
   const lines = rowLines(mains, em);
   if (lines.length < 2) return null;
+  // A period or a comma after the rows' last glyphs, at the text's size,
+  // on no row's baseline, is the sentence's mark after the whole display:
+  // TeX sets it on the display's axis, between two rows (parse loop
+  // finding: the MML book's systems of equations (2.44), (2.45), (2.73)
+  // read it as the middle row's superscript, "0^{.}", and were crops).
+  const last = [...atoms].sort((p, q) => q.x2 - p.x2)[0];
+  if (/^[.,;]$/.test(last.tex) && last.size >= em * 0.95 && atoms.every((a) => a === last || a.x2 <= last.x1 + 0.1 * em)) {
+    const rest = atoms.filter((a) => a !== last);
+    const restLines = rowLines(
+      rest.filter((a) => mains.includes(a)),
+      em,
+    );
+    if (restLines.length >= 2 && restLines.every((y) => Math.abs(y - last.yb) > 0.25 * em)) {
+      const inner = alignedRows(rest, em);
+      if (inner) return `${inner}${last.tex}`;
+    }
+  }
   const rows = splitRows(atoms, lines);
   // Rows that are no more than a big operator's limits are no rows, nor is
   // a limit with a word in the text's size, centered under or over the
@@ -1136,6 +1358,7 @@ function limits(atoms: Atom[], em: number): Atom[] {
     if (up.length) op.upper = stackedLimit(up);
     if (low.length) op.lower = stackedLimit(low);
     op.limits = true;
+    op.ownX1 = op.x1;
     op.x1 = Math.min(op.x1, ...[...up, ...low].map((b) => b.x1));
     op.x2 = Math.max(op.x2, ...[...up, ...low].map((b) => b.x2));
     for (const b of [...up, ...low]) out.splice(out.indexOf(b), 1);
@@ -1189,6 +1412,7 @@ function linearAt(input: Atom[]): string {
   for (const a of atoms) {
     if (hangingFamily(a.fam) && (a.cls === "op" || a.entry?.size || a.entry?.piece || a.cls === "open" || a.cls === "close")) a.yb = (a.top + a.bottom) / 2 - 0.25 * Math.min(em, a.size);
   }
+  atoms = rowNotes(atoms, em);
   const rows = alignedRows(atoms, em);
   if (rows) return rows;
   // Tall delimiters pair up as \left … \right (an editor redraws them to
@@ -1237,7 +1461,12 @@ function linearAt(input: Atom[]): string {
     }
   }
   const onLine = (a: Atom) => onBase(a) && !bound.has(a);
-  const main = atoms.filter(onLine).sort(byX);
+  // A big operator stands in the line where its own glyph stands: a limit
+  // set wider than the space before it (\mathclap) reaches past the
+  // relation before it (parse loop finding: GeoTopo's "Z(x) := ⋃ A" with
+  // "A ⊆ X zhgd." under the ⋃ starting left of the "=" read
+  // "Z(x):\bigcup…=\quad A").
+  const main = atoms.filter(onLine).sort((a, b) => (a.ownX1 ?? a.x1) - (b.ownX1 ?? b.x1));
   const small = atoms.filter((a) => !main.includes(a));
   // An upright word from main[k]: its last index and its letters ("lim"
   // takes a following "sup" set a thin space apart, "arg" a "min").
@@ -1248,7 +1477,7 @@ function linearAt(input: Atom[]): string {
       (w === "lim" || (w === "arg" && /^m(in|ax)$/.test(main.slice(end + 1, end + 4).map((b) => b.tex).join("")))) && main[end + 1].x1 - main[end].x2 < 0.3 * em;
     while (
       (main[k].italic ? main[end + 1]?.italic : main[end + 1]?.upright) &&
-      /^[A-Za-z]$/.test(main[end + 1].tex) &&
+      LETTER_RE.test(main[end + 1].tex) &&
       (main[end + 1].x1 - main[end].x2 < 0.12 * em || named(word))
     ) {
       end++;
@@ -1281,13 +1510,35 @@ function linearAt(input: Atom[]): string {
     for (const s of label) s.claimed = true;
     if (label.length) labels.set(a, label);
   }
+  // So is a label stacked under a relation (\underset{n\to+\infty}{\sim}):
+  // small glyphs under its width, wholly under its baseline, and the
+  // glyphs set on with them (the CS 229 probability refresher's central
+  // limit theorem read "\overline{X}_{n\rightarrow}\sim_{\infty}", and
+  // lost its "+").
+  const underLabels = new Map<Atom, Atom[]>();
+  for (const a of main) {
+    if (a.cls !== "rel") continue;
+    const label = small.filter((s) => !s.claimed && cx(s) > a.x1 - 0.1 * em && cx(s) < a.x2 + 0.1 * em && a.yb - s.yb > 0.4 * baseSize && s.top < a.yb);
+    for (let grew = label.length > 0; grew; ) {
+      grew = false;
+      for (const s of small) {
+        if (s.claimed || label.includes(s)) continue;
+        if (label.some((l) => Math.abs(l.yb - s.yb) < 0.1 * em && (Math.abs(s.x1 - l.x2) < 0.3 * em || Math.abs(l.x1 - s.x2) < 0.3 * em))) {
+          label.push(s);
+          grew = true;
+        }
+      }
+    }
+    for (const s of label) s.claimed = true;
+    if (label.length) underLabels.set(a, label);
+  }
   // The limit under \lim, \sup, \max in display is claimed before any
   // script: wider than the name, it starts left of it ("N → ∞" under "lim"
   // read as a subscript of the "=" before it).
   const nameLimits = new Map<Atom, Atom[]>();
   const names: { a: Atom; x1: number; x2: number }[] = [];
   for (let k = 0; k < main.length; k++) {
-    if (!main[k].upright || !/^[A-Za-z]$/.test(main[k].tex)) continue;
+    if (!main[k].upright || !LETTER_RE.test(main[k].tex)) continue;
     const { end, word } = wordAt(k);
     if (LIMIT_OPS.has(word)) names.push({ a: main[k], x1: main[k].x1, x2: main[end].x2 });
     k = end;
@@ -1328,7 +1579,7 @@ function linearAt(input: Atom[]): string {
     // sets two after the 2). A bar may be a relation (a ∣ b); a period, a
     // slash, and a prime are no operand.
     const operand = (b: Atom, classes: string[]) => b.code >= 0 && classes.includes(b.cls) && !/^(\||\\\||\\mid|\\vert|\\Vert|\.|\/|'|\\prime)$/.test(b.tex);
-    const wordStarts = (a.upright || a.italic) && /^[A-Za-z]$/.test(a.tex) && wordAt(k).word.length > 1;
+    const wordStarts = (a.upright || a.italic) && LETTER_RE.test(a.tex) && wordAt(k).word.length > 1;
     const net = prev && tail ? gap - italicOf(tail) - (tail === prev ? 0 : tail.size < prev.size * 0.6 ? 0.1 * em : 0.05 * em) : 0;
     const apart = prev !== null && !spaced && !afterWord && !wordStarts && operand(prev, ["ord", "close"]) && operand(a, ["ord", "open"]) && net > 0.2 * em;
     let wordEnds = false;
@@ -1337,14 +1588,14 @@ function linearAt(input: Atom[]): string {
     // A word in a text italic set apart as text is \textit (\text{ for all }
     // in a theorem's italic read as the math letters "forall"); its letter
     // alone, or letters set tight, stay math letters.
-    if (a.italic && /^[A-Za-z]$/.test(a.tex)) {
+    if (a.italic && LETTER_RE.test(a.tex)) {
       const { end, word } = wordAt(k);
       const next = main[end + 1];
       const trail = next ? next.x1 - main[end].x2 : 0;
       // A word space, which math never sets between two symbols of its own
       // (Times' quarter em before an "i": arXiv 2410.04586 p. 7 "fori").
       const apart = (b: Atom | null | undefined, space: number) => !b || space > (b.cls === "ord" ? 0.15 : 0.25) * em;
-      if (word.length > 1 && ((apart(prev, gap) && apart(next, trail)) || /^[a-z]{4,}$/.test(word))) {
+      if ((word.length > 1 && ((apart(prev, gap) && apart(next, trail)) || /^[a-z]{4,}$/.test(word))) || MARKED_RE.test(word)) {
         k = end;
         last = main[k];
         wordEnds = true;
@@ -1353,7 +1604,7 @@ function linearAt(input: Atom[]): string {
       }
     }
     // Upright letters: an operator name, a word in text, or \mathrm.
-    else if (a.upright && /^[A-Za-z]$/.test(a.tex)) {
+    else if (a.upright && LETTER_RE.test(a.tex)) {
       const { end, word } = wordAt(k);
       k = end;
       last = main[k];
@@ -1365,8 +1616,8 @@ function linearAt(input: Atom[]): string {
       // A word with a script set on it names a thing (SF_+): no text.
       const scripted = small.some((s) => !s.claimed && s.x1 >= last.x2 - 0.05 * em && s.x1 < last.x2 + 0.15 * em);
       if (OPNAMES.has(word)) tex = `\\${word}`;
-      else if (word.length === 1 || scripted) tex = `\\mathrm{${word}}`;
-      else if (!applied && (((!prev || gap > 0.2 * em) && (!main[k + 1] || trail > 0.2 * em)) || /^[a-z]{4,}$/.test(word))) {
+      else if ((word.length === 1 || scripted) && !MARKED_RE.test(word)) tex = `\\mathrm{${word}}`;
+      else if (MARKED_RE.test(word) || (!applied && (((!prev || gap > 0.2 * em) && (!main[k + 1] || trail > 0.2 * em)) || /^[a-z]{4,}$/.test(word)))) {
         // A word set apart by spaces is text; the spaces stay inside it
         // ("\text{in }\Omega", not "inΩ"), unless a quad already holds them
         // or the word before ends with it.
@@ -1423,6 +1674,8 @@ function linearAt(input: Atom[]): string {
     if (tex === ":" && prev && a.x1 - prev.x2 < 0.25 * em && next && next.x1 - a.x2 > 0.3 * em) tex = "\\colon";
     const label = labels.get(a);
     if (label) tex = `\\overset{${linear(label.map((s) => ({ ...s, claimed: false })))}}{${tex}}`;
+    const under = underLabels.get(a);
+    if (under) tex = `\\underset{${linear(under.map((s) => ({ ...s, claimed: false })))}}{${tex}}`;
     const right = next ? next.x1 : Infinity;
     let mine = small.filter((s) => !s.claimed && s.x1 >= last.x2 - 0.25 * em && s.x1 < right - 0.05 * em);
     // A script's word runs on under the next symbol's bracket, set tight on
@@ -1447,8 +1700,11 @@ function linearAt(input: Atom[]): string {
     // operator in a display: KaTeX would set them over and under. An
     // operator a display sets at the text's size (ℓ(θ) = Σᵢ ℓᵢ, arXiv
     // 2302.12627 p. 5) is drawn so: KaTeX would draw it large.
+    // A text-size operator in a display with limits over and under it
+    // (\textstyle\sum\limits_{i}) keeps them there: \textstyle alone sets
+    // them beside it.
     const big = a.cls === "op" && hangingFamily(a.fam);
-    if ((a.lower || a.upper) && (!style.display || INTEGRAL_RE.test(tex))) tex += "\\limits";
+    if ((a.lower || a.upper) && (!style.display || INTEGRAL_RE.test(tex) || (big && !a.entry?.display && nesting === displayDepth))) tex += "\\limits";
     else if (style.display && big && a.entry?.display && mine.length > 0 && !a.lower && !a.upper && !INTEGRAL_RE.test(tex)) tex += "\\nolimits";
     if (a.lower) tex += `_{${a.lower}}`;
     if (a.upper) tex += `^{${a.upper}}`;
@@ -1493,6 +1749,7 @@ function scripts(list: Atom[], yb: number, em: number): string {
 }
 
 const ALPHABET_RE = /^\\(mathfrak|mathbf|mathsf|mathtt)\{([A-Za-z0-9]+)\}$/;
+const TEXT_RE = /^\\text\{([^{}\\]*)\}$/;
 
 function join(tokens: string[]): string {
   const merged: string[] = [];
@@ -1500,7 +1757,12 @@ function join(tokens: string[]): string {
     const m = ALPHABET_RE.exec(t);
     const last = merged.length ? ALPHABET_RE.exec(merged[merged.length - 1]) : null;
     // One alphabet per run: \mathfrak{su}, not \mathfrak{s}\mathfrak{u}.
+    // One \text per phrase: \text{ ist offene Überdeckung von }, not a
+    // \text for each word (GeoTopo's rows of words in aligned displays).
+    const words = TEXT_RE.exec(t);
+    const before = merged.length ? TEXT_RE.exec(merged[merged.length - 1]) : null;
     if (m && last && m[1] === last[1]) merged[merged.length - 1] = `\\${m[1]}{${last[2]}${m[2]}}`;
+    else if (words && before) merged[merged.length - 1] = `\\text{${before[1]}${words[1]}}`;
     else merged.push(t);
   }
   let s = "";
@@ -1656,6 +1918,54 @@ function unreadShape(atoms: Atom[], rules: Rule[], paths: Box[], used: Set<Box>)
   return (left.length > 0 && right.length > 0) || [...left, ...right].some((p) => p.y2 - p.y1 < top - bottom + em);
 }
 
+/** Frames among a formula's rules (\boxed, a framed box): a rule down each
+    side and one over and under, meeting at the corners. tol is how far
+    apart the ends may stand. */
+export function framesOf(rules: Rule[], tol: number): { left: Rule; right: Rule; top: Rule; bottom: Rule }[] {
+  const vr = rules.filter((r) => r.dir === "v").sort((a, b) => a.x1 - b.x1);
+  const hr = rules.filter((r) => r.dir === "h");
+  const out: { left: Rule; right: Rule; top: Rule; bottom: Rule }[] = [];
+  const taken = new Set<Rule>();
+  for (const left of vr) {
+    if (taken.has(left)) continue;
+    const right = vr.find((r) => r !== left && !taken.has(r) && r.x1 - left.x1 > 2 * tol && Math.abs(r.y1 - left.y1) < tol && Math.abs(r.y2 - left.y2) < tol);
+    if (!right) continue;
+    const across = (y: number) =>
+      hr.find((r) => !taken.has(r) && Math.abs(r.y1 - y) < tol && r.x1 < left.x1 + tol && r.x2 > right.x1 - tol && r.x2 - r.x1 < right.x1 - left.x1 + 4 * tol);
+    const top = across(Math.max(left.y1, left.y2));
+    const bottom = across(Math.min(left.y1, left.y2));
+    if (!top || !bottom || top === bottom) continue;
+    for (const r of [left, right, top, bottom]) taken.add(r);
+    out.push({ left, right, top, bottom });
+  }
+  return out;
+}
+
+/** A frame around atoms of the formula (\boxed): the atoms inside are laid
+    out alone, with the rules inside, into one \boxed node; its four rules
+    are read (parse loop finding: the probability cheatsheet boxes each
+    worked answer, "= \boxed{n\sum_{j=1}^{n}\frac{1}{j}}", and the frame's
+    rules, unread, failed its displays to crops). */
+function framed(atoms: Atom[], rules: Rule[]): Atom[] {
+  if (atoms.length === 0) return atoms;
+  const em = maxSize(atoms);
+  let out = atoms;
+  for (const f of framesOf(rules.filter((r) => !read.has(r)), 0.15 * em)) {
+    const x1 = f.left.x1;
+    const x2 = f.right.x1;
+    const y1 = Math.min(f.left.y1, f.left.y2);
+    const y2 = Math.max(f.left.y1, f.left.y2);
+    const inside = out.filter((a) => cx(a) > x1 && cx(a) < x2 && a.yb > y1 && a.yb < y2);
+    if (inside.length === 0) continue;
+    const frame = [f.left, f.right, f.top, f.bottom];
+    const inner = rules.filter((r) => !frame.includes(r) && !read.has(r) && r.dir === "h" && r.x1 > x1 && r.x2 < x2 && r.y1 > y1 && r.y1 < y2);
+    for (const r of frame) read.add(r);
+    const built = structure(inside, inner, 1);
+    out = [...out.filter((a) => !inside.includes(a)), node(inside, `\\boxed{${linear(built)}}`, mainBaseline(built), maxSize(inside), { x1, x2, top: y2, bottom: y1 })];
+  }
+  return out;
+}
+
 /** A formula's LaTeX from its glyphs and the shapes drawn with them (rules,
     and paths), the atoms the check compares against (pieces joined,
     composites fused), and the paths it read. */
@@ -1678,7 +1988,10 @@ export function formulaToLatex(
   // arrow would otherwise fuse into \longrightarrow.
   const fused = fuseComposites(arrowRuns(assemblePieces([...atoms, ...radicals, ...drawn.atoms], all)));
   const copies = ruledArray(
-    fused.map((a) => ({ ...a })),
+    framed(
+      fused.map((a) => ({ ...a })),
+      all,
+    ),
     all,
   );
   const bars = all.filter((r) => r.dir === "h");

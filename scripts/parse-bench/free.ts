@@ -12,7 +12,7 @@ import type { LayoutScores } from "./layout";
 import { inkBands, type PagePaint } from "./paint";
 import { ROOT } from "./load";
 import { mathLeaves } from "./math";
-import { FREE_WEIGHTS, furnitureMatches, type Flat } from "./metrics";
+import { FREE_WEIGHTS, furnitureMatches, type Flat, type MathItem } from "./metrics";
 import { garblesOf, normText, PAGE_NUMBER_RE, pageNumberOf, wordsOf } from "./text";
 
 // Checks that need no reference: the PDF's own text (pdftotext) against the
@@ -60,7 +60,7 @@ const lettersOf = (text: string) => readingOf(text).letters;
 /** A caption's label opening a line ("図表Ⅰ-2-1-3", "Figure 4", "TABLE II"):
     a report sets every chart's caption at one height, so the label repeats
     with its number changed, but it is the figure's, never the page's. */
-const CAPTION_LABEL_RE = /^\s*(?:図表|図|表|fig(?:ure)?\.?|table)\s*[\dⅠ-Ⅻivxlc]/iu;
+const CAPTION_LABEL_RE = /^\s*(?:図表|図|表|fig(?:ure)?\.?|table|abbildung|abb\.|tabelle)\s*[\dⅠ-Ⅻivxlc]/iu;
 const CJK_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
 /** A line's length in words, a CJK character a quarter word (wordsOf makes
     each a word, so a chart's label "インターネット利用率" read as ten words). */
@@ -278,7 +278,8 @@ export function furnitureOf(lines: Line[], sizes: Sizes): Line[] {
   // stands apart from the page numbers' height); a lone number at that
   // distance in a page's first or last row (a paper sets its first page's
   // number at the foot, the others' in the head); a lone number in the
-  // page's outer 8%. Roman numbers count apart from arabic ones.
+  // page's outer 8% (no lone letter). Roman numbers count apart from
+  // arabic ones.
   const numbered = candidates.flatMap((l) => {
     const n = pageNumberOf(l.text);
     const roman = !/\d/.test(l.text);
@@ -291,7 +292,10 @@ export function furnitureOf(lines: Line[], sizes: Sizes): Line[] {
   }
   const offsets = new Set(numbered.filter((n) => furniture.has(n.line)).map((n) => n.offset));
   for (const { line, offset } of numbered) if (offsets.has(offset) && outermost.has(line)) furniture.add(line);
-  for (const l of candidates) if (outer(l) && PAGE_NUMBER_RE.test(l.text.trim())) furniture.add(l);
+  // A lone letter (i, v, x) is a page number only by its distance from the
+  // page's index: alone it is a formula's limit or label more often (the
+  // probability cheatsheet's ∑ₓ at two pages' feet).
+  for (const l of candidates) if (outer(l) && PAGE_NUMBER_RE.test(l.text.trim()) && !/^[ivxIVX]$/.test(l.text.trim())) furniture.add(l);
 
   // Repeats: a line or a whole row of three letters or more (a diagram's
   // label "o3" tops pages too). A row, since pdftotext cuts a head at its
@@ -521,12 +525,18 @@ function leaksOf(pdf: PdfText, furniture: Line[], cand: Flat): Leaks {
   const strings = [...new Set(furniture.map((f) => f.text.trim()))].filter((f) => wordsOf(f).length > 0);
   const words = strings.map((f) => wordsOf(f).map((w) => w.w));
   const inLine = (run: string[]) => own.some((line) => holds(line, run));
+  // A word only pdftotext cannot read stands beside a string the page's
+  // own line holds: the line reads short (parse loop finding: a Japanese
+  // book's list item "• 6 章 固有値と固有ベクトル" read "6" alone in
+  // pdftotext, and the item's number counted as page 6's number).
+  const read = new Set(own.flat());
+  const unread = new Set((pdf.blind ?? []).flatMap((b) => wordsOf(b.text).map((w) => w.w)).filter((w) => !read.has(w)));
   const beside = (m: { unit: number; tok: number }, x: number) => {
     const unit = cand.units[m.unit];
     const k = words[x].length;
     const before = m.tok > unit.first ? cand.toks[m.tok - 1].w : null;
     const after = m.tok + k < unit.end ? cand.toks[m.tok + k].w : null;
-    return (before !== null && inLine([before, ...words[x]])) || (after !== null && inLine([...words[x], after]));
+    return (before !== null && (inLine([before, ...words[x]]) || unread.has(before))) || (after !== null && (inLine([...words[x], after]) || unread.has(after)));
   };
   const atEdges = furnitureMatches(cand, words, false, false);
   // A heading made of running heads alone is the section's own title, which
@@ -854,6 +864,9 @@ function countWords(texts: string[]): Map<string, number> {
   return out;
 }
 
+/** A formula's text command and its words: "\text{ und }". */
+const TEXT_RE = /\\(?:text|textup|textrm|textit|textbf|mbox)\s*\{([^{}]*)\}/g;
+
 /** The words the candidate prints, as the PDF's text layer holds them: its
     words and its list markers ("1.1", "(a)"). Its formulas apart, as the
     glyphs they draw (a parse's readable characters, else the glyphs KaTeX
@@ -861,7 +874,10 @@ function countWords(texts: string[]): Map<string, number> {
     spacing ("2", "k1", "t" where the formula reads "2k1t"), so the formulas'
     glyphs cover the PDF's short words, as the reference metrics let a
     reference's math do, and are never extra words. */
-function printedWords(cand: Flat, contents: boolean): { words: string[]; glyphs: Map<string, number>; raised: { joined: string; parts: string[] }[] } {
+function printedWords(
+  cand: Flat,
+  contents: boolean,
+): { words: string[]; glyphs: Map<string, number>; raised: { joined: string; parts: string[] }[]; tight: { joined: string; parts: string[]; formula: string }[]; texted: string[] } {
   const kept = (b: number) => contents || cand.blocks[b].role !== "contents";
   const toks = cand.toks.filter((t) => kept(cand.units[t.unit].block));
   const words = toks.map((t) => t.w);
@@ -879,11 +895,37 @@ function printedWords(cand: Flat, contents: boolean): { words: string[]; glyphs:
     if (block.kind === "list" && kept(b)) for (const item of block.items) words.push(...wordsOf(item.marker).map((w) => w.w));
   });
   const glyphs = new Map<string, number>();
+  const readings = new Map<MathItem, string>();
+  const texted: string[] = [];
   for (const m of cand.math) {
-    const reading = m.text?.trim() ? m.text : m.latex !== undefined || m.mathml !== undefined ? mathLeaves(m, m.display).join(" ") : "";
+    // A formula's \text words are words the page prints ("\text{ und }", a
+    // display's German "\text{ ist offen in }"): they cover the text layer's
+    // words as a paragraph's words do, not as glyphs. parse loop finding:
+    // GeoTopo's displays that keep their words lowered coverage recall.
+    let latex = m.latex;
+    if (latex !== undefined && !m.text?.trim()) {
+      latex = latex.replace(TEXT_RE, (_, inner: string) => {
+        if (kept(m.block)) texted.push(...wordsOf(inner).map((w) => w.w));
+        return " ";
+      });
+    }
+    const reading = m.text?.trim() ? m.text : latex !== undefined || m.mathml !== undefined ? mathLeaves({ ...m, latex }, m.display).join(" ") : "";
+    readings.set(m, reading);
     for (const w of wordsOf(`${reading} ${m.label ?? ""}`)) for (const ch of w.w) glyphs.set(ch, (glyphs.get(ch) ?? 0) + 1);
   }
-  return { words, glyphs, raised };
+  // A word set tight after a formula ("$n$th", "$k$th"): the text layer reads
+  // the formula's glyphs and the word as one word ("nth"). parse loop
+  // finding: thinkdsp's "the nth row" scored "nth" missing and "th" extra.
+  const tight: { joined: string; parts: string[]; formula: string }[] = [];
+  for (const m of cand.math) {
+    if (m.display || m.to === undefined || !kept(m.block)) continue;
+    const t = toks.find((x) => x.unit === m.unit && x.start === m.to);
+    const formula = wordsOf(readings.get(m) ?? "").map((w) => w.w).join("");
+    const joined = t && formula ? wordsOf(formula + t.w)[0]?.w : undefined;
+    if (t && joined && [...formula].length <= 4) tight.push({ joined, parts: [t.w], formula });
+  }
+  words.push(...texted);
+  return { words, glyphs, raised, tight, texted };
 }
 
 /** The reference-free checks: text coverage against pdftotext (every word of
@@ -914,7 +956,7 @@ export function mathPart(glyphs: Pick<GlyphScores, "checked" | "passed" | "mathI
 }
 
 export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word = false, look: LookScores | null = null, layout: LayoutScores | null = null): FreeScores {
-  const { words: printed, glyphs: formulaGlyphs, raised } = printedWords(cand, !word);
+  const { words: printed, glyphs: formulaGlyphs, raised, tight, texted } = printedWords(cand, !word);
   const candBag = countWords([]);
   for (const w of printed) candBag.set(w, (candBag.get(w) ?? 0) + 1);
   const expected = new Map<string, number>();
@@ -985,6 +1027,39 @@ export function freeScores(pdf: PdfText, cand: Flat, glyphs?: GlyphScores, word 
     if (!short || !parts.every((w) => (expected.get(w) ?? 0) > (candBag.get(w) ?? 0))) continue;
     candBag.set(joined, (candBag.get(joined) ?? 0) - 1);
     for (const w of parts) candBag.set(w, (candBag.get(w) ?? 0) + 1);
+  }
+  // A word set tight after a formula counts as the text layer reads it: the
+  // formula's glyphs and the word as one word.
+  for (const { joined, parts, formula } of tight) {
+    const short = (expected.get(joined) ?? 0) > (candBag.get(joined) ?? 0);
+    const extra = parts.every((w) => (candBag.get(w) ?? 0) > (expected.get(w) ?? 0));
+    const chars = countWords([]);
+    for (const ch of formula) chars.set(ch, (chars.get(ch) ?? 0) + 1);
+    if (!short || !extra || ![...chars].every(([ch, c]) => (formulaGlyphs.get(ch) ?? 0) >= c)) continue;
+    for (const [ch, c] of chars) formulaGlyphs.set(ch, (formulaGlyphs.get(ch) ?? 0) - c);
+    for (const w of parts) candBag.set(w, (candBag.get(w) ?? 0) - 1);
+    candBag.set(joined, (candBag.get(joined) ?? 0) + 1);
+  }
+  // A formula's \text word set tight to its glyphs (𝔗 and its subscript
+  // "Euklid"): the text layer reads the glyphs and the word as one word
+  // ("TEuklid"), as it reads a word set tight after a formula.
+  for (const w of texted) {
+    if ((candBag.get(w) ?? 0) <= (expected.get(w) ?? 0)) continue;
+    // A glyph with its accent (ā) counts as its letter: the formula reads the accent apart.
+    const glyphsOf = (x: string) => [...(x.endsWith(w) ? x.slice(0, -w.length) : x.slice(w.length)).normalize("NFD").replace(/\p{M}/gu, "")];
+    const fits = (x: string) => {
+      const rest = glyphsOf(x);
+      const chars = countWords([]);
+      for (const ch of rest) chars.set(ch, (chars.get(ch) ?? 0) + 1);
+      return rest.length <= 4 && [...chars].every(([ch, c]) => (formulaGlyphs.get(ch) ?? 0) >= c);
+    };
+    const joined = [...expected.keys()].find(
+      (x) => x !== w && (x.endsWith(w) || x.startsWith(w)) && (expected.get(x) ?? 0) > (candBag.get(x) ?? 0) && fits(x),
+    );
+    if (!joined) continue;
+    for (const ch of glyphsOf(joined)) formulaGlyphs.set(ch, (formulaGlyphs.get(ch) ?? 0) - 1);
+    candBag.set(w, (candBag.get(w) ?? 0) - 1);
+    candBag.set(joined, (candBag.get(joined) ?? 0) + 1);
   }
   // The candidate's word count, a split mark counted apart.
   const printedCount = [...candBag.values()].reduce((a, n) => a + n, 0);

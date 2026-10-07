@@ -267,9 +267,14 @@ function crossesBack(prev: Item, next: Item): boolean {
 // A cell boundary: a wide gap, or an em between two numbers — number
 // columns sit closer than the word gap rule allows (a table of Brier
 // scores read as one cell per row: import compare loop finding).
-function opensCell(prev: Item, item: Item, size: number): boolean {
+// A number that opens CJK words set on with it is a word of them, no
+// number of a column (parse loop finding: the Japanese heading "2  2 つの
+// ベクトルの積", its section number a quad from "2 つ", read as two cells
+// and lost its heading).
+function opensCell(prev: Item, item: Item, size: number, next?: Item): boolean {
   const gap = item.x - (prev.x + prev.w);
-  const numeric = NUMERIC_TOKEN_RE.test(prev.str.trim()) && NUMERIC_TOKEN_RE.test(item.str.trim());
+  const words = next !== undefined && CJK_START_RE.test(next.str.trimStart()) && next.x - (item.x + item.w) < size * 0.5;
+  const numeric = NUMERIC_TOKEN_RE.test(prev.str.trim()) && NUMERIC_TOKEN_RE.test(item.str.trim()) && !words;
   return gap > Math.max(8, size * 1.6) || (numeric && gap > size * 1.0);
 }
 
@@ -318,7 +323,7 @@ function buildLine(rawItems: Item[], page: number): Line {
   let from = 0;
   const cellStarts: number[] = [];
   for (let k = 1; k <= merged.length; k++) {
-    if (k < merged.length && !opensCell(merged[k - 1], merged[k], size)) continue;
+    if (k < merged.length && !opensCell(merged[k - 1], merged[k], size, merged[k + 1])) continue;
     markShifts(merged.slice(from, k));
     cellStarts.push(from);
     from = k;
@@ -328,13 +333,13 @@ function buildLine(rawItems: Item[], page: number): Line {
   const cells: Cell[] = [];
   let prevEnd: number | null = null;
   let prevItem: Item | null = null;
-  for (const item of items) {
+  for (const [n, item] of items.entries()) {
     const gap = prevEnd === null ? 0 : item.x - prevEnd;
     // An end-of-proof mark set flush right closes the line's text, not a cell
     // of its own (read by its code, □ turned "as claimed." and a running
     // head into a table).
     const proofEnd = item === items[items.length - 1] && QED_RE.test(item.str.trim());
-    const wide = prevItem !== null && !proofEnd && opensCell(prevItem, item, size);
+    const wide = prevItem !== null && !proofEnd && opensCell(prevItem, item, size, items[n + 1]);
     const least = prevItem !== null ? spaceGap(prevItem, item, size) : size * 0.12;
     const crossed = prevItem !== null && crossesBack(prevItem, item);
     prevItem = item;

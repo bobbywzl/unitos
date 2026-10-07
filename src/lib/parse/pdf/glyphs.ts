@@ -4,10 +4,14 @@
 // math, the TeX math family).
 
 import type { Glyph } from "@/lib/parse/pdf/drawing";
-import { isBbm, mathGlyph, openTypeGlyphs, sizeFontGlyph } from "@/lib/parse/pdf/math-fonts";
+import { extensionGlyph, isBbm, mathGlyph, openTypeGlyphs, openTypeSizedByAdvance, sizeFontGlyph } from "@/lib/parse/pdf/math-fonts";
 import type { Flags } from "@/lib/parse/pdf/types";
 
-export const CONTROL_CHARS_RE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g;
+// Control characters, C0 and C1 and DEL, are no text: a glyph whose code
+// maps to one draws a shape no text names (parse loop finding: GeoTopo's
+// xy-pic arrow tips, XYATIP's codes read as DEL, left "\x7f\x7f" in a
+// diagram's words).
+export const CONTROL_CHARS_RE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/g;
 // Some generators map common CJK glyphs to the Kangxi Radicals and CJK
 // Radicals Supplement blocks (⼴州 for 广州): the glyph looks right and a
 // search for the word finds nothing. NFKC folds the Kangxi block; the
@@ -257,12 +261,19 @@ type UnicodeFont =
 // OpenSymbol also draws a list's bullets and dashes: those are no math.
 // MathTime's extension font (MTEX) numbers its glyphs anew in each PDF
 // (Springer's ∑ at 0x08): each is a big operator, a sized delimiter, or a
-// piece, and stays unread. So does each glyph of MathDesign's symbol fonts
-// A and B, whose layouts the tables lack, but for font A's capitals at
-// their own codes, which are \mathbb's: the text layer reads them as "O"
-// and "R" (arXiv 2506.06352's u: 𝕆 → ℝ).
+// piece, read by its character and its advance as TeX's extension font's
+// (math-fonts.ts extensionGlyph; parse loop finding: every Springer display
+// with one was a crop). Each glyph of MathDesign's symbol fonts A and B,
+// whose layouts the tables lack, stays unread, but for font A's capitals
+// at their own codes, which are \mathbb's: the text layer reads them as
+// "O" and "R" (arXiv 2506.06352's u: 𝕆 → ℝ). So are the capitals of
+// doublestroke's fonts (\mathds: dsrom10, dsss10) and bbold's (parse loop
+// finding: the MML book's every ℝ read as \mathrm{R}).
+// mathpazo's PazoMath fonts (Palatino's Greek, ∑, ∏, ∞, ∝) read so too: a
+// thesis set in Palatino lost every Greek letter and every ∑ of its
+// formulas, and each display with one was a crop (parse loop finding).
 const UNICODE_TEX_RE =
-  /^(STIXGeneral|STIXNonUnicode|STIXVariants|LibertineMath|NewTXB?MI|txmia|txsy|MTMI|MTSY|RMTMI|MTEX|MnSymbol|EURM|OpenSymbol|MathDesign-.+-MathDesignSymbol[AB]-)/;
+  /^(STIXGeneral|STIXNonUnicode|STIXVariants|LibertineMath|NewTXB?MI|txmia|txsy|MTMI|MTSY|RMTMI|MTEX|MnSymbol|EURM|OpenSymbol|MathDesign-.+-MathDesignSymbol[AB]-|dsrom\d|dsss\d|bbold\d|PazoMath(-Italic)?$)/;
 const ITALIC_MATH_RE = /Italic|MI(B|\d)*$|txmia|MathMI|^EURM/;
 // STIX's first fonts set a formula's sized delimiters, big operators, and
 // the pieces of tall delimiters in five size fonts: each glyph reads by the
@@ -291,7 +302,7 @@ function unicodeFont(base: string): UnicodeFont {
                 italic: ITALIC_MATH_RE.test(base),
                 bullets: /^OpenSymbol/.test(base),
                 unread: /^MTEX|MathDesignSymbol/.test(base),
-                blackboard: /MathDesignSymbolA/.test(base),
+                blackboard: /MathDesignSymbolA|^dsrom|^dsss|^bbold/.test(base),
               }
             : null;
     fontKinds.set(base, kind);
@@ -339,6 +350,10 @@ const SAME: Record<string, [MathFamily, number]> = {
   "˙": ["ot1", 0x5f], "¨": ["ot1", 0x7f], "´": ["ot1", 0x13], "ˊ": ["ot1", 0x13], "`": ["ot1", 0x12], "ˋ": ["ot1", 0x12],
   "˘": ["ot1", 0x15], "ˇ": ["ot1", 0x14], "˚": ["ot1", 0x17], "": ["oms", 0x36], "/": ["oml", 0x3d],
   "⋅": ["oms", 0x01], "∘": ["oms", 0x0e], "∙": ["oms", 0x0f], "∣": ["oms", 0x6a], "∖": ["oms", 0x6e],
+  // MathTime's symbol font maps its angle brackets to the CJK ones and its
+  // \| to the double vertical line (parse loop finding: Springer's ⟨…⟩
+  // and ‖…‖ read as no symbol, and every formula with one failed).
+  "〈": ["oms", 0x68], "〉": ["oms", 0x69], "‖": ["oms", 0x6b],
 };
 
 // Unicode's mathematical alphanumerics (U+1D400…): the first code of each
@@ -409,7 +424,10 @@ function texWorldChar(char: string, italic: boolean, bullets: boolean): Tex | nu
   // The micro sign is μ.
   const c = char.normalize("NFKC");
   const letter = /^([A-Za-z]|\p{Script=Greek})$/u.test(c);
-  const tex = (italic && letter ? texOf(c, ["oml"]) : null) ?? openTypeChar(c);
+  // A spacing accent reads by its own character: NFKC makes "¯" a space
+  // and a combining macron, which no table holds (parse loop finding:
+  // MathTime's \bar and \tilde, Springer's ā and ã, read as no symbol).
+  const tex = (italic && letter ? texOf(c, ["oml"]) : null) ?? openTypeChar(c) ?? openTypeChar(char);
   return tex?.family === "omx" ? null : tex;
 }
 
@@ -538,6 +556,58 @@ export const isBoldFont = (base: string) => fontLook(base).bold;
     draws it otherwise, and its alphabet), and each glyph of a TeX text font
     under another name the family of CMR's (texTextFonts). A glyph no table
     knows keeps no family: a formula it is in fails the check. */
+// cmex10's radicals by size (0x70–0x73): each hangs from its origin, as
+// deep as the table says.
+const RADICAL_DEPTHS = [1.16, 1.76, 2.36, 2.96];
+
+/** A radical of an extension font that numbers its glyphs anew (MTEX):
+    its sizes share one advance, so the radicand sets the size, as TeX
+    chose it: the smallest radical as deep as the radicand. The radicand
+    is the glyphs right after the sign under its origin, read down from
+    the one nearest the bar while each stands within three quarters of an
+    em under the last and is no larger than the first (a fraction's
+    parts; the next row of a display is set larger than a script-size
+    radicand, or farther down). Parse loop finding: Springer's
+    √(k₂/D_A) in MathTime read as no symbol, and each display with one
+    was a crop. */
+function radicalBySpan(g: Glyph, glyphs: Glyph[]): { family: MathFamily; code: number } {
+  const em = g.size;
+  const start = g.x + g.w;
+  const under = glyphs
+    .filter((h) => h !== g && h.unicode.trim() !== "" && h.x >= start - 0.1 * em && h.x <= start + 1.5 * em && h.y < g.y && g.y - h.y < 3.5 * em)
+    .sort((p, q) => q.y - p.y);
+  const top = (h: Glyph) => h.y + 0.7 * h.size;
+  const bottom = (h: Glyph) => h.y - 0.25 * h.size;
+  let low = g.y;
+  const first = under[0];
+  if (first && top(first) >= g.y - em) {
+    low = bottom(first);
+    for (const h of under.slice(1)) {
+      if (h.size > first.size * 1.15 || top(h) < low - 0.75 * em) break;
+      low = Math.min(low, bottom(h));
+    }
+  }
+  const depth = (g.y - low) / em;
+  const size = RADICAL_DEPTHS.findIndex((d) => d >= depth - 0.05);
+  return { family: "omx", code: 0x70 + (size < 0 ? 3 : size) };
+}
+
+/** PazoMath's ∑ and ∏ stand on the baseline as a text glyph does (its ∑
+    0.78 em over it and 0.13 em under it, as the page draws it), where
+    cmex10's hang from their origin. mathpazo sets a display's operator
+    from the same glyph scaled 1.4 times: one set larger than the glyphs
+    beside it on its baseline is the display form. Read with its own box,
+    its limits stand over and under it (a thesis's ∑ᵢ₌₁ⁿ read its limits
+    into the lines around the display, and the display was a crop). */
+const PAZO_OPERATORS: Record<string, number> = { "∑": 0x50, "∏": 0x51 };
+function pazoOperator(g: Glyph, glyphs: Glyph[]): Tex | null {
+  const code = /^PazoMath$/.test(g.base) ? PAZO_OPERATORS[g.unicode] : undefined;
+  if (code === undefined) return null;
+  const beside = glyphs.filter((h) => h !== g && h.unicode.trim() !== "" && Math.abs(h.y - g.y) < g.size * 0.1 && h.x >= g.x + g.w * 0.5 && h.x < g.x + g.w + g.size * 1.5);
+  const display = beside.length > 0 && Math.max(...beside.map((h) => h.size)) < g.size / 1.25;
+  return { family: "omx", code: display ? code + 8 : code, box: [0.78, 0.13] };
+}
+
 export function unicodeMath(glyphs: Glyph[]): Glyph[] {
   texTextFonts(glyphs);
   bbmLetters(glyphs);
@@ -560,11 +630,20 @@ export function unicodeMath(glyphs: Glyph[]): Glyph[] {
       // wide.
       const delta = /^RMTMI/.test(g.base) && g.code === 0x31 && g.w > g.size * 0.65;
       if (delta) g.unicode = "Δ";
-      tex = font.blackboard && g.code >= 0x41 && g.code <= 0x5a ? { family: "msb", code: g.code } : font.unread ? null : texWorldChar(g.unicode, font.italic && !delta, font.bullets);
+      tex =
+        font.blackboard && g.code >= 0x41 && g.code <= 0x5a
+          ? { family: "msb", code: g.code }
+          : font.unread
+            ? /^MTEX/.test(g.base)
+              ? g.unicode === "√"
+                ? radicalBySpan(g, glyphs)
+                : extensionGlyph(g.unicode, g.w / g.size)
+              : null
+            : (pazoOperator(g, glyphs) ?? texWorldChar(g.unicode, font.italic && !delta, font.bullets));
     }
     else {
       tex = openTypeSized(g, font.name);
-      if (tex === undefined) tex = openTypeChar(g.unicode);
+      if (tex === undefined) tex = openTypeSizedByAdvance(g.unicode, g.w / g.size) ?? openTypeChar(g.unicode);
     }
     if (!tex) continue;
     g.family = tex.family;
@@ -587,7 +666,8 @@ export function unicodeMath(glyphs: Glyph[]): Glyph[] {
   const digits = glyphs.some((g) => g.family !== null && /^[0-9]$/.test(g.unicode));
   for (const g of glyphs) {
     if (g.family !== null) continue;
-    if ((!latin && /^[A-Za-z]$/.test(g.unicode) && isItalicFont(g.base)) || (!digits && /^[0-9]$/.test(g.unicode))) textMath.add(g);
+    // So is its slash: "p = 1/n" read "p = 1" and the words "/n".
+    if ((!latin && /^[A-Za-z]$/.test(g.unicode) && isItalicFont(g.base)) || (!digits && /^[0-9/]$/.test(g.unicode))) textMath.add(g);
   }
   return glyphs;
 }
@@ -683,14 +763,75 @@ function arrowOf(pieces: ArrowPiece[]): string | null {
 // column's edge. The glyphs keep their own boxes: the layout reads the
 // parts by their overlap.
 const compositeEnd = new WeakMap<Glyph, number>();
+// Where a long arrow drawn in pieces ends, by the glyph it sits on.
+const arrowEnd = new WeakMap<Glyph, number>();
+
+/** The end of the long arrow (⟹, ⟶, ↪) glyphTexts fused onto g, its
+    leftmost piece; undefined when g starts none. */
+export function longArrowEnd(g: Glyph): number | undefined {
+  return arrowEnd.get(g);
+}
+
+// A font subset that names each glyph by its id in the whole font ("g131")
+// and carries no Unicode map: the text layer reads its codes as control
+// characters and stray letters. Word's PDFs set Cambria so (parse loop
+// finding: a review in Cambria read 24% of its words). Cambria's ids, the
+// same in its regular, bold, and italic faces: capitals from 4, small
+// letters from 131, figures from 882, and the punctuation Word's text
+// uses. An id the table lacks reads as the text layer reads it.
+const CAMBRIA_IDS: Record<number, string> = {
+  3: " ",
+  428: "&",
+  481: ",",
+  482: ";",
+  483: ":",
+  484: ".",
+  486: "-",
+  491: "?",
+  495: "’",
+  498: "“",
+  499: "”",
+  512: "/",
+  514: "–",
+  523: "(",
+  524: ")",
+  820: "_",
+  821: "'",
+  938: "+",
+  945: "=",
+};
+for (let k = 0; k < 26; k++) {
+  CAMBRIA_IDS[4 + k] = String.fromCharCode(65 + k);
+  CAMBRIA_IDS[131 + k] = String.fromCharCode(97 + k);
+}
+for (let k = 0; k < 10; k++) CAMBRIA_IDS[882 + k] = String.fromCharCode(48 + k);
+const CAMBRIA_RE = /^Cambria(?:-(?:Bold|Italic|BoldItalic))?$/;
+
+/** What each code of a font that names its glyphs by id draws, from the
+    font's encoding (its glyph name for each code); null for any other
+    font. */
+export function namedGlyphs(base: string, names: ArrayLike<string | null | undefined> | undefined): Map<number, string> | null {
+  if (!names || !CAMBRIA_RE.test(base)) return null;
+  const out = new Map<number, string>();
+  for (let code = 0; code < names.length; code++) {
+    const m = /^g(\d+)$/.exec(names[code] ?? "");
+    const text = m ? CAMBRIA_IDS[Number(m[1])] : undefined;
+    if (text !== undefined) out.set(code, text);
+  }
+  return out.size > 0 ? out : null;
+}
 
 // The text of the page's glyphs where it is not the text layer's: every glyph
 // of a math family, and the glyphs of a composite or an accented letter. A
 // glyph that reads as nothing (a composite's second glyph, a placed accent)
-// maps to "".
+// maps to "". A glyph read by its name (namedGlyphs) reads as it.
 export function glyphTexts(glyphs: Glyph[]): Map<Glyph, string> {
   const texts = new Map<Glyph, string>();
   for (const g of glyphs) {
+    if (g.named) {
+      texts.set(g, g.unicode);
+      continue;
+    }
     if (g.family === null || g.family === "ot1") continue;
     const entry = mathGlyph(g.family, g.code);
     // A font read by its character reads as its text layer does: the
@@ -817,6 +958,7 @@ export function glyphTexts(glyphs: Glyph[]): Map<Glyph, string> {
       if (arrow) {
         const first = run.reduce((l, g) => (g.x < l.x - 0.01 ? g : l));
         fuse(first, arrow, run.filter((g) => g !== first));
+        arrowEnd.set(first, compositeEnd.get(first)!);
       }
     }
   }
@@ -861,9 +1003,17 @@ export function itemText(glyphs: Glyph[], texts: Map<Glyph, string>): { str: str
       "",
     );
     g.text = text;
+    // A space read by its name and the gap around it are one space (Word
+    // justifies a line by the gaps beside its spaces).
+    if (g.named && text.trim() === "") {
+      g.text = str === "" || str.endsWith(" ") ? "" : " ";
+      str += g.text;
+      prevEnd = g.x + g.w;
+      continue;
+    }
     if (text !== "") {
       if (str === "") x = g.x;
-      else if (prevEnd !== null && g.x - prevEnd >= g.size * 0.102) str += " ";
+      else if (prevEnd !== null && g.x - prevEnd >= g.size * 0.102 && !str.endsWith(" ")) str += " ";
       str += text;
       end = Math.max(end, compositeEnd.get(g) ?? g.x + g.w);
     }
@@ -884,9 +1034,8 @@ export function unreadRuns(glyphs: Glyph[], read: Set<Glyph>, texts: Map<Glyph, 
   let run: Glyph[] = [];
   for (const g of glyphs) {
     const unread =
-      g.family !== null &&
-      g.family !== "ot1" &&
-      ((g.family !== "omx" && g.family !== "esint") || g.unicode.trim() === "") &&
+      ((g.named === true && g.unicode.trim() !== "") ||
+        (g.family !== null && g.family !== "ot1" && ((g.family !== "omx" && g.family !== "esint") || g.unicode.trim() === ""))) &&
       !read.has(g) &&
       (texts.get(g) ?? "") !== "";
     const last = run[run.length - 1];

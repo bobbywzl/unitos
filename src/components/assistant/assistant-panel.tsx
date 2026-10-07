@@ -65,6 +65,7 @@ import { SaveAsNote } from "@/components/assistant/save-as-note";
 import { splitActionsFence } from "@/lib/assistant/fence";
 import { RatingButtons } from "@/components/rating-buttons";
 import { LoadingDots, ThinkingIndicator } from "@/components/thinking";
+import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 
 type Scope = "document" | "notebook";
 type Task = "contradictions" | "gaps" | "unsourced";
@@ -1372,6 +1373,7 @@ export function AssistantPanel({
             <DriveIcon size={15} />
           </button>
         )}
+        <VoiceTypingButton field={boxRef} track="assistant-voice-typing" className="size-8" size={15} />
         {/* While an answer runs the button is Stop, or Queue once a message
             is composed; the thinking row in the thread keeps its own Stop. */}
         <button

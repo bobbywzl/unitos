@@ -322,6 +322,8 @@ export function useNoteCompose({
     cancel,
     escape,
     attachQuote,
+    /** The note the composer owns, once created; null before. */
+    noteId,
     /** The section's notes without the one the composer owns. */
     visibleNotes: noteId ? notes.filter((n) => n.id !== noteId) : notes,
   };

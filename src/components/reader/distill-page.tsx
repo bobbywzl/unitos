@@ -10,6 +10,7 @@ import { ChevronLeftIcon } from "@/components/icons";
 import { useLang, useT } from "@/components/lang-provider";
 import { jumpUnlessSelecting as jump, SelectionNotes } from "@/components/reader/selection-notes";
 import { ThinkingIndicator } from "@/components/thinking";
+import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 
 type DistillQuoteView = DistillationView["quotes"][number];
 
@@ -264,14 +265,17 @@ export function DistillPage({
               />
               <p className="mt-2 text-xs text-sand-500">{t("panes.askHint")}</p>
               {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-              <button
-                type="submit"
-                data-track="distill-page-run"
-                disabled={!question.trim()}
-                className="mt-3 rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
-              >
-                {t("panes.distill")}
-              </button>
+              <div className="mt-3 flex items-center gap-1.5">
+                <button
+                  type="submit"
+                  data-track="distill-page-run"
+                  disabled={!question.trim()}
+                  className="rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+                >
+                  {t("panes.distill")}
+                </button>
+                <VoiceTypingButton track="distill-voice-typing" />
+              </div>
             </form>
 
             {distillations.length > 0 && (

@@ -86,9 +86,11 @@ export type AttachedDocument = {
   // before it replaces the edits. Absent: the server's 409 "edited" asks.
   importEdited?: boolean;
   // The document list's Sort by (SPEC.md §6; lib/document-order.ts): what
-  // the document was made from, and when it was added.
+  // the document was made from, when it was added, and its last edit in
+  // this project (documentEditedAt).
   kind: DocumentKind;
   addedAt: string;
+  editedAt: string;
 };
 type IngestPhase = { fileLabel: string; steps: IngestStep[] };
 // Wire format from /api/documents: a stage event per line, then one terminal line.

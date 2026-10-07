@@ -3534,3 +3534,23 @@ li[data-checked] > .note-box::before {
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
+
+/* Voice typing's microphone button while it listens (components/voice/
+   voice-typing-button.tsx): a red ring that pulses out, as the page
+   editor's microphone box does. */
+.voice-typing-on {
+  animation: voice-typing-pulse 1.4s ease-out infinite;
+}
+@keyframes voice-typing-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgb(239 68 68 / 0.45);
+  }
+  100% {
+    box-shadow: 0 0 0 8px rgb(239 68 68 / 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .voice-typing-on {
+    animation: none;
+  }
+}

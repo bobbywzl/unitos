@@ -72,7 +72,10 @@ const FURNITURE_PAGES = 6;
 
 export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Promise<PdfParse> {
   // pdf.js transfers (detaches) the buffer it receives — parse a copy so callers keep theirs.
-  const pdf = await getDocumentProxy(new Uint8Array(data), PDF_CMAPS);
+  // fontExtraProperties keeps each font's encoding (its glyph names) for the
+  // drawing: a font with no Unicode map reads by its names (glyphs.ts
+  // namedGlyphs).
+  const pdf = await getDocumentProxy(new Uint8Array(data), { ...PDF_CMAPS, fontExtraProperties: true });
   // The chosen pages (chosen[i] is the PDF's number for the parse's page i),
   // and the pages read.
   const chosen = chosenPages(pdf.numPages, opts.pages);
@@ -105,8 +108,8 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
       const ops = (await page.getOperatorList()) as { fnArray: number[]; argsArray: unknown[] };
       const fonts: FontLookup = (id) => {
         try {
-          const font = page.commonObjs.get(id) as { name?: string; fontMatrix?: number[]; vertical?: boolean } | null;
-          return font ? { name: font.name ?? "", fontMatrix: font.fontMatrix, vertical: font.vertical } : null;
+          const font = page.commonObjs.get(id) as { name?: string; fontMatrix?: number[]; vertical?: boolean; differences?: (string | null)[] } | null;
+          return font ? { name: font.name ?? "", fontMatrix: font.fontMatrix, vertical: font.vertical, differences: font.differences } : null;
         } catch {
           return null;
         }
@@ -258,9 +261,11 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
     // space: ⊖ ⊘ ⊙ in a CMSY font with no Unicode map, a \big⟨) become items
     // of their own, on the baseline they stand on.
     const [viewX1, viewY1, viewX2, viewY2] = page.view;
-    // The math glyphs items read (unreadRuns asks only of those).
+    // The math glyphs items read, and the glyphs read by name (unreadRuns
+    // asks only of those): the text layer drops a named glyph whose code it
+    // takes for a space (Cambria's "o" at code 9, a tab).
     const read = new Set<Glyph>();
-    for (const run of glyphRuns) for (const g of run ?? []) if (g.family !== null && g.family !== "ot1") read.add(g);
+    for (const run of glyphRuns) for (const g of run ?? []) if ((g.family !== null && g.family !== "ot1") || g.named) read.add(g);
     for (const run of unreadRuns(drawing.glyphs, read, glyphText)) {
       const first = run[0];
       if (run.every((g) => g.hidden)) continue;
@@ -811,6 +816,7 @@ type TitleClues = { page: number; running: Set<string>; words?: Map<string, numb
 // than the body, a centered heading that opens the first page is the title:
 // amsart sets its title in bold capitals at the body's size (arXiv
 // 2506.08494, 2410.04586), and a Word contract in bold centered lines.
+const SECTION_NUMBER_RE = /^\d{1,2}(?:\.\d{1,2})*\.?\s+[\p{Lu}\p{Lo}\p{N}]/u;
 function titleOf(segments: Segment[], bodySize: number, clues: TitleClues, pages = 1): Segment | undefined {
   const onPages = (s: Segment) => s.page >= clues.page && s.page < clues.page + pages;
   // Most of a title's letters are set large: the W-9's form number, "W-9"
@@ -838,8 +844,14 @@ function titleOf(segments: Segment[], bodySize: number, clues: TitleClues, pages
     for (const w of words) own.set(w, (own.get(w) ?? 0) + 1);
     return words.filter((w) => (clues.words!.get(w) ?? 0) > own.get(w)!).length * 2 >= words.length;
   };
+  // parse loop finding: a page that opens with its first section ("1 A
+  // small example", a LaTeX article with no \maketitle) has no title: a
+  // numbered heading set flush left under half again the body's size is a
+  // section's. A title set off with a number ("10 Simple Rules for …") is
+  // set larger, or centered.
+  const section = (s: Segment) => s.align !== "center" && s.rawSize! < bodySize * 1.5 && SECTION_NUMBER_RE.test(s.text);
   let heads = segments.filter(
-    (s) => onPages(s) && s.type === "HEADING" && s.rawSize !== undefined && s.rawSize >= bodySize * 1.14 && s.text.length > 4 && large(s) && wordy(s) && known(s),
+    (s) => onPages(s) && s.type === "HEADING" && s.rawSize !== undefined && s.rawSize >= bodySize * 1.14 && s.text.length > 4 && large(s) && wordy(s) && known(s) && !section(s),
   );
   if (heads.length === 0 && pages === 1) {
     const at = segments.findIndex((s) => s.page === clues.page && s.text.trim().length > 0);

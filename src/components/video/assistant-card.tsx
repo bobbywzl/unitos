@@ -18,6 +18,7 @@ import { StopPill, ThinkingIndicator } from "@/components/thinking";
 import { runFormalize } from "@/lib/video/formalize-client";
 import { formatTimeRange, type Region } from "@/lib/video/types";
 import type { AssistantPlan, FormalizedArticle, FormalizeFormat } from "@/lib/types";
+import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 
 // The assistant on the media pane (SPEC.md §11): a chat card under the tool
 // bar, document scope — the model reads the whole timed transcript. Facing
@@ -338,6 +339,7 @@ export function MediaAssistant({
           aria-label={t("video.assistant")}
           className="min-w-0 flex-1 rounded-full bg-sand-100 px-4 py-2 text-[13px] outline-none placeholder:text-sand-500"
         />
+        <VoiceTypingButton field={inputRef} track="video-assistant-voice-typing" className="size-8" size={14} />
         {/* While an answer runs the button is Stop, or Queue once a message is
             composed (SPEC.md §7). */}
         <button

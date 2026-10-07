@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { attachNoteEditable, type NoteEditable, type StyleCommand } from "@/lib/note-editable";
 import type { Patch } from "@/lib/markdown-style";
@@ -543,6 +544,10 @@ export function NoteEditor({
             />
           </>
         )}
+        <span aria-hidden className="mx-1 h-4 w-px bg-line" />
+        {/* Voice typing (SPEC.md §29, typing): what is said goes in at the
+            body's caret. */}
+        <VoiceTypingButton field={ref} track="note-voice-typing" className="size-6" />
       </div>
       {!full && moreHref && (
         <Link

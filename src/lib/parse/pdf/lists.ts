@@ -12,6 +12,7 @@ import {
   justifiedItems,
   layout,
   leftEdge,
+  lineAlign,
   opensWithLabel,
   proseEdge,
   pushedApart,
@@ -239,7 +240,16 @@ function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[],
     // On a page set justified a wrapped line fills the column: under a line
     // that stopped short, a line with no marker is no wrap of the item (a
     // form's label lines under a checkbox item).
-    if (!stopsShort(lines, j - 1, ctx) && goesOn(item, prev, next, edge, ctx)) {
+    // A line at the item's words goes on with the item, though the line
+    // above stopped short, where that says nothing of the item's end: a
+    // formula set on a line of its own, the line under one, or the line
+    // under the item's lead that ends in a colon (parse loop finding: the
+    // MML book's "▪ Associativity:" over "(λψ)C = λ(ψC), C ∈ ℝ^{m×n}" read
+    // each line as an item of its own, and "Note that this allows us to
+    // move scalar values around." under its item's formula too).
+    // A display the math reader joined stays its own block.
+    const atWords = !next.display && Math.abs(next.x - item.bodyX) <= next.size * 0.3 && (lineMathShare(next) >= 0.5 || lineMathShare(prev) >= 0.5 || /:$/.test(prev.text.trim()));
+    if ((atWords || !stopsShort(lines, j - 1, ctx)) && goesOn(item, prev, next, edge, ctx)) {
       item.lines.push(next);
       j++;
       continue;
@@ -247,6 +257,10 @@ function markedList(lines: Line[], i: number, ctx: PageContext, runOf: number[],
     break;
   }
   if ((first === DRAWN && items.length < 2) || !isList(items, i, ctx)) return null;
+  // A dash before lines set flush right is a signature's, not a bullet:
+  // "– Gilbert Strang" over "Professor of Mathematics at MIT" closing a
+  // foreword, both lines ending at the column's right edge, read as a LIST.
+  if (items.length === 1 && /^[-–—]$/.test(first.text) && lineAlign(lines, i, j, ctx) === "right") return null;
   const { depths, levels } = depthsOf(items, line.size);
   const list = listSegment(items, depths);
   list.listIndents = listIndentsOf(items, depths, levels, listEdge(items, lines, i, j, ctx));
@@ -399,8 +413,9 @@ function listSegment(items: Item[], depths: number[]): Segment {
 // A bullet the page draws as a shape left of a line's first word, about its
 // letters' height, at most `most` ems wide and high (Beamer's and a slide
 // program's bullets never reach the text layer; Beamer paints its balls as
-// shadings): the shape's left edge, or null.
-function drawnBulletAt(line: Line, ctx: PageContext, most = 0.9): number | null {
+// shadings): the shape's left edge, or null. square: the shape's sides
+// within twice each other (a brace KaTeX draws in pieces has slivers).
+export function drawnBulletAt(line: Line, ctx: PageContext, most = 0.9, square = false): number | null {
   const s = line.size;
   const shape = [...ctx.drawing.paths.filter((b) => !b.clip), ...ctx.drawing.fills, ...ctx.drawing.shades].find(
     (b) =>
@@ -411,7 +426,8 @@ function drawnBulletAt(line: Line, ctx: PageContext, most = 0.9): number | null 
       b.y2 - b.y1 >= s * 0.1 &&
       b.y2 - b.y1 <= s * most &&
       b.y1 >= line.y - s * 0.3 &&
-      b.y2 <= line.y + s,
+      b.y2 <= line.y + s &&
+      (!square || (b.x2 - b.x1 <= (b.y2 - b.y1) * 2 && b.y2 - b.y1 <= (b.x2 - b.x1) * 2)),
   );
   return shape ? shape.x1 : null;
 }

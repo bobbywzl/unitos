@@ -12,6 +12,7 @@ import { SparkleIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { ThinkingIndicator } from "@/components/thinking";
+import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 
 // The note's assistant (SPEC.md §6): a panel docked at the bottom of an open
 // note, the way Gemini sits at the bottom of a Google Doc — a sparkle and a
@@ -304,6 +305,7 @@ export function NoteAssistant({
           placeholder={t("assistant.noteAssistantPlaceholder")}
           className="max-h-32 min-h-[34px] flex-1 resize-none bg-transparent py-1.5 text-[13.5px] text-ink outline-none placeholder:text-sand-500 [field-sizing:content]"
         />
+        <VoiceTypingButton field={inputRef} track="note-assistant-voice-typing" className="mb-0.5 size-8" size={15} />
         <button
           type="button"
           onClick={() => void send()}

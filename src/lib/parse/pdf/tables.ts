@@ -7,6 +7,7 @@ import { geom, lineMathShare, median } from "@/lib/parse/pdf/geometry";
 import { sameFlags } from "@/lib/parse/pdf/glyphs";
 import { ATTACH_PUNCT_RE } from "@/lib/parse/pdf/lines";
 import { isGlyphMarker, readMarker } from "@/lib/parse/pdf/markers";
+import { CAPTION_RE } from "@/lib/parse/pdf/figures";
 import { firstPageOf } from "@/lib/parse/pdf/merge";
 import { mathSpans } from "@/lib/parse/pdf/math/zones";
 import { TextBuilder, boldShare, escapeHtml, isMonoLine, joinGroup, lineEndHyphen, spansFromRuns } from "@/lib/parse/pdf/text";
@@ -310,9 +311,9 @@ export function tableSegment(
 }
 
 // A table's caption opens with its label and a mark after the number:
-// "Table 2:", "TABLE 1.", "Table II.", "Table A1 –" ("Table 3 shows …" is
-// a sentence).
-const TABLE_CAPTION_RE = /^(?:table|tab\.)\s*(?:\d+|[A-Z]\d+|[IVXL]+)\s*[.:|–—-]/i;
+// "Table 2:", "TABLE 1.", "Table II.", "Table A1 –", German's "Tabelle
+// 2:" ("Table 3 shows …" is a sentence).
+const TABLE_CAPTION_RE = /^(?:table|tab\.|tabelle)\s*(?:\d+|[A-Z]\d+|[IVXL]+)\s*[.:|–—-]/i;
 
 /** A table's caption joins its table: a paragraph that opens with a
     table's label, right over the table on its first page or right under it
@@ -377,6 +378,16 @@ export function attachTableCaptions(segments: Segment[]): Segment[] {
   join(labeled);
   const pages = new Set([...taken].map((s) => s.page));
   join(segments.flatMap((s, k) => (pages.has(s.page) && isSubCaption(s) ? [k] : [])));
+  // A caption a figure's label opens that no figure took, right under a
+  // table or right over it, is the table's: ACM's style labels a table
+  // "Figure" (parse loop finding: TraceMonkey's "Figure 13. Detailed trace
+  // recording statistics …" read as a paragraph under its table).
+  segments.forEach((s, k) => {
+    if (taken.has(s) || s.type !== "PARAGRAPH" || s.footnote || s.text.length > 1200 || !CAPTION_RE.test(s.text.trim())) return;
+    const [below, above] = [tableBy(k, true), tableBy(k, false)];
+    const table = open(below) && open(above) ? nearer(s, below, above) : open(below) ? below : open(above) ? above : undefined;
+    if (table) captionOf(table, s, table === below, taken);
+  });
   // A table with no caption takes one the paragraph over it kept as its
   // last line.
   segments.forEach((table, i) => {
@@ -518,6 +529,9 @@ export function boldHeaderRows(rows: TableRow[]): number {
 // A cell of a value: an amount, a share, or a count ("$ 2,174", "(357)",
 // "21.0 %", "-£2,000").
 export const NUMERIC_CELL_RE = /^[-−–]?[$€£¥]?\s*\(?[-−–]?[\d.,]+\)?\s*%?$/;
+// A cell of a measure: a number with a short unit or none ("2.20x", "35
+// ms"), or a dash for none.
+const VALUE_RE = /^(?:[-−–]?[$€£¥]?\s*\(?[-−–]?[\d.,]*\d[\d.,]*\)?\s*(?:%|×|x|[a-zµμ]{1,3})?|[-−–—])$/;
 
 // Row starts in a run of lines split into cells. Rows come from the run's
 // vertical rhythm: with two gap sizes present, the small gap is a wrapped
@@ -564,7 +578,12 @@ function rowStartsOf(run: Line[], cellsOf: Cell[][], leading: number): number[] 
     const firstOnly = cellsOf[k].every((cell, idx) => idx === 0 || cell.text.length === 0);
     const valuesNext = k + 1 < run.length && /^\p{Ll}/u.test(cellsOf[k + 1][0].text) && valued(k + 1);
     const opens = lastFirst >= 0 && (colon(lastFirst) || (valued(lastFirst) && (colon(k) || valuesNext)));
-    const continues = (firstOnly && !opens) || /^[a-z]/.test(cellsOf[k][0].text);
+    // A lowercase label with a value in every column the row over it fills
+    // is a row of its own: a benchmark's or a function's name ("access-
+    // nbody  8  16  18 …"). Parse loop finding: TraceMonkey's Figure 13 read
+    // 24 such rows as one row of wrapped cells.
+    const own = lastFirst >= 0 && valued(lastFirst) && cellsOf[lastFirst].every((c, idx) => idx === 0 || !c.text || VALUE_RE.test(cellsOf[k][idx].text.trim()));
+    const continues = (firstOnly && !opens) || (/^[a-z]/.test(cellsOf[k][0].text) && !own);
     const wrap =
       continues &&
       lastFirst >= 0 &&
@@ -580,9 +599,10 @@ function rowStartsOf(run: Line[], cellsOf: Cell[][], leading: number): number[] 
   // first column: the head lines are head rows, a row for each line that
   // fills other columns than the line above it ("Year Ended December 31,"
   // over the years over the amounts: the 10-K's OI&E statement, p. 78, read
-  // its heads into its first row).
+  // its heads into its first row). A measure with its unit is a value
+  // ("2.20x": TraceMonkey's Figure 13 read its heads into "3d-cube"'s row).
   const filled = (k: number) => cellsOf[k].map((c) => (c.text.length > 0 ? "1" : "0")).join("");
-  const values = anchors.length > 0 && cellsOf[anchors[0]].slice(1).some((c) => c.text) && cellsOf[anchors[0]].slice(1).every((c) => !c.text || NUMERIC_CELL_RE.test(c.text.trim()));
+  const values = anchors.length > 0 && cellsOf[anchors[0]].slice(1).some((c) => c.text) && cellsOf[anchors[0]].slice(1).every((c) => !c.text || VALUE_RE.test(c.text.trim()));
   if (anchorRows && values && anchors[0] > 0) {
     for (let m = 1; m < anchors[0]; m++) if (filled(m) !== filled(m - 1)) rowStarts.push(m);
     rowStarts.push(anchors[0]);
@@ -791,7 +811,7 @@ const FIGURE_CAPTION_RE = /^(?:fig\.|figure)\s*\d+[a-z]?\s*[.:|]/i;
 const holdsCaption = (line: Line) => line.cells.some((c) => FIGURE_CAPTION_RE.test(c.text.trim()));
 
 // A cell of prose: six words or more.
-const proseCell = (text: string) => text.split(/\s+/).filter((w) => /\p{L}{2}/u.test(w)).length >= 6;
+export const proseCell = (text: string) => text.split(/\s+/).filter((w) => /\p{L}{2}/u.test(w)).length >= 6;
 
 // Lines whose cells hold prose: two prose cells side by side on half of
 // them or more (two columns of text), or on a scan's text layer a prose

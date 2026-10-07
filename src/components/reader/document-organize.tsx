@@ -42,11 +42,10 @@ function subscribe(onChange: () => void) {
   };
 }
 
-/** The list's sort: Added — the list as it has always been — unless the
-    reader picked another. */
+/** The list's sort: Last edited unless the reader picked another. */
 export function useDocumentSort(): [DocumentSort, (s: DocumentSort) => void] {
   const stored = useSyncExternalStore(subscribe, () => read(SORT_STORE), () => null);
-  const sort = DOCUMENT_SORTS.includes(stored as DocumentSort) ? (stored as DocumentSort) : "added";
+  const sort = DOCUMENT_SORTS.includes(stored as DocumentSort) ? (stored as DocumentSort) : "edited";
   return [sort, useCallback((s: DocumentSort) => write(SORT_STORE, s), [])];
 }
 
@@ -75,6 +74,7 @@ export function useFoldedCategories(): [ReadonlySet<string>, (key: string) => vo
 }
 
 const SORT_KEY: Record<DocumentSort, TKey> = {
+  edited: "panes.documentsSortEdited",
   added: "panes.documentsSortAdded",
   title: "panes.documentsSortTitle",
   kind: "panes.documentsSortKind",

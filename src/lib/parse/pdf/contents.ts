@@ -65,7 +65,11 @@ export function readContentsEntries(lines: Line[], i: number, leading: number): 
       j++;
       continue;
     }
-    if (!isContentsEntry(entry)) break;
+    // A line set larger than the first entry is the heading after the
+    // list (parse loop finding: The Art of Linear Algebra's contents took
+    // the 14 pt "1 Viewing a Matrix – 4 Ways" under it, and its first
+    // paragraph as that entry's wrap).
+    if (!isContentsEntry(entry) || (j > i && entry.size > lines[i].size * 1.14)) break;
     const indent = "  ".repeat(entryDepth(entry.text));
     const part = tocEntryPart(entry);
     const start = (builder.text.length === 0 ? 0 : builder.text.length + 1) + indent.length;

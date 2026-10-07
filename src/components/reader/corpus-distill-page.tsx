@@ -13,6 +13,7 @@ import { useLang, useT } from "@/components/lang-provider";
 import { ExtractionList } from "@/components/reader/extraction-list";
 import { jumpUnlessSelecting as onQuoteClick, SelectionNotes } from "@/components/reader/selection-notes";
 import { ThinkingIndicator } from "@/components/thinking";
+import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 
 type CorpusQuoteView = CorpusDistillationView["quotes"][number];
 
@@ -405,14 +406,17 @@ export function CorpusDistillPage({
               />
               <p className="mt-2 text-xs text-sand-500">{t("panes.corpusAskHint")}</p>
               {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-              <button
-                type="submit"
-                data-track="distill-corpus-run"
-                disabled={!question.trim()}
-                className="mt-3 rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
-              >
-                {t("panes.distill")}
-              </button>
+              <div className="mt-3 flex items-center gap-1.5">
+                <button
+                  type="submit"
+                  data-track="distill-corpus-run"
+                  disabled={!question.trim()}
+                  className="rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+                >
+                  {t("panes.distill")}
+                </button>
+                <VoiceTypingButton track="distill-corpus-voice-typing" />
+              </div>
             </form>
 
             {all.length > 0 && (
