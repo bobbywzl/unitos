@@ -258,6 +258,12 @@ export const STITCH_EXPAND_WORDS = 15;
 // read (a picked generated document is always read). Owner's call (pending;
 // the recommended option is false).
 export const STITCH_READS_GENERATED = false;
+// The language Stitch replies in (SPEC.md §22): "ui", the reader's interface
+// language (the cookie, else Accept-Language); or "command", the command's
+// language when it is plainly in one (a Chinese question gets a Chinese
+// reply under an English interface), else the interface's. Quotes keep
+// the documents' words either way. Owner's call (pending); "ui" until then.
+export const STITCH_REPLY_LANGUAGE: "ui" | "command" = "ui";
 export const STITCH_GROUP_CONCURRENCY = 6;
 // The route's limits: a command over STITCH_COMMAND_MAX chars is refused
 // with a message that says so; a history turn is cut to

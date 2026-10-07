@@ -18,6 +18,7 @@ import {
   STITCH_QUESTION_SKELETON,
   STITCH_READ_HISTORY,
   STITCH_READS_GENERATED,
+  STITCH_REPLY_LANGUAGE,
   STITCH_ROUTE_EFFORT,
   STITCH_SELECT_EFFORT,
   STITCH_SELECT_MAX_OUTPUT_TOKENS,
@@ -220,6 +221,58 @@ export function commandKind(command: string): StitchCommandKind {
   );
   if (links.test(c) || /矛盾|冲突|分歧|不一致|意见不同|看法不同|相反|连接|关联/.test(c)) return "links";
   return "question";
+}
+
+// Words of a command that are never a name, though capitalised.
+const NAME_STOP = new Set(
+  "what which who whom whose when where why how does did do is are was were has have had the a an and or of in on to for from with about i my me we our you your he his she her they their it its this that these those quote list compare gather collect write make find show tell give please can could would will should".split(" "),
+);
+const NAME_HITS_MAX = 8; // a name in more blocks than this is common: the select pass finds it in the lines
+const NAME_TERMS_MAX = 6;
+
+/** The rare names of a command: its capitalised words after the first
+    word (Darwin, Parsifal; Nietzsche's is Nietzsche), and its quoted
+    phrases ("eternal recurrence", 《敌基督》). Question words and the
+    like drop. */
+export function commandNames(command: string): string[] {
+  const out = new Set<string>();
+  for (const m of command.matchAll(/["“«《「『]([^"“”«»《》「」『』]{2,60})["”»》」』]/g)) {
+    const t = m[1].trim();
+    if (t.length >= 3 || /[㐀-鿿]{2}/.test(t)) out.add(t);
+  }
+  // A run of capitalised words is one name (New Testament), its question
+  // words and articles dropped; the command's first word only when the
+  // run goes on past it.
+  const first = command.search(/\p{L}/u);
+  for (const m of command.matchAll(/(?<![\p{L}\p{N}])\p{Lu}[\p{L}\p{N}-]{2,}(?:\s+\p{Lu}[\p{L}\p{N}-]{2,})*/gu)) {
+    let words = m[0].split(/\s+/);
+    if (m.index === first) words = words.slice(1);
+    words = words.filter((w) => !NAME_STOP.has(w.toLowerCase()));
+    if (words.length > 0) out.add(words.join(" "));
+  }
+  return [...out].slice(0, NAME_TERMS_MAX);
+}
+
+/** The blocks whose full text names each of the command's rare names
+    (commandNames): a word-start match, any case, so Darwin finds
+    Darwinian. A name kept only when 1 to NAME_HITS_MAX blocks name it.
+    A skeleton line keeps at most 40 words of a block, so a name deep in a
+    long block can be missing from its line: the select pass is told
+    which blocks name it (ANS3-01). */
+export function nameHits(command: string, blocks: { alias: string; text: string }[]): { term: string; aliases: string[] }[] {
+  const out: { term: string; aliases: string[] }[] = [];
+  for (const term of commandNames(command)) {
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const rx = /^[\p{L}\p{N}]/u.test(term) && !/[㐀-鿿]/.test(term) ? new RegExp(`(?<![\\p{L}\\p{N}])${escaped}`, "iu") : new RegExp(escaped, "iu");
+    const aliases: string[] = [];
+    for (const b of blocks) {
+      if (!rx.test(b.text)) continue;
+      aliases.push(b.alias);
+      if (aliases.length > NAME_HITS_MAX) break;
+    }
+    if (aliases.length >= 1 && aliases.length <= NAME_HITS_MAX) out.push({ term, aliases });
+  }
+  return out;
 }
 
 export type StitchTurn = { role: "user" | "assistant"; content: string };
@@ -598,8 +651,11 @@ export function answerMessages(input: {
   profile: Profile;
   history: ModelMessage[];
   command: string;
+  // The command's rare names (nameHits), counted against the blocks shown.
+  names?: { term: string; aliases: string[] }[];
 }): ModelMessage[] {
   const { rendered, documentList } = input.reading;
+  const selected = input.selected;
   const rules = stitchRules(input.lang);
   const system = input.selected
     ? systemOf(rules, input.profile, "The blocks a first read picked for the command follow.", selectedSections(rendered, input.selected))
@@ -613,7 +669,10 @@ export function answerMessages(input: {
         documents: documentList,
         command: input.command,
         continued: input.history.length > 0,
-        selected: input.selected !== null,
+        selected: selected !== null,
+        names: selected
+          ? (input.names ?? []).map((n) => ({ term: n.term, total: n.aliases.length, shown: n.aliases.filter((a) => selected.has(a)).length }))
+          : undefined,
       }),
     },
   ];
@@ -721,7 +780,7 @@ function skeletonSystem(views: SkeletonView[], rendered: Rendered[], shown: Set<
     of the top so no document goes unread. query: called only when the
     lines run past the budget (the expansion is a model call). Returns the
     aliases shown. */
-async function cutLines(
+export async function cutLines(
   views: SkeletonView[],
   routed: Set<string> | null,
   query: () => Promise<string>,
@@ -739,7 +798,27 @@ async function cutLines(
   const total = candidates.reduce((sum, c) => sum + lineCost(c.l), 0);
   if (total <= budget) return new Set(candidates.map((c) => c.l.alias));
 
-  const ranked = rank(candidates, (c) => `${c.l.text} ${c.v.parts.find((p) => p.alias === c.l.partAlias)?.title ?? ""}`, await query());
+  let ranked = rank(candidates, (c) => `${c.l.text} ${c.v.parts.find((p) => p.alias === c.l.partAlias)?.title ?? ""}`, await query());
+  // No line shares a word with the query (a Chinese command over English
+  // lines whose expansion failed or came back in Chinese): a cut by score
+  // would be a cut by position, the first documents kept and the last
+  // lost. Read every line instead, in groups, up to what the groups can
+  // read; past that, the documents take turns, line by line, so each
+  // keeps its opening lines.
+  if (ranked.length > 0 && ranked[0].score === 0) {
+    console.warn(`[stitch] no skeleton line matches the command; reading ${total <= STITCH_GROUPED_MAX ? "every line" : "every document's opening lines"}`);
+    if (total <= STITCH_GROUPED_MAX) return new Set(candidates.map((c) => c.l.alias));
+    const byDoc = new Map<string, typeof ranked>();
+    for (const r of ranked) {
+      const letter = r.item.v.r.letter;
+      if (!byDoc.has(letter)) byDoc.set(letter, []);
+      byDoc.get(letter)!.push(r);
+    }
+    ranked = [];
+    const lists = [...byDoc.values()];
+    for (let i = 0; ranked.length < candidates.length; i++) for (const list of lists) if (i < list.length) ranked.push(list[i]);
+    budget = STITCH_GROUPED_MAX;
+  }
   const shown = new Set<string>();
   let used = 0;
   // Every document's top lines first, up to a share of the budget.
@@ -834,19 +913,41 @@ export function interleave(lists: string[][]): string[] {
     document's first pick moved to the front: a comparison still opens with
     every document's best block, and the rest of the budget goes where the
     select pass ranked it, not to every document alike. docOf: the
-    document of an alias; an alias with none drops. */
-export function firstsFirst(aliases: string[], docOf: (alias: string) => string | undefined): string[] {
+    document of an alias; an alias with none drops. cap: the first picks
+    moved to the front stop once they hold this many tokens (costOf), and
+    the rest keep the select pass's order (COST3-01): on a project of 100
+    documents the first picks alone would fill a question's budget, one
+    block per document, and the blocks that answer best would be cut.
+    Thirty documents' first picks fit a third of a question's budget, so
+    under that the order is unchanged. */
+export function firstsFirst(
+  aliases: string[],
+  docOf: (alias: string) => string | undefined,
+  cap?: { tokens: number; costOf: (alias: string) => number },
+): string[] {
   const firsts: string[] = [];
   const rest: string[] = [];
   const seen = new Set<string>();
+  let used = 0;
+  let full = false;
   for (const alias of aliases) {
     const doc = docOf(alias);
     if (doc === undefined) continue;
-    if (seen.has(doc)) rest.push(alias);
-    else {
-      seen.add(doc);
-      firsts.push(alias);
+    if (full || seen.has(doc)) {
+      rest.push(alias);
+      continue;
     }
+    seen.add(doc);
+    if (cap) {
+      const cost = cap.costOf(alias);
+      if (used + cost > cap.tokens) {
+        full = true;
+        rest.push(alias);
+        continue;
+      }
+      used += cost;
+    }
+    firsts.push(alias);
   }
   return [...firsts, ...rest];
 }
@@ -910,6 +1011,80 @@ export function replyWithIds(reply: string, blockByRef: Map<string, DocBlock>): 
 }
 
 const BLOCK_TAG = /\[block ([^\]\s]+)\]/g;
+
+// A quote's text as compared with a block's: case, whitespace, quote
+// marks, markdown emphasis, and dashes folded.
+const foldQuote = (t: string) =>
+  t
+    .normalize("NFKC")
+    .replace(/[*_"'“”‘’「」『』]/g, "")
+    .replace(/[‐-―−]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+
+// A span in quote marks: straight or curly, opened after a space or a
+// bracket, closed before a space or a punctuation mark.
+const QUOTE_SPAN = /(^|[\s(（:：，,—–])(["“])([^"“”\n]+?)(["”])(?=[\s.,;:!?)）\]，。、…]|$)/g;
+const QUOTE_MIN = 12; // chars of a quote checked; a CJK quote from 6
+const QUOTE_CJK_MIN = 6;
+
+/** The reply's quotes checked against the blocks it cites (ANS3-05), as
+    the link and page quotes resolve against theirs: a span in quote marks
+    on a line that cites blocks must be in one of them, or in any block
+    the reply cites when the line cites none, or verbatim in any block
+    read. Cut words (… or ...) split it into pieces, each in the block. A
+    span that is in none loses its quote marks and keeps its words, so a
+    paraphrase never reads as the document's words. A document's title in
+    quote marks is left alone. Runs on the model's aliases, before
+    replyWithIds. unquoted: the spans that lost their marks. */
+export function checkReplyQuotes(
+  reply: string,
+  blockByRef: Map<string, DocBlock>,
+  titles: Set<string>,
+): { reply: string; unquoted: string[] } {
+  const unquoted: string[] = [];
+  const textOf = (alias: string) => blockByRef.get(alias.toUpperCase())?.text ?? "";
+  const tagsIn = (t: string) => [...t.matchAll(/\[block ([A-Za-z]+\d+)\]/g)].map((m) => m[1]);
+  const all = tagsIn(reply);
+  const every = [...new Set([...blockByRef.values()])];
+  const lines = reply.split("\n").map((line) =>
+    line.replace(QUOTE_SPAN, (span, lead: string, _open: string, inner: string) => {
+      const cjk = /[㐀-鿿]/.test(inner);
+      if (inner.trim().length < (cjk ? QUOTE_CJK_MIN : QUOTE_MIN) || titles.has(inner.trim())) return span;
+      const pieces = inner
+        .split(/\s*(?:…|\.\.\.)\s*/)
+        .map(foldQuote)
+        .map((p) => p.replace(/^[\s.,;:!?]+|[\s.,;:!?]+$/g, ""))
+        .filter((p) => p.length >= 4);
+      if (pieces.length === 0) return span;
+      const holds = (text: string) => {
+        const folded = foldQuote(text);
+        return pieces.every((p) => folded.includes(p));
+      };
+      const tags = tagsIn(line);
+      const cited = tags.length > 0 ? tags : all;
+      if (cited.some((a) => holds(textOf(a)))) return span;
+      if (every.some((b) => holds(b.text))) return span;
+      unquoted.push(inner);
+      return `${lead}${inner}`;
+    }),
+  );
+  return { reply: lines.join("\n"), unquoted };
+}
+
+/** The language the reply is written in (STITCH_REPLY_LANGUAGE): the UI's,
+    or, with "command", the command's when it is plainly in one language
+    (four CJK characters and at least as many as Latin letters: Chinese;
+    eight Latin letters and no CJK: English), else the UI's. */
+export function replyLanguage(command: string, uiLang: Lang, mode: "ui" | "command" = STITCH_REPLY_LANGUAGE): Lang {
+  if (mode === "ui") return uiLang;
+  const cjk = (command.match(/[㐀-鿿]/g) ?? []).length;
+  const latin = (command.match(/[A-Za-z]/g) ?? []).length;
+  if (cjk >= 4 && cjk >= latin) return "zh";
+  if (latin >= 8 && cjk === 0) return "en";
+  return uiLang;
+}
 
 /** What the reply cites, for the box's chips (StitchResult.cited): every
     stored block id the reply cites as [block <id>], with its document's id
@@ -1103,6 +1278,9 @@ export async function pickBlocks(input: {
     .slice(-STITCH_READ_HISTORY);
   const continued = input.history.length > 0;
   const cited = citedAliases(input.history, blockByRef);
+  // The blocks whose full text names the command's rare names: the select
+  // pass is told of them, and a cut keeps their lines.
+  const names = nameHits(input.command, read.flatMap((r) => r.blocks));
   const jevCommand =
     earlier.length > 0
       ? `Earlier commands of the conversation:\n${earlier.join("\n")}\n\nThe command:\n${input.command}`
@@ -1182,6 +1360,7 @@ export async function pickBlocks(input: {
   } else if (!jev && kind !== "page" && skeletonLength > STITCH_CUT_OVER) {
     shown = await cutLines(views, null, rankQuery, cutBudget);
   }
+  if (shown) for (const n of names) for (const a of n.aliases) shown.add(a);
   if (input.signal?.aborted) aborted();
 
   // The picks most relevant first: Jev's by document (one noul per line),
@@ -1212,6 +1391,9 @@ export async function pickBlocks(input: {
               cited: groups.length > 1 ? cited.filter((a) => letters.has(blockLetter(a))) : cited,
               maxBlocks: STITCH_SELECTED_BLOCKS[kind],
               partial: group.shown !== null,
+              names: names
+                .map((n) => ({ term: n.term, aliases: n.aliases.filter((a) => letters.has(blockLetter(a))) }))
+                .filter((n) => n.aliases.length > 0),
             }),
           },
         ],
@@ -1230,12 +1412,15 @@ export async function pickBlocks(input: {
     });
     if (input.signal?.aborted) aborted();
   }
-  // Every document's first pick, then the rest in the select pass's order
-  // (firstsFirst), cut to the kind's budget. A document the select pass
+  // Every document's first pick, up to a third of the budget, then the
+  // rest in the select pass's order (firstsFirst), cut to the kind's budget. A document the select pass
   // read and picked nothing of is left out: none of its blocks are shown.
   // When nothing at all was picked, every document reads as its opening,
   // so the answer pass has text to say so from.
-  let picks = firstsFirst(interleave(lists), (alias) => blockByRef.get(alias)?.documentId);
+  let picks = firstsFirst(interleave(lists), (alias) => blockByRef.get(alias)?.documentId, {
+    tokens: STITCH_SELECTED_BUDGET[kind] / 3,
+    costOf: (alias) => blockCost(blockByRef.get(alias)?.text ?? ""),
+  });
   if (picks.length === 0) picks = interleave(read.map((r) => opening(r, share)));
   if (input.signal?.aborted) aborted();
   return cutSelection(picks, blockByRef, kind);
@@ -1269,6 +1454,7 @@ export async function stitch(input: {
   const profile = await loadProfile(input.notebookId);
   const history = await stitchHistory(input.history, reading, input.notebookId);
   const kind = commandKind(input.command);
+  const lang = replyLanguage(input.command, input.lang);
   // The stitch feature's model answers (lib/feature-models.ts); the
   // stitch-select feature's model reads the skeletons in the route and
   // select passes, each at its own effort.
@@ -1296,7 +1482,15 @@ export async function stitch(input: {
   // ── The answer pass ──────────────────────────────────────────────────────
   const result = await callForJson({
     model,
-    messages: answerMessages({ reading, selected, lang: input.lang, profile, history, command: input.command }),
+    messages: answerMessages({
+      reading,
+      selected,
+      lang,
+      profile,
+      history,
+      command: input.command,
+      names: selected ? nameHits(input.command, read.flatMap((r) => r.blocks)) : undefined,
+    }),
     maxOutputTokens: STITCH_MAX_OUTPUT_TOKENS,
     providerOptions: answer.providerOptions,
     schema: outputSchema,
@@ -1367,7 +1561,10 @@ export async function stitch(input: {
   }
 
   if (linkCount > 0 || document) await bumpNotebook(input.notebookId);
-  const reply = replyWithIds(result.data.reply.trim(), blockByRef);
+  const titles = new Set(rendered.map((r) => r.doc.title));
+  const checked = checkReplyQuotes(result.data.reply.trim(), blockByRef, titles);
+  if (checked.unquoted.length > 0) console.warn(`[stitch] ${checked.unquoted.length} quote(s) in the reply not in the blocks cited; shown without quote marks`);
+  const reply = replyWithIds(checked.reply, blockByRef);
   // No reply and nothing stored: the reader would see an empty turn.
   if (!reply && linkCount === 0 && !document) throw input.onFailure(STITCH_EMPTY_ANSWER);
   const titleOf = new Map(rendered.map((r) => [r.doc.id, r.doc.title]));
