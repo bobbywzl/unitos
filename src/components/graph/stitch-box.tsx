@@ -47,6 +47,8 @@ export function StitchBox({
   onUnpick,
   onClearPick,
   onOpenDocument,
+  open: openProp,
+  onOpenChange,
 }: {
   notebookId: string;
   nodes: GraphNode[];
@@ -57,6 +59,13 @@ export function StitchBox({
   onUnpick: (documentId: string) => void;
   onClearPick: () => void;
   onOpenDocument: () => void;
+  // The fold, when the graph overlay controls it (it folds the box on a
+  // narrow screen and under a side list). Unset: the box keeps its own.
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  // Wired by the graph overlay; the box calls them (BOX package).
+  onShowRecommended?: () => void;
+  onCited?: (documentIds: string[]) => void;
 }) {
   const t = useT();
   const router = useRouter();
@@ -66,7 +75,12 @@ export function StitchBox({
   const [command, setCommand] = useState("");
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [open, setOpen] = useState(true);
+  const [openState, setOpenState] = useState(true);
+  const open = openProp ?? openState;
+  const setOpen = (next: boolean) => {
+    setOpenState(next);
+    onOpenChange?.(next);
+  };
   const abortRef = useRef<AbortController | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -147,7 +161,7 @@ export function StitchBox({
         data-track="stitch-expand"
         aria-label={t("stitch.stitchExpand")}
         data-tip={t("stitch.stitchTitle")}
-        className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full bg-ink px-4 py-2 text-[13px] font-semibold text-paper shadow-float hover:bg-clay-800 print:hidden"
+        className="flex items-center gap-2 rounded-full bg-ink px-4 py-2 text-[13px] font-semibold text-paper shadow-float hover:bg-clay-800 print:hidden"
       >
         <SparkleIcon size={14} />
         {t("stitch.stitch")}
@@ -161,7 +175,7 @@ export function StitchBox({
   return (
     <div
       data-track-surface="sidebar"
-      className="absolute bottom-4 left-1/2 z-20 flex w-[680px] max-w-[calc(100vw-32px)] -translate-x-1/2 flex-col rounded-[22px] border border-line bg-card/95 shadow-float backdrop-blur-md print:hidden"
+      className="relative flex w-full flex-col rounded-[22px] border border-line bg-card/95 shadow-float backdrop-blur-md print:hidden"
       role="region"
       aria-label={t("stitch.stitch")}
     >

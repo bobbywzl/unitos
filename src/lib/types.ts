@@ -3,6 +3,7 @@ import type { ChatTurn } from "@/lib/conversation";
 import type { SuggestResult } from "@/lib/docs/assistant-suggestions";
 import type { BlockKind } from "@/lib/block-kind";
 import type { ToggleStyle } from "@/lib/text-style";
+import type { DocumentKind } from "@/lib/document-order";
 
 /** One reply in the discussion under a note, an edit, or a link. */
 export type ReplyView = {
@@ -355,6 +356,10 @@ export type GraphNode = {
   id: string; // document id
   title: string;
   hasVideo: boolean;
+  // The node's card and dot (SPEC.md §13): what the document is, and its
+  // length in blocks (the dot grows with it).
+  kind?: DocumentKind;
+  blockCount?: number;
 };
 
 /** One link of a pair, listed when the pair's curve is hovered or pinned

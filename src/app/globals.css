@@ -1951,6 +1951,55 @@ ellipse.anchor-flash {
 .corpus-graph .react-flow__controls-button svg {
   fill: currentColor;
 }
+.corpus-graph .react-flow__controls-button svg.graph-stroke-icon {
+  fill: none;
+  max-width: 15px;
+  max-height: 15px;
+}
+
+/* Labels and count pills keep a readable size on screen when the view zooms
+   out: graph-view.tsx sets --graph-label-scale from the zoom (1 at zoom 1
+   and closer, up to 1.7). The label's width grows less, so neighbors never
+   overlap. */
+.corpus-graph .graph-node-label {
+  width: calc(144px * var(--graph-label-width-scale, 1));
+  font-size: calc(11px * var(--graph-label-scale, 1));
+}
+.corpus-graph .graph-edge-pill {
+  transform: scale(var(--graph-label-scale, 1));
+}
+.corpus-graph .react-flow__node:focus-visible {
+  outline: 2px solid var(--clay);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+/* A curve is a thin target under a finger: a wider hit path. */
+@media (pointer: coarse) {
+  .corpus-graph .graph-edge-hit {
+    stroke-width: 28px;
+  }
+}
+
+/* The link lists and node cards float over the canvas at their place: an
+   entrance in opacity only, so it never overrides the position. */
+@keyframes graph-float-in {
+  from {
+    opacity: 0;
+  }
+}
+.graph-float-in {
+  animation: graph-float-in 0.14s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .graph-settling .react-flow__node {
+    transition: none;
+  }
+  .graph-breathe,
+  .graph-dash-march,
+  .graph-float-in {
+    animation: none;
+  }
+}
 
 /* ── Motion for opening, closing, and folding ──────────────────────────────
    Every surface that appears or leaves moves the same way: dropdowns and

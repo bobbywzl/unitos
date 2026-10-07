@@ -1143,7 +1143,7 @@ export default async function NotebookPage(props: {
       // while only recommended ones connect a pair — and the recommended
       // links, both ends with their passages, the AI's reason, and the
       // replies. Accept and Dismiss live in the graph.
-      documentsGraph(attached.map((d) => ({ id: d.id, title: d.title, hasVideo: d.hasVideo }))),
+      documentsGraph(attached.map((d) => ({ id: d.id, title: d.title, hasVideo: d.hasVideo, kind: d.kind }))),
       db.notebookEvent.findMany({
         where: { notebookId },
         orderBy: { createdAt: "desc" },
