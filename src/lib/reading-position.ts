@@ -33,6 +33,10 @@ export const TRAY_STATE_STORE = "unitos-tray-state";
 // keeps the tray past the panes, so folding it gives the page no room. An
 // import keeps the tray open, as the block reader shows it.
 const TRAY_FOLD_BELOW = 1860;
+// Any document opens with the tray folded in a window narrower than this (a
+// tablet held upright, a narrow window): beside the open tray the article
+// would be a phone's column.
+const TRAY_FOLD_NARROW = 1000;
 const PAGE_EDITOR_PANE = "[data-reader-root][data-page-editor]:not([data-import])";
 // The inline script's style rules: the tray stays folded (md+; below md the
 // tray is a bottom sheet under the reader, closed until the reader opens it)
@@ -80,9 +84,12 @@ export function trayStateKey(notebookId: string): string {
   return `${TRAY_STATE_STORE}:${notebookId}`;
 }
 
-/** The tray's default: folded for a blank document in a narrower window. */
+/** The tray's default: folded in a narrow window, and for a blank document
+    in a narrower one than its toolbar needs. */
 export function trayFoldsByDefault(split: boolean): boolean {
-  return !split && window.innerWidth < TRAY_FOLD_BELOW && document.querySelector(PAGE_EDITOR_PANE) !== null;
+  if (split) return false;
+  if (window.innerWidth < TRAY_FOLD_NARROW) return true;
+  return window.innerWidth < TRAY_FOLD_BELOW && document.querySelector(PAGE_EDITOR_PANE) !== null;
 }
 
 const BLOCK_SELECTOR = "[data-block-id], [data-edit-block]";
@@ -256,7 +263,7 @@ css+=".content-in,.panel-in{animation-duration:0s!important}";
 }
 var tray=null;
 try{tray=sessionStorage.getItem(${JSON.stringify(trayStateKey(notebookId))});}catch(e){}
-try{if(tray?JSON.parse(tray).collapsed===true:${!split}&&innerWidth<${TRAY_FOLD_BELOW}&&document.querySelector(${JSON.stringify(PAGE_EDITOR_PANE)}))css+="@media (min-width:768px){.tray-column{width:0!important;transition:none!important}}";}catch(e){}
+try{if(tray?JSON.parse(tray).collapsed===true:${!split}&&(innerWidth<${TRAY_FOLD_NARROW}||innerWidth<${TRAY_FOLD_BELOW}&&document.querySelector(${JSON.stringify(PAGE_EDITOR_PANE)})))css+="@media (min-width:768px){.tray-column{width:0!important;transition:none!important}}";}catch(e){}
 if(css){var s=document.createElement("style");s.id=${JSON.stringify(RESTORE_STYLE_ID)};s.textContent=css;document.head.appendChild(s);}
 }catch(e){}})();`;
 }

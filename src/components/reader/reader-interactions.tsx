@@ -9309,7 +9309,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         <div className="relative">
           <button
             onClick={() => openDistillPage(distillShownId)}
-            data-track="distill"
+            data-track="distill-page"
             className="flex items-center gap-1.5 rounded-full bg-sand-100 px-3.5 py-1.5 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
             data-tip={t("reader.distillButtonTitle")}
           >

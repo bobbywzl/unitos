@@ -1,12 +1,14 @@
 import { db } from "@/lib/db";
 import { trivialEdits } from "@/lib/history/trivial";
-import type { HistoryEntry } from "@/lib/types";
+import type { EditItem, HistoryEntry } from "@/lib/types";
 
 // The History panel's rows (SPEC.md §12): the project's events (deletions,
 // detachments, merges) merged with every attached document's edits, newest
 // first. One page is HISTORY_PAGE rows; Show older reads the page under the
 // last row shown, so every row, a removed note kept whole among them, is
-// reachable. Read-only: nothing here writes a row.
+// reachable. History's This document reads one document's edits alone
+// (`editsOnly`), the rows the rail's Edits tab listed. Read-only: nothing
+// here writes a row.
 
 export const HISTORY_PAGE = 100;
 
@@ -33,24 +35,31 @@ export async function historyPage(
   attachedIds: string[],
   cursor: HistoryCursor | null = null,
   limit = HISTORY_PAGE,
+  { editsOnly = false }: { editsOnly?: boolean } = {},
 ): Promise<{ entries: HistoryEntry[]; more: boolean }> {
   // The newest `limit` rows of the union are among the newest `limit` of
   // each table; one more of each says whether older rows remain.
   const [events, edits] = await Promise.all([
     // meta is left out: a detach keeps the project's work on the document
     // there (lib/documents/detach.ts), and the panel reads none of it.
-    db.notebookEvent.findMany({
-      where: { notebookId, ...olderThan(cursor) },
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      take: limit + 1,
-      select: { id: true, userId: true, kind: true, content: true, createdAt: true },
-    }),
+    editsOnly
+      ? []
+      : db.notebookEvent.findMany({
+          where: { notebookId, ...olderThan(cursor) },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: limit + 1,
+          select: { id: true, userId: true, kind: true, content: true, createdAt: true },
+        }),
     attachedIds.length > 0
       ? db.blockEdit.findMany({
           where: { documentId: { in: attachedIds }, ...olderThan(cursor) },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take: limit + 1,
-          include: { document: { select: { title: true } } },
+          include: {
+            document: { select: { title: true } },
+            // The discussion under each edit (reply-thread.tsx), oldest first.
+            replies: { orderBy: { createdAt: "asc" } },
+          },
         })
       : [],
   ]);
@@ -117,6 +126,18 @@ export async function historyPage(
         documentTitle: e.document.title,
         documentId: e.documentId,
         blockId: e.blockId,
+        edit: {
+          before: e.before,
+          after: e.after,
+          meta: e.meta as EditItem["meta"],
+          replies: e.replies.map((r) => ({
+            id: r.id,
+            content: r.content,
+            userId: r.userId,
+            resolvedById: r.resolvedById,
+            createdAt: r.createdAt.toISOString(),
+          })),
+        },
         createdAt: e.createdAt.toISOString(),
         trivial: trivial.get(e.id) ?? false,
       }),

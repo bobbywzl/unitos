@@ -6,7 +6,6 @@ import { createPortal } from "react-dom";
 import { useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
 import { Presence } from "@/components/presence";
-import { FEEDBACK_OPEN_EVENT } from "@/components/feedback-button";
 import type { TKey } from "@/lib/i18n/dictionaries";
 import { useJumpParamCleanup } from "@/components/reader/jump-param";
 import { useEscapeLayer } from "@/lib/escape-layers";
@@ -279,14 +278,13 @@ export function ReaderPanes({
   const router = useRouter();
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  // Below md the Reader view button is a button of the bottom bar
-  // (workspace.tsx, data-reader-view-slot): floating, it stood on the
-  // article's bottom-left lines.
+  // Below md the views are rows of the bottom bar's More menu
+  // (workspace.tsx, data-reader-view-slot): floating, the Reader view button
+  // stood on the article's bottom-left lines.
   const phone = useSyncExternalStore(subscribePhone, readPhone, () => false);
-  // Below md the button is the bottom bar's last button (the slot); at md and
-  // up it is the rail's last button, under Edit history: floating at the
-  // pane's bottom left it lay on the first words of the last lines on a
-  // tablet and a landscape phone.
+  // At md and up the button is the rail's last button, under Extract:
+  // floating at the pane's bottom left it lay on the first words of the last
+  // lines on a tablet and a landscape phone.
   const [barSlot, setBarSlot] = useState<HTMLElement | null>(null);
   const [rail, setRail] = useState<HTMLElement | null>(null);
   useEffect(() => {
@@ -406,6 +404,22 @@ export function ReaderPanes({
     );
   }
 
+  // One row per view: the menu's rows, and below md the rows of the bar's
+  // More menu (workspace.tsx), which holds them in its slot.
+  const viewRows = views.map((kind) => (
+    <button
+      key={kind}
+      onClick={() => go(kind)}
+      data-track={`view:${kind}`}
+      className={`flex items-center gap-2.5 rounded-full px-2.5 py-1.5 text-left text-[12px] ${
+        view === kind ? "bg-clay-100 font-semibold text-clay-800" : "text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+      }`}
+    >
+      <ViewGlyph kind={kind} size={13} />
+      {t(VIEW_LABEL[kind])}
+    </button>
+  ));
+
   // Bottom-left: clear of the article menu (top-left) and the sticky
   // Extract controls (top-right). Below md with the sheet open
   // (data-sheet-open, workspace.tsx), bottom-right: the sheet cuts the
@@ -413,8 +427,7 @@ export function ReaderPanes({
   // Show tabs & outlines at the canvas's top-left. While the menu is open it
   // stands at z-40, the layer of the app's menus (docs/css/layer.css), over
   // the page editor's header, which a short reader brings under the menu.
-  // Below md it is a button of the bottom bar instead (inBar), its menu
-  // opening above the bar.
+  // Below md its rows stand in the bar's More menu instead (inBar).
   const viewControl = (
     <div
       ref={menuRef}
@@ -451,34 +464,7 @@ export function ReaderPanes({
                 : "bottom-full left-0 mb-1.5 max-md:in-data-sheet-open:right-0 max-md:in-data-sheet-open:left-auto"
           }`}
         >
-          {views.map((kind) => (
-            <button
-              key={kind}
-              onClick={() => go(kind)}
-              data-track={`view:${kind}`}
-              className={`flex items-center gap-2.5 rounded-full px-2.5 py-1.5 text-left text-[12px] ${
-                view === kind
-                  ? "bg-clay-100 font-semibold text-clay-800"
-                  : "text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-              }`}
-            >
-              <ViewGlyph kind={kind} size={13} />
-              {t(VIEW_LABEL[kind])}
-            </button>
-          ))}
-          {/* A phone's reader has no floating Feedback pill, which would
-              lie on the article's last lines (feedback-button.tsx). */}
-          <div aria-hidden className="mx-2.5 my-1 h-px bg-line md:hidden" />
-          <button
-            onClick={() => {
-              setMenu(false);
-              window.dispatchEvent(new Event(FEEDBACK_OPEN_EVENT));
-            }}
-            data-track="feedback-open"
-            className="flex items-center gap-2.5 rounded-full px-2.5 py-1.5 text-left text-[12px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 md:hidden"
-          >
-            {t("works.feedback")}
-          </button>
+          {viewRows}
         </div>
       )}
       </Presence>
@@ -498,7 +484,7 @@ export function ReaderPanes({
       }
       className={`relative flex h-full min-h-0 min-w-0 ${view === "stack" ? "flex-col" : "flex-row"}`}
     >
-      {portalTo ? createPortal(viewControl, portalTo) : viewControl}
+      {inBar ? createPortal(viewRows, barSlot) : portalTo ? createPortal(viewControl, portalTo) : viewControl}
 
       {missing && missingClosed !== missing.documentId && (
         <div

@@ -27,7 +27,6 @@ import {
   type AnnotationItem,
   type CorpusDistillationView,
   type DistillationView,
-  type EditItem,
   type ExtractionView,
   type HistoryEntry,
   type LinkIn,
@@ -43,7 +42,6 @@ import { AssistantPanel } from "@/components/assistant/assistant-panel";
 import type { CollabState } from "@/components/collab/collab-context";
 import { AnnotationsPanel } from "@/components/panels/annotations-panel";
 import { DistillPanel } from "@/components/panels/distill-panel";
-import { EditsPanel } from "@/components/panels/edits-panel";
 import type { ConversionInfo } from "@/components/reader/conversion-strip";
 import { GlossaryLanguage } from "@/components/reader/glossary-language";
 import type { PageMark } from "@/components/reader/page-block";
@@ -1129,7 +1127,7 @@ export default async function NotebookPage(props: {
 
   // The rest of the page's reads depend on nothing below: they start together.
   const [
-    editRows,
+    documentHistoryFirst,
     corpusQuoteDocs,
     graph,
     historyFirst,
@@ -1137,15 +1135,10 @@ export default async function NotebookPage(props: {
     positionRows,
   ] =
     await Promise.all([
-      // Edit history for the open document, newest first.
-      paneOne
-        ? db.blockEdit.findMany({
-            where: { documentId: paneOne.document.id },
-            orderBy: { createdAt: "desc" },
-            take: 100,
-            include: { replies: { orderBy: { createdAt: "asc" } } },
-          })
-        : [],
+      // History's This document (SPEC.md §12): the open document's edits,
+      // newest first, each with its replies — the rows the rail's Edits tab
+      // listed. Show older reads the rest.
+      paneOne ? historyPage(notebookId, [paneOne.document.id], null, undefined, { editsOnly: true }) : null,
       corpusQuoteDocIds.length > 0
         ? db.document.findMany({
             where: { id: { in: corpusQuoteDocIds } },
@@ -1184,17 +1177,7 @@ export default async function NotebookPage(props: {
       : null;
   };
 
-  const edits: EditItem[] = editRows.map((e) => ({
-        id: e.id,
-        kind: e.kind as EditItem["kind"],
-        blockId: e.blockId,
-        before: e.before,
-        after: e.after,
-        meta: e.meta as EditItem["meta"],
-        userId: e.userId,
-        replies: toReplyViews(e.replies),
-        createdAt: e.createdAt.toISOString(),
-      }));
+  const documentHistory: HistoryEntry[] = documentHistoryFirst?.entries ?? [];
 
 
   // Corpus distillations (SPEC.md §13): quotes heal against the current blocks
@@ -1245,11 +1228,10 @@ export default async function NotebookPage(props: {
       for (const r of n.replies) authorIds.add(r.userId);
     }
   }
-  for (const e of edits) {
-    if (e.userId) authorIds.add(e.userId);
-    for (const r of e.replies) authorIds.add(r.userId);
+  for (const entry of [...history, ...documentHistory]) {
+    if (entry.userId) authorIds.add(entry.userId);
+    for (const r of entry.edit?.replies ?? []) authorIds.add(r.userId);
   }
-  for (const entry of history) if (entry.userId) authorIds.add(entry.userId);
   for (const link of recommendedLinks) {
     if (link.createdById) authorIds.add(link.createdById);
     for (const r of link.replies) authorIds.add(r.userId);
@@ -1440,6 +1422,8 @@ export default async function NotebookPage(props: {
         linkScansLeft: await linkScanRunsLeft(user?.id ?? null),
       }}
       history={history}
+      documentHistory={documentHistory}
+      liveBlockIds={paneOne?.document.blocks.map((b) => b.id) ?? []}
       corpusDistillations={corpusDistillations}
       assistant={
         <AssistantPanel
@@ -1471,13 +1455,6 @@ export default async function NotebookPage(props: {
           linksOut={paneOne?.linksOut ?? []}
           linksIn={paneOne?.linksIn ?? []}
           sections={view.sections}
-        />
-      }
-      editsPanel={
-        <EditsPanel
-          key="edits"
-          edits={edits}
-          liveBlockIds={paneOne?.document.blocks.map((b) => b.id) ?? []}
         />
       }
       annotationCount={
