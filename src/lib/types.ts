@@ -388,6 +388,11 @@ export type GraphEdgeLink = {
   toBlockText: string | null;
   reason: string | null;
   recommended: boolean;
+  // The discussion on the link, oldest first, and who made it (SPEC.md §13):
+  // the curve's list shows the replies under the expanded link. Filled by
+  // withLinkReplies in lib/graph/view.ts; absent = none read.
+  replies?: ReplyView[];
+  createdById?: string | null;
 };
 
 /** One undirected pair of documents. Edge width and clay depth scale with
