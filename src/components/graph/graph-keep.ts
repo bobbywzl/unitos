@@ -28,6 +28,10 @@ export const OPEN_GRAPH_EVENT = "dissect:open-graph";
 /** The notes full page's Show on graph: /n/<id>?graph=1&graphNote=<noteId>. */
 export const GRAPH_NOTE_PARAM = "graphNote";
 
+/** The page Show on graph left, when it is not the reader: graphFrom=notes
+    is the notes full page, where closing the graph goes back (WALK4-06). */
+export const GRAPH_FROM_PARAM = "graphFrom";
+
 /** Ask the workspace to open the graph on a note or a link. False when no
     workspace answered (the notes full page): the caller navigates. */
 export function requestGraph(focus: GraphFocus): boolean {

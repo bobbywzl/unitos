@@ -211,10 +211,13 @@ export function FindList({
       data-track-surface="sidebar"
       data-graph-find-list
       data-graph-side-list="find"
-      className="menu-in absolute top-3 right-3 bottom-3 z-10 flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto overscroll-contain rounded-[20px] border border-line bg-card/95 p-4 pb-24 shadow-float backdrop-blur-md max-[999px]:bottom-16 max-[999px]:pb-4"
+      tabIndex={-1}
+      aria-label={t("graphView.findLabel")}
+      className="menu-in absolute outline-none top-3 right-3 bottom-3 z-10 flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto overscroll-contain rounded-[20px] border border-line bg-card/95 p-4 pb-24 shadow-float backdrop-blur-md max-[999px]:bottom-16 max-[999px]:pb-4"
     >
       <div className="flex items-start gap-2">
-        <p className="min-w-0 flex-1 text-[12.5px] leading-snug text-sand-700" data-graph-find-summary>
+        {/* A live region: a screen reader hears what Find found (WALK4-09). */}
+        <p role="status" className="min-w-0 flex-1 text-[12.5px] leading-snug text-sand-700" data-graph-find-summary>
           {find.error
             ? t("graphView.findFailed")
             : find.result === null
@@ -260,7 +263,11 @@ export function FindList({
               className="rounded-full bg-clay px-3.5 py-1.5 text-[12px] font-semibold text-clay-fg hover:bg-clay-600"
             >
               {others > 0
-                ? t("graphView.findAskWithPicks", { n: counted.length, m: others, ms: others === 1 ? "" : "s" })
+                ? t(counted.length === 1 ? "graphView.findAskWithPicksOne" : "graphView.findAskWithPicks", {
+                    n: counted.length,
+                    m: others,
+                    ms: others === 1 ? "" : "s",
+                  })
                 : t("graphView.findAsk")}
             </button>
           )}

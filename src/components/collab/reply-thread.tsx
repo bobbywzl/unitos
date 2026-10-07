@@ -214,14 +214,16 @@ export function ReplyThread({
             <span suppressHydrationWarning className="text-[10px] text-sand-500">
               {replyTime(reply.createdAt, lang)}
             </span>
-            <span className="ml-auto flex items-center gap-2">
+            {/* Under a finger, Resolve and Delete are 40px targets, 8px
+                apart (WALK4-16). */}
+            <span className="ml-auto flex items-center gap-2 pointer-coarse:-my-2.5 pointer-coarse:gap-3">
               {canEdit && (!outside || mine) && (
                 <button
                   onClick={() => setResolved(reply.id, !isResolved)}
                   disabled={inFlight.has(reply.id)}
                   data-track="reply-resolve"
                   data-tip={isResolved ? t("common.reopenTitle") : t("common.resolveTitle")}
-                  className="text-[10px] font-semibold text-sand-500 hover:text-sage-700"
+                  className="text-[10px] font-semibold text-sand-500 hover:text-sage-700 pointer-coarse:min-h-10 pointer-coarse:px-1.5"
                 >
                   {isResolved ? t("common.reopen") : t("common.resolve")}
                 </button>
@@ -233,7 +235,7 @@ export function ReplyThread({
                   data-track="reply-delete"
                   aria-label={t("common.delete")}
                   data-tip={t("common.delete")}
-                  className="text-[11px] text-sand-400 hover:text-red-600"
+                  className="text-[11px] text-sand-400 hover:text-red-600 pointer-coarse:flex pointer-coarse:size-10 pointer-coarse:items-center pointer-coarse:justify-center pointer-coarse:text-[15px]"
                 >
                   ×
                 </button>
@@ -290,7 +292,7 @@ export function ReplyThread({
           onClick={() => setComposing(true)}
           data-track="reply"
           data-tip={t("common.replyTitle")}
-          className="self-start text-[11px] font-semibold text-sand-600 hover:text-clay-700"
+          className="self-start text-[11px] font-semibold text-sand-600 hover:text-clay-700 pointer-coarse:min-h-10 pointer-coarse:pr-3"
         >
           {t("common.reply")}
         </button>
@@ -325,7 +327,7 @@ export function ReplyThread({
             type="submit"
             data-track="reply-send"
             disabled={!draft.trim() || busy}
-            className="rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+            className="rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40 pointer-coarse:min-h-10 pointer-coarse:px-4"
           >
             {t("common.reply")}
           </button>

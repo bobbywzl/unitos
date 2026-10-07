@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { readLinkNoteDraft, writeLinkNoteDraft } from "@/lib/note-drafts";
 import { refreshWhenOnline } from "@/lib/offline/queue";
@@ -36,6 +36,23 @@ export function LinkNoteComposer({ linkId }: { linkId: string }) {
   const [sectionId, setSectionId] = useState<string | null>(initial?.sectionId ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Escape folds the composer with its words kept (here and in the browser)
+  // and gives the focus back to Note on this link (WALK4-07); opening it
+  // scrolls Save into view on a short screen (WALK4-17).
+  const openerRef = useRef<HTMLButtonElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const returnFocus = useRef(false);
+  const scrollOnOpen = useRef(false);
+  useEffect(() => {
+    if (open && scrollOnOpen.current) {
+      scrollOnOpen.current = false;
+      formRef.current?.scrollIntoView({ block: "nearest" });
+    }
+    if (!open && returnFocus.current) {
+      returnFocus.current = false;
+      openerRef.current?.focus();
+    }
+  }, [open]);
   const [saved, setSaved] = useState<
     | { noteId: string; section: string }
     | { queued: { sectionId: string; content: string; at: number }; section: string }
@@ -79,7 +96,11 @@ export function LinkNoteComposer({ linkId }: { linkId: string }) {
   if (!open) {
     return (
       <button
-        onClick={() => setOpen(true)}
+        ref={openerRef}
+        onClick={() => {
+          scrollOnOpen.current = true;
+          setOpen(true);
+        }}
         data-track="graph-link-note"
         data-tip={t("graphNotes.noteOnLinkTitle")}
         className="mt-2 flex items-center gap-1.5 rounded-full border border-line px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-sage-100 hover:text-sage-800"
@@ -120,6 +141,7 @@ export function LinkNoteComposer({ linkId }: { linkId: string }) {
 
   return (
     <form
+      ref={formRef}
       data-graph-link-note-composer={linkId}
       onSubmit={(e) => {
         e.preventDefault();
@@ -159,6 +181,12 @@ export function LinkNoteComposer({ linkId }: { linkId: string }) {
         {...ime.props}
         onKeyDown={(e) => {
           if (ime.isImeEnter(e) || isImeKey(e)) return;
+          if (e.key === "Escape") {
+            e.preventDefault();
+            returnFocus.current = true;
+            setOpen(false);
+            return;
+          }
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
             e.preventDefault();
             void save();

@@ -60,8 +60,8 @@ const drafts = new Map<string, string>();
 const COMMAND_MAX = 4_000;
 const HISTORY_TURN_MAX = 8_000;
 
-// Each chip fills its template; the cursor lands at {topic}. A template
-// without {topic} runs at once.
+// Each chip fills its template; the cursor lands at {topic}, or at the end
+// of a template without {topic}. No chip runs on its own.
 const SUGGESTIONS = [
   { label: "stitch.stitchSuggestAsk", template: "stitch.stitchSuggestAskTemplate" },
   { label: "stitch.stitchSuggestGather", template: "stitch.stitchSuggestGatherTemplate" },
@@ -146,6 +146,7 @@ export function StitchBox({
   const bodyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const regionRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLSpanElement>(null);
 
   function setTurns(update: (turns: Turn[]) => Turn[]) {
     setTurnsState((prev) => {
@@ -190,9 +191,10 @@ export function StitchBox({
         onPickingChange(false);
         return true;
       }
+      // The focus goes to the box's title, never to the page (WALK4-07).
       const active = document.activeElement;
-      if (active instanceof HTMLElement && regionRef.current?.contains(active)) {
-        active.blur();
+      if (active instanceof HTMLElement && regionRef.current?.contains(active) && active !== titleRef.current) {
+        titleRef.current?.focus({ preventScroll: true });
         return true;
       }
       return false;
@@ -305,11 +307,9 @@ export function StitchBox({
 
   function suggest(suggestion: (typeof SUGGESTIONS)[number]) {
     const template = t(suggestion.template, { topic: TOPIC });
-    const slot = template.indexOf(TOPIC);
-    if (slot < 0) {
-      void send(template);
-      return;
-    }
+    // A template without {topic} fills the whole command: the caret at its
+    // end, and Send runs it (WALK4-02).
+    const slot = template.indexOf(TOPIC) < 0 ? template.length : template.indexOf(TOPIC);
     setCommand(template.replace(TOPIC, ""));
     // The cursor goes where the topic goes, once the text is in the box.
     requestAnimationFrame(() => {
@@ -390,7 +390,9 @@ export function StitchBox({
       )}
       <div className="flex items-center gap-2 px-4 pt-3">
         <SparkleIcon size={15} className="shrink-0 text-clay" />
-        <span className="font-display text-[16px]">{t("stitch.stitch")}</span>
+        <span ref={titleRef} tabIndex={-1} data-stitch-title className="font-display text-[16px] outline-none">
+          {t("stitch.stitch")}
+        </span>
         <span
           data-stitch-hint
           data-tip={t("stitch.stitchHintDetail")}

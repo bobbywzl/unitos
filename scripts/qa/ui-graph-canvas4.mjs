@@ -165,6 +165,19 @@ try {
   {
     const { page, context } = await open(LIB, 1440, 900, "en");
     await page.locator('[data-track="graph-documents"]').click();
+    // Past 20 rows each row is one line (LISTS4): open the row with the most parts first.
+    await page.waitForSelector("[data-graph-documents-row]", { timeout: 30000 }).catch(() => {});
+    if (await page.locator("[data-graph-documents-list][data-compact]").count()) {
+      const id = await page.locator("[data-graph-documents-row]").evaluateAll((els) => {
+        let best = null, k = -1;
+        for (const el of els) {
+          const m = /(\d+) parts?/.exec(el.textContent ?? "");
+          if (m && Number(m[1]) > k) { k = Number(m[1]); best = el.getAttribute("data-graph-documents-row"); }
+        }
+        return best;
+      });
+      if (id) await page.locator(`[data-graph-documents-row="${id}"] [data-row-head]`).click();
+    }
     await page.waitForSelector("[data-graph-parts-more]", { timeout: 30000 }).catch(() => {});
     const more = page.locator("[data-graph-parts-more]").first();
     const n = Number((await more.getAttribute("data-graph-parts-more").catch(() => null)) ?? 0);
