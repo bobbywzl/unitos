@@ -2640,7 +2640,7 @@ export function ReaderInteractions({
     const headerBottom = pageGeo
       ? container.querySelector(".docs-header")?.getBoundingClientRect().bottom
       : undefined;
-    // Under the page editor's toolbar the bubbles drop below the toolbox.
+    // The toolbox stands clear of the page editor's toolbar.
     const pageTop = headerBottom !== undefined ? Math.max(lineTop, headerBottom + 56) : lineTop;
     // Near the pane's top edge on screen — the document's first lines, or
     // the line at the top after a scroll — the toolbox moves down clear of
@@ -9823,7 +9823,8 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 </button>
               );
             }
-            const kind = tool?.kind ?? summary?.kind ?? "highlight";
+            // A source with neither a tool nor a summary is a highlight.
+            const kind = tool ? tool.kind : (summary?.kind ?? "highlight");
             // What the mark holds, not the words again: a comment's words, a
             // tool's answer, a highlight's comment (a pure highlight stores
             // its quote: its row is its hue alone).
