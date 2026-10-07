@@ -393,6 +393,9 @@ export type GraphEdgeLink = {
   toBlockText: string | null;
   reason: string | null;
   recommended: boolean;
+  // A generated document's provenance link (lib/graph/provenance.ts): drawn
+  // only while the graph shows where generated documents come from.
+  provenance?: boolean;
   // The discussion on the link, oldest first, and who made it (SPEC.md §13):
   // the curve's list shows the replies under the expanded link. Filled by
   // withLinkReplies in lib/graph/view.ts; absent = none read.
@@ -406,8 +409,9 @@ export type GraphEdgeLink = {
 export type GraphEdge = {
   a: string; // document id
   b: string; // document id; equal to a for a loop
-  accepted: number;
+  accepted: number; // the reader's accepted links; provenance links not counted
   recommended: number;
+  provenance?: number; // a generated document's provenance links (SPEC.md §22)
   links: GraphEdgeLink[]; // accepted first, oldest first
 };
 

@@ -20,6 +20,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { trivialEdits } from "@/lib/history/trivial";
 import { documentsGraph, listGenerated } from "@/lib/graph/view";
+import { isProvenanceLink } from "@/lib/graph/provenance";
 import {
   corpusDistillationList,
   distillationList,
@@ -640,7 +641,7 @@ export default async function NotebookPage(props: {
         where: { toDocumentId: document.id, ...projectLinks(notebookId) },
         orderBy: { createdAt: "desc" },
         include: {
-          fromDocument: { select: { title: true } },
+          fromDocument: { select: { title: true, generatedCommand: true } },
           replies: { orderBy: { createdAt: "asc" } },
         },
       }),
@@ -797,7 +798,10 @@ export default async function NotebookPage(props: {
           },
         });
       }
-      if (link.recommended) continue;
+      // A generated document's provenance link paints on the generated page
+      // only: the source's text keeps the reader's own marks (SPEC.md §22).
+      // It still lists in the Annotations tab.
+      if (link.recommended || isProvenanceLink(link, link.fromDocument.generatedCommand !== null)) continue;
       const list = linksByBlock[resolved.blockId] ?? [];
       list.push({
         linkId: link.id,
