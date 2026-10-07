@@ -117,15 +117,15 @@ export function DocumentDeleteConfirm({
       // reader's own projects only, and nothing goes.
       lines.push(t("panes.deleteShared", { projects: join(reach.projects.map((p) => p.title), 0) }));
     } else {
-      lines.push(t("panes.deleteAsk"));
+      // The question names the projects it reaches: in this project alone,
+      // the plain question; else every project, and the next line names them.
       const count = names.length + others;
       const projects = join(names, others);
+      lines.push(t(notebookId !== null && count === 0 ? "panes.deleteAskOnly" : "panes.deleteAsk"));
       if (notebookId === null) {
         lines.push(t(count === 1 ? "panes.deleteWhereLibraryOne" : "panes.deleteWhereLibrary", { projects }));
       } else if (count > 0) {
         lines.push(t(count === 1 ? "panes.deleteWhereAlsoOne" : "panes.deleteWhereAlso", { projects }));
-      } else {
-        lines.push(t("panes.deleteWhereOnly"));
       }
       if (reach.annotations > 0) {
         lines.push(

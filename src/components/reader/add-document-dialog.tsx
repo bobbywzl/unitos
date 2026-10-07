@@ -163,6 +163,7 @@ export function AddDocumentDialog({
   const pagesOf = (item: UploadItem) => readPageRanges(pageText.get(item) ?? "", countOf(item));
   const pagesInvalid = items.some((item) => isPdfItem(item) && "error" in pagesOf(item));
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const urlRef = useRef<HTMLInputElement>(null);
   // The project title field: empty while the project carries the default
   // title, which stands as the placeholder.
   const titleOf = (p: { title: string; untitled: string } | null) =>
@@ -195,6 +196,15 @@ export function AddDocumentDialog({
       setTitleDraft(titleOf(projectTitle));
     }
   }
+  // An open on a project that has its title puts the caret in the link
+  // field, so a link is paste and Continue. Not with a touch screen, where
+  // the keyboard would cover the dialog, nor for a new project, whose title
+  // field comes first.
+  useEffect(() => {
+    if (!open || projectTitle || !window.matchMedia("(pointer: fine)").matches) return;
+    const id = requestAnimationFrame(() => urlRef.current?.focus());
+    return () => cancelAnimationFrame(id);
+  }, [open, projectTitle]);
 
   // Save the title field when it changed: on blur, Enter, and Continue. An
   // empty field keeps the title as it is.
@@ -232,8 +242,20 @@ export function AddDocumentDialog({
     }
   }
 
-  // Enter after a link queues it (several links at once queue each). A
-  // Google Drive link imports on its own. A video link queues as a video.
+  // The links in the field, as queue items: a video link as a video.
+  const linkItems = (links: string[]): UploadItem[] =>
+    links.map((link) =>
+      parseYouTubeId(link) || isMediaUrl(link)
+        ? { kind: "video-url" as const, url: link }
+        : { kind: "url" as const, url: link },
+    );
+  // What Continue sends: the queue and the links still in the field.
+  const typedLinks = parseLinks(url);
+  const typedDrive = typedLinks.length === 1 && parseDriveFileId(typedLinks[0]) !== null;
+  const sendCount = items.length + (typedDrive ? 0 : typedLinks.length);
+
+  // Enter after a link queues it (several links at once queue each), for a
+  // list of more. A Google Drive link imports on its own.
   async function addUrl(e: React.FormEvent) {
     e.preventDefault();
     const links = parseLinks(url);
@@ -245,23 +267,30 @@ export function AddDocumentDialog({
       if (await onDriveLink(links[0])) setUrl("");
       return;
     }
-    queue(
-      links.map((link) =>
-        parseYouTubeId(link) || isMediaUrl(link)
-          ? { kind: "video-url" as const, url: link }
-          : { kind: "url" as const, url: link },
-      ),
-    );
+    queue(linkItems(links));
     setUrl("");
   }
 
+  // Continue: the queue and a link still in the field go together, so one
+  // link is paste and Continue. Words in the field that are not a link stay
+  // there with the message, and nothing goes.
   async function submit() {
-    if (items.length === 0 || pagesInvalid) return;
+    if (pagesInvalid) return;
+    if (url.trim() && typedLinks.length === 0) {
+      onError(t("panes.notLink"));
+      return;
+    }
+    if (typedDrive) {
+      if (await onDriveLink(typedLinks[0])) setUrl("");
+      if (items.length === 0) return;
+    }
+    const all = [...items, ...(typedDrive ? [] : linkItems(typedLinks))];
+    if (all.length === 0) return;
     await saveTitle();
     // A PDF goes with its chosen pages; every page needs none.
     onSubmit(
       requestFor(
-        items.map((item) => {
+        all.map((item) => {
           if (!isPdfItem(item)) return item;
           const read = pagesOf(item);
           return "ranges" in read && read.ranges ? { ...item, pdfPages: read.ranges } : item;
@@ -389,25 +418,19 @@ export function AddDocumentDialog({
               <span className="text-xs font-normal text-sand-500">{t("panes.dropZoneHint")}</span>
             </button>
 
-            <form className="flex flex-col gap-1.5" onSubmit={(e) => void addUrl(e)}>
-              <div className="flex items-center gap-2">
-                <input
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  placeholder="https://…"
-                  aria-label={t("panes.documentUrl")}
-                  className="min-w-0 flex-1 rounded-full bg-sand-100 px-4 py-2 text-sm outline-none placeholder:text-sand-500"
-                />
-                <button
-                  type="submit"
-                  data-track="add-url"
-                  disabled={busy || !url.trim()}
-                  className={submitButton}
-                >
-                  {t("panes.queueLink")}
-                </button>
-              </div>
-              <span className="text-[11px] text-sand-500">{t("panes.urlHint")}</span>
+            {/* A link: Continue takes it from the field; Enter queues it
+                for a list of more. What a link becomes is the tooltip. */}
+            <form className="flex" onSubmit={(e) => void addUrl(e)}>
+              <input
+                ref={urlRef}
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://…"
+                aria-label={t("panes.documentUrl")}
+                data-track="add-url"
+                data-tip={t("panes.urlHint")}
+                className="min-w-0 flex-1 rounded-full bg-sand-100 px-4 py-2 text-sm outline-none placeholder:text-sand-500"
+              />
             </form>
 
             {/* The queue (SPEC.md §22): every link and file waiting for Continue. */}
@@ -511,10 +534,10 @@ export function AddDocumentDialog({
               <button
                 onClick={() => void submit()}
                 data-track="add-continue"
-                disabled={busy || items.length === 0 || pagesInvalid}
+                disabled={busy || (items.length === 0 && !url.trim()) || pagesInvalid}
                 className={`ml-auto ${submitButton}`}
               >
-                {items.length > 1 ? t("panes.continueWithCount", { n: items.length }) : t("panes.continue")}
+                {sendCount > 1 ? t("panes.continueWithCount", { n: sendCount }) : t("panes.continue")}
               </button>
             </div>
             {onImportDrive && driveLink && (driveLink.linked || driveLink.canLink) && (

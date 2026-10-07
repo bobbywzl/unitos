@@ -16,18 +16,20 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CommentIcon,
-  DistillIcon,
   EditsIcon,
   GraphIcon,
+  MoreIcon,
   NotesIcon,
   OfflineIcon,
   QuestionIcon,
+  QuoteIcon,
   SparkleIcon,
 } from "@/components/icons";
 import { ClickTracker } from "@/components/click-tracker";
 import { FunnelStepMark } from "@/components/funnel-step";
 import { CollabProvider, type CollabState } from "@/components/collab/collab-context";
-import { HistoryControl } from "@/components/collab/history-control";
+import { HistoryPanel } from "@/components/collab/history-control";
+import { FEEDBACK_OPEN_EVENT } from "@/components/feedback-button";
 import { ShareControl } from "@/components/collab/share-control";
 import { OfflineStatus } from "@/components/offline-status";
 import { useNotebookSync } from "@/components/collab/use-sync";
@@ -50,6 +52,7 @@ import {
   type SaveProgress,
 } from "@/lib/offline/saved";
 import { TierMark } from "@/components/tier-mark";
+import { useEscapeLayer } from "@/lib/escape-layers";
 import { FloatingNoteEditor } from "@/components/outline/floating-note-editor";
 import { readTrayFold, subscribeTrayFold } from "@/lib/assistant/side-chat-open";
 import { NotesTray } from "@/components/outline/notes-tray";
@@ -70,7 +73,10 @@ import {
   trayStateKey,
 } from "@/lib/reading-position";
 
-type Tab = "notes" | "assistant" | "distill" | "annotations" | "edits";
+// History (SPEC.md §12) is a tab of the tray, opened from the header's
+// History button (below md, from the bar's More menu); it took in the rail's
+// Edits tab, whose rows are its This document.
+type Tab = "notes" | "assistant" | "distill" | "annotations" | "history";
 
 /** The back arrow, and three dots in a wave while the dashboard opens: the
     press answers at once, and the dashboard lands half a second later. */
@@ -84,12 +90,15 @@ const TAB_TITLES: Record<Tab, TKey> = {
   assistant: "panes.assistant",
   distill: "panes.distill",
   annotations: "panes.annotations",
-  edits: "panes.edits",
+  history: "panes.history",
 };
 
 const RAIL_BUTTON =
   "relative flex size-[38px] items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800";
 const RAIL_BUTTON_ON = "relative flex size-[38px] items-center justify-center rounded-full bg-clay-200 text-clay-800";
+// A row of the bar's More menu (below md).
+const MORE_ROW =
+  "flex items-center gap-2.5 rounded-full px-2.5 py-1.5 text-left text-[12px] text-sand-700 hover:bg-clay-100 hover:text-clay-800";
 // The strip's edge buttons (a split view): one scrolls to the tray, one back
 // to the documents. md+ only — below md the tray is a sheet, never a screen.
 const STRIP_BUTTON =
@@ -138,13 +147,14 @@ export function Workspace({
   assistant,
   distillPanel,
   annotationsPanel,
-  editsPanel,
   annotationCount,
   distillationCount,
   collab,
   rev,
   graph,
   history,
+  documentHistory,
+  liveBlockIds,
   corpusDistillations,
 }: {
   notebook: NotebookView;
@@ -164,7 +174,6 @@ export function Workspace({
   assistant: React.ReactNode;
   distillPanel: React.ReactNode;
   annotationsPanel: React.ReactNode;
-  editsPanel: React.ReactNode;
   annotationCount: number;
   distillationCount: number;
   collab: CollabState;
@@ -179,6 +188,10 @@ export function Workspace({
     linkScansLeft: number;
   };
   history: HistoryEntry[];
+  // History's This document: the open document's edits, and its blocks
+  // (an edit reverts while its block is there).
+  documentHistory: HistoryEntry[];
+  liveBlockIds: string[];
   corpusDistillations: CorpusDistillationView[];
 }) {
   const t = useT();
@@ -209,6 +222,11 @@ export function Workspace({
   // bottom bar; mobileTray tracks it. On md+ the md: overrides put the same
   // aside back in the side column, so the flag is inert there.
   const [mobileTray, setMobileTray] = useState(false);
+  // A phone's layout (below md): the rail is the bottom bar, and its More
+  // menu holds what the header and the bar have no room for.
+  const phone = useSyncExternalStore(subscribeNarrow, readNarrow, () => false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
   // A jump opens the sheet below md, as the bottom bar does. On md+ the flag
   // stays as it is: the rail reads it to tell a second press on the open tab.
   const openSheet = useCallback(() => {
@@ -584,6 +602,51 @@ export function Workspace({
     setMobileTray(true);
     revealTray();
   }
+  // A tab is the open one: below md while the sheet shows it, on md+ while
+  // the tray is open on it. The bar's button for it reads pressed then only.
+  const isOpen = (which: Tab) => tab === which && (phone ? mobileTray : !collapsed);
+  // The header's History: opens the tray on History; a second press, History
+  // open, folds the tray as the rail's chevron does.
+  function toggleHistory() {
+    if (!phone && isOpen("history")) {
+      setCollapsed(true);
+      rememberTray({ collapsed: true, tab });
+      return;
+    }
+    show("history");
+  }
+  // The Notes button with notes waiting for Accept: the tray opens on notes
+  // with the first pending note in view and flashed, as the header's
+  // pending count did; with the notes open, a press is the tab's own.
+  function showNotes() {
+    if (pending.length > 0 && !isOpen("notes")) {
+      window.dispatchEvent(
+        new CustomEvent("dissect:show-note", { detail: { noteId: actions.focusedPendingId ?? pending[0].id } }),
+      );
+      return;
+    }
+    show("notes");
+  }
+  // The More menu closes on a press outside it and on any row's press (the
+  // reader views are rows reader-panes.tsx puts in its slot, outside this
+  // component's tree, so a native listener hears them).
+  useEffect(() => {
+    if (!moreOpen) return;
+    const menu = moreRef.current;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!menu?.contains(e.target as Node)) setMoreOpen(false);
+    };
+    const onClick = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest("[data-more-row], [data-reader-view-slot] button")) setMoreOpen(false);
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    menu?.addEventListener("click", onClick);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      menu?.removeEventListener("click", onClick);
+    };
+  }, [moreOpen]);
+  useEscapeLayer(moreOpen, () => setMoreOpen(false));
 
   // A note floats over the article (dragged out of the tray), or a side chat
   // or version history is open in the reader (SPEC.md §7, §29): the tray
@@ -650,7 +713,12 @@ export function Workspace({
         >
           <BackArrow />
         </Link>
-        <NotebookTitle id={notebook.id} title={notebook.title} />
+        {/* Below sm the document pill takes the title's room: a title cut
+            to two letters names nothing, and Rename stays on the
+            dashboard card's menu. */}
+        <div className="hidden min-w-0 sm:flex">
+          <NotebookTitle id={notebook.id} title={notebook.title} />
+        </div>
         <span aria-hidden className="hidden size-[5px] shrink-0 rounded-full bg-sand-400 sm:block" />
         {/* No overflow clipping here: the document list and the + menu drop
             below the header. The one pill truncates instead of scrolling. */}
@@ -669,11 +737,25 @@ export function Workspace({
         <OfflineStatus />
         <SaveIndicator />
         <ShareControl notebookId={notebook.id} presence={presence} />
-        <div className="hidden md:block">
-          <HistoryControl history={history} />
-        </div>
-        {/* Save for offline (SPEC.md §17, Unitos Ultra): the pill in the header.
-            Saved, it reads Offline and a press removes the copy. */}
+        {/* History (SPEC.md §12): opens the tray on History. Below md it
+            is a row of the bar's More menu. */}
+        <button
+          onClick={toggleHistory}
+          data-track="history"
+          aria-expanded={isOpen("history")}
+          aria-label={t("panes.history")}
+          data-tip={t("panes.historyTitle")}
+          className={`hidden size-[34px] shrink-0 items-center justify-center rounded-full border md:flex ${
+            isOpen("history")
+              ? "border-clay-300 bg-clay-200 text-clay-800"
+              : "border-line text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+          }`}
+        >
+          <EditsIcon size={16} />
+        </button>
+        {/* Save for offline (SPEC.md §17, Unitos Ultra): an icon in the
+            header, its name in the tooltip; saved, it is filled and a press
+            removes the copy. Below md it is a row of the bar's More menu. */}
         {offlineOn && (
           <button
             onClick={() => void toggleOffline()}
@@ -681,33 +763,18 @@ export function Workspace({
             data-track="offline-save"
             aria-label={t(offlineSaved ? "works.removeOffline" : "works.saveOffline")}
             data-tip={t(offlineSaved ? "works.removeOffline" : "works.saveOffline")}
-            className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40 ${
+            className={`relative hidden size-[34px] shrink-0 items-center justify-center rounded-full hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40 md:flex ${
               offlineSaved
                 ? "border border-sage-300 bg-sage-200 text-sage-800"
                 : "border border-dashed border-sand-400 text-sand-600"
             }`}
           >
-            <OfflineIcon size={14} />
-            <span className="hidden sm:inline">
-              {t(offlineSaved ? "works.offlineBadge" : "works.saveOffline")}
-            </span>
-            {!collab.ultra && !offlineSaved && <TierMark state="ultra" size={10} />}
-          </button>
-        )}
-        {/* The pending count opens the pending notes: the tray on notes,
-            the first pending note in view and flashed. */}
-        {pending.length > 0 && (
-          <button
-            onClick={() =>
-              window.dispatchEvent(
-                new CustomEvent("dissect:show-note", { detail: { noteId: actions.focusedPendingId ?? pending[0].id } }),
-              )
-            }
-            data-track="pending-count"
-            data-tip={t("panes.pendingCountTitle")}
-            className="hidden shrink-0 rounded-full bg-clay-200 px-3.5 py-1.5 text-xs font-semibold text-clay-800 hover:bg-clay-300 lg:inline"
-          >
-            {t("panes.pendingCount", { n: pending.length })}
+            <OfflineIcon size={15} />
+            {!collab.ultra && !offlineSaved && (
+              <span className="absolute -top-1 -right-1">
+                <TierMark state="ultra" size={10} />
+              </span>
+            )}
           </button>
         )}
         <button
@@ -852,7 +919,14 @@ export function Workspace({
               {tab === "assistant" && assistant}
               {tab === "distill" && distillPanel}
               {tab === "annotations" && annotationsPanel}
-              {tab === "edits" && editsPanel}
+              {tab === "history" && (
+                <HistoryPanel
+                  history={history}
+                  documentHistory={documentHistory}
+                  documentId={activeDocumentId}
+                  liveBlockIds={liveBlockIds}
+                />
+              )}
             </div>
 
             {/* One Undo pill on the body for a merge, a delete, and a
@@ -916,30 +990,31 @@ export function Workspace({
               data-track="assistant"
               aria-label={t("panes.assistant")}
               data-tip={t("panes.assistantTabTitle")}
-              aria-current={!collapsed && tab === "assistant"}
-              className={!collapsed && tab === "assistant" ? RAIL_BUTTON_ON : RAIL_BUTTON}
+              aria-current={isOpen("assistant")}
+              className={isOpen("assistant") ? RAIL_BUTTON_ON : RAIL_BUTTON}
             >
               <SparkleIcon />
             </button>
           )}
 
+          {/* Below md the graph is a row of the More menu. */}
           <button
             onClick={() => setGraphOpen(true)}
             data-track="graph"
             aria-label={t("panes.graph")}
             data-tip={t("panes.graphTitle")}
-            className={RAIL_BUTTON}
+            className={`max-md:hidden ${RAIL_BUTTON}`}
           >
             <GraphIcon />
           </button>
 
           <button
-            onClick={() => show("notes")}
+            onClick={showNotes}
             data-track="notes"
             aria-label={t("panes.notes")}
-            data-tip={t("panes.notesTabTitle")}
-            aria-current={!collapsed && tab === "notes"}
-            className={!collapsed && tab === "notes" ? RAIL_BUTTON_ON : RAIL_BUTTON}
+            data-tip={pending.length > 0 ? t("panes.pendingCountTitle") : t("panes.notesTabTitle")}
+            aria-current={isOpen("notes")}
+            className={isOpen("notes") ? RAIL_BUTTON_ON : RAIL_BUTTON}
           >
             <NotesIcon />
             {pending.length > 0 && (
@@ -954,8 +1029,8 @@ export function Workspace({
             data-track="annotations"
             aria-label={t("panes.annotations")}
             data-tip={t("panes.annotationsTabTitle")}
-            aria-current={!collapsed && tab === "annotations"}
-            className={!collapsed && tab === "annotations" ? RAIL_BUTTON_ON : RAIL_BUTTON}
+            aria-current={isOpen("annotations")}
+            className={isOpen("annotations") ? RAIL_BUTTON_ON : RAIL_BUTTON}
           >
             <CommentIcon />
           </button>
@@ -965,27 +1040,76 @@ export function Workspace({
             data-track="distill"
             aria-label={t("panes.distill")}
             data-tip={t("panes.distillTabTitle")}
-            aria-current={!collapsed && tab === "distill"}
-            className={!collapsed && tab === "distill" ? RAIL_BUTTON_ON : RAIL_BUTTON}
+            aria-current={isOpen("distill")}
+            className={isOpen("distill") ? RAIL_BUTTON_ON : RAIL_BUTTON}
           >
-            <DistillIcon />
+            {/* The glyph the article's Extract button carries. */}
+            <QuoteIcon />
           </button>
 
-          <button
-            onClick={() => show("edits")}
-            data-track="edits"
-            aria-label={t("panes.editHistory")}
-            data-tip={t("panes.editsTabTitle")}
-            aria-current={!collapsed && tab === "edits"}
-            className={!collapsed && tab === "edits" ? RAIL_BUTTON_ON : RAIL_BUTTON}
-          >
-            <EditsIcon />
-          </button>
-
-          {/* Below md the Reader view button stands here, the bar's last
-              button (reader-panes.tsx); floating, it lay on the article's
-              bottom-left lines. */}
-          <div data-reader-view-slot className="empty:hidden md:hidden" />
+          {/* Below md the bar's last button: More, a menu of what a phone
+              has no room for at rest — the reader views (reader-panes.tsx
+              puts them in the slot), the graph, History, Save for offline,
+              the guide, and Feedback. Rendered closed, so the slot is there
+              when the reader mounts. */}
+          <div ref={moreRef} className="relative md:hidden">
+            <button
+              onClick={() => setMoreOpen((v) => !v)}
+              data-track="more"
+              aria-label={t("panes.more")}
+              data-tip={t("panes.more")}
+              aria-expanded={moreOpen}
+              className={moreOpen || (isOpen("history") && mobileTray) ? RAIL_BUTTON_ON : RAIL_BUTTON}
+            >
+              <MoreIcon />
+              {guideNudge && (
+                <span aria-hidden className="absolute top-1 right-1 size-2 rounded-full bg-clay">
+                  <span className="absolute inset-0 motion-safe:animate-ping rounded-full bg-clay" />
+                </span>
+              )}
+            </button>
+            <div
+              className={`${moreOpen ? "menu-in flex" : "hidden"} absolute right-0 bottom-full z-40 mb-2.5 w-52 flex-col rounded-2xl bg-card p-1.5 shadow-float`}
+            >
+              <div data-reader-view-slot className="mb-1 flex flex-col border-b border-line pb-1 empty:hidden" />
+              <button data-more-row onClick={() => setGraphOpen(true)} data-track="more:graph" className={MORE_ROW}>
+                <GraphIcon size={15} />
+                {t("panes.graph")}
+              </button>
+              <button data-more-row onClick={() => show("history")} data-track="more:history" className={MORE_ROW}>
+                <EditsIcon size={15} />
+                {t("panes.history")}
+              </button>
+              {offlineOn && (
+                <button
+                  data-more-row
+                  onClick={() => void toggleOffline()}
+                  disabled={offlineSaving}
+                  data-track="more:offline-save"
+                  className={`${MORE_ROW} disabled:opacity-40`}
+                >
+                  <OfflineIcon size={15} />
+                  {t(offlineSaved ? "works.removeOffline" : "works.saveOffline")}
+                  {!collab.ultra && !offlineSaved && <TierMark state="ultra" size={10} />}
+                </button>
+              )}
+              <button data-more-row onClick={openGuide} data-track="more:guide" className={MORE_ROW}>
+                <QuestionIcon size={15} />
+                {t("panes.guide")}
+              </button>
+              {/* A phone's reader has no floating Feedback pill, which would
+                  lie on the article's last lines (feedback-button.tsx). */}
+              <button
+                data-more-row
+                onClick={() => window.dispatchEvent(new Event(FEEDBACK_OPEN_EVENT))}
+                data-track="feedback-open"
+                className={MORE_ROW}
+              >
+                <CommentIcon size={15} />
+                {t("works.feedback")}
+              </button>
+            </div>
+          </div>
         </nav>
       </div>
 
@@ -1056,13 +1180,26 @@ function storedTray(key: string, canEdit: boolean): { collapsed: boolean; tab: T
     const stored = raw ? (JSON.parse(raw) as { collapsed?: unknown; tab?: unknown }) : null;
     if (!stored || typeof stored.collapsed !== "boolean") return null;
     const tab =
-      typeof stored.tab === "string" && stored.tab in TAB_TITLES && (stored.tab !== "assistant" || canEdit)
-        ? (stored.tab as Tab)
-        : "notes";
+      // The Edits tab folded into History: a tray left on it opens on History.
+      stored.tab === "edits"
+        ? "history"
+        : typeof stored.tab === "string" && stored.tab in TAB_TITLES && (stored.tab !== "assistant" || canEdit)
+          ? (stored.tab as Tab)
+          : "notes";
     return { collapsed: stored.collapsed, tab };
   } catch {
     return null; // storage unavailable: the tray's default
   }
+}
+
+// Below md (Tailwind's md): a phone's layout, with the bottom bar.
+function subscribeNarrow(onChange: () => void) {
+  const query = window.matchMedia(MD_QUERY);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+function readNarrow() {
+  return !window.matchMedia(MD_QUERY).matches;
 }
 
 function countNotes(sections: NotebookView["sections"]): number {

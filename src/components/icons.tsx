@@ -214,7 +214,7 @@ export function HistoryIcon(props: IconProps) {
   );
 }
 
-// Pencil over a baseline: the Edits tab in the rail.
+// Pencil over a baseline: History, in the header (SPEC.md §12).
 export function EditsIcon(props: IconProps) {
   return (
     <Icon {...props}>

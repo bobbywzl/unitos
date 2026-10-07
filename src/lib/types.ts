@@ -313,6 +313,15 @@ export type HistoryEntry = {
   // DOCUMENT_DETACH entries: the removed document, while it is out of the
   // project and still exists, so the row can offer Add back.
   addBackDocumentId?: string;
+  // BlockEdit entries: what the edit changed, for the row's words and its
+  // Revert or Restore, and the discussion under the edit (the Edits tab's
+  // card, folded into History).
+  edit?: {
+    before: string | null;
+    after: string | null;
+    meta: EditItem["meta"];
+    replies: ReplyView[];
+  };
   createdAt: string; // ISO
 };
 

@@ -30,13 +30,16 @@ export function throwIfDuplicate(body: unknown, fallback: string): void {
   }
 }
 
-/** The ask's words and buttons. */
+/** The ask's words and buttons. In the upload box (`inBox`) the box's
+    heading says the ask's title and its ✕ is Cancel, so neither repeats. */
 export function DuplicateAsk({
   documents,
   onChoose,
+  inBox = false,
 }: {
   documents: DuplicateMatch[];
   onChoose: (choice: DuplicateChoice) => void;
+  inBox?: boolean;
 }) {
   const t = useT();
   const first = documents[0];
@@ -47,9 +50,11 @@ export function DuplicateAsk({
       : t("panes.duplicateWhere", { title: first.title, project });
   return (
     <div className="flex flex-col gap-3" data-duplicate-ask>
-      <h2 id="duplicate-ask-title" className="font-display text-[17px] text-sand-900">
-        {t("panes.duplicateTitle")}
-      </h2>
+      {!inBox && (
+        <h2 id="duplicate-ask-title" className="font-display text-[17px] text-sand-900">
+          {t("panes.duplicateTitle")}
+        </h2>
+      )}
       <p className="text-[13px] leading-relaxed text-sand-700">
         {where} {t("panes.duplicateAsk")}
       </p>
@@ -68,13 +73,15 @@ export function DuplicateAsk({
         >
           {t("panes.duplicateOpen")}
         </button>
-        <button
-          onClick={() => onChoose("cancel")}
-          data-track="duplicate-cancel"
-          className="ml-auto rounded-full px-3.5 py-1.5 text-xs text-sand-600 hover:bg-clay-100 hover:text-clay-800"
-        >
-          {t("common.cancel")}
-        </button>
+        {!inBox && (
+          <button
+            onClick={() => onChoose("cancel")}
+            data-track="duplicate-cancel"
+            className="ml-auto rounded-full px-3.5 py-1.5 text-xs text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+          >
+            {t("common.cancel")}
+          </button>
+        )}
       </div>
     </div>
   );

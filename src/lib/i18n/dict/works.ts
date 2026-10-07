@@ -44,7 +44,7 @@ const en = {
   nudgeDocument: "Add more documents with +: a PDF, a web page, a video, or Google Drive.",
   nudgeSelect: "Select any passage of the text. A toolbar appears: the Assistant, Explain, Simplify, Comment, and colors.",
   nudgeRail:
-    "The side panel: Assistant, Graph, Notes, Annotations, Extract, Edit history. Open one and explore.",
+    "The side panel: Assistant, Graph, Notes, Annotations, Extract. Open one and explore.",
   nudgeTools:
     "Extract answers one question with quotes. Contents, top left, jumps to any part of the article.",
   nudgeMerge: "Hold a note over another note until the ring closes. The two join into one note.",
@@ -126,8 +126,8 @@ const en = {
   guidePanelAnnotations: "Annotations",
   guidePanelAnnotationsBody:
     "Highlights, comments, explanations, links; Jump scrolls to the source. Every kind carries one color everywhere — the mark in the text, the card, the tab: comment blue, explain red, simplify green, analyze teal, visualize magenta, assistant violet; a highlight keeps its own hue. Drag an annotation by its grip onto a note: the note gets the quote, a row that opens the annotation, and its text. The four arrows open the annotations full page: every annotation of the project, grouped by document.",
-  guidePanelEdits: "Edits",
-  guidePanelEditsBody: "The edit history.",
+  guidePanelEdits: "History",
+  guidePanelEditsBody: "Every edit and deletion in the project, from the History button at the top. This document narrows it to the open document's edits.",
   // Collapse (SPEC.md §28) and Contents (SPEC.md §26): the article's own controls.
   guideCollapseHeader: "Collapse — every block to its core",
   guideCollapseBody:
@@ -248,7 +248,7 @@ const zh: Record<keyof typeof en, string> = {
   nudgeProject: "从这里开始：按“新建项目”。一个项目绑定文档和笔记。",
   nudgeDocument: "用 + 添加更多文档：PDF、网页、视频或 Google Drive。",
   nudgeSelect: "选中正文中的任意一段。工具栏随即出现：助手、解释、简化、评论和颜色。",
-  nudgeRail: "侧栏：助手、图谱、笔记、批注、提取、编辑记录。打开一个，开始探索。",
+  nudgeRail: "侧栏：助手、图谱、笔记、批注、提取。打开一个，开始探索。",
   nudgeTools: "提取用引文回答一个问题。左上角的目录可跳转到文章的任何部分。",
   nudgeMerge: "把一条笔记压在另一条上按住，直到合并环合拢。两条会合并成一条。",
   nudgeFloat: "按住一条笔记，拖到文章上。笔记会浮在文章上，边读边写。",
@@ -318,8 +318,8 @@ const zh: Record<keyof typeof en, string> = {
   guidePanelAnnotations: "批注",
   guidePanelAnnotationsBody:
     "高亮、评论、解释、链接；“跳转”滚动到出处。每类批注在各处都用同一种颜色——文本中的标记、卡片、页签：评论蓝、解释红、简化绿、分析青、可视化品红、助手紫；高亮保留自己的色调。拖动批注的把手放到笔记上：笔记会得到引文、一条打开批注的批注链接和批注内容。四个箭头打开整页批注：项目里的每条批注，按文档分组。",
-  guidePanelEdits: "编辑记录",
-  guidePanelEditsBody: "编辑历史。",
+  guidePanelEdits: "历史",
+  guidePanelEditsBody: "此项目中的所有编辑与删除，从顶部的历史按钮打开。“此文档”只列出当前文档的编辑。",
   guideCollapseHeader: "折叠——每个块折叠为核心",
   guideCollapseBody:
     "文章右上角、提取旁边的折叠按钮。每个段落、列表、插图、表格和公式都显示为它的核心：它真正要说的，用大白话，长度是原文的十分之一到三分之一，结合整篇文章写成。",
