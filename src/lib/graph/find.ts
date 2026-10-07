@@ -1,12 +1,15 @@
 // Find across the project (SPEC.md §13): a word match over the project's
 // block text, no model call. Latin script matches at a word start ("pity"
-// finds "pitying", not "spity"); a query with CJK characters matches as a
-// substring, since Chinese has no spaces between words. Pure helpers: the
-// route runs the SQL.
+// finds "pitying", not "spity"); a word shorter than FIND_PREFIX_MIN matches
+// only whole ("of" finds "of", not "often"); a query with CJK characters
+// matches as a substring, since Chinese has no spaces between words. Pure
+// helpers: the route runs the SQL.
 
 export const FIND_MIN = 2;
 export const FIND_MAX = 100;
-export const FIND_SNIPPETS = 3; // passages per document in the first answer
+export const FIND_PREFIX_MIN = 3; // a shorter word matches only whole (COST4-02)
+export const FIND_SNIPPETS = 1; // passages per document in the first answer
+export const FIND_TOP = 30; // documents with a passage in the first answer; the rest send counts (COST4-02)
 export const FIND_MORE = 10; // passages per "+ N more"
 const AROUND = 80; // characters each side of the match
 
@@ -25,11 +28,19 @@ export function normalizeQuery(q: string): string {
 // that starts with punctuation ("§22", "“pity”", "$5") matches wherever it
 // stands, since no word starts before it (REV3-11).
 const WORD_HEAD = /^[\p{L}\p{N}_]/u;
+const WORD_TAIL = /[\p{L}\p{N}_]$/u;
 
-/** A Postgres ARE pattern that matches q at a word start, case aside. */
+/** A word query too short to match as a word start: it matches only whole. */
+function wholeWord(q: string): boolean {
+  return q.length < FIND_PREFIX_MIN && !isCjk(q) && WORD_HEAD.test(q) && WORD_TAIL.test(q);
+}
+
+/** A Postgres ARE pattern that matches q at a word start, case aside; a
+    short word matches only whole. */
 export function wordStartPattern(q: string): string {
   const escaped = q.replace(/[\\^$.|?*+()[\]{}]/g, "\\$&");
-  return WORD_HEAD.test(q) ? `\\m${escaped}` : escaped;
+  if (!WORD_HEAD.test(q)) return escaped;
+  return wholeWord(q) ? `\\m${escaped}\\M` : `\\m${escaped}`;
 }
 
 /** An ILIKE pattern that matches q anywhere, with % _ \ taken literally. */
@@ -47,7 +58,10 @@ export function firstMatch(text: string, q: string): { start: number; end: numbe
   const re =
     isCjk(q) || !WORD_HEAD.test(q)
       ? new RegExp(escapeJs(q), "iu")
-      : new RegExp(`(?<![\\p{L}\\p{N}_])(?=[\\p{L}\\p{N}_])${escapeJs(q)}`, "iu");
+      : new RegExp(
+          `(?<![\\p{L}\\p{N}_])(?=[\\p{L}\\p{N}_])${escapeJs(q)}${wholeWord(q) ? "(?![\\p{L}\\p{N}_])" : ""}`,
+          "iu",
+        );
   const m = re.exec(text);
   return m ? { start: m.index, end: m.index + m[0].length } : null;
 }
@@ -76,5 +90,7 @@ export function snippet(text: string, q: string): { text: string; start: number;
 }
 
 export type FindPassage = { blockId: string; text: string; start: number; end: number };
+/** A document past the first FIND_TOP has its count and no passage; its
+    passages come from the documentId + after call. */
 export type FindDocument = { id: string; count: number; passages: FindPassage[] };
 export type FindResult = { q: string; documents: FindDocument[] };

@@ -22,6 +22,13 @@ const cases: [string, string, boolean][] = [
   ["pitying the weak", "pity", true],
   ["spity", "pity", false],
   ["no section here", "§22", false],
+  // COST4-02: a word under three characters matches only whole.
+  ["one of them", "of", true],
+  ["Of course", "of", true],
+  ["often the case", "of", false],
+  ["the thing", "th", false],
+  ["AI-based tools", "ai", true],
+  ["often the case", "oft", true],
 ];
 for (const [text, q, hit] of cases) ok((firstMatch(text, q) !== null) === hit, `firstMatch(${JSON.stringify(text)}, ${JSON.stringify(q)}) = ${hit}`);
 
