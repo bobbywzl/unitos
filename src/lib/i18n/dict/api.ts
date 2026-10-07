@@ -227,9 +227,9 @@ const en = {
   compareNeedsText: "Both documents need text to compare",
   compareNoPoints: "Compare found no points",
   compareFailed: "Compare failed. {reason}",
-  // Recommend links (SPEC.md §13): the runs an account gets a calendar month.
+  // Scan for links (SPEC.md §13): the runs an account gets a calendar month.
   linkScanQuotaSpent:
-    "Recommend links runs {n} times a month and this month's runs are used. It comes back at the start of next month.",
+    "Scan for links runs {n} times a month and this month's runs are used. It comes back at the start of next month.",
   stitchNeedsTwo: "Stitch needs two or more documents of the project",
   stitchFailed: "Stitch failed. {reason}",
   stitchTimedOut: "Stitch ran out of time before the answer ended. Narrow the command to one topic or question, or try again.",

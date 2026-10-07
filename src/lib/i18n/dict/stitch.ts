@@ -4,6 +4,7 @@
 
 const en = {
   generated: "Generated content",
+  generatedShort: "Generated",
   generatedDesc: "Every page Stitch wrote for the project, newest first. A row opens it in the reader.",
   generatedEmpty: "Nothing generated yet. Ask Stitch below for a page built from the documents.",
   generatedFrom: "From the command: {command}",
@@ -92,6 +93,7 @@ const en = {
 
 const zh: Record<keyof typeof en, string> = {
   generated: "生成内容",
+  generatedShort: "生成",
   generatedDesc: "缝合为项目写的每个页面，最新在前。点击一行在阅读器中打开。",
   generatedEmpty: "尚未生成内容。在下方让缝合根据文档写一个页面。",
   generatedFrom: "来自指令：{command}",

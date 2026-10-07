@@ -410,7 +410,7 @@ const en = {
   graphProvenanceTag: "Source of a generated document",
   // The canvas by keyboard (graph-view.tsx, REV2-10).
   graphKeysHelp:
-    "Arrow keys move between documents. ] and [ go through the focused document's links. Enter opens a document or pins a link list, Space picks a document for Stitch, Escape goes back.",
+    "Arrow keys move between documents. ] and [ go through the focused document's links. Enter shows a document's card and Enter again opens the document; on a link, Enter pins its list. Space picks a document for Stitch, Escape goes back.",
   graphSkipStitch: "Skip to Stitch",
   graphSkipList: "Skip to the open list",
   // The Links list and an expanded link in the side panel (links-list.tsx, link-panel.tsx).
@@ -433,6 +433,18 @@ const en = {
   graphDocumentsAiLine: "The gists and the part titles are written by AI from each document. Check them against the text.",
   graphDocumentsBack: "Back to Documents",
   graphDocumentsEmpty: "No documents yet.",
+  graphDocuments: "Documents",
+  graphDocumentsFilter: "Filter by title, gist, or part",
+  graphDocumentsFilterNone: "No document matches these words.",
+  graphDocumentsFound: "{n} of {total} document{ts}",
+  graphDocumentsParts: "{n} part{s}",
+  graphDocumentsLinks: "{n} link{s}",
+  graphDocumentsNotes: "{n} note{s}",
+  graphDocumentsPartsMore: "{n} more part{s}",
+  graphDocumentsLinksMore: "{n} more link{s}",
+  graphDocumentsFewer: "Show fewer",
+  graphDocumentsGeneratedHidden: "{n} generated document{s} not listed. They list while Show where generated documents come from is on.",
+  graphDocumentsGeneratedShow: "Turn it on",
   // A node's card (graph-view.tsx). Count phrases: {s} is the English plural suffix.
   graphCardBlocks: "{n} block{s}",
   graphCardLinks: "{n} link{s}",
@@ -449,16 +461,17 @@ const en = {
   graphLinkRecommended: "Recommended link, not yet accepted",
   graphEmpty: "No documents yet. Add documents to the project, and the graph draws them and the links between them.",
   graphOneDocument: "One document so far. Add another, and the graph draws the links between them.",
-  graphNoLinks: "No links yet. Select a passage in the reader and press Link, or press Recommend links to have the AI propose some.",
+  graphNoLinks: "No links yet. Select a passage in the reader and press Link, or press Scan for links to have the AI propose some.",
   // Accepted links only: recommended links count under Recommended links.
   graphCounts: "{docs} document{ds} · {links} link{ls}",
   graphCountsGenerated: " · {n} generated document{s}",
 
   // Recommended links (annotations-panel.tsx)
-  // Recommend links (SPEC.md §13): the scan the reader asks for, from the
+  // Scan for links (SPEC.md §13): the scan the reader asks for, from the
   // graph. It reads every document of the project whole against the others,
   // so it runs a few times a month and never on its own.
-  recommendScan: "Recommend links",
+  recommendScan: "Scan for links",
+  recommendScanShort: "Scan",
   recommendScanRunning: "Reading the project…",
   recommendScanStopTitle: "Stop the scan. The links it already proposed stay, and the run still counts this month.",
   recommendScanTitle:
@@ -469,10 +482,11 @@ const en = {
   recommendScanPartial: "{n} link{s} proposed. {left} document{ds} not read this run — run it again to reach them.",
   recommendScanNone: "No links to propose between these documents.",
   recommendedLinks: "Recommended links",
+  recommendedLinksShort: "Recommended",
   recommendedLinksDesc:
     "Links the AI proposed. Accept a link to make it real; dismiss what does not hold.",
   recommendedLinksToggleTitle: "Recommended links awaiting Accept, for the whole project",
-  recommendedLinksEmpty: "No recommended links. Press Recommend links above to have the AI propose some.",
+  recommendedLinksEmpty: "No recommended links. Press Scan for links above to have the AI propose some.",
   openLinkEnd: "Open {title} at this link",
   acceptLinkTitle: "Make this recommended link real; it paints in both texts",
   dismissLinkTitle: "Drop this recommended link; nothing is recorded",
@@ -914,7 +928,7 @@ const zh: Record<keyof typeof en, string> = {
   graphProvenanceHide: "隐藏生成文档出自哪里",
   graphProvenanceCurve: "生成文档的段落出自这个文档",
   graphProvenanceTag: "生成文档的出处",
-  graphKeysHelp: "方向键在文档之间移动。] 和 [ 依次经过当前文档的链接。Enter 打开文档或固定链接列表，空格为缝合选取文档，Esc 返回。",
+  graphKeysHelp: "方向键在文档之间移动。] 和 [ 依次经过当前文档的链接。Enter 显示文档的卡片，再按一次 Enter 打开文档；在链接上，Enter 固定它的列表。空格为缝合选取文档，Esc 返回。",
   graphSkipStitch: "跳到缝合",
   graphSkipList: "跳到打开的列表",
   graphLinks: "链接",
@@ -935,6 +949,18 @@ const zh: Record<keyof typeof en, string> = {
   graphDocumentsAiLine: "要旨和部分标题由 AI 根据每个文档写成。请对照原文核对。",
   graphDocumentsBack: "返回文档",
   graphDocumentsEmpty: "还没有文档。",
+  graphDocuments: "文档",
+  graphDocumentsFilter: "按标题、要旨或部分筛选",
+  graphDocumentsFilterNone: "没有文档包含这些词。",
+  graphDocumentsFound: "{total} 个文档中的 {n} 个",
+  graphDocumentsParts: "{n} 个部分",
+  graphDocumentsLinks: "{n} 条链接",
+  graphDocumentsNotes: "{n} 条笔记",
+  graphDocumentsPartsMore: "还有 {n} 个部分",
+  graphDocumentsLinksMore: "还有 {n} 条链接",
+  graphDocumentsFewer: "收起",
+  graphDocumentsGeneratedHidden: "{n} 个生成文档未列出。打开“显示生成文档出自哪里”时列出。",
+  graphDocumentsGeneratedShow: "打开",
   graphCardBlocks: "{n} 个块",
   graphCardLinks: "{n} 个链接",
   graphCardRecommended: "{n} 个推荐链接",
@@ -955,6 +981,7 @@ const zh: Record<keyof typeof en, string> = {
   graphCountsGenerated: " · {n} 个生成文档",
 
   recommendScan: "扫描推荐链接",
+  recommendScanShort: "扫描",
   recommendScanLeft: "剩 {left} 次",
   recommendScanRunning: "正在阅读项目…",
   recommendScanStopTitle: "停止扫描。已提出的推荐链接保留，本次仍计入本月次数。",
@@ -964,6 +991,7 @@ const zh: Record<keyof typeof en, string> = {
   recommendScanPartial: "已提出 {n} 条链接。本次还有 {left} 个文档未读——再运行一次即可读到。",
   recommendScanNone: "这些文档之间没有可提出的链接。",
   recommendedLinks: "推荐链接",
+  recommendedLinksShort: "推荐",
   recommendedLinksDesc: "AI 提出的链接。接受即成为正式链接；不成立的可忽略。",
   recommendedLinksToggleTitle: "整个项目中待接受的推荐链接",
   recommendedLinksEmpty: "没有推荐链接。按上方的“扫描推荐链接”让 AI 提出链接。",
