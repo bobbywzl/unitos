@@ -77,7 +77,8 @@ for (const lang of ["en", "zh"]) {
     const page = await context.newPage();
     const modelCalls = [];
     page.on("request", (r) => {
-      if (/\/api\/(derive|assistant|multi|notes\/gist|notebooks\/[^/]+\/(stitch|connect))/.test(r.url())) modelCalls.push(r.url());
+      // The Stitch box's warm on open (/stitch/warm, SPEC.md §22) is the box's, not the card's or Find's.
+      if (/\/api\/(derive|assistant|multi|notes\/gist|notebooks\/[^/]+\/(stitch|connect))(?!\/warm)/.test(r.url())) modelCalls.push(r.url());
     });
     page.on("response", async (r) => {
       const u = r.url();
@@ -203,7 +204,8 @@ for (const lang of ["en", "zh"]) {
       await page.keyboard.up("Shift");
       await page.waitForTimeout(500);
       const pickText = await page.locator('[aria-label="Stitch"], [aria-label="缝合"]').first().innerText().catch(() => "");
-      check(`${tag} ⇧-click picks, no card`, (await page.locator("[data-graph-node-card]").count()) === 0 && /BOOK TWO/.test(pickText));
+      const cardsAfterPick = await page.locator("[data-graph-node-card]:not([role=\"tooltip\"])").count();
+      check(`${tag} ⇧-click picks, no card`, cardsAfterPick === 0 && /BOOK TWO/.test(pickText), `cards ${cardsAfterPick}, hover ${await page.locator('[role="tooltip"][data-graph-node-card]').count()}, box ${JSON.stringify(pickText.slice(0, 120))}`);
       await page.locator('[data-track="stitch-pick-clear"]').click().catch(() => {});
     }
 
@@ -255,7 +257,7 @@ for (const lang of ["en", "zh"]) {
     // reported, not judged.
     const usageAfter = usage();
     const served = LOG ? fs.readFileSync(LOG, "utf8").slice(logAt).split("\n") : [];
-    const modelServed = served.filter((l) => /(POST|GET) \/api\/(derive|assistant|multi|notes\/gist|notebooks\/[^/]+\/(stitch|connect))/.test(l));
+    const modelServed = served.filter((l) => /(POST|GET) \/api\/(derive|assistant|multi|notes\/gist|notebooks\/[^/]+\/(stitch|connect))(?!\/warm)/.test(l));
     check(
       `${tag} card and Find: no model call`,
       modelCalls.length === 0 && modelServed.length === 0,

@@ -1436,7 +1436,8 @@ function GraphCanvas({
   // between documents, ] and [ go through the focused document's curves.
   const rovingRef = useRef<string | null>(null);
   const curveOrigin = useRef<{ nodeId: string; index: number } | null>(null);
-  // Set while Escape puts focus back on a curve, so that focus opens no list.
+  // Set while Escape puts focus back on a curve, so that focus opens no list,
+  // and while focus follows the pinned card to a node, so it opens no hover card.
   const quietFocus = useRef(false);
   const applyRoving = useCallback(() => {
     const root = wrapRef.current;
@@ -1637,7 +1638,11 @@ function GraphCanvas({
     if (!focusedId) return;
     const active = document.activeElement;
     if (!(active instanceof Element) || !active.matches(".react-flow__node")) return;
-    if (active.getAttribute("data-id") !== focusedId) focusNode(focusedId);
+    if (active.getAttribute("data-id") === focusedId) return;
+    // Quietly: the card shows the document, so no hover card opens over it.
+    quietFocus.current = true;
+    focusNode(focusedId);
+    quietFocus.current = false;
   }, [focusedId, focusNode]);
   const onFocusCapture = useCallback(
     (e: FocusEvent) => {
@@ -1650,7 +1655,7 @@ function GraphCanvas({
           applyRoving();
         }
         curveOrigin.current = null;
-        hoverNode(id);
+        if (!quietFocus.current) hoverNode(id);
       } else if (e.target.matches(".react-flow__edge")) {
         const id = e.target.getAttribute("data-testid")?.replace(/^rf__edge-/, "");
         if (id && !quietFocus.current) hoverEdge(id);

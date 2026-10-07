@@ -98,17 +98,18 @@ async function pinAB() {
   return true;
 }
 const list = () => page.locator('[data-track-surface="graph-links"]');
-const thread = (id) => list().locator(`[data-graph-link-thread="${id}"]`);
-/** Expand the row of one link in the pinned list (rows expand one at a time). */
+// A link opens in the side panel beside the canvas (GRAPH2, WALK2-05), not in
+// place in the curve's list.
+const panel = (id) => page.locator(`[data-graph-link-panel="${id}"]`);
+const thread = (id) => panel(id).locator(`[data-graph-link-thread="${id}"]`);
+/** Open one link of the pinned list in the side panel. */
 async function expand(id) {
   const rows = list().locator('[data-track="graph-link-expand"]');
   const n = await rows.count();
   for (let i = 0; i < n; i++) {
     if (await thread(id).count()) return true;
-    const row = rows.nth(i);
-    if ((await row.getAttribute("aria-expanded")) === "true") await row.click();
     await rows.nth(i).click();
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(500);
   }
   return (await thread(id).count()) > 0;
 }
@@ -239,18 +240,18 @@ if (after) {
   await openLink(LINK_AB);
   const text = `SAFE offline note ${Date.now()}`;
   await page.route("**/api/notes", (route) => (route.request().method() === "POST" ? route.abort("internetdisconnected") : route.continue()));
-  await thread(LINK_AB).locator("..").locator('[data-track="graph-link-note"]').click();
-  await list().locator("[data-graph-link-note-composer] textarea").fill(text);
-  await list().locator('[data-track="graph-link-note-save"]').click();
+  await panel(LINK_AB).locator('[data-track="graph-link-note"]').click();
+  await panel(LINK_AB).locator("[data-graph-link-note-composer] textarea").fill(text);
+  await panel(LINK_AB).locator('[data-track="graph-link-note-save"]').click();
   await page.waitForTimeout(1200);
-  const queued = list().locator("[data-graph-link-note-queued]");
+  const queued = panel(LINK_AB).locator("[data-graph-link-note-queued]");
   check((await queued.count()) === 1, "offline: the line says the note waits in the queue", await queued.innerText().catch(() => ""));
-  check((await list().locator('[data-track="graph-link-note-show"]').count()) === 0, "offline: no Show yet");
+  check((await panel(LINK_AB).locator('[data-track="graph-link-note-show"]').count()) === 0, "offline: no Show yet");
   await shot(page, "REV2-07-queued");
   await page.unroute("**/api/notes");
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
-  await list().locator("[data-graph-link-note-saved]").waitFor({ timeout: 30000 }).catch(() => {});
-  const savedId = await list().locator("[data-graph-link-note-saved]").getAttribute("data-graph-link-note-saved").catch(() => null);
+  await panel(LINK_AB).locator("[data-graph-link-note-saved]").waitFor({ timeout: 30000 }).catch(() => {});
+  const savedId = await panel(LINK_AB).locator("[data-graph-link-note-saved]").getAttribute("data-graph-link-note-saved").catch(() => null);
   check(savedId !== null && sql(`select content from "Note" where id='${savedId}'`) === text, "landed: Show names the synced note", String(savedId));
   await shot(page, "REV2-07-landed");
   await page.mouse.click(4, 300);

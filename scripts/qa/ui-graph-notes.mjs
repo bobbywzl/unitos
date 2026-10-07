@@ -103,6 +103,8 @@ async function newPage(width, lang) {
   return { ctx, page };
 }
 
+// A link opens in the side panel beside the canvas (GRAPH2, WALK2-05).
+const panelOf = (page, id) => page.locator(`[data-graph-link-panel="${id}"]`);
 const nodeChip = (page, id) => page.locator(`[data-graph-node-notes="${id}"]`);
 
 for (const lang of ["en", "zh"]) {
@@ -145,7 +147,7 @@ for (const lang of ["en", "zh"]) {
     check(/COP 2\.6/.test(pairNotes), `${tag} Notes quoting both lists the COP note`);
     await list.locator('[data-track="graph-link-expand"]').first().click();
     await page.waitForTimeout(500);
-    const thread = await list.locator(`[data-graph-link-thread="${LINK_AB}"]`).innerText().catch(() => "");
+    const thread = await panelOf(page, LINK_AB).locator(`[data-graph-link-thread="${LINK_AB}"]`).innerText().catch(() => "");
     const seeded = sql(`select count(*) from "Reply" where "docLinkId"='${LINK_AB}' and "resolvedById" is null`);
     check(thread.split("\n").filter((l) => l.trim()).length >= Number(seeded), `${tag} thread shows the seeded replies`, JSON.stringify(thread.slice(0, 160)));
     await page.screenshot({ path: `${OUT}/link-pinned-${tag}-${MODE}.png` });
@@ -153,19 +155,19 @@ for (const lang of ["en", "zh"]) {
     if (SESSION && lang === "en" && width === 1440) {
       // Send a reply on the graph, then resolve it.
       const REPLY = `graph reply ${Date.now()}`;
-      await list.locator(`[data-graph-link-thread="${LINK_AB}"] [data-track="reply"]`).click();
-      await list.locator(`[data-graph-link-thread="${LINK_AB}"] textarea`).fill(REPLY);
-      await list.locator(`[data-graph-link-thread="${LINK_AB}"] [data-track="reply-send"]`).click();
+      await panelOf(page, LINK_AB).locator(`[data-graph-link-thread="${LINK_AB}"] [data-track="reply"]`).click();
+      await panelOf(page, LINK_AB).locator(`[data-graph-link-thread="${LINK_AB}"] textarea`).fill(REPLY);
+      await panelOf(page, LINK_AB).locator(`[data-graph-link-thread="${LINK_AB}"] [data-track="reply-send"]`).click();
       // The reply shows once the refresh lands (the first call compiles the route in dev).
-      await list.locator(`[data-graph-link-thread="${LINK_AB}"]`, { hasText: REPLY }).waitFor({ timeout: 30000 }).catch(() => {});
+      await panelOf(page, LINK_AB).locator(`[data-graph-link-thread="${LINK_AB}"]`, { hasText: REPLY }).waitFor({ timeout: 30000 }).catch(() => {});
       await abEdge.locator('[data-graph-curve-mark="replies"] text', { hasText: "3" }).waitFor({ timeout: 15000 }).catch(() => {});
-      const sent = await list.locator(`[data-graph-link-thread="${LINK_AB}"]`).innerText().catch(() => "");
+      const sent = await panelOf(page, LINK_AB).locator(`[data-graph-link-thread="${LINK_AB}"]`).innerText().catch(() => "");
       check(sent.includes(REPLY), "signed in: the sent reply shows in the thread");
       check(sql(`select count(*) from "Reply" where "docLinkId"='${LINK_AB}' and content='${REPLY}'`) === "1", "signed in: SQL finds the reply on the A–B link");
       const mark = await abEdge.locator('[data-graph-curve-mark="replies"] text').textContent().catch(() => "");
       check(mark?.trim() === "3", "signed in: the curve mark counts 3", mark ?? "");
       await page.screenshot({ path: `${OUT}/reply-sent-${tag}.png` });
-      const row = list.locator(`[data-graph-link-thread="${LINK_AB}"] div.flex.items-start`, { hasText: REPLY });
+      const row = panelOf(page, LINK_AB).locator(`[data-graph-link-thread="${LINK_AB}"] div.flex.items-start`, { hasText: REPLY });
       await row.locator('[data-track="reply-resolve"]').click();
       await abEdge.locator('[data-graph-curve-mark="replies"] text', { hasText: "2" }).waitFor({ timeout: 20000 }).catch(() => {});
       const mark2 = await abEdge.locator('[data-graph-curve-mark="replies"] text').textContent().catch(() => "");
@@ -226,20 +228,20 @@ for (const lang of ["en", "zh"]) {
       check(await pin(page, pair(A, C), 0.4), "pinned Heat pumps ⇄ Household");
       await list.locator('[data-track="graph-link-expand"]').first().click();
       await page.waitForTimeout(300);
-      await list.locator('[data-track="graph-link-note"]').click();
-      await list.locator(`[data-graph-link-note-composer="${LINK_AC}"] textarea`).fill("running cost and savings agree");
+      await panelOf(page, LINK_AC).locator('[data-track="graph-link-note"]').click();
+      await panelOf(page, LINK_AC).locator(`[data-graph-link-note-composer="${LINK_AC}"] textarea`).fill("running cost and savings agree");
       await page.waitForTimeout(200);
       // Reload mid-typing: the draft comes back.
       await openGraph(page);
       await pin(page, pair(A, C), 0.4);
       await list.locator('[data-track="graph-link-expand"]').first().click();
       await page.waitForTimeout(300);
-      const restored = await list.locator(`[data-graph-link-note-composer="${LINK_AC}"] textarea`).inputValue().catch(() => "");
+      const restored = await panelOf(page, LINK_AC).locator(`[data-graph-link-note-composer="${LINK_AC}"] textarea`).inputValue().catch(() => "");
       check(restored === "running cost and savings agree", "the draft comes back after a reload", restored);
       await page.screenshot({ path: `${OUT}/link-note-composer-${tag}.png` });
-      await list.locator('[data-track="graph-link-note-save"]').click();
+      await panelOf(page, LINK_AC).locator('[data-track="graph-link-note-save"]').click();
       await page.waitForTimeout(1800);
-      const savedLine = await list.locator("[data-graph-link-note-saved]").innerText().catch(() => "");
+      const savedLine = await panelOf(page, LINK_AC).locator("[data-graph-link-note-saved]").innerText().catch(() => "");
       check(/Note saved in/.test(savedLine), "the composer closes into Note saved in …", savedLine);
       const noteRow = sql(`select n.id || ',' || n.status || ',' || coalesce(n."documentId",'null') from "Note" n where n.content='running cost and savings agree' order by n."createdAt" desc limit 1`);
       const [noteId, status, documentId] = noteRow.split(",");
@@ -250,7 +252,7 @@ for (const lang of ["en", "zh"]) {
       check(draftLeft === null, "the draft is cleared once the server has the note");
       await page.screenshot({ path: `${OUT}/link-note-saved-${tag}.png` });
       // Show: the graph closes and the tray shows the note.
-      await list.locator('[data-track="graph-link-note-show"]').click();
+      await panelOf(page, LINK_AC).locator('[data-track="graph-link-note-show"]').click();
       await page.waitForTimeout(2500);
       const overlay = await page.locator(".graph-overlay-in").count();
       const card = await page.locator(`[data-note-id="${noteId}"]`).count();
