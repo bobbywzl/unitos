@@ -1108,7 +1108,11 @@ function GraphCanvas({
       if (keyOpen) setKeyOpen(false);
       else if (pinnedEdgeId && typed) {
         /* kept */
-      } else if (pinnedEdgeId) setPinnedEdgeId(null);
+      } else if (pinnedEdgeId) {
+        // The pointer may rest on the list: its hover would keep it open.
+        setPinnedEdgeId(null);
+        setHover(null);
+      }
       else if (hover) setHover(null);
       else return;
       e.preventDefault();
