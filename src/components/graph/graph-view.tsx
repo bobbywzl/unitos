@@ -1091,15 +1091,31 @@ function GraphCanvas({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented) return;
+      // Esc in a text box (a reply or a note on a link) only leaves the box:
+      // the overlay blurs it, and the list holding it stays open.
+      const target = e.target;
+      if (
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLInputElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      )
+        return;
+      // A list holding typed words stays, and so does the graph: closing
+      // either would throw the words away (✕ still closes the graph).
+      const typed = [...(floatHost?.querySelectorAll("textarea, input") ?? [])].some(
+        (el) => (el as HTMLTextAreaElement | HTMLInputElement).value.trim() !== "",
+      );
       if (keyOpen) setKeyOpen(false);
-      else if (pinnedEdgeId) setPinnedEdgeId(null);
+      else if (pinnedEdgeId && typed) {
+        /* kept */
+      } else if (pinnedEdgeId) setPinnedEdgeId(null);
       else if (hover) setHover(null);
       else return;
       e.preventDefault();
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [keyOpen, pinnedEdgeId, hover]);
+  }, [keyOpen, pinnedEdgeId, hover, floatHost]);
 
   // Keyboard (GR-16): Tab reaches nodes and curves; Enter on a node opens it
   // (⇧-Enter picks it), Space picks it; Enter on a curve pins its list.
