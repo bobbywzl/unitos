@@ -4,12 +4,13 @@ import type { Prisma } from "@prisma/client";
 // §13). A document row can sit in several projects of several accounts, so a
 // project reads only its own links. A link made before links carried a
 // project (notebookId null) shows in every project that holds both
-// documents, as it did (rule zero item 4). The access gate for one link is
-// linkAccess in lib/collab.ts.
+// documents, as it did (rule zero item 4). A link whose project was deleted
+// (formerNotebookId set) is kept and shows nowhere. The access gate for one
+// link is linkAccess in lib/collab.ts.
 
 /** The links one project reads: its own and the ones with no project. */
 export function projectLinks(notebookId: string): Prisma.DocLinkWhereInput {
-  return { OR: [{ notebookId }, { notebookId: null }] };
+  return { OR: [{ notebookId }, { notebookId: null, formerNotebookId: null }] };
 }
 
 /** The route of one link, asked from one project: a link of another project

@@ -18,10 +18,17 @@
 //      (DocLink.createdById) can edit exactly one of them (its owner, or an
 //      EDITOR collaborator by email). The link gets that one: a link is made
 //      from a project the maker can edit.
-//   4. Otherwise the link stays null and keeps showing in every project that
+//   4. Kept for others: a link of case 2 or 3 stays null when an account
+//      that wrote a reply on it, or accepted it (a LINK_ADD edit naming it),
+//      cannot open the chosen project (not its owner, not a collaborator by
+//      email). Scoping it would hide that account's reply or accept from the
+//      project it was written in (rule zero items 1 and 4).
+//   5. Otherwise the link stays null and keeps showing in every project that
 //      holds both documents, as before (rule zero item 4):
 //        ambiguous: several projects, and the maker can edit none or several;
 //        unknown: no project holds both documents.
+//   A link whose project was deleted (formerNotebookId set) is never given a
+//   project: it stays kept and shown nowhere.
 
 import { PrismaClient } from "@prisma/client";
 
@@ -36,6 +43,12 @@ async function plan(tx) {
     WHERE table_name = 'DocLink' AND column_name = 'notebookId'`;
   if (column.length === 0) {
     throw new Error('DocLink.notebookId does not exist: run "prisma migrate deploy" first.');
+  }
+  const former = await tx.$queryRaw`
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'DocLink' AND column_name = 'formerNotebookId'`;
+  if (former.length === 0) {
+    throw new Error('DocLink.formerNotebookId does not exist: run "prisma migrate deploy" first.');
   }
   const total = await tx.$queryRaw`SELECT count(*)::int AS n FROM "DocLink"`;
   const scoped = await tx.$queryRaw`SELECT count(*)::int AS n FROM "DocLink" WHERE "notebookId" IS NOT NULL`;
@@ -57,19 +70,54 @@ async function plan(tx) {
     LEFT JOIN "NotebookDocument" a ON a."documentId" = l."fromDocumentId"
     LEFT JOIN "NotebookDocument" b ON b."notebookId" = a."notebookId" AND b."documentId" = l."toDocumentId"
     LEFT JOIN "Notebook" n ON n."id" = b."notebookId"
-    WHERE l."notebookId" IS NULL
+    WHERE l."notebookId" IS NULL AND l."formerNotebookId" IS NULL
     GROUP BY l."id"
     ORDER BY l."id"`;
+  // The accounts that acted on each null link: reply authors, and the
+  // accounts whose LINK_ADD edit names it (accepters).
+  const actorRows = await tx.$queryRaw`
+    SELECT x."linkId", array_agg(DISTINCT x."userId") AS "actors"
+    FROM (
+      SELECT r."docLinkId" AS "linkId", r."userId" FROM "Reply" r
+      WHERE r."docLinkId" IS NOT NULL
+      UNION
+      SELECT e."meta"->>'linkId', e."userId" FROM "BlockEdit" e
+      WHERE e."kind" = 'LINK_ADD' AND e."userId" IS NOT NULL AND e."meta"->>'linkId' IS NOT NULL
+    ) x
+    JOIN "DocLink" l ON l."id" = x."linkId" AND l."notebookId" IS NULL
+    GROUP BY x."linkId"`;
+  const actorsOf = new Map(actorRows.map((r) => [r.linkId, r.actors]));
+  // Who can open each project: its owner, and its collaborators by email.
+  const memberRows = await tx.$queryRaw`
+    SELECT n."id", n."userId" AS "uid" FROM "Notebook" n
+    UNION
+    SELECT c."notebookId", u."id" FROM "NotebookCollaborator" c
+    JOIN "User" u ON lower(u."email") = lower(c."email")`;
+  const members = new Map();
+  for (const m of memberRows) {
+    if (!members.has(m.id)) members.set(m.id, new Set());
+    members.get(m.id).add(m.uid);
+  }
+  /** The accounts that acted on the link and cannot open the project. */
+  const outsiders = (linkId, notebookId) =>
+    (actorsOf.get(linkId) ?? []).filter((uid) => !members.get(notebookId)?.has(uid));
 
   const writes = [];
-  const counts = { certain: 0, byCreator: 0, ambiguous: 0, unknown: 0 };
+  const counts = { certain: 0, byCreator: 0, keptForOthers: 0, ambiguous: 0, unknown: 0 };
   for (const r of rows) {
-    if (r.projects.length === 1) {
-      counts.certain++;
-      writes.push({ id: r.id, notebookId: r.projects[0], why: "certain" });
-    } else if (r.projects.length > 1 && r.makerProjects.length === 1) {
-      counts.byCreator++;
-      writes.push({ id: r.id, notebookId: r.makerProjects[0], why: "by creator" });
+    const chosen =
+      r.projects.length === 1
+        ? { notebookId: r.projects[0], why: "certain" }
+        : r.projects.length > 1 && r.makerProjects.length === 1
+          ? { notebookId: r.makerProjects[0], why: "by creator" }
+          : null;
+    const outside = chosen ? outsiders(r.id, chosen.notebookId) : [];
+    if (chosen && outside.length > 0) {
+      counts.keptForOthers++;
+      if (verbose) console.log(`kept      ${r.id}: ${chosen.why} ${chosen.notebookId}, but ${outside.join(", ")} cannot open it`);
+    } else if (chosen) {
+      counts[chosen.why === "certain" ? "certain" : "byCreator"]++;
+      writes.push({ id: r.id, ...chosen });
     } else if (r.projects.length > 1) {
       counts.ambiguous++;
       if (verbose) console.log(`ambiguous ${r.id}: ${r.projects.join(", ")}`);
@@ -85,6 +133,7 @@ function report(p) {
   console.log(`Links: ${p.total} (already with a project: ${p.alreadyScoped}, with none: ${p.nullLinks})`);
   console.log(`  certain    (one project holds both documents):      ${p.counts.certain}`);
   console.log(`  by creator (the maker edits one of those projects): ${p.counts.byCreator}`);
+  console.log(`  ambiguous  (replies or accepts from accounts outside that project, left null): ${p.counts.keptForOthers}`);
   console.log(`  ambiguous  (several projects, left null):           ${p.counts.ambiguous}`);
   console.log(`  unknown    (no project holds both, left null):      ${p.counts.unknown}`);
   if (verbose) for (const w of p.writes) console.log(`write ${w.id} -> ${w.notebookId} (${w.why})`);
@@ -109,7 +158,7 @@ try {
           written += await tx.$executeRawUnsafe(
             `UPDATE "DocLink" AS l SET "notebookId" = v.nb
              FROM unnest($1::text[], $2::text[]) AS v(id, nb)
-             WHERE l."id" = v.id AND l."notebookId" IS NULL`,
+             WHERE l."id" = v.id AND l."notebookId" IS NULL AND l."formerNotebookId" IS NULL`,
             chunk.map((w) => w.id),
             chunk.map((w) => w.notebookId),
           );

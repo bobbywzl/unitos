@@ -98,7 +98,7 @@ export function LinkPanel({
           <span className="rounded-full border border-dashed border-clay-300 px-2 text-[10.5px] font-semibold text-clay-700">
             {t("panes.graphLinkRecommended")}
           </span>
-          {canEdit && (
+          {canEdit && !link.crossAccount?.outside && (
             <span className="ml-auto flex items-center gap-1.5">
               <button
                 onClick={() => void decide(true)}

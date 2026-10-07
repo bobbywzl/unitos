@@ -175,7 +175,8 @@ export async function POST(req: Request) {
   if (data.fromLinkId) {
     const link = await db.docLink.findUnique({ where: { id: data.fromLinkId } });
     // The link must belong to this project (or to none: a link made before
-    // links had a project), and both ends must be documents of it.
+    // links had a project; a deleted project's link is not found), and both
+    // ends must be documents of it.
     const attachedEnds = link
       ? await db.notebookDocument.count({
           where: { notebookId: section.notebookId, documentId: { in: [link.fromDocumentId, link.toDocumentId] } },
@@ -184,6 +185,7 @@ export async function POST(req: Request) {
     if (
       !link ||
       (link.notebookId !== null && link.notebookId !== section.notebookId) ||
+      (link.notebookId === null && link.formerNotebookId !== null) ||
       attachedEnds < new Set([link.fromDocumentId, link.toDocumentId]).size
     ) {
       return NextResponse.json({ error: t("api.linkNotFound") }, { status: 404 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { api } from "@/lib/api";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { type Edge as FlowEdge, type EdgeProps } from "reactflow";
 import type { GraphEdge, GraphEdgeLink, SectionView } from "@/lib/types";
@@ -48,6 +49,12 @@ type GraphNotesValue = {
   openSource: (documentId: string, sourceId: string) => void;
   acceptNote: (id: string) => Promise<void>;
   rejectNote: (id: string) => Promise<void>;
+  /** Undo for a Reject: the note goes back to pending (PATCH status PENDING). */
+  restoreNote: (id: string) => Promise<void>;
+  /** The newest note of a section whose text is this text, made since
+      `since` (ms; five minutes of clock slack): a note the offline queue
+      saved, once it lands. */
+  findNote: (sectionId: string, content: string, since: number) => string | null;
 };
 
 const GraphNotesContext = createContext<GraphNotesValue | null>(null);
@@ -137,6 +144,35 @@ export function GraphNotesProvider({
     return byId;
   }, [sections]);
 
+  const findNote = useCallback(
+    (sectionId: string, content: string, since: number) => {
+      const text = content.trim();
+      let found: { id: string; at: number } | null = null;
+      const walk = (list: SectionView[]) => {
+        for (const s of list) {
+          if (s.id === sectionId) {
+            for (const n of s.notes) {
+              const at = n.createdAt ? Date.parse(n.createdAt) : 0;
+              if (n.content.trim() !== text || at < since - 5 * 60_000) continue;
+              if (!found || at > found.at) found = { id: n.id, at };
+            }
+          }
+          walk(s.children);
+        }
+      };
+      walk(sections ?? []);
+      return (found as { id: string } | null)?.id ?? null;
+    },
+    [sections],
+  );
+  const restoreNote = useCallback(
+    async (id: string) => {
+      await api(`/api/notes/${id}`, "PATCH", { status: "PENDING" });
+      router.refresh();
+    },
+    [router],
+  );
+
   const openSource = useCallback(
     (documentId: string, sourceId: string) => {
       router.push(`/n/${notebookId}?doc=${documentId}&src=${sourceId}`);
@@ -178,9 +214,11 @@ export function GraphNotesProvider({
             openSource,
             acceptNote: input.acceptNote,
             rejectNote: input.rejectNote,
+            restoreNote,
+            findNote,
           }
         : null,
-    [input, notebookId, view, liveSectionId, setSectionId, defaultSectionId, titleOf, showNote, openSource],
+    [input, notebookId, view, liveSectionId, setSectionId, defaultSectionId, titleOf, showNote, openSource, restoreNote, findNote],
   );
   const lit = useMemo(() => ({ rowLit, pinnedPair }), [rowLit, pinnedPair]);
   return (

@@ -17,7 +17,11 @@ import { splitNote } from "@/lib/note-title";
 // section. Hovering a row lights the documents the note quotes; a click
 // reads it here, its quotes each with Jump; editing stays in the tray.
 // Section filters the list and the graph: the node chips, the note curves,
-// and the nodes no note of the section touches dim.
+// and the nodes no note of the section touches dim. The notes on no
+// document of the graph close the list under Notes on the project, so a
+// note saved from the graph is always found here. Accept and Reject show at
+// once and come back with the error if the server refuses; a rejected note
+// leaves a "Note rejected · Undo" line in its place while the list is open.
 
 /** The header pill that opens and folds the list. */
 export function NotesListToggle({ open, onToggle }: { open: boolean; onToggle: () => void }) {
@@ -37,16 +41,16 @@ export function NotesListToggle({ open, onToggle }: { open: boolean; onToggle: (
       <NotesIcon size={13} />
       {t("graphNotes.notes")}
       <span className="rounded-full bg-sand-200 px-1.5 text-[11px] font-semibold tabular-nums text-sand-700">
-        {ctx.view.notes.length}
+        {ctx.view.notes.length + ctx.view.projectNotes.length}
       </span>
     </button>
   );
 }
 
-function bySection(notes: GraphNote[]): { title: string; notes: GraphNote[] }[] {
-  const groups = new Map<string, { title: string; notes: GraphNote[] }>();
+function bySection(notes: GraphNote[]): { id: string; title: string; notes: GraphNote[] }[] {
+  const groups = new Map<string, { id: string; title: string; notes: GraphNote[] }>();
   for (const g of notes) {
-    const group = groups.get(g.sectionId) ?? { title: g.sectionTitle, notes: [] };
+    const group = groups.get(g.sectionId) ?? { id: g.sectionId, title: g.sectionTitle, notes: [] };
     group.notes.push(g);
     groups.set(g.sectionId, group);
   }
@@ -63,8 +67,76 @@ export function GraphNotesList({ pickedIds, onClose }: { pickedIds: Set<string>;
     setOpenIdState(id);
     writeGraphKeep(ctx?.notebookId, { noteId: id });
   };
+  // Accept and Reject before the server answers: accepted rows read
+  // accepted, rejected rows leave the list for an Undo line.
+  const [acceptedNow, setAcceptedNow] = useState<Set<string>>(() => new Set());
+  const [rejectedNow, setRejectedNow] = useState<{ g: GraphNote; where: "shown" | "project" }[]>([]);
+  const [busyIds, setBusyIds] = useState<Set<string>>(() => new Set());
+  const [errors, setErrors] = useState<Record<string, string>>({});
   if (!ctx) return null;
   const { view } = ctx;
+  const graphNotes = ctx;
+
+  const message = (err: unknown) => (err instanceof Error ? err.message : t("common.requestFailed"));
+  const without = <T,>(set: Set<T>, value: T) => {
+    const next = new Set(set);
+    next.delete(value);
+    return next;
+  };
+  const setError = (id: string, text: string | null) =>
+    setErrors((prev) => {
+      const next = { ...prev };
+      if (text === null) delete next[id];
+      else next[id] = text;
+      return next;
+    });
+  async function decide(g: GraphNote, accept: boolean, where: "shown" | "project") {
+    const id = g.note.id;
+    if (busyIds.has(id)) return;
+    setBusyIds((prev) => new Set(prev).add(id));
+    setError(id, null);
+    if (accept) setAcceptedNow((prev) => new Set(prev).add(id));
+    else setRejectedNow((prev) => [...prev.filter((r) => r.g.note.id !== id), { g, where }]);
+    try {
+      await (accept ? graphNotes.acceptNote(id) : graphNotes.rejectNote(id));
+    } catch (err) {
+      if (accept) setAcceptedNow((prev) => without(prev, id));
+      else setRejectedNow((prev) => prev.filter((r) => r.g.note.id !== id));
+      setError(id, message(err));
+    } finally {
+      setBusyIds((prev) => without(prev, id));
+    }
+  }
+  async function undoReject(g: GraphNote) {
+    const id = g.note.id;
+    if (busyIds.has(id)) return;
+    setBusyIds((prev) => new Set(prev).add(id));
+    setError(id, null);
+    try {
+      await graphNotes.restoreNote(id);
+      setRejectedNow((prev) => prev.filter((r) => r.g.note.id !== id));
+    } catch (err) {
+      setError(id, message(err));
+    } finally {
+      setBusyIds((prev) => without(prev, id));
+    }
+  }
+  const rejectedIds = new Set(rejectedNow.map((r) => r.g.note.id));
+  // A rejected note keeps its place (the refresh drops it from the data: it
+  // goes back where its last edit sorts it), and an accepted one reads accepted.
+  const live = (list: GraphNote[], where: "shown" | "project") => {
+    const out = list.map((g) =>
+      acceptedNow.has(g.note.id) && g.note.status === "PENDING"
+        ? { ...g, note: { ...g.note, status: "ACCEPTED" as const } }
+        : g,
+    );
+    const ids = new Set(out.map((g) => g.note.id));
+    for (const { g } of rejectedNow.filter((r) => r.where === where && !ids.has(r.g.note.id))) {
+      const at = out.findIndex((x) => Date.parse(x.note.updatedAt) < Date.parse(g.note.updatedAt));
+      out.splice(at < 0 ? out.length : at, 0, g);
+    }
+    return out;
+  };
 
   const [pa, pb] = pinnedPair?.split("|") ?? [];
   const pinned = pa && pb && pa !== pb ? pinnedPair : null;
@@ -83,6 +155,40 @@ export function GraphNotesList({ pickedIds, onClose }: { pickedIds: Set<string>;
     shown = view.notes.filter((g) => g.documentIds.length >= 2);
     single = view.notes.length - shown.length;
   }
+  shown = live(shown, "shown");
+  // Notes on no document of the graph: listed when nothing narrows the list.
+  const project = pinned || pickedIds.size > 0 ? [] : live(view.projectNotes, "project");
+  const row = (where: "shown" | "project", g: GraphNote) =>
+    rejectedIds.has(g.note.id) ? (
+      <p
+        key={g.note.id}
+        data-graph-notes-rejected={g.note.id}
+        className="flex flex-wrap items-center gap-1.5 rounded-xl bg-sand-100 px-3 py-1.5 text-[11.5px] text-sand-700"
+      >
+        <span className="min-w-0 flex-1 truncate">
+          {t("outline.noteRejected")} · {noteLine(g.note)}
+        </span>
+        <button
+          onClick={() => void undoReject(g)}
+          disabled={busyIds.has(g.note.id)}
+          data-track="graph-notes-undo-reject"
+          className="rounded-full bg-card px-2.5 py-0.5 text-[11px] font-semibold text-sand-800 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+        >
+          {t("outline.undo")}
+        </button>
+        {errors[g.note.id] && <span className="w-full text-[11px] text-red-500">{errors[g.note.id]}</span>}
+      </p>
+    ) : (
+      <NotesListRow
+        key={g.note.id}
+        note={g}
+        open={openId === g.note.id}
+        onToggle={() => setOpenId(openId === g.note.id ? null : g.note.id)}
+        busy={busyIds.has(g.note.id)}
+        error={errors[g.note.id] ?? null}
+        onDecide={(accept) => void decide(g, accept, where)}
+      />
+    );
 
   return (
     <aside
@@ -120,16 +226,9 @@ export function GraphNotesList({ pickedIds, onClose }: { pickedIds: Set<string>;
       <p className="text-[11px] font-bold tracking-[0.06em] text-sand-600 uppercase">{heading}</p>
       {shown.length === 0 && <p className="text-[13px] text-sand-600">{t("graphNotes.notesEmpty")}</p>}
       {bySection(shown).map((group) => (
-        <div key={group.title} className="flex flex-col gap-1.5">
+        <div key={group.id} className="flex flex-col gap-1.5">
           <p className="text-[11.5px] font-semibold text-sage-700">{group.title}</p>
-          {group.notes.map((g) => (
-            <NotesListRow
-              key={g.note.id}
-              note={g}
-              open={openId === g.note.id}
-              onToggle={() => setOpenId(openId === g.note.id ? null : g.note.id)}
-            />
-          ))}
+          {group.notes.map((g) => row("shown", g))}
         </div>
       ))}
       {single > 0 && (
@@ -137,27 +236,43 @@ export function GraphNotesList({ pickedIds, onClose }: { pickedIds: Set<string>;
           {single === 1 ? t("graphNotes.notesOneDocumentOne") : t("graphNotes.notesOneDocument", { n: single })}
         </p>
       )}
+      {project.length > 0 && (
+        <div data-graph-notes-project="" className="flex flex-col gap-1.5">
+          <p className="text-[11px] font-bold tracking-[0.06em] text-sand-600 uppercase">{t("graphNotes.notesOnProject")}</p>
+          {bySection(project).map((group) => (
+            <div key={group.id} className="flex flex-col gap-1.5">
+              <p className="text-[11.5px] font-semibold text-sage-700">{group.title}</p>
+              {group.notes.map((g) => row("project", g))}
+            </div>
+          ))}
+        </div>
+      )}
     </aside>
   );
 }
 
-function NotesListRow({ note: g, open, onToggle }: { note: GraphNote; open: boolean; onToggle: () => void }) {
+function NotesListRow({
+  note: g,
+  open,
+  onToggle,
+  busy,
+  error,
+  onDecide,
+}: {
+  note: GraphNote;
+  open: boolean;
+  onToggle: () => void;
+  busy: boolean;
+  error: string | null;
+  onDecide: (accept: boolean) => void;
+}) {
   const t = useT();
   const ctx = useGraphNotes();
   const { canEdit } = useCollab();
-  const [busy, setBusy] = useState(false);
   if (!ctx) return null;
   const note = g.note;
   const openReplies = note.replies.filter((r) => r.resolvedById === null).length;
-  const decide = async (accept: boolean) => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      await (accept ? ctx.acceptNote(note.id) : ctx.rejectNote(note.id));
-    } finally {
-      setBusy(false);
-    }
-  };
+
   return (
     <div
       data-graph-notes-row={note.id}
@@ -238,7 +353,7 @@ function NotesListRow({ note: g, open, onToggle }: { note: GraphNote; open: bool
         {note.status === "PENDING" && canEdit && (
           <span className="ml-auto flex items-center gap-1.5">
             <button
-              onClick={() => void decide(true)}
+              onClick={() => onDecide(true)}
               disabled={busy}
               data-track="graph-notes-accept"
               className="rounded-full bg-sage-600 px-3 py-0.5 text-[11px] font-semibold text-sage-fg hover:bg-sage-700 disabled:opacity-40"
@@ -246,7 +361,7 @@ function NotesListRow({ note: g, open, onToggle }: { note: GraphNote; open: bool
               {t("common.accept")}
             </button>
             <button
-              onClick={() => void decide(false)}
+              onClick={() => onDecide(false)}
               disabled={busy}
               data-track="graph-notes-reject"
               className="rounded-full border border-line px-2.5 py-0.5 text-[11px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
@@ -256,6 +371,7 @@ function NotesListRow({ note: g, open, onToggle }: { note: GraphNote; open: bool
           </span>
         )}
       </div>
+      {error && <p className="mt-1.5 text-[11px] text-red-500">{error}</p>}
     </div>
   );
 }

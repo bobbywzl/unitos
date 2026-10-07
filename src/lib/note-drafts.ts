@@ -83,6 +83,24 @@ export function clearComposeDraft(sectionId: string) {
   remove(COMPOSE_PREFIX + sectionId);
 }
 
+// A reply draft belongs to the reply box under one note, one edit, or one
+// link (ReplyThread): what is typed there is kept until the server has the
+// reply, or the offline queue holds it (SPEC.md §12).
+const REPLY_PREFIX = "unitos-reply-draft:";
+
+export type ReplyDraft = { content: string; savedAt: number };
+
+/** The reply box's key: "note:<id>", "edit:<id>", or "link:<id>". */
+export function readReplyDraft(target: string): string | null {
+  const draft = read<ReplyDraft>(REPLY_PREFIX + target);
+  return draft && typeof draft.content === "string" && draft.content ? draft.content : null;
+}
+
+export function writeReplyDraft(target: string, content: string) {
+  if (content) write(REPLY_PREFIX + target, { content, savedAt: Date.now() } satisfies ReplyDraft);
+  else remove(REPLY_PREFIX + target);
+}
+
 /** Drop drafts older than MAX_AGE_MS. Runs once per load (use-outline.ts). */
 export function sweepStaleDrafts() {
   try {

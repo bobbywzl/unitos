@@ -5,7 +5,7 @@ import { authEnabled, currentUser } from "@/lib/auth";
 import { browserConfigured } from "@/lib/browser";
 import { driveConfig } from "@/lib/drive/config";
 import { currentLang, serverT } from "@/lib/i18n/server";
-import { peopleByIds, roleOf, withoutOtherProjectLinkEdits } from "@/lib/collab";
+import { crossAccountLinks, peopleByIds, roleOf, withoutOtherProjectLinkEdits } from "@/lib/collab";
 import { projectLinks } from "@/lib/link-scope";
 import { matchInText } from "@/lib/anchors/match";
 import { conversationTurns } from "@/lib/conversation";
@@ -646,6 +646,13 @@ export default async function NotebookPage(props: {
         },
       }),
     ]);
+    // A link with no project shared across accounts: the panel hides the
+    // changes this viewer may not make (SPEC.md §13).
+    const crossAccount = await crossAccountLinks([...outgoing, ...incoming], user);
+    const crossAccountOf = (id: string) => {
+      const rule = crossAccount.get(id);
+      return rule ? { crossAccount: { outside: rule.outside } } : {};
+    };
     for (const link of outgoing) {
       // Same ladder as resolveDocumentSources: stored offsets, re-find in the
       // stored block, re-find across all blocks (re-parse gives new block ids).
@@ -683,6 +690,7 @@ export default async function NotebookPage(props: {
         reason: link.reason,
         createdById: link.createdById,
         replies: toReplyViews(link.replies),
+        ...crossAccountOf(link.id),
       });
       if (!resolved) {
         // Orphan flags write back, so both ends report honestly (SPEC.md §5).
@@ -772,6 +780,7 @@ export default async function NotebookPage(props: {
           reason: link.reason,
           createdById: link.createdById,
           replies: toReplyViews(link.replies),
+          ...crossAccountOf(link.id),
         });
       }
       if (!twoEnded) continue;
@@ -1150,7 +1159,7 @@ export default async function NotebookPage(props: {
       // while only recommended ones connect a pair — and the recommended
       // links, both ends with their passages, the AI's reason, and the
       // replies. Accept and Dismiss live in the graph.
-      documentsGraph(attached.map((d) => ({ id: d.id, title: d.title, hasVideo: d.hasVideo, kind: d.kind })), notebookId),
+      documentsGraph(attached.map((d) => ({ id: d.id, title: d.title, hasVideo: d.hasVideo, kind: d.kind })), notebookId, user),
       db.notebookEvent.findMany({
         where: { notebookId },
         orderBy: { createdAt: "desc" },

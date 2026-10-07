@@ -610,20 +610,30 @@ export function RecommendedLinkList({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  // Accepted or dismissed here: the card leaves at once, before the server
+  // answers, and comes back if the server refuses (SPEC.md §13).
+  const [gone, setGone] = useState<Set<string>>(() => new Set());
 
   async function mutate(id: string, run: () => Promise<unknown>) {
     if (busyId) return;
     setBusyId(id);
     setErrorText(null);
+    setGone((prev) => new Set(prev).add(id));
     try {
       await run();
       router.refresh();
     } catch (err) {
+      setGone((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
       setErrorText(err instanceof Error ? err.message : t("common.requestFailed"));
     } finally {
       setBusyId(null);
     }
   }
+  const shown = links.filter((l) => !gone.has(l.id));
 
   function openDocument(documentId: string, linkId: string) {
     router.push(`/n/${notebookId}?doc=${documentId}&link=${linkId}`);
@@ -638,12 +648,12 @@ export function RecommendedLinkList({
       data-track-surface="sidebar"
       className="menu-in absolute top-3 right-3 bottom-3 z-10 flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 shadow-float backdrop-blur-md max-[999px]:bottom-16"
     >
-      {links.length > 0 && <p className="text-[11px] text-sand-500">{t("panes.recommendedLinksDesc")}</p>}
+      {shown.length > 0 && <p className="text-[11px] text-sand-500">{t("panes.recommendedLinksDesc")}</p>}
       {errorText && <p className="text-[13px] text-red-600">{errorText}</p>}
-      {links.length === 0 && (
+      {shown.length === 0 && (
         <p className="text-[13px] text-sand-600">{t("panes.recommendedLinksEmpty")}</p>
       )}
-      {links.map((l) => {
+      {shown.map((l) => {
         const open = openId === l.id;
         return (
         <div key={l.id} className="rounded-2xl border border-dashed border-clay-300 bg-card p-3.5 shadow-soft">
@@ -695,7 +705,7 @@ export function RecommendedLinkList({
               </>
             )}
             <AuthorChip createdById={l.createdById} nameless />
-            {canEdit && (
+            {canEdit && !l.crossAccount?.outside && (
               <span className="ml-auto flex items-center gap-2">
                 <button
                   onClick={() =>
@@ -720,7 +730,7 @@ export function RecommendedLinkList({
               </span>
             )}
           </div>
-          <ReplyThread target={{ docLinkId: l.id, notebookId }} replies={l.replies} />
+          <ReplyThread target={{ docLinkId: l.id, notebookId }} replies={l.replies} crossAccount={l.crossAccount} />
         </div>
         );
       })}

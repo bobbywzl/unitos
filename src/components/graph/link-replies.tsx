@@ -47,7 +47,11 @@ export function LinkReplies({ link }: { link: GraphEdgeLink }) {
         box.blur();
       }}
     >
-      <ReplyThread target={{ docLinkId: link.id, notebookId }} replies={link.replies ?? []} />
+      <ReplyThread
+        target={{ docLinkId: link.id, notebookId }}
+        replies={link.replies ?? []}
+        crossAccount={link.crossAccount}
+      />
     </div>
   );
 }

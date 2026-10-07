@@ -16,7 +16,8 @@ import { useGraphNotes } from "@/components/graph/graph-notes";
 // the reader picks — by default the one they last wrote a note in. What is
 // typed is kept in the browser (graph-link-note:<linkId>) until the server
 // has the note, so a reload, a closed graph, or a failed save never loses
-// it; Cancel keeps nothing.
+// it; Cancel keeps nothing. Offline (Unitos Premium) the note waits in the
+// offline queue: the line says so, and Show comes once the note lands.
 
 const draftKey = (linkId: string) => `graph-link-note:${linkId}`;
 
@@ -57,19 +58,37 @@ export function LinkNoteComposer({ linkId }: { linkId: string }) {
   const [sectionId, setSectionId] = useState<string | null>(initial?.sectionId ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState<{ noteId: string; section: string } | null>(null);
+  const [saved, setSaved] = useState<
+    | { noteId: string; section: string }
+    | { queued: { sectionId: string; content: string; at: number }; section: string }
+    | null
+  >(null);
 
   if (!ctx || !canEdit) return null;
   const choices = ctx.sectionChoices;
   const chosen = choices.find((c) => c.id === sectionId) ?? choices.find((c) => c.id === ctx.defaultSectionId) ?? choices[0];
 
-  if (saved) {
+  // A queued note has an id once the queue sends it and the page refreshes.
+  const savedId = !saved
+    ? null
+    : "noteId" in saved
+      ? saved.noteId
+      : ctx.findNote(saved.queued.sectionId, saved.queued.content, saved.queued.at);
+  if (saved && !savedId) {
     return (
-      <p data-graph-link-note-saved={saved.noteId} className="mt-2 flex items-center gap-1.5 text-[11.5px] text-sage-700">
+      <p data-graph-link-note-queued="" className="mt-2 flex items-center gap-1.5 text-[11.5px] text-sage-700">
+        <NotesIcon size={12} />
+        {t("graphNotes.noteOnLinkQueued", { section: saved.section })}
+      </p>
+    );
+  }
+  if (saved && savedId) {
+    return (
+      <p data-graph-link-note-saved={savedId} className="mt-2 flex items-center gap-1.5 text-[11.5px] text-sage-700">
         <NotesIcon size={12} />
         {t("graphNotes.noteOnLinkSaved", { section: saved.section })}
         <button
-          onClick={() => ctx.showNote(saved.noteId)}
+          onClick={() => ctx.showNote(savedId)}
           data-track="graph-link-note-show"
           className="rounded-full bg-sage-100 px-2 py-0.5 font-semibold text-sage-800 hover:bg-sage-200"
         >
@@ -99,13 +118,18 @@ export function LinkNoteComposer({ linkId }: { linkId: string }) {
     setBusy(true);
     setError(null);
     try {
-      const note = await api<{ id: string }>("/api/notes", "POST", {
+      const note = await api<{ id: string } | { queued: true }>("/api/notes", "POST", {
         sectionId: chosen.id,
         content: text,
         fromLinkId: linkId,
       });
+      // The server has the note, or the offline queue does: the draft goes.
       writeDraft(linkId, "", null);
-      setSaved({ noteId: note.id, section: chosen.label });
+      setSaved(
+        "queued" in note
+          ? { queued: { sectionId: chosen.id, content: text, at: Date.now() }, section: chosen.label }
+          : { noteId: note.id, section: chosen.label },
+      );
       setContent("");
       refreshWhenOnline(router);
     } catch (err) {

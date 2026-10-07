@@ -155,6 +155,28 @@ export async function POST(req: Request) {
   );
   const noteId = ids[0];
   if (!noteId) return NextResponse.json({ error: t("api.organizeFailed", { reason: "" }).trim() }, { status: 422 });
+  // A Stitch answer saved with no quote that resolved: each block the answer
+  // cites becomes a whole-block source, so the note sits on the documents
+  // it came from and the graph finds it (SPEC.md §22). Real text, never
+  // invented.
+  if (data.origin === "stitch" && cited.length > 0 && (await db.source.count({ where: { noteId } })) === 0) {
+    const order = new Map(citedIds.map((id, i) => [id, i]));
+    await db.source.createMany({
+      data: [...cited]
+        .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+        .filter((b) => b.text.length > 0)
+        .map((b) => ({
+          noteId,
+          documentId: b.documentId,
+          blockId: b.id,
+          startOffset: 0,
+          endOffset: b.text.length,
+          quotedText: b.text,
+          prefix: "",
+          suffix: "",
+        })),
+    });
+  }
   await bumpNotebook(data.notebookId);
   const saved = await db.note.findUnique({ where: { id: noteId }, select: { section: { select: { id: true, title: true } } } });
   return NextResponse.json({

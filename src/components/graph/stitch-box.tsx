@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { SaveAsNote } from "@/components/assistant/save-as-note";
 import { useCollab } from "@/components/collab/collab-context";
+import { useGraphNotes } from "@/components/graph/graph-notes";
 import { StitchCitationChip, StitchPassageCard, type StitchCitation } from "@/components/graph/stitch-passage-card";
 import { ChevronDownIcon, ChevronRightIcon, SparkleIcon, StopIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
@@ -42,7 +43,13 @@ import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 // The route adds `cited` (the document and words of every [block] tag in the
 // reply); a reply from before it has none, and its chips stay ¶.
 type StitchReply = StitchResult & { cited?: Record<string, StitchCitation> };
-type Turn = { role: "user" | "assistant"; content: string; result?: StitchReply };
+// savedNote: the answer was saved as a note (Save as note keeps its line).
+type Turn = {
+  role: "user" | "assistant";
+  content: string;
+  result?: StitchReply;
+  savedNote?: { noteId: string; section: string };
+};
 const threads = new Map<string, Turn[]>();
 // The unsent command per project, kept when the graph closes (CLAUDE.md
 // rule zero §6).
@@ -217,7 +224,8 @@ export function StitchBox({
     const text = (override ?? command).trim();
     if (!text || running || text.length > COMMAND_MAX || picked.length === 1) return;
     setError(null);
-    setCommand("");
+    // Retry sends the failed command again: a new command typed since stays.
+    if (override === undefined || command.trim() === text) setCommand("");
     setPassage(null);
     onPickingChange(false);
     // The graph drops the last reply's cited documents.
@@ -299,7 +307,14 @@ export function StitchBox({
 
   // Show on a saved note: the tray sits behind the graph, so the graph
   // closes first.
+  // Show on a saved answer: the graph's own Show closes the graph (and its
+  // graph=1 entry) and opens the tray on the note.
+  const graphNotes = useGraphNotes();
   function showNote(noteId: string) {
+    if (graphNotes) {
+      graphNotes.showNote(noteId);
+      return;
+    }
     onOpenDocument();
     setTimeout(() => window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId } })), 0);
   }
@@ -451,6 +466,10 @@ export function StitchBox({
                       question={turns[i - 1]?.role === "user" ? turns[i - 1].content : ""}
                       answer={turn.content}
                       onShow={showNote}
+                      saved={turn.savedNote}
+                      onSaved={(savedNote) =>
+                        setTurns((prev) => prev.map((x) => (x === turn ? { ...x, savedNote } : x)))
+                      }
                     />
                     <RatingButtons
                       tool="stitch"

@@ -235,6 +235,13 @@ export type AnnotationItem = {
   conversation: ChatTurn[];
 };
 
+/** Set on a link with no project whose documents sit in projects of more
+    than one account (SPEC.md §13): no one deletes another account's reply on
+    it. outside = the viewer is not in a project of the link's maker: it
+    reads the link and changes only its own replies. Absent = a link of one
+    project, or of one account. */
+export type CrossAccountView = { outside: boolean };
+
 export type LinkOut = {
   id: string;
   toDocumentId: string;
@@ -248,6 +255,7 @@ export type LinkOut = {
   reason: string | null; // why the AI connected the two passages
   createdById: string | null;
   replies: ReplyView[];
+  crossAccount?: CrossAccountView;
 };
 export type LinkIn = {
   id: string;
@@ -261,6 +269,7 @@ export type LinkIn = {
   reason: string | null;
   createdById: string | null;
   replies: ReplyView[];
+  crossAccount?: CrossAccountView;
 };
 
 // ── History (SPEC.md §12): every edit and deletion in the corpus, attributed ──
@@ -401,6 +410,7 @@ export type GraphEdgeLink = {
   // withLinkReplies in lib/graph/view.ts; absent = none read.
   replies?: ReplyView[];
   createdById?: string | null;
+  crossAccount?: CrossAccountView;
 };
 
 /** One undirected pair of documents. Edge width and clay depth scale with
@@ -431,6 +441,7 @@ export type RecommendedLinkView = {
   reason: string | null;
   createdById: string | null;
   replies: ReplyView[];
+  crossAccount?: CrossAccountView;
 };
 
 // ── The assistant as an actor ──────────────────────────────────────────────
