@@ -897,7 +897,7 @@ function useSpotlightAttributes(
     // A spotlight set as the graph opens (Show on graph) comes before the
     // nodes are drawn: look again on the next frames until each is there.
     let raf = 0;
-    let frames = 30;
+    let frames = 180;
     const apply = () => {
       let missing = false;
       for (const id of nodeIds ?? []) {
