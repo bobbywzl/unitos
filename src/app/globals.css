@@ -1897,7 +1897,9 @@ ellipse.anchor-flash {
 /* First open: nodes scatter, then glide into place; edges wait offstage and
    fade in once the nodes land. */
 .graph-settling .react-flow__node {
-  transition: transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition:
+    transform 900ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.3s ease;
 }
 .corpus-graph .react-flow__edge {
   transition: opacity 500ms ease;
@@ -1973,11 +1975,129 @@ ellipse.anchor-flash {
   outline-offset: 2px;
   border-radius: 10px;
 }
-/* A curve is a thin target under a finger: a wider hit path. */
+/* A curve is a thin target under a finger: a hit path about 32px wide on
+   screen at any zoom, and a node at least 44px tall (REV2-12, WALK2-06).
+   graph-view.tsx sets --graph-zoom. */
 @media (pointer: coarse) {
   .corpus-graph .graph-edge-hit {
-    stroke-width: 28px;
+    stroke-width: calc(32px / var(--graph-zoom, 1));
   }
+  .corpus-graph .react-flow__node::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, calc(44px / var(--graph-zoom, 1)));
+    height: max(100%, calc(44px / var(--graph-zoom, 1)));
+    transform: translate(-50%, -50%);
+  }
+}
+
+/* The spotlight's resting state (graph-view.tsx SpotlightStyle dims and
+   lights by id over it): curves at their weight, a recommended-only pair
+   lighter, a generated document faded until the reader shows the
+   provenance (WALK2-02). */
+.corpus-graph .react-flow__node {
+  transition: opacity 0.3s ease;
+}
+.corpus-graph [data-graph-dot] {
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+.corpus-graph .graph-curve {
+  opacity: 0.7;
+  transition: opacity 0.25s ease;
+}
+.corpus-graph .graph-curve[data-rec] {
+  opacity: 0.45;
+}
+.corpus-graph .graph-curve-stroke {
+  stroke-width: var(--w);
+  transition: stroke-width 0.25s ease;
+}
+.corpus-graph .graph-note-curve {
+  opacity: 0.8;
+  transition: opacity 0.25s ease;
+}
+.corpus-graph .graph-note-stroke {
+  stroke-width: 2.2px;
+}
+.corpus-graph .graph-prov-curve {
+  opacity: 0.75;
+}
+.corpus-graph:not([data-provenance]) .react-flow__node.graph-generated {
+  opacity: 0.35;
+}
+/* The spotlight (graph-view.tsx useSpotlightAttributes): while anything is
+   lit the canvas carries data-spot, and each lit node and curve data-lit.
+   A large project does not dim the rest — repainting hundreds of faded
+   elements on every hover is what made it slow (REV2-09) — its curves rest
+   light instead, and a lit curve stands out from them. */
+.corpus-graph[data-spot]:not([data-large]) .react-flow__node {
+  opacity: 0.15;
+}
+.corpus-graph[data-spot]:not([data-large]) .react-flow__edge .graph-curve {
+  opacity: 0.07;
+}
+.corpus-graph[data-spot]:not([data-large]) .react-flow__edge .graph-note-curve,
+.corpus-graph[data-spot]:not([data-large]) .react-flow__edge .graph-prov-curve {
+  opacity: 0.1;
+}
+.corpus-graph[data-large] .graph-curve,
+.corpus-graph[data-large] .graph-curve[data-rec] {
+  opacity: 0.35;
+}
+.corpus-graph[data-spot] .react-flow__node[data-lit] {
+  opacity: 1;
+}
+.corpus-graph[data-spot] .react-flow__node[data-lit] [data-graph-dot] {
+  transform: scale(1.1);
+}
+.corpus-graph[data-spot] .react-flow__node[data-lit] .graph-node-label {
+  display: -webkit-box;
+}
+.corpus-graph[data-spot] .react-flow__edge[data-lit] .graph-curve {
+  opacity: 0.95;
+}
+.corpus-graph[data-spot] .react-flow__edge[data-lit] .graph-curve-stroke {
+  stroke-width: calc(var(--w) + 0.8px);
+}
+.corpus-graph[data-spot] .react-flow__edge[data-lit] .graph-note-curve,
+.corpus-graph[data-spot] .react-flow__edge[data-lit] .graph-prov-curve {
+  opacity: 1;
+}
+.corpus-graph[data-spot] .react-flow__edge[data-lit] .graph-note-stroke {
+  stroke-width: 3px;
+}
+/* A large project (REV2-09): no transitions, and at a far zoom only the
+   kept labels (data-lod; a lit label still draws). */
+.corpus-graph[data-large] .react-flow__node,
+.corpus-graph[data-large] .react-flow__edge,
+.corpus-graph[data-large] .graph-curve,
+.corpus-graph[data-large] .graph-curve-stroke,
+.corpus-graph[data-large] .graph-note-curve,
+.corpus-graph[data-large] [data-graph-dot] {
+  transition: none;
+}
+.corpus-graph[data-lod] .graph-node-label:not([data-keep-label]) {
+  display: none;
+}
+/* A curve reached by keyboard (] and [) shows where it runs. */
+.corpus-graph .react-flow__edge:focus {
+  outline: none;
+}
+.corpus-graph .react-flow__edge:focus-visible .graph-edge-hit {
+  stroke: color-mix(in srgb, var(--clay) 28%, transparent);
+}
+.corpus-graph .react-flow__controls-button.graph-control-on {
+  background: var(--clay-100);
+  color: var(--clay-800);
+}
+/* The dialog's title takes focus on open as a starting point, not as a
+   control: no ring (REV2-11). */
+.graph-overlay [data-graph-title]:focus-visible {
+  outline: none;
 }
 
 /* The link lists and node cards float over the canvas at their place: an

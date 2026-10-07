@@ -19,6 +19,8 @@ const en = {
   pairNotes: "Notes quoting both",
   pairNotesTitle: "Notes that quote both documents",
   noteCurveHint: "A sage dotted line: a note quotes both documents.",
+  noteCurveLabelOne: "1 note quotes {a} and {b}",
+  noteCurveLabel: "{n} notes quote {a} and {b}",
   showNote: "Show this note in the notes tray",
 
   // Note on this link (link-note-composer.tsx)
@@ -65,6 +67,8 @@ const zh: Record<keyof typeof en, string> = {
   pairNotes: "同时引用两者的笔记",
   pairNotesTitle: "同时引用这两个文档的笔记",
   noteCurveHint: "鼠尾草色虚线：有笔记同时引用这两个文档。",
+  noteCurveLabelOne: "1 条笔记同时引用 {a} 和 {b}",
+  noteCurveLabel: "{n} 条笔记同时引用 {a} 和 {b}",
   showNote: "在笔记栏中显示这条笔记",
 
   noteOnLink: "就此链接写笔记",

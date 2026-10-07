@@ -9,11 +9,14 @@ import { linkPath } from "@/lib/link-scope";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { ReplyThread } from "@/components/collab/reply-thread";
-import { PageIcon, SparkleIcon, UnlinkIcon } from "@/components/icons";
+import { LinkIcon, PageIcon, SparkleIcon, UnlinkIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Presence } from "@/components/presence";
 import { StopPill } from "@/components/thinking";
 import { GeneratedList } from "@/components/graph/generated-list";
+import { clearGraphKeep, readGraphKeep, writeGraphKeep } from "@/components/graph/graph-keep";
+import { LinkPanel } from "@/components/graph/link-panel";
+import { LinksList } from "@/components/graph/links-list";
 import type { GraphInsets } from "@/components/graph/graph-view";
 import { LinkDetail } from "@/components/graph/link-detail";
 import { StitchBox } from "@/components/graph/stitch-box";
@@ -34,6 +37,12 @@ const GraphView = dynamic(() => import("@/components/graph/graph-view"), {
 const NARROW = 640;
 const WIDE = 1000;
 const LIST_ROOM = 412; // a side list's width and its margin
+
+type SideList = "recommended" | "generated" | "notes" | "links" | "link" | null;
+const SIDE_LISTS: SideList[] = ["recommended", "generated", "notes", "links", "link"];
+function sideList(value: string | null | undefined): SideList {
+  return SIDE_LISTS.find((l) => l === value) ?? null;
+}
 
 function useWindowWidth(): number {
   const [width, setWidth] = useState(() => (typeof window === "undefined" ? 1440 : window.innerWidth));
@@ -96,22 +105,56 @@ export function GraphOverlay({
   const router = useRouter();
   const { canEdit } = useCollab();
   const leave = onNavigate ?? onClose;
+  // ✕ and Escape close the graph for good: Back no longer restores the view
+  // (WALK2-07). Leaving for a document keeps it.
+  const close = useCallback(() => {
+    clearGraphKeep(notebookId);
+    onClose();
+  }, [notebookId, onClose]);
   const windowWidth = useWindowWidth();
-  // One folded list at a time beside the canvas: the recommended links, or
-  // the generated content.
-  const [list, setList] = useState<"recommended" | "generated" | "notes" | null>(null);
+  // One folded list at a time beside the canvas: the recommended links, the
+  // generated content, the notes, the links, or one link expanded (WALK2-05).
+  // The open list and link come back on Back from a document (WALK2-07).
+  const [list, setListState] = useState<SideList>(() => sideList(readGraphKeep(notebookId).list));
+  const [openLinkId, setOpenLinkId] = useState<string | null>(() => readGraphKeep(notebookId).linkId ?? null);
+  // The link panel's Back: to the Links list when it was opened there.
+  const [linkFromList, setLinkFromList] = useState(false);
+  const setList = useCallback(
+    (next: SideList | ((prev: SideList) => SideList)) => {
+      setListState((prev) => {
+        const value = typeof next === "function" ? next(prev) : next;
+        writeGraphKeep(notebookId, { list: value });
+        return value;
+      });
+    },
+    [notebookId],
+  );
+  const openLink = useCallback(
+    (linkId: string, fromList: boolean) => {
+      setOpenLinkId(linkId);
+      setLinkFromList(fromList);
+      setList("link");
+      writeGraphKeep(notebookId, { linkId });
+    },
+    [notebookId, setList],
+  );
+  const linkById = useMemo(() => new Map(edges.flatMap((e) => e.links.map((l) => [l.id, l] as const))), [edges]);
+  const openLinkView = list === "link" && openLinkId ? (linkById.get(openLinkId) ?? null) : null;
+  // A link gone since (dismissed, removed): no panel, no list.
+  const shownList: SideList = list === "link" && !openLinkView ? null : list;
+  const titleOf = useMemo(() => new Map(nodes.map((n) => [n.id, n.title])), [nodes]);
   const listOpen = list === "recommended";
   // The Stitch box's fold: open on a wide screen, folded on a phone; an open
   // list folds it under WIDE, and opening the box there closes the list.
   const [boxOpen, setBoxOpen] = useState(() => typeof window === "undefined" || window.innerWidth >= NARROW);
-  const listBesideBox = list !== null && windowWidth >= WIDE;
-  const boxShown = boxOpen && (list === null || listBesideBox);
+  const listBesideBox = shownList !== null && windowWidth >= WIDE;
+  const boxShown = boxOpen && (shownList === null || listBesideBox);
   const onBoxOpenChange = useCallback(
     (open: boolean) => {
       setBoxOpen(open);
       if (open && window.innerWidth < WIDE) setList(null);
     },
-    [],
+    [setList],
   );
   // The box's height, for the fit: nodes never sit under it.
   const boxRef = useRef<HTMLDivElement>(null);
@@ -223,11 +266,28 @@ export function GraphOverlay({
       }
       if (picking) setPicking(false);
       else if (list) setList(null);
-      else onClose();
+      else close();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, picking, list]);
+  }, [close, picking, list, setList]);
+
+  // The skip links (REV2-10): to the Stitch text box (the box opens first
+  // when it is folded), or to the first control of the open side list.
+  const skipToStitch = useCallback(() => {
+    onBoxOpenChange(true);
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const slot = boxRef.current;
+        (slot?.querySelector<HTMLElement>("textarea") ?? slot?.querySelector<HTMLElement>("button"))?.focus();
+      }),
+    );
+  }, [onBoxOpenChange]);
+  const skipToList = useCallback(() => {
+    dialogRef.current
+      ?.querySelector<HTMLElement>("[data-graph-side-list] button, [data-graph-side-list] select, aside button")
+      ?.focus();
+  }, []);
 
   // A dialog (GR-16): focus moves into it on open, stays in it on Tab, and
   // goes back where it was on close.
@@ -259,7 +319,12 @@ export function GraphOverlay({
     }
   }
 
+  // The header counts the reader's map: documents and links, with generated
+  // documents counted apart and their provenance links not at all (WALK2-02).
   const acceptedLinks = edges.reduce((sum, e) => sum + e.accepted, 0);
+  const generatedCount = nodes.filter((n) => n.kind === "generated").length;
+  const ownDocs = nodes.length - generatedCount;
+  const allLinks = edges.reduce((sum, e) => sum + e.links.filter((l) => !l.recommended && !l.provenance).length, 0);
   const anyLink = edges.some((e) => e.accepted + e.recommended > 0);
   const emptyCard =
     nodes.length === 1 ? t("panes.graphOneDocument") : nodes.length >= 2 && !anyLink ? t("panes.graphNoLinks") : null;
@@ -274,7 +339,7 @@ export function GraphOverlay({
   );
 
   return (
-    <GraphNotesProvider notebookId={notebookId} nodes={nodes} input={notes} onClose={onClose} onNavigate={leave}>
+    <GraphNotesProvider notebookId={notebookId} nodes={nodes} input={notes} onClose={close} onNavigate={leave}>
     <div
       ref={dialogRef}
       role="dialog"
@@ -288,16 +353,34 @@ export function GraphOverlay({
           the header stays two short rows and the close button stays in
           view. */}
       <div className="flex items-center gap-3 border-b border-line px-5 py-3 max-[900px]:flex-wrap max-[900px]:gap-x-3 max-[900px]:gap-y-2 max-md:px-3 max-md:py-2">
-        <span ref={titleRef} tabIndex={-1} className="font-display text-[18px] outline-none">
+        <span ref={titleRef} tabIndex={-1} data-graph-title className="font-display text-[18px] outline-none">
           {t("panes.graph")}
         </span>
+        {/* Skip links (REV2-10): the first controls in the dialog, shown on
+            focus, straight to the Stitch box or the open side list. */}
+        {nodes.length >= 2 && (
+          <button onClick={skipToStitch} data-track="graph-skip-stitch" className="sr-only focus:not-sr-only focus:rounded-full focus:bg-clay-100 focus:px-3 focus:py-1 focus:text-[12px] focus:text-clay-800">
+            {t("panes.graphSkipStitch")}
+          </button>
+        )}
+        {shownList !== null && (
+          <button onClick={skipToList} data-track="graph-skip-list" className="sr-only focus:not-sr-only focus:rounded-full focus:bg-clay-100 focus:px-3 focus:py-1 focus:text-[12px] focus:text-clay-800">
+            {t("panes.graphSkipList")}
+          </button>
+        )}
         <span className="mr-auto text-[13px] whitespace-nowrap text-sand-600">
           {t("panes.graphCounts", {
-            docs: nodes.length,
-            ds: nodes.length === 1 ? "" : "s",
+            docs: ownDocs,
+            ds: ownDocs === 1 ? "" : "s",
             links: acceptedLinks,
             ls: acceptedLinks === 1 ? "" : "s",
           })}
+          {/* On a phone the header keeps one short line: Generated content counts them. */}
+          {generatedCount > 0 && (
+            <span className="max-md:hidden">
+              {t("panes.graphCountsGenerated", { n: generatedCount, s: generatedCount === 1 ? "" : "s" })}
+            </span>
+          )}
         </span>
         {/* On md+ the pills stand in the row itself (contents); below md
             they take a line of their own under the title and the counts,
@@ -365,9 +448,24 @@ export function GraphOverlay({
             </span>
           </button>
           <NotesListToggle open={list === "notes"} onToggle={() => setList((v) => (v === "notes" ? null : "notes"))} />
+          <button
+            onClick={() => setList((v) => (v === "links" ? null : "links"))}
+            data-track="graph-links"
+            aria-expanded={list === "links" || list === "link"}
+            data-tip={t("panes.graphLinksToggleTitle")}
+            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 ${
+              list === "links" || list === "link" ? "border-line bg-clay-100 text-clay-800" : "border-line text-sand-600"
+            }`}
+          >
+            <LinkIcon size={13} />
+            {t("panes.graphLinks")}
+            <span className="rounded-full bg-sand-200 px-1.5 text-[11px] font-semibold tabular-nums text-sand-700">
+              {allLinks}
+            </span>
+          </button>
         </div>
         <button
-          onClick={onClose}
+          onClick={close}
           data-track="graph-close"
           aria-label={t("common.close")}
           data-tip={t("common.close")}
@@ -397,6 +495,8 @@ export function GraphOverlay({
             insets={insets}
             citedIds={citedIds}
             onClearCited={clearCited}
+            expandedLinkId={openLinkView?.id ?? null}
+            onExpandLink={(linkId) => openLink(linkId, false)}
           />
         )}
         {/* One document, or no link yet: what to do next (GR-08). */}
@@ -429,14 +529,39 @@ export function GraphOverlay({
         <Presence show={list === "notes"} exit="menu">
         {list === "notes" && <GraphNotesList pickedIds={selectedIds} onClose={() => setList(null)} />}
         </Presence>
+        <Presence show={list === "links"} exit="menu">
+        {list === "links" && (
+          <LinksList
+            edges={edges}
+            titleOf={titleOf}
+            openLinkId={openLinkId}
+            onOpen={(l) => openLink(l.id, true)}
+            onClose={() => setList(null)}
+          />
+        )}
+        </Presence>
+        <Presence show={openLinkView !== null} exit="menu">
+        {openLinkView && (
+          <LinkPanel
+            key={openLinkView.id}
+            link={openLinkView}
+            onBack={linkFromList ? () => setList("links") : undefined}
+            onClose={() => setList(null)}
+            onOpenDocument={leave}
+          />
+        )}
+        </Presence>
         {nodes.length >= 2 && (
           // Where the box sits (BOX-03..06, BOX-19): centered at the foot;
           // left of an open list on a wide screen; clear of the Feedback
           // button at the bottom right between md and 1100px. The box draws
           // itself; this wrapper places it and measures it for the fit.
+          // The box never takes more than 45% of the canvas: the conversation
+          // scrolls inside it, and the graph keeps the rest (WALK2-04).
           <div
             ref={boxRef}
-            className={`pointer-events-none absolute bottom-4 z-20 flex justify-center [&>*]:pointer-events-auto ${
+            data-stitch-slot
+            className={`pointer-events-none absolute bottom-4 z-20 flex max-h-[45%] flex-col items-center [&>*]:pointer-events-auto ${
               listBesideBox
                 ? "left-[max(16px,calc((100%-412px-680px)/2))] w-[min(680px,calc(100%-412px-32px))]"
                 : "left-1/2 w-[680px] max-w-[calc(100%-32px)] -translate-x-1/2 md:max-[1099px]:max-w-[calc(100%-272px)]"

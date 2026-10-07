@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { readGraphKeep, writeGraphKeep } from "@/components/graph/graph-keep";
 import { useCollab } from "@/components/collab/collab-context";
 import { NotesIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
-import { useGraphNotes } from "@/components/graph/graph-notes";
+import { useGraphNotes, useGraphNotesLit } from "@/components/graph/graph-notes";
 import { noteLine, type GraphNote } from "@/lib/graph/notes";
 import { splitNote } from "@/lib/note-title";
 
@@ -55,12 +56,18 @@ function bySection(notes: GraphNote[]): { title: string; notes: GraphNote[] }[] 
 export function GraphNotesList({ pickedIds, onClose }: { pickedIds: Set<string>; onClose: () => void }) {
   const t = useT();
   const ctx = useGraphNotes();
-  const [openId, setOpenId] = useState<string | null>(null);
+  const { pinnedPair } = useGraphNotesLit();
+  // The open note survives a trip to a document and Back (WALK2-07).
+  const [openId, setOpenIdState] = useState<string | null>(() => readGraphKeep(ctx?.notebookId).noteId ?? null);
+  const setOpenId = (id: string | null) => {
+    setOpenIdState(id);
+    writeGraphKeep(ctx?.notebookId, { noteId: id });
+  };
   if (!ctx) return null;
   const { view } = ctx;
 
-  const [pa, pb] = ctx.pinnedPair?.split("|") ?? [];
-  const pinned = pa && pb && pa !== pb ? ctx.pinnedPair : null;
+  const [pa, pb] = pinnedPair?.split("|") ?? [];
+  const pinned = pa && pb && pa !== pb ? pinnedPair : null;
   let heading: string;
   let shown: GraphNote[];
   let single = 0;
@@ -156,6 +163,8 @@ function NotesListRow({ note: g, open, onToggle }: { note: GraphNote; open: bool
       data-graph-notes-row={note.id}
       onMouseEnter={() => ctx.setRowLit(new Set(g.documentIds))}
       onMouseLeave={() => ctx.setRowLit(null)}
+      onFocus={() => ctx.setRowLit(new Set(g.documentIds))}
+      onBlur={() => ctx.setRowLit(null)}
       className={`rounded-2xl border bg-card p-3 shadow-soft ${
         note.status === "PENDING" ? "border-dashed border-clay-300" : "border-line"
       }`}

@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { projectLinks } from "@/lib/link-scope";
+import { isProvenanceLink } from "@/lib/graph/provenance";
 import type { DocumentKind } from "@/lib/document-order";
 import type { GeneratedDocumentView, GraphEdge, GraphNode, RecommendedLinkView } from "@/lib/types";
 
@@ -55,6 +56,9 @@ export async function documentsGraph(
         reason: true,
         quotedText: true,
         toQuotedText: true,
+        startOffset: true,
+        prefix: true,
+        suffix: true,
       },
     }),
     db.docLink.findMany({
@@ -98,12 +102,17 @@ export async function documentsGraph(
     blockCount: blocksOf.get(d.id) ?? 0,
   }));
   const edgeByPair = new Map<string, GraphEdge>();
+  // A generated document's provenance links count apart from the reader's
+  // links (SPEC.md §13, §22): the graph draws them only on request.
+  const generatedIds = new Set(documents.filter((d) => d.kind === "generated").map((d) => d.id));
   // A link with both ends in one document is an edge from the node to
   // itself: a loop on that node (SPEC.md §13).
   for (const link of links) {
     const [a, b] = [link.fromDocumentId, link.toDocumentId].sort();
-    const edge = edgeByPair.get(`${a}|${b}`) ?? { a, b, accepted: 0, recommended: 0, links: [] };
-    if (link.recommended) edge.recommended++;
+    const edge = edgeByPair.get(`${a}|${b}`) ?? { a, b, accepted: 0, recommended: 0, provenance: 0, links: [] };
+    const provenance = isProvenanceLink(link, generatedIds.has(link.fromDocumentId));
+    if (provenance) edge.provenance = (edge.provenance ?? 0) + 1;
+    else if (link.recommended) edge.recommended++;
     else edge.accepted++;
     edge.links.push({
       id: link.id,
@@ -117,6 +126,7 @@ export async function documentsGraph(
       toBlockText: link.toBlockId ? (blockText.get(link.toBlockId) ?? null) : null,
       reason: link.reason,
       recommended: link.recommended,
+      ...(provenance ? { provenance: true } : {}),
     });
     edgeByPair.set(`${a}|${b}`, edge);
   }

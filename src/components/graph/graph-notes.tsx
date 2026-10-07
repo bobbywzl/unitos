@@ -1,13 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { type Edge as FlowEdge, type EdgeProps } from "reactflow";
 import type { GraphEdge, GraphEdgeLink, SectionView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { CommentIcon, NotesIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
+import { readGraphKeep, writeGraphKeep } from "@/components/graph/graph-keep";
 import { noteLine, notesOnGraph, pairKey, type GraphNote, type NotesOnGraph } from "@/lib/graph/notes";
 
 // The project's notes on the graph (SPEC.md §13). The document stays the
@@ -36,11 +36,10 @@ type GraphNotesValue = {
   sectionChoices: { id: string; label: string }[];
   /** The section the reader last wrote a note in, else the first. */
   defaultSectionId: string | null;
-  /** Documents a hovered note lights on the canvas; null = none. */
-  rowLit: Set<string> | null;
+  /** Light the documents of a hovered or focused note on the canvas; null = none
+      (the lit set itself: useGraphNotesLit). */
   setRowLit: (ids: Set<string> | null) => void;
-  /** The pinned curve's pair ("a|b"), as the canvas reports it. */
-  pinnedPair: string | null;
+  /** The canvas reports its pinned curve ("a|b"); useGraphNotesLit reads it. */
   setPinnedPair: (pair: string | null) => void;
   titleOf: Map<string, string>;
   /** Close the graph, open the reader on the note's first source, and the tray on the note. */
@@ -52,9 +51,21 @@ type GraphNotesValue = {
 };
 
 const GraphNotesContext = createContext<GraphNotesValue | null>(null);
+// What a hovered or focused row lights and the pinned curve change on every
+// hover: they ride a context of their own, so the nodes and curves that read
+// the notes do not render again for them (REV2-09).
+const GraphNotesLitContext = createContext<{ rowLit: Set<string> | null; pinnedPair: string | null }>({
+  rowLit: null,
+  pinnedPair: null,
+});
 
 export function useGraphNotes(): GraphNotesValue | null {
   return useContext(GraphNotesContext);
+}
+
+/** The documents a hovered or focused note lights, and the pinned curve's pair. */
+export function useGraphNotesLit(): { rowLit: Set<string> | null; pinnedPair: string | null } {
+  return useContext(GraphNotesLitContext);
 }
 
 export function GraphNotesProvider({
@@ -75,7 +86,15 @@ export function GraphNotesProvider({
 }) {
   const router = useRouter();
   const { myId } = useCollab();
-  const [sectionId, setSectionId] = useState<string | null>(null);
+  // The section filter survives a trip to a document and Back (WALK2-07).
+  const [sectionId, setSectionIdState] = useState<string | null>(() => readGraphKeep(notebookId).sectionId ?? null);
+  const setSectionId = useCallback(
+    (id: string | null) => {
+      setSectionIdState(id);
+      writeGraphKeep(notebookId, { sectionId: id });
+    },
+    [notebookId],
+  );
   const [rowLit, setRowLit] = useState<Set<string> | null>(null);
   const [pinnedPair, setPinnedPair] = useState<string | null>(null);
   const sections = input?.sections;
@@ -152,9 +171,7 @@ export function GraphNotesProvider({
             setSectionId,
             sectionChoices: input.sectionChoices,
             defaultSectionId,
-            rowLit,
             setRowLit,
-            pinnedPair,
             setPinnedPair,
             titleOf,
             showNote,
@@ -163,16 +180,21 @@ export function GraphNotesProvider({
             rejectNote: input.rejectNote,
           }
         : null,
-    [input, notebookId, view, liveSectionId, defaultSectionId, rowLit, pinnedPair, titleOf, showNote, openSource],
+    [input, notebookId, view, liveSectionId, setSectionId, defaultSectionId, titleOf, showNote, openSource],
   );
-  return <GraphNotesContext.Provider value={value}>{children}</GraphNotesContext.Provider>;
+  const lit = useMemo(() => ({ rowLit, pinnedPair }), [rowLit, pinnedPair]);
+  return (
+    <GraphNotesContext.Provider value={value}>
+      <GraphNotesLitContext.Provider value={lit}>{children}</GraphNotesLitContext.Provider>
+    </GraphNotesContext.Provider>
+  );
 }
 
 // ── Hooks the canvas reads (graph-view.tsx) ────────────────────────────────
 
 /** The documents a hovered note lights; null = no note hovered. */
 export function useNotesLit(): Set<string> | null {
-  return useGraphNotes()?.rowLit ?? null;
+  return useContext(GraphNotesLitContext).rowLit;
 }
 
 /** True when the section filter is on and no note of the section belongs to the document. */
@@ -194,7 +216,10 @@ export type NoteEdgeData = { notes: number };
 /** A sage dotted curve for every pair of documents that a note joins and no
     link does. Its id is the pair's, as a link curve's is. */
 export function useNoteOnlyEdges(edges: GraphEdge[]): FlowEdge<NoteEdgeData>[] {
-  const view = useGraphNotes()?.view;
+  const ctx = useGraphNotes();
+  const view = ctx?.view;
+  const titleOf = ctx?.titleOf;
+  const t = useT();
   return useMemo(() => {
     if (!view) return [];
     const linked = new Set(edges.map((e) => pairKey(e.a, e.b)));
@@ -202,111 +227,57 @@ export function useNoteOnlyEdges(edges: GraphEdge[]): FlowEdge<NoteEdgeData>[] {
       .filter(([key]) => !linked.has(key))
       .map(([key, notes]) => {
         const [a, b] = key.split("|");
-        return { id: key, source: a, target: b, type: "note", data: { notes: notes.length } };
+        const ariaLabel = t(notes.length === 1 ? "graphNotes.noteCurveLabelOne" : "graphNotes.noteCurveLabel", {
+          n: notes.length,
+          a: titleOf?.get(a) ?? "",
+          b: titleOf?.get(b) ?? "",
+        });
+        return { id: key, source: a, target: b, type: "note", ariaLabel, data: { notes: notes.length } };
       });
-  }, [view, edges]);
+  }, [view, edges, titleOf, t]);
 }
 
 // ── Node chip and hover card ───────────────────────────────────────────────
 
-// The hover card waits for the pointer to rest, as the spotlight does.
-const CARD_DELAY = 300;
 const CARD_ROWS = 5;
 
-/** Under a node's title: the number of accepted notes that belong to the
-    document, a dot for pending ones. hovered: the canvas's hover is on the
-    node; after a rest the card of its notes opens under it. */
-export function NodeNotes({ documentId, hovered }: { documentId: string; hovered: boolean }) {
+/** Right of a node's dot: the number of accepted notes that belong to the
+    document, a dot for pending ones. The notes themselves list in the node's
+    card (NodeNotesRows), so a node shows one card (VIEW2-01). */
+export function NodeNotes({ documentId }: { documentId: string }) {
   const ctx = useGraphNotes();
   const t = useT();
-  const [anchor, setAnchor] = useState<HTMLSpanElement | null>(null);
-  const [rested, setRested] = useState(false);
-  const [onCard, setOnCard] = useState(false);
-  const leaveTimer = useRef<number | null>(null);
-  useEffect(() => {
-    if (!hovered) {
-      const timer = window.setTimeout(() => setRested(false), 160);
-      return () => window.clearTimeout(timer);
-    }
-    const timer = window.setTimeout(() => setRested(true), CARD_DELAY);
-    return () => window.clearTimeout(timer);
-  }, [hovered]);
-  useEffect(() => () => {
-    if (leaveTimer.current !== null) window.clearTimeout(leaveTimer.current);
-  }, []);
   const entry = ctx?.view.byDocument.get(documentId);
   if (!ctx || !entry) return null;
-  const open = (rested && hovered) || onCard;
   return (
-    <>
-      <span
-        ref={setAnchor}
-        data-graph-node-notes={documentId}
-        data-tip={t("graphNotes.nodeNotesTitle")}
-        className="flex items-center gap-1 rounded-full bg-sage-100 px-1.5 py-px text-[10px] font-semibold tabular-nums text-sage-800"
-      >
-        <NotesIcon size={10} />
-        {entry.accepted}
-        {entry.pending > 0 && (
-          <span
-            aria-label={t("graphNotes.nodeNotesPending", { n: entry.pending })}
-            className="size-1.5 rounded-full bg-clay"
-          />
-        )}
-      </span>
-      {open && (
-        <NodeNotesCard
-          documentId={documentId}
-          anchor={anchor}
-          notes={entry.notes}
-          onEnter={() => {
-            if (leaveTimer.current !== null) window.clearTimeout(leaveTimer.current);
-            setOnCard(true);
-          }}
-          onLeave={() => {
-            leaveTimer.current = window.setTimeout(() => {
-              setOnCard(false);
-              ctx.setRowLit(null);
-            }, 160);
-          }}
+    <span
+      data-graph-node-notes={documentId}
+      data-tip={t("graphNotes.nodeNotesTitle")}
+      className="flex items-center gap-1 rounded-full bg-sage-100 px-1.5 py-px text-[10px] font-semibold tabular-nums text-sage-800"
+    >
+      <NotesIcon size={10} />
+      {entry.accepted}
+      {entry.pending > 0 && (
+        <span
+          aria-label={t("graphNotes.nodeNotesPending", { n: entry.pending })}
+          className="size-1.5 rounded-full bg-clay"
         />
       )}
-    </>
+    </span>
   );
 }
 
-function NodeNotesCard({
-  documentId,
-  anchor,
-  notes,
-  onEnter,
-  onLeave,
-}: {
-  documentId: string;
-  anchor: HTMLElement | null;
-  notes: GraphNote[];
-  onEnter: () => void;
-  onLeave: () => void;
-}) {
+/** The node card's notes (graph-view.tsx NodeCard): the newest five notes
+    that belong to the document, each a row that shows it in the tray. */
+export function NodeNotesRows({ documentId }: { documentId: string }) {
   const ctx = useGraphNotes();
   const t = useT();
-  if (!ctx || !anchor || typeof document === "undefined") return null;
-  const rect = anchor.getBoundingClientRect();
-  const width = Math.min(300, window.innerWidth - 24);
-  const left = Math.max(12, Math.min(rect.left + rect.width / 2 - width / 2, window.innerWidth - width - 12));
-  const below = rect.bottom + 8;
-  const top = below + 260 > window.innerHeight ? undefined : below;
-  const bottom = top === undefined ? window.innerHeight - rect.top + 8 : undefined;
+  const notes = ctx?.view.byDocument.get(documentId)?.notes;
+  if (!ctx || !notes || notes.length === 0) return null;
   const shown = notes.slice(0, CARD_ROWS);
-  return createPortal(
-    <div
-      data-track-surface="graph-node-notes"
-      onMouseEnter={onEnter}
-      onMouseLeave={onLeave}
-      className="menu-in fixed z-[60] flex flex-col gap-0.5 rounded-2xl border border-line bg-card/95 p-2 shadow-float backdrop-blur-md"
-      style={{ left, top, bottom, width }}
-    >
-      <p className="px-2 pt-0.5 pb-1 text-[11px] font-bold tracking-[0.06em] text-sand-600 uppercase">
+  return (
+    <div data-track-surface="graph-node-notes" className="-mx-1.5 mt-1 flex flex-col gap-0.5 border-t border-line pt-1.5">
+      <p className="px-2 pb-0.5 text-[11px] font-bold tracking-[0.06em] text-sage-700 uppercase">
         {notes.length === 1 ? t("graphNotes.nodeNotesOne") : t("graphNotes.nodeNotesMany", { n: notes.length })}
       </p>
       {shown.map((g) => (
@@ -317,8 +288,7 @@ function NodeNotesCard({
           {t("graphNotes.nodeNotesMore", { n: notes.length - CARD_ROWS })}
         </p>
       )}
-    </div>,
-    document.body,
+    </div>
   );
 }
 
@@ -337,6 +307,8 @@ export function GraphNoteRow({ note: g, hereId }: { note: GraphNote; hereId: str
       data-graph-note-row={g.note.id}
       onMouseEnter={() => lightWith(null)}
       onMouseLeave={() => ctx.setRowLit(null)}
+      onFocus={() => lightWith(null)}
+      onBlur={() => ctx.setRowLit(null)}
       className="flex flex-col gap-1 rounded-xl px-2 py-1.5 hover:bg-sage-100/60"
     >
       <button
@@ -462,60 +434,31 @@ function seededBow(id: string): number {
   return ((h % 1000) / 999) * 2 - 1;
 }
 
-export type NoteEdgeSpotlight = {
-  hover: { nodeId?: string; edgeId?: string } | null;
-  pinnedEdgeId: string | null;
-  hoverEdge: (edgeId: string) => void;
-  scheduleClear: () => void;
-};
-
 /** The sage dotted curve of a pair that only notes join: no gradient, no
-    marching. Hovered or pinned, it lists the notes quoting both. */
+    marching. Hovered or pinned (listOpen), it lists the notes quoting both.
+    Its spotlight (lit, dim) is the canvas's CSS, never a render. */
 export function NoteEdge({
   id,
-  source,
-  target,
   sourceX,
   sourceY,
   targetX,
   targetY,
-  spotlight,
+  listOpen,
   renderList,
 }: EdgeProps<NoteEdgeData> & {
-  spotlight: NoteEdgeSpotlight;
+  listOpen: boolean;
   /** Draws the list where the canvas puts a curve's list (graph-view.tsx). */
   renderList: (anchor: { x: number; y: number }, children: React.ReactNode) => React.ReactNode;
 }) {
   const t = useT();
-  const rowLit = useNotesLit();
-  const { hover, pinnedEdgeId } = spotlight;
-  const lit = hover
-    ? hover.nodeId
-      ? source === hover.nodeId || target === hover.nodeId
-      : hover.edgeId === id
-    : rowLit
-      ? rowLit.has(source) && rowLit.has(target)
-      : false;
-  const state = hover === null && rowLit === null ? "base" : lit ? "lit" : "dim";
   const bow = seededBow(id) * 46 + (targetX - sourceX) * 0.14;
   const midX = (sourceX + targetX) / 2;
   const midY = (sourceY + targetY) / 2;
   const path = `M ${sourceX} ${sourceY} Q ${midX + bow} ${midY} ${targetX} ${targetY}`;
-  const listOpen = hover?.edgeId === id || pinnedEdgeId === id;
   return (
-    <g
-      data-graph-note-curve={id}
-      style={{ opacity: state === "dim" ? 0.1 : state === "lit" ? 1 : 0.8, transition: "opacity 0.25s ease" }}
-    >
+    <g data-graph-note-curve={id} className="graph-note-curve">
       <title>{t("graphNotes.noteCurveHint")}</title>
-      <path
-        d={path}
-        fill="none"
-        stroke="var(--sage-500)"
-        strokeLinecap="round"
-        strokeDasharray="1.5 6"
-        style={{ strokeWidth: state === "lit" ? 3 : 2.2 }}
-      />
+      <path d={path} fill="none" stroke="var(--sage-500)" strokeLinecap="round" strokeDasharray="1.5 6" className="graph-note-stroke" />
       <path d={path} fill="none" stroke="transparent" strokeWidth={16} className="react-flow__edge-interaction graph-edge-hit" />
       <CurveMarks pair={id} links={[]} x={midX + bow / 2} y={midY} offset={0} />
       {listOpen &&
