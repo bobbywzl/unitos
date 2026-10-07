@@ -174,14 +174,18 @@ export async function POST(req: Request) {
   }
   if (data.fromLinkId) {
     const link = await db.docLink.findUnique({ where: { id: data.fromLinkId } });
-    // Both ends must be documents of this project: a link is read only where
-    // its two documents are attached.
+    // The link must belong to this project (or to none: a link made before
+    // links had a project), and both ends must be documents of it.
     const attachedEnds = link
       ? await db.notebookDocument.count({
           where: { notebookId: section.notebookId, documentId: { in: [link.fromDocumentId, link.toDocumentId] } },
         })
       : 0;
-    if (!link || attachedEnds < new Set([link.fromDocumentId, link.toDocumentId]).size) {
+    if (
+      !link ||
+      (link.notebookId !== null && link.notebookId !== section.notebookId) ||
+      attachedEnds < new Set([link.fromDocumentId, link.toDocumentId]).size
+    ) {
       return NextResponse.json({ error: t("api.linkNotFound") }, { status: 404 });
     }
     const end = { layer: null, startTime: null, endTime: null };
