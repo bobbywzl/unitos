@@ -100,10 +100,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ notebookId: st
           signal: AbortSignal.any([req.signal, deadline]),
           onFailure: (reason) => new StitchFailure(reason),
         });
-        // A generated document gets its skeleton in the background, like
-        // every added document, so the next command does not build it inline.
+        // A generated document gets no skeleton in the background: the
+        // every-document read leaves it out (STITCH_READS_GENERATED), and a
+        // pick of it builds one when Stitch reads it (ensureSkeleton).
         const generated = result.document;
-        if (generated) after(() => refreshSkeleton(generated.id, access.user.id).catch(() => {}));
+        if (generated && STITCH_READS_GENERATED) after(() => refreshSkeleton(generated.id, access.user.id).catch(() => {}));
         if (cancelled || req.signal.aborted) return;
         send(JSON.stringify({ ok: true, ...result }));
       } catch (err) {

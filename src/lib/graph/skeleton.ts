@@ -13,6 +13,7 @@ import {
   SKELETON_STALE_FRACTION,
   SKELETON_STALE_MS,
   SKELETON_WINDOW_CHARS,
+  STITCH_READS_GENERATED,
   STITCH_WHOLE_THRESHOLD,
 } from "@/lib/derive/config";
 import { documentPrefix, pageNames } from "@/lib/derive/context";
@@ -311,11 +312,90 @@ export async function buildSkeleton(
     chars: readable.reduce((sum, b) => sum + b.text.length, 0),
     built: Date.now(),
   };
+  // The build lock (skeletonStartedAt) is its holder's to clear
+  // (buildLocked), never a build's: another run may hold it.
   await db.document.update({
     where: { id: documentId },
-    data: { skeleton: skeleton as unknown as Prisma.InputJsonValue, skeletonStartedAt: null },
+    data: { skeleton: skeleton as unknown as Prisma.InputJsonValue },
   });
   return skeleton;
+}
+
+// One build per document at a time (REV3-07). In this process, a running
+// build is shared: a command that needs the skeleton the graph's warm is
+// building waits for that build instead of starting a second. Across
+// processes, Document.skeletonStartedAt is the lock: set by a conditional
+// update, so two runs never both take it, cleared only by the run that set
+// it, and a lock older than SKELETON_STALE_MS is a dead run's.
+const running = new Map<string, Promise<Skeleton | null>>();
+const WAIT_POLL_MS = 2_000;
+const WAIT_MAX_MS = 90_000; // how long a command waits for another process's build
+
+async function claimBuild(documentId: string): Promise<Date | null> {
+  const stamp = new Date();
+  const { count } = await db.document.updateMany({
+    where: {
+      id: documentId,
+      OR: [{ skeletonStartedAt: null }, { skeletonStartedAt: { lt: new Date(stamp.getTime() - SKELETON_STALE_MS) } }],
+    },
+    data: { skeletonStartedAt: stamp },
+  });
+  return count === 1 ? stamp : null;
+}
+
+async function releaseBuild(documentId: string, stamp: Date): Promise<void> {
+  await db.document.updateMany({ where: { id: documentId, skeletonStartedAt: stamp }, data: { skeletonStartedAt: null } });
+}
+
+// A promise the signal stops waiting for; the build behind it runs on and
+// stores its skeleton for the next command.
+function untilAborted<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(new Error("aborted"));
+  return new Promise<T>((resolve, reject) => {
+    const stop = () => reject(new Error("aborted"));
+    signal.addEventListener("abort", stop, { once: true });
+    promise.then(
+      (v) => {
+        signal.removeEventListener("abort", stop);
+        resolve(v);
+      },
+      (e: unknown) => {
+        signal.removeEventListener("abort", stop);
+        reject(e instanceof Error ? e : new Error(String(e)));
+      },
+    );
+  });
+}
+
+/** The skeleton built under the lock: the build of this document already
+    running in this process; else the lock taken, the skeleton built, and
+    the lock cleared. "held": another process holds the lock. */
+async function buildLocked(documentId: string, userId: string | null, signal?: AbortSignal): Promise<Skeleton | null | "held"> {
+  const own = running.get(documentId);
+  if (own) return untilAborted(own, signal);
+  const stamp = await claimBuild(documentId);
+  if (!stamp) return "held";
+  const build = buildSkeleton(documentId, userId).finally(async () => {
+    running.delete(documentId);
+    await releaseBuild(documentId, stamp).catch(() => {});
+  });
+  running.set(documentId, build);
+  return untilAborted(build, signal);
+}
+
+/** Another process's build of the document, waited for: the stored
+    skeleton once its lock clears, polled every WAIT_POLL_MS up to
+    WAIT_MAX_MS. Null when it does not clear in time. */
+async function waitForBuild(documentId: string, signal?: AbortSignal): Promise<Skeleton | null> {
+  const until = Date.now() + WAIT_MAX_MS;
+  while (Date.now() < until) {
+    await untilAborted(new Promise((resolve) => setTimeout(resolve, WAIT_POLL_MS)), signal);
+    const row = await db.document.findUnique({ where: { id: documentId }, select: { skeleton: true, skeletonStartedAt: true } });
+    if (!row) return null;
+    if (!row.skeletonStartedAt || Date.now() - row.skeletonStartedAt.getTime() >= SKELETON_STALE_MS) return readSkeleton(row.skeleton);
+  }
+  return null;
 }
 
 /** The skeleton Stitch reads for a document it has loaded: the stored one
@@ -331,7 +411,10 @@ export async function ensureSkeleton(
   const stored = readSkeleton(document.skeleton);
   if (!skeletonStale(stored, document.blocks)) return currentSkeleton(stored, document.blocks);
   try {
-    const built = await buildSkeleton(document.id, userId, signal);
+    // A build already running (the graph's warm, an edit's refresh) is
+    // waited for, not run twice.
+    const locked = await buildLocked(document.id, userId, signal);
+    const built = locked === "held" ? await waitForBuild(document.id, signal) : locked;
     if (built) return currentSkeleton(built, document.blocks);
   } catch (err) {
     if (signal?.aborted) throw err;
@@ -347,25 +430,32 @@ export async function ensureSkeleton(
     character (3 bytes in UTF-8) at 1 and the rest at chars / 4. A
     document in no project reads none. by: the document, or a project. */
 export async function skeletonNeeded(by: { documentId: string } | { notebookId: string }): Promise<boolean> {
-  const rows = await db.$queryRaw<{ chars: bigint | null; cjk: bigint | null }[]>(
+  return (await projectText(by)).some(readsSkeletons);
+}
+
+// The text of the projects of a document, or of one project: its chars,
+// its CJK chars, and its blocks.
+async function projectText(by: { documentId: string } | { notebookId: string }) {
+  return db.$queryRaw<{ chars: bigint | null; cjk: bigint | null; blocks: bigint | null }[]>(
     "documentId" in by
-      ? Prisma.sql`SELECT sum(length(b.text)) AS chars, sum(octet_length(b.text) - length(b.text)) / 2 AS cjk
+      ? Prisma.sql`SELECT sum(length(b.text)) AS chars, sum(octet_length(b.text) - length(b.text)) / 2 AS cjk, count(*) AS blocks
           FROM "NotebookDocument" nd
           JOIN "NotebookDocument" nd2 ON nd2."notebookId" = nd."notebookId"
           JOIN "Block" b ON b."documentId" = nd2."documentId"
           WHERE nd."documentId" = ${by.documentId}
           GROUP BY nd."notebookId"`
-      : Prisma.sql`SELECT sum(length(b.text)) AS chars, sum(octet_length(b.text) - length(b.text)) / 2 AS cjk
+      : Prisma.sql`SELECT sum(length(b.text)) AS chars, sum(octet_length(b.text) - length(b.text)) / 2 AS cjk, count(*) AS blocks
           FROM "NotebookDocument" nd
           JOIN "Block" b ON b."documentId" = nd."documentId"
           WHERE nd."notebookId" = ${by.notebookId}`,
   );
-  return rows.some((r) => {
-    const chars = Number(r.chars ?? 0);
-    const cjk = Math.min(chars, Number(r.cjk ?? 0));
-    // A tenth of headroom: Stitch counts the rendering, tags included.
-    return cjk + (chars - cjk) / 4 > STITCH_WHOLE_THRESHOLD * 0.9 || chars > ASSISTANT_WHOLE_THRESHOLD;
-  });
+}
+
+function readsSkeletons(r: { chars: bigint | null; cjk: bigint | null }): boolean {
+  const chars = Number(r.chars ?? 0);
+  const cjk = Math.min(chars, Number(r.cjk ?? 0));
+  // A tenth of headroom: Stitch counts the rendering, tags included.
+  return cjk + (chars - cjk) / 4 > STITCH_WHOLE_THRESHOLD * 0.9 || chars > ASSISTANT_WHOLE_THRESHOLD;
 }
 
 /** The background refresh, after an add or an edit: builds the skeleton
@@ -376,19 +466,25 @@ export async function skeletonNeeded(by: { documentId: string } | { notebookId: 
     built under that ago waits). force: the caller knows the skeleton is
     read (the graph opened): build now. A
     skeleton not built here is built at once when Stitch or the assistant
-    needs it (ensureSkeleton). One build at a time per document: a build
-    started under SKELETON_STALE_MS ago is running, and this one yields. */
+    needs it (ensureSkeleton). One build at a time per document
+    (buildLocked): a build running in this process, or holding the lock
+    from another, and this one yields. A page Stitch generated gets no
+    skeleton here while the every-document read skips generated pages
+    (STITCH_READS_GENERATED): a picked one is built when Stitch reads it. */
 export async function refreshSkeleton(documentId: string, userId: string | null, options: { force?: boolean } = {}): Promise<void> {
   if (!(await featureConfigured("skeleton"))) return;
+  if (running.has(documentId)) return;
   const document = await db.document.findUnique({
     where: { id: documentId },
     select: {
       skeleton: true,
       skeletonStartedAt: true,
+      generatedCommand: true,
       blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true } },
     },
   });
   if (!document) return;
+  if (document.generatedCommand !== null && !STITCH_READS_GENERATED) return;
   const stored = readSkeleton(document.skeleton);
   if (!skeletonStale(stored, document.blocks)) return;
   if (document.skeletonStartedAt && Date.now() - document.skeletonStartedAt.getTime() < SKELETON_STALE_MS) return;
@@ -396,21 +492,81 @@ export async function refreshSkeleton(documentId: string, userId: string | null,
     if (stored?.built !== undefined && Date.now() - stored.built < SKELETON_QUIET_MS) return;
     if (!(await skeletonNeeded({ documentId }))) return;
   }
-  await db.document.update({ where: { id: documentId }, data: { skeletonStartedAt: new Date() } });
   try {
-    await buildSkeleton(documentId, userId);
+    await buildLocked(documentId, userId);
   } catch (err) {
     console.error(`[skeleton] refresh of ${documentId} failed:`, err);
-    await db.document.update({ where: { id: documentId }, data: { skeletonStartedAt: null } }).catch(() => {});
   }
 }
 
+/** The documents of a project whose skeleton may be stale: skeletonDrift
+    worked out in SQL, from each readable block's length and the hash of its
+    text against the stored lines' hashes, so a graph open reads no block
+    text into the server (COST3-07). A document with no skeleton, or one of
+    an older version, is stale. Generated pages are left out while the
+    every-document read skips them. The SQL's readable blocks are the text
+    blocks with a non-space character: a block JS trims to nothing counts
+    here as changed, which only sends it to refreshSkeleton, whose check
+    is exact. */
+export async function staleSkeletonDocuments(notebookId: string): Promise<string[]> {
+  const rows = await db.$queryRaw<{ id: string; v: number | null; total: bigint | null; changed: bigint | null; removed: bigint | null; lines: number | null }[]>`
+    WITH docs AS (
+      SELECT d.id, d.skeleton FROM "NotebookDocument" nd JOIN "Document" d ON d.id = nd."documentId"
+      WHERE nd."notebookId" = ${notebookId} AND (${STITCH_READS_GENERATED} OR d."generatedCommand" IS NULL)
+    ),
+    lines AS MATERIALIZED (
+      SELECT docs.id AS doc, l."blockId" AS "blockId", l.hash, length(l.text) AS len
+      FROM docs, jsonb_to_recordset(CASE WHEN jsonb_typeof(docs.skeleton->'lines') = 'array' THEN docs.skeleton->'lines' ELSE '[]'::jsonb END)
+        AS l("blockId" text, hash text, text text)
+    ),
+    blocks AS MATERIALIZED (
+      SELECT b."documentId" AS doc, b.id, left(md5(b.text), 12) AS hash, length(b.text) AS len
+      FROM "Block" b JOIN docs ON docs.id = b."documentId"
+      WHERE b.type NOT IN ('VIDEO', 'PAGE') AND b.text ~ '[^[:space:]]'
+    ),
+    bl AS (
+      SELECT b.doc, sum(b.len) AS total, sum(CASE WHEN l.hash IS NULL OR l.hash <> b.hash THEN b.len ELSE 0 END) AS changed
+      FROM blocks b LEFT JOIN lines l ON l.doc = b.doc AND l."blockId" = b.id
+      GROUP BY b.doc
+    ),
+    lr AS (
+      SELECT l.doc, count(*)::int AS lines, sum(CASE WHEN b.id IS NULL THEN l.len ELSE 0 END) * 10 AS removed
+      FROM lines l LEFT JOIN blocks b ON b.doc = l.doc AND b.id = l."blockId"
+      GROUP BY l.doc
+    )
+    SELECT docs.id,
+      CASE WHEN jsonb_typeof(docs.skeleton->'v') = 'number' THEN (docs.skeleton->>'v')::int END AS v,
+      bl.total, bl.changed, lr.removed, lr.lines
+    FROM docs LEFT JOIN bl ON bl.doc = docs.id LEFT JOIN lr ON lr.doc = docs.id`;
+  return rows
+    .filter((r) => {
+      const total = Number(r.total ?? 0);
+      if (r.v !== SKELETON_VERSION) return total > 0;
+      if (total === 0) return (r.lines ?? 0) > 0;
+      return Math.min(1, (Number(r.changed ?? 0) + Number(r.removed ?? 0)) / total) > SKELETON_STALE_FRACTION;
+    })
+    .map((r) => r.id);
+}
+
+const warmed = new Map<string, { key: string; at: number }>();
+
 /** The graph opened: every document of a project that reads skeletons gets
     its missing or stale skeleton built now, so the first command does not
-    wait for them. Under the threshold nothing is built. */
+    wait for them. Under the threshold nothing is built. Only the documents
+    the SQL finds stale are loaded (staleSkeletonDocuments); a build
+    already running is not started again (buildLocked). */
 export async function warmSkeletons(notebookId: string, userId: string | null): Promise<void> {
   if (!(await featureConfigured("skeleton"))) return;
-  if (!(await skeletonNeeded({ notebookId }))) return;
-  const rows = await db.notebookDocument.findMany({ where: { notebookId }, select: { documentId: true } });
-  await mapLimit(rows, SKELETON_BUILD_CONCURRENCY, (r) => refreshSkeleton(r.documentId, userId, { force: true }).catch(() => {}));
+  const [text] = await projectText({ notebookId });
+  if (!text || !readsSkeletons(text)) return;
+  // The same project text warmed under SKELETON_QUIET_MS ago is not
+  // checked again: a graph opened twice reads no block twice. An edit that
+  // keeps the length builds at the command (ensureSkeleton).
+  const key = `${text.chars ?? 0}:${text.cjk ?? 0}:${text.blocks ?? 0}`;
+  const last = warmed.get(notebookId);
+  if (last && last.key === key && Date.now() - last.at < SKELETON_QUIET_MS) return;
+  if (warmed.size > 500) warmed.clear();
+  warmed.set(notebookId, { key, at: Date.now() });
+  const stale = await staleSkeletonDocuments(notebookId);
+  await mapLimit(stale, SKELETON_BUILD_CONCURRENCY, (id) => refreshSkeleton(id, userId, { force: true }).catch(() => {}));
 }
