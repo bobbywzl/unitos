@@ -69,8 +69,8 @@ function Passage({ p, documentId, onOpen }: { p: FindPassage; documentId: string
       <mark className="rounded-[3px] bg-clay-100 px-px font-semibold text-clay-800">{p.text.slice(p.start, p.end)}</mark>
       {p.text.slice(p.end)}
     </button>
-    {/* [cover4] The passage's words, without the snippet's ellipses, as a quote. */}
-    <AddToNote quote={{ documentId, blockId: p.blockId, text: p.text.replace(/^…|…$/g, "").trim() }} className="mt-1" />
+    {/* [cover4] The passage as a quote: its sentences (WALK5-10), or the row's words without the ellipses. */}
+    <AddToNote quote={{ documentId, blockId: p.blockId, text: p.quote ?? p.text.replace(/^…|…$/g, "").trim() }} className="mt-1" />
     </div>
   );
 }
