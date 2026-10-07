@@ -659,8 +659,9 @@ export function Workspace({
   }, [moreOpen]);
   useEscapeLayer(moreOpen, () => setMoreOpen(false));
 
-  // A note floats over the article (dragged out of the tray), or a side chat
-  // or version history is open in the reader (SPEC.md §7, §29): the tray
+  // A note floats over the article (dragged out of the tray), or version
+  // history is open in the reader (SPEC.md §7, §29); a side chat no longer
+  // folds it (it stays in its card's place): the tray
   // folds so they have the room, and unfolds when the card docks or closes
   // and they are gone. Docking opens the tray on notes on its own (onDock
   // below); this undoes only the fold it made, so a tray the reader had
