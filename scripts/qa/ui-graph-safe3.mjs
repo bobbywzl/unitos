@@ -194,6 +194,7 @@ if ((!ONLY || ONLY === "04") && after) {
   );
   await signIn("rev3-sa");
   await page.goto(`${BASE}/settings`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(5000); // hydrated: Sign out runs its onClick, not the bare link
   await page.click("a[href='/api/auth/logout']");
   await page.waitForTimeout(2000);
   const moved = await page.evaluate(() => ({
