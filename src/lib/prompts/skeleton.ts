@@ -6,16 +6,19 @@
 // window, and, in the first window, the document's gist. The answer is a
 // list of {blockId, text} by default; with SKELETON_KEYED it is JSON keyed
 // by block number ({"1": "…"}: COST4-08, a fifth fewer output tokens). The
-// parser takes both forms. The keyed form is off until a judged run on the
-// real model shows the same lines. The window's
+// parser takes both forms. The keyed form is on (ANS5, round 5): the
+// first builds log their coverage (lib/graph/skeleton.ts
+// logSkeletonCoverage) to judge it on the real model. The window's
 // blocks are numbered 1..n in their [block <n>] markers (lib/graph/
 // skeleton.ts maps each number back to the stored id): a line whose number
 // names no block is dropped, and a block the model skips reads as its own
 // first words.
 
 // blockId: the number of the part's first block in the window.
-// COST4-08: the keyed answer form. Off: not yet proven on the real model.
-export const SKELETON_KEYED = false;
+// COST4-08: the keyed answer form, a fifth fewer output tokens. On; turn it
+// off again when the coverage log shows the model skipping more blocks
+// in it than in the list form (more than 2 points under).
+export const SKELETON_KEYED = true;
 
 export type SkeletonPartCtx = { blockId: string; title: string };
 

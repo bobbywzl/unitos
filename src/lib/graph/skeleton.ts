@@ -24,7 +24,7 @@ import { documentPrefix, pageNames } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import { featureCall, featureConfigured } from "@/lib/feature-models";
 import { mapLimit } from "@/lib/jev";
-import { skeletonPrompt } from "@/lib/prompts/skeleton";
+import { SKELETON_KEYED, skeletonPrompt } from "@/lib/prompts/skeleton";
 import type { UsageMeta } from "@/lib/usage";
 
 // The skeleton of a document (SPEC.md §22): the document collapsed for
@@ -93,6 +93,31 @@ export const windowSchema = z.object({
   parts: partsSchema,
   lines: linesSchema,
 });
+
+// The first builds of the process log their coverage (SKELETON_KEYED is
+// on, ANS5): per window, the blocks the model wrote a line for against the
+// blocks in the window. One line per build:
+//   [skeleton] coverage keyed build 3/50 doc=<id>: 118/120 lines (98.3%); windows 40/40 38/40 40/40
+// A block with no line reads as its first words. Judge the keyed form by
+// the build's percentage against the list form's on the same documents
+// (set SKELETON_KEYED false and rebuild): off again when it is more than 2
+// points under.
+const COVERAGE_LOG_BUILDS = 50;
+let coverageBuilds = 0;
+function logSkeletonCoverage(documentId: string, windows: { id: string }[][], results: { lines: { blockId: string }[] }[]): void {
+  if (coverageBuilds >= COVERAGE_LOG_BUILDS) return;
+  coverageBuilds++;
+  const per = windows.map((blocks, i) => {
+    const inWindow = new Set(blocks.map((b) => b.id));
+    const named = new Set((results[i]?.lines ?? []).map((l) => l.blockId).filter((id) => inWindow.has(id)));
+    return { named: named.size, expected: blocks.length };
+  });
+  const named = per.reduce((n, w) => n + w.named, 0);
+  const expected = per.reduce((n, w) => n + w.expected, 0);
+  console.log(
+    `[skeleton] coverage ${SKELETON_KEYED ? "keyed" : "list"} build ${coverageBuilds}/${COVERAGE_LOG_BUILDS} doc=${documentId}: ${named}/${expected} lines (${expected > 0 ? ((100 * named) / expected).toFixed(1) : "100.0"}%); windows ${per.map((w) => `${w.named}/${w.expected}`).join(" ")}`,
+  );
+}
 
 /** The hash of a block's text: what tells a stored line its block changed. */
 export function blockHash(text: string): string {
@@ -345,6 +370,7 @@ export async function buildSkeleton(
     };
   });
 
+  logSkeletonCoverage(documentId, windows, results);
   // Every line against the stored blocks: the model's line where it named
   // the block, the block's own first words where it did not.
   const lineFor = new Map<string, string>();
