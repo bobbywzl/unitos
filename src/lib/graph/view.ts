@@ -1,3 +1,5 @@
+import type { User } from "@prisma/client";
+import { crossAccountLinks } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { projectLinks } from "@/lib/link-scope";
 import type { DocumentKind } from "@/lib/document-order";
@@ -35,10 +37,13 @@ export async function listGenerated(notebookId: string): Promise<GeneratedDocume
 
 /** The graph among a set of documents: nodes, one edge per linked pair, and
     the recommended links awaiting Accept (SPEC.md §13). Only the project's
-    links, and the links with no project. */
+    links, and the links with no project. `viewer` marks the links with no
+    project shared across accounts (crossAccount), so the lists hide what
+    the viewer may not change. */
 export async function documentsGraph(
   documents: { id: string; title: string; hasVideo: boolean; kind?: DocumentKind }[],
   notebookId: string,
+  viewer: User | null = null,
 ): Promise<{ nodes: GraphNode[]; edges: GraphEdge[]; recommended: RecommendedLinkView[] }> {
   const ids = documents.map((d) => d.id);
   const [links, recommendedRows, blockCounts] = await Promise.all([
@@ -55,6 +60,9 @@ export async function documentsGraph(
         reason: true,
         quotedText: true,
         toQuotedText: true,
+        notebookId: true,
+        formerNotebookId: true,
+        createdById: true,
       },
     }),
     db.docLink.findMany({
@@ -89,6 +97,11 @@ export async function documentsGraph(
         )
       : [],
   );
+  const crossAccount = await crossAccountLinks([...links, ...recommendedRows], viewer);
+  const crossAccountOf = (id: string) => {
+    const rule = crossAccount.get(id);
+    return rule ? { crossAccount: { outside: rule.outside } } : {};
+  };
   const titleOf = new Map(documents.map((d) => [d.id, d.title]));
   const nodes: GraphNode[] = documents.map((d) => ({
     id: d.id,
@@ -117,6 +130,7 @@ export async function documentsGraph(
       toBlockText: link.toBlockId ? (blockText.get(link.toBlockId) ?? null) : null,
       reason: link.reason,
       recommended: link.recommended,
+      ...crossAccountOf(link.id),
     });
     edgeByPair.set(`${a}|${b}`, edge);
   }
@@ -139,6 +153,7 @@ export async function documentsGraph(
       resolvedById: r.resolvedById,
       createdAt: r.createdAt.toISOString(),
     })),
+    ...crossAccountOf(link.id),
   }));
   return { nodes, edges: await withLinkReplies([...edgeByPair.values()]), recommended };
 }

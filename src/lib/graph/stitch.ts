@@ -29,6 +29,7 @@ import { attachDocument } from "@/lib/parse/attach";
 import { parseMarkdown } from "@/lib/parse/markdown";
 import { PARSER_VERSION, type ParsedBlock } from "@/lib/parse/types";
 import { ensureSkeleton, type Skeleton } from "@/lib/graph/skeleton";
+import { projectLinks } from "@/lib/link-scope";
 import { jevRouteParts, jevSelectLines } from "@/lib/graph/stitch-jev";
 import { jevEnabled, mapLimit } from "@/lib/jev";
 import { rank } from "@/lib/graph/rank";
@@ -1146,7 +1147,7 @@ export async function stitch(input: {
 
   // ── Links: block to block across docs, stored recommended ─────────────
   const existing = await db.docLink.findMany({
-    where: { fromDocumentId: { in: docs.map((m) => m.id) }, OR: [{ notebookId: input.notebookId }, { notebookId: null }] },
+    where: { fromDocumentId: { in: docs.map((m) => m.id) }, ...projectLinks(input.notebookId) },
     select: { fromBlockId: true, quotedText: true, toDocumentId: true, toBlockId: true },
   });
   const seen = new Set(existing.map((l) => `${l.fromBlockId}|${l.quotedText}|${l.toBlockId ?? l.toDocumentId}`));

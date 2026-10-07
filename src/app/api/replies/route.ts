@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { bumpDocument, bumpNotebook, documentAccess, linkAccess, noteAccess, peopleByIds } from "@/lib/collab";
+import {
+  bumpDocument,
+  bumpNotebook,
+  crossAccountLink,
+  documentAccess,
+  linkAccess,
+  linkOfOtherAccount,
+  noteAccess,
+  peopleByIds,
+} from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
@@ -71,11 +80,21 @@ export async function POST(req: Request) {
   if (data.docLinkId) {
     const link = await db.docLink.findUnique({
       where: { id: data.docLinkId },
-      select: { id: true, fromDocumentId: true, notebookId: true },
+      select: {
+        id: true,
+        fromDocumentId: true,
+        toDocumentId: true,
+        notebookId: true,
+        formerNotebookId: true,
+        createdById: true,
+      },
     });
     if (!link) return NextResponse.json({ error: t("api.linkNotFound") }, { status: 404 });
     const access = await linkAccess(link, "editor", data.notebookId);
     if (access instanceof NextResponse) return access;
+    // A link with no project shared across accounts: only its maker's
+    // projects reply on it (SPEC.md §13).
+    if ((await crossAccountLink(link, access.user)).outside) return linkOfOtherAccount();
     const reply = await db.reply.create({
       data: { docLinkId: link.id, userId: access.user.id, content: data.content.trim() },
     });

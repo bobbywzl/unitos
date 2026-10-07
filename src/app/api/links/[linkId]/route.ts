@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { bumpDocument, legacyLinkSharedAcrossAccounts, linkAccess } from "@/lib/collab";
+import { bumpDocument, crossAccountLink, linkAccess, linkOfOtherAccount } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
@@ -34,6 +34,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ linkId: strin
   if (!link) return NextResponse.json({ error: t("api.linkNotFound") }, { status: 404 });
   const access = await linkAccess(link, "editor", scopeOf(req));
   if (access instanceof NextResponse) return access;
+  // A link with no project shared across accounts: only its maker's
+  // projects re-word or accept it (SPEC.md §13).
+  if ((await crossAccountLink(link, access.user)).outside) return linkOfOtherAccount();
   if (data.reason !== undefined) {
     const reason = data.reason.trim();
     const updated = await db.docLink.update({
@@ -79,7 +82,7 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ linkId: stri
   if (!link) return NextResponse.json({ error: t("api.linkNotFound") }, { status: 404 });
   const access = await linkAccess(link, "editor", scopeOf(req));
   if (access instanceof NextResponse) return access;
-  if (link.createdById !== access.user.id && (await legacyLinkSharedAcrossAccounts(link))) {
+  if (link.createdById !== access.user.id && (await crossAccountLink(link, access.user)).crossAccount) {
     return NextResponse.json({ error: t("api.linkSharedAcrossAccounts") }, { status: 403 });
   }
 
