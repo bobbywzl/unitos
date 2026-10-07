@@ -33,6 +33,15 @@ const en = {
   cardGenerated: "A generated document: Stitch wrote it from the project's documents.",
   cardGeneratedFrom: "A generated document: Stitch wrote it from the command “{command}”.",
   generatedNodeLabel: "Generated document: {label}",
+  // [ui5] WALK5-09: the graph's status line, read by a screen reader.
+  cardShownStatus: "{title}: card shown",
+  pickedStatus: "{title} picked · {n} document{s} picked",
+  unpickedStatus: "{title} removed from the pick · {n} document{s} picked",
+  pickedManyStatus: "{n} document{s} picked",
+  pickClearedStatus: "No document picked: Stitch reads every document",
+  // WALK5-11: the phone's chip for the generated documents left out of the fit.
+  generatedFolded: "{n} generated document{s}",
+  // [/ui5]
   // The hover card and the key (graph-view.tsx), option A: a click selects.
   cardHintSelect: "Click to read its card · ⇧-click to pick for Stitch",
   gesturesSelect:
@@ -94,6 +103,14 @@ const zh: Record<keyof typeof en, string> = {
   cardGenerated: "生成文档：缝合根据项目的文档写成。",
   cardGeneratedFrom: "生成文档：缝合根据指令“{command}”写成。",
   generatedNodeLabel: "生成文档：{label}",
+  // [ui5] WALK5-09
+  cardShownStatus: "已显示 {title} 的卡片",
+  pickedStatus: "已选取 {title} · 共选取 {n} 篇文档",
+  unpickedStatus: "已从选取中移除 {title} · 共选取 {n} 篇文档",
+  pickedManyStatus: "共选取 {n} 篇文档",
+  pickClearedStatus: "没有选取文档：缝合阅读全部文档",
+  generatedFolded: "{n} 个生成文档",
+  // [/ui5]
   cardLoading: "正在载入…",
   cardKeys: "← → 沿链接走 · Enter 打开 · Esc 关闭",
   cardHintSelect: "点击查看卡片 · ⇧-点击为缝合选取",

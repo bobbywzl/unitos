@@ -5,6 +5,7 @@ import { useState } from "react";
 import { api } from "@/lib/api";
 import { NotesIcon, SpinnerIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
+import { announceSavedLine } from "@/components/graph/saved-line"; // [ui5]
 
 // Save as note (SPEC.md §7): under every answer of the assistant and every
 // tool's output, the answer organized into one note of the project — a
@@ -60,6 +61,7 @@ export function SaveAsNote({
       });
       setState({ kind: "saved", noteId: saved.noteId, section: saved.sectionTitle });
       onSaved?.({ noteId: saved.noteId, section: saved.sectionTitle });
+      if (origin === "stitch") announceSavedLine("stitch"); // [ui5] WALK5-14
       // The tray reads the new note from the refreshed page.
       router.refresh();
     } catch (err) {

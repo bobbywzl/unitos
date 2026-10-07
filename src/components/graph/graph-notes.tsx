@@ -54,6 +54,10 @@ type GraphNotesValue = {
   titleOf: Map<string, string>;
   /** Close the graph, open the reader on the note's first source, and the tray on the note. */
   showNote: (noteId: string) => void;
+  /** [ui5] VIEW5-10: Show on a note just saved on the graph (Add to note,
+      Note on this link, Save as note): the graph shows it, in the Notes list
+      with its documents lit. Without a graph to show it, showNote. */
+  showSaved: (noteId: string) => void;
   /** Close the graph and open the reader at a source of a note. */
   openSource: (documentId: string, sourceId: string) => void;
   acceptNote: (id: string) => Promise<void>;
@@ -90,6 +94,7 @@ export function GraphNotesProvider({
   input,
   onClose,
   onNavigate,
+  onShowHere,
   children,
 }: {
   notebookId: string;
@@ -98,6 +103,8 @@ export function GraphNotesProvider({
   onClose: () => void;
   /** The graph closes because the URL moved to a document. Default: onClose. */
   onNavigate?: () => void;
+  /** [ui5] VIEW5-10: open the Notes list on a note (graph-overlay.tsx). */
+  onShowHere?: (noteId: string) => void;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -195,6 +202,8 @@ export function GraphNotesProvider({
     (noteId: string) => {
       const note = allNotes.get(noteId);
       const first = note?.sources.find((s) => s.documentId && !s.orphaned && titleOf.has(s.documentId));
+      // A document needs the server's render: the router's push (a native
+      // push here leaves Back on a URL the reader does not draw).
       if (first) router.push(`/n/${notebookId}?doc=${first.documentId}&src=${first.id}`);
       else if (note?.documentId && titleOf.has(note.documentId)) router.push(`/n/${notebookId}?doc=${note.documentId}`);
       else {
@@ -203,7 +212,9 @@ export function GraphNotesProvider({
         // after a note with a source.
         const url = withoutGraphParams(new URL(window.location.href));
         url.searchParams.delete("graph");
-        router.push(`${url.pathname}${url.search}`);
+        // [ui5] WALK5-05: only the graph's parameters leave the URL, so the
+        // URL moves now, with no server round trip (Next syncs a native push).
+        window.history.pushState(null, "", `${url.pathname}${url.search}`);
       }
       (onNavigate ?? onClose)();
       // The tray sits under the graph: it opens on the note once the graph is gone.
@@ -213,6 +224,11 @@ export function GraphNotesProvider({
       );
     },
     [allNotes, titleOf, router, notebookId, onClose, onNavigate],
+  );
+  // [ui5] VIEW5-10
+  const showSaved = useCallback(
+    (noteId: string) => (onShowHere ? onShowHere(noteId) : showNote(noteId)),
+    [onShowHere, showNote],
   );
 
   const value = useMemo<GraphNotesValue | null>(
@@ -231,6 +247,7 @@ export function GraphNotesProvider({
             setPinnedPair,
             titleOf,
             showNote,
+            showSaved,
             openSource,
             acceptNote: input.acceptNote,
             rejectNote: input.rejectNote,
@@ -238,7 +255,7 @@ export function GraphNotesProvider({
             findNote,
           }
         : null,
-    [input, notebookId, view, every, liveSectionId, setSectionId, defaultSectionId, titleOf, showNote, openSource, restoreNote, findNote],
+    [input, notebookId, view, every, liveSectionId, setSectionId, defaultSectionId, titleOf, showNote, showSaved, openSource, restoreNote, findNote],
   );
   const lit = useMemo(() => ({ rowLit: rowLit ?? focusLit, pinnedPair }), [rowLit, focusLit, pinnedPair]);
   return (
@@ -312,7 +329,7 @@ export function NodeNotes({ documentId }: { documentId: string }) {
     <span
       data-graph-node-notes={documentId}
       data-tip={t("graphNotes.nodeNotesTitle")}
-      className="flex items-center gap-1 rounded-full bg-sage-100 px-1.5 py-px text-[10px] font-semibold tabular-nums text-sage-800"
+      className="flex shrink-0 items-center gap-1 rounded-full bg-sage-100 px-1.5 py-px text-[10px] font-semibold whitespace-nowrap tabular-nums text-sage-800" /* [ui5] WALK5-15: never wraps */
     >
       <NotesIcon size={10} />
       {entry.accepted === 0 && entry.pending > 0 ? (

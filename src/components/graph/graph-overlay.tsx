@@ -65,6 +65,12 @@ const SIDE_LISTS: SideList[] = ["recommended", "generated", "notes", "links", "l
 function sideList(value: string | null | undefined): SideList {
   return SIDE_LISTS.find((l) => l === value) ?? null;
 }
+// [ui5] WALK5-04
+const LINK_FROMS: LinkFrom[] = ["links", "notes", "document", "documents"];
+function linkFromValue(value: string | null | undefined): LinkFrom {
+  return LINK_FROMS.find((l) => l === value) ?? null;
+}
+// [/ui5]
 
 /** The id of a side list, for its pill's aria-controls. */
 function sideListId(list: Exclude<SideList, null>): string {
@@ -182,7 +188,7 @@ export function GraphOverlay({
     if (!focus) return;
     writeGraphKeep(notebookId, {
       list: focus.noteId ? "notes" : "link",
-      ...(focus.noteId ? { noteId: focus.noteId, shownId: focus.noteId } : { linkId: focus.linkId, shownId: null }),
+      ...(focus.noteId ? { noteId: focus.noteId, shownId: focus.noteId } : { linkId: focus.linkId, linkFrom: null, shownId: null }),
     });
     // The focus is read once, when the graph opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -190,7 +196,14 @@ export function GraphOverlay({
   // The link panel's Back: to the list it was opened from — Links, the
   // Notes list's links between a note's documents, or the node card
   // (VIEW3-03).
-  const [linkFrom, setLinkFrom] = useState<LinkFrom>(null);
+  // [ui5] WALK5-04: the kept view carries it, so after a document and Back
+  // the panel still has Back to Links and the Links pill still reads open.
+  const [linkFrom, setLinkFrom] = useState<LinkFrom>(() => {
+    if (focus) return null;
+    const keep = readGraphKeep(notebookId);
+    return keep.linkId && keep.linkId === openLinkId ? linkFromValue(keep.linkFrom) : null;
+  });
+  // [/ui5]
   const setList = useCallback(
     (next: SideList | ((prev: SideList) => SideList)) => {
       setListState((prev) => {
@@ -217,7 +230,7 @@ export function GraphOverlay({
       setLinkFrom(from);
       setList("link");
       focusList.current = "link";
-      writeGraphKeep(notebookId, { linkId });
+      writeGraphKeep(notebookId, { linkId, linkFrom: from }); // [ui5] WALK5-04
     },
     [notebookId, setList],
   );
@@ -413,6 +426,44 @@ export function GraphOverlay({
     }
   }
 
+  // [ui5] VIEW5-10: Show on a note saved on the graph opens the Notes list
+  // on it, its documents lit; the list mounts again so it opens on the note.
+  const [showTurn, setShowTurn] = useState(0);
+  const showHere = useCallback(
+    (noteId: string) => {
+      setShownNoteId(noteId);
+      writeGraphKeep(notebookId, { noteId });
+      setShowTurn((n) => n + 1);
+      focusList.current = "notes";
+      setList("notes");
+    },
+    [notebookId, setShownNoteId, setList],
+  );
+  // [/ui5]
+  // [ui5] WALK5-09: a pinned card and a pick are said in the graph's status
+  // line, so a screen reader hears what a click, Enter, or Space did.
+  const [said, setSaid] = useState("");
+  const cardShownId = list === "document" && focusNode ? focusNode.id : null;
+  // What was last said of: compared during the render, as React advises
+  // for state that follows props.
+  const [saidOf, setSaidOf] = useState({ card: cardShownId, picked: selectedIds });
+  if (saidOf.card !== cardShownId || saidOf.picked !== selectedIds) {
+    setSaidOf({ card: cardShownId, picked: selectedIds });
+    const prev = saidOf.picked;
+    const added = [...selectedIds].filter((id) => !prev.has(id));
+    const removed = [...prev].filter((id) => !selectedIds.has(id));
+    const n = selectedIds.size;
+    const s = n === 1 ? "" : "s";
+    const one = added.length + removed.length === 1 ? titleOf.get(added[0] ?? removed[0]) : undefined;
+    const cardTitle = cardShownId && saidOf.card !== cardShownId ? titleOf.get(cardShownId) : undefined;
+    if (added.length + removed.length > 0) {
+      if (n === 0) setSaid(t("graphView.pickClearedStatus"));
+      else if (one) setSaid(t(added.length ? "graphView.pickedStatus" : "graphView.unpickedStatus", { title: one, n, s }));
+      else setSaid(t("graphView.pickedManyStatus", { n, s }));
+    } else if (cardTitle) setSaid(t("graphView.cardShownStatus", { title: cardTitle }));
+  }
+  // [/ui5]
+
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLSpanElement>(null);
   // Leaving a text box with Escape (WALK4-07): the focus goes to the box's
@@ -549,7 +600,7 @@ export function GraphOverlay({
   );
 
   return (
-    <GraphNotesProvider notebookId={notebookId} nodes={nodes} input={notes} onClose={close} onNavigate={leave}>
+    <GraphNotesProvider notebookId={notebookId} nodes={nodes} input={notes} onClose={close} onNavigate={leave} onShowHere={showHere /* [ui5] */}>
     <GraphCoverageProvider notebookId={notebookId /* [cover4] */}>
     <NoteGatherProvider notebookId={notebookId /* [cover4] */}>
     <GraphContentProvider value={content}>
@@ -721,6 +772,8 @@ export function GraphOverlay({
           ✕
         </button>
       </div>
+      {/* [ui5] WALK5-09 */}
+      <p role="status" data-graph-status className="sr-only">{said}</p>
       {scanNotice && (
         <p className="border-b border-line px-5 py-2 text-xs text-sand-600">{scanNotice}</p>
       )}
@@ -769,6 +822,7 @@ export function GraphOverlay({
             onClearCited={clearCited}
             expandedLinkId={openLinkView?.id ?? null}
             onExpandLink={(linkId) => openLink(linkId, null)}
+            onShowGenerated={() => setList("generated") /* [ui5] WALK5-11 */}
           />
         )}
         {/* One document, or no link yet: what to do next (GR-08). */}
@@ -806,6 +860,7 @@ export function GraphOverlay({
         <Presence show={list === "notes"} exit="menu">
         {list === "notes" && (
           <GraphNotesList
+            key={showTurn /* [ui5] VIEW5-10 */}
             pickedIds={selectedIds}
             shownId={shownNoteId}
             onClearShown={() => setShownNoteId(null)}

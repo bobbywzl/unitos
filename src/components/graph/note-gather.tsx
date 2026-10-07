@@ -14,7 +14,7 @@
 // a failed save never loses them. Discard drops them, after a confirm.
 
 import { useRouter } from "next/navigation";
-import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { MAX_NOTE_QUOTES } from "@/lib/anchors/note-quotes-limit";
 import { readGatherDraft, writeGatherDraft, type GatherDraftQuote } from "@/lib/note-drafts";
@@ -25,6 +25,7 @@ import { useCollab } from "@/components/collab/collab-context";
 import { ChevronDownIcon, NotesIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { useGraphNotes } from "@/components/graph/graph-notes";
+import { announceSavedLine, onOtherSavedLine } from "@/components/graph/saved-line"; // [ui5]
 
 export type GatherQuote = GatherDraftQuote;
 
@@ -144,6 +145,8 @@ export function NoteGatherDock({ notebookId, onOpenDocument }: { notebookId: str
     | { queued: { sectionId: string; content: string; at: number }; section: string }
     | null
   >(null);
+  // [ui5] WALK5-14: one saved line at a time on the graph.
+  useEffect(() => (saved ? onOtherSavedLine("gather", () => setSaved(null)) : undefined), [saved]);
   const ref = useRef<HTMLDivElement>(null);
   const drafting = Boolean(gather && (gather.quotes.length > 0 || gather.content));
   // A new quote after a save starts the next note: the saved line gives way.
@@ -196,6 +199,7 @@ export function NoteGatherDock({ notebookId, onOpenDocument }: { notebookId: str
         })),
       });
       // The server has the note, or the offline queue does: the draft goes.
+      announceSavedLine("gather"); // [ui5] WALK5-14
       setSaved(
         "queued" in note
           ? { queued: { sectionId: chosen.id, content: words, at: Date.now() }, section: chosen.label }
@@ -227,7 +231,7 @@ export function NoteGatherDock({ notebookId, onOpenDocument }: { notebookId: str
           </span>
           {savedId && (
             <button
-              onClick={() => ctx.showNote(savedId)}
+              onClick={() => ctx.showSaved(savedId) /* [ui5] VIEW5-10 */}
               data-track="graph-note-gather-show"
               className="rounded-full bg-sage-100 px-2 py-0.5 text-[11px] font-semibold text-sage-800 hover:bg-sage-200"
             >

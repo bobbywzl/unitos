@@ -10,6 +10,7 @@ import { useCollab } from "@/components/collab/collab-context";
 import { NotesIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { useGraphNotes } from "@/components/graph/graph-notes";
+import { announceSavedLine, onOtherSavedLine } from "@/components/graph/saved-line"; // [ui5]
 
 // Note on this link (SPEC.md §13): in an expanded link, the reader writes a
 // note of their own words that quotes both ends of the link
@@ -58,6 +59,8 @@ export function LinkNoteComposer({ linkId }: { linkId: string }) {
     | { queued: { sectionId: string; content: string; at: number }; section: string }
     | null
   >(null);
+  // [ui5] WALK5-14: one saved line at a time on the graph.
+  useEffect(() => (saved ? onOtherSavedLine("link", () => setSaved(null)) : undefined), [saved]);
 
   if (!ctx || !canEdit) return null;
   const choices = ctx.sectionChoices;
@@ -83,7 +86,7 @@ export function LinkNoteComposer({ linkId }: { linkId: string }) {
         <NotesIcon size={12} />
         {t("graphNotes.noteOnLinkSaved", { section: saved.section })}
         <button
-          onClick={() => ctx.showNote(savedId)}
+          onClick={() => ctx.showSaved(savedId) /* [ui5] VIEW5-10 */}
           data-track="graph-link-note-show"
           className="rounded-full bg-sage-100 px-2 py-0.5 font-semibold text-sage-800 hover:bg-sage-200"
         >
@@ -124,6 +127,7 @@ export function LinkNoteComposer({ linkId }: { linkId: string }) {
       });
       // The server has the note, or the offline queue does: the draft goes.
       writeDraft(linkId, "", null);
+      announceSavedLine("link"); // [ui5] WALK5-14
       setSaved(
         "queued" in note
           ? { queued: { sectionId: chosen.id, content: text, at: Date.now() }, section: chosen.label }

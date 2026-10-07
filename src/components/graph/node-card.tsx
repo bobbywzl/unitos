@@ -24,6 +24,7 @@ import { GraphNoteRow, useGraphNotes } from "@/components/graph/graph-notes";
 import { noteLine } from "@/lib/graph/notes";
 import { useCoarsePointer, useGraphContent } from "@/components/graph/graph-content";
 import { LinkReplyCount } from "@/components/graph/link-replies";
+import { LinkDraftTag } from "@/components/graph/link-draft-tag"; // [ui5]
 import { useWantProvenance } from "@/components/graph/provenance-want";
 import { PartDot } from "@/components/graph/coverage"; // [cover4]
 import { AddToNote } from "@/components/graph/note-gather"; // [cover4]
@@ -371,6 +372,7 @@ export function NodeCardPanel({
                               </span>
                             )}
                             <LinkReplyCount link={l} />
+                            <LinkDraftTag linkId={l.id} /* [ui5] WALK5-13 */ />
                           </button>
                         </li>
                       );

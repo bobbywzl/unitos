@@ -180,6 +180,30 @@ export function writeLinkNoteDraft(account: string, linkId: string, content: str
   else remove(linkNoteKey(account, linkId));
 }
 
+// [ui5] WALK5-13: whether this browser holds unsent words on a link for the
+// account: a reply draft or a Note on this link draft (legacy keys too).
+// Read only: nothing is claimed or moved.
+function hasContent(key: string): boolean {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return false;
+    const value = JSON.parse(raw) as { content?: unknown };
+    return typeof value.content === "string" && value.content.trim() !== "";
+  } catch {
+    return false;
+  }
+}
+export function hasLinkDraft(account: string, linkId: string): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    hasContent(linkNoteKey(account, linkId)) ||
+    hasContent(replyKey(account, `link:${linkId}`)) ||
+    hasContent(LINK_NOTE_PREFIX + linkId) ||
+    hasContent(`${REPLY_PREFIX}link:${linkId}`)
+  );
+}
+// [/ui5]
+
 // The graph's new note (note-gather.tsx, VIEW4-03): the quotes collected
 // with Add to note, the words typed, and the section picked, one per project
 // per account. Written on every change; cleared once the server (or the
