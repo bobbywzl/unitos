@@ -622,6 +622,7 @@ export default async function NotebookPage(props: {
         href: string;
         title: string;
         reason: string | null; // what the link is about, shown in the mark's tip
+        replies: number; // open replies on the link: a count on its chain icon
       }[]
     > = {};
     const linksOut: LinkOut[] = [];
@@ -727,6 +728,7 @@ export default async function NotebookPage(props: {
           : `/n/${notebookId}?doc=${link.toDocumentId}`,
         title: link.toDocument.title,
         reason: link.reason,
+        replies: link.replies.filter((r) => r.resolvedById === null).length,
       });
       linksByBlock[resolved.blockId] = list;
     }
@@ -817,6 +819,7 @@ export default async function NotebookPage(props: {
         href: `/n/${notebookId}?doc=${link.fromDocumentId}&link=${link.id}`,
         title: link.fromDocument.title,
         reason: link.reason,
+        replies: link.replies.filter((r) => r.resolvedById === null).length,
       });
       linksByBlock[resolved.blockId] = list;
     }

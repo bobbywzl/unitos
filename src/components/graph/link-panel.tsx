@@ -12,10 +12,12 @@ import { useT } from "@/components/lang-provider";
 import { LinkDetail } from "@/components/graph/link-detail";
 import { LinkNoteComposer } from "@/components/graph/link-note-composer";
 import { LinkReplies } from "@/components/graph/link-replies";
+import { LinkNotes } from "@/components/graph/graph-notes";
 
 // An expanded link, in the side panel at full height (SPEC.md §13; WALK2-05):
 // the two documents, why the link was made, each end's passage with Open in
-// reader, the link's replies, and Note on this link. A click on a link in a
+// reader, the link's replies, the notes on the link (WALK3-03), and Note on
+// this link. A click on a link in a
 // curve's list or in the Links list opens it here; the curve stays pinned
 // and lit on the canvas, and nothing covers its two ends. A recommended link
 // keeps Accept and Dismiss.
@@ -28,9 +30,9 @@ export function LinkPanel({
   onOpenDocument,
 }: {
   link: GraphEdgeLink;
-  /** Back to the Links list or the node card, when the link was opened there. */
+  /** Back to the list the link was opened from: Links, the Notes list, or the node card. */
   onBack?: () => void;
-  /** Back's name; default Back to Links. */
+  /** The back arrow's label; default "Back to Links". */
   backLabel?: string;
   onClose: () => void;
   /** The reader opened a document from the panel (the URL already moved). */
@@ -142,6 +144,7 @@ export function LinkPanel({
         }}
       />
       <LinkReplies link={link} />
+      <LinkNotes link={link} />
       <LinkNoteComposer linkId={link.id} />
     </aside>
   );

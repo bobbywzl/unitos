@@ -161,6 +161,7 @@ import {
   type SuggestResult,
 } from "@/lib/docs/assistant-suggestions";
 import type { SuggestCommand } from "@/lib/prompts/suggest";
+import { sourceMarkSelector } from "@/lib/source-mark";
 import { readNdjson } from "@/lib/ndjson";
 import {
   publishSuggestRun,
@@ -986,6 +987,7 @@ export function ReaderInteractions({
       href: string;
       title: string;
       reason: string | null; // what the link is about, typed after Close link
+      replies?: number; // open replies on the link: a count on its chain icon
     }[]
   >;
   editedByBlock: Record<string, { start: number; end: number }[]>;
@@ -3039,7 +3041,7 @@ export function ReaderInteractions({
           rows ??= unitRows(pane, unit, richTextRef.current !== null);
           found = (rows ?? []).flatMap((row) => wordsOf(pane, row) ?? []);
         } else if (!wordsHidden(pane, keys.filter((key) => !isCoreKey(key)), readWholeRef.current)) {
-          const el = pane.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
+          const el = pane.querySelector<HTMLElement>(sourceMarkSelector(sourceId));
           if (el) found = [el];
         }
       }
@@ -3092,7 +3094,7 @@ export function ReaderInteractions({
     let attempts = 0;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const tryOpen = () => {
-      const el = containerRef.current?.querySelector<HTMLElement>(`[data-source-id="${src}"]`);
+      const el = containerRef.current?.querySelector<HTMLElement>(sourceMarkSelector(src));
       // Drawn: a mark in a collapsed unit waits for the unit read whole.
       if (el && el.getClientRects().length > 0) {
         window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId: src } }));
@@ -3106,8 +3108,9 @@ export function ReaderInteractions({
     };
   }, [src, annotationParam, flashSource]);
 
-  // Arriving through a link's other end: ?link=<id> flashes the mark here;
-  // a mark in a collapsed unit reads the unit whole first.
+  // Arriving through a link's other end: ?link=<id> flashes the mark here,
+  // and the tray turns to the Annotations tab on the link's card; a mark in
+  // a collapsed unit reads the unit whole first.
   const linkParam = searchParams.get("link");
   const linksRef = useRef(linksByBlock);
   linksRef.current = linksByBlock;
@@ -3125,6 +3128,8 @@ export function ReaderInteractions({
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
         flashElement(el);
+        // The tray shows the link's card, with its replies (VIEW3-02; workspace.tsx).
+        window.dispatchEvent(new CustomEvent("dissect:focus-link", { detail: { linkId: linkParam } }));
       } else if (attempts++ < PAGE_WAIT_MS / 200) {
         setTimeout(tryScroll, 200);
       }
@@ -3154,7 +3159,7 @@ export function ReaderInteractions({
   const markTop = useCallback((sourceId: string) => {
     const container = containerRef.current;
     if (!container) return 80;
-    const markEl = container.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
+    const markEl = container.querySelector<HTMLElement>(sourceMarkSelector(sourceId));
     return markEl
       ? markEl.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop
       : 80;
@@ -3336,12 +3341,12 @@ export function ReaderInteractions({
       const { sourceId } = (e as CustomEvent<{ sourceId: string }>).detail;
       const container = containerRef.current;
       // Another pane owns marks this pane does not paint.
-      if (!container?.querySelector(`[data-source-id="${sourceId}"]`)) return;
+      if (!container?.querySelector(sourceMarkSelector(sourceId))) return;
       const stored = annotationBubblesRef.current[sourceId];
       if (!stored) {
         // Highlight or comment: the on-mark card, right below the mark.
         const summary = annotationsBySourceRef.current[sourceId];
-        const markEl = container.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
+        const markEl = container.querySelector<HTMLElement>(sourceMarkSelector(sourceId));
         if (!summary || !markEl) {
           window.dispatchEvent(
             new CustomEvent("dissect:focus-annotation", { detail: { sourceId } }),
@@ -6884,6 +6889,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         linkTitle: l.title,
         linkId: l.linkId,
         linkReason: linkReasons[l.linkId] ?? l.reason,
+        linkReplies: l.replies ?? 0,
       })),
     ];
   }

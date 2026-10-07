@@ -43,8 +43,16 @@ const en = {
   notesAcross: "Notes across documents",
   notesOnPair: "Notes quoting both documents",
   notesOnPick: "Notes quoting the picked documents",
-  notesOneDocument: "{n} notes quote one document; open the notes full page for all.",
-  notesOneDocumentOne: "1 note quotes one document; open the notes full page for all.",
+  notesOneDocument: "{n} notes quote one document.",
+  notesOneDocumentOne: "1 note quotes one document.",
+  notesOneDocumentShow: "Show them",
+  notesOneDocumentHide: "Hide them",
+  notesFullPage: "Notes full page",
+  notesShown: "Shown on graph",
+  notesShownAll: "All notes",
+  notesLinksBetween: "Links between these documents",
+  notesLinksOf: "Links of this document",
+  notesBack: "Back to Notes",
   notesEmpty: "No note quotes these documents yet.",
   notesOnProject: "Notes on the project",
   notesSection: "Section",
@@ -54,6 +62,15 @@ const en = {
   notesJump: "Jump",
   notesJumpTitle: "Open the reader at this source",
   notesOpenInNotes: "Open in notes",
+
+  // The notes on a link, in its side panel (graph-notes.tsx LinkNotes)
+  linkNotesOne: "1 note on this link",
+  linkNotesMany: "{n} notes on this link",
+
+  // Show on graph, from a note card and a link card (note-card.tsx, annotations-panel.tsx)
+  showOnGraph: "Show on graph",
+  showNoteOnGraphTitle: "Open the graph on this note: its documents lit, and the links between them",
+  showLinkOnGraphTitle: "Open the graph on this link",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -91,8 +108,16 @@ const zh: Record<keyof typeof en, string> = {
   notesAcross: "跨文档的笔记",
   notesOnPair: "同时引用这两个文档的笔记",
   notesOnPick: "引用所选文档的笔记",
-  notesOneDocument: "{n} 条笔记只引用一个文档；打开整页笔记查看全部。",
-  notesOneDocumentOne: "1 条笔记只引用一个文档；打开整页笔记查看全部。",
+  notesOneDocument: "{n} 条笔记只引用一个文档。",
+  notesOneDocumentOne: "1 条笔记只引用一个文档。",
+  notesOneDocumentShow: "显示",
+  notesOneDocumentHide: "收起",
+  notesFullPage: "整页笔记",
+  notesShown: "在图谱中显示",
+  notesShownAll: "全部笔记",
+  notesLinksBetween: "这些文档之间的链接",
+  notesLinksOf: "这个文档的链接",
+  notesBack: "返回笔记",
   notesEmpty: "还没有笔记引用这些文档。",
   notesOnProject: "整个项目的笔记",
   notesSection: "章节",
@@ -102,6 +127,13 @@ const zh: Record<keyof typeof en, string> = {
   notesJump: "跳转",
   notesJumpTitle: "在阅读器中打开这个出处",
   notesOpenInNotes: "在笔记中打开",
+
+  linkNotesOne: "此链接上的 1 条笔记",
+  linkNotesMany: "此链接上的 {n} 条笔记",
+
+  showOnGraph: "在图谱中显示",
+  showNoteOnGraphTitle: "在图谱中打开这条笔记：点亮它的文档，以及它们之间的链接",
+  showLinkOnGraphTitle: "在图谱中打开这个链接",
 };
 
 export const graphNotes = { en, zh } as const;

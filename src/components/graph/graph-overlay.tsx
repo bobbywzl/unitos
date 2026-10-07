@@ -15,7 +15,7 @@ import { useLang, useT } from "@/components/lang-provider";
 import { Presence } from "@/components/presence";
 import { StopPill } from "@/components/thinking";
 import { GeneratedList } from "@/components/graph/generated-list";
-import { clearGraphKeep, readGraphKeep, writeGraphKeep } from "@/components/graph/graph-keep";
+import { clearGraphKeep, readGraphKeep, writeGraphKeep, type GraphFocus } from "@/components/graph/graph-keep";
 import { LinkPanel } from "@/components/graph/link-panel";
 import { LinksList } from "@/components/graph/links-list";
 import type { GraphInsets } from "@/components/graph/graph-view";
@@ -47,6 +47,8 @@ const LIST_ROOM = 412; // a side list's width and its margin
 
 // [view2] The node card ("document") and the Find list ("find") are side lists too.
 type SideList = "recommended" | "generated" | "notes" | "links" | "link" | "document" | "find" | null;
+/** Where a link panel was opened from, for its Back. */
+type LinkFrom = "links" | "notes" | "document" | null;
 const SIDE_LISTS: SideList[] = ["recommended", "generated", "notes", "links", "link", "document", "find"];
 function sideList(value: string | null | undefined): SideList {
   return SIDE_LISTS.find((l) => l === value) ?? null;
@@ -95,6 +97,7 @@ export function GraphOverlay({
   generated,
   linkScansLeft,
   notes,
+  focus,
   onClose,
   onNavigate,
   gists,
@@ -112,6 +115,9 @@ export function GraphOverlay({
   linkScansLeft: number;
   /** The project's notes, for the notes on the graph and the Notes list. */
   notes?: GraphNotesInput;
+  /** What the graph opens on (workspace.tsx): a note's Notes list, or a
+      link's panel. Null: where the reader was (graph-keep.ts). */
+  focus?: GraphFocus | null;
   /** Close the graph: ✕, Escape, or Back. */
   onClose: () => void;
   /** The graph closes because the reader opened a document from it (the
@@ -140,16 +146,48 @@ export function GraphOverlay({
   // One folded list at a time beside the canvas: the recommended links, the
   // generated content, the notes, the links, or one link expanded (WALK2-05).
   // The open list and link come back on Back from a document (WALK2-07).
-  const [list, setListState] = useState<SideList>(() => sideList(readGraphKeep(notebookId).list));
-  const [openLinkId, setOpenLinkId] = useState<string | null>(() => readGraphKeep(notebookId).linkId ?? null);
-  // The link panel's Back: to the Links list or the node card it was
-  // opened from (VIEW3-03).
-  const [linkFrom, setLinkFrom] = useState<"links" | "document" | null>(null);
+  // A focus wins over the kept view: Show on graph opens the Notes list on
+  // its note, a link card's Show on graph or the rail from a reader at a
+  // link opens that link's panel (VIEW3-04, VIEW3-09).
+  const [list, setListState] = useState<SideList>(() =>
+    focus?.noteId ? "notes" : focus?.linkId ? "link" : sideList(readGraphKeep(notebookId).list),
+  );
+  const [openLinkId, setOpenLinkId] = useState<string | null>(
+    () => focus?.linkId ?? readGraphKeep(notebookId).linkId ?? null,
+  );
+  // The note Show on graph opened the Notes list on; it stays while the list is open.
+  const [shownNoteId, setShownNoteIdState] = useState<string | null>(() =>
+    focus ? (focus.noteId ?? null) : (readGraphKeep(notebookId).shownId ?? null),
+  );
+  const setShownNoteId = useCallback(
+    (id: string | null) => {
+      setShownNoteIdState(id);
+      writeGraphKeep(notebookId, { shownId: id });
+    },
+    [notebookId],
+  );
+  useEffect(() => {
+    if (!focus) return;
+    writeGraphKeep(notebookId, {
+      list: focus.noteId ? "notes" : "link",
+      ...(focus.noteId ? { noteId: focus.noteId, shownId: focus.noteId } : { linkId: focus.linkId, shownId: null }),
+    });
+    // The focus is read once, when the graph opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // The link panel's Back: to the list it was opened from — Links, the
+  // Notes list's links between a note's documents, or the node card
+  // (VIEW3-03).
+  const [linkFrom, setLinkFrom] = useState<LinkFrom>(null);
   const setList = useCallback(
     (next: SideList | ((prev: SideList) => SideList)) => {
       setListState((prev) => {
         const value = typeof next === "function" ? next(prev) : next;
-        writeGraphKeep(notebookId, { list: value });
+        // The shown note lasts while the Notes list, or a link opened from
+        // it, is open.
+        const keepShown = value === "notes" || value === "link";
+        if (!keepShown) setShownNoteIdState(null);
+        writeGraphKeep(notebookId, { list: value, ...(keepShown ? {} : { shownId: null }) });
         return value;
       });
     },
@@ -161,7 +199,7 @@ export function GraphOverlay({
   const linkOpener = useRef<HTMLElement | null>(null);
   const focusList = useRef<SideList>(null);
   const openLink = useCallback(
-    (linkId: string, from: "links" | "document" | null) => {
+    (linkId: string, from: LinkFrom) => {
       if (from && document.activeElement instanceof HTMLElement) linkOpener.current = document.activeElement;
       setOpenLinkId(linkId);
       setLinkFrom(from);
@@ -693,7 +731,16 @@ export function GraphOverlay({
         )}
         </Presence>
         <Presence show={list === "notes"} exit="menu">
-        {list === "notes" && <GraphNotesList pickedIds={selectedIds} onClose={() => setList(null)} />}
+        {list === "notes" && (
+          <GraphNotesList
+            pickedIds={selectedIds}
+            shownId={shownNoteId}
+            onClearShown={() => setShownNoteId(null)}
+            edges={edges}
+            onOpenLink={(linkId) => openLink(linkId, "notes")}
+            onClose={() => setList(null)}
+          />
+        )}
         </Presence>
         <Presence show={list === "links"} exit="menu">
         {list === "links" && (
@@ -718,12 +765,19 @@ export function GraphOverlay({
                     // Back where the link was opened, with the focus on its row.
                     const from = linkFrom;
                     setList(from);
-                    const row = from === "links" ? `[data-graph-links-row="${openLinkView.id}"]` : `[data-graph-card-link="${openLinkView.id}"]`;
+                    const row =
+                      from === "links"
+                        ? `[data-graph-links-row="${openLinkView.id}"]`
+                        : from === "notes"
+                          ? `[data-graph-notes-link="${openLinkView.id}"]`
+                          : `[data-graph-card-link="${openLinkView.id}"]`;
                     requestAnimationFrame(() => requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>(row)?.focus()));
                   }
                 : undefined
             }
-            backLabel={linkFrom === "document" ? t("graphView.cardBack") : undefined}
+            backLabel={
+              linkFrom === "document" ? t("graphView.cardBack") : linkFrom === "notes" ? t("graphNotes.notesBack") : undefined
+            }
             onClose={() => setList(null)}
             onOpenDocument={leave}
           />

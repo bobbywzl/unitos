@@ -2,7 +2,7 @@
 // the section filter, and old data (a note with no documentId still counts
 // through its sources). Run: npx tsx scripts/qa/graph-notes-check.ts
 import assert from "node:assert/strict";
-import { notesOnGraph, pairKey } from "@/lib/graph/notes";
+import { notesOnGraph, notesOnLink, pairKey } from "@/lib/graph/notes";
 import type { NoteView, SectionView } from "@/lib/types";
 
 const note = (id: string, documentId: string | null, sources: string[], status: "ACCEPTED" | "PENDING" = "ACCEPTED", updatedAt = "2026-01-01T00:00:00Z"): NoteView => ({
@@ -56,4 +56,38 @@ assert.equal(open.byDocument.has("E"), false);
 
 const cut = notesOnGraph(sections, ["A", "C"]);
 assert.equal(cut.byPair.size, 0, "a document off the graph joins nothing");
+// The notes on a link (WALK3-03): a source at each end, by quote or by block.
+const quoted = (id: string, quotes: [string, string][]): NoteView => ({
+  ...note(id, null, []),
+  sources: quotes.map(([d, q], i) => ({ id: `${id}-s${i}`, documentId: d, documentTitle: d, quotedText: q, orphaned: false })),
+});
+const linkSections = [
+  section("links", [
+    quoted("both", [["A", "the flute"], ["B", "pessimism  is"]]), // Note on this link: the ends' own quotes
+    quoted("wider", [["A", "he played the flute every evening"], ["B", "pessimism"]]), // holds the from end's quote
+    quoted("block", [["A", "every evening"], ["B", "a mood"]]), // both in the ends' blocks
+    quoted("one", [["A", "the flute"]]), // one end only
+    quoted("elsewhere", [["A", "the flute"], ["B", "an unrelated chapter"]]),
+  ]),
+];
+const linkView = notesOnGraph(linkSections, ["A", "B"]);
+const pairNotes = linkView.byPair.get(pairKey("A", "B")) ?? [];
+const link = {
+  fromDocumentId: "A",
+  toDocumentId: "B",
+  quotedText: "the flute",
+  toQuotedText: "pessimism is",
+  fromBlockText: "Each night he played the flute every evening, alone.",
+  toBlockText: "For him pessimism is a mood, not a doctrine.",
+};
+assert.deepEqual(
+  notesOnLink(pairNotes, link).map((g) => g.note.id).sort(),
+  ["block", "both", "wider"],
+  "a note quoting both passages is on the link; one end or another passage is not",
+);
+assert.deepEqual(
+  notesOnLink(pairNotes, { ...link, toQuotedText: null, toBlockText: null }).map((g) => g.note.id).sort(),
+  ["block", "both", "elsewhere", "wider"],
+  "a document-level end takes any quote of its document",
+);
 console.log("graph-notes-check: all pass");
