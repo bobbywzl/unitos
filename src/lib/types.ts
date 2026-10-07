@@ -356,6 +356,9 @@ export type StitchResult = {
   // id and title, and the block's text cut to 600 chars, so a chip can say
   // where it points and open it. {} when the reply cites nothing.
   cited: Record<string, { documentId: string; title: string; text: string }>;
+  // The ids of the recommended links this run made, for the graph to light
+  // in place (SPEC.md §22). Absent on a result stored before it existed.
+  linkIds?: string[];
 };
 
 /** What a Stitch command asks for (lib/graph/stitch.ts commandKind): an

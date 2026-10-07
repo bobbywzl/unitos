@@ -1151,6 +1151,7 @@ export async function stitch(input: {
   });
   const seen = new Set(existing.map((l) => `${l.fromBlockId}|${l.quotedText}|${l.toBlockId ?? l.toDocumentId}`));
   let linkCount = 0;
+  const linkIds: string[] = [];
   for (const link of result.data.links) {
     if (linkCount >= MAX_LINKS) break;
     const from = resolveQuote(blockByRef, link.fromBlockId, link.fromQuote);
@@ -1159,7 +1160,7 @@ export async function stitch(input: {
     const key = `${from.blockId}|${from.quotedText}|${to.blockId}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    await db.docLink.create({
+    const made = await db.docLink.create({
       data: {
         recommended: true,
         reason: link.reason.trim(),
@@ -1181,6 +1182,7 @@ export async function stitch(input: {
         toSuffix: to.suffix,
       },
     });
+    linkIds.push(made.id);
     linkCount++;
   }
 
@@ -1213,7 +1215,7 @@ export async function stitch(input: {
         return { ...c, shown: r ? r.blocks.filter((b) => picked.has(b.alias)).length : 0 };
       })
     : coverage;
-  return { reply, linkCount, document, documents, cited: citedBlocks(reply, blockByRef, titleOf) };
+  return { reply, linkCount, linkIds, document, documents, cited: citedBlocks(reply, blockByRef, titleOf) };
 }
 
 type Part = z.infer<typeof partSchema>;
