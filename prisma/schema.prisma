@@ -164,6 +164,7 @@ model Notebook {
   presence      NotebookPresence[]
   events        NotebookEvent[]
   linkScanRuns  LinkScanRun[]
+  links         DocLink[]
   createdAt     DateTime               @default(now())
   updatedAt     DateTime               @updatedAt
 
@@ -659,6 +660,11 @@ model DocLink {
   recommended    Boolean  @default(false)
   reason         String?
   createdById    String? // account that made the link, or triggered the scan
+  // The project the link belongs to: it shows, and is changed, only there.
+  // Null = a link made before links carried a project (or whose project was
+  // deleted): it shows in every project that holds both documents, as before.
+  notebookId     String?
+  notebook       Notebook? @relation(fields: [notebookId], references: [id], onDelete: SetNull)
   replies        Reply[]
   fromDocumentId String
   fromDocument   Document @relation("DocLinkFrom", fields: [fromDocumentId], references: [id], onDelete: Cascade)
@@ -685,6 +691,7 @@ model DocLink {
 
   @@index([fromDocumentId])
   @@index([toDocumentId])
+  @@index([notebookId])
 }
 
 model NotebookDocument {
