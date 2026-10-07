@@ -5,7 +5,8 @@ import { authEnabled, currentUser } from "@/lib/auth";
 import { browserConfigured } from "@/lib/browser";
 import { driveConfig } from "@/lib/drive/config";
 import { currentLang, serverT } from "@/lib/i18n/server";
-import { peopleByIds, roleOf } from "@/lib/collab";
+import { peopleByIds, roleOf, withoutOtherProjectLinkEdits } from "@/lib/collab";
+import { projectLinks } from "@/lib/link-scope";
 import { matchInText } from "@/lib/anchors/match";
 import { conversationTurns } from "@/lib/conversation";
 import { editedRanges } from "@/lib/diff";
@@ -628,7 +629,7 @@ export default async function NotebookPage(props: {
     const linksIn: LinkIn[] = [];
     const [outgoing, incoming] = await Promise.all([
       db.docLink.findMany({
-        where: { fromDocumentId: document.id },
+        where: { fromDocumentId: document.id, ...projectLinks(notebookId) },
         orderBy: { createdAt: "desc" },
         include: {
           toDocument: { select: { title: true } },
@@ -636,7 +637,7 @@ export default async function NotebookPage(props: {
         },
       }),
       db.docLink.findMany({
-        where: { toDocumentId: document.id },
+        where: { toDocumentId: document.id, ...projectLinks(notebookId) },
         orderBy: { createdAt: "desc" },
         include: {
           fromDocument: { select: { title: true } },
@@ -1121,12 +1122,14 @@ export default async function NotebookPage(props: {
     await Promise.all([
       // Edit history for the open document, newest first.
       paneOne
-        ? db.blockEdit.findMany({
-            where: { documentId: paneOne.document.id },
-            orderBy: { createdAt: "desc" },
-            take: 100,
-            include: { replies: { orderBy: { createdAt: "asc" } } },
-          })
+        ? db.blockEdit
+            .findMany({
+              where: { documentId: paneOne.document.id },
+              orderBy: { createdAt: "desc" },
+              take: 100,
+              include: { replies: { orderBy: { createdAt: "asc" } } },
+            })
+            .then((rows) => withoutOtherProjectLinkEdits(rows, notebookId))
         : [],
       corpusQuoteDocIds.length > 0
         ? db.document.findMany({
@@ -1143,18 +1146,20 @@ export default async function NotebookPage(props: {
       // while only recommended ones connect a pair — and the recommended
       // links, both ends with their passages, the AI's reason, and the
       // replies. Accept and Dismiss live in the graph.
-      documentsGraph(attached.map((d) => ({ id: d.id, title: d.title, hasVideo: d.hasVideo }))),
+      documentsGraph(attached.map((d) => ({ id: d.id, title: d.title, hasVideo: d.hasVideo })), notebookId),
       db.notebookEvent.findMany({
         where: { notebookId },
         orderBy: { createdAt: "desc" },
         take: 80,
       }),
-      db.blockEdit.findMany({
-        where: { documentId: { in: attachedIdList } },
-        orderBy: { createdAt: "desc" },
-        take: 80,
-        include: { document: { select: { title: true } } },
-      }),
+      db.blockEdit
+        .findMany({
+          where: { documentId: { in: attachedIdList } },
+          orderBy: { createdAt: "desc" },
+          take: 80,
+          include: { document: { select: { title: true } } },
+        })
+        .then((rows) => withoutOtherProjectLinkEdits(rows, notebookId)),
       // The pages Stitch wrote for the project (SPEC.md §22): the graph's
       // Generated content list.
       listGenerated(notebookId),

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { bumpDocument, documentAccess } from "@/lib/collab";
+import { bumpDocument, legacyLinkSharedAcrossAccounts, linkAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
@@ -16,6 +16,10 @@ const patchSchema = z
     message: "Provide accept or reason",
   });
 
+// ?notebookId= names the project the request comes from: a link of another
+// project is not found there (SPEC.md §13).
+const scopeOf = (req: Request) => new URL(req.url).searchParams.get("notebookId");
+
 // Accept a recommended link: it becomes a normal link — it paints in the text
 // and joins the Edits panel as a LINK_ADD by its accepter. Or set the reason.
 export async function PATCH(req: Request, ctx: { params: Promise<{ linkId: string }> }) {
@@ -28,7 +32,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ linkId: strin
     include: { toDocument: { select: { title: true } } },
   });
   if (!link) return NextResponse.json({ error: t("api.linkNotFound") }, { status: 404 });
-  const access = await documentAccess(link.fromDocumentId, "editor");
+  const access = await linkAccess(link, "editor", scopeOf(req));
   if (access instanceof NextResponse) return access;
   if (data.reason !== undefined) {
     const reason = data.reason.trim();
@@ -50,6 +54,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ linkId: strin
         kind: "LINK_ADD",
         meta: {
           linkId: link.id,
+          ...(link.notebookId ? { notebookId: link.notebookId } : {}),
           toDocumentId: link.toDocumentId,
           toTitle: link.toDocument.title,
           quotedText: link.quotedText,
@@ -64,7 +69,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ linkId: strin
 
 // Remove a link. Recorded as a LINK_REMOVE edit so the Edits panel shows it;
 // dismissing a still-recommended link records nothing — it never was history.
-export async function DELETE(_req: Request, ctx: { params: Promise<{ linkId: string }> }) {
+export async function DELETE(req: Request, ctx: { params: Promise<{ linkId: string }> }) {
   const t = await serverT();
   const { linkId } = await ctx.params;
   const link = await db.docLink.findUnique({
@@ -72,8 +77,11 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ linkId: str
     include: { toDocument: { select: { title: true } } },
   });
   if (!link) return NextResponse.json({ error: t("api.linkNotFound") }, { status: 404 });
-  const access = await documentAccess(link.fromDocumentId, "editor");
+  const access = await linkAccess(link, "editor", scopeOf(req));
   if (access instanceof NextResponse) return access;
+  if (link.createdById !== access.user.id && (await legacyLinkSharedAcrossAccounts(link))) {
+    return NextResponse.json({ error: t("api.linkSharedAcrossAccounts") }, { status: 403 });
+  }
 
   await db.$transaction([
     db.docLink.delete({ where: { id: linkId } }),
@@ -86,6 +94,8 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ linkId: str
               blockId: link.fromBlockId,
               kind: "LINK_REMOVE",
               meta: {
+                linkId: link.id,
+                ...(link.notebookId ? { notebookId: link.notebookId } : {}),
                 toDocumentId: link.toDocumentId,
                 toTitle: link.toDocument.title,
                 quotedText: link.quotedText,

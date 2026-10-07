@@ -1,6 +1,8 @@
 import type { DerivationType } from "@prisma/client";
 import { conversationTurns, renderTranscript } from "@/lib/conversation";
+import { withoutOtherProjectLinkEdits } from "@/lib/collab";
 import { db } from "@/lib/db";
+import { projectLinks } from "@/lib/link-scope";
 import { pageNames, renderBlockLines, renderReferenceLines } from "@/lib/derive/context";
 import {
   distillationList,
@@ -144,17 +146,19 @@ export async function buildDigest(
   const [links, edits] = await Promise.all([
     documentIds.length > 0
       ? db.docLink.findMany({
-          where: { fromDocumentId: { in: documentIds } },
+          where: { fromDocumentId: { in: documentIds }, ...projectLinks(notebookId) },
           orderBy: { createdAt: "asc" },
           include: { toDocument: { select: { title: true } } },
         })
       : [],
     documentIds.length > 0
-      ? db.blockEdit.findMany({
-          where: { documentId: { in: documentIds } },
-          orderBy: { createdAt: "desc" },
-          take: 400,
-        })
+      ? db.blockEdit
+          .findMany({
+            where: { documentId: { in: documentIds } },
+            orderBy: { createdAt: "desc" },
+            take: 400,
+          })
+          .then((rows) => withoutOtherProjectLinkEdits(rows, notebookId))
       : [],
   ]);
 

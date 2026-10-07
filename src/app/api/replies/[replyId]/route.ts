@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { bumpDocument, bumpNotebook, documentAccess, noteAccess } from "@/lib/collab";
+import { bumpDocument, bumpNotebook, documentAccess, linkAccess, noteAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
@@ -21,14 +21,14 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ replyId: stri
       noteId: true,
       note: { select: { section: { select: { notebookId: true } } } },
       blockEdit: { select: { documentId: true } },
-      docLink: { select: { fromDocumentId: true } },
+      docLink: { select: { fromDocumentId: true, notebookId: true } },
     },
   });
   if (!reply) return NextResponse.json({ error: t("api.replyNotFound") }, { status: 404 });
   const access = reply.noteId
     ? await noteAccess(reply.noteId, "editor")
     : reply.docLink
-      ? await documentAccess(reply.docLink.fromDocumentId, "editor")
+      ? await linkAccess(reply.docLink, "editor")
       : await documentAccess(reply.blockEdit!.documentId, "editor");
   if (access instanceof NextResponse) return access;
 
@@ -54,7 +54,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ replyId: st
       noteId: true,
       note: { select: { section: { select: { notebookId: true } } } },
       blockEdit: { select: { documentId: true } },
-      docLink: { select: { fromDocumentId: true } },
+      docLink: { select: { fromDocumentId: true, notebookId: true } },
     },
   });
   if (!reply) return NextResponse.json({ error: t("api.replyNotFound") }, { status: 404 });
@@ -62,7 +62,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ replyId: st
   const access = reply.noteId
     ? await noteAccess(reply.noteId, "viewer")
     : reply.docLink
-      ? await documentAccess(reply.docLink.fromDocumentId, "viewer")
+      ? await linkAccess(reply.docLink, "viewer")
       : await documentAccess(reply.blockEdit!.documentId, "viewer");
   if (access instanceof NextResponse) return access;
   if (reply.userId !== access.user.id && access.role !== "owner") {

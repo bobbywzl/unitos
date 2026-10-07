@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import ReactFlow, {
   Background,
@@ -19,6 +19,7 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 import type { GraphEdge, GraphEdgeLink, GraphNode } from "@/lib/types";
 import { api } from "@/lib/api";
+import { linkPath } from "@/lib/link-scope";
 import { useCollab } from "@/components/collab/collab-context";
 import { FilmIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
@@ -155,6 +156,7 @@ function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data
   // the row answers at once, and the refresh brings the graph's own data.
   const { canEdit } = useCollab();
   const router = useRouter();
+  const { notebookId } = useParams<{ notebookId?: string }>();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [accepted, setAccepted] = useState<Set<string>>(() => new Set());
   const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
@@ -164,8 +166,8 @@ function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data
     setBusyId(linkId);
     setDecideError(null);
     try {
-      if (accept) await api(`/api/links/${linkId}`, "PATCH", { accept: true });
-      else await api(`/api/links/${linkId}`, "DELETE");
+      if (accept) await api(linkPath(linkId, notebookId), "PATCH", { accept: true });
+      else await api(linkPath(linkId, notebookId), "DELETE");
       (accept ? setAccepted : setDismissed)((prev) => new Set(prev).add(linkId));
       router.refresh();
     } catch (err) {

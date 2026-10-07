@@ -7,6 +7,7 @@ import { CONNECT_EFFORT } from "@/lib/derive/config";
 import { featureCall, featureConfigured } from "@/lib/feature-models";
 import { loadProfile, pageNames, renderBlockLines } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
+import { projectLinks } from "@/lib/link-scope";
 import type { Lang } from "@/lib/i18n/config";
 import { currentLang } from "@/lib/i18n/server";
 import { connectPrompt, connectVerifyPrompt } from "@/lib/prompts/connect";
@@ -218,7 +219,7 @@ export async function buildConnections(
   // resolve; drop repeats of links that already exist between the same spans.
   const blockById = new Map(document.blocks.map((b) => [b.id, b]));
   const existing = await db.docLink.findMany({
-    where: { fromDocumentId: documentId },
+    where: { fromDocumentId: documentId, ...projectLinks(notebookId) },
     select: { fromBlockId: true, quotedText: true, toDocumentId: true },
   });
   const seen = new Set(existing.map((l) => `${l.fromBlockId}|${l.quotedText}|${l.toDocumentId}`));
@@ -309,6 +310,7 @@ export async function buildConnections(
         recommended: true,
         reason: link.reason,
         createdById: userId,
+        notebookId,
         fromDocumentId: documentId,
         fromBlockId: from.blockId,
         startOffset: from.startOffset,
