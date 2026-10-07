@@ -286,10 +286,12 @@ export function AnswerToolbar({
 export function QuoteChip({
   quote,
   onClear,
+  clearLabel,
   className = "",
 }: {
   quote: string;
   onClear: () => void;
+  clearLabel?: string; // what the ✕ says when it does more than drop the quote
   className?: string;
 }) {
   const t = useT();
@@ -302,8 +304,8 @@ export function QuoteChip({
         type="button"
         onClick={onClear}
         data-track="assistant-quote-remove"
-        aria-label={t("assistant.quoteRemove")}
-        data-tip={t("assistant.quoteRemove")}
+        aria-label={clearLabel ?? t("assistant.quoteRemove")}
+        data-tip={clearLabel ?? t("assistant.quoteRemove")}
         className="text-sand-500 hover:text-clay-800"
       >
         ✕
@@ -386,7 +388,8 @@ export type AnswerComment = {
 /** The box a comment is written in: the quote it is on, then the words.
     `draft` and `onDraft` keep the words typed and not yet posted (SPEC.md
     §6): the box opens with them, and each keystroke hands them on, so
-    Escape, Cancel, or a closed card never throws them away. */
+    Escape, the quote's ✕ (Cancel), or a closed card never throws them
+    away. */
 export function CommentBox({
   quote,
   busy,
@@ -414,7 +417,7 @@ export function CommentBox({
       }}
       className={`flex flex-col gap-1.5 rounded-2xl bg-card p-2 shadow-soft ${className}`}
     >
-      <QuoteChip quote={quote} onClear={onCancel} />
+      <QuoteChip quote={quote} onClear={onCancel} clearLabel={t("common.cancel")} />
       <textarea
         autoFocus
         value={text}
@@ -438,16 +441,8 @@ export function CommentBox({
         placeholder={t("assistant.commentPlaceholder")}
         className="w-full resize-none rounded-xl bg-sand-100 p-2 text-[12.5px] outline-none placeholder:text-sand-500"
       />
-      <div className="flex items-center gap-1.5">
-        <button
-          type="button"
-          onClick={onCancel}
-          data-track="assistant-comment-cancel"
-          className="rounded-full px-2.5 py-1 text-[11px] font-semibold text-sand-600 hover:text-clay-800"
-        >
-          {t("common.cancel")}
-        </button>
-        <VoiceTypingButton track="assistant-comment-voice-typing" className="ml-auto size-7" />
+      <div className="flex items-center justify-end gap-1.5">
+        <VoiceTypingButton track="assistant-comment-voice-typing" className="size-8" size={14} />
         <button
           type="submit"
           disabled={busy || !text.trim()}

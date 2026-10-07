@@ -1315,7 +1315,8 @@ export function AssistantPanel({
           )}
         </div>
       )}
-      {quote && <QuoteChip quote={quote} onClear={dropQuote} className="mb-1.5" />}
+      {/* A side chat's header already shows the quote it started on. */}
+      {quote && quote !== openSideChat?.quote && <QuoteChip quote={quote} onClear={dropQuote} className="mb-1.5" />}
       <textarea
         ref={boxRef}
         value={question}

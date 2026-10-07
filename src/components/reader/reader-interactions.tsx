@@ -78,7 +78,6 @@ import {
   useAnswerSelection,
   type AnswerComment,
 } from "@/components/assistant/answer-tools";
-import { setSideChatOpen } from "@/lib/assistant/side-chat-open";
 import type { Person } from "@/lib/person";
 import { ThinkingChips, useThinking } from "@/components/assistant/thinking-chips";
 import { useWeb, WebChip } from "@/components/assistant/web-chip";
@@ -7164,7 +7163,9 @@ export function ReaderInteractions({
       setPlanChecked(new Set(plan.actions.map((_, i) => i)));
       setPlanFrom(toolNoteId ? "tool" : "chat");
       setPlanNoteId(toolNoteId ?? plan.conversationNoteId ?? conversationNoteId);
-      parts.push(t("assistant.proposedActions", { n, s: plural(n) }));
+      // The plan under the answer and its Apply say the count; a plan with
+      // no reply says it in the turn.
+      if (!plan.reply) parts.push(t("assistant.proposedActions", { n, s: plural(n) }));
     }
     // The assistant's suggestions land in the text: pending by construction
     // until an editor accepts them.
@@ -7491,13 +7492,6 @@ export function ReaderInteractions({
       cancelled = true;
     };
   }, [chatNoteId]);
-
-  // The tray folds while a side chat is open, so the card has the room
-  // (SPEC.md §7); it unfolds when the side chat closes.
-  useEffect(() => {
-    setSideChatOpen(assistantChat?.openKey != null);
-    return () => setSideChatOpen(false);
-  }, [assistantChat?.openKey]);
 
   // The selection's three actions in the card, the panel's three.
   // The browser's own selection goes — the box that opens takes focus — and
@@ -9172,11 +9166,15 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       onDelete={(id) => void deleteChatComment(id)}
       className={chipsClassName}
     />
-    <div className={`flex items-center gap-1.5 ${chipsClassName}`}>
-      <ThinkingChips small />
-      <WebChip small />
-    </div>
-    {chat.quote && (
+    {/* How the assistant answers; a comment goes to people, not to it. */}
+    {!chatCommentQuote && (
+      <div className={`flex items-center gap-1.5 ${chipsClassName}`}>
+        <ThinkingChips small />
+        <WebChip small />
+      </div>
+    )}
+    {/* A side chat's header already shows the quote it started on. */}
+    {chat.quote && !(chat.openKey && chat.quote === chatOpenSide?.quote) && (
       <QuoteChip quote={chat.quote} onClear={dropChatQuote} className={chipsClassName} />
     )}
     {chatCommentQuote ? (
@@ -9440,17 +9438,20 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       : null;
   // The plan's checklist and its buttons: under the answer in the chat card
   // that proposed it, or in the card at the window's foot for the panel's.
+  // In a card the answer above says what the plan is, so the plan is its
+  // action rows and Apply alone; the panel's card, far from its answer,
+  // keeps its title and the reply.
+  const planAlone = planFrom === "panel";
   const planBody = aiPlan ? (
     <>
-      <div className="mb-2 flex items-center gap-2">
-        <SparkleIcon size={15} className="text-clay" />
-        <span className="font-display text-[15px]">{t("reader.assistantPlan")}</span>
-        <span className="ml-auto rounded-full bg-sand-200 px-2.5 py-0.5 text-[10px] font-semibold text-sand-600">
-          {t("reader.askFirst")}
-        </span>
-      </div>
+      {planAlone && (
+        <div className="mb-2 flex items-center gap-2">
+          <SparkleIcon size={15} className="text-clay" />
+          <span className="font-display text-[15px]">{t("reader.assistantPlan")}</span>
+        </div>
+      )}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-      {aiPlan.reply && (
+      {planAlone && aiPlan.reply && (
         <div className="mb-2 text-[13px]">
           <Markdown>{aiPlan.reply}</Markdown>
         </div>
@@ -9498,7 +9499,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           ))}
         </ul>
       )}
-      <div className="mt-3 flex items-center gap-2">
+      <div className={`${planAlone ? "mt-3" : "mt-2"} flex items-center gap-2`}>
         <button
           disabled={planChecked.size === 0}
           onClick={() => void approvePlan()}
@@ -9520,14 +9521,13 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
     </>
   ) : null;
   // The card that shows the plan; a plan whose card is closed waits for it.
+  // A side chat shows its own plan; the main thread's waits in the main thread.
+  const shownThreadNoteId = assistantChat?.openKey ? (chatOpenSide?.noteId ?? null) : (assistantChat?.noteId ?? null);
   const planInCard =
     aiPlan !== null &&
     planFrom === "chat" &&
     assistantChat !== null &&
-    (planNoteId === null ||
-      assistantChat.noteId === null ||
-      assistantChat.noteId === planNoteId ||
-      (assistantChat.sideChats ?? []).some((s) => s.noteId === planNoteId));
+    (planNoteId === null || shownThreadNoteId === null || shownThreadNoteId === planNoteId);
   const planFloats = aiPlan !== null && planFrom === "panel";
   const barKey = bar ? barRunKey(bar) : null;
   return (
