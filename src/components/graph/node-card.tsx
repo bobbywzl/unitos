@@ -20,6 +20,7 @@ import { clipWords } from "@/lib/markdown-preview";
 import { GraphNoteRow, useGraphNotes } from "@/components/graph/graph-notes";
 import { noteLine } from "@/lib/graph/notes";
 import { useGraphContent } from "@/components/graph/graph-content";
+import { useWantProvenance } from "@/components/graph/provenance-want";
 
 const outlines = new Map<string, DocumentOutline>();
 const NOTE_ROWS = 6;
@@ -57,7 +58,7 @@ type Group = { other: string; links: GraphEdgeLink[]; recommended: number };
 export function linkGroups(edges: GraphEdge[], id: string): Group[] {
   const out: Group[] = [];
   for (const e of edges) {
-    if (e.a !== id && e.b !== id) continue;
+    if ((e.a !== id && e.b !== id) || e.links.length === 0) continue;
     out.push({ other: e.a === id ? e.b : e.a, links: e.links, recommended: e.recommended });
   }
   return out.sort((x, y) => Number(x.other === id) - Number(y.other === id) || y.links.length - x.links.length);
@@ -105,6 +106,8 @@ export function NodeCardPanel({
   }
   const titleOf = useMemo(() => new Map(nodes.map((n) => [n.id, n.title])), [nodes]);
   const groups = useMemo(() => linkGroups(edges, node.id), [edges, node.id]);
+  // COST3-03: a card whose document has provenance links lists them; they load now.
+  useWantProvenance(edges.some((e) => (e.a === node.id || e.b === node.id) && (e.provenance ?? 0) > 0), "card");
   const notes = notesCtx?.view.byDocument.get(node.id)?.notes ?? [];
   const linkCount = groups.reduce((s, g) => s + g.links.length, 0);
 

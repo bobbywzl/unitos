@@ -5,7 +5,7 @@ import { linkScanRunsLeft } from "@/lib/connect";
 import { documentsGraph, listGenerated } from "@/lib/graph/view";
 import { SKELETON_VERSION } from "@/lib/graph/skeleton";
 import type { Person } from "@/lib/person";
-import type { GeneratedDocumentView, GraphEdge } from "@/lib/types";
+import type { GeneratedDocumentView, GraphEdge, GraphEdgeLink } from "@/lib/types";
 
 // The graph's data, loaded when the graph opens (GET /api/notebooks/<id>/
 // graph, SPEC.md §13): the workspace page no longer carries it, so a page
@@ -14,12 +14,25 @@ import type { GeneratedDocumentView, GraphEdge } from "@/lib/types";
 // the edges with their links, the recommended links (ids into the edges'
 // links, so none ships twice), the generated documents, the runs of
 // Recommend links left, and the people who made the links and replied.
+// What it leaves out (COST3-03): each link's titles (the nodes carry them;
+// graph-data.tsx puts them back), each end's whole block (the link panel
+// reads it when the link opens, graph/passages), and a generated document's
+// provenance links unless asked (?provenance=1): the edges count them, and
+// the graph lists them only while the provenance switch is on or a card
+// that holds them is open.
+
+/** A link as the route sends it: no titles, no block texts. */
+export type GraphWireLink = Omit<GraphEdgeLink, "fromTitle" | "toTitle" | "fromBlockText" | "toBlockText">;
+export type GraphWireEdge = Omit<GraphEdge, "links"> & { links: GraphWireLink[] };
 
 export type GraphData = {
   blockCounts: Record<string, number>;
   /** The skeleton's gist per document; a document without one is absent. */
   gists: Record<string, string>;
-  edges: GraphEdge[];
+  edges: GraphWireEdge[];
+  /** The edges' links hold the provenance links (?provenance=1). Without
+      it, an edge's provenance links are its `provenance` count alone. */
+  provenance: boolean;
   /** The recommended links, newest first: ids into edges[].links. */
   recommendedIds: string[];
   generated: GeneratedDocumentView[];
@@ -43,7 +56,11 @@ export async function documentGists(notebookId: string): Promise<Record<string, 
 /** viewer: the account asking. A link with no project shared across
     accounts carries crossAccount for it (SPEC.md §13), so the graph hides
     the changes the viewer may not make. */
-export async function graphData(notebookId: string, viewer: User): Promise<GraphData> {
+export async function graphData(
+  notebookId: string,
+  viewer: User,
+  { provenance = false }: { provenance?: boolean } = {},
+): Promise<GraphData> {
   const attached = await db.notebookDocument.findMany({
     where: { notebookId },
     orderBy: { document: { createdAt: "asc" } },
@@ -63,8 +80,19 @@ export async function graphData(notebookId: string, viewer: User): Promise<Graph
     linkScanRunsLeft(viewer.id),
     documentGists(notebookId),
   ]);
+  const edges: GraphWireEdge[] = graph.edges.map((e) => ({
+    ...e,
+    links: e.links
+      .filter((l) => provenance || !l.provenance)
+      .map((l): GraphWireLink => {
+        const wire: GraphWireLink & { fromTitle?: string; toTitle?: string } = { ...l };
+        delete wire.fromTitle;
+        delete wire.toTitle;
+        return wire;
+      }),
+  }));
   const authorIds = new Set<string>();
-  for (const e of graph.edges) {
+  for (const e of edges) {
     for (const l of e.links) {
       if (l.createdById) authorIds.add(l.createdById);
       for (const r of l.replies ?? []) authorIds.add(r.userId);
@@ -73,7 +101,8 @@ export async function graphData(notebookId: string, viewer: User): Promise<Graph
   return {
     blockCounts: Object.fromEntries(graph.nodes.map((n) => [n.id, n.blockCount ?? 0])),
     gists,
-    edges: graph.edges,
+    edges,
+    provenance,
     recommendedIds: graph.recommended.map((r) => r.id),
     generated,
     linkScansLeft,

@@ -27,6 +27,7 @@ import { FilmIcon, MaximizeIcon, NotesIcon, PageIcon, PlusIcon, QuestionIcon } f
 import { useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
 import { extendLayout, graphLayout, layoutAspect, seeded, type Point } from "@/components/graph/graph-layout";
+import { useWantProvenance } from "@/components/graph/provenance-want";
 import { categoryLabels } from "@/components/reader/document-organize";
 // [graph-notes] The notes and the link replies on the graph (graph-notes.tsx).
 import {
@@ -983,6 +984,7 @@ function GraphCanvas({
   const [keyOpen, setKeyOpen] = useState(false);
   // Generated documents' provenance links: drawn on request (WALK2-02).
   const [showProvenance, setShowProvenance] = useState(false);
+  useWantProvenance(showProvenance, "switch"); // COST3-03: their links load when the switch turns on
   // A curve's link list lives in the floating layer, off the curve: the
   // leave that fires on the way there waits a beat, and the list's own hover
   // cancels it. A click on a curve pins its list until the pane is clicked.
