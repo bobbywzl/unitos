@@ -104,6 +104,22 @@ function scripted(all) {
 function buildResponse(all) {
   const script = scripted(all);
   if (script !== null) return script;
+  // Words from a figure (SPEC.md §7): a command that says "under" puts the
+  // figure's text and its key points under it; any other reads them out.
+  const figure = all.match(/^Words from the figure \(block ([^)]+)\)/m)?.[1];
+  if (figure && all.includes('"actions"')) {
+    const command = all.match(/^Command: (.*)$/m)?.[1] ?? "";
+    const text = "A study led by Jane Gillette (1999) tested college undergraduates on 24 video clips.";
+    if (!/under|below|beneath/i.test(command)) return JSON.stringify({ reply: `The figure reads: ${text}`, actions: [], matches: [] });
+    return JSON.stringify({
+      reply: "The figure's text and its key points go under it.",
+      matches: [],
+      actions: [
+        { type: "insert_paragraph", afterBlockId: figure, text, description: "Put the figure's text under it" },
+        { type: "insert_paragraph", afterBlockId: figure, kind: "list", text: "Students guessed 24 clips\nVerbs were harder than nouns", description: "Put the key points under it" },
+      ],
+    });
+  }
   if (all.includes("Suggest edits to the document above.")) return suggestOps(all);
   // The panel at This page scope: the answer, then the actions fence.
   if (all.includes("Rules for actions:") && all.includes("- suggest {") && CHANGE_RX.test(all.match(/^Question: (.*)$/m)?.[1] ?? "")) {

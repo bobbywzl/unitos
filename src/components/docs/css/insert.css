@@ -1612,3 +1612,62 @@ body.docs-img-moving .docs-img-toolbar {
     display: none !important;
   }
 }
+
+/* The image's Assistant (SPEC.md §7, words from a figure): the first control
+   of the image toolbar, in the assistant's kind color, its spark breathing
+   and a sheen crossing the pill, as the assistant's own controls do. */
+.docs-img-assistant {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 12px 0 10px;
+  margin-right: 2px;
+  overflow: hidden;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--kind-assistant);
+  background: color-mix(in srgb, var(--kind-assistant) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--kind-assistant) 35%, transparent);
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.docs-img-assistant:hover {
+  background: color-mix(in srgb, var(--kind-assistant) 20%, transparent);
+  box-shadow: inset 0 0 0 1px var(--kind-assistant);
+}
+.docs-img-assistant:focus-visible {
+  outline: 2px solid var(--kind-assistant);
+  outline-offset: 2px;
+}
+@keyframes img-assistant-sheen {
+  0%,
+  55% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(220%);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .docs-img-assistant svg {
+    animation: thinking-spark 2.4s ease-in-out infinite;
+  }
+  .docs-img-assistant::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    width: 45%;
+    pointer-events: none;
+    background: linear-gradient(
+      100deg,
+      transparent,
+      color-mix(in srgb, var(--kind-assistant) 22%, transparent),
+      transparent
+    );
+    animation: img-assistant-sheen 3.2s ease-in-out infinite;
+  }
+}

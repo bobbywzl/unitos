@@ -1,4 +1,4 @@
-import { actionLines, TRANSCRIPT_RULE, type DocumentEdits } from "@/lib/assistant/plan";
+import { actionLines, insertParagraphLine, TRANSCRIPT_RULE, type DocumentEdits } from "@/lib/assistant/plan";
 import type { ChatTurn } from "@/lib/conversation";
 import type { Lang } from "@/lib/i18n/config";
 import {
@@ -57,6 +57,9 @@ export type ActCtx = {
   // A video's or an audio's document: its voices and who speaks from which
   // line (lib/assistant/transcript.ts); null for any other document.
   transcript?: string[] | null;
+  // The selected figure the model sees (its image, its SVG source, or its
+  // page): words read from it may go under it. Null: no such figure.
+  figureBlockId?: string | null;
 };
 
 /** The selection block for a text selection: what the route puts in the
@@ -125,6 +128,7 @@ export function actPrompt(ctx: ActCtx): string {
             "10. A change to the words of more than five blocks (the spelling or grammar of a long selection or of the document, its register, a section rewritten) is one revise action, whatever its size; never more than five edit_block actions. Its blockIds: the selected blocks when the command concerns the selection. A change of order of more than two blocks (group by theme, organize, put in order) is a revise action with reorder: true, never move_block actions. reply: one sentence on what will change: the plan carries the edits.",
             ...(ctx.transcript ? [`11. ${TRANSCRIPT_RULE}`] : []),
           ]),
+    ...(ctx.figureBlockId && ctx.edits !== "none" ? ["", ...figureWordsRules(ctx.figureBlockId, ctx.edits ?? "blocks")] : []),
     "",
     ...(ctx.history.length > 0
       ? [
@@ -138,4 +142,19 @@ export function actPrompt(ctx: ActCtx): string {
     ...(ctx.web ? ["", ...WEB_LINES, ""] : []),
     'Return ONLY JSON: {"reply": string or null, "actions": [...], "matches": [{"blockId": "<id>", "quote": "<verbatim>", "why": "<sentence>"}]}',
   ].join("\n");
+}
+
+/** Words read from the selected figure (SPEC.md §7): an answer by default;
+    under the figure, as the assistant's suggestion, when the command asks
+    to put them there. */
+function figureWordsRules(figureBlockId: string, edits: DocumentEdits): string[] {
+  return [
+    `Words from the figure (block ${figureBlockId}). You see the figure. These rules come before rules 2 and 10 for words read from it:`,
+    "a. A command that asks to read, extract, transcribe, or summarize what the figure shows (its text, a screenshot's paragraph, its key points, its numbers): put the words in reply and return no actions.",
+    `b. A command that asks to put those words in the document under the figure (below it, beneath it, under the image, insert it, add it to the document, or a confirmation of such a change): return insert_paragraph actions with afterBlockId "${figureBlockId}", one per paragraph, heading, or list, in reading order. reply: one sentence on what goes under the figure. The words land under the figure as the assistant's suggestion, and the reader accepts or rejects it.`,
+    ...(edits === "suggestions" ? [`   The action: ${insertParagraphLine()} Use it only right after the figure; every other change to the words is the suggest action.`] : []),
+    "c. Text the figure shows: copy it exactly as the figure shows it, word for word, with its numbers, its punctuation, and its spelling. Join a paragraph's lines into one line, and join a word the figure hyphenates at a line's end. Never correct, translate, or add words. Write [illegible] for words you cannot read. Skip words cut off at the figure's edges.",
+    "d. Key points or a summary: a list (kind list), one point per line, in plain words, each with the figure's own numbers and names exactly as the figure shows them. Only what the figure shows; the document may explain a term.",
+    "e. Never write a number, a name, or a quotation the figure and the document do not show.",
+  ];
 }
