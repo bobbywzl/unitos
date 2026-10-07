@@ -218,6 +218,8 @@ if (want("esc")) {
   await page.waitForTimeout(400);
   await page.keyboard.press("Escape");
   await page.waitForFunction(() => document.activeElement?.hasAttribute("data-graph-documents-link"), null, { timeout: 3000 }).catch(() => {});
+  // Focus reaches the row at once; the link panel fades out and leaves about 120 ms later (its exit animation).
+  await page.locator("[data-graph-link-panel]").waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
   check("first Esc on a link from Documents: back to the list, on its row",
     (await list(page).count()) === 1 && (await page.locator("[data-graph-link-panel]").count()) === 0 && (await active(page)).includes("graph-documents-link"),
     await active(page));
