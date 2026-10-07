@@ -601,6 +601,7 @@ export function AssistantPanel({
     setQuote(text);
     setCommentQuote(null);
     stickRef.current = true;
+    setFocusTick((n) => n + 1);
   }
   // Ask about this: the words ride into the next message of this thread.
   function askAboutThis() {
@@ -608,6 +609,7 @@ export function AssistantPanel({
     if (!text) return;
     setQuote(text);
     setCommentQuote(null);
+    setFocusTick((n) => n + 1);
   }
   function openComment() {
     const text = takeSelection();
@@ -938,6 +940,7 @@ export function AssistantPanel({
   // answer runs. The composer clears either way.
   function ask() {
     if (!composed) return;
+    if (document.activeElement === boxRef.current) setFocusTick((n) => n + 1);
     const message: OutgoingMessage = {
       content: quote ? quoteMessage(quote, question) : question.trim(),
       images: attachments.flatMap((a) =>
@@ -1144,7 +1147,6 @@ export function AssistantPanel({
   const recommendedShown = recDepth ? (recTexts[recDepth] ?? summaries[recDepth] ?? "") : "";
   const recommendedRow = RECOMMENDED.find((r) => r.depth === recDepth);
   const recommendedLabel = recommendedRow ? t(recommendedRow.labelKey) : "";
-  const scopeChoice = SCOPES.find((s) => s.id === scope);
   // A side chat is open on top of a conversation: both are a conversation on
   // screen, so the first layout never returns while one is open.
   const inConversation = turns.length > 0 || openSideChat !== null;
@@ -1157,6 +1159,13 @@ export function AssistantPanel({
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   }, [question]);
+  // The box keeps the focus when the first message swaps the resting layout
+  // for the conversation's, and takes it after Start side chat and Ask about
+  // this: the next words typed land in it, never on the page.
+  const [focusTick, setFocusTick] = useState(0);
+  useEffect(() => {
+    if (focusTick) boxRef.current?.focus({ preventScroll: true });
+  }, [focusTick]);
 
   // The thread follows the newest turn while the reader is at its foot; a
   // reader who scrolled up to read stays where they are.
@@ -1206,9 +1215,9 @@ export function AssistantPanel({
     </div>
   );
 
-  // What the next message runs with, right above the composer (SPEC.md §7):
-  // the scope — This page or Project — on one row; how the assistant
-  // answers — Fast Thinking or Deep Thinking, and Web — on the row under it.
+  // What the next message runs with, on one row right above the composer
+  // (SPEC.md §7): the scope — This page or Project — then how the assistant
+  // answers — the thinking chip, and Web.
   const scopeRow = (
     <div className="flex flex-wrap items-center gap-1">
       {SCOPES.map((s) => (
@@ -1229,12 +1238,8 @@ export function AssistantPanel({
           {t(s.labelKey)}
         </button>
       ))}
-    </div>
-  );
-  const answerRow = (
-    <div className="flex flex-wrap items-center gap-1">
-      <ThinkingChips />
-      <WebChip className="ml-auto" />
+      <ThinkingChips className="ml-auto" />
+      <WebChip />
     </div>
   );
 
@@ -1305,7 +1310,8 @@ export function AssistantPanel({
           )}
         </div>
       )}
-      {quote && <QuoteChip quote={quote} onClear={dropQuote} className="mb-1.5" />}
+      {/* A side chat's header already shows the quote it started on. */}
+      {quote && quote !== openSideChat?.quote && <QuoteChip quote={quote} onClear={dropQuote} className="mb-1.5" />}
       <textarea
         ref={boxRef}
         value={question}
@@ -1373,7 +1379,7 @@ export function AssistantPanel({
             <DriveIcon size={15} />
           </button>
         )}
-        <VoiceTypingButton field={boxRef} track="assistant-voice-typing" className="size-8" size={15} />
+        <VoiceTypingButton field={boxRef} track="assistant-voice-typing" className="ml-auto size-8" size={14} />
         {/* While an answer runs the button is Stop, or Queue once a message
             is composed; the thinking row in the thread keeps its own Stop. */}
         <button
@@ -1387,13 +1393,9 @@ export function AssistantPanel({
           disabled={!busy && !canSend}
           data-tip={busy ? t(canQueue ? "assistant.queueTitle" : "assistant.stopAsk") : undefined}
           aria-label={busy && !canQueue ? t("assistant.stopAsk") : undefined}
-          className="ml-auto rounded-full bg-clay px-4 py-1.5 text-sm font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+          className="rounded-full bg-clay px-4 py-1.5 text-sm font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
         >
-          {busy && !canQueue ? (
-            <StopIcon size={13} />
-          ) : (
-            t(canQueue ? "assistant.queue" : inConversation ? "assistant.send" : "assistant.ask")
-          )}
+          {busy && !canQueue ? <StopIcon size={13} /> : t(canQueue ? "assistant.queue" : "assistant.send")}
         </button>
       </div>
     </form>
@@ -1500,6 +1502,8 @@ export function AssistantPanel({
   }
 
   if (inConversation) {
+    // The newest answer keeps its rating row and Save as note in view.
+    const lastAnswer = activeTurns.findLastIndex((turn) => turn.role === "assistant");
     return (
       <div className="flex h-full flex-col gap-3">
         {head}
@@ -1547,7 +1551,13 @@ export function AssistantPanel({
                 )}
               </div>
             ) : (
-              <div key={i} className="rounded-2xl bg-card p-4 text-sm shadow-soft">
+              <div
+                key={i}
+                // An older answer shows its rating row on hover or focus; a
+                // tap focuses the answer on a touch screen.
+                tabIndex={-1}
+                className="group/answer rounded-2xl bg-card p-4 text-sm shadow-soft outline-none"
+              >
                 {turn.content ? (
                   <>
                     {/* Highlighting the answer offers the side chat, the
@@ -1590,7 +1600,13 @@ export function AssistantPanel({
                         the answer, once the answer is whole; the
                         suggestions' row rates a turn that asked for them. */}
                     {!(busy && i === activeTurns.length - 1) && (
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <div
+                        className={`mt-2 flex flex-wrap items-center gap-2${
+                          i < lastAnswer
+                            ? " opacity-0 transition-opacity group-focus-within/answer:opacity-100 group-hover/answer:opacity-100"
+                            : ""
+                        }`}
+                      >
                         {!turn.suggest && (
                           <RatingButtons
                             tool="assistant"
@@ -1690,7 +1706,6 @@ export function AssistantPanel({
         ) : (
           <>
             {scopeRow}
-            {answerRow}
             {composer}
           </>
         )}
@@ -1793,9 +1808,6 @@ export function AssistantPanel({
       </div>
 
       {scopeRow}
-      <p className="text-xs text-sand-500">{scopeChoice ? t(scopeChoice.hintKey) : null}</p>
-      {answerRow}
-
       {composer}
 
       {scope === "notebook" && (

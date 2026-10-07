@@ -239,13 +239,15 @@ export function NoteAssistant({
       <div className="flex items-center gap-2 px-3 pt-2">
         <SparkleIcon size={16} className="text-[var(--kind-assistant)]" />
         <span className="sr-only">{t("assistant.noteAssistant")}</span>
+        {/* Web sits in the head row, so the box takes the whole row under it. */}
+        <WebChip small className="ml-auto shrink-0" />
         <button
           type="button"
           onClick={() => toggle(false)}
           data-track="note-assistant-close"
           aria-label={t("assistant.noteAssistantClose")}
           data-tip={t("assistant.noteAssistantClose")}
-          className="ml-auto rounded-full px-1.5 text-sm text-sand-500 hover:bg-clay-100 hover:text-clay-800"
+          className="rounded-full px-1.5 text-sm text-sand-500 hover:bg-clay-100 hover:text-clay-800"
         >
           ✕
         </button>
@@ -285,7 +287,6 @@ export function NoteAssistant({
       {error && <p className="px-3.5 pb-1 text-[11.5px] text-red-500">{error}</p>}
 
       <div className="flex items-end gap-2 border-t border-line px-3 py-2">
-        <WebChip small className="mb-1 shrink-0" />
         <textarea
           ref={inputRef}
           value={input}
@@ -305,19 +306,18 @@ export function NoteAssistant({
           placeholder={t("assistant.noteAssistantPlaceholder")}
           className="max-h-32 min-h-[34px] flex-1 resize-none bg-transparent py-1.5 text-[13.5px] text-ink outline-none placeholder:text-sand-500 [field-sizing:content]"
         />
-        <VoiceTypingButton field={inputRef} track="note-assistant-voice-typing" className="mb-0.5 size-8" size={15} />
+        <VoiceTypingButton field={inputRef} track="note-assistant-voice-typing" className="mb-0.5 size-8" size={14} />
         <button
           type="button"
           onClick={() => void send()}
           disabled={!canSend}
           data-track="note-assistant-send"
-          aria-label={t("assistant.noteAssistantSend")}
           data-tip={t("assistant.noteAssistantSend")}
-          className={`mb-0.5 flex size-8 shrink-0 items-center justify-center rounded-full text-base font-bold transition-colors ${
+          className={`mb-1 shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors ${
             canSend ? "bg-[var(--kind-assistant)] text-white hover:opacity-90" : "bg-sand-100 text-sand-400"
           }`}
         >
-          ↑
+          {t("assistant.send")}
         </button>
       </div>
     </section>

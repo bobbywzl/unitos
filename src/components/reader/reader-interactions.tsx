@@ -78,7 +78,6 @@ import {
   useAnswerSelection,
   type AnswerComment,
 } from "@/components/assistant/answer-tools";
-import { setSideChatOpen } from "@/lib/assistant/side-chat-open";
 import type { Person } from "@/lib/person";
 import { ThinkingChips, useThinking } from "@/components/assistant/thinking-chips";
 import { useWeb, WebChip } from "@/components/assistant/web-chip";
@@ -98,7 +97,6 @@ import {
   CommentIcon,
   DefineIcon,
   ExpandIcon,
-  MaximizeIcon,
   TrashIcon,
   ExtractIcon,
   LinkIcon,
@@ -137,7 +135,6 @@ import { NotePicker } from "@/components/reader/note-picker";
 import { PANE_HEADER } from "@/components/reader/reader-panes";
 import type { FigureRenderInfo } from "@/components/reader/figure-capture";
 import { Reader, type TranscriptVariant } from "@/components/reader/reader";
-import { openVisualization } from "@/components/reader/visualization-viewer";
 import { setQuoteDragImage, writeQuoteDrag, type QuoteDrag } from "@/lib/quote-drag";
 import { blockIdOfKey, coreKey, isCoreKey } from "@/lib/anchors/core-key";
 import { MAX_SEGMENTS } from "@/lib/anchors/passage-limit";
@@ -757,6 +754,13 @@ type ToolChat = {
   sendError?: string | null;
 };
 const NO_CHAT: ToolChat = { conversation: [], chatOpen: false, input: "", busy: false, queue: [], sendError: null };
+// What Save as note sends for a tool's card (SPEC.md §7): the output and every
+// turn of the conversation it continued into — the reader's messages as the
+// question, the output and each answer as the answer.
+const savedQuestion = (card: ToolChat) =>
+  card.conversation.filter((turn) => turn.role === "user").map((turn) => turn.content).join("\n\n");
+const savedAnswer = (output: string, card: ToolChat) =>
+  [output, ...card.conversation.filter((turn) => turn.role === "assistant").map((turn) => turn.content)].join("\n\n");
 
 // The card EXPLAIN and ANALYZE stream into (SPEC.md §4, §6): one card, the
 // kind sets its title and glyph.
@@ -924,13 +928,6 @@ const suggestCode = () =>
       applyAssistantOps: assistant.applyAssistantOps,
     }),
   );
-
-// The picture a stored visualization's markdown points at, and its caption
-// (SPEC.md §20): the card's Open button shows them in the viewer.
-function visualizationImage(markdown: string): { src: string; caption: string } | null {
-  const m = /!\[([^\]]*)\]\((\/api\/images\/[A-Za-z0-9_-]+)\)/.exec(markdown);
-  return m ? { src: m[2], caption: m[1] } : null;
-}
 
 // SIMPLIFY output: a translucent bubble beside the article, level with the
 // selection. The selection stays tinted while the bubble is open (SPEC.md §6).
@@ -2034,6 +2031,10 @@ export function ReaderInteractions({
   // A Comment whose save failed: the toolbar opens again on its words with
   // the box, the kept draft, and this reason under it (SPEC.md §6).
   const [commentError, setCommentError] = useState<{ text: string; from: Anchor } | null>(null);
+  // A highlight or an Add to notes the server refused (EDGE12-12): the
+  // reason shows in the toolbar, under the row the reader pressed, and the
+  // toolbar stays open on the words; the error log keeps it too.
+  const [toolError, setToolError] = useState<{ text: string; from: Anchor; at: "highlight" | "add" } | null>(null);
   const [aiPlan, setAiPlan] = useState<AssistantPlan | null>(null);
   const [planChecked, setPlanChecked] = useState<Set<number>>(new Set());
   // Where the plan came from: the selection's chat card, or an Explain or
@@ -2132,6 +2133,19 @@ export function ReaderInteractions({
   const [assistantChat, setAssistantChat] = useState<AssistantChat | null>(null);
   const assistantChatRef = useRef(assistantChat);
   assistantChatRef.current = assistantChat;
+  // The card's box takes the focus when it replaces the box the reader typed
+  // in (the toolbar's, the bar's), and after Start side chat and Ask about
+  // this: the next words typed land in it, never on the page.
+  const [chatFocusTick, setChatFocusTick] = useState(0);
+  useEffect(() => {
+    if (!chatFocusTick) return;
+    const raf = requestAnimationFrame(() => {
+      // The conversation view's box when the view is open, else the card's.
+      const boxes = [...document.querySelectorAll<HTMLTextAreaElement>("textarea[data-chat-box]")];
+      (boxes.find((b) => !b.closest("[data-side-card]")) ?? boxes[0])?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [chatFocusTick]);
   // The assistant's bar at the bottom of the pane (SPEC.md §29).
   const [bar, setBar] = useState<AssistantBar | null>(null);
   // Highlighting an answer in the chat card (SPEC.md §7): Start side chat,
@@ -2239,6 +2253,15 @@ export function ReaderInteractions({
         Math.max(...blocksOnSide(rects, articleMid, s, top, CARD_ESTIMATE).map((r) => r.bottom)),
       );
       top = Math.min(...clears) + CARD_GAP;
+      side = sides[0];
+    }
+    // Dropped under the window, the card would open out of view: it opens at
+    // its words instead, and the older card above gives up height
+    // (settleSideCards).
+    const pane = containerRef.current;
+    if (pane && top > Math.max(8, preferredTop) && top + CAP_MIN > pane.scrollTop + pane.clientHeight) {
+      const over = blocksOnSide(rects, articleMid, sides[0], Math.max(8, preferredTop), CARD_ESTIMATE);
+      top = Math.max(8, preferredTop, ...over.map((r) => r.top + CAP_MIN + CARD_GAP));
       side = sides[0];
     }
     return { ...dockSideCard(side, col, cardsRoomRef.current), top, side };
@@ -3510,7 +3533,7 @@ export function ReaderInteractions({
   // grown card's height limit, by kind; it lifts when a card opens or closes.
   const [cardCaps, setCardCaps] = useState<Record<string, number>>({});
   const CAP_MIN = 160;
-  const settleSideCards = useCallback((grown: string | null) => {
+  const settleSideCards = useCallback((grown: string | null, opened: string | null = null) => {
     const container = containerRef.current;
     if (!container) return;
     // The narrow reader places its cards under their paragraphs (layoutNarrowCards).
@@ -3544,13 +3567,37 @@ export function ReaderInteractions({
         }
       }
     }
-    // The grown card is placed first and stays; the rest settle top to bottom.
+    // A card that just opened lands at its words, in view: an older card above
+    // it that reaches it gives up height (its body scrolls) instead of pushing
+    // the new card under the window. An older card keeps CAP_MIN at least; the
+    // new card then opens under that.
+    const openedBox = grownBox ? undefined : boxes.find((b) => b.kind === opened);
+    let openedTop: number | null = null;
+    if (openedBox) {
+      for (const above of boxes) {
+        if (above === openedBox || above.top >= openedBox.top) continue;
+        if (above.left >= openedBox.right || above.right <= openedBox.left) continue;
+        if (above.top + above.height + SETTLE_GAP <= openedBox.top) continue;
+        const room = Math.max(CAP_MIN, openedBox.top - SETTLE_GAP - above.top);
+        if (room >= above.height) continue;
+        above.height = room;
+        setCardCaps((caps) => (caps[above.kind] === room ? caps : { ...caps, [above.kind]: room }));
+        openedTop = Math.max(openedTop ?? openedBox.top, above.top + room + SETTLE_GAP);
+      }
+    }
+    // The grown card, or the card that just opened, is placed first and
+    // stays; the rest settle top to bottom.
+    const pinned = grownBox ? grown : openedBox ? opened : null;
     const order = [
-      ...boxes.filter((b) => b.kind === grown),
-      ...boxes.filter((b) => b.kind !== grown).sort((a, b) => a.top - b.top),
+      ...boxes.filter((b) => b.kind === pinned),
+      ...boxes.filter((b) => b.kind !== pinned).sort((a, b) => a.top - b.top),
     ];
-    const placed: Box[] = [];
     const moved: Record<string, number> = {};
+    if (openedBox && openedTop !== null && openedTop !== openedBox.top) {
+      openedBox.top = openedTop;
+      moved[openedBox.kind] = openedTop;
+    }
+    const placed: Box[] = [];
     for (const box of order) {
       let top = box.top;
       let pushed = true;
@@ -3667,6 +3714,7 @@ export function ReaderInteractions({
     const railTop = rail && getComputedStyle(rail).position === "fixed" ? rail.getBoundingClientRect().top : Infinity;
     const shownHeight = Math.min(crect.bottom, railTop) - crect.top;
     const tops: Record<string, number> = {};
+    const phoneCaps: Record<string, number> = {};
     const ordered = [...hosts.keys()].sort((a, b) =>
       a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
     );
@@ -3700,9 +3748,17 @@ export function ReaderInteractions({
           const keep = card.anchorTop - container.scrollTop - 16 - band;
           const by = Math.min(want, keep);
           if (by > 0) container.scrollBy({ top: by, behavior: "smooth" });
+          // On a phone a card taller than the room left above the bottom bar
+          // gives up height (its body scrolls), so its foot — the box, the
+          // buttons — stays in reach above the bar.
+          if (railTop !== Infinity) {
+            const room = Math.floor(shownHeight - (tops[card.kind] - container.scrollTop - Math.max(0, by)) - 16);
+            if (card.el.offsetHeight > room && room >= CAP_MIN) phoneCaps[card.kind] = room;
+          }
         }
       }
     }
+    if (Object.keys(phoneCaps).length > 0) setCardCaps((caps) => ({ ...caps, ...phoneCaps }));
     const place = <T extends { top: number }>(kind: string) => (c: T | null): T | null =>
       c && tops[kind] !== undefined && Math.abs(c.top - tops[kind]) > 1 ? { ...c, top: tops[kind] } : c;
     if (tops.explain !== undefined) setBubble(place<ExplainBubble>("explain"));
@@ -3741,6 +3797,7 @@ export function ReaderInteractions({
       // first report of a card carries no change: the cards settle top to
       // bottom then, none pinned.
       let grown: string | null = null;
+      let opened: string | null = null;
       for (const entry of entries) {
         const el = entry.target as HTMLElement;
         const kind = el.dataset.sideCard ?? "";
@@ -3748,11 +3805,12 @@ export function ReaderInteractions({
         const before = cardSizesRef.current[kind];
         cardSizesRef.current[kind] = size;
         if (before !== undefined && before !== size) grown = kind;
+        if (before === undefined) opened = kind;
         // A card that opens tall (reopened from its mark with its turns)
         // keeps its foot inside the pane too, not only one that grew.
         if (before !== size) keepCardInPane(kind);
       }
-      settleSideCards(grown);
+      settleSideCards(grown, opened);
       layoutNarrowCardsRef.current();
     });
     // A closed card's size goes with it: the next card of its kind opens
@@ -5578,10 +5636,17 @@ export function ReaderInteractions({
       // bar's Notes button blooms (quiet), so the reader keeps reading.
       window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: note.id, quiet: true } }));
     } catch (err) {
-      showError(err instanceof Error ? err.message : t("reader.addFailed"));
+      addFailed(err);
     } finally {
       setBusy(false);
     }
+  }
+  // The box stays open on the words, the reason under Add to notes.
+  function addFailed(err: unknown) {
+    const text = err instanceof Error ? err.message : t("reader.addFailed");
+    reportError(text, documentId);
+    if (popoverRef.current) setToolError({ text, from: popoverRef.current.anchor, at: "add" });
+    else showToast(text);
   }
 
   // Add to a note… (SPEC.md §6): the quote and the comment go onto the end of
@@ -5604,7 +5669,7 @@ export function ReaderInteractions({
       addedToNotes(popover.anchor);
       window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: note.id, quiet: true } }));
     } catch (err) {
-      showError(err instanceof Error ? err.message : t("reader.addFailed"));
+      addFailed(err);
     } finally {
       setBusy(false);
     }
@@ -6655,6 +6720,7 @@ export function ReaderInteractions({
     const shown = popover;
     const { anchor } = popover;
     setCommentError(null);
+    setToolError(null);
     await flushLiveBlock(anchor.blockId);
     markFreshAnchor(anchor);
     // Every segment of the passage paints at once, a comment as a comment.
@@ -6746,7 +6812,13 @@ export function ReaderInteractions({
         setPopover(shown);
         setSubmenu("comment");
         setCommentError({ text: reason, from: anchor });
-      } else showError(reason);
+      } else {
+        // The toolbar opens again on the words, the reason under the colors.
+        reportError(reason, documentId);
+        setPopover(shown);
+        setSubmenu(null);
+        setToolError({ text: reason, from: anchor, at: "highlight" });
+      }
     } finally {
       setBusy(false);
     }
@@ -6911,18 +6983,30 @@ export function ReaderInteractions({
       // The reader may have moved on to other words while the answer ran:
       // their toolbar and selection stay. Only the toolbar that sent the
       // question closes.
+      // The reader still in its box goes on typing in the card's box.
+      const inBox =
+        popoverRef.current?.anchor === sent.anchor &&
+        !!document.activeElement?.closest("[data-selection-popover]");
       if (popoverRef.current?.anchor === sent.anchor) {
         setPopover(null);
         setSubmenu(null);
         window.getSelection()?.removeAllRanges();
       }
+      // The card opens beside the words where they are now; words the reader
+      // scrolled away from get a toast that brings the card and the words back.
+      const pane = containerRef.current;
+      const box = pane ? passageBox(pane, anchor) : null;
+      const inView =
+        !pane || !box || (box.bottom > pane.scrollTop + 24 && box.top < pane.scrollTop + pane.clientHeight - 24);
       // The answer landed, so the question's draft goes (SPEC.md §6, toolbar
       // drafts) — unless the box already holds a next question typed while
-      // this one ran: that one stays.
+      // this one ran: that one stays, or, with the reader in the box and the
+      // card opening, moves into the card's box, which keeps it as its draft.
       const typed = aiCommandRef.current.trim();
-      if (typed === "" || typed === command) {
+      const carried = inBox && inView && turn.noteId && typed && typed !== command ? aiCommandRef.current : "";
+      if (typed === "" || typed === command || carried) {
         clearToolbarDraft("assistant", documentId, anchor, command);
-        if (typed === command) setAiCommand("");
+        if (typed === command || carried) setAiCommand("");
       }
       // The conversation continues in a chat card docked beside the article.
       markFreshAnchor(anchor);
@@ -6935,17 +7019,12 @@ export function ReaderInteractions({
           { role: "user", content: command },
           { role: "assistant", content: turn.reply, suggestKey: turn.suggestKey },
         ],
-        input: "",
+        input: carried,
         busy: false,
       });
-      // The card opens beside the words where they are now; words the reader
-      // scrolled away from get a toast that brings the card and the words back.
-      const pane = containerRef.current;
-      const box = pane ? passageBox(pane, anchor) : null;
-      const inView =
-        !pane || !box || (box.bottom > pane.scrollTop + 24 && box.top < pane.scrollTop + pane.clientHeight - 24);
       if (inView) {
         setAssistantChat(chat(box?.top ?? sent.yTop));
+        if (inBox) setChatFocusTick((n) => n + 1);
       } else {
         showToast(
           t("reader.answerReady"),
@@ -7066,10 +7145,15 @@ export function ReaderInteractions({
   runBarRef.current = runBar;
 
   // The bar's conversation goes on in the chat card beside the words.
+  // Words typed in the bar while the command ran go into the card's box, and
+  // the reader in the bar goes on typing there.
   function barToCard(b: AssistantBar) {
+    const typed = barRef.current?.key === b.key ? barRef.current.input : "";
+    const inBar = !!document.activeElement?.closest("[data-assistant-bar]");
     setBar(null);
     const slot = claimSideSlot("assistant", b.yTop, b.anchor);
-    setAssistantChat({ anchor: b.anchor, noteId: b.noteId, ...slot, messages: b.messages, input: "", busy: false });
+    setAssistantChat({ anchor: b.anchor, noteId: b.noteId, ...slot, messages: b.messages, input: typed, busy: false });
+    if (inBar) setChatFocusTick((n) => n + 1);
   }
 
   // The bar never covers the words it acts on (SPEC.md §29): when it opens
@@ -7156,7 +7240,9 @@ export function ReaderInteractions({
       setPlanChecked(new Set(plan.actions.map((_, i) => i)));
       setPlanFrom(toolNoteId ? "tool" : "chat");
       setPlanNoteId(toolNoteId ?? plan.conversationNoteId ?? conversationNoteId);
-      parts.push(t("assistant.proposedActions", { n, s: plural(n) }));
+      // The plan under the answer and its Apply say the count; a plan with
+      // no reply says it in the turn.
+      if (!plan.reply) parts.push(t("assistant.proposedActions", { n, s: plural(n) }));
     }
     // The assistant's suggestions land in the text: pending by construction
     // until an editor accepts them.
@@ -7484,13 +7570,6 @@ export function ReaderInteractions({
     };
   }, [chatNoteId]);
 
-  // The tray folds while a side chat is open, so the card has the room
-  // (SPEC.md §7); it unfolds when the side chat closes.
-  useEffect(() => {
-    setSideChatOpen(assistantChat?.openKey != null);
-    return () => setSideChatOpen(false);
-  }, [assistantChat?.openKey]);
-
   // The selection's three actions in the card, the panel's three.
   // The browser's own selection goes — the box that opens takes focus — and
   // the words stay marked by the tint until the reader is done with them.
@@ -7518,12 +7597,14 @@ export function ReaderInteractions({
         : c,
     );
     setChatCommentQuote(null);
+    setChatFocusTick((n) => n + 1);
   }
   function askAboutThisInChat() {
     const text = takeAnswerSelection();
     if (!text) return;
     setAssistantChat((c) => (c ? { ...c, quote: text } : c));
     setChatCommentQuote(null);
+    setChatFocusTick((n) => n + 1);
   }
   function openChatComment() {
     const text = takeAnswerSelection();
@@ -9039,6 +9120,8 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   ) => {
     if (!card.noteId || card.streaming || card.error) return null;
     if (!card.chatOpen) {
+      // On the card Continue is a pill in the foot row (continuePill).
+      if (!inView) return null;
       // Continuing into a conversation is Unitos Ultra (TIERS.md): every
       // account sees the mention at the end of the tool's output; a
       // non-Ultra press answers with the plain Ultra message, never the box.
@@ -9130,6 +9213,27 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       </>
     );
   };
+  // Continue on a tool card: a short pill in the foot row beside the rating
+  // and Save as note; a press opens the box in its place (toolChatFoot). Its
+  // tooltip names it whole and says when it needs Unitos Ultra.
+  const continuePill = (
+    kind: "explain" | "simplify",
+    card: ToolChat & { noteId: string | null; streaming: boolean; error: string | null },
+    tool: ToolKind,
+    className = "",
+  ) =>
+    !card.noteId || card.streaming || card.error || card.chatOpen ? null : (
+      <button
+        onClick={() => openToolChat(kind)}
+        data-track={`${tool}-continue`}
+        aria-label={t("reader.continueConversation")}
+        data-tip={ultra ? t("reader.continueConversationTitle") : t("reader.continueNeedsUltra")}
+        className={`flex items-center gap-1 rounded-full border border-line px-1.5 py-0.5 pointer-coarse:py-1.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 ${className}`}
+      >
+        {t("assistant.continue")}
+        {!ultra && <TierMark state="ultra" size={10} />}
+      </button>
+    );
   // The assistant card's foot: the box that sends the next turn. The card
   // beside the article and the full conversation view render the same one.
   const assistantChatFoot = (chat: AssistantChat, className: string, chipsClassName: string) => (
@@ -9161,11 +9265,15 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       onDelete={(id) => void deleteChatComment(id)}
       className={chipsClassName}
     />
-    <div className={`flex items-center gap-1.5 ${chipsClassName}`}>
-      <ThinkingChips small />
-      <WebChip small />
-    </div>
-    {chat.quote && (
+    {/* How the assistant answers; a comment goes to people, not to it. */}
+    {!chatCommentQuote && (
+      <div className={`flex items-center gap-1.5 ${chipsClassName}`}>
+        <ThinkingChips small />
+        <WebChip small />
+      </div>
+    )}
+    {/* A side chat's header already shows the quote it started on. */}
+    {chat.quote && !(chat.openKey && chat.quote === chatOpenSide?.quote) && (
       <QuoteChip quote={chat.quote} onClear={dropChatQuote} className={chipsClassName} />
     )}
     {chatCommentQuote ? (
@@ -9209,6 +9317,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         }}
         placeholder={t(chat.busy ? "assistant.queuePlaceholder" : "reader.replyPlaceholder")}
         aria-label={t("reader.messageAssistant")}
+        data-chat-box=""
         className="field-sizing-content max-h-40 min-h-8 flex-1 resize-none rounded-xl bg-sand-100 px-3 py-1.5 text-[12.5px] outline-none placeholder:text-sand-500"
       />
       <VoiceTypingButton track="assistant-card-voice-typing" className="size-8" size={14} />
@@ -9275,9 +9384,10 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   // Every action in a card's header is one button: a 24px circle around a
   // 13px glyph, the same on the explanation, the simplification, the
   // analysis, the visualization, and the assistant's card. The rating sits
-  // at the card's foot, not in the header (SPEC.md §25).
+  // at the card's foot, not in the header (SPEC.md §25). On a touch screen
+  // the circle takes the toolbar's finger size.
   const CARD_ACTION =
-    "flex size-6 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800";
+    "flex size-6 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:size-9";
   const expandButton = (kind: "assistant" | "explain" | "simplify") => (
     <button
       onClick={() => openConversationView(kind)}
@@ -9428,17 +9538,20 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       : null;
   // The plan's checklist and its buttons: under the answer in the chat card
   // that proposed it, or in the card at the window's foot for the panel's.
+  // In a card the answer above says what the plan is, so the plan is its
+  // action rows and Apply alone; the panel's card, far from its answer,
+  // keeps its title and the reply.
+  const planAlone = planFrom === "panel";
   const planBody = aiPlan ? (
     <>
-      <div className="mb-2 flex items-center gap-2">
-        <SparkleIcon size={15} className="text-clay" />
-        <span className="font-display text-[15px]">{t("reader.assistantPlan")}</span>
-        <span className="ml-auto rounded-full bg-sand-200 px-2.5 py-0.5 text-[10px] font-semibold text-sand-600">
-          {t("reader.askFirst")}
-        </span>
-      </div>
+      {planAlone && (
+        <div className="mb-2 flex items-center gap-2">
+          <SparkleIcon size={15} className="text-clay" />
+          <span className="font-display text-[15px]">{t("reader.assistantPlan")}</span>
+        </div>
+      )}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-      {aiPlan.reply && (
+      {planAlone && aiPlan.reply && (
         <div className="mb-2 text-[13px]">
           <Markdown>{aiPlan.reply}</Markdown>
         </div>
@@ -9486,7 +9599,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           ))}
         </ul>
       )}
-      <div className="mt-3 flex items-center gap-2">
+      <div className={`${planAlone ? "mt-3" : "mt-2"} flex items-center gap-2`}>
         <button
           disabled={planChecked.size === 0}
           onClick={() => void approvePlan()}
@@ -9508,14 +9621,13 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
     </>
   ) : null;
   // The card that shows the plan; a plan whose card is closed waits for it.
+  // A side chat shows its own plan; the main thread's waits in the main thread.
+  const shownThreadNoteId = assistantChat?.openKey ? (chatOpenSide?.noteId ?? null) : (assistantChat?.noteId ?? null);
   const planInCard =
     aiPlan !== null &&
     planFrom === "chat" &&
     assistantChat !== null &&
-    (planNoteId === null ||
-      assistantChat.noteId === null ||
-      assistantChat.noteId === planNoteId ||
-      (assistantChat.sideChats ?? []).some((s) => s.noteId === planNoteId));
+    (planNoteId === null || shownThreadNoteId === null || shownThreadNoteId === planNoteId);
   const planFloats = aiPlan !== null && planFrom === "panel";
   const barKey = bar ? barRunKey(bar) : null;
   return (
@@ -10252,19 +10364,19 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               <div className="flex flex-wrap items-center gap-1.5">
                 <ThinkingChips small />
                 <WebChip small />
-              </div>
-              <div className="flex items-center gap-1.5">
-                <VoiceTypingButton track="assistant-voice" />
+                <span className="ml-auto flex items-center gap-1.5">
+                <VoiceTypingButton track="assistant-voice" className="size-8" size={14} />
                 <button
                   disabled={!aiBusy && !aiCommand.trim()}
                   onClick={() => (aiBusy ? stopAssistantChat() : void runAssistant())}
                   data-track="assistant-run"
-                  data-tip={aiBusy ? t("reader.stopAssistant") : t("reader.runTitle")}
+                  data-tip={aiBusy ? t("reader.stopAssistant") : t("reader.sendTitle")}
                   aria-label={aiBusy ? t("reader.stopAssistant") : undefined}
-                  className="ml-auto rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+                  className="rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
                 >
-                  {aiBusy ? <StopIcon size={11} /> : t("reader.run")}
+                  {aiBusy ? <StopIcon size={11} /> : t("reader.send")}
                 </button>
+                </span>
               </div>
               {aiBusy && <ThinkingIndicator className="px-1 pb-0.5 text-[11.5px]" />}
               {/* A failed run says so here, where the reader asked (SPEC.md §6). */}
@@ -10468,6 +10580,11 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             {has("readAloud") && voiceButton}
           </div>
           )}
+          {toolError?.at === "highlight" && toolError.from === popover.anchor && (
+            <p data-tool-error role="alert" className="order-first px-2 py-1 text-[12px] font-medium text-red-600">
+              {toolError.text}
+            </p>
+          )}
 
           {/* Add to notes: the toolbox's second row. One press makes a new
               note in the first section with the words as its quote, as Enter
@@ -10497,6 +10614,11 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   <ChevronDownIcon size={coarse ? 14 : 12} className={submenu === "add" ? "rotate-180" : undefined} />
                 </button>
               </div>
+              {toolError?.at === "add" && toolError.from === popover.anchor && (
+                <p data-tool-error role="alert" className="px-2 py-0.5 text-[12px] font-medium text-red-600">
+                  {toolError.text}
+                </p>
+              )}
           {(() => {
             // The panel: the field for the note's words on top, then the
             // sections for a new note under "New note in", then Add to a
@@ -10657,18 +10779,10 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   {t("common.stop")}
                 </button>
               )}
-              {bubble.kind === "visualize" && !bubble.streaming && visualizationImage(bubble.text) && (
-                <button
-                  onClick={() => openVisualization(visualizationImage(bubble.text)!)}
-                  data-track="visualize-open"
-                  className={CARD_ACTION}
-                  aria-label={t("reader.openVisualization")}
-                  data-tip={t("reader.openVisualizationTitle")}
-                >
-                  <MaximizeIcon size={13} />
-                </button>
-              )}
-              {(bubble.text || bubble.conversation.length > 0) && expandButton("explain")}
+              {/* A press on the picture opens it large, so a visualization
+                  shows Expand once it holds a conversation. */}
+              {(bubble.kind === "visualize" ? bubble.conversation.length > 0 : bubble.text || bubble.conversation.length > 0) &&
+                expandButton("explain")}
               {!bubble.streaming && !bubble.busy && bubble.anchor && (
                 <button
                   onClick={() => void regenerateBubble()}
@@ -10752,10 +10866,14 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   documentId={documentId}
                   origin={bubble.kind}
                   selection={bubble.anchor?.quotedText ?? ""}
-                  answer={bubble.text}
+                  // A new turn is more to save: the button comes back.
+                  key={bubble.conversation.length}
+                  question={savedQuestion(bubble)}
+                  answer={savedAnswer(bubble.text, bubble)}
                   className="ml-auto"
                 />
               )}
+              {continuePill("explain", bubble, bubble.kind, bubble.kind === "visualize" ? "ml-auto" : "")}
             </div>
           )}
           {bubble.declined === null && toolChatFoot("explain", bubble, bubble.kind)}
@@ -10906,9 +11024,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 documentId={documentId}
                 origin="simplify"
                 selection={simplifyCard.anchor.quotedText}
-                answer={stripSimplifyMarkers(simplifyCard.text)}
+                key={simplifyCard.conversation.length}
+                question={savedQuestion(simplifyCard)}
+                answer={savedAnswer(stripSimplifyMarkers(simplifyCard.text), simplifyCard)}
                 className="ml-auto"
               />
+              {continuePill("simplify", simplifyCard, "simplify")}
             </div>
           )}
           {toolChatFoot("simplify", simplifyCard, "simplify")}
@@ -11511,7 +11632,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               aria-label={t("reader.barPlaceholder")}
               className="min-w-0 flex-1 rounded-xl bg-sand-100 px-3 py-1.5 text-[13px] outline-none placeholder:text-sand-500"
             />
-            <VoiceTypingButton track="assistant-voice" />
+            <VoiceTypingButton track="assistant-voice" className="size-8" size={14} />
             <button
               type="button"
               disabled={bar.busy || !bar.input.trim()}

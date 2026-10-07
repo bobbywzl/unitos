@@ -130,7 +130,7 @@ export function RatingButtons({
       data-track={`rate:${tool}:${rating}`}
       aria-label={t(rated === rating ? "common.rateTakeBack" : rating === "up" ? "common.rateUp" : "common.rateDown")}
       data-tip={t(rated === rating ? "common.rateTakeBack" : rating === "up" ? "common.rateUp" : "common.rateDown")}
-      className={`rounded-full transition-colors ${
+      className={`rounded-full transition-colors pointer-coarse:p-2.5 ${
         rated === rating ? "text-clay-800" : rated ? "text-sand-300 hover:text-clay-800" : "text-sand-500 hover:text-clay-800"
       } disabled:cursor-default`}
     >

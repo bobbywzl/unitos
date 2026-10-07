@@ -130,6 +130,56 @@ export function VoiceTypingButton({
     return () => window.clearTimeout(timer);
   }, [listening, status, setStatus]);
 
+  // The words still being heard are typed before the box can close (NOTE12-11):
+  // a press outside the box and the button (Done, ✕, a click away) and Escape
+  // type them at the caret first. Escape waits a frame, for the box to take
+  // the words, then goes on to close what it closes.
+  const { flush } = speech;
+  useEffect(() => {
+    if (!listening) return;
+    const onDown = (e: PointerEvent) => {
+      const target = e.target instanceof Node ? e.target : null;
+      if (target && (buttonRef.current?.contains(target) || targetRef.current?.contains(target))) return;
+      const heard = speech.interim.trim();
+      flush();
+      // The words typed can move what was pressed (Done drops a line), and
+      // the click then lands beside it: it is clicked once the words are in.
+      const pressed = heard && target instanceof Element ? target.closest<HTMLElement>("button, a, [role=button]") : null;
+      if (!pressed) return;
+      let landed = false;
+      const onClick = (c: MouseEvent) => {
+        if (c.target instanceof Node && pressed.contains(c.target)) landed = true;
+      };
+      const onUp = () => {
+        document.removeEventListener("pointerup", onUp, true);
+        window.setTimeout(() => {
+          document.removeEventListener("click", onClick, true);
+          if (!landed && pressed.isConnected) pressed.click();
+        }, 0);
+      };
+      document.addEventListener("click", onClick, true);
+      document.addEventListener("pointerup", onUp, true);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || !e.isTrusted || !speech.interim.trim()) return;
+      const target = e.target;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      flush();
+      requestAnimationFrame(() => {
+        if (target instanceof Node && target.isConnected) {
+          target.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true, cancelable: true }));
+        }
+      });
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    window.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("pointerdown", onDown, true);
+      window.removeEventListener("keydown", onKey, true);
+    };
+  }, [listening, flush, speech.interim]);
+
   // The box left the page (a card closed, a message sent and the box went):
   // the microphone turns off.
   useEffect(() => {
