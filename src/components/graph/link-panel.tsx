@@ -4,6 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import type { GraphEdgeLink } from "@/lib/types";
 import { api } from "@/lib/api";
+import { markAccepted } from "@/components/graph/accepted-now";
 import { linkPath } from "@/lib/link-scope";
 import { useCollab } from "@/components/collab/collab-context";
 import { confirmLinkRemoval, linkRemovable } from "@/components/collab/confirm-link-removal";
@@ -53,8 +54,10 @@ export function LinkPanel({
     setBusy(true);
     setError(null);
     try {
-      if (accept) await api(linkPath(link.id, notebookId), "PATCH", { accept: true });
-      else await api(linkPath(link.id, notebookId), "DELETE");
+      if (accept) {
+        await api(linkPath(link.id, notebookId), "PATCH", { accept: true });
+        markAccepted(link.id); // the header counts it at once (WALK4-15)
+      } else await api(linkPath(link.id, notebookId), "DELETE");
       setDecided(accept ? "accepted" : "dismissed");
       router.refresh();
       if (!accept) onClose();

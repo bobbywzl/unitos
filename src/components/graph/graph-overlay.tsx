@@ -15,6 +15,7 @@ import { useLang, useT } from "@/components/lang-provider";
 import { Presence } from "@/components/presence";
 import { StopPill } from "@/components/thinking";
 import { GeneratedList } from "@/components/graph/generated-list";
+import { markAccepted, unmarkAccepted, useAcceptedNow } from "@/components/graph/accepted-now";
 import { clearGraphKeep, readGraphKeep, writeGraphKeep, type GraphFocus } from "@/components/graph/graph-keep";
 import { LinkPanel } from "@/components/graph/link-panel";
 import { LinksList } from "@/components/graph/links-list";
@@ -474,11 +475,14 @@ export function GraphOverlay({
 
   // The header counts the reader's map: documents and links, with generated
   // documents counted apart and their provenance links not at all (WALK2-02).
-  const acceptedLinks = edges.reduce((sum, e) => sum + e.accepted, 0);
+  // Links accepted here count at once, before the refetch shows them (WALK4-15).
+  const acceptedNow = useAcceptedNow();
+  const acceptedHere = acceptedNow.size === 0 ? 0 : edges.reduce((sum, e) => sum + e.links.filter((l) => l.recommended && acceptedNow.has(l.id)).length, 0);
+  const acceptedLinks = edges.reduce((sum, e) => sum + e.accepted, 0) + acceptedHere;
   const generatedCount = nodes.filter((n) => n.kind === "generated").length;
   const ownDocs = nodes.length - generatedCount;
   const generatedNodeIds = useMemo(() => nodes.filter((n) => n.kind === "generated").map((n) => n.id), [nodes]);
-  const allLinks = edges.reduce((sum, e) => sum + e.links.filter((l) => !l.recommended && !l.provenance).length, 0);
+  const allLinks = edges.reduce((sum, e) => sum + e.links.filter((l) => !l.recommended && !l.provenance).length, 0) + acceptedHere;
   const anyLink = edges.some((e) => e.accepted + e.recommended > 0);
   const emptyCard = loading
     ? null
@@ -1027,7 +1031,16 @@ export function RecommendedLinkList({
               <span className="ml-auto flex items-center gap-2">
                 <button
                   onClick={() =>
-                    void mutate(l.id, () => api(linkPath(l.id, notebookId), "PATCH", { accept: true }))
+                    void mutate(l.id, async () => {
+                      // The header counts it at once (WALK4-15).
+                      markAccepted(l.id);
+                      try {
+                        await api(linkPath(l.id, notebookId), "PATCH", { accept: true });
+                      } catch (err) {
+                        unmarkAccepted(l.id);
+                        throw err;
+                      }
+                    })
                   }
                   data-track="link-accept"
                   data-tip={t("panes.acceptLinkTitle")}
