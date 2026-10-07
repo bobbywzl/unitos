@@ -520,15 +520,6 @@ export function DocsEditor({
     setNarrowWas(narrow);
     setHeaderHidden(narrow);
   }
-  useEffect(() => {
-    const shell = shellRef.current;
-    if (!shell) return;
-    const measure = () => setNarrow(shell.clientWidth > 0 && shell.clientWidth < NARROW_PANE);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(shell);
-    return () => observer.disconnect();
-  }, [editor]);
   // View > Full screen: the title row, the toolbar, and the rulers hide,
   // as in Google Docs; Esc brings them back.
   const [fullScreen, setFullScreen] = useState(false);
@@ -579,6 +570,18 @@ export function DocsEditor({
     },
     [documentId],
   );
+
+  // The pane's width, measured once the shell stands (the shell is drawn
+  // after the editor is built, so this waits for it).
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+    const measure = () => setNarrow(shell.clientWidth > 0 && shell.clientWidth < NARROW_PANE);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(shell);
+    return () => observer.disconnect();
+  }, [editor]);
 
   // A document opens with the caret at the page's start, as in Google Docs,
   // unless something else already has the focus. A document that opens at

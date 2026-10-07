@@ -25,7 +25,7 @@ export type ToolbarGroup = {
 };
 
 /** The mode's name box, open and folded, and a Unitos tool folded to its
-    symbol (Collapse, Extract; 8 px apart) (css/toolbar.css). */
+    symbol (Collapse; 8 px apart) (css/toolbar.css). */
 const CAPTION_OPEN = 122;
 const CAPTION_FOLDED = 26;
 const UNITOS_FOLDED = 30;
@@ -61,7 +61,7 @@ export function ToolbarRow({
   const moreRef = useRef<HTMLButtonElement>(null);
   // The keys of the groups in More, in the row's order, joined by a space.
   const [hiddenKeys, setHiddenKeys] = useState("");
-  const [folded, setFolded] = useState<"extract" | "mode" | null>(null);
+  const [folded, setFolded] = useState<"tools" | "mode" | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   // The groups that just came back from the bubble fade in.
   const [lastHidden, setLastHidden] = useState(hiddenKeys);
@@ -88,11 +88,11 @@ export function ToolbarRow({
     const rightOpen = base + (caption ? CAPTION_OPEN : 0) + (unitos ? unitosOpen.current : 0);
     const tools = unitos?.querySelectorAll("button").length ?? 0;
     const unitosFolded = tools * UNITOS_FOLDED + Math.max(0, tools - 1) * UNITOS_GAP;
-    const rightExtract = base + (caption ? CAPTION_OPEN : 0) + unitosFolded;
+    const rightTools = base + (caption ? CAPTION_OPEN : 0) + unitosFolded;
     const rightFolded = base + (caption ? CAPTION_FOLDED : 0) + unitosFolded;
     const list = groups.map((g) => widths.current.get(g.key) ?? 0);
     const total = list.reduce((a, b) => a + b, 0);
-    const nextFolded = total <= inner - rightOpen ? null : total <= inner - rightExtract ? "extract" : "mode";
+    const nextFolded = total <= inner - rightOpen ? null : total <= inner - rightTools ? "tools" : "mode";
     const room = inner - rightFolded;
     const hide = new Set<number>();
     if (total > room) {
