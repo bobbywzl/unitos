@@ -361,3 +361,32 @@ export function extendLayout(
   }
   return out;
 }
+
+/** The documents in the layout's own order, for a list beside the canvas
+    (the Documents list, SPEC.md §13): the linked groups the largest first,
+    each group's documents by most links first; then the unlinked
+    documents in the order given; then the documents set apart (generated
+    documents). Linked documents come next to each other, as on the canvas. */
+export function layoutOrder(ids: string[], edges: LayoutEdge[], apart?: Set<string>): string[] {
+  const own = apart ? ids.filter((id) => !apart.has(id)) : ids;
+  const known = new Set(own);
+  const adjacency = new Map<string, Map<string, number>>();
+  const weight = new Map<string, number>();
+  for (const e of edges) {
+    if (e.a === e.b || !known.has(e.a) || !known.has(e.b)) continue;
+    for (const [x, y] of [
+      [e.a, e.b],
+      [e.b, e.a],
+    ]) {
+      const m = adjacency.get(x) ?? new Map<string, number>();
+      m.set(y, (m.get(y) ?? 0) + e.weight);
+      adjacency.set(x, m);
+      weight.set(x, (weight.get(x) ?? 0) + e.weight);
+    }
+  }
+  const { groups, isolated } = components(own, adjacency);
+  const linked = [...groups]
+    .sort((x, y) => y.length - x.length)
+    .flatMap((g) => [...g].sort((x, y) => (weight.get(y) ?? 0) - (weight.get(x) ?? 0) || g.indexOf(x) - g.indexOf(y)));
+  return [...linked, ...isolated, ...(apart ? ids.filter((id) => apart.has(id)) : [])];
+}

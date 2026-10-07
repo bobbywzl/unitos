@@ -22,12 +22,15 @@ import { LinkReplies } from "@/components/graph/link-replies";
 export function LinkPanel({
   link,
   onBack,
+  backLabel,
   onClose,
   onOpenDocument,
 }: {
   link: GraphEdgeLink;
-  /** Back to the Links list, when the link was opened from it. */
+  /** Back to the list the link was opened from (Links, Documents). */
   onBack?: () => void;
+  /** The Back button's name; default Back to Links. */
+  backLabel?: string;
   onClose: () => void;
   /** The reader opened a document from the panel (the URL already moved). */
   onOpenDocument: () => void;
@@ -73,8 +76,8 @@ export function LinkPanel({
           <button
             onClick={onBack}
             data-track="graph-link-panel-back"
-            aria-label={t("panes.graphLinksBack")}
-            data-tip={t("panes.graphLinksBack")}
+            aria-label={backLabel ?? t("panes.graphLinksBack")}
+            data-tip={backLabel ?? t("panes.graphLinksBack")}
             className="-mt-1 -ml-1 flex size-7 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
           >
             <ArrowLeftIcon size={15} />
