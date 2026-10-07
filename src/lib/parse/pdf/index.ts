@@ -25,6 +25,7 @@ import { displayEquations, displayLines, isTexPage } from "@/lib/parse/pdf/math/
 import { mathSpans, resolveZones } from "@/lib/parse/pdf/math/zones";
 import { firstPageOf, joinOnPage, mergeAcrossPages, shiftSpansInto } from "@/lib/parse/pdf/merge";
 import { isOcrLayer, measureSpacing, pageLeading } from "@/lib/parse/pdf/paragraphs";
+import { embeddedGlyphNames } from "@/lib/parse/pdf/programs";
 import { placeTables, ruledTables, takeTables } from "@/lib/parse/pdf/ruled";
 import { markPullQuoteHeadings, segmentPage } from "@/lib/parse/pdf/segment";
 import { attachTableCaptions, isWrappedRowLine } from "@/lib/parse/pdf/tables";
@@ -110,8 +111,19 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
       const ops = (await page.getOperatorList()) as { fnArray: number[]; argsArray: unknown[] };
       const fonts: FontLookup = (id) => {
         try {
-          const font = page.commonObjs.get(id) as { name?: string; fontMatrix?: number[]; vertical?: boolean; differences?: (string | null)[] } | null;
-          return font ? { name: font.name ?? "", fontMatrix: font.fontMatrix, vertical: font.vertical, differences: font.differences } : null;
+          const font = page.commonObjs.get(id) as {
+            name?: string;
+            fontMatrix?: number[];
+            vertical?: boolean;
+            differences?: (string | null)[];
+            composite?: boolean;
+            isMonospace?: boolean;
+          } | null;
+          if (!font) return null;
+          // A coding font's glyph names (its ligatures, programs.ts): a
+          // fixed-pitch font whose codes are its glyph ids.
+          const glyphNames = font.composite && font.isMonospace && font.name ? (embeddedGlyphNames(data, font.name) ?? undefined) : undefined;
+          return { name: font.name ?? "", fontMatrix: font.fontMatrix, vertical: font.vertical, differences: font.differences, glyphNames };
         } catch {
           return null;
         }
