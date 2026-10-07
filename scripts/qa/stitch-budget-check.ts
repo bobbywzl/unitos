@@ -26,6 +26,7 @@ import {
   cutSelection,
   expandPick,
   firstsFirst,
+  groupMaxBlocks,
   historyWithAliases,
   interleave,
   nameHits,
@@ -33,6 +34,7 @@ import {
   replyLanguage,
   replyWithIds,
   skeletonGroups,
+  titleMatches,
   type SkeletonView,
 } from "../../src/lib/graph/stitch";
 import { asksWhere, stitchExpandPrompt, stitchPrompt, stitchRules, stitchSelectPrompt } from "../../src/lib/prompts/stitch";
@@ -334,7 +336,40 @@ check("skeleton prompt: the line cap scales past 400 words", skeletonPrompt({ pa
   check("answer sections: a medium document is 'read whole when picked'", /Medium essay" \([^)]*; read whole when picked with one short document\)/.test(sys));
   check("answer sections: a gap of one is '1 block not shown'", sys.includes("(1 block not shown)") && !sys.includes("(1 blocks not shown)"));
   check("answer sections: a document with nothing shown is one line", !sys.includes('[document D]') && sys.includes('No block shown for this command: "Other essay" (100 blocks).'));
+
+  // COST5-04: past 20 documents the "No block shown" line is a count and the titles that hold a command word,
+  // and a document with 1 to 3 blocks shown has no gist unless its title holds a command word.
+  const many = [
+    ...Array.from({ length: 20 }, (_, i) => mk(`m${i}`, `Essay ${i} on the will`, 5, 20)),
+    mk("n", "On Noise", 10, 20),
+    mk("p", "Of Women", 10, 20),
+  ];
+  const r2 = readingOf(many as unknown as Parameters<typeof readingOf>[0]);
+  for (const d of many) r2.gists.set(d.id, `Gist of ${d.title}.`);
+  const letterOf = (i: number) => (i < 26 ? String.fromCharCode(65 + i) : `A${String.fromCharCode(65 + i - 26)}`);
+  // Shown: two blocks of essay 0, four of essay 1, two of "On Noise"; "Of Women" and essays 2-19 nothing.
+  const sel2 = new Set(["A1", "A2", "B1", "B2", "B3", "B4", `${letterOf(20)}1`, `${letterOf(20)}2`]);
+  const msg = (command: string) =>
+    String(answerMessages({ reading: r2, selected: sel2, lang: "en", profile: null as unknown as Parameters<typeof answerMessages>[0]["profile"], history: [], command })[0].content);
+  const s2 = msg("What does Schopenhauer say about noise?");
+  check("short lists: past 20 documents the nothing-shown line is a count", s2.includes("No block shown for this command: 19 more documents, none titled with a word of the command."), /No block shown[^\n]*/.exec(s2)?.[0]);
+  check("short lists: a document with 2 blocks shown, off the command, has no gist", !s2.includes("Gist of Essay 0 on the will."));
+  check("short lists: a document with 4 blocks shown keeps its gist", s2.includes("Gist of Essay 1 on the will."));
+  check("short lists: a document whose title holds a command word keeps its gist", s2.includes("Gist of On Noise."));
+  const s3 = msg("Which documents discuss women?");
+  check("short lists: the nothing-shown titles that hold a command word are named", s3.includes('No block shown for this command: 19 more documents; the ones whose title holds a word of the command: "Of Women" (10 blocks).'), /No block shown[^\n]*/.exec(s3)?.[0]);
+  check("titleMatches: 'documents', 'which', 'the' never match", titleMatches([{ doc: { title: "The documents which matter" } }], "Which documents discuss the will?").length === 0);
+  check("titleMatches: two CJK characters in a row match", titleMatches([{ doc: { title: "人生的智慧（第3篇）" } }], "《人生的智慧》对幸福补充了什么？").length === 1);
+  check("titleMatches: one CJK character alone does not", titleMatches([{ doc: { title: "道德的谱系" } }], "人如何看待痛苦？").length === 0);
+  // Under 21 documents the line lists every title, as before.
+  check("short lists: 20 documents or fewer list every title", sys.includes('"Other essay" (100 blocks)'));
 }
+
+// ── COST5-01: the select pass's ids per group ──
+check("groupMaxBlocks: one group names the kind's cap", groupMaxBlocks("page", 1) === STITCH_SELECTED_BLOCKS.page && groupMaxBlocks("question", 1) === STITCH_SELECTED_BLOCKS.question);
+check("groupMaxBlocks: two groups each name up to the cap", groupMaxBlocks("page", 2) === STITCH_SELECTED_BLOCKS.page);
+check("groupMaxBlocks: 25 groups of a page name 32 each", groupMaxBlocks("page", 25) === 32, String(groupMaxBlocks("page", 25)));
+check("groupMaxBlocks: never under 20", groupMaxBlocks("question", 40) === 20 && groupMaxBlocks("question", 6) === 50);
 
 // ── skeleton groups close at a document's end ──
 {

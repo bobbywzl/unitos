@@ -41,7 +41,7 @@ import { ensureSkeleton, readSkeleton, type Skeleton } from "@/lib/graph/skeleto
 import { projectLinks } from "@/lib/link-scope";
 import { jevRouteParts, jevSelectLines } from "@/lib/graph/stitch-jev";
 import { jevEnabled, mapLimit } from "@/lib/jev";
-import { rank } from "@/lib/graph/rank";
+import { rank, tokenize } from "@/lib/graph/rank";
 import {
   stitchExpandPrompt,
   stitchPrompt,
@@ -116,6 +116,13 @@ const MAX_SELECTED = 400; // blocks the select pass may name
 const MAX_ROUTED = 80; // parts the route pass may name
 const MAX_LINKS = 24;
 const MAX_PARTS = 200;
+const SELECT_GROUP_MIN = 20; // ids a select call of many groups may still name (groupMaxBlocks)
+// Past this many documents read, the answer pass's lists are short
+// (COST5-04): the documents with no block shown are a count and the titles
+// that hold a word of the command, and a document with GIST_MIN_SHOWN - 1
+// or fewer blocks shown has no gist line.
+const SHORT_LISTS_PAST = 20;
+const GIST_MIN_SHOWN = 4;
 const MAX_CITED = 40; // blocks of the earlier answers the reading passes are told of
 const CITED_TEXT = 600; // chars of a cited block's text in the result
 
@@ -671,11 +678,22 @@ function wholeSection(r: Rendered, gists: Map<string, string>): string {
     whole says so in its header ("read whole when picked"), so the reply's
     partial-read sentence gives advice that works. A document with nothing
     to read is declared with its reason, as in the whole rendering; the
-    documents none of whose blocks were picked share one line at the end. */
-function selectedSections(rendered: Rendered[], selected: Set<string>, gists: Map<string, string> = new Map()): string {
+    documents none of whose blocks were picked share one line at the end.
+    Past SHORT_LISTS_PAST documents (COST5-04) that line is their count and
+    the titles that hold a word of the command (titleMatches), and a gist
+    goes only under a document with GIST_MIN_SHOWN blocks shown or more, or
+    whose title holds a word of the command: a document of one to three
+    blocks shown, off the command's words, is read from its blocks. */
+function selectedSections(
+  rendered: Rendered[],
+  selected: Set<string>,
+  gists: Map<string, string> = new Map(),
+  command = "",
+): string {
   const sections: string[] = [];
   const none: Rendered[] = [];
   const read = rendered.filter((r) => r.coverage.status === "read");
+  const short = rendered.length > SHORT_LISTS_PAST;
   for (const r of rendered) {
     if (r.coverage.status === "empty") {
       sections.push(r.section);
@@ -688,7 +706,8 @@ function selectedSections(rendered: Rendered[], selected: Set<string>, gists: Ma
     }
     const shortest = Math.min(Infinity, ...read.filter((x) => x !== r).map((x) => x.tokens));
     const whole = shown.length < r.blocks.length && r.tokens + shortest <= STITCH_WHOLE_THRESHOLD;
-    const head = `${header(r.letter, r.doc, `${coverageNote(r.coverage, shown.length)}${whole ? "; read whole when picked with one short document" : ""}`)}${gistLine(r, gists)}`;
+    const gist = short && shown.length < GIST_MIN_SHOWN && titleMatches([r], command).length === 0 ? "" : gistLine(r, gists);
+    const head = `${header(r.letter, r.doc, `${coverageNote(r.coverage, shown.length)}${whole ? "; read whole when picked with one short document" : ""}`)}${gist}`;
     const lines: string[] = [];
     let last = -1;
     for (const block of shown) {
@@ -699,12 +718,28 @@ function selectedSections(rendered: Rendered[], selected: Set<string>, gists: Ma
     }
     sections.push(`${head}\n${lines.join("\n\n")}`);
   }
-  if (none.length > 0) {
+  const named = (list: Rendered[]) => list.map((r) => `"${r.doc.title}" (${r.coverage.blocks} ${UNIT[r.coverage.kind]})`).join(", ");
+  if (none.length > 0 && !short) sections.push(`No block shown for this command: ${named(none)}.`);
+  else if (none.length > 0) {
+    const matching = titleMatches(none, command);
     sections.push(
-      `No block shown for this command: ${none.map((r) => `"${r.doc.title}" (${r.coverage.blocks} ${UNIT[r.coverage.kind]})`).join(", ")}.`,
+      `No block shown for this command: ${none.length} more ${none.length === 1 ? "document" : "documents"}` +
+        (matching.length > 0 ? `; the ones whose title holds a word of the command: ${named(matching)}.` : `, none titled with a word of the command.`),
     );
   }
   return sections.join("\n\n");
+}
+
+// Words of a command that never make a title match (titleMatches).
+const TITLE_STOP = new Set([...NAME_STOP, ..."all any every each more most other some such than then there into over only also not no yes say says said document documents project passage passages text texts part parts".split(" ")]);
+
+/** The documents whose title holds a word of the command: a Latin word of
+    three letters or more that is not a question word or the like, or two
+    CJK characters in a row (the ranker's tokens, lib/graph/rank.ts). */
+export function titleMatches<T extends { doc: { title: string } }>(docs: T[], command: string): T[] {
+  const words = new Set(tokenize(command).filter((t) => (/[^\x00-\u024f]/.test(t) ? [...t].length >= 2 : t.length >= 3 && !TITLE_STOP.has(t))));
+  if (words.size === 0) return [];
+  return docs.filter((d) => tokenize(d.doc.title).some((t) => words.has(t)));
 }
 
 /** The answer pass's messages: the system message (the rules, the reader
@@ -751,11 +786,11 @@ export function answerMessages(input: {
     return [
       systemMessage(systemOf(rules, input.profile, "The blocks a first read picked for the command are in the reader's last message.", "")),
       ...input.history,
-      { role: "user", content: `${selectedSections(rendered, selected, gists)}\n\n${prompt}` },
+      { role: "user", content: `${selectedSections(rendered, selected, gists, input.command)}\n\n${prompt}` },
     ];
   }
   const system = selected
-    ? systemOf(rules, input.profile, "The blocks a first read picked for the command follow.", selectedSections(rendered, selected, gists))
+    ? systemOf(rules, input.profile, "The blocks a first read picked for the command follow.", selectedSections(rendered, selected, gists, input.command))
     : systemOf(rules, input.profile, "Every document follows.", rendered.map((r) => wholeSection(r, gists)).join("\n\n"));
   return [systemMessage(system), ...input.history, { role: "user", content: prompt }];
 }
@@ -1606,6 +1641,7 @@ export async function pickBlocks(input: {
     lists = [interleave(read.map((r) => jevByDoc.get(r.doc.id) ?? []))];
   } else {
     const groups = skeletonGroups(views, shown, STITCH_SKELETON_BUDGET, STITCH_SKELETON_GROUP);
+    const maxBlocks = groupMaxBlocks(kind, groups.length);
     lists = await mapLimit(groups, STITCH_GROUP_CONCURRENCY, async (group) => {
       const letters = new Set(group.views.map((v) => v.r.letter));
       const pick = await callForJson({
@@ -1620,7 +1656,7 @@ export async function pickBlocks(input: {
               continued,
               earlier,
               cited: groups.length > 1 ? cited.filter((a) => letters.has(blockLetter(a))) : cited,
-              maxBlocks: STITCH_SELECTED_BLOCKS[kind],
+              maxBlocks,
               partial: group.shown !== null,
               names: names
                 .map((n) => ({ term: n.term, aliases: n.aliases.filter((a) => letters.has(blockLetter(a))) }))
@@ -1655,6 +1691,18 @@ export async function pickBlocks(input: {
   if (picks.length === 0) picks = interleave(read.map((r) => opening(r, share)));
   if (input.signal?.aborted) aborted();
   return cutSelection(picks, blockByRef, kind);
+}
+
+/** The ids one select call may name (COST5-01): the kind's block cap
+    (STITCH_SELECTED_BLOCKS) shared over the groups, twice over, so a group
+    that holds most of the answer still names enough, and never under
+    SELECT_GROUP_MIN. One group names up to the cap. The answer pass reads
+    no more than the cap in all, so ids past a group's share were written,
+    paid for and waited on, and then cut. */
+export function groupMaxBlocks(kind: StitchCommandKind, groups: number): number {
+  const cap = STITCH_SELECTED_BLOCKS[kind];
+  if (groups <= 1) return cap;
+  return Math.min(cap, Math.max(SELECT_GROUP_MIN, Math.ceil((2 * cap) / groups)));
 }
 
 // The document letter of an alias (B12 → B).
