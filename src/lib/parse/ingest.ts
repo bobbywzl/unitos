@@ -19,7 +19,6 @@ import {
   PdfPagesError,
   pdfPagesOf,
   rangePages,
-  samePdfPages,
   storedPdfPages,
   type PageRange,
   type PdfPages,
@@ -61,8 +60,7 @@ import {
 } from "@/lib/handwritten/page-images";
 
 // Ingest progress, reported to the caller as each stage starts. A repeated stage
-// updates the detail line ("148 figures · 152 equations"). Dedupe hits report
-// nothing — there is no parse or save to do, the caller treats "no events" as instant.
+// updates the detail line ("148 figures · 152 equations").
 // PDF stages: parse, save. URL stages: fetch, extract, select, structure, layout, save.
 // The upload assistant's review streams fetch, extract, review.
 export type IngestStage =
@@ -89,7 +87,8 @@ export type IngestOptions = {
   // The PDF's pages the reader chose in the add dialog (SPEC.md §15): the
   // add imports those pages alone. Absent: every page.
   pdfPages?: PageRange[];
-  // A PDF fetched from a link keeps the link, so adding the URL again dedupes.
+  // A PDF fetched from a link keeps the link as its source: the add asks
+  // before the same link adds again (lib/documents/duplicates.ts).
   sourceUrl?: string;
   // When the model passes must be done, epoch ms (modelPassDeadline): a pass
   // that cannot finish in time aborts or is skipped, and the mechanical parse
@@ -117,7 +116,7 @@ export function modelPassSignal(deadline: number | undefined): AbortSignal | nul
 }
 
 // A split part's sourceUrl carries this marker plus its part number, so parts
-// stay distinct for dedupe and never re-parse (a re-parse would paste the whole
+// stay distinct and never re-parse (a re-parse would paste the whole
 // page over one part).
 export const SPLIT_URL_MARKER = "#unitos-part-";
 
@@ -354,41 +353,12 @@ async function createImportedDocument(data: {
   );
 }
 
-// ── Dedupe (SPEC.md §13, §14) ───────────────────────────────────────────────
-// An add of a file or an address already in the library attaches that
-// document as it is — only while it is unedited: an import edited since it
-// was imported is its readers' own, so the add imports anew beside it.
-
-const UNEDITED: Prisma.DocumentWhereInput = {
-  OR: [{ importRev: null }, { richTextRev: { lte: db.document.fields.importRev } }],
-};
-
-/** The oldest unedited document with these bytes and these chosen pages of
-    a PDF (null: every page, and every file that is no PDF). The same file
-    with other pages is another document (SPEC.md §30). */
-async function dedupeByHash(fileHash: string, pdfPages: PdfPages | null = null) {
-  const found = await db.document.findMany({
-    where: { fileHash, ...UNEDITED },
-    orderBy: { createdAt: "asc" },
-    omit: { fileData: true },
-  });
-  const same = found.find((document) => samePdfPages(storedPdfPages(document), pdfPages));
-  return same ? db.document.findUnique({ where: { id: same.id } }) : null;
-}
-
-/** True when a project of an account other than `userId` holds the
-    document, quotes it, or has notes written in it. Sign-in off (null):
-    one reader, never another account. */
-async function heldByOtherAccount(documentId: string, userId: string | null): Promise<boolean> {
-  if (userId === null) return false;
-  const other = { userId: { not: userId } };
-  const [held, quoted, written] = await Promise.all([
-    db.notebookDocument.count({ where: { documentId, notebook: other } }),
-    db.source.count({ where: { documentId, note: { section: { notebook: other } } } }),
-    db.note.count({ where: { documentId, section: { notebook: other } } }),
-  ]);
-  return held + quoted + written > 0;
-}
+// ── Every add is its own document (SPEC.md §13, §14) ───────────────────────
+// An add never hands out a document already stored: the same file or address
+// added again parses again into a new document. The add routes ask the
+// reader first when the account already has one (lib/documents/duplicates.ts).
+// `deduped` stays in the results, always false, so the routes' answers keep
+// their shape.
 
 /** The chosen pages' column (Document.pdfPages), written only when pages
     were chosen: null is every page. */
@@ -618,7 +588,7 @@ function pageBlockRows(documentId: string, pages: number[]) {
   }));
 }
 
-// Upload path. Dedupe by fileHash: a re-upload returns the existing document, no re-parse.
+// Upload path. Every upload parses into a new document, a re-upload too.
 // Import PDF judges each PDF (SPEC.md §16): a computer-text article parses to
 // text blocks; rough handwritten notes and drawings become a handwritten
 // document. opts.pages skips the judgment — the PDF imports as handwritten
@@ -638,8 +608,6 @@ export async function ingestPdf(
 ) {
   const fileHash = createHash("sha256").update(bytes).digest("hex");
   const pdfPages = await chosenPdfPages(bytes, opts.pdfPages);
-  const existing = await dedupeByHash(fileHash, pdfPages);
-  if (existing) return { document: existing, deduped: true };
 
   onProgress?.("parse");
   const parsed = await parsePdf(bytes, { pages: pdfPages ? rangePages(pdfPages.ranges) : undefined });
@@ -714,7 +682,7 @@ export function isPdfBytes(bytes: Uint8Array): boolean {
   return bytes.length >= 5 && String.fromCharCode(...bytes.slice(0, 5)) === "%PDF-";
 }
 
-// Markdown upload path (SPEC.md §2). Dedupe by fileHash like a PDF; the
+// Markdown upload path (SPEC.md §2). A new document per add; the
 // bytes are kept for re-parse. The file parses through the URL walk, no
 // model pass.
 export async function ingestMarkdown(
@@ -725,8 +693,6 @@ export async function ingestMarkdown(
   userId: string | null = null,
 ) {
   const fileHash = createHash("sha256").update(bytes).digest("hex");
-  const existing = await dedupeByHash(fileHash);
-  if (existing) return { document: existing, deduped: true };
 
   onProgress?.("parse");
   const parsed = await parseMarkdownDocument(new TextDecoder("utf-8").decode(bytes), filename);
@@ -769,7 +735,7 @@ export async function ingestMarkdown(
 // Word upload path (SPEC.md §30): a .docx parses into blocks from its own
 // structure (lib/parse/docx.ts), no model pass, and adds as a Markdown file
 // does: an import while the switch is on, pageless; else a block document.
-// Dedupe by fileHash; the bytes are kept for re-parse. Its pictures are
+// A new document per add; the bytes are kept for re-parse. Its pictures are
 // stored as images of the document, every one claimed by it (a picture in a
 // table cell is no figure object an import's claim would find).
 export async function ingestDocx(
@@ -780,8 +746,6 @@ export async function ingestDocx(
   userId: string | null = null,
 ) {
   const fileHash = createHash("sha256").update(bytes).digest("hex");
-  const existing = await dedupeByHash(fileHash);
-  if (existing) return { document: existing, deduped: true };
 
   onProgress?.("parse");
   const store = slideImageStore(userId);
@@ -836,7 +800,7 @@ export type SlidesIngestOptions = IngestOptions & {
 };
 
 // Slides upload path (SPEC.md §27): a .pptx, or a Google Slides file Drive
-// exported as one. Dedupe by fileHash like a PDF; the bytes are kept for
+// exported as one. A new document per add; the bytes are kept for
 // re-parse. No model pass: the parse is the file's own structure.
 export async function ingestSlides(
   bytes: Uint8Array<ArrayBuffer>,
@@ -846,8 +810,6 @@ export async function ingestSlides(
   userId: string | null = null,
 ) {
   const fileHash = createHash("sha256").update(bytes).digest("hex");
-  const existing = await dedupeByHash(fileHash);
-  if (existing) return { document: existing, deduped: true };
 
   onProgress?.("parse");
   const parsed = await parseSlides(bytes, filename, {
@@ -886,8 +848,8 @@ async function parseSheetsBytes(bytes: Uint8Array, filename: string, userId: str
 }
 
 // Sheets upload path (SPEC.md §27): a .xlsx, a Google Sheets file Drive
-// exported as one, or a .csv/.tsv. Dedupe by fileHash; the bytes are kept
-// for re-parse. No model pass.
+// exported as one, or a .csv/.tsv. A new document per add; the bytes are
+// kept for re-parse. No model pass.
 export async function ingestSheets(
   bytes: Uint8Array<ArrayBuffer>,
   filename: string,
@@ -896,8 +858,6 @@ export async function ingestSheets(
   userId: string | null = null,
 ) {
   const fileHash = createHash("sha256").update(bytes).digest("hex");
-  const existing = await dedupeByHash(fileHash);
-  if (existing) return { document: existing, deduped: true };
 
   onProgress?.("parse");
   const parsed = await parseSheetsBytes(bytes, filename, userId);
@@ -924,46 +884,18 @@ function filenameOfUrl(url: string): string {
   }
 }
 
-// URL path. Dedupe by exact sourceUrl, an unedited document only. A stale
-// stored parse upgrades in place: adding the URL again must never hand back
-// blocks from an older parser — and never replaces an import's edits: an
-// import edited while the upgrade ran is left as it is, and the add imports
-// anew. A stale document another account's project holds or quotes is never
-// upgraded in place either: a re-parse gives it new blocks, and that
-// account's quotes in it would move or orphan at no request of theirs; the
-// add imports anew. With split, one long page saves as multiple documents:
-// `document` is the first part, `extra` the rest. Re-adding the same URL with
-// split dedupes to the existing first part; without split it saves a fresh
-// whole document.
+// URL path. Every add fetches and parses the page into a new document, the
+// same address added again too (a stored document upgrades only by Re-parse
+// document). With split, one long page saves as multiple documents:
+// `document` is the first part, `extra` the rest.
 export async function ingestUrl(
   url: string,
   onProgress?: OnIngestProgress,
   opts: IngestOptions = {},
   userId: string | null = null,
 ): Promise<{ document: Document; extra?: Document[]; deduped: boolean }> {
-  const existing = await db.document.findFirst({
-    where: { sourceUrl: url, ...UNEDITED },
-    orderBy: { createdAt: "asc" },
-  });
-  if (existing && existing.parserVersion >= PARSER_VERSION) return { document: existing, deduped: true };
-  if (existing && !(await heldByOtherAccount(existing.id, userId))) {
-    try {
-      const document = await reparseDocument(existing.id, onProgress, { deadline: opts.deadline, userId });
-      if (document) return { document, deduped: false };
-    } catch (err) {
-      if (!(err instanceof ImportEditedError)) throw err;
-    }
-  }
-  if (opts.split) {
-    const part = await db.document.findFirst({
-      where: { sourceUrl: { startsWith: `${url}${SPLIT_URL_MARKER}` }, ...UNEDITED },
-      orderBy: { createdAt: "asc" },
-    });
-    if (part) return { document: part, deduped: true };
-  }
-
   // A link to a PDF file adds the PDF itself: same parse, same judgment, same
-  // stored bytes as an upload, with the link kept for dedupe.
+  // stored bytes as an upload, with the link kept as its source.
   const fetched = await fetchPage(url, onProgress);
   if (fetched.kind === "pdf") {
     const { document, deduped } = await ingestPdf(

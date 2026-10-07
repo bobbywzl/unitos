@@ -1,3 +1,4 @@
+import { DuplicateDocumentError } from "@/lib/documents/duplicate-answer";
 import { serverT } from "@/lib/i18n/server";
 import { ndjsonHeartbeat, ndjsonWriter } from "@/lib/ndjson";
 import type { OnIngestProgress } from "@/lib/parse/ingest";
@@ -7,6 +8,8 @@ import type { OnIngestProgress } from "@/lib/parse/ingest";
 // on are reported in-band as a final {error} line instead of a status code — same tradeoff
 // the /api/derive text stream already makes. The terminal line is the run's result:
 // {id, title, deduped} for ingest, {review} for the upload assistant's review.
+// A repeat add learned of inside the stream (a Drive download) ends on
+// {error, duplicate}, the 409's body (lib/documents/duplicates.ts).
 // A heartbeat keeps the connection alive while a model pass reasons in
 // silence (lib/ndjson.ts).
 export function progressResponse<T extends Record<string, unknown>>(
@@ -21,7 +24,8 @@ export function progressResponse<T extends Record<string, unknown>>(
         send(result);
       } catch (err) {
         const t = await serverT();
-        send({ error: err instanceof Error ? err.message : t("common.requestFailed") });
+        if (err instanceof DuplicateDocumentError) send({ error: err.message, duplicate: { documents: err.documents } });
+        else send({ error: err instanceof Error ? err.message : t("common.requestFailed") });
       } finally {
         stopHeartbeat();
         controller.close();

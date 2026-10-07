@@ -5,18 +5,11 @@ import type { OnIngestProgress } from "@/lib/parse/ingest";
 
 // A YouTube link becomes a video document (SPEC.md §11): Document + VIDEO
 // block + VideoAsset kind YOUTUBE. No bytes are stored — the video plays
-// through the IFrame player. Dedupe by youtubeId: re-adding attaches the
-// existing document. oEmbed supplies the title and proves the video exists.
+// through the IFrame player. Every add makes a new document, the same video
+// added again too (the add route asks first, lib/documents/duplicates.ts).
+// oEmbed supplies the title and proves the video exists. `deduped` stays,
+// always false, so the route's answer keeps its shape.
 export async function ingestYouTube(youtubeId: string, onProgress?: OnIngestProgress) {
-  const existing = await db.videoAsset.findUnique({
-    where: { youtubeId },
-    select: { documentId: true },
-  });
-  if (existing) {
-    const document = await db.document.findUniqueOrThrow({ where: { id: existing.documentId } });
-    return { document, deduped: true };
-  }
-
   onProgress?.("fetch");
   const title = await fetchYouTubeTitle(youtubeId);
   onProgress?.("save");
