@@ -134,12 +134,13 @@ async function add(notebookId, what) {
     res = await fetch(`${BASE}/api/documents`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ url: what.url, notebookId }),
+      body: JSON.stringify({ url: what.url, notebookId, ...(what.confirmDuplicate ? { confirmDuplicate: true } : {}) }),
     });
   } else {
     const form = new FormData();
     form.set("notebookId", notebookId);
     form.set("file", new File([what.bytes], what.name, { type: what.type ?? "application/octet-stream" }));
+    if (what.confirmDuplicate) form.set("confirmDuplicate", "1");
     res = await fetch(`${BASE}/api/documents`, { method: "POST", body: form });
   }
   const text = await res.text();
@@ -1836,7 +1837,7 @@ RISKS.R8 = async (theme) => {
 };
 
 // R9: an import another account's project holds is not editable here, the
-// server refuses the save, and dedupe never hands out an edited import.
+// server refuses the save, and an add never hands out a stored import.
 RISKS.R9 = async (theme) => {
   const added = await fresh("pdf", `-r9${theme[0]}`);
   const other = await db.notebook.create({ data: { title: `QA other account ${tagged()}`, userId: "qa-other-account", sections: { create: { title: "Notes", order: 0 } } } });
@@ -1872,15 +1873,18 @@ RISKS.R9 = async (theme) => {
     check("R9", patch.status === 403, "a server-side edit (the block route) refuses a shared import with 403", `HTTP ${patch.status}`);
     const suggest = await api(`/api/documents/${added.id}/suggest`, "POST", { notebookId: ctx.notebookId, command: "Shorten this paragraph.", blockIds: [block.id] });
     check("R9", suggest.status === 403, "the assistant's suggest route refuses a shared import with 403", `HTTP ${suggest.status} ${clip(JSON.stringify(suggest.body), 100)}`);
-    // Dedupe: an edited import is never handed to another add.
+    // Every add is its own document (SPEC.md §15): the same PDF again asks
+    // first, and each confirmed add is a new, unedited import.
     const solo = await fresh("pdf", "-r9dedupe");
     const soloRow = await documentRow(solo.id);
     await api(`/api/documents/${solo.id}/rich-text`, "PUT", { richText: { ...soloRow.richText, content: [...soloRow.richText.content, { type: "paragraph", attrs: { blockId: `qa${tagged("edit")}` }, content: [{ type: "text", text: "An edit by another reader." }] }] }, rev: soloRow.richTextRev });
-    const second = await add(ctx.notebookId, { bytes: stamped(ctx.bytes.attention, tagged("-r9dedupe")), name: "attention-again.pdf", type: "application/pdf" });
+    const asked = await add(ctx.notebookId, { bytes: stamped(ctx.bytes.attention, tagged("-r9dedupe")), name: "attention-again.pdf", type: "application/pdf" });
+    check("R9", !asked.id && asked.duplicate?.documents?.some((d) => d.id === solo.id), "the same PDF added again asks first and adds nothing", `${clip(JSON.stringify(asked.duplicate ?? asked.error), 120)}`);
+    const second = await add(ctx.notebookId, { bytes: stamped(ctx.bytes.attention, tagged("-r9dedupe")), name: "attention-again.pdf", type: "application/pdf", confirmDuplicate: true });
     const secondRow = second.id ? await documentRow(second.id) : null;
-    check("R9", second.id && second.id !== solo.id && secondRow?.importRev === secondRow?.richTextRev, "the same PDF added after an edit gives an unedited import", `first ${solo.id}, second ${second.id} (deduped ${second.deduped}), second rev ${secondRow?.richTextRev}/${secondRow?.importRev}`);
-    const unedited = await add(ctx.notebookId, { bytes: stamped(ctx.bytes.attention, tagged("-r9dedupe")), name: "attention-third.pdf", type: "application/pdf" });
-    check("R9", unedited.id === second.id && unedited.deduped === true, "an unedited import is handed out again", `third ${unedited.id} deduped ${unedited.deduped}`);
+    check("R9", second.id && second.id !== solo.id && secondRow?.importRev === secondRow?.richTextRev, "the same PDF added again, confirmed, gives a new unedited import", `first ${solo.id}, second ${second.id}, second rev ${secondRow?.richTextRev}/${secondRow?.importRev}`);
+    const third = await add(ctx.notebookId, { bytes: stamped(ctx.bytes.attention, tagged("-r9dedupe")), name: "attention-third.pdf", type: "application/pdf", confirmDuplicate: true });
+    check("R9", third.id && third.id !== second.id && third.id !== solo.id, "an unedited import is never handed out again", `third ${third.id}`);
   }
   // The assistant offers no edit commands on the shared import (C2).
   await selectWords(page, "attention").catch(() => {});
