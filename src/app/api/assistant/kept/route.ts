@@ -51,6 +51,9 @@ export async function GET(req: Request) {
   return NextResponse.json({
     turns: turns.success ? turns.data : [],
     updatedAt: row?.updatedAt.toISOString() ?? null,
+    // Whose conversation this is: the browser keeps an unsaved copy under it,
+    // so another account signed in on the same browser never adopts it.
+    account: access.user.id,
   });
 }
 

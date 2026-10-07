@@ -38,6 +38,8 @@ type Entry = {
   retry: number;
   // The running answer, so Stop works from a surface opened again.
   abort: AbortController | null;
+  // The signed-in account the server answered for; null until it answers.
+  account: string | null;
 };
 
 const LOCAL_PREFIX = "unitos-kept-chat:";
@@ -50,7 +52,14 @@ const EMPTY: State<KeptTurn> = { turns: [], hydrated: false, busy: false };
 
 const keyOf = (notebookId: string, place: string) => `${notebookId}|${place}`;
 
-type LocalCopy = { turns: KeptTurn[]; at: number };
+// The account that wrote a local copy rides with it: another account
+// signed in on this browser never adopts it. A copy whose account is not the
+// one signed in is parked under that account's own name, so it saves when
+// that account comes back. A copy written before the server answered has no
+// account: it was typed in this page, by the account signed in now.
+type LocalCopy = { turns: KeptTurn[]; at: number; account?: string };
+
+const parkedKey = (account: string, key: string) => `${account}|${key}`;
 
 function readLocal(key: string): LocalCopy | null {
   try {
@@ -63,9 +72,10 @@ function readLocal(key: string): LocalCopy | null {
   }
 }
 
-function writeLocal(key: string, turns: KeptTurn[]) {
+function writeLocal(key: string, turns: KeptTurn[], account: string | null, at = Date.now()) {
   try {
-    localStorage.setItem(LOCAL_PREFIX + key, JSON.stringify({ turns, at: Date.now() }));
+    const copy: LocalCopy = { turns, at, ...(account ? { account } : {}) };
+    localStorage.setItem(LOCAL_PREFIX + key, JSON.stringify(copy));
   } catch {
     // A full or blocked store: the server save still runs.
   }
@@ -138,7 +148,7 @@ function schedule(entry: Entry, delay = SAVE_DELAY_MS) {
 
 function change(entry: Entry, turns: KeptTurn[]) {
   entry.version += 1;
-  writeLocal(keyOf(entry.notebookId, entry.place), turns);
+  writeLocal(keyOf(entry.notebookId, entry.place), turns, entry.account);
   setState(entry, { turns });
   // Before the server copy is read, a save would overwrite it: hydrate()
   // saves once it has decided which copy wins.
@@ -147,13 +157,33 @@ function change(entry: Entry, turns: KeptTurn[]) {
 
 async function hydrate(entry: Entry) {
   const key = keyOf(entry.notebookId, entry.place);
-  const local = readLocal(key);
-  if (local) setState(entry, { turns: local.turns });
+  let local = readLocal(key);
   try {
     const params = new URLSearchParams({ notebookId: entry.notebookId, place: entry.place });
     const res = await fetch(`/api/assistant/kept?${params}`);
-    const json = (await res.json().catch(() => null)) as { turns?: KeptTurn[]; updatedAt?: string | null } | null;
-    if (!res.ok || !json) throw new Error(String(res.status));
+    const json = (await res.json().catch(() => null)) as {
+      turns?: KeptTurn[];
+      updatedAt?: string | null;
+      account?: string;
+    } | null;
+    if (!res.ok || !json?.account) throw new Error(String(res.status));
+    const account = json.account;
+    entry.account = account;
+    // Another account's copy is parked under its name; this account's
+    // parked copy, if any, takes its place.
+    if (local?.account && local.account !== account) {
+      writeLocal(parkedKey(local.account, key), local.turns, local.account, local.at);
+      dropLocal(key);
+      local = null;
+    }
+    const parked = readLocal(parkedKey(account, key));
+    if (parked) {
+      dropLocal(parkedKey(account, key));
+      if (!local || parked.at > local.at) local = parked;
+    }
+    // Every local copy from here on names this account.
+    if (local) writeLocal(key, local.turns, account, local.at);
+    if (local && entry.version === 0) setState(entry, { turns: local.turns });
     const server = json.turns ?? [];
     const serverAt = json.updatedAt ? Date.parse(json.updatedAt) : 0;
     const changedHere = entry.version > 0;
@@ -169,10 +199,12 @@ async function hydrate(entry: Entry) {
       setState(entry, { turns: server, hydrated: true });
     }
   } catch {
-    // Offline or refused: what this browser holds stands; a later change
-    // saves it.
+    // Offline or refused: what this browser holds stands, shown only when it
+    // is not another account's; a later change saves it.
+    const mine = local && !local.account;
+    if (mine && entry.version === 0) setState(entry, { turns: local!.turns });
     setState(entry, { hydrated: true });
-    if (entry.version > 0 || local) schedule(entry, 2000);
+    if (entry.version > 0 || mine) schedule(entry, 2000);
   }
 }
 
@@ -190,6 +222,7 @@ function entryFor(notebookId: string, place: string): Entry {
       timer: null,
       retry: 0,
       abort: null,
+      account: null,
     };
     entries.set(key, entry);
     if (typeof window !== "undefined") void hydrate(entry);

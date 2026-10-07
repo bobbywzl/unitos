@@ -25,6 +25,7 @@ page.on("dialog", (d) => void d.accept());
 const settle = (ms = 1200) => page.waitForTimeout(ms);
 
 try {
+  await otherAccount();
   await media();
   await askRange();
   await stitch();
@@ -205,4 +206,23 @@ async function sidePanel() {
   await settle(2000);
   check("side assistant: a question sent just before a reload is kept", (await page.locator('[data-track-surface="tray"]').innerText()).includes("Kept question about the default payments"));
   await page.screenshot({ path: `${SHOT}/side-after-reload.png` });
+}
+
+// An unsaved copy another account left on this browser is never shown or
+// saved as this account's: it is parked under that account's name.
+async function otherAccount() {
+  const key = `unitos-kept-chat:${NB}|media:${AUDIO}`;
+  await page.goto(`${base}/n/${NB}`, { waitUntil: "networkidle" });
+  await page.evaluate(
+    (k) => localStorage.setItem(k, JSON.stringify({ turns: [{ role: "user", content: "Another account's question" }], at: Date.now(), account: "someone-else" })),
+    key,
+  );
+  await page.goto(`${base}/n/${NB}?doc=${AUDIO}`, { waitUntil: "networkidle" });
+  await page.locator('button[data-track="video-assistant"]').click();
+  await settle(2000);
+  const shown = await page.locator('button[data-track="video-assistant-close"]').locator("xpath=ancestor::div[contains(@class,'shadow-float')][1]").innerText();
+  check("account: another account's unsaved copy is not shown", !shown.includes("Another account's question"));
+  const parked = await page.evaluate((k) => localStorage.getItem(`unitos-kept-chat:someone-else|${k.slice("unitos-kept-chat:".length)}`), key);
+  check("account: it is parked under that account", Boolean(parked && parked.includes("Another account's question")));
+  await page.locator('button[data-track="video-assistant-close"]').click();
 }
