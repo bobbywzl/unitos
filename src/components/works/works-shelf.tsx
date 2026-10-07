@@ -141,32 +141,35 @@ export function WorksShelf({
 
   return (
     <>
-      <h1 className="mb-7 text-[34px] sm:text-[46px]">{t("works.corpora")}</h1>
+      {/* Projects, and New project at the right of the heading: one row. */}
+      <div className="mb-6 flex items-center justify-between gap-4 sm:mb-8">
+        <h1 className="min-w-0 text-[34px] sm:text-[46px]">{t("works.corpora")}</h1>
 
-      <button
-        onClick={() => void create()}
-        disabled={busy}
-        data-track="new-project"
-        data-nudge="project"
-        className="mb-11 flex items-center gap-2.5 rounded-full bg-clay px-7 py-3.5 text-[15px] font-semibold text-clay-fg shadow-soft hover:bg-clay-600 disabled:opacity-40"
-      >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.75"
-          strokeLinecap="round"
-          strokeLinejoin="round"
+        <button
+          onClick={() => void create()}
+          disabled={busy}
+          data-track="new-project"
+          data-nudge="project"
+          className="flex shrink-0 items-center gap-2 rounded-full bg-clay px-5 py-2.5 text-[14px] font-semibold text-clay-fg shadow-soft hover:bg-clay-600 disabled:opacity-40 sm:gap-2.5 sm:px-7 sm:py-3.5 sm:text-[15px]"
         >
-          <path d="M5 12h14" />
-          <path d="M12 5v14" />
-        </svg>
-        {busy ? t("common.working") : t("works.newWork")}
-      </button>
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.75"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M5 12h14" />
+            <path d="M12 5v14" />
+          </svg>
+          {busy ? t("common.working") : t("works.newWork")}
+        </button>
+      </div>
 
-      <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <ul className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4">
         {works.map((work) => (
           <WorkCard
             key={work.id}
@@ -181,7 +184,7 @@ export function WorksShelf({
       {sharedWorks.length > 0 && (
         <>
           <h2 className="mt-16 mb-7 text-[28px]">{t("works.sharedWithYou")}</h2>
-          <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <ul className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4">
             {sharedWorks.map((work) => (
               <WorkCard
                 key={work.id}
