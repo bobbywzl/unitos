@@ -63,7 +63,7 @@ export function AskRange({
   const [startTime, setStartTime] = useState(formatTime(defaultStart));
   const [endTime, setEndTime] = useState(formatTime(defaultEnd));
   const [question, setQuestion] = useState("");
-  const kept = useKeptChat<AskTurn>(notebookId, `ask:${documentId}`);
+  const kept = useKeptChat<AskTurn>(notebookId, `ask:${documentId}`, "replace");
   const busy = kept.busy;
   const answer = answerOf(kept.turns);
   const saved = answer?.saved === true;

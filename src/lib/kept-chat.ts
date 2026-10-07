@@ -14,8 +14,16 @@ import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 // opens again. Every change is written to localStorage at once and to the
 // server (PUT /api/assistant/kept) a moment later; the local copy is cleared
 // when the server confirms it, so a lost connection, a reload, or a closed
-// tab never loses a turn. A clear is a change like any other: an empty
-// conversation deletes the row.
+// tab never loses a turn.
+//
+// A save names the server copy it was built on (`base`, the row's
+// updatedAt; null = no row read). When the row changed since — another tab,
+// another device, or a load that failed — the server refuses (409), and the
+// store reads the server copy and puts its own new turns after it: the turns
+// past `baseCount`, the count the base held. So no save ever writes over turns
+// it never saw. A surface whose conversation is one exchange that a new one
+// replaces (Ask about a range) merges by replacing instead. Clear deletes the
+// row whatever its base: it is the reader's explicit word.
 
 export type KeptTurn = {
   role: "user" | "assistant";
@@ -24,11 +32,15 @@ export type KeptTurn = {
   data?: Record<string, unknown>;
 };
 
+/** append: new turns go after the server's; replace: the newest exchange wins. */
+export type KeptMode = "append" | "replace";
+
 type State<T extends KeptTurn> = { turns: T[]; hydrated: boolean; busy: boolean };
 
 type Entry = {
   notebookId: string;
   place: string;
+  mode: KeptMode;
   state: State<KeptTurn>;
   listeners: Set<() => void>;
   // The local change count and the count the server last confirmed.
@@ -40,11 +52,14 @@ type Entry = {
   abort: AbortController | null;
   // The signed-in account the server answered for; null until it answers.
   account: string | null;
+  // The server copy the turns were built on, and how many turns it held.
+  base: string | null;
+  baseCount: number;
 };
 
 const LOCAL_PREFIX = "unitos-kept-chat:";
 const SAVE_DELAY_MS = 400;
-const TURNS_MAX = 200;
+const TURNS_MAX = 2000;
 const TURN_MAX_CHARS = 60_000;
 
 const entries = new Map<string, Entry>();
@@ -63,7 +78,14 @@ const keyOf = (notebookId: string, place: string) => `${notebookId}|${place}`;
 const PAGE_START = Date.now();
 const UNKNOWN_ACCOUNT = "unknown";
 
-type LocalCopy = { turns: KeptTurn[]; at: number; account?: string };
+type LocalCopy = {
+  turns: KeptTurn[];
+  at: number;
+  account?: string;
+  // The server copy the turns were built on (see Entry).
+  base?: string | null;
+  baseCount?: number;
+};
 
 const parkedKey = (account: string, key: string) => `${account}|${key}`;
 
@@ -78,13 +100,23 @@ function readLocal(key: string): LocalCopy | null {
   }
 }
 
-function writeLocal(key: string, turns: KeptTurn[], account: string | null, at = Date.now()) {
+function putLocal(key: string, copy: LocalCopy) {
   try {
-    const copy: LocalCopy = { turns, at, ...(account ? { account } : {}) };
     localStorage.setItem(LOCAL_PREFIX + key, JSON.stringify(copy));
   } catch {
     // A full or blocked store: the server save still runs.
   }
+}
+
+/** The entry's turns as its local copy, with the base they were built on. */
+function writeLocal(entry: Entry) {
+  putLocal(keyOf(entry.notebookId, entry.place), {
+    turns: entry.state.turns,
+    at: Date.now(),
+    ...(entry.account ? { account: entry.account } : {}),
+    base: entry.base,
+    baseCount: entry.baseCount,
+  });
 }
 
 function dropLocal(key: string) {
@@ -104,13 +136,39 @@ function setState(entry: Entry, next: Partial<State<KeptTurn>>) {
   emit(entry);
 }
 
-/** The turns as the server takes them: the newest TURNS_MAX, each cut. */
+/** The turns as the server takes them, each cut to the route's limit. */
 function wire(turns: KeptTurn[]): KeptTurn[] {
-  return turns.slice(-TURNS_MAX).map((turn) => ({
+  return turns.map((turn) => ({
     role: turn.role,
     content: turn.content.slice(0, TURN_MAX_CHARS),
     ...(turn.data ? { data: JSON.parse(JSON.stringify(turn.data)) as Record<string, unknown> } : {}),
   }));
+}
+
+/** This browser's turns put on the server's: what neither copy may lose. */
+function merge(mode: KeptMode, server: KeptTurn[], local: KeptTurn[], baseCount: number): KeptTurn[] {
+  if (mode === "replace") return local.length > 0 ? local : server;
+  return [...server, ...local.slice(Math.min(baseCount, local.length))];
+}
+
+type ServerCopy = { turns: KeptTurn[]; updatedAt: string | null; account: string };
+
+async function readServer(entry: Entry): Promise<ServerCopy> {
+  const params = new URLSearchParams({ notebookId: entry.notebookId, place: entry.place });
+  const res = await fetch(`/api/assistant/kept?${params}`);
+  const json = (await res.json().catch(() => null)) as Partial<ServerCopy> | null;
+  if (!res.ok || !json?.account) throw new Error(String(res.status));
+  return { turns: json.turns ?? [], updatedAt: json.updatedAt ?? null, account: json.account };
+}
+
+/** The server refused a save: read its copy and put this browser's new turns after it. */
+async function resync(entry: Entry) {
+  const server = await readServer(entry);
+  const turns = merge(entry.mode, server.turns, entry.state.turns, entry.baseCount);
+  entry.base = server.updatedAt;
+  entry.baseCount = server.turns.length;
+  setState(entry, { turns });
+  writeLocal(entry);
 }
 
 async function save(entry: Entry) {
@@ -119,6 +177,7 @@ async function save(entry: Entry) {
   const turns = entry.state.turns;
   const key = keyOf(entry.notebookId, entry.place);
   try {
+    if (turns.length > TURNS_MAX) throw new Error("too long");
     const res =
       turns.length === 0
         ? await fetch("/api/assistant/kept", {
@@ -129,14 +188,30 @@ async function save(entry: Entry) {
         : await fetch("/api/assistant/kept", {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ notebookId: entry.notebookId, place: entry.place, turns: wire(turns) }),
+            body: JSON.stringify({
+              notebookId: entry.notebookId,
+              place: entry.place,
+              base: entry.base,
+              turns: wire(turns),
+            }),
           });
+    if (res.status === 409) {
+      // The row changed since this browser read it: merge, then save again.
+      await resync(entry);
+      entry.retry = Math.min(entry.retry + 1, 6);
+      schedule(entry, entry.retry > 2 ? 1000 * 2 ** entry.retry : 0);
+      return;
+    }
     // Refused for good (no access, signed out, a body the route refuses):
     // the local copy stays, so nothing is lost; the next change tries again.
     if (!res.ok) throw new Error(String(res.status));
+    const json = (await res.json().catch(() => null)) as { updatedAt?: string | null } | null;
+    entry.base = turns.length === 0 ? null : (json?.updatedAt ?? null);
+    entry.baseCount = turns.length;
     entry.confirmed = Math.max(entry.confirmed, version);
     entry.retry = 0;
     if (entry.version === version) dropLocal(key);
+    else writeLocal(entry);
   } catch {
     // Offline: the local copy holds the turns; try again with a backoff,
     // and at once when the browser is back online.
@@ -154,8 +229,8 @@ function schedule(entry: Entry, delay = SAVE_DELAY_MS) {
 
 function change(entry: Entry, turns: KeptTurn[]) {
   entry.version += 1;
-  writeLocal(keyOf(entry.notebookId, entry.place), turns, entry.account);
   setState(entry, { turns });
+  writeLocal(entry);
   // Before the server copy is read, a save would overwrite it: hydrate()
   // saves once it has decided which copy wins.
   if (entry.state.hydrated) schedule(entry);
@@ -165,21 +240,14 @@ async function hydrate(entry: Entry) {
   const key = keyOf(entry.notebookId, entry.place);
   let local = readLocal(key);
   try {
-    const params = new URLSearchParams({ notebookId: entry.notebookId, place: entry.place });
-    const res = await fetch(`/api/assistant/kept?${params}`);
-    const json = (await res.json().catch(() => null)) as {
-      turns?: KeptTurn[];
-      updatedAt?: string | null;
-      account?: string;
-    } | null;
-    if (!res.ok || !json?.account) throw new Error(String(res.status));
-    const account = json.account;
+    const server = await readServer(entry);
+    const account = server.account;
     entry.account = account;
     // Another account's copy is parked under its name; this account's
     // parked copy, if any, takes its place.
     const owner = local ? (local.account ?? (local.at < PAGE_START ? UNKNOWN_ACCOUNT : account)) : null;
     if (local && owner !== account) {
-      writeLocal(parkedKey(owner!, key), local.turns, owner, local.at);
+      putLocal(parkedKey(owner!, key), local);
       dropLocal(key);
       local = null;
     }
@@ -188,40 +256,50 @@ async function hydrate(entry: Entry) {
       dropLocal(parkedKey(account, key));
       if (!local || parked.at > local.at) local = parked;
     }
-    // Every local copy from here on names this account.
-    if (local) writeLocal(key, local.turns, account, local.at);
-    if (local && entry.version === 0) setState(entry, { turns: local.turns });
-    const server = json.turns ?? [];
-    const serverAt = json.updatedAt ? Date.parse(json.updatedAt) : 0;
+    // What this browser holds that the server never confirmed, merged onto
+    // the server's copy: turns typed in this page before the load answered
+    // (built on nothing), else the local copy (built on its own base).
     const changedHere = entry.version > 0;
-    // A local copy is a change the server never confirmed: it wins unless the
-    // server's copy changed after it (another device, later).
-    const localWins = changedHere || (local !== null && local.at >= serverAt);
-    if (localWins) {
-      entry.state = { ...entry.state, hydrated: true };
-      emit(entry);
-      if (changedHere || local) schedule(entry, 0);
-    } else {
-      if (local) dropLocal(key);
-      setState(entry, { turns: server, hydrated: true });
+    let turns = server.turns;
+    if (changedHere) {
+      turns = merge(entry.mode, server.turns, entry.state.turns, entry.baseCount);
+    } else if (local) {
+      turns =
+        local.base !== undefined && local.base === server.updatedAt
+          ? local.turns
+          : merge(entry.mode, server.turns, local.turns, local.baseCount ?? 0);
+    }
+    entry.base = server.updatedAt;
+    entry.baseCount = server.turns.length;
+    setState(entry, { turns, hydrated: true });
+    if (changedHere || local) {
+      writeLocal(entry);
+      schedule(entry, 0);
     }
   } catch {
     // Offline or refused: what this browser holds stands, shown only when it
-    // is not another account's; a later change saves it.
-    const mine = local && !local.account && local.at >= PAGE_START;
-    if (mine && entry.version === 0) setState(entry, { turns: local!.turns });
+    // is not another account's, with the base it was built on, so the save
+    // that follows merges with the server's copy instead of replacing it.
+    const mine = local && local.account === undefined && local.at >= PAGE_START ? local : null;
+    const own = local && local.account !== undefined ? local : mine;
+    if (own && entry.version === 0) {
+      entry.base = own.base ?? null;
+      entry.baseCount = own.baseCount ?? 0;
+      setState(entry, { turns: own.turns });
+    }
     setState(entry, { hydrated: true });
-    if (entry.version > 0 || mine) schedule(entry, 2000);
+    if (entry.version > 0 || own) schedule(entry, 2000);
   }
 }
 
-function entryFor(notebookId: string, place: string): Entry {
+function entryFor(notebookId: string, place: string, mode: KeptMode): Entry {
   const key = keyOf(notebookId, place);
   let entry = entries.get(key);
   if (!entry) {
     entry = {
       notebookId,
       place,
+      mode,
       state: EMPTY,
       listeners: new Set(),
       version: 0,
@@ -230,6 +308,8 @@ function entryFor(notebookId: string, place: string): Entry {
       retry: 0,
       abort: null,
       account: null,
+      base: null,
+      baseCount: 0,
     };
     entries.set(key, entry);
     if (typeof window !== "undefined") void hydrate(entry);
@@ -277,10 +357,14 @@ const noop = () => () => {};
  * helpers keep working after the surface closes, so an answer that lands
  * late still lands. Null ids: nothing is kept (no project at hand).
  */
-export function useKeptChat<T extends KeptTurn>(notebookId: string | null, place: string | null) {
+export function useKeptChat<T extends KeptTurn>(
+  notebookId: string | null,
+  place: string | null,
+  mode: KeptMode = "append",
+) {
   const entry = useMemo(
-    () => (notebookId && place && typeof window !== "undefined" ? entryFor(notebookId, place) : null),
-    [notebookId, place],
+    () => (notebookId && place && typeof window !== "undefined" ? entryFor(notebookId, place, mode) : null),
+    [notebookId, place, mode],
   );
   const subscribe = useCallback(
     (listener: () => void) => {
@@ -352,4 +436,16 @@ export function useChatDraft(key: string | null, set: (text: string) => void) {
     // set is a state setter; the key alone decides.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
+}
+
+/** The store at one place without React, for scripts and checks
+    (scripts/qa/kept-chat-check.mts). */
+export function keptStore(notebookId: string, place: string, mode: KeptMode = "append") {
+  const entry = entryFor(notebookId, place, mode);
+  return {
+    turns: () => entry.state.turns,
+    hydrated: () => entry.state.hydrated,
+    setTurns: (update: (turns: KeptTurn[]) => KeptTurn[]) => change(entry, update(entry.state.turns)),
+    clear: () => clearEntry(entry),
+  };
 }

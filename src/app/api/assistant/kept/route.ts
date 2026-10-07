@@ -8,15 +8,19 @@ import { parseBody } from "@/lib/validate";
 
 // Kept conversations (SPEC.md §21, lib/kept-chat.ts): the turns of an
 // assistant surface that keeps no note of its own, one row per account per
-// project per place. GET reads the account's row, PUT replaces its turns,
-// DELETE removes it — the one way a kept conversation goes (Clear
+// project per place. GET reads the account's row, PUT replaces its turns
+// when the row is still the one the browser built on (`base`, the row's
+// updatedAt as GET or the last PUT answered; null = no row) and answers 409
+// when it changed since — another tab, another device — so the browser merges
+// instead of writing over turns it never saw (lib/kept-chat.ts). DELETE
+// removes the row — the one way a kept conversation goes (Clear
 // conversation). Viewer access: a conversation is the account's own, not the
 // project's, so a viewer keeps theirs too; no rev moves, nothing lands in the
 // history, and no other account ever reads the row.
 
 const PLACE = z.string().min(1).max(200).regex(/^[a-z]+(:[A-Za-z0-9_-]+)?$/);
 const TURN_MAX_CHARS = 60_000;
-const TURNS_MAX = 200;
+const TURNS_MAX = 2000;
 
 const turnSchema = z.object({
   role: z.enum(["user", "assistant"]),
@@ -29,6 +33,8 @@ const turnSchema = z.object({
 const putSchema = z.object({
   notebookId: z.string().min(1),
   place: PLACE,
+  // The row the turns were built on: its updatedAt, or null for no row.
+  base: z.iso.datetime().nullable(),
   turns: z.array(turnSchema).max(TURNS_MAX),
 });
 
@@ -63,15 +69,27 @@ export async function PUT(req: Request) {
   const access = await notebookAccess(data.notebookId, "viewer");
   if (access instanceof NextResponse) return access;
   const turns = data.turns as Prisma.InputJsonValue;
-  const row = await db.keptChat.upsert({
-    where: {
-      userId_notebookId_place: { userId: access.user.id, notebookId: data.notebookId, place: data.place },
-    },
-    create: { userId: access.user.id, notebookId: data.notebookId, place: data.place, turns },
-    update: { turns },
-    select: { updatedAt: true },
+  const key = { userId: access.user.id, notebookId: data.notebookId, place: data.place };
+  const changed = () => NextResponse.json({ error: "changed" }, { status: 409 });
+  if (data.base === null) {
+    // No row read: create it; a row that exists already is one the browser never saw.
+    try {
+      const row = await db.keptChat.create({ data: { ...key, turns }, select: { updatedAt: true } });
+      return NextResponse.json({ ok: true, updatedAt: row.updatedAt.toISOString() });
+    } catch (err) {
+      if ((err as { code?: string }).code === "P2002") return changed();
+      throw err;
+    }
+  }
+  // The stamp is set here, later than the base, so it names this write alone.
+  const base = new Date(data.base);
+  const stamp = new Date(Math.max(Date.now(), base.getTime() + 1));
+  const updated = await db.keptChat.updateMany({
+    where: { ...key, updatedAt: base },
+    data: { turns, updatedAt: stamp },
   });
-  return NextResponse.json({ ok: true, updatedAt: row.updatedAt.toISOString() });
+  if (updated.count === 0) return changed();
+  return NextResponse.json({ ok: true, updatedAt: stamp.toISOString() });
 }
 
 export async function DELETE(req: Request) {
