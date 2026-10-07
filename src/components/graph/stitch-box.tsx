@@ -384,6 +384,7 @@ export function StitchBox({
       {passage && (
         <StitchPassageCard
           citation={passage.citation}
+          blockId={passage.blockId}
           onOpenInReader={() => openBlock(passage.citation.documentId, passage.blockId)}
           onClose={() => setPassage(null)}
         />
