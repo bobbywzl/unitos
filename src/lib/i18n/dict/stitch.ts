@@ -57,6 +57,9 @@ const en = {
   stitchLinksMadeN: "{n} links proposed. Accept them under Recommended links.",
   stitchLinksReviewed1: "{n} link proposed, and reviewed.",
   stitchLinksReviewedN: "{n} links proposed, and reviewed.",
+  // Under the reply when links it proposed were already in the graph (ANS4-01).
+  stitchLinksExisting1: "{n} of the links proposed was already in the graph, so it was not added again.",
+  stitchLinksExistingN: "{n} of the links proposed were already in the graph, so they were not added again.",
   stitchReviewLinks: "Review",
   stitchReviewLinksTitle: "Open Recommended links",
   stitchDocumentMade: "Page written: {title}",
@@ -138,6 +141,8 @@ const zh: Record<keyof typeof en, string> = {
   stitchSuggestSynthesisTemplate: "写一个页面，综合它们关于{topic}的说法",
   stitchLinksMade1: "已提出 {n} 条链接。请在推荐链接中接受。",
   stitchLinksMadeN: "已提出 {n} 条链接。请在推荐链接中接受。",
+  stitchLinksExisting1: "提出的链接中有 {n} 条已在图谱中，没有重复添加。",
+  stitchLinksExistingN: "提出的链接中有 {n} 条已在图谱中，没有重复添加。",
   stitchLinksReviewed1: "已提出 {n} 条链接，已处理。",
   stitchLinksReviewedN: "已提出 {n} 条链接，已处理。",
   stitchReviewLinks: "查看",

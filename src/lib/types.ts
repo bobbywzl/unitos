@@ -370,6 +370,22 @@ export type StitchResult = {
   // The ids of the recommended links this run made, for the graph to light
   // in place (SPEC.md §22). Absent on a result stored before it existed.
   linkIds?: string[];
+  // Links the answer proposed that were already in the graph (the same two
+  // blocks, an overlapping end), not stored again; the reply says so.
+  linksExisting?: number;
+  // What this answer stored, for the next command's history (ANS4-02): the
+  // box sends it back with the reply as the turn's record.
+  record?: StitchRecord;
+};
+
+/** What one Stitch answer stored, as the box sends it back with the turn
+    (the route's history `record`): each link's id and its two ends'
+    document titles, in the order the answer proposed them, and the
+    generated document. The route reads the links and the page again by id
+    inside the project; the titles name a link that is gone. */
+export type StitchRecord = {
+  links: { id: string; from: string; to: string }[];
+  document: { id: string; title: string } | null;
 };
 
 /** What a Stitch command asks for (lib/graph/stitch.ts commandKind): an
