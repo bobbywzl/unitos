@@ -1,6 +1,7 @@
 "use client";
 
 import { ACCOUNT_HEADER } from "@/lib/constants";
+import { duplicateOf, type DuplicateMatch } from "@/lib/documents/duplicate-answer";
 import { openDb, tx, UPLOADS, WRITES } from "@/lib/offline/db";
 import { tabAccount } from "@/lib/tab-account";
 import { MEDIA_EXTENSIONS, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
@@ -20,7 +21,12 @@ import { MEDIA_EXTENSIONS, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 // lands its words without the source (replayBody), and words written to a
 // note deleted meanwhile land in a new note (lib/notes/gone.ts). While
 // records wait and the browser says online, a write that did not reach the
-// server runs again after a growing wait (retryLater).
+// server runs again after a growing wait (retryLater). A queued add of a
+// file or a link the account already has comes back 409 `duplicate`
+// (SPEC.md §15): it is never dropped. It stays queued, held with the
+// documents the answer named, the drain passes over it, and the reader is
+// asked on the next page (QueueSync): Add again sends it once more,
+// confirmed; Open the one I have and Cancel take it out.
 
 const PREMIUM_KEY = "unitos-premium";
 const SINGLE_REQUEST_BYTES = 4 * 1024 * 1024;
@@ -28,6 +34,8 @@ const MAX_ATTEMPTS = 5;
 const SYNC_LOCK = "unitos-offline-sync";
 /** Fired on window when a drain sent at least one record. */
 export const QUEUE_SYNCED_EVENT = "unitos:queue-synced";
+/** Fired on window when a drain held a queued add for the reader's word. */
+export const QUEUE_HELD_EVENT = "unitos:queue-held";
 /** Fired on window when a note write's quote landed without its source: the
     anchor no longer resolves (detail: { noteId }). */
 export const SOURCE_LOST_EVENT = "unitos:source-lost";
@@ -49,6 +57,8 @@ export type QueuedWrite = {
   queuedAt: number;
   // Tries that met a 5xx.
   attempts?: number;
+  // A repeat add waiting for the reader's word: the documents the 409 named.
+  held?: DuplicateMatch[];
 };
 
 export type QueuedUpload = {
@@ -59,6 +69,9 @@ export type QueuedUpload = {
   account: string | null;
   queuedAt: number;
   attempts?: number;
+  // A repeat add waiting for the reader's word, and the reader's Add again.
+  held?: DuplicateMatch[];
+  confirmDuplicate?: boolean;
 };
 
 // The last known premium state, mirrored to localStorage by the offline
@@ -171,8 +184,15 @@ function headers(account: string | null, json: boolean): Record<string, string> 
 
 // One drained record's outcome: "done" leaves the queue (sent, or stale on a
 // 4xx), "wait" stops the drain and keeps it (no network, or a 401), "retry"
-// stops the drain and counts a 5xx against it.
-type Sent = "done" | "wait" | "retry";
+// stops the drain and counts a 5xx against it, `held` keeps it for the
+// reader's word on a repeat add and the drain goes on.
+type Sent = "done" | "wait" | "retry" | { held: DuplicateMatch[] };
+
+/** A 409 that names a repeat add: the documents it names. */
+async function heldBy(res: Response): Promise<DuplicateMatch[] | null> {
+  if (res.status !== 409) return null;
+  return duplicateOf(await res.clone().json().catch(() => null));
+}
 
 function outcome(res: Response, record: QueuedWrite | QueuedUpload, label: string): Sent {
   if (res.ok) return "done";
@@ -221,6 +241,8 @@ async function sendWrite(record: QueuedWrite): Promise<Sent> {
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
     if (res.ok) await announce(record, res);
+    const held = await heldBy(res);
+    if (held) return { held };
     return outcome(res, record, record.path);
   } catch {
     return "wait";
@@ -246,11 +268,14 @@ async function sendUpload(record: QueuedUpload): Promise<Sent> {
       const form = new FormData();
       form.set("file", new File([record.bytes], record.name, { type: record.mimeType }));
       form.set("notebookId", record.notebookId);
+      if (record.confirmDuplicate) form.set("confirmDuplicate", "1");
       const res = await fetch("/api/documents", {
         method: "POST",
         headers: headers(record.account, false),
         body: form,
       });
+      const held = await heldBy(res);
+      if (held) return { held };
       return outcome(res, record, record.name);
     }
     // The chunked path, same as an online upload of a big file (SPEC.md §11).
@@ -272,16 +297,20 @@ async function sendUpload(record: QueuedUpload): Promise<Sent> {
         filename: record.name,
         notebookId: record.notebookId,
         kind: media ? "video" : "pdf",
+        ...(record.confirmDuplicate ? { confirmDuplicate: true } : {}),
       }),
     });
+    const held = await heldBy(res);
+    if (held) return { held };
     return outcome(res, record, record.name);
   } catch {
     return "wait";
   }
 }
 
-// The oldest record in a store, with its key — the next one to sync.
-function firstRecord<T>(store: string): Promise<{ key: IDBValidKey; record: T } | null> {
+// The oldest record in a store that is not held for the reader's word,
+// with its key — the next one to sync.
+function firstRecord<T extends { held?: unknown }>(store: string): Promise<{ key: IDBValidKey; record: T } | null> {
   return openDb().then(
     (db) =>
       new Promise((resolve, reject) => {
@@ -289,6 +318,10 @@ function firstRecord<T>(store: string): Promise<{ key: IDBValidKey; record: T } 
         const req = t.objectStore(store).openCursor();
         req.onsuccess = () => {
           const cursor = req.result;
+          if (cursor && (cursor.value as T).held) {
+            cursor.continue();
+            return;
+          }
           resolve(cursor ? { key: cursor.primaryKey, record: cursor.value as T } : null);
         };
         req.onerror = () => reject(req.error);
@@ -320,6 +353,7 @@ export async function syncQueue(): Promise<void> {
   syncing = true;
   notify();
   let sent = 0;
+  let held = 0;
   try {
     const drain = async () => {
       for (const store of [WRITES, UPLOADS] as const) {
@@ -331,6 +365,12 @@ export async function syncQueue(): Promise<void> {
               ? await sendWrite(head.record as QueuedWrite)
               : await sendUpload(head.record as QueuedUpload);
           if (result === "wait") return "wait" as const;
+          if (typeof result === "object") {
+            await tx(store, "readwrite", (s) => s.put({ ...head.record, held: result.held }, head.key));
+            held++;
+            notify();
+            continue;
+          }
           if (result === "retry") {
             const attempts = (head.record.attempts ?? 0) + 1;
             await tx(store, "readwrite", (s) => s.put({ ...head.record, attempts }, head.key));
@@ -355,9 +395,88 @@ export async function syncQueue(): Promise<void> {
     syncing = false;
     notify();
     if (sent > 0 && typeof window !== "undefined") window.dispatchEvent(new Event(QUEUE_SYNCED_EVENT));
+    if (held > 0 && typeof window !== "undefined") window.dispatchEvent(new Event(QUEUE_HELD_EVENT));
   }
 }
 
 export function isSyncing(): boolean {
   return syncing;
+}
+
+/** A queued add held for the reader's word on a repeat add (SPEC.md §15):
+    where it is queued, the documents the 409 named, and the project it was
+    queued for. */
+export type HeldAdd = {
+  store: typeof WRITES | typeof UPLOADS;
+  key: IDBValidKey;
+  documents: DuplicateMatch[];
+  notebookId: string | null;
+};
+
+function heldIn(store: typeof WRITES | typeof UPLOADS): Promise<HeldAdd[]> {
+  return openDb().then(
+    (db) =>
+      new Promise((resolve, reject) => {
+        const found: HeldAdd[] = [];
+        const t = db.transaction(store, "readonly");
+        const req = t.objectStore(store).openCursor();
+        req.onsuccess = () => {
+          const cursor = req.result;
+          if (!cursor) {
+            resolve(found);
+            return;
+          }
+          const record = cursor.value as QueuedWrite | QueuedUpload;
+          if (record.held && record.held.length > 0) {
+            const notebookId =
+              "notebookId" in record
+                ? record.notebookId
+                : ((record.body as { notebookId?: unknown } | undefined)?.notebookId ?? null);
+            found.push({
+              store,
+              key: cursor.primaryKey,
+              documents: record.held,
+              notebookId: typeof notebookId === "string" ? notebookId : null,
+            });
+          }
+          cursor.continue();
+        };
+        req.onerror = () => reject(req.error);
+        t.oncomplete = () => db.close();
+      }),
+  );
+}
+
+/** The queued adds waiting for the reader's word, oldest first. */
+export async function heldAdds(): Promise<HeldAdd[]> {
+  try {
+    return [...(await heldIn(WRITES)), ...(await heldIn(UPLOADS))];
+  } catch {
+    return [];
+  }
+}
+
+/** The reader's word on a held add: again, it goes back in the queue,
+    confirmed, and the queue drains; otherwise (Open the one I have,
+    Cancel) it leaves the queue. */
+export async function answerHeld(add: HeldAdd, again: boolean): Promise<void> {
+  if (!again) {
+    await tx(add.store, "readwrite", (s) => s.delete(add.key));
+    notify();
+    return;
+  }
+  const record = await tx<QueuedWrite | QueuedUpload | undefined>(add.store, "readonly", (s) => s.get(add.key));
+  if (!record) return;
+  const next: QueuedWrite | QueuedUpload =
+    "notebookId" in record
+      ? { ...record, confirmDuplicate: true }
+      : {
+          ...record,
+          body:
+            record.body && typeof record.body === "object" ? { ...record.body, confirmDuplicate: true } : record.body,
+        };
+  delete next.held;
+  await tx(add.store, "readwrite", (s) => s.put(next, add.key));
+  notify();
+  void syncQueue();
 }

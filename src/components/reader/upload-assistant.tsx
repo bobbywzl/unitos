@@ -5,6 +5,8 @@ import { isImeKey } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
 import { CheckIcon } from "@/components/icons";
 import { MediaRange, type MediaClip } from "@/components/reader/media-range";
+import { DuplicateAsk, throwIfDuplicate, type DuplicateChoice } from "@/components/reader/duplicate-ask";
+import { DuplicateDocumentError, type DuplicateMatch } from "@/lib/documents/duplicate-answer";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { readNdjson } from "@/lib/ndjson";
 import { type FinishPlan, warmImages } from "@/lib/finish";
@@ -64,17 +66,27 @@ export type UploadRequest = (
   folderId?: string | null;
 };
 
-// What the box opens when it is done: the first added document.
-export type OpenTarget = { kind: "document"; id: string };
+// What the box opens when it is done: the first added document, or the
+// document a repeat add's Open the one I have named (SPEC.md §15).
+// notebookId: absent, this project; a project's id, that project; null, the
+// document is in no project (the Library), and opening it attaches it here.
+export type OpenTarget = { kind: "document"; id: string; notebookId?: string | null };
 
 // range: a video or audio file is uploaded and the reader picks the part to
 // import (components/reader/media-range.tsx) before the add completes.
-type Phase = "ready" | "adding" | "range" | "done";
+// duplicate: the account already has this file or this source, and the add
+// waits for the reader's word (components/reader/duplicate-ask.tsx).
+type Phase = "ready" | "adding" | "range" | "duplicate" | "done";
+/** The add is under way: ✕, Escape, and a click outside hide the box, and
+    the add runs on (a range pick or an ask waits for the box to come back). */
+function runs(phase: Phase): boolean {
+  return phase === "adding" || phase === "range" || phase === "duplicate";
+}
 type Added = { id: string; title: string };
 type IngestEvent =
   | { stage: string; detail?: string }
   | { id: string; title: string; deduped: boolean; documents?: Added[] }
-  | { error: string };
+  | { error: string; duplicate?: unknown };
 type IngestResult = Extract<IngestEvent, { id: string }>;
 
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
@@ -251,6 +263,29 @@ export function UploadAssistant({
   // The range step (SPEC.md §15): a media file's bytes are up, and the add
   // waits for the part to import. The resolver ends the wait.
   const [rangePick, setRangePick] = useState<{ file: File; resolve: (clip: MediaClip | null) => void } | null>(null);
+  // The ask before a repeat add (SPEC.md §15): the add waits for Add again,
+  // Open the one I have, or Cancel. A hidden box comes back to ask.
+  const [duplicateAsk, setDuplicateAsk] = useState<{
+    documents: DuplicateMatch[];
+    resolve: (choice: DuplicateChoice) => void;
+  } | null>(null);
+  function askDuplicate(documents: DuplicateMatch[]): Promise<DuplicateChoice> {
+    return new Promise((resolve) => {
+      setDuplicateAsk({
+        documents,
+        resolve: (choice) => {
+          setDuplicateAsk(null);
+          setPhase("adding");
+          resolve(choice);
+        },
+      });
+      setPhase("duplicate");
+      if (hiddenRef.current) onShow();
+    });
+  }
+  // The first match whose Open the one I have the reader pressed: the box
+  // opens it when it is done.
+  const chosenOpenRef = useRef<DuplicateMatch | null>(null);
   function pickRange(file: File): Promise<MediaClip | null> {
     return new Promise((resolve) => {
       setRangePick({
@@ -290,6 +325,7 @@ export function UploadAssistant({
   async function streamIngest(res: Response): Promise<IngestResult> {
     if (!res.ok) {
       const detail = (await res.json().catch(() => null)) as { error?: string } | null;
+      throwIfDuplicate(detail, t("panes.duplicateTitle"));
       throw new Error(detail?.error ?? statusMessage(t, res.status));
     }
     let result: IngestEvent | null = null;
@@ -299,6 +335,7 @@ export function UploadAssistant({
         setSteps((s) => (s ? advanceIngestSteps(s, event.stage, event.detail) : s));
       } else result = event;
     }
+    if (result && "error" in result) throwIfDuplicate(result, t("panes.duplicateTitle"));
     if (!result || "error" in result) {
       throw new Error(result && "error" in result ? result.error : t("panes.uploadCutOff"));
     }
@@ -379,15 +416,27 @@ export function UploadAssistant({
     return result;
   }
 
-  // clip: the part of a recording to import, asked for once the bytes are
-  // up and before the add completes (the range step); null = the whole.
-  // pdfPages: a PDF's chosen pages (SPEC.md §15).
-  async function uploadChunked(
-    file: File,
-    kind: "pdf" | "video",
-    clip?: () => Promise<MediaClip | null>,
-    pdfPages?: PageRange[],
-  ): Promise<Response> {
+  // One add that asks first when the account already has the file or the
+  // source (SPEC.md §15): send(false) adds; a repeat answers with the ask,
+  // and Add again sends once more with confirmDuplicate. Open the one I have
+  // and Cancel add nothing (null); Open records the match for the box to
+  // open when it is done.
+  async function addAsking(send: (confirmDuplicate: boolean) => Promise<Response>): Promise<IngestResult | null> {
+    try {
+      return await ingestAndFinish(await send(false));
+    } catch (err) {
+      if (!(err instanceof DuplicateDocumentError)) throw err;
+      const choice = await askDuplicate(err.documents);
+      if (choice === "again") return ingestAndFinish(await send(true));
+      if (choice === "open") chosenOpenRef.current ??= err.documents[0];
+      return null;
+    }
+  }
+
+  // A big file's bytes, sent in chunks (the request cap): the upload's id,
+  // which /api/uploads/complete assembles. The chunks stay staged until the
+  // add completes, so a repeat add's Add again completes the same upload.
+  async function stageChunks(file: File): Promise<string> {
     const uploadId = crypto.randomUUID();
     const totalLabel = megabytes(file.size);
     for (let sent = 0; sent < file.size; sent += CHUNK_BYTES) {
@@ -413,7 +462,20 @@ export function UploadAssistant({
           : s,
       );
     }
-    const part = clip ? await clip() : null;
+    return uploadId;
+  }
+
+  // part: the part of a recording to import, asked for once the bytes are
+  // up and before the add completes (the range step); null = the whole.
+  // pdfPages: a PDF's chosen pages (SPEC.md §15).
+  function completeChunked(
+    uploadId: string,
+    file: File,
+    kind: "pdf" | "video",
+    part: MediaClip | null,
+    pdfPages: PageRange[] | undefined,
+    confirmDuplicate: boolean,
+  ): Promise<Response> {
     return fetch("/api/uploads/complete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -425,15 +487,17 @@ export function UploadAssistant({
         kind,
         ...(part ? { clipStart: part.start, clipEnd: part.end } : {}),
         ...(pdfPages ? { pdfPages } : {}),
+        ...(confirmDuplicate ? { confirmDuplicate } : {}),
       }),
     });
   }
 
   // One file's add: a media file uploads in chunks as a video; a PDF over
   // the single-request size uploads in chunks; anything else goes in one
-  // multipart request. Every path lands one document. pdfPages: a PDF's
-  // chosen pages (SPEC.md §15).
-  async function addFile(file: File, pdfPages?: PageRange[]): Promise<Added> {
+  // multipart request, sent again whole when the reader says Add again.
+  // Every path lands one document, or none when a repeat add's ask ends
+  // without Add again. pdfPages: a PDF's chosen pages (SPEC.md §15).
+  async function addFile(file: File, pdfPages?: PageRange[]): Promise<Added | null> {
     const media = isMediaFile(file);
     if (media && file.size > MAX_VIDEO_BYTES) {
       throw new Error(t("panes.fileTooLarge", { name: file.name, mb: 200 }));
@@ -442,21 +506,24 @@ export function UploadAssistant({
       throw new Error(t("panes.fileTooLarge", { name: file.name, mb: 50 }));
     }
     setSteps(initialIngestSteps(media ? "video" : "pdf"));
-    const result = await ingestAndFinish(
-      media
-        ? await uploadChunked(file, "video", () => pickRange(file))
-        : file.size > SINGLE_REQUEST_BYTES
-          ? await uploadChunked(file, "pdf", undefined, pdfPages)
-          : await (() => {
-              const form = new FormData();
-              form.set("file", file);
-              form.set("notebookId", notebookId);
-              if (request.folderId) form.set("folderId", request.folderId);
-              if (pdfPages) form.set("pdfPages", JSON.stringify(pdfPages));
-              return fetch("/api/documents", { method: "POST", body: form });
-            })(),
-    );
-    return { id: result.id, title: result.title };
+    let send: (confirmDuplicate: boolean) => Promise<Response>;
+    if (media || file.size > SINGLE_REQUEST_BYTES) {
+      const uploadId = await stageChunks(file);
+      const part = media ? await pickRange(file) : null;
+      send = (confirm) => completeChunked(uploadId, file, media ? "video" : "pdf", part, media ? undefined : pdfPages, confirm);
+    } else {
+      send = (confirm) => {
+        const form = new FormData();
+        form.set("file", file);
+        form.set("notebookId", notebookId);
+        if (request.folderId) form.set("folderId", request.folderId);
+        if (pdfPages) form.set("pdfPages", JSON.stringify(pdfPages));
+        if (confirm) form.set("confirmDuplicate", "1");
+        return fetch("/api/documents", { method: "POST", body: form });
+      };
+    }
+    const result = await addAsking(send);
+    return result ? { id: result.id, title: result.title } : null;
   }
 
   // One link's add: the server routes YouTube links and direct media links
@@ -464,17 +531,19 @@ export function UploadAssistant({
   async function addLink(url: string): Promise<Added[]> {
     const video = parseYouTubeId(url) || isMediaUrl(url);
     setSteps(initialIngestSteps(video ? (parseYouTubeId(url) ? "youtube" : "media") : "url"));
-    const result = await ingestAndFinish(
-      await fetch("/api/documents", {
+    const result = await addAsking((confirmDuplicate) =>
+      fetch("/api/documents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          video
-            ? { url, notebookId, folderId: request.folderId ?? undefined }
-            : { url, notebookId, folderId: request.folderId ?? undefined },
-        ),
+        body: JSON.stringify({
+          url,
+          notebookId,
+          folderId: request.folderId ?? undefined,
+          ...(confirmDuplicate ? { confirmDuplicate } : {}),
+        }),
       }),
     );
+    if (!result) return [];
     return result.documents ?? [{ id: result.id, title: result.title }];
   }
 
@@ -498,10 +567,10 @@ export function UploadAssistant({
 
   // One Drive pick's add (SPEC.md §14): the server fetches the file with the
   // token and ingests it like an upload, a PDF's chosen pages alone.
-  async function addDriveFile(file: DrivePickedFile, token: string, pdfPages?: PageRange[]): Promise<Added> {
+  async function addDriveFile(file: DrivePickedFile, token: string, pdfPages?: PageRange[]): Promise<Added | null> {
     setSteps(initialIngestSteps(driveKindOf(file) === "media" ? "media" : "drive"));
-    const result = await ingestAndFinish(
-      await fetch("/api/drive/import", {
+    const result = await addAsking((confirmDuplicate) =>
+      fetch("/api/drive/import", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -514,10 +583,11 @@ export function UploadAssistant({
           name: file.name,
           mimeType: file.mimeType,
           ...(pdfPages ? { pdfPages } : {}),
+          ...(confirmDuplicate ? { confirmDuplicate } : {}),
         }),
       }),
     );
-    return { id: result.id, title: result.title };
+    return result ? { id: result.id, title: result.title } : null;
   }
 
   // ── The add itself: runs at once for one document; after Add for two or
@@ -528,6 +598,11 @@ export function UploadAssistant({
     setPhase("adding");
     const collected: Added[] = [];
     const failed: string[] = [];
+    // An add a repeat add's ask ended without Add again adds nothing and
+    // fails nothing.
+    const keep = (one: Added | null) => {
+      if (one) collected.push(one);
+    };
     saveDetailRef.current = null;
     conversionFailedRef.current = null;
     addStartedAtRef.current = Date.now();
@@ -562,8 +637,8 @@ export function UploadAssistant({
           }
         }
         try {
-          if (item.kind === "file") collected.push(await addFile(item.file, item.pdfPages));
-          else if (item.kind === "drive-file") collected.push(await addDriveFile(item.file, item.token, item.pdfPages));
+          if (item.kind === "file") keep(await addFile(item.file, item.pdfPages));
+          else if (item.kind === "drive-file") keep(await addDriveFile(item.file, item.token, item.pdfPages));
           else collected.push(...(await addLink(item.url)));
         } catch (err) {
           failed.push(
@@ -590,7 +665,7 @@ export function UploadAssistant({
           continue;
         }
         try {
-          collected.push(await addDriveFile(file, request.token));
+          keep(await addDriveFile(file, request.token));
         } catch (err) {
           failed.push(
             t("panes.uploadPageFailed", {
@@ -609,7 +684,7 @@ export function UploadAssistant({
             : null,
         );
         try {
-          collected.push(await addFile(file));
+          keep(await addFile(file));
         } catch (err) {
           failed.push(
             t("panes.uploadPageFailed", {
@@ -624,15 +699,27 @@ export function UploadAssistant({
     setAdded(collected);
     setFailures(failed);
     setHeadline(null);
+    // Open the one I have: that document opens when the box is done, in the
+    // project that holds it.
+    const chosen = chosenOpenRef.current;
+    const chosenTarget: OpenTarget | null = chosen
+      ? { kind: "document", id: chosen.id, notebookId: chosen.notebookId }
+      : null;
+    if (collected.length === 0 && failed.length === 0) {
+      // Every add ended at its ask: nothing to show, the box goes.
+      onClose(chosenTarget);
+      return;
+    }
     if (collected.length === 0) {
       setPhase("done");
       setSteps(null);
+      setOpenTarget(chosenTarget);
       setError(failed.join(" ") || t("panes.uploadFailed"));
       if (hiddenRef.current) onShow();
       return;
     }
     setPhase("done");
-    const target: OpenTarget = { kind: "document", id: collected[0].id };
+    const target: OpenTarget = chosenTarget ?? { kind: "document", id: collected[0].id };
     setOpenTarget(target);
     // Clean adds close themselves; failures stay visible until Close, and so
     // does a lost figure: a single add whose figure check found a caption
@@ -670,7 +757,7 @@ export function UploadAssistant({
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || isImeKey(e)) return;
       e.stopPropagation();
-      if (phase === "adding" || phase === "range") onHide();
+      if (runs(phase)) onHide();
       else onClose(null);
     };
     window.addEventListener("keydown", onKey, true);
@@ -715,7 +802,7 @@ export function UploadAssistant({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4"
-      onClick={() => (phase === "adding" || phase === "range" ? onHide() : onClose(null))}
+      onClick={() => (runs(phase) ? onHide() : onClose(null))}
       role="dialog"
       aria-modal
       aria-label={t("panes.uploadAssistant")}
@@ -728,15 +815,15 @@ export function UploadAssistant({
           <span className="font-display text-[17px]">{t("panes.uploadAssistant")}</span>
           <button
             onClick={() => {
-              if (phase === "adding" || phase === "range") {
+              if (runs(phase)) {
                 onHide();
                 return;
               }
               onClose(null);
             }}
-            data-track={phase === "adding" || phase === "range" ? "upload-hide" : "upload-close"}
-            aria-label={t(phase === "adding" || phase === "range" ? "panes.uploadHide" : "common.close")}
-            data-tip={t(phase === "adding" || phase === "range" ? "panes.uploadHide" : "common.close")}
+            data-track={runs(phase) ? "upload-hide" : "upload-close"}
+            aria-label={t(runs(phase) ? "panes.uploadHide" : "common.close")}
+            data-tip={t(runs(phase) ? "panes.uploadHide" : "common.close")}
             className="ml-auto flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
           >
             ✕
@@ -791,6 +878,10 @@ export function UploadAssistant({
         )}
 
         {phase === "range" && rangePick && <MediaRange file={rangePick.file} onDone={rangePick.resolve} />}
+
+        {phase === "duplicate" && duplicateAsk && (
+          <DuplicateAsk documents={duplicateAsk.documents} onChoose={duplicateAsk.resolve} />
+        )}
 
         {phase === "done" && (
           <div className="flex flex-col gap-2.5">

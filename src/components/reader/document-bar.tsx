@@ -57,8 +57,11 @@ import {
   keptBlockDocument,
   UploadAssistant,
   uploadItemTitle,
+  type OpenTarget,
   type UploadRequest,
 } from "@/components/reader/upload-assistant";
+import { throwIfDuplicate, useDuplicateAsk } from "@/components/reader/duplicate-ask";
+import { DuplicateDocumentError, type DuplicateMatch } from "@/lib/documents/duplicate-answer";
 import { isMarkdownFile, MARKDOWN_ACCEPT } from "@/lib/markdown-file";
 import { isSheetsFile, isSlidesFile, isWordFile, SHEETS_ACCEPT, SLIDES_ACCEPT, WORD_ACCEPT } from "@/lib/office-file";
 
@@ -93,7 +96,7 @@ type IngestPhase = { fileLabel: string; steps: IngestStep[] };
 type IngestEvent =
   | { stage: string; detail?: string }
   | { id: string; title: string; deduped: boolean }
-  | { error: string; reason?: string };
+  | { error: string; reason?: string; duplicate?: unknown };
 
 // The re-parse route's answer when a re-parse would replace an import's
 // edits: the document menu shows it as its question, never as an error.
@@ -704,6 +707,7 @@ export function DocumentBar({
     if (!res.ok) {
       const detail = await readJson<{ error?: string; reason?: string }>(res);
       if (detail?.reason === "edited") throw new EditedImportAnswer(detail.error);
+      throwIfDuplicate(detail, t("panes.duplicateTitle"));
       throw new Error(detail?.error ?? statusMessage(t, res.status));
     }
     let result: IngestEvent | null = null;
@@ -717,6 +721,7 @@ export function DocumentBar({
       }
     }
     if (result && "error" in result && result.reason === "edited") throw new EditedImportAnswer(result.error);
+    if (result && "error" in result) throwIfDuplicate(result, t("panes.duplicateTitle"));
     if (!result || "error" in result) {
       throw new Error(result && "error" in result ? result.error : t("panes.uploadCutOff"));
     }
@@ -730,6 +735,9 @@ export function DocumentBar({
   // itself. Google Drive picks open it too — the server fetches those files
   // at import time, so only the sandbox review has nothing to read.
   const [assistant, setAssistant] = useState<UploadRequest | null>(null);
+  // The ask before a repeat add from a pasted link (SPEC.md §15); the upload
+  // box asks in place.
+  const { ask: askDuplicate, dialog: duplicateDialog } = useDuplicateAsk();
   // One box at a time: an add that arrives while one runs waits here and
   // starts when the running one closes, so neither replaces the other. The
   // run counter keys the box, so each request mounts a fresh one.
@@ -826,14 +834,22 @@ export function DocumentBar({
   // facts from Drive metadata. An all-files grant reaches any file the
   // account can read; a picked-files grant reaches picked files only, and the
   // server says so.
-  async function importDriveLink(fileId: string): Promise<boolean> {
+  // A file the account already has asks first (SPEC.md §15): Add again
+  // imports it once more with confirmDuplicate.
+  async function importDriveLink(fileId: string, confirmDuplicate = false): Promise<boolean> {
     setError(null);
+    let repeat: DuplicateMatch[] | null = null;
     try {
       const result = await runIngest(t("panes.addFromDrive"), "drive", () =>
         fetch("/api/drive/import", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ notebookId, fileId, ...(addFolder ? { folderId: addFolder } : {}) }),
+          body: JSON.stringify({
+            notebookId,
+            fileId,
+            ...(addFolder ? { folderId: addFolder } : {}),
+            ...(confirmDuplicate ? { confirmDuplicate } : {}),
+          }),
         }),
       );
       setDialog(false);
@@ -841,11 +857,28 @@ export function DocumentBar({
       if (result.blockDocument) showNotice(t(result.blockDocument), 8000);
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("panes.uploadFailed"));
-      return false;
+      if (err instanceof DuplicateDocumentError) repeat = err.documents;
+      else {
+        setError(err instanceof Error ? err.message : t("panes.uploadFailed"));
+        return false;
+      }
     } finally {
       setPhase(null);
     }
+    if (!repeat) return false;
+    return answerDuplicate(repeat, () => importDriveLink(fileId, true));
+  }
+
+  // The reader's word on a repeat add (SPEC.md §15): Add again runs the add
+  // once more, confirmed; Open the one I have opens the first match; Cancel
+  // adds nothing and leaves the dialog as it was. True: something opened.
+  async function answerDuplicate(documents: DuplicateMatch[], again: () => Promise<boolean>): Promise<boolean> {
+    const choice = await askDuplicate(documents);
+    if (choice === "again") return again();
+    if (choice === "cancel") return false;
+    setDialog(false);
+    openTarget({ kind: "document", id: documents[0].id, notebookId: documents[0].notebookId });
+    return true;
   }
 
   // Google Drive upload (SPEC.md §14): get a token and open the picker
@@ -968,17 +1001,24 @@ export function DocumentBar({
   // direct media file links to video documents, everything else to the
   // article parse; this only picks the matching progress steps. Returns
   // whether the document was added and opened.
-  async function ingestFromUrl(raw: string): Promise<boolean> {
+  // A link the account already has asks first (SPEC.md §15).
+  async function ingestFromUrl(raw: string, confirmDuplicate = false): Promise<boolean> {
     const trimmed = raw.trim();
     if (!trimmed) return false;
     setError(null);
+    let repeat: DuplicateMatch[] | null = null;
     try {
       const kind = parseYouTubeId(trimmed) ? "youtube" : isMediaUrl(trimmed) ? "media" : "url";
       const result = await runIngest(trimmed, kind, () =>
         fetch("/api/documents", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: trimmed, notebookId, ...(addFolder ? { folderId: addFolder } : {}) }),
+          body: JSON.stringify({
+            url: trimmed,
+            notebookId,
+            ...(addFolder ? { folderId: addFolder } : {}),
+            ...(confirmDuplicate ? { confirmDuplicate } : {}),
+          }),
         }),
       );
       setDialog(false);
@@ -986,11 +1026,16 @@ export function DocumentBar({
       if (result.blockDocument) showNotice(t(result.blockDocument), 8000);
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("panes.ingestFailed"));
-      return false;
+      if (err instanceof DuplicateDocumentError) repeat = err.documents;
+      else {
+        setError(err instanceof Error ? err.message : t("panes.ingestFailed"));
+        return false;
+      }
     } finally {
       setPhase(null);
     }
+    if (!repeat) return false;
+    return answerDuplicate(repeat, () => ingestFromUrl(raw, true));
   }
 
   // The reader's media-figure toast sends its player link here: same ingest
@@ -1019,6 +1064,20 @@ export function DocumentBar({
     setDialog(false);
     open(documentId);
     router.refresh();
+  }
+
+  // A document a repeat add's Open the one I have named (SPEC.md §15): in
+  // this project it opens here; in another project, there; in no project
+  // (the Library), it attaches here the way a Library pick does, and opens.
+  function openTarget(target: OpenTarget) {
+    if (target.notebookId === undefined || target.notebookId === notebookId) {
+      open(target.id);
+      router.refresh();
+    } else if (target.notebookId !== null) {
+      startOpening(() => router.push(`/n/${target.notebookId}?doc=${encodeURIComponent(target.id)}`));
+    } else {
+      attach(target.id).catch((err: unknown) => setError(err instanceof Error ? err.message : t("common.requestFailed")));
+    }
   }
 
   // Delete document, after its confirm under the row: the document leaves
@@ -1525,13 +1584,16 @@ export function DocumentBar({
               setAssistant(null);
               setAssistantHidden(false);
             }
-            if (target && target.id !== opened) openAdded(target.id);
+            if (target && target.notebookId !== undefined) openTarget(target);
+            else if (target && target.id !== opened) openAdded(target.id);
             // Opened early: the glossary and links the finishing step wrote
             // arrive with a refresh.
             else if (target) router.refresh();
           }}
         />
       )}
+
+      {duplicateDialog}
 
       {/* No backdrop blur: a blur over the whole page re-draws on every
           drag frame, and the drag stutters. A tint is enough. */}

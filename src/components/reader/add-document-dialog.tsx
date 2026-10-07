@@ -549,7 +549,7 @@ export function AddDocumentDialog({
                   )}
                   {library !== null && libraryRows.length === 0 && (
                     <li className="px-3 py-2 text-sm text-sand-500">
-                      {libraryQuery.trim() ? t("panes.librarySearchNone") : t("panes.noOtherDocuments")}
+                      {libraryQuery.trim() ? t("panes.librarySearchNone") : t("panes.libraryEmpty")}
                     </li>
                   )}
                   {libraryRows.map((d) => (

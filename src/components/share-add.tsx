@@ -5,6 +5,8 @@ import { useState } from "react";
 import { readNdjson } from "@/lib/ndjson";
 import { parseYouTubeId } from "@/lib/video/youtube";
 import { useT } from "@/components/lang-provider";
+import { throwIfDuplicate, useDuplicateAsk } from "@/components/reader/duplicate-ask";
+import { DuplicateDocumentError } from "@/lib/documents/duplicate-answer";
 import {
   advanceIngestSteps,
   completeIngestSteps,
@@ -17,11 +19,14 @@ export type SharePayload =
   | { kind: "url"; url: string }
   | { kind: "file"; uploadId: string; filename: string; fileKind: "pdf" | "video" };
 
-type IngestEvent = { stage: string; detail?: string } | { id: string } | { error: string };
+type IngestEvent = { stage: string; detail?: string } | { id: string } | { error: string; duplicate?: unknown };
 
 // The share landing form: what arrived, which project it goes to, Add. Runs
 // the same ingestion as the reader's header (URL → /api/documents; staged
-// file → /api/uploads/complete) and opens the document when it lands.
+// file → /api/uploads/complete) and opens the document when it lands. A
+// file or a link the account already has asks first (SPEC.md §15): Add
+// again adds it once more, confirmed (the staged file is still there);
+// Open the one I have opens it.
 export function ShareAdd({
   projects,
   payload,
@@ -34,10 +39,11 @@ export function ShareAdd({
   const [notebookId, setNotebookId] = useState(projects[0].id);
   const [steps, setSteps] = useState<IngestStep[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { ask, dialog } = useDuplicateAsk();
 
   const label = payload.kind === "url" ? payload.url : payload.filename;
 
-  async function add() {
+  async function add(confirmDuplicate = false) {
     setError(null);
     const stepKind =
       payload.kind === "url"
@@ -52,7 +58,7 @@ export function ShareAdd({
           ? await fetch("/api/documents", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ url: payload.url, notebookId }),
+              body: JSON.stringify({ url: payload.url, notebookId, ...(confirmDuplicate ? { confirmDuplicate } : {}) }),
             })
           : await fetch("/api/uploads/complete", {
               method: "POST",
@@ -62,10 +68,12 @@ export function ShareAdd({
                 filename: payload.filename,
                 notebookId,
                 kind: payload.fileKind,
+                ...(confirmDuplicate ? { confirmDuplicate } : {}),
               }),
             });
       if (!res.ok) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
+        throwIfDuplicate(detail, t("panes.duplicateTitle"));
         throw new Error(detail?.error ?? t("common.requestFailedStatus", { status: res.status }));
       }
       let result: IngestEvent | null = null;
@@ -76,6 +84,7 @@ export function ShareAdd({
           result = event;
         }
       }
+      if (result && "error" in result) throwIfDuplicate(result, t("panes.duplicateTitle"));
       if (!result || "error" in result) {
         throw new Error(result && "error" in result ? result.error : t("panes.uploadFailed"));
       }
@@ -84,7 +93,29 @@ export function ShareAdd({
       router.refresh();
     } catch (err) {
       setSteps(null);
-      setError(err instanceof Error ? err.message : t("panes.ingestFailed"));
+      if (!(err instanceof DuplicateDocumentError)) {
+        setError(err instanceof Error ? err.message : t("panes.ingestFailed"));
+        return;
+      }
+      const choice = await ask(err.documents);
+      if (choice === "again") return add(true);
+      if (choice !== "open") return;
+      const match = err.documents[0];
+      // In no project (the Library): it goes into the chosen project first.
+      const target = match.notebookId ?? notebookId;
+      if (match.notebookId === null) {
+        const res = await fetch(`/api/notebooks/${notebookId}/documents`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ documentId: match.id }),
+        });
+        if (!res.ok) {
+          setError(t("common.requestFailedStatus", { status: res.status }));
+          return;
+        }
+      }
+      router.push(`/n/${target}?doc=${match.id}`);
+      router.refresh();
     }
   }
 
@@ -115,6 +146,7 @@ export function ShareAdd({
         <IngestProgress fileLabel={label} steps={steps} />
       )}
       {error && <p className="text-sm text-red-500">{error}</p>}
+      {dialog}
     </div>
   );
 }
