@@ -322,7 +322,7 @@ const en = {
     "The article is open. Its glossary, links, and figures are still loading — click to see the progress.",
   stepFetchingPage: "Fetching the page",
   stepReadingPage: "Reading the page",
-  noDocumentOpen: "No document open. Upload a PDF, drop one here, or add a URL to start reading.",
+  noDocumentOpen: "No document yet. Add a PDF, a web page, or a file to start reading.",
   historyYou: "You",
   // Count details on the progress card's extract step
   detailBlocks: "{n} blocks",
@@ -828,7 +828,7 @@ const zh: Record<keyof typeof en, string> = {
   uploadFinishingTip: "文章已打开。术语表、链接和插图仍在加载——点击查看进度。",
   stepFetchingPage: "获取页面",
   stepReadingPage: "读取页面",
-  noDocumentOpen: "尚未打开文档。上传 PDF、拖入文件，或添加 URL 开始阅读。",
+  noDocumentOpen: "还没有文档。添加 PDF、网页或文件，开始阅读。",
   historyYou: "你",
   detailBlocks: "{n} 个块",
   detailFigures: "{n} 张插图",
