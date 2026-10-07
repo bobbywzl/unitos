@@ -8,7 +8,7 @@
 // Nothing here calls a model: the card reads stored outlines, and Find
 // matches words.
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { FindResult } from "@/lib/graph/find";
 import { FIND_MAX, FIND_MIN, normalizeQuery } from "@/lib/graph/find";
 
@@ -32,6 +32,17 @@ export type GraphContent = {
   findHits: Map<string, number> | null;
   /** The recommended links the last Stitch answer proposed. */
   proposedLinkIds: Set<string>;
+  /** The project's recommended links (those still waiting for Accept). */
+  recommendedLinkIds: Set<string>;
+  /** The provenance of generated documents is drawn, counted, and listed
+      (the switch in the zoom stack and in Generated content; WALK3-13). */
+  showProvenance: boolean;
+  setShowProvenance: (show: boolean) => void;
+  /** Each generated document's command (null: none stored), by id (WALK3-09). */
+  generatedCommands: Map<string, string | null>;
+  /** Open a link in the side panel, from the node card: its Back returns
+      to the card (VIEW3-03). */
+  openLinkFromCard: (linkId: string) => void;
 };
 
 const NONE = new Set<string>();
@@ -43,9 +54,30 @@ const GraphContentContext = createContext<GraphContent>({
   gists: {},
   findHits: null,
   proposedLinkIds: NONE,
+  recommendedLinkIds: NONE,
+  showProvenance: false,
+  setShowProvenance: () => {},
+  generatedCommands: new Map(),
+  openLinkFromCard: () => {},
 });
 
 export const GraphContentProvider = GraphContentContext.Provider;
+
+// A touch screen (pointer: coarse): the graph says Tap, not Click, and
+// shows no key hints (WALK3-11).
+const COARSE = "(pointer: coarse)";
+function subscribeCoarse(listener: () => void): () => void {
+  const query = window.matchMedia?.(COARSE);
+  query?.addEventListener("change", listener);
+  return () => query?.removeEventListener("change", listener);
+}
+export function useCoarsePointer(): boolean {
+  return useSyncExternalStore(
+    subscribeCoarse,
+    () => window.matchMedia?.(COARSE).matches ?? false,
+    () => false,
+  );
+}
 
 export function useGraphContent(): GraphContent {
   return useContext(GraphContentContext);
@@ -179,7 +211,7 @@ export function useGraphContentState<L extends string | null>({
   const [prefill, setPrefill] = useState<{ text: string; seq: number } | null>(null);
   const askStitch = useCallback((text: string) => setPrefill((p) => ({ text, seq: (p?.seq ?? 0) + 1 })), []);
 
-  const content = useMemo<GraphContent>(
+  const content = useMemo(
     () => ({ clickSelects: CLICK_SELECTS, focusedId, select, gists, findHits, proposedLinkIds }),
     [focusedId, select, gists, findHits, proposedLinkIds],
   );

@@ -3,9 +3,11 @@
 // [view2] Find across the project (SPEC.md §13): words typed in the graph's
 // header light the documents that hold them, each with its count of
 // passages, and the Find list beside the canvas shows the passages, each a
-// jump into the reader. Pick these documents hands them to Stitch, and Ask
-// Stitch puts a question in its box for the reader to send. A word match,
-// never a model call (GET .../find).
+// jump into the reader. Pick these documents adds them to the pick, and Ask
+// Stitch adds them too and puts a question in its box for the reader to
+// send: a pick the reader made stays (WALK3-04). Generated documents come
+// last and stay out of the pick and the counts unless the provenance switch
+// is on (WALK3-14). A word match, never a model call (GET .../find).
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -21,7 +23,7 @@ export function FindBox({ find }: { find: FindState }) {
   return (
     <label
       data-graph-find
-      className="flex h-[34px] min-w-0 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-3 text-[13px] text-sand-600 focus-within:border-clay-400 max-[900px]:w-[220px] min-[901px]:w-[200px] min-[1600px]:w-[260px]"
+      className="flex h-[34px] min-w-0 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-3 text-[13px] text-sand-600 focus-within:border-clay-400 max-[900px]:w-[220px] max-md:w-[150px] min-[901px]:w-[200px] min-[901px]:max-[1099px]:w-[170px] min-[1600px]:w-[260px]"
     >
       <SearchIcon size={13} />
       <input
@@ -72,12 +74,14 @@ function FindGroup({
   notebookId,
   doc,
   title,
+  generated,
   q,
   onOpenDocument,
 }: {
   notebookId: string;
   doc: FindDocument;
   title: string;
+  generated: boolean;
   q: string;
   onOpenDocument: () => void;
 }) {
@@ -115,6 +119,7 @@ function FindGroup({
         >
           {title}
         </button>
+        {generated && <span className="shrink-0 text-[11px] text-sand-500">{t("panes.documentKindGenerated")}</span>}
         <span className="ml-auto shrink-0 rounded-full bg-clay-100 px-1.5 text-[11px] font-semibold tabular-nums text-clay-800">
           {doc.count}
         </span>
@@ -149,6 +154,7 @@ export function FindList({
   find,
   nodes,
   canPick,
+  picked,
   onPickAll,
   onAsk,
   onOpenDocument,
@@ -158,21 +164,34 @@ export function FindList({
   find: FindState;
   nodes: GraphNode[];
   canPick: boolean;
+  /** The documents picked for Stitch now. */
+  picked: Set<string>;
+  /** Adds the documents to the pick. */
   onPickAll: (ids: string[]) => void;
   onAsk: (text: string) => void;
   onOpenDocument: () => void;
   onClose: () => void;
 }) {
   const t = useT();
+  const { showProvenance } = useGraphContent();
   const titleOf = new Map(nodes.map((n) => [n.id, n.title]));
-  const docs = (find.result?.documents ?? []).filter((d) => titleOf.has(d.id));
-  const passages = docs.reduce((s, d) => s + d.count, 0);
+  const generatedIds = new Set(nodes.filter((n) => n.kind === "generated").map((n) => n.id));
+  const found = (find.result?.documents ?? []).filter((d) => titleOf.has(d.id));
+  const own = found.filter((d) => !generatedIds.has(d.id));
+  const docs = [...own, ...found.filter((d) => generatedIds.has(d.id))];
+  const counted = showProvenance ? docs : own;
+  const total = showProvenance ? nodes.length : nodes.length - generatedIds.size;
+  const passages = counted.reduce((s, d) => s + d.count, 0);
   const q = find.result?.q ?? "";
+  const pickIds = counted.map((d) => d.id);
+  // The reader's own picks that Find did not find: Ask Stitch keeps them.
+  const others = [...picked].filter((id) => titleOf.has(id) && !pickIds.includes(id)).length;
   return (
     <aside
       data-track-surface="sidebar"
       data-graph-find-list
-      className="menu-in absolute top-3 right-3 bottom-3 z-10 flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto overscroll-contain rounded-[20px] border border-line bg-card/95 p-4 shadow-float backdrop-blur-md max-[999px]:bottom-16"
+      data-graph-side-list="find"
+      className="menu-in absolute top-3 right-3 bottom-3 z-10 flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto overscroll-contain rounded-[20px] border border-line bg-card/95 p-4 pb-24 shadow-float backdrop-blur-md max-[999px]:bottom-16 max-[999px]:pb-4"
     >
       <div className="flex items-start gap-2">
         <p className="min-w-0 flex-1 text-[12.5px] leading-snug text-sand-700" data-graph-find-summary>
@@ -183,9 +202,9 @@ export function FindList({
               : docs.length === 0
                 ? t("graphView.findNone")
                 : t("graphView.findSummary", {
-                    n: docs.length,
-                    total: nodes.length,
-                    ts: nodes.length === 1 ? "" : "s",
+                    n: counted.length,
+                    total,
+                    ts: total === 1 ? "" : "s",
                     p: passages,
                     ps: passages === 1 ? "" : "s",
                   })}
@@ -199,27 +218,30 @@ export function FindList({
           ✕
         </button>
       </div>
-      {docs.length > 0 && (
+      {counted.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {canPick && (
             <button
-              onClick={() => onPickAll(docs.map((d) => d.id))}
+              onClick={() => onPickAll(pickIds)}
               data-track="graph-find-pick"
               className="rounded-full border border-line px-3 py-1.5 text-[12px] text-sand-700 hover:bg-clay-100 hover:text-clay-800"
             >
-              {docs.length === 1 ? t("graphView.findPickOne") : t("graphView.findPick", { n: docs.length })}
+              {counted.length === 1 ? t("graphView.findPickOne") : t("graphView.findPick", { n: counted.length })}
             </button>
           )}
-          {canPick && docs.length >= 2 && (
+          {canPick && counted.length + others >= 2 && (
             <button
               onClick={() => {
-                onPickAll(docs.map((d) => d.id));
+                onPickAll(pickIds);
                 onAsk(t("graphView.findAskTemplate", { q }));
               }}
               data-track="graph-find-ask"
+              data-tip={t("graphView.findAskTitle")}
               className="rounded-full bg-clay px-3.5 py-1.5 text-[12px] font-semibold text-clay-fg hover:bg-clay-600"
             >
-              {t("graphView.findAsk")}
+              {others > 0
+                ? t("graphView.findAskWithPicks", { n: counted.length, m: others, ms: others === 1 ? "" : "s" })
+                : t("graphView.findAsk")}
             </button>
           )}
         </div>
@@ -230,6 +252,7 @@ export function FindList({
           notebookId={notebookId}
           doc={d}
           title={titleOf.get(d.id) ?? ""}
+          generated={generatedIds.has(d.id)}
           q={q}
           onOpenDocument={onOpenDocument}
         />

@@ -1904,8 +1904,38 @@ ellipse.anchor-flash {
 .corpus-graph .react-flow__edge {
   transition: opacity 500ms ease;
 }
-.graph-settling .react-flow__edge {
+.graph-settling .react-flow__edge,
+.graph-settling .graph-curve-marks {
   opacity: 0;
+}
+/* A curve's marks (graph-notes.tsx CurveMarks) draw above the nodes, in
+   reactflow's label layer, and take the pointer (VIEW3-01). */
+.corpus-graph .react-flow__edgelabel-renderer {
+  z-index: 5;
+}
+.corpus-graph .graph-curve-marks {
+  pointer-events: all;
+  transition: opacity 0.25s ease;
+}
+.corpus-graph[data-large] .graph-curve-marks {
+  transition: none;
+}
+.corpus-graph[data-spot]:not([data-large]) .graph-curve-marks {
+  opacity: 0.15;
+}
+.corpus-graph[data-spot] .graph-curve-marks[data-lit] {
+  opacity: 1;
+}
+/* A Chinese label breaks its lines evenly, never one character alone on the
+   second line (WALK3-17). */
+.corpus-graph .graph-node-label {
+  text-wrap: balance;
+}
+/* The graph's header pills: a fade at the right edge while more pills
+   scroll beyond it (graph-overlay.tsx, WALK3-07). */
+.graph-pill-row[data-more] {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
 }
 
 /* Documents whose recommended links await acceptance breathe on their own

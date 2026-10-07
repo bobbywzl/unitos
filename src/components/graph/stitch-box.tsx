@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { SaveAsNote } from "@/components/assistant/save-as-note";
 import { useCollab } from "@/components/collab/collab-context";
 import { useGraphNotes } from "@/components/graph/graph-notes";
+import { useCoarsePointer, useGraphContent } from "@/components/graph/graph-content";
 import { StitchCitationChip, StitchPassageCard, type StitchCitation } from "@/components/graph/stitch-passage-card";
 import { ChevronDownIcon, ChevronRightIcon, SparkleIcon, StopIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
@@ -231,6 +232,7 @@ export function StitchBox({
   }
 
   const picked = nodes.filter((n) => selectedIds.has(n.id));
+  const coarse = useCoarsePointer();
   const everyCount = STITCH_READS_GENERATED ? nodes.length : nodes.filter((n) => !generatedIds?.includes(n.id)).length;
   // Why Send is off, said under the text box: a command over the route's
   // limit, or a pick of one document (Stitch reads two or more).
@@ -424,9 +426,11 @@ export function StitchBox({
       {canEdit && (
         <div className="flex flex-wrap items-center gap-1.5 px-4 pt-2 text-[11px] text-sand-600">
           <span className="font-semibold text-sand-700">
-            {picked.length > 0
-              ? t("stitch.stitchScopePicked", { n: picked.length })
-              : t("stitch.stitchScopeAll", { n: everyCount })}
+            {picked.length === 1
+              ? t("stitch.stitchScopePickedOne")
+              : picked.length > 0
+                ? t("stitch.stitchScopePicked", { n: picked.length })
+                : t("stitch.stitchScopeAll", { n: everyCount })}
           </span>
           {picked.map((n) => (
             <button
@@ -444,7 +448,7 @@ export function StitchBox({
             onClick={() => onPickingChange(!picking)}
             data-track="stitch-pick"
             aria-pressed={picking}
-            data-tip={t("stitch.stitchPickTitle")}
+            data-tip={t(coarse ? "stitch.stitchPickTitleTouch" : "stitch.stitchPickTitle")}
             className={`rounded-full border px-2.5 py-0.5 hover:bg-clay-100 hover:text-clay-800 ${
               picking ? "border-clay bg-clay text-clay-fg hover:bg-clay-600 hover:text-clay-fg" : "border-line"
             }`}
@@ -461,7 +465,7 @@ export function StitchBox({
               {t("stitch.stitchPickClear")}
             </button>
           )}
-          {picking && <span className="text-clay-700">{t("stitch.stitchPickHint")}</span>}
+          {picking && <span className="text-clay-700">{t(coarse ? "stitch.stitchPickHintTouch" : "stitch.stitchPickHint")}</span>}
         </div>
       )}
 
@@ -624,16 +628,30 @@ function ResultLine({
   const t = useT();
   const readCount = result.documents.filter((d) => d.status === "read").length;
   const ran = readCount >= 2;
+  // The proposed links still waiting under Recommended links: a link
+  // accepted or dismissed since leaves the count (WALK3-12). A link not yet
+  // seen there (the graph's data still loading) still counts.
+  const { recommendedLinkIds } = useGraphContent();
+  const [seen, setSeen] = useState<Set<string>>(() => new Set());
+  const ids = result.linkIds ?? [];
+  const newlySeen = ids.filter((id) => recommendedLinkIds.has(id) && !seen.has(id));
+  if (newlySeen.length > 0) setSeen(new Set([...seen, ...newlySeen]));
+  const waiting = ids.length === 0 ? result.linkCount : ids.filter((id) => recommendedLinkIds.has(id) || !seen.has(id)).length;
   return (
     <div className="flex flex-col gap-1 text-xs text-sand-600">
       {!ran && <p className="text-red-500">{t("stitch.stitchNotEnoughRead")}</p>}
       {ran && result.linkCount === 0 && !result.document && (
         <p className="text-sand-500">{t("stitch.stitchNothingStored")}</p>
       )}
-      {result.linkCount > 0 && (
+      {result.linkCount > 0 && waiting === 0 && (
+        <p data-stitch-links-reviewed>
+          {t(result.linkCount === 1 ? "stitch.stitchLinksReviewed1" : "stitch.stitchLinksReviewedN", { n: result.linkCount })}
+        </p>
+      )}
+      {result.linkCount > 0 && waiting > 0 && (
         <p className="flex items-center gap-2">
           <span>
-            {t(result.linkCount === 1 ? "stitch.stitchLinksMade1" : "stitch.stitchLinksMadeN", { n: result.linkCount })}
+            {t(waiting === 1 ? "stitch.stitchLinksMade1" : "stitch.stitchLinksMadeN", { n: waiting })}
           </span>
           {onShowRecommended && (
             <button

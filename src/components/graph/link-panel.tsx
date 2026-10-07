@@ -22,12 +22,15 @@ import { LinkReplies } from "@/components/graph/link-replies";
 export function LinkPanel({
   link,
   onBack,
+  backLabel,
   onClose,
   onOpenDocument,
 }: {
   link: GraphEdgeLink;
-  /** Back to the Links list, when the link was opened from it. */
+  /** Back to the Links list or the node card, when the link was opened there. */
   onBack?: () => void;
+  /** Back's name; default Back to Links. */
+  backLabel?: string;
   onClose: () => void;
   /** The reader opened a document from the panel (the URL already moved). */
   onOpenDocument: () => void;
@@ -63,18 +66,20 @@ export function LinkPanel({
   return (
     <aside
       data-track-surface="graph-link-panel"
-      data-graph-side-list
+      data-graph-side-list="link"
       data-graph-link-panel={link.id}
+      id="graph-list-link"
+      tabIndex={-1}
       aria-label={t("panes.graphLinkPanel")}
-      className="menu-in absolute top-3 right-3 bottom-3 z-10 flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 pb-24 shadow-float backdrop-blur-md max-[999px]:bottom-16 max-[999px]:pb-4"
+      className="menu-in absolute top-3 right-3 bottom-3 z-10 flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 pb-24 shadow-float outline-none backdrop-blur-md max-[999px]:bottom-16 max-[999px]:pb-4"
     >
       <div className="flex items-start gap-2">
         {onBack && (
           <button
             onClick={onBack}
             data-track="graph-link-panel-back"
-            aria-label={t("panes.graphLinksBack")}
-            data-tip={t("panes.graphLinksBack")}
+            aria-label={backLabel ?? t("panes.graphLinksBack")}
+            data-tip={backLabel ?? t("panes.graphLinksBack")}
             className="-mt-1 -ml-1 flex size-7 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
           >
             <ArrowLeftIcon size={15} />

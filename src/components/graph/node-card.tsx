@@ -4,11 +4,14 @@
 // card pins beside the canvas — a sheet at the foot on a phone. It says what
 // the document is about (the skeleton's gist and part summaries, written by
 // AI and marked so), its contents with a jump to each part, its links
-// grouped by the other document with each link's reason and the part it
-// sits in, and its notes. Open in reader and Pick for Stitch act on it; a
-// click on another document's chip moves the card there, and ← → walk the
-// links. Everything is read from what is stored (GET .../outline): the card
-// never calls a model.
+// grouped by the other document with each link's reason, the part it sits
+// in, and its replies, and its notes. It counts and lists what the canvas
+// draws: the provenance of generated documents only while the provenance
+// switch is on (WALK3-02). Open in reader and Pick for Stitch act on it; a
+// click on another document's chip moves the card there, a click on a link
+// opens it in the side panel, whose Back returns here (VIEW3-03), and ← →
+// walk the links. Everything is read from what is stored (GET .../outline):
+// the card never calls a model.
 
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -19,14 +22,15 @@ import { useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
 import { GraphNoteRow, useGraphNotes } from "@/components/graph/graph-notes";
 import { noteLine } from "@/lib/graph/notes";
-import { useGraphContent } from "@/components/graph/graph-content";
+import { useCoarsePointer, useGraphContent } from "@/components/graph/graph-content";
+import { LinkReplyCount } from "@/components/graph/link-replies";
 
 const outlines = new Map<string, DocumentOutline>();
 const NOTE_ROWS = 6;
 const GROUP_ROWS = 2;
 
 /** One document's outline, from the tab's cache at once, then fresh. */
-function useOutline(notebookId: string, documentId: string): DocumentOutline | null {
+function useOutline(notebookId: string, documentId: string, version: unknown): DocumentOutline | null {
   const key = `${notebookId}:${documentId}`;
   const [state, setState] = useState<{ key: string; outline: DocumentOutline | null }>(() => ({
     key,
@@ -46,21 +50,35 @@ function useOutline(notebookId: string, documentId: string): DocumentOutline | n
       })
       .catch(() => undefined);
     return () => controller.abort();
-  }, [notebookId, documentId, key]);
+    // version: the graph's data refetched (a link accepted, a page written):
+    // the card's link parts follow (REV3-10).
+  }, [notebookId, documentId, key, version]);
   return state.key === key ? state.outline : null;
 }
 
-type Group = { other: string; links: GraphEdgeLink[]; recommended: number };
+type Group = { other: string; links: GraphEdgeLink[]; accepted: number; recommended: number };
 
 /** The node's links grouped by the other document, most links first; a
-    loop (links inside the document) last. */
-export function linkGroups(edges: GraphEdge[], id: string): Group[] {
+    loop (links inside the document) last. A generated document's
+    provenance links only with the provenance switch on, as the canvas
+    draws them (WALK3-02). */
+export function linkGroups(edges: GraphEdge[], id: string, showProvenance = false): Group[] {
   const out: Group[] = [];
   for (const e of edges) {
     if (e.a !== id && e.b !== id) continue;
-    out.push({ other: e.a === id ? e.b : e.a, links: e.links, recommended: e.recommended });
+    const links = showProvenance ? e.links : e.links.filter((l) => !l.provenance);
+    if (links.length === 0) continue;
+    out.push({ other: e.a === id ? e.b : e.a, links, accepted: e.accepted, recommended: e.recommended });
   }
   return out.sort((x, y) => Number(x.other === id) - Number(y.other === id) || y.links.length - x.links.length);
+}
+
+/** "3 links · 1 recommended": accepted links, then the recommended ones,
+    the same count the hover card and the node's name give (WALK3-08). */
+export function linkLine(t: ReturnType<typeof useT>, accepted: number, recommended: number): string {
+  const head = t("panes.graphCardLinks", { n: accepted, s: accepted === 1 ? "" : "s" });
+  const rec = t("panes.graphCardRecommended", { n: recommended });
+  return recommended === 0 ? head : accepted === 0 ? rec : `${head} · ${rec}`;
 }
 
 export function NodeCardPanel({
@@ -91,8 +109,9 @@ export function NodeCardPanel({
   const router = useRouter();
   const { canEdit } = useCollab();
   const notesCtx = useGraphNotes();
-  const { select, proposedLinkIds } = useGraphContent();
-  const outline = useOutline(notebookId, node.id);
+  const { select, proposedLinkIds, showProvenance, generatedCommands, openLinkFromCard } = useGraphContent();
+  const coarse = useCoarsePointer();
+  const outline = useOutline(notebookId, node.id, edges);
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set());
   const [showAllNotes, setShowAllNotes] = useState(false);
   // The card stays mounted while the selection walks (its trail with it);
@@ -104,35 +123,56 @@ export function NodeCardPanel({
     setShowAllNotes(false);
   }
   const titleOf = useMemo(() => new Map(nodes.map((n) => [n.id, n.title])), [nodes]);
-  const groups = useMemo(() => linkGroups(edges, node.id), [edges, node.id]);
+  const groups = useMemo(() => linkGroups(edges, node.id, showProvenance), [edges, node.id, showProvenance]);
   const notes = notesCtx?.view.byDocument.get(node.id)?.notes ?? [];
-  const linkCount = groups.reduce((s, g) => s + g.links.length, 0);
+  const acceptedCount = groups.reduce((s, g) => s + g.accepted, 0);
+  const recommendedCount = groups.reduce((s, g) => s + g.recommended, 0);
+  const generated = node.kind === "generated";
+  const command = generatedCommands.get(node.id) ?? null;
 
   // ← → walk the links: → goes to the most linked document not just come
   // from, ← goes back the way the walk came.
+  // A key that cannot walk says why (REV3-09); Alt+← and the other
+  // modified arrows stay the browser's.
   const trail = useRef<string[]>([]);
+  const [walkNote, setWalkNote] = useState<string | null>(null);
+  if (shownId !== node.id && walkNote) setWalkNote(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+      if (e.altKey || e.metaKey || e.ctrlKey || e.shiftKey || e.defaultPrevented) return;
       const target = e.target as HTMLElement | null;
-      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      if (
+        target &&
+        (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable)
+      )
+        return;
+      const others = groups.filter((g) => g.other !== node.id);
       if (e.key === "ArrowLeft") {
         const back = trail.current.pop();
-        if (!back) return;
         e.preventDefault();
+        if (!back) {
+          setWalkNote(t(others.length === 0 ? "graphView.cardWalkNone" : "graphView.cardWalkStart"));
+          return;
+        }
+        setWalkNote(null);
         select(back);
         return;
       }
       const came = trail.current[trail.current.length - 1];
-      const next = groups.find((g) => g.other !== node.id && g.other !== came)?.other ?? groups.find((g) => g.other !== node.id)?.other;
-      if (!next) return;
+      const next = others.find((g) => g.other !== came)?.other ?? others[0]?.other;
       e.preventDefault();
+      if (!next) {
+        setWalkNote(t("graphView.cardWalkNone"));
+        return;
+      }
+      setWalkNote(null);
       trail.current.push(node.id);
       select(next);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [groups, node.id, select]);
+  }, [groups, node.id, select, t]);
 
   const ref = useRef<HTMLElement>(null);
   useLayoutEffect(() => {
@@ -159,7 +199,7 @@ export function NodeCardPanel({
   }
   const facts = [
     node.blockCount !== undefined ? t("panes.graphCardBlocks", { n: node.blockCount, s: node.blockCount === 1 ? "" : "s" }) : null,
-    t("panes.graphCardLinks", { n: linkCount, s: linkCount === 1 ? "" : "s" }),
+    linkLine(t, acceptedCount, recommendedCount),
     t("graphView.cardNotes", { n: notes.length, s: notes.length === 1 ? "" : "s" }),
   ].filter(Boolean);
   const head = "mb-1.5 text-[11px] font-bold tracking-[0.06em] text-sand-600 uppercase";
@@ -174,7 +214,7 @@ export function NodeCardPanel({
       className={`menu-in absolute z-10 flex flex-col gap-3 overflow-y-auto overscroll-contain border border-line bg-card/95 p-4 shadow-float backdrop-blur-md ${
         sheet
           ? "inset-x-0 bottom-0 h-[60%] rounded-t-[20px] border-b-0 pb-16"
-          : "top-3 right-3 bottom-3 w-[400px] max-w-[calc(100vw-24px)] rounded-[20px] max-[999px]:bottom-16"
+          : "top-3 right-3 bottom-3 w-[400px] max-w-[calc(100vw-24px)] rounded-[20px] pb-24 max-[999px]:bottom-16 max-[999px]:pb-4"
       }`}
     >
       <div className="flex items-start gap-2">
@@ -189,6 +229,12 @@ export function NodeCardPanel({
         </button>
       </div>
       <p className="-mt-2 text-[11.5px] text-sand-600">{facts.join(" · ")}</p>
+      {/* A generated document says so, and which command wrote it (WALK3-09). */}
+      {generated && (
+        <p data-graph-card-generated className="-mt-1.5 rounded-xl bg-sand-100 px-3 py-2 text-[12px] leading-snug text-sand-700">
+          {command ? t("graphView.cardGeneratedFrom", { command }) : t("graphView.cardGenerated")}
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <button
           onClick={() => go(`/n/${notebookId}?doc=${node.id}`)}
@@ -279,10 +325,7 @@ export function NodeCardPanel({
                         {titleOf.get(g.other) ?? ""}
                       </button>
                     )}
-                    <span className="ml-auto shrink-0 text-[11px] text-sand-500">
-                      {t("panes.graphCardLinks", { n: g.links.length, s: g.links.length === 1 ? "" : "s" })}
-                      {g.recommended > 0 ? ` · ${t("panes.graphCardRecommended", { n: g.recommended })}` : ""}
-                    </span>
+                    <span className="ml-auto shrink-0 text-[11px] text-sand-500">{linkLine(t, g.accepted, g.recommended)}</span>
                   </div>
                   <ul className="mt-1.5 flex flex-col gap-1">
                     {(open ? ordered : ordered.slice(0, GROUP_ROWS)).map((l) => {
@@ -292,10 +335,10 @@ export function NodeCardPanel({
                       return (
                         <li key={l.id}>
                           <button
-                            onClick={() => go(`/n/${notebookId}?doc=${node.id}&link=${l.id}`)}
+                            onClick={() => openLinkFromCard(l.id)}
                             data-track="graph-card-link"
                             data-graph-card-link={l.id}
-                            data-tip={t("panes.graphOpenLink")}
+                            data-tip={t("panes.linkExpand")}
                             className={`block w-full rounded-lg px-1.5 py-1 text-left hover:bg-clay-100/60 ${
                               l.recommended ? "border-l-2 border-dashed border-clay-300" : ""
                             }`}
@@ -311,6 +354,12 @@ export function NodeCardPanel({
                                 {t("graphView.cardInPart", { part: part.title })}
                               </span>
                             )}
+                            {l.provenance && (
+                              <span className="mt-0.5 inline-block rounded-full bg-sand-200/80 px-1.5 text-[10px] font-semibold text-sand-700">
+                                {t("panes.graphProvenanceTag")}
+                              </span>
+                            )}
+                            <LinkReplyCount link={l} />
                           </button>
                         </li>
                       );
@@ -346,7 +395,10 @@ export function NodeCardPanel({
           )}
         </section>
       )}
-      {!sheet && <p className="mt-auto pt-1 text-[11px] text-sand-500">{t("graphView.cardKeys")}</p>}
+      <p role="status" data-graph-card-walk className="text-[12px] text-clay-800 empty:hidden">
+        {walkNote}
+      </p>
+      {!sheet && !coarse && <p className="mt-auto pt-1 text-[11px] text-sand-500">{t("graphView.cardKeys")}</p>}
     </aside>
   );
 }

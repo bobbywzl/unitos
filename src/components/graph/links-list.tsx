@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { GraphEdge, GraphEdgeLink } from "@/lib/types";
 import { useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
@@ -12,7 +13,9 @@ import { LinkReplyCount } from "@/components/graph/link-replies";
 // panel (link-panel.tsx). It reaches every link without hitting a curve:
 // the one sure way on a phone, and a fast one on a crowded canvas. Hovering
 // or focusing a row lights its two documents. Provenance links are not
-// listed: they are the generated document's, not the reader's.
+// listed: they are the generated document's, not the reader's. A filter at
+// the top keeps the links whose documents or reason hold its words; opened
+// while a node card is pinned, it starts on that document (WALK3-15).
 
 export function LinksList({
   edges,
@@ -20,25 +23,44 @@ export function LinksList({
   openLinkId,
   onOpen,
   onClose,
+  initialFilter = "",
 }: {
   edges: GraphEdge[];
   titleOf: Map<string, string>;
   openLinkId: string | null;
+  initialFilter?: string;
   onOpen: (link: GraphEdgeLink) => void;
   onClose: () => void;
 }) {
   const t = useT();
   const setRowLit = useGraphNotes()?.setRowLit;
-  const groups = edges
+  const [filter, setFilter] = useState(initialFilter);
+  const words = filter.trim().toLowerCase();
+  const all = edges
     .map((e) => ({ edge: e, links: e.links.filter((l) => !l.recommended && !l.provenance) }))
     .filter((g) => g.links.length > 0)
     .sort((x, y) => y.links.length - x.links.length);
+  const total = all.reduce((n, g) => n + g.links.length, 0);
+  const groups = words
+    ? all
+        .map(({ edge, links }) => {
+          const titles = `${titleOf.get(edge.a) ?? ""} ${titleOf.get(edge.b) ?? ""}`.toLowerCase();
+          return {
+            edge,
+            links: titles.includes(words) ? links : links.filter((l) => (l.reason ?? l.quotedText).toLowerCase().includes(words)),
+          };
+        })
+        .filter((g) => g.links.length > 0)
+    : all;
   const light = (e: GraphEdge | null) => setRowLit?.(e ? new Set([e.a, e.b]) : null);
   return (
     <aside
       data-track-surface="graph-links-list"
-      data-graph-side-list
-      className="menu-in absolute top-3 right-3 bottom-3 z-10 flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 shadow-float backdrop-blur-md max-[999px]:bottom-16"
+      data-graph-side-list="links"
+      id="graph-list-links"
+      tabIndex={-1}
+      aria-label={t("panes.graphLinks")}
+      className="menu-in absolute top-3 right-3 bottom-3 z-10 flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 pb-24 shadow-float outline-none backdrop-blur-md max-[999px]:bottom-16 max-[999px]:pb-4"
     >
       <div className="flex items-start gap-2">
         <p className="flex-1 text-[11px] text-sand-500">{t("panes.graphLinksDesc")}</p>
@@ -52,7 +74,20 @@ export function LinksList({
           ✕
         </button>
       </div>
-      {groups.length === 0 && <p className="text-[13px] text-sand-600">{t("panes.graphLinksEmpty")}</p>}
+      {total > 1 && (
+        <input
+          type="search"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder={t("panes.graphLinksFilter")}
+          aria-label={t("panes.graphLinksFilter")}
+          data-track="graph-links-filter"
+          maxLength={100}
+          className="rounded-full border border-line bg-card px-3 py-1.5 text-[12.5px] text-ink placeholder:text-sand-500 focus:border-clay-400"
+        />
+      )}
+      {total === 0 && <p className="text-[13px] text-sand-600">{t("panes.graphLinksEmpty")}</p>}
+      {total > 0 && groups.length === 0 && <p className="text-[13px] text-sand-600">{t("panes.graphLinksFilterNone")}</p>}
       {groups.map(({ edge, links }) => (
         <div
           key={`${edge.a}|${edge.b}`}
@@ -72,6 +107,7 @@ export function LinksList({
               key={l.id}
               onClick={() => onOpen(l)}
               data-track="graph-links-open"
+              data-graph-links-row={l.id}
               aria-expanded={openLinkId === l.id}
               className={`flex flex-col items-start gap-0.5 rounded-xl border px-3 py-2 text-left hover:bg-clay-100/60 ${
                 openLinkId === l.id ? "border-clay-300 bg-clay-100/50" : "border-line bg-card"

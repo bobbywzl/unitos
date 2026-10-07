@@ -136,8 +136,9 @@ for (const lang of ["en", "zh"]) {
     // database copy may hold more links on the pair, as SAFE's seed does) and
     // a notes pill. Links with no project count while no project held them.
     const OPEN = Number(sql(`select count(*) from "Reply" r join "DocLink" l on l.id=r."docLinkId" where r."resolvedById" is null and not l.recommended and ((l."fromDocumentId"='${A}' and l."toDocumentId"='${B}') or (l."fromDocumentId"='${B}' and l."toDocumentId"='${A}')) and (l."notebookId"='${NB}' or (l."notebookId" is null and l."formerNotebookId" is null))`));
-    const abEdge = page.locator(`[data-testid="rf__edge-${pair(A, B)}"]`);
-    const repliesMark = (await abEdge.locator('[data-graph-curve-mark="replies"] text').textContent().catch(() => "")) ?? "";
+    // The curve's marks draw in the label layer above the nodes (VIEW3-01).
+    const abEdge = page.locator(`[data-curve-marks="${pair(A, B)}"]`);
+    const repliesMark = (await abEdge.locator('[data-graph-curve-mark="replies"] [data-n]').textContent().catch(() => "")) ?? "";
     check(repliesMark.trim() === String(OPEN), `${tag} A–B curve shows ${OPEN} open replies`, repliesMark);
     check((await abEdge.locator('[data-graph-curve-mark="notes"]').count()) === 1, `${tag} A–B curve shows a notes pill`);
 
@@ -163,17 +164,17 @@ for (const lang of ["en", "zh"]) {
       await panelOf(page, LINK_AB).locator(`[data-graph-link-thread="${LINK_AB}"] [data-track="reply-send"]`).click();
       // The reply shows once the refresh lands (the first call compiles the route in dev).
       await panelOf(page, LINK_AB).locator(`[data-graph-link-thread="${LINK_AB}"]`, { hasText: REPLY }).waitFor({ timeout: 30000 }).catch(() => {});
-      await abEdge.locator('[data-graph-curve-mark="replies"] text', { hasText: String(OPEN + 1) }).waitFor({ timeout: 15000 }).catch(() => {});
+      await abEdge.locator('[data-graph-curve-mark="replies"] [data-n]', { hasText: String(OPEN + 1) }).waitFor({ timeout: 15000 }).catch(() => {});
       const sent = await panelOf(page, LINK_AB).locator(`[data-graph-link-thread="${LINK_AB}"]`).innerText().catch(() => "");
       check(sent.includes(REPLY), "signed in: the sent reply shows in the thread");
       check(sql(`select count(*) from "Reply" where "docLinkId"='${LINK_AB}' and content='${REPLY}'`) === "1", "signed in: SQL finds the reply on the A–B link");
-      const mark = await abEdge.locator('[data-graph-curve-mark="replies"] text').textContent().catch(() => "");
+      const mark = await abEdge.locator('[data-graph-curve-mark="replies"] [data-n]').textContent().catch(() => "");
       check(mark?.trim() === String(OPEN + 1), `signed in: the curve mark counts ${OPEN + 1}`, mark ?? "");
       await page.screenshot({ path: `${OUT}/reply-sent-${tag}.png` });
       const row = panelOf(page, LINK_AB).locator(`[data-graph-link-thread="${LINK_AB}"] div.flex.items-start`, { hasText: REPLY });
       await row.locator('[data-track="reply-resolve"]').click();
-      await abEdge.locator('[data-graph-curve-mark="replies"] text', { hasText: String(OPEN) }).waitFor({ timeout: 20000 }).catch(() => {});
-      const mark2 = await abEdge.locator('[data-graph-curve-mark="replies"] text').textContent().catch(() => "");
+      await abEdge.locator('[data-graph-curve-mark="replies"] [data-n]', { hasText: String(OPEN) }).waitFor({ timeout: 20000 }).catch(() => {});
+      const mark2 = await abEdge.locator('[data-graph-curve-mark="replies"] [data-n]').textContent().catch(() => "");
       check(mark2?.trim() === String(OPEN), `signed in: resolved, the curve mark counts ${OPEN}`, mark2 ?? "");
       check(sql(`select count(*) from "Reply" where "docLinkId"='${LINK_AB}' and content='${REPLY}' and "resolvedById" is not null`) === "1", "signed in: SQL finds the reply resolved");
       await page.screenshot({ path: `${OUT}/reply-resolved-${tag}.png` });

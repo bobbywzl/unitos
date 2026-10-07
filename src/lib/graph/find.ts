@@ -21,9 +21,15 @@ export function normalizeQuery(q: string): string {
   return q.replace(/\s+/g, " ").trim();
 }
 
+// A query that starts with a letter or a digit matches at a word start; one
+// that starts with punctuation ("§22", "“pity”", "$5") matches wherever it
+// stands, since no word starts before it (REV3-11).
+const WORD_HEAD = /^[\p{L}\p{N}_]/u;
+
 /** A Postgres ARE pattern that matches q at a word start, case aside. */
 export function wordStartPattern(q: string): string {
-  return `\\m${q.replace(/[\\^$.|?*+()[\]{}]/g, "\\$&")}`;
+  const escaped = q.replace(/[\\^$.|?*+()[\]{}]/g, "\\$&");
+  return WORD_HEAD.test(q) ? `\\m${escaped}` : escaped;
 }
 
 /** An ILIKE pattern that matches q anywhere, with % _ \ taken literally. */
@@ -38,7 +44,10 @@ function escapeJs(q: string): string {
 /** Where q first matches in text by the same rule as the SQL: at a word
     start (no letter or digit before it), or anywhere for CJK. */
 export function firstMatch(text: string, q: string): { start: number; end: number } | null {
-  const re = isCjk(q) ? new RegExp(escapeJs(q), "iu") : new RegExp(`(?<![\\p{L}\\p{N}_])(?=[\\p{L}\\p{N}_])${escapeJs(q)}`, "iu");
+  const re =
+    isCjk(q) || !WORD_HEAD.test(q)
+      ? new RegExp(escapeJs(q), "iu")
+      : new RegExp(`(?<![\\p{L}\\p{N}_])(?=[\\p{L}\\p{N}_])${escapeJs(q)}`, "iu");
   const m = re.exec(text);
   return m ? { start: m.index, end: m.index + m[0].length } : null;
 }
