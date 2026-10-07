@@ -214,11 +214,14 @@ export function GraphOverlay({
   // The Links list opened while a card is pinned shows that document's
   // links (WALK3-15).
   const [linksFilter, setLinksFilter] = useState("");
+  const linksOpen = list === "links" || (list === "link" && linkFrom === "links");
   const togglePill = (name: Exclude<SideList, null>, e: { currentTarget: HTMLElement }) => {
     opener.current = e.currentTarget;
     focusList.current = name;
     if (name === "links") setLinksFilter(list === "document" && focusNode ? focusNode.title : "");
-    setList((v) => (v === name || (name === "links" && v === "link") ? null : name));
+    // A link opened from the Links list counts as that list: its pill closes
+    // it. A link opened elsewhere (a curve, a card) gives way to the list.
+    setList((v) => (v === name || (name === "links" && v === "link" && linkFrom === "links") ? null : name));
   };
   // The pill row scrolls sideways when the pills do not fit: a fade at its
   // right edge says more pills are there (WALK3-07).
@@ -574,11 +577,11 @@ export function GraphOverlay({
           <button
             onClick={(e) => togglePill("links", e)}
             data-track="graph-links"
-            aria-expanded={list === "links" || list === "link"}
+            aria-expanded={linksOpen}
             aria-controls={sideListId("links")}
             data-tip={t("panes.graphLinksToggleTitle")}
             className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 ${
-              list === "links" || list === "link" ? "border-line bg-clay-100 text-clay-800" : "border-line text-sand-600"
+              linksOpen ? "border-line bg-clay-100 text-clay-800" : "border-line text-sand-600"
             }`}
           >
             <LinkIcon size={13} />

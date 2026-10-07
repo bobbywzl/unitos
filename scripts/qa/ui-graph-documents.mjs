@@ -233,9 +233,8 @@ for (const [w, h, touch] of [
     await page.waitForTimeout(2500);
     check("the provenance switch fetches ?provenance=1", calls.some((c) => c.at >= t0 && c.path.includes("provenance=1") && c.status === 200));
     check("provenance curves draw", (await page.locator(".graph-prov-curve").count()) > 0);
-    await prov.click();
-    await page.waitForTimeout(800);
-    // A generated document's card lists its links.
+    // A generated document's card lists its links while the switch shows
+    // them (GRAPH3: the card counts only the links the canvas draws).
     const gen = page.locator(".react-flow__node.graph-generated").first();
     if ((await gen.count()) > 0) {
       const genId = await gen.getAttribute("data-id");

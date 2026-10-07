@@ -52,7 +52,7 @@ assert.equal(likePattern("50%_\\"), "%50\\%\\_\\\\%", "LIKE metacharacters escap
 assert.deepEqual(firstMatch("Pitying the weak", "pity"), { start: 0, end: 4 }, "a word start matches");
 assert.equal(firstMatch("spity", "pity"), null, "not inside a word");
 assert.deepEqual(firstMatch("it is a pity.", "PITY"), { start: 8, end: 12 }, "case aside");
-assert.equal(firstMatch("a (b) c", "(b"), null, "a query that starts with no word character needs one before it (the SQL's \\m)");
+assert.deepEqual(firstMatch("a (b) c", "(b"), { start: 2, end: 4 }, "a query that starts with no word character matches anywhere (REV3-11: no \\m)");
 assert.deepEqual(firstMatch("他对同情的看法", "同情"), { start: 2, end: 4 }, "Chinese: a substring");
 assert.deepEqual(firstMatch("the will-to-power", "will-to"), { start: 4, end: 11 }, "a hyphen is literal");
 assert.equal(firstMatch("x", "a/b|c[d]"), null, "metacharacters never throw");
