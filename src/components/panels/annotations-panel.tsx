@@ -35,6 +35,7 @@ import {
 import { useCollapsedView } from "@/components/use-collapsed-view";
 import { inLayer, LayerSwitch, useAnnotationLayer } from "@/components/panels/layer-switch";
 import { stripSimplifyMarkers } from "@/lib/sentences";
+import { LinkCardNotes, ProvenanceRows } from "@/components/panels/link-card-extras"; // [cover4]
 
 // A link's card carries the link kind color (lib/annotations/kind.ts).
 const card = "rounded-2xl border bg-card p-3.5 shadow-soft";
@@ -185,8 +186,10 @@ export function AnnotationsPanel({
   const highlights = annotations.filter((a) => a.kind === "highlight");
   // Recommended links list in the graph (SPEC.md §13); only accepted ones
   // here, with the whole text's annotations: a link joins the texts.
-  const acceptedOut = layer === "whole" ? linksOut.filter((l) => !l.recommended) : [];
-  const acceptedIn = layer === "whole" ? linksIn.filter((l) => !l.recommended) : [];
+  // [cover4] Provenance links fold into ProvenanceRows (WALK4-03).
+  const acceptedOut = layer === "whole" ? linksOut.filter((l) => !l.recommended && !l.provenance) : [];
+  const acceptedIn = layer === "whole" ? linksIn.filter((l) => !l.recommended && !l.provenance) : [];
+  const provenanceShown = layer === "whole" && [...linksOut, ...linksIn].some((l) => l.provenance && !l.recommended);
   const comments = annotations.filter((a) => a.kind === "comment" && !a.resolved);
   const resolved = annotations.filter((a) => a.resolved);
   const explanations = annotations.filter((a) => a.kind === "explain");
@@ -249,7 +252,7 @@ export function AnnotationsPanel({
     </button>
   );
 
-  const empty = annotations.length === 0 && acceptedOut.length === 0 && acceptedIn.length === 0;
+  const empty = annotations.length === 0 && acceptedOut.length === 0 && acceptedIn.length === 0 && !provenanceShown;
 
   // The three-dots menu at the right of every card's header: New note, Add
   // to a note, Jump, Delete — in reach while the card is collapsed too.
@@ -429,6 +432,7 @@ export function AnnotationsPanel({
                 )}
               </div>
               <ReplyThread target={{ docLinkId: l.id, notebookId }} replies={l.replies} crossAccount={l.crossAccount} />
+              <LinkCardNotes noteIds={l.noteIds} sections={sections} /* [cover4] WALK4-05 */ />
             </div>
           ))}
           {acceptedIn.map((l) => (
@@ -474,8 +478,16 @@ export function AnnotationsPanel({
                 )}
               </div>
               <ReplyThread target={{ docLinkId: l.id, notebookId }} replies={l.replies} crossAccount={l.crossAccount} />
+              <LinkCardNotes noteIds={l.noteIds} sections={sections} /* [cover4] WALK4-05 */ />
             </div>
           ))}
+        </div>
+      )}
+      {/* [cover4] A generated document's provenance links, one row per document (WALK4-03). */}
+      {provenanceShown && (
+        <div className="flex flex-col gap-2">
+          <GroupLabel icon={<LinkIcon size={12} />}>{t("stitch.generated")}</GroupLabel>
+          <ProvenanceRows notebookId={notebookId} linksOut={linksOut} linksIn={linksIn} card={card} />
         </div>
       )}
     </div>
