@@ -21,6 +21,8 @@ export type WorkItem = {
 
 // A work: a 5.5 × 8.5 book with a spine, its counts as tags, and the instrument
 // fan behind the cover (design 2a). Rename and delete sit behind the quiet ⋯.
+// The title starts under the ⋯, with no empty band above it; on a phone two
+// books stand side by side, so the type and the tags are a size smaller.
 export function WorkCard({
   work,
   onRename,
@@ -62,47 +64,47 @@ export function WorkCard({
 
       <Link
         href={`/n/${work.id}`}
-        className="relative z-1 flex aspect-[5.5/8.5] flex-col rounded-[18px] bg-sand-100 px-[18px] pt-6 pb-[18px] text-center shadow-soft transition-[transform,box-shadow] duration-300 hover:-translate-y-[5px] hover:shadow-lift"
+        className="relative z-1 flex aspect-[5.5/8.5] flex-col rounded-[18px] bg-sand-100 px-3 pt-6 pb-3 sm:px-[18px] sm:pb-[18px] text-center shadow-soft transition-[transform,box-shadow] duration-300 hover:-translate-y-[5px] hover:shadow-lift"
       >
         <span
           aria-hidden
           className="absolute top-3 bottom-3 left-[13px] w-[3px] rounded-full bg-sand-300"
         />
-        <span className="mt-14 px-2 font-display text-[22px] leading-[1.25]">{work.title}</span>
+        <span className="mt-6 px-2 font-display text-[17px] leading-[1.25] break-words sm:text-[22px]">{work.title}</span>
         {work.shared && (
           <span className="mt-1.5 px-2 text-xs text-sand-600">
             {t("works.byOwner", { name: work.shared.ownerName })}
           </span>
         )}
         <CoverDot />
-        <span className="mt-auto flex flex-wrap justify-center gap-1.5">
-          <span className="rounded-full bg-sand-200 px-3 py-1 text-xs font-semibold text-sand-700">
+        <span className="mt-auto flex flex-wrap justify-center gap-1 sm:gap-1.5">
+          <span className="rounded-full bg-sand-200 px-2 py-1 text-xs font-semibold sm:px-3 text-sand-700">
             {t(work.sectionCount === 1 ? "works.sectionCountOne" : "works.sectionCountOther", {
               n: work.sectionCount,
             })}
           </span>
-          <span className="rounded-full bg-sand-200 px-3 py-1 text-xs font-semibold text-sand-700">
+          <span className="rounded-full bg-sand-200 px-2 py-1 text-xs font-semibold sm:px-3 text-sand-700">
             {t(work.documentCount === 1 ? "works.documentCountOne" : "works.documentCountOther", {
               n: work.documentCount,
             })}
           </span>
           {work.pendingCount > 0 && (
-            <span className="rounded-full bg-clay-200 px-3 py-1 text-xs font-semibold text-clay-800">
+            <span className="rounded-full bg-clay-200 px-2 py-1 text-xs font-semibold sm:px-3 text-clay-800">
               {t("works.pendingCount", { n: work.pendingCount })}
             </span>
           )}
           {offline?.saved && (
-            <span className="rounded-full bg-sage-200 px-3 py-1 text-xs font-semibold text-sage-800">
+            <span className="rounded-full bg-sage-200 px-2 py-1 text-xs font-semibold sm:px-3 text-sage-800">
               {t("works.offlineBadge")}
             </span>
           )}
           {work.shared ? (
-            <span className="rounded-full bg-sage-200 px-3 py-1 text-xs font-semibold text-sage-800">
+            <span className="rounded-full bg-sage-200 px-2 py-1 text-xs font-semibold sm:px-3 text-sage-800">
               {t(work.shared.role === "editor" ? "panes.roleEditor" : "panes.roleViewer")}
             </span>
           ) : (
             work.collaboratorCount > 0 && (
-              <span className="rounded-full bg-sage-200 px-3 py-1 text-xs font-semibold text-sage-800">
+              <span className="rounded-full bg-sage-200 px-2 py-1 text-xs font-semibold sm:px-3 text-sage-800">
                 {t("works.sharedBadge", { n: work.collaboratorCount })}
               </span>
             )

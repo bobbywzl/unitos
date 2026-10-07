@@ -90,8 +90,9 @@ const secondaryButton =
   "shrink-0 rounded-full border border-line px-4 py-1.5 text-xs font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40";
 
 // Settings: one Profile section (picture, name, symbol, color, background),
-// Unitos Premium, Connections (sign-in and Google Drive), Your data (every
-// stored field and count about the account), then Language and Theme.
+// Language and Theme (one row each), the subscription and Storage,
+// Connections (sign-in and Google Drive), then Your data (every stored field
+// and count about the account), last.
 // Changes save automatically.
 export function SettingsForm({
   account,
@@ -471,6 +472,35 @@ export function SettingsForm({
         )}
       </section>
 
+      {/* Language and Theme: one row each, under Profile. A theme's
+          description is its tooltip. */}
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className={sectionTitle}>{t("settings.language")}</h2>
+          <LangSwitcher />
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className={sectionTitle}>{t("settings.theme")}</h2>
+          <div className="flex gap-1">
+            {THEMES.map((th) => (
+              <button
+                key={th.value}
+                onClick={() => setTheme(th.value)}
+                aria-pressed={theme === th.value}
+                data-tip={t(th.description)}
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                  theme === th.value
+                    ? "bg-ink text-paper"
+                    : "bg-card text-sand-600 shadow-soft hover:text-clay-800"
+                }`}
+              >
+                {t(th.label)}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
       <section className="space-y-3">
         <h2 className={sectionTitle}>{t("settings.subscription")}</h2>
         {/* The subscription panel (SPEC.md §24): the plan, its status, the
@@ -572,34 +602,6 @@ export function SettingsForm({
         </div>
       </section>
 
-      <section className="space-y-3">
-        <h2 className={sectionTitle}>{t("settings.language")}</h2>
-        <LangSwitcher />
-      </section>
-
-      <section className="space-y-3">
-        <h2 className={sectionTitle}>{t("settings.theme")}</h2>
-        <div className="grid grid-cols-3 gap-3">
-          {THEMES.map((th) => (
-            <button
-              key={th.value}
-              onClick={() => setTheme(th.value)}
-              aria-pressed={theme === th.value}
-              className={`rounded-2xl px-4 py-3 text-left ${
-                theme === th.value
-                  ? "bg-card shadow-soft outline-2 outline-clay-400"
-                  : "bg-card shadow-soft hover:bg-clay-100"
-              }`}
-            >
-              <div className="text-sm font-semibold">
-                {t(th.label)}
-                {theme === th.value && <span className="ml-1.5">✓</span>}
-              </div>
-              <div className="mt-0.5 text-xs text-sand-600">{t(th.description)}</div>
-            </button>
-          ))}
-        </div>
-      </section>
     </div>
   );
 }

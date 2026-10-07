@@ -130,6 +130,7 @@ const en = {
   // service worker's answer (public/sw.js)
   offlineAi:
     "AI is off while offline. Notes, highlights, comments, and edits save on this device and sync when you are back online.",
+  offlineSyncingOne: "Syncing 1 offline change…",
   offlineSyncing: "Syncing {n} offline changes…",
   offlineShort: "Offline",
   offlineShortQueued: "Offline · {n} to sync",
@@ -223,6 +224,7 @@ const zh: Record<keyof typeof en, string> = {
   // A call that needs a model, offline (SPEC.md §17): the same words as the
   // service worker's answer (public/sw.js)
   offlineAi: "离线时 AI 不可用。笔记、高亮、评论和编辑会保存在此设备上，联网后同步。",
+  offlineSyncingOne: "正在同步 1 项离线更改…",
   offlineSyncing: "正在同步 {n} 项离线更改…",
   offlineShort: "离线",
   offlineShortQueued: "离线 · {n} 项待同步",

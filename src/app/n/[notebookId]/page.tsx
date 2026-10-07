@@ -77,6 +77,7 @@ import { cookies } from "next/headers";
 import { READING_LINE_PX, type BlockPosition } from "@/lib/reading-position";
 import { storedPdfPages } from "@/lib/pdf-pages";
 import { documentEditedAt, type DocumentKind } from "@/lib/document-order";
+import { EmptyProjectAdd } from "@/components/reader/empty-project-add";
 
 export const dynamic = "force-dynamic";
 
@@ -1518,6 +1519,8 @@ export default async function NotebookPage(props: {
             <p className="max-w-sm text-center text-sm text-sand-600">
               {(await serverT())("panes.noDocumentOpen")}
             </p>
+            {/* The one thing to do here; a viewer cannot add. */}
+            {myRole !== "viewer" && <EmptyProjectAdd />}
           </div>
         )
       }

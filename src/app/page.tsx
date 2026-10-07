@@ -14,6 +14,7 @@ import { PersonBadge } from "@/components/collab/person-badge";
 import { TierBand } from "@/components/tier-mark";
 import { ActiveTimeClock } from "@/components/active-time-clock";
 import { Companions } from "@/components/works/companions";
+import { FeedbackHeaderButton } from "@/components/feedback-button";
 import { Notifications } from "@/components/works/notifications";
 import { currentLang } from "@/lib/i18n/server";
 import { ensureReleaseNotifications } from "@/lib/releases-server";
@@ -117,39 +118,51 @@ export default async function Home() {
       <header className="flex items-center gap-3 pt-[26px]">
         <Logo size={38} className="text-clay" />
         <span className="font-display text-[21px]">{t("common.appName")}</span>
-        {authEnabled() && (
-          <>
-            <Link href="/settings" className="ml-auto flex min-w-0 items-center gap-3">
-              <PersonBadge person={{ ...personOf(user), tier }} size={30} title={user.name} />
-              <span className="hidden max-w-[200px] truncate text-xs text-sand-600 sm:inline">
-                {user.email}
-              </span>
+        {/* Signed in, the badge is the Settings link; signed out, the gear
+            is. On a phone Feedback sits here, not over the cards. */}
+        <div className="ml-auto flex min-w-0 items-center gap-3">
+          {authEnabled() && (
+            <>
+              <Link
+                href="/settings"
+                aria-label={t("common.settings")}
+                data-tip={t("common.settings")}
+                className="flex min-w-0 items-center gap-3"
+              >
+                <PersonBadge person={{ ...personOf(user), tier }} size={30} title={user.name} />
+                <span className="hidden max-w-[200px] truncate text-xs text-sand-600 sm:inline">
+                  {user.email}
+                </span>
+              </Link>
+              <TierButton state={tier} trialEndsAt={user.trialEndsAt?.toISOString() ?? null} billing={billing} />
+            </>
+          )}
+          <FeedbackHeaderButton />
+          {!authEnabled() && (
+            <Link
+              href="/settings"
+              aria-label={t("common.settings")}
+              className="flex size-[38px] items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
             </Link>
-            <TierButton state={tier} trialEndsAt={user.trialEndsAt?.toISOString() ?? null} billing={billing} />
-          </>
-        )}
-        <Link
-          href="/settings"
-          aria-label={t("common.settings")}
-          className={`flex size-[38px] items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800 ${authEnabled() ? "" : "ml-auto"}`}
-        >
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.75"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-            <circle cx="12" cy="12" r="3" />
-          </svg>
-        </Link>
+          )}
+        </div>
       </header>
 
-      <div className="pt-16">
+      <div className="pt-6 sm:pt-10">
         {/* The welcome flow and the nudges are for a new account: no project
             yet, and created within NEW_ACCOUNT_DAYS (welcome-flow.tsx).
             welcomeKey is the account's birth: an admin reset stamps createdAt

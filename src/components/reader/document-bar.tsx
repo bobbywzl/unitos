@@ -792,7 +792,9 @@ export function DocumentBar({
           : request.kind === "batch"
             ? request.items
             : [request];
-      const queued = Promise.all(
+      // The offline pill counts the queued add; no second notice. A queue
+      // that cannot store the add says so.
+      void Promise.all(
         items.map((item) =>
           item.kind === "file"
             ? queueUpload(item.file, notebookId)
@@ -800,11 +802,7 @@ export function DocumentBar({
               ? Promise.resolve()
               : queueWrite("/api/documents", "POST", { url: item.url, notebookId, ...(request.folderId ? { folderId: request.folderId } : {}) }),
         ),
-      ).then(() => items.length);
-      void queued.then((n) => {
-        setNotice(t("panes.uploadQueuedOffline", { n }));
-        setTimeout(() => setNotice(null), 4000);
-      });
+      ).catch(() => setError(t("common.offline")));
       setDialog(false);
       return;
     }
@@ -1547,7 +1545,7 @@ export function DocumentBar({
         </span>
       )}
       {notice && capture?.status !== "running" && (
-        <span className="shrink-0 rounded-full bg-sage-200 px-3 py-1 text-xs font-semibold text-sage-800">
+        <span data-tip={notice} className="min-w-0 truncate rounded-full bg-sage-200 px-3 py-1 text-xs font-semibold text-sage-800">
           {notice}
         </span>
       )}

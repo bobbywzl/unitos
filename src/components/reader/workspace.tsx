@@ -37,7 +37,7 @@ import { CorpusDistillPage } from "@/components/reader/corpus-distill-page";
 import { GuideDialog } from "@/components/guide-dialog";
 import { useT } from "@/components/lang-provider";
 import { NotebookTitle } from "@/components/notebook-title";
-import { ProgressBar } from "@/components/progress-bar";
+import { BOTTOM_STATUS, ProgressBar } from "@/components/progress-bar";
 import { LoadingDots } from "@/components/thinking";
 import { SaveIndicator } from "@/components/save-indicator";
 import { OpenDocumentProvider } from "@/components/reader/open-document-context";
@@ -998,7 +998,7 @@ export function Workspace({
         />
       )}
       {offlineToast && !offlineSaving && (
-        <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full bg-ink/90 px-3 py-1.5 text-xs text-paper">
+        <div className={`${BOTTOM_STATUS} z-40 flex w-max max-w-[calc(100vw-32px)] items-center gap-2 rounded-full bg-ink/90 px-3 py-1.5 text-xs text-paper`}>
           {offlineToast.text}
           {offlineToast.plans && (
             <button

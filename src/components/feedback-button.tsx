@@ -30,12 +30,52 @@ function parseLink(raw: string): string | null {
     (reader-panes.tsx). */
 export const FEEDBACK_OPEN_EVENT = "unitos:feedback-open";
 
+/** Feedback in the dashboard's header, on a phone only: there the floating
+    pill would lie on the first project card's ⋯ (FeedbackButton hides it). */
+export function FeedbackHeaderButton() {
+  const t = useT();
+  return (
+    <button
+      onClick={() => window.dispatchEvent(new Event(FEEDBACK_OPEN_EVENT))}
+      aria-label={t("works.sendFeedback")}
+      data-tip={t("works.sendFeedback")}
+      className="flex size-[38px] items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800 sm:hidden"
+    >
+      <FeedbackIcon />
+    </button>
+  );
+}
+
+function FeedbackIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden
+      className={className}
+      width="17"
+      height="17"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      <path d="M12 7v4" />
+      <path d="M12 14h.01" />
+    </svg>
+  );
+}
+
 // Floating feedback button, mounted app-wide (release-edu pattern).
 export function FeedbackButton() {
   const pathname = usePathname();
   const t = useT();
   // The reader (/n/<project>): its tray and rail fill the right edge.
   const inReader = /^\/n\/[^/]+\/?$/.test(pathname ?? "");
+  // The dashboard on a phone: the pill would lie on the first card's ⋯;
+  // Feedback is a button in the header there (FeedbackHeaderButton).
+  const onDashboard = pathname === "/";
   const [open, setOpen] = useState(false);
   const [category, setCategory] = useState<"bug" | "idea" | "other">("bug");
   const [message, setMessage] = useState("");
@@ -158,7 +198,8 @@ export function FeedbackButton() {
           reopens a resolved comment): there, on md+, it is a round button
           at the foot of the rail, where no control sits. On a phone's
           reader it would lie on the article's last lines: there it is a row
-          of the Reader view menu instead (FEEDBACK_OPEN_EVENT). */}
+          of the Reader view menu instead (FEEDBACK_OPEN_EVENT). On a
+          phone's dashboard it is a button in the header. */}
       <button
         onClick={() => setOpen(!open)}
         aria-label={t("works.sendFeedback")}
@@ -166,27 +207,10 @@ export function FeedbackButton() {
         data-feedback-button=""
         className={`fixed right-4 bottom-[calc(64px+env(safe-area-inset-bottom))] z-20 rounded-full bg-card px-4 py-2 text-sm text-sand-700 shadow-lift hover:bg-clay-100 hover:text-clay-800 md:bottom-[60px] print:hidden ${
           inReader ? "max-md:hidden md:right-2 md:bottom-4 md:flex md:size-9 md:items-center md:justify-center md:p-0" : ""
-        }`}
+        } ${onDashboard ? "max-sm:hidden" : ""}`}
       >
         <span className={inReader ? "md:hidden" : undefined}>{t("works.feedback")}</span>
-        {inReader && (
-          <svg
-            aria-hidden
-            className="hidden md:block"
-            width="17"
-            height="17"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            <path d="M12 7v4" />
-            <path d="M12 14h.01" />
-          </svg>
-        )}
+        {inReader && <FeedbackIcon className="hidden md:block" />}
       </button>
       <Presence show={open} exit="pop">
       {open && (
