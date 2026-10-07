@@ -10,6 +10,9 @@
 //      show A's link; B cannot remove, accept, reword, or reply to it (404);
 //      a link with no project still shows in both, and B cannot remove it
 //      (403) while A's project holds it too.
+//   4. No project named (an older tab): a removal keeps the row and other
+//      accounts' replies (hidden, or 409 when no project can hide it), and a
+//      hidden link answers 404 to reason edits, replies, and removals.
 //
 // Run, with a dev server on the same database copy, sign-in on, and the mock
 // models (scripts/qa/mock-kimi.mjs):
@@ -266,6 +269,70 @@ check("the seeded link and its 2 replies are intact", !!seedAfter && seedAfter.r
 // Existing workflow: the owner still rewords, replies, and removes in their own project.
 check("A rewords A's link from A's project", (await call(A, "PATCH", `/api/links/${linkA}?notebookId=${PA}`, { reason: "Same COP" })).status === 200);
 check("A removes A's link from A's project", (await call(A, "DELETE", `/api/links/${linkA}?notebookId=${PA}`)).status === 200);
+
+// ── 4. No project named (REV4-01) ───────────────────────────────────────────
+// Every tab open at the deploy sends Remove, Dismiss, reason edits, and
+// replies with no project. A removal must still keep the row and the replies
+// of other accounts, and a link hidden in a project stays out of reach.
+console.log("== no project named");
+const C = await account("c");
+const cUser = await db.user.findUniqueOrThrow({ where: { id: C.id } });
+// Four documents of this run: X and Y only A's project PA3 holds (C edits it),
+// Z and W no project holds.
+const madeDocs: string[] = [];
+async function doc(title: string) {
+  const d = await db.document.create({
+    data: { title, blocks: { create: [{ order: 0, type: "PARAGRAPH", text: `${title}: suffering is the ground of compassion.` }] } },
+    include: { blocks: true },
+  });
+  madeDocs.push(d.id);
+  return { id: d.id, block: d.blocks[0] };
+}
+const [X, Y, Z, W] = [await doc("QA Link X"), await doc("QA Link Y"), await doc("QA Link Z"), await doc("QA Link W")];
+const PA3 = await project(A.id, "QA Link Scope A3", [X.id, Y.id]);
+await db.notebookCollaborator.upsert({
+  where: { notebookId_email: { notebookId: PA3, email: cUser.email! } },
+  create: { notebookId: PA3, email: cUser.email!, role: "EDITOR" },
+  update: { role: "EDITOR" },
+});
+const legacyLink = (from: typeof X, to: typeof X) =>
+  db.docLink.create({
+    data: {
+      createdById: A.id,
+      fromDocumentId: from.id,
+      fromBlockId: from.block.id,
+      startOffset: 0,
+      endOffset: 9,
+      quotedText: from.block.text.slice(0, 9),
+      prefix: "",
+      suffix: from.block.text.slice(9, 40),
+      toDocumentId: to.id,
+      toBlockId: to.block.id,
+    },
+  });
+const legacy = (await legacyLink(X, Y)).id;
+const legacyReply = await call(A, "POST", "/api/replies", { docLinkId: legacy, notebookId: PA3, content: "A's reply on a link with no project" });
+check("A replies on a link with no project", legacyReply.status === 201, `${legacyReply.status} ${legacyReply.text.slice(0, 160)}`);
+const cRemove = await call(C, "DELETE", `/api/links/${legacy}`);
+const kept = await db.docLink.findUnique({ where: { id: legacy }, include: { replies: true } });
+check("C (A's editor) removes it with no project: 200, the row and A's reply stay", cRemove.status === 200 && !!kept && kept.replies.length === 1, `${cRemove.status} ${cRemove.text.slice(0, 160)}`);
+check("…and it is hidden in A's project C edits", (await db.docLinkHidden.count({ where: { docLinkId: legacy, notebookId: PA3 } })) === 1);
+const hiddenTries: [string, { status: number }][] = [
+  ["PATCH reason", await call(A, "PATCH", `/api/links/${legacy}`, { reason: "set from an older tab" })],
+  ["reply", await call(A, "POST", "/api/replies", { docLinkId: legacy, content: "reply from an older tab" })],
+  ["DELETE", await call(C, "DELETE", `/api/links/${legacy}`)],
+];
+for (const [what, res] of hiddenTries) check(`a hidden link, no project named: ${what} answers 404`, res.status === 404, String(res.status));
+const orphan = (await legacyLink(Z, W)).id;
+await db.reply.create({ data: { docLinkId: orphan, userId: A.id, content: "A's reply on a link no project holds" } });
+const refuse = await call(C, "DELETE", `/api/links/${orphan}`);
+check(
+  "no project to hide it in: the removal answers 409 and keeps the row and A's reply",
+  refuse.status === 409 && (await db.reply.count({ where: { docLinkId: orphan } })) === 1,
+  `${refuse.status} ${refuse.text.slice(0, 160)}`,
+);
+await db.notebook.delete({ where: { id: PA3 } }); // this run's project
+await db.document.deleteMany({ where: { id: { in: madeDocs } } }); // this run's documents, with their links
 
 // Clean up only the links this run made (their replies go with them).
 await db.docLink.deleteMany({ where: { id: { in: made } } });

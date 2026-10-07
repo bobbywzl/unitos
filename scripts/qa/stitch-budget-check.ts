@@ -134,6 +134,14 @@ const kinds: [string, ReturnType<typeof commandKind>][] = [
   ["你能把这些段落汇总成一页吗？", "page"],
   ["列出叔本华给出的三个理由", "question"],
   ["尼采和叔本华的看法相反吗？", "links"],
+  // Round 4 (REV4-08): 整理一下 with what it gathers; write an answer.
+  ["请整理一下关于同情的段落", "page"],
+  ["帮我整理好尼采关于怜悯的引文", "page"],
+  ["Can you write a short answer: what is pity?", "question"],
+  ["Write me a brief reply on what he means by the will", "question"],
+  ["Write an answer to this: is pity a virtue?", "question"],
+  ["Draft a page on pity from every document", "page"],
+  ["Could you write up the passages on pity?", "page"],
 ];
 for (const [command, want] of kinds) check(`commandKind "${command}"`, commandKind(command) === want, commandKind(command));
 // The round 3 answers audit's 37 commands: every one a question.
@@ -189,6 +197,17 @@ check(
   firstsFirst(["A5", "A6", "A7", "B2", "A8", "C9", "B3", "Z1"], docOf).join(" ") === "A5 B2 C9 A6 A7 A8 B3",
   firstsFirst(["A5", "A6", "A7", "B2", "A8", "C9", "B3", "Z1"], docOf).join(" "),
 );
+{
+  // REV4-07: one long first pick no longer turns off the rule for the
+  // documents after it: it waits in the call's order, and B and C lead.
+  const tok: Record<string, number> = { A1: 6000, A2: 100, A3: 100, A4: 100, B1: 100, C1: 100 };
+  const capDoc = (a: string) => a[0];
+  const capped = firstsFirst(["A1", "A2", "A3", "A4", "B1", "C1"], capDoc, { tokens: 5000, costOf: (a) => tok[a] });
+  check("firstsFirst: a long first pick does not stop the next documents' first picks", capped.join(" ") === "B1 C1 A1 A2 A3 A4", capped.join(" "));
+  check("firstsFirst: no cap, every first pick leads", firstsFirst(["A1", "A2", "A3", "A4", "B1", "C1"], capDoc).join(" ") === "A1 B1 C1 A2 A3 A4");
+  const tight = firstsFirst(["A1", "B1", "C1", "D1"], capDoc, { tokens: 250, costOf: () => 100 });
+  check("firstsFirst: the cap still holds: first picks past it keep the call's order", tight.join(" ") === "A1 B1 C1 D1", tight.join(" "));
+}
 {
   // A question about one document's topic: its late blocks survive the cut
   // because the call ranked them first, not after every other document's.
@@ -388,6 +407,34 @@ check("commandNames: quoted phrases and 《》", commandNames('What does "eterna
   check("checkReplyQuotes: cut words (…) stay a quote", lines[2].includes('"It was in the month … in Sils Maria"'));
   check("checkReplyQuotes: curly quotes are checked too", lines[3].includes("“to make feeble is the Christian recipe”"));
   check("checkReplyQuotes: the misquotes are counted", q.unquoted.length === 2, q.unquoted.join(" | "));
+}
+
+// ── Round 4 (REV4-05): correct quotes keep their marks ──
+{
+  const qb = new Map<string, B>([
+    ["A1", { id: "b1", alias: "A1", type: "PARAGRAPH", documentId: "d1", text: "The will—blind, striving—is the thing in itself." }],
+    ["A2", { id: "b2", alias: "A2", type: "PARAGRAPH", documentId: "d1", text: "Pity is the practice of nihilism, and it preserves what is ripe for destruction." }],
+    ["C1", { id: "b6", alias: "C1", type: "PARAGRAPH", documentId: "d3", text: "Ressenti\u00adment itself, if it should appear in the noble man, consummates itself." }],
+    ["B1", { id: "b3", alias: "B1", type: "PARAGRAPH", documentId: "d2", text: "Compassion is the basis of morality." }],
+    ["B2", { id: "b4", alias: "B2", type: "PARAGRAPH", documentId: "d2", text: "and, he adds, it is the sole source of moral worth." }],
+    ["B3", { id: "b5", alias: "B3", type: "PARAGRAPH", documentId: "d2", text: "Man is a rope, tied between beast and overman—a rope over an abyss." }],
+  ]);
+  const cases: [string, string, boolean][] = [
+    ["exact", `He calls pity "the practice of nihilism" [block A2].`, true],
+    ["spaced em dash", `He writes "The will — blind, striving — is the thing in itself" [block A1].`, true],
+    ["hyphen for dash", `He writes "The will - blind, striving - is the thing" [block A1].`, true],
+    ["soft hyphen in block", `He writes "Ressentiment itself, if it should appear" [block C1].`, true],
+    ["bracketed insertion", `He says "[pity] preserves what is ripe for destruction" [block A2].`, true],
+    ["across two blocks", `Schopenhauer: "Compassion is the basis of morality and, he adds, it is the sole source" [block B1] [block B2].`, true],
+    ["ellipsis", `"Man is a rope ... over an abyss" [block B3].`, true],
+    ["paraphrase", `He says "pity is a kind of weakness of the soul" [block A2].`, false],
+    ["two blocks out of order", `"it is the sole source of moral worth. Compassion is the basis" [block B1] [block B2].`, false],
+    ["a hyphenated word is not a dash", `He writes "The will-to blind, striving" [block A1].`, false],
+  ];
+  for (const [name, line, kept] of cases) {
+    const r = checkReplyQuotes(line, qb, new Set());
+    check(`checkReplyQuotes: ${name} ${kept ? "keeps" : "loses"} its marks`, (r.unquoted.length === 0) === kept, r.unquoted.join(" | "));
+  }
 }
 
 // ── Round 3 (ANS3-04): the reply's language, one switch ──

@@ -196,23 +196,25 @@ export function commandKind(command: string): StitchCommandKind {
   // write", "please list".
   const lead =
     String.raw`^(?:(?:please|now|then|ok(?:ay)?|so)[,\s]+|(?:can|could|would|will) you\s+(?:please\s+)?|i(?: would|'d)? (?:want|need|like) you to\s+|help me\s+)*`;
-  // Verbs that ask for a page on their own; list only with every, all, or
-  // each ("list every claim"; "list the three reasons" is a question).
+  // Verbs that ask for a page on their own, write and draft unless they
+  // write an answer ("write a short answer: …" is a question); list only
+  // with every, all, or each ("list every claim"; "list the three reasons" is a question).
   // make, create, build, put, and turn only with what they make: "make a
   // timeline", "put them together", "turn these into a page" — never "make
   // sense of", "put simply", "turn to", "build an argument".
   const pageVerb = new RegExp(
     lead +
-      String.raw`(?:(?:gather|collect|compile|write|draft|combine)\b|list\b.*\b(?:every|all|each)\b|give me (?:a|an|one) (?:page|timeline|list|table|study guide)\b|(?:make|create|build|draw up|produce|prepare) (?:me )?(?:a|an|one|the|that|this|it)?\s*(?:[\w-]+\s+){0,2}?(?:page|timeline|list|table|study guide|cheat sheet|chronology|glossary|reading list)\b|put (?:(?:them|these|those|it|this|that)(?: [\w-]+)?|all (?:the )?[\w-]+|every [\w-]+|the [\w-]+(?: [\w-]+)?) (?:together|into|in one|on one)\b|turn (?:(?:it|this|that|these|them|those)(?: [\w-]+)?|the [\w-]+(?: [\w-]+)?) into\b)`,
+      String.raw`(?:(?:gather|collect|compile|combine)\b|(?:write|draft)\b(?!\s+(?:me\s+)?(?:(?:a|an|one|your)\s+)?(?:(?:short|brief|quick|simple)\s+)?(?:answer|reply|response)\b)|list\b.*\b(?:every|all|each)\b|give me (?:a|an|one) (?:page|timeline|list|table|study guide)\b|(?:make|create|build|draw up|produce|prepare) (?:me )?(?:a|an|one|the|that|this|it)?\s*(?:[\w-]+\s+){0,2}?(?:page|timeline|list|table|study guide|cheat sheet|chronology|glossary|reading list)\b|put (?:(?:them|these|those|it|this|that)(?: [\w-]+)?|all (?:the )?[\w-]+|every [\w-]+|the [\w-]+(?: [\w-]+)?) (?:together|into|in one|on one)\b|turn (?:(?:it|this|that|these|them|those)(?: [\w-]+)?|the [\w-]+(?: [\w-]+)?) into\b)`,
   );
   // Nouns that ask for a page anywhere; a timeline only as a thing to make
   // ("a timeline"), never "the timeline in my notes".
   const pageNoun =
     /\b(one page|a page|new page|into (one|a) page|that a page|it a page|(a|one) timeline|study guide|every passage|all (the )?passages|cheat sheet)\b/;
   // Chinese: the page verb opens the command (after a polite opening or a
-  // 把 object), as in English; 列出 only with 所有, 每, 各, or 全部.
+  // 把 object), as in English; 列出 only with 所有, 每, 各, or 全部; 整理
+  // (一下) only with what it gathers: 段落, 引文, 内容, 说法.
   const zhLead = "^(?:请|帮我|帮忙|麻烦你?|你能|你可以|能不能|能否|可以|可不可以)*";
-  const zhVerb = new RegExp(`${zhLead}(?:把.{1,30}?)?(?:汇集|收集|汇总|整理成|整理出|写成|写一页|写一篇|做成|合并成|生成|列出.*(?:所有|每|各|全部))`);
+  const zhVerb = new RegExp(`${zhLead}(?:把.{1,30}?)?(?:汇集|收集|汇总|整理成|整理出|整理(?:一下|好)?.{0,20}?(?:段落|引文|内容|说法)|写成|写一页|写一篇|做成|合并成|生成|列出.*(?:所有|每|各|全部))`);
   const zhNoun = /一页纸|新页面|成一页|做成页面|(给我|做|画|列|写)(一个|一条|一份)?时间线|时间线页面|学习指南|所有段落|每一段/;
   if (pageVerb.test(c) || pageNoun.test(c) || zhVerb.test(c) || zhNoun.test(c)) return "page";
   const links = new RegExp(
@@ -920,8 +922,9 @@ export function interleave(lists: string[][]): string[] {
     every document's best block, and the rest of the budget goes where the
     select pass ranked it, not to every document alike. docOf: the
     document of an alias; an alias with none drops. cap: the first picks
-    moved to the front stop once they hold this many tokens (costOf), and
-    the rest keep the select pass's order (COST3-01): on a project of 100
+    moved to the front hold this many tokens at most (costOf): a first pick
+    that does not fit keeps its place in the select pass's order, and the
+    next documents' first picks still lead while they fit (COST3-01): on a project of 100
     documents the first picks alone would fill a question's budget, one
     block per document, and the blocks that answer best would be cut.
     Thirty documents' first picks fit a third of a question's budget, so
@@ -935,19 +938,19 @@ export function firstsFirst(
   const rest: string[] = [];
   const seen = new Set<string>();
   let used = 0;
-  let full = false;
   for (const alias of aliases) {
     const doc = docOf(alias);
     if (doc === undefined) continue;
-    if (full || seen.has(doc)) {
+    if (seen.has(doc)) {
       rest.push(alias);
       continue;
     }
     seen.add(doc);
     if (cap) {
       const cost = cap.costOf(alias);
+      // A long first pick waits in the select order; the documents after
+      // it still lead with their first picks while they fit (REV4-07).
       if (used + cost > cap.tokens) {
-        full = true;
         rest.push(alias);
         continue;
       }
@@ -1020,11 +1023,14 @@ const BLOCK_TAG = /\[block ([^\]\s]+)\]/g;
 
 // A quote's text as compared with a block's: case, whitespace, quote
 // marks, markdown emphasis, and dashes folded.
+// A dash with or without spaces around it is one "-" (models re-space em
+// dashes); soft hyphens and zero-width characters drop (REV4-05).
 const foldQuote = (t: string) =>
   t
+    .replace(/[\u00ad\u200b-\u200d\u2060\ufeff]/g, "")
     .normalize("NFKC")
     .replace(/[*_"'“”‘’「」『』]/g, "")
-    .replace(/[‐-―−]/g, "-")
+    .replace(/\s*[‐-―−]\s*|\s+-\s+/g, "-")
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
@@ -1039,7 +1045,10 @@ const QUOTE_CJK_MIN = 6;
     the link and page quotes resolve against theirs: a span in quote marks
     on a line that cites blocks must be in one of them, or in any block
     the reply cites when the line cites none, or verbatim in any block
-    read. Cut words (… or ...) split it into pieces, each in the block. A
+    read, or in the line's cited blocks joined in order (a quote across
+    two blocks). Cut words (… or ...) and an editor's [insertion] split it
+    into pieces, each in the block. Dashes match with or without spaces,
+    and soft hyphens drop. A
     span that is in none loses its quote marks and keeps its words, so a
     paraphrase never reads as the document's words. A document's title in
     quote marks is left alone. Runs on the model's aliases, before
@@ -1059,7 +1068,7 @@ export function checkReplyQuotes(
       const cjk = /[㐀-鿿]/.test(inner);
       if (inner.trim().length < (cjk ? QUOTE_CJK_MIN : QUOTE_MIN) || titles.has(inner.trim())) return span;
       const pieces = inner
-        .split(/\s*(?:…|\.\.\.)\s*/)
+        .split(/\s*(?:…|\.\.\.|\[[^\]]{1,40}\])\s*/)
         .map(foldQuote)
         .map((p) => p.replace(/^[\s.,;:!?]+|[\s.,;:!?]+$/g, ""))
         .filter((p) => p.length >= 4);
@@ -1071,6 +1080,15 @@ export function checkReplyQuotes(
       const tags = tagsIn(line);
       const cited = tags.length > 0 ? tags : all;
       if (cited.some((a) => holds(textOf(a)))) return span;
+      // A quote that runs from one cited block into the next: the cited
+      // blocks in their order, joined, with or without the first block's
+      // closing stop.
+      if (tags.length > 1) {
+        const texts = tags.map(textOf);
+        const joined = texts.join(" ");
+        const trimmed = texts.map((t) => t.replace(/[\s.,;:!?。，；：]+$/, "")).join(" ");
+        if (holds(joined) || holds(trimmed)) return span;
+      }
       if (every.some((b) => holds(b.text))) return span;
       unquoted.push(inner);
       return `${lead}${inner}`;

@@ -13,7 +13,9 @@
 // COST3-04: each refetch sends the last answer's ETag, and a 304 (nothing the
 // graph shows changed) keeps the last answer. COST3-03: the answer has no
 // link titles (put back here from the nodes) and no provenance links until
-// some part of the graph asks for them (provenance-want.ts).
+// some part of the graph asks for them (provenance-want.ts). REV4-02: a rev
+// move moves the graph's generation before the fetch, so a 304 still has the
+// open link's passages and the part titles read again (graph-generation.ts).
 
 import { useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import type { GraphData } from "@/lib/graph/data";
@@ -21,13 +23,16 @@ import type { GraphEdge, GraphNode, RecommendedLinkView } from "@/lib/types";
 import type { DocumentKind } from "@/lib/document-order";
 import { CollabProvider, useCollab } from "@/components/collab/collab-context";
 import { GraphOverlay } from "@/components/graph/graph-overlay";
-import { clearLinkPassages } from "@/components/graph/link-passages";
+import { bumpGraphGeneration } from "@/components/graph/graph-generation";
 import { useProvenanceWanted } from "@/components/graph/provenance-want";
 
 /** The last answer per project: its data, when it landed or was confirmed
     (a 304), its ETag, and whether it holds the provenance links. */
 type Loaded = { data: GraphData; at: number; etag: string | null; provenance: boolean };
 const lastData = new Map<string, Loaded>();
+// The rev each project's graph last loaded at: a move makes what the tab
+// keeps beside the graph (passages, part titles) read again (REV4-02).
+const lastRev = new Map<string, number>();
 
 type OverlayProps = ComponentProps<typeof GraphOverlay>;
 
@@ -53,6 +58,8 @@ export function GraphOverlayLoader({
   useEffect(() => {
     const kept = lastData.get(notebookId);
     const at = `${notebookId}|${rev}|${attempt}`;
+    if (lastRev.has(notebookId) && lastRev.get(notebookId) !== rev) bumpGraphGeneration(notebookId);
+    lastRev.set(notebookId, rev);
     if (!wanted && kept?.provenance && fetchedAt.current === at) return;
     const provenance = wanted;
     const controller = new AbortController();
@@ -80,7 +87,7 @@ export function GraphOverlayLoader({
         const d = (await r.json()) as GraphData;
         const next = { data: d, at: Date.now(), etag: r.headers.get("etag"), provenance: d.provenance };
         lastData.set(notebookId, next);
-        clearLinkPassages(notebookId);
+        bumpGraphGeneration(notebookId);
         fetchedAt.current = at;
         setLoaded(next);
       })

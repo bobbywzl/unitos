@@ -73,7 +73,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ linkId: strin
 // Remove a link. Recorded as a LINK_REMOVE edit so the Edits panel shows it;
 // dismissing a still-recommended link records nothing — it never was history.
 // The row is deleted only when no other account replied on it and no other
-// account's project shows it. Otherwise the link is hidden in the remover's
+// account's project shows it; when it must stay and no project to hide it in
+// is found, the removal is refused (409). Otherwise the link is hidden in the remover's
 // projects (DocLinkHidden): every reply row is kept, and every other project
 // still reads the link (rule zero items 1 and 2; SPEC.md §13).
 export async function DELETE(req: Request, ctx: { params: Promise<{ linkId: string }> }) {
@@ -92,7 +93,13 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ linkId: stri
     return NextResponse.json({ error: t("api.linkSharedAcrossAccounts") }, { status: 403 });
   }
   const othersReplied = (await db.reply.count({ where: { docLinkId: linkId, userId: { not: access.user.id } } })) > 0;
-  const hideIn = othersReplied || rule.crossAccount ? await linkHideProjects(link, access.user, scope) : [];
+  const keep = othersReplied || rule.crossAccount;
+  const hideIn = keep ? await linkHideProjects(link, access.user, scope) : [];
+  // The row must stay, and no project to hide it in was found (an older tab
+  // that names no project): refuse rather than delete (rule zero item 1).
+  if (keep && hideIn.length === 0) {
+    return NextResponse.json({ error: t("api.linkRemoveReload") }, { status: 409 });
+  }
   const project = link.notebookId ?? (hideIn.length > 0 ? scope : null);
 
   await db.$transaction([
