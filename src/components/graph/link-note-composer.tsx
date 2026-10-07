@@ -17,7 +17,9 @@ import { useGraphNotes } from "@/components/graph/graph-notes";
 // the reader picks — by default the one they last wrote a note in. What is
 // typed is kept in the browser for the account (lib/note-drafts.ts) until the server
 // has the note, so a reload, a closed graph, or a failed save never loses
-// it; Cancel keeps nothing. Offline (Unitos Premium) the note waits in the
+// it; Cancel folds the box and keeps the words, as Escape does (WALK5-02):
+// the draft goes only when the server or the offline queue has the note, or
+// when the reader empties the box. Offline (Unitos Premium) the note waits in the
 // offline queue: the line says so, and Show comes once the note lands.
 
 export function LinkNoteComposer({ linkId }: { linkId: string }) {
@@ -196,18 +198,19 @@ export function LinkNoteComposer({ linkId }: { linkId: string }) {
         rows={3}
         className="resize-none rounded-xl bg-sand-100 px-2.5 py-1.5 text-[12.5px] outline-none placeholder:text-sand-500"
       />
-      <span className="flex items-center justify-end gap-1.5">
+      <span className="flex items-center justify-end gap-1.5 pointer-coarse:gap-3">
         {error && <span className="mr-auto text-[11px] text-red-500">{error}</span>}
         <button
           type="button"
           onClick={() => {
-            writeDraft(linkId, "", null);
-            setContent("");
+            // The words stay here and in the browser (rule zero item 6).
+            returnFocus.current = true;
             setOpen(false);
             setError(null);
           }}
           data-track="graph-link-note-cancel"
-          className="rounded-full border border-line px-2.5 py-0.5 text-[11px] text-sand-700 hover:bg-clay-100"
+          data-tip={t("graphNotes.noteOnLinkCancelTitle")}
+          className="rounded-full border border-line px-2.5 py-0.5 text-[11px] text-sand-700 hover:bg-clay-100 pointer-coarse:min-h-11 pointer-coarse:px-4"
         >
           {t("graphNotes.noteOnLinkCancel")}
         </button>
@@ -215,7 +218,7 @@ export function LinkNoteComposer({ linkId }: { linkId: string }) {
           type="submit"
           data-track="graph-link-note-save"
           disabled={!content.trim() || !chosen || busy}
-          className="rounded-full bg-sage-600 px-3 py-0.5 text-[11px] font-semibold text-sage-fg hover:bg-sage-700 disabled:opacity-40"
+          className="rounded-full bg-sage-600 px-3 py-0.5 text-[11px] font-semibold text-sage-fg hover:bg-sage-700 disabled:opacity-40 pointer-coarse:min-h-11 pointer-coarse:px-4"
         >
           {busy ? t("graphNotes.noteOnLinkSaving") : t("graphNotes.noteOnLinkSave")}
         </button>
