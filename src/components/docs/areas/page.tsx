@@ -45,6 +45,8 @@ import { translatorFor } from "@/lib/i18n/dictionaries";
 const PAGELESS_RUNOUT = 300;
 /** Fit: the canvas's side padding on each side. */
 const FIT_GUTTER = 24;
+/** A pane narrower than this (a phone) draws no vertical ruler. */
+const NARROW_PANE = 600;
 /** The canvas's padding above the first page. */
 const CANVAS_TOP = 11;
 
@@ -62,11 +64,13 @@ function Banner({ width }: { width: number }) {
   ) : null;
 }
 
-/** The ruler row under the toolbar. */
+/** The ruler row under the toolbar: in Editing and Suggesting only (in
+    Viewing no indent can be dragged), and not on a pane too narrow for the
+    page (a phone), where every pixel above the first line counts. */
 export function PageRuler({ editor, documentId, pageSetup, editing }: DocsAreaProps) {
   const store = pageStore(editor, documentId, pageSetup);
   const showRuler = usePageState(store, (s) => s.showRuler);
-  return showRuler ? <HorizontalRuler editor={editor} store={store} editing={editing} /> : null;
+  return showRuler && editing ? <HorizontalRuler editor={editor} store={store} editing={editing} /> : null;
 }
 
 /** The header's height and the room under it: the side's rulers and panel
@@ -194,14 +198,17 @@ export function PageCanvas({
   }, [setup, compact]);
   // The canvas's left edge for the page: past the outline while it is
   // open, so the page never goes under it. Fit fills the rest.
-  const vruler = showRuler && !pageless && !compact;
+  const vruler = showRuler && editing && !pageless && !compact && canvasWidth >= NARROW_PANE;
   const outlineLeft = vruler ? 16 : 0;
   const side = outlineOpen ? outlineLeft + outlineWidth + 16 : FIT_GUTTER;
   const fitScale = canvasWidth > 0 ? (canvasWidth - FIT_GUTTER - side) / frame.width : 1;
   const scale = zoom === "fit" ? (pageless ? 1 : Math.max(0.25, Math.min(4, fitScale))) : zoom / 100;
   // A pageless column leaves the cards their room beside it, past the
   // canvas's left padding the page can move to.
-  const columnWidth = pageless ? pagelessWidth(canvasWidth || frame.width, scale, textWidth, side + CARD_REACH) : frame.width;
+  // The outline's room is not the column's: with the panel open the column
+  // fits in what is left beside it, so no line goes under the notes tray.
+  const columnRoom = (canvasWidth || frame.width) - (outlineOpen ? side : 0);
+  const columnWidth = pageless ? pagelessWidth(columnRoom, scale, textWidth, FIT_GUTTER + CARD_REACH) : frame.width;
 
   useEffect(() => {
     if (store.get().scale !== scale) store.set({ scale });
@@ -519,7 +526,10 @@ export function PageCanvas({
         {outlineOpen ? (
           <OutlinePanel editor={editor} store={store} left={outlineLeft} height={view.height} viewTop={view.top} />
         ) : (
-          <OutlineButton editor={editor} store={store} ruler={vruler} />
+          // On a pane too narrow for the page the button would stand over
+          // the first letters of the lines: there it is in the toolbar's
+          // row instead (toolbar.tsx).
+          canvasWidth >= NARROW_PANE && <OutlineButton editor={editor} store={store} ruler={vruler} />
         )}
       </div>
       <div

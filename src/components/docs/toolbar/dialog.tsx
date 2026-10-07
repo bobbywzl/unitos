@@ -8,7 +8,8 @@ import { CloseIcon } from "@/components/docs/icons";
 // The toolbar's dialogs (SPEC.md §29) in Google Docs' Material 3 look: a
 // white card over a dimmed page (or an undimmed one, as the custom color
 // picker has), a title, the body, and the buttons at the bottom right.
-// Escape or the close button cancels; a press on the backdrop cancels.
+// Escape cancels, and so does a press on the backdrop. The close button
+// (✕) shows only on a dialog with no Cancel: one way to close per dialog.
 
 export function ToolbarDialog({
   title,
@@ -34,9 +35,12 @@ export function ToolbarDialog({
   className?: string;
   /** False: the page behind stays undimmed. */
   dim?: boolean;
+  /** The ✕; never beside the Cancel that `submit` brings. A dialog with
+      its own Cancel in `actions` passes false. */
   closeButton?: boolean;
 }) {
   const t = useT();
+  const showClose = closeButton && !submit;
   const cardRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
   useEffect(() => {
@@ -85,10 +89,10 @@ export function ToolbarDialog({
           (e.shiftKey ? controls.at(-1) : controls[0])?.focus();
         }}
       >
-        {(title || closeButton) && (
+        {(title || showClose) && (
           <div className="docs-tb-dialog-head">
             {title && <h2>{title}</h2>}
-            {closeButton && (
+            {showClose && (
               <button
                 type="button"
                 aria-label={t("docs.close")}

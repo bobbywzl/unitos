@@ -7,7 +7,7 @@ import { useLang, useT } from "@/components/lang-provider";
 import { DropDownIcon } from "@/components/docs/icons";
 import { insertContext } from "@/components/docs/insert/context";
 import { DropdownPanel, keepFocus, MenuItem, MenuSeparator } from "@/components/docs/menu";
-import { ToolbarDialog } from "@/components/docs/toolbar/dialog";
+import { DialogButton, ToolbarDialog } from "@/components/docs/toolbar/dialog";
 import { countRange, type Counts } from "@/components/docs/typing/count";
 import { TYPING_EVENT } from "@/components/docs/typing/events";
 import { serverTypingPrefs, setTypingPrefs, subscribeTypingPrefs, typingPrefs, type TypingPrefs } from "@/components/docs/typing/prefs";
@@ -164,7 +164,6 @@ export function WordCountDialog({ editor }: { editor: Editor }) {
   const lang = useLang();
   const [open, setOpen] = useState(false);
   const [show, setShow] = useState(() => typeof window !== "undefined" && readShow());
-  const [draftShow, setDraftShow] = useState(false);
   // Include headers, footers and footnotes: off each time the dialog opens.
   const [extras, setExtras] = useState(false);
   const [menu, setMenu] = useState(false);
@@ -178,7 +177,7 @@ export function WordCountDialog({ editor }: { editor: Editor }) {
   useEffect(() => {
     const dom = editor.view.dom;
     const onOpen = () => {
-      setDraftShow(readShow());
+      setShow(readShow());
       setExtras(false);
       setOpen(true);
     };
@@ -250,13 +249,14 @@ export function WordCountDialog({ editor }: { editor: Editor }) {
           title={t("docsTyping.wordCount")}
           onClose={closeDialog}
           className="docs-wc-dialog"
-          submit={{
-            run: () => {
-              setShow(draftShow);
-              writeShow(draftShow);
-              closeDialog();
-            },
-          }}
+          // It only shows numbers: OK alone closes it, and the box below
+          // takes effect at once.
+          closeButton={false}
+          actions={
+            <DialogButton primary onClick={closeDialog}>
+              {t("docs.ok")}
+            </DialogButton>
+          }
         >
           <table className="docs-wc-table">
             <tbody>
@@ -273,7 +273,14 @@ export function WordCountDialog({ editor }: { editor: Editor }) {
             {t("docsTyping.includeHeadersFooters")}
           </label>
           <label className="docs-ty-check docs-wc-show">
-            <input type="checkbox" checked={draftShow} onChange={(e) => setDraftShow(e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={show}
+              onChange={(e) => {
+                setShow(e.target.checked);
+                writeShow(e.target.checked);
+              }}
+            />
             {t("docsTyping.displayWhileTyping")}
           </label>
         </ToolbarDialog>

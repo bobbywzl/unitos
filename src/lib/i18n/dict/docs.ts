@@ -247,8 +247,8 @@ const en = {
   modeSuggestingHint: "Edits become suggestions",
   modeViewing: "Viewing",
   modeViewingHint: "Read or print final document",
-  hideMenus: "Hide the menus",
-  showMenus: "Show the menus",
+  hideTitleRow: "Hide the title row",
+  showTitleRow: "Show the title row",
   // A stored copy a newer build wrote
   newerContent: "This document holds content this version of Unitos can't show. Reload the page to get the newest version.",
 };
@@ -485,8 +485,8 @@ const zh: Record<keyof typeof en, string> = {
   modeSuggestingHint: "修改会成为建议",
   modeViewing: "查看",
   modeViewingHint: "阅读或打印最终文档",
-  hideMenus: "隐藏菜单",
-  showMenus: "显示菜单",
+  hideTitleRow: "隐藏标题行",
+  showTitleRow: "显示标题行",
   newerContent: "此文档包含当前版本的 Unitos 无法显示的内容。请重新加载页面以获取最新版本。",
 };
 

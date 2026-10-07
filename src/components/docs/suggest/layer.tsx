@@ -8,6 +8,7 @@ import type { DocsAreaProps } from "@/components/docs/areas/types";
 import { registerDocsCommands } from "@/components/docs/commands";
 import { focusSuggestion, readSuggestions, setSuggesting, settleSuggestions, suggestionAt } from "@/components/docs/ext/suggest";
 import { belowSlot, marginPlace, pageGeometry, paneReach, slotAt } from "@/components/docs/layer/margin";
+import { setCardsUnderWords } from "@/components/docs/suggest/under-words";
 import { applyAssistantOps, type Landing } from "@/components/docs/suggest/assistant";
 import { SuggestionCard } from "@/components/docs/suggest/card";
 import { ReviewPanel } from "@/components/docs/suggest/review";
@@ -138,6 +139,8 @@ function placeCards(editor: Editor, pane: HTMLElement, column: HTMLElement): boo
   if (!geo || !page) return false;
   const split = column.parentElement?.hasAttribute("data-split") ?? false;
   const slot = split ? null : slotAt(geo, 0);
+  // With no column the open card draws as one line (suggest/under-words.ts).
+  setCardsUnderWords(slot === null);
   const { left, width } = slot ?? belowSlot(geo, 0);
   const paneRect = pane.getBoundingClientRect();
   const paneTop = paneRect.top - pane.scrollTop;

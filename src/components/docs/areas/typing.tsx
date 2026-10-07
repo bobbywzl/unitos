@@ -266,7 +266,9 @@ export function TypingLayer({ editor, documentId, canEdit, projectEditor, editin
         if (!findState(view.state).open) openFind("bar");
         else stepResult(view, e.shiftKey ? -1 : 1);
       } else if (mod && !e.altKey && !e.shiftKey && (key === "/" || code === "Slash")) setShortcutsOpen(true);
-      else if (mod && e.shiftKey && !e.altKey && code === "KeyS") setVoiceOpen(true);
+      // The key and the toolbar's microphone both toggle: open and
+      // listening, or closed (typing/voice-typing.tsx).
+      else if (mod && e.shiftKey && !e.altKey && code === "KeyS") setVoiceOpen((o) => !o);
       // The word count in Viewing too, where the page takes no focus.
       else if (mod && e.shiftKey && !e.altKey && code === "KeyC") fireDocs(editor, TYPING_EVENT.wordCount);
       else if ((mod && e.altKey && !e.shiftKey && code === "KeyX") || (e.key === "F7" && !mod && !e.altKey)) toggleSpelling();
@@ -282,7 +284,7 @@ export function TypingLayer({ editor, documentId, canEdit, projectEditor, editin
       [TYPING_EVENT.findReplace, () => openFind("dialog")],
       [TYPING_EVENT.preferences, () => setPrefsOpen(true)],
       [TYPING_EVENT.shortcuts, () => setShortcutsOpen(true)],
-      [TYPING_EVENT.voice, () => setVoiceOpen(true)],
+      [TYPING_EVENT.voice, () => setVoiceOpen((o) => !o)],
       [TYPING_EVENT.spelling, toggleSpelling],
       [TYPING_EVENT.grammar, toggleGrammar],
       [TYPING_EVENT.personalDictionary, () => setDictionaryOpen(true)],

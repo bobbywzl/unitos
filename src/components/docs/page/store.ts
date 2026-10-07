@@ -42,7 +42,7 @@ type PageState = {
   /** Show print layout: off, the pages sit edge to edge without their top
       and bottom margins (Docs' compact view). */
   printLayout: boolean;
-  /** The tabs & outlines panel: open, and its width in px. */
+  /** The outline panel: open, and its width in px. */
   outlineOpen: boolean;
   outlineWidth: number;
   textWidth: TextWidth;

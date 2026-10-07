@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useCollab } from "@/components/collab/collab-context";
 import { SparkleIcon, SpinnerIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
-import { DocIcon, OutlineIcon } from "@/components/docs/icons";
+import { OutlineIcon } from "@/components/docs/icons";
 import { importedOf } from "@/components/docs/insert/figure";
 import { ArrowBackIcon } from "@/components/docs/insert/icons";
 import { coreSlotOf } from "@/components/docs/layer/core-slot";
@@ -18,7 +18,7 @@ import { useContents } from "@/components/reader/contents-menu";
 import { StopPill } from "@/components/thinking";
 import type { ContentsEntry } from "@/lib/contents";
 
-// The tabs & outlines panel (SPEC.md §29), Google Docs' left panel: the
+// The outline panel (SPEC.md §29), Google Docs' left panel: the
 // document's one tab ("Tab 1") and under it the document's headings — the
 // Title and Heading 1–6, never the Subtitle — each nested under the heading
 // above it. The heading that owns the top of the view is marked blue as the
@@ -258,7 +258,7 @@ function OutlineContents({
   );
 }
 
-/** Show tabs & outlines, at Google Docs' place at the canvas's top left
+/** Show the outline, at Google Docs' place at the canvas's top left
     (32 px in beside the vertical ruler, else 50), always there. While the
     page would come under it (the cards move the page left), it moves left
     with the page, down to the canvas's edge, and then stands over the page's
@@ -353,12 +353,9 @@ export function OutlinePanel({
           <ArrowBackIcon size={24} />
         </button>
       </div>
+      {/* A document has one tab, so the panel names no tabs: the headings
+          start under the back arrow (PAGE12-07). */}
       <div className="docs-outline-scroll">
-        <div className="docs-outline-header">{t("docsPage.documentTabs")}</div>
-        <div className="docs-outline-tab" aria-current="page">
-          <DocIcon size={20} />
-          <span className="docs-outline-tab-name">{t("docsPage.firstTab")}</span>
-        </div>
         {items.length === 0 ? (
           <p className="docs-outline-empty">{t("docsPage.outlineEmpty")}</p>
         ) : (

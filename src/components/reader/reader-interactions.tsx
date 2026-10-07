@@ -9735,13 +9735,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             ? {
                 ...richText,
                 canEdit,
-                aiControls:
-                  !split && !embedded ? (
-                    <div className="flex items-center gap-2">
-                      {collapseButton}
-                      {distillButton}
-                    </div>
-                  ) : null,
+                // Collapse alone: the rail's Extract tab has Extract from
+                // the article (PAGE12-11).
+                aiControls: !split && !embedded ? <div className="flex items-center gap-2">{collapseButton}</div> : null,
                 notebookId,
                 documents: attachedDocuments,
                 // An import's References section stands under its pages,
