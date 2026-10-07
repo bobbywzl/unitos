@@ -49,7 +49,7 @@ const en = {
   composerOpenQuote: "Open this passage in the reader",
   // Write a page from these (note-gather.tsx, VIEW5-05).
   composerWritePage: "Write a page from these",
-  composerWritePageTitle: "Adds these quotes' documents to the pick and puts a command in the Stitch box. Nothing is sent until you press Send.",
+  composerWritePageTitle: "Adds the quotes' documents to the pick and puts a command in the Stitch box. Nothing is sent until you press Send.",
   composerWritePageCommand: "Write one page from these passages, in this order, and keep each as a quote:",
 
   // The reader's Annotations tab (link-card-extras.tsx)
@@ -101,7 +101,7 @@ const zh: Record<keyof typeof en, string> = {
   composerShow: "查看",
   composerOpenQuote: "在阅读器中打开这个片段",
   composerWritePage: "用这些写一页",
-  composerWritePageTitle: "把这些引文所在的文档加入选取，并在缝合框中写好命令。按发送之前不会发出任何内容。",
+  composerWritePageTitle: "把引文所在的文档加入选取，并在缝合框中写好命令。按发送之前不会发出任何内容。",
   composerWritePageCommand: "按这个顺序，用下面这些片段写一页，每段都作为引文保留：",
 
   provenanceUsedBy: "被 {title} 使用",

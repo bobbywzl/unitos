@@ -63,6 +63,8 @@ const storedQuotes = (page) =>
     const k = Object.keys(localStorage).find((x) => x.startsWith("unitos-note-gather:"));
     return k ? JSON.parse(localStorage.getItem(k)).quotes : [];
   });
+// Controls a view adds (Linda, round 5: no bloat): buttons, fields, and selects inside the element.
+const controls = (page, sel) => page.locator(sel).first().evaluate((el) => el.querySelectorAll("button, select, textarea, input").length).catch(() => 0);
 const dockCount = (page) => page.locator("[data-graph-note-gather-quote]").count();
 async function gatherTwo(page) {
   const adds = page.locator('[data-graph-find-list] [data-graph-add-to-note="out"]');
@@ -90,7 +92,7 @@ if (!only || only === "walk10") {
       await page.locator('[data-track="graph-note-gather-save"]').click();
       const note = await (await posted).json();
       const rows = sql(
-        `SELECT s."startOffset" || ':' || s."endOffset" || ':' || length(b.text) || ':' || substr(b.text, greatest(s."startOffset" - 1, 1), 2) || '|' || substr(b.text, s."endOffset", 1) FROM "Source" s JOIN "Block" b ON b.id = s."blockId" WHERE s."noteId" = '${note.id}' ORDER BY s."order"`,
+        `SELECT s."startOffset" || ':' || s."endOffset" || ':' || length(b.text) || ':' || substr(b.text, greatest(s."startOffset" - 1, 1), 2) || '|' || substr(b.text, s."endOffset", 1) FROM "Source" s JOIN "Block" b ON b.id = s."blockId" WHERE s."noteId" = '${note.id}' ORDER BY s."startOffset"`,
       ).split("\n");
       // Each source starts the block or after a sentence end + space, and ends at a sentence end.
       const ok = rows.length === 2 && rows.every((r) => {
@@ -111,6 +113,7 @@ if (!only || only === "view05") {
     await openGraph(page, "suffering");
     await gatherTwo(page);
     const button = page.locator('[data-track="graph-note-gather-write-page"]');
+    console.log(`  controls in the composer (2 quotes): ${await controls(page, "[data-graph-note-gather]")}; rows: ${await page.locator("[data-graph-note-gather] form > *").count()}`);
     await shot(page, `VIEW5-05-dock-${w}-${lang}`);
     check(`VIEW5-05 ${lang} ${w} the composer has Write a page from these`, (await button.count()) === 1);
     if (before || (await button.count()) === 0) {
@@ -169,6 +172,7 @@ if (!only || only === "view04") {
     await page.locator('[data-track="stitch-citation"]').first().click();
     await page.locator('[data-track-surface="stitch-passage"]').waitFor();
     const add = page.locator('[data-track-surface="stitch-passage"] [data-graph-add-to-note]');
+    console.log(`  controls in the passage card: ${await controls(page, '[data-track-surface="stitch-passage"]')}; height ${Math.round((await page.locator('[data-track-surface="stitch-passage"]').boundingBox()).height)} px`);
     check(`VIEW5-04 ${lang} ${w} the passage card has Add to note`, (await add.count()) === 1);
     if (before || (await add.count()) === 0) {
       await shot(page, `VIEW5-04-passage-${w}-${lang}`);

@@ -22,7 +22,7 @@ import { refreshWhenOnline } from "@/lib/offline/queue";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import { clipWords } from "@/lib/markdown-preview";
 import { useCollab } from "@/components/collab/collab-context";
-import { ChevronDownIcon, NotesIcon } from "@/components/icons";
+import { ChevronDownIcon, NotesIcon, SparkleIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { useGraphNotes } from "@/components/graph/graph-notes";
 
@@ -223,9 +223,6 @@ export function NoteGatherDock({
   const ref = useRef<HTMLDivElement>(null);
   // One save at a time: a second ⌘↵ before the first answers does nothing (REV5-04).
   const saving = useRef(false);
-  // The quotes and words of the note just saved, so its saved line can still
-  // write a page from them (VIEW5-05).
-  const [lastSaved, setLastSaved] = useState<{ quotes: GatherQuote[]; content: string } | null>(null);
   const drafting = Boolean(gather && (gather.quotes.length > 0 || gather.content));
   // A new quote after a save, or words kept from during it, start the next
   // note: the saved line moves into its composer.
@@ -330,7 +327,6 @@ export function NoteGatherDock({
           ? { queued: { sectionId: chosen.id, content: words, at: Date.now() }, section: chosen.label }
           : { noteId: note.id, section: chosen.label },
       );
-      setLastSaved({ quotes: sentQuotes, content: words });
       gather.settle({ keys: new Set(sentQuotes.map(keyOf)), content: sentContent });
       refreshWhenOnline(router);
     } catch (err) {
@@ -342,17 +338,19 @@ export function NoteGatherDock({
     }
   }
 
-  const writePageButton = (quotes: GatherQuote[], content: string, track: string, extra = "") =>
-    onWritePage && quotes.length > 0 ? (
+  // Write a page from these: an icon in the header row, beside the fold, so
+  // the composer gains no row (VIEW5-05).
+  const writePageButton =
+    onWritePage && gather.quotes.length > 0 && !compact ? (
       <button
         type="button"
-        onClick={() => writePage(quotes, content)}
-        data-track={track}
-        data-graph-note-gather-write-page
-        data-tip={t("graphCover.composerWritePageTitle")}
-        className={`shrink-0 rounded-full border border-[color-mix(in_srgb,var(--kind-assistant)_45%,transparent)] px-2.5 py-0.5 text-[11px] font-semibold text-[var(--kind-assistant)] hover:bg-[color-mix(in_srgb,var(--kind-assistant)_8%,transparent)] ${extra}`}
+        onClick={() => writePage(gather.quotes, gather.content)}
+        data-track="graph-note-gather-write-page"
+        aria-label={t("graphCover.composerWritePage")}
+        data-tip={`${t("graphCover.composerWritePage")}. ${t("graphCover.composerWritePageTitle")}`}
+        className="flex size-6 items-center justify-center rounded-full text-[var(--kind-assistant)] hover:bg-[color-mix(in_srgb,var(--kind-assistant)_10%,transparent)]"
       >
-        {t("graphCover.composerWritePage")}
+        <SparkleIcon size={13} />
       </button>
     ) : null;
 
@@ -364,7 +362,6 @@ export function NoteGatherDock({
       <span className="min-w-0 flex-1">
         {savedId ? t("graphCover.composerSaved", { section: saved.section }) : t("graphCover.composerQueued", { section: saved.section })}
       </span>
-      {!drafting && lastSaved && writePageButton(lastSaved.quotes, lastSaved.content, "graph-note-gather-saved-write-page")}
       {savedId && (
         <button
           onClick={() => ctx.showNote(savedId)}
@@ -413,6 +410,7 @@ export function NoteGatherDock({
           <span className="font-semibold text-ink">{t("graphCover.composerTitle")}</span>
           <span data-graph-note-gather-summary className="text-sand-600"> · {summary}</span>
         </p>
+        {writePageButton}
         <button
           onClick={() => {
             // Folded over the Stitch box: unfolding folds the box (WALK5-12).
@@ -510,7 +508,6 @@ export function NoteGatherDock({
                 {error}
               </span>
             )}
-            {writePageButton(gather.quotes, gather.content, "graph-note-gather-write-page", error ? "" : "mr-auto")}
             <button
               type="button"
               onClick={() => {
