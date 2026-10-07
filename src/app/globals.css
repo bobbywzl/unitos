@@ -2113,6 +2113,15 @@ ellipse.anchor-flash {
 .corpus-graph[data-lod] .graph-node-label:not([data-keep-label]) {
   display: none;
 }
+/* A quiet canvas at a far zoom (VIEW4-06): no notes chip on a node, and a
+   curve's link count and notes pill only while the curve is lit (hovered,
+   pinned, or its link open); the replies mark always draws. graph-view.tsx
+   sets data-far below zoom 0.7. */
+.corpus-graph[data-far] [data-graph-node-notes],
+.corpus-graph[data-far] [data-curve-marks]:not([data-lit]) [data-graph-curve-mark="count"],
+.corpus-graph[data-far] [data-curve-marks]:not([data-lit]) [data-graph-curve-mark="notes"] {
+  display: none;
+}
 /* A curve reached by keyboard (] and [) shows where it runs. */
 .corpus-graph .react-flow__edge:focus {
   outline: none;

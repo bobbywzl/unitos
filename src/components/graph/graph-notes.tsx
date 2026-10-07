@@ -300,8 +300,9 @@ export function useNoteOnlyEdges(edges: GraphEdge[]): FlowEdge<NoteEdgeData>[] {
 const CARD_ROWS = 5;
 
 /** Right of a node's dot: the number of accepted notes that belong to the
-    document, a dot for pending ones. The notes themselves list in the node's
-    card (NodeNotesRows), so a node shows one card (VIEW2-01). */
+    document, a dot for pending ones; with only pending notes, "1 pending"
+    (WALK4-13: never "0"). The notes themselves list in the node's card
+    (NodeNotesRows), so a node shows one card (VIEW2-01). */
 export function NodeNotes({ documentId }: { documentId: string }) {
   const ctx = useGraphNotes();
   const t = useT();
@@ -314,8 +315,12 @@ export function NodeNotes({ documentId }: { documentId: string }) {
       className="flex items-center gap-1 rounded-full bg-sage-100 px-1.5 py-px text-[10px] font-semibold tabular-nums text-sage-800"
     >
       <NotesIcon size={10} />
-      {entry.accepted}
-      {entry.pending > 0 && (
+      {entry.accepted === 0 && entry.pending > 0 ? (
+        <span data-pending>{t("graphNotes.nodeNotesPending", { n: entry.pending })}</span>
+      ) : (
+        entry.accepted
+      )}
+      {entry.accepted > 0 && entry.pending > 0 && (
         <span
           aria-label={t("graphNotes.nodeNotesPending", { n: entry.pending })}
           className="size-1.5 rounded-full bg-clay"
@@ -468,7 +473,7 @@ export function marksWidth(count: number, open: number, notes: number): number {
   const parts = [
     count > 1 ? 14 + String(count).length * 7 : 0,
     open > 0 ? 32 + String(open).length * 6 : 0,
-    notes > 0 ? 32 + String(notes).length * 6 : 0,
+    notes > 1 ? 32 + String(notes).length * 6 : notes > 0 ? 24 : 0,
   ].filter((w) => w > 0);
   return parts.reduce((a, b) => a + b, 0) + Math.max(0, parts.length - 1) * 4;
 }
@@ -547,7 +552,8 @@ export function CurveMarks({
               className={`${pill} border border-dashed border-sage-500 bg-sage-100 text-sage-800`}
             >
               <NotesIcon size={11} />
-              <span data-n>{notes}</span>
+              {/* One note: the mark alone, as the link count shows from two (VIEW3-08). */}
+              {notes > 1 && <span data-n>{notes}</span>}
             </span>
           )}
         </div>

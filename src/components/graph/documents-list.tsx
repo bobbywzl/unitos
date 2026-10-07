@@ -47,6 +47,8 @@ function usePartTitles(notebookId: string): ProjectPartTitles | null {
   return titles;
 }
 
+const PARTS_CAP = 8;
+
 export function DocumentsList({
   notebookId,
   nodes,
@@ -77,6 +79,8 @@ export function DocumentsList({
   const showGenerated = useProvenanceShown();
   const titles = usePartTitles(notebookId);
   const [openGists, setOpenGists] = useState<Set<string>>(() => new Set());
+  // A long parts line shows its first PARTS_CAP parts and a count; a click shows them all (P4).
+  const [openParts, setOpenParts] = useState<Set<string>>(() => new Set());
 
   const titleOf = useMemo(() => new Map(nodes.map((n) => [n.id, n.title])), [nodes]);
   // The links of each document, by the other document, accepted first; a
@@ -187,7 +191,9 @@ export function DocumentsList({
       {ordered.map((n) => {
         const gist = gists[n.id];
         const gistOpen = openGists.has(n.id);
-        const parts = titles?.documents[n.id] ?? [];
+        const allParts = titles?.documents[n.id] ?? [];
+        const partsHidden = openParts.has(n.id) || allParts.length <= PARTS_CAP + 1 ? 0 : allParts.length - PARTS_CAP;
+        const parts = partsHidden > 0 ? allParts.slice(0, PARTS_CAP) : allParts;
         const groups = linksOf.get(n.id) ?? [];
         const notes = notesCtx?.view.byDocument.get(n.id)?.notes ?? [];
         return (
@@ -249,6 +255,19 @@ export function DocumentsList({
                     </button>
                   </span>
                 ))}
+                {partsHidden > 0 && (
+                  <>
+                    <span className="text-sand-400"> · </span>
+                    <button
+                      onClick={() => setOpenParts((prev) => new Set(prev).add(n.id))}
+                      data-track="graph-documents-parts-more"
+                      data-graph-parts-more={partsHidden}
+                      className="font-semibold text-sand-700 hover:text-clay-800"
+                    >
+                      {partsHidden === 1 ? t("graphView.partsMoreOne") : t("graphView.partsMore", { n: partsHidden })}
+                    </button>
+                  </>
+                )}
               </p>
             )}
             {groups.flatMap((g) =>
