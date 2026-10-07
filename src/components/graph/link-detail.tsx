@@ -3,6 +3,7 @@
 import { useParams } from "next/navigation";
 import { useT } from "@/components/lang-provider";
 import { useLinkPassages } from "@/components/graph/link-passages";
+import { AddToNote } from "@/components/graph/note-gather"; // [cover4]
 
 // An expanded link (SPEC.md §13): why the link was made, then each end — the
 // document's title, the passage the quote sits in with the quote lit, and a
@@ -64,11 +65,13 @@ function Passage({ quote, blockText }: { quote: string; blockText: string | null
 }
 
 function LinkEnd({
+  documentId,
   title,
   quote,
   blockText,
   onOpen,
 }: {
+  documentId: string;
   title: string;
   quote: string | null;
   blockText: string | null;
@@ -79,6 +82,7 @@ function LinkEnd({
     <div className="rounded-xl border border-line bg-sand-50/60 p-2.5">
       <div className="flex items-center gap-2">
         <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-ink">{title}</span>
+        {quote && <AddToNote quote={{ documentId, text: quote }} /* [cover4] */ />}
         <button
           onClick={onOpen}
           data-track="graph-link-open"
@@ -122,12 +126,14 @@ export function LinkDetail({
         </div>
       )}
       <LinkEnd
+        documentId={link.fromDocumentId}
         title={link.fromTitle}
         quote={link.quotedText}
         blockText={passages?.from ?? null}
         onOpen={() => onOpen(link.fromDocumentId)}
       />
       <LinkEnd
+        documentId={link.toDocumentId}
         title={link.toTitle}
         quote={link.toQuotedText}
         blockText={passages?.to ?? null}

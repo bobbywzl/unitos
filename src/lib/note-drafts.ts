@@ -180,8 +180,54 @@ export function writeLinkNoteDraft(account: string, linkId: string, content: str
   else remove(linkNoteKey(account, linkId));
 }
 
-/** Drop drafts older than MAX_AGE_MS: note, compose, reply, and Note on this
-    link drafts. Runs once per load (use-outline.ts). A legacy draft with
+// The graph's new note (note-gather.tsx, VIEW4-03): the quotes collected
+// with Add to note, the words typed, and the section picked, one per project
+// per account. Written on every change; cleared once the server (or the
+// offline queue) has the note.
+const GATHER_PREFIX = "unitos-note-gather:";
+
+export type GatherDraftQuote = {
+  documentId: string;
+  /** Absent: the quote is found across the document (a link's end). */
+  blockId?: string;
+  /** What the composer shows, and the quote the server re-finds. */
+  text: string;
+  /** No quotedText goes to the server: it quotes the block's words (a part's start). */
+  whole?: boolean;
+};
+export type GatherDraft = { content: string; sectionId: string | null; quotes: GatherDraftQuote[]; savedAt: number };
+
+const gatherKey = (account: string, notebookId: string) => `${GATHER_PREFIX}${accountPart(account)}:${notebookId}`;
+
+function gatherQuote(raw: unknown): GatherDraftQuote | null {
+  if (!raw || typeof raw !== "object") return null;
+  const q = raw as Record<string, unknown>;
+  if (typeof q.documentId !== "string" || typeof q.text !== "string") return null;
+  return {
+    documentId: q.documentId,
+    text: q.text,
+    ...(typeof q.blockId === "string" ? { blockId: q.blockId } : {}),
+    ...(q.whole === true ? { whole: true } : {}),
+  };
+}
+
+export function readGatherDraft(account: string, notebookId: string): GatherDraft | null {
+  const draft = read<GatherDraft>(gatherKey(account, notebookId));
+  if (!draft) return null;
+  const quotes = Array.isArray(draft.quotes) ? draft.quotes.flatMap((q) => gatherQuote(q) ?? []) : [];
+  const content = typeof draft.content === "string" ? draft.content : "";
+  if (!content && quotes.length === 0) return null;
+  return { content, sectionId: typeof draft.sectionId === "string" ? draft.sectionId : null, quotes, savedAt: draft.savedAt };
+}
+
+/** An empty draft (no words, no quotes) clears the key. */
+export function writeGatherDraft(account: string, notebookId: string, draft: Omit<GatherDraft, "savedAt">) {
+  if (draft.content || draft.quotes.length > 0) write(gatherKey(account, notebookId), { ...draft, savedAt: Date.now() } satisfies GatherDraft);
+  else remove(gatherKey(account, notebookId));
+}
+
+/** Drop drafts older than MAX_AGE_MS: note, compose, reply, Note on this
+    link, and the graph's new note drafts. Runs once per load (use-outline.ts). A legacy draft with
     no savedAt (a Note on this link draft) is kept: it waits for its
     account to claim it. */
 export function sweepStaleDrafts() {
@@ -190,7 +236,7 @@ export function sweepStaleDrafts() {
     const stale: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (!key || ![NOTE_PREFIX, COMPOSE_PREFIX, REPLY_PREFIX, LINK_NOTE_PREFIX].some((p) => key.startsWith(p))) continue;
+      if (!key || ![NOTE_PREFIX, COMPOSE_PREFIX, REPLY_PREFIX, LINK_NOTE_PREFIX, GATHER_PREFIX].some((p) => key.startsWith(p))) continue;
       const draft = read<{ savedAt: number }>(key);
       if (draft ? now - draft.savedAt > MAX_AGE_MS : !legacyKey(key)) stale.push(key);
     }

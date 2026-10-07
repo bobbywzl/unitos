@@ -54,6 +54,8 @@ import { LinkReplyCount } from "@/components/graph/link-replies";
 // [view2] The node card, Find's counts, and the last Stitch answer's links.
 import { useGraphContent } from "@/components/graph/graph-content";
 import { NodeCardExtras, linkLine } from "@/components/graph/node-card";
+import { CoverageRing } from "@/components/graph/coverage"; // [cover4]
+import { ownCommand } from "@/lib/graph/generated-label"; // [cover4]
 
 // The corpus graph (SPEC.md §13; the release-edu canvas patterns): documents
 // as nodes on a pan/zoom canvas, links between them as swept curves. The more
@@ -248,6 +250,8 @@ function DocumentNode({ id, data }: NodeProps<DocumentNodeData>) {
           )}
         </span>
       </span>
+      {/* [cover4] The share of the document's parts noted (VIEW4-01). */}
+      {!data.generated && <CoverageRing documentId={id} size={size} />}
       {/* The label hangs under the dot and grows when the view zooms out,
           so it stays readable on screen (--graph-label-scale, set on the
           canvas from the zoom). At a far zoom of a large project only a
@@ -1281,7 +1285,9 @@ function GraphCanvas({
     for (const n of nodes) if (n.kind === "generated") seen.set(n.title, (seen.get(n.title) ?? 0) + 1);
     const out = new Map<string, string>();
     for (const n of nodes) {
-      const command = generatedCommands.get(n.id);
+      // [cover4] A follow-up's page takes its own command (WALK4-14).
+      const stored = generatedCommands.get(n.id);
+      const command = stored ? ownCommand(stored) : null;
       if (n.kind === "generated" && (seen.get(n.title) ?? 0) > 1 && command) {
         const head = clipWords(command, 28);
         out.set(n.id, `${n.title} · ${head}${head.length < command.trim().length ? "…" : ""}`);

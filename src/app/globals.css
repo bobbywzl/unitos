@@ -1937,6 +1937,20 @@ ellipse.anchor-flash {
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
   mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
 }
+/* Add to note's new note docks at the foot of the side list (note-gather.tsx,
+   VIEW4-03): while it shows, a side list ends above it, and the foot room it
+   keeps for the Feedback button is the note's. */
+.graph-overlay[data-gather] [data-graph-side-list],
+.graph-overlay[data-gather] aside[data-graph-node-card] {
+  bottom: calc(var(--graph-gather-h, 0px) + 20px);
+  padding-bottom: 1rem;
+}
+@media (max-width: 999px) {
+  .graph-overlay[data-gather] [data-graph-side-list],
+  .graph-overlay[data-gather] aside[data-graph-node-card] {
+    bottom: calc(var(--graph-gather-h, 0px) + 72px);
+  }
+}
 
 /* Documents whose recommended links await acceptance breathe on their own
    rhythm — the living tips of the graph still calling for review. */

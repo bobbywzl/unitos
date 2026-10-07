@@ -25,6 +25,8 @@ import { noteLine } from "@/lib/graph/notes";
 import { useCoarsePointer, useGraphContent } from "@/components/graph/graph-content";
 import { LinkReplyCount } from "@/components/graph/link-replies";
 import { useWantProvenance } from "@/components/graph/provenance-want";
+import { PartDot } from "@/components/graph/coverage"; // [cover4]
+import { AddToNote } from "@/components/graph/note-gather"; // [cover4]
 
 const outlines = new Map<string, DocumentOutline>();
 const NOTE_ROWS = 6;
@@ -280,17 +282,22 @@ export function NodeCardPanel({
               <h3 className={head}>{t("graphView.cardContents")}</h3>
               <ol className="flex flex-col gap-0.5">
                 {outline.parts.map((p) => (
-                  <li key={p.blockId} className={p.level === 2 ? "pl-3" : ""}>
+                  <li key={p.blockId} className={`flex items-start gap-1 ${p.level === 2 ? "pl-3" : ""}`}>
                     <button
                       onClick={() => go(`/n/${notebookId}?doc=${node.id}&block=${p.blockId}`)}
                       data-track="graph-card-part"
                       data-graph-part={p.blockId}
                       data-tip={t("graphView.cardPartTitle")}
-                      className="block w-full rounded-lg px-1.5 py-1 text-left hover:bg-clay-100/60"
+                      className="block min-w-0 flex-1 rounded-lg px-1.5 py-1 text-left hover:bg-clay-100/60"
                     >
-                      <span className="block text-[12.5px] leading-snug font-semibold text-ink">{p.title}</span>
+                      <span className="block text-[12.5px] leading-snug font-semibold text-ink">
+                        <PartDot documentId={node.id} blockId={p.blockId} /* [cover4] */ />
+                        {p.title}
+                      </span>
                       {p.summary && <span className="mt-0.5 block text-[12px] leading-snug text-sand-600">{p.summary}</span>}
                     </button>
+                    {/* [cover4] The part's opening words as a quote (VIEW4-03). */}
+                    <AddToNote quote={{ documentId: node.id, blockId: p.blockId, text: p.title, whole: true }} className="mt-1" />
                   </li>
                 ))}
               </ol>

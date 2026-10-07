@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { sourceInputSchema } from "@/lib/anchors/input";
 import { MAX_SEGMENTS, passageSources, resolvePassage } from "@/lib/anchors/passage";
 import { layerBlocks } from "@/lib/anchors/layer";
+import { MAX_NOTE_QUOTES, noteQuoteSchema, resolveNoteQuotes } from "@/lib/anchors/note-quotes";
 import type { ResolvedAnchor } from "@/lib/anchors/resolve";
 import { serverT } from "@/lib/i18n/server";
 import { normalizeNoteOrders } from "@/lib/order";
@@ -25,6 +26,11 @@ const createSchema = z
     // words (content), with the link's two ends copied in as its sources — one
     // for a document-level end. It lands accepted, the project's note.
     fromLinkId: z.string().min(1).optional(),
+    // A note gathered on the graph (SPEC.md §13, Add to note): quotes from
+    // one or more documents of the section's project, each a source. Each
+    // resolves through the ladder (lib/anchors/note-quotes.ts); the note's
+    // text is the reader's words (content, optional) and then each quote.
+    quotes: z.array(noteQuoteSchema).min(1).max(MAX_NOTE_QUOTES).optional(),
     source: sourceInputSchema.optional(),
     // A selection over several blocks of the source's document
     // (lib/anchors/passage.ts): one anchor per block, the first being
@@ -54,8 +60,11 @@ const createSchema = z
     documentId: z.string().min(1).optional(),
   })
   .refine((d) => !(d.source && d.video), { message: "Provide source or video, not both" })
-  .refine((d) => Boolean(d.content) !== Boolean(d.fromAnnotationId), {
+  .refine((d) => (d.quotes ? !d.fromAnnotationId : Boolean(d.content) !== Boolean(d.fromAnnotationId)), {
     message: "Provide content or fromAnnotationId, not both",
+  })
+  .refine((d) => !d.quotes || !(d.source || d.segments || d.video || d.fromLinkId || d.origin || d.pending), {
+    message: "A gathered note takes quotes and content alone",
   })
   .refine((d) => !d.fromLinkId || !(d.source || d.video || d.fromAnnotationId || d.origin), {
     message: "A note on a link takes content alone",
@@ -227,13 +236,26 @@ export async function POST(req: Request) {
         : []),
     ];
   }
+  if (data.quotes) {
+    const gathered = await resolveNoteQuotes(section.notebookId, data.quotes);
+    if ("notInProject" in gathered) return NextResponse.json({ error: t("api.quoteNotInProject") }, { status: 400 });
+    if ("unresolved" in gathered) {
+      return NextResponse.json(
+        { error: t("api.quoteNotResolved", { n: gathered.unresolved + 1 }), quoteIndex: gathered.unresolved },
+        { status: 400 },
+      );
+    }
+    sources = gathered.sources;
+    content = [content.trim(), ...gathered.sources.map((s) => quoteLines(s.quotedText))].filter(Boolean).join("\n\n");
+  }
   if (!content.trim()) return NextResponse.json({ error: t("api.validationFailed") }, { status: 400 });
 
   // The document the note belongs to (SPEC.md §6): the passage's, the video's,
   // the annotation's first anchor's, else the one the composer named — when
   // it is attached to this project; a document that is not is nobody's.
   // A note on a link belongs to the project: it quotes two documents.
-  let documentId: string | null = data.fromLinkId
+  // A gathered note over several documents belongs to the project, as one on a link.
+  let documentId: string | null = data.fromLinkId || (data.quotes && new Set(sources.map((s) => s.documentId)).size > 1)
     ? null
     : (sources[0]?.documentId ?? videoSource?.documentId ?? copiedSources[0]?.documentId ?? data.documentId ?? null);
   if (documentId) {
@@ -281,4 +303,13 @@ export async function POST(req: Request) {
   if (data.top) await normalizeNoteOrders(data.sectionId);
   await bumpNotebook(section.notebookId);
   return NextResponse.json(note, { status: 201 });
+}
+
+// A quote as the note's text shows it: blockquote lines, the boxed
+// quotation on the note card (as a passage added from the reader).
+function quoteLines(text: string): string {
+  return text
+    .split("\n")
+    .map((line) => (line ? `> ${line}` : ">"))
+    .join("\n");
 }
