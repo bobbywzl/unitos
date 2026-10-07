@@ -133,6 +133,12 @@ function continuesOnPage(prev: Segment, next: Segment, setting: PageSetting): bo
   const lineSize = prev.lineSize ?? 10;
   const lone = prev.box !== undefined && prev.box.y2 - prev.box.y1 <= lineSize * 1.6 && prev.text.length <= 30;
   if (lone && next.box !== undefined && next.box.y2 < prev.box!.y1 - lineSize * 2) return false;
+  // A short line alone set smaller than the next part, level with its top
+  // and left of it, is a note beside it in the margin (parse loop finding:
+  // the MML book read "ordered basis and call this n-tuple an ordered
+  // basis of V", and "coordinate of x with respect to B").
+  const beside = lone && next.box !== undefined && Math.abs(next.box.y2 - prev.box!.y2) <= lineSize * 0.5 && next.box.x1 > prev.box!.x2;
+  if (beside && sizes && sizes[0] < sizes[1] * 0.95) return false;
   if ((/[a-z,;\-–—]$/.test(prev.text) || ABBREVIATION_END_RE.test(prev.text)) && goesOn(prev.text, next.text)) return true;
   const size = prev.lineSize ?? 10;
   const columnBreak = prev.box !== undefined && next.box !== undefined && next.box.y2 > prev.box.y1 && next.box.x1 > prev.box.x2 - size;
