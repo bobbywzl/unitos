@@ -111,7 +111,7 @@ check(
 
 // ── prompts ──
 const rules = stitchRules("en");
-for (const rule of ["never pick one", "do not answer", "worked out", "never by its letter", "reply only", "At most 3,000 characters", "Specificity:", "check that they measure the same thing", "up to 8"]) {
+for (const rule of ["never pick one", "is a copy", "cite the original", "Never say which to use", "no topic the command did not ask about", "one text part per finding", "do not answer", "worked out", "never by its letter", "reply only", "At most 3,000 characters", "Specificity:", "check that they measure the same thing", "up to 8"]) {
   check(`answer rules carry "${rule}"`, rules.includes(rule));
 }
 check("answer rules hold no command-specific text", !rules.includes("The reader's command"));
@@ -124,6 +124,7 @@ const next = stitchPrompt({ documents: docs, command: "Which is right?", continu
 check("answer prompt: no continue line on the first command", !first.includes("continues the conversation"));
 check("answer prompt: continue line on a follow-up", next.includes("continues the conversation"));
 check("answer prompt: the select-path line", next.includes("not that the documents do not"));
+check("answer prompt: partial-read sentence, actionable", next.includes("pick fewer documents in the graph"));
 check("answer prompt: unread named only when it bears", first.includes("only when the command asks about them"));
 const select = stitchSelectPrompt({ documents: docs, command: "And the second one?", continued: true, earlier: ["List the two studies."], cited: ["B3"], maxBlocks: 150, partial: false });
 check("select prompt: earlier commands", select.includes("- List the two studies."));
