@@ -3695,7 +3695,9 @@ export function ReaderInteractions({
           const viewBottom = container.scrollTop + shownHeight;
           const want =
             tops[card.kind] + Math.min(card.el.offsetHeight, Math.max(220, shownHeight - 32)) - (viewBottom - 16);
-          const keep = card.anchorTop - container.scrollTop - 16;
+          // The words stay in view below the article's band (its chips).
+          const band = container.querySelector<HTMLElement>("[data-article-band]")?.offsetHeight ?? 0;
+          const keep = card.anchorTop - container.scrollTop - 16 - band;
           const by = Math.min(want, keep);
           if (by > 0) container.scrollBy({ top: by, behavior: "smooth" });
         }
@@ -6164,7 +6166,8 @@ export function ReaderInteractions({
       draftShownRef.current.delete(card.noteId);
       setCardDraft(card.noteId, null);
       setAnnotationCard(null);
-      showToast(t(saved.conflict ? "outline.savedBoth" : "common.saved"));
+      // The header says Saved; a toast says only that both sides were kept.
+      if (saved.conflict) showToast(t("outline.savedBoth"));
     } catch (err) {
       showError(err instanceof Error ? err.message : t("reader.saveFailed"));
       setAnnotationCard((c) => (c ? { ...c, busy: false } : c));
@@ -6200,7 +6203,8 @@ export function ReaderInteractions({
       setCommentCard((c) =>
         c ? { ...c, draft: c.draft.trim() === content ? saved.content : c.draft, saved: saved.content, busy: false } : c,
       );
-      showToast(t(saved.conflict ? "outline.savedBoth" : "common.saved"));
+      // The header says Saved; a toast says only that both sides were kept.
+      if (saved.conflict) showToast(t("outline.savedBoth"));
     } catch (err) {
       showError(err instanceof Error ? err.message : t("reader.saveFailed"));
       setCommentCard((c) => (c ? { ...c, busy: false } : c));
@@ -6243,7 +6247,6 @@ export function ReaderInteractions({
       setLinkReasons((prev) => ({ ...prev, [card.linkId]: reason }));
       setLinkCard(null);
       router.refresh();
-      showToast(t("common.saved"));
     } catch (err) {
       showError(err instanceof Error ? err.message : t("reader.saveFailed"));
       setLinkCard((c) => (c ? { ...c, busy: false } : c));
@@ -9821,7 +9824,14 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               );
             }
             const kind = tool?.kind ?? summary?.kind ?? "highlight";
-            const quote = summary?.quotedText ?? anchorOfSource(sid)?.quotedText ?? "";
+            // What the mark holds, not the words again: a comment's words, a
+            // tool's answer, a highlight's comment (a pure highlight stores
+            // its quote: its row is its hue alone).
+            const held = tool
+              ? markdownPreview(tool.content)
+              : summary && summary.content !== (summary.quotedText ?? "")
+                ? summary.content
+                : "";
             return (
               <button
                 key={sid}
@@ -9834,12 +9844,19 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 className="flex min-w-0 flex-col items-start rounded-xl px-2.5 py-1.5 text-left hover:bg-sand-100"
               >
                 <span
-                  className="text-[10.5px] font-bold tracking-[0.08em] uppercase"
+                  className="flex items-center gap-1.5 text-[10.5px] font-bold tracking-[0.08em] uppercase"
                   style={{ color: annotationKindColor(kind, summary?.color ?? null) }}
                 >
+                  {kind === "highlight" && (
+                    <span
+                      aria-hidden
+                      className="size-2 rounded-full"
+                      style={{ background: annotationKindColor(kind, summary?.color ?? null) }}
+                    />
+                  )}
                   {t(ANNOTATION_KIND_KEY[kind])}
                 </span>
-                <span className="line-clamp-2 text-[12px] text-sand-700">{quote}</span>
+                {held && <span className="line-clamp-2 text-[12px] text-sand-700">{held}</span>}
               </button>
             );
           })}
@@ -10980,7 +10997,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           data-selection-popover
           data-side-card="comment"
           onPointerDown={holdAnnotation(commentReference)}
-          className={`bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border bg-card p-4 shadow-float${underView}`}
+          className={`group/cmcard bubble-in absolute ${TOOL_LAYER} flex flex-col rounded-[20px] border bg-card p-4 shadow-float${underView}`}
           style={{
             left: commentCard.left,
             top: commentCard.top,
@@ -11007,25 +11024,42 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               <CommentIcon size={12} />
               {t("reader.comment")}
             </span>
-            {commentCard.noteId && canEdit && (
+            {/* The page editor's comment card's shape: its icons at the
+                head's right — Resolve, then Delete — and the field under it. */}
+            <span className="ml-auto flex items-center gap-0.5">
+              {commentCard.noteId && canEdit && (
+                <button
+                  onClick={() => void resolveCommentCard()}
+                  data-track="comment-card-resolve"
+                  aria-label={t("common.resolve")}
+                  data-tip={t("docsLayer.resolveTitle")}
+                  className="flex size-6 items-center justify-center rounded-full text-sand-600 hover:bg-sage-100 hover:text-sage-700"
+                >
+                  <CheckIcon size={14} />
+                </button>
+              )}
+              {commentCard.noteId && (
+                <button
+                  onClick={() => void deleteCommentCard()}
+                  data-track="comment-card-delete"
+                  aria-label={t("common.delete")}
+                  data-tip={t("reader.deleteCommentTitle")}
+                  disabled={commentCard.busy}
+                  className="flex size-6 items-center justify-center rounded-full text-sand-600 hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                >
+                  <TrashIcon size={13} />
+                </button>
+              )}
               <button
-                onClick={() => void resolveCommentCard()}
-                data-track="comment-card-resolve"
-                className="mr-2 ml-auto rounded-full border border-line px-2.5 py-0.5 text-[11px] font-semibold text-sand-600 hover:bg-sage-100 hover:text-sage-700"
-                data-tip={t("docsLayer.resolveTitle")}
+                onClick={closeCommentCard}
+                data-track="comment-card-close"
+                className="flex size-6 items-center justify-center rounded-full text-xs text-sand-500 hover:text-clay-700"
+                aria-label={t("common.close")}
+                data-tip={t("common.close")}
               >
-                {t("common.resolve")}
+                ✕
               </button>
-            )}
-            <button
-              onClick={closeCommentCard}
-              data-track="comment-card-close"
-              className="text-xs text-sand-500 hover:text-clay-700"
-              aria-label={t("common.close")}
-              data-tip={t("common.close")}
-            >
-              ✕
-            </button>
+            </span>
           </div>
           {commentCard.noteId ? (
             <>
@@ -11047,24 +11081,16 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                     setCommentCard(null);
                   }
                 }}
-                rows={4}
+                rows={1}
                 className="field-sizing-content min-h-0 w-full flex-1 resize-none rounded-xl bg-sand-100 px-2.5 py-2 text-[13px] outline-none placeholder:text-sand-500"
               />
-              {commentCard.anchor && (
-                <p className="mt-2 line-clamp-2 border-l-2 border-sand-300 pl-2 text-xs text-sand-500">
-                  {commentCard.anchor.quotedText}
-                </p>
-              )}
-              <div className="mt-2 flex items-center justify-between">
-                <button
-                  onClick={() => void deleteCommentCard()}
-                  data-track="comment-card-delete"
-                  data-tip={t("reader.deleteCommentTitle")}
-                  disabled={commentCard.busy}
-                  className="text-xs font-semibold text-red-500 hover:text-red-700 disabled:opacity-40"
-                >
-                  {t("common.delete")}
-                </button>
+              {/* The mic and Save show once the reader writes. The quote is
+                  the lit words beside the card. */}
+              <div
+                className={`mt-2 items-center justify-end ${
+                  commentCard.draft.trim() !== commentCard.saved.trim() ? "flex" : "hidden group-focus-within/cmcard:flex"
+                }`}
+              >
                 <span className="flex items-center gap-1.5">
                   <VoiceTypingButton track="comment-card-voice-typing" />
                   <button
@@ -11083,11 +11109,6 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               <div className="min-h-0 flex-1 overflow-y-auto text-[13px]">
                 <Markdown>{commentCard.draft}</Markdown>
               </div>
-              {commentCard.anchor && (
-                <p className="mt-2 line-clamp-2 border-l-2 border-sand-300 pl-2 text-xs text-sand-500">
-                  {commentCard.anchor.quotedText}
-                </p>
-              )}
             </>
           )}
         </div>
