@@ -83,7 +83,11 @@ if (want("scale")) {
       (await list(page).getAttribute("aria-label")) === "Documents");
   const tabbable = await list(page).evaluate((el) =>
     [...el.querySelectorAll("button, input, a[href], select")].filter((x) => x.tabIndex >= 0 && x.getClientRects().length).length);
-  check("one Tab stop per row (+ close, filter)", tabbable === n + 2, `${tabbable} for ${n} rows`);
+  // The head's controls: close, the filter, and COVER4's Gaps only when the coverage has loaded.
+  const head = 2 + (await list(page).locator("[data-graph-gaps-only]").count());
+  const rowStops = await list(page).evaluate((el) =>
+    [...el.querySelectorAll("ul[role=list] button, ul[role=list] input, ul[role=list] a[href], ul[role=list] select")].filter((x) => x.tabIndex >= 0 && x.getClientRects().length).length);
+  check("one Tab stop per row (+ close, filter, Gaps only)", tabbable === n + head && rowStops === n, `${tabbable} for ${n} rows (${rowStops} in the rows, ${head} in the head)`);
   await page.screenshot({ path: `${SHOT}/VIEW4-04-after-compact.png` });
   // Open the row with the most parts: parts capped at 8 with "N more parts".
   const most = await rows.evaluateAll((els) => {

@@ -148,6 +148,9 @@ await page.waitForTimeout(1000);
 const docRows = await page.locator("[data-graph-documents-row]").count();
 const docParts = await page.locator("[data-graph-documents-row] [data-graph-part]").count();
 check("offline: the Documents list lists every document with its parts", docRows === seed.docs.length && docParts > 0, `${docRows} rows, ${docParts} parts`);
+// What the notes cover, from the copy (COVER4's route is in the offline copy).
+const dots = await page.locator("[data-graph-documents-row] [data-graph-part-dot]").count();
+check("offline: the coverage dots draw from the copy", dots === docParts, `${dots} dots for ${docParts} parts`);
 await page.screenshot({ path: `${OUT}/VIEW3-06-offline-documents${TAG}.png` });
 await context.setOffline(false);
 await page.goto(`${BASE}/n/${NB}`, { waitUntil: "networkidle", timeout: 300000 });

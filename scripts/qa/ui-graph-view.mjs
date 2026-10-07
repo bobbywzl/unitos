@@ -58,7 +58,16 @@ async function openGraph(page) {
 }
 const node = (page, docId) => page.locator(`.react-flow__node[data-id="${docId}"]`);
 async function press(page, docId, touch) {
-  const box = await node(page, docId).boundingBox();
+  // The view may still be panning (a card pans its node clear, GRAPH4
+  // WALK4-01): wait until the node holds still before aiming at it.
+  let box = await node(page, docId).boundingBox();
+  for (let i = 0; i < 20; i++) {
+    await page.waitForTimeout(150);
+    const next = await node(page, docId).boundingBox();
+    const still = box && next && Math.abs(box.x - next.x) < 0.5 && Math.abs(box.y - next.y) < 0.5;
+    box = next;
+    if (still) break;
+  }
   if (!box) throw new Error(`node ${docId} not on screen`);
   // The dot: the top of the node's box (the label hangs under it).
   const x = box.x + box.width / 2;
@@ -227,7 +236,7 @@ for (const lang of ["en", "zh"]) {
       await page.locator('[data-track="graph-find-ask"]').click();
       await page.waitForTimeout(500);
       const value = await page.locator("textarea").first().inputValue();
-      check(`${tag} find: Ask Stitch fills the box`, lang === "en" ? value === "What do these documents say about pity?" : value === "这些文档对“pity”说了什么？", value);
+      check(`${tag} find: Ask Stitch fills the box`, lang === "en" ? value === 'What do these documents say about "pity"?' : value === "这些文档对“pity”说了什么？", value);
       const scope = await page.locator('[aria-label="Stitch"], [aria-label="缝合"]').first().innerText().catch(() => "");
       check(`${tag} find: Pick these picks 5`, /5 documents picked|已选取 5 篇文档/.test(scope));
       await page.locator("textarea").first().fill("");
@@ -267,7 +276,9 @@ for (const lang of ["en", "zh"]) {
     // ── The last Stitch answer (P3) ─────────────────────────────────────
     if (tag === "1440-en") {
       const before = new Set(psql(`SELECT id FROM "DocLink" WHERE "notebookId" = '${NB}' AND recommended`).split("\n").filter(Boolean));
+      // The chip fills the box (WALK4-02); Send asks.
       await page.locator('[data-track="stitch-suggest:contradict"]').click();
+      await page.locator('[data-track="stitch-send"]').click();
       await page.waitForSelector("[data-graph-proposed]", { timeout: 180000 }).catch(() => {});
       await page.waitForTimeout(1500);
       const halos = await page.locator("[data-graph-proposed]").count();
