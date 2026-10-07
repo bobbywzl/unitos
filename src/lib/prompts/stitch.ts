@@ -132,8 +132,39 @@ export function stitchSelectPrompt(ctx: StitchSelectCtx): string {
     ...commandLines(ctx),
     ...citedLine(ctx.cited, "Pick them as well, when the command refers back to them."),
     "",
-    `blockIds: the aliases, most relevant first, up to ${ctx.maxBlocks}. Copy each alias exactly as tagged. Consecutive blocks of one document go as one range, first-last (B10-B15). An empty list means nothing bears on the command.`,
+    `blockIds: the aliases, most relevant first, up to ${ctx.maxBlocks}: the block that answers best comes first, even when it comes late in its document. Copy each alias exactly as tagged. Consecutive blocks of one document go as one range, first-last (B10-B15); a range counts at the place of its most relevant block. An empty list means nothing bears on the command.`,
     'Return ONLY JSON: {"blockIds": ["A3", "B10-B15"]}',
+  ].join("\n");
+}
+
+// ── The expansion ──────────────────────────────────────────────────────────
+
+export type StitchExpandCtx = {
+  command: string;
+  earlier: string[];
+  // The titles of the documents read: they tell the documents' language
+  // and field.
+  titles: string[];
+  maxWords: number;
+};
+
+/** The words a passage that answers the command would use, for the ranked
+    cut of the skeleton lines (lib/graph/rank.ts): the reader asks in their
+    own words, the documents use theirs. One cheap call; no documents. */
+export function stitchExpandPrompt(ctx: StitchExpandCtx): string {
+  return [
+    "Your task: list the words a passage of the documents below would use when it answers the reader's command. A ranker finds the passages by the words they share with your list.",
+    `The documents: ${ctx.titles.map((t) => `"${t}"`).join(", ")}.`,
+    "",
+    ...(ctx.earlier.length > 0
+      ? ["The reader's earlier commands in this conversation, oldest first:", ...ctx.earlier.map((c) => `- ${c.replace(/\s+/g, " ").trim()}`), ""]
+      : []),
+    "The reader's command:",
+    ctx.command,
+    "",
+    `words: up to ${ctx.maxWords} words or short terms: each key word of the command, its synonyms, the word a translator of these documents would use for it, the names, and the terms of the field. In the documents' language. No sentence, no word the command's topic does not need.`,
+    READING_ONLY,
+    'Return ONLY JSON: {"words": ["…", "…"]}',
   ].join("\n");
 }
 
@@ -152,7 +183,7 @@ export function stitchRules(lang: Lang): string {
     `   - {"kind": "text", "markdown": "…", "sources": [{"blockId": "<alias>", "quote": "…"}]}: your own writing, in ${name}, in markdown (paragraphs, lists, bold). sources: the blocks the writing rests on, up to 8, each with a verbatim quote of 8 to 300 characters. Every text part needs at least one source. Write nothing the documents do not support.`,
     "   Up to 200 parts. A command that asks to gather and to summarise gets both: the quote parts, then a text part with the summary. A page that combines findings gets one heading per topic and one text part per finding, each with its own sources; no finding of the documents on the topic is left out. null when the command asks for no page.",
     `3. reply: the answer to the command, in ${name}. A question gets its answer here: start with the answer in one or two sentences, then the evidence, each claim naming the document it comes from by its title and citing its block as [block <alias>]. When the documents give different values or claims on the same point, give each with its document and say they differ; never pick one. When two figures differ in what they cover, say what each covers. Never say which to use for a purpose the documents do not name. When the documents answer only in part, answer that part, then say in one sentence what they do not answer. When they do not answer at all, say so in one sentence, then say what they do say about it. A number you work out from the documents' numbers is marked as worked out and shows the numbers it comes from. A command to gather, link, or write gets one to three sentences on what the page holds, how many links, or why the command could not be done with these documents. Never restate the page. Answer only what the command asks, from the documents only: no fact, number, comparison, or label the documents do not state (never call a figure a "lab rating" or a cause a "delay" unless a document does), and no topic the command did not ask about. At most 3,000 characters. Markdown: short paragraphs, a list when the answer has three or more parallel items, bold for the one or two key figures, no headings. ${SPECIFICITY_RULE} ${STYLE_RULE}`,
-    `Rules: every blockId is an alias tagged below, copied exactly; never invent one. In reply, cite a block as [block <alias>]. Every quote is real text of the named block, copied exactly. When a block repeats another document's block word for word, cite the original, not the copy: the original is in a document not marked "a page Stitch generated", else in the earlier document. Name a document by its title, never by its letter: the reader does not see the letters. When the command cannot be done with these documents, say so in reply and return empty links and a null document.`,
+    `Rules: every blockId is an alias tagged below, copied exactly; never invent one. In reply, cite a block as [block <alias>], one block per tag: [block B19] [block B21], never [block B19, B21]. Every quote is real text of the named block, copied exactly. When a block repeats another document's block word for word, cite the original, not the copy: the original is in a document not marked "a page Stitch generated", else in the earlier document. Name a document by its title, never by its letter: the reader does not see the letters. When the command cannot be done with these documents, say so in reply and return empty links and a null document.`,
   ].join("\n");
 }
 
@@ -161,7 +192,7 @@ export function stitchPrompt(ctx: StitchCtx): string {
     ...unreadLines(ctx.documents),
     ...(ctx.selected
       ? [
-          `A first read picked the blocks above for this command out of every document; each document's header says how many of its blocks are shown. Answer from the blocks shown. A block not shown was judged off the command: when the blocks shown do not answer, say that the passages read do not answer it, not that the documents do not. When the answer is missing or incomplete and a document that could hold it shows only some of its blocks, add one sentence: "Only <shown> of <total> blocks of "<title>" were read for this command; pick fewer documents in the graph to have them read whole."`,
+          `A first read picked the blocks above for this command out of every document; each document's header says how many of its blocks are shown. Answer from the blocks shown. A block not shown was judged off the command: when the blocks shown do not answer, say that the passages read do not answer it, not that the documents do not. When the answer is missing or incomplete and a document that could hold it shows some of its blocks, add one sentence for that document: when its header says "read whole when picked", "Only <shown> of <total> blocks of "<title>" were read for this command; pick it and one short document in the graph to have it read whole."; else "Only <shown> of <total> blocks of "<title>" were read for this command; ask about one part of it to have that part read." Never write the sentence for a document with no blocks shown.`,
         ]
       : []),
     ...commandLines(ctx),

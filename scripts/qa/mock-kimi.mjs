@@ -169,6 +169,14 @@ function buildResponse(all) {
     return JSON.stringify({ quotes: p1 ? [quoteOf(p1, "The passage answers the question directly in the document's own terms.")] : [] });
   }
 
+  // Stitch (SPEC.md §22), the expansion: the command's own longer words.
+  if (all.includes('{"words"') && all.includes("A ranker finds the passages")) {
+    const command = /The reader's command:\n([\s\S]*?)\n\n/.exec(all)?.[1] ?? "";
+    const words = [...new Set(command.toLowerCase().match(/[\p{L}\p{N}]{4,}/gu) ?? [])].slice(0, 15);
+    console.log("[mock stitch expand]", words.length, "words");
+    return JSON.stringify({ words });
+  }
+
   // Stitch (SPEC.md §22), the select pass: the first three lines of every
   // document's skeleton, aliases only.
   if (all.includes('"blockIds"') && all.includes("A second read will do what the command asks")) {

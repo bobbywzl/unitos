@@ -59,7 +59,12 @@ const OUT = arg("out", "");
 const REBUILD = flag("rebuild-skeletons");
 const ONLY = arg("only", "");
 const TURNS = Number(arg("turns", "3")); // turns of the conversation
-const REPLY_CHARS = Number(arg("reply-chars", "0")); // pad each reply to this many chars (0: as written) // comma list of run names: info,compare,gather,contradictions,conv
+const REPLY_CHARS = Number(arg("reply-chars", "0"));
+// --conv mixed: a 6-turn conversation of mixed kinds (question, follow-up,
+// links, question, page, new topic) in place of the 3-turn one. --repeat: run
+// each single command twice, to check the prefix is byte-stable.
+const CONV = arg("conv", "base") as "base" | "mixed";
+const REPEAT = flag("repeat"); // pad each reply to this many chars (0: as written) // comma list of run names: info,compare,gather,contradictions,conv
 
 process.env.DATABASE_URL ??= "postgresql://postgres:postgres@localhost:5432/dissect";
 process.env.MOONSHOT_API_KEY ??= "mock";
@@ -84,6 +89,7 @@ const PROD_MODEL: Record<string, string> = {
   contents: "glm-5.3",
   route: "glm-5.3-flash",
   select: "glm-5.3-flash",
+  expand: "glm-5.3-flash",
   answer: "glm-5.3",
   other: "glm-5.3",
 };
@@ -199,6 +205,26 @@ const ZH: Commands = {
   gather: "把所有关于同情的段落汇集成一页。",
   contradictions: "这些文档在哪些地方相互矛盾？",
   conv: ["尼采如何论述权力意志？", "这与叔本华的生存意志相比如何？", "哪些段落最能支持这一区别？"],
+};
+
+// The mixed conversation (--conv mixed): six turns of mixed kinds.
+const MIXED: Record<"en" | "zh", string[]> = {
+  en: [
+    "What does Schopenhauer say about the vanity of existence?",
+    "How does Nietzsche answer that?",
+    "Where do the two contradict each other on pity?",
+    "Which passages best support that difference?",
+    "Gather those passages into one page.",
+    "What does The Wisdom of Life add about happiness?",
+  ],
+  zh: [
+    "叔本华如何看待生存的虚无？",
+    "尼采如何回应这一点？",
+    "两人在同情问题上哪里相互矛盾？",
+    "哪些段落最能支持这一区别？",
+    "把这些段落汇集成一页。",
+    "《人生的智慧》对幸福补充了什么？",
+  ],
 };
 
 const BOOKS = ["bge", "pessimism", "antichrist", "wisdom", "zarathustra", "controversy", "pride", "moby"];
@@ -336,11 +362,14 @@ export type CallRecord = {
   outputTokensEst: number; // the responder's answer, no reasoning
   usdInput: number; // at the production model's input price, no cache
   usdInputCached: number; // the shared prefix at the cache price
+  sharedSameModelTokens: number; // the prefix shared with an earlier call on the same production model: what the provider's cache can serve
+  usdInputCachedModel: number; // input $ with that cache
 };
 
 const records: CallRecord[] = [];
 let current = { scenario: "", run: "" };
 const prior = new Map<string, string[]>(); // scenario -> serialized prompts
+const priorByModel = new Map<string, string[]>(); // scenario|prod model -> serialized prompts
 
 function contentText(c: unknown): string {
   if (typeof c === "string") return c;
@@ -357,6 +386,7 @@ function passOf(messages: Msg[]): string {
   if (user.includes("A second read will pick the blocks") || user.includes('Return ONLY JSON: {"parts": ["A1"')) return "route";
   if (user.includes("A second read will do what the command asks") || user.includes('Return ONLY JSON: {"blockIds"')) return "select";
   if (user.includes('Return ONLY JSON: {"reply"')) return "answer";
+  if (user.includes('Return ONLY JSON: {"words"')) return "expand";
   if (user.includes("Return ONLY the corrected JSON")) return "retry";
   return "other";
 }
@@ -403,6 +433,15 @@ function record(body: Record<string, unknown>, outputText: string): void {
   const sharedText = serialized.slice(0, shared);
   const sharedTokens = estTokens(sharedText) >= 256 ? estTokens(sharedText) : 0;
   const prodModel = PROD_MODEL[pass] ?? "glm-5.3";
+  // The provider caches per model: only an earlier call on the same model serves the prefix.
+  const modelKey = `${current.scenario}|${prodModel}`;
+  const sameModel = priorByModel.get(modelKey) ?? [];
+  let sharedModel = 0;
+  for (const p of sameModel) sharedModel = Math.max(sharedModel, lcp(p, serialized));
+  sameModel.push(serialized);
+  priorByModel.set(modelKey, sameModel);
+  const sharedModelText = estTokens(serialized.slice(0, sharedModel));
+  const sharedModelTokens = sharedModelText >= 256 ? sharedModelText : 0;
   const price = PRICE[prodModel];
   const total = estTokens(system) + estTokens(historyText) + estTokens(user);
   records.push({
@@ -432,6 +471,8 @@ function record(body: Record<string, unknown>, outputText: string): void {
     outputTokensEst: estTokens(outputText),
     usdInput: (total / 1e6) * price.input,
     usdInputCached: ((total - sharedTokens) / 1e6) * price.input + (sharedTokens / 1e6) * price.cacheRead,
+    sharedSameModelTokens: Math.min(total, sharedModelTokens),
+    usdInputCachedModel: ((total - Math.min(total, sharedModelTokens)) / 1e6) * price.input + (Math.min(total, sharedModelTokens) / 1e6) * price.cacheRead,
   });
 }
 
@@ -508,8 +549,17 @@ function respond(body: Record<string, unknown>): string {
     if (picks.length === 0) picks = lines.slice(0, 3).map((l) => l.alias);
     return JSON.stringify({ blockIds: picks });
   }
+  if (pass === "expand") {
+    // The expansion's words: the command's own content words (a stand-in
+    // that measures the call's tokens; a real model adds synonyms).
+    const words = [...new Set(commandOf(user).toLowerCase().match(/[\p{L}\p{N}]{4,}/gu) ?? [])].slice(0, 15);
+    return JSON.stringify({ words });
+  }
   if (pass === "answer" || pass === "other") {
-    const aliases = [...system.matchAll(/\[block ([A-Z]+\d+)\]/g)].map((m) => m[1]);
+    // The blocks the call shows: the system message's, and the last user
+    // message's (the append-only layout puts the command's blocks there).
+    let aliases = [...`${system}\n${user}`.matchAll(/\[block ([A-Z]+\d+)\]/g)].map((m) => m[1]);
+    if (aliases.length === 0) aliases = [...messages.map((m) => m.content).join("\n").matchAll(/\[block ([A-Z]+\d+)\]/g)].map((m) => m[1]);
     const cite = [aliases[0], aliases[Math.floor(aliases.length / 3)], aliases[Math.floor((2 * aliases.length) / 3)], aliases[aliases.length - 1]].filter(Boolean);
     let reply = zh
       ? `叔本华认为痛苦是生命的本质 [block ${cite[0]}]，而尼采把痛苦看作力量生长的条件 [block ${cite[1]}]。两人都从意志出发，但叔本华主张否定意志 [block ${cite[2]}]，尼采主张肯定并超越它 [block ${cite[3]}]。第一篇和第三篇对同情的评价正好相反：前者把同情视为道德的基础，后者把同情视为削弱生命的力量。最容易误解的是“意志”一词：两人用的是同一个词，指的却不是同一件事。`
@@ -563,9 +613,9 @@ type StitchFn = (input: {
   userId: string | null;
   lang: "en" | "zh";
   command: string;
-  history: { role: "user" | "assistant"; content: string }[];
+  history: { role: "user" | "assistant"; content: string; picked?: string[] }[];
   onFailure: (reason: string) => Error;
-}) => Promise<{ reply: string }>;
+}) => Promise<{ reply: string; picked?: string[] }>;
 
 async function main() {
   if (!existsSync(TEXTS) || readdirSync(TEXTS).filter((f) => f.endsWith(".txt")).length < 8) {
@@ -632,16 +682,21 @@ async function main() {
     const only = ONLY ? new Set(ONLY.split(",")) : null;
     for (const [run, command] of runs) {
       if (only && !only.has(run)) continue;
-      current.run = run;
-      await impl.stitch({ notebookId: notebook.id, documentIds: null, userId: null, lang: sc.lang, command, history: [], onFailure: (r) => new Error(r) });
+      for (let rep = 0; rep < (REPEAT ? 2 : 1); rep++) {
+        current.run = rep === 0 ? run : `${run}-again`;
+        await impl.stitch({ notebookId: notebook.id, documentIds: null, userId: null, lang: sc.lang, command, history: [], onFailure: (r) => new Error(r) });
+      }
     }
     if (!only || only.has("conv")) {
-      const history: { role: "user" | "assistant"; content: string }[] = [];
-      for (let t = 0; t < TURNS; t++) {
+      const history: { role: "user" | "assistant"; content: string; picked?: string[] }[] = [];
+      const script = CONV === "mixed" ? MIXED[sc.lang] : null;
+      const turns = script ? script.length : TURNS;
+      for (let t = 0; t < turns; t++) {
         current.run = `conv-${t + 1}`;
-        const command = t < 3 ? sc.commands.conv[t] : `${sc.commands.conv[t % 3]} (${t + 1})`;
+        const command = script ? script[t] : t < 3 ? sc.commands.conv[t] : `${sc.commands.conv[t % 3]} (${t + 1})`;
         const result = await impl.stitch({ notebookId: notebook.id, documentIds: null, userId: null, lang: sc.lang, command, history: [...history], onFailure: (r) => new Error(r) });
-        history.push({ role: "user", content: command }, { role: "assistant", content: result.reply });
+        // The box keeps each answer's pick with its turn (the append-only layout sends it back).
+        history.push({ role: "user", content: command }, { role: "assistant", content: result.reply, ...(result.picked ? { picked: result.picked } : {}) });
         // The box sends the last 20 turns with text (components/graph/stitch-box.tsx).
         while (history.length > 20) history.shift();
       }
@@ -693,7 +748,9 @@ async function main() {
     console.log(
       `${k.padEnd(22)} calls=${pad(rs.length, 3)} input_tok=${pad(sum((r) => r.totalTokens), 9)} cached_tok=${pad(sum((r) => r.sharedPrefixTokens), 9)} ` +
         `answer_tok=${pad(sum((r) => (r.pass === "answer" ? r.totalTokens : 0)), 8)} select_tok=${pad(sum((r) => (r.pass === "select" ? r.totalTokens : 0)), 8)} ` +
-        `route_tok=${pad(sum((r) => (r.pass === "route" ? r.totalTokens : 0)), 7)} usd=${sum((r) => r.usdInput).toFixed(4)} usd_cache=${sum((r) => r.usdInputCached).toFixed(4)}`,
+        `route_tok=${pad(sum((r) => (r.pass === "route" ? r.totalTokens : 0)), 7)} expand_tok=${pad(sum((r) => (r.pass === "expand" ? r.totalTokens : 0)), 5)} usd=${sum((r) => r.usdInput).toFixed(4)} usd_cache=${sum((r) => r.usdInputCached).toFixed(4)} ` +
+        `model_cached_tok=${pad(sum((r) => r.sharedSameModelTokens), 9)} usd_model_cache=${sum((r) => r.usdInputCachedModel).toFixed(4)} ` +
+        `answer_cached=${pad(sum((r) => (r.pass === "answer" ? r.sharedSameModelTokens : 0)), 8)}`,
     );
   }
   if (OUT) {
