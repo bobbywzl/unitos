@@ -17,6 +17,7 @@ import { setCommentResolved } from "@/lib/annotations/resolve";
 import { isImeKey } from "@/lib/ime";
 import { markdownStyleKey } from "@/lib/markdown-style";
 import type { ReplyView } from "@/lib/types";
+import { sourceMarkSelector } from "@/lib/source-mark";
 import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 
 // A comment's card in the page editor's margin, as Google Docs draws it
@@ -157,7 +158,7 @@ export function CommentCard({
     );
     const next = ids[ids.indexOf(sourceId ?? "") + direction];
     if (!next) return;
-    pane?.querySelector(`[data-source-id="${next}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+    pane?.querySelector(sourceMarkSelector(next))?.scrollIntoView({ block: "center", behavior: "smooth" });
     window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId: next } }));
   }
 

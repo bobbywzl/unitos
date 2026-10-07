@@ -3,6 +3,7 @@
 import type { Highlight } from "@/components/reader/block-view";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { endSweep } from "@/lib/mark-sweep";
+import { sourceIdsAttr } from "@/lib/source-mark";
 
 // Marks inside a table's html (SPEC.md §6): a table with rendered text is
 // article text — a selection inside it opens the text toolbar, and its
@@ -149,6 +150,8 @@ export function paintTableMarks(container: HTMLElement, blockId: string, text: s
         mark.setAttribute(MARK, "");
         mark.className = className.replace(/\s+/g, " ").trim();
         if (anchor?.sourceId) mark.dataset.sourceId = anchor.sourceId;
+        const sourceIds = sourceIdsAttr(anchors);
+        if (sourceIds) mark.dataset.sourceIds = sourceIds;
         if (tip) mark.dataset.tip = tip;
         if (sweep && painter?.freshDelay) mark.style.animationDelay = `${painter.freshDelay}ms`;
         if (sweep && painter) {
