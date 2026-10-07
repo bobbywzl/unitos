@@ -24,6 +24,7 @@ import { useGraphContent } from "@/components/graph/graph-content";
 import { GraphNoteRow, useGraphNotes } from "@/components/graph/graph-notes";
 import { LinkReplyCount } from "@/components/graph/link-replies";
 import { useProvenanceShown } from "@/components/graph/provenance-want";
+import { CoverageHead, DocumentCoverageLine, PartDot, useCoverageGaps } from "@/components/graph/coverage"; // [cover4]
 
 const titlesKept = new Map<string, ProjectPartTitles>();
 // Where the list was scrolled, per project, for Back from a document.
@@ -76,6 +77,7 @@ export function DocumentsList({
   const notesCtx = useGraphNotes();
   const showGenerated = useProvenanceShown();
   const titles = usePartTitles(notebookId);
+  const gaps = useCoverageGaps(); // [cover4]
   const [openGists, setOpenGists] = useState<Set<string>>(() => new Set());
 
   const titleOf = useMemo(() => new Map(nodes.map((n) => [n.id, n.title])), [nodes]);
@@ -183,13 +185,22 @@ export function DocumentsList({
           ✕
         </button>
       </div>
+      {/* [cover4] What the notes cover, and Gaps only (VIEW4-01). */}
+      <CoverageHead documentIds={ordered.map((n) => n.id)} links={edges.flatMap((e) => e.links)} />
       {ordered.length === 0 && <p className="text-[13px] text-sand-600">{t("panes.graphDocumentsEmpty")}</p>}
+      {gaps.on && ordered.every((n) => !gaps.keepRow(n.id, (linksOf.get(n.id) ?? []).flatMap((g) => g.links))) && (
+        <p className="text-[13px] text-sand-600">{t("graphCover.gapsNone")}</p>
+      )}
       {ordered.map((n) => {
         const gist = gists[n.id];
         const gistOpen = openGists.has(n.id);
-        const parts = titles?.documents[n.id] ?? [];
-        const groups = linksOf.get(n.id) ?? [];
-        const notes = notesCtx?.view.byDocument.get(n.id)?.notes ?? [];
+        // [cover4] Gaps only keeps the rows, parts, and links with a gap.
+        if (!gaps.keepRow(n.id, (linksOf.get(n.id) ?? []).flatMap((g) => g.links))) return null;
+        const parts = (titles?.documents[n.id] ?? []).filter((p) => gaps.keepPart(n.id, p.blockId));
+        const groups = (linksOf.get(n.id) ?? [])
+          .map((g) => ({ ...g, links: g.links.filter(gaps.keepLink) }))
+          .filter((g) => g.links.length > 0);
+        const notes = gaps.keepNotes ? (notesCtx?.view.byDocument.get(n.id)?.notes ?? []) : [];
         return (
           <section
             key={n.id}
@@ -211,6 +222,7 @@ export function DocumentsList({
             >
               {n.title}
             </button>
+            <DocumentCoverageLine documentId={n.id} /* [cover4] */ />
             {gist ? (
               <button
                 onClick={() =>
@@ -238,6 +250,7 @@ export function DocumentsList({
                 {parts.map((p, i) => (
                   <span key={p.blockId}>
                     {i > 0 && <span className="text-sand-400"> · </span>}
+                    <PartDot documentId={n.id} blockId={p.blockId} /* [cover4] */ />
                     <button
                       onClick={() => go(`/n/${notebookId}?doc=${n.id}&block=${p.blockId}`)}
                       data-track="graph-documents-part"

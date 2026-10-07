@@ -6,6 +6,7 @@ import { useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
 import { useGraphNotes } from "@/components/graph/graph-notes";
 import { LinkReplyCount } from "@/components/graph/link-replies";
+import { NoReplyToggle, hasNoReply } from "@/components/graph/coverage"; // [cover4]
 
 // Links, a folded list beside the canvas (SPEC.md §13; WALK2-06): every
 // accepted link of the project, grouped by the pair of documents it joins,
@@ -35,14 +36,18 @@ export function LinksList({
   const t = useT();
   const setRowLit = useGraphNotes()?.setRowLit;
   const [filter, setFilter] = useState(initialFilter);
+  const [noReply, setNoReply] = useState(false); // [cover4] No reply (VIEW4-01)
   const words = filter.trim().toLowerCase();
   const all = edges
     .map((e) => ({ edge: e, links: e.links.filter((l) => !l.recommended && !l.provenance) }))
     .filter((g) => g.links.length > 0)
     .sort((x, y) => y.links.length - x.links.length);
   const total = all.reduce((n, g) => n + g.links.length, 0);
+  const kept = noReply
+    ? all.map((g) => ({ ...g, links: g.links.filter(hasNoReply) })).filter((g) => g.links.length > 0)
+    : all;
   const groups = words
-    ? all
+    ? kept
         .map(({ edge, links }) => {
           const titles = `${titleOf.get(edge.a) ?? ""} ${titleOf.get(edge.b) ?? ""}`.toLowerCase();
           return {
@@ -51,7 +56,7 @@ export function LinksList({
           };
         })
         .filter((g) => g.links.length > 0)
-    : all;
+    : kept;
   const light = (e: GraphEdge | null) => setRowLit?.(e ? new Set([e.a, e.b]) : null);
   return (
     <aside
@@ -75,6 +80,7 @@ export function LinksList({
         </button>
       </div>
       {total > 1 && (
+        <div className="flex items-center gap-2">
         <input
           type="search"
           value={filter}
@@ -83,11 +89,15 @@ export function LinksList({
           aria-label={t("panes.graphLinksFilter")}
           data-track="graph-links-filter"
           maxLength={100}
-          className="rounded-full border border-line bg-card px-3 py-1.5 text-[12.5px] text-ink placeholder:text-sand-500 focus:border-clay-400"
+          className="min-w-0 flex-1 rounded-full border border-line bg-card px-3 py-1.5 text-[12.5px] text-ink placeholder:text-sand-500 focus:border-clay-400"
         />
+        <NoReplyToggle on={noReply} onChange={setNoReply} />
+        </div>
       )}
       {total === 0 && <p className="text-[13px] text-sand-600">{t("panes.graphLinksEmpty")}</p>}
-      {total > 0 && groups.length === 0 && <p className="text-[13px] text-sand-600">{t("panes.graphLinksFilterNone")}</p>}
+      {total > 0 && groups.length === 0 && (
+        <p className="text-[13px] text-sand-600">{noReply && kept.length === 0 ? t("graphCover.noReplyNone") : t("panes.graphLinksFilterNone")}</p>
+      )}
       {groups.map(({ edge, links }) => (
         <div
           key={`${edge.a}|${edge.b}`}
