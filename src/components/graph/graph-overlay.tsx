@@ -411,24 +411,27 @@ export function GraphOverlay({
             {t("panes.graphSkipList")}
           </button>
         )}
-        <span className="mr-auto text-[13px] whitespace-nowrap text-sand-600">
+        <span className="shrink-0 text-[13px] whitespace-nowrap text-sand-600">
           {t("panes.graphCounts", {
             docs: ownDocs,
             ds: ownDocs === 1 ? "" : "s",
             links: acceptedLinks,
             ls: acceptedLinks === 1 ? "" : "s",
           })}
-          {/* On a phone the header keeps one short line: Generated content counts them. */}
+          {/* Below 1500px the header keeps one short line, so the pills fit
+              beside it: Generated content counts them. */}
           {generatedCount > 0 && (
-            <span className="max-md:hidden">
+            <span className="max-[1500px]:hidden">
               {t("panes.graphCountsGenerated", { n: generatedCount, s: generatedCount === 1 ? "" : "s" })}
             </span>
           )}
         </span>
-        {/* On md+ the pills stand in the row itself (contents); below md
-            they take a line of their own under the title and the counts,
-            one row that scrolls sideways. A pill never wraps its label. */}
-        <div className="contents max-[900px]:order-1 max-[900px]:-mx-5 max-md:-mx-3 max-[900px]:flex max-[900px]:w-[calc(100%+40px)] max-md:w-[calc(100%+24px)] max-[900px]:items-center max-[900px]:gap-2 max-[900px]:overflow-x-auto max-[900px]:px-5 max-md:px-3 max-[900px]:pb-0.5 [&>button]:shrink-0 [&>button]:whitespace-nowrap">
+        {/* Above 900px the pills fill the rest of the row, right-aligned,
+            and scroll sideways when they do not fit, so the close button
+            stays in view; below they take a line of their own under the
+            title and the counts, one row that scrolls sideways. A pill
+            never wraps its label. */}
+        <div className="flex min-w-0 items-center gap-3 overflow-x-auto py-0.5 [scrollbar-width:thin] min-[901px]:flex-1 min-[901px]:[&>*:first-child]:ml-auto max-[900px]:order-1 max-[900px]:-mx-5 max-md:-mx-3 max-[900px]:flex max-[900px]:w-[calc(100%+40px)] max-md:w-[calc(100%+24px)] max-[900px]:items-center max-[900px]:gap-2 max-[900px]:overflow-x-auto max-[900px]:px-5 max-md:px-3 max-[900px]:pb-0.5 [&>button]:shrink-0 [&>button]:whitespace-nowrap">
           {nodes.length >= 2 && <FindBox find={view2.find} /> /* [view2] */}
           {canEdit && nodes.length >= 2 && (
             <button
@@ -442,7 +445,7 @@ export function GraphOverlay({
                     ? t("panes.recommendScanTitle", { left: scanLeft })
                     : t("panes.recommendScanSpentTitle")
               }
-              className="ml-auto flex items-center gap-1.5 rounded-full border border-line px-3.5 py-1.5 text-[13px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40 max-[900px]:ml-0"
+              className="flex items-center gap-1.5 rounded-full border border-line px-3.5 py-1.5 text-[13px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
             >
               <SparkleIcon size={13} />
               {scanning ? t("panes.recommendScanRunning") : t("panes.recommendScan")}
@@ -513,7 +516,7 @@ export function GraphOverlay({
           data-track="graph-close"
           aria-label={t("common.close")}
           data-tip={t("common.close")}
-          className="flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
+          className="flex size-8 shrink-0 items-center max-[900px]:ml-auto justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
         >
           ✕
         </button>
