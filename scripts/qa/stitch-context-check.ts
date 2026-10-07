@@ -352,8 +352,10 @@ function passOf(messages: Msg[]): string {
   const user = messages[messages.length - 1]?.content ?? "";
   if (user.includes("Write the document's skeleton")) return "skeleton";
   if (user.includes("Write the contents of this document")) return "contents";
-  if (user.includes("A second read will pick the blocks")) return "route";
-  if (user.includes("A second read will do what the command asks")) return "select";
+  // The route and select prompts' JSON shapes: the rules may sit in the
+  // system message, the shape is always in the last user message.
+  if (user.includes("A second read will pick the blocks") || user.includes('Return ONLY JSON: {"parts": ["A1"')) return "route";
+  if (user.includes("A second read will do what the command asks") || user.includes('Return ONLY JSON: {"blockIds"')) return "select";
   if (user.includes('Return ONLY JSON: {"reply"')) return "answer";
   if (user.includes("Return ONLY the corrected JSON")) return "retry";
   return "other";
@@ -374,7 +376,7 @@ function openingChars(system: string): number {
   let total = 0;
   const sections = system.split(/\n\n(?=\[document [A-Z]+\] ")/);
   for (const sec of sections) {
-    const head = /^\[document ([A-Z]+)\] "[^"]*" \((\d+) of (\d+) blocks shown\)/.exec(sec);
+    const head = /^\[document ([A-Z]+)\] "[^"]*" \((?:[a-z]+, )?(\d+) of (\d+) (?:blocks|transcript lines|converted blocks) shown\)/.exec(sec);
     if (!head) continue;
     const n = Number(head[2]);
     if (n === 0) continue;
@@ -422,7 +424,7 @@ function record(body: Record<string, unknown>, outputText: string): void {
     totalTokens: total,
     cjkChars: cjkCount(system) + cjkCount(historyText) + cjkCount(user),
     shown: pass === "answer" && system.includes("blocks shown)")
-      ? [...system.matchAll(/\((\d+) of (\d+) blocks shown\)/g)].map((m) => `${m[1]}/${m[2]}`).join(" ")
+      ? [...system.matchAll(/\((?:[a-z]+, )?(\d+) of (\d+) blocks shown\)/g)].map((m) => `${m[1]}/${m[2]}`).join(" ")
       : null,
     openingChars: pass === "answer" ? openingChars(system) : 0,
     sharedPrefixChars: shared,
@@ -649,7 +651,7 @@ async function main() {
   // ── The table ──
   const pad = (s: string | number, n: number) => String(s).padStart(n);
   console.log(
-    `\nconstants: STITCH_WHOLE_THRESHOLD=${config.STITCH_WHOLE_THRESHOLD} STITCH_SELECTED_BUDGET=${config.STITCH_SELECTED_BUDGET} ` +
+    `\nconstants: STITCH_WHOLE_THRESHOLD=${config.STITCH_WHOLE_THRESHOLD} STITCH_SELECTED_BUDGET=${JSON.stringify(config.STITCH_SELECTED_BUDGET)} ` +
       `STITCH_SKELETON_BUDGET=${config.STITCH_SKELETON_BUDGET} STITCH_SKELETON_GROUP=${config.STITCH_SKELETON_GROUP} select=${SELECT_MODE} responder=${RESPONDER}`,
   );
   console.log(

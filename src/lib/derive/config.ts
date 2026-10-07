@@ -202,12 +202,13 @@ export const CONNECT_EFFORT: KimiEffort = DEFAULT_EFFORT;
 // graph. The documents are read through their skeletons (SKELETON_* below):
 // a select pass reads every skeleton and names the blocks the command needs
 // — ids only, at "low": a reading, not a problem to reason through. Past
-// STITCH_SKELETON_BUDGET of skeleton text a route pass at "low" reads the
+// STITCH_GROUPED_MAX of skeleton a route pass at "low" reads the
 // gists and part summaries first and names the parts, and the select pass
 // reads only those parts' lines, ranked against the command when they
 // still run past the budget (lib/graph/rank.ts). The answer pass reads the
-// selected blocks' real text at the reader's effort and answers with links,
-// a generated document, or both. Documents under STITCH_WHOLE_THRESHOLD
+// selected blocks' real text at the reader's effort, up to the budget of
+// the command's kind, and answers in the reply, with links, a generated
+// document, or a mix. Documents under STITCH_WHOLE_THRESHOLD
 // together skip every pass but the answer: the answer pass reads them
 // whole. Not a DerivationType — it runs through
 // /api/notebooks/[notebookId]/stitch.
@@ -218,16 +219,41 @@ export const STITCH_SELECT_EFFORT: KimiEffort = "low";
 export const STITCH_SELECT_MAX_OUTPUT_TOKENS = 16384; // a list of ids, with the short reasoning before it
 export const STITCH_EFFORT: KimiEffort = "high";
 export const STITCH_MAX_OUTPUT_TOKENS = 32768; // a page of whole-block references and the model's own writing
-export const STITCH_WHOLE_THRESHOLD = 120_000; // chars of document text; under it the answer pass reads the documents whole
-export const STITCH_SKELETON_BUDGET = 200_000; // chars of skeleton text one select call reads; past it the route pass runs first
-export const STITCH_SELECTED_BUDGET = 200_000; // chars of real block text the answer pass reads
+// Every Stitch budget below is in estimated tokens (lib/tokens.ts: Latin
+// chars / 4, a CJK character 1), so a Chinese project reads what an English
+// project of the same token count reads, at the same cost.
+export const STITCH_WHOLE_THRESHOLD = 30_000; // under it the answer pass reads the documents whole
+export const STITCH_SKELETON_BUDGET = 50_000; // skeleton one select call reads; past it the lines are read in groups
+// What the answer pass reads after selection, by what the command asks for
+// (commandKind, lib/graph/stitch.ts): an answer, links, or a page. A
+// question's budget stays under the whole threshold, so the reading passes
+// pay for themselves; a page keeps the breadth a gather needs.
+export const STITCH_SELECTED_BUDGET = { question: 15_000, links: 30_000, page: 50_000 } as const;
+export const STITCH_SELECTED_BLOCKS = { question: 150, links: 300, page: 400 } as const;
 // Past STITCH_SKELETON_BUDGET the select pass reads every line in groups of
-// this many chars of skeleton, the groups at once, so no line goes unread
-// and no call reads more than a few documents' worth; the route pass runs
-// first only past STITCH_GROUPED_MAX of skeleton (about 300 articles).
-export const STITCH_SKELETON_GROUP = 60_000;
-export const STITCH_GROUPED_MAX = 1_200_000;
+// this much skeleton, the groups at once, so no line goes unread and no
+// call reads more than a few documents' worth; the route pass runs first
+// only past STITCH_GROUPED_MAX of skeleton (about 300 articles). A question
+// past STITCH_SKELETON_BUDGET reads instead the lines ranked against it
+// (lib/graph/rank.ts), cut to STITCH_QUESTION_SKELETON: one call, not one
+// per group.
+export const STITCH_SKELETON_GROUP = 15_000;
+export const STITCH_GROUPED_MAX = 300_000;
+export const STITCH_QUESTION_SKELETON = 20_000;
+// A generated document of the project is read with every document when
+// nothing is picked. False leaves generated documents out of that default
+// read (a picked generated document is always read). Owner's call.
+export const STITCH_READS_GENERATED = true;
 export const STITCH_GROUP_CONCURRENCY = 6;
+// The route's limits: a command over STITCH_COMMAND_MAX chars is refused
+// with a message that says so; a history turn is cut to
+// STITCH_HISTORY_TURN_MAX chars and the history to its last
+// STITCH_HISTORY_MAX turns, never refused. The reading passes read the
+// last STITCH_READ_HISTORY commands of the reader, not the replies.
+export const STITCH_COMMAND_MAX = 4_000;
+export const STITCH_HISTORY_TURN_MAX = 8_000;
+export const STITCH_HISTORY_MAX = 20;
+export const STITCH_READ_HISTORY = 3;
 // The model passes together get this long; the route's limit (300 s) keeps
 // the rest for storing the answer. Past it the run stops and the reader is
 // told to narrow the command instead of reading a stream that ended empty.
@@ -235,7 +261,7 @@ export const STITCH_DEADLINE_MS = 270_000;
 // The assistant at Project scope (SPEC.md §7, lib/assistant/project-reading.ts):
 // a project with more document text than this is read the way Stitch reads
 // it, through the skeletons, for each message; under it the digest goes whole.
-export const ASSISTANT_WHOLE_THRESHOLD = STITCH_WHOLE_THRESHOLD;
+export const ASSISTANT_WHOLE_THRESHOLD = 120_000; // chars of document text (project-reading.ts counts chars)
 
 // The skeleton of a document (SPEC.md §22): the document collapsed for
 // Stitch — a gist, one summary per part of the contents, one line per

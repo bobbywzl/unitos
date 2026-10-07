@@ -324,6 +324,10 @@ export type StitchDocument = {
   status: "read" | "empty";
   blocks: number;
   total: number;
+  // After selection: how many of its blocks the answer pass read whole
+  // (the rest were judged off the command). Null on the whole read, and
+  // for a document not read.
+  shown: number | null;
   reason:
     | "transcriptPending"
     | "transcriptStale"
@@ -347,7 +351,16 @@ export type StitchResult = {
   linkCount: number;
   document: { id: string; title: string } | null;
   documents: StitchDocument[];
+  // Every stored block id the reply cites as [block <id>]: its document's
+  // id and title, and the block's text cut to 600 chars, so a chip can say
+  // where it points and open it. {} when the reply cites nothing.
+  cited: Record<string, { documentId: string; title: string; text: string }>;
 };
+
+/** What a Stitch command asks for (lib/graph/stitch.ts commandKind): an
+    answer, links, or a page. It sets what the answer pass reads after
+    selection (STITCH_SELECTED_BUDGET). */
+export type StitchCommandKind = "question" | "links" | "page";
 
 // ── Graph view (SPEC.md §13): documents as nodes, links as weighted edges ──
 
