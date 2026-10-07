@@ -133,7 +133,7 @@ export function DocumentColumns({
           <ChevronLeftIcon size={14} />
           {t("outline.notesLabel")}
         </button>
-        <span className="font-display text-[18px]">{t("outline.byDocument")}</span>
+        <span className="font-display text-[18px]">{t("outline.documentColumns")}</span>
         {columns.length > 0 && (
           <span className="text-[12px] text-sand-500">{t("outline.byDocumentCount", { n: documents.filter((d) => used.has(d.id)).length })}</span>
         )}

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { attachNoteEditable, type NoteEditable, type StyleCommand } from "@/lib/note-editable";
@@ -22,10 +21,12 @@ import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 // reads large, a list line carries its bullet — the same prose classes as the
 // rendered note, so the two look alike.
 //
-// Two bars (SPEC.md §6): the tray's editor carries the core tools and a link
-// to the notes full page, whose editor carries them all — the dash list, the
-// checklist, the quote, and the image picker. Every typed shortcut works in
-// both, and every tool's tooltip names its key or its typed shortcut.
+// Two bars (SPEC.md §6): the tray's editor carries the core tools — the
+// lists, the checklist, the quote, the styles, one color button that opens
+// the four colors — and the notes full page's editor adds Heading 1 (the
+// title field is the note's level-one heading), the indent buttons (Tab and
+// Shift+Tab indent in both), and the image picker. Every typed shortcut works
+// in both, and every tool's tooltip names its key or its typed shortcut.
 
 type TextColor = "clay" | "sage" | "gold" | "plum";
 const TEXT_COLORS: { tag: TextColor; dot: string; nameKey: TKey }[] = [
@@ -80,6 +81,7 @@ const FORMATS: { label: string; tipKey: TKey; track: string; full?: boolean; map
     label: "H1",
     tipKey: "outline.tipHeading1",
     track: "h1",
+    full: true,
     map: (ls) => setLinePrefix(ls, () => "# ", /^\s*#\s/),
   },
   {
@@ -104,7 +106,6 @@ const FORMATS: { label: string; tipKey: TKey; track: string; full?: boolean; map
     label: "–",
     tipKey: "outline.tipDashList",
     track: "dash",
-    full: true,
     map: (ls) => setLinePrefix(ls, () => "+ ", /^\s*\+\s(?!\[[ xX]\]\s)/),
   },
   {
@@ -117,7 +118,6 @@ const FORMATS: { label: string; tipKey: TKey; track: string; full?: boolean; map
     label: "☐",
     tipKey: "outline.tipChecklist",
     track: "checklist",
-    full: true,
     map: (ls) => setLinePrefix(ls, () => "- [ ] ", /^\s*[-*+]\s\[[ xX]\]\s/),
   },
   {
@@ -178,7 +178,6 @@ export function NoteEditor({
   placeholder,
   className = "",
   full = false,
-  moreHref,
   autoFocus = true,
   title,
   onQuoteDrop,
@@ -192,8 +191,6 @@ export function NoteEditor({
   className?: string;
   /** The whole bar (the notes full page); false: the core tools (the tray). */
   full?: boolean;
-  /** With the core bar: where the whole bar is — the notes full page. */
-  moreHref?: string;
   /** The caret lands at the end of the text on mount. False: the title field
       takes the focus (note-title-field.tsx). */
   autoFocus?: boolean;
@@ -221,6 +218,8 @@ export function NoteEditor({
   // editable owns the history (lib/note-editable.ts) and Cmd+Z reaches it
   // there, so the buttons are the same two steps under a symbol.
   const [history, setHistory] = useState({ canUndo: false, canRedo: false });
+  // The four colors, shown in the color button's place while it is pressed.
+  const [colorsOpen, setColorsOpen] = useState(false);
   const readHistory = () => setHistory(core.current?.history() ?? { canUndo: false, canRedo: false });
 
   useEffect(() => {
@@ -480,42 +479,69 @@ export function NoteEditor({
           </button>
         ))}
         <span aria-hidden className="mx-1 h-4 w-px bg-line" />
-        {TEXT_COLORS.map(({ tag, dot, nameKey }) => (
+        {/* One color button: a press shows the four colors in its place, a
+            pick colors the text and folds them again. */}
+        {colorsOpen ? (
+          TEXT_COLORS.map(({ tag, dot, nameKey }) => (
+            <button
+              key={tag}
+              type="button"
+              onMouseDown={keep}
+              onClick={() => {
+                command(tag);
+                setColorsOpen(false);
+              }}
+              data-track="note-text-color"
+              aria-label={t("outline.tipColor", { color: t(nameKey) })}
+              data-tip={t("outline.tipColor", { color: t(nameKey) })}
+              className="mx-0.5 size-[13px] rounded-full transition-transform hover:scale-110"
+              style={{ background: dot }}
+            />
+          ))
+        ) : (
           <button
-            key={tag}
             type="button"
             onMouseDown={keep}
-            onClick={() => command(tag)}
-            data-track="note-text-color"
-            aria-label={t("outline.tipColor", { color: t(nameKey) })}
-            data-tip={t("outline.tipColor", { color: t(nameKey) })}
-            className="mx-0.5 size-[13px] rounded-full transition-transform hover:scale-110"
-            style={{ background: dot }}
-          />
-        ))}
-        <span aria-hidden className="mx-1 h-4 w-px bg-line" />
-        <button
-          type="button"
-          onMouseDown={keep}
-          onClick={() => apply((v, s, e) => mapSelectedLines(v, s, e, outdentLines))}
-          data-track="note-outdent"
-          aria-label={t("outline.tipOutdent")}
-          data-tip={t("outline.tipOutdent")}
-          className={barButton}
-        >
-          ⇤
-        </button>
-        <button
-          type="button"
-          onMouseDown={keep}
-          onClick={() => apply((v, s, e) => mapSelectedLines(v, s, e, indentLines))}
-          data-track="note-indent"
-          aria-label={t("outline.tipIndent")}
-          data-tip={t("outline.tipIndent")}
-          className={barButton}
-        >
-          ⇥
-        </button>
+            onClick={() => setColorsOpen(true)}
+            data-track="note-text-colors"
+            aria-label={t("outline.tipColors")}
+            data-tip={t("outline.tipColors")}
+            className={barButton}
+          >
+            <span
+              aria-hidden
+              className="size-[13px] rounded-full"
+              style={{ background: `conic-gradient(${TEXT_COLORS.map((c) => c.dot).join(", ")})` }}
+            />
+          </button>
+        )}
+        {full && (
+          <>
+            <span aria-hidden className="mx-1 h-4 w-px bg-line" />
+            <button
+              type="button"
+              onMouseDown={keep}
+              onClick={() => apply((v, s, e) => mapSelectedLines(v, s, e, outdentLines))}
+              data-track="note-outdent"
+              aria-label={t("outline.tipOutdent")}
+              data-tip={t("outline.tipOutdent")}
+              className={barButton}
+            >
+              ⇤
+            </button>
+            <button
+              type="button"
+              onMouseDown={keep}
+              onClick={() => apply((v, s, e) => mapSelectedLines(v, s, e, indentLines))}
+              data-track="note-indent"
+              aria-label={t("outline.tipIndent")}
+              data-tip={t("outline.tipIndent")}
+              className={barButton}
+            >
+              ⇥
+            </button>
+          </>
+        )}
         {full && (
           <>
             <span aria-hidden className="mx-1 h-4 w-px bg-line" />
@@ -549,15 +575,6 @@ export function NoteEditor({
             body's caret. */}
         <VoiceTypingButton field={ref} track="note-voice-typing" className="size-6" />
       </div>
-      {!full && moreHref && (
-        <Link
-          href={moreHref}
-          data-track="notes-full-page-tools"
-          className="shrink-0 self-start text-[11px] text-sand-500 hover:text-clay-700"
-        >
-          {t("outline.moreOnFullPage")} →
-        </Link>
-      )}
       {imageError && <p className="shrink-0 text-[11px] text-red-500">{imageError}</p>}
       {title}
       <div

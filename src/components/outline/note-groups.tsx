@@ -1,15 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { isImeKey } from "@/lib/ime";
 import type { Lang } from "@/lib/i18n/config";
 import { noteTitle } from "@/lib/note-title";
 import type { NoteView, SectionView } from "@/lib/types";
-import { ChevronDownIcon, ChevronRightIcon, PlusIcon } from "@/components/icons";
+import { CheckIcon, ChevronDownIcon, ChevronRightIcon, PlusIcon } from "@/components/icons";
+import { NEW_GLOW_CLASS, NewPill } from "@/components/new-feature";
+import { menuRowClass } from "@/components/reader/note-picker";
 import { useCollab } from "@/components/collab/collab-context";
 import { useLang, useT } from "@/components/lang-provider";
 import { NoteCard } from "@/components/outline/note-card";
 import { NoteComposer } from "@/components/outline/note-composer";
-import { SECTION_ADD_NOTE } from "@/components/outline/section-action";
+import { SECTION_ACTION, SECTION_ADD_NOTE } from "@/components/outline/section-action";
+import { SortableBoard, SortableGroup, SortableItem } from "@/components/sortable";
+import { VoiceNoteButton } from "@/components/outline/voice-note";
 import { useNoteCompose } from "@/components/outline/use-note-compose";
 import { flattenNotes, noteMatches, type OutlineActions } from "@/components/outline/use-outline";
 
@@ -175,54 +180,145 @@ const GROUPING_KEY: Record<
   title: "groupByTitle",
 };
 
-/** The Group by picker, and on the tray the scope switch: This document or
-    All notes. */
-export function NotesOrganize({
+/** The notes' view menu, beside the search (SPEC.md §6): on the tray the
+    scope (All notes or This document) and Group by; on the notes full page
+    Group by and Document columns. One icon in place of the scope's two
+    pills and the Group by select; the button reads pressed while the tray
+    shows This document alone, so a filtered tray says so at rest. */
+export function NotesViewMenu({
   grouping,
   onGrouping,
   scope,
   onScope,
+  onColumns,
+  columnsNew,
 }: {
   grouping: NoteGrouping;
   onGrouping: (g: NoteGrouping) => void;
   scope?: NoteScope;
   onScope?: (s: NoteScope) => void;
+  /** The notes full page: Document columns, one column per document. */
+  onColumns?: () => void;
+  /** Document columns is new (the New glow, SPEC.md §18). */
+  columnsNew?: boolean;
 }) {
   const t = useT();
-  const pill = "rounded-full px-3 py-1 text-[11.5px] font-semibold";
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !isImeKey(e)) setOpen(false);
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  const filtered = scope === "document";
+  const now = [
+    ...(scope ? [t(scope === "project" ? "outline.scopeProject" : "outline.scopeDocument")] : []),
+    t(`outline.${GROUPING_KEY[grouping]}`),
+  ].join(" · ");
+  const head = "px-2.5 pt-1.5 pb-0.5 text-[10.5px] font-bold tracking-[0.08em] text-sand-500 uppercase";
+  const row = (on: boolean) =>
+    `${menuRowClass} justify-between ${on ? "font-semibold text-clay-800" : ""}`;
+  const tick = (on: boolean) => (on ? <CheckIcon size={12} /> : null);
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {scope && onScope && (
-        <div className="flex rounded-full border border-line p-0.5" role="group" aria-label={t("outline.notesScope")}>
-          {(["project", "document"] as const).map((s) => (
-            <button
-              key={s}
-              onClick={() => onScope(s)}
-              data-track={`notes-scope:${s}`}
-              aria-pressed={scope === s}
-              data-tip={t(s === "project" ? "outline.scopeProjectTitle" : "outline.scopeDocumentTitle")}
-              className={`${pill} ${scope === s ? "bg-clay-100 text-clay-800" : "text-sand-600 hover:text-clay-800"}`}
-            >
-              {t(s === "project" ? "outline.scopeProject" : "outline.scopeDocument")}
-            </button>
-          ))}
+    <div ref={rootRef} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        data-track="notes-view-menu"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={t("outline.notesViewMenu")}
+        data-tip={`${t("outline.notesViewMenu")}\n${now}`}
+        className={`relative flex size-8 items-center justify-center rounded-full shadow-soft hover:bg-clay-100 hover:text-clay-800 ${
+          filtered ? "bg-clay-100 text-clay-800" : "bg-card text-sand-700"
+        }${columnsNew ? ` ${NEW_GLOW_CLASS}` : ""}`}
+      >
+        <svg aria-hidden width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12" />
+          <circle cx="16" cy="6" r="2" />
+          <circle cx="10" cy="12" r="2" />
+          <circle cx="18" cy="18" r="2" />
+        </svg>
+        {filtered && <span aria-hidden className="absolute top-0.5 right-0.5 size-2 rounded-full bg-clay" />}
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="menu-in absolute top-full right-0 z-30 mt-1 w-56 rounded-2xl border border-line bg-card p-1.5 shadow-float"
+        >
+          {scope && onScope && (
+            <div role="group" aria-label={t("outline.notesScope")}>
+              <p className={head}>{t("outline.notesScope")}</p>
+              {(["project", "document"] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={scope === s}
+                  onClick={() => {
+                    onScope(s);
+                    setOpen(false);
+                  }}
+                  data-track={`notes-scope:${s}`}
+                  data-tip={t(s === "project" ? "outline.scopeProjectTitle" : "outline.scopeDocumentTitle")}
+                  className={row(scope === s)}
+                >
+                  {t(s === "project" ? "outline.scopeProject" : "outline.scopeDocument")}
+                  {tick(scope === s)}
+                </button>
+              ))}
+            </div>
+          )}
+          <div role="group" aria-label={t("outline.groupBy")}>
+            <p className={head}>{t("outline.groupBy")}</p>
+            {NOTE_GROUPINGS.map((g) => (
+              <button
+                key={g}
+                type="button"
+                role="menuitemradio"
+                aria-checked={grouping === g}
+                onClick={() => {
+                  onGrouping(g);
+                  setOpen(false);
+                }}
+                data-track={`notes-grouping:${g}`}
+                className={row(grouping === g)}
+              >
+                {t(`outline.${GROUPING_KEY[g]}`)}
+                {tick(grouping === g)}
+              </button>
+            ))}
+            {onColumns && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  onColumns();
+                }}
+                data-track="by-document"
+                data-tip={t("outline.byDocumentTitle")}
+                className={row(false)}
+              >
+                <span className="flex items-center gap-1.5">
+                  {t("outline.documentColumns")}
+                  {columnsNew && <NewPill />}
+                </span>
+              </button>
+            )}
+          </div>
         </div>
       )}
-      <label className="flex items-center gap-1.5 text-[11.5px] text-sand-600">
-        {t("outline.groupBy")}
-        <select
-          value={grouping}
-          onChange={(e) => onGrouping(e.target.value as NoteGrouping)}
-          data-track="notes-grouping"
-          className="rounded-full border border-line bg-card px-2.5 py-1 text-[11.5px] font-semibold text-sand-700 outline-none hover:bg-clay-100"
-        >
-          {NOTE_GROUPINGS.map((g) => (
-            <option key={g} value={g}>
-              {t(`outline.${GROUPING_KEY[g]}`)}
-            </option>
-          ))}
-        </select>
-      </label>
     </div>
   );
 }
@@ -236,24 +332,19 @@ type NoteGroupsProps = {
   search: string;
   /** The tray: accepted notes alone (pending notes wait in the queue above). */
   accepted?: boolean;
+  /** The ring closed: the held note joins the note it covers. */
+  onMerge?: (id: string, intoId: string) => void;
+  /** The tray: a note let go over the article floats there. */
+  onDropOutside?: (itemId: string, at: { x: number; y: number; grab: { dx: number; dy: number } }) => void;
 };
 
 /** The notes in every grouping but section: Last edited as one list, the
-    others in groups. No drag: a grouping other than section moves no note. */
+    others in groups. A grouping other than section moves no note, so no
+    drop line draws; a hold still merges a note into the one it covers and,
+    on the tray, floats it out over the article (SPEC.md §6). Note writes a
+    new note in the first section, under every grouping. */
 export function NoteGroups(props: NoteGroupsProps) {
-  return props.grouping === "edited" ? <EditedNotes {...props} /> : <GroupedNotes {...props} />;
-}
-
-const allSections = (sections: SectionView[]): SectionView[] =>
-  sections.flatMap((section) => [section, ...allSections(section.children)]);
-
-/** Last edited: every note in one list, newest edit first. Note writes a
-    new note in the first section, where a new note lands at the top (SPEC.md
-    §6). Each section's composer is mounted, so a draft left open in any
-    section reopens here as it does under Section. */
-function EditedNotes({ tree, actions, variant, search, accepted }: NoteGroupsProps) {
-  const t = useT();
-  const lang = useLang();
+  const { tree, actions, variant, search, accepted, onMerge, onDropOutside } = props;
   const { canEdit } = useCollab();
   const sections = allSections(tree);
   // The notes the composers own, by section: they stay out of the list while
@@ -272,9 +363,11 @@ function EditedNotes({ tree, actions, variant, search, accepted }: NoteGroupsPro
   const notes = flattenNotes(tree).filter(
     (n) => !ownedIds.has(n.id) && (!accepted || n.status !== "PENDING") && noteMatches(n, search),
   );
-  const sorted = groupNotes(notes, "edited", [], lang, { project: "", untitled: "", weekOf: () => "" })[0]?.notes ?? [];
+  const notesById = new Map(notes.map((n) => [n.id, n]));
   return (
     <div className="flex flex-col gap-2">
+      {/* Each section's composer is mounted, so a draft left open in any
+          section reopens here as it does under Section. */}
       {sections.map((section, i) => (
         <SectionComposer
           key={section.id}
@@ -286,21 +379,71 @@ function EditedNotes({ tree, actions, variant, search, accepted }: NoteGroupsPro
           onOwned={onOwned}
         />
       ))}
-      {sorted.length === 0 ? (
-        <p className="text-[13px] text-sand-600">{t("outline.byDocumentEmpty")}</p>
-      ) : (
-        <div className={variant === "page" ? "grid grid-cols-1 gap-2 lg:grid-cols-2" : "flex flex-col gap-2"}>
-          {sorted.map((note) => (
-            <NoteCard key={actions.noteKey(note.id)} note={note} actions={actions} variant={variant} search={search} />
-          ))}
-        </div>
-      )}
+      <SortableBoard
+        id={`note-groups:${variant}`}
+        onMerge={canEdit ? onMerge : undefined}
+        onDropOutside={canEdit ? onDropOutside : undefined}
+        canMerge={(id, intoId) =>
+          notesById.get(id)?.status === "ACCEPTED" && notesById.get(intoId)?.status === "ACCEPTED"
+        }
+        overlay={(itemId) => {
+          const note = notesById.get(itemId);
+          return note ? <NoteCard note={note} actions={actions} variant={variant} search={search} /> : null;
+        }}
+      >
+        {props.grouping === "edited" ? (
+          <EditedNotes {...props} notes={notes} canEdit={canEdit} />
+        ) : (
+          <GroupedNotes {...props} notes={notes} canEdit={canEdit} />
+        )}
+      </SortableBoard>
     </div>
   );
 }
 
-/** One section's composer under Last edited: the Note button (the first
-    section), and the composer while it is open, under the section's name. */
+const allSections = (sections: SectionView[]): SectionView[] =>
+  sections.flatMap((section) => [section, ...allSections(section.children)]);
+
+type ListProps = NoteGroupsProps & { notes: NoteView[]; canEdit: boolean };
+
+/** One group's notes as cards a hold picks up. The page's two columns keep
+    each card's own height: a one-line note never stretches to its
+    neighbour's. */
+function GroupList({ id, notes, actions, variant, search, canEdit }: ListProps & { id: string }) {
+  return (
+    <SortableGroup
+      id={id}
+      ids={notes.map((n) => n.id)}
+      className={variant === "page" ? "grid grid-cols-1 items-start gap-2 lg:grid-cols-2" : "flex flex-col gap-2"}
+    >
+      {notes.map((note) => (
+        <SortableItem key={actions.noteKey(note.id)} id={note.id}>
+          {(handle) => (
+            <NoteCard
+              note={note}
+              actions={actions}
+              handle={canEdit ? handle : undefined}
+              variant={variant}
+              search={search}
+            />
+          )}
+        </SortableItem>
+      ))}
+    </SortableGroup>
+  );
+}
+
+/** Last edited: every note in one list, newest edit first. */
+function EditedNotes(props: ListProps) {
+  const t = useT();
+  const lang = useLang();
+  const sorted = groupNotes(props.notes, "edited", [], lang, { project: "", untitled: "", weekOf: () => "" })[0]?.notes ?? [];
+  if (sorted.length === 0) return <p className="text-[13px] text-sand-600">{t("outline.byDocumentEmpty")}</p>;
+  return <GroupList {...props} id="group:edited" notes={sorted} />;
+}
+
+/** The Note button and Command for the first section, and each section's
+    composer while it is open, under the section's name. */
 function SectionComposer({
   section,
   actions,
@@ -317,6 +460,7 @@ function SectionComposer({
   onOwned: (sectionId: string, noteId: string | null) => void;
 }) {
   const t = useT();
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const compose = useNoteCompose({ sectionId: section.id, notes: section.notes, actions, canEdit });
   useEffect(() => {
     onOwned(section.id, compose.noteId);
@@ -326,24 +470,36 @@ function SectionComposer({
   return (
     <div className="flex flex-col gap-2">
       {withAdd && canEdit && !compose.composing && (
-        <button
-          onClick={compose.open}
-          data-track="edited-add-note"
-          data-tip={t("outline.addNoteInTitle", { section: section.title })}
-          className={`self-start ${SECTION_ADD_NOTE}`}
-        >
-          <PlusIcon size={14} />
-          {t("outline.addNoteBtn")}
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={compose.open}
+            data-track="edited-add-note"
+            data-tip={t("outline.addNoteInTitle", { section: section.title })}
+            className={SECTION_ADD_NOTE}
+          >
+            <PlusIcon size={14} />
+            {t("outline.addNoteBtn")}
+          </button>
+          <VoiceNoteButton
+            sectionId={section.id}
+            onError={setVoiceError}
+            className={SECTION_ACTION}
+            compact={variant === "tray"}
+          />
+        </div>
       )}
+      {voiceError && <p className="text-xs text-red-500">{voiceError}</p>}
       {compose.composing && (
         <>
           <span className="text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">{section.title}</span>
-          {variant === "page" ? (
-            <NoteComposer compose={compose} full padding="p-4" />
-          ) : (
-            <NoteComposer compose={compose} full={false} moreHref={`/n/${actions.notebookId}/notes`} padding="p-3" />
-          )}
+          {/* The note joins the list the moment the server has it, as in a
+              section (use-outline.ts expectComposed). */}
+          <NoteComposer
+            compose={compose}
+            onRelease={() => actions.expectComposed(section.id)}
+            full={variant === "page"}
+            padding={variant === "page" ? "p-4" : "p-3"}
+          />
         </>
       )}
     </div>
@@ -352,18 +508,10 @@ function SectionComposer({
 
 /** The notes in groups (groupNotes): a header per group that folds it, and
     the notes as cards. */
-function GroupedNotes({
-  tree,
-  grouping,
-  documents,
-  actions,
-  variant,
-  search,
-  accepted,
-}: NoteGroupsProps) {
+function GroupedNotes(props: ListProps) {
+  const { notes, grouping, documents } = props;
   const t = useT();
   const lang = useLang();
-  const notes = flattenNotes(tree).filter((n) => (!accepted || n.status !== "PENDING") && noteMatches(n, search));
   const groups = groupNotes(notes, grouping, documents, lang, {
     project: t("outline.groupProject"),
     untitled: t("outline.groupUntitled"),
@@ -382,6 +530,8 @@ function GroupedNotes({
     <div className="flex flex-col gap-3.5">
       {groups.map((group) => {
         const closed = folded.has(group.key);
+        // One count rule on every surface: the accepted notes.
+        const count = group.notes.filter((n) => n.status !== "PENDING").length;
         return (
           <div key={group.key} className="flex flex-col gap-2">
             <div className="flex items-baseline gap-2">
@@ -396,15 +546,9 @@ function GroupedNotes({
                 </span>
                 <span className="truncate">{group.title}</span>
               </button>
-              <span className="text-[11px] text-sand-500">{group.notes.length}</span>
+              {count > 0 && <span className="text-[11px] text-sand-500">{count}</span>}
             </div>
-            {!closed && (
-              <div className={variant === "page" ? "grid grid-cols-1 gap-2 lg:grid-cols-2" : "flex flex-col gap-2"}>
-                {group.notes.map((note) => (
-                  <NoteCard key={actions.noteKey(note.id)} note={note} actions={actions} variant={variant} search={search} />
-                ))}
-              </div>
-            )}
+            {!closed && <GroupList {...props} id={`group:${group.key}`} notes={group.notes} />}
           </div>
         );
       })}

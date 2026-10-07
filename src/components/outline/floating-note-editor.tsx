@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { isImeKey } from "@/lib/ime";
 import { skipsDrag, watchHold } from "@/lib/hold-drag";
@@ -69,6 +69,9 @@ const KEEP = 96;
 // Less room than this beside the card and the text skips below it instead.
 const MIN_BESIDE = 200;
 const WRAP_STORE = "unitos-note-wrap";
+// How long a card that just landed follows the text under it while the
+// tray folds and the article settles.
+const FOLLOW_MS = 1200;
 
 type Pos = { left: number; top: number };
 
@@ -445,6 +448,40 @@ export function FloatingNoteEditor({
     };
   }, [grab, width, pane]);
 
+  // The tray folds as the card lands (workspace.tsx), and the article's text
+  // moves under it. For a moment after the landing the card follows the
+  // block of text it was let go over, so it stays over the words the reader
+  // aimed it at. A hold on the card ends it.
+  useLayoutEffect(() => {
+    if (pane) return;
+    const card = cardRef.current?.getBoundingClientRect();
+    if (!card) return;
+    const block = document
+      .elementsFromPoint(card.left + 24, card.top + 12)
+      .map((el) => el.closest<HTMLElement>("[data-reader-root] [data-block-id]"))
+      .find((el): el is HTMLElement => el !== null && !cardRef.current?.contains(el));
+    if (!block) return;
+    let last = block.getBoundingClientRect().left;
+    let frame = 0;
+    const until = performance.now() + FOLLOW_MS;
+    const follow = () => {
+      if (performance.now() > until || !block.isConnected) return;
+      const now = block.getBoundingClientRect().left;
+      if (now !== last) {
+        const moved = now - last;
+        last = now;
+        setPos((p) => clampPos({ left: p.left + moved, top: p.top }, cardRef.current?.offsetWidth ?? width));
+      }
+      frame = requestAnimationFrame(follow);
+    };
+    frame = requestAnimationFrame(follow);
+    const stop = () => cancelAnimationFrame(frame);
+    cardRef.current?.addEventListener("pointerdown", stop, { once: true });
+    return stop;
+    // Once, as the card lands.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // The window shrinks: a card over the article stays on screen.
   useEffect(() => {
     if (pane) return;
@@ -625,7 +662,6 @@ export function FloatingNoteEditor({
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void done();
               if (e.key === "Escape") cancelEdit();
             }}
-            moreHref={`/n/${actions.notebookId}/notes`}
             onQuoteDrop={(drag) =>
               note
                 ? actions.attachSource(note.id, drag).then((ids) => {

@@ -282,8 +282,10 @@ export function SortableBoard({
   id: string;
   /** The card left `fromListId` and landed in `toListId`, before the card
       `beforeId` — null when it landed at the end of that list. The same list
-      on both sides is a reorder. */
-  onDrop: (fromListId: string, toListId: string, itemId: string, beforeId: string | null) => void;
+      on both sides is a reorder. Without it the lists are a view that moves
+      no card (the notes grouped by anything but section): no drop line
+      draws, and a hold still merges and floats. */
+  onDrop?: (fromListId: string, toListId: string, itemId: string, beforeId: string | null) => void;
   /** The card was let go off every list, over the article: where the pointer
       was, and where the pointer sat inside the card, so the card can land
       where it was seen. */
@@ -419,7 +421,7 @@ export function SortableBoard({
     const from = listOf(dragged);
     const allowed = (listId: string) => !from || !canDrop || canDrop(from[0], listId);
     const lists: Lists = [...registry.current.entries()].filter(([listId]) => allowed(listId));
-    setDropLine(dropLineAt(root(), lists, x, y, allowed));
+    setDropLine(onDrop ? dropLineAt(root(), lists, x, y, allowed) : null);
 
     if (!onMerge) return;
     // Where the dragged card is drawn: under the pointer, at the offset it was
@@ -476,7 +478,7 @@ export function SortableBoard({
       return;
     }
     if (landing.listId === from[0] && landing.beforeId === itemId) return;
-    onDrop(from[0], landing.listId, itemId, landing.beforeId);
+    onDrop?.(from[0], landing.listId, itemId, landing.beforeId);
   }
 
   useEffect(() => {

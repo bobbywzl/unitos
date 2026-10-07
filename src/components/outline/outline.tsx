@@ -6,7 +6,7 @@ import type { NotebookView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { CollapsedViewToggle } from "@/components/collapsed-view-toggle";
-import { NEW_GLOW_CLASS, NewPill, useNewFeature } from "@/components/new-feature";
+import { useNewFeature } from "@/components/new-feature";
 import { Presence } from "@/components/presence";
 import { SortableBoard, SortableGroup, SortableItem } from "@/components/sortable";
 import { AddSection } from "@/components/outline/add-section";
@@ -17,7 +17,7 @@ import { MergeUndoBar } from "@/components/outline/merge-undo";
 import { NoteCard } from "@/components/outline/note-card";
 import { SectionBoard } from "@/components/outline/section-board";
 import { SectionItem } from "@/components/outline/section-item";
-import { NoteGroups, NotesOrganize, useNoteGrouping } from "@/components/outline/note-groups";
+import { NoteGroups, NotesViewMenu, useNoteGrouping } from "@/components/outline/note-groups";
 import { SelectionBar } from "@/components/outline/selection-bar";
 import {
   filterSections,
@@ -32,7 +32,8 @@ import {
 // which hoists the whole pending queue to the top. A search shows the notes
 // it found whole, with the words it found lit up, in the same sections.
 // Selecting two or more notes offers Compare: the compare view opens over the
-// page with one pane per note (compare-view.tsx). By document opens the
+// page with one pane per note (compare-view.tsx). Document columns, the last row
+// of the view menu, opens the
 // project's notes as a grid over the page, one column per document and one
 // row per section (document-columns.tsx): the page is the whole project,
 // where the tray in the reader holds the open document's notes alone.
@@ -95,8 +96,8 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
         <span className="text-[11px] text-sand-500">{t("outline.pageKeyHint")}</span>
       </div>
 
-      {/* Wraps on a phone, where the row is wider than the screen. */}
-      <div className="mt-2 flex flex-wrap items-center gap-2">
+      {/* One row on a phone too: the search takes what the icons leave. */}
+      <div className="mt-2 flex items-center gap-2">
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -104,31 +105,36 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
           placeholder={t("outline.searchNotes")}
           aria-label={t("outline.searchNotes")}
           type="search"
-          className="w-full min-w-0 rounded-full bg-card px-4 py-2 text-[13px] shadow-soft outline-none placeholder:text-sand-500 sm:w-72"
+          className="min-w-0 flex-1 rounded-full bg-card px-4 py-2 text-[13px] shadow-soft outline-none placeholder:text-sand-500 sm:w-72 sm:flex-none"
         />
         <CollapsedViewToggle view={actions.notesView} onChange={actions.setNotesView} track="notes-view" />
-        <NotesOrganize grouping={grouping} onGrouping={setGrouping} />
-        {notebook.documents.length > 0 && (
-          <button
-            onClick={() => {
-              byDocumentNew.seen();
-              setByDocument(true);
-            }}
-            data-track="by-document"
-            data-tip={t("outline.byDocumentTitle")}
-            className={`flex items-center rounded-full bg-card px-3.5 py-1.5 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800${
-              byDocumentNew.isNew ? ` ${NEW_GLOW_CLASS}` : ""
-            }`}
-          >
-            {t("outline.byDocument")}
-            {byDocumentNew.isNew && <NewPill />}
-          </button>
-        )}
+        {/* Group by and Document columns in one menu (SPEC.md §6). */}
+        <NotesViewMenu
+          grouping={grouping}
+          onGrouping={setGrouping}
+          onColumns={
+            notebook.documents.length > 0
+              ? () => {
+                  byDocumentNew.seen();
+                  setByDocument(true);
+                }
+              : undefined
+          }
+          columnsNew={notebook.documents.length > 0 && byDocumentNew.isNew}
+        />
       </div>
 
       {grouping !== "section" ? (
         <div className="pt-[22px]">
-          <NoteGroups tree={tree} grouping={grouping} documents={notebook.documents} actions={actions} variant="page" search={query} />
+          <NoteGroups
+            tree={tree}
+            grouping={grouping}
+            documents={notebook.documents}
+            actions={actions}
+            variant="page"
+            search={query}
+            onMerge={(id, intoId) => void actions.mergeNotes(intoId, [id], "join")}
+          />
         </div>
       ) : (
       <div className="flex flex-col gap-[30px] pt-[22px]">
