@@ -202,7 +202,13 @@ export function stitchPrompt(ctx: StitchCtx): string {
     ...(ctx.selected
       ? [
           `A first read picked the blocks above for this command out of every document; each document's header says how many of its blocks are shown. Answer from the blocks shown. A block not shown was judged off the command: when the blocks shown do not answer, say that the passages read do not answer it, not that the documents do not. When the answer is missing or incomplete, add one sentence, for the one document most likely to hold the rest (its title or its other blocks bear on the topic): when its header says "read whole when picked", "Only <shown> of <total> blocks of "<title>" were read for this command; pick it and one short document in the graph to have it read whole."; else "Only <shown> of <total> blocks of "<title>" were read for this command; ask about one part of it to have that part read." Never add it when no document is likely to hold the answer, and never for a document with no blocks shown.`,
-          `A command that asks which documents or passages mention something, or asks for every one of them: when some document is only partly shown, say in one sentence that the list covers the blocks read for this command.`,
+          // A rare name whose every block is shown answers "which documents
+          // mention it" in full: no hedge then.
+          ...((ctx.names ?? []).length > 0 && (ctx.names ?? []).every((n) => n.shown >= n.total)
+            ? []
+            : [
+                `A command that asks which documents or passages mention something, or asks for every one of them: when some document is only partly shown, say in one sentence that the list covers the blocks read for this command.`,
+              ]),
           ...(ctx.names ?? []).map((n) =>
             n.shown >= n.total
               ? `Every block of the documents read that names "${n.term}" is shown above (${n.total}).`

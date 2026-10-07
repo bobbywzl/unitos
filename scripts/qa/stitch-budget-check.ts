@@ -361,6 +361,7 @@ check("commandNames: quoted phrases and 《》", commandNames('What does "eterna
   const part = stitchPrompt({ documents: docs, command: "x", continued: false, selected: true, names: [{ term: "Darwin", total: 5, shown: 3 }] });
   check("answer prompt: every block naming it shown", all.includes('Every block of the documents read that names "Darwin" is shown above (3).'));
   check("answer prompt: some blocks naming it not shown, the list is partial", part.includes('5 blocks of the documents read name "Darwin"; 3 of them are shown above. A list of where "Darwin" is named is partial: say so.'));
+  check("answer prompt: no partial-list hedge when every block naming the name is shown", !all.includes("the list covers the blocks read") && part.includes("the list covers the blocks read"));
 }
 
 // ── Round 3 (ANS3-05): the reply's quotes against the blocks cited ──

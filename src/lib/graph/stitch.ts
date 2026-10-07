@@ -12,6 +12,7 @@ import {
   STITCH_EXPAND_WORDS,
   STITCH_GROUP_CONCURRENCY,
   STITCH_GROUPED_MAX,
+  STITCH_HISTORY_FIRST,
   STITCH_HISTORY_MAX,
   STITCH_LINKS_SKELETON,
   STITCH_MAX_OUTPUT_TOKENS,
@@ -657,25 +658,30 @@ export function answerMessages(input: {
   const { rendered, documentList } = input.reading;
   const selected = input.selected;
   const rules = stitchRules(input.lang);
+  const prompt = stitchPrompt({
+    documents: documentList,
+    command: input.command,
+    continued: input.history.length > 0,
+    selected: selected !== null,
+    names: selected
+      ? (input.names ?? []).map((n) => ({ term: n.term, total: n.aliases.length, shown: n.aliases.filter((a) => selected.has(a)).length }))
+      : undefined,
+  });
+  // The blocks picked change every command, so behind them nothing caches:
+  // with STITCH_HISTORY_FIRST the conversation comes before them, and turn
+  // t reads turn t-1's history from the cache (COST3-06). The documents
+  // read whole stay in the system message: they are the same every command.
+  if (STITCH_HISTORY_FIRST && selected) {
+    return [
+      systemMessage(systemOf(rules, input.profile, "The blocks a first read picked for the command are in the reader's last message.", "")),
+      ...input.history,
+      { role: "user", content: `${selectedSections(rendered, selected)}\n\n${prompt}` },
+    ];
+  }
   const system = input.selected
     ? systemOf(rules, input.profile, "The blocks a first read picked for the command follow.", selectedSections(rendered, input.selected))
     : systemOf(rules, input.profile, "Every document follows.", rendered.map((r) => r.section).join("\n\n"));
-  return [
-    systemMessage(system),
-    ...input.history,
-    {
-      role: "user",
-      content: stitchPrompt({
-        documents: documentList,
-        command: input.command,
-        continued: input.history.length > 0,
-        selected: selected !== null,
-        names: selected
-          ? (input.names ?? []).map((n) => ({ term: n.term, total: n.aliases.length, shown: n.aliases.filter((a) => selected.has(a)).length }))
-          : undefined,
-      }),
-    },
-  ];
+  return [systemMessage(system), ...input.history, { role: "user", content: prompt }];
 }
 
 // ── The skeletons as the reading passes see them ─────────────────────────
