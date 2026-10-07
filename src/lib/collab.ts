@@ -261,9 +261,12 @@ async function editableHolders(link: LinkForAccess, user: User, owner: string | 
     project of the asking project's owner that holds both documents and
     that the caller edits, so it leaves the same projects a delete took it
     from and stays in every other account's project. Asked from no project
-    (an older tab), in every project of any account that holds both
-    documents and that the caller edits. An empty answer means the row
-    can't be kept hidden anywhere: the caller refuses the removal. */
+    (an older tab), in every project that holds both documents and that the
+    caller edits: the DELETE route asks so only for a link no other account
+    replied on and no other account's project shows, so those are one
+    account's projects; a link that must stay for another account answers
+    409 Reload instead (REV5-01). An empty answer means the link can't be
+    hidden anywhere: the caller refuses the removal. */
 export async function linkHideProjects(
   link: LinkForAccess,
   user: User,
@@ -291,7 +294,8 @@ export async function legacyLinkSharedAcrossAccounts(link: LinkForRule, user: Us
 
 /** A document's edit history read from one project, without the LINK_ADD and
     LINK_REMOVE edits of another project's links: meta.notebookId names the
-    link's project (edits since links carried one); an older LINK_ADD whose
+    link's project (edits since links carried one), else a removal's
+    meta.hiddenIn names the projects it left; an older LINK_ADD whose
     link still exists answers by the link's project. An older edit that
     tells neither keeps showing, as before. */
 export async function withoutOtherProjectLinkEdits<T extends { kind: string; meta: Prisma.JsonValue }>(
@@ -322,6 +326,10 @@ export async function withoutOtherProjectLinkEdits<T extends { kind: string; met
   return edits.filter((e) => {
     if (!isLinkEdit(e)) return true;
     const m = metaOf(e);
+    if (typeof m.notebookId !== "string" && Array.isArray(m.hiddenIn) && m.hiddenIn.length > 0) {
+      // A removal from an older tab names the projects it was hidden in.
+      return m.hiddenIn.includes(notebookId);
+    }
     const project =
       typeof m.notebookId === "string" ? m.notebookId : typeof m.linkId === "string" ? projectOf.get(m.linkId) : null;
     return !project || project === notebookId;

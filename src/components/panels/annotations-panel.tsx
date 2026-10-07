@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { AnnotationItem, LinkIn, LinkOut, SectionView } from "@/lib/types";
 import { api } from "@/lib/api";
 import { linkPath } from "@/lib/link-scope";
@@ -168,7 +168,7 @@ export function AnnotationsPanel({
 }) {
   const router = useRouter();
   const t = useT();
-  const { canEdit } = useCollab();
+  const { canEdit, myId, people } = useCollab();
   const view = useCollapsedView(`${ANNOTATIONS_VIEW_STORE}:${notebookId}`);
   // The New glow (SPEC.md §18) on the four arrows until they are pressed.
   const fullPageNew = useNewFeature("annotationsFullPage");
@@ -227,10 +227,32 @@ export function AnnotationsPanel({
   }
 
   // A link with replies asks first (SPEC.md §13): the replies leave the
-  // project with it.
-  async function removeLink(id: string, replyCount: number) {
-    if (!confirmLinkRemoval(t, replyCount, "remove")) return;
-    await mutate(id, () => api(linkPath(id, notebookId), "DELETE"));
+  // project with it; so does a link another person made, named (WALK5-08).
+  // Remove hides the link and keeps its row (WALK5-01): Link removed · Undo
+  // shows for 10 seconds, and History's Restore does the same later.
+  const [removed, setRemoved] = useState<string | null>(null);
+  useEffect(() => {
+    if (!removed) return;
+    const timer = setTimeout(() => setRemoved(null), 10_000);
+    return () => clearTimeout(timer);
+  }, [removed]);
+  async function removeLink(id: string, replyCount: number, createdById: string | null) {
+    const madeBy = createdById && createdById !== myId ? people[createdById]?.name : undefined;
+    if (!confirmLinkRemoval(t, replyCount, "remove", madeBy)) return;
+    let done = false;
+    await mutate(id, async () => {
+      // Offline the removal waits in the queue: Undo comes only once the
+      // server has hidden the link.
+      const result = await api<{ queued?: true }>(linkPath(id, notebookId), "DELETE");
+      done = !result.queued;
+    });
+    if (done) setRemoved(id);
+  }
+  async function undoRemove(id: string) {
+    await mutate(id, async () => {
+      await api(`/api/links/${encodeURIComponent(id)}/hidden?notebookId=${encodeURIComponent(notebookId)}`, "DELETE");
+      setRemoved(null);
+    });
   }
 
   // What a link is about: typed after Close link, or here. Save stores it as
@@ -342,6 +364,23 @@ export function AnnotationsPanel({
     <div className="flex flex-col gap-3.5">
       {conversationOverlay}
       {errorText && <p className="text-[13px] text-red-600">{errorText}</p>}
+      {removed && (
+        <p
+          role="status"
+          data-link-removed={removed}
+          className="sticky top-0 z-10 flex items-center gap-2 rounded-xl bg-sand-200 px-3 py-1.5 text-[12px] text-sand-800 shadow-soft"
+        >
+          {t("panels.linkRemoved")}
+          <button
+            onClick={() => void undoRemove(removed)}
+            disabled={busyId !== null}
+            data-track="link-remove-undo"
+            className="ml-auto rounded-full bg-card px-2.5 py-0.5 text-[11.5px] font-semibold text-clay-800 hover:bg-clay-100 disabled:opacity-50 pointer-coarse:min-h-11 pointer-coarse:px-4"
+          >
+            {t("panels.linkRemovedUndo")}
+          </button>
+        </p>
+      )}
       <div className="flex items-center justify-end gap-1.5">
         {(counts.core > 0 || layer === "core") && (
           <div className="mr-auto">
@@ -422,7 +461,7 @@ export function AnnotationsPanel({
                 {!l.detached && showOnGraph(l.id)}
                 {canEdit && linkRemovable(l.crossAccount) && (
                   <button
-                    onClick={() => void removeLink(l.id, l.replies.length)}
+                    onClick={() => void removeLink(l.id, l.replies.length, l.createdById)}
                     data-track="link-remove"
                     data-tip={t("panels.removeLinkTitle")}
                     className="text-xs text-red-500 hover:text-red-700"
@@ -468,7 +507,7 @@ export function AnnotationsPanel({
                 {showOnGraph(l.id)}
                 {canEdit && linkRemovable(l.crossAccount) && (
                   <button
-                    onClick={() => void removeLink(l.id, l.replies.length)}
+                    onClick={() => void removeLink(l.id, l.replies.length, l.createdById)}
                     data-track="link-remove"
                     data-tip={t("panels.removeLinkTitle")}
                     className="text-xs text-red-500 hover:text-red-700"
