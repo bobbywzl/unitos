@@ -267,6 +267,7 @@ export async function loadDocuments(
         select: {
           id: true,
           title: true,
+          generatedCommand: true,
           skeleton: true,
           handwritten: true,
           importRev: true,
@@ -427,8 +428,10 @@ function systemOf(rules: string, profile: Profile, intro: string, sections: stri
   ].join("\n");
 }
 
+// A generated document says so in its header: its blocks are copies of the
+// other documents' blocks, and the answer cites the original.
 function header(letter: string, doc: Doc, note: string): string {
-  return `[document ${letter}] "${doc.title}" (${note})`;
+  return `[document ${letter}] "${doc.title}" (${doc.generatedCommand !== null ? "a page Stitch generated; " : ""}${note})`;
 }
 
 /** One document's readable blocks as the model reads them: the stored block
