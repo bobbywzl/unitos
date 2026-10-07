@@ -198,7 +198,7 @@ export function ReplyThread({
             </span>
             {/* Under a finger, Resolve and Delete are 40px targets, 8px
                 apart (WALK4-16). */}
-            <span className="ml-auto flex items-center gap-2 pointer-coarse:-my-2.5">
+            <span className="ml-auto flex items-center gap-2 pointer-coarse:-my-2.5 pointer-coarse:gap-3">
               {canEdit && (!outside || mine) && (
                 <button
                   onClick={() => setResolved(reply.id, !isResolved)}

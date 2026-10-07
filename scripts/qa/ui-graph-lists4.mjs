@@ -10,6 +10,7 @@ const B = `http://localhost:${port}`;
 const LIB = process.env.LIB || "cmuxjmw8704qt7dztg6adlhps";
 const FORTY = process.env.FORTY || "cmuy46ui500hs7dpzttt5f9il";
 const LINDA = process.env.LINDA || "cmuy46sr4005b7doy5eghkkeq";
+const NOTE = process.env.NOTE || "cmuy46tl500627doygqdr5yy8";
 const REPLY_LINK = process.env.REPLY_LINK || "cmuy46tir005h7doy49wc2qdz";
 const SHOT = process.env.SHOT ?? "/mnt/project-files/stitch-graph-loop/round-4/lists4";
 const only = process.env.ONLY?.split(",");
@@ -37,12 +38,15 @@ async function newPage(width, height, lang, touch = false) {
   return { ctx, page, calls };
 }
 async function openGraph(page, nb) {
-  await page.goto(`${B}/n/${nb}`, { waitUntil: "networkidle", timeout: 300000 });
+  await page.goto(`${B}/n/${nb}`, { waitUntil: "load", timeout: 300000 });
   for (let i = 0; i < 6 && (await page.locator(".graph-overlay-in").count()) === 0; i++) {
     await page.locator('[data-track="graph"]').first().click().catch(() => {});
     await page.waitForTimeout(1500);
   }
-  await page.locator(".react-flow__node").first().waitFor({ timeout: 90000 });
+  await page.locator(".react-flow__node").first().waitFor({ timeout: 90000 }).catch(async (e) => {
+    await page.screenshot({ path: `${SHOT}/debug-open.png` });
+    throw e;
+  });
   await page.waitForTimeout(1500);
 }
 const list = (page) => page.locator("[data-graph-documents-list]");
@@ -209,7 +213,7 @@ if (want("esc")) {
   await page.locator("[data-graph-link-panel]").waitFor();
   await page.waitForTimeout(400);
   await page.keyboard.press("Escape");
-  await page.waitForTimeout(400);
+  await page.waitForFunction(() => document.activeElement?.hasAttribute("data-graph-documents-link"), null, { timeout: 3000 }).catch(() => {});
   check("first Esc on a link from Documents: back to the list, on its row",
     (await list(page).count()) === 1 && (await page.locator("[data-graph-link-panel]").count()) === 0 && (await active(page)).includes("graph-documents-link"),
     await active(page));
@@ -218,7 +222,7 @@ if (want("esc")) {
   await page.waitForTimeout(400);
   check("next Esc closes the list, the graph stays", (await list(page).count()) === 0 && (await page.locator(".graph-overlay").count()) === 1);
   // Note on this link: Esc folds it, focus on its button, words kept.
-  await page.goto(`${B}/n/${LINDA}`, { waitUntil: "networkidle" });
+  await page.goto("about:blank");
   await openGraph(page, LINDA);
   await openList(page);
   await list(page).locator("[data-graph-documents-link]").first().click();
@@ -295,7 +299,7 @@ if (want("header")) {
 // ── WALK4-16 / WALK4-17: the phone link panel ──────────────────────────────
 if (want("touch")) {
   const { ctx, page } = await newPage(390, 844, "en", true);
-  await page.goto(`${B}/n/${LINDA}?graph=1`, { waitUntil: "networkidle", timeout: 300000 });
+  await page.goto(`${B}/n/${LINDA}?graph=1`, { waitUntil: "load", timeout: 300000 });
   await page.locator(".react-flow__node").first().waitFor({ timeout: 90000 });
   await openList(page);
   const row = list(page).locator(`[data-graph-documents-link="${REPLY_LINK}"]`);
@@ -328,14 +332,22 @@ if (want("touch")) {
 // ── WALK4-06: Show on graph from the notes full page ───────────────────────
 if (want("notes")) {
   const { ctx, page } = await newPage(1440, 900, "en");
-  await page.goto(`${B}/n/${LINDA}/notes`, { waitUntil: "networkidle", timeout: 300000 });
-  const show = page.locator('[data-track="note-show-on-graph"]').first();
-  await show.waitFor({ timeout: 30000 }).catch(() => {});
+  await page.goto(`${B}/n/${LINDA}/notes`, { waitUntil: "load", timeout: 300000 });
+  await page.waitForTimeout(3000);
+  const card = page.locator(`[data-note-id="${NOTE}"]`).first();
+  await card.scrollIntoViewIfNeeded().catch(() => {});
+  await card.hover().catch(() => {});
+  let show = card.locator('[data-track="note-show-on-graph"]');
+  if ((await show.count()) === 0) {
+    await card.click().catch(() => {}); // a collapsed card opens first
+    await page.waitForTimeout(600);
+    show = card.locator('[data-track="note-show-on-graph"]');
+  }
   if (!(await show.count())) {
-    // The button sits in a note's open header: open the first note that has it.
     check("a note with Show on graph on the notes full page", false);
   } else {
-    await show.click();
+    await page.screenshot({ path: `${SHOT}/WALK4-06-after-notes.png` });
+    await show.click({ force: true });
     await page.locator(".react-flow__node").first().waitFor({ timeout: 90000 });
     await page.waitForTimeout(1000);
     check("the graph opened from the notes full page, without graphFrom left in the URL", !page.url().includes("graphFrom"), page.url());
