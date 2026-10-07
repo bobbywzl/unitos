@@ -2029,6 +2029,10 @@ export function ReaderInteractions({
   // A Comment whose save failed: the toolbar opens again on its words with
   // the box, the kept draft, and this reason under it (SPEC.md §6).
   const [commentError, setCommentError] = useState<{ text: string; from: Anchor } | null>(null);
+  // A highlight or an Add to notes the server refused (EDGE12-12): the
+  // reason shows in the toolbar, under the row the reader pressed, and the
+  // toolbar stays open on the words; the error log keeps it too.
+  const [toolError, setToolError] = useState<{ text: string; from: Anchor; at: "highlight" | "add" } | null>(null);
   const [aiPlan, setAiPlan] = useState<AssistantPlan | null>(null);
   const [planChecked, setPlanChecked] = useState<Set<number>>(new Set());
   // Where the plan came from: the selection's chat card, or an Explain or
@@ -5607,10 +5611,17 @@ export function ReaderInteractions({
       // folded (SPEC.md §29).
       window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: note.id } }));
     } catch (err) {
-      showError(err instanceof Error ? err.message : t("reader.addFailed"));
+      addFailed(err);
     } finally {
       setBusy(false);
     }
+  }
+  // The box stays open on the words, the reason under Add to notes.
+  function addFailed(err: unknown) {
+    const text = err instanceof Error ? err.message : t("reader.addFailed");
+    reportError(text, documentId);
+    if (popoverRef.current) setToolError({ text, from: popoverRef.current.anchor, at: "add" });
+    else showToast(text);
   }
 
   // Add to a note… (SPEC.md §6): the quote and the comment go onto the end of
@@ -5633,7 +5644,7 @@ export function ReaderInteractions({
       addedToNotes(popover.anchor);
       window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: note.id } }));
     } catch (err) {
-      showError(err instanceof Error ? err.message : t("reader.addFailed"));
+      addFailed(err);
     } finally {
       setBusy(false);
     }
@@ -6683,6 +6694,7 @@ export function ReaderInteractions({
     const shown = popover;
     const { anchor } = popover;
     setCommentError(null);
+    setToolError(null);
     await flushLiveBlock(anchor.blockId);
     markFreshAnchor(anchor);
     // Every segment of the passage paints at once, a comment as a comment.
@@ -6774,7 +6786,13 @@ export function ReaderInteractions({
         setPopover(shown);
         setSubmenu("comment");
         setCommentError({ text: reason, from: anchor });
-      } else showError(reason);
+      } else {
+        // The toolbar opens again on the words, the reason under the colors.
+        reportError(reason, documentId);
+        setPopover(shown);
+        setSubmenu(null);
+        setToolError({ text: reason, from: anchor, at: "highlight" });
+      }
     } finally {
       setBusy(false);
     }
@@ -10505,6 +10523,11 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             {compact && has("readAloud") && voiceButton(true)}
           </div>
           )}
+          {toolError?.at === "highlight" && toolError.from === popover.anchor && (
+            <p data-tool-error role="alert" className="order-first px-2 py-1 text-[12px] font-medium text-red-600">
+              {toolError.text}
+            </p>
+          )}
 
           {/* Add to notes: a separate bubble above the toolbar, as wide as the
               toolbox. Press it, pick a section, and the highlighted text lands
@@ -10532,6 +10555,11 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 <NotesIcon size={coarse ? 14 : 12} />
                 {t("reader.addToNotes")}
               </button>
+              {toolError?.at === "add" && toolError.from === popover.anchor && (
+                <p data-tool-error role="alert" className="px-2 py-0.5 text-[12px] font-medium text-red-600">
+                  {toolError.text}
+                </p>
+              )}
           {(() => {
             // The bubble's panel: the comment field on top, then the
             // sections for a new note under "New note in", then Add to a
