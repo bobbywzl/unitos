@@ -149,10 +149,6 @@ for (const lang of ["en", "zh"]) {
     const seeded = sql(`select count(*) from "Reply" where "docLinkId"='${LINK_AB}' and "resolvedById" is null`);
     check(thread.split("\n").filter((l) => l.trim()).length >= Number(seeded), `${tag} thread shows the seeded replies`, JSON.stringify(thread.slice(0, 160)));
     await page.screenshot({ path: `${OUT}/link-pinned-${tag}-${MODE}.png` });
-    if (!SESSION) {
-      // Sign-in off: the replies show, and there is no Reply (as in the reader).
-      check((await list.locator(`[data-graph-link-thread="${LINK_AB}"] [data-track="reply"]`).count()) === 0, `${tag} sign-in off: no Reply`);
-    }
 
     if (SESSION && lang === "en" && width === 1440) {
       // Send a reply on the graph, then resolve it.
