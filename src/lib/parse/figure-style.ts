@@ -213,7 +213,11 @@ type Page = {
   rows: Map<Element, boolean>;
   budget: { styles: number; matches: number };
   columnPx: number;
+  // The class names, ids, and tag names the document holds, lowercased,
+  // read once at the first query (pageTokens).
+  tokens?: PageTokens;
 };
+type PageTokens = { classes: Set<string>; ids: Set<string>; tags: Set<string> };
 
 // ── The page's stylesheets ──────────────────────────────────────────────────
 
@@ -755,13 +759,64 @@ function candidateEntries(el: Element, index: RuleIndex): Entry[] {
   return out;
 }
 
+/** Every class name, id, and tag name of the document, lowercased. Read
+    after the stylesheets are inlined; the passes after add no element, no
+    class, and no id, so the sets stay a superset of what the page holds. */
+function pageTokens(document: Document, page: Page): PageTokens {
+  if (page.tokens) return page.tokens;
+  const tokens: PageTokens = { classes: new Set(), ids: new Set(), tags: new Set() };
+  for (const el of document.getElementsByTagName("*")) {
+    tokens.tags.add(el.localName.toLowerCase());
+    const id = el.getAttribute("id");
+    if (id) tokens.ids.add(id.toLowerCase());
+    const cls = el.getAttribute("class");
+    if (cls) for (const c of cls.split(/[\t\n\f\r ]+/)) if (c) tokens.classes.add(c.toLowerCase());
+  }
+  page.tokens = tokens;
+  return tokens;
+}
+
+/** A selector with a compound that needs a class, an id, or a tag no
+    element of the page carries matches nothing: the engine's query is
+    skipped. Read lowercased, as a quirks-mode page matches classes and ids,
+    so the test never rules out a selector the engine would match. A
+    selector with an escape, a namespace, or a quoted value is left to the
+    engine. Parse loop finding: most of a page's selectors name classes the
+    page never uses, and each query walked the whole document; on the web
+    benchmark's pages 25,000 queries matched nothing, and 3 in 4 of them
+    are now skipped. */
+function cannotMatch(document: Document, selector: string, page: Page): boolean {
+  if (/[\\|"']/.test(selector)) return false;
+  const tokens = pageTokens(document, page);
+  // Every compound outside parentheses and brackets must find an element:
+  // the last one is the matched element, each other one an ancestor or a
+  // sibling of it.
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i <= selector.length; i++) {
+    const ch = selector[i];
+    if (ch === "(" || ch === "[") depth++;
+    else if (ch === ")" || ch === "]") {
+      if (--depth < 0) return false;
+    } else if (i === selector.length || (depth === 0 && /[\s>+~]/.test(ch))) {
+      const compound = lastCompound(selector.slice(start, i));
+      start = i + 1;
+      if (!compound) continue;
+      if (compound.tag && !tokens.tags.has(compound.tag)) return true;
+      if (compound.id && !tokens.ids.has(compound.id.toLowerCase())) return true;
+      if (compound.classes.some((c) => !tokens.classes.has(c.toLowerCase()))) return true;
+    }
+  }
+  return false;
+}
+
 /** The elements one selector matches, queried once per page. A selector
     the engine does not know matches nothing. */
 function matchedSet(document: Document, selector: string, page: Page): Set<Element> {
   const cached = page.matched.get(selector);
   if (cached) return cached;
   let set: Set<Element>;
-  if (neverMatches(selector) || page.budget.matches <= 0) set = new Set();
+  if (neverMatches(selector) || page.budget.matches <= 0 || cannotMatch(document, selector, page)) set = new Set();
   else {
     try {
       const matched = document.querySelectorAll(selector);
