@@ -1,8 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { type Edge as FlowEdge, type EdgeProps } from "reactflow";
 import type { GraphEdge, GraphEdgeLink, SectionView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
@@ -11,8 +10,8 @@ import { useT } from "@/components/lang-provider";
 import { noteLine, notesOnGraph, pairKey, type GraphNote, type NotesOnGraph } from "@/lib/graph/notes";
 
 // The project's notes on the graph (SPEC.md §13). The document stays the
-// node; a note shows where it is: a chip on each node it belongs to, a card
-// of its notes on a node's hover, a sage pill on a curve whose two documents
+// node; a note shows where it is: a chip on each node it belongs to, its
+// lines in the node's card (node-card.tsx), a sage pill on a curve whose two documents
 // one note quotes, and a sage dotted curve where only a note joins two
 // documents. The Notes list beside the canvas (graph-notes-list.tsx) is a
 // lens on the same data: a hovered row lights the documents it quotes, and
@@ -207,118 +206,33 @@ export function useNoteOnlyEdges(edges: GraphEdge[]): FlowEdge<NoteEdgeData>[] {
   }, [view, edges]);
 }
 
-// ── Node chip and hover card ───────────────────────────────────────────────
+// ── Node chip ──────────────────────────────────────────────────────────────
 
-// The hover card waits for the pointer to rest, as the spotlight does.
-const CARD_DELAY = 300;
-const CARD_ROWS = 5;
-
-/** Under a node's title: the number of accepted notes that belong to the
-    document, a dot for pending ones. hovered: the canvas's hover is on the
-    node; after a rest the card of its notes opens under it. */
-export function NodeNotes({ documentId, hovered }: { documentId: string; hovered: boolean }) {
+/** Beside a node's dot: the number of accepted notes that belong to the
+    document, a dot for pending ones. [view2] The node's notes show in its
+    one card (VIEW2-01): the hover card lists the first lines, and the card a
+    click pins (node-card.tsx) lists the rows. hovered: kept for the canvas's
+    call; the chip no longer opens a card of its own. */
+export function NodeNotes({ documentId }: { documentId: string; hovered?: boolean }) {
   const ctx = useGraphNotes();
   const t = useT();
-  const [anchor, setAnchor] = useState<HTMLSpanElement | null>(null);
-  const [rested, setRested] = useState(false);
-  const [onCard, setOnCard] = useState(false);
-  const leaveTimer = useRef<number | null>(null);
-  useEffect(() => {
-    if (!hovered) {
-      const timer = window.setTimeout(() => setRested(false), 160);
-      return () => window.clearTimeout(timer);
-    }
-    const timer = window.setTimeout(() => setRested(true), CARD_DELAY);
-    return () => window.clearTimeout(timer);
-  }, [hovered]);
-  useEffect(() => () => {
-    if (leaveTimer.current !== null) window.clearTimeout(leaveTimer.current);
-  }, []);
   const entry = ctx?.view.byDocument.get(documentId);
   if (!ctx || !entry) return null;
-  const open = (rested && hovered) || onCard;
   return (
-    <>
-      <span
-        ref={setAnchor}
-        data-graph-node-notes={documentId}
-        data-tip={t("graphNotes.nodeNotesTitle")}
-        className="flex items-center gap-1 rounded-full bg-sage-100 px-1.5 py-px text-[10px] font-semibold tabular-nums text-sage-800"
-      >
-        <NotesIcon size={10} />
-        {entry.accepted}
-        {entry.pending > 0 && (
-          <span
-            aria-label={t("graphNotes.nodeNotesPending", { n: entry.pending })}
-            className="size-1.5 rounded-full bg-clay"
-          />
-        )}
-      </span>
-      {open && (
-        <NodeNotesCard
-          documentId={documentId}
-          anchor={anchor}
-          notes={entry.notes}
-          onEnter={() => {
-            if (leaveTimer.current !== null) window.clearTimeout(leaveTimer.current);
-            setOnCard(true);
-          }}
-          onLeave={() => {
-            leaveTimer.current = window.setTimeout(() => {
-              setOnCard(false);
-              ctx.setRowLit(null);
-            }, 160);
-          }}
+    <span
+      data-graph-node-notes={documentId}
+      data-tip={t("graphNotes.nodeNotesTitle")}
+      className="flex items-center gap-1 rounded-full bg-sage-100 px-1.5 py-px text-[10px] font-semibold tabular-nums text-sage-800"
+    >
+      <NotesIcon size={10} />
+      {entry.accepted}
+      {entry.pending > 0 && (
+        <span
+          aria-label={t("graphNotes.nodeNotesPending", { n: entry.pending })}
+          className="size-1.5 rounded-full bg-clay"
         />
       )}
-    </>
-  );
-}
-
-function NodeNotesCard({
-  documentId,
-  anchor,
-  notes,
-  onEnter,
-  onLeave,
-}: {
-  documentId: string;
-  anchor: HTMLElement | null;
-  notes: GraphNote[];
-  onEnter: () => void;
-  onLeave: () => void;
-}) {
-  const ctx = useGraphNotes();
-  const t = useT();
-  if (!ctx || !anchor || typeof document === "undefined") return null;
-  const rect = anchor.getBoundingClientRect();
-  const width = Math.min(300, window.innerWidth - 24);
-  const left = Math.max(12, Math.min(rect.left + rect.width / 2 - width / 2, window.innerWidth - width - 12));
-  const below = rect.bottom + 8;
-  const top = below + 260 > window.innerHeight ? undefined : below;
-  const bottom = top === undefined ? window.innerHeight - rect.top + 8 : undefined;
-  const shown = notes.slice(0, CARD_ROWS);
-  return createPortal(
-    <div
-      data-track-surface="graph-node-notes"
-      onMouseEnter={onEnter}
-      onMouseLeave={onLeave}
-      className="menu-in fixed z-[60] flex flex-col gap-0.5 rounded-2xl border border-line bg-card/95 p-2 shadow-float backdrop-blur-md"
-      style={{ left, top, bottom, width }}
-    >
-      <p className="px-2 pt-0.5 pb-1 text-[11px] font-bold tracking-[0.06em] text-sand-600 uppercase">
-        {notes.length === 1 ? t("graphNotes.nodeNotesOne") : t("graphNotes.nodeNotesMany", { n: notes.length })}
-      </p>
-      {shown.map((g) => (
-        <GraphNoteRow key={g.note.id} note={g} hereId={documentId} />
-      ))}
-      {notes.length > CARD_ROWS && (
-        <p className="px-2 pt-0.5 text-[11px] text-sand-500">
-          {t("graphNotes.nodeNotesMore", { n: notes.length - CARD_ROWS })}
-        </p>
-      )}
-    </div>,
-    document.body,
+    </span>
   );
 }
 

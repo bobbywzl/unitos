@@ -76,6 +76,16 @@ function pageUrls(id: string, info: OfflineInfo): string[] {
   ];
 }
 
+// The graph's data (SPEC.md §13): the page no longer carries it, so the copy
+// keeps the routes the graph reads when it opens — the graph, and each
+// document's outline for its node card. Find needs the network.
+function graphUrls(id: string, info: OfflineInfo): string[] {
+  return [
+    `/api/notebooks/${id}/graph`,
+    ...info.documents.map((d) => `/api/notebooks/${id}/outline?documentId=${encodeURIComponent(d.id)}`),
+  ];
+}
+
 const STATIC_RE = /\/_next\/static\/[^"'\s)\\]+/g;
 // A page image's URL carries its renderer's revision (?r=2,
 // lib/handwritten/page-url.ts), and the copy keeps it whole.
@@ -162,6 +172,17 @@ export async function saveProject(
     collect(text, STATIC_RE, statics);
     onProgress?.({ stage: "pages", done: ++pagesDone, total: pages.length });
   }
+  // The graph's data, stored as the routes answered it. A route that fails
+  // leaves the graph to say it did not load offline; the pages still save.
+  const data = graphUrls(id, info);
+  for (const url of data) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) await cache.put(url, cacheable(res, await res.text()));
+    } catch {
+      // The next refresh tries again.
+    }
+  }
 
   // The chunks the pages load, and the fonts their stylesheets load, counted
   // with the images so one stage covers everything that is not a page.
@@ -198,7 +219,7 @@ export async function saveProject(
     }
   }
 
-  const keep = new Set([...pages, ...assets].map((u) => new URL(u, location.origin).href));
+  const keep = new Set([...pages, ...data, ...assets].map((u) => new URL(u, location.origin).href));
   for (const req of await cache.keys()) {
     if (!keep.has(req.url)) await cache.delete(req);
   }

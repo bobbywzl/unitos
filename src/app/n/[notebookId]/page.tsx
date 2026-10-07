@@ -19,7 +19,6 @@ import { resolveDocumentSources } from "@/lib/anchors/resolve";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { trivialEdits } from "@/lib/history/trivial";
-import { documentsGraph, listGenerated } from "@/lib/graph/view";
 import {
   corpusDistillationList,
   distillationList,
@@ -69,7 +68,6 @@ import {
 } from "@/lib/video/types";
 import { billingLinks } from "@/lib/billing/switch";
 import { accountTier } from "@/lib/tiers";
-import { linkScanRunsLeft } from "@/lib/connect";
 import { isTextStyle, type TextStyle } from "@/lib/text-style";
 import { coreBlocks } from "@/lib/anchors/layer";
 import { READING_LINE_PX, type BlockPosition } from "@/lib/reading-position";
@@ -1113,10 +1111,8 @@ export default async function NotebookPage(props: {
   const [
     editRows,
     corpusQuoteDocs,
-    graph,
     events,
     allEdits,
-    generated,
     positionRows,
   ] =
     await Promise.all([
@@ -1141,12 +1137,6 @@ export default async function NotebookPage(props: {
             },
           })
         : [],
-      // The graph (SPEC.md §13): attached documents as nodes; links between
-      // them as undirected weighted edges — thicker with more links, dashed
-      // while only recommended ones connect a pair — and the recommended
-      // links, both ends with their passages, the AI's reason, and the
-      // replies. Accept and Dismiss live in the graph.
-      documentsGraph(attached.map((d) => ({ id: d.id, title: d.title, hasVideo: d.hasVideo, kind: d.kind })), notebookId),
       db.notebookEvent.findMany({
         where: { notebookId },
         orderBy: { createdAt: "desc" },
@@ -1160,9 +1150,6 @@ export default async function NotebookPage(props: {
           include: { document: { select: { title: true } } },
         })
         .then((rows) => withoutOtherProjectLinkEdits(rows, notebookId)),
-      // The pages Stitch wrote for the project (SPEC.md §22): the graph's
-      // Generated content list.
-      listGenerated(notebookId),
       // The account's copy of each open article's reading position. A preview
       // build reads the production database before its migration runs: with
       // no table, nothing resumes.
@@ -1224,9 +1211,8 @@ export default async function NotebookPage(props: {
     }),
   }));
 
-  const graphNodes = graph.nodes;
-  const graphEdges = graph.edges;
-  const recommendedLinks = graph.recommended;
+  // The graph's data (SPEC.md §13) is not on the page: the graph reads it
+  // when it opens, from GET /api/notebooks/<id>/graph (GR-18).
 
   // The History panel (SPEC.md §12): corpus events (deletions, detachments)
   // merged with every attached document's edits, newest first, attributed.
@@ -1280,10 +1266,6 @@ export default async function NotebookPage(props: {
     for (const r of e.replies) authorIds.add(r.userId);
   }
   for (const entry of history) if (entry.userId) authorIds.add(entry.userId);
-  for (const link of recommendedLinks) {
-    if (link.createdById) authorIds.add(link.createdById);
-    for (const r of link.replies) authorIds.add(r.userId);
-  }
   for (const d of corpusDistillations) if (d.createdById) authorIds.add(d.createdById);
   for (const pane of [paneOne, paneTwo]) {
     for (const d of pane?.distillations ?? []) if (d.createdById) authorIds.add(d.createdById);
@@ -1451,13 +1433,6 @@ export default async function NotebookPage(props: {
       browserConfigured={browserConfigured()}
       collab={collab}
       rev={notebook.rev}
-      graph={{
-        nodes: graphNodes,
-        edges: graphEdges,
-        recommended: recommendedLinks,
-        generated,
-        linkScansLeft: await linkScanRunsLeft(user?.id ?? null),
-      }}
       history={history}
       corpusDistillations={corpusDistillations}
       assistant={

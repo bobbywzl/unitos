@@ -4,12 +4,8 @@ import Link, { useLinkStatus } from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type {
   CorpusDistillationView,
-  GraphEdge,
-  GraphNode,
   HistoryEntry,
-  GeneratedDocumentView,
   NotebookView,
-  RecommendedLinkView,
 } from "@/lib/types";
 import {
   ArrowLeftIcon,
@@ -31,7 +27,8 @@ import { HistoryControl } from "@/components/collab/history-control";
 import { ShareControl } from "@/components/collab/share-control";
 import { OfflineStatus } from "@/components/offline-status";
 import { useNotebookSync } from "@/components/collab/use-sync";
-import { GraphOverlay } from "@/components/graph/graph-overlay";
+import { GraphOverlayLoader } from "@/components/graph/graph-data";
+import { withoutGraphParams } from "@/components/graph/graph-content";
 import { VisualizationViewer } from "@/components/reader/visualization-viewer";
 import { CorpusDistillPage } from "@/components/reader/corpus-distill-page";
 import { GuideDialog } from "@/components/guide-dialog";
@@ -139,7 +136,6 @@ export function Workspace({
   distillationCount,
   collab,
   rev,
-  graph,
   history,
   corpusDistillations,
 }: {
@@ -165,15 +161,6 @@ export function Workspace({
   distillationCount: number;
   collab: CollabState;
   rev: number;
-  graph: {
-    nodes: GraphNode[];
-    edges: GraphEdge[];
-    recommended: RecommendedLinkView[];
-    // The pages Stitch wrote for the project (SPEC.md §22).
-    generated: GeneratedDocumentView[];
-    // Runs of Recommend links this account has left this month (SPEC.md §13).
-    linkScansLeft: number;
-  };
   history: HistoryEntry[];
   corpusDistillations: CorpusDistillationView[];
 }) {
@@ -368,7 +355,7 @@ export function Workspace({
     }
     const url = new URL(window.location.href);
     url.searchParams.delete("graph");
-    window.history.replaceState(null, "", url);
+    window.history.replaceState(null, "", withoutGraphParams(url)); // [view2]
   }, []);
   // A document opened from the graph: the URL already moved on, and the
   // graph's entry stays behind it for Back.
@@ -1062,14 +1049,12 @@ export function Workspace({
       <VisualizationViewer />
       <Presence show={graphOpen} exit="fade">
       {graphOpen && (
-        <GraphOverlay
+        // [view2] GR-18: the graph's data loads when it opens (graph-data.tsx).
+        <GraphOverlayLoader
           notebookId={notebook.id}
           activeDocumentId={activeDocumentId}
-          nodes={graph.nodes}
-          edges={graph.edges}
-          recommended={graph.recommended}
-          generated={graph.generated}
-          linkScansLeft={graph.linkScansLeft}
+          rev={rev}
+          documents={documents}
           notes={graphNotes}
           onClose={closeGraph}
           onNavigate={leaveGraph}

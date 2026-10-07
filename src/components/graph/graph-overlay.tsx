@@ -22,6 +22,12 @@ import { GraphNotesProvider, type GraphNotesInput } from "@/components/graph/gra
 import { GraphNotesList, NotesListToggle } from "@/components/graph/graph-notes-list";
 import { LinkNoteComposer } from "@/components/graph/link-note-composer";
 // [/graph-notes]
+// [view2] The node card, Find, and the last Stitch answer on the graph.
+import { GraphContentProvider, useGraphContentState } from "@/components/graph/graph-content";
+import { FindBox, FindList } from "@/components/graph/graph-find";
+import { NodeCardPanel } from "@/components/graph/node-card";
+const NO_GISTS: Record<string, string> = {};
+// [/view2]
 
 // reactflow loads only when the graph opens — the workspace bundle stays lean.
 const GraphView = dynamic(() => import("@/components/graph/graph-view"), {
@@ -75,6 +81,9 @@ export function GraphOverlay({
   notes,
   onClose,
   onNavigate,
+  gists,
+  loading = false,
+  loadFailed,
 }: {
   notebookId: string;
   activeDocumentId: string | null;
@@ -91,6 +100,11 @@ export function GraphOverlay({
   /** The graph closes because the reader opened a document from it (the
       URL already moved there). Default: onClose. */
   onNavigate?: () => void;
+  // [view2] GR-18: the graph's data arrives after the open (graph-data.tsx):
+  // each document's gist, and the load's state (loadFailed: Try again).
+  gists?: Record<string, string>;
+  loading?: boolean;
+  loadFailed?: () => void;
 }) {
   const t = useT();
   const router = useRouter();
@@ -99,8 +113,15 @@ export function GraphOverlay({
   const windowWidth = useWindowWidth();
   // One folded list at a time beside the canvas: the recommended links, or
   // the generated content.
-  const [list, setList] = useState<"recommended" | "generated" | "notes" | null>(null);
+  const [list, setList] = useState<"recommended" | "generated" | "notes" | "document" | "find" | null>(null);
   const listOpen = list === "recommended";
+  // [view2] The node card ("document") and the Find list ("find") are side lists too.
+  const nodeIdList = useMemo(() => nodes.map((n) => n.id), [nodes]);
+  const view2 = useGraphContentState({ notebookId, nodeIds: nodeIdList, gists: gists ?? NO_GISTS, list, setList });
+  const { onProposed } = view2;
+  const focusNode = view2.focusedId ? (nodes.find((n) => n.id === view2.focusedId) ?? null) : null;
+  const [sheetHeight, setSheetHeight] = useState(0);
+  // [/view2]
   // The Stitch box's fold: open on a wide screen, folded on a phone; an open
   // list folds it under WIDE, and opening the box there closes the list.
   const [boxOpen, setBoxOpen] = useState(() => typeof window === "undefined" || window.innerWidth >= NARROW);
@@ -127,7 +148,10 @@ export function GraphOverlay({
   // next command or a click on the canvas.
   const [citedIds, setCitedIds] = useState<Set<string>>(() => new Set());
   const onCited = useCallback((ids: string[]) => setCitedIds(new Set(ids)), []);
-  const clearCited = useCallback(() => setCitedIds((prev) => (prev.size ? new Set() : prev)), []);
+  const clearCited = useCallback(() => {
+    setCitedIds((prev) => (prev.size ? new Set() : prev));
+    onProposed([]); // [view2] the answer's proposed links go dark with its cited documents
+  }, [onProposed]);
   // The documents picked for Stitch (SPEC.md §22): a ⇧-click on a node, or
   // any click while picking. Empty = every document. A node that leaves
   // the graph leaves the pick: the pick the canvas and the box read is the
@@ -154,6 +178,12 @@ export function GraphOverlay({
   // the scan started). Closing the graph lets the scan finish.
   const [scanning, setScanning] = useState(false);
   const [scanLeft, setScanLeft] = useState(linkScansLeft);
+  // [view2] The count arrives with the graph's data, after the open.
+  const [scanFrom, setScanFrom] = useState(linkScansLeft);
+  if (scanFrom !== linkScansLeft) {
+    setScanFrom(linkScansLeft);
+    setScanLeft(linkScansLeft);
+  }
   const [scanNotice, setScanNotice] = useState<string | null>(null);
   const scanAbort = useRef<AbortController | null>(null);
 
@@ -261,20 +291,30 @@ export function GraphOverlay({
 
   const acceptedLinks = edges.reduce((sum, e) => sum + e.accepted, 0);
   const anyLink = edges.some((e) => e.accepted + e.recommended > 0);
-  const emptyCard =
-    nodes.length === 1 ? t("panes.graphOneDocument") : nodes.length >= 2 && !anyLink ? t("panes.graphNoLinks") : null;
+  const emptyCard = loading
+    ? null
+    : nodes.length === 1
+      ? t("panes.graphOneDocument")
+      : nodes.length >= 2 && !anyLink
+        ? t("panes.graphNoLinks")
+        : null;
+  // [view2] The node card is a sheet at the foot on a phone, and beside the
+  // canvas from NARROW up; the fit keeps the nodes clear of it.
+  const cardSheet = list === "document" && windowWidth < NARROW;
+  const cardBeside = (list === "document" || list === "find") && windowWidth >= NARROW;
   const insets = useMemo<GraphInsets>(
     () => ({
       top: emptyCard ? 96 : 0,
-      right: listBesideBox ? LIST_ROOM : 0,
-      bottom: boxHeight > 0 ? boxHeight + 16 : 0,
+      right: listBesideBox || cardBeside ? LIST_ROOM : 0,
+      bottom: cardSheet && sheetHeight > 0 ? sheetHeight + 8 : boxHeight > 0 ? boxHeight + 16 : 0,
       left: 0,
     }),
-    [emptyCard, listBesideBox, boxHeight],
+    [emptyCard, listBesideBox, cardBeside, cardSheet, sheetHeight, boxHeight],
   );
 
   return (
     <GraphNotesProvider notebookId={notebookId} nodes={nodes} input={notes} onClose={onClose} onNavigate={leave}>
+    <GraphContentProvider value={view2.content}>
     <div
       ref={dialogRef}
       role="dialog"
@@ -303,6 +343,7 @@ export function GraphOverlay({
             they take a line of their own under the title and the counts,
             one row that scrolls sideways. A pill never wraps its label. */}
         <div className="contents max-[900px]:order-1 max-[900px]:-mx-5 max-md:-mx-3 max-[900px]:flex max-[900px]:w-[calc(100%+40px)] max-md:w-[calc(100%+24px)] max-[900px]:items-center max-[900px]:gap-2 max-[900px]:overflow-x-auto max-[900px]:px-5 max-md:px-3 max-[900px]:pb-0.5 [&>button]:shrink-0 [&>button]:whitespace-nowrap">
+          {nodes.length >= 2 && <FindBox find={view2.find} /> /* [view2] */}
           {canEdit && nodes.length >= 2 && (
             <button
               onClick={() => void scan()}
@@ -380,7 +421,18 @@ export function GraphOverlay({
         <p className="border-b border-line px-5 py-2 text-xs text-sand-600">{scanNotice}</p>
       )}
       <div className="relative min-h-0 flex-1">
-        {nodes.length === 0 ? (
+        {loading ? null : loadFailed ? (
+          // [view2] The graph's data did not arrive (offline with no copy, or a failed call).
+          <div className="flex h-full flex-col items-center justify-center gap-3 px-8 text-center text-sm text-sand-600">
+            <p>{t("graphView.loadFailed")}</p>
+            <button
+              onClick={loadFailed}
+              className="rounded-full border border-line px-3.5 py-1.5 text-[13px] text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+            >
+              {t("graphView.loadRetry")}
+            </button>
+          </div>
+        ) : nodes.length === 0 ? (
           <p className="flex h-full items-center justify-center px-8 text-center text-sm text-sand-600">
             {t("panes.graphEmpty")}
           </p>
@@ -418,7 +470,12 @@ export function GraphOverlay({
         )}
         <Presence show={listOpen} exit="menu">
         {listOpen && (
-          <RecommendedLinkList notebookId={notebookId} links={recommended} onOpenDocument={leave} />
+          <RecommendedLinkList
+            notebookId={notebookId}
+            links={recommended}
+            onOpenDocument={leave}
+            proposedLinkIds={view2.proposedLinkIds /* [view2] */}
+          />
         )}
         </Presence>
         <Presence show={list === "generated"} exit="menu">
@@ -429,6 +486,40 @@ export function GraphOverlay({
         <Presence show={list === "notes"} exit="menu">
         {list === "notes" && <GraphNotesList pickedIds={selectedIds} onClose={() => setList(null)} />}
         </Presence>
+        {/* [view2] The node card, and the Find list. */}
+        {list === "document" && focusNode && (
+          <NodeCardPanel
+            notebookId={notebookId}
+            node={focusNode}
+            nodes={nodes}
+            edges={edges}
+            picked={selectedIds.has(focusNode.id)}
+            onPick={canEdit ? () => toggleSelect(focusNode.id) : undefined}
+            onOpenDocument={leave}
+            onClose={() => setList(null)}
+            sheet={cardSheet}
+            onSheetHeight={setSheetHeight}
+          />
+        )}
+        {list === "find" && (
+          <FindList
+            notebookId={notebookId}
+            find={view2.find}
+            nodes={nodes}
+            canPick={canEdit}
+            onPickAll={(ids) => setPickedIds(new Set(ids))}
+            onAsk={(text) => {
+              view2.askStitch(text);
+              if (window.innerWidth < WIDE) {
+                setList(null);
+                setBoxOpen(true);
+              }
+            }}
+            onOpenDocument={leave}
+            onClose={() => setList(null)}
+          />
+        )}
+        {/* [/view2] */}
         {nodes.length >= 2 && (
           // Where the box sits (BOX-03..06, BOX-19): centered at the foot;
           // left of an open list on a wide screen; clear of the Feedback
@@ -455,11 +546,14 @@ export function GraphOverlay({
               onOpenChange={onBoxOpenChange}
               onShowRecommended={() => setList("recommended")}
               onCited={onCited}
+              onProposed={onProposed /* [view2] */}
+              prefill={view2.prefill /* [view2] */}
             />
           </div>
         )}
       </div>
     </div>
+    </GraphContentProvider>
     </GraphNotesProvider>
   );
 }
@@ -473,14 +567,20 @@ export function RecommendedLinkList({
   notebookId,
   links,
   onOpenDocument,
+  proposedLinkIds,
 }: {
   notebookId: string;
   links: RecommendedLinkView[];
   onOpenDocument: () => void;
+  // [view2] The links the last Stitch answer proposed: first, and marked.
+  proposedLinkIds?: Set<string>;
 }) {
   const t = useT();
   const router = useRouter();
   const { canEdit } = useCollab();
+  const ordered = proposedLinkIds?.size
+    ? [...links].sort((a, b) => Number(proposedLinkIds.has(b.id)) - Number(proposedLinkIds.has(a.id)))
+    : links;
   const [busyId, setBusyId] = useState<string | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -517,10 +617,13 @@ export function RecommendedLinkList({
       {links.length === 0 && (
         <p className="text-[13px] text-sand-600">{t("panes.recommendedLinksEmpty")}</p>
       )}
-      {links.map((l) => {
+      {ordered.map((l) => {
         const open = openId === l.id;
         return (
-        <div key={l.id} className="rounded-2xl border border-dashed border-clay-300 bg-card p-3.5 shadow-soft">
+        <div key={l.id} data-graph-recommended={l.id} className="rounded-2xl border border-dashed border-clay-300 bg-card p-3.5 shadow-soft">
+          {proposedLinkIds?.has(l.id) && (
+            <p className="mb-1 text-[10.5px] font-semibold text-[var(--kind-assistant)]">{t("graphView.fromLastAnswer")}</p>
+          )}
           <button
             onClick={() => setOpenId(open ? null : l.id)}
             data-track="graph-link-expand"
