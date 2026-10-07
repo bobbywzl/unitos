@@ -28,6 +28,7 @@ import { ShareControl } from "@/components/collab/share-control";
 import { OfflineStatus } from "@/components/offline-status";
 import { useNotebookSync } from "@/components/collab/use-sync";
 import { GraphOverlayLoader } from "@/components/graph/graph-data";
+import { preloadGraphView } from "@/components/graph/graph-overlay";
 import { withoutGraphParams } from "@/components/graph/graph-content";
 import { GRAPH_NOTE_PARAM, OPEN_GRAPH_EVENT, type GraphFocus } from "@/components/graph/graph-keep";
 import { VisualizationViewer } from "@/components/reader/visualization-viewer";
@@ -344,6 +345,7 @@ export function Workspace({
   // where the reader was (Back from a document; graph-keep.ts).
   const [graphFocus, setGraphFocus] = useState<GraphFocus | null>(null);
   const openGraph = useCallback((focus?: GraphFocus) => {
+    preloadGraphView(); // the canvas's chunk beside the data (COST4-06)
     const arrivedLink = new URLSearchParams(window.location.search).get("link");
     setGraphFocus(focus ?? (arrivedLink ? { linkId: arrivedLink } : null));
     setGraphOpen(true);
@@ -365,6 +367,11 @@ export function Workspace({
     url.searchParams.delete("graph");
     window.history.replaceState(null, "", withoutGraphParams(url)); // [view2]
   }, []);
+  // A graph opened from the URL or Back: the chunk in the same tick as the
+  // loader's data fetch.
+  useEffect(() => {
+    if (graphOpen) preloadGraphView();
+  }, [graphOpen]);
   // M (map) opens the graph from anywhere in the workspace (WALK3-06): the
   // rail's Graph is the last stop of a long tab order. Never while typing (a
   // text box, a note, the page editor), never with a modifier, so no browser
@@ -1029,6 +1036,8 @@ export function Workspace({
 
           <button
             onClick={() => openGraph()}
+            onPointerEnter={preloadGraphView}
+            onFocus={preloadGraphView}
             data-track="graph"
             aria-label={t("panes.graph")}
             aria-keyshortcuts="M"

@@ -35,7 +35,14 @@ const NO_GISTS: Record<string, string> = {};
 // [/view2]
 
 // reactflow loads only when the graph opens — the workspace bundle stays lean.
-const GraphView = dynamic(() => import("@/components/graph/graph-view"), {
+// The workspace starts the load on a hover or focus of the Graph button, on
+// M, and on every open (preloadGraphView), so the chunk comes beside the
+// graph's data instead of after it (COST4-06).
+const loadGraphView = () => import("@/components/graph/graph-view");
+export function preloadGraphView(): void {
+  void loadGraphView().catch(() => {});
+}
+const GraphView = dynamic(loadGraphView, {
   ssr: false,
   loading: () => null,
 });
