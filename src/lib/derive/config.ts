@@ -258,6 +258,12 @@ export const STITCH_EXPAND_WORDS = 15;
 // read (a picked generated document is always read). Owner's call (pending;
 // the recommended option is false).
 export const STITCH_READS_GENERATED = false;
+// The language Stitch replies in (SPEC.md §22): "ui", the reader's interface
+// language (the cookie, else Accept-Language); or "command", the command's
+// language when it is plainly in one (a Chinese question gets a Chinese
+// reply under an English interface), else the interface's. Quotes keep
+// the documents' words either way. Owner's call (pending); "ui" until then.
+export const STITCH_REPLY_LANGUAGE: "ui" | "command" = "ui";
 export const STITCH_GROUP_CONCURRENCY = 6;
 // The route's limits: a command over STITCH_COMMAND_MAX chars is refused
 // with a message that says so; a history turn is cut to
@@ -268,6 +274,15 @@ export const STITCH_COMMAND_MAX = 4_000;
 export const STITCH_HISTORY_TURN_MAX = 8_000;
 export const STITCH_HISTORY_MAX = 20;
 export const STITCH_READ_HISTORY = 3;
+// The answer pass's layout after a pick: false, the picked blocks in the
+// system message and the conversation after them (nothing of the
+// conversation caches, since the blocks change every command); true, the
+// conversation first and the blocks in the last message, so each turn
+// reads the turns before it from the cache. Off: on six-turn conversations
+// it saved 0.6–1.1% (the conversation is ~2.7k tokens of a ~170k answer
+// pass), and the blind judged run found the facts, citations and quotes the
+// same but some detail dropped (round 3, engine3 RESULT.md).
+export const STITCH_HISTORY_FIRST = false;
 // The model passes together get this long; the route's limit (300 s) keeps
 // the rest for storing the answer. Past it the run stops and the reader is
 // told to narrow the command instead of reading a stream that ended empty.

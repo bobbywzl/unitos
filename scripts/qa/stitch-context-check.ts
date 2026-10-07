@@ -288,6 +288,22 @@ const SCENARIO_LIST: Scenario[] = [
     docs: () => englishDocs(Array.from({ length: 30 }, (_, i) => [28_000, 47_000, 66_000, 86_000, 105_000][i % 5]), BOOKS),
   },
   {
+    id: "h",
+    title: "QA Stitch Cost (h) 120 docs 4M",
+    lang: "en",
+    commands: EN,
+    // A large project: 120 documents of 12k-60k chars, about 4M chars, skeleton past STITCH_CUT_OVER.
+    docs: () => englishDocs(Array.from({ length: 120 }, (_, i) => [12_000, 20_000, 30_000, 45_000, 60_000][i % 5]), BOOKS),
+  },
+  {
+    id: "i",
+    title: "QA Stitch Cost (i) 200 docs 10M",
+    lang: "en",
+    commands: EN,
+    // A very large project: 200 documents of 30k-70k chars, about 10M chars, skeleton past STITCH_GROUPED_MAX.
+    docs: () => englishDocs(Array.from({ length: 200 }, (_, i) => [30_000, 40_000, 50_000, 60_000, 70_000][i % 5]), BOOKS),
+  },
+  {
     id: "g",
     title: "QA Stitch Cost (g) scenario b plus one gather page",
     lang: "en",
@@ -364,6 +380,7 @@ export type CallRecord = {
   usdInputCached: number; // the shared prefix at the cache price
   sharedSameModelTokens: number; // the prefix shared with an earlier call on the same production model: what the provider's cache can serve
   usdInputCachedModel: number; // input $ with that cache
+  usdOutput: number; // the responder's output at the output price, no reasoning
 };
 
 const records: CallRecord[] = [];
@@ -416,9 +433,13 @@ function openingChars(system: string): number {
   return total;
 }
 
+let dumpN = 0;
 function record(body: Record<string, unknown>, outputText: string): void {
   const messages = ((body.messages as { role: string; content: unknown }[]) ?? []).map((m) => ({ role: m.role, content: contentText(m.content) }));
   const pass = passOf(messages);
+  if (process.env.DUMP_DIR && pass !== "skeleton") {
+    writeFileSync(`${process.env.DUMP_DIR}/${current.scenario}-${current.run}-${String(++dumpN).padStart(3, "0")}-${pass}.txt`, messages.map((m) => `<<<${m.role}>>>\n${m.content}`).join("\n") + `\n<<<output>>>\n${outputText}`);
+  }
   const system = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n");
   const rest = messages.filter((m) => m.role !== "system");
   const user = rest[rest.length - 1]?.content ?? "";
@@ -472,6 +493,7 @@ function record(body: Record<string, unknown>, outputText: string): void {
     usdInput: (total / 1e6) * price.input,
     usdInputCached: ((total - sharedTokens) / 1e6) * price.input + (sharedTokens / 1e6) * price.cacheRead,
     sharedSameModelTokens: Math.min(total, sharedModelTokens),
+    usdOutput: (estTokens(outputText) / 1e6) * price.output,
     usdInputCachedModel: ((total - Math.min(total, sharedModelTokens)) / 1e6) * price.input + (Math.min(total, sharedModelTokens) / 1e6) * price.cacheRead,
   });
 }

@@ -8,15 +8,20 @@ import { partsFor } from "../../src/lib/graph/skeleton";
 import { readFileSync } from "node:fs";
 import {
   answerMessages,
+  checkReplyQuotes,
   citedAliases,
   citedBlocks,
   commandKind,
+  commandNames,
+  cutLines,
   cutSelection,
   expandPick,
   firstsFirst,
   historyWithAliases,
   interleave,
+  nameHits,
   readingOf,
+  replyLanguage,
   replyWithIds,
   skeletonGroups,
   type SkeletonView,
@@ -78,8 +83,67 @@ const kinds: [string, ReturnType<typeof commandKind>][] = [
   ["请给我一个时间线", "page"],
   ["Summarise the chronology into one page", "page"],
   ["总结这些文档对教育的看法", "question"],
+  // Round 3 (ANS3-02): Chinese page words open the command; a bare noun
+  // (第一页, 时间线, 页面) or a verb inside a question is not a page.
+  ["讲义第一页说了叔本华的哪些生平？", "question"],
+  ["这些文档是怎么整理尼采的思想的？", "question"],
+  ["讲义里的时间线对吗？", "question"],
+  ["讲义和原文有没有不一致的地方？", "links"],
+  ["尼采写一本书要多久？", "question"],
+  ["页面上的引文是谁说的？", "question"],
+  ["What does the timeline in my notes get wrong?", "question"],
+  ["Which page does Mencken mention Parsifal on?", "question"],
+  ["汇集所有关于怜悯的段落", "page"],
+  ["把每份文档关于怜悯的说法整理成一页", "page"],
+  ["写一页关于永恒轮回的总结", "page"],
+  ["请列出查拉图斯特拉各部分的写作时间", "page"],
+  ["Make a timeline of Nietzsche's life from these documents", "page"],
+  ["Gather every passage on pity", "page"],
+  ["Write a page on pity in each document.", "page"],
+  ["Do my notes contradict any of the other documents?", "links"],
+  ["叔本华认为自杀是罪行吗？", "question"],
+  // Round 3 (REV3-06): everyday phrasings — a polite opening before the
+  // verb, idiom verbs that make nothing, list without every/all/each.
+  ["Could you gather what each author says about pity?", "page"],
+  ["Can you collect the passages on suffering into one place?", "page"],
+  ["I want a page of every quote about pity", "page"],
+  ["Please write one page that combines what they say about the will", "page"],
+  ["Summarize the project", "question"],
+  ["Make sense of Nietzsche's view of pity for me", "question"],
+  ["Put simply, what is the will to power?", "question"],
+  ["List the three reasons Schopenhauer gives for pity", "question"],
+  ["Turn to the Genealogy: what does he mean by ressentiment?", "question"],
+  ["Build an argument: is pity a virtue?", "question"],
+  ["What links pity and the will?", "question"],
+  ["Where do they disagree about suffering?", "links"],
+  ["Link the passages on pity", "links"],
+  ["Find the contradictions", "links"],
+  ["Is there any inconsistency in his use of 'pity'?", "links"],
+  ["把关于同情的段落整理成一页", "page"],
+  ["总结这些文档", "question"],
+  ["列出所有关于同情的段落", "page"],
+  ["他们在哪些地方意见不同？", "links"],
+  ["尼采怎么看待同情与意志的联系？", "question"],
+  // More everyday phrasings of the same rules.
+  ["I'd like you to put these passages together in one place", "page"],
+  ["Could you turn these quotes into a page?", "page"],
+  ["Would you please make me a reading list from these documents", "page"],
+  ["Can you connect the notes to the essay?", "links"],
+  ["Make the case that pity is a weakness, from the documents", "question"],
+  ["Could you tell me what Schopenhauer means by the will?", "question"],
+  ["你能把这些段落汇总成一页吗？", "page"],
+  ["列出叔本华给出的三个理由", "question"],
+  ["尼采和叔本华的看法相反吗？", "links"],
 ];
 for (const [command, want] of kinds) check(`commandKind "${command}"`, commandKind(command) === want, commandKind(command));
+// The round 3 answers audit's 37 commands: every one a question.
+try {
+  const ans3 = JSON.parse(readFileSync("/home/user/unitos/.qa-tmp/stitch/r3/ans/commands.json", "utf8")) as { id: string; command: string }[];
+  const wrong = ans3.filter((c) => commandKind(c.command) !== "question");
+  check(`commandKind: the round 3 answers audit's ${ans3.length} commands are questions`, wrong.length === 0, wrong.map((c) => c.id).join(" "));
+} catch {
+  console.log("skip the round 3 answers audit's commands (not on this machine)");
+}
 // The answers audit's 27 commands (round 2), when its data is on this machine.
 const ANS = "/home/user/unitos/.qa-tmp/stitch/r2/ans/commands.json";
 const ANS_KIND: Record<string, ReturnType<typeof commandKind>> = { "P1-11": "links", "P1-12": "page", "P2-10": "links" };
@@ -186,17 +250,25 @@ check("answer prompt: continue line on a follow-up", next.includes("continues th
 check("answer prompt: the select-path line", next.includes("not that the documents do not"));
 check("answer prompt: partial-read sentence when a pick reads it whole", next.includes("pick it and one short document in the graph"));
 check("answer prompt: partial-read sentence for a long document", next.includes("ask about one part of it"));
-check("answer prompt: never the sentence for a document with nothing shown", next.includes("Never write the sentence for a document with no blocks shown"));
+check("answer prompt: never the sentence for a document with nothing shown", next.includes("never for a document with no blocks shown"));
 check("answer rules: one block per tag", rules.includes("one block per tag"));
 // Round 2 judge fixes.
 check("answer rules: a summary is a reply unless it asks for a page", rules.includes("and a summary (summarise, overview, outline) get reply only"));
 check("answer rules: causes and effects before \"says nothing\"", rules.includes("check its blocks for the topic's causes and effects"));
 check("answer rules: different causes differ only when one denies the other", rules.includes("differ only when one denies the other's cause"));
-check("answer rules: closest figures when the documents do not answer", rules.includes("give the closest figures they do give"));
+// Round 3 (ANS3-06): "the documents don't say" in one sentence, a figure
+// only when it is the same quantity, and one partial-read sentence at most.
+check("answer rules: no padding when the documents do not answer", rules.includes("say so in one sentence. Then give a figure only when a block shown gives the same quantity for another scope or date; else stop.") && !rules.includes("closest figures"));
+check("answer prompt: one partial-read sentence, for the likeliest document", next.includes("add one sentence, for the one document most likely to hold the rest") && next.includes("Never add it when no document is likely to hold the answer"));
+// Round 3 (ANS3-07): the reader's later dated value replaces the earlier.
+check("answer rules: a later-dated change comes first", rules.includes("never pick one. Except: when a later-dated document of the reader's says the value changed"));
+// Round 3 (ANS3-05): quotes in the reply are copied exactly.
+check("answer rules: a quote in reply is copied exactly", rules.includes("A quote in reply is copied exactly from the block it cites; cut words with … instead of rewording."));
+// Round 3 (ANS3-01): which-documents lists on a partial read say so.
+check("answer prompt: a which-documents list on a partial read says it covers the blocks read", next.includes("say in one sentence that the list covers the blocks read for this command"));
 check("answer rules: an unread document that could hold the answer", rules.includes("say in one sentence that it has no text to read"));
 check("answer rules: a why question leads with the reason", rules.includes("A why question starts with the reason the documents give"));
 check("answer rules: a count equals the quote parts", rules.includes("equals the number of its quote parts"));
-check("answer prompt: the not-read sentence for every document that could hold the answer", next.includes("for every document that shows some of its blocks and whose blocks not shown could hold the answer, cited or not"));
 check("answer prompt: unread named only when it bears", first.includes("only when the command asks about them"));
 const select = stitchSelectPrompt({ documents: docs, command: "And the second one?", continued: true, earlier: ["List the two studies."], cited: ["B3"], maxBlocks: 150, partial: false });
 check("select prompt: earlier commands", select.includes("- List the two studies."));
@@ -206,6 +278,8 @@ check("select prompt: best block first, even late", select.includes("even when i
 const expand = stitchExpandPrompt({ command: "Where does the overman first appear?", earlier: ["Who is Zarathustra?"], titles: ["Thus Spake Zarathustra"], maxWords: 15 });
 check("expand prompt: the command, the earlier commands, the titles, the cap", expand.includes("overman") && expand.includes("- Who is Zarathustra?") && expand.includes('"Thus Spake Zarathustra"') && expand.includes("up to 15"));
 check("expand prompt: JSON words", expand.includes('{"words"'));
+// Round 3 (ANS3-03): the words in the documents' language, whatever the command's.
+check("expand prompt: the documents' language, even for a command in another", expand.includes("a Chinese command over English documents gets English words"));
 check("skeleton prompt: the line cap scales past 400 words", skeletonPrompt({ parts: [], window: 1, windows: 1, blockCount: 3 }).includes("one word in ten for a block over 400 words"));
 
 // ── the answer pass's sections ──
@@ -265,5 +339,112 @@ check("partsFor: headings when there are some", partsFor(null, headed).some((p) 
 check("partsFor: stored contents first", partsFor([{ title: "X", blockId: "p3", level: 1 }], plain).map((p) => p.blockId).join(" ") === "p3");
 check("partsFor: a short document is one part", partsFor(null, plain.slice(0, 10)).length === 0);
 
-console.log(failed === 0 ? "\nall checks pass" : `\n${failed} check(s) failed`);
-process.exit(failed === 0 ? 0 : 1);
+// ── Round 3 (ANS3-01): the command's rare names and the blocks naming them ──
+check("commandNames: a capitalised word after the first", commandNames("Which of these documents mention Darwin, and what do they say about him?").join("|") === "Darwin");
+check("commandNames: a run is one name, question words drop", commandNames("Who is the one figure in the New Testament that Nietzsche says deserves honour?").join("|") === "New Testament|Nietzsche");
+check("commandNames: quoted phrases and 《》", commandNames('What does "eternal recurrence" mean?').includes("eternal recurrence") && commandNames("翻译《敌基督》之前已经有哪些英译本？").join("|") === "敌基督");
+{
+  const blocks = [
+    { alias: "A11", text: "a clergyman criticising Darwin's hypothesis of natural selection" },
+    { alias: "A12", text: "the Darwinists" },
+    { alias: "A13", text: "nothing here" },
+    { alias: "B13", text: "a million Darwins and Harnacks" },
+    { alias: "C1", text: "undarwinian" },
+  ];
+  const hits = nameHits("Which documents mention Darwin?", blocks);
+  check("nameHits: word-start matches, any case, not inside a word", hits.length === 1 && hits[0].aliases.join(" ") === "A11 A12 B13", JSON.stringify(hits));
+  const common = Array.from({ length: 12 }, (_, i) => ({ alias: `A${i + 1}`, text: "Kant again" }));
+  check("nameHits: a name in more than 8 blocks is common and drops", nameHits("What does Nietzsche hold against Kant?", common).length === 0);
+  const sel = stitchSelectPrompt({ documents: docs, command: "Which documents mention Darwin?", continued: false, earlier: [], cited: [], maxBlocks: 150, partial: false, names: hits });
+  check("select prompt: the blocks that name the rare name", sel.includes('Blocks whose full text names "Darwin", though their skeleton line may not: A11, A12, B13.'));
+  const all = stitchPrompt({ documents: docs, command: "x", continued: false, selected: true, names: [{ term: "Darwin", total: 3, shown: 3 }] });
+  const part = stitchPrompt({ documents: docs, command: "x", continued: false, selected: true, names: [{ term: "Darwin", total: 5, shown: 3 }] });
+  check("answer prompt: every block naming it shown", all.includes('Every block of the documents read that names "Darwin" is shown above (3).'));
+  check("answer prompt: some blocks naming it not shown, the list is partial", part.includes('5 blocks of the documents read name "Darwin"; 3 of them are shown above. A list of where "Darwin" is named is partial: say so.'));
+  check("answer prompt: no partial-list hedge when every block naming the name is shown", !all.includes("the list covers the blocks read") && part.includes("the list covers the blocks read"));
+}
+
+// ── Round 3 (ANS3-05): the reply's quotes against the blocks cited ──
+{
+  const quoteBlocks = new Map<string, B>([
+    ["F56", { id: "idF56", alias: "F56", type: "PARAGRAPH", text: "Christianity wants to master beasts of prey; its method is to make them _ill_ — to make feeble is the Christian recipe.", documentId: "docF" }],
+    ["B19", { id: "idB19", alias: "B19", type: "PARAGRAPH", text: "It was in the month of August 1881 in Sils Maria, 6,000 feet above the sea.", documentId: "docB" }],
+  ]);
+  const titles = new Set(["The Antichrist"]);
+  const q = checkReplyQuotes(
+    [
+      'In "The Antichrist" he says its method is "to make them _ill_" [block F56], not "by making them _ill_" [block F56].',
+      'The idea came "in the month of August 1881 in Sils Maria" [block B19], or "in August 1881 in Sils Maria" [block B19].',
+      'Cut words stay a quote: "It was in the month … in Sils Maria" [block B19].',
+      "A Chinese line quotes “to make feeble is the Christian recipe” [block F56].",
+    ].join("\n"),
+    quoteBlocks,
+    titles,
+  );
+  const lines = q.reply.split("\n");
+  check("checkReplyQuotes: a verbatim quote keeps its marks", lines[0].includes('"to make them _ill_" [block F56]') && lines[1].includes('"in the month of August 1881 in Sils Maria"'));
+  check("checkReplyQuotes: a title in quote marks is left alone", lines[0].includes('In "The Antichrist"'));
+  check("checkReplyQuotes: a misquote loses its marks, keeps its words", lines[0].includes("not by making them _ill_ [block F56]") && lines[1].includes("or in August 1881 in Sils Maria [block B19]"), lines.slice(0, 2).join(" / "));
+  check("checkReplyQuotes: cut words (…) stay a quote", lines[2].includes('"It was in the month … in Sils Maria"'));
+  check("checkReplyQuotes: curly quotes are checked too", lines[3].includes("“to make feeble is the Christian recipe”"));
+  check("checkReplyQuotes: the misquotes are counted", q.unquoted.length === 2, q.unquoted.join(" | "));
+}
+
+// ── Round 3 (ANS3-04): the reply's language, one switch ──
+check("replyLanguage ui (the default): the UI's, whatever the command", replyLanguage("翻译《敌基督》之前已经有哪些英译本？", "en") === "en" && replyLanguage("When did he die?", "zh") === "zh");
+check("replyLanguage command: a Chinese question under an English UI is answered in Chinese", replyLanguage("翻译《敌基督》之前已经有哪些英译本？门肯怎么评价它们？", "en", "command") === "zh");
+check("replyLanguage command: an English question under a Chinese UI is answered in English", replyLanguage("What does Mencken predict about the plutocracy?", "zh", "command") === "en");
+check("replyLanguage command: a mixed or short command keeps the UI's", replyLanguage("Zarathustra 是谁", "en", "command") === "en" && replyLanguage("ok?", "zh", "command") === "zh");
+{
+  const mkDoc = (id: string) => ({ id, title: id, generatedCommand: null, skeleton: null, handwritten: false, importRev: null, pageLabels: null, conversionStatus: "NONE", conversionError: null, video: null, blocks: [{ id: `${id}-0`, type: "PARAGRAPH", text: "text", startTime: null, endTime: null, cell: null, page: null }] });
+  const reading = readingOf([mkDoc("a"), mkDoc("b")] as unknown as Parameters<typeof readingOf>[0]);
+  const profile = null as unknown as Parameters<typeof answerMessages>[0]["profile"];
+  const sysOf = (lang: "en" | "zh") => String(answerMessages({ reading, selected: null, lang, profile, history: [], command: "x" })[0].content);
+  check("answer pass: the reply language reaches the rules", sysOf(replyLanguage("尼采在哪里第一次想到永恒轮回？", "en", "command")).includes("in Chinese") && sysOf(replyLanguage("尼采在哪里第一次想到永恒轮回？", "en")).includes("reply: the answer to the command, in English"));
+}
+
+// ── Round 3 (COST3-01): first picks capped at a third of the budget ──
+{
+  // 100 documents, the select pass's best 12 blocks in two documents, then
+  // every document's one weak match: today the weak matches fill the
+  // question's budget; capped, the best blocks are read.
+  const big = new Map<string, B>();
+  const docOf100 = (a: string) => big.get(a)?.documentId;
+  const order: string[] = [];
+  const mk = (alias: string, doc: string, words: number) => {
+    const b: B = { id: `id${alias}`, alias, type: "PARAGRAPH", text: "word ".repeat(words), documentId: doc };
+    big.set(alias, b);
+    return alias;
+  };
+  for (let i = 1; i <= 6; i++) order.push(mk(`A${i}`, "docA", 400));
+  for (let i = 1; i <= 6; i++) order.push(mk(`B${i}`, "docB", 400));
+  for (let d = 0; d < 100; d++) order.push(mk(`D${d}Z1`, `doc${d}`, 400));
+  const costOf = (a: string) => estTokens(big.get(a)!.text) + 10;
+  const best = order.slice(0, 12);
+  const today = cutSelection(firstsFirst(order, docOf100), big, "question");
+  const capped = cutSelection(firstsFirst(order, docOf100, { tokens: STITCH_SELECTED_BUDGET.question / 3, costOf }), big, "question");
+  const kept = (set: Set<string>) => best.filter((a) => set.has(a)).length;
+  check("firstsFirst cap: 100 documents, the best blocks survive the cut", kept(capped) === 12 && kept(today) < 12, `best kept: today ${kept(today)}/12, capped ${kept(capped)}/12`);
+  const few = ["A5", "A6", "B2", "A7", "C9", "B3"];
+  check("firstsFirst cap: under a third of the budget the order is unchanged", firstsFirst(few, docOf, { tokens: STITCH_SELECTED_BUDGET.question / 3, costOf: (a) => estTokens(blockByRef.get(a)!.text) + 10 }).join(" ") === firstsFirst(few, docOf).join(" "));
+}
+
+// ── Round 3 (ANS3-03): a cut where no line shares a word with the query ──
+void (async () => {
+  const view = (letter: string, n: number) =>
+    ({
+      r: { letter },
+      gist: "",
+      parts: [],
+      lines: Array.from({ length: n }, (_, i) => ({ alias: `${letter}${i + 1}`, text: `english words line ${i} `.repeat(6), partAlias: null })),
+    }) as unknown as SkeletonView;
+  const views = Array.from({ length: 30 }, (_, i) => view(String.fromCharCode(65 + (i % 26)) + (i >= 26 ? "A" : ""), 100));
+  const shown = await cutLines(views, null, async () => "尼采说的末人是什么", 20_000);
+  const total = views.reduce((n, v) => n + v.lines.length, 0);
+  const last = views[views.length - 1];
+  check("cutLines: no line matches → every line read, not the first documents", shown.size === total && last.lines.every((l) => shown.has(l.alias)), `${shown.size} of ${total}`);
+  const match = await cutLines(views, null, async () => "line 5 words", 20_000);
+  check("cutLines: a query that matches still cuts", match.size < total, `${match.size} of ${total}`);
+  console.log(failed === 0 ? "\nall checks pass" : `\n${failed} check(s) failed`);
+  process.exit(failed === 0 ? 0 : 1);
+})();
