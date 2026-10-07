@@ -29,7 +29,7 @@ async function main() {
   const ids = process.argv.slice(2);
   const notebooks = ids.length
     ? await db.notebook.findMany({ where: { id: { in: ids } } })
-    : await db.notebook.findMany({ where: { docLinks: { some: {} } }, take: 3, orderBy: { createdAt: "asc" } });
+    : await db.notebook.findMany({ where: { links: { some: {} } }, take: 3, orderBy: { createdAt: "asc" } });
   for (const nb of notebooks) {
     // Sign-in off: the local reader, who has no row.
     const row = await db.user.findUnique({ where: { id: nb.userId } });
