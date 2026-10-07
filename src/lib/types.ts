@@ -382,6 +382,11 @@ export type StitchResult = {
   // Links the answer proposed that were already in the graph (the same two
   // blocks, an overlapping end), not stored again; the reply says so.
   linksExisting?: number;
+  // The ids of the links already in the project this answer is about (ANS5-05):
+  // the ones it proposed again, the ones a links command was told of, and
+  // the ones the reply cites both blocks of. Lit with linkIds. A link removed
+  // from the project is not drawn, so it is not listed.
+  existingLinkIds?: string[];
   // What this answer stored, for the next command's history (ANS4-02): the
   // box sends it back with the reply as the turn's record.
   record?: StitchRecord;
@@ -393,9 +398,18 @@ export type StitchResult = {
     generated document. The route reads the links and the page again by id
     inside the project; the titles name a link that is gone. */
 export type StitchRecord = {
-  links: { id: string; from: string; to: string }[];
+  // Every link the answer proposed, in its order (ANS5-02): a stored one by
+  // its id; one already in the project ("existing", "removed") by that
+  // link's id; one that did not resolve ("unstored") with no id (""). A
+  // record kept before status existed lists only stored links.
+  links: { id: string; from: string; to: string; status?: StitchRecordLinkStatus }[];
   document: { id: string; title: string } | null;
 };
+
+/** Why a proposed link of a record was not stored: already in the graph
+    (accepted or waiting under Recommended links), removed from the
+    project before, or not resolved to two blocks of two documents. */
+export type StitchRecordLinkStatus = "existing" | "removed" | "unstored";
 
 /** What a Stitch command asks for (lib/graph/stitch.ts commandKind): an
     answer, links, or a page. It sets what the answer pass reads after
