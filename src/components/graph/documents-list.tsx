@@ -10,8 +10,8 @@
 // documents come last, and only while the provenance switch shows them.
 //
 // No model call and no write: the gists come with the graph's data, the
-// part titles from GET .../outline?parts=titles once per tab (the offline
-// copy keeps that call), the links and the notes are on the page already.
+// part titles from GET .../outline?parts=titles, again after each rev move
+// (the offline copy keeps that call), the links and the notes are on the page already.
 
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -24,26 +24,32 @@ import { useGraphContent } from "@/components/graph/graph-content";
 import { GraphNoteRow, useGraphNotes } from "@/components/graph/graph-notes";
 import { LinkReplyCount } from "@/components/graph/link-replies";
 import { useProvenanceShown } from "@/components/graph/provenance-want";
+import { useGraphGeneration } from "@/components/graph/graph-generation";
 
-const titlesKept = new Map<string, ProjectPartTitles>();
+/** Each project's part titles with the graph generation they were read at. */
+const titlesKept = new Map<string, { titles: ProjectPartTitles; gen: number }>();
 // Where the list was scrolled, per project, for Back from a document.
 const scrollKept = new Map<string, number>();
 
+// Read again once the graph's generation moved (a rev move: a skeleton
+// built, a document added; REV4-02). The kept titles show until then.
 function usePartTitles(notebookId: string): ProjectPartTitles | null {
-  const [titles, setTitles] = useState<ProjectPartTitles | null>(() => titlesKept.get(notebookId) ?? null);
+  const gen = useGraphGeneration(notebookId);
+  const [titles, setTitles] = useState<ProjectPartTitles | null>(() => titlesKept.get(notebookId)?.titles ?? null);
   useEffect(() => {
-    if (titlesKept.has(notebookId)) return;
+    const kept = titlesKept.get(notebookId);
+    if (kept && kept.gen >= gen) return;
     const controller = new AbortController();
     fetch(`/api/notebooks/${notebookId}/outline?parts=titles`, { signal: controller.signal })
       .then((r) => (r.ok ? (r.json() as Promise<ProjectPartTitles>) : null))
       .then((data) => {
         if (!data) return;
-        titlesKept.set(notebookId, data);
+        titlesKept.set(notebookId, { titles: data, gen });
         setTitles(data);
       })
       .catch(() => undefined);
     return () => controller.abort();
-  }, [notebookId]);
+  }, [notebookId, gen]);
   return titles;
 }
 
