@@ -36,9 +36,11 @@ export const maxDuration = 300;
 const title = z.string().transform((s) => s.slice(0, 300));
 const recordSchema = z.object({
   links: z
-    .array(z.object({ id: z.string().min(1).max(100), from: title, to: title }))
+    // Every link the turn proposed, in order (ANS5-02): a link not stored
+    // has a status, and one that did not resolve has no id.
+    .array(z.object({ id: z.string().max(100), from: title, to: title, status: z.enum(["existing", "removed", "unstored"]).optional() }))
     .max(200)
-    .transform((a) => a.slice(0, 24)),
+    .transform((a) => a.slice(0, 48)),
   document: z.object({ id: z.string().min(1).max(100), title }).nullable(),
 });
 const requestSchema = z.object({

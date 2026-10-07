@@ -13,7 +13,11 @@ import {
   assignSources,
   checkReplyQuotes,
   duplicateLink,
+  duplicateOf,
+  existingNamed,
   existingPairs,
+  pageCountNote,
+  skeletonView,
   pageCommand,
   recordText,
   resolveQuote,
@@ -37,7 +41,7 @@ import {
   titleMatches,
   type SkeletonView,
 } from "../../src/lib/graph/stitch";
-import { asksWhere, stitchExpandPrompt, stitchPrompt, stitchRules, stitchSelectPrompt } from "../../src/lib/prompts/stitch";
+import { asksEvery, asksWhere, stitchExpandPrompt, stitchPrompt, stitchRules, stitchSelectPrompt } from "../../src/lib/prompts/stitch";
 import { skeletonPrompt } from "../../src/lib/prompts/skeleton";
 import { estTokens } from "../../src/lib/tokens";
 
@@ -298,7 +302,8 @@ check("answer rules: a quote in reply is copied exactly", rules.includes("A quot
 check("answer prompt: a which-documents list on a partial read says it covers the blocks read", next.includes("say in one sentence that the list covers the blocks read for this command"));
 check("answer rules: an unread document that could hold the answer", rules.includes("say in one sentence that it has no text to read"));
 check("answer rules: a why question leads with the reason", rules.includes("A why question starts with the reason the documents give"));
-check("answer rules: a count equals the quote parts", rules.includes("equals the number of its quote parts"));
+// ANS5-04: the server states the page's counts; the model never counts them.
+check("answer rules: the page's parts are never counted in reply", rules.includes("Never count the parts of the page: the count is added under the reply."));
 check("answer prompt: unread named only when it bears", first.includes("only when the command asks about them"));
 const select = stitchSelectPrompt({ documents: docs, command: "And the second one?", continued: true, earlier: ["List the two studies."], cited: ["B3"], maxBlocks: 150, partial: false });
 check("select prompt: earlier commands", select.includes("- List the two studies."));
@@ -536,7 +541,7 @@ check("replyLanguage command: a mixed or short command keeps the UI's", replyLan
   const withLinks = stitchPrompt({ documents: docs4, command: "Find the contradictions", continued: false, selected: true, existing: pairs });
   check("answer prompt: the links already in the project", withLinks.includes("Links already in the project between the blocks above: [block G6] – [block B20]; [block G7] – [block A8]. Never propose them again"));
   check("answer prompt: no links line when none", !stitchPrompt({ documents: docs4, command: "x", continued: false, selected: true }).includes("Links already in the project"));
-  check("answer rules: the link count is the links proposed, the listed ones said to be there", rules.includes("a count of links equals the number of links you propose. A link listed as already in the project is never proposed again"));
+  check("answer rules: the link count is the links proposed, the listed ones said to be there", rules.includes("A count of links equals the number of links you propose. A link listed as already in the project is never proposed again"));
   const en = translatorFor("en");
   const zh = translatorFor("zh");
   check("reply note: N already in the graph, en and zh", en("stitch.stitchLinksExistingN", { n: 3 }).startsWith("3 of the links proposed were already in the graph") && zh("stitch.stitchLinksExisting1", { n: 1 }).includes("1 条已在图谱中"), `${en("stitch.stitchLinksExistingN", { n: 3 })} / ${zh("stitch.stitchLinksExisting1", { n: 1 })}`);
@@ -640,6 +645,123 @@ check("replyLanguage command: a mixed or short command keeps the UI's", replyLan
   check("answer layout: the whole read never moves", String(lay(long, null)[0].content).includes("[block A1]"));
   check("answer layout: the history-first system message is the same bytes every turn", String(l1[0].content) === String(lay([...long, ...long], new Set(["A1", "B1"]))[0].content));
   check("answer layout: off by default (STITCH_HISTORY_FIRST_MIN), a long history still after the blocks", STITCH_HISTORY_FIRST_MIN === Infinity && String(answerMessages({ reading: gReading, selected: new Set(["A1"]), lang: "en", profile: prof, history: long, command: "And then?" })[0].content).includes("[block A1]"));
+}
+
+// ── Round 5 (ENGINE5) ──
+{
+  const docs5 = [{ tag: "A", title: "Mencken", read: true }, { tag: "B", title: "Notes", read: true }];
+  // ANS5-01: quotes in Chinese replies (the answers audit's proto/zhquote.ts, 6 of 6).
+  const f24 = new Map<string, B>([["F24", { id: "b1", alias: "F24", type: "PARAGRAPH", documentId: "d", text: "Schopenhauer was right in this: that by means of pity life is denied, and made worthy of denial--pity is the technic of nihilism." }]]);
+  const zhMis = [
+    'He says "pity is the practice of nihilism" [block F24].',
+    '他说 "pity is the practice of nihilism" [block F24]。',
+    '他说"pity is the practice of nihilism" [block F24]。',
+    '他说“pity is the practice of nihilism”[block F24]。',
+    '他说「pity is the practice of nihilism」[block F24]。',
+    '尼采写道：“pity is the practice of nihilism”[block F24]。',
+  ];
+  const caught = zhMis.filter((c) => checkReplyQuotes(c, f24, new Set()).unquoted.length === 1);
+  check("checkReplyQuotes: a misquote after a CJK character, in 「」, and before [block (6 of 6)", caught.length === 6, `${caught.length} of 6`);
+  const zhOut = checkReplyQuotes('他说「pity is the practice of nihilism」[block F24]。', f24, new Set()).reply;
+  check("checkReplyQuotes: a corner-bracket misquote loses its brackets, keeps its words", zhOut === "他说pity is the practice of nihilism[block F24]。", zhOut);
+  const zhBlock = new Map<string, B>([["C3", { id: "c3", alias: "C3", type: "PARAGRAPH", documentId: "d2", text: "叔本华认为同情是道德的唯一基础，而尼采说同情使痛苦加倍。" }]]);
+  const zhKeep = [
+    '他说"pity is the technic of nihilism"[block F24]。',
+    '他说“by means of pity life is denied”，而且[block F24]',
+    '笔记说「同情是道德的唯一基础」[block C3]。',
+    '笔记说『尼采说同情使痛苦加倍』[block C3]。',
+    '笔记说"同情是道德的唯一基础"而[block C3]',
+  ];
+  const kept5 = zhKeep.filter((c) => checkReplyQuotes(c, new Map([...f24, ...zhBlock]), new Set()).unquoted.length === 0);
+  check("checkReplyQuotes: verbatim quotes in Chinese replies keep their marks (5 of 5)", kept5.length === 5, `${kept5.length} of 5`);
+  const n13 = checkReplyQuotes('笔记说叔本华认为自杀"摧毁意志而不是否定意志"，而译者注说自杀是对生命意志的肯定 [block C3]。', zhBlock, new Set());
+  check("checkReplyQuotes: N13's Chinese paraphrase of English notes loses its marks", n13.unquoted.length === 1 && !n13.reply.includes('"摧毁'), n13.reply);
+  check("checkReplyQuotes: a title in 《》 and an English apostrophe stay", checkReplyQuotes("《敌基督》说 it's the technic [block F24]。", f24, new Set()).unquoted.length === 0);
+  check("answer rules: a translation gets no quote marks", rules.includes("A quote is the document's words in the document's language: a translation or a paraphrase gets no quote marks."));
+
+  // ANS5-02: every proposed link keeps its number in the record.
+  const recX = recordText(
+    {
+      links: [
+        { id: "n1", from: "Notes", to: "The Antichrist" },
+        { id: "old", from: "BOOK TWO", to: "Arthur Schopenhauer", status: "existing" },
+        { id: "n2", from: "Arthur Schopenhauer", to: "The Antichrist" },
+        { id: "", from: "Notes", to: "", status: "unstored" },
+        { id: "gone", from: "Notes", to: "BOOK TWO", status: "removed" },
+      ],
+      document: null,
+    },
+    new Map([
+      ["n1", { id: "n1", fromBlockId: "idA2", toBlockId: "idB3", reason: "Both define happiness.", recommended: true }],
+      ["old", { id: "old", fromBlockId: "idA5", toBlockId: "idC9", reason: "Well-being.", recommended: true }],
+      ["n2", { id: "n2", fromBlockId: "idB3", toBlockId: "idC9", reason: "Boredom and power.", recommended: true }],
+    ]),
+    null,
+  );
+  check("recordText: link 3 is the reply's third link after a duplicate (F2x)", recX.includes("- link 3: [block idB3] – [block idC9]: Boredom and power."), recX);
+  check("recordText: a link proposed again is numbered, in the graph, waiting", recX.includes("- link 2 (already in the graph, waiting under Recommended links; not stored again): [block idA5] – [block idC9]: Well-being."), recX);
+  check("recordText: a link that did not resolve and one removed before keep their numbers", recX.includes("- link 4: not stored") && recX.includes('- link 5: removed by the reader before, not stored again ("Notes" – "BOOK TWO")') && recX.startsWith("(Proposed by this answer"), recX);
+  check("recordText: a record with no status reads as before", recordText({ links: [{ id: "n1", from: "a", to: "b" }], document: null }, new Map([["n1", { id: "n1", fromBlockId: "x", toBlockId: "y", reason: null, recommended: true }]]), null) === "(Stored by this answer, in the order it proposed them:\n- link 1: [block x] – [block y])");
+  const end5 = (block: string, start: number, stop: number) => ({ block, start, end: stop });
+  check("duplicateOf: the index of the link repeated, -1 for a new one", duplicateOf([end5("G6", 0, 10), end5("B20", 0, 10)], [[end5("A1", 0, 5), end5("B1", 0, 5)], [end5("B20", 5, 20), end5("G6", 5, 20)]]) === 1 && duplicateOf([end5("G6", 0, 10), end5("B21", 0, 10)], []) === -1);
+
+  // ANS5-05 / WALK5-03: the existing links' states, and which the answer is about.
+  const ex = [
+    { id: "e1", from: "G6", to: "B20", state: "accepted" as const },
+    { id: "e2", from: "G7", to: "A8", state: "waiting" as const },
+    { id: "e3", from: "G10", to: "E73", state: "removed" as const },
+    { id: "e4", from: "G11", to: "E90", state: "waiting" as const },
+  ];
+  const pairs5 = existingPairs(ex, () => true);
+  check("existingPairs: a waiting and a removed link say so", pairs5.join("; ") === "[block G6] – [block B20]; [block G7] – [block A8] (waiting under Recommended links); [block G10] – [block E73] (removed by the reader); [block G11] – [block E90] (waiting under Recommended links)", pairs5.join("; "));
+  const sel5 = new Set(["G6", "B20", "G7", "A8", "G10", "E73", "G11"]);
+  check("existingNamed: a links command lights every listed link but removed ones", existingNamed("Nine other links are already in the graph.", ex, sel5, true).join(",") === "e1,e2");
+  check("existingNamed: a reply names a link by its two blocks side by side", existingNamed("Already linked: [block G7] – [block A8]; and [block G6] alone, [block E90].", ex, sel5, false).join(",") === "e2");
+  check("existingNamed: a removed link is never lit", !existingNamed("[block G10] [block E73]", ex, null, false).includes("e3"));
+  const en5 = translatorFor("en");
+  const zh5 = translatorFor("zh");
+  check("reply lines: waiting and removed, en and zh", en5("stitch.stitchLinksWaiting1", { n: 1 }) === "1 of the links proposed was proposed before and waits under Recommended links." && en5("stitch.stitchLinksRemovedN", { n: 2 }) === "2 of the links proposed were removed before, so they were not added again." && zh5("stitch.stitchLinksWaitingN", { n: 2 }).includes("推荐链接") && zh5("stitch.stitchLinksRemoved1", { n: 1 }).includes("已被移除"));
+  const pr5 = stitchPrompt({ documents: docs5, command: "Connect the passages on the will", continued: false, selected: true, existing: pairs5.slice(0, 2) });
+  check("answer prompt: the listed links say how many wait, never a removed one", pr5.includes("say in one sentence that these are already in the graph, and how many wait under Recommended links when some do; never mention one removed by the reader."));
+
+  // ANS5-03: the lines before a document's first part are a part of their own.
+  const rv = { letter: "X", blocks: [1, 2, 3, 4, 5].map((n) => ({ id: `x${n}`, alias: `X${n}` })) } as unknown as Parameters<typeof skeletonView>[0];
+  const sv = skeletonView(rv, { v: 1, gist: "", chars: 0, built: 0, parts: [{ blockId: "x4", title: "Chapter 1", summary: "s" }], lines: [1, 2, 3, 4, 5].map((n) => ({ blockId: `x${n}`, hash: "", text: `line ${n}` })) } as unknown as Parameters<typeof skeletonView>[1]);
+  check("skeletonView: an opening part at the first line holds the lines before the first part", sv.parts[0].alias === "X1" && sv.parts[0].opening === true && sv.lines.slice(0, 3).every((l) => l.partAlias === "X1") && sv.lines[3].partAlias === "X4");
+  const sv0 = skeletonView(rv, { v: 1, gist: "", chars: 0, built: 0, parts: [{ blockId: "x1", title: "Chapter 1", summary: "s" }], lines: [1, 2].map((n) => ({ blockId: `x${n}`, hash: "", text: `line ${n}` })) } as unknown as Parameters<typeof skeletonView>[1]);
+  const svNone = skeletonView(rv, { v: 1, gist: "", chars: 0, built: 0, parts: [], lines: [1, 2].map((n) => ({ blockId: `x${n}`, hash: "", text: `line ${n}` })) } as unknown as Parameters<typeof skeletonView>[1]);
+  check("skeletonView: no opening part when the first part starts at the first line, or with no parts", sv0.parts.length === 1 && svNone.parts.length === 0 && svNone.lines.every((l) => l.partAlias === null));
+
+  // ANS5-04: the page's counts, stated by the server.
+  check("pageCountNote: en", pageCountNote({ quotes: 7, headings: 3, texts: 6 }, "en") === "The page holds 7 quotes, 3 headings, and 6 paragraphs of writing." && pageCountNote({ quotes: 1, headings: 0, texts: 1 }, "en") === "The page holds 1 quote and 1 paragraph of writing.", pageCountNote({ quotes: 7, headings: 3, texts: 6 }, "en"));
+  check("pageCountNote: zh", pageCountNote({ quotes: 7, headings: 3, texts: 6 }, "zh") === "页面包含 7 段引文、3 个标题和 6 段撰写的文字。", pageCountNote({ quotes: 7, headings: 3, texts: 6 }, "zh"));
+
+  // ANS5-07: the heading a shown block falls under, when the heading is not shown.
+  const hDoc = (id: string, title: string, blocks: [string, string][]) => ({
+    id, title, generatedCommand: null, skeleton: null, handwritten: false, importRev: null, pageLabels: null, conversionStatus: "NONE", conversionError: null, video: null,
+    blocks: blocks.map(([type, text], i) => ({ id: `${id}-${i}`, type, text, startTime: null, endTime: null, cell: null, page: null })),
+  });
+  const hReading = readingOf([
+    hDoc("h", "The Art of Controversy", [["PARAGRAPH", "Opening."], ["HEADING", "XXVII"], ["PARAGRAPH", "Should your opponent surprisingly become angry at an argument, you must urge it with all the more zeal."], ["PARAGRAPH", "Next."]]),
+    hDoc("i", "Notes", [["PARAGRAPH", "Anger as a stratagem."]]),
+  ] as unknown as Parameters<typeof readingOf>[0]);
+  const hSys = String(answerMessages({ reading: hReading, selected: new Set(["A1", "A3", "B1"]), lang: "en", profile: null as unknown as Parameters<typeof answerMessages>[0]["profile"], history: [], command: "x" })[0].content);
+  check("answer sections: a block under a heading not shown names it in the gap line", hSys.includes('(1 block not shown; under the heading "XXVII")\n\n[block A3]'), hSys.slice(hSys.indexOf("[document A]"), hSys.indexOf("[document A]") + 300));
+  const hSys2 = String(answerMessages({ reading: hReading, selected: new Set(["A2", "A3", "B1"]), lang: "en", profile: null as unknown as Parameters<typeof answerMessages>[0]["profile"], history: [], command: "x" })[0].content);
+  check("answer sections: a shown heading is not named twice", !hSys2.includes("under the heading"));
+
+  // ANS5-09: the name-hint cap grows with the project.
+  const darwin = Array.from({ length: 9 }, (_, i) => ({ alias: `D${i}`, text: "Darwin wrote" }));
+  check("nameHits: 9 blocks name Darwin: dropped on 7 documents, kept on 36", nameHits("What does Darwin say?", darwin, Array(7).fill("t")).length === 0 && nameHits("What does Darwin say?", darwin, Array(36).fill("t"))[0]?.aliases.length === 9);
+
+  // ANS5-10: the partial-list sentence only when the command asks for a list.
+  const hedge = "say in one sentence that the list covers the blocks read for this command";
+  check("answer prompt: no list sentence on a question with no names", !stitchPrompt({ documents: docs5, command: "Why did Nietzsche break with Wagner?", continued: false, selected: true, names: [] }).includes(hedge));
+  check("answer prompt: the list sentence on which / every / 哪些 with no names", ["Which documents discuss pity?", "List every passage on pity", "哪些文档谈到同情？"].every((c) => stitchPrompt({ documents: docs5, command: c, continued: false, selected: true, names: [] }).includes(hedge)) && asksEvery("Gather all the passages"));
+  check("answer prompt: the list sentence with a name partly shown, as before", stitchPrompt({ documents: docs5, command: "What does Darwin say?", continued: false, selected: true, names: [{ term: "Darwin", total: 9, shown: 3 }] }).includes(hedge));
+
+  // ANS5-11: Stitch cannot remove, accept, or edit.
+  check("answer rules: Stitch cannot remove, accept, or edit, and says where the reader does", rules.includes("You cannot remove, accept, or edit a link, a note, or a document: say so in one sentence") && rules.includes("a recommended link under Recommended links"));
 }
 
 // ── Round 3 (ANS3-03): a cut where no line shares a word with the query ──

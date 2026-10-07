@@ -286,7 +286,7 @@ export function StitchBox({
       ]);
       setPending(null);
       onCited?.(citedDocumentIds(result));
-      onProposed?.(result.linkIds ?? []); // [view2]
+      onProposed?.([...(result.linkIds ?? []), ...(result.existingLinkIds ?? [])]); // [view2] new links and the existing ones the answer is about (ANS5-05)
       // The graph's new curves and the generated list arrive with a refresh.
       if (result.linkCount > 0 || result.document) router.refresh();
     } catch (err) {
