@@ -227,6 +227,13 @@ export function Workspace({
   const phone = useSyncExternalStore(subscribeNarrow, readNarrow, () => false);
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
+  // Add to notes on a phone keeps the sheet closed: the bar's Notes button
+  // blooms once instead (notesBloom counts the adds, so each one replays it).
+  const quietAdd = useRef({ phone, sheetOpen: mobileTray });
+  useEffect(() => {
+    quietAdd.current = { phone, sheetOpen: mobileTray };
+  }, [phone, mobileTray]);
+  const [notesBloom, setNotesBloom] = useState(0);
   // A jump opens the sheet below md, as the bottom bar does. On md+ the flag
   // stays as it is: the rail reads it to tell a second press on the open tab.
   const openSheet = useCallback(() => {
@@ -479,7 +486,11 @@ export function Workspace({
       }
     };
     const onShowNote = (e: Event) => {
-      const { noteId } = (e as CustomEvent<{ noteId: string }>).detail;
+      const { noteId, quiet } = (e as CustomEvent<{ noteId: string; quiet?: boolean }>).detail;
+      if (quiet === true && quietAdd.current.phone && !quietAdd.current.sheetOpen) {
+        setNotesBloom((n) => n + 1);
+        return;
+      }
       setCollapsed(false);
       setTab("notes");
       rememberTray({ collapsed: false, tab: "notes" });
@@ -1017,6 +1028,9 @@ export function Workspace({
             className={isOpen("notes") ? RAIL_BUTTON_ON : RAIL_BUTTON}
           >
             <NotesIcon />
+            {notesBloom > 0 && (
+              <span key={notesBloom} aria-hidden className="note-absorb pointer-events-none absolute inset-0 rounded-full" />
+            )}
             {pending.length > 0 && (
               <span className="absolute -top-[3px] -right-[3px] flex size-4 items-center justify-center rounded-full bg-clay text-[10px] font-bold text-clay-fg">
                 {pending.length}

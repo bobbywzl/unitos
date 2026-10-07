@@ -5574,8 +5574,9 @@ export function ReaderInteractions({
       addedToNotes(popover.anchor);
       // The tray opens on the new note, so the reader sees where it went
       // (SPEC.md §6): every document, and a blank one whose tray starts
-      // folded (SPEC.md §29).
-      window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: note.id } }));
+      // folded (SPEC.md §29). On a phone the sheet stays closed and the
+      // bar's Notes button blooms (quiet), so the reader keeps reading.
+      window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: note.id, quiet: true } }));
     } catch (err) {
       showError(err instanceof Error ? err.message : t("reader.addFailed"));
     } finally {
@@ -5601,7 +5602,7 @@ export function ReaderInteractions({
       });
       if (answer?.sourceDropped === true) showToast(t("outline.quoteSourceLost"));
       addedToNotes(popover.anchor);
-      window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: note.id } }));
+      window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: note.id, quiet: true } }));
     } catch (err) {
       showError(err instanceof Error ? err.message : t("reader.addFailed"));
     } finally {
