@@ -765,7 +765,9 @@ function candidateEntries(el: Element, index: RuleIndex): Entry[] {
 function pageTokens(document: Document, page: Page): PageTokens {
   if (page.tokens) return page.tokens;
   const tokens: PageTokens = { classes: new Set(), ids: new Set(), tags: new Set() };
-  for (const el of document.getElementsByTagName("*")) {
+  // A static list: jsdom reads each index of a live collection through a
+  // proxy, many times slower over a whole page.
+  for (const el of document.querySelectorAll("*")) {
     tokens.tags.add(el.localName.toLowerCase());
     const id = el.getAttribute("id");
     if (id) tokens.ids.add(id.toLowerCase());
