@@ -258,6 +258,11 @@ export type LinkOut = {
   createdById: string | null;
   replies: ReplyView[];
   crossAccount?: CrossAccountView;
+  // A generated document's provenance link (lib/graph/provenance.ts): the
+  // Annotations tab folds these into one row per document (WALK4-03).
+  provenance?: boolean;
+  // The notes on the link (lib/graph/reader-link-notes.ts, WALK4-05).
+  noteIds?: string[];
 };
 export type LinkIn = {
   id: string;
@@ -272,6 +277,10 @@ export type LinkIn = {
   createdById: string | null;
   replies: ReplyView[];
   crossAccount?: CrossAccountView;
+  // A generated document's provenance link: folded, as on LinkOut (WALK4-03).
+  provenance?: boolean;
+  // The notes on the link (WALK4-05).
+  noteIds?: string[];
 };
 
 // ── History (SPEC.md §12): every edit and deletion in the corpus, attributed ──

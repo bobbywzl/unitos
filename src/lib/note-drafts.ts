@@ -180,12 +180,59 @@ export function writeLinkNoteDraft(account: string, linkId: string, content: str
   else remove(linkNoteKey(account, linkId));
 }
 
+// The graph's new note (note-gather.tsx, VIEW4-03): the quotes collected
+// with Add to note, the words typed, and the section picked, one per project
+// per account. Written on every change; cleared once the server (or the
+// offline queue) has the note.
+const GATHER_PREFIX = "unitos-note-gather:";
+
+export type GatherDraftQuote = {
+  documentId: string;
+  /** Absent: the quote is found across the document (a link's end). */
+  blockId?: string;
+  /** What the composer shows, and the quote the server re-finds. */
+  text: string;
+  /** No quotedText goes to the server: it quotes the block's words (a part's start). */
+  whole?: boolean;
+};
+export type GatherDraft = { content: string; sectionId: string | null; quotes: GatherDraftQuote[]; savedAt: number };
+
+const gatherKey = (account: string, notebookId: string) => `${GATHER_PREFIX}${accountPart(account)}:${notebookId}`;
+
+function gatherQuote(raw: unknown): GatherDraftQuote | null {
+  if (!raw || typeof raw !== "object") return null;
+  const q = raw as Record<string, unknown>;
+  if (typeof q.documentId !== "string" || typeof q.text !== "string") return null;
+  return {
+    documentId: q.documentId,
+    text: q.text,
+    ...(typeof q.blockId === "string" ? { blockId: q.blockId } : {}),
+    ...(q.whole === true ? { whole: true } : {}),
+  };
+}
+
+export function readGatherDraft(account: string, notebookId: string): GatherDraft | null {
+  const draft = read<GatherDraft>(gatherKey(account, notebookId));
+  if (!draft) return null;
+  const quotes = Array.isArray(draft.quotes) ? draft.quotes.flatMap((q) => gatherQuote(q) ?? []) : [];
+  const content = typeof draft.content === "string" ? draft.content : "";
+  if (!content && quotes.length === 0) return null;
+  return { content, sectionId: typeof draft.sectionId === "string" ? draft.sectionId : null, quotes, savedAt: draft.savedAt };
+}
+
+/** An empty draft (no words, no quotes) clears the key. */
+export function writeGatherDraft(account: string, notebookId: string, draft: Omit<GatherDraft, "savedAt">) {
+  if (draft.content || draft.quotes.length > 0) write(gatherKey(account, notebookId), { ...draft, savedAt: Date.now() } satisfies GatherDraft);
+  else remove(gatherKey(account, notebookId));
+}
+
 /** Drop note and compose drafts older than MAX_AGE_MS: those are replayed on
     every load, so one nobody replayed in that long has no note or section
-    left. Runs once per load (use-outline.ts). Reply and Note on this link
-    drafts are never dropped by age: nothing replays them, they show only
-    when the reader opens that box again, so their words stay until a
-    confirmed send or the reader's Cancel clears them (rule zero item 6). */
+    left. Runs once per load (use-outline.ts). Reply, Note on this link, and
+    the graph's new note (Add to note) drafts are never dropped by age:
+    nothing replays them, they show only when the reader opens that box
+    again, so their words stay until a confirmed send or the reader's
+    Cancel or Discard clears them (rule zero item 6). */
 export function sweepStaleDrafts() {
   try {
     const now = Date.now();

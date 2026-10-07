@@ -56,6 +56,7 @@ import { profileLines } from "@/lib/prompts/types";
 import { estTokens } from "@/lib/tokens";
 import type { StitchCommandKind, StitchDocument, StitchRecord, StitchResult } from "@/lib/types";
 import { transcriptIsStale } from "@/lib/video/types";
+import { COMMAND_CHAIN } from "@/lib/graph/generated-label";
 
 // Stitch (SPEC.md §22): one command over the project's documents, from the
 // graph — the documents the reader selected in the graph, or every attached
@@ -1916,7 +1917,7 @@ export function pageCommand(command: string, history: ModelMessage[], pageBlocks
       const block = blockByRef.get(tag[1]);
       if (block && pageBlocks.has(block.id)) cited.add(block.id);
     }
-    if (cited.size >= need) return `${textOf(asked).trim()} → ${command}`;
+    if (cited.size >= need) return `${textOf(asked).trim()}${COMMAND_CHAIN}${command}`;
   }
   return command;
 }

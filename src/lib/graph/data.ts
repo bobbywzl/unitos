@@ -13,7 +13,7 @@ import type { GeneratedDocumentView, GraphEdge, GraphEdgeLink } from "@/lib/type
 // this adds what the graph alone reads: each document's length and gist,
 // the edges with their links, the recommended links (ids into the edges'
 // links, so none ships twice), the generated documents, the runs of
-// Recommend links left, and the people who made the links and replied.
+// Scan for links runs left, and the people who made the links and replied.
 // What it leaves out (COST3-03): each link's titles (the nodes carry them;
 // graph-data.tsx puts them back), each end's whole block (the link panel
 // reads it when the link opens, graph/passages), and a generated document's

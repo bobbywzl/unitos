@@ -1234,7 +1234,8 @@ export function DocumentBar({
           >
             <span className="overflow-hidden whitespace-nowrap">{active ? clipWords(active.title, 56) : t("panes.documentList")}</span>
             <span className="shrink-0 rounded-full bg-paper/20 px-1.5 text-[11px] tabular-nums">
-              {opening ? <LoadingDots /> : documents.length}
+              {/* [cover4] The documents the graph counts: generated ones aside (WALK4-03). */}
+              {opening ? <LoadingDots /> : documents.filter((d) => d.kind !== "generated").length || documents.length}
             </span>
             <ChevronDownIcon
               size={13}

@@ -10,7 +10,7 @@
      refreshed in that copy. Offline, the saved copy answers; anything else
      answers with the offline page, which lists the saved projects.
    - An image of a document or a note, and the graph's data (the graph,
-     its link passages, and the outline routes): network first, the saved
+     its link passages, its coverage, and the outline routes): network first, the saved
      copy second. A one-link passages call (?linkId=) is answered from the
      copy's every-link passages; a graph call the copy does not hold with
      its query (?provenance=1 in a copy saved before it existed, or of a
@@ -129,9 +129,10 @@ function isAsset(url) {
 }
 
 // The graph's data (SPEC.md §13), which a saved copy holds: the graph, its
-// link passages, and the outlines. Network first, the saved copy second.
+// link passages, what the notes cover, and the outlines. Network first, the
+// saved copy second.
 function isGraphData(url) {
-  return /^\/api\/notebooks\/[^/]+\/(graph|graph\/passages|outline)$/.test(url.pathname);
+  return /^\/api\/notebooks\/[^/]+\/(graph|graph\/passages|graph\/coverage|outline)$/.test(url.pathname);
 }
 
 function isShell(url) {

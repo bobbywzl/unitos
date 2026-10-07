@@ -20,6 +20,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { trivialEdits } from "@/lib/history/trivial";
 import { isProvenanceLink } from "@/lib/graph/provenance";
+import { withReaderLinkNotes } from "@/lib/graph/reader-link-notes";
 import {
   corpusDistillationList,
   distillationList,
@@ -623,6 +624,7 @@ export default async function NotebookPage(props: {
         title: string;
         reason: string | null; // what the link is about, shown in the mark's tip
         replies: number; // open replies on the link: a count on its chain icon
+        notes?: number; // the notes on the link: counted in its chain icon's tip (WALK4-05)
       }[]
     > = {};
     const linksOut: LinkOut[] = [];
@@ -690,6 +692,8 @@ export default async function NotebookPage(props: {
         createdById: link.createdById,
         replies: toReplyViews(link.replies),
         ...crossAccountOf(link.id),
+        // [cover4] On a generated page, its provenance links fold (WALK4-03).
+        ...(isProvenanceLink(link, document.generatedCommand !== null) ? { provenance: true } : {}),
       });
       if (!resolved) {
         // Orphan flags write back, so both ends report honestly (SPEC.md §5).
@@ -781,6 +785,8 @@ export default async function NotebookPage(props: {
           createdById: link.createdById,
           replies: toReplyViews(link.replies),
           ...crossAccountOf(link.id),
+          // [cover4] A generated document's provenance link folds (WALK4-03).
+          ...(isProvenanceLink(link, link.fromDocument.generatedCommand !== null) ? { provenance: true } : {}),
         });
       }
       if (!twoEnded) continue;
@@ -1107,6 +1113,10 @@ export default async function NotebookPage(props: {
     sections: top,
     documents: attached.map((d) => ({ id: d.id, title: d.title })),
   };
+  // [cover4] The notes on each link of the open documents (WALK4-05).
+  for (const pane of new Set([paneOne, paneTwo])) {
+    if (pane) withReaderLinkNotes(pane, view.sections, attached.map((d) => d.id));
+  }
 
   const sectionChoices = top.flatMap((s) => [
     { id: s.id, label: s.title },
@@ -1492,8 +1502,9 @@ export default async function NotebookPage(props: {
       }
       annotationCount={
         (paneOne?.annotations.length ?? 0) +
-        (paneOne?.linksOut.filter((l) => !l.recommended).length ?? 0) +
-        (paneOne?.linksIn.filter((l) => !l.recommended).length ?? 0)
+        // [cover4] Provenance links are the generated document's, not the reader's (WALK4-03).
+        (paneOne?.linksOut.filter((l) => !l.recommended && !l.provenance).length ?? 0) +
+        (paneOne?.linksIn.filter((l) => !l.recommended && !l.provenance).length ?? 0)
       }
       distillationCount={
         (paneOne?.distillations.length ?? 0) +

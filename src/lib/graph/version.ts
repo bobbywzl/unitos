@@ -22,7 +22,7 @@ import { SKELETON_VERSION } from "@/lib/graph/skeleton";
 //   is running), the cross-account inputs of a link with no project (the
 //   projects that hold its documents: owner, createdAt, collaborators and
 //   roles, which of the documents they hold), and the viewer's part (id,
-//   email, the Recommend links runs this month, the month, sign-in on or
+//   email, the Scan for links runs this month, the month, sign-in on or
 //   off), the provenance flag, the deploy, and GRAPH_KEY_VERSION.
 // - A key can change when the answer did not (a reply on a provenance link
 //   with ?provenance off): that costs one full answer, never a stale one.

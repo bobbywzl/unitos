@@ -81,12 +81,14 @@ function pageUrls(id: string, info: OfflineInfo): string[] {
 // provenance links too when the project has any (COST4-05: without them the
 // answer is the bare one, which the service worker serves for the query),
 // every link's passages (the service worker answers a one-link call from
-// them), every document's part titles for the Documents list, and each
+// them), what the notes cover (VIEW4-01: the part dots, the rings, Gaps
+// only), every document's part titles for the Documents list, and each
 // document's outline for its node card. Find needs the network.
 function graphUrls(id: string, info: OfflineInfo): string[] {
   return [
     `/api/notebooks/${id}/graph`,
     `/api/notebooks/${id}/graph/passages`,
+    `/api/notebooks/${id}/graph/coverage`,
     `/api/notebooks/${id}/outline?parts=titles`,
     ...info.documents.map((d) => `/api/notebooks/${id}/outline?documentId=${encodeURIComponent(d.id)}`),
   ];

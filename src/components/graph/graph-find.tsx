@@ -17,6 +17,7 @@ import { FIND_MORE, FIND_SNIPPETS } from "@/lib/graph/find";
 import { SearchIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { useGraphContent, type FindState } from "@/components/graph/graph-content";
+import { AddToNote } from "@/components/graph/note-gather"; // [cover4]
 
 export function FindBox({ find }: { find: FindState }) {
   const t = useT();
@@ -53,20 +54,24 @@ export function FindBox({ find }: { find: FindState }) {
   );
 }
 
-function Passage({ p, onOpen }: { p: FindPassage; onOpen: () => void }) {
+function Passage({ p, documentId, onOpen }: { p: FindPassage; documentId: string; onOpen: () => void }) {
   const t = useT();
   return (
+    <div className="group flex items-start gap-1">
     <button
       onClick={onOpen}
       data-track="graph-find-passage"
       data-graph-find-passage={p.blockId}
       data-tip={t("graphView.findPassageTitle")}
-      className="block w-full rounded-lg px-1.5 py-1 text-left text-[12px] leading-snug text-sand-700 hover:bg-clay-100/60"
+      className="block min-w-0 flex-1 rounded-lg px-1.5 py-1 text-left text-[12px] leading-snug text-sand-700 hover:bg-clay-100/60"
     >
       {p.text.slice(0, p.start)}
       <mark className="rounded-[3px] bg-clay-100 px-px font-semibold text-clay-800">{p.text.slice(p.start, p.end)}</mark>
       {p.text.slice(p.end)}
     </button>
+    {/* [cover4] The passage's words, without the snippet's ellipses, as a quote. */}
+    <AddToNote quote={{ documentId, blockId: p.blockId, text: p.text.replace(/^…|…$/g, "").trim() }} className="mt-1" />
+    </div>
   );
 }
 
@@ -149,6 +154,7 @@ function FindGroup({
           <Passage
             key={p.blockId}
             p={p}
+            documentId={doc.id}
             onOpen={() => {
               router.push(`/n/${notebookId}?doc=${doc.id}&block=${p.blockId}`);
               onOpenDocument();

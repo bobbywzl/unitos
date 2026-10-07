@@ -988,6 +988,7 @@ export function ReaderInteractions({
       title: string;
       reason: string | null; // what the link is about, typed after Close link
       replies?: number; // open replies on the link: a count on its chain icon
+      notes?: number; // the notes on the link: in its chain icon's tip (WALK4-05)
     }[]
   >;
   editedByBlock: Record<string, { start: number; end: number }[]>;
@@ -6890,6 +6891,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         linkId: l.linkId,
         linkReason: linkReasons[l.linkId] ?? l.reason,
         linkReplies: l.replies ?? 0,
+        linkNotes: l.notes ?? 0,
       })),
     ];
   }

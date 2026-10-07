@@ -32,6 +32,8 @@ import { GraphContentProvider, useGraphContentState } from "@/components/graph/g
 import { FindBox, FindList } from "@/components/graph/graph-find";
 import { NodeCardPanel } from "@/components/graph/node-card";
 import { DocumentsList } from "@/components/graph/documents-list"; // [docs3]
+import { GraphCoverageProvider } from "@/components/graph/coverage"; // [cover4]
+import { NoteGatherDock, NoteGatherProvider } from "@/components/graph/note-gather"; // [cover4]
 const NO_GISTS: Record<string, string> = {};
 // [/view2]
 
@@ -548,6 +550,8 @@ export function GraphOverlay({
 
   return (
     <GraphNotesProvider notebookId={notebookId} nodes={nodes} input={notes} onClose={close} onNavigate={leave}>
+    <GraphCoverageProvider notebookId={notebookId /* [cover4] */}>
+    <NoteGatherProvider notebookId={notebookId /* [cover4] */}>
     <GraphContentProvider value={content}>
     <div
       ref={dialogRef}
@@ -891,6 +895,8 @@ export function GraphOverlay({
             onSheetHeight={setSheetHeight}
           />
         )}
+        {/* [cover4] Add to note's new note, at the foot of the side list (VIEW4-03). */}
+        <NoteGatherDock notebookId={notebookId} onOpenDocument={leave} />
         {nodes.length >= 2 && (
           // Where the box sits (BOX-03..06, BOX-19): centered at the foot;
           // left of an open list on a wide screen; clear of the Feedback
@@ -929,6 +935,8 @@ export function GraphOverlay({
       </div>
     </div>
     </GraphContentProvider>
+    </NoteGatherProvider>
+    </GraphCoverageProvider>
     </GraphNotesProvider>
   );
 }

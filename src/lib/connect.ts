@@ -14,7 +14,7 @@ import { connectPrompt, connectVerifyPrompt } from "@/lib/prompts/connect";
 
 // Recommended links (SPEC.md §13): the connections between a project's
 // documents, stored as DocLink rows with recommended: true. The reader asks
-// for them — Recommend links in the graph runs scanProject below — and
+// for them — Scan for links in the graph runs scanProject below — and
 // nothing runs on its own: the scan reads whole documents against whole
 // documents, which is the most expensive thing the app can do to a project,
 // and a document joining a project is not a request for it.
@@ -362,7 +362,7 @@ export async function linkScanRunsLeft(userId: string | null): Promise<number> {
   return Math.max(0, LINK_SCAN_RUNS_PER_MONTH - used);
 }
 
-/** One press of Recommend links: every document of the project scanned
+/** One press of Scan for links: every document of the project scanned
     against the others, oldest attachment first, until the run's documents or
     its clock run out. Returns the links proposed and how many documents were
     read. The caller records the run against the quota. */

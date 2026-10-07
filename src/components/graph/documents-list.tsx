@@ -36,6 +36,7 @@ import { GraphNoteRow, useGraphNotes } from "@/components/graph/graph-notes";
 import { LinkReplyCount } from "@/components/graph/link-replies";
 import { useProvenanceShown } from "@/components/graph/provenance-want";
 import { useGraphGeneration } from "@/components/graph/graph-generation";
+import { CoverageHead, DocumentCoverageLine, PartDot, useCoverageGaps, useDocumentCoverage } from "@/components/graph/coverage"; // [cover4]
 
 /** Each project's part titles with the graph generation they were read at. */
 const titlesKept = new Map<string, { titles: ProjectPartTitles; gen: number }>();
@@ -162,6 +163,7 @@ export function DocumentsList({
     setFilterState(value);
   };
   const words = filter.trim().toLowerCase();
+  const gaps = useCoverageGaps(); // [cover4]
 
   const titleOf = useMemo(() => new Map(nodes.map((n) => [n.id, n.title])), [nodes]);
   // The links of each document, by the other document, accepted first; a
@@ -193,9 +195,14 @@ export function DocumentsList({
     });
   }, [nodes, edges, generatedIds, showGenerated]);
   const hiddenGenerated = showGenerated ? 0 : generatedIds.size;
-  const shown = useMemo(
+  const matched = useMemo(
     () => ordered.filter((n) => matches(words, n.title, gists[n.id], titles?.documents[n.id] ?? [])),
     [ordered, words, gists, titles],
+  );
+  // [cover4] Gaps only keeps the rows, parts, and links with a gap.
+  const shown = useMemo(
+    () => matched.filter((n) => gaps.keepRow(n.id, (linksOf.get(n.id) ?? []).flatMap((g) => g.links))),
+    [matched, gaps, linksOf],
   );
   const compact = shown.length > COMPACT_ROWS;
 
@@ -285,13 +292,16 @@ export function DocumentsList({
           className="shrink-0 rounded-full border border-line bg-card px-3 py-1.5 text-[12.5px] text-ink placeholder:text-sand-500 focus:border-clay-400"
         />
       )}
+      {/* [cover4] What the notes cover, and Gaps only (VIEW4-01). */}
+      <CoverageHead documentIds={ordered.map((n) => n.id)} links={edges.flatMap((e) => e.links)} />
       {ordered.length === 0 && <p className="text-[13px] text-sand-600">{t("panes.graphDocumentsEmpty")}</p>}
-      {ordered.length > 0 && shown.length === 0 && (
+      {gaps.on && matched.length > 0 && shown.length === 0 && <p className="text-[13px] text-sand-600">{t("graphCover.gapsNone")}</p>}
+      {ordered.length > 0 && matched.length === 0 && (
         <p className="text-[13px] text-sand-600">{t("panes.graphDocumentsFilterNone")}</p>
       )}
-      {words && shown.length > 0 && (
+      {words && matched.length > 0 && (
         <p role="status" className="text-[11.5px] text-sand-600" data-graph-documents-found>
-          {t("panes.graphDocumentsFound", { n: shown.length, total: ordered.length, ts: s(ordered.length) })}
+          {t("panes.graphDocumentsFound", { n: matched.length, total: ordered.length, ts: s(ordered.length) })}
         </p>
       )}
       <ul
@@ -309,9 +319,9 @@ export function DocumentsList({
             generated={generatedIds.has(n.id)}
             compact={compact}
             gist={gists[n.id]}
-            parts={titles?.documents[n.id] ?? []}
-            groups={linksOf.get(n.id) ?? []}
-            notes={notesCtx?.view.byDocument.get(n.id)?.notes ?? []}
+            parts={(titles?.documents[n.id] ?? []).filter((p) => gaps.keepPart(n.id, p.blockId))}
+            groups={(linksOf.get(n.id) ?? []).map((g) => ({ ...g, links: g.links.filter(gaps.keepLink) })).filter((g) => g.links.length > 0)}
+            notes={gaps.keepNotes ? (notesCtx?.view.byDocument.get(n.id)?.notes ?? []) : []}
             titleOf={titleOf}
             openLinkId={openLinkId}
             onOpenLink={onOpenLink}
@@ -386,14 +396,24 @@ function DocumentRow({
   const shownLinks = allLinks ? links : links.slice(0, LINKS_SHOWN);
   const opened = !compact || open;
 
+  // [cover4] What the notes cover: "N of M parts noted" and Not opened.
+  const coverage = useDocumentCoverage(n.id);
+  const notedParts = coverage ? coverage.parts.filter((p) => p.noted > 0).length : 0;
+
   // The one-line row's summary: what the row holds.
   const counts = [
-    parts.length > 0 ? t("panes.graphDocumentsParts", { n: parts.length, s: s(parts.length) }) : null,
+    coverage && coverage.parts.length > 0
+      ? t("graphCover.partsNoted", { n: notedParts, m: coverage.parts.length })
+      : parts.length > 0
+        ? t("panes.graphDocumentsParts", { n: parts.length, s: s(parts.length) })
+        : null,
+    coverage && !coverage.opened ? t("graphCover.notOpened") : null,
     links.length > 0 ? t("panes.graphDocumentsLinks", { n: links.length, s: s(links.length) }) : null,
     notes.length > 0 ? t("panes.graphDocumentsNotes", { n: notes.length, s: s(notes.length) }) : null,
   ].filter((c): c is string => c !== null);
 
   const lines: ReactNode[] = [
+    <DocumentCoverageLine key="coverage" documentId={n.id} /* [cover4] */ />,
     gist ? (
       <button
         key="gist"
@@ -415,6 +435,7 @@ function DocumentRow({
         {shownParts.map((p, i) => (
           <span key={p.blockId}>
             {i > 0 && <span className="text-sand-400"> · </span>}
+            <PartDot documentId={n.id} blockId={p.blockId} /* [cover4] */ />
             <button
               onClick={() => onGo(`/n/${notebookId}?doc=${n.id}&block=${p.blockId}`)}
               data-track="graph-documents-part"

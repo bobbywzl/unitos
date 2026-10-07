@@ -116,6 +116,8 @@ export type Highlight = {
   linkReason?: string | null;
   // kind "link": the link's open replies; the chain icon counts them.
   linkReplies?: number;
+  // kind "link": the notes on the link; the chain icon's tip counts them (WALK4-05).
+  linkNotes?: number;
 };
 
 export function anchorClass(anchor: Highlight): string {
@@ -342,6 +344,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
       // digits out of anchor offsets (SPEC.md §5).
       if (link.end === to) {
         const replies = link.linkReplies ?? 0;
+        const linkNotes = link.linkNotes ?? 0;
         const chainTip = [
           link.linkTitle ? t("panes.linkedTo", { title: link.linkTitle }) : t("panes.linked"),
           replies > 0
@@ -349,6 +352,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
               ? t("graphNotes.replyCountOne")
               : t("graphNotes.replyCountMany", { n: replies })
             : null,
+          linkNotes > 0 ? (linkNotes === 1 ? t("graphNotes.nodeNotesOne") : t("graphNotes.nodeNotesMany", { n: linkNotes })) : null,
         ]
           .filter((s): s is string => s !== null)
           .join(" · ");
@@ -358,6 +362,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
             href={link.href}
             data-anchor-skip
             data-link-replies={replies > 0 ? replies : undefined}
+            data-link-notes={linkNotes > 0 ? linkNotes : undefined}
             aria-label={chainTip}
             data-tip={chainTip}
             className={replies > 0 ? CHAIN_BUTTON.replace("size-[16px]", "h-[16px] gap-0.5 px-1") : CHAIN_BUTTON}
