@@ -7,10 +7,15 @@ import {
   STITCH_EFFORT,
   STITCH_GROUP_CONCURRENCY,
   STITCH_GROUPED_MAX,
+  STITCH_HISTORY_MAX,
   STITCH_MAX_OUTPUT_TOKENS,
+  STITCH_QUESTION_SKELETON,
+  STITCH_READ_HISTORY,
+  STITCH_READS_GENERATED,
   STITCH_ROUTE_EFFORT,
   STITCH_SELECT_EFFORT,
   STITCH_SELECT_MAX_OUTPUT_TOKENS,
+  STITCH_SELECTED_BLOCKS,
   STITCH_SELECTED_BUDGET,
   STITCH_SKELETON_BUDGET,
   STITCH_SKELETON_GROUP,
@@ -27,8 +32,18 @@ import { ensureSkeleton, type Skeleton } from "@/lib/graph/skeleton";
 import { jevRouteParts, jevSelectLines } from "@/lib/graph/stitch-jev";
 import { jevEnabled, mapLimit } from "@/lib/jev";
 import { rank } from "@/lib/graph/rank";
-import { stitchPrompt, stitchRoutePrompt, stitchSelectPrompt, type StitchDocumentCtx } from "@/lib/prompts/stitch";
-import type { StitchDocument, StitchResult } from "@/lib/types";
+import {
+  stitchPrompt,
+  stitchRoutePrompt,
+  stitchRouteRules,
+  stitchRules,
+  stitchSelectPrompt,
+  stitchSelectRules,
+  type StitchDocumentCtx,
+} from "@/lib/prompts/stitch";
+import { profileLines } from "@/lib/prompts/types";
+import { estTokens } from "@/lib/tokens";
+import type { StitchCommandKind, StitchDocument, StitchResult } from "@/lib/types";
 import { transcriptIsStale } from "@/lib/video/types";
 
 // Stitch (SPEC.md §22): one command over the project's documents, from the
@@ -36,18 +51,29 @@ import { transcriptIsStale } from "@/lib/video/types";
 // document when none is selected. The documents are read through their
 // skeletons (lib/graph/skeleton.ts): one line per block at a tenth of the
 // length, so the cost of finding the blocks a command needs scales with
-// the skeletons, not the text. Up to three passes. The select pass reads
-// every skeleton in one call — byte-identical from turn to turn for the
-// same documents, so the prefix caches — and names the blocks the command
-// needs. When the skeletons together run past STITCH_SKELETON_BUDGET, a
-// route pass first reads only the documents' gists and part summaries and
-// names the parts, the select pass reads those parts' lines, and when
-// they still run past the budget the lines are ranked against the command
-// (lib/graph/rank.ts) and cut to it. The answer pass reads the picked
-// blocks' real text, in document order with the gaps declared, and answers
-// with links, a generated document, or both. Documents under
-// STITCH_WHOLE_THRESHOLD together skip the reading passes: the answer pass
-// reads them whole.
+// the skeletons, not the text. Every budget is in estimated tokens
+// (lib/tokens.ts), so Chinese text costs what English text of the same
+// tokens does. Up to three passes. The select pass reads every skeleton in
+// one call — byte-identical from turn to turn for the same documents, so
+// the prefix caches — and names the blocks the command needs. Past
+// STITCH_SKELETON_BUDGET the lines are read in groups, one call each; a
+// question instead reads the lines ranked against it (lib/graph/rank.ts),
+// one call's worth. Past STITCH_GROUPED_MAX a route pass first reads only
+// the documents' gists and part summaries and names the parts, the select
+// pass reads those parts' lines, ranked and cut when they still run past.
+// The answer pass reads the picked blocks' real text, in document order
+// with the gaps declared, cut to the budget of the command's kind
+// (commandKind: a question reads a third of what a page reads), and
+// answers in the reply, with links, a generated document, or a mix.
+// Documents under STITCH_WHOLE_THRESHOLD together skip the reading passes:
+// the answer pass reads them whole. Each pass's system message opens with
+// its rules and the reader context, which do not change from command to
+// command, so the prefix caches; the command comes last.
+// A follow-up reads the conversation: the history's block tags are
+// rewritten from the stored ids back to this reading's aliases
+// (stitchHistory), the answer pass reads the turns, and the reading passes
+// read the reader's last commands and the blocks the earlier answers
+// cited, so "the second one" finds what it names.
 // With Jev configured (lib/jev.ts, TYPESAFE_API_KEY) the route and select
 // passes are Jev's (lib/graph/stitch-jev.ts): one calibrated yes/no per
 // part and per skeleton line, every line of every document read getting
@@ -78,17 +104,25 @@ const MAX_SELECTED = 400; // blocks the select pass may name
 const MAX_ROUTED = 80; // parts the route pass may name
 const MAX_LINKS = 24;
 const MAX_PARTS = 200;
-const MAX_HISTORY = 20;
+const MAX_CITED = 40; // blocks of the earlier answers the reading passes are told of
+const CITED_TEXT = 600; // chars of a cited block's text in the result
 
-const quote = z.string().max(2_000).optional();
+// The answer's limits cut what runs over instead of failing it: one field
+// over its limit would otherwise fail validation and re-run the whole
+// answer pass (lib/derive/json-call.ts). The prompt states each limit.
+const cut = (max: number) => z.string().transform((s) => s.slice(0, max));
+const quote = cut(2_000).optional();
 const sourceSchema = z.object({ blockId: z.string().min(1), quote });
 const partSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("heading"), text: z.string().min(1).max(300) }),
+  z.object({ kind: z.literal("heading"), text: z.string().min(1).transform((s) => s.slice(0, 300)) }),
   z.object({ kind: z.literal("quote"), blockId: z.string().min(1), quote }),
   z.object({
     kind: z.literal("text"),
-    markdown: z.string().min(1).max(20_000),
-    sources: z.array(sourceSchema).max(8).default([]),
+    markdown: z.string().min(1).transform((s) => s.slice(0, 20_000)),
+    sources: z
+      .array(sourceSchema)
+      .default([])
+      .transform((a) => a.slice(0, 8)),
   }),
 ]);
 const selectSchema = z.object({
@@ -98,7 +132,7 @@ const routeSchema = z.object({
   parts: z.array(z.string().min(1)).max(MAX_ROUTED * 2).default([]),
 });
 const outputSchema = z.object({
-  reply: z.string().max(4_000).default(""),
+  reply: cut(4_000).default(""),
   links: z
     .array(
       z.object({
@@ -106,16 +140,43 @@ const outputSchema = z.object({
         fromQuote: quote,
         toBlockId: z.string().min(1),
         toQuote: quote,
-        reason: z.string().min(1).max(600),
+        reason: z.string().min(1).transform((s) => s.slice(0, 600)),
       }),
     )
-    .max(48)
-    .default([]),
+    .default([])
+    .transform((a) => a.slice(0, 48)),
   document: z
-    .object({ title: z.string().min(1).max(200), parts: z.array(partSchema).max(400) })
+    .object({
+      title: z.string().min(1).transform((s) => s.slice(0, 200)),
+      parts: z
+        .array(partSchema)
+        .transform((a) => a.slice(0, 400)),
+    })
     .nullable()
     .default(null),
 });
+
+/** The reason stitch() fails with when the model wrote no reply and stored
+    nothing: the route says so in the reader's language. */
+export const STITCH_EMPTY_ANSWER = "empty answer";
+
+/** What the command asks for, which sets what the answer pass reads after
+    selection (STITCH_SELECTED_BUDGET): a page (gather, collect, write,
+    summarise), links (connect, contradictions), or else an answer. A rule,
+    not a model call: the kind is needed before the select pass runs — a
+    question's select pass reads the lines ranked against it — and on the
+    whole read, which has no select pass; it costs nothing and reads the
+    same every time. A command the rule misses reads as a question, whose
+    budget still holds about 60,000 characters of the blocks picked. */
+export function commandKind(command: string): StitchCommandKind {
+  const c = command.toLowerCase();
+  if (
+    /\b(gather|collect|compile|write|draft|pages?|combine|summari[sz]e|summary|synthesi[sz]e|synthesis|outline|every passage|all (the )?passages)\b|汇集|收集|汇总|整理|写一|写成|一页|页面|合并|总结|概括|综述/.test(c)
+  )
+    return "page";
+  if (/\b(contradict\w*|disagree\w*|conflict\w*|connect\w*|links?|linking)\b|矛盾|冲突|分歧|连接|关联|联系/.test(c)) return "links";
+  return "question";
+}
 
 export type StitchTurn = { role: "user" | "assistant"; content: string };
 
@@ -187,12 +248,18 @@ export function resolveQuote(
     document's transcript or conversion: the attached documents of the
     project, in attach order — the ones named by documentIds when given,
     every one otherwise. An id that names no attached document is
-    skipped. */
-export async function loadDocuments(notebookId: string, documentIds: string[] | null) {
+    skipped. generated: false leaves the generated documents out of the
+    every-document read (STITCH_READS_GENERATED); a named one is read. */
+export async function loadDocuments(
+  notebookId: string,
+  documentIds: string[] | null,
+  options: { generated?: boolean } = {},
+) {
   const rows = await db.notebookDocument.findMany({
     where: {
       notebookId,
       ...(documentIds ? { documentId: { in: documentIds } } : {}),
+      ...(!documentIds && options.generated === false ? { document: { generatedCommand: null } } : {}),
     },
     orderBy: { document: { createdAt: "asc" } },
     include: {
@@ -321,25 +388,47 @@ const UNIT: Record<StitchDocument["kind"], string> = {
   handwritten: "converted blocks",
 };
 
-/** One document's coverage as the prompt states it beside the document's title. */
-export function coverageNote(m: StitchDocument): string {
+/** One document's coverage as its header states it beside the document's
+    title: its kind and its blocks, or why it has nothing to read. shown:
+    how many of its blocks the answer pass sees after selection. */
+export function coverageNote(m: StitchDocument, shown?: number): string {
   switch (m.status) {
     case "read":
-      return `${m.kind}, ${m.blocks} ${UNIT[m.kind]} read`;
+      return shown === undefined
+        ? `${m.kind}, ${m.blocks} ${UNIT[m.kind]}`
+        : `${m.kind}, ${shown} of ${m.blocks} ${UNIT[m.kind]} shown`;
     case "empty":
-      return `${m.kind}, not read: ${EMPTY_NOTE[m.reason ?? "noText"]}`;
+      return `${m.kind}, nothing to read: ${EMPTY_NOTE[m.reason ?? "noText"]}`;
   }
 }
 
 const CONTEXT_HEAD = [
-  "You assist a reader working across the documents of a project.",
-  "Each document starts with its letter as [document <letter>]; each block starts with its alias as [block <alias>]: the document's letter and the block's number in it, in reading order (A1, A2, B1). Aliases are unique across all docs. Reference blocks by alias exactly as given.",
-  "A video or audio document is its transcript: every line is a TRANSCRIPT block tagged with its seconds. A document marked (nothing to read: …) has no text here: never cite it and never guess what it says.",
-  "",
+  "Each document starts with its letter as [document <letter>] and its title, and its header says what of it is here; each block starts with its alias as [block <alias>]: the document's letter and the block's number in it, in reading order (A1, A2, B1). Aliases are unique across all documents. Reference blocks by alias exactly as given.",
+  "A video or audio document is its transcript: every line is a TRANSCRIPT block tagged with its seconds. A document marked (… nothing to read: …) has no text here: never cite it and never guess what it says.",
 ];
 
-function emptySection(letter: string, doc: Doc, reason: StitchDocument["reason"]): string {
-  return `[document ${letter}] "${doc.title}"\n(nothing to read: ${EMPTY_NOTE[reason ?? "noText"]})`;
+type Profile = Awaited<ReturnType<typeof loadProfile>>;
+
+/** A pass's system message: the pass's rules and the reader context first —
+    the same bytes for every command of a project, so the prefix caches —
+    then how the documents are tagged, then the documents. */
+function systemOf(rules: string, profile: Profile, intro: string, sections: string): string {
+  return [
+    "You assist a reader working across the documents of a project.",
+    rules,
+    "",
+    profileLines(profile),
+    "",
+    ...CONTEXT_HEAD,
+    "",
+    intro,
+    "",
+    sections,
+  ].join("\n");
+}
+
+function header(letter: string, doc: Doc, note: string): string {
+  return `[document ${letter}] "${doc.title}" (${note})`;
 }
 
 /** One document's readable blocks as the model reads them: the stored block
@@ -375,41 +464,35 @@ function renderDocument(doc: Doc, index: number): Rendered {
   const blocks = docBlocks(doc, letter);
   const base = { id: doc.id, title: doc.title, kind, total: blocks.length };
   if (blocks.length === 0) {
-    const empty = emptyReason(doc);
-    return {
-      letter,
-      doc,
-      blocks,
-      coverage: { ...base, status: "empty", blocks: 0, ...empty },
-      section: emptySection(letter, doc, empty.reason),
-    };
+    const coverage: StitchDocument = { ...base, status: "empty", blocks: 0, shown: null, ...emptyReason(doc) };
+    return { letter, doc, blocks, coverage, section: header(letter, doc, coverageNote(coverage)) };
   }
+  const coverage: StitchDocument = { ...base, status: "read", blocks: blocks.length, shown: null, reason: null, detail: null };
   return {
     letter,
     doc,
     blocks,
-    coverage: { ...base, status: "read", blocks: blocks.length, reason: null, detail: null },
-    section: `[document ${letter}] "${doc.title}"\n${aliasedLines(blocks, doc)}`,
+    coverage,
+    section: `${header(letter, doc, coverageNote(coverage))}\n${aliasedLines(blocks, doc)}`,
   };
 }
 
-/** Every document rendered, in order. length: the chars of document text. */
-function renderDocuments(docs: Doc[]): { rendered: Rendered[]; length: number } {
+/** Every document rendered, in order. length: the chars of document text;
+    tokens: its estimated tokens (lib/tokens.ts). */
+function renderDocuments(docs: Doc[]): { rendered: Rendered[]; length: number; tokens: number } {
   const rendered = docs.map((doc, index) => renderDocument(doc, index));
-  return { rendered, length: rendered.reduce((sum, r) => sum + r.section.length, 0) };
+  return {
+    rendered,
+    length: rendered.reduce((sum, r) => sum + r.section.length, 0),
+    tokens: rendered.reduce((sum, r) => sum + estTokens(r.section), 0),
+  };
 }
 
-/** Every document whole, as one system message: what the answer pass reads
-    when the documents are short enough to skip the select pass. */
-function wholeSystem(rendered: Rendered[]): string {
-  return [...CONTEXT_HEAD, "Every document follows.", "", rendered.map((r) => r.section).join("\n\n")].join("\n");
-}
-
-/** The selected blocks as one system message: every document in order, its
-    header saying how many of its blocks are shown, the blocks in reading
-    order, a gap between two shown blocks declared. A document with nothing
-    to read is declared with its reason, as in the whole rendering. */
-export function selectedSystem(rendered: Rendered[], selected: Set<string>): string {
+/** The selected blocks: every document in order, its header saying how
+    many of its blocks are shown, the blocks in reading order, a gap between
+    two shown blocks declared. A document with nothing to read is declared
+    with its reason, as in the whole rendering. */
+function selectedSections(rendered: Rendered[], selected: Set<string>): string {
   const sections: string[] = [];
   for (const r of rendered) {
     if (r.coverage.status === "empty") {
@@ -417,9 +500,9 @@ export function selectedSystem(rendered: Rendered[], selected: Set<string>): str
       continue;
     }
     const shown = r.blocks.filter((b) => selected.has(b.alias));
-    const header = `[document ${r.letter}] "${r.doc.title}" (${shown.length} of ${r.blocks.length} blocks shown)`;
+    const head = header(r.letter, r.doc, coverageNote(r.coverage, shown.length));
     if (shown.length === 0) {
-      sections.push(header);
+      sections.push(head);
       continue;
     }
     const lines: string[] = [];
@@ -430,9 +513,41 @@ export function selectedSystem(rendered: Rendered[], selected: Set<string>): str
       lines.push(aliasedLines([block], r.doc));
       last = at;
     }
-    sections.push(`${header}\n${lines.join("\n\n")}`);
+    sections.push(`${head}\n${lines.join("\n\n")}`);
   }
-  return [...CONTEXT_HEAD, "The blocks a first read picked for the command follow.", "", sections.join("\n\n")].join("\n");
+  return sections.join("\n\n");
+}
+
+/** The answer pass's messages: the system message (the rules, the reader
+    context, then the documents whole or the blocks selected), the turns so
+    far, and the command. selected: the aliases the reading passes picked,
+    or null for the whole read. */
+export function answerMessages(input: {
+  reading: Reading;
+  selected: Set<string> | null;
+  lang: Lang;
+  profile: Profile;
+  history: ModelMessage[];
+  command: string;
+}): ModelMessage[] {
+  const { rendered, documentList } = input.reading;
+  const rules = stitchRules(input.lang);
+  const system = input.selected
+    ? systemOf(rules, input.profile, "The blocks a first read picked for the command follow.", selectedSections(rendered, input.selected))
+    : systemOf(rules, input.profile, "Every document follows.", rendered.map((r) => r.section).join("\n\n"));
+  return [
+    { role: "system", content: system },
+    ...input.history,
+    {
+      role: "user",
+      content: stitchPrompt({
+        documents: documentList,
+        command: input.command,
+        continued: input.history.length > 0,
+        selected: input.selected !== null,
+      }),
+    },
+  ];
 }
 
 // ── The skeletons as the reading passes see them ─────────────────────────
@@ -466,44 +581,45 @@ function skeletonView(r: Rendered, skeleton: Skeleton): SkeletonView {
   return { r, gist: skeleton.gist, parts, lines };
 }
 
-const lineCost = (l: SkeletonLineView) => l.text.length + l.alias.length + 12;
+// A line's cost in estimated tokens: its text and its [block <alias>] tag.
+const lineCost = (l: SkeletonLineView) => estTokens(l.text) + Math.ceil((l.alias.length + 9) / 4);
 
 /** The route pass's system message: every document's gist and part
     summaries, no lines. */
-function routeSystem(views: SkeletonView[], rendered: Rendered[]): string {
+function routeSystem(views: SkeletonView[], rendered: Rendered[], profile: Profile): string {
   const byLetter = new Map(views.map((v) => [v.r.letter, v]));
   const sections = rendered.map((r) => {
     const v = byLetter.get(r.letter);
     if (!v) return r.section;
-    const head = `[document ${r.letter}] "${r.doc.title}"${v.gist ? `\ngist: ${v.gist}` : ""}`;
+    const head = `${header(r.letter, r.doc, coverageNote(r.coverage))}${v.gist ? `\ngist: ${v.gist}` : ""}`;
     const parts =
       v.parts.length > 0
         ? v.parts.map((p) => `[part at ${p.alias}] "${p.title}"${p.summary ? `: ${p.summary}` : ""}`).join("\n")
         : "(one part: the whole document)";
     return `${head}\n${parts}`;
   });
-  return [
-    ...CONTEXT_HEAD,
+  return systemOf(
+    stitchRouteRules(),
+    profile,
     "Each document's gist and the summary of each of its parts follow. A part is tagged [part at <alias>] with the alias of its first block.",
-    "",
     sections.join("\n\n"),
-  ].join("\n");
+  );
 }
 
 /** The select pass's system message: every document's skeleton lines, or
     the lines in `shown` (a gap between two shown lines declared), each
     part's summary above its first shown line. Byte-identical from turn to
     turn when every line is shown. */
-function skeletonSystem(views: SkeletonView[], rendered: Rendered[], shown: Set<string> | null): string {
+function skeletonSystem(views: SkeletonView[], rendered: Rendered[], shown: Set<string> | null, profile: Profile): string {
   const byLetter = new Map(views.map((v) => [v.r.letter, v]));
   const sections = rendered.map((r) => {
     const v = byLetter.get(r.letter);
     if (!v) return r.section;
     const lines = shown ? v.lines.filter((l) => shown.has(l.alias)) : v.lines;
-    const header = shown
-      ? `[document ${r.letter}] "${r.doc.title}" (${lines.length} of ${v.lines.length} skeleton lines shown)`
-      : `[document ${r.letter}] "${r.doc.title}"`;
-    const out: string[] = [header];
+    const note = coverageNote(r.coverage);
+    const out: string[] = [
+      header(r.letter, r.doc, shown ? `${note}; ${lines.length} of ${v.lines.length} skeleton lines shown` : note),
+    ];
     if (v.gist) out.push(`gist: ${v.gist}`);
     const partOf = new Map(v.parts.map((p) => [p.alias, p]));
     let lastIndex = -1;
@@ -522,12 +638,12 @@ function skeletonSystem(views: SkeletonView[], rendered: Rendered[], shown: Set<
     if (lines.length === 0) out.push("(no lines shown)");
     return out.join("\n");
   });
-  return [
-    ...CONTEXT_HEAD,
+  return systemOf(
+    stitchSelectRules(),
+    profile,
     "Each document's skeleton follows: one line per block, tagged [block <alias>], what the block says at a tenth of its length.",
-    "",
     sections.join("\n\n"),
-  ].join("\n");
+  );
 }
 
 /** The lines the select pass reads when the skeletons run past the budget:
@@ -633,17 +749,25 @@ export function interleave(lists: string[][]): string[] {
   return out;
 }
 
-/** The select pass's pick cut to the budget: known aliases, once each, in
-    the given order (most relevant first) until the chars run out. */
-export function cutSelection(aliases: string[], blockByRef: Map<string, DocBlock>): Set<string> {
+// A block's cost in the answer pass, in estimated tokens: its text and its tag line.
+const blockCost = (text: string) => estTokens(text) + 10;
+
+/** The select pass's pick cut to the kind's budget (STITCH_SELECTED_BUDGET,
+    STITCH_SELECTED_BLOCKS): known aliases, once each, in the given order
+    (most relevant first) until the tokens run out. */
+export function cutSelection(
+  aliases: string[],
+  blockByRef: Map<string, DocBlock>,
+  kind: StitchCommandKind = "page",
+): Set<string> {
   const picked = new Set<string>();
   let used = 0;
   for (const alias of aliases) {
     const block = blockByRef.get(alias);
     if (!block || picked.has(block.alias)) continue;
-    if (picked.size >= MAX_SELECTED) break;
-    const cost = block.text.length + 40;
-    if (used + cost > STITCH_SELECTED_BUDGET) continue;
+    if (picked.size >= STITCH_SELECTED_BLOCKS[kind]) break;
+    const cost = blockCost(block.text);
+    if (used + cost > STITCH_SELECTED_BUDGET[kind]) continue;
     used += cost;
     picked.add(block.alias);
   }
@@ -651,12 +775,12 @@ export function cutSelection(aliases: string[], blockByRef: Map<string, DocBlock
 }
 
 // A document's opening, cut to its share of the budget: what the answer pass
-// reads of a document the select pass picked nothing of.
+// reads of a document whose select call failed.
 function opening(r: Rendered, share: number): string[] {
   const picked: string[] = [];
   let used = 0;
   for (const block of r.blocks) {
-    const cost = block.text.length + 40;
+    const cost = blockCost(block.text);
     if (used + cost > share) break;
     used += cost;
     picked.push(block.alias);
@@ -673,6 +797,84 @@ export function replyWithIds(reply: string, blockByRef: Map<string, DocBlock>): 
   });
 }
 
+const BLOCK_TAG = /\[block ([^\]\s]+)\]/g;
+
+/** What the reply cites, for the box's chips (StitchResult.cited): every
+    stored block id the reply cites as [block <id>], with its document's id
+    and title and the block's text, cut to CITED_TEXT chars. */
+export function citedBlocks(
+  reply: string,
+  blockByRef: Map<string, DocBlock>,
+  titleOf: Map<string, string>,
+): StitchResult["cited"] {
+  const out: StitchResult["cited"] = {};
+  for (const m of reply.matchAll(BLOCK_TAG)) {
+    const block = blockByRef.get(m[1]);
+    if (!block || block.id !== m[1] || out[block.id]) continue;
+    out[block.id] = {
+      documentId: block.documentId,
+      title: titleOf.get(block.documentId) ?? "",
+      text: block.text.slice(0, CITED_TEXT),
+    };
+  }
+  return out;
+}
+
+/** A history turn's block tags as this reading's aliases: the box keeps the
+    replies with the stored ids (replyWithIds), which the model cannot map
+    to the passages it reads. A block of this reading becomes its alias; a
+    block of a document of the project not in this reading becomes (a
+    passage of "<title>") (titles: stored id → title); any other tag
+    drops. */
+export function historyWithAliases(
+  text: string,
+  blockByRef: Map<string, DocBlock>,
+  titles: Map<string, string>,
+): string {
+  return text.replace(BLOCK_TAG, (_tag, ref: string) => {
+    const block = blockByRef.get(ref) ?? blockByRef.get(ref.toUpperCase());
+    if (block) return `[block ${block.alias}]`;
+    const title = titles.get(ref);
+    return title !== undefined ? `(a passage of "${title}")` : "";
+  });
+}
+
+/** The conversation as the passes read it: the last STITCH_HISTORY_MAX
+    turns with text, each turn's block tags as this reading's aliases
+    (historyWithAliases). Only blocks of documents attached to the project
+    are named by title. */
+export async function stitchHistory(turns: StitchTurn[], reading: Reading, notebookId: string): Promise<ModelMessage[]> {
+  const kept = turns.filter((t) => t.content.trim()).slice(-STITCH_HISTORY_MAX);
+  const unknown = new Set<string>();
+  for (const t of kept) for (const m of t.content.matchAll(BLOCK_TAG)) if (!reading.blockByRef.has(m[1])) unknown.add(m[1]);
+  const titles = new Map<string, string>();
+  if (unknown.size > 0) {
+    const rows = await db.block.findMany({
+      where: { id: { in: [...unknown].slice(0, 500) }, document: { notebooks: { some: { notebookId } } } },
+      select: { id: true, document: { select: { title: true } } },
+    });
+    for (const row of rows) titles.set(row.id, row.document.title);
+  }
+  return kept.map((t) => ({ role: t.role, content: historyWithAliases(t.content, reading.blockByRef, titles) }));
+}
+
+const textOf = (m: ModelMessage): string => (typeof m.content === "string" ? m.content : "");
+
+/** The aliases the earlier answers cited, the latest answer's first, once
+    each, up to MAX_CITED: what "it" and "the second one" most often name. */
+export function citedAliases(history: ModelMessage[], blockByRef: Map<string, DocBlock>): string[] {
+  const out: string[] = [];
+  for (const m of [...history].reverse()) {
+    if (m.role !== "assistant") continue;
+    for (const tag of textOf(m).matchAll(BLOCK_TAG)) {
+      const block = blockByRef.get(tag[1]);
+      if (block && !out.includes(block.alias)) out.push(block.alias);
+      if (out.length >= MAX_CITED) return out;
+    }
+  }
+  return out;
+}
+
 /** The documents as the reading passes and the answer pass see them: every
     document rendered under its letter, the ones with text to read, every
     block under its alias and its stored id, and the list the prompts name. */
@@ -684,9 +886,9 @@ export type Reading = {
 };
 
 /** The documents loaded by loadDocuments, ready for the reading passes.
-    length: the chars of document text. */
-export function readingOf(docs: Doc[]): Reading & { length: number } {
-  const { rendered, length } = renderDocuments(docs);
+    length: the chars of document text; tokens: its estimated tokens. */
+export function readingOf(docs: Doc[]): Reading & { length: number; tokens: number } {
+  const { rendered, length, tokens } = renderDocuments(docs);
   const read = rendered.filter((r) => r.coverage.status === "read");
   const blockByRef = new Map<string, DocBlock>();
   for (const r of rendered) {
@@ -698,30 +900,51 @@ export function readingOf(docs: Doc[]): Reading & { length: number } {
   const documentList = rendered.map((r) => ({
     tag: r.letter,
     title: r.doc.title,
-    note: coverageNote(r.coverage),
     read: r.coverage.status === "read",
   }));
-  return { rendered, read, blockByRef, documentList, length };
+  return { rendered, read, blockByRef, documentList, length, tokens };
 }
 
 /** The reading passes (SPEC.md §22): the blocks a command needs, found from
-    the documents' skeletons — the route pass past the skeleton budget, then
-    the select pass — as aliases cut to the answer pass's budget. A pass that
-    fails falls back (every line ranked, every document's opening), so the
-    blocks always come back. Stitch reads them; so does the assistant at
-    Project scope past the whole threshold (lib/assistant/project-reading.ts).
-    feature: the usage record's name for the calls. */
+    the documents' skeletons — the route pass past what the groups can
+    read, then the select pass — as aliases cut to the answer pass's budget
+    for the command's kind. The reading passes read the reader's last
+    STITCH_READ_HISTORY commands, not the replies, and are told which
+    blocks the earlier answers cited; the ranker and Jev judge the lines
+    against the earlier commands and the command together, so a follow-up
+    finds what it refers to. A pass that fails falls back (every line
+    ranked, the failed group's documents' openings), so the blocks always
+    come back. Stitch reads them; so does the assistant at Project scope
+    past the whole threshold (lib/assistant/project-reading.ts).
+    feature: the usage record's name for the calls. kind: the command's
+    kind (commandKind); a page by default, the widest budget. */
 export async function pickBlocks(input: {
   reading: Reading;
   command: string;
   history: ModelMessage[];
-  profile: Awaited<ReturnType<typeof loadProfile>>;
+  profile: Profile;
   userId: string | null;
   feature: string;
   signal?: AbortSignal;
+  kind?: StitchCommandKind;
 }): Promise<Set<string>> {
   const { rendered, read, blockByRef, documentList } = input.reading;
-  const { profile, history } = input;
+  const { profile } = input;
+  const kind = input.kind ?? "page";
+  // What the command refers back to is in the reader's commands; the
+  // replies are the answer pass's, and the blocks they cited are named.
+  const earlier = input.history
+    .filter((m) => m.role === "user")
+    .map(textOf)
+    .filter((t) => t.trim())
+    .slice(-STITCH_READ_HISTORY);
+  const continued = input.history.length > 0;
+  const cited = citedAliases(input.history, blockByRef);
+  const query = [...earlier, input.command].join("\n");
+  const jevCommand =
+    earlier.length > 0
+      ? `Earlier commands of the conversation:\n${earlier.join("\n")}\n\nThe command:\n${input.command}`
+      : input.command;
   const readRoute = await featureCall("stitch-select", STITCH_ROUTE_EFFORT);
   const readSelect = await featureCall("stitch-select", STITCH_SELECT_EFFORT);
   const readModel = readRoute.model;
@@ -740,23 +963,25 @@ export async function pickBlocks(input: {
   // Past the budget the select pass reads every line in groups (below);
   // past what the groups can read, the route pass names the parts first,
   // and the lines are cut to them and, if still too many, ranked against
-  // the command. Jev reads part by part, so it routes past the budget.
+  // the command. Jev reads part by part, so it routes past the budget. A
+  // question past the budget reads the lines ranked against it, one
+  // call's worth: a question needs the few blocks that answer it, and the
+  // groups' calls would read every line of the project for them.
   let shown: Set<string> | null = null;
   const jev = jevEnabled();
   const routeOver = jev ? STITCH_SKELETON_BUDGET : STITCH_GROUPED_MAX;
   if (skeletonLength > routeOver) {
     // Jev first (one noul per part), else the GLM route pass.
-    let routed: Set<string> | null = jev ? await jevRouteParts(views, input.command, input.userId, input.signal) : null;
+    let routed: Set<string> | null = jev ? await jevRouteParts(views, jevCommand, input.userId, input.signal) : null;
     if (input.signal?.aborted) aborted();
     if (!routed) {
       const route = await callForJson({
         model: readModel,
         messages: [
-          { role: "system", content: routeSystem(views, rendered) },
-          ...history,
+          { role: "system", content: routeSystem(views, rendered, profile) },
           {
             role: "user",
-            content: stitchRoutePrompt({ profile, documents: documentList, command: input.command, maxParts: MAX_ROUTED }),
+            content: stitchRoutePrompt({ documents: documentList, command: input.command, continued, earlier, cited, maxParts: MAX_ROUTED }),
           },
         ],
         maxOutputTokens: STITCH_SELECT_MAX_OUTPUT_TOKENS,
@@ -775,14 +1000,18 @@ export async function pickBlocks(input: {
         if (picked.length > 0) routed = new Set(picked);
       }
     }
-    shown = cutLines(views, routed, input.command, routeOver);
+    shown = cutLines(views, routed, query, kind === "question" ? STITCH_QUESTION_SKELETON : routeOver);
+  } else if (!jev && kind === "question" && skeletonLength > STITCH_SKELETON_BUDGET) {
+    shown = cutLines(views, null, query, STITCH_QUESTION_SKELETON);
   }
 
   // The picks by document, most relevant first within each: Jev's (one
   // noul per line), else the GLM select pass's, one call per group of
-  // lines, the groups at once.
+  // lines, the groups at once. failed: the documents of a group whose
+  // call failed; they read as their openings below.
+  const failed = new Set<string>();
   let byDoc: Map<string, string[]> | null = jev
-    ? await jevSelectLines(views, shown, input.command, input.userId, input.signal)
+    ? await jevSelectLines(views, shown, jevCommand, input.userId, input.signal)
     : null;
   if (input.signal?.aborted) aborted();
   if (!byDoc) {
@@ -792,15 +1021,19 @@ export async function pickBlocks(input: {
       const pick = await callForJson({
         model: readModel,
         messages: [
-          { role: "system", content: skeletonSystem(group.views, rendered.filter((r) => letters.has(r.letter)), group.shown) },
-          ...history,
+          {
+            role: "system",
+            content: skeletonSystem(group.views, rendered.filter((r) => letters.has(r.letter)), group.shown, profile),
+          },
           {
             role: "user",
             content: stitchSelectPrompt({
-              profile,
               documents: groups.length > 1 ? documentList.filter((d) => letters.has(d.tag)) : documentList,
               command: input.command,
-              maxBlocks: MAX_SELECTED,
+              continued,
+              earlier,
+              cited: groups.length > 1 ? cited.filter((a) => letters.has(blockLetter(a))) : cited,
+              maxBlocks: STITCH_SELECTED_BLOCKS[kind],
               partial: group.shown !== null,
             }),
           },
@@ -814,6 +1047,7 @@ export async function pickBlocks(input: {
       });
       if (!pick.ok) {
         if (!input.signal?.aborted) console.warn("[stitch] select pass failed, reading the group's openings:", pick.error);
+        for (const v of group.views) failed.add(v.r.doc.id);
         return [];
       }
       return pick.data.blockIds.flatMap(expandPick);
@@ -825,17 +1059,23 @@ export async function pickBlocks(input: {
       if (block) byDoc.get(block.documentId)?.push(alias);
     }
   }
-  const share = Math.floor(STITCH_SELECTED_BUDGET / read.length);
-  // A document the pick names nothing of reads as its opening, so every
-  // document read is under the answer pass.
+  const share = Math.floor(STITCH_SELECTED_BUDGET[kind] / read.length);
+  // A document the select pass read and picked nothing of is left out: its
+  // header says none of its blocks are shown. A document whose call failed
+  // reads as its opening. When nothing at all was picked, every document
+  // reads as its opening, so the answer pass has text to say so from.
   const picksByDoc = byDoc;
-  const picks = read.map((r) => {
+  let picks = read.map((r) => {
     const own = picksByDoc.get(r.doc.id) ?? [];
-    return own.length > 0 ? own : opening(r, share);
+    return own.length > 0 || !failed.has(r.doc.id) ? own : opening(r, share);
   });
+  if (picks.every((p) => p.length === 0)) picks = read.map((r) => opening(r, share));
   if (input.signal?.aborted) aborted();
-  return cutSelection(interleave(picks), blockByRef);
+  return cutSelection(interleave(picks), blockByRef, kind);
 }
+
+// The document letter of an alias (B12 → B).
+const blockLetter = (alias: string) => /^[A-Z]+/.exec(alias)?.[0] ?? "";
 
 /** Run one Stitch command. Throws with the reason on a failed model call. */
 export async function stitch(input: {
@@ -850,20 +1090,18 @@ export async function stitch(input: {
   signal?: AbortSignal;
   onFailure: (reason: string) => Error;
 }): Promise<StitchResult> {
-  const docs = await loadDocuments(input.notebookId, input.documentIds);
-  const { length, ...reading } = readingOf(docs);
-  const { rendered, read, blockByRef, documentList } = reading;
+  const docs = await loadDocuments(input.notebookId, input.documentIds, { generated: STITCH_READS_GENERATED });
+  const reading = readingOf(docs);
+  const { rendered, read, blockByRef } = reading;
   const coverage = rendered.map((r) => r.coverage);
   // Fewer than two documents read: no links can be drawn and no page can rest
   // on the docs, so nothing runs and nothing is stored. The result says
   // what was read of every document and why the rest were not.
-  if (read.length < 2) return { reply: "", linkCount: 0, document: null, documents: coverage };
+  if (read.length < 2) return { reply: "", linkCount: 0, document: null, documents: coverage, cited: {} };
 
   const profile = await loadProfile(input.notebookId);
-  const history: ModelMessage[] = input.history
-    .slice(-MAX_HISTORY)
-    .filter((turn) => turn.content.trim())
-    .map((turn) => ({ role: turn.role, content: turn.content }));
+  const history = await stitchHistory(input.history, reading, input.notebookId);
+  const kind = commandKind(input.command);
   // The stitch feature's model answers (lib/feature-models.ts); the
   // stitch-select feature's model reads the skeletons in the route and
   // select passes, each at its own effort.
@@ -872,10 +1110,9 @@ export async function stitch(input: {
   const usage = { userId: input.userId, feature: "stitch" as const, model: answer.modelId };
 
   // ── The reading passes: the blocks the command needs, from the skeletons ──
-  let context = wholeSystem(rendered);
-  let selected = false;
-  if (length > STITCH_WHOLE_THRESHOLD) {
-    const picked = await pickBlocks({
+  let selected: Set<string> | null = null;
+  if (reading.tokens > STITCH_WHOLE_THRESHOLD) {
+    selected = await pickBlocks({
       reading,
       command: input.command,
       history,
@@ -883,30 +1120,16 @@ export async function stitch(input: {
       userId: input.userId,
       feature: "stitch",
       signal: input.signal,
+      kind,
     }).catch((err: unknown) => {
       throw input.signal?.aborted ? input.onFailure("aborted") : err;
     });
-    context = selectedSystem(rendered, picked);
-    selected = true;
   }
 
   // ── The answer pass ──────────────────────────────────────────────────────
   const result = await callForJson({
     model,
-    messages: [
-      { role: "system", content: context },
-      ...history,
-      {
-        role: "user",
-        content: stitchPrompt({
-          profile,
-          lang: input.lang,
-          documents: documentList,
-          command: input.command,
-          selected,
-        }),
-      },
-    ],
+    messages: answerMessages({ reading, selected, lang: input.lang, profile, history, command: input.command }),
     maxOutputTokens: STITCH_MAX_OUTPUT_TOKENS,
     providerOptions: answer.providerOptions,
     schema: outputSchema,
@@ -915,6 +1138,8 @@ export async function stitch(input: {
     abortSignal: input.signal,
   });
   if (!result.ok) throw input.onFailure(result.error);
+  // Stop pressed while the model answered: nothing is stored.
+  if (input.signal?.aborted) throw input.onFailure("aborted");
 
   // ── Links: block to block across docs, stored recommended ─────────────
   const existing = await db.docLink.findMany({
@@ -956,12 +1181,15 @@ export async function stitch(input: {
   }
 
   // ── The generated document ───────────────────────────────────────────────
+  // A page made by a follow-up records the command before it too, so
+  // Generated content says what "make that a page" made a page of.
   let document: StitchResult["document"] = null;
-  if (result.data.document) {
+  if (result.data.document && !input.signal?.aborted) {
+    const previous = [...input.history].reverse().find((t) => t.role === "user" && t.content.trim());
     document = await materializeGenerated({
       notebookId: input.notebookId,
       userId: input.userId,
-      command: input.command,
+      command: previous ? `${previous.content.trim()} → ${input.command}` : input.command,
       title: result.data.document.title.trim(),
       parts: result.data.document.parts.slice(0, MAX_PARTS),
       blockById: blockByRef,
@@ -969,7 +1197,19 @@ export async function stitch(input: {
   }
 
   if (linkCount > 0 || document) await bumpNotebook(input.notebookId);
-  return { reply: replyWithIds(result.data.reply.trim(), blockByRef), linkCount, document, documents: coverage };
+  const reply = replyWithIds(result.data.reply.trim(), blockByRef);
+  // No reply and nothing stored: the reader would see an empty turn.
+  if (!reply && linkCount === 0 && !document) throw input.onFailure(STITCH_EMPTY_ANSWER);
+  const titleOf = new Map(rendered.map((r) => [r.doc.id, r.doc.title]));
+  const picked = selected;
+  const documents = picked
+    ? coverage.map((c) => {
+        if (c.status !== "read") return c;
+        const r = rendered.find((x) => x.doc.id === c.id);
+        return { ...c, shown: r ? r.blocks.filter((b) => picked.has(b.alias)).length : 0 };
+      })
+    : coverage;
+  return { reply, linkCount, document, documents, cited: citedBlocks(reply, blockByRef, titleOf) };
 }
 
 type Part = z.infer<typeof partSchema>;

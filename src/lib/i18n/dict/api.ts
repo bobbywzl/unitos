@@ -231,6 +231,8 @@ const en = {
   stitchNeedsTwo: "Stitch needs two or more documents of the project",
   stitchFailed: "Stitch failed. {reason}",
   stitchTimedOut: "Stitch ran out of time before the answer ended. Narrow the command to one topic or question, or try again.",
+  stitchCommandTooLong: "The command is {length} characters. Stitch takes up to {max}. Shorten it, or send it in parts.",
+  stitchEmptyAnswer: "Stitch wrote no answer. Send the command again, or ask it another way.",
   analyzeNeedsFigureOrTable: "Analyze works on a figure or a table",
   defineNeedsWord: "Define works on one word, not on Chinese text",
   // Note text of COMPARE (SPEC.md §4)
@@ -593,6 +595,8 @@ const zh: Record<keyof typeof en, string> = {
   stitchNeedsTwo: "缝合需要项目中的两篇或更多文档",
   stitchFailed: "缝合失败。{reason}",
   stitchTimedOut: "缝合在回答结束前超时。请把命令缩小到一个主题或问题，或重试。",
+  stitchCommandTooLong: "命令有 {length} 个字符。缝合最多接受 {max} 个。请缩短，或分几次发送。",
+  stitchEmptyAnswer: "缝合没有写出回答。请再次发送命令，或换一种问法。",
   analyzeNeedsFigureOrTable: "分析只用于插图或表格",
   defineNeedsWord: "定义只用于一个词，不用于中文文本",
   comparisonTitle: "对比：{first} 与 {second}",
