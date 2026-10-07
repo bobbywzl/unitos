@@ -10,7 +10,7 @@
 // is on (WALK3-14). A word match, never a model call (GET .../find).
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { GraphNode } from "@/lib/types";
 import type { FindDocument, FindPassage } from "@/lib/graph/find";
 import { FIND_MORE, FIND_SNIPPETS } from "@/lib/graph/find";
@@ -90,26 +90,46 @@ function FindGroup({
   const { select } = useGraphContent();
   const [more, setMore] = useState<FindPassage[]>([]);
   const [loading, setLoading] = useState(false);
+  const loadingRef = useRef(false);
+  const box = useRef<HTMLDivElement>(null);
   const shown = [...doc.passages, ...more];
   const left = doc.count - shown.length;
-  async function loadMore() {
-    if (loading) return;
+  async function loadMore(limit: number) {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
     setLoading(true);
     try {
-      const after = Math.max(FIND_SNIPPETS, shown.length);
       const r = await fetch(
-        `/api/notebooks/${notebookId}/find?q=${encodeURIComponent(q)}&documentId=${encodeURIComponent(doc.id)}&after=${after}`,
+        `/api/notebooks/${notebookId}/find?q=${encodeURIComponent(q)}&documentId=${encodeURIComponent(doc.id)}&after=${shown.length}&limit=${limit}`,
       );
       if (r.ok) {
         const data = (await r.json()) as { documents: FindDocument[] };
         setMore((prev) => [...prev, ...(data.documents[0]?.passages ?? [])]);
       }
     } finally {
+      loadingRef.current = false;
       setLoading(false);
     }
   }
+  // A document past the first FIND_TOP comes with its count only (COST4-02):
+  // its first passage loads when the row scrolls into view.
+  const bare = shown.length === 0 && doc.count > 0;
+  useEffect(() => {
+    const el = box.current;
+    if (!bare || !el) return;
+    const seen = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) {
+        seen.disconnect();
+        void loadMore(FIND_SNIPPETS);
+      }
+    });
+    seen.observe(el);
+    return () => seen.disconnect();
+    // loadMore reads shown.length, which is 0 while bare.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bare]);
   return (
-    <div data-graph-find-group={doc.id} className="rounded-xl border border-line p-2.5">
+    <div ref={box} data-graph-find-group={doc.id} className="rounded-xl border border-line p-2.5">
       <div className="flex items-center gap-2">
         <button
           onClick={() => select(doc.id)}
@@ -138,7 +158,7 @@ function FindGroup({
       </div>
       {left > 0 && (
         <button
-          onClick={() => void loadMore()}
+          onClick={() => void loadMore(FIND_MORE)}
           disabled={loading}
           className="mt-1 px-1.5 text-[11.5px] text-clay-700 hover:underline disabled:opacity-50"
         >

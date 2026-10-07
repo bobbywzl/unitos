@@ -8,7 +8,7 @@ import { useCollab } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { ReplyThread } from "@/components/collab/reply-thread";
 import { Highlight } from "@/components/highlight";
-import { ChevronDownIcon, ChevronRightIcon, CommentIcon, LocateIcon, PencilIcon } from "@/components/icons";
+import { ChevronDownIcon, ChevronRightIcon, CommentIcon, LocateIcon, PencilIcon, RowIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { markdownPreview } from "@/lib/markdown-preview";
@@ -68,30 +68,11 @@ function PinIcon({ size = 12 }: { size?: number }) {
 }
 
 function TickIcon({ size = 10 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20 6 9 17l-5-5" />
-    </svg>
-  );
+  return <RowIcon shape="check" size={size} bold />;
 }
 
 function AnchorIcon({ size = 11 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.75"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="12" cy="5" r="3" />
-      <path d="M12 22V8" />
-      <path d="M5 12H2a10 10 0 0 0 20 0h-3" />
-    </svg>
-  );
+  return <RowIcon shape="anchor" size={size} />;
 }
 
 // One note. Every state shares one structure: the header row — collapse

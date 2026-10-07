@@ -325,6 +325,12 @@ export const SKELETON_WAIT_MS = 5_000;
 // command (ensureSkeleton builds at once), or the graph opening (warmSkeletons).
 export const SKELETON_QUIET_MS = 10 * 60_000;
 export const SKELETON_BUILD_CONCURRENCY = 12; // documents ensureSkeleton builds at once
+// Windows in flight (COST4-08): a document's windows go out SKELETON_WINDOW_CONCURRENCY
+// at a time, and every build in the process shares SKELETON_WINDOWS_IN_FLIGHT,
+// so a project of large imports never sends a burst of calls that a rate
+// limit turns into failed builds.
+export const SKELETON_WINDOW_CONCURRENCY = 4;
+export const SKELETON_WINDOWS_IN_FLIGHT = 12;
 
 // The contents of a document (SPEC.md §26): the parts the reader jumps
 // between, each with the block it starts at. One call over the whole

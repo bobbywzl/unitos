@@ -40,7 +40,8 @@ export type GraphData = {
   people: Record<string, Person>;
 };
 
-/** Each document's gist, read from the stored skeleton without its lines. */
+/** Each document's gist, read from the stored skeleton without its lines,
+    in id order so the body (and its ETag) is the same while nothing changes. */
 export async function documentGists(notebookId: string): Promise<Record<string, string>> {
   const rows = await db.$queryRaw<{ id: string; gist: string | null }[]>`
     SELECT d.id, d.skeleton->>'gist' AS gist
@@ -49,6 +50,7 @@ export async function documentGists(notebookId: string): Promise<Record<string, 
     WHERE nd."notebookId" = ${notebookId}
       AND jsonb_typeof(d.skeleton) = 'object'
       AND (d.skeleton->>'v') = ${String(SKELETON_VERSION)}
+    ORDER BY d.id
   `;
   return Object.fromEntries(rows.filter((r) => r.gist && r.gist.trim()).map((r) => [r.id, r.gist!.trim()]));
 }

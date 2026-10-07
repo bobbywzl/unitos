@@ -3725,3 +3725,16 @@ li[data-checked] > .note-box::before {
     animation: none;
   }
 }
+
+/* Row icons (components/icons.tsx, COST4-05): a <use> of the sprite's
+   symbol, stroked as every line icon is. */
+.row-icon {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.row-icon-bold {
+  stroke-width: 4;
+}

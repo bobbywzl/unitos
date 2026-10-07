@@ -13,8 +13,8 @@
      its link passages, and the outline routes): network first, the saved
      copy second. A one-link passages call (?linkId=) is answered from the
      copy's every-link passages; a graph call the copy does not hold with
-     its query (?provenance=1 in a copy saved before it existed) from the
-     bare graph call.
+     its query (?provenance=1 in a copy saved before it existed, or of a
+     project with no provenance links, COST4-05) from the bare graph call.
    - RSC fetches (the router's soft navigations) are never answered from the
      cache: when one fails offline the router falls back to a full load, and
      that load is what the cache answers. */
