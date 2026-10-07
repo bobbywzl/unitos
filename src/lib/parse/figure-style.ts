@@ -2282,13 +2282,20 @@ function columnWidth(prose: Element[], page: Page): number {
     here fails — a figure without its look is the old behavior, never a
     missing figure. */
 export async function bakeFigureStyles(rawHtml: string, url: string): Promise<string> {
-  if (!/<(?:svg|img|link|style)[\s>]/i.test(rawHtml)) return rawHtml;
+  return (await bakeFigureDocument(rawHtml, url)).html;
+}
+
+/** The bake, with its document: the html it returns, and the jsdom it
+    built and baked, or null when it built none or gave up. A caller that
+    walks the page reads that document instead of parsing the html again. */
+export async function bakeFigureDocument(rawHtml: string, url: string): Promise<{ html: string; dom: JSDOM | null }> {
+  if (!/<(?:svg|img|link|style)[\s>]/i.test(rawHtml)) return { html: rawHtml, dom: null };
   try {
     // A fresh console with no listener: the page's stylesheets may hold
     // syntax jsdom's parser does not know, and that is not worth a log line.
     const dom = new JSDOM(rawHtml, { url, virtualConsole: new VirtualConsole() });
     const { document } = dom.window;
-    if (!document.body) return rawHtml;
+    if (!document.body) return { html: rawHtml, dom: null };
     await inlineStylesheets(document, url);
     const rules = collectRules(document);
     const page: Page = {
@@ -2324,8 +2331,8 @@ export async function bakeFigureStyles(rawHtml: string, url: string): Promise<st
     );
     for (const svg of [...svgs.filter((s) => !isHidden(s)), ...svgs.filter(isHidden)]) bakeSvg(svg, page, budget);
     for (const img of [...document.querySelectorAll("img")]) bakeImage(img, page);
-    return dom.serialize();
+    return { html: dom.serialize(), dom };
   } catch {
-    return rawHtml;
+    return { html: rawHtml, dom: null };
   }
 }
