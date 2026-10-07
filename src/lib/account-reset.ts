@@ -11,7 +11,8 @@ import { trialEnd } from "@/lib/tiers";
 // replies, attachments, digest, collaborators, presence, history); the
 // documents only its projects held — a document still attached to another
 // account's project, or cited by a note in one, stays in the library (the
-// document DELETE rule); its profile; its reading positions; its sessions (signed out everywhere);
+// document DELETE rule); its profile; its reading positions; its kept
+// conversations; its sessions (signed out everywhere);
 // its memberships on other accounts' shared projects; its pending email links;
 // its Drive link (revoked at Google); its picture, symbol, color, and premium
 // flag.
@@ -68,6 +69,7 @@ export async function resetAccount(userId: string): Promise<AccountResetCounts |
   await db.notebookDigest.deleteMany({ where: { userId } });
   await db.notebookPresence.deleteMany({ where: { userId } });
   await db.readingPosition.deleteMany({ where: { userId } });
+  await db.keptChat.deleteMany({ where: { userId } });
 
   if (user) {
     // Memberships on other accounts' shared projects; those projects refresh.
