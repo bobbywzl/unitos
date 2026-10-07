@@ -17,6 +17,7 @@ import { setCommentResolved } from "@/lib/annotations/resolve";
 import { isImeKey } from "@/lib/ime";
 import { markdownStyleKey } from "@/lib/markdown-style";
 import type { ReplyView } from "@/lib/types";
+import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 
 // A comment's card in the page editor's margin, as Google Docs draws it
 // (SPEC.md §29): the author's badge, name, and time, the comment, Resolve,
@@ -261,6 +262,7 @@ export function CommentCard({
             className="docs-comment-field"
           />
           <div className="docs-comment-actions">
+            <VoiceTypingButton track="docs-comment-voice-typing" className="mr-auto size-8" size={16} />
             <DialogButton onClick={cancelEdit}>{t("common.cancel")}</DialogButton>
             <DialogButton primary disabled={busy || !unsaved || !draft.trim()} onClick={onSave}>
               {t("common.save")}

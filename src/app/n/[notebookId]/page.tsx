@@ -73,7 +73,7 @@ import { isTextStyle, type TextStyle } from "@/lib/text-style";
 import { coreBlocks } from "@/lib/anchors/layer";
 import { READING_LINE_PX, type BlockPosition } from "@/lib/reading-position";
 import { storedPdfPages } from "@/lib/pdf-pages";
-import type { DocumentKind } from "@/lib/document-order";
+import { documentEditedAt, type DocumentKind } from "@/lib/document-order";
 
 export const dynamic = "force-dynamic";
 
@@ -127,6 +127,8 @@ export default async function NotebookPage(props: {
               createdAt: true,
               format: true,
               generatedCommand: true,
+              // Last edited (SPEC.md §6): a rich text's last save.
+              richTextSavedAt: true,
             },
           },
         },
@@ -187,6 +189,19 @@ export default async function NotebookPage(props: {
     if (d.sourceUrl && /^https?:/i.test(d.sourceUrl)) return "page";
     return head?.rich ? "blank" : "text";
   };
+  // Last edited (SPEC.md §6): the last change to each document's notes and
+  // annotations in this project, those written in it and those quoting it.
+  const noteEdits = new Map<string, Date>();
+  for (const section of notebook.sections) {
+    for (const note of section.notes) {
+      const ids = new Set([note.documentId, ...note.sources.map((source) => source.documentId)]);
+      for (const id of ids) {
+        if (!id) continue;
+        const at = noteEdits.get(id);
+        if (!at || note.updatedAt > at) noteEdits.set(id, note.updatedAt);
+      }
+    }
+  }
   const attached = notebook.documents.map((nd) => ({
     id: nd.document.id,
     title: nd.document.title,
@@ -203,6 +218,10 @@ export default async function NotebookPage(props: {
     importEdited: editedSinceImport(nd.document),
     kind: kindOf(nd),
     addedAt: nd.document.createdAt.toISOString(),
+    editedAt: documentEditedAt(nd.document.createdAt.toISOString(), [
+      nd.document.richTextSavedAt?.toISOString(),
+      noteEdits.get(nd.document.id)?.toISOString(),
+    ]),
   }));
   const activeId = doc && attached.some((d) => d.id === doc) ? doc : (attached[0]?.id ?? null);
   // The reader view is a per-visit choice carried in the URL; a fresh open is Normal.

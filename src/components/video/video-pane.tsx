@@ -47,6 +47,7 @@ import {
   type VideoAnnotationItem,
   type VideoInfo,
 } from "@/lib/video/types";
+import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 
 // The video pane (SPEC.md §11): the player with everything for dissecting the
 // video in one surface under it — circle and comment, Find, the transcript.
@@ -995,6 +996,7 @@ export function VideoPane({
             >
               {composer.region ? t("video.explainCircled") : t("video.explainThisMoment")}
             </button>
+            <VoiceTypingButton track="video-composer-voice-typing" />
             <button
               onClick={() => setComposer(null)}
               data-track="video-composer-cancel"

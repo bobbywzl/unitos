@@ -12,6 +12,7 @@ import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { ThinkingIndicator } from "@/components/thinking";
 import { formatTime, parseTimeInput } from "@/lib/video/types";
+import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 
 // Ask about a range (SPEC.md §11): the reader names a start and an end time
 // and asks a question; the model answers from the transcript inside that
@@ -203,6 +204,7 @@ export function AskRange({
           disabled={!hasTranscript}
           className="min-w-0 flex-1 rounded-full bg-sand-100 px-4 py-2 text-[13px] outline-none placeholder:text-sand-500 disabled:opacity-60"
         />
+        {hasTranscript && <VoiceTypingButton track="video-ask-voice-typing" className="size-8" size={14} />}
         <button
           type="submit"
           data-track="video-ask"
