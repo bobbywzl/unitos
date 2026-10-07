@@ -213,7 +213,12 @@ function boxOf(pos: Map<string, Point>): Box {
 /** Every document's center on the canvas, the whole layout centered on 0,0.
     `edges` may list a pair more than once and may hold loops (a === b);
     loops never move a node. */
-export function graphLayout(ids: string[], edges: LayoutEdge[], aspect = 2.1): Map<string, Point> {
+export function graphLayout(ids: string[], edges: LayoutEdge[], aspect = 2.1, apart?: Set<string>): Map<string, Point> {
+  if (apart && apart.size > 0 && ids.some((id) => apart.has(id))) {
+    const own = ids.filter((id) => !apart.has(id));
+    const main = own.length > 0 ? graphLayout(own, edges, aspect) : new Map<string, Point>();
+    return withApartRow(main, ids.filter((id) => apart.has(id)), aspect);
+  }
   const known = new Set(ids);
   const adjacency = new Map<string, Map<string, number>>();
   for (const e of edges) {
@@ -255,4 +260,104 @@ export function graphLayout(ids: string[], edges: LayoutEdge[], aspect = 2.1): M
   const cy = (Math.min(...pts.map((p) => p.y)) + Math.max(...pts.map((p) => p.y))) / 2;
   for (const [id, p] of result) result.set(id, { x: Math.round(p.x - cx), y: Math.round(p.y - cy) });
   return result;
+}
+
+/** The generated documents in rows under the layout, centered under it,
+    and the whole re-centered on 0,0. */
+function withApartRow(main: Map<string, Point>, apartIds: string[], aspect: number): Map<string, Point> {
+  const pts = [...main.values()];
+  const x0 = pts.length ? Math.min(...pts.map((p) => p.x)) : 0;
+  const x1 = pts.length ? Math.max(...pts.map((p) => p.x)) : 0;
+  const y1 = pts.length ? Math.max(...pts.map((p) => p.y)) : -SPACE_Y - GROUP_GAP;
+  const width = Math.max(x1 - x0 + SPACE_X, SPACE_X);
+  // As many per row as the layout's width holds, at least the aspect's share.
+  const perRow = Math.max(1, Math.floor(width / SPACE_X), Math.round(Math.sqrt(apartIds.length * aspect)));
+  const out = new Map(main);
+  apartIds.forEach((id, i) => {
+    const row = Math.floor(i / perRow);
+    const inRow = Math.min(perRow, apartIds.length - row * perRow);
+    const left = (x0 + x1) / 2 - ((inRow - 1) * SPACE_X) / 2;
+    out.set(id, { x: left + (i % perRow) * SPACE_X, y: y1 + SPACE_Y + GROUP_GAP + row * SPACE_Y });
+  });
+  const all = [...out.values()];
+  const cx = (Math.min(...all.map((p) => p.x)) + Math.max(...all.map((p) => p.x))) / 2;
+  const cy = (Math.min(...all.map((p) => p.y)) + Math.max(...all.map((p) => p.y))) / 2;
+  for (const [id, p] of out) out.set(id, { x: Math.round(p.x - cx), y: Math.round(p.y - cy) });
+  return out;
+}
+
+/** True when a node at p keeps the room a node needs from every placed one. */
+function roomAt(p: Point, placed: Iterable<Point>): boolean {
+  for (const q of placed) if (((p.x - q.x) / SPACE_X) ** 2 + ((p.y - q.y) / SPACE_Y) ** 2 < 1) return false;
+  return true;
+}
+
+/** The free spot nearest to `start` on a lattice of node rooms. */
+function freeSpot(start: Point, placed: Point[]): Point {
+  for (let ring = 0; ring < 40; ring++) {
+    const spots: Point[] = [];
+    for (let i = -ring; i <= ring; i++) {
+      for (let j = -ring; j <= ring; j++) {
+        if (Math.max(Math.abs(i), Math.abs(j)) !== ring) continue;
+        spots.push({ x: start.x + i * SPACE_X * 0.75, y: start.y + j * SPACE_Y });
+      }
+    }
+    spots.sort((a, b) => Math.hypot(a.x - start.x, a.y - start.y) - Math.hypot(b.x - start.x, b.y - start.y));
+    const hit = spots.find((p) => roomAt(p, placed));
+    if (hit) return { x: Math.round(hit.x), y: Math.round(hit.y) };
+  }
+  return { x: Math.round(start.x), y: Math.round(start.y) };
+}
+
+/** The layout of `ids` that keeps every node of `prev` where it was (WALK2-03).
+    A new document goes beside the documents it links to (the free spot
+    nearest their middle), a new generated document at the end of the
+    generated row, any other new document under the layout. Null when too
+    few of the documents were laid out before (under half): then a fresh
+    layout reads better than a patched one. */
+export function extendLayout(
+  prev: Map<string, Point>,
+  ids: string[],
+  edges: LayoutEdge[],
+  apart?: Set<string>,
+): Map<string, Point> | null {
+  const kept = ids.filter((id) => prev.has(id));
+  if (kept.length === 0 || kept.length * 2 < ids.length) return null;
+  const out = new Map<string, Point>(kept.map((id) => [id, prev.get(id)!]));
+  const fresh = ids.filter((id) => !prev.has(id));
+  if (fresh.length === 0) return out;
+  const neighbors = new Map<string, string[]>();
+  for (const e of edges) {
+    if (e.a === e.b) continue;
+    neighbors.set(e.a, [...(neighbors.get(e.a) ?? []), e.b]);
+    neighbors.set(e.b, [...(neighbors.get(e.b) ?? []), e.a]);
+  }
+  const pts = () => [...out.values()];
+  const bottom = () => Math.max(...pts().map((p) => p.y));
+  const middleX = () => {
+    const xs = pts().map((p) => p.x);
+    return (Math.min(...xs) + Math.max(...xs)) / 2;
+  };
+  for (const id of fresh) {
+    let start: Point;
+    if (apart?.has(id)) {
+      // The end of the generated row: right of the last generated document.
+      const row = [...out].filter(([other]) => apart.has(other)).map(([, p]) => p);
+      if (row.length > 0) {
+        const y = Math.max(...row.map((p) => p.y));
+        const x = Math.max(...row.filter((p) => p.y === y).map((p) => p.x));
+        start = { x: x + SPACE_X, y };
+      } else start = { x: middleX(), y: bottom() + SPACE_Y + GROUP_GAP };
+    } else {
+      const linked = (neighbors.get(id) ?? [])
+        .filter((n) => !apart?.has(n))
+        .map((n) => out.get(n))
+        .filter((p): p is Point => p !== undefined);
+      start = linked.length
+        ? { x: linked.reduce((s, p) => s + p.x, 0) / linked.length, y: linked.reduce((s, p) => s + p.y, 0) / linked.length }
+        : { x: middleX(), y: bottom() + SPACE_Y };
+    }
+    out.set(id, freeSpot(start, pts()));
+  }
+  return out;
 }
