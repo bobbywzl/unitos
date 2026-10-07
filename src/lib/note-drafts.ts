@@ -180,19 +180,21 @@ export function writeLinkNoteDraft(account: string, linkId: string, content: str
   else remove(linkNoteKey(account, linkId));
 }
 
-/** Drop drafts older than MAX_AGE_MS: note, compose, reply, and Note on this
-    link drafts. Runs once per load (use-outline.ts). A legacy draft with
-    no savedAt (a Note on this link draft) is kept: it waits for its
-    account to claim it. */
+/** Drop note and compose drafts older than MAX_AGE_MS: those are replayed on
+    every load, so one nobody replayed in that long has no note or section
+    left. Runs once per load (use-outline.ts). Reply and Note on this link
+    drafts are never dropped by age: nothing replays them, they show only
+    when the reader opens that box again, so their words stay until a
+    confirmed send or the reader's Cancel clears them (rule zero item 6). */
 export function sweepStaleDrafts() {
   try {
     const now = Date.now();
     const stale: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (!key || ![NOTE_PREFIX, COMPOSE_PREFIX, REPLY_PREFIX, LINK_NOTE_PREFIX].some((p) => key.startsWith(p))) continue;
+      if (!key || ![NOTE_PREFIX, COMPOSE_PREFIX].some((p) => key.startsWith(p))) continue;
       const draft = read<{ savedAt: number }>(key);
-      if (draft ? now - draft.savedAt > MAX_AGE_MS : !legacyKey(key)) stale.push(key);
+      if (!draft || now - draft.savedAt > MAX_AGE_MS) stale.push(key);
     }
     for (const key of stale) remove(key);
   } catch {

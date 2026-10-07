@@ -67,15 +67,20 @@ async function main() {
   store.setItem("unitos-reply-draft:note:n2", JSON.stringify({ content: "newest from an old tab", savedAt: Date.now() + 1000 }));
   check(d.readReplyDraft("ua", "note:n2") === "newest from an old tab", "a newer legacy draft wins over the account's older one");
 
-  // 5. The sweep drops drafts unused for 30 days, keeps fresh ones and undated legacy link notes.
-  store.setItem("unitos-reply-draft:ua:note:old", JSON.stringify({ content: "x", savedAt: Date.now() - 31 * DAY }));
-  store.setItem("graph-link-note:uc:old", JSON.stringify({ content: "x", sectionId: null, savedAt: Date.now() - 31 * DAY }));
+  // 5. The sweep never drops a reply or Note on this link draft by age:
+  // nothing replays them, so their words wait for a send or Cancel (REV4-06).
+  store.setItem("unitos-reply-draft:ua:note:old", JSON.stringify({ content: "x", savedAt: Date.now() - 400 * DAY }));
+  store.setItem("graph-link-note:uc:old", JSON.stringify({ content: "x", sectionId: null, savedAt: Date.now() - 400 * DAY }));
   store.setItem("graph-link-note:undated", JSON.stringify({ content: "keep me", sectionId: null }));
+  store.setItem("unitos-note-draft:gone", JSON.stringify({ content: "x", savedAt: Date.now() - 31 * DAY }));
   d.sweepStaleDrafts();
-  check(store.getItem("unitos-reply-draft:ua:note:old") === null, "a 31-day-old reply draft is swept");
-  check(store.getItem("graph-link-note:uc:old") === null, "a 31-day-old Note on this link draft is swept");
+  check(store.getItem("unitos-reply-draft:ua:note:old") !== null, "a 400-day-old reply draft stays");
+  check(store.getItem("graph-link-note:uc:old") !== null, "a 400-day-old Note on this link draft stays");
   check(store.getItem("unitos-reply-draft:ua:note:n1") !== null, "a fresh reply draft stays");
   check(store.getItem("graph-link-note:undated") !== null, "an undated legacy Note on this link draft stays");
+  check(store.getItem("unitos-note-draft:gone") === null, "a 31-day-old note draft nobody replayed is swept, as before");
+  d.writeReplyDraft("ua", "note:old", "");
+  check(store.getItem("unitos-reply-draft:ua:note:old") === null, "a send (empty draft written) clears the reply draft");
 
   console.log(failed === 0 ? "\nall checks pass" : `\n${failed} check(s) failed`);
   process.exit(failed === 0 ? 0 : 1);
