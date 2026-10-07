@@ -46,7 +46,7 @@ const kinds: [string, ReturnType<typeof commandKind>][] = [
   ["And the second one, why did grades not change there?", "question"],
   ["Gather every passage about pity into one page.", "page"],
   ["Write one page that combines what they say about cost.", "page"],
-  ["Summarise what all the documents say about installation delays", "page"],
+  ["Summarise what all the documents say about installation delays", "question"],
   ["Make that a page", "page"],
   ["Where do these documents contradict each other?", "links"],
   ["Connect the sections that answer this question", "links"],
@@ -60,8 +60,8 @@ const kinds: [string, ReturnType<typeof commandKind>][] = [
   ["How does Nietzsche link suffering and growth?", "question"],
   ["Is there a connection between the will to live and boredom?", "question"],
   ["What do all of these documents say about education?", "question"],
-  ["Give me an overview of how the two thinkers relate", "page"],
-  ["Summarise the chronology of Nietzsche's break with Wagner", "page"],
+  ["Give me an overview of how the two thinkers relate", "question"],
+  ["Summarise the chronology of Nietzsche's break with Wagner", "question"],
   ["List every claim about Schopenhauer's influence", "page"],
   ["Make a timeline of Nietzsche's life from these notes", "page"],
   ["Draw links between the notes and the essay", "links"],
@@ -76,6 +76,8 @@ const kinds: [string, ReturnType<typeof commandKind>][] = [
   ["尼采写了哪些关于同情的话？", "question"],
   ["把叔本华对教育的看法整理成一页", "page"],
   ["请给我一个时间线", "page"],
+  ["Summarise the chronology into one page", "page"],
+  ["总结这些文档对教育的看法", "question"],
 ];
 for (const [command, want] of kinds) check(`commandKind "${command}"`, commandKind(command) === want, commandKind(command));
 // The answers audit's 27 commands (round 2), when its data is on this machine.
@@ -186,6 +188,15 @@ check("answer prompt: partial-read sentence when a pick reads it whole", next.in
 check("answer prompt: partial-read sentence for a long document", next.includes("ask about one part of it"));
 check("answer prompt: never the sentence for a document with nothing shown", next.includes("Never write the sentence for a document with no blocks shown"));
 check("answer rules: one block per tag", rules.includes("one block per tag"));
+// Round 2 judge fixes.
+check("answer rules: a summary is a reply unless it asks for a page", rules.includes("and a summary (summarise, overview, outline) get reply only"));
+check("answer rules: causes and effects before \"says nothing\"", rules.includes("check its blocks for the topic's causes and effects"));
+check("answer rules: different causes differ only when one denies the other", rules.includes("differ only when one denies the other's cause"));
+check("answer rules: closest figures when the documents do not answer", rules.includes("give the closest figures they do give"));
+check("answer rules: an unread document that could hold the answer", rules.includes("say in one sentence that it has no text to read"));
+check("answer rules: a why question leads with the reason", rules.includes("A why question starts with the reason the documents give"));
+check("answer rules: a count equals the quote parts", rules.includes("equals the number of its quote parts"));
+check("answer prompt: the not-read sentence for every document that could hold the answer", next.includes("for every document that shows some of its blocks and whose blocks not shown could hold the answer, cited or not"));
 check("answer prompt: unread named only when it bears", first.includes("only when the command asks about them"));
 const select = stitchSelectPrompt({ documents: docs, command: "And the second one?", continued: true, earlier: ["List the two studies."], cited: ["B3"], maxBlocks: 150, partial: false });
 check("select prompt: earlier commands", select.includes("- List the two studies."));

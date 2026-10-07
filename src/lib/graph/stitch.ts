@@ -170,8 +170,10 @@ export const STITCH_EMPTY_ANSWER = "empty answer";
 /** What the command asks for, which sets what the answer pass reads after
     selection (STITCH_SELECTED_BUDGET) and how the reading passes read: a
     page, links, or else an answer. A page is asked by a page verb at the
-    start (gather, collect, write, summarise, make, list, "give me a …") or
-    a page noun anywhere (a page, timeline, study guide, every passage);
+    start (gather, collect, write, make, list, "give me a page …") or a
+    page noun anywhere (a page, timeline, study guide, every passage). A
+    summary or an overview is an answer in the reply unless it asks for a
+    page; the answer prompt routes it the same way (stitchRules);
     links by a contradiction word, or a command to draw links (connect …,
     find connections, conflicts between); anything else is a question — so
     "what did he write about pity" and "how does he link X and Y" stay
@@ -184,10 +186,10 @@ export const STITCH_EMPTY_ANSWER = "empty answer";
 export function commandKind(command: string): StitchCommandKind {
   const c = command.toLowerCase().trim();
   const pageVerb =
-    /^(please\s+|now\s+|then\s+)?(gather|collect|compile|write|draft|combine|summari[sz]e|synthesi[sz]e|outline|make|create|build|put|turn|list|give me (a|an|one) (page|timeline|overview|summary|list|table|outline|study guide))\b/;
+    /^(please\s+|now\s+|then\s+)?(gather|collect|compile|write|draft|combine|make|create|build|put|turn|list|give me (a|an|one) (page|timeline|list|table|study guide))\b/;
   const pageNoun =
     /\b(one page|a page|new page|into (one|a) page|that a page|it a page|timeline|study guide|every passage|all (the )?passages|cheat sheet)\b/;
-  if (pageVerb.test(c) || pageNoun.test(c) || /汇集|收集|汇总|整理|写一|写成|一页|页面|合并|总结|概括|综述|时间线|大纲/.test(c)) return "page";
+  if (pageVerb.test(c) || pageNoun.test(c) || /汇集|收集|汇总|整理|写一|写成|一页|页面|合并|时间线/.test(c)) return "page";
   const links =
     /\b(contradict\w*|disagree\w*|inconsisten\w*)\b|^(please\s+)?(connect|link|draw|propose)\b|\b(draw|propose|find|add|make)\s+(the\s+|some\s+)?(links?|connections?)\b|\bconflict\w* between\b/;
   if (links.test(c) || /矛盾|冲突|分歧|连接|关联/.test(c)) return "links";
