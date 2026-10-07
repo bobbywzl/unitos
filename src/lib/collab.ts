@@ -133,7 +133,18 @@ export async function linkAccess(
   };
   if (!link.notebookId) {
     if (link.formerNotebookId) return notFound();
-    if (!scope) return documentAccess(link.fromDocumentId, min);
+    if (!scope) {
+      const access = await documentAccess(link.fromDocumentId, min);
+      if (access instanceof NextResponse || !authEnabled() || RANK[min] < RANK.editor) return access;
+      // An older tab names no project: a change answers 404 when the link
+      // was removed from any project the caller edits that holds both its
+      // documents, as the same change asked from that project would.
+      const editable = await editableHolders(link, access.user, null);
+      const hidden =
+        editable.length > 0 &&
+        (await db.docLinkHidden.count({ where: { docLinkId: link.id, notebookId: { in: editable } } })) > 0;
+      return hidden ? notFound() : access;
+    }
     const access = await notebookAccess(scope, min);
     if (access instanceof NextResponse) return access.status === 404 ? notFound() : access;
     if (!authEnabled()) return access;
@@ -224,37 +235,45 @@ export async function crossAccountLink(link: LinkForRule, user: User): Promise<C
   return (await crossAccountLinks([link], user)).get(link.id) ?? { crossAccount: false, outside: false, removable: true };
 }
 
-/** Where a removal hides a link whose row has to stay (another account
-    replied on it, or another account's project shows it; SPEC.md §13): a
-    link of a project, in that project; a link with no project, in every
-    project of the asking project's owner that holds both documents and
-    that the caller edits, so it leaves the same projects a delete took it
-    from and stays in every other account's project. */
-export async function linkHideProjects(
-  link: LinkForAccess,
-  user: User,
-  scope: string | null,
-): Promise<string[]> {
-  if (link.notebookId) return [link.notebookId];
-  const owner = scope
-    ? ((await db.notebook.findUnique({ where: { id: scope }, select: { userId: true } }))?.userId ?? user.id)
-    : user.id;
+/** The projects that hold both documents of a link and that the caller
+    edits: of `owner` only when one is named, else of every account. */
+async function editableHolders(link: LinkForAccess, user: User, owner: string | null): Promise<string[]> {
   const ends = [...new Set([link.fromDocumentId, link.toDocumentId])];
   const holders = await db.notebook.findMany({
     where: {
-      ...(authEnabled() ? { userId: owner } : {}),
+      ...(authEnabled() && owner ? { userId: owner } : {}),
       AND: ends.map((documentId) => ({ documents: { some: { documentId } } })),
     },
     select: { id: true, userId: true, collaborators: { select: { email: true, role: true } } },
   });
-  const ids = holders
+  return holders
     .filter((h) => {
       if (!authEnabled()) return true;
       const role = roleOf(h, user);
       return role !== null && RANK[role] >= RANK.editor;
     })
     .map((h) => h.id);
-  return scope && !ids.includes(scope) ? [...ids, scope] : ids;
+}
+
+/** Where a removal hides a link whose row has to stay (another account
+    replied on it, or another account's project shows it; SPEC.md §13): a
+    link of a project, in that project; a link with no project, in every
+    project of the asking project's owner that holds both documents and
+    that the caller edits, so it leaves the same projects a delete took it
+    from and stays in every other account's project. Asked from no project
+    (an older tab), in every project of any account that holds both
+    documents and that the caller edits. An empty answer means the row
+    can't be kept hidden anywhere: the caller refuses the removal. */
+export async function linkHideProjects(
+  link: LinkForAccess,
+  user: User,
+  scope: string | null,
+): Promise<string[]> {
+  if (link.notebookId) return [link.notebookId];
+  if (!scope) return editableHolders(link, user, null);
+  const owner = (await db.notebook.findUnique({ where: { id: scope }, select: { userId: true } }))?.userId ?? user.id;
+  const ids = await editableHolders(link, user, owner);
+  return ids.includes(scope) ? ids : [...ids, scope];
 }
 
 /** The answer when the cross-account rule refuses a change. */
