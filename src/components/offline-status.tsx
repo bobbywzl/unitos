@@ -14,7 +14,9 @@ import {
 // Offline work (SPEC.md §17, Unitos Premium): the pill in the workspace
 // header. Hidden while online with an empty queue. Offline it says so — with
 // the queued count for premium accounts, with the plain limit for the rest.
-// Back online it shows the sync until the queue drains. It also mirrors the
+// Back online it shows the sync until the queue drains. A held repeat add
+// waits for the reader's word in the ask on screen, not for the sync, so it
+// is not counted (queuedCount): the pill does not say Syncing for it. It also mirrors the
 // account's premium state for the queue and kicks off the sync.
 export function OfflineStatus() {
   const t = useT();
@@ -59,7 +61,9 @@ export function OfflineStatus() {
         : t("common.offlinePremium")
       : t("common.offlineReadOnly")
     : syncing || queued > 0
-      ? t("common.offlineSyncing", { n: queued })
+      ? queued === 1
+        ? t("common.offlineSyncingOne")
+        : t("common.offlineSyncing", { n: queued })
       : null;
   if (!label) return null;
   // Below md the header has no room for the sentence: the pill says Offline

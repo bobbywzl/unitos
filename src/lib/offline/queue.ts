@@ -138,12 +138,37 @@ function notify() {
   for (const l of listeners) l();
 }
 
+// The records in a store that wait for the sync: a held repeat add waits for
+// the reader's word instead (heldAdds), so it is not counted. It stays in
+// the queue all the same.
+function waitingIn(store: typeof WRITES | typeof UPLOADS): Promise<number> {
+  return openDb().then(
+    (db) =>
+      new Promise((resolve, reject) => {
+        let n = 0;
+        const t = db.transaction(store, "readonly");
+        const req = t.objectStore(store).openCursor();
+        req.onsuccess = () => {
+          const cursor = req.result;
+          if (!cursor) {
+            resolve(n);
+            return;
+          }
+          const record = cursor.value as QueuedWrite | QueuedUpload;
+          if (!(record.held && record.held.length > 0)) n++;
+          cursor.continue();
+        };
+        req.onerror = () => reject(req.error);
+        t.oncomplete = () => db.close();
+      }),
+  );
+}
+
+/** The records waiting for the sync, held repeat adds left out: the
+    offline pill's count. */
 export async function queuedCount(): Promise<number> {
   try {
-    const [writes, uploads] = await Promise.all([
-      tx<number>(WRITES, "readonly", (s) => s.count()),
-      tx<number>(UPLOADS, "readonly", (s) => s.count()),
-    ]);
+    const [writes, uploads] = await Promise.all([waitingIn(WRITES), waitingIn(UPLOADS)]);
     return writes + uploads;
   } catch {
     return 0;
