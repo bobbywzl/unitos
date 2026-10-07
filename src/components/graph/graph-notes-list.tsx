@@ -10,6 +10,7 @@ import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { useGraphNotes, useGraphNotesLit } from "@/components/graph/graph-notes";
 import { LinkReplyCount } from "@/components/graph/link-replies";
+import { ReplyThread } from "@/components/collab/reply-thread"; // [layer5]
 import { noteLine, type GraphNote } from "@/lib/graph/notes";
 import { clipWords } from "@/lib/markdown-preview";
 import { splitNote } from "@/lib/note-title";
@@ -487,6 +488,22 @@ function NotesListRow({
               </p>
             </div>
           ))}
+          {/* [layer5] The note's replies, readable here (VIEW5-03): the
+              tray's thread and rules (editors reply and resolve; a viewer reads). */}
+          <div
+            data-graph-notes-thread={note.id}
+            onKeyDownCapture={(e) => {
+              // Esc in a reply box holding words only leaves the box (as on a link).
+              const box = e.target;
+              if (e.key !== "Escape" || !(box instanceof HTMLTextAreaElement) || box.value.trim() === "") return;
+              e.stopPropagation();
+              const home = box.closest<HTMLElement>("[data-graph-side-list][tabindex]");
+              if (home) home.focus({ preventScroll: true });
+              else box.blur();
+            }}
+          >
+            <ReplyThread target={{ noteId: note.id }} replies={note.replies} />
+          </div>
         </div>
       )}
       <div className="mt-2 flex flex-wrap items-center gap-2">

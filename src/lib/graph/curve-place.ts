@@ -45,15 +45,16 @@ function textWidth(title: string): number {
 
 /** A node's room, from its box's top-left corner, its label, and the label
     scale: two boxes, the dot with the notes chip right of it, and the
-    label's one or two lines under them. */
-export function nodeRoom(x: number, y: number, scale = 1, title = ""): Box[] {
+    label's one or two lines under them. [layer5] chipW: the comments chip
+    right of the notes chip, in flow units (VIEW5-01 (a)); 0 for none. */
+export function nodeRoom(x: number, y: number, scale = 1, title = "", chipW = 0): Box[] {
   const box = NODE_W * Math.min(scale, LABEL_WIDTH_SCALE_MAX);
   const text = textWidth(title) * scale;
   const lines = text > box ? 2 : 1;
   const half = Math.min(box, text) / 2 + 2;
   const cx = x + NODE_W / 2;
   return [
-    { x0: cx - 22, y0: y - 2, x1: cx + 64, y1: y + 34 },
+    { x0: cx - 22, y0: y - 2, x1: cx + 64 + (chipW > 0 ? chipW + 4 : 0), y1: y + 34 },
     { x0: cx - half, y0: y + 34, x1: cx + half, y1: y + 38 + 16 * scale * lines },
   ];
 }

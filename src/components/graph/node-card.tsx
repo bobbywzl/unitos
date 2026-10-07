@@ -28,6 +28,7 @@ import { LinkDraftTag } from "@/components/graph/link-draft-tag"; // [ui5]
 import { useWantProvenance } from "@/components/graph/provenance-want";
 import { PartDot } from "@/components/graph/coverage"; // [cover4]
 import { AddToNote } from "@/components/graph/note-gather"; // [cover4]
+import { NodeCommentsLine } from "@/components/graph/coverage"; // [layer5]
 
 const outlines = new Map<string, DocumentOutline>();
 const NOTE_ROWS = 6;
@@ -236,6 +237,8 @@ export function NodeCardPanel({
         </button>
       </div>
       <p className="-mt-2 text-[11.5px] text-sand-600">{facts.join(" · ")}</p>
+      {/* [layer5] The reader's comments: one line that opens into them (VIEW5-01). */}
+      {node.kind !== "generated" && <NodeCommentsLine notebookId={notebookId} documentId={node.id} onOpenDocument={onOpenDocument} />}
       {/* A generated document says so, and which command wrote it (WALK3-09). */}
       {generated && (
         <p data-graph-card-generated className="-mt-1.5 rounded-xl bg-sand-100 px-3 py-2 text-[12px] leading-snug text-sand-700">

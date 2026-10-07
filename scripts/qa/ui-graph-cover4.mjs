@@ -85,7 +85,11 @@ async function cover(lang, width, height) {
     const gapDots = await page.locator("[data-graph-documents-list] [data-graph-part-dot]").evaluateAll((els) => els.map((e) => e.getAttribute("data-graph-part-dot")));
     check(`${w} Gaps only keeps the 12 empty parts`, gapDots.length === 12 && gapDots.every((d) => d === "empty"), JSON.stringify(gapDots));
     const gapLinks = await page.locator("[data-graph-documents-list] [data-graph-documents-link]").evaluateAll((els) => new Set(els.map((e) => e.getAttribute("data-graph-documents-link"))).size);
-    check(`${w} Gaps only keeps the 4 links with no reply`, gapLinks === 4, String(gapLinks));
+    // Round 5 (WALK5-06): Gaps only is about notes; links waiting for a reply are No reply's.
+    check(`${w} Gaps only lists no links`, gapLinks === 0, String(gapLinks));
+    const why = await page.locator("[data-graph-documents-list] [data-graph-gap-why]").count();
+    const rows = await page.locator("[data-graph-documents-row]").count();
+    check(`${w} each row Gaps only keeps says why`, rows > 0 && why === rows, `${why} of ${rows}`);
     check(`${w} Gaps only hides notes`, (await page.locator("[data-graph-documents-list] [data-graph-note-row]").count()) === 0);
     await shot(page, `VIEW4-01-gaps-${w}`);
     await page.locator("[data-graph-gaps-only]").click();
