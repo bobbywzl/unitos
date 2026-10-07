@@ -34,12 +34,12 @@ function boxAt(p: Point, w: number, h: number): Box {
 const NODE_W = 144;
 const LABEL_WIDTH_SCALE_MAX = 1.35;
 
-// About how wide a label's text runs at 11 px: a CJK character is square,
-// a Latin one about half as wide.
+// About how wide a label's text runs at 11 px semibold: a CJK character is
+// square, a Latin capital about two thirds of it, a small letter about half.
 const CJK = /[぀-ヿ㐀-䶿一-鿿豈-﫿가-힯]/;
 function textWidth(title: string): number {
   let w = 0;
-  for (const ch of title) w += CJK.test(ch) ? 11 : 5.6;
+  for (const ch of title) w += CJK.test(ch) ? 11 : /[A-Z]/.test(ch) ? 7.6 : 6;
   return w;
 }
 
@@ -63,13 +63,12 @@ export function nodeRoom(x: number, y: number, scale = 1, title = ""): Box[] {
 export type MarkCurve = { id: string; curve: { s: Point; c: Point; e: Point } | null; at: Point; w: number; h: number };
 
 /** The points to try: along the curve, then (a short curve whose length
-    the two nodes cover) beside its middle, one and two marks' heights off
-    it on either side. */
+    the two nodes cover) beside its middle third, one and two marks'
+    heights off it on either side. */
 function candidates(m: MarkCurve): Point[] {
   if (!m.curve) return [];
   const { s, c, e } = m.curve;
   const along = TRIES.map((t) => quadAt(s, c, e, t));
-  const mid = along[0];
   const dx = e.x - s.x;
   const dy = e.y - s.y;
   const len = Math.hypot(dx, dy) || 1;
@@ -81,7 +80,9 @@ function candidates(m: MarkCurve): Point[] {
     nx = -nx;
     ny = -ny;
   }
-  const off = [1.2, -1.2, 2.2, -2.2].map((k) => ({ x: mid.x + nx * m.h * k, y: mid.y + ny * m.h * k }));
+  const off = [1.2, -1.2, 2.2, -2.2].flatMap((k) =>
+    along.slice(0, 3).map((p) => ({ x: p.x + nx * m.h * k, y: p.y + ny * m.h * k })),
+  );
   return [...along, ...off];
 }
 
