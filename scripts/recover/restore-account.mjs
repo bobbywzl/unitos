@@ -12,7 +12,8 @@
 // What it does, for every project the account owned in the backup:
 //   - Inserts every row that is in the backup and missing in production: the
 //     project, its sections, notes, annotations, quotes (Source), replies,
-//     note edits, history, collaborators, folders, and document attachments;
+//     note edits, history, collaborators, folders, document attachments, and
+//     the hide rows of the links removed from it (DocLinkHidden);
 //     and every document the project held or quoted that production no longer
 //     has, with its blocks, pages, figures, images, video, versions, edits,
 //     and links.
@@ -25,6 +26,8 @@
 //     trigger in 20261007120000_doclink_former_notebook). Each such link of a
 //     project restored here gets its notebookId back and formerNotebookId
 //     cleared, so the project shows its links and their replies again.
+//   - Keeps a restored project's removed links removed: the DocLinkHidden
+//     rows of its links come back with the links.
 //   - Bumps each project's rev, so an open tab refreshes.
 //
 // What it never does: delete a row, or change a row production already has
@@ -166,6 +169,20 @@ async function main() {
       Dm,
     )
   ).filter((l) => available.has(l.fromDocumentId) && available.has(l.toDocumentId));
+  // A link removed from a restored project while its row stayed (another
+  // account's reply or project): the hide row goes with the link, so the
+  // removal holds after the restore. The table exists from
+  // 20261007140000_doclink_hidden on, in both databases.
+  const hasHidden =
+    (await columns(backup, "DocLinkHidden")).size > 0 && (await columns(target, "DocLinkHidden")).size > 0;
+  const linkHides = hasHidden
+    ? await backupRows(
+        "DocLinkHidden",
+        `t."docLinkId" = ANY($1::text[]) AND t."notebookId" = ANY($2::text[])`,
+        ids(docLinks),
+        N,
+      )
+    : [];
   const readingPositions = await backupRows(
     "ReadingPosition",
     `t."documentId" = ANY($1::text[]) AND t."userId" = $2`,
@@ -221,6 +238,7 @@ async function main() {
   add("DocumentVersion", versions);
   add("BlockEdit", blockEdits);
   add("DocLink", docLinks);
+  if (hasHidden) add("DocLinkHidden", linkHides);
   add("ReadingPosition", readingPositions);
   add("ImageAsset", imageKeys.map((r) => ({ id: r.id })), true);
   add("NotebookDocument", attachments);
@@ -238,6 +256,7 @@ async function main() {
   const COMPOSITE = {
     NotebookDocument: ["notebookId", "documentId"],
     ReadingPosition: ["userId", "documentId"],
+    DocLinkHidden: ["docLinkId", "notebookId"],
   };
   for (const step of plan) {
     const composite = COMPOSITE[step.table];
