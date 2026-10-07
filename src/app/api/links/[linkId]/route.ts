@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { bumpDocument, crossAccountLink, linkAccess, linkOfOtherAccount } from "@/lib/collab";
+import { bumpDocument, crossAccountLink, linkAccess, linkHideProjects, linkOfOtherAccount } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
@@ -72,6 +72,10 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ linkId: strin
 
 // Remove a link. Recorded as a LINK_REMOVE edit so the Edits panel shows it;
 // dismissing a still-recommended link records nothing — it never was history.
+// The row is deleted only when no other account replied on it and no other
+// account's project shows it. Otherwise the link is hidden in the remover's
+// projects (DocLinkHidden): every reply row is kept, and every other project
+// still reads the link (rule zero items 1 and 2; SPEC.md §13).
 export async function DELETE(req: Request, ctx: { params: Promise<{ linkId: string }> }) {
   const t = await serverT();
   const { linkId } = await ctx.params;
@@ -80,14 +84,24 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ linkId: stri
     include: { toDocument: { select: { title: true } } },
   });
   if (!link) return NextResponse.json({ error: t("api.linkNotFound") }, { status: 404 });
-  const access = await linkAccess(link, "editor", scopeOf(req));
+  const scope = scopeOf(req);
+  const access = await linkAccess(link, "editor", scope);
   if (access instanceof NextResponse) return access;
-  if (link.createdById !== access.user.id && (await crossAccountLink(link, access.user)).crossAccount) {
+  const rule = await crossAccountLink(link, access.user);
+  if (link.createdById !== access.user.id && rule.crossAccount) {
     return NextResponse.json({ error: t("api.linkSharedAcrossAccounts") }, { status: 403 });
   }
+  const othersReplied = (await db.reply.count({ where: { docLinkId: linkId, userId: { not: access.user.id } } })) > 0;
+  const hideIn = othersReplied || rule.crossAccount ? await linkHideProjects(link, access.user, scope) : [];
+  const project = link.notebookId ?? (hideIn.length > 0 ? scope : null);
 
   await db.$transaction([
-    db.docLink.delete({ where: { id: linkId } }),
+    hideIn.length > 0
+      ? db.docLinkHidden.createMany({
+          data: hideIn.map((notebookId) => ({ docLinkId: link.id, notebookId, userId: access.user.id })),
+          skipDuplicates: true,
+        })
+      : db.docLink.delete({ where: { id: linkId } }),
     ...(link.recommended
       ? []
       : [
@@ -98,7 +112,7 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ linkId: stri
               kind: "LINK_REMOVE",
               meta: {
                 linkId: link.id,
-                ...(link.notebookId ? { notebookId: link.notebookId } : {}),
+                ...(project ? { notebookId: project } : {}),
                 toDocumentId: link.toDocumentId,
                 toTitle: link.toDocument.title,
                 quotedText: link.quotedText,

@@ -219,7 +219,7 @@ export async function buildConnections(
   // resolve; drop repeats of links that already exist between the same spans.
   const blockById = new Map(document.blocks.map((b) => [b.id, b]));
   const existing = await db.docLink.findMany({
-    where: { fromDocumentId: documentId, ...projectLinks(notebookId) },
+    where: { fromDocumentId: documentId, ...projectLinks(notebookId, { withHidden: true }) },
     select: { fromBlockId: true, quotedText: true, toDocumentId: true },
   });
   const seen = new Set(existing.map((l) => `${l.fromBlockId}|${l.quotedText}|${l.toDocumentId}`));

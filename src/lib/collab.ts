@@ -106,6 +106,7 @@ export async function documentAccess(
 // §13); the reads are lib/link-scope.ts.
 
 type LinkForAccess = {
+  id: string;
   notebookId: string | null;
   formerNotebookId: string | null;
   fromDocumentId: string;
@@ -119,7 +120,8 @@ type LinkForAccess = {
     to the caller's role there, and is not found unless both its documents
     sit in that project; asked from no project (an older tab), to the best
     role over its from-document. A link whose project was deleted is not
-    found. */
+    found, and neither is a link removed from the project it is asked from
+    (DocLinkHidden). */
 export async function linkAccess(
   link: LinkForAccess,
   min: NotebookRole,
@@ -137,12 +139,19 @@ export async function linkAccess(
     if (!authEnabled()) return access;
     const ends = [...new Set([link.fromDocumentId, link.toDocumentId])];
     const held = await db.notebookDocument.count({ where: { notebookId: scope, documentId: { in: ends } } });
-    return held === ends.length ? access : notFound();
+    if (held !== ends.length || (await hiddenIn(link.id, scope))) return notFound();
+    return access;
   }
   if (scope && scope !== link.notebookId) return notFound();
+  if (await hiddenIn(link.id, link.notebookId)) return notFound();
   const access = await notebookAccess(link.notebookId, min);
   if (access instanceof NextResponse && access.status === 404) return notFound();
   return access;
+}
+
+/** The link was removed from this project while its row stays. */
+async function hiddenIn(docLinkId: string, notebookId: string): Promise<boolean> {
+  return (await db.docLinkHidden.count({ where: { docLinkId, notebookId } })) > 0;
 }
 
 /** What one account may do on a link with no project whose documents sit in
@@ -158,6 +167,8 @@ export type CrossAccountLink = {
   /** The caller is outside the maker's projects: no Reply, no reason edit,
       no Accept, no resolve of another account's reply. */
   outside: boolean;
+  /** The caller made the link: only the maker removes or dismisses it. */
+  removable: boolean;
 };
 
 type LinkForRule = LinkForAccess & { id: string; createdById: string | null; createdAt: Date };
@@ -203,14 +214,47 @@ export async function crossAccountLinks(
           const role = roleOf(h, user);
           return role !== null && RANK[role] >= RANK.editor;
         }));
-    out.set(link.id, { crossAccount: true, outside: !inside });
+    out.set(link.id, { crossAccount: true, outside: !inside, removable: user !== null && link.createdById === user.id });
   }
   return out;
 }
 
 /** The cross-account rule for one link. */
 export async function crossAccountLink(link: LinkForRule, user: User): Promise<CrossAccountLink> {
-  return (await crossAccountLinks([link], user)).get(link.id) ?? { crossAccount: false, outside: false };
+  return (await crossAccountLinks([link], user)).get(link.id) ?? { crossAccount: false, outside: false, removable: true };
+}
+
+/** Where a removal hides a link whose row has to stay (another account
+    replied on it, or another account's project shows it; SPEC.md §13): a
+    link of a project, in that project; a link with no project, in every
+    project of the asking project's owner that holds both documents and
+    that the caller edits, so it leaves the same projects a delete took it
+    from and stays in every other account's project. */
+export async function linkHideProjects(
+  link: LinkForAccess,
+  user: User,
+  scope: string | null,
+): Promise<string[]> {
+  if (link.notebookId) return [link.notebookId];
+  const owner = scope
+    ? ((await db.notebook.findUnique({ where: { id: scope }, select: { userId: true } }))?.userId ?? user.id)
+    : user.id;
+  const ends = [...new Set([link.fromDocumentId, link.toDocumentId])];
+  const holders = await db.notebook.findMany({
+    where: {
+      ...(authEnabled() ? { userId: owner } : {}),
+      AND: ends.map((documentId) => ({ documents: { some: { documentId } } })),
+    },
+    select: { id: true, userId: true, collaborators: { select: { email: true, role: true } } },
+  });
+  const ids = holders
+    .filter((h) => {
+      if (!authEnabled()) return true;
+      const role = roleOf(h, user);
+      return role !== null && RANK[role] >= RANK.editor;
+    })
+    .map((h) => h.id);
+  return scope && !ids.includes(scope) ? [...ids, scope] : ids;
 }
 
 /** The answer when the cross-account rule refuses a change. */

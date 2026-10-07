@@ -6,6 +6,7 @@ import type { GraphEdgeLink } from "@/lib/types";
 import { api } from "@/lib/api";
 import { linkPath } from "@/lib/link-scope";
 import { useCollab } from "@/components/collab/collab-context";
+import { confirmLinkRemoval, linkRemovable } from "@/components/collab/confirm-link-removal";
 import { ArrowLeftIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { LinkDetail } from "@/components/graph/link-detail";
@@ -43,6 +44,7 @@ export function LinkPanel({
 
   async function decide(accept: boolean) {
     if (busy) return;
+    if (!accept && !confirmLinkRemoval(t, link.replies?.length ?? 0, "dismiss")) return;
     setBusy(true);
     setError(null);
     try {
@@ -111,15 +113,17 @@ export function LinkPanel({
               >
                 {t("panes.acceptLink")}
               </button>
-              <button
-                onClick={() => void decide(false)}
-                data-track="link-dismiss"
-                disabled={busy}
-                data-tip={t("panes.dismissLinkTitle")}
-                className="rounded-full border border-line px-2.5 py-0.5 text-[11px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
-              >
-                {t("panes.dismissLink")}
-              </button>
+              {linkRemovable(link.crossAccount) && (
+                <button
+                  onClick={() => void decide(false)}
+                  data-track="link-dismiss"
+                  disabled={busy}
+                  data-tip={t("panes.dismissLinkTitle")}
+                  className="rounded-full border border-line px-2.5 py-0.5 text-[11px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+                >
+                  {t("panes.dismissLink")}
+                </button>
+              )}
             </span>
           )}
         </div>

@@ -23,6 +23,7 @@ import type { GraphEdge, GraphEdgeLink, GraphNode } from "@/lib/types";
 import { api } from "@/lib/api";
 import { linkPath } from "@/lib/link-scope";
 import { useCollab } from "@/components/collab/collab-context";
+import { confirmLinkRemoval, linkRemovable } from "@/components/collab/confirm-link-removal";
 import { FilmIcon, MaximizeIcon, NotesIcon, PageIcon, PlusIcon, QuestionIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
@@ -520,13 +521,15 @@ function EdgeLinkList({ edgeId, loop, anchor, links }: { edgeId: string; loop: b
   const { canEdit } = useCollab();
   const router = useRouter();
   const { notebookId } = useParams<{ notebookId?: string }>();
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [busyIds, setBusyIds] = useState<Set<string>>(() => new Set());
   const [accepted, setAccepted] = useState<Set<string>>(() => new Set());
   const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
   const [decideError, setDecideError] = useState<string | null>(null);
-  async function decide(linkId: string, accept: boolean) {
-    if (busyId) return;
-    setBusyId(linkId);
+  async function decide(link: GraphEdgeLink, accept: boolean) {
+    const linkId = link.id;
+    if (busyIds.has(linkId)) return;
+    if (!accept && !confirmLinkRemoval(t, link.replies?.length ?? 0, "dismiss")) return;
+    setBusyIds((prev) => new Set(prev).add(linkId));
     setDecideError(null);
     const mark = accept ? setAccepted : setDismissed;
     mark((prev) => new Set(prev).add(linkId));
@@ -542,7 +545,11 @@ function EdgeLinkList({ edgeId, loop, anchor, links }: { edgeId: string; loop: b
       });
       setDecideError(err instanceof Error ? err.message : t("common.requestFailed"));
     } finally {
-      setBusyId(null);
+      setBusyIds((prev) => {
+        const next = new Set(prev);
+        next.delete(linkId);
+        return next;
+      });
     }
   }
   const count = links.length;
@@ -605,23 +612,25 @@ function EdgeLinkList({ edgeId, loop, anchor, links }: { edgeId: string; loop: b
                 {canEdit && !l.crossAccount?.outside && (
                   <span className="ml-auto flex items-center gap-1.5">
                     <button
-                      onClick={() => void decide(l.id, true)}
+                      onClick={() => void decide(l, true)}
                       data-track="link-accept"
-                      disabled={busyId !== null}
+                      disabled={busyIds.has(l.id)}
                       data-tip={t("panes.acceptLinkTitle")}
                       className="rounded-full bg-sage-600 px-2.5 py-0.5 text-[11px] font-semibold text-sage-fg hover:bg-sage-700 disabled:opacity-40"
                     >
                       {t("panes.acceptLink")}
                     </button>
-                    <button
-                      onClick={() => void decide(l.id, false)}
-                      data-track="link-dismiss"
-                      disabled={busyId !== null}
-                      data-tip={t("panes.dismissLinkTitle")}
-                      className="rounded-full border border-line px-2 py-0.5 text-[11px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
-                    >
-                      {t("panes.dismissLink")}
-                    </button>
+                    {linkRemovable(l.crossAccount) && (
+                      <button
+                        onClick={() => void decide(l, false)}
+                        data-track="link-dismiss"
+                        disabled={busyIds.has(l.id)}
+                        data-tip={t("panes.dismissLinkTitle")}
+                        className="rounded-full border border-line px-2 py-0.5 text-[11px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+                      >
+                        {t("panes.dismissLink")}
+                      </button>
+                    )}
                   </span>
                 )}
               </div>
