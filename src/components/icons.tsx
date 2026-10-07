@@ -21,6 +21,79 @@ function Icon({ size = 17, className, children }: IconProps & { children: React.
   );
 }
 
+// Row icons (COST4-05): a list draws these once per row — every reader
+// block, every note — so the page holds each shape once, as a <symbol> in
+// IconSprite (the root layout), and a row draws a <use> of it. The outer
+// svg's stroke and fill reach the shape through the <use>.
+const ROW_SHAPES = {
+  pencil: (
+    <>
+      <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
+      <path d="m15 5 4 4" />
+    </>
+  ),
+  locate: (
+    <>
+      <line x1="2" x2="5" y1="12" y2="12" />
+      <line x1="19" x2="22" y1="12" y2="12" />
+      <line x1="12" x2="12" y1="2" y2="5" />
+      <line x1="12" x2="12" y1="19" y2="22" />
+      <circle cx="12" cy="12" r="7" />
+    </>
+  ),
+  bookmark: <path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" />,
+  "chevron-right": <path d="m9 18 6-6-6-6" />,
+  check: <path d="M20 6 9 17l-5-5" />,
+  anchor: (
+    <>
+      <circle cx="12" cy="5" r="3" />
+      <path d="M12 22V8" />
+      <path d="M5 12H2a10 10 0 0 0 20 0h-3" />
+    </>
+  ),
+} as const;
+export type RowShape = keyof typeof ROW_SHAPES;
+
+/** Every row shape, once: rendered in the root layout's body. */
+export function IconSprite() {
+  return (
+    <svg aria-hidden width="0" height="0" style={{ position: "absolute", width: 0, height: 0, overflow: "hidden" }}>
+      <defs>
+        {(Object.keys(ROW_SHAPES) as RowShape[]).map((name) => (
+          <symbol key={name} id={`icon-${name}`} viewBox="0 0 24 24">
+            {ROW_SHAPES[name]}
+          </symbol>
+        ))}
+      </defs>
+    </svg>
+  );
+}
+
+/** A row shape as its own svg: a <use> of the sprite's symbol. */
+export function RowIcon({
+  shape,
+  size = 17,
+  strokeWidth = "2.75",
+  className,
+}: IconProps & { shape: RowShape; strokeWidth?: string }) {
+  return (
+    <svg
+      aria-hidden
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <use href={`#icon-${shape}`} />
+    </svg>
+  );
+}
+
 export function ArrowLeftIcon(props: IconProps) {
   return (
     <Icon {...props}>
@@ -44,11 +117,7 @@ export function UnlinkIcon(props: IconProps) {
 }
 
 export function ChevronRightIcon(props: IconProps) {
-  return (
-    <Icon {...props}>
-      <path d="m9 18 6-6-6-6" />
-    </Icon>
-  );
+  return <RowIcon shape="chevron-right" {...props} />;
 }
 
 export function ChevronLeftIcon(props: IconProps) {
@@ -187,12 +256,7 @@ export function PlusIcon(props: IconProps) {
 }
 
 export function PencilIcon(props: IconProps) {
-  return (
-    <Icon {...props}>
-      <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
-      <path d="m15 5 4 4" />
-    </Icon>
-  );
+  return <RowIcon shape="pencil" {...props} />;
 }
 
 export function CommentIcon(props: IconProps) {
@@ -286,11 +350,7 @@ export function DistillIcon(props: IconProps) {
 
 // Extract (DISTILL): the quotes that answer a question.
 export function BookmarkIcon(props: IconProps) {
-  return (
-    <Icon {...props}>
-      <path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" />
-    </Icon>
-  );
+  return <RowIcon shape="bookmark" {...props} />;
 }
 
 export function QuoteIcon(props: IconProps) {
@@ -429,11 +489,7 @@ export function RegenerateIcon(props: IconProps) {
 }
 
 export function CheckIcon(props: IconProps) {
-  return (
-    <Icon {...props}>
-      <path d="M20 6 9 17l-5-5" />
-    </Icon>
-  );
+  return <RowIcon shape="check" {...props} />;
 }
 
 export function PlayIcon(props: IconProps) {
@@ -508,15 +564,7 @@ export function MuteIcon(props: IconProps) {
 
 // Crosshair: jump to the anchor in the reader.
 export function LocateIcon(props: IconProps) {
-  return (
-    <Icon {...props}>
-      <line x1="2" x2="5" y1="12" y2="12" />
-      <line x1="19" x2="22" y1="12" y2="12" />
-      <line x1="12" x2="12" y1="2" y2="5" />
-      <line x1="12" x2="12" y1="19" y2="22" />
-      <circle cx="12" cy="12" r="7" />
-    </Icon>
-  );
+  return <RowIcon shape="locate" {...props} />;
 }
 
 // A reader's rating of a tool's answer (rating-buttons.tsx): thumb up.

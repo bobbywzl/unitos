@@ -77,19 +77,29 @@ function pageUrls(id: string, info: OfflineInfo): string[] {
 }
 
 // The graph's data (SPEC.md §13): the page no longer carries it, so the copy
-// keeps the routes the graph reads when it opens — the graph, with and
-// without the provenance links, every link's passages (the service worker
-// answers a one-link call from them), every document's part titles for the
-// Documents list, and each document's outline for its node card. Find needs
-// the network.
+// keeps the routes the graph reads when it opens — the graph, with the
+// provenance links too when the project has any (COST4-05: without them the
+// answer is the bare one, which the service worker serves for the query),
+// every link's passages (the service worker answers a one-link call from
+// them), every document's part titles for the Documents list, and each
+// document's outline for its node card. Find needs the network.
 function graphUrls(id: string, info: OfflineInfo): string[] {
   return [
     `/api/notebooks/${id}/graph`,
-    `/api/notebooks/${id}/graph?provenance=1`,
     `/api/notebooks/${id}/graph/passages`,
     `/api/notebooks/${id}/outline?parts=titles`,
     ...info.documents.map((d) => `/api/notebooks/${id}/outline?documentId=${encodeURIComponent(d.id)}`),
   ];
+}
+
+// Whether the bare graph answer counts provenance links on any edge.
+function hasProvenance(body: string): boolean {
+  try {
+    const data = JSON.parse(body) as { edges?: { provenance?: number }[] };
+    return (data.edges ?? []).some((e) => (e.provenance ?? 0) > 0);
+  } catch {
+    return true; // unreadable: keep both answers, as before
+  }
 }
 
 const STATIC_RE = /\/_next\/static\/[^"'\s)\\]+/g;
@@ -181,13 +191,21 @@ export async function saveProject(
   // The graph's data, stored as the routes answered it. A route that fails
   // leaves the graph to say it did not load offline; the pages still save.
   const data = graphUrls(id, info);
-  for (const url of data) {
+  for (let i = 0; i < data.length; i++) {
+    const url = data[i];
+    let body: string | null = null;
     try {
       const res = await fetch(url);
-      if (res.ok) await cache.put(url, cacheable(res, await res.text()));
+      if (res.ok) {
+        body = await res.text();
+        await cache.put(url, cacheable(res, body));
+      }
     } catch {
       // The next refresh tries again.
     }
+    // The graph with its provenance links, only when it holds any; a bare
+    // answer that failed keeps the old one as before.
+    if (i === 0 && (body === null || hasProvenance(body))) data.push(`/api/notebooks/${id}/graph?provenance=1`);
   }
 
   // The chunks the pages load, and the fonts their stylesheets load, counted

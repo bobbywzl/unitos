@@ -3,6 +3,7 @@ import Script from "next/script";
 import { Caprasimo, Figtree } from "next/font/google";
 import "./globals.css";
 import { FeedbackButton } from "@/components/feedback-button";
+import { IconSprite } from "@/components/icons";
 import { LangProvider } from "@/components/lang-provider";
 import { Nudges } from "@/components/nudges";
 import { QueueSync } from "@/components/offline/queue-sync";
@@ -69,6 +70,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         </Script>
       </head>
       <body className="min-h-full flex flex-col">
+        <IconSprite />
         <LangProvider lang={lang}>
           {children}
           <Nudges />
