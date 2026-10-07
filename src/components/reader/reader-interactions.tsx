@@ -9212,7 +9212,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         data-track={`${tool}-continue`}
         aria-label={t("reader.continueConversation")}
         data-tip={ultra ? t("reader.continueConversationTitle") : t("reader.continueNeedsUltra")}
-        className={`flex items-center gap-1 rounded-full border border-line px-1.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 ${className}`}
+        className={`flex items-center gap-1 rounded-full border border-line px-1.5 py-0.5 pointer-coarse:py-1.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 ${className}`}
       >
         {t("assistant.continue")}
         {!ultra && <TierMark state="ultra" size={10} />}

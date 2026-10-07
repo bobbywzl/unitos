@@ -81,7 +81,7 @@ export function SaveAsNote({
         disabled={state.kind === "busy"}
         data-track={`assistant-save-note:${origin}`}
         data-tip={t("assistant.saveAsNoteTitle")}
-        className="flex items-center gap-1.5 rounded-full border border-line px-2.5 py-0.5 text-[11.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-60"
+        className="flex items-center gap-1.5 rounded-full border border-line px-2.5 py-0.5 pointer-coarse:py-1.5 text-[11.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-60"
       >
         {state.kind === "busy" ? <SpinnerIcon size={12} className="animate-spin" /> : <NotesIcon size={12} />}
         {state.kind === "busy" ? t("assistant.savingAsNote") : t("assistant.saveAsNote")}
