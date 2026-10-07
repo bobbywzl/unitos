@@ -1,6 +1,6 @@
 "use client";
 
-import { ACCOUNT_HEADER } from "@/lib/constants";
+import { ACCOUNT_HEADER, QUOTES_KEPT_HEADER, REPLAY_HEADER } from "@/lib/constants";
 import { openDb, tx, UPLOADS, WRITES } from "@/lib/offline/db";
 import { tabAccount } from "@/lib/tab-account";
 import { MEDIA_EXTENSIONS, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
@@ -149,7 +149,21 @@ function headers(account: string | null, json: boolean): Record<string, string> 
   return {
     ...(json ? { "Content-Type": "application/json" } : {}),
     ...(account ? { [ACCOUNT_HEADER]: account } : {}),
+    // A replayed write: a gathered note keeps a quote that no longer
+    // resolves as text instead of answering 400 (REV5-06).
+    [REPLAY_HEADER]: "1",
   };
+}
+
+// Quotes of replayed gathered notes the server kept as text (REV5-06), since
+// the offline status last took them: it says so once.
+let quotesKept = 0;
+
+/** The count of quotes kept as text since the last call; clears it. */
+export function takeQuotesKept(): number {
+  const n = quotesKept;
+  quotesKept = 0;
+  return n;
 }
 
 // One drained record's outcome: "done" leaves the queue (sent, or stale on a
@@ -172,6 +186,8 @@ async function sendWrite(record: QueuedWrite): Promise<Sent> {
       headers: headers(record.account, record.body !== undefined),
       body: record.body !== undefined ? JSON.stringify(record.body) : undefined,
     });
+    const kept = Number(res.headers.get(QUOTES_KEPT_HEADER) ?? 0);
+    if (res.ok && kept > 0) quotesKept += kept;
     return outcome(res, record, record.path);
   } catch {
     return "wait";
