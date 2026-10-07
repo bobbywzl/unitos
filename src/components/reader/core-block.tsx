@@ -1,10 +1,11 @@
 "use client";
 
+import { useLayoutEffect } from "react";
 import { CollapseIcon, ExpandIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import type { TKey } from "@/lib/i18n/dictionaries";
 import { coreKey } from "@/lib/anchors/core-key";
-import { markedText, type Highlight } from "@/components/reader/block-view";
+import { layMarginChips, markedText, type Highlight } from "@/components/reader/block-view";
 
 // Collapse (SPEC.md §28): a block shown as its core — what it really says,
 // in plain words — in the block's place. The core carries the block's id,
@@ -41,6 +42,8 @@ export function CoreBlock({
 }) {
   const t = useT();
   const kind = KIND_KEY[block.type];
+  // The chips in the margin find their places once the words are drawn.
+  useLayoutEffect(layMarginChips);
   return (
     <p data-block-id={block.id} data-collapsed="" className="reader-block reader-core my-4">
       {kind && (
@@ -57,9 +60,11 @@ export function CoreBlock({
 }
 
 /** The button beside every block that has a core: collapses the block to its
-    core, or reads it whole, whatever the rest of the article shows. While
-    Collapse is off (`quiet`) it shows only under the pointer: the whole
-    article carries no row of faint buttons. */
+    core, or reads it whole, whatever the rest of the article shows. Beside a
+    core (⤢) it shows only under the pointer or the keyboard's focus — a click
+    on the core reads it whole too — and so does it while Collapse is off
+    (`quiet`): the article carries no row of faint buttons. Beside a block read
+    whole while Collapse is on, the button that folds it again stays. */
 export function CoreToggle({ showsCore, quiet = false, onToggle }: { showsCore: boolean; quiet?: boolean; onToggle: () => void }) {
   const t = useT();
   const label = t(showsCore ? "reader.coreExpandTitle" : "reader.coreFoldTitle");
@@ -71,7 +76,7 @@ export function CoreToggle({ showsCore, quiet = false, onToggle }: { showsCore: 
       data-track={showsCore ? "collapse-expand" : "collapse-fold"}
       aria-label={label}
       data-tip={label}
-      className={`absolute top-0.5 -right-8 flex size-6 items-center justify-center rounded-full text-sage-700 ${quiet ? "opacity-0" : "opacity-40"} transition-opacity group-hover/block:opacity-100 hover:bg-sage-100 hover:opacity-100 focus-visible:opacity-100 print:hidden`}
+      className={`absolute top-0.5 -right-8 flex size-6 items-center justify-center rounded-full text-sage-700 ${quiet || showsCore ? "opacity-0" : "opacity-40"} transition-opacity group-hover/block:opacity-100 hover:bg-sage-100 hover:opacity-100 focus-visible:opacity-100 print:hidden`}
     >
       {showsCore ? <ExpandIcon size={11} /> : <CollapseIcon size={11} />}
     </button>

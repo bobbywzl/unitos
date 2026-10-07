@@ -422,10 +422,10 @@ mark[data-held] {
   pointer-events: none;
   animation: mark-out 0.3s ease-out forwards;
 }
-/* The symbol at the end of a highlighted text (block-view.tsx): the tool that
-   made the annotation, or the comment bubble. A 15px chip that sits on the
-   highlight's bottom edge right after its last character — low in the line,
-   not at its top — with a paper ring so it reads as a badge on the mark. */
+/* The symbol of a mark (block-view.tsx): the tool that made the annotation,
+   or the comment bubble. A 15px chip with a paper ring, so it reads as a
+   badge; it stands in the margin beside the line its mark ends on
+   ([data-margin-chip] below, docs/css/layer.css in the page editor). */
 .mark-chip {
   width: 15px;
   height: 15px;
@@ -440,6 +440,25 @@ mark[data-held] {
 .mark-chip-plus {
   width: auto;
   padding: 0 3px 0 2px;
+}
+/* In the block reader a mark's chip takes no room in the line (block-view.tsx
+   data-margin-chip): it stands right of the text column, level with the line
+   its mark ends on, as the page editor's chips do (docs/css/layer.css), so a
+   mark never pushes the words apart or splits a word. The chips on one line
+   stand side by side (--chip-at), and under each other where the margin is
+   narrow (--chip-down, layMarginChips). */
+[data-margin-chip] {
+  position: absolute;
+  left: calc(100% + 6px);
+  z-index: 1;
+  margin: 0.3em 0 0 !important;
+  vertical-align: baseline;
+  transform: translate(var(--chip-at, 0px), var(--chip-down, 0px));
+}
+@media print {
+  [data-margin-chip] {
+    display: none;
+  }
 }
 .tool-plus {
   gap: 1px;

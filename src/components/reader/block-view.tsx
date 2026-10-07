@@ -10,7 +10,6 @@ import {
   QuestionIcon,
   SparkleIcon,
   SummaryIcon,
-  UnlinkIcon,
   VisualizeIcon,
 } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
@@ -33,11 +32,12 @@ import { colorClass, customCss, isColorStyle, isHighlightStyle, parsedStyleClass
 
 export const CHAIN_BUTTON =
   "link-chain mx-0.5 inline-flex size-[16px] items-center justify-center rounded-full bg-clay-100 align-text-top text-clay-700 hover:bg-clay-200 hover:text-clay-800";
-// The symbol at the end of a highlighted text — the tool that made the
-// annotation, or the comment bubble. A small round chip on the highlight's
-// bottom edge, right after its last character (globals.css .mark-chip);
-// clicking it opens the card. SVG only, so the block's DOM text stays exactly
-// the stored text (SPEC.md §5).
+// The symbol of a mark — the tool that made the annotation, or the comment
+// bubble (globals.css .mark-chip); clicking it opens the card. SVG only, so
+// the block's DOM text stays exactly the stored text (SPEC.md §5). In the
+// block reader a chip takes no room in the line: it stands right of the text
+// column, level with the line its mark ends on (data-margin-chip,
+// layMarginChips), as the page editor's chips do.
 export const MARK_CHIP =
   "mark-chip inline-flex items-center justify-center rounded-full bg-clay-100 text-clay-700 hover:bg-clay-200 hover:text-clay-800";
 // The extraction's label at the end of its quote; a click opens its card.
@@ -46,6 +46,41 @@ export const EXTRACT_CHIP =
 // A glossary key term (SPEC.md §8 Phase 7): a dotted underline. The pointer
 // on it shows its definition; a press opens the selection toolbar on it.
 export const TERM_MARK = "glossary-term cursor-pointer border-b-2 border-dotted border-clay-400 hover:border-clay-600";
+
+let chipFrame = 0;
+let chipResize: ResizeObserver | null = null;
+/** The chips in the margin (data-margin-chip, globals.css): the chips on one
+    line stand side by side, and where the margin has no room for the next one
+    it stands under the one before. A block's width changing (the tray opens,
+    the window narrows) lays them again. */
+export function layMarginChips(): void {
+  if (chipFrame || typeof window === "undefined") return;
+  chipFrame = requestAnimationFrame(() => {
+    chipFrame = 0;
+    chipResize ??= new ResizeObserver(() => layMarginChips());
+    let row = { parent: null as Element | null, top: NaN, x: 0, y: 0 };
+    for (const chip of document.querySelectorAll<HTMLElement>("[data-margin-chip]")) {
+      const parent = chip.offsetParent;
+      if (!(parent instanceof HTMLElement)) continue;
+      chipResize.observe(parent);
+      const right = parent.getBoundingClientRect().right;
+      const room = (chip.closest("[data-reader-root]")?.getBoundingClientRect().right ?? window.innerWidth) - right - 8;
+      // The block's Collapse button stands at its first line's right.
+      const first = chip.offsetTop < 26 && parent.querySelector(":scope > [data-track^='collapse-']") !== null;
+      const start = first ? 28 : 0;
+      if (parent !== row.parent || Math.abs(chip.offsetTop - row.top) >= 4) {
+        row = { parent, top: chip.offsetTop, x: start, y: 0 };
+      }
+      const width = chip.offsetWidth + 4;
+      if (row.x > start && row.x + width > room) row = { ...row, x: start, y: row.y + 19 };
+      const at = `${row.x}px`;
+      const down = `${row.y}px`;
+      if (chip.style.getPropertyValue("--chip-at") !== at) chip.style.setProperty("--chip-at", at);
+      if (chip.style.getPropertyValue("--chip-down") !== down) chip.style.setProperty("--chip-down", down);
+      row.x += width;
+    }
+  });
+}
 
 /** A key term's hover: its definition in the reader's language, when the
     glossary has one, then how to open its tools. */
@@ -391,6 +426,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
             key={`chain-${from}`}
             href={link.href}
             data-anchor-skip
+            data-margin-chip
             aria-label={link.linkTitle ? t("panes.linkedTo", { title: link.linkTitle }) : t("panes.linked")}
             data-tip={link.linkTitle ? t("panes.linkedTo", { title: link.linkTitle }) : t("panes.linked")}
             className={CHAIN_BUTTON}
@@ -581,6 +617,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
             key={`extract-${from}`}
             type="button"
             data-anchor-skip
+            data-margin-chip
             data-track="extract-chip"
             aria-label={t("panes.extractOpenCard", { label: extractEnding.extractLabel ?? "" })}
             data-tip={t("panes.extractOpenCard", { label: extractEnding.extractLabel ?? "" })}
@@ -613,6 +650,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
             key={`tool-${from}`}
             type="button"
             data-anchor-skip
+            data-margin-chip
             data-track="tool-chip"
             data-hover-source={toolEnding.sourceId ?? undefined}
             aria-label={tip}
@@ -637,6 +675,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
             key={`comment-${from}`}
             type="button"
             data-anchor-skip
+            data-margin-chip
             data-track="comment-icon"
             aria-label={t("panes.openComment")}
             data-tip={t("panes.openComment")}
@@ -651,34 +690,6 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
             className={`comment-dot ${MARK_CHIP} mark-chip-comment`}
           >
             <CommentIcon size={10} />
-          </button>,
-        );
-      }
-      // A highlight's broken chain starts a link from it: the next text the
-      // reader highlights — this article or another — completes the link.
-      const linkStart = covering.find(
-        (h) => h.kind === "anchor" && h.color && h.sourceId && h.end === to,
-      );
-      if (linkStart) {
-        parts.push(
-          <button
-            key={`link-start-${from}`}
-            type="button"
-            data-anchor-skip
-            data-track="link-chip"
-            aria-label={t("panes.linkToOtherTexts")}
-            data-tip={t("panes.linkToOtherTexts")}
-            onClick={(e) => {
-              e.stopPropagation();
-              window.dispatchEvent(
-                new CustomEvent("dissect:start-link", {
-                  detail: { sourceId: linkStart.sourceId, origin: e.currentTarget },
-                }),
-              );
-            }}
-            className={CHAIN_BUTTON}
-          >
-            <UnlinkIcon size={10} />
           </button>,
         );
       }
@@ -936,6 +947,8 @@ export function BlockView({
 }) {
   const t = useT();
   const shared = "reader-block";
+  // The chips in the margin find their places once the words are drawn.
+  useLayoutEffect(layMarginChips);
 
   const content = highlights.length > 0 ? markedText(block.id, block.text, highlights, t) : block.text;
   const anchorIds = highlights.filter((h) => h.kind === "anchor" && h.sourceId && !h.leaving);
