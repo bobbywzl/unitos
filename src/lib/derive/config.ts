@@ -305,7 +305,16 @@ export const SKELETON_EFFORT: KimiEffort = "low";
 export const SKELETON_MAX_OUTPUT_TOKENS = 32768; // a line per block of the window, with the short reasoning before them
 export const SKELETON_WINDOW_CHARS = 100_000;
 export const SKELETON_STALE_FRACTION = 0.1;
-export const SKELETON_STALE_MS = 10 * 60_000; // a build older than this is a dead run
+// The build lock (Document.skeletonStartedAt): its holder refreshes it every
+// SKELETON_HEARTBEAT_MS while it builds, so a lock not refreshed for
+// SKELETON_STALE_MS is a dead run's (a deploy restart, a killed warm, a
+// crash) and the next run takes it over. A command waits for another
+// process's build at most SKELETON_WAIT_MS, then reads the stored skeleton
+// (its changed blocks as their own first words), or first words alone
+// (REV4-03).
+export const SKELETON_HEARTBEAT_MS = 10_000;
+export const SKELETON_STALE_MS = 45_000;
+export const SKELETON_WAIT_MS = 5_000;
 // A skeleton builds only when it can be read: a project of the document past
 // STITCH_WHOLE_THRESHOLD tokens or ASSISTANT_WHOLE_THRESHOLD chars. While a
 // document is being written it rebuilds at most once per SKELETON_QUIET_MS:

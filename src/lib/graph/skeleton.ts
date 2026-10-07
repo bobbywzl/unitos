@@ -11,7 +11,9 @@ import {
   SKELETON_MAX_OUTPUT_TOKENS,
   SKELETON_QUIET_MS,
   SKELETON_STALE_FRACTION,
+  SKELETON_HEARTBEAT_MS,
   SKELETON_STALE_MS,
+  SKELETON_WAIT_MS,
   SKELETON_WINDOW_CHARS,
   STITCH_READS_GENERATED,
   STITCH_WHOLE_THRESHOLD,
@@ -325,11 +327,22 @@ export async function buildSkeleton(
 // build is shared: a command that needs the skeleton the graph's warm is
 // building waits for that build instead of starting a second. Across
 // processes, Document.skeletonStartedAt is the lock: set by a conditional
-// update, so two runs never both take it, cleared only by the run that set
-// it, and a lock older than SKELETON_STALE_MS is a dead run's.
-const running = new Map<string, Promise<Skeleton | null>>();
-const WAIT_POLL_MS = 2_000;
-const WAIT_MAX_MS = 90_000; // how long a command waits for another process's build
+// update, so two runs never both take it, refreshed by its holder every
+// SKELETON_HEARTBEAT_MS, cleared only by the run that holds it, and taken
+// over once it was not refreshed for SKELETON_STALE_MS (a dead run's;
+// REV4-03).
+type Running = {
+  build: Promise<Skeleton | null>;
+  /** Stops the model calls once no one waits for the build any more. */
+  stop: AbortController;
+  /** Waiters that hold no signal (a warm, an edit's refresh): the build
+      runs on for them whatever Stop does. */
+  unstoppable: number;
+  /** Waiters with a signal not yet aborted. */
+  live: number;
+};
+const running = new Map<string, Running>();
+const WAIT_POLL_MS = 1_000;
 
 async function claimBuild(documentId: string): Promise<Date | null> {
   const stamp = new Date();
@@ -343,12 +356,30 @@ async function claimBuild(documentId: string): Promise<Date | null> {
   return count === 1 ? stamp : null;
 }
 
-async function releaseBuild(documentId: string, stamp: Date): Promise<void> {
-  await db.document.updateMany({ where: { id: documentId, skeletonStartedAt: stamp }, data: { skeletonStartedAt: null } });
+/** The lock held while the build runs: refreshed every
+    SKELETON_HEARTBEAT_MS, cleared at the end, both only while it is still
+    this run's stamp. */
+function holdLock(documentId: string, first: Date): { release: () => Promise<void> } {
+  let stamp = first;
+  const beat = setInterval(() => {
+    const next = new Date();
+    db.document
+      .updateMany({ where: { id: documentId, skeletonStartedAt: stamp }, data: { skeletonStartedAt: next } })
+      .then(({ count }) => {
+        if (count === 1) stamp = next;
+        else clearInterval(beat); // taken over: no longer ours to refresh
+      })
+      .catch(() => {});
+  }, SKELETON_HEARTBEAT_MS);
+  return {
+    release: async () => {
+      clearInterval(beat);
+      await db.document.updateMany({ where: { id: documentId, skeletonStartedAt: stamp }, data: { skeletonStartedAt: null } });
+    },
+  };
 }
 
-// A promise the signal stops waiting for; the build behind it runs on and
-// stores its skeleton for the next command.
+// A promise the signal stops waiting for.
 function untilAborted<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
   if (!signal) return promise;
   if (signal.aborted) return Promise.reject(new Error("aborted"));
@@ -368,32 +399,60 @@ function untilAborted<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> 
   });
 }
 
+// One more waiter on a running build. A waiter without a signal keeps it
+// running to the end, and it stores its skeleton for the next command. When
+// every waiter had a signal and each was aborted (Stop), the build's model
+// calls stop too.
+function join(run: Running, signal?: AbortSignal): Promise<Skeleton | null> {
+  if (!signal) {
+    run.unstoppable++;
+    return run.build;
+  }
+  run.live++;
+  const leave = () => {
+    run.live--;
+    if (run.live === 0 && run.unstoppable === 0) run.stop.abort();
+  };
+  if (signal.aborted) leave();
+  else signal.addEventListener("abort", leave, { once: true });
+  return untilAborted(run.build, signal);
+}
+
 /** The skeleton built under the lock: the build of this document already
     running in this process; else the lock taken, the skeleton built, and
     the lock cleared. "held": another process holds the lock. */
 async function buildLocked(documentId: string, userId: string | null, signal?: AbortSignal): Promise<Skeleton | null | "held"> {
   const own = running.get(documentId);
-  if (own) return untilAborted(own, signal);
+  if (own) return join(own, signal);
   const stamp = await claimBuild(documentId);
   if (!stamp) return "held";
-  const build = buildSkeleton(documentId, userId).finally(async () => {
+  const lock = holdLock(documentId, stamp);
+  const stop = new AbortController();
+  const build = buildSkeleton(documentId, userId, stop.signal).finally(async () => {
     running.delete(documentId);
-    await releaseBuild(documentId, stamp).catch(() => {});
+    await lock.release().catch(() => {});
   });
-  running.set(documentId, build);
-  return untilAborted(build, signal);
+  const run: Running = { build, stop, unstoppable: 0, live: 0 };
+  running.set(documentId, run);
+  return join(run, signal);
 }
 
-/** Another process's build of the document, waited for: the stored
+/** Another process's build of the document, waited for briefly: the stored
     skeleton once its lock clears, polled every WAIT_POLL_MS up to
-    WAIT_MAX_MS. Null when it does not clear in time. */
-async function waitForBuild(documentId: string, signal?: AbortSignal): Promise<Skeleton | null> {
-  const until = Date.now() + WAIT_MAX_MS;
+    SKELETON_WAIT_MS. When the lock is a dead run's, this run takes it over
+    and builds. Null when the build does not end in time: the command reads
+    without it rather than blocking. */
+async function waitForBuild(documentId: string, userId: string | null, signal?: AbortSignal): Promise<Skeleton | null> {
+  const until = Date.now() + SKELETON_WAIT_MS;
   while (Date.now() < until) {
     await untilAborted(new Promise((resolve) => setTimeout(resolve, WAIT_POLL_MS)), signal);
     const row = await db.document.findUnique({ where: { id: documentId }, select: { skeleton: true, skeletonStartedAt: true } });
     if (!row) return null;
-    if (!row.skeletonStartedAt || Date.now() - row.skeletonStartedAt.getTime() >= SKELETON_STALE_MS) return readSkeleton(row.skeleton);
+    if (!row.skeletonStartedAt) return readSkeleton(row.skeleton);
+    if (Date.now() - row.skeletonStartedAt.getTime() >= SKELETON_STALE_MS) {
+      const built = await buildLocked(documentId, userId, signal);
+      return built === "held" ? null : built;
+    }
   }
   return null;
 }
@@ -414,7 +473,7 @@ export async function ensureSkeleton(
     // A build already running (the graph's warm, an edit's refresh) is
     // waited for, not run twice.
     const locked = await buildLocked(document.id, userId, signal);
-    const built = locked === "held" ? await waitForBuild(document.id, signal) : locked;
+    const built = locked === "held" ? await waitForBuild(document.id, userId, signal) : locked;
     if (built) return currentSkeleton(built, document.blocks);
   } catch (err) {
     if (signal?.aborted) throw err;
