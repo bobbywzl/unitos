@@ -198,9 +198,20 @@ export function sanitizeSvgElement(svg: Element): boolean {
   return walk(svg);
 }
 
+// One parser for every call. A jsdom window per call built the window's
+// whole interface set each time, for a fragment of a few elements, once per
+// figure and table of a page (parse loop finding: a twentieth of a web
+// page's parse). A DOMParser document parses the same html the same way:
+// the same parser, scripting off as jsdom's default window has it.
+let parser: DOMParser | null = null;
+
+function parseBody(html: string): Document {
+  if (!parser) parser = new new JSDOM("").window.DOMParser();
+  return parser.parseFromString(`<body>${html}</body>`, "text/html");
+}
+
 export function sanitizeHtml(html: string, baseUrl?: string): string {
-  const dom = new JSDOM(`<body>${html}</body>`);
-  const document = dom.window.document;
+  const document = parseBody(html);
 
   const resolveUrl = (el: Element, attr: string): boolean => {
     const value = el.getAttribute(attr) ?? "";
