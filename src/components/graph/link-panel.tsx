@@ -58,13 +58,15 @@ export function LinkPanel({
     }
   }
 
+  // pb-24: a long thread scrolls its last controls (Send, Save) clear of the
+  // Feedback button at the bottom right.
   return (
     <aside
       data-track-surface="graph-link-panel"
       data-graph-side-list
       data-graph-link-panel={link.id}
       aria-label={t("panes.graphLinkPanel")}
-      className="menu-in absolute top-3 right-3 bottom-3 z-10 flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 shadow-float backdrop-blur-md max-[999px]:bottom-16"
+      className="menu-in absolute top-3 right-3 bottom-3 z-10 flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 pb-24 shadow-float backdrop-blur-md max-[999px]:bottom-16 max-[999px]:pb-4"
     >
       <div className="flex items-start gap-2">
         {onBack && (
