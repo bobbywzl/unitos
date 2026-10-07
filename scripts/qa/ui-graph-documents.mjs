@@ -60,8 +60,9 @@ const list = (page) => page.locator("[data-graph-documents-list]");
   await page.locator('[data-track="graph-documents"]').click();
   await list(page).waitFor({ timeout: 10000 });
   await page.waitForTimeout(1500);
-  // The workspace's own sync poll runs on a timer, open graph or not.
-  const opened = calls.filter((c) => c.at >= t0 && !c.path.includes("/sync"));
+  // The workspace's own sync poll runs on a timer, and the click counter
+  // (data-track) records the press: neither reads the project.
+  const opened = calls.filter((c) => c.at >= t0 && !c.path.includes("/sync") && c.path !== "/api/clicks");
   check(
     "opening the list makes one call, parts=titles, and nothing else",
     opened.length === 1 && opened[0].path.includes("outline?parts=titles") && opened[0].method === "GET",
