@@ -154,7 +154,7 @@ export function StitchBox({
   });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || e.isComposing) return;
+      if (e.key !== "Escape" || e.isComposing || e.defaultPrevented) return;
       if (!escRef.current()) return;
       e.preventDefault();
       e.stopImmediatePropagation();
@@ -197,6 +197,8 @@ export function StitchBox({
     setCommand("");
     setPassage(null);
     onPickingChange(false);
+    // The graph drops the last reply's cited documents.
+    onCited?.([]);
     // Only a command that got its reply is in `turns`, so the history holds
     // no failed or stopped command. A turn with no text (an answer that was
     // only links or a page) has nothing for the model to read, and the
