@@ -1072,7 +1072,6 @@ function GraphCanvas({
   onClearCited,
   expandedLinkId = null,
   onExpandLink,
-  onShowGenerated,
 }: GraphViewProps) {
   const router = useRouter();
   const t = useT();
@@ -1326,8 +1325,8 @@ function GraphCanvas({
   // zoom, the view shows the top of the layout, where the linked groups are.
   // A large project fits every node (its far labels are few).
   // [ui5] WALK5-11: on a phone, with the provenance switch off, generated
-  // documents stay out of the fit: the reader's documents get the canvas,
-  // and a chip at its edge counts the generated ones.
+  // documents are not drawn: the reader's documents get the canvas. The
+  // header counts them, and Generated content and the switch show them.
   const foldGenerated = paneW > 0 && paneW < 640 && !showProvenance && generatedIds.size > 0 && generatedIds.size < nodes.length;
   const foldRef = useRef<Set<string> | null>(null);
   useLayoutEffect(() => {
@@ -1449,7 +1448,7 @@ function GraphCanvas({
         // A generated document draws faded until the reader asks for the
         // provenance (WALK2-02).
         className: generated ? "graph-generated" : undefined,
-        hidden: generated && foldGenerated, // [ui5] WALK5-11: the chip counts them
+        hidden: generated && foldGenerated, // [ui5] WALK5-11
         ariaLabel: generated ? t("graphView.generatedNodeLabel", { label: named }) : named,
         data: {
           title: labelOf.get(n.id) ?? n.title,
@@ -2200,20 +2199,6 @@ function GraphCanvas({
       )}
       </SpotlightContext.Provider>
       {keyOpen && <GraphKey onClose={() => setKeyOpen(false)} />}
-      {/* [ui5] WALK5-11 */}
-      {foldGenerated && (
-        <button
-          onClick={onShowGenerated ?? (() => setShowProvenance(true))}
-          data-track="graph-generated-chip"
-          data-graph-generated-chip
-          data-tip={t("stitch.generatedToggleTitle")}
-          className="absolute top-3 right-3 z-10 flex items-center gap-1.5 rounded-full border border-line bg-card/95 px-3 py-1.5 text-[12px] whitespace-nowrap text-sand-700 shadow-soft hover:bg-clay-100 hover:text-clay-800"
-        >
-          <PageIcon size={12} />
-          {t("graphView.generatedFolded", { n: generatedIds.size, s: generatedIds.size === 1 ? "" : "s" })}
-        </button>
-      )}
-      {/* [/ui5] */}
       {/* The floating layer: link lists and node cards, screen-sized. */}
       <div ref={setFloatHost} className="pointer-events-none absolute inset-0 z-30 overflow-hidden" />
     </div>
@@ -2245,8 +2230,6 @@ type GraphViewProps = {
   // (WALK2-05); expandedLinkId is the one open there.
   expandedLinkId?: string | null;
   onExpandLink?: (linkId: string) => void;
-  /** [ui5] WALK5-11: the phone's "N generated" chip opens Generated content. */
-  onShowGenerated?: () => void;
 };
 
 export default function GraphView(props: GraphViewProps) {

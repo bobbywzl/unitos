@@ -5,7 +5,7 @@ import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { hasLinkDraft } from "@/lib/note-drafts";
 
-// [ui5] WALK5-13: the Draft tag on a link row — the Links list, the node
+// [ui5] WALK5-13: the draft dot on a link row — the Links list, the node
 // card, the reader's link card — when this browser holds words typed on the
 // link and not sent: a reply or a Note on this link. Read each time the row
 // draws; the words themselves stay where they were typed.
@@ -17,14 +17,14 @@ export function LinkDraftTag({ linkId, className = "" }: { linkId: string; class
   const { myId } = useCollab();
   const draft = useSyncExternalStore(noSubscribe, () => hasLinkDraft(myId, linkId), () => false);
   if (!draft) return null;
+  // A dot, not a label (Linda, round 5): the row keeps its size.
   return (
     <span
       data-link-draft={linkId}
       data-tip={t("graphNotes.linkDraftTitle")}
-      className={`inline-block shrink-0 rounded-full border border-dashed border-clay-300 px-1.5 text-[10px] font-semibold whitespace-nowrap text-clay-700 ${className}`}
+      className={`inline-block size-1.5 shrink-0 rounded-full bg-clay align-middle ${className}`}
     >
-      {t("graphNotes.linkDraft")}
-      <span className="sr-only">: {t("graphNotes.linkDraftTitle")}</span>
+      <span className="sr-only">{t("graphNotes.linkDraftTitle")}</span>
     </span>
   );
 }

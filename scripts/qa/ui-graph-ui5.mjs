@@ -155,7 +155,7 @@ if (ONLY.includes("show") && after) {
     // Add to note from Find, then Save note: the dock's saved line.
     const find = page.locator('input[data-track="graph-find"]');
     await find.click();
-    await find.fill(zh ? "意志" : "suffering");
+    await find.fill("suffering");
     const passage = page.locator("[data-graph-find-passage]").first();
     await passage.waitFor({ timeout: 30000 });
     await passage.hover().catch(() => {});
@@ -253,18 +253,19 @@ if (ONLY.includes("phone")) {
   const span = (list, k, d) => Math.round(Math.max(...list.map((b) => b[k] + b[d])) - Math.min(...list.map((b) => b[k])));
   const inView = (b) => b.y + b.h > 0 && b.y < 844 && b.x + b.w > 0 && b.x < 390;
   console.log(`  own documents span ${span(own, "x", "w")}×${span(own, "y", "h")} px; generated in view: ${boxes.filter((b) => b.gen && inView(b)).length} of ${boxes.filter((b) => b.gen).length}`);
-  const chip = page.locator("[data-graph-generated-chip]");
-  check((await chip.count()) === 1 || !after, "the phone shows the generated chip", await chip.innerText().catch(() => ""));
+  check((await page.locator("[data-graph-generated-chip]").count()) === 0, "no new control on the canvas (round 5: add nothing new)");
   check(boxes.filter((b) => b.gen && inView(b)).length === 0 || !after, "no generated document is drawn on the phone with the switch off");
   const controls = await page.evaluate(() => [...document.querySelectorAll(".react-flow__controls button")].map((b) => { const r = b.getBoundingClientRect(); const t = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return b.contains(t); }));
-  check(controls.every(Boolean), "the chip covers no zoom control", controls.join(","));
+  check(controls.every(Boolean), "the zoom controls are clear", controls.join(","));
   check(own.every(inView), "every own document is in view");
   await shot(page, "WALK5-11-phone", 390);
   if (after) {
-    await chip.click();
-    await page.locator('[data-graph-side-list="generated"]').waitFor({ timeout: 5000 }).catch(() => {});
-    check((await page.locator('[data-graph-side-list="generated"]').count()) === 1, "the chip opens Generated content");
-    await shot(page, "WALK5-11-chip-list", 390);
+    // The provenance switch shows them again.
+    await page.click('[data-track="graph-provenance"]');
+    await page.waitForTimeout(1200);
+    const shown = await page.evaluate(() => document.querySelectorAll(".react-flow__node.graph-generated").length);
+    check(shown > 0, "the provenance switch draws the generated documents again", String(shown));
+    await page.click('[data-track="graph-provenance"]');
   }
   await ctx.close();
 }
@@ -283,18 +284,18 @@ if (ONLY.includes("draft")) {
     await page.click('[data-track="graph-links"]');
     await page.locator(`[data-graph-links-row="${WILL}"]`).waitFor();
     const tags = await page.locator("[data-graph-side-list=links] [data-link-draft]").evaluateAll((els) => els.map((e) => e.getAttribute("data-link-draft")));
-    check((tags.includes(WILL) && tags.includes(FLUTE)) || !after, "the Links rows with a draft read Draft", tags.join(","));
-    check(tags.length === 2 || !after, "no other row reads Draft", String(tags.length));
+    check((tags.includes(WILL) && tags.includes(FLUTE)) || !after, "the Links rows with a draft carry the draft dot", tags.join(","));
+    check(tags.length === 2 || !after, "no other row carries the dot", String(tags.length));
     await shot(page, "WALK5-13-links", w);
     await page.keyboard.press("Escape");
     await node(page, BOOK2).click();
     await page.locator(`[data-graph-card-link="${FLUTE}"]`).waitFor({ timeout: 8000 }).catch(() => {});
-    check((await page.locator(`[data-graph-card-link="${FLUTE}"] [data-link-draft]`).count()) === 1 || !after, "the card's link row reads Draft");
+    check((await page.locator(`[data-graph-card-link="${FLUTE}"] [data-link-draft]`).count()) === 1 || !after, "the card's link row carries the dot");
     await shot(page, "WALK5-13-card", w);
     // The reader's link card.
     await page.goto(`${BASE}/n/${NB}?doc=${BOOK2}&link=${FLUTE}`, { waitUntil: "domcontentloaded" });
     await page.locator(`[data-annotation-link-id="${FLUTE}"]`).first().waitFor({ timeout: 60000 }).catch(() => {});
-    check((await page.locator(`[data-annotation-link-id="${FLUTE}"] [data-link-draft]`).count()) >= 1 || !after, "the reader's link card reads Draft");
+    check((await page.locator(`[data-annotation-link-id="${FLUTE}"] [data-link-draft]`).count()) >= 1 || !after, "the reader's link card carries the dot");
     await shot(page, "WALK5-13-reader", w);
     await page.evaluate(([will, flute]) => {
       localStorage.removeItem(`graph-link-note:user-1:${will}`);

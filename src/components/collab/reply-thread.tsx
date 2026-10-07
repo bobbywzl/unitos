@@ -279,7 +279,7 @@ export function ReplyThread({
         <button
           onClick={() => setShowResolved(!showResolved)}
           data-track="reply-show-resolved"
-          className="inline-flex min-h-6 items-center self-start text-[10px] font-semibold text-sand-500 hover:text-clay-700"
+          className="inline-flex min-h-6 min-w-6 items-center justify-center self-start text-[10px] font-semibold text-sand-500 hover:text-clay-700"
         >
           {resolvedReplies.length === 1
             ? t("common.resolvedCountOne")
@@ -293,7 +293,7 @@ export function ReplyThread({
           onClick={() => setComposing(true)}
           data-track="reply"
           data-tip={t("common.replyTitle")}
-          className="inline-flex min-h-6 items-center self-start text-[11px] font-semibold text-sand-600 hover:text-clay-700 pointer-coarse:min-h-10 pointer-coarse:pr-3"
+          className="inline-flex min-h-6 min-w-6 items-center justify-center self-start text-[11px] font-semibold text-sand-600 hover:text-clay-700 pointer-coarse:min-h-10 pointer-coarse:pr-3"
         >
           {t("common.reply")}
         </button>

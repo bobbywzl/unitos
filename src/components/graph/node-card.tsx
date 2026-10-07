@@ -360,7 +360,10 @@ export function NodeCardPanel({
                                 {t("graphView.fromLastAnswer")}
                               </span>
                             )}
-                            <span className="block text-[12px] leading-snug text-ink">{l.reason ?? clipWords(l.quotedText, 60)}</span>
+                            <span className="block text-[12px] leading-snug text-ink">
+                              {l.reason ?? clipWords(l.quotedText, 60)}
+                              <LinkDraftTag linkId={l.id} className="ml-1.5" /* [ui5] WALK5-13 */ />
+                            </span>
                             {part && (
                               <span className="mt-0.5 block text-[11px] text-sand-500">
                                 {t("graphView.cardInPart", { part: part.title })}
@@ -372,7 +375,6 @@ export function NodeCardPanel({
                               </span>
                             )}
                             <LinkReplyCount link={l} />
-                            <LinkDraftTag linkId={l.id} /* [ui5] WALK5-13 */ />
                           </button>
                         </li>
                       );

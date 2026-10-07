@@ -124,10 +124,12 @@ export function LinksList({
                 openLinkId === l.id ? "border-clay-300 bg-clay-100/50" : "border-line bg-card"
               }`}
             >
-              <span className="text-[12.5px] leading-snug font-semibold text-ink">{l.reason ?? clipWords(l.quotedText, 60)}</span>
+              <span className="text-[12.5px] leading-snug font-semibold text-ink">
+                {l.reason ?? clipWords(l.quotedText, 60)}
+                <LinkDraftTag linkId={l.id} className="ml-1.5" /* [ui5] WALK5-13 */ />
+              </span>
               {l.reason && <span className="text-[11px] leading-snug text-sand-600">{clipWords(l.quotedText, 40)}</span>}
               <LinkReplyCount link={l} />
-              <LinkDraftTag linkId={l.id} /* [ui5] WALK5-13 */ />
             </button>
           ))}
         </div>

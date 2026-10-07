@@ -822,7 +822,6 @@ export function GraphOverlay({
             onClearCited={clearCited}
             expandedLinkId={openLinkView?.id ?? null}
             onExpandLink={(linkId) => openLink(linkId, null)}
-            onShowGenerated={() => setList("generated") /* [ui5] WALK5-11 */}
           />
         )}
         {/* One document, or no link yet: what to do next (GR-08). */}
