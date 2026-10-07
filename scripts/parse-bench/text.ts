@@ -52,8 +52,10 @@ const GARBLES: { kind: string; re: RegExp }[] = [
   { kind: "private-use character", re: /[\uE000-\uF8FF\u{F0000}-\u{FFFFD}\u{100000}-\u{10FFFD}]/gu },
   // A combining mark stands on a letter, a digit, or a math symbol: \vec
   // over ∇ is ∇⃗ (parse loop finding: a quantum mechanics book's seven
-  // ∇⃗ were counted lone).
-  { kind: "lone combining mark", re: /(?<![\p{L}\p{N}\p{M}\p{Sm}])\p{M}/gu },
+  // ∇⃗ were counted lone). An enclosing mark (a circle, a square) stands on
+  // any mark of print as well: a chemistry manual's circled charges are
+  // "+⃝" and "–⃝", a dash in the circle.
+  { kind: "lone combining mark", re: /(?<![\p{L}\p{N}\p{M}\p{Sm}])(?:[\p{Mn}\p{Mc}]|(?<![\p{P}\p{S}])\p{Me})/gu },
   { kind: "accent apart from its letter", re: /[´¨ˆ˜˙ˇ˘˚¸˛](?=\p{L})|(?<=\p{L})[´¨ˆ˜˙ˇ˘˚¸˛]/gu },
   // Not a 6 that stands after a relation or an operator, a space between (a
   // fraction read flat: "σ = 6 = 1.5").
