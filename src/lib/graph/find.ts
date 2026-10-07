@@ -19,6 +19,13 @@ export function isCjk(q: string): boolean {
   return CJK.test(q);
 }
 
+/** Whether q has no letter with case (Chinese, digits, punctuation): its
+    substring match needs no case folding, so the SQL runs LIKE, not ILIKE,
+    and returns the same rows about five times faster (COST5-02). */
+export function caseless(q: string): boolean {
+  return q === q.toLowerCase() && q === q.toUpperCase();
+}
+
 /** The query as one run of words: trimmed, inner whitespace one space. */
 export function normalizeQuery(q: string): string {
   return q.replace(/\s+/g, " ").trim();

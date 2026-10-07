@@ -38,7 +38,7 @@ import type { UsageMeta } from "@/lib/usage";
 // reads as its own first words until the skeleton is rebuilt, and a
 // document more than a tenth changed is rebuilt — in the background after
 // an edit or an add (refreshSkeleton), and at once when Stitch needs it
-// (ensureSkeleton). Built one call per window of SKELETON_WINDOW_CHARS,
+// (ensureSkeleton), but at most once per SKELETON_QUIET_MS either way. Built one call per window of SKELETON_WINDOW_CHARS,
 // SKELETON_WINDOW_CONCURRENCY windows at a time under a process-wide
 // SKELETON_WINDOWS_IN_FLIGHT, each under its own cached prefix.
 
@@ -290,7 +290,7 @@ export async function buildSkeleton(
 
   const skeletonCall = await featureCall("skeleton", SKELETON_EFFORT);
   const model = skeletonCall.model;
-  const usage = { userId, feature: "skeleton", model: skeletonCall.modelId } satisfies UsageMeta;
+  const usage = { userId, feature: "skeleton", model: skeletonCall.modelId, pass: "skeleton" } satisfies UsageMeta;
   // A document's windows SKELETON_WINDOW_CONCURRENCY at a time, every
   // build's under the process's SKELETON_WINDOWS_IN_FLIGHT (COST4-08); a
   // failed window stops the windows not yet sent.
@@ -506,18 +506,60 @@ async function waitForBuild(documentId: string, userId: string | null, signal?: 
   return null;
 }
 
+/** What a command does with a document's stored skeleton (COST5-08):
+    "read" it when under a tenth of the document changed; "defer" when more
+    changed but it was built under SKELETON_QUIET_MS ago — the document is
+    being written, and a rebuild every command would read it again and
+    again, so the command reads the stored skeleton and the rebuild waits
+    for the quiet period's end; "build" it now when stale past the quiet
+    period, missing, or of a skeleton that does not say when it was built. */
+export function skeletonAction(stored: Skeleton | null, blocks: SkeletonBlock[], now = Date.now()): "read" | "defer" | "build" {
+  if (!skeletonStale(stored, blocks)) return "read";
+  if (stored?.built !== undefined && now - stored.built < SKELETON_QUIET_MS) return "defer";
+  return "build";
+}
+
+// The refreshes a deferred command queued, one per document: each runs
+// refreshSkeleton once the quiet period ends, under the same lock and the
+// same tenth rule as an edit's. One queued earlier for a later time (the
+// skeleton was rebuilt since) gives way to the earlier one. A process that
+// ends first loses the timer; the next command past the quiet period
+// builds then, as before.
+const deferred = new Map<string, { at: number; timer: ReturnType<typeof setTimeout> }>();
+const DEFER_MARGIN_MS = 1_000;
+
+function refreshAfterQuiet(documentId: string, userId: string | null, built: number): void {
+  const at = built + SKELETON_QUIET_MS + DEFER_MARGIN_MS;
+  const queued = deferred.get(documentId);
+  if (queued && queued.at <= at) return;
+  if (queued) clearTimeout(queued.timer);
+  const timer = setTimeout(() => {
+    deferred.delete(documentId);
+    refreshSkeleton(documentId, userId).catch(() => {});
+  }, Math.max(0, at - Date.now()));
+  timer.unref?.();
+  deferred.set(documentId, { at, timer });
+}
+
 /** The skeleton Stitch reads for a document it has loaded: the stored one
     when under a tenth of the document changed, with the changed blocks as
-    their own first words; built now when stale or missing. A failed build
-    answers the current lines — every block as its own first words — so a
-    command still runs. */
+    their own first words; the stored one too, the same way, while it is
+    under SKELETON_QUIET_MS old, its rebuild queued for the quiet period's
+    end (skeletonAction); built now when stale past that or missing. A
+    failed build answers the current lines — every block as its own first
+    words — so a command still runs. */
 export async function ensureSkeleton(
   document: { id: string; skeleton: unknown; blocks: SkeletonBlock[] },
   userId: string | null,
   signal?: AbortSignal,
 ): Promise<Skeleton> {
   const stored = readSkeleton(document.skeleton);
-  if (!skeletonStale(stored, document.blocks)) return currentSkeleton(stored, document.blocks);
+  const action = skeletonAction(stored, document.blocks);
+  if (action === "read") return currentSkeleton(stored, document.blocks);
+  if (action === "defer" && stored?.built !== undefined) {
+    refreshAfterQuiet(document.id, userId, stored.built);
+    return currentSkeleton(stored, document.blocks);
+  }
   try {
     // A build already running (the graph's warm, an edit's refresh) is
     // waited for, not run twice.

@@ -228,7 +228,10 @@ export const STITCH_SKELETON_BUDGET = 50_000; // skeleton one select call reads;
 // (commandKind, lib/graph/stitch.ts): an answer, links, or a page. A
 // question's budget stays under the whole threshold, so the reading passes
 // pay for themselves; a page keeps the breadth a gather needs.
-export const STITCH_SELECTED_BUDGET = { question: 15_000, links: 30_000, page: 50_000 } as const;
+// The question budget is held at 15,000 until UsageEvent.reasoningTokens
+// says what a question's answer pass costs in all (COST5-03); one constant.
+export const STITCH_QUESTION_BUDGET = 15_000;
+export const STITCH_SELECTED_BUDGET = { question: STITCH_QUESTION_BUDGET, links: 30_000, page: 50_000 } as const;
 export const STITCH_SELECTED_BLOCKS = { question: 150, links: 300, page: 400 } as const;
 // Past STITCH_SKELETON_BUDGET the select pass reads every line in groups of
 // this much skeleton, the groups at once, so no line goes unread and no
@@ -321,8 +324,10 @@ export const SKELETON_WAIT_MS = 5_000;
 // A skeleton builds only when it can be read: a project of the document past
 // STITCH_WHOLE_THRESHOLD tokens or ASSISTANT_WHOLE_THRESHOLD chars. While a
 // document is being written it rebuilds at most once per SKELETON_QUIET_MS:
-// an edit under that since the last build waits for the next edit, a Stitch
-// command (ensureSkeleton builds at once), or the graph opening (warmSkeletons).
+// an edit under that since the last build waits for the next edit or the
+// graph opening (warmSkeletons); a Stitch command under it reads the stored
+// skeleton, changed blocks as their first words, and queues the rebuild for
+// the quiet period's end (COST5-08); past it the command builds at once.
 export const SKELETON_QUIET_MS = 10 * 60_000;
 export const SKELETON_BUILD_CONCURRENCY = 12; // documents ensureSkeleton builds at once
 // Windows in flight (COST4-08): a document's windows go out SKELETON_WINDOW_CONCURRENCY

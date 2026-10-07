@@ -9,6 +9,7 @@ import {
   FIND_MORE,
   FIND_SNIPPETS,
   FIND_TOP,
+  caseless,
   isCjk,
   likePattern,
   normalizeQuery,
@@ -46,8 +47,12 @@ export async function GET(req: Request, ctx: { params: Promise<{ notebookId: str
     return NextResponse.json({ error: `Type ${FIND_MIN} to ${FIND_MAX} characters.` }, { status: 400 });
   }
   const { q, documentId, after = 0, limit = FIND_MORE } = parsed.data;
+  // A CJK query matches as a substring: LIKE when it has no letter with
+  // case (ILIKE folds the case of every block for nothing), else ILIKE.
   const match = isCjk(q)
-    ? Prisma.sql`b.text ILIKE ${likePattern(q)}`
+    ? caseless(q)
+      ? Prisma.sql`b.text LIKE ${likePattern(q)}`
+      : Prisma.sql`b.text ILIKE ${likePattern(q)}`
     : Prisma.sql`b.text ~* ${wordStartPattern(q)}`;
   type Row = { id: string | null; documentId: string; text: string | null; n: bigint };
   const hits = Prisma.sql`
