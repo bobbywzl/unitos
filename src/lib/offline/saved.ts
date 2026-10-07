@@ -77,11 +77,17 @@ function pageUrls(id: string, info: OfflineInfo): string[] {
 }
 
 // The graph's data (SPEC.md §13): the page no longer carries it, so the copy
-// keeps the routes the graph reads when it opens — the graph, and each
-// document's outline for its node card. Find needs the network.
+// keeps the routes the graph reads when it opens — the graph, with and
+// without the provenance links, every link's passages (the service worker
+// answers a one-link call from them), every document's part titles for the
+// Documents list, and each document's outline for its node card. Find needs
+// the network.
 function graphUrls(id: string, info: OfflineInfo): string[] {
   return [
     `/api/notebooks/${id}/graph`,
+    `/api/notebooks/${id}/graph?provenance=1`,
+    `/api/notebooks/${id}/graph/passages`,
+    `/api/notebooks/${id}/outline?parts=titles`,
     ...info.documents.map((d) => `/api/notebooks/${id}/outline?documentId=${encodeURIComponent(d.id)}`),
   ];
 }

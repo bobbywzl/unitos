@@ -9,8 +9,12 @@
    - A page load: network first. Online, a page a saved copy holds is
      refreshed in that copy. Offline, the saved copy answers; anything else
      answers with the offline page, which lists the saved projects.
-   - An image of a document or a note, and the graph's data (the graph and
-     outline routes): network first, the saved copy second.
+   - An image of a document or a note, and the graph's data (the graph,
+     its link passages, and the outline routes): network first, the saved
+     copy second. A one-link passages call (?linkId=) is answered from the
+     copy's every-link passages; a graph call the copy does not hold with
+     its query (?provenance=1 in a copy saved before it existed) from the
+     bare graph call.
    - RSC fetches (the router's soft navigations) are never answered from the
      cache: when one fails offline the router falls back to a full load, and
      that load is what the cache answers. */
@@ -124,10 +128,10 @@ function isAsset(url) {
   return /^\/api\/(images\/[^/]+|documents\/[^/]+\/(figure|page)\/[^/]+)$/.test(url.pathname);
 }
 
-// The graph's data (SPEC.md §13), which a saved copy holds: the graph and
-// each document's outline. Network first, the saved copy second.
+// The graph's data (SPEC.md §13), which a saved copy holds: the graph, its
+// link passages, and the outlines. Network first, the saved copy second.
 function isGraphData(url) {
-  return /^\/api\/notebooks\/[^/]+\/(graph|outline)$/.test(url.pathname);
+  return /^\/api\/notebooks\/[^/]+\/(graph|graph\/passages|outline)$/.test(url.pathname);
 }
 
 function isShell(url) {
@@ -160,9 +164,11 @@ async function cachedPage(url) {
 
 // A page image's URL carries its renderer's revision (?r=2); a copy saved
 // before the revision holds the URL without it, which still answers offline.
+// The same for the graph's data: one link's passages come from every link's,
+// and the bare graph call answers one the copy lacks with its query.
 async function cachedAsset(url) {
   const exact = await caches.match(url.href, { ignoreVary: true });
-  if (exact || !url.search || !isAsset(url)) return exact;
+  if (exact || !url.search || !(isAsset(url) || isGraphData(url))) return exact;
   return caches.match(url.origin + url.pathname, { ignoreVary: true });
 }
 

@@ -1,6 +1,9 @@
 // The graph of a project saved for offline opens without a network (GR-18,
 // SPEC.md §13, §17): the copy keeps GET .../graph and each document's
-// GET .../outline, and the service worker answers them offline. On a dev
+// GET .../outline, and the service worker answers them offline. Round 3
+// (COST3-03, VIEW3-06): the copy also keeps .../graph?provenance=1, every
+// link's passages (.../graph/passages: a link panel draws its passages
+// offline) and the part titles (.../outline?parts=titles: the Documents list). On a dev
 // server the worker is not registered by the app, so the script registers
 // public/sw.js itself, saves the project from the reader's Save for offline
 // pill, goes offline, reloads the graph, and opens a node card.
@@ -13,11 +16,12 @@ import fs from "node:fs";
 
 const BASE = process.env.BASE ?? "http://localhost:3143";
 const OUT = process.env.OUT ?? "/mnt/project-files/stitch-graph-loop/round-2/view2";
+const TAG = process.env.TAG ?? "";
 const seed = JSON.parse(fs.readFileSync(process.env.SEED ?? "/home/user/unitos/.qa-tmp/stitch/r2/view/seed.json", "utf8"));
 const NB = seed.notebookId;
 const NCN = seed.docs.find((d) => d.title === "Nietzsche combined notes").id;
 
-const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome" });
+const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome", args: ["--disable-dev-shm-usage"] });
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
 const page = await context.newPage();
 const out = {};
@@ -71,7 +75,12 @@ out.cached = await page.evaluate(async (nb) => {
   console.log("KEYS", (await caches.keys()).join(","), all.length, all.slice(0, 5).join(" "));
   return all.filter((u) => u.startsWith("/api/notebooks"));
 }, NB);
-check("the copy holds the graph and every outline", out.cached.includes(`/api/notebooks/${NB}/graph`) && out.cached.filter((u) => u.includes("/outline")).length === seed.docs.length, `${out.cached.length} data routes`);
+check("the copy holds the graph and every outline", out.cached.includes(`/api/notebooks/${NB}/graph`) && out.cached.filter((u) => u.includes("/outline?documentId=")).length === seed.docs.length, `${out.cached.length} data routes`);
+check(
+  "the copy holds the provenance graph, the passages, and the part titles",
+  [`/api/notebooks/${NB}/graph?provenance=1`, `/api/notebooks/${NB}/graph/passages`, `/api/notebooks/${NB}/outline?parts=titles`].every((u) => out.cached.includes(u)),
+  out.cached.join(" "),
+);
 
 await context.setOffline(true);
 // The tab stays as it was when the network went (a dev server's pages do not
@@ -87,15 +96,41 @@ if ((await page.locator(".react-flow__node").count()) === 0) {
 const nodes = await page.locator(".react-flow__node").count();
 const edges = await page.locator(".react-flow__edge").count();
 check("offline: the graph draws its nodes and curves", nodes === seed.docs.length && edges > 0, `${nodes} nodes, ${edges} curves`);
-await page.screenshot({ path: `${OUT}/GR-18-offline-graph.png` });
+await page.screenshot({ path: `${OUT}/GR-18-offline-graph${TAG}.png` });
 const box = await page.locator(`.react-flow__node[data-id="${NCN}"]`).boundingBox().catch(() => null);
 if (box) {
   await page.mouse.click(box.x + box.width / 2, box.y + 14);
   await page.locator("[data-graph-gist]").waitFor({ timeout: 20000 }).catch(() => {});
   const gist = await page.locator("[data-graph-gist]").innerText().catch(() => "");
   check("offline: the node card reads its outline", gist.startsWith("From The Antichrist"), gist.slice(0, 50));
-  await page.screenshot({ path: `${OUT}/GR-18-offline-card.png` });
+  await page.screenshot({ path: `${OUT}/GR-18-offline-card${TAG}.png` });
 }
+// A link panel offline: its passages come from the copy's every-link passages.
+await page.keyboard.press("Escape");
+await page.waitForTimeout(400);
+await page.locator('[data-track="graph-links"]').click();
+await page.locator('[data-track="graph-links-open"]').first().click();
+await page.locator("[data-graph-link-panel]").waitFor({ timeout: 10000 }).catch(() => {});
+await page.locator("[data-link-passages]").waitFor({ timeout: 10000 }).catch(() => {});
+const passage = await page
+  .locator("[data-graph-link-panel] mark.link-detail-quote")
+  .first()
+  .evaluate((m) => ({ quote: m.textContent.length, passage: m.parentElement.textContent.length }))
+  .catch(() => null);
+check(
+  "offline: a link panel draws its passages",
+  (await page.locator("[data-link-passages]").count()) === 1 && passage !== null && passage.passage > passage.quote,
+  JSON.stringify(passage),
+);
+await page.screenshot({ path: `${OUT}/COST3-03-offline-link${TAG}.png` });
+// The Documents list offline: gists and part titles from the copy.
+await page.locator('[data-track="graph-documents"]').click();
+await page.locator("[data-graph-documents-list]").waitFor({ timeout: 10000 }).catch(() => {});
+await page.waitForTimeout(1000);
+const docRows = await page.locator("[data-graph-documents-row]").count();
+const docParts = await page.locator("[data-graph-documents-row] [data-graph-part]").count();
+check("offline: the Documents list lists every document with its parts", docRows === seed.docs.length && docParts > 0, `${docRows} rows, ${docParts} parts`);
+await page.screenshot({ path: `${OUT}/VIEW3-06-offline-documents${TAG}.png` });
 await context.setOffline(false);
 await page.goto(`${BASE}/n/${NB}`, { waitUntil: "networkidle", timeout: 300000 });
 await page.locator('[data-track="offline-save"]').click().catch(() => {});

@@ -30,6 +30,7 @@ import { LinkNoteComposer } from "@/components/graph/link-note-composer";
 import { GraphContentProvider, useGraphContentState } from "@/components/graph/graph-content";
 import { FindBox, FindList } from "@/components/graph/graph-find";
 import { NodeCardPanel } from "@/components/graph/node-card";
+import { DocumentsList } from "@/components/graph/documents-list"; // [docs3]
 const NO_GISTS: Record<string, string> = {};
 // [/view2]
 
@@ -46,10 +47,11 @@ const WIDE = 1000;
 const LIST_ROOM = 412; // a side list's width and its margin
 
 // [view2] The node card ("document") and the Find list ("find") are side lists too.
-type SideList = "recommended" | "generated" | "notes" | "links" | "link" | "document" | "find" | null;
+// [docs3] So is the Documents list ("documents").
+type SideList = "recommended" | "generated" | "notes" | "links" | "link" | "document" | "find" | "documents" | null;
 /** Where a link panel was opened from, for its Back. */
-type LinkFrom = "links" | "notes" | "document" | null;
-const SIDE_LISTS: SideList[] = ["recommended", "generated", "notes", "links", "link", "document", "find"];
+type LinkFrom = "links" | "notes" | "document" | "documents" | null;
+const SIDE_LISTS: SideList[] = ["recommended", "generated", "notes", "links", "link", "document", "find", "documents"];
 function sideList(value: string | null | undefined): SideList {
   return SIDE_LISTS.find((l) => l === value) ?? null;
 }
@@ -484,8 +486,8 @@ export function GraphOverlay({
         : null;
   // [view2] The node card is a sheet at the foot on a phone, and beside the
   // canvas from NARROW up; the fit keeps the nodes clear of it.
-  const cardSheet = list === "document" && windowWidth < NARROW;
-  const cardBeside = (list === "document" || list === "find") && windowWidth >= NARROW;
+  const cardSheet = (list === "document" || list === "documents") && windowWidth < NARROW;
+  const cardBeside = (list === "document" || list === "find" || list === "documents") && windowWidth >= NARROW;
   const insets = useMemo<GraphInsets>(
     () => ({
       top: emptyCard ? 96 : 0,
@@ -527,7 +529,18 @@ export function GraphOverlay({
             {t("panes.graphSkipList")}
           </button>
         )}
-        <span className="shrink-0 text-[13px] whitespace-nowrap text-sand-600">
+        {/* [docs3] The counts open the Documents list. */}
+        <button
+          onClick={(e) => togglePill("documents", e)}
+          disabled={nodes.length === 0}
+          data-track="graph-documents"
+          aria-expanded={list === "documents"}
+          aria-controls={sideListId("documents")}
+          data-tip={t("panes.graphDocumentsToggleTitle")}
+          className={`shrink-0 rounded-full px-2.5 py-1 text-[13px] whitespace-nowrap text-sand-600 hover:bg-clay-100 hover:text-clay-800 disabled:pointer-events-none ${
+            list === "documents" ? "bg-clay-100 text-clay-800" : ""
+          }`}
+        >
           {t("panes.graphCounts", {
             docs: ownDocs,
             ds: ownDocs === 1 ? "" : "s",
@@ -541,7 +554,7 @@ export function GraphOverlay({
               {t("panes.graphCountsGenerated", { n: generatedCount, s: generatedCount === 1 ? "" : "s" })}
             </span>
           )}
-        </span>
+        </button>
         {/* Above 900px the pills fill the rest of the row, right-aligned,
             and scroll sideways when they do not fit, so the close button
             stays in view; below they take a line of their own under the
@@ -770,13 +783,21 @@ export function GraphOverlay({
                         ? `[data-graph-links-row="${openLinkView.id}"]`
                         : from === "notes"
                           ? `[data-graph-notes-link="${openLinkView.id}"]`
-                          : `[data-graph-card-link="${openLinkView.id}"]`;
+                          : from === "documents"
+                            ? `[data-graph-documents-link="${openLinkView.id}"]`
+                            : `[data-graph-card-link="${openLinkView.id}"]`;
                     requestAnimationFrame(() => requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>(row)?.focus()));
                   }
                 : undefined
             }
             backLabel={
-              linkFrom === "document" ? t("graphView.cardBack") : linkFrom === "notes" ? t("graphNotes.notesBack") : undefined
+              linkFrom === "document"
+                ? t("graphView.cardBack")
+                : linkFrom === "notes"
+                  ? t("graphNotes.notesBack")
+                  : linkFrom === "documents"
+                    ? t("panes.graphDocumentsBack")
+                    : undefined
             }
             onClose={() => setList(null)}
             onOpenDocument={leave}
@@ -818,6 +839,19 @@ export function GraphOverlay({
           />
         )}
         {/* [/view2] */}
+        {list === "documents" && (
+          <DocumentsList
+            notebookId={notebookId}
+            nodes={nodes}
+            edges={edges}
+            openLinkId={openLinkId}
+            onOpenLink={(linkId) => openLink(linkId, "documents")}
+            onOpenDocument={leave}
+            onClose={() => setList(null)}
+            sheet={cardSheet}
+            onSheetHeight={setSheetHeight}
+          />
+        )}
         {nodes.length >= 2 && (
           // Where the box sits (BOX-03..06, BOX-19): centered at the foot;
           // left of an open list on a wide screen; clear of the Feedback

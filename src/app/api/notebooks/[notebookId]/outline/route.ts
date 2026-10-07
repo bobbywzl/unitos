@@ -4,6 +4,7 @@ import { notebookAccess } from "@/lib/collab";
 import { contentsEntries, headingContents } from "@/lib/contents";
 import { db } from "@/lib/db";
 import { outlineParts, partAt, type DocumentOutline } from "@/lib/graph/outline";
+import { projectPartTitles } from "@/lib/graph/outline-titles";
 import { SKELETON_VERSION } from "@/lib/graph/skeleton";
 import { projectLinks } from "@/lib/link-scope";
 
@@ -12,14 +13,20 @@ import { projectLinks } from "@/lib/link-scope";
 // else the headings, and the part each of its links' ends sits in. Read
 // only, never a model call: a document Stitch has not read has no summary,
 // and nothing here builds one. The skeleton's lines are never read.
+// ?parts=titles answers every document's part titles at once instead.
 
 const querySchema = z.object({ documentId: z.string().min(1).max(64) });
+// ?parts=titles: every document's part titles, for the Documents list
+// (lib/graph/outline-titles.ts).
+const titlesSchema = z.object({ parts: z.literal("titles") });
 
 export async function GET(req: Request, ctx: { params: Promise<{ notebookId: string }> }) {
   const { notebookId } = await ctx.params;
   const access = await notebookAccess(notebookId, "viewer");
   if (access instanceof NextResponse) return access;
-  const parsed = querySchema.safeParse(Object.fromEntries(new URL(req.url).searchParams));
+  const params = Object.fromEntries(new URL(req.url).searchParams);
+  if (titlesSchema.safeParse(params).success) return NextResponse.json(await projectPartTitles(notebookId));
+  const parsed = querySchema.safeParse(params);
   if (!parsed.success) return NextResponse.json({ error: "documentId is required" }, { status: 400 });
   const { documentId } = parsed.data;
   const [row] = await db.$queryRaw<

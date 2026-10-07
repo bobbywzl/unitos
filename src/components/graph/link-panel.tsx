@@ -30,7 +30,7 @@ export function LinkPanel({
   onOpenDocument,
 }: {
   link: GraphEdgeLink;
-  /** Back to the list the link was opened from: Links, the Notes list, or the node card. */
+  /** Back to the list the link was opened from: Links, the Notes list, the node card, or Documents. */
   onBack?: () => void;
   /** The back arrow's label; default "Back to Links". */
   backLabel?: string;

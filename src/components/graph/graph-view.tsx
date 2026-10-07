@@ -29,6 +29,7 @@ import { useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
 import { extendLayout, graphLayout, layoutAspect, seeded, type Point } from "@/components/graph/graph-layout";
 import { nodeRoom, placeMarks, type MarkCurve } from "@/lib/graph/curve-place";
+import { useWantProvenance } from "@/components/graph/provenance-want";
 import { categoryLabels } from "@/components/reader/document-organize";
 // [graph-notes] The notes and the link replies on the graph (graph-notes.tsx).
 import {
@@ -1023,6 +1024,7 @@ function GraphCanvas({
   // Dragging a node hides its card until the pointer rests again.
   const [dragging, setDragging] = useState(false);
   const [keyOpen, setKeyOpen] = useState(false);
+
   // A curve's link list lives in the floating layer, off the curve: the
   // leave that fires on the way there waits a beat, and the list's own hover
   // cancels it. A click on a curve pins its list until the pane is clicked.
@@ -1077,6 +1079,7 @@ function GraphCanvas({
   // Generated documents' provenance links: drawn on request (WALK2-02), the
   // switch kept with the view (WALK3-13).
   const { showProvenance, setShowProvenance, generatedCommands } = content;
+  useWantProvenance(showProvenance, "switch"); // COST3-03: their links load when the switch turns on
   // Nothing hovered: a pinned curve keeps its pair in the spotlight, and
   // then the node whose card is pinned [view2].
   const shown = useMemo<HoverState>(

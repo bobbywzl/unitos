@@ -86,22 +86,6 @@ export async function documentsGraph(
       : Promise.resolve([]),
   ]);
   const blocksOf = new Map(blockCounts.map((row) => [row.documentId, row._count._all]));
-  // The block each end's quote sits in: the passage an expanded link shows
-  // around the quote (SPEC.md §13). A block a re-parse replaced is gone
-  // until the reader opens the document and the link heals; the end then
-  // shows its quote alone.
-  const blockIds = [
-    ...new Set(
-      [...links, ...recommendedRows].flatMap((l) => [l.fromBlockId, l.toBlockId ?? ""]).filter(Boolean),
-    ),
-  ];
-  const blockText = new Map(
-    blockIds.length > 0
-      ? (await db.block.findMany({ where: { id: { in: blockIds } }, select: { id: true, text: true } })).map(
-          (b) => [b.id, b.text] as const,
-        )
-      : [],
-  );
   const crossAccount = await crossAccountLinks([...links, ...recommendedRows], viewer);
   const crossAccountOf = (id: string) => {
     const rule = crossAccount.get(id);
@@ -136,8 +120,6 @@ export async function documentsGraph(
       toTitle: titleOf.get(link.toDocumentId) ?? "",
       quotedText: link.quotedText,
       toQuotedText: link.toQuotedText,
-      fromBlockText: blockText.get(link.fromBlockId) ?? null,
-      toBlockText: link.toBlockId ? (blockText.get(link.toBlockId) ?? null) : null,
       reason: link.reason,
       recommended: link.recommended,
       ...(provenance ? { provenance: true } : {}),
@@ -153,8 +135,6 @@ export async function documentsGraph(
     toTitle: link.toDocument.title,
     quotedText: link.quotedText,
     toQuotedText: link.toQuotedText,
-    fromBlockText: blockText.get(link.fromBlockId) ?? null,
-    toBlockText: link.toBlockId ? (blockText.get(link.toBlockId) ?? null) : null,
     reason: link.reason,
     createdById: link.createdById,
     replies: link.replies.map((r) => ({
@@ -198,4 +178,42 @@ async function withLinkReplies(edges: GraphEdge[]): Promise<GraphEdge[]> {
       };
     }),
   }));
+}
+
+/** The block each end's quote sits in, whole: the passage an expanded link
+    shows around the quote (SPEC.md §13). Read when a link opens (GET .../
+    graph/passages?linkId=), not with the graph: a block that ends many
+    links ships once. Only the project's links between its documents; one
+    linkId, or every link for the offline copy. A block a re-parse replaced
+    is gone until the reader opens the document and the link heals; the end
+    then shows its quote alone. */
+export type LinkPassages = {
+  /** Per link: the from end's block id and the to end's (null: document-level). */
+  links: Record<string, [string, string | null]>;
+  /** Each block's text; a block that is gone is absent. */
+  blocks: Record<string, string>;
+};
+
+export async function linkPassages(notebookId: string, linkId?: string): Promise<LinkPassages> {
+  const ids = (await db.notebookDocument.findMany({ where: { notebookId }, select: { documentId: true } })).map(
+    (d) => d.documentId,
+  );
+  const rows = await db.docLink.findMany({
+    where: {
+      ...(linkId ? { id: linkId } : {}),
+      fromDocumentId: { in: ids },
+      toDocumentId: { in: ids },
+      ...projectLinks(notebookId),
+    },
+    select: { id: true, fromBlockId: true, toBlockId: true },
+  });
+  const blockIds = [...new Set(rows.flatMap((l) => [l.fromBlockId, l.toBlockId ?? ""]).filter(Boolean))];
+  const blocks =
+    blockIds.length > 0
+      ? await db.block.findMany({ where: { id: { in: blockIds } }, select: { id: true, text: true } })
+      : [];
+  return {
+    links: Object.fromEntries(rows.map((l) => [l.id, [l.fromBlockId, l.toBlockId] as [string, string | null]])),
+    blocks: Object.fromEntries(blocks.map((b) => [b.id, b.text])),
+  };
 }

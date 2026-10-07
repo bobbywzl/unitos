@@ -1,11 +1,14 @@
 "use client";
 
+import { useParams } from "next/navigation";
 import { useT } from "@/components/lang-provider";
+import { useLinkPassages } from "@/components/graph/link-passages";
 
 // An expanded link (SPEC.md §13): why the link was made, then each end — the
 // document's title, the passage the quote sits in with the quote lit, and a
 // button that opens the reader there. The curve's list and the Recommended
-// links list both expand a link this way.
+// links list both expand a link this way. The passages load when the link
+// opens (link-passages.ts); each quote shows at once.
 
 export type LinkDetailLink = {
   id: string;
@@ -15,8 +18,8 @@ export type LinkDetailLink = {
   toTitle: string;
   quotedText: string;
   toQuotedText: string | null;
-  fromBlockText: string | null;
-  toBlockText: string | null;
+  fromBlockText?: string | null;
+  toBlockText?: string | null;
   reason: string | null;
 };
 
@@ -108,8 +111,10 @@ export function LinkDetail({
   showReason?: boolean;
 }) {
   const t = useT();
+  const { notebookId } = useParams<{ notebookId?: string }>();
+  const passages = useLinkPassages(notebookId, link);
   return (
-    <div className="flex flex-col gap-2" data-track-surface="link-detail">
+    <div className="flex flex-col gap-2" data-track-surface="link-detail" data-link-passages={passages ? "" : undefined}>
       {showReason && (
         <div>
           <p className="text-[10.5px] font-bold tracking-[0.06em] text-sand-500 uppercase">{t("panes.linkWhy")}</p>
@@ -119,13 +124,13 @@ export function LinkDetail({
       <LinkEnd
         title={link.fromTitle}
         quote={link.quotedText}
-        blockText={link.fromBlockText}
+        blockText={passages?.from ?? null}
         onOpen={() => onOpen(link.fromDocumentId)}
       />
       <LinkEnd
         title={link.toTitle}
         quote={link.toQuotedText}
-        blockText={link.toBlockText}
+        blockText={passages?.to ?? null}
         onOpen={() => onOpen(link.toDocumentId)}
       />
     </div>

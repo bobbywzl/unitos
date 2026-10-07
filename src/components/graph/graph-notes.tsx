@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { EdgeLabelRenderer, type Edge as FlowEdge, type EdgeProps } from "reactflow";
@@ -10,6 +10,7 @@ import { CommentIcon, NotesIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { readGraphKeep, writeGraphKeep } from "@/components/graph/graph-keep";
 import { withoutGraphParams } from "@/components/graph/graph-content";
+import { useLinkPassages } from "@/components/graph/link-passages";
 import { noteLine, notesOnGraph, notesOnLink, pairKey, type GraphNote, type NotesOnGraph } from "@/lib/graph/notes";
 import type { Point } from "@/lib/graph/curve-place";
 
@@ -405,14 +406,18 @@ export function LinkNotes({ link }: { link: GraphEdgeLink }) {
   const ctx = useGraphNotes();
   const t = useT();
   const view = ctx?.view;
+  const { notebookId } = useParams<{ notebookId?: string }>();
+  // The ends' blocks load with the link (COST3-03); until they land, a note
+  // matches on the quotes alone.
+  const passages = useLinkPassages(notebookId, link);
   const notes = useMemo(() => {
     if (!view) return [];
     const near =
       link.fromDocumentId === link.toDocumentId
         ? (view.byDocument.get(link.fromDocumentId)?.notes ?? [])
         : (view.byPair.get(pairKey(link.fromDocumentId, link.toDocumentId)) ?? []);
-    return notesOnLink(near, link);
-  }, [view, link]);
+    return notesOnLink(near, { ...link, fromBlockText: passages?.from ?? null, toBlockText: passages?.to ?? null });
+  }, [view, link, passages]);
   if (!ctx || notes.length === 0) return null;
   return (
     <div data-graph-link-notes={link.id} className="-mx-1.5 flex flex-col gap-0.5 border-t border-line pt-2">

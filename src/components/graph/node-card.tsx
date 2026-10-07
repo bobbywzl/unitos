@@ -24,6 +24,7 @@ import { GraphNoteRow, useGraphNotes } from "@/components/graph/graph-notes";
 import { noteLine } from "@/lib/graph/notes";
 import { useCoarsePointer, useGraphContent } from "@/components/graph/graph-content";
 import { LinkReplyCount } from "@/components/graph/link-replies";
+import { useWantProvenance } from "@/components/graph/provenance-want";
 
 const outlines = new Map<string, DocumentOutline>();
 const NOTE_ROWS = 6;
@@ -124,6 +125,9 @@ export function NodeCardPanel({
   }
   const titleOf = useMemo(() => new Map(nodes.map((n) => [n.id, n.title])), [nodes]);
   const groups = useMemo(() => linkGroups(edges, node.id, showProvenance), [edges, node.id, showProvenance]);
+  // COST3-03: a card lists its document's provenance links only while the
+  // switch shows them; they load then.
+  useWantProvenance(showProvenance && edges.some((e) => (e.a === node.id || e.b === node.id) && (e.provenance ?? 0) > 0), "card");
   const notes = notesCtx?.view.byDocument.get(node.id)?.notes ?? [];
   const acceptedCount = groups.reduce((s, g) => s + g.accepted, 0);
   const recommendedCount = groups.reduce((s, g) => s + g.recommended, 0);
