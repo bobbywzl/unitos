@@ -12,7 +12,7 @@ import {
   STITCH_EXPAND_WORDS,
   STITCH_GROUP_CONCURRENCY,
   STITCH_GROUPED_MAX,
-  STITCH_HISTORY_FIRST,
+  STITCH_HISTORY_FIRST_MIN,
   STITCH_HISTORY_MAX,
   STITCH_LINKS_SKELETON,
   STITCH_MAX_OUTPUT_TOKENS,
@@ -32,11 +32,12 @@ import {
 import { loadProfile, pageNames, renderBlockLines } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import type { Lang } from "@/lib/i18n/config";
+import { translatorFor } from "@/lib/i18n/dictionaries";
 import { featureCall } from "@/lib/feature-models";
 import { attachDocument } from "@/lib/parse/attach";
 import { parseMarkdown } from "@/lib/parse/markdown";
 import { PARSER_VERSION, type ParsedBlock } from "@/lib/parse/types";
-import { ensureSkeleton, type Skeleton } from "@/lib/graph/skeleton";
+import { ensureSkeleton, readSkeleton, type Skeleton } from "@/lib/graph/skeleton";
 import { projectLinks } from "@/lib/link-scope";
 import { jevRouteParts, jevSelectLines } from "@/lib/graph/stitch-jev";
 import { jevEnabled, mapLimit } from "@/lib/jev";
@@ -53,7 +54,7 @@ import {
 } from "@/lib/prompts/stitch";
 import { profileLines } from "@/lib/prompts/types";
 import { estTokens } from "@/lib/tokens";
-import type { StitchCommandKind, StitchDocument, StitchResult } from "@/lib/types";
+import type { StitchCommandKind, StitchDocument, StitchRecord, StitchResult } from "@/lib/types";
 import { transcriptIsStale } from "@/lib/video/types";
 
 // Stitch (SPEC.md §22): one command over the project's documents, from the
@@ -261,10 +262,18 @@ export function commandNames(command: string): string[] {
     Darwinian. A name kept only when 1 to NAME_HITS_MAX blocks name it.
     A skeleton line keeps at most 40 words of a block, so a name deep in a
     long block can be missing from its line: the select pass is told
-    which blocks name it (ANS3-01). */
-export function nameHits(command: string, blocks: { alias: string; text: string }[]): { term: string; aliases: string[] }[] {
+    which blocks name it (ANS3-01). A term in a title of a document read
+    (titles) names the document, not a topic, and drops: "Beyond Good" of
+    "Beyond Good and Evil" is not a rare name (ANS4-06). */
+export function nameHits(
+  command: string,
+  blocks: { alias: string; text: string }[],
+  titles: string[] = [],
+): { term: string; aliases: string[] }[] {
   const out: { term: string; aliases: string[] }[] = [];
+  const titled = titles.map((t) => t.toLowerCase());
   for (const term of commandNames(command)) {
+    if (titled.some((t) => t.includes(term.toLowerCase()))) continue;
     const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const rx = /^[\p{L}\p{N}]/u.test(term) && !/[㐀-鿿]/.test(term) ? new RegExp(`(?<![\\p{L}\\p{N}])${escaped}`, "iu") : new RegExp(escaped, "iu");
     const aliases: string[] = [];
@@ -278,7 +287,9 @@ export function nameHits(command: string, blocks: { alias: string; text: string 
   return out;
 }
 
-export type StitchTurn = { role: "user" | "assistant"; content: string };
+/** One turn of the conversation as the box sends it; an assistant turn may
+    carry its record (StitchResult.record): what it stored. */
+export type StitchTurn = { role: "user" | "assistant"; content: string; record?: StitchRecord };
 
 /** One readable block of a doc: its stored id, and the alias the model
     reads it under (the document's letter and the block's number, B12). */
@@ -317,9 +328,44 @@ function findIn(block: DocBlock, text: string): Resolved | null {
   return resolvedAt(block, hit.start, hit.end);
 }
 
+// The words of a text, for the sentence window: Latin words and numbers,
+// and each CJK character on its own.
+const spanWords = (s: string) => s.toLowerCase().match(/[㐀-鿿]|[\p{L}\p{N}]+/gu) ?? [];
+
+/** The shortest window of 1 to 4 sentences of the text that holds at least
+    60% of the quote's words and is at most 2.5 times the quote's length:
+    where a quote the model did not copy exactly comes from (ANS4-05).
+    Null when no window does. */
+export function sentenceWindow(text: string, wanted: string): { start: number; end: number } | null {
+  const want = new Set(spanWords(wanted));
+  if (want.size === 0) return null;
+  const sentences = [...text.matchAll(/[^.!?。！？]+(?:[.!?。！？]+|$)["'”’)\]）」』]*\s*/g)].map((m) => ({
+    start: m.index + (m[0].length - m[0].trimStart().length),
+    end: m.index + m[0].trimEnd().length,
+    words: spanWords(m[0]),
+  }));
+  let best: { start: number; end: number; score: number } | null = null;
+  for (let i = 0; i < sentences.length; i++) {
+    const got = new Set<string>();
+    for (let j = i; j < Math.min(sentences.length, i + 4); j++) {
+      for (const w of sentences[j].words) if (want.has(w)) got.add(w);
+      const score = got.size / want.size;
+      const start = sentences[i].start;
+      const len = sentences[j].end - start;
+      if (len > wanted.length * 2.5) break;
+      if (score >= 0.6 && (!best || len < best.end - best.start || (len === best.end - best.start && score > best.score))) {
+        best = { start, end: sentences[j].end, score };
+      }
+    }
+  }
+  return best && best.end > best.start ? { start: best.start, end: best.end } : null;
+}
+
 /** A quote against the blocks: in the named block first; then, when the
-    model named the wrong block, exact in any block; then the named block
-    whole — a quote that was not copied verbatim still points at real text.
+    model named the wrong block, exact in any block; then the shortest
+    window of the named block's sentences that holds most of the quote's
+    words (sentenceWindow); then the named block whole — a quote that was
+    not copied verbatim still points at real text.
     No quote is the named block whole. Null when the alias names no block.
     blockByRef: every block under its alias (lib/graph/stitch.ts documentLetter)
     and under its stored id, so either form the model writes resolves. */
@@ -341,6 +387,8 @@ export function resolveQuote(
       if (at !== -1) return resolvedAt(block, at, at + wanted.length);
     }
   }
+  const window = sentenceWindow(named.text, wanted);
+  if (window) return resolvedAt(named, window.start, window.end);
   return resolvedAt(named, 0, named.text.length);
 }
 
@@ -600,6 +648,21 @@ function renderDocuments(docs: Doc[]): { rendered: Rendered[]; length: number; t
 // "(3 blocks not shown)", "(1 block not shown)".
 const notShown = (n: number, unit: "block" | "line") => `(${n} ${unit}${n === 1 ? "" : "s"} not shown)`;
 
+// The document's gist under its header (ANS4-07): what a document titled
+// "BOOK TWO" or "chapter3.pdf" is. Empty when it has no skeleton yet.
+function gistLine(r: Rendered, gists: Map<string, string>): string {
+  const gist = gists.get(r.doc.id)?.replace(/\s+/g, " ").trim();
+  return gist ? `\ngist: ${gist}` : "";
+}
+
+// A document read whole, its gist under its header.
+function wholeSection(r: Rendered, gists: Map<string, string>): string {
+  const gist = r.coverage.status === "read" ? gistLine(r, gists) : "";
+  if (!gist) return r.section;
+  const at = r.section.indexOf("\n");
+  return at === -1 ? `${r.section}${gist}` : `${r.section.slice(0, at)}${gist}${r.section.slice(at)}`;
+}
+
 /** The selected blocks: every document something of is shown, in order,
     its header saying how many of its blocks are shown, the blocks in
     reading order, a gap between two shown blocks declared. A partly shown
@@ -608,7 +671,7 @@ const notShown = (n: number, unit: "block" | "line") => `(${n} ${unit}${n === 1 
     partial-read sentence gives advice that works. A document with nothing
     to read is declared with its reason, as in the whole rendering; the
     documents none of whose blocks were picked share one line at the end. */
-function selectedSections(rendered: Rendered[], selected: Set<string>): string {
+function selectedSections(rendered: Rendered[], selected: Set<string>, gists: Map<string, string> = new Map()): string {
   const sections: string[] = [];
   const none: Rendered[] = [];
   const read = rendered.filter((r) => r.coverage.status === "read");
@@ -624,7 +687,7 @@ function selectedSections(rendered: Rendered[], selected: Set<string>): string {
     }
     const shortest = Math.min(Infinity, ...read.filter((x) => x !== r).map((x) => x.tokens));
     const whole = shown.length < r.blocks.length && r.tokens + shortest <= STITCH_WHOLE_THRESHOLD;
-    const head = header(r.letter, r.doc, `${coverageNote(r.coverage, shown.length)}${whole ? "; read whole when picked with one short document" : ""}`);
+    const head = `${header(r.letter, r.doc, `${coverageNote(r.coverage, shown.length)}${whole ? "; read whole when picked with one short document" : ""}`)}${gistLine(r, gists)}`;
     const lines: string[] = [];
     let last = -1;
     for (const block of shown) {
@@ -646,7 +709,9 @@ function selectedSections(rendered: Rendered[], selected: Set<string>): string {
 /** The answer pass's messages: the system message (the rules, the reader
     context, then the documents whole or the blocks selected), the turns so
     far, and the command. selected: the aliases the reading passes picked,
-    or null for the whole read. */
+    or null for the whole read. links: the links already in the project
+    between the documents read, as aliases; the prompt lists the ones whose
+    two blocks are both shown (ANS4-01). */
 export function answerMessages(input: {
   reading: Reading;
   selected: Set<string> | null;
@@ -656,10 +721,15 @@ export function answerMessages(input: {
   command: string;
   // The command's rare names (nameHits), counted against the blocks shown.
   names?: { term: string; aliases: string[] }[];
+  links?: { from: string; to: string }[];
+  // The history's tokens past which it comes before the blocks
+  // (STITCH_HISTORY_FIRST_MIN).
+  historyFirstMin?: number;
 }): ModelMessage[] {
-  const { rendered, documentList } = input.reading;
+  const { rendered, documentList, gists } = input.reading;
   const selected = input.selected;
   const rules = stitchRules(input.lang);
+  const shownBlock = (alias: string) => (selected ? selected.has(alias) : input.reading.blockByRef.has(alias));
   const prompt = stitchPrompt({
     documents: documentList,
     command: input.command,
@@ -668,22 +738,43 @@ export function answerMessages(input: {
     names: selected
       ? (input.names ?? []).map((n) => ({ term: n.term, total: n.aliases.length, shown: n.aliases.filter((a) => selected.has(a)).length }))
       : undefined,
+    existing: existingPairs(input.links ?? [], shownBlock),
   });
   // The blocks picked change every command, so behind them nothing caches:
-  // with STITCH_HISTORY_FIRST the conversation comes before them, and turn
-  // t reads turn t-1's history from the cache (COST3-06). The documents
-  // read whole stay in the system message: they are the same every command.
-  if (STITCH_HISTORY_FIRST && selected) {
+  // past STITCH_HISTORY_FIRST_MIN tokens of history the conversation comes
+  // before them, and turn t reads turn t-1's history from the cache
+  // (COST4-01). The documents read whole stay in the system message: they
+  // are the same every command.
+  const historyTokens = input.history.reduce((sum, m) => sum + estTokens(textOf(m)), 0);
+  if (selected && historyTokens >= (input.historyFirstMin ?? STITCH_HISTORY_FIRST_MIN)) {
     return [
       systemMessage(systemOf(rules, input.profile, "The blocks a first read picked for the command are in the reader's last message.", "")),
       ...input.history,
-      { role: "user", content: `${selectedSections(rendered, selected)}\n\n${prompt}` },
+      { role: "user", content: `${selectedSections(rendered, selected, gists)}\n\n${prompt}` },
     ];
   }
-  const system = input.selected
-    ? systemOf(rules, input.profile, "The blocks a first read picked for the command follow.", selectedSections(rendered, input.selected))
-    : systemOf(rules, input.profile, "Every document follows.", rendered.map((r) => r.section).join("\n\n"));
+  const system = selected
+    ? systemOf(rules, input.profile, "The blocks a first read picked for the command follow.", selectedSections(rendered, selected, gists))
+    : systemOf(rules, input.profile, "Every document follows.", rendered.map((r) => wholeSection(r, gists)).join("\n\n"));
   return [systemMessage(system), ...input.history, { role: "user", content: prompt }];
+}
+
+const EXISTING_MAX = 40; // links listed to the answer pass
+
+/** The links already in the project whose two blocks are both shown, once
+    per pair of blocks, as "[block G6] – [block B20]". */
+export function existingPairs(links: { from: string; to: string }[], shown: (alias: string) => boolean): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const l of links) {
+    if (!shown(l.from) || !shown(l.to)) continue;
+    const key = [l.from, l.to].sort().join("|");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(`[block ${l.from}] – [block ${l.to}]`);
+    if (out.length >= EXISTING_MAX) break;
+  }
+  return out;
 }
 
 // ── The skeletons as the reading passes see them ─────────────────────────
@@ -1150,14 +1241,120 @@ export function historyWithAliases(
   });
 }
 
+/** One stored link of a turn's record, as read again from the project. */
+export type RecordLink = { id: string; fromBlockId: string; toBlockId: string | null; reason: string | null; recommended: boolean };
+/** One block of a turn's generated page with its sources: quote, true when
+    the block is a copy of its source (a quote part). */
+export type RecordPageBlock = { quote: boolean; sources: { blockId: string; title: string }[] };
+
+const RECORD_QUOTES_MAX = 20; // quote parts of a page named by block
+
+/** A turn's record as the model reads it (ANS4-02): what the turn stored,
+    under the reply. Each link in the order the answer proposed it, its two
+    blocks as stored ids (historyWithAliases makes them this reading's
+    aliases) and its stored reason; a link gone from the project by the two
+    titles the box sent. The page by its title, its quote parts counted by
+    the document they come from, and the blocks they copy. "" when the turn
+    stored nothing. */
+export function recordText(
+  record: StitchRecord,
+  links: Map<string, RecordLink>,
+  page: RecordPageBlock[] | null,
+): string {
+  const lines: string[] = [];
+  record.links.forEach((l, i) => {
+    const row = links.get(l.id);
+    if (!row) {
+      lines.push(`- link ${i + 1}: "${l.from}" – "${l.to}" (no longer in the graph)`);
+      return;
+    }
+    const to = row.toBlockId ? `[block ${row.toBlockId}]` : `"${l.to}"`;
+    const reason = row.reason?.replace(/\s+/g, " ").trim();
+    lines.push(`- link ${i + 1}${row.recommended ? "" : " (accepted)"}: [block ${row.fromBlockId}] – ${to}${reason ? `: ${reason}` : ""}`);
+  });
+  if (record.document) {
+    const title = record.document.title.replace(/\s+/g, " ").trim();
+    if (!page) {
+      lines.push(`- page "${title}" (no longer in the project)`);
+    } else {
+      const quotes = page.filter((b) => b.quote);
+      const byTitle = new Map<string, number>();
+      for (const b of quotes) for (const src of b.sources.slice(0, 1)) byTitle.set(src.title, (byTitle.get(src.title) ?? 0) + 1);
+      const from = [...byTitle].map(([t, n]) => `"${t}" ${n}`).join(", ");
+      const tags = quotes.slice(0, RECORD_QUOTES_MAX).flatMap((b) => b.sources.slice(0, 1).map((src) => `[block ${src.blockId}]`));
+      const texts = page.filter((b) => !b.quote && b.sources.length > 0).length;
+      lines.push(
+        `- page "${title}": ${quotes.length} quote part${quotes.length === 1 ? "" : "s"}${from ? ` (${from})` : ""}${tags.length > 0 ? `: ${tags.join(" ")}${quotes.length > tags.length ? " …" : ""}` : ""}; ${texts} text block${texts === 1 ? "" : "s"} with sources`,
+      );
+    }
+  }
+  return lines.length > 0 ? `(Stored by this answer, in the order it proposed them:\n${lines.join("\n")})` : "";
+}
+
+/** The records of the turns, read again inside the project: the links by
+    id, and each page's blocks with their provenance links. A link or a
+    page of another project is not read. */
+async function loadRecords(turns: StitchTurn[], notebookId: string): Promise<{ links: Map<string, RecordLink>; pages: Map<string, RecordPageBlock[]> }> {
+  const linkIds = [...new Set(turns.flatMap((t) => t.record?.links.map((l) => l.id) ?? []))].slice(0, 500);
+  const pageIds = [...new Set(turns.flatMap((t) => (t.record?.document ? [t.record.document.id] : [])))].slice(0, 20);
+  const links = new Map<string, RecordLink>();
+  const pages = new Map<string, RecordPageBlock[]>();
+  if (linkIds.length > 0) {
+    const rows = await db.docLink.findMany({
+      where: { id: { in: linkIds }, ...projectLinks(notebookId) },
+      select: { id: true, fromBlockId: true, toBlockId: true, reason: true, recommended: true },
+    });
+    for (const row of rows) links.set(row.id, row);
+  }
+  if (pageIds.length > 0) {
+    const docs = await db.document.findMany({
+      where: { id: { in: pageIds }, generatedCommand: { not: null }, notebooks: { some: { notebookId } } },
+      select: {
+        id: true,
+        blocks: { orderBy: { order: "asc" }, select: { id: true, text: true } },
+        linksFrom: {
+          where: { recommended: false },
+          orderBy: { createdAt: "asc" },
+          select: { fromBlockId: true, toBlockId: true, toQuotedText: true, toDocument: { select: { title: true } } },
+        },
+      },
+    });
+    for (const d of docs) {
+      const byBlock = new Map<string, typeof d.linksFrom>();
+      for (const l of d.linksFrom) byBlock.set(l.fromBlockId, [...(byBlock.get(l.fromBlockId) ?? []), l]);
+      pages.set(
+        d.id,
+        d.blocks.map((b) => {
+          const from = byBlock.get(b.id) ?? [];
+          const sources = from.flatMap((l) => (l.toBlockId ? [{ blockId: l.toBlockId, title: l.toDocument.title }] : []));
+          // A quote part is a copy of its one source; its markdown
+          // emphasis parsed away (_pity_ is pity), so compared folded.
+          return { quote: from.length === 1 && foldQuote(from[0].toQuotedText ?? "").replace(/-/g, "") === foldQuote(b.text).replace(/-/g, ""), sources };
+        }),
+      );
+    }
+  }
+  return { links, pages };
+}
+
 /** The conversation as the passes read it: the last STITCH_HISTORY_MAX
-    turns with text, each turn's block tags as this reading's aliases
+    turns with text, each assistant turn with its record under it
+    (recordText), each turn's block tags as this reading's aliases
     (historyWithAliases). Only blocks of documents attached to the project
     are named by title. */
 export async function stitchHistory(turns: StitchTurn[], reading: Reading, notebookId: string): Promise<ModelMessage[]> {
-  const kept = turns.filter((t) => t.content.trim()).slice(-STITCH_HISTORY_MAX);
+  // A turn with no text but a record (an answer that was only links or a
+  // page) is kept: its record is what the model reads of it.
+  const kept = turns.filter((t) => t.content.trim() || t.record?.links.length || t.record?.document).slice(-STITCH_HISTORY_MAX);
+  const records = await loadRecords(kept.filter((t) => t.role === "assistant"), notebookId);
+  const contents = kept.map((t) => {
+    if (t.role !== "assistant" || !t.record) return t.content;
+    const page = t.record.document ? (records.pages.get(t.record.document.id) ?? null) : null;
+    const text = recordText(t.record, records.links, page);
+    return [t.content.trim(), text].filter(Boolean).join("\n\n");
+  });
   const unknown = new Set<string>();
-  for (const t of kept) for (const m of t.content.matchAll(BLOCK_TAG)) if (!reading.blockByRef.has(m[1])) unknown.add(m[1]);
+  for (const c of contents) for (const m of c.matchAll(BLOCK_TAG)) if (!reading.blockByRef.has(m[1])) unknown.add(m[1]);
   const titles = new Map<string, string>();
   if (unknown.size > 0) {
     const rows = await db.block.findMany({
@@ -1166,7 +1363,7 @@ export async function stitchHistory(turns: StitchTurn[], reading: Reading, noteb
     });
     for (const row of rows) titles.set(row.id, row.document.title);
   }
-  return kept.map((t) => ({ role: t.role, content: historyWithAliases(t.content, reading.blockByRef, titles) }));
+  return kept.map((t, i) => ({ role: t.role, content: historyWithAliases(contents[i], reading.blockByRef, titles) }));
 }
 
 const textOf = (m: ModelMessage): string => (typeof m.content === "string" ? m.content : "");
@@ -1194,6 +1391,9 @@ export type Reading = {
   read: Rendered[];
   blockByRef: Map<string, DocBlock>;
   documentList: StitchDocumentCtx[];
+  // Each document's skeleton gist by document id: the stored ones, and the
+  // ones the reading passes build (pickBlocks).
+  gists: Map<string, string>;
 };
 
 /** The documents loaded by loadDocuments, ready for the reading passes.
@@ -1213,7 +1413,12 @@ export function readingOf(docs: Doc[]): Reading & { length: number; tokens: numb
     title: r.doc.title,
     read: r.coverage.status === "read",
   }));
-  return { rendered, read, blockByRef, documentList, length, tokens };
+  const gists = new Map<string, string>();
+  for (const r of read) {
+    const gist = readSkeleton(r.doc.skeleton)?.gist;
+    if (gist) gists.set(r.doc.id, gist);
+  }
+  return { rendered, read, blockByRef, documentList, gists, length, tokens };
 }
 
 const expandSchema = z.object({
@@ -1304,7 +1509,7 @@ export async function pickBlocks(input: {
   const cited = citedAliases(input.history, blockByRef);
   // The blocks whose full text names the command's rare names: the select
   // pass is told of them, and a cut keeps their lines.
-  const names = nameHits(input.command, read.flatMap((r) => r.blocks));
+  const names = nameHits(input.command, read.flatMap((r) => r.blocks), read.map((r) => r.doc.title));
   const jevCommand =
     earlier.length > 0
       ? `Earlier commands of the conversation:\n${earlier.join("\n")}\n\nThe command:\n${input.command}`
@@ -1334,6 +1539,7 @@ export async function pickBlocks(input: {
   const skeletons = await mapLimit(read, SKELETON_BUILD_CONCURRENCY, (r) => ensureSkeleton(r.doc, input.userId, input.signal));
   if (input.signal?.aborted) aborted();
   const views = read.map((r, i) => skeletonView(r, skeletons[i]));
+  for (const v of views) if (v.gist) input.reading.gists.set(v.r.doc.id, v.gist);
   const skeletonLength = views.reduce((sum, v) => sum + v.lines.reduce((n, l) => n + lineCost(l), 0), 0);
 
   // Past the budget the select pass reads every line in groups (below);
@@ -1465,6 +1671,9 @@ export async function stitch(input: {
   history: StitchTurn[];
   signal?: AbortSignal;
   onFailure: (reason: string) => Error;
+  // The answer pass's history-first threshold, for a check that compares
+  // the two layouts; STITCH_HISTORY_FIRST_MIN when absent.
+  historyFirstMin?: number;
 }): Promise<StitchResult> {
   const docs = await loadDocuments(input.notebookId, input.documentIds, { generated: STITCH_READS_GENERATED });
   const reading = readingOf(docs);
@@ -1503,6 +1712,23 @@ export async function stitch(input: {
     });
   }
 
+  // The links already in the project between the documents read: the
+  // answer pass is told of the ones between blocks it reads, and a link it
+  // proposes again is not stored again (ANS4-01). Removed links count, so
+  // a link the reader removed is never proposed back.
+  const docIds = docs.map((m) => m.id);
+  const existing = await db.docLink.findMany({
+    where: { fromDocumentId: { in: docIds }, toDocumentId: { in: docIds }, ...projectLinks(input.notebookId, { withHidden: true }) },
+    orderBy: { createdAt: "asc" },
+    select: { fromBlockId: true, startOffset: true, endOffset: true, toDocumentId: true, toBlockId: true, toStartOffset: true, toEndOffset: true },
+  });
+  const aliasOf = (id: string | null) => (id ? blockByRef.get(id)?.alias : undefined);
+  const existingAliases = existing.flatMap((l) => {
+    const from = aliasOf(l.fromBlockId);
+    const to = aliasOf(l.toBlockId);
+    return from && to ? [{ from, to }] : [];
+  });
+
   // ── The answer pass ──────────────────────────────────────────────────────
   const result = await callForJson({
     model,
@@ -1513,7 +1739,9 @@ export async function stitch(input: {
       profile,
       history,
       command: input.command,
-      names: selected ? nameHits(input.command, read.flatMap((r) => r.blocks)) : undefined,
+      names: selected ? nameHits(input.command, read.flatMap((r) => r.blocks), read.map((r) => r.doc.title)) : undefined,
+      links: existingAliases,
+      historyFirstMin: input.historyFirstMin,
     }),
     maxOutputTokens: STITCH_MAX_OUTPUT_TOKENS,
     providerOptions: answer.providerOptions,
@@ -1527,21 +1755,32 @@ export async function stitch(input: {
   if (input.signal?.aborted) throw input.onFailure("aborted");
 
   // ── Links: block to block across docs, stored recommended ─────────────
-  const existing = await db.docLink.findMany({
-    where: { fromDocumentId: { in: docs.map((m) => m.id) }, ...projectLinks(input.notebookId, { withHidden: true }) },
-    select: { fromBlockId: true, quotedText: true, toDocumentId: true, toBlockId: true },
-  });
-  const seen = new Set(existing.map((l) => `${l.fromBlockId}|${l.quotedText}|${l.toBlockId ?? l.toDocumentId}`));
+  // A link that joins the same two blocks as a link already in the project
+  // or one stored just before, with an end overlapping it, is that link
+  // again (duplicateLink): not stored, and counted in linksExisting.
+  const kept: LinkEnds[] = existing.map((l) => [
+    { block: l.fromBlockId, start: l.startOffset, end: l.endOffset },
+    { block: l.toBlockId ?? l.toDocumentId, start: l.toStartOffset ?? 0, end: l.toEndOffset ?? Number.MAX_SAFE_INTEGER },
+  ]);
   let linkCount = 0;
+  let linksExisting = 0;
   const linkIds: string[] = [];
+  const recordLinks: StitchRecord["links"] = [];
+  const titleOf = new Map(rendered.map((r) => [r.doc.id, r.doc.title]));
   for (const link of result.data.links) {
     if (linkCount >= MAX_LINKS) break;
     const from = resolveQuote(blockByRef, link.fromBlockId, link.fromQuote);
     const to = resolveQuote(blockByRef, link.toBlockId, link.toQuote);
     if (!from || !to || from.documentId === to.documentId) continue;
-    const key = `${from.blockId}|${from.quotedText}|${to.blockId}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
+    const ends: LinkEnds = [
+      { block: from.blockId, start: from.startOffset, end: from.endOffset },
+      { block: to.blockId, start: to.startOffset, end: to.endOffset },
+    ];
+    if (duplicateLink(ends, kept)) {
+      linksExisting++;
+      continue;
+    }
+    kept.push(ends);
     const made = await db.docLink.create({
       data: {
         recommended: true,
@@ -1565,33 +1804,47 @@ export async function stitch(input: {
       },
     });
     linkIds.push(made.id);
+    recordLinks.push({ id: made.id, from: titleOf.get(from.documentId) ?? "", to: titleOf.get(to.documentId) ?? "" });
     linkCount++;
   }
 
   // ── The generated document ───────────────────────────────────────────────
-  // A page made by a follow-up records the command before it too, so
-  // Generated content says what "make that a page" made a page of.
+  // A page made by a follow-up records the earlier command it continues
+  // too (pageCommand), so Generated content says what "make that a page"
+  // made a page of.
+  // Titles in quote marks are not quotes: the documents read, and the
+  // pages the earlier turns stored.
+  const titles = new Set([
+    ...rendered.map((r) => r.doc.title),
+    ...input.history.flatMap((t) => (t.record?.document ? [t.record.document.title] : [])),
+  ]);
   let document: StitchResult["document"] = null;
   if (result.data.document && !input.signal?.aborted) {
-    const previous = [...input.history].reverse().find((t) => t.role === "user" && t.content.trim());
+    const parts = result.data.document.parts.slice(0, MAX_PARTS);
     document = await materializeGenerated({
       notebookId: input.notebookId,
       userId: input.userId,
-      command: previous ? `${previous.content.trim()} → ${input.command}` : input.command,
+      command: pageCommand(input.command, history, partBlocks(parts, blockByRef), blockByRef),
       title: result.data.document.title.trim(),
-      parts: result.data.document.parts.slice(0, MAX_PARTS),
+      parts,
       blockById: blockByRef,
+      titles,
     });
   }
 
   if (linkCount > 0 || document) await bumpNotebook(input.notebookId);
-  const titles = new Set(rendered.map((r) => r.doc.title));
   const checked = checkReplyQuotes(result.data.reply.trim(), blockByRef, titles);
   if (checked.unquoted.length > 0) console.warn(`[stitch] ${checked.unquoted.length} quote(s) in the reply not in the blocks cited; shown without quote marks`);
-  const reply = replyWithIds(checked.reply, blockByRef);
+  // The reply says how many of the links it proposed were already in the
+  // graph, so its count and the links stored agree.
+  const t = translatorFor(lang);
+  const existingNote =
+    linksExisting > 0
+      ? t(linksExisting === 1 ? "stitch.stitchLinksExisting1" : "stitch.stitchLinksExistingN", { n: linksExisting })
+      : "";
+  const reply = replyWithIds([checked.reply, existingNote].filter(Boolean).join("\n\n"), blockByRef);
   // No reply and nothing stored: the reader would see an empty turn.
   if (!reply && linkCount === 0 && !document) throw input.onFailure(STITCH_EMPTY_ANSWER);
-  const titleOf = new Map(rendered.map((r) => [r.doc.id, r.doc.title]));
   const picked = selected;
   const documents = picked
     ? coverage.map((c) => {
@@ -1600,10 +1853,109 @@ export async function stitch(input: {
         return { ...c, shown: r ? r.blocks.filter((b) => picked.has(b.alias)).length : 0 };
       })
     : coverage;
-  return { reply, linkCount, linkIds, document, documents, cited: citedBlocks(reply, blockByRef, titleOf) };
+  const record: StitchRecord = { links: recordLinks, document };
+  return {
+    reply,
+    linkCount,
+    linkIds,
+    linksExisting,
+    record,
+    document,
+    documents,
+    cited: citedBlocks(reply, blockByRef, titleOf),
+  };
+}
+
+/** A link's two ends: each end's block (or the document, for a link to a
+    whole document) and its range in the block. */
+export type LinkEnds = [{ block: string; start: number; end: number }, { block: string; start: number; end: number }];
+
+/** True when a link of `kept` joins the same two blocks as `link`, in
+    either direction, and overlaps it on at least one end: the same link
+    proposed again, though its quote differs by a word or its direction is
+    reversed. Two links between other passages of the same two blocks are
+    two links. */
+export function duplicateLink(link: LinkEnds, kept: LinkEnds[]): boolean {
+  const overlaps = (a: LinkEnds[number], b: LinkEnds[number]) => a.block === b.block && a.start < b.end && b.start < a.end;
+  const [x, y] = link;
+  return kept.some(([a, b]) =>
+    a.block === x.block && b.block === y.block
+      ? overlaps(a, x) || overlaps(b, y)
+      : a.block === y.block && b.block === x.block && (overlaps(a, y) || overlaps(b, x)),
+  );
+}
+
+/** The stored blocks a page's parts quote or rest on. */
+function partBlocks(parts: Part[], blockByRef: Map<string, DocBlock>): Set<string> {
+  const out = new Set<string>();
+  for (const part of parts) {
+    const refs = part.kind === "quote" ? [part.blockId] : part.kind === "text" ? part.sources.map((s) => s.blockId) : [];
+    for (const ref of refs) {
+      const block = blockByRef.get(ref.trim()) ?? blockByRef.get(ref.trim().toUpperCase());
+      if (block) out.add(block.id);
+    }
+  }
+  return out;
+}
+
+/** The command a generated page records (ANS4-10): the command, after the
+    earliest earlier command whose answer cited at least two of the blocks
+    the page rests on (one, when the page rests on one), so Generated
+    content says what "make that a page" made a page of; the command alone
+    when no earlier answer did. history: the turns as the passes read them
+    (aliases), each answer with its record. */
+export function pageCommand(command: string, history: ModelMessage[], pageBlocks: Set<string>, blockByRef: Map<string, DocBlock>): string {
+  const need = Math.min(2, pageBlocks.size);
+  if (need === 0) return command;
+  for (let i = 1; i < history.length; i++) {
+    const m = history[i];
+    const asked = history[i - 1];
+    if (m.role !== "assistant" || asked.role !== "user") continue;
+    const cited = new Set<string>();
+    for (const tag of textOf(m).matchAll(BLOCK_TAG)) {
+      const block = blockByRef.get(tag[1]);
+      if (block && pageBlocks.has(block.id)) cited.add(block.id);
+    }
+    if (cited.size >= need) return `${textOf(asked).trim()} → ${command}`;
+  }
+  return command;
 }
 
 type Part = z.infer<typeof partSchema>;
+
+/** A text part's sources spread over its blocks (ANS4-03): each source on
+    the block whose words its quote shares most (the first on a tie), and a
+    block of text that gets none takes the part's first source, so every
+    paragraph and list item of the part clicks back to a block it rests on.
+    A heading gets none. One block: every source on it. */
+export function assignSources<S extends { quotedText: string }>(blocks: { type: string; text: string }[], sources: S[]): S[][] {
+  const out: S[][] = blocks.map(() => []);
+  if (blocks.length === 0 || sources.length === 0) return out;
+  // Words of three letters or more, and CJK characters: "the" and "of"
+  // tell no two paragraphs apart.
+  const keyWords = (t: string) => new Set(spanWords(t).filter((w) => w.length >= 3 || /[㐀-鿿]/.test(w)));
+  const text = blocks.map((b, i) => ({ i, heading: b.type === "HEADING", words: keyWords(b.text) })).filter((b) => !b.heading);
+  if (text.length === 0) {
+    out[0] = [...sources];
+    return out;
+  }
+  for (const source of sources) {
+    const words = keyWords(source.quotedText);
+    let best = text[0];
+    let bestScore = -1;
+    for (const b of text) {
+      let score = 0;
+      for (const w of words) if (b.words.has(w)) score++;
+      if (score > bestScore) {
+        best = b;
+        bestScore = score;
+      }
+    }
+    out[best.i].push(source);
+  }
+  for (const b of text) if (out[b.i].length === 0) out[b.i].push(sources[0]);
+  return out;
+}
 
 // The generated document: parts become markdown, the markdown becomes blocks
 // (lib/parse/markdown.ts), and every part links back to the document block it
@@ -1616,6 +1968,8 @@ async function materializeGenerated(input: {
   title: string;
   parts: Part[];
   blockById: Map<string, DocBlock>;
+  // The titles of the documents read: a title in quote marks is not a quote.
+  titles: Set<string>;
 }): Promise<StitchResult["document"]> {
   // One markdown chunk per part, and the sources each chunk carries. A quote
   // part's text is the resolved passage, never the model's copy of it.
@@ -1634,7 +1988,11 @@ async function materializeGenerated(input: {
       quoted.add(key);
       chunks.push({ markdown: resolved.quotedText, sources: [resolved] });
     } else {
-      const markdown = part.markdown.trim();
+      // A quote in the writing that is in no block read loses its quote
+      // marks, as in the reply (ANS4-04).
+      const checked = checkReplyQuotes(part.markdown.trim(), input.blockById, input.titles);
+      if (checked.unquoted.length > 0) console.warn(`[stitch] ${checked.unquoted.length} quote(s) in a page's text part not in the blocks read; shown without quote marks`);
+      const markdown = checked.reply;
       if (!markdown) continue;
       const sources = part.sources
         .map((s) => resolveQuote(input.blockById, s.blockId, s.quote))
@@ -1652,6 +2010,9 @@ async function materializeGenerated(input: {
   })[] = [];
   for (const chunk of chunks) {
     const blocks = parseMarkdown(chunk.markdown);
+    // Each block of a text part of several paragraphs or list items gets
+    // its own sources (ANS4-03); a quote part is one block.
+    const sources = assignSources(blocks, chunk.sources);
     blocks.forEach((b, i) => {
       rows.push({
         order: rows.length,
@@ -1661,8 +2022,7 @@ async function materializeGenerated(input: {
         citations: b.citations,
         styles: b.styles,
         links: b.links,
-        // The chunk's sources ride on its first block.
-        sources: i === 0 ? chunk.sources : [],
+        sources: sources[i],
       });
     });
   }

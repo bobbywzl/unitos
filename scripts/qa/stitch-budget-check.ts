@@ -3,12 +3,21 @@
 // tags as aliases, the reply's citations, and the skeleton's parts without
 // a contents call. No model, no database rows.
 // Run: npx tsx scripts/qa/stitch-budget-check.ts
-import { STITCH_SELECTED_BLOCKS, STITCH_SELECTED_BUDGET } from "../../src/lib/derive/config";
+import { STITCH_HISTORY_FIRST_MIN, STITCH_READ_HISTORY, STITCH_SELECTED_BLOCKS, STITCH_SELECTED_BUDGET } from "../../src/lib/derive/config";
+import { translatorFor } from "../../src/lib/i18n/dictionaries";
+import { parseMarkdown } from "../../src/lib/parse/markdown";
 import { partsFor } from "../../src/lib/graph/skeleton";
 import { readFileSync } from "node:fs";
 import {
   answerMessages,
+  assignSources,
   checkReplyQuotes,
+  duplicateLink,
+  existingPairs,
+  pageCommand,
+  recordText,
+  resolveQuote,
+  sentenceWindow,
   citedAliases,
   citedBlocks,
   commandKind,
@@ -26,7 +35,7 @@ import {
   skeletonGroups,
   type SkeletonView,
 } from "../../src/lib/graph/stitch";
-import { stitchExpandPrompt, stitchPrompt, stitchRules, stitchSelectPrompt } from "../../src/lib/prompts/stitch";
+import { asksWhere, stitchExpandPrompt, stitchPrompt, stitchRules, stitchSelectPrompt } from "../../src/lib/prompts/stitch";
 import { skeletonPrompt } from "../../src/lib/prompts/skeleton";
 import { estTokens } from "../../src/lib/tokens";
 
@@ -377,7 +386,7 @@ check("commandNames: quoted phrases and 《》", commandNames('What does "eterna
   const sel = stitchSelectPrompt({ documents: docs, command: "Which documents mention Darwin?", continued: false, earlier: [], cited: [], maxBlocks: 150, partial: false, names: hits });
   check("select prompt: the blocks that name the rare name", sel.includes('Blocks whose full text names "Darwin", though their skeleton line may not: A11, A12, B13.'));
   const all = stitchPrompt({ documents: docs, command: "x", continued: false, selected: true, names: [{ term: "Darwin", total: 3, shown: 3 }] });
-  const part = stitchPrompt({ documents: docs, command: "x", continued: false, selected: true, names: [{ term: "Darwin", total: 5, shown: 3 }] });
+  const part = stitchPrompt({ documents: docs, command: "Which documents mention Darwin?", continued: false, selected: true, names: [{ term: "Darwin", total: 5, shown: 3 }] });
   check("answer prompt: every block naming it shown", all.includes('Every block of the documents read that names "Darwin" is shown above (3).'));
   check("answer prompt: some blocks naming it not shown, the list is partial", part.includes('5 blocks of the documents read name "Darwin"; 3 of them are shown above. A list of where "Darwin" is named is partial: say so.'));
   check("answer prompt: no partial-list hedge when every block naming the name is shown", !all.includes("the list covers the blocks read") && part.includes("the list covers the blocks read"));
@@ -474,6 +483,128 @@ check("replyLanguage command: a mixed or short command keeps the UI's", replyLan
   check("firstsFirst cap: 100 documents, the best blocks survive the cut", kept(capped) === 12 && kept(today) < 12, `best kept: today ${kept(today)}/12, capped ${kept(capped)}/12`);
   const few = ["A5", "A6", "B2", "A7", "C9", "B3"];
   check("firstsFirst cap: under a third of the budget the order is unchanged", firstsFirst(few, docOf, { tokens: STITCH_SELECTED_BUDGET.question / 3, costOf: (a) => estTokens(blockByRef.get(a)!.text) + 10 }).join(" ") === firstsFirst(few, docOf).join(" "));
+}
+
+// ── Round 4 (ENGINE4) ──
+{
+  const end = (block: string, start: number, stop: number) => ({ block, start, end: stop });
+  // ANS4-01: the round 2 link G6→B20 (quote 0–120), proposed again.
+  const kept: Parameters<typeof duplicateLink>[1] = [[end("G6", 0, 120), end("B20", 40, 200)]];
+  check("duplicateLink: the same pair, a quote one period longer", duplicateLink([end("G6", 0, 121), end("B20", 40, 200)], kept));
+  check("duplicateLink: the same pair reversed (F24→E53 after E53→F24)", duplicateLink([end("B20", 60, 90), end("G6", 300, 400)], kept));
+  check("duplicateLink: other passages of the same two blocks are a new link", !duplicateLink([end("G6", 200, 300), end("B20", 300, 400)], kept));
+  check("duplicateLink: one block shared, the other end elsewhere, is a new link", !duplicateLink([end("G6", 0, 120), end("B21", 0, 50)], kept));
+  check("duplicateLink: a whole-document link overlaps its document's end", duplicateLink([end("G6", 10, 20), end("docB", 0, 5)], [[end("G6", 0, 50), end("docB", 0, Number.MAX_SAFE_INTEGER)]]));
+  const pairs = existingPairs([{ from: "G6", to: "B20" }, { from: "B20", to: "G6" }, { from: "G7", to: "A8" }, { from: "G10", to: "E73" }], (a) => a !== "E73");
+  check("existingPairs: once per pair, only when both blocks are shown", pairs.join("; ") === "[block G6] – [block B20]; [block G7] – [block A8]", pairs.join("; "));
+  const docs4 = [{ tag: "A", title: "Mencken", read: true }, { tag: "B", title: "Notes", read: true }];
+  const withLinks = stitchPrompt({ documents: docs4, command: "Find the contradictions", continued: false, selected: true, existing: pairs });
+  check("answer prompt: the links already in the project", withLinks.includes("Links already in the project between the blocks above: [block G6] – [block B20]; [block G7] – [block A8]. Never propose them again"));
+  check("answer prompt: no links line when none", !stitchPrompt({ documents: docs4, command: "x", continued: false, selected: true }).includes("Links already in the project"));
+  check("answer rules: the link count is the links proposed, the listed ones said to be there", rules.includes("a count of links equals the number of links you propose. A link listed as already in the project is never proposed again"));
+  const en = translatorFor("en");
+  const zh = translatorFor("zh");
+  check("reply note: N already in the graph, en and zh", en("stitch.stitchLinksExistingN", { n: 3 }).startsWith("3 of the links proposed were already in the graph") && zh("stitch.stitchLinksExisting1", { n: 1 }).includes("1 条已在图谱中"), `${en("stitch.stitchLinksExistingN", { n: 3 })} / ${zh("stitch.stitchLinksExisting1", { n: 1 })}`);
+
+  // ANS4-02: a turn's record.
+  const rec = recordText(
+    { links: [{ id: "l1", from: "Notes", to: "Mencken" }, { id: "l2", from: "Notes", to: "Essays" }, { id: "gone", from: "Notes", to: "Zarathustra" }], document: { id: "p", title: "Pity in both" } },
+    new Map([
+      ["l1", { id: "l1", fromBlockId: "idA2", toBlockId: "idB3", reason: "Both date the printing.", recommended: true }],
+      ["l2", { id: "l2", fromBlockId: "idA5", toBlockId: "idC9", reason: "Pity\nmultiplies suffering.", recommended: false }],
+    ]),
+    [
+      { quote: false, sources: [] },
+      { quote: true, sources: [{ blockId: "idA2", title: "Notes" }] },
+      { quote: true, sources: [{ blockId: "idA5", title: "Notes" }] },
+      { quote: true, sources: [{ blockId: "idB3", title: "Mencken" }] },
+      { quote: false, sources: [{ blockId: "idB3", title: "Mencken" }] },
+    ],
+  );
+  check("recordText: each link numbered, its blocks and its stored reason", rec.includes("- link 1: [block idA2] – [block idB3]: Both date the printing.") && rec.includes("- link 2 (accepted): [block idA5] – [block idC9]: Pity multiplies suffering."), rec);
+  check("recordText: a link gone from the project by its titles", rec.includes('- link 3: "Notes" – "Zarathustra" (no longer in the graph)'));
+  check("recordText: the page's quote parts counted by document", rec.includes('- page "Pity in both": 3 quote parts ("Notes" 2, "Mencken" 1): [block idA2] [block idA5] [block idB3]; 1 text block with sources'), rec);
+  check("recordText: nothing stored is no record", recordText({ links: [], document: null }, new Map(), null) === "");
+  check("recordText: the history's tags become this reading's aliases", historyWithAliases(rec, blockByRef, new Map()).includes("[block A2] – [block B3]"));
+
+  // ANS4-03: the sources of a text part of two paragraphs and a list.
+  const md = "Nietzsche dates the idea to August 1881 at Sils Maria.\n\nMencken reads the recurrence as a mocking criticism of progress.\n\n- animals are happy\n- the present moment alone";
+  const blocks4 = parseMarkdown(md);
+  const src = (q: string) => ({ quotedText: q });
+  const spread = assignSources(blocks4, [src("in the month of August 1881 in Sils Maria"), src("a mocking criticism of the idea of progress"), src("the animal is happy in the present moment")]);
+  check("assignSources: each paragraph and the list get their own sources", spread.length === 3 && spread.every((s) => s.length === 1) && spread[1][0].quotedText.includes("mocking"), JSON.stringify(spread.map((s) => s.map((x) => x.quotedText.slice(0, 12)))));
+  const lonely = assignSources(parseMarkdown("One finding.\n\nAnother, with no shared words."), [src("finding")]);
+  check("assignSources: a block that gets none takes the first source", lonely.every((s) => s.length === 1));
+  check("answer rules: a text part is one paragraph or one list", rules.includes("A finding in two paragraphs is two text parts, each with its own sources."));
+
+  // ANS4-04: a text part's misquote loses its marks (checkReplyQuotes as it is).
+  const recurrence = new Map<string, B>([["B19", { id: "idB19", alias: "B19", type: "PARAGRAPH", text: "The idea first occurred to me in August 1881 at Sils Maria.", documentId: "docB" }]]);
+  const textPart = checkReplyQuotes('Nietzsche says it "first came to me in August 1881" at Sils Maria.', recurrence, new Set());
+  check("page text part: a misquote loses its marks", textPart.unquoted.length === 1 && !textPart.reply.includes('"first came'));
+
+  // ANS4-05: a quote two words off resolves to its sentence, not the whole block.
+  const a16text = "The plutocracy is fat and the proletariat is lean. ".repeat(12) + "Here, perhaps, there is an example of the eternal recurrence that Nietzsche was fond of mulling over in his blacker moods. " + "Every revolution ends where it began. ".repeat(20);
+  const a16 = new Map<string, B>([["A16", { id: "idA16", alias: "A16", type: "PARAGRAPH", text: a16text, documentId: "docA" }]]);
+  const near = resolveQuote(a16, "A16", "Here, perhaps, there is an example of the eternal recurrence that Nietzsche was so fond of mulling over in his darker moods.");
+  check("resolveQuote: a quote two words off is its sentence", near?.quotedText === "Here, perhaps, there is an example of the eternal recurrence that Nietzsche was fond of mulling over in his blacker moods.", near?.quotedText.slice(0, 80));
+  const off = resolveQuote(a16, "A16", "A sentence that this block never says about anything at all, really.");
+  check("resolveQuote: a quote in no sentence is still the whole block", off?.quotedText.length === a16text.length);
+  check("sentenceWindow: never more than 2.5 times the quote", sentenceWindow("Short one. " + "x ".repeat(400) + "end.", "Short one two") !== null && sentenceWindow("a b c d e f g h i j k l m n o p.", "a b c") === null);
+  check("sentenceWindow: Chinese sentences", (() => { const t = "叔本华说同情是道德的基础。尼采说同情使痛苦加倍。"; const w = sentenceWindow(t, "尼采认为同情让痛苦加倍"); return w !== null && t.slice(w.start, w.end) === "尼采说同情使痛苦加倍。"; })());
+
+  // ANS4-06: title words are not rare names; the hedge only for "which/where".
+  const named = [{ alias: "A23", text: "H. L. Mencken" }, { alias: "C5", text: "Beyond Good and Evil was written" }, { alias: "D2", text: "democracy, Beyond Good" }];
+  const h1 = nameHits("What do the Mencken introduction, Beyond Good and Evil and The Antichrist each say about democracy?", named, ["Friedrich Nietzsche", "Beyond Good and Evil (Chapters I–III)", "BOOK TWO", "The Antichrist"]);
+  check("nameHits: a term in a title of a document read drops; Mencken stays", !h1.some((n) => n.term.startsWith("Beyond Good")) && !h1.some((n) => n.term.includes("Antichrist")) && h1.some((n) => n.term === "Mencken"), JSON.stringify(h1));
+  check("nameHits: without titles the term stays (old behaviour)", nameHits("What does Beyond Good say?", named).some((n) => n.term === "Beyond Good"));
+  check("asksWhere: which documents, mention, where … discussed, 哪些, 提到", ["Which documents mention Darwin?", "Where is Parsifal discussed?", "Every passage that names Wagner", "哪些文档提到达尔文？"].every(asksWhere));
+  check("asksWhere: not a question about a topic", !["What do they each say about democracy?", "How many years passed?", "Why did Nietzsche praise St. Paul?"].some(asksWhere));
+  const h1p = stitchPrompt({ documents: docs4, command: "What do the Mencken introduction and The Antichrist each say about democracy?", continued: false, selected: true, names: [{ term: "Mencken", total: 2, shown: 0 }] });
+  check("answer prompt: no name hedge on a question that asks no list", !h1p.includes("is named is partial"));
+
+  // ANS4-07: the gist under each document's header.
+  const mkG = (id: string, title: string, gist: string | null, n: number) => ({
+    id, title, generatedCommand: null, skeleton: gist === null ? null : { v: 1, gist, parts: [], lines: [], chars: 0 },
+    handwritten: false, importRev: null, pageLabels: null, conversionStatus: "NONE", conversionError: null, video: null,
+    blocks: Array.from({ length: n }, (_, i) => ({ id: `${id}-${i}`, type: "PARAGRAPH", text: `paragraph ${i} of ${title}`, startTime: null, endTime: null, cell: null, page: null })),
+  });
+  const gReading = readingOf([mkG("d", "BOOK TWO", "Beyond Good and Evil, chapters V and VII: the natural history of morals.", 3), mkG("e", "Notes", null, 2)] as unknown as Parameters<typeof readingOf>[0]);
+  const prof = null as unknown as Parameters<typeof answerMessages>[0]["profile"];
+  const gSel = String(answerMessages({ reading: gReading, selected: new Set(["A1", "B1"]), lang: "en", profile: prof, history: [], command: "x" })[0].content);
+  const gWhole = String(answerMessages({ reading: gReading, selected: null, lang: "en", profile: prof, history: [], command: "x" })[0].content);
+  check("answer sections: a document's gist under its header (pick)", /\[document A\] "BOOK TWO" \([^)]*\)\ngist: Beyond Good and Evil, chapters V and VII/.test(gSel) && !/\[document B\] "Notes" \([^)]*\)\ngist/.test(gSel));
+  check("answer sections: a document's gist under its header (whole read)", /\[document A\] "BOOK TWO" \([^)]*\)\ngist: Beyond Good and Evil[^\n]*\n\[block A1\]/.test(gWhole));
+
+  // ANS4-08: Stitch says it reads no notes, replies, or links.
+  check("answer rules: Stitch reads only the documents' text", rules.includes("You read only the documents' text: never the reader's notes, the replies on links, or the links in the graph") && rules.includes("notes in the Notes list, replies in the link's panel, links in the graph"));
+
+  // ANS4-09: the reading passes keep the last six commands.
+  check("STITCH_READ_HISTORY keeps six commands", STITCH_READ_HISTORY === 6);
+
+  // ANS4-10: a page made by a follow-up records the command it continues.
+  const pageBlocks = new Set(["idA2", "idA5", "idB3"]);
+  const hist = [
+    { role: "user" as const, content: "What does Nietzsche say pity does?" },
+    { role: "assistant" as const, content: "It multiplies suffering [block A2] [block A5]." },
+    { role: "user" as const, content: "Quote the sentence about natural selection." },
+    { role: "assistant" as const, content: "Here it is [block B3]." },
+  ];
+  check("pageCommand: the earliest command whose answer cited the page's blocks", pageCommand("Make that a page", hist, pageBlocks, blockByRef) === "What does Nietzsche say pity does? → Make that a page");
+  check("pageCommand: one shared block is not enough when the page rests on more", pageCommand("Make that a page", hist.slice(2), pageBlocks, blockByRef) === "Make that a page");
+  check("pageCommand: a first command records itself", pageCommand("Gather every passage on pity", [], pageBlocks, blockByRef) === "Gather every passage on pity");
+
+  // COST4-01: history before the blocks only past STITCH_HISTORY_FIRST_MIN tokens.
+  const short = [{ role: "user" as const, content: "What is pity?" }, { role: "assistant" as const, content: "x ".repeat(400) }];
+  const long = [{ role: "user" as const, content: "What is pity?" }, { role: "assistant" as const, content: "x ".repeat(4 * 3_000) }];
+  // The layout at a 3k line (the config ships it off: Infinity).
+  const lay = (history: typeof short, selected: Set<string> | null, historyFirstMin = 3_000) => answerMessages({ reading: gReading, selected, lang: "en", profile: prof, history, command: "And then?", historyFirstMin });
+  const s1 = lay(short, new Set(["A1"]));
+  const l1 = lay(long, new Set(["A1"]));
+  check("answer layout: a short history comes after the blocks", String(s1[0].content).includes("[block A1]") && s1.length === 4 && !String(s1[3].content).includes("[block A1]"));
+  check("answer layout: past the threshold the history comes first, the blocks last", !String(l1[0].content).includes("[block A1]") && String(l1[3].content).includes("[block A1]") && String(l1[3].content).includes("And then?"));
+  check("answer layout: the whole read never moves", String(lay(long, null)[0].content).includes("[block A1]"));
+  check("answer layout: the history-first system message is the same bytes every turn", String(l1[0].content) === String(lay([...long, ...long], new Set(["A1", "B1"]))[0].content));
+  check("answer layout: off by default (STITCH_HISTORY_FIRST_MIN), a long history still after the blocks", STITCH_HISTORY_FIRST_MIN === Infinity && String(answerMessages({ reading: gReading, selected: new Set(["A1"]), lang: "en", profile: prof, history: long, command: "And then?" })[0].content).includes("[block A1]"));
 }
 
 // ── Round 3 (ANS3-03): a cut where no line shares a word with the query ──

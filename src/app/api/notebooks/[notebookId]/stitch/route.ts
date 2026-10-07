@@ -30,7 +30,17 @@ export const maxDuration = 300;
 // is refused with a message that says so; the history is cut, never
 // refused: each turn to STITCH_HISTORY_TURN_MAX chars, the history to its
 // last STITCH_HISTORY_MAX turns, so one long turn cannot break the rest of
-// the conversation.
+// the conversation. An assistant turn may carry its record: the links and
+// the page it stored (StitchResult.record), so "the second one" and "that
+// page" find what the turn stored.
+const title = z.string().transform((s) => s.slice(0, 300));
+const recordSchema = z.object({
+  links: z
+    .array(z.object({ id: z.string().min(1).max(100), from: title, to: title }))
+    .max(200)
+    .transform((a) => a.slice(0, 24)),
+  document: z.object({ id: z.string().min(1).max(100), title }).nullable(),
+});
 const requestSchema = z.object({
   command: z.string().trim().min(1).max(STITCH_COMMAND_MAX * 25),
   documentIds: z.array(z.string().min(1)).max(200).optional(),
@@ -39,11 +49,14 @@ const requestSchema = z.object({
       z.object({
         role: z.enum(["user", "assistant"]),
         content: z.string().transform((s) => s.slice(0, STITCH_HISTORY_TURN_MAX)),
+        // What the turn stored (StitchResult.record), read again by id
+        // inside the project (lib/graph/stitch.ts stitchHistory).
+        record: recordSchema.optional(),
       }),
     )
     .max(200)
     .default([])
-    .transform((turns) => turns.filter((t) => t.content.trim()).slice(-STITCH_HISTORY_MAX)),
+    .transform((turns) => turns.filter((t) => t.content.trim() || t.record?.links.length || t.record?.document).slice(-STITCH_HISTORY_MAX)),
 });
 
 class StitchFailure extends Error {}

@@ -273,16 +273,19 @@ export const STITCH_GROUP_CONCURRENCY = 6;
 export const STITCH_COMMAND_MAX = 4_000;
 export const STITCH_HISTORY_TURN_MAX = 8_000;
 export const STITCH_HISTORY_MAX = 20;
-export const STITCH_READ_HISTORY = 3;
-// The answer pass's layout after a pick: false, the picked blocks in the
-// system message and the conversation after them (nothing of the
-// conversation caches, since the blocks change every command); true, the
-// conversation first and the blocks in the last message, so each turn
-// reads the turns before it from the cache. Off: on six-turn conversations
-// it saved 0.6–1.1% (the conversation is ~2.7k tokens of a ~170k answer
-// pass), and the blind judged run found the facts, citations and quotes the
-// same but some detail dropped (round 3, engine3 RESULT.md).
-export const STITCH_HISTORY_FIRST = false;
+export const STITCH_READ_HISTORY = 6; // a bare "make that a page" at turn 9 still has its topic (ANS4-09)
+// The answer pass's layout after a pick: under STITCH_HISTORY_FIRST_MIN
+// tokens of conversation, the picked blocks in the system message and the
+// conversation after them (nothing of the conversation caches, since the
+// blocks change every command); past it, the conversation first and the
+// blocks in the last message, so each turn reads the turns before it from
+// the cache (COST4-01). Off (Infinity): judged blind on four turns of a
+// 10-turn conversation, history-first lost 3 of 4 and was terser, as in
+// round 3; and a 10-turn conversation of Linda's shape holds ~2.2k tokens
+// of history, under a 3k line. On at 3_000 it would save 5–7% of a 10-turn
+// conversation of long English replies, ~15% in Chinese (round 4 cost
+// audit). Engine4 RESULT.md.
+export const STITCH_HISTORY_FIRST_MIN = Infinity;
 // The model passes together get this long; the route's limit (300 s) keeps
 // the rest for storing the answer. Past it the run stops and the reader is
 // told to narrow the command instead of reading a stream that ended empty.
