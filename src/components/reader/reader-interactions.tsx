@@ -3524,7 +3524,7 @@ export function ReaderInteractions({
   // grown card's height limit, by kind; it lifts when a card opens or closes.
   const [cardCaps, setCardCaps] = useState<Record<string, number>>({});
   const CAP_MIN = 160;
-  const settleSideCards = useCallback((grown: string | null) => {
+  const settleSideCards = useCallback((grown: string | null, opened: string | null = null) => {
     const container = containerRef.current;
     if (!container) return;
     // The narrow reader places its cards under their paragraphs (layoutNarrowCards).
@@ -3558,13 +3558,37 @@ export function ReaderInteractions({
         }
       }
     }
-    // The grown card is placed first and stays; the rest settle top to bottom.
+    // A card that just opened lands at its words, in view: an older card above
+    // it that reaches it gives up height (its body scrolls) instead of pushing
+    // the new card under the window. An older card keeps CAP_MIN at least; the
+    // new card then opens under that.
+    const openedBox = grownBox ? undefined : boxes.find((b) => b.kind === opened);
+    let openedTop: number | null = null;
+    if (openedBox) {
+      for (const above of boxes) {
+        if (above === openedBox || above.top >= openedBox.top) continue;
+        if (above.left >= openedBox.right || above.right <= openedBox.left) continue;
+        if (above.top + above.height + SETTLE_GAP <= openedBox.top) continue;
+        const room = Math.max(CAP_MIN, openedBox.top - SETTLE_GAP - above.top);
+        if (room >= above.height) continue;
+        above.height = room;
+        setCardCaps((caps) => (caps[above.kind] === room ? caps : { ...caps, [above.kind]: room }));
+        openedTop = Math.max(openedTop ?? openedBox.top, above.top + room + SETTLE_GAP);
+      }
+    }
+    // The grown card, or the card that just opened, is placed first and
+    // stays; the rest settle top to bottom.
+    const pinned = grownBox ? grown : openedBox ? opened : null;
     const order = [
-      ...boxes.filter((b) => b.kind === grown),
-      ...boxes.filter((b) => b.kind !== grown).sort((a, b) => a.top - b.top),
+      ...boxes.filter((b) => b.kind === pinned),
+      ...boxes.filter((b) => b.kind !== pinned).sort((a, b) => a.top - b.top),
     ];
-    const placed: Box[] = [];
     const moved: Record<string, number> = {};
+    if (openedBox && openedTop !== null && openedTop !== openedBox.top) {
+      openedBox.top = openedTop;
+      moved[openedBox.kind] = openedTop;
+    }
+    const placed: Box[] = [];
     for (const box of order) {
       let top = box.top;
       let pushed = true;
@@ -3681,6 +3705,7 @@ export function ReaderInteractions({
     const railTop = rail && getComputedStyle(rail).position === "fixed" ? rail.getBoundingClientRect().top : Infinity;
     const shownHeight = Math.min(crect.bottom, railTop) - crect.top;
     const tops: Record<string, number> = {};
+    const phoneCaps: Record<string, number> = {};
     const ordered = [...hosts.keys()].sort((a, b) =>
       a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
     );
@@ -3712,9 +3737,17 @@ export function ReaderInteractions({
           const keep = card.anchorTop - container.scrollTop - 16;
           const by = Math.min(want, keep);
           if (by > 0) container.scrollBy({ top: by, behavior: "smooth" });
+          // On a phone a card taller than the room left above the bottom bar
+          // gives up height (its body scrolls), so its foot — the box, the
+          // buttons — stays in reach above the bar.
+          if (railTop !== Infinity) {
+            const room = Math.floor(shownHeight - (tops[card.kind] - container.scrollTop - Math.max(0, by)) - 16);
+            if (card.el.offsetHeight > room && room >= CAP_MIN) phoneCaps[card.kind] = room;
+          }
         }
       }
     }
+    if (Object.keys(phoneCaps).length > 0) setCardCaps((caps) => ({ ...caps, ...phoneCaps }));
     const place = <T extends { top: number }>(kind: string) => (c: T | null): T | null =>
       c && tops[kind] !== undefined && Math.abs(c.top - tops[kind]) > 1 ? { ...c, top: tops[kind] } : c;
     if (tops.explain !== undefined) setBubble(place<ExplainBubble>("explain"));
@@ -3753,6 +3786,7 @@ export function ReaderInteractions({
       // first report of a card carries no change: the cards settle top to
       // bottom then, none pinned.
       let grown: string | null = null;
+      let opened: string | null = null;
       for (const entry of entries) {
         const el = entry.target as HTMLElement;
         const kind = el.dataset.sideCard ?? "";
@@ -3760,11 +3794,12 @@ export function ReaderInteractions({
         const before = cardSizesRef.current[kind];
         cardSizesRef.current[kind] = size;
         if (before !== undefined && before !== size) grown = kind;
+        if (before === undefined) opened = kind;
         // A card that opens tall (reopened from its mark with its turns)
         // keeps its foot inside the pane too, not only one that grew.
         if (before !== size) keepCardInPane(kind);
       }
-      settleSideCards(grown);
+      settleSideCards(grown, opened);
       layoutNarrowCardsRef.current();
     });
     // A closed card's size goes with it: the next card of its kind opens
@@ -9307,9 +9342,10 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   // Every action in a card's header is one button: a 24px circle around a
   // 13px glyph, the same on the explanation, the simplification, the
   // analysis, the visualization, and the assistant's card. The rating sits
-  // at the card's foot, not in the header (SPEC.md §25).
+  // at the card's foot, not in the header (SPEC.md §25). On a touch screen
+  // the circle takes the toolbar's finger size.
   const CARD_ACTION =
-    "flex size-6 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800";
+    "flex size-6 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:size-9";
   const expandButton = (kind: "assistant" | "explain" | "simplify") => (
     <button
       onClick={() => openConversationView(kind)}

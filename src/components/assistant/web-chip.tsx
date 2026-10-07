@@ -53,7 +53,7 @@ export function WebChip({ small = false, className = "" }: { small?: boolean; cl
       data-track={`assistant-web:${web ? "off" : "on"}`}
       aria-pressed={web}
       data-tip={t(web ? "assistant.webOnTitle" : "assistant.webOffTitle")}
-      className={`rounded-full font-semibold ${small ? "px-2 py-0.5 text-[10.5px]" : "px-3 py-1 text-xs"} ${
+      className={`rounded-full font-semibold ${small ? "px-2 py-0.5 text-[10.5px] pointer-coarse:py-1.5" : "px-3 py-1 text-xs"} ${
         web ? "bg-sage-600 text-sage-fg" : "bg-card text-sand-600 shadow-soft hover:text-clay-800"
       } ${className}`}
     >
