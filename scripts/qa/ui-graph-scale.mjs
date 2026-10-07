@@ -25,8 +25,13 @@ async function openGraph() {
     window.__long = [];
     new PerformanceObserver((l) => window.__long.push(...l.getEntries().map((e) => Math.round(e.duration)))).observe({ type: "longtask" });
   });
-  const t0 = Date.now();
-  await page.locator('[data-track="graph"]').first().click();
+  // A click before hydration does nothing: the time runs from the click that opens the graph.
+  let t0 = Date.now();
+  for (let i = 0; i < 6; i++) {
+    t0 = Date.now();
+    await page.locator('[data-track="graph"]').first().click();
+    if (await page.locator(".graph-overlay-in").first().waitFor({ timeout: 1500 }).then(() => true, () => false)) break;
+  }
   await page.locator(".react-flow__node").first().waitFor({ timeout: 60000 });
   const firstNode = Date.now() - t0;
   await page.waitForTimeout(2500);

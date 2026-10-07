@@ -132,10 +132,13 @@ for (const lang of ["en", "zh"]) {
     check(dotE === 1, `${tag} State rebate chip has a pending dot`);
     // The note curve: Household ⇄ State rebate has no link, one note.
     check((await page.locator(`[data-graph-note-curve="${pair(C, E)}"]`).count()) === 1, `${tag} sage dotted curve Household ⇄ State rebate`);
-    // Package 1: the A–B curve carries the open-reply mark "2" and a notes pill.
+    // Package 1: the A–B curve carries the open-reply mark (2 on the seed; a
+    // database copy may hold more links on the pair, as SAFE's seed does) and
+    // a notes pill. Links with no project count while no project held them.
+    const OPEN = Number(sql(`select count(*) from "Reply" r join "DocLink" l on l.id=r."docLinkId" where r."resolvedById" is null and not l.recommended and ((l."fromDocumentId"='${A}' and l."toDocumentId"='${B}') or (l."fromDocumentId"='${B}' and l."toDocumentId"='${A}')) and (l."notebookId"='${NB}' or (l."notebookId" is null and l."formerNotebookId" is null))`));
     const abEdge = page.locator(`[data-testid="rf__edge-${pair(A, B)}"]`);
     const repliesMark = (await abEdge.locator('[data-graph-curve-mark="replies"] text').textContent().catch(() => "")) ?? "";
-    check(repliesMark.trim() === "2", `${tag} A–B curve shows 2 open replies`, repliesMark);
+    check(repliesMark.trim() === String(OPEN), `${tag} A–B curve shows ${OPEN} open replies`, repliesMark);
     check((await abEdge.locator('[data-graph-curve-mark="notes"]').count()) === 1, `${tag} A–B curve shows a notes pill`);
 
     // Pin the A–B curve: the row counts replies, the expanded link shows the thread.
@@ -160,18 +163,18 @@ for (const lang of ["en", "zh"]) {
       await panelOf(page, LINK_AB).locator(`[data-graph-link-thread="${LINK_AB}"] [data-track="reply-send"]`).click();
       // The reply shows once the refresh lands (the first call compiles the route in dev).
       await panelOf(page, LINK_AB).locator(`[data-graph-link-thread="${LINK_AB}"]`, { hasText: REPLY }).waitFor({ timeout: 30000 }).catch(() => {});
-      await abEdge.locator('[data-graph-curve-mark="replies"] text', { hasText: "3" }).waitFor({ timeout: 15000 }).catch(() => {});
+      await abEdge.locator('[data-graph-curve-mark="replies"] text', { hasText: String(OPEN + 1) }).waitFor({ timeout: 15000 }).catch(() => {});
       const sent = await panelOf(page, LINK_AB).locator(`[data-graph-link-thread="${LINK_AB}"]`).innerText().catch(() => "");
       check(sent.includes(REPLY), "signed in: the sent reply shows in the thread");
       check(sql(`select count(*) from "Reply" where "docLinkId"='${LINK_AB}' and content='${REPLY}'`) === "1", "signed in: SQL finds the reply on the A–B link");
       const mark = await abEdge.locator('[data-graph-curve-mark="replies"] text').textContent().catch(() => "");
-      check(mark?.trim() === "3", "signed in: the curve mark counts 3", mark ?? "");
+      check(mark?.trim() === String(OPEN + 1), `signed in: the curve mark counts ${OPEN + 1}`, mark ?? "");
       await page.screenshot({ path: `${OUT}/reply-sent-${tag}.png` });
       const row = panelOf(page, LINK_AB).locator(`[data-graph-link-thread="${LINK_AB}"] div.flex.items-start`, { hasText: REPLY });
       await row.locator('[data-track="reply-resolve"]').click();
-      await abEdge.locator('[data-graph-curve-mark="replies"] text', { hasText: "2" }).waitFor({ timeout: 20000 }).catch(() => {});
+      await abEdge.locator('[data-graph-curve-mark="replies"] text', { hasText: String(OPEN) }).waitFor({ timeout: 20000 }).catch(() => {});
       const mark2 = await abEdge.locator('[data-graph-curve-mark="replies"] text').textContent().catch(() => "");
-      check(mark2?.trim() === "2", "signed in: resolved, the curve mark counts 2", mark2 ?? "");
+      check(mark2?.trim() === String(OPEN), `signed in: resolved, the curve mark counts ${OPEN}`, mark2 ?? "");
       check(sql(`select count(*) from "Reply" where "docLinkId"='${LINK_AB}' and content='${REPLY}' and "resolvedById" is not null`) === "1", "signed in: SQL finds the reply resolved");
       await page.screenshot({ path: `${OUT}/reply-resolved-${tag}.png` });
     }
@@ -202,7 +205,12 @@ for (const lang of ["en", "zh"]) {
     if (width > 500) {
       await aside.locator('[data-graph-notes-row="cmuxeddly000w7d4evwwt1od5"]').hover();
       await page.waitForTimeout(500);
-      const op = async (id) => page.locator(`[data-id="${id}"] > div`).first().evaluate((el) => getComputedStyle(el).opacity);
+      // The spotlight dims the node's wrapper (CSS, REV2-09), a filter its dot: the product shows.
+      const op = async (id) =>
+        page.locator(`.react-flow__node[data-id="${id}"]`).first().evaluate((el) => {
+          const inner = el.querySelector(":scope > div");
+          return String(Number(getComputedStyle(el).opacity) * Number(inner ? getComputedStyle(inner).opacity : 1));
+        });
       const lit = [await op(C), await op(E)];
       const dim = [await op(A), await op(B), await op(D)];
       check(lit.every((o) => Number(o) > 0.9) && dim.every((o) => Number(o) < 0.3), `${tag} hover on the savings note lights Household and State rebate`, `${lit} / ${dim}`);
@@ -225,7 +233,8 @@ for (const lang of ["en", "zh"]) {
 
     // Package 3a: Note on this link (once, en at 1440).
     if (lang === "en" && width === 1440) {
-      check(await pin(page, pair(A, C), 0.4), "pinned Heat pumps ⇄ Household");
+      // Mid-curve, clear of either node's box (a click on a node pins its card).
+      check(await pin(page, pair(A, C), 0.55), "pinned Heat pumps ⇄ Household");
       await list.locator('[data-track="graph-link-expand"]').first().click();
       await page.waitForTimeout(300);
       await panelOf(page, LINK_AC).locator('[data-track="graph-link-note"]').click();
@@ -233,7 +242,7 @@ for (const lang of ["en", "zh"]) {
       await page.waitForTimeout(200);
       // Reload mid-typing: the draft comes back.
       await openGraph(page);
-      await pin(page, pair(A, C), 0.4);
+      await pin(page, pair(A, C), 0.55);
       await list.locator('[data-track="graph-link-expand"]').first().click();
       await page.waitForTimeout(300);
       const restored = await panelOf(page, LINK_AC).locator(`[data-graph-link-note-composer="${LINK_AC}"] textarea`).inputValue().catch(() => "");

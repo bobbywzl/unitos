@@ -25,7 +25,11 @@ async function newPage(width, height, lang, touch = false) {
 }
 async function openGraph(page) {
   await page.goto(`${B}/n/${NB}`, { waitUntil: "networkidle", timeout: 300000 });
-  await page.locator('[data-track="graph"]').first().click();
+  // A click before hydration does nothing: click again until the graph is up.
+  for (let i = 0; i < 6 && (await page.locator(".graph-overlay-in").count()) === 0; i++) {
+    await page.locator('[data-track="graph"]').first().click();
+    await page.waitForTimeout(1500);
+  }
   await page.locator(".react-flow__node").first().waitFor({ timeout: 60000 });
   await page.waitForTimeout(1800);
 }
