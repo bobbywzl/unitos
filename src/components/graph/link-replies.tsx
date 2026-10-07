@@ -44,7 +44,10 @@ export function LinkReplies({ link }: { link: GraphEdgeLink }) {
         const box = e.target;
         if (e.key !== "Escape" || !(box instanceof HTMLTextAreaElement) || box.value.trim() === "") return;
         e.stopPropagation();
-        box.blur();
+        // The focus goes to the panel holding the box, never to the page (WALK4-07).
+        const home = box.closest<HTMLElement>("[data-graph-side-list][tabindex], [data-curve-list][tabindex]");
+        if (home) home.focus({ preventScroll: true });
+        else box.blur();
       }}
     >
       <ReplyThread

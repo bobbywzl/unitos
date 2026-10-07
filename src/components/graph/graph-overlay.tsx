@@ -113,7 +113,7 @@ export function GraphOverlay({
   edges: GraphEdge[];
   recommended: RecommendedLinkView[];
   generated: GeneratedDocumentView[];
-  /** Runs of Recommend links this account has left this month. */
+  /** Runs of Scan for links this account has left this month. */
   linkScansLeft: number;
   /** The project's notes, for the notes on the graph and the Notes list. */
   notes?: GraphNotesInput;
@@ -336,7 +336,7 @@ export function GraphOverlay({
     const ids = new Set(nodes.map((n) => n.id));
     return new Set([...pickedIds].filter((id) => ids.has(id)));
   }, [nodes, pickedIds]);
-  // Recommend links (SPEC.md §13): the scan the reader asks for. It reads
+  // Scan for links (SPEC.md §13): the scan the reader asks for. It reads
   // every document of the project whole against the others, so it runs only
   // here and only a few times a month; the button says how many are left.
   // While it runs the button reads Stop: a press ends the scan, the links it
@@ -403,9 +403,39 @@ export function GraphOverlay({
     }
   }
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLSpanElement>(null);
+  // Leaving a text box with Escape (WALK4-07): the focus goes to the box's
+  // region — the side list it sits in, else the graph's title — never to the
+  // page, so a screen reader and the next Tab start from there. A search
+  // box holding words keeps the focus: Escape clears it (the browser's own).
+  const leaveTextBox = useCallback((box: HTMLElement) => {
+    if (box instanceof HTMLInputElement && box.type === "search" && box.value !== "") return;
+    const home = box.closest<HTMLElement>("[data-graph-side-list][tabindex]") ?? titleRef.current;
+    if (home) home.focus({ preventScroll: true });
+    else box.blur();
+  }, []);
+  // A link opened from a list goes back to that list, with the focus on its
+  // row: the panel's Back, and the first Escape (WALK4-07).
+  const backFromLink = useCallback(() => {
+    if (!linkFrom || !openLinkId) return;
+    const from = linkFrom;
+    setList(from);
+    const row =
+      from === "links"
+        ? `[data-graph-links-row="${openLinkId}"]`
+        : from === "notes"
+          ? `[data-graph-notes-link="${openLinkId}"]`
+          : from === "documents"
+            ? `[data-graph-documents-link="${openLinkId}"]`
+            : `[data-graph-card-link="${openLinkId}"]`;
+    requestAnimationFrame(() => requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>(row)?.focus()));
+  }, [linkFrom, openLinkId, setList]);
+
   // Escape (GR-11) closes the innermost thing first and never throws away
   // typed words: in a text box it only leaves the box (the words stay);
-  // then picking ends; then an open list closes; only then the graph. The
+  // then picking ends; then a link opened from a list goes back to the
+  // list; then an open list closes; only then the graph. The
   // canvas (a pinned link list, the key) and the Stitch box handle their
   // own first, in the capture phase, and mark the event handled; this
   // listener runs in the bubble phase, after them.
@@ -414,16 +444,17 @@ export function GraphOverlay({
       if (e.key !== "Escape" || e.defaultPrevented) return;
       e.stopPropagation();
       if (isTextBox(e.target)) {
-        e.target.blur();
+        leaveTextBox(e.target);
         return;
       }
       if (picking) setPicking(false);
+      else if (list === "link" && linkFrom && openLinkView) backFromLink();
       else if (list) setList(null);
       else close();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [close, picking, list, setList]);
+  }, [close, picking, list, setList, linkFrom, openLinkView, backFromLink, leaveTextBox]);
 
   // The skip links (REV2-10): to the Stitch text box (the box opens first
   // when it is folded), or to the first control of the open side list.
@@ -432,7 +463,12 @@ export function GraphOverlay({
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         const slot = boxRef.current;
-        (slot?.querySelector<HTMLElement>("textarea") ?? slot?.querySelector<HTMLElement>("button"))?.focus();
+        const box = slot?.querySelector<HTMLTextAreaElement>("textarea");
+        if (box) {
+          // The caret after the kept words, so new words follow them (WALK4-08).
+          box.focus();
+          box.setSelectionRange(box.value.length, box.value.length);
+        } else slot?.querySelector<HTMLElement>("button")?.focus();
       }),
     );
   }, [onBoxOpenChange]);
@@ -444,8 +480,6 @@ export function GraphOverlay({
 
   // A dialog (GR-16): focus moves into it on open, stays in it on Tab, and
   // goes back where it was on close.
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const titleRef = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     const before = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     titleRef.current?.focus({ preventScroll: true });
@@ -571,8 +605,9 @@ export function GraphOverlay({
         >
           {nodes.length >= 2 && <FindBox find={view2.find} /> /* [view2] */}
           {/* The lists by use: Notes and Links first (WALK3-07). Below
-              1400px the less used pills show their mark and count, their
-              name in the tooltip. */}
+              1400px the less used pills show their mark, a short name, and
+              their count; the full name is in the tooltip and read by a
+              screen reader (WALK4-12). */}
           <NotesListToggle open={list === "notes"} onToggle={(e) => togglePill("notes", e)} controls={sideListId("notes")} />
           <button
             onClick={(e) => togglePill("links", e)}
@@ -606,6 +641,7 @@ export function GraphOverlay({
           >
             <UnlinkIcon size={13} />
             <span className="max-[1399px]:sr-only">{t("panes.recommendedLinks")}</span>
+            <span aria-hidden className="min-[1400px]:hidden">{t("panes.recommendedLinksShort")}</span>
             <span className="rounded-full bg-sand-200 px-1.5 text-[11px] font-semibold tabular-nums text-sand-700">
               {recommended.length}
             </span>
@@ -622,6 +658,7 @@ export function GraphOverlay({
           >
             <PageIcon size={13} />
             <span className="max-[1399px]:sr-only">{t("stitch.generated")}</span>
+            <span aria-hidden className="min-[1400px]:hidden">{t("stitch.generatedShort")}</span>
             <span className="rounded-full bg-sand-200 px-1.5 text-[11px] font-semibold tabular-nums text-sand-700">
               {generated.length}
             </span>
@@ -642,6 +679,11 @@ export function GraphOverlay({
             >
               <SparkleIcon size={13} />
               <span className="max-[1399px]:sr-only">{scanning ? t("panes.recommendScanRunning") : t("panes.recommendScan")}</span>
+              {!scanning && (
+                <span aria-hidden className="min-[1400px]:hidden">
+                  {t("panes.recommendScanShort")}
+                </span>
+              )}
               {/* The runs left this month: plain text, never a count chip,
                   so it does not read as a number of links (GR-07). */}
               {scanning ? (
@@ -775,24 +817,7 @@ export function GraphOverlay({
           <LinkPanel
             key={openLinkView.id}
             link={openLinkView}
-            onBack={
-              linkFrom
-                ? () => {
-                    // Back where the link was opened, with the focus on its row.
-                    const from = linkFrom;
-                    setList(from);
-                    const row =
-                      from === "links"
-                        ? `[data-graph-links-row="${openLinkView.id}"]`
-                        : from === "notes"
-                          ? `[data-graph-notes-link="${openLinkView.id}"]`
-                          : from === "documents"
-                            ? `[data-graph-documents-link="${openLinkView.id}"]`
-                            : `[data-graph-card-link="${openLinkView.id}"]`;
-                    requestAnimationFrame(() => requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>(row)?.focus()));
-                  }
-                : undefined
-            }
+            onBack={linkFrom ? backFromLink : undefined}
             backLabel={
               linkFrom === "document"
                 ? t("graphView.cardBack")
