@@ -17,7 +17,7 @@ const en = {
   color: "Color",
   background: "Background",
   backgroundDesc:
-    "Who you are and what you read for. Injected into every AI prompt: notes, distillation, analysis. Optional. A work can override this from its Context tab.",
+    "Who you are and what you read for. Every AI tool reads it: notes, extraction, analysis. Optional.",
   backgroundPh: "e.g. Stanford student, stochastic calc + stats + quantum. Reading for due diligence.",
   singleReader:
     "Sign-in is off — this instance runs as a single reader. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and SESSION_SECRET to open Google sign-in at /signin.",
@@ -130,7 +130,7 @@ const zh: Record<keyof typeof en, string> = {
   color: "颜色",
   background: "背景",
   backgroundDesc:
-    "你是谁、为什么而读。注入到每个 AI 提示词中：笔记、提炼、分析。可选。各项目可在其“背景”页签覆盖此设置。",
+    "你是谁、为什么而读。每个 AI 工具都会读它：笔记、提取、分析。可选。",
   backgroundPh: "如：斯坦福学生，修过随机微积分、统计和量子力学。为尽职调查而读。",
   singleReader:
     "此实例未开启登录——当前以单人阅读器模式运行。设置 GOOGLE_CLIENT_ID、GOOGLE_CLIENT_SECRET 和 SESSION_SECRET 即可在 /signin 开启 Google 登录。",
