@@ -2126,6 +2126,12 @@ ellipse.anchor-flash {
 }
 /* The dialog's title takes focus on open as a starting point, not as a
    control: no ring (REV2-11). */
+/* The graph is a full-screen dialog with its own Escape: Feedback hides while
+   it is open, so it never covers a side list (graph-overlay.tsx, WALK4-19). */
+body:has(.graph-overlay) [data-feedback-button] {
+  display: none;
+}
+
 .graph-overlay [data-graph-title]:focus-visible {
   outline: none;
 }
