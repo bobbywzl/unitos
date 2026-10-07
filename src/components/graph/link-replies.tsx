@@ -1,5 +1,6 @@
 "use client";
 
+import { useParams } from "next/navigation";
 import type { GraphEdgeLink } from "@/lib/types";
 import { ReplyThread } from "@/components/collab/reply-thread";
 import { CommentIcon } from "@/components/icons";
@@ -29,11 +30,24 @@ export function LinkReplyCount({ link }: { link: GraphEdgeLink }) {
   );
 }
 
-/** The link's reply thread, under the expanded link. */
+/** The link's reply thread, under the expanded link. The reply carries the
+    project (a link answers only in its own project). Esc in a reply box
+    holding words only leaves the box: the box, its words, and the curve's
+    list stay (ReplyThread itself would fold the box, and the next Esc would
+    close the list and lose the words). */
 export function LinkReplies({ link }: { link: GraphEdgeLink }) {
+  const { notebookId } = useParams<{ notebookId?: string }>();
   return (
-    <div data-graph-link-thread={link.id}>
-      <ReplyThread target={{ docLinkId: link.id }} replies={link.replies ?? []} />
+    <div
+      data-graph-link-thread={link.id}
+      onKeyDownCapture={(e) => {
+        const box = e.target;
+        if (e.key !== "Escape" || !(box instanceof HTMLTextAreaElement) || box.value.trim() === "") return;
+        e.stopPropagation();
+        box.blur();
+      }}
+    >
+      <ReplyThread target={{ docLinkId: link.id, notebookId }} replies={link.replies ?? []} />
     </div>
   );
 }
