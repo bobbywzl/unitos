@@ -174,6 +174,12 @@ export function StitchBox({
     return () => window.removeEventListener("keydown", onKey, true);
   }, []);
 
+  // The graph opened: the project's skeletons build now, not at the first
+  // command (SPEC.md §22). Fire and forget; nothing builds for a short project.
+  useEffect(() => {
+    if (canEdit) void fetch(`/api/notebooks/${notebookId}/stitch/warm`, { method: "POST" }).catch(() => {});
+  }, [canEdit, notebookId]);
+
   // Expanding from the pill puts the cursor in the text box.
   const wasOpen = useRef(open);
   useEffect(() => {
