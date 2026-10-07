@@ -33,6 +33,8 @@ const en = {
   noteOnLink: "Note on this link",
   noteOnLinkTitle: "Write a note that quotes both ends of this link",
   noteOnLinkPlaceholder: "What do these two passages say together?",
+  // [ui5] WALK5-13: unsent words on a link
+  linkDraftTitle: "Draft: words on this link not sent yet, a reply or a note",
   noteOnLinkSection: "Section",
   noteOnLinkSave: "Save",
   noteOnLinkSaving: "Saving…",
@@ -105,6 +107,8 @@ const zh: Record<keyof typeof en, string> = {
   noteOnLink: "就此链接写笔记",
   noteOnLinkTitle: "写一条引用这个链接两端的笔记",
   noteOnLinkPlaceholder: "这两个片段放在一起说明了什么？",
+  // [ui5] WALK5-13
+  linkDraftTitle: "草稿：这个链接上有还没发送的文字，一条回复或一条笔记",
   noteOnLinkSection: "章节",
   noteOnLinkSave: "保存",
   noteOnLinkSaving: "正在保存…",

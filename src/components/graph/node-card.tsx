@@ -24,6 +24,7 @@ import { GraphNoteRow, useGraphNotes } from "@/components/graph/graph-notes";
 import { noteLine } from "@/lib/graph/notes";
 import { useCoarsePointer, useGraphContent } from "@/components/graph/graph-content";
 import { LinkReplyCount } from "@/components/graph/link-replies";
+import { LinkDraftTag } from "@/components/graph/link-draft-tag"; // [ui5]
 import { useWantProvenance } from "@/components/graph/provenance-want";
 import { PartDot } from "@/components/graph/coverage"; // [cover4]
 import { AddToNote } from "@/components/graph/note-gather"; // [cover4]
@@ -359,7 +360,10 @@ export function NodeCardPanel({
                                 {t("graphView.fromLastAnswer")}
                               </span>
                             )}
-                            <span className="block text-[12px] leading-snug text-ink">{l.reason ?? clipWords(l.quotedText, 60)}</span>
+                            <span className="block text-[12px] leading-snug text-ink">
+                              {l.reason ?? clipWords(l.quotedText, 60)}
+                              <LinkDraftTag linkId={l.id} className="ml-1.5" /* [ui5] WALK5-13 */ />
+                            </span>
                             {part && (
                               <span className="mt-0.5 block text-[11px] text-sand-500">
                                 {t("graphView.cardInPart", { part: part.title })}

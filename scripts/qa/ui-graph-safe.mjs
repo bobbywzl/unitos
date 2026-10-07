@@ -6,8 +6,8 @@
 // lists the notes on the project (WALK2-01); Note on this link offline says
 // it waits in the queue, and Show comes once it lands (REV2-07); Stitch
 // Retry keeps a command typed after the failure (REV2-04); Save as note →
-// Show closes the graph and its graph=1 entry, and the saved line stays
-// (WALK2-10).
+// Show opens the Notes list on the note (VIEW5-10), Open in notes closes the
+// graph and its graph=1 entry, and the saved line stays (WALK2-10, WALK5-05).
 //
 //   BASE=http://localhost:3141 SESSION=rev-owner DB=dissect_r2safe OUT=<dir> MODE=after \
 //     node scripts/qa/ui-graph-safe.mjs
@@ -288,11 +288,20 @@ if (after) {
   const before = sql(`select count(*) from "Note" n join "Section" s on s.id=n."sectionId" where s."notebookId"='${NB}'`);
   await shot(page, "WALK2-10-saved");
   await show.click();
-  await overlay().waitFor({ state: "detached", timeout: 8000 }).catch(() => {});
-  await page.waitForTimeout(800);
-  check((await overlay().count()) === 0, "Show closed the graph");
-  check(!page.url().includes("graph=1"), "Show left no graph=1 in the URL", page.url());
+  // VIEW5-10: Show keeps the graph and opens the Notes list on the note.
+  const notesList = page.locator('[data-graph-side-list="notes"]');
+  await notesList.waitFor({ timeout: 5000 }).catch(() => {});
+  check((await overlay().count()) === 1 && (await notesList.count()) === 1, "Show kept the graph and opened the Notes list");
+  check(page.url().includes("graph=1"), "the graph's URL stays while it shows the note", page.url());
   await shot(page, "WALK2-10-shown");
+  // Open in notes closes the graph; the URL moves with no server round trip
+  // (WALK5-05): wait for the URL, not for a fixed time.
+  await notesList.locator('[data-track="graph-notes-open"]').first().click();
+  await overlay().waitFor({ state: "detached", timeout: 8000 }).catch(() => {});
+  const urlLeft = await page.waitForURL((u) => !u.search.includes("graph=1"), { timeout: 5000 }).then(() => true, () => false);
+  check((await overlay().count()) === 0, "Open in notes closed the graph");
+  check(urlLeft, "Open in notes left no graph=1 in the URL", page.url());
+  await shot(page, "WALK2-10-open-in-notes");
   await openGraph({ load: false });
   check((await page.locator('[data-track="assistant-saved-note-show"]').count()) >= 1, "reopened: the saved line stays");
   check((await page.locator('[data-track="assistant-save-note:stitch"]').count()) === 0, "reopened: no second Save as note on that answer");

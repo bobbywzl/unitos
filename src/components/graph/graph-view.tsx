@@ -1324,6 +1324,15 @@ function GraphCanvas({
   // FIT_MIN_ZOOM and FIT_MAX_ZOOM. When the nodes do not fit at the least
   // zoom, the view shows the top of the layout, where the linked groups are.
   // A large project fits every node (its far labels are few).
+  // [ui5] WALK5-11: on a phone, with the provenance switch off, generated
+  // documents are not drawn: the reader's documents get the canvas. The
+  // header counts them, and Generated content and the switch show them.
+  const foldGenerated = paneW > 0 && paneW < 640 && !showProvenance && generatedIds.size > 0 && generatedIds.size < nodes.length;
+  const foldRef = useRef<Set<string> | null>(null);
+  useLayoutEffect(() => {
+    foldRef.current = foldGenerated ? generatedIds : null;
+  }, [foldGenerated, generatedIds]);
+  // [/ui5]
   const insetsRef = useRef(insets);
   const loopsRef = useRef(loops);
   const layoutKeyRef = useRef(layoutKey);
@@ -1344,7 +1353,12 @@ function GraphCanvas({
     focusOnRef.current = focusOn;
   }, [focusOn]);
   const fitTo = useCallback(
-    (positions: { id: string; x: number; y: number }[], duration = 0) => {
+    (all: { id: string; x: number; y: number }[], duration = 0) => {
+      // [ui5] WALK5-11: folded generated documents are not framed.
+      const fold = foldRef.current;
+      const kept = fold ? all.filter((p) => !fold.has(p.id)) : all;
+      const positions = kept.length > 0 ? kept : all;
+      // [/ui5]
       if (positions.length === 0 || paneW <= 0 || paneH <= 0) return;
       const ins = insetsRef.current;
       lastFit.current = { key: layoutKeyRef.current, w: paneW, h: paneH, ins, focus: focusOnRef.current };
@@ -1434,6 +1448,7 @@ function GraphCanvas({
         // A generated document draws faded until the reader asks for the
         // provenance (WALK2-02).
         className: generated ? "graph-generated" : undefined,
+        hidden: generated && foldGenerated, // [ui5] WALK5-11
         ariaLabel: generated ? t("graphView.generatedNodeLabel", { label: named }) : named,
         data: {
           title: labelOf.get(n.id) ?? n.title,
@@ -1499,7 +1514,7 @@ function GraphCanvas({
       const size = new Map(prev.map((p) => [p.id, { width: p.width, height: p.height }]));
       return nodes.map((n) => ({ ...mk(n, target(n.id)), ...size.get(n.id) }));
     });
-  }, [nodes, linkCounts, breathing, target, activeDocumentId, selectedIds, keptLabels, setFlowNodes, paneW, paneH, fitTo, large, t, labelOf]);
+  }, [nodes, linkCounts, breathing, target, activeDocumentId, selectedIds, keptLabels, setFlowNodes, paneW, paneH, fitTo, large, t, labelOf, foldGenerated]);
 
   // Refit when the free area changes — the Stitch box grows or folds, a
   // side list opens, the window resizes — or documents come and go, as long
@@ -1527,6 +1542,18 @@ function GraphCanvas({
     const timer = window.setTimeout(() => fitNow(300), prev.key !== layoutKey ? 120 : 0);
     return () => window.clearTimeout(timer);
   }, [insets, paneW, paneH, layoutKey, fitNow, settling, focusOn]);
+
+  // [ui5] WALK5-11: the switch or a rotation folds or unfolds the generated
+  // documents: frame again, unless the reader moved the view.
+  const lastFold = useRef(foldGenerated);
+  useEffect(() => {
+    if (lastFold.current === foldGenerated) return;
+    lastFold.current = foldGenerated;
+    if (!lastFit.current || userMoved.current) return;
+    const timer = window.setTimeout(() => fitNow(300), 0);
+    return () => window.clearTimeout(timer);
+  }, [foldGenerated, fitNow]);
+  // [/ui5]
 
   // Keep the focus in view (WALK4-01, WALK4-10): the pinned card's node —
   // on a narrow screen with its linked documents, above the card's sheet —
@@ -1753,6 +1780,13 @@ function GraphCanvas({
   // Set while Escape puts focus back on a curve, so that focus opens no list,
   // and while focus follows the pinned card to a node, so it opens no hover card.
   const quietFocus = useRef(false);
+  // [ui5] WALK5-09: a node says whether it is picked (aria-pressed), for a
+  // reader who can pick; ReactFlow's node wrapper takes no such prop.
+  const pickedRef = useRef<Set<string> | null>(onToggleSelect ? (selectedIds ?? null) : null);
+  useLayoutEffect(() => {
+    pickedRef.current = onToggleSelect ? (selectedIds ?? new Set()) : null;
+  }, [onToggleSelect, selectedIds]);
+  // [/ui5]
   const applyRoving = useCallback(() => {
     const root = wrapRef.current;
     if (!root) return;
@@ -1774,6 +1808,12 @@ function GraphCanvas({
       const tab = el === current ? "0" : "-1";
       if (el.getAttribute("tabindex") !== tab) el.setAttribute("tabindex", tab);
       if (el.getAttribute("aria-describedby") !== keysHelpId) el.setAttribute("aria-describedby", keysHelpId);
+      // [ui5] WALK5-09
+      const picked = pickedRef.current;
+      const pressed = picked ? String(picked.has(el.getAttribute("data-id") ?? "")) : null;
+      if (pressed === null) el.removeAttribute("aria-pressed");
+      else if (el.getAttribute("aria-pressed") !== pressed) el.setAttribute("aria-pressed", pressed);
+      // [/ui5]
     }
     for (const el of root.querySelectorAll<SVGElement>(".react-flow__edge[tabindex='0']")) el.setAttribute("tabindex", "-1");
   }, [activeDocumentId, keysHelpId]);
@@ -1792,6 +1832,11 @@ function GraphCanvas({
       cancelAnimationFrame(frame);
     };
   }, [applyRoving]);
+  // [ui5] WALK5-09: a pick changes no node's DOM children; say it on the nodes.
+  useEffect(() => {
+    applyRoving();
+  }, [selectedIds, onToggleSelect, applyRoving]);
+  // [/ui5]
   const nodeEl = useCallback(
     (id: string) => wrapRef.current?.querySelector<HTMLElement>(`.react-flow__node[data-id=${JSON.stringify(id)}]`) ?? null,
     [],

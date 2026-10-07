@@ -8,6 +8,9 @@
 export type GraphKeep = {
   list?: string | null;
   linkId?: string | null;
+  /** Where the open link was opened from, for its Back and its pill
+      (WALK5-04): links, notes, document, or documents. */
+  linkFrom?: string | null;
   sectionId?: string | null;
   noteId?: string | null;
   /** The provenance switch (WALK3-13). */
@@ -55,6 +58,7 @@ export function readGraphKeep(notebookId: string | undefined): GraphKeep {
     return {
       list: str(keep.list),
       linkId: str(keep.linkId),
+      linkFrom: str(keep.linkFrom),
       sectionId: str(keep.sectionId),
       noteId: str(keep.noteId),
       provenance: keep.provenance === true,

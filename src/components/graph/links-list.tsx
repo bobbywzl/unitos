@@ -7,6 +7,7 @@ import { clipWords } from "@/lib/markdown-preview";
 import { useGraphNotes } from "@/components/graph/graph-notes";
 import { LinkReplyCount } from "@/components/graph/link-replies";
 import { NoReplyToggle, hasNoReply } from "@/components/graph/coverage"; // [cover4]
+import { LinkDraftTag } from "@/components/graph/link-draft-tag"; // [ui5]
 
 // Links, a folded list beside the canvas (SPEC.md §13; WALK2-06): every
 // accepted link of the project, grouped by the pair of documents it joins,
@@ -123,7 +124,10 @@ export function LinksList({
                 openLinkId === l.id ? "border-clay-300 bg-clay-100/50" : "border-line bg-card"
               }`}
             >
-              <span className="text-[12.5px] leading-snug font-semibold text-ink">{l.reason ?? clipWords(l.quotedText, 60)}</span>
+              <span className="text-[12.5px] leading-snug font-semibold text-ink">
+                {l.reason ?? clipWords(l.quotedText, 60)}
+                <LinkDraftTag linkId={l.id} className="ml-1.5" /* [ui5] WALK5-13 */ />
+              </span>
               {l.reason && <span className="text-[11px] leading-snug text-sand-600">{clipWords(l.quotedText, 40)}</span>}
               <LinkReplyCount link={l} />
             </button>

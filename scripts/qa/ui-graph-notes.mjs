@@ -261,13 +261,22 @@ for (const lang of ["en", "zh"]) {
       const draftLeft = await page.evaluate((k) => localStorage.getItem(k), `graph-link-note:${LINK_AC}`);
       check(draftLeft === null, "the draft is cleared once the server has the note");
       await page.screenshot({ path: `${OUT}/link-note-saved-${tag}.png` });
-      // Show: the graph closes and the tray shows the note.
+      // Show (VIEW5-10): the graph stays and its Notes list opens on the note;
+      // the list's Open in notes closes the graph and the tray shows the note.
       await panelOf(page, LINK_AC).locator('[data-track="graph-link-note-show"]').click();
-      await page.waitForTimeout(2500);
+      const notesList = page.locator('[data-graph-side-list="notes"]');
+      await notesList.waitFor({ timeout: 5000 }).catch(() => {});
+      await notesList.locator(`[data-graph-notes-row="${noteId}"], [data-graph-notes-note="${noteId}"]`).first().waitFor({ timeout: 8000 }).catch(() => {});
+      const shownHere = await notesList.innerText().catch(() => "");
+      check((await page.locator(".graph-overlay-in").count()) === 1 && shownHere.includes("running cost and savings agree"), "Show keeps the graph and opens the Notes list on the note", shownHere.slice(0, 120));
+      await page.screenshot({ path: `${OUT}/link-note-shown-${tag}.png` });
+      await notesList.locator('[data-track="graph-notes-open"]').first().click();
+      await page.waitForURL((u) => !u.search.includes("graph=1"), { timeout: 5000 }).catch(() => {});
+      await page.locator(`[data-note-id="${noteId}"]`).first().waitFor({ timeout: 8000 }).catch(() => {});
       const overlay = await page.locator(".graph-overlay-in").count();
       const card = await page.locator(`[data-note-id="${noteId}"]`).count();
-      check(overlay === 0 && card > 0, "Show closes the graph and the tray shows the note", `overlay ${overlay}, cards ${card}`);
-      await page.screenshot({ path: `${OUT}/link-note-shown-${tag}.png` });
+      check(overlay === 0 && card > 0, "Open in notes closes the graph and the tray shows the note", `overlay ${overlay}, cards ${card}`);
+      await page.screenshot({ path: `${OUT}/link-note-open-in-notes-${tag}.png` });
     }
     await ctx.close();
   }

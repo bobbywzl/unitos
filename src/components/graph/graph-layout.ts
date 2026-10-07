@@ -79,46 +79,62 @@ function layoutGroup(order: string[], adjacency: Map<string, Map<string, number>
       springs.push({ i, j, len: SPACE_X * (1.05 - Math.min(weight, 6) * 0.03), k: 0.06 + Math.min(weight, 6) * 0.012 });
     }
   }
-  const disp = pos.map(() => ({ x: 0, y: 0 }));
+  // [ui5] COST5-10: flat arrays, and each pair's push computed once for
+  // both ends. The arithmetic is the same, in the same order, so the layout
+  // is the same to the last bit (graph-layout-check); only faster.
+  const px = Float64Array.from(pos, (p) => p.x);
+  const py = Float64Array.from(pos, (p) => p.y);
+  const dispX = new Float64Array(n);
+  const dispY = new Float64Array(n);
+  const push = SPACE_X * SPACE_X * 0.9;
   for (let tick = 0; tick < TICKS; tick++) {
     const alpha = 1 - tick / TICKS;
-    for (const d of disp) d.x = d.y = 0;
+    dispX.fill(0);
+    dispY.fill(0);
     // Every pair pushes apart; distance is read on an ellipse, since a label
     // is wider than it is tall.
     for (let i = 0; i < n; i++) {
+      const xi = px[i];
+      const yi = py[i];
       for (let j = i + 1; j < n; j++) {
-        const dx = pos[i].x - pos[j].x;
-        const dy = (pos[i].y - pos[j].y) * 1.6;
+        const dx = xi - px[j];
+        const dy = (yi - py[j]) * 1.6;
         const d2 = Math.max(dx * dx + dy * dy, 100);
-        const f = (SPACE_X * SPACE_X * 0.9) / d2;
+        const f = push / d2;
         const d = Math.sqrt(d2);
-        disp[i].x += (dx / d) * f;
-        disp[i].y += ((dy / d) * f) / 1.6;
-        disp[j].x -= (dx / d) * f;
-        disp[j].y -= ((dy / d) * f) / 1.6;
+        const ux = (dx / d) * f;
+        const uy = ((dy / d) * f) / 1.6;
+        dispX[i] += ux;
+        dispY[i] += uy;
+        dispX[j] -= ux;
+        dispY[j] -= uy;
       }
     }
     for (const s of springs) {
-      const dx = pos[s.j].x - pos[s.i].x;
-      const dy = pos[s.j].y - pos[s.i].y;
+      const dx = px[s.j] - px[s.i];
+      const dy = py[s.j] - py[s.i];
       const d = Math.max(Math.sqrt(dx * dx + dy * dy), 1);
       const f = (d - s.len) * s.k;
-      disp[s.i].x += (dx / d) * f;
-      disp[s.i].y += (dy / d) * f;
-      disp[s.j].x -= (dx / d) * f;
-      disp[s.j].y -= (dy / d) * f;
+      const ux = (dx / d) * f;
+      const uy = (dy / d) * f;
+      dispX[s.i] += ux;
+      dispY[s.i] += uy;
+      dispX[s.j] -= ux;
+      dispY[s.j] -= uy;
     }
     // A pull to the center keeps the group round.
     for (let i = 0; i < n; i++) {
-      disp[i].x -= pos[i].x * 0.012;
-      disp[i].y -= pos[i].y * 0.02;
-      const step = Math.sqrt(disp[i].x ** 2 + disp[i].y ** 2);
+      dispX[i] -= px[i] * 0.012;
+      dispY[i] -= py[i] * 0.02;
+      const step = Math.sqrt(dispX[i] ** 2 + dispY[i] ** 2);
       const cap = 40 * alpha + 2;
       const scale = step > cap ? cap / step : 1;
-      pos[i].x += disp[i].x * scale;
-      pos[i].y += disp[i].y * scale;
+      px[i] += dispX[i] * scale;
+      py[i] += dispY[i] * scale;
     }
   }
+  for (let i = 0; i < n; i++) pos[i] = { x: px[i], y: py[i] };
+  // [/ui5]
   separate(pos);
   const cx = pos.reduce((s, p) => s + p.x, 0) / n;
   const cy = pos.reduce((s, p) => s + p.y, 0) / n;
@@ -127,12 +143,16 @@ function layoutGroup(order: string[], adjacency: Map<string, Map<string, number>
 
 /** Pushes apart any two nodes closer than the room a node needs. */
 function separate(pos: Point[]): void {
+  // [ui5] COST5-10: flat arrays; the same arithmetic in the same order.
+  const n = pos.length;
+  const px = Float64Array.from(pos, (p) => p.x);
+  const py = Float64Array.from(pos, (p) => p.y);
   for (let pass = 0; pass < 60; pass++) {
     let moved = false;
-    for (let i = 0; i < pos.length; i++) {
-      for (let j = i + 1; j < pos.length; j++) {
-        const dx = pos[j].x - pos[i].x;
-        const dy = pos[j].y - pos[i].y;
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const dx = px[j] - px[i];
+        const dy = py[j] - py[i];
         const e = (dx / SPACE_X) ** 2 + (dy / SPACE_Y) ** 2;
         if (e >= 1) continue;
         moved = true;
@@ -141,13 +161,17 @@ function separate(pos: Point[]): void {
         // Push along the axis that needs less: usually sideways.
         const ux = d > 0.01 ? dx / (d * SPACE_X) : 1;
         const uy = d > 0.01 ? dy / (d * SPACE_Y) : 0;
-        pos[i].x -= ux * push * SPACE_X;
-        pos[i].y -= uy * push * SPACE_Y;
-        pos[j].x += ux * push * SPACE_X;
-        pos[j].y += uy * push * SPACE_Y;
+        px[i] -= ux * push * SPACE_X;
+        py[i] -= uy * push * SPACE_Y;
+        px[j] += ux * push * SPACE_X;
+        py[j] += uy * push * SPACE_Y;
       }
     }
     if (!moved) break;
+  }
+  for (let i = 0; i < n; i++) {
+    pos[i].x = px[i];
+    pos[i].y = py[i];
   }
 }
 

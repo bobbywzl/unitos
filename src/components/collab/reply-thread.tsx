@@ -215,15 +215,16 @@ export function ReplyThread({
               {replyTime(reply.createdAt, lang)}
             </span>
             {/* Under a finger, Resolve and Delete are 40px targets, 8px
-                apart (WALK4-16). */}
-            <span className="ml-auto flex items-center gap-2 pointer-coarse:-my-2.5 pointer-coarse:gap-3">
+                apart (WALK4-16); under a mouse, 24px targets, 8px apart
+                (WALK5-15, WCAG 2.5.8), the row's height kept. */}
+            <span className="-my-1 ml-auto flex items-center gap-2 pointer-coarse:-my-2.5 pointer-coarse:gap-3">
               {canEdit && (!outside || mine) && (
                 <button
                   onClick={() => setResolved(reply.id, !isResolved)}
                   disabled={inFlight.has(reply.id)}
                   data-track="reply-resolve"
                   data-tip={isResolved ? t("common.reopenTitle") : t("common.resolveTitle")}
-                  className="text-[10px] font-semibold text-sand-500 hover:text-sage-700 pointer-coarse:min-h-10 pointer-coarse:px-1.5"
+                  className="inline-flex min-h-6 items-center px-1 text-[10px] font-semibold text-sand-500 hover:text-sage-700 pointer-coarse:min-h-10 pointer-coarse:px-1.5"
                 >
                   {isResolved ? t("common.reopen") : t("common.resolve")}
                 </button>
@@ -235,7 +236,7 @@ export function ReplyThread({
                   data-track="reply-delete"
                   aria-label={t("common.delete")}
                   data-tip={t("common.delete")}
-                  className="text-[11px] text-sand-400 hover:text-red-600 pointer-coarse:flex pointer-coarse:size-10 pointer-coarse:items-center pointer-coarse:justify-center pointer-coarse:text-[15px]"
+                  className="flex size-6 items-center justify-center text-[13px] text-sand-400 hover:text-red-600 pointer-coarse:size-10 pointer-coarse:text-[15px]"
                 >
                   ×
                 </button>
@@ -278,7 +279,7 @@ export function ReplyThread({
         <button
           onClick={() => setShowResolved(!showResolved)}
           data-track="reply-show-resolved"
-          className="self-start text-[10px] font-semibold text-sand-500 hover:text-clay-700"
+          className="inline-flex min-h-6 min-w-6 items-center justify-center self-start text-[10px] font-semibold text-sand-500 hover:text-clay-700"
         >
           {resolvedReplies.length === 1
             ? t("common.resolvedCountOne")
@@ -292,7 +293,7 @@ export function ReplyThread({
           onClick={() => setComposing(true)}
           data-track="reply"
           data-tip={t("common.replyTitle")}
-          className="self-start text-[11px] font-semibold text-sand-600 hover:text-clay-700 pointer-coarse:min-h-10 pointer-coarse:pr-3"
+          className="inline-flex min-h-6 min-w-6 items-center justify-center self-start text-[11px] font-semibold text-sand-600 hover:text-clay-700 pointer-coarse:min-h-10 pointer-coarse:pr-3"
         >
           {t("common.reply")}
         </button>

@@ -36,6 +36,7 @@ import { useCollapsedView } from "@/components/use-collapsed-view";
 import { inLayer, LayerSwitch, useAnnotationLayer } from "@/components/panels/layer-switch";
 import { stripSimplifyMarkers } from "@/lib/sentences";
 import { LinkCardNotes, ProvenanceRows } from "@/components/panels/link-card-extras"; // [cover4]
+import { LinkDraftTag } from "@/components/graph/link-draft-tag"; // [ui5]
 
 // A link's card carries the link kind color (lib/annotations/kind.ts).
 const card = "rounded-2xl border bg-card p-3.5 shadow-soft";
@@ -453,6 +454,7 @@ export function AnnotationsPanel({
                     {t("panels.otherEndUnresolved")}
                   </span>
                 )}
+                <LinkDraftTag linkId={l.id} /* [ui5] WALK5-13 */ />
                 <AuthorChip createdById={l.createdById} nameless />
                 {!l.detached && showOnGraph(l.id)}
                 {canEdit && linkRemovable(l.crossAccount) && (
@@ -499,6 +501,7 @@ export function AnnotationsPanel({
                     {t("panels.otherEndUnresolved")}
                   </span>
                 )}
+                <LinkDraftTag linkId={l.id} /* [ui5] WALK5-13 */ />
                 <AuthorChip createdById={l.createdById} nameless />
                 {showOnGraph(l.id)}
                 {canEdit && linkRemovable(l.crossAccount) && (

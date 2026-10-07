@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { SaveAsNote } from "@/components/assistant/save-as-note";
 import { useCollab } from "@/components/collab/collab-context";
 import { useGraphNotes } from "@/components/graph/graph-notes";
@@ -246,8 +246,19 @@ export function StitchBox({
         ? t("stitch.stitchPickOneMore")
         : null;
 
+  // [ui5] WALK5-09: the blocked line is a status the text box points to; a
+  // blocked Enter says it again.
+  const blockedId = useId();
+  const [hushBlocked, setHushBlocked] = useState(false);
+  function sayBlocked() {
+    setHushBlocked(true);
+    window.setTimeout(() => setHushBlocked(false), 120);
+  }
+  // [/ui5]
+
   async function send(override?: string) {
     const text = (override ?? command).trim();
+    if (text && !running && blocked) sayBlocked(); // [ui5]
     if (!text || running || text.length > COMMAND_MAX || picked.length === 1) return;
     setError(null);
     // Retry sends the failed command again: a new command typed since stays.
@@ -331,14 +342,13 @@ export function StitchBox({
     onOpenDocument();
   }
 
-  // Show on a saved note: the tray sits behind the graph, so the graph
-  // closes first.
-  // Show on a saved answer: the graph's own Show closes the graph (and its
-  // graph=1 entry) and opens the tray on the note.
+  // Show on a saved answer: on the graph, the Notes list opens on the note
+  // (VIEW5-10). Without the graph's notes, the graph closes and the tray
+  // opens on the note.
   const graphNotes = useGraphNotes();
   function showNote(noteId: string) {
     if (graphNotes) {
-      graphNotes.showNote(noteId);
+      graphNotes.showSaved(noteId); // [ui5] VIEW5-10: the graph shows it
       return;
     }
     onOpenDocument();
@@ -577,6 +587,7 @@ export function StitchBox({
             placeholder={t("stitch.stitchPlaceholder")}
             rows={1}
             aria-label={t("stitch.stitch")}
+            aria-describedby={canEdit && blocked ? blockedId : undefined /* [ui5] */}
             className="min-h-[38px] flex-1 resize-none rounded-2xl bg-sand-100 px-4 py-2.5 text-sm outline-none placeholder:text-sand-500"
           />
           <VoiceTypingButton field={inputRef} track="stitch-voice-typing" className="size-[38px]" size={15} />
@@ -611,7 +622,12 @@ export function StitchBox({
       ) : (
         <p className="px-4 py-3 text-xs text-sand-500">{t("stitch.stitchViewer")}</p>
       )}
-      {canEdit && blocked && <p className="-mt-1 px-4 pb-3 text-xs text-red-500">{blocked}</p>}
+      {canEdit && (
+        // [ui5] WALK5-09: always there, so a new reason is read as it shows.
+        <p id={blockedId} role="status" data-stitch-blocked className={blocked ? "-mt-1 px-4 pb-3 text-xs text-red-500" : "sr-only"}>
+          {blocked && !hushBlocked ? blocked : ""}
+        </p>
+      )}
     </div>
   );
 }
