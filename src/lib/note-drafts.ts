@@ -120,17 +120,20 @@ function claimedKey(key: string, account: string): string {
     : linkNoteKey(account, key.slice(LINK_NOTE_PREFIX.length));
 }
 
-/** Move one legacy key to the account, unless the account has its own. A
-    legacy link-note draft carries no savedAt: it gets one now. */
+/** Move one legacy key to the account. When the account has its own draft
+    for the same box (a tab from before the change kept writing the old
+    key), the newer of the two stays: both are the same box's words, typed
+    on this browser. A legacy link-note draft carries no savedAt: it gets
+    one now. */
 function claim(key: string, account: string) {
   try {
     const raw = localStorage.getItem(key);
     if (raw === null) return;
     const to = claimedKey(key, account);
-    if (localStorage.getItem(to) === null) {
-      const value = JSON.parse(raw) as Record<string, unknown>;
-      localStorage.setItem(to, JSON.stringify({ ...value, savedAt: typeof value.savedAt === "number" ? value.savedAt : Date.now() }));
-    }
+    const value = JSON.parse(raw) as Record<string, unknown>;
+    const savedAt = typeof value.savedAt === "number" ? value.savedAt : Date.now();
+    const own = read<{ savedAt: number }>(to);
+    if (!own || own.savedAt < savedAt) localStorage.setItem(to, JSON.stringify({ ...value, savedAt }));
     localStorage.removeItem(key);
   } catch {
     // Storage blocked, or the value does not parse: it stays where it is.
