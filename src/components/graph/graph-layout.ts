@@ -17,6 +17,8 @@ export type Point = { x: number; y: number };
 export const SPACE_X = 200;
 export const SPACE_Y = 118;
 const GROUP_GAP = 70;
+// The widest layout a tall canvas takes: three grid columns.
+const TALL_MAX_W = 3 * SPACE_X;
 const TICKS = 240;
 
 // Deterministic pseudo-random in [-1, 1] from a string.
@@ -245,11 +247,22 @@ export function graphLayout(ids: string[], edges: LayoutEdge[], aspect = 2.1, ap
     widths.add(run);
   }
   const colChoices = isolated.length ? Array.from({ length: Math.min(isolated.length, 24) }, (_, i) => i + 1) : [0];
+  // A tall canvas (a phone) shows a tall layout at the fit's least zoom and
+  // scrolls down, never sideways: an arrangement wider than TALL_MAX_W, or
+  // than its widest linked group, puts nodes and labels past the canvas's
+  // edges (VIEW4-05). It is kept only when no arrangement is that narrow.
+  const tall = aspect < 1;
+  const tallMax = Math.max(TALL_MAX_W, ...boxes.map((b) => b.w));
+  let bestNarrow = false;
   for (const rowWidth of widths) {
     for (const cols of colChoices) {
       const packed = arrange(boxes, isolated, rowWidth, cols);
       const scale = Math.min(aspect / packed.w, 1 / packed.h);
-      if (!best || scale > best.scale * 1.0001) best = { pos: packed.pos, scale };
+      const narrow = !tall || packed.w <= tallMax;
+      if (!best || (narrow && !bestNarrow) || (narrow === bestNarrow && scale > best.scale * 1.0001)) {
+        best = { pos: packed.pos, scale };
+        bestNarrow = narrow;
+      }
     }
   }
   const result = best?.pos ?? new Map<string, Point>();
