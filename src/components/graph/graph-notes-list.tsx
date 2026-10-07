@@ -24,7 +24,16 @@ import { splitNote } from "@/lib/note-title";
 // leaves a "Note rejected · Undo" line in its place while the list is open.
 
 /** The header pill that opens and folds the list. */
-export function NotesListToggle({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+export function NotesListToggle({
+  open,
+  onToggle,
+  controls,
+}: {
+  open: boolean;
+  onToggle: (e: { currentTarget: HTMLElement }) => void;
+  /** The list's id (aria-controls). */
+  controls?: string;
+}) {
   const t = useT();
   const ctx = useGraphNotes();
   if (!ctx) return null;
@@ -33,6 +42,7 @@ export function NotesListToggle({ open, onToggle }: { open: boolean; onToggle: (
       onClick={onToggle}
       data-track="graph-notes"
       aria-expanded={open}
+      aria-controls={controls}
       data-tip={t("graphNotes.notesToggleTitle")}
       className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] whitespace-nowrap hover:bg-clay-100 hover:text-clay-800 ${
         open ? "border-line bg-clay-100 text-clay-800" : ctx.sectionId ? "border-sage-400 text-sage-800" : "border-line text-sand-600"
@@ -193,7 +203,11 @@ export function GraphNotesList({ pickedIds, onClose }: { pickedIds: Set<string>;
   return (
     <aside
       data-track-surface="graph-notes-list"
-      className="menu-in absolute top-3 right-3 bottom-3 z-10 flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 shadow-float backdrop-blur-md max-[999px]:bottom-16"
+      data-graph-side-list="notes"
+      id="graph-list-notes"
+      tabIndex={-1}
+      aria-label={t("graphNotes.notes")}
+      className="menu-in absolute top-3 right-3 bottom-3 z-10 flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 pb-24 shadow-float outline-none backdrop-blur-md max-[999px]:bottom-16 max-[999px]:pb-4"
     >
       <div className="flex items-start gap-2">
         <p className="flex-1 text-[11px] text-sand-500">{t("graphNotes.notesDesc")}</p>

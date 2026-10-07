@@ -3,13 +3,14 @@
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { type Edge as FlowEdge, type EdgeProps } from "reactflow";
+import { EdgeLabelRenderer, type Edge as FlowEdge, type EdgeProps } from "reactflow";
 import type { GraphEdge, GraphEdgeLink, SectionView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { CommentIcon, NotesIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { readGraphKeep, writeGraphKeep } from "@/components/graph/graph-keep";
 import { noteLine, notesOnGraph, pairKey, type GraphNote, type NotesOnGraph } from "@/lib/graph/notes";
+import type { Point } from "@/lib/graph/curve-place";
 
 // The project's notes on the graph (SPEC.md §13). The document stays the
 // node; a note shows where it is: a chip on each node it belongs to, its
@@ -401,67 +402,106 @@ export function PairNotes({ pair }: { pair: string }) {
   );
 }
 
-/** Beside a curve's count pill: the open replies on the pair's links (the
-    comment glyph and the number), then the notes that quote both documents
-    (a sage pill). x, y: the count pill's center; offset: half its width, 0
-    when there is none. */
+/** Where each curve's marks sit, by curve id: the canvas places them all
+    at once, so they keep off the nodes and off each other (curve-place.ts). */
+export const MarkPlacesContext = createContext<Map<string, Point>>(new Map());
+
+/** The open replies on a curve's links. */
+export function openReplies(links: GraphEdgeLink[]): number {
+  return links.reduce((n, l) => n + (l.replies ?? []).filter((r) => r.resolvedById === null).length, 0);
+}
+
+/** The marks' row width on screen at scale 1: the count pill (more than
+    one link), the replies mark, the notes pill, 4 px apart. */
+export function marksWidth(count: number, open: number, notes: number): number {
+  const parts = [
+    count > 1 ? 14 + String(count).length * 7 : 0,
+    open > 0 ? 32 + String(open).length * 6 : 0,
+    notes > 0 ? 32 + String(notes).length * 6 : 0,
+  ].filter((w) => w > 0);
+  return parts.reduce((a, b) => a + b, 0) + Math.max(0, parts.length - 1) * 4;
+}
+
+/** On a curve, above the nodes (the HTML label layer; VIEW3-01): the link
+    count when the pair has more than one, the open replies on the pair's
+    links (the comment glyph and the number, in the comment kind color), and
+    the notes that quote both documents (a sage pill). They ride the curve's
+    middle, or slide along it to the first point no node's room covers
+    (curve-place.ts; the canvas places them, MarkPlacesContext); a loop's
+    sit at its top. Hovering them lights the curve, and a click pins its
+    list, as on the curve itself. */
 export function CurveMarks({
   pair,
   links,
-  x,
-  y,
-  offset,
+  count,
+  at,
+  onEnter,
+  onLeave,
+  onClick,
 }: {
   pair: string;
   links: GraphEdgeLink[];
-  x: number;
-  y: number;
-  offset: number;
+  /** The pair's link count: a pill when more than one. */
+  count: number;
+  /** Where the marks sit until the canvas has placed them. */
+  at: Point;
+  onEnter?: () => void;
+  onLeave?: () => void;
+  onClick?: () => void;
 }) {
   const ctx = useGraphNotes();
   const t = useT();
-  const open = links.reduce((n, l) => n + (l.replies ?? []).filter((r) => r.resolvedById === null).length, 0);
+  const places = useContext(MarkPlacesContext);
+  const open = openReplies(links);
   const notes = ctx?.view.byPair.get(pair)?.length ?? 0;
-  if (open === 0 && notes === 0) return null;
-  const marks: { kind: "replies" | "notes"; n: number }[] = [
-    ...(open > 0 ? [{ kind: "replies" as const, n: open }] : []),
-    ...(notes > 0 ? [{ kind: "notes" as const, n: notes }] : []),
-  ];
-  let at = x + (offset > 0 ? offset + 4 : -((marks.length - 1) * 38) / 2 - 17);
+  const showCount = count > 1;
+  if (!showCount && open === 0 && notes === 0) return null;
+  const p = places.get(pair) ?? at;
+  const pill = "flex h-[18px] items-center gap-1 rounded-full px-1.5 text-[10px] font-semibold tabular-nums";
   return (
-    <g>
-      {marks.map((m) => {
-        const w = 30 + String(m.n).length * 6;
-        const left = at;
-        at += w + 4;
-        const replies = m.kind === "replies";
-        return (
-          <g key={m.kind} transform={`translate(${left}, ${y - 9})`} data-graph-curve-mark={m.kind}>
-            <title>{replies ? t("graphNotes.openRepliesTitle") : t("graphNotes.pairNotesTitle")}</title>
-            <rect
-              width={w}
-              height={18}
-              rx={9}
-              fill={replies ? "var(--card)" : "var(--sage-100)"}
-              stroke={replies ? "var(--sand-400)" : "var(--sage-300)"}
-            />
-            <g transform="translate(6, 3)" className={replies ? "text-sand-700" : "text-sage-700"}>
-              {replies ? <CommentIcon size={12} /> : <NotesIcon size={12} />}
-            </g>
-            <text
-              x={21}
-              y={9}
-              dominantBaseline="central"
-              fontSize={10}
-              fontWeight={600}
-              fill={replies ? "var(--sand-700)" : "var(--sage-800)"}
+    <EdgeLabelRenderer>
+      <div
+        data-curve-marks={pair}
+        onMouseEnter={onEnter}
+        onMouseLeave={onLeave}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick?.();
+        }}
+        className="graph-curve-marks nodrag nopan absolute cursor-pointer"
+        style={{ transform: `translate(-50%, -50%) translate(${p.x}px, ${p.y}px)` }}
+      >
+        <div className="graph-edge-pill flex items-center gap-1">
+          {showCount && (
+            <span data-graph-curve-mark="count" className={`${pill} justify-center border border-line bg-card text-sand-700`}>
+              {count}
+            </span>
+          )}
+          {open > 0 && (
+            <span
+              data-graph-curve-mark="replies"
+              data-tip={t("graphNotes.openRepliesTitle")}
+              aria-label={`${t("graphNotes.openRepliesTitle")}: ${open}`}
+              className={`${pill} border-[1.5px] border-[var(--kind-comment)] bg-card font-bold text-[var(--kind-comment)]`}
             >
-              {m.n}
-            </text>
-          </g>
-        );
-      })}
-    </g>
+              <CommentIcon size={11} />
+              <span data-n>{open}</span>
+            </span>
+          )}
+          {notes > 0 && (
+            <span
+              data-graph-curve-mark="notes"
+              data-tip={t("graphNotes.pairNotesTitle")}
+              aria-label={`${t("graphNotes.pairNotesTitle")}: ${notes}`}
+              className={`${pill} border border-dashed border-sage-500 bg-sage-100 text-sage-800`}
+            >
+              <NotesIcon size={11} />
+              <span data-n>{notes}</span>
+            </span>
+          )}
+        </div>
+      </div>
+    </EdgeLabelRenderer>
   );
 }
 
@@ -470,6 +510,11 @@ function seededBow(id: string): number {
   let h = 3;
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
   return ((h % 1000) / 999) * 2 - 1;
+}
+
+/** A note curve's control point: it bows sideways from the middle. */
+export function noteControl(id: string, s: Point, e: Point): Point {
+  return { x: (s.x + e.x) / 2 + seededBow(id) * 46 + (e.x - s.x) * 0.14, y: (s.y + e.y) / 2 };
 }
 
 /** The sage dotted curve of a pair that only notes join: no gradient, no
@@ -483,13 +528,17 @@ export function NoteEdge({
   targetY,
   listOpen,
   renderList,
+  marks,
 }: EdgeProps<NoteEdgeData> & {
   listOpen: boolean;
+  /** The marks' hover and click: those of the curve (graph-view.tsx). */
+  marks?: { onEnter: () => void; onLeave: () => void; onClick: () => void };
   /** Draws the list where the canvas puts a curve's list (graph-view.tsx). */
   renderList: (anchor: { x: number; y: number }, children: React.ReactNode) => React.ReactNode;
 }) {
   const t = useT();
-  const bow = seededBow(id) * 46 + (targetX - sourceX) * 0.14;
+  const c = noteControl(id, { x: sourceX, y: sourceY }, { x: targetX, y: targetY });
+  const bow = c.x - (sourceX + targetX) / 2;
   const midX = (sourceX + targetX) / 2;
   const midY = (sourceY + targetY) / 2;
   const path = `M ${sourceX} ${sourceY} Q ${midX + bow} ${midY} ${targetX} ${targetY}`;
@@ -498,7 +547,13 @@ export function NoteEdge({
       <title>{t("graphNotes.noteCurveHint")}</title>
       <path d={path} fill="none" stroke="var(--sage-500)" strokeLinecap="round" strokeDasharray="1.5 6" className="graph-note-stroke" />
       <path d={path} fill="none" stroke="transparent" strokeWidth={16} className="react-flow__edge-interaction graph-edge-hit" />
-      <CurveMarks pair={id} links={[]} x={midX + bow / 2} y={midY} offset={0} />
+      <CurveMarks
+        pair={id}
+        links={[]}
+        count={0}
+        at={{ x: midX + bow / 2, y: midY }}
+        {...marks}
+      />
       {listOpen &&
         renderList(
           { x: midX + bow / 2, y: midY },

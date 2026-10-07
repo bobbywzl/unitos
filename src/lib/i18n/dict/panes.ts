@@ -387,7 +387,7 @@ const en = {
 
   // Graph (graph-overlay.tsx, graph-view.tsx)
   graph: "Graph",
-  graphTitle: "The project as a graph: documents and the links between them",
+  graphTitle: "The project as a graph: documents and the links between them (M)",
   // The key behind the ? button with the zoom controls (graph-view.tsx).
   graphKeyTitle: "How to read the graph",
   graphKeyOpen: "The open document",
@@ -418,6 +418,8 @@ const en = {
   graphLinksToggleTitle: "Every accepted link of the project, by the two documents it joins",
   graphLinksDesc: "Every accepted link, by the two documents it joins. A click opens the link: why it was made, both passages, its replies.",
   graphLinksEmpty: "No accepted links yet.",
+  graphLinksFilter: "Filter by document or reason",
+  graphLinksFilterNone: "No link matches these words.",
   graphLinksPairTitle: "{a} ⇄ {b}",
   graphLinksLoopTitle: "Within {title}",
   graphLinksBack: "Back to Links",
@@ -429,6 +431,7 @@ const en = {
   graphCardOpen: "Click to open · ⇧-click to pick for Stitch",
   graphCardPick: "Click to pick for Stitch, or to drop the pick",
   graphNodeLabel: "{title}, {n} link{s}",
+  graphNodeLabelRec: "{title}, {n} link{s}, {m} recommended",
   graphLoopLinkOne: "1 link within this document",
   graphLoopLinks: "{count} links within this document",
   graphPairLinkOne: "1 link between these documents",
@@ -880,7 +883,7 @@ const zh: Record<keyof typeof en, string> = {
   historyReparse: "重新解析了一个文档",
 
   graph: "图谱",
-  graphTitle: "项目图谱：文档与它们之间的链接",
+  graphTitle: "项目图谱：文档与它们之间的链接（M）",
   graphKeyTitle: "如何阅读图谱",
   graphKeyOpen: "当前打开的文档",
   graphKeyDocument: "一个文档；越长的文档圆点越大",
@@ -905,6 +908,8 @@ const zh: Record<keyof typeof en, string> = {
   graphLinksToggleTitle: "项目中所有已接受的链接，按它连接的两个文档分组",
   graphLinksDesc: "所有已接受的链接，按它连接的两个文档分组。点击打开链接：为何建立、两端的段落、它的回复。",
   graphLinksEmpty: "还没有已接受的链接。",
+  graphLinksFilter: "按文档或理由筛选",
+  graphLinksFilterNone: "没有链接包含这些词。",
   graphLinksPairTitle: "{a} ⇄ {b}",
   graphLinksLoopTitle: "{title} 内部",
   graphLinksBack: "返回链接",
@@ -915,6 +920,7 @@ const zh: Record<keyof typeof en, string> = {
   graphCardOpen: "点击打开 · ⇧-点击为缝合选取",
   graphCardPick: "点击为缝合选取，或取消选取",
   graphNodeLabel: "{title}，{n} 个链接",
+  graphNodeLabelRec: "{title}，{n} 个链接，{m} 个推荐链接",
   graphLoopLinkOne: "本文档内有 1 个链接",
   graphLoopLinks: "本文档内有 {count} 个链接",
   graphPairLinkOne: "这两篇文档之间有 1 个链接",

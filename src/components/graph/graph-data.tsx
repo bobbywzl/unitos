@@ -7,7 +7,9 @@
 // project's rev moves while the graph is open (a collaborator's link, the
 // reader's own Accept, a Stitch answer: each bumps the rev and refreshes the
 // page). A tab keeps the last answer per project, so a reopen draws at once.
-// Offline, the service worker answers from the project's offline copy.
+// Offline, the service worker answers from the project's offline copy. A
+// refetch that fails keeps the last data and says how old it is; a 403 or
+// 404 (access removed, the project gone) drops it (REV3-10).
 
 import { useEffect, useMemo, useState, type ComponentProps } from "react";
 import type { GraphData } from "@/lib/graph/data";
@@ -16,7 +18,7 @@ import type { DocumentKind } from "@/lib/document-order";
 import { CollabProvider, useCollab } from "@/components/collab/collab-context";
 import { GraphOverlay } from "@/components/graph/graph-overlay";
 
-const lastData = new Map<string, GraphData>();
+const lastData = new Map<string, { data: GraphData; at: number }>();
 
 type OverlayProps = ComponentProps<typeof GraphOverlay>;
 
@@ -30,16 +32,26 @@ export function GraphOverlayLoader({
   documents: { id: string; title: string; hasVideo: boolean; kind?: DocumentKind }[];
 }) {
   const collab = useCollab();
-  const [data, setData] = useState<GraphData | null>(() => lastData.get(notebookId) ?? null);
+  const [loaded, setLoaded] = useState<{ data: GraphData; at: number } | null>(() => lastData.get(notebookId) ?? null);
+  const data = loaded?.data ?? null;
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
     fetch(`/api/notebooks/${notebookId}/graph`, { signal: controller.signal })
-      .then((r) => (r.ok ? (r.json() as Promise<GraphData>) : Promise.reject(new Error(String(r.status)))))
+      .then((r) => {
+        if (r.ok) return r.json() as Promise<GraphData>;
+        if (r.status === 403 || r.status === 404) {
+          // No access any more: nothing of the old graph stays on screen.
+          lastData.delete(notebookId);
+          setLoaded(null);
+        }
+        return Promise.reject(new Error(String(r.status)));
+      })
       .then((d) => {
-        lastData.set(notebookId, d);
-        setData(d);
+        const next = { data: d, at: Date.now() };
+        lastData.set(notebookId, next);
+        setLoaded(next);
         setFailed(false);
       })
       .catch(() => {
@@ -109,6 +121,7 @@ export function GraphOverlayLoader({
         gists={data?.gists}
         loading={data === null && !failed}
         loadFailed={data === null && failed ? () => setAttempt((n) => n + 1) : undefined}
+        stale={loaded && failed ? { at: loaded.at, retry: () => setAttempt((n) => n + 1) } : null}
       />
     </CollabProvider>
   );

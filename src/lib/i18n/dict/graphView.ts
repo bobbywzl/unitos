@@ -24,6 +24,12 @@ const en = {
   cardNeighbourTitle: "Show this document's card",
   cardLoading: "Loading…",
   cardKeys: "← → walk the links · Enter opens · Esc closes",
+  cardWalkNone: "This document has no links to walk.",
+  cardWalkStart: "→ walks the links; ← comes back the same way.",
+  cardBack: "Back to the card",
+  cardGenerated: "A generated document: Stitch wrote it from the project's documents.",
+  cardGeneratedFrom: "A generated document: Stitch wrote it from the command “{command}”.",
+  generatedNodeLabel: "Generated document: {label}",
   // The hover card and the key (graph-view.tsx), option A: a click selects.
   cardHintSelect: "Click to read its card · ⇧-click to pick for Stitch",
   gesturesSelect:
@@ -47,6 +53,8 @@ const en = {
   findPick: "Pick these {n} documents",
   findPickOne: "Pick this document",
   findAsk: "Ask Stitch",
+  findAskWithPicks: "Ask Stitch about these {n} and your {m} other pick{ms}",
+  findAskTitle: "Adds these documents to the pick and puts a question in the Stitch box",
   findAskTemplate: "What do these documents say about {q}?",
   findMore: "+ {n} more",
   findPassageTitle: "Open the reader at this passage",
@@ -55,6 +63,7 @@ const en = {
   // The graph's own load (graph-data.tsx)
   loadFailed: "The graph did not load.",
   loadRetry: "Try again",
+  staleNotice: "The graph did not refresh. It shows the project as of {time}.",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -73,6 +82,12 @@ const zh: Record<keyof typeof en, string> = {
   cardMore: "还有 {n} 项",
   cardPartTitle: "在阅读器中打开这一部分",
   cardNeighbourTitle: "显示这个文档的卡片",
+  cardWalkNone: "这个文档没有可沿着走的链接。",
+  cardWalkStart: "→ 沿链接走；← 原路返回。",
+  cardBack: "返回卡片",
+  cardGenerated: "生成文档：缝合根据项目的文档写成。",
+  cardGeneratedFrom: "生成文档：缝合根据指令“{command}”写成。",
+  generatedNodeLabel: "生成文档：{label}",
   cardLoading: "正在载入…",
   cardKeys: "← → 沿链接走 · Enter 打开 · Esc 关闭",
   cardHintSelect: "点击查看卡片 · ⇧-点击为缝合选取",
@@ -92,12 +107,15 @@ const zh: Record<keyof typeof en, string> = {
   findPick: "选取这 {n} 个文档",
   findPickOne: "选取这个文档",
   findAsk: "问缝合",
+  findAskWithPicks: "就这 {n} 个和你另选的 {m} 个问缝合",
+  findAskTitle: "把这些文档加入选取，并在缝合框中写好问题",
   findAskTemplate: "这些文档对“{q}”说了什么？",
   findMore: "还有 {n} 个",
   findPassageTitle: "在阅读器中打开这个片段",
   findHits: "{n} 个片段包含这些词",
   loadFailed: "图谱没有载入。",
   loadRetry: "重试",
+  staleNotice: "图谱没有刷新，显示的是 {time} 时的项目。",
 };
 
 export const graphView = { en, zh } as const;

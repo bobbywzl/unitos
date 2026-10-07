@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type FocusEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type FocusEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import ReactFlow, {
   Background,
@@ -27,10 +27,16 @@ import { FilmIcon, MaximizeIcon, NotesIcon, PageIcon, PlusIcon, QuestionIcon } f
 import { useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
 import { extendLayout, graphLayout, layoutAspect, seeded, type Point } from "@/components/graph/graph-layout";
+import { nodeRoom, placeMarks, type MarkCurve } from "@/lib/graph/curve-place";
 import { categoryLabels } from "@/components/reader/document-organize";
 // [graph-notes] The notes and the link replies on the graph (graph-notes.tsx).
 import {
   CurveMarks,
+  MarkPlacesContext,
+  marksWidth,
+  noteControl,
+  openReplies,
+  useGraphNotes,
   NodeNotes,
   NodeNotesRows,
   NoteEdge,
@@ -45,7 +51,7 @@ import { LinkReplyCount } from "@/components/graph/link-replies";
 // [/graph-notes]
 // [view2] The node card, Find's counts, and the last Stitch answer's links.
 import { useGraphContent } from "@/components/graph/graph-content";
-import { NodeCardExtras } from "@/components/graph/node-card";
+import { NodeCardExtras, linkLine } from "@/components/graph/node-card";
 
 // The corpus graph (SPEC.md §13; the release-edu canvas patterns): documents
 // as nodes on a pan/zoom canvas, links between them as swept curves. The more
@@ -299,33 +305,34 @@ function useScreenPoint(p: Point): Point {
 // tone, without the gradient.
 const LOOP_HEIGHT = 64; // the control points' rise above the node's center
 const LOOP_HALF_WIDTH = 34;
+/** A link curve's control point: the bow runs along the chord's normal, so
+    side-by-side pairs bow too. */
+function linkControl(id: string, s: Point, e: Point): Point {
+  const chord = Math.hypot(e.x - s.x, e.y - s.y) || 1;
+  const bowSize = seeded(id, 3) * 40 + chord * 0.12;
+  return { x: (s.x + e.x) / 2 - ((e.y - s.y) / chord) * bowSize, y: (s.y + e.y) / 2 + ((e.x - s.x) / chord) * bowSize };
+}
 function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data }: EdgeProps<LinkEdgeData>) {
-  const { plain, showProvenance } = useContext(SpotlightContext);
+  const { plain, showProvenance, hoverEdge, scheduleClear, pinEdge } = useContext(SpotlightContext);
   const listOpen = useEdgeListOpen(id);
   const count = data?.count ?? 1;
   const recommendedOnly = data?.recommendedOnly ?? false;
   const allLinks = data?.links ?? [];
   const links = showProvenance ? allLinks : allLinks.filter((l) => !l.provenance);
   const loop = source === target;
-  // The bow runs along the chord's normal, so side-by-side pairs bow too.
-  const chord = Math.hypot(targetX - sourceX, targetY - sourceY) || 1;
-  const bowSize = loop ? 0 : seeded(id, 3) * 40 + chord * 0.12;
-  const nx = loop ? 0 : -(targetY - sourceY) / chord;
-  const ny = loop ? 0 : (targetX - sourceX) / chord;
   // The pill's and the list's anchor: the curve's middle, or the loop's top.
   const midX = loop ? sourceX : (sourceX + targetX) / 2;
   const midY = loop ? sourceY - LOOP_HEIGHT * 0.75 : (sourceY + targetY) / 2;
+  const control = loop ? { x: midX, y: midY } : linkControl(id, { x: sourceX, y: sourceY }, { x: targetX, y: targetY });
   const path = loop
     ? `M ${sourceX} ${sourceY} C ${sourceX - LOOP_HALF_WIDTH} ${sourceY - LOOP_HEIGHT}, ${sourceX + LOOP_HALF_WIDTH} ${sourceY - LOOP_HEIGHT}, ${sourceX} ${sourceY}`
-    : `M ${sourceX} ${sourceY} Q ${midX + nx * bowSize} ${midY + ny * bowSize} ${targetX} ${targetY}`;
+    : `M ${sourceX} ${sourceY} Q ${control.x} ${control.y} ${targetX} ${targetY}`;
   // A quadratic curve passes its control point's direction at half the bow.
-  const anchor = { x: midX + (nx * bowSize) / 2, y: midY + (ny * bowSize) / 2 };
+  const anchor = { x: (midX + control.x) / 2, y: (midY + control.y) / 2 };
   const depth = Math.min(1, Math.max(0, count - 1) / 7);
   const width = 1.6 + depth * 6.4;
   const gradient = !recommendedOnly && !plain;
   const gradientId = `edge-${id.replace(/[^a-zA-Z0-9]/g, "-")}`;
-  const label = String(count);
-  const pillWidth = 14 + label.length * 7;
   // [view2] A pair holding a link the last Stitch answer proposed: a violet halo.
   const { proposedLinkIds } = useGraphContent();
   const proposed = proposedLinkIds.size > 0 && links.some((l) => proposedLinkIds.has(l.id));
@@ -370,20 +377,18 @@ function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data
       {/* Wide invisible twin so the thin curve is hoverable (wider still
           under a finger, graph rules in globals.css). */}
       <path d={path} fill="none" stroke="transparent" strokeWidth={16} className="react-flow__edge-interaction graph-edge-hit" />
-      {count > 1 && (
-        // The exact link count on a small pill at the curve's midpoint; it
-        // grows with the labels when the view zooms out.
-        <g transform={`translate(${anchor.x}, ${loop ? midY : anchor.y})`}>
-          <g className="graph-edge-pill">
-            <rect x={-pillWidth / 2} y={-9} width={pillWidth} height={18} rx={9} fill="var(--card)" stroke="var(--line)" />
-            <text textAnchor="middle" dominantBaseline="central" fontSize={10} fontWeight={600} fill="var(--sand-700)">
-              {label}
-            </text>
-          </g>
-        </g>
-      )}
-      {/* [graph-notes] Open replies and notes quoting both, beside the pill. */}
-      <CurveMarks pair={id} links={links} x={anchor.x} y={loop ? midY : anchor.y} offset={count > 1 ? pillWidth / 2 : 0} />
+      {/* The exact link count, the open replies, and the notes quoting both
+          [graph-notes], above the nodes and off them (VIEW3-01); they grow
+          with the labels when the view zooms out. */}
+      <CurveMarks
+        pair={id}
+        links={links}
+        count={count}
+        at={loop ? { x: midX, y: midY } : anchor}
+        onEnter={() => hoverEdge(id)}
+        onLeave={scheduleClear}
+        onClick={() => pinEdge(id)}
+      />
       {listOpen && links.length > 0 && (
         <EdgeLinkList edgeId={id} loop={loop} anchor={loop ? { x: midX, y: midY - 10 } : anchor} links={links} />
       )}
@@ -416,10 +421,12 @@ function ProvenanceEdge({ sourceX, sourceY, targetX, targetY }: EdgeProps) {
 // [graph-notes] A pair that only notes join: the sage dotted curve.
 function NoteEdgeHost(props: EdgeProps<NoteEdgeData>) {
   const listOpen = useEdgeListOpen(props.id);
+  const { hoverEdge, scheduleClear, pinEdge } = useContext(SpotlightContext);
   return (
     <NoteEdge
       {...props}
       listOpen={listOpen}
+      marks={{ onEnter: () => hoverEdge(props.id), onLeave: scheduleClear, onClick: () => pinEdge(props.id) }}
       renderList={(anchor, children) => (
         <CurveListFrame edgeId={props.id} loop={false} anchor={anchor} wide={false}>
           {children}
@@ -673,7 +680,7 @@ function NodeCard({
 }) {
   const { floatHost, insets } = useContext(SpotlightContext);
   const t = useT();
-  const { clickSelects } = useGraphContent(); // [view2]
+  const { clickSelects, generatedCommands } = useGraphContent(); // [view2]
   // The card waits a beat, so a pointer crossing the canvas does not flash a
   // card on every node it passes. Its own state: the canvas does not render
   // again when it shows.
@@ -703,10 +710,7 @@ function NodeCard({
       ? t("panes.graphCardBlocks", { n: node.blockCount, s: node.blockCount === 1 ? "" : "s" })
       : null,
   ].filter(Boolean);
-  const linkLine = [
-    t("panes.graphCardLinks", { n: accepted, s: accepted === 1 ? "" : "s" }),
-    recommended > 0 ? t("panes.graphCardRecommended", { n: recommended }) : null,
-  ].filter(Boolean);
+
   return createPortal(
     <div
       role="tooltip"
@@ -718,7 +722,13 @@ function NodeCard({
     >
       <p className="text-[13px] leading-snug font-semibold text-ink">{node.title}</p>
       {facts1.length > 0 && <p className="text-[11.5px] text-sand-600">{facts1.join(" · ")}</p>}
-      <p className="text-[11.5px] text-sand-600">{linkLine.join(" · ")}</p>
+      {/* A generated document: the command that wrote it (WALK3-09). */}
+      {node.kind === "generated" && generatedCommands.get(node.id) && (
+        <p className="line-clamp-2 text-[11.5px] text-sand-600">
+          {t("stitch.generatedFrom", { command: generatedCommands.get(node.id) ?? "" })}
+        </p>
+      )}
+      <p className="text-[11.5px] text-sand-600">{linkLine(t, accepted, recommended)}</p>
       {/* [view2] The gist's first words; the notes as rows: one card per node (VIEW2-01). */}
       <NodeCardExtras documentId={node.id} notes={false} />
       <p className="mt-0.5 text-[11px] text-sand-500">
@@ -901,6 +911,8 @@ function useSpotlightAttributes(
     for (const id of edgeIds ?? []) {
       const edge = el.querySelector(`.react-flow__edge[data-testid=${JSON.stringify(`rf__edge-${id}`)}]`);
       if (edge) lit.push(edge);
+      const marks = el.querySelector(`[data-curve-marks=${JSON.stringify(id)}]`);
+      if (marks) lit.push(marks);
     }
     for (const e of lit) e.setAttribute("data-lit", "");
     return () => {
@@ -978,11 +990,19 @@ function GraphCanvas({
   // Once the reader pans or zooms, the view is theirs: no automatic refit.
   const userMoved = useRef(false);
   const [hover, setHover] = useState<HoverState>(null);
+  // A finger on the canvas: a tap opens no hover card, which would stay up
+  // over the next node (WALK3-11); the tap pins the card or picks.
+  const touchInput = useRef(false);
+  const onPointerDownCapture = useCallback(
+    (e: ReactPointerEvent) => {
+      touchInput.current = e.pointerType === "touch";
+      if (touchInput.current) setHover((prev) => (prev?.nodeId ? null : prev));
+    },
+    [],
+  );
   // Dragging a node hides its card until the pointer rests again.
   const [dragging, setDragging] = useState(false);
   const [keyOpen, setKeyOpen] = useState(false);
-  // Generated documents' provenance links: drawn on request (WALK2-02).
-  const [showProvenance, setShowProvenance] = useState(false);
   // A curve's link list lives in the floating layer, off the curve: the
   // leave that fires on the way there waits a beat, and the list's own hover
   // cancels it. A click on a curve pins its list until the pane is clicked.
@@ -1034,6 +1054,9 @@ function GraphCanvas({
   const notesLit = useNotesLit(); // [graph-notes]
   const content = useGraphContent(); // [view2]
   const focusedId = content.focusedId;
+  // Generated documents' provenance links: drawn on request (WALK2-02), the
+  // switch kept with the view (WALK3-13).
+  const { showProvenance, setShowProvenance, generatedCommands } = content;
   // Nothing hovered: a pinned curve keeps its pair in the spotlight, and
   // then the node whose card is pinned [view2].
   const shown = useMemo<HoverState>(
@@ -1228,11 +1251,34 @@ function GraphCanvas({
     [fitTo, target],
   );
 
+  // Generated documents that share a title (five "Stitched page"s): each
+  // label takes its command's first words (WALK3-09).
+  const labelOf = useMemo(() => {
+    const seen = new Map<string, number>();
+    for (const n of nodes) if (n.kind === "generated") seen.set(n.title, (seen.get(n.title) ?? 0) + 1);
+    const out = new Map<string, string>();
+    for (const n of nodes) {
+      const command = generatedCommands.get(n.id);
+      if (n.kind === "generated" && (seen.get(n.title) ?? 0) > 1 && command) {
+        const head = clipWords(command, 28);
+        out.set(n.id, `${n.title} · ${head}${head.length < command.trim().length ? "…" : ""}`);
+      }
+    }
+    return out;
+  }, [nodes, generatedCommands]);
+
   useEffect(() => {
     const mk = (n: GraphNode, position: Point): FlowNode<DocumentNodeData> => {
       const c = linkCounts.get(n.id);
       const degree = (c?.accepted ?? 0) + (c?.recommended ?? 0);
       const generated = n.kind === "generated";
+      // The node's name says its links as the cards do: accepted links,
+      // then the recommended ones (WALK3-08); a generated document says so.
+      const accepted = c?.accepted ?? 0;
+      const recommended = c?.recommended ?? 0;
+      const named = recommended > 0
+        ? t("panes.graphNodeLabelRec", { title: n.title, n: accepted, s: accepted === 1 ? "" : "s", m: recommended })
+        : t("panes.graphNodeLabel", { title: n.title, n: accepted, s: accepted === 1 ? "" : "s" });
       return {
         id: n.id,
         type: "document",
@@ -1240,9 +1286,9 @@ function GraphCanvas({
         // A generated document draws faded until the reader asks for the
         // provenance (WALK2-02).
         className: generated ? "graph-generated" : undefined,
-        ariaLabel: t("panes.graphNodeLabel", { title: n.title, n: degree, s: degree === 1 ? "" : "s" }),
+        ariaLabel: generated ? t("graphView.generatedNodeLabel", { label: named }) : named,
         data: {
-          title: n.title,
+          title: labelOf.get(n.id) ?? n.title,
           hasVideo: n.hasVideo,
           generated,
           // A longer document draws a bigger dot (√ of its blocks); without
@@ -1305,7 +1351,7 @@ function GraphCanvas({
       const size = new Map(prev.map((p) => [p.id, { width: p.width, height: p.height }]));
       return nodes.map((n) => ({ ...mk(n, target(n.id)), ...size.get(n.id) }));
     });
-  }, [nodes, linkCounts, breathing, target, activeDocumentId, selectedIds, keptLabels, setFlowNodes, paneW, paneH, fitTo, large, t]);
+  }, [nodes, linkCounts, breathing, target, activeDocumentId, selectedIds, keptLabels, setFlowNodes, paneW, paneH, fitTo, large, t, labelOf]);
 
   // Refit when the free area changes — the Stitch box grows or folds, a
   // side list opens, the window resizes — or documents come and go, as long
@@ -1356,6 +1402,43 @@ function GraphCanvas({
     ],
     [visibleEdges, noteEdges, t],
   );
+
+  // Where each curve's marks sit (VIEW3-01): placed together, off the
+  // nodes' rooms and off each other, at the label scale of the zoom.
+  const notesView = useGraphNotes()?.view;
+  const markScale = useStore((s) => Math.round(labelScale(s.transform[2]) * 10) / 10);
+  const markPlaces = useMemo(() => {
+    const at = new Map(flowNodes.map((n) => [n.id, n.position]));
+    const center = (id: string) => {
+      const p = at.get(id);
+      return p ? { x: p.x + NODE_W / 2, y: p.y + 16 } : null;
+    };
+    const rooms = flowNodes.flatMap((n) => nodeRoom(n.position.x, n.position.y, markScale, n.data.title));
+    const curves: MarkCurve[] = [];
+    for (const f of flowEdges) {
+      if (f.type === "provenance") continue;
+      const s = center(f.source);
+      const e = center(f.target);
+      if (!s || !e) continue;
+      const data = f.data as LinkEdgeData | NoteEdgeData | undefined;
+      const links = f.type === "link" ? ((data as LinkEdgeData | undefined)?.links ?? []).filter((l) => showProvenance || !l.provenance) : [];
+      const count = f.type === "link" ? ((data as LinkEdgeData | undefined)?.count ?? 0) : 0;
+      const w = marksWidth(count, openReplies(links), notesView?.byPair.get(f.id)?.length ?? 0);
+      if (w === 0) continue;
+      const loop = f.source === f.target;
+      const c = loop ? null : f.type === "note" ? noteControl(f.id, s, e) : linkControl(f.id, s, e);
+      curves.push({
+        id: f.id,
+        curve: c ? { s, c, e } : null,
+        at: { x: s.x, y: s.y - LOOP_HEIGHT * 0.75 },
+        w: (w + 6) * markScale,
+        h: 22 * markScale,
+      });
+    }
+    // The widest marks first: they have the fewest free places.
+    curves.sort((a, b) => b.w - a.w || a.id.localeCompare(b.id));
+    return placeMarks(curves, rooms);
+  }, [flowNodes, flowEdges, notesView, markScale, showProvenance]);
 
   // The curves the spotlight lights: a hovered node's, a hovered or pinned
   // curve, or the curves between a hovered note's documents.
@@ -1655,7 +1738,7 @@ function GraphCanvas({
           applyRoving();
         }
         curveOrigin.current = null;
-        if (!quietFocus.current) hoverNode(id);
+        if (!quietFocus.current && !touchInput.current) hoverNode(id);
       } else if (e.target.matches(".react-flow__edge")) {
         const id = e.target.getAttribute("data-testid")?.replace(/^rf__edge-/, "");
         if (id && !quietFocus.current) hoverEdge(id);
@@ -1670,7 +1753,12 @@ function GraphCanvas({
     (e: ReactMouseEvent, node: FlowNode) => activate(node.id, e.shiftKey || e.metaKey || e.ctrlKey),
     [activate],
   );
-  const onNodeMouseEnter = useCallback((_: ReactMouseEvent, node: FlowNode) => hoverNode(node.id), [hoverNode]);
+  const onNodeMouseEnter = useCallback(
+    (_: ReactMouseEvent, node: FlowNode) => {
+      if (!touchInput.current) hoverNode(node.id);
+    },
+    [hoverNode],
+  );
   const onEdgeMouseEnter = useCallback((_: ReactMouseEvent, edge: FlowEdge) => hoverEdge(edge.id), [hoverEdge]);
   const onEdgeClick = useCallback(
     (_: ReactMouseEvent, edge: FlowEdge) => {
@@ -1720,6 +1808,10 @@ function GraphCanvas({
       data-large={large ? "" : undefined}
       data-provenance={showProvenance ? "" : undefined}
       onKeyDown={onKeyDown}
+      onPointerDownCapture={onPointerDownCapture}
+      onPointerMoveCapture={(e) => {
+        if (e.pointerType === "mouse") touchInput.current = false;
+      }}
       onFocusCapture={onFocusCapture}
       onBlurCapture={scheduleClear}
     >
@@ -1727,6 +1819,7 @@ function GraphCanvas({
         {t("panes.graphKeysHelp")}
       </p>
       <SpotlightContext.Provider value={spotlight}>
+      <MarkPlacesContext.Provider value={markPlaces}>
       <ReactFlow
         nodes={flowNodes}
         edges={flowEdges}
@@ -1791,7 +1884,7 @@ function GraphCanvas({
           </ControlButton>
           {generatedIds.size > 0 && (
             <ControlButton
-              onClick={() => setShowProvenance((v) => !v)}
+              onClick={() => setShowProvenance(!showProvenance)}
               title={t(showProvenance ? "panes.graphProvenanceHide" : "panes.graphProvenanceShow")}
               aria-label={t("panes.graphProvenanceShow")}
               aria-pressed={showProvenance}
@@ -1812,6 +1905,7 @@ function GraphCanvas({
           </ControlButton>
         </Controls>
       </ReactFlow>
+      </MarkPlacesContext.Provider>
       {hoveredNodeId && hoveredNodeId !== focusedId /* [view2] its card is pinned */ && !dragging && (
         <NodeCard
           key={hoveredNodeId}

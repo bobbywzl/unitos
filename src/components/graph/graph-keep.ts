@@ -1,8 +1,8 @@
 // Where the reader was on the graph (WALK2-07), per project, in this tab:
 // the open side list, the expanded link, the Notes list's section and its
-// open note. The graph writes it as the reader moves, keeps it when the
-// reader leaves for a document (so Back finds the same view), and drops it on
-// an explicit close (✕, Escape). A view convenience only: losing it (a
+// open note, and the provenance switch. The graph writes it as the reader
+// moves, keeps it when the reader leaves for a document (so Back finds the
+// same view), and drops it on an explicit close (✕, Escape). A view convenience only: losing it (a
 // private window, cleared storage) loses no work.
 
 export type GraphKeep = {
@@ -10,6 +10,8 @@ export type GraphKeep = {
   linkId?: string | null;
   sectionId?: string | null;
   noteId?: string | null;
+  /** The provenance switch (WALK3-13). */
+  provenance?: boolean;
 };
 
 const KEY = (notebookId: string) => `unitos-graph-view:${notebookId}`;
@@ -26,7 +28,13 @@ export function readGraphKeep(notebookId: string | undefined): GraphKeep {
     const { at, ...keep } = parsed as GraphKeep & { at?: unknown };
     if (typeof at !== "number" || Date.now() - at > FRESH_MS) return {};
     const str = (v: unknown) => (typeof v === "string" ? v : null);
-    return { list: str(keep.list), linkId: str(keep.linkId), sectionId: str(keep.sectionId), noteId: str(keep.noteId) };
+    return {
+      list: str(keep.list),
+      linkId: str(keep.linkId),
+      sectionId: str(keep.sectionId),
+      noteId: str(keep.noteId),
+      provenance: keep.provenance === true,
+    };
   } catch {
     return {};
   }

@@ -7,11 +7,13 @@ import { useCollab } from "@/components/collab/collab-context";
 import { useLang, useT } from "@/components/lang-provider";
 import { replyTime } from "@/components/collab/reply-thread";
 import type { GeneratedDocumentView } from "@/lib/types";
+import { useGraphContent } from "@/components/graph/graph-content";
 
 // Generated content (SPEC.md §22): every document Stitch wrote for the
 // project, newest first, each with the command that made it. The list
 // folds beside the graph's canvas like the recommended links. A row opens
-// the document in the reader.
+// the document in the reader. The switch at the top draws where generated
+// documents come from (the provenance; the zoom stack's page button too).
 
 export function GeneratedList({
   notebookId,
@@ -26,6 +28,7 @@ export function GeneratedList({
   const lang = useLang();
   const router = useRouter();
   const { canEdit } = useCollab();
+  const { showProvenance, setShowProvenance } = useGraphContent();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,9 +54,32 @@ export function GeneratedList({
   return (
     <aside
       data-track-surface="sidebar"
-      className="menu-in absolute top-3 right-3 bottom-3 z-10 flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 shadow-float backdrop-blur-md max-[999px]:bottom-16"
+      data-graph-side-list="generated"
+      id="graph-list-generated"
+      tabIndex={-1}
+      aria-label={t("stitch.generated")}
+      className="menu-in absolute top-3 right-3 bottom-3 z-10 flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 pb-24 shadow-float outline-none backdrop-blur-md max-[999px]:bottom-16 max-[999px]:pb-4"
     >
       <p className="text-[11px] text-sand-500">{t("stitch.generatedDesc")}</p>
+      {generated.length > 0 && (
+        <button
+          role="switch"
+          aria-checked={showProvenance}
+          onClick={() => setShowProvenance(!showProvenance)}
+          data-track="graph-provenance-switch"
+          className="flex items-center gap-2 self-start rounded-full px-1 py-0.5 text-[12.5px] text-sand-700 hover:text-clay-800"
+        >
+          <span
+            aria-hidden
+            className={`relative h-4 w-7 shrink-0 rounded-full transition-colors ${showProvenance ? "bg-clay" : "bg-sand-300"}`}
+          >
+            <span
+              className={`absolute top-0.5 size-3 rounded-full bg-card transition-[left] ${showProvenance ? "left-3.5" : "left-0.5"}`}
+            />
+          </span>
+          {t("stitch.generatedProvenance")}
+        </button>
+      )}
       {error && <p className="text-[13px] text-red-600">{error}</p>}
       {generated.length === 0 && (
         <p className="text-[13px] text-sand-600">{t("stitch.generatedEmpty")}</p>

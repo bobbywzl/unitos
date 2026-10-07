@@ -10,7 +10,7 @@ import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { ReplyThread } from "@/components/collab/reply-thread";
 import { LinkIcon, PageIcon, SparkleIcon, UnlinkIcon } from "@/components/icons";
-import { useT } from "@/components/lang-provider";
+import { useLang, useT } from "@/components/lang-provider";
 import { Presence } from "@/components/presence";
 import { StopPill } from "@/components/thinking";
 import { GeneratedList } from "@/components/graph/generated-list";
@@ -49,6 +49,11 @@ type SideList = "recommended" | "generated" | "notes" | "links" | "link" | "docu
 const SIDE_LISTS: SideList[] = ["recommended", "generated", "notes", "links", "link", "document", "find"];
 function sideList(value: string | null | undefined): SideList {
   return SIDE_LISTS.find((l) => l === value) ?? null;
+}
+
+/** The id of a side list, for its pill's aria-controls. */
+function sideListId(list: Exclude<SideList, null>): string {
+  return `graph-list-${list}`;
 }
 
 function useWindowWidth(): number {
@@ -94,6 +99,7 @@ export function GraphOverlay({
   gists,
   loading = false,
   loadFailed,
+  stale = null,
 }: {
   notebookId: string;
   activeDocumentId: string | null;
@@ -115,8 +121,11 @@ export function GraphOverlay({
   gists?: Record<string, string>;
   loading?: boolean;
   loadFailed?: () => void;
+  /** The last refetch failed: the graph shows the data as of `at` (REV3-10). */
+  stale?: { at: number; retry: () => void } | null;
 }) {
   const t = useT();
+  const lang = useLang();
   const router = useRouter();
   const { canEdit } = useCollab();
   const leave = onNavigate ?? onClose;
@@ -132,8 +141,9 @@ export function GraphOverlay({
   // The open list and link come back on Back from a document (WALK2-07).
   const [list, setListState] = useState<SideList>(() => sideList(readGraphKeep(notebookId).list));
   const [openLinkId, setOpenLinkId] = useState<string | null>(() => readGraphKeep(notebookId).linkId ?? null);
-  // The link panel's Back: to the Links list when it was opened there.
-  const [linkFromList, setLinkFromList] = useState(false);
+  // The link panel's Back: to the Links list or the node card it was
+  // opened from (VIEW3-03).
+  const [linkFrom, setLinkFrom] = useState<"links" | "document" | null>(null);
   const setList = useCallback(
     (next: SideList | ((prev: SideList) => SideList)) => {
       setListState((prev) => {
@@ -144,14 +154,56 @@ export function GraphOverlay({
     },
     [notebookId],
   );
+  // Focus (WALK3-06): a list opened from a pill or a row takes the focus,
+  // and gives it back to that pill or row when it closes.
+  const opener = useRef<HTMLElement | null>(null);
+  const linkOpener = useRef<HTMLElement | null>(null);
+  const focusList = useRef<SideList>(null);
   const openLink = useCallback(
-    (linkId: string, fromList: boolean) => {
+    (linkId: string, from: "links" | "document" | null) => {
+      if (from && document.activeElement instanceof HTMLElement) linkOpener.current = document.activeElement;
       setOpenLinkId(linkId);
-      setLinkFromList(fromList);
+      setLinkFrom(from);
       setList("link");
+      focusList.current = "link";
       writeGraphKeep(notebookId, { linkId });
     },
     [notebookId, setList],
+  );
+  // The Links list opened while a card is pinned shows that document's
+  // links (WALK3-15).
+  const [linksFilter, setLinksFilter] = useState("");
+  const togglePill = (name: Exclude<SideList, null>, e: { currentTarget: HTMLElement }) => {
+    opener.current = e.currentTarget;
+    focusList.current = name;
+    if (name === "links") setLinksFilter(list === "document" && focusNode ? focusNode.title : "");
+    setList((v) => (v === name || (name === "links" && v === "link") ? null : name));
+  };
+  // The pill row scrolls sideways when the pills do not fit: a fade at its
+  // right edge says more pills are there (WALK3-07).
+  const pillRow = useRef<HTMLDivElement>(null);
+  const [pillMore, setPillMore] = useState(false);
+  const updatePillFade = useCallback(() => {
+    const el = pillRow.current;
+    if (el) setPillMore(el.scrollLeft + el.clientWidth < el.scrollWidth - 2);
+  }, []);
+  useEffect(() => {
+    const el = pillRow.current;
+    if (!el) return;
+    const observer = new ResizeObserver(updatePillFade);
+    observer.observe(el);
+    for (const child of el.children) observer.observe(child);
+    return () => observer.disconnect();
+  }, [updatePillFade]);
+  // The provenance of generated documents: drawn, counted, and listed on
+  // request, and kept with the view for Back (WALK3-13).
+  const [showProvenance, setShowProvenanceState] = useState(() => readGraphKeep(notebookId).provenance === true);
+  const setShowProvenance = useCallback(
+    (show: boolean) => {
+      setShowProvenanceState(show);
+      writeGraphKeep(notebookId, { provenance: show });
+    },
+    [notebookId],
   );
   const linkById = useMemo(() => new Map(edges.flatMap((e) => e.links.map((l) => [l.id, l] as const))), [edges]);
   const openLinkView = list === "link" && openLinkId ? (linkById.get(openLinkId) ?? null) : null;
@@ -161,6 +213,13 @@ export function GraphOverlay({
   const nodeIdList = useMemo(() => nodes.map((n) => n.id), [nodes]);
   const view2 = useGraphContentState({ notebookId, nodeIds: nodeIdList, gists: gists ?? NO_GISTS, list, setList });
   const { onProposed } = view2;
+  const generatedCommands = useMemo(() => new Map(generated.map((g) => [g.id, g.command ?? null])), [generated]);
+  const recommendedLinkIds = useMemo(() => new Set(recommended.map((l) => l.id)), [recommended]);
+  const openLinkFromCard = useCallback((linkId: string) => openLink(linkId, "document"), [openLink]);
+  const content = useMemo(
+    () => ({ ...view2.content, recommendedLinkIds, showProvenance, setShowProvenance, generatedCommands, openLinkFromCard }),
+    [view2.content, recommendedLinkIds, showProvenance, setShowProvenance, generatedCommands, openLinkFromCard],
+  );
   const focusNode = view2.focusedId ? (nodes.find((n) => n.id === view2.focusedId) ?? null) : null;
   const [sheetHeight, setSheetHeight] = useState(0);
   // [/view2]
@@ -168,6 +227,23 @@ export function GraphOverlay({
   // gone: no panel, no list.
   const shownList: SideList =
     (list === "link" && !openLinkView) || (list === "document" && !focusNode) ? null : list;
+  // Into the list that opened, back to its opener when it closes.
+  const lastShown = useRef<SideList>(shownList);
+  useEffect(() => {
+    const prev = lastShown.current;
+    lastShown.current = shownList;
+    if (shownList && focusList.current === shownList) {
+      focusList.current = null;
+      requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>(`[data-graph-side-list="${shownList}"]`)?.focus());
+      return;
+    }
+    if (prev && prev !== "document" && prev !== "find" && !shownList) {
+      const active = document.activeElement;
+      const lost = !active || active === document.body || (active instanceof Element && active.closest("[data-graph-side-list]"));
+      const back = [prev === "link" ? linkOpener.current : null, opener.current].find((el) => el?.isConnected);
+      if (lost && back) back.focus();
+    }
+  }, [shownList]);
   // The Stitch box's fold: open on a wide screen, folded on a phone; an open
   // list folds it under WIDE, and opening the box there closes the list.
   const [boxOpen, setBoxOpen] = useState(() => typeof window === "undefined" || window.innerWidth >= NARROW);
@@ -357,6 +433,7 @@ export function GraphOverlay({
   const acceptedLinks = edges.reduce((sum, e) => sum + e.accepted, 0);
   const generatedCount = nodes.filter((n) => n.kind === "generated").length;
   const ownDocs = nodes.length - generatedCount;
+  const generatedNodeIds = useMemo(() => nodes.filter((n) => n.kind === "generated").map((n) => n.id), [nodes]);
   const allLinks = edges.reduce((sum, e) => sum + e.links.filter((l) => !l.recommended && !l.provenance).length, 0);
   const anyLink = edges.some((e) => e.accepted + e.recommended > 0);
   const emptyCard = loading
@@ -382,7 +459,7 @@ export function GraphOverlay({
 
   return (
     <GraphNotesProvider notebookId={notebookId} nodes={nodes} input={notes} onClose={close} onNavigate={leave}>
-    <GraphContentProvider value={view2.content}>
+    <GraphContentProvider value={content}>
     <div
       ref={dialogRef}
       role="dialog"
@@ -431,74 +508,22 @@ export function GraphOverlay({
             stays in view; below they take a line of their own under the
             title and the counts, one row that scrolls sideways. A pill
             never wraps its label. */}
-        <div className="flex min-w-0 items-center gap-3 overflow-x-auto py-0.5 [scrollbar-width:thin] min-[901px]:flex-1 min-[901px]:[&>*:first-child]:ml-auto max-[900px]:order-1 max-[900px]:-mx-5 max-md:-mx-3 max-[900px]:flex max-[900px]:w-[calc(100%+40px)] max-md:w-[calc(100%+24px)] max-[900px]:items-center max-[900px]:gap-2 max-[900px]:overflow-x-auto max-[900px]:px-5 max-md:px-3 max-[900px]:pb-0.5 [&>button]:shrink-0 [&>button]:whitespace-nowrap">
+        <div
+          ref={pillRow}
+          onScroll={updatePillFade}
+          data-more={pillMore ? "" : undefined}
+          className="graph-pill-row flex min-w-0 items-center gap-3 overflow-x-auto py-0.5 [scrollbar-width:thin] min-[901px]:flex-1 min-[901px]:[&>*:first-child]:ml-auto max-[900px]:order-1 max-[900px]:-mx-5 max-md:-mx-3 max-[900px]:flex max-[900px]:w-[calc(100%+40px)] max-md:w-[calc(100%+24px)] max-[900px]:items-center max-[900px]:gap-2 max-[900px]:overflow-x-auto max-[900px]:px-5 max-md:px-3 max-[900px]:pb-0.5 [&>button]:shrink-0 [&>button]:whitespace-nowrap"
+        >
           {nodes.length >= 2 && <FindBox find={view2.find} /> /* [view2] */}
-          {canEdit && nodes.length >= 2 && (
-            <button
-              onClick={() => void scan()}
-              data-track={scanning ? "graph-recommend-links-stop" : "graph-recommend-links"}
-              disabled={!scanning && scanLeft <= 0}
-              data-tip={
-                scanning
-                  ? t("panes.recommendScanStopTitle")
-                  : scanLeft > 0
-                    ? t("panes.recommendScanTitle", { left: scanLeft })
-                    : t("panes.recommendScanSpentTitle")
-              }
-              className="flex items-center gap-1.5 rounded-full border border-line px-3.5 py-1.5 text-[13px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
-            >
-              <SparkleIcon size={13} />
-              {scanning ? t("panes.recommendScanRunning") : t("panes.recommendScan")}
-              {/* The runs left this month: plain text, never a count chip,
-                  so it does not read as a number of links (GR-07). */}
-              {scanning ? (
-                <StopPill />
-              ) : (
-                <span className="text-[11.5px] tabular-nums text-sand-500">
-                  · {t("panes.recommendScanLeft", { left: scanLeft })}
-                </span>
-              )}
-            </button>
-          )}
+          {/* The lists by use: Notes and Links first (WALK3-07). Below
+              1400px the less used pills show their mark and count, their
+              name in the tooltip. */}
+          <NotesListToggle open={list === "notes"} onToggle={(e) => togglePill("notes", e)} controls={sideListId("notes")} />
           <button
-            onClick={() => setList((v) => (v === "recommended" ? null : "recommended"))}
-            data-track="graph-recommended-links"
-            aria-expanded={listOpen}
-            data-tip={t("panes.recommendedLinksToggleTitle")}
-            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 ${
-              listOpen
-                ? "border-line bg-clay-100 text-clay-800"
-                : recommended.length > 0
-                  ? "border-dashed border-clay-400 text-clay-800"
-                  : "border-line text-sand-600"
-            }`}
-          >
-            <UnlinkIcon size={13} />
-            {t("panes.recommendedLinks")}
-            <span className="rounded-full bg-sand-200 px-1.5 text-[11px] font-semibold tabular-nums text-sand-700">
-              {recommended.length}
-            </span>
-          </button>
-          <button
-            onClick={() => setList((v) => (v === "generated" ? null : "generated"))}
-            data-track="graph-generated"
-            aria-expanded={list === "generated"}
-            data-tip={t("stitch.generatedToggleTitle")}
-            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 ${
-              list === "generated" ? "border-line bg-clay-100 text-clay-800" : "border-line text-sand-600"
-            }`}
-          >
-            <PageIcon size={13} />
-            {t("stitch.generated")}
-            <span className="rounded-full bg-sand-200 px-1.5 text-[11px] font-semibold tabular-nums text-sand-700">
-              {generated.length}
-            </span>
-          </button>
-          <NotesListToggle open={list === "notes"} onToggle={() => setList((v) => (v === "notes" ? null : "notes"))} />
-          <button
-            onClick={() => setList((v) => (v === "links" ? null : "links"))}
+            onClick={(e) => togglePill("links", e)}
             data-track="graph-links"
             aria-expanded={list === "links" || list === "link"}
+            aria-controls={sideListId("links")}
             data-tip={t("panes.graphLinksToggleTitle")}
             className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 ${
               list === "links" || list === "link" ? "border-line bg-clay-100 text-clay-800" : "border-line text-sand-600"
@@ -510,6 +535,69 @@ export function GraphOverlay({
               {allLinks}
             </span>
           </button>
+          <button
+            onClick={(e) => togglePill("recommended", e)}
+            data-track="graph-recommended-links"
+            aria-expanded={listOpen}
+            aria-controls={sideListId("recommended")}
+            data-tip={`${t("panes.recommendedLinks")}: ${t("panes.recommendedLinksToggleTitle")}`}
+            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 max-[1399px]:px-2.5 ${
+              listOpen
+                ? "border-line bg-clay-100 text-clay-800"
+                : recommended.length > 0
+                  ? "border-dashed border-clay-400 text-clay-800"
+                  : "border-line text-sand-600"
+            }`}
+          >
+            <UnlinkIcon size={13} />
+            <span className="max-[1399px]:sr-only">{t("panes.recommendedLinks")}</span>
+            <span className="rounded-full bg-sand-200 px-1.5 text-[11px] font-semibold tabular-nums text-sand-700">
+              {recommended.length}
+            </span>
+          </button>
+          <button
+            onClick={(e) => togglePill("generated", e)}
+            data-track="graph-generated"
+            aria-expanded={list === "generated"}
+            aria-controls={sideListId("generated")}
+            data-tip={`${t("stitch.generated")}: ${t("stitch.generatedToggleTitle")}`}
+            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 max-[1399px]:px-2.5 ${
+              list === "generated" ? "border-line bg-clay-100 text-clay-800" : "border-line text-sand-600"
+            }`}
+          >
+            <PageIcon size={13} />
+            <span className="max-[1399px]:sr-only">{t("stitch.generated")}</span>
+            <span className="rounded-full bg-sand-200 px-1.5 text-[11px] font-semibold tabular-nums text-sand-700">
+              {generated.length}
+            </span>
+          </button>
+          {canEdit && nodes.length >= 2 && (
+            <button
+              onClick={() => void scan()}
+              data-track={scanning ? "graph-recommend-links-stop" : "graph-recommend-links"}
+              disabled={!scanning && scanLeft <= 0}
+              data-tip={
+                scanning
+                  ? t("panes.recommendScanStopTitle")
+                  : scanLeft > 0
+                    ? `${t("panes.recommendScan")}: ${t("panes.recommendScanTitle", { left: scanLeft })}`
+                    : t("panes.recommendScanSpentTitle")
+              }
+              className="flex items-center gap-1.5 rounded-full border border-line px-3.5 py-1.5 text-[13px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40 max-[1399px]:px-2.5"
+            >
+              <SparkleIcon size={13} />
+              <span className="max-[1399px]:sr-only">{scanning ? t("panes.recommendScanRunning") : t("panes.recommendScan")}</span>
+              {/* The runs left this month: plain text, never a count chip,
+                  so it does not read as a number of links (GR-07). */}
+              {scanning ? (
+                <StopPill />
+              ) : (
+                <span className="text-[11.5px] tabular-nums text-sand-500 max-[1399px]:sr-only">
+                  · {t("panes.recommendScanLeft", { left: scanLeft })}
+                </span>
+              )}
+            </button>
+          )}
         </div>
         <button
           onClick={close}
@@ -523,6 +611,20 @@ export function GraphOverlay({
       </div>
       {scanNotice && (
         <p className="border-b border-line px-5 py-2 text-xs text-sand-600">{scanNotice}</p>
+      )}
+      {stale && (
+        // A refetch failed: the graph shows what it had, and says so (REV3-10).
+        <p role="status" data-graph-stale className="flex items-center gap-3 border-b border-line px-5 py-2 text-xs text-sand-600">
+          {t("graphView.staleNotice", {
+            time: new Date(stale.at).toLocaleTimeString(lang === "zh" ? "zh-CN" : "en-US", { hour: "numeric", minute: "2-digit" }),
+          })}
+          <button
+            onClick={stale.retry}
+            className="rounded-full border border-line px-2.5 py-0.5 text-[11.5px] text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+          >
+            {t("graphView.loadRetry")}
+          </button>
+        </p>
       )}
       <div className="relative min-h-0 flex-1">
         {loading ? null : loadFailed ? (
@@ -554,7 +656,7 @@ export function GraphOverlay({
             citedIds={citedIds}
             onClearCited={clearCited}
             expandedLinkId={openLinkView?.id ?? null}
-            onExpandLink={(linkId) => openLink(linkId, false)}
+            onExpandLink={(linkId) => openLink(linkId, null)}
           />
         )}
         {/* One document, or no link yet: what to do next (GR-08). */}
@@ -598,7 +700,8 @@ export function GraphOverlay({
             edges={edges}
             titleOf={titleOf}
             openLinkId={openLinkId}
-            onOpen={(l) => openLink(l.id, true)}
+            onOpen={(l) => openLink(l.id, "links")}
+            initialFilter={linksFilter}
             onClose={() => setList(null)}
           />
         )}
@@ -608,7 +711,18 @@ export function GraphOverlay({
           <LinkPanel
             key={openLinkView.id}
             link={openLinkView}
-            onBack={linkFromList ? () => setList("links") : undefined}
+            onBack={
+              linkFrom
+                ? () => {
+                    // Back where the link was opened, with the focus on its row.
+                    const from = linkFrom;
+                    setList(from);
+                    const row = from === "links" ? `[data-graph-links-row="${openLinkView.id}"]` : `[data-graph-card-link="${openLinkView.id}"]`;
+                    requestAnimationFrame(() => requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>(row)?.focus()));
+                  }
+                : undefined
+            }
+            backLabel={linkFrom === "document" ? t("graphView.cardBack") : undefined}
             onClose={() => setList(null)}
             onOpenDocument={leave}
           />
@@ -635,7 +749,8 @@ export function GraphOverlay({
             find={view2.find}
             nodes={nodes}
             canPick={canEdit}
-            onPickAll={(ids) => setPickedIds(new Set(ids))}
+            picked={selectedIds}
+            onPickAll={(ids) => setPickedIds((prev) => new Set([...prev, ...ids]))}
             onAsk={(text) => {
               view2.askStitch(text);
               if (window.innerWidth < WIDE) {
@@ -667,7 +782,7 @@ export function GraphOverlay({
             <StitchBox
               notebookId={notebookId}
               nodes={nodes}
-              generatedIds={generated.map((g) => g.id)}
+              generatedIds={generatedNodeIds}
               selectedIds={selectedIds}
               picking={picking}
               onPickingChange={setPicking}
@@ -752,7 +867,11 @@ export function RecommendedLinkList({
   return (
     <aside
       data-track-surface="sidebar"
-      className="menu-in absolute top-3 right-3 bottom-3 z-10 flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 shadow-float backdrop-blur-md max-[999px]:bottom-16"
+      data-graph-side-list="recommended"
+      id="graph-list-recommended"
+      tabIndex={-1}
+      aria-label={t("panes.recommendedLinks")}
+      className="menu-in absolute top-3 right-3 bottom-3 z-10 flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 pb-24 shadow-float outline-none backdrop-blur-md max-[999px]:bottom-16 max-[999px]:pb-4"
     >
       {shown.length > 0 && <p className="text-[11px] text-sand-500">{t("panes.recommendedLinksDesc")}</p>}
       {errorText && <p className="text-[13px] text-red-600">{errorText}</p>}

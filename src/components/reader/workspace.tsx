@@ -357,6 +357,28 @@ export function Workspace({
     url.searchParams.delete("graph");
     window.history.replaceState(null, "", withoutGraphParams(url)); // [view2]
   }, []);
+  // M (map) opens the graph from anywhere in the workspace (WALK3-06): the
+  // rail's Graph is the last stop of a long tab order. Never while typing (a
+  // text box, a note, the page editor), never with a modifier, so no browser
+  // key is taken; G, J, K and E belong to the pending queue (use-outline.ts).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "m" && e.key !== "M") return;
+      if (e.defaultPrevented || e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || graphOpen) return;
+      const target = e.target;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && (target.isContentEditable || target.closest("[role=dialog], video, audio")))
+      )
+        return;
+      e.preventDefault();
+      openGraph();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [graphOpen, openGraph]);
   // A document opened from the graph: the URL already moved on, and the
   // graph's entry stays behind it for Back.
   const leaveGraph = useCallback(() => {
@@ -954,6 +976,7 @@ export function Workspace({
             onClick={openGraph}
             data-track="graph"
             aria-label={t("panes.graph")}
+            aria-keyshortcuts="M"
             data-tip={t("panes.graphTitle")}
             className={RAIL_BUTTON}
           >
