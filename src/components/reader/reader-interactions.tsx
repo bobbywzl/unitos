@@ -1006,11 +1006,12 @@ type AnnotationCard = {
 const plural = (n: number) => (n === 1 ? "" : "s");
 
 // A side card never covers a word (SPEC.md §6): it is 260-320 wide and
-// keeps 12px from the words and 8px from the pane's edge.
+// keeps 26px from the words — the marks' chips stand in that margin
+// (block-view.tsx data-margin-chip) — and 8px from the pane's edge.
 const CARD_MIN = 260;
 const CARD_MAX = 320;
 const CARD_EDGE = 8;
-const CARD_WORDS_GAP = 12;
+const CARD_WORDS_GAP = 26;
 
 /** The column as it stands at rest with no room made for cards: what
     measureSideCards reads, less the shift the pane made (--cards-room). */
@@ -5502,7 +5503,6 @@ export function ReaderInteractions({
       rightBase: containerRect.width - 130,
       cw: containerRect.width,
       ...(page ? { page: { geo: page } } : {}),
-      ...(page && headerBottom !== undefined ? { nearTop: !beside || lineTop - headerBottom < 96 } : {}),
     });
   }
   const openFigureToolsRef = useRef(openFigureTools);
@@ -8550,8 +8550,14 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           simplifyCard?.noteId === h.noteId ||
           (assistantChat?.noteId === h.noteId && !assistantEditing) ||
           commentCard?.noteId === h.noteId;
+        // A highlight that holds a comment (typed in its card) carries the
+        // comment's chip, so the reader sees which highlights hold one. A pure
+        // highlight stores its quote as its content.
+        const summary = h.color ? annotationsBySource[h.sourceId] : undefined;
+        const holdsComment = summary !== undefined && summary.content !== (summary.quotedText ?? "");
         return {
           ...h,
+          comment: h.comment || holdsComment,
           kind: "anchor" as const,
           tool,
           chipless: stored?.chipless ?? false,
@@ -9847,7 +9853,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           // The block reader docks it like a tool card (SPEC.md §6).
           data-side-card={richText ? undefined : "annotation"}
           onPointerDown={holdAnnotation(annotationCardReference)}
-          className={`pop-in absolute ${TOOL_LAYER} w-[300px] rounded-2xl border bg-card p-3 shadow-float${underView}`}
+          className={`group/hlcard pop-in absolute ${TOOL_LAYER} w-[300px] rounded-2xl border bg-card p-3 shadow-float${underView}`}
           // The card's border and label carry the annotation's kind color (SPEC.md §6).
           style={{
             top: annotationCard.top,
@@ -9911,20 +9917,49 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               }
             }}
             placeholder={t("reader.addCommentPlaceholder")}
-            rows={3}
-            className="w-full resize-none rounded-xl bg-sand-100 px-2.5 py-2 text-[13px] outline-none placeholder:text-sand-500"
+            // One line at rest; the field grows while the reader writes.
+            rows={1}
+            className="field-sizing-content max-h-48 min-h-9 w-full resize-none rounded-xl bg-sand-100 px-2.5 py-2 text-[13px] outline-none placeholder:text-sand-500 focus:min-h-[4.5rem]"
           />
           <div className="mt-2 flex items-center justify-between">
-            <button
-              onClick={() => void deleteAnnotation()}
-              data-track="annotation-delete"
-              data-tip={annotationCard.kind === "highlight" ? t("reader.deleteHighlightTitle") : t("reader.deleteCommentTitle")}
-              disabled={annotationCard.busy}
-              className="text-xs font-semibold text-red-500 hover:text-red-700 disabled:opacity-40"
+            <span className="flex items-center gap-3">
+              <button
+                onClick={() => void deleteAnnotation()}
+                data-track="annotation-delete"
+                data-tip={annotationCard.kind === "highlight" ? t("reader.deleteHighlightTitle") : t("reader.deleteCommentTitle")}
+                disabled={annotationCard.busy}
+                className="text-xs font-semibold text-red-500 hover:text-red-700 disabled:opacity-40"
+              >
+                {t("common.delete")}
+              </button>
+              {/* A link across texts starts from the highlight: the next
+                  words the reader selects, here or in another text, close it. */}
+              {annotationCard.kind === "highlight" && (
+                <button
+                  onClick={(e) => {
+                    window.dispatchEvent(
+                      new CustomEvent("dissect:start-link", {
+                        detail: { sourceId: annotationCard.sourceId, origin: e.currentTarget },
+                      }),
+                    );
+                    setAnnotationCard(null);
+                  }}
+                  data-track="link-chip"
+                  aria-label={t("panes.linkToOtherTexts")}
+                  data-tip={t("panes.linkToOtherTexts")}
+                  className="flex size-6 items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+                >
+                  <UnlinkIcon size={12} />
+                </button>
+              )}
+            </span>
+            {/* The mic and Save show once the reader writes: a card opened to
+                recolor or delete holds no dead buttons. */}
+            <span
+              className={`items-center gap-1.5 ${
+                annotationCard.draft.trim() !== annotationCard.saved.trim() ? "flex" : "hidden group-focus-within/hlcard:flex"
+              }`}
             >
-              {t("common.delete")}
-            </button>
-            <span className="flex items-center gap-1.5">
               <VoiceTypingButton track="annotation-voice-typing" />
               <button
                 onClick={() => void saveAnnotation()}

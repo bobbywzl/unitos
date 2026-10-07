@@ -441,6 +441,25 @@ mark[data-held] {
   width: auto;
   padding: 0 3px 0 2px;
 }
+/* In the block reader a mark's chip takes no room in the line (block-view.tsx
+   data-margin-chip): it stands right of the text column, level with the line
+   its mark ends on, as the page editor's chips do (docs/css/layer.css), so a
+   mark never pushes the words apart or splits a word. The chips on one line
+   stand side by side (--chip-at), and under each other where the margin is
+   narrow (--chip-down, layMarginChips). */
+[data-margin-chip] {
+  position: absolute;
+  left: calc(100% + 6px);
+  z-index: 1;
+  margin: 0.3em 0 0 !important;
+  vertical-align: baseline;
+  transform: translate(var(--chip-at, 0px), var(--chip-down, 0px));
+}
+@media print {
+  [data-margin-chip] {
+    display: none;
+  }
+}
 .tool-plus {
   gap: 1px;
 }

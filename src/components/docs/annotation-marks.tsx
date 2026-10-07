@@ -7,7 +7,7 @@ import { Mapping, StepMap } from "@tiptap/pm/transform";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import { Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { CommentIcon, LinkIcon, UnlinkIcon } from "@/components/icons";
+import { CommentIcon, LinkIcon } from "@/components/icons";
 import {
   CHAIN_BUTTON,
   EXTRACT_CHIP,
@@ -38,7 +38,7 @@ export type MarksMeta = { highlights: Record<string, Highlight[]>; t: TFunc; add
 
 export const annotationMarksKey = new PluginKey<DecorationSet>("docsAnnotationMarks");
 
-type Chip = { kind: "tool" | "comment" | "link-start" | "link-end" | "extract"; highlight: Highlight };
+type Chip = { kind: "tool" | "comment" | "highlight" | "link-end" | "extract"; highlight: Highlight };
 
 function chipWidget({ kind, highlight: h }: Chip, t: TFunc) {
   return () => {
@@ -68,15 +68,19 @@ function chipWidget({ kind, highlight: h }: Chip, t: TFunc) {
       look(CHAIN_BUTTON, h.linkTitle ? t("panes.linkedTo", { title: h.linkTitle }) : t("panes.linked"), "link");
       button.dataset.href = h.href ?? "";
       symbol = <LinkIcon size={10} />;
-    } else if (kind === "link-start") {
-      look(CHAIN_BUTTON, t("panes.linkToOtherTexts"), "start-link", "link-chip");
-      symbol = <UnlinkIcon size={10} />;
+    } else if (kind === "highlight") {
+      // A highlight's chip opens its card, also while the reader writes,
+      // where a click on the words places the caret. Its dot is the hue.
+      look(MARK_CHIP, t("panes.viewAnnotation"), "annotation", "highlight-chip");
+      symbol = (
+        <span aria-hidden className="block size-[7px] rounded-full" style={{ background: annotationKindColor("highlight", h.color ?? null) }} />
+      );
     } else {
       look(EXTRACT_CHIP, t("panes.extractOpenCard", { label: h.extractLabel ?? "" }), "extract", "extract-chip");
       button.textContent = h.extractLabel ?? "";
       button.dataset.extractId = h.extractId ?? "";
     }
-    if (kind === "tool" || kind === "comment" || kind === "link-start") button.dataset.sourceId = h.sourceId ?? "";
+    if (kind === "tool" || kind === "comment" || kind === "highlight") button.dataset.sourceId = h.sourceId ?? "";
     if (symbol) {
       const root = createRoot(button);
       root.render(symbol);
@@ -181,8 +185,10 @@ function chipsOf(h: Highlight): Chip[] {
   const chips: Chip[] = [];
   const live = h.kind === "anchor" && h.sourceId && !h.leaving;
   if (live && h.tool && !h.chipless) chips.push({ kind: "tool", highlight: h });
+  // A highlight carries the comment's chip when it holds a comment, else a
+  // chip in its hue; a link across texts starts from its card.
   if (live && h.comment) chips.push({ kind: "comment", highlight: h });
-  if (live && h.color) chips.push({ kind: "link-start", highlight: h });
+  else if (live && h.color) chips.push({ kind: "highlight", highlight: h });
   if (h.kind === "extract" && h.extractLabel) chips.push({ kind: "extract", highlight: h });
   if (h.kind === "link" && h.href) chips.push({ kind: "link-end", highlight: h });
   return chips;
@@ -700,12 +706,6 @@ export function openMarkAt(target: EventTarget | null, at?: { x: number; y: numb
   if (kind === "extract" && el.dataset.extractId) {
     window.dispatchEvent(
       new CustomEvent("dissect:extract-chip", { detail: { extractId: el.dataset.extractId, element: el } }),
-    );
-    return true;
-  }
-  if (kind === "start-link" && el.dataset.sourceId) {
-    window.dispatchEvent(
-      new CustomEvent("dissect:start-link", { detail: { sourceId: el.dataset.sourceId, origin: el } }),
     );
     return true;
   }
