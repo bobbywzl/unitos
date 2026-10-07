@@ -224,5 +224,17 @@ async function otherAccount() {
   check("account: another account's unsaved copy is not shown", !shown.includes("Another account's question"));
   const parked = await page.evaluate((k) => localStorage.getItem(`unitos-kept-chat:someone-else|${k.slice("unitos-kept-chat:".length)}`), key);
   check("account: it is parked under that account", Boolean(parked && parked.includes("Another account's question")));
+  // A copy with no account left by an earlier page has no known writer.
+  await page.evaluate(
+    (k) => localStorage.setItem(k, JSON.stringify({ turns: [{ role: "user", content: "Nobody's question" }], at: Date.now() - 60_000 })),
+    key,
+  );
+  await page.reload({ waitUntil: "networkidle" });
+  await page.locator('button[data-track="video-assistant"]').click();
+  await settle(2000);
+  const shownAgain = await page.locator('button[data-track="video-assistant-close"]').locator("xpath=ancestor::div[contains(@class,'shadow-float')][1]").innerText();
+  check("account: a copy with no account from an earlier page is not shown", !shownAgain.includes("Nobody's question"));
+  const unknown = await page.evaluate((k) => localStorage.getItem(`unitos-kept-chat:unknown|${k.slice("unitos-kept-chat:".length)}`), key);
+  check("account: it is parked under unknown", Boolean(unknown && unknown.includes("Nobody's question")));
   await page.locator('button[data-track="video-assistant-close"]').click();
 }

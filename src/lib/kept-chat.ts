@@ -56,7 +56,13 @@ const keyOf = (notebookId: string, place: string) => `${notebookId}|${place}`;
 // signed in on this browser never adopts it. A copy whose account is not the
 // one signed in is parked under that account's own name, so it saves when
 // that account comes back. A copy written before the server answered has no
-// account: it was typed in this page, by the account signed in now.
+// account: one written in this page was typed by the account signed in now;
+// one left by an earlier page has no known writer, so it is parked under
+// "unknown" and never saved as anyone's.
+// When this page started.
+const PAGE_START = Date.now();
+const UNKNOWN_ACCOUNT = "unknown";
+
 type LocalCopy = { turns: KeptTurn[]; at: number; account?: string };
 
 const parkedKey = (account: string, key: string) => `${account}|${key}`;
@@ -171,8 +177,9 @@ async function hydrate(entry: Entry) {
     entry.account = account;
     // Another account's copy is parked under its name; this account's
     // parked copy, if any, takes its place.
-    if (local?.account && local.account !== account) {
-      writeLocal(parkedKey(local.account, key), local.turns, local.account, local.at);
+    const owner = local ? (local.account ?? (local.at < PAGE_START ? UNKNOWN_ACCOUNT : account)) : null;
+    if (local && owner !== account) {
+      writeLocal(parkedKey(owner!, key), local.turns, owner, local.at);
       dropLocal(key);
       local = null;
     }
@@ -201,7 +208,7 @@ async function hydrate(entry: Entry) {
   } catch {
     // Offline or refused: what this browser holds stands, shown only when it
     // is not another account's; a later change saves it.
-    const mine = local && !local.account;
+    const mine = local && !local.account && local.at >= PAGE_START;
     if (mine && entry.version === 0) setState(entry, { turns: local!.turns });
     setState(entry, { hydrated: true });
     if (entry.version > 0 || mine) schedule(entry, 2000);
