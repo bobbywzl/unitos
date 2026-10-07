@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { AnnotationItem, LinkIn, LinkOut, SectionView } from "@/lib/types";
 import { api } from "@/lib/api";
+import { linkPath } from "@/lib/link-scope";
 import { LINK_KIND_VAR } from "@/lib/annotations/kind";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
@@ -217,13 +218,13 @@ export function AnnotationsPanel({
   }
 
   async function removeLink(id: string) {
-    await mutate(id, () => api(`/api/links/${id}`, "DELETE"));
+    await mutate(id, () => api(linkPath(id, notebookId), "DELETE"));
   }
 
   // What a link is about: typed after Close link, or here. Save stores it as
   // the link's reason; an empty box clears it.
   async function describeLink(id: string, reason: string) {
-    await mutate(id, () => api(`/api/links/${id}`, "PATCH", { reason }));
+    await mutate(id, () => api(linkPath(id, notebookId), "PATCH", { reason }));
   }
 
   const empty = annotations.length === 0 && acceptedOut.length === 0 && acceptedIn.length === 0;
@@ -398,7 +399,7 @@ export function AnnotationsPanel({
                   </button>
                 )}
               </div>
-              <ReplyThread target={{ docLinkId: l.id }} replies={l.replies} />
+              <ReplyThread target={{ docLinkId: l.id, notebookId }} replies={l.replies} />
             </div>
           ))}
           {acceptedIn.map((l) => (
@@ -436,7 +437,7 @@ export function AnnotationsPanel({
                   </button>
                 )}
               </div>
-              <ReplyThread target={{ docLinkId: l.id }} replies={l.replies} />
+              <ReplyThread target={{ docLinkId: l.id, notebookId }} replies={l.replies} />
             </div>
           ))}
         </div>

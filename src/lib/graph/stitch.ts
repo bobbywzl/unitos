@@ -918,7 +918,7 @@ export async function stitch(input: {
 
   // ── Links: block to block across docs, stored recommended ─────────────
   const existing = await db.docLink.findMany({
-    where: { fromDocumentId: { in: docs.map((m) => m.id) } },
+    where: { fromDocumentId: { in: docs.map((m) => m.id) }, OR: [{ notebookId: input.notebookId }, { notebookId: null }] },
     select: { fromBlockId: true, quotedText: true, toDocumentId: true, toBlockId: true },
   });
   const seen = new Set(existing.map((l) => `${l.fromBlockId}|${l.quotedText}|${l.toBlockId ?? l.toDocumentId}`));
@@ -936,6 +936,7 @@ export async function stitch(input: {
         recommended: true,
         reason: link.reason.trim(),
         createdById: input.userId,
+        notebookId: input.notebookId,
         fromDocumentId: from.documentId,
         fromBlockId: from.blockId,
         startOffset: from.startOffset,
@@ -1074,6 +1075,7 @@ async function materializeGenerated(input: {
             recommended: false,
             reason: null,
             createdById: input.userId,
+            notebookId: input.notebookId,
             fromDocumentId: doc.id,
             fromBlockId: block.id,
             startOffset: 0,

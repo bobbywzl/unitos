@@ -30,7 +30,7 @@ export function ReplyThread({
   replies,
   onChange,
 }: {
-  target: { noteId: string } | { blockEditId: string } | { docLinkId: string };
+  target: { noteId: string } | { blockEditId: string } | { docLinkId: string; notebookId?: string };
   replies: ReplyView[];
   /** Runs after a reply is sent, resolved, reopened, or deleted: a caller
       that loaded the replies itself loads them again. */

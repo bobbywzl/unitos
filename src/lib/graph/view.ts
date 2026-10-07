@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { projectLinks } from "@/lib/link-scope";
 import type { GeneratedDocumentView, GraphEdge, GraphNode, RecommendedLinkView } from "@/lib/types";
 
 // The graph's data (SPEC.md §13, §22): the nodes, the edges, the recommended
@@ -32,14 +33,16 @@ export async function listGenerated(notebookId: string): Promise<GeneratedDocume
 }
 
 /** The graph among a set of documents: nodes, one edge per linked pair, and
-    the recommended links awaiting Accept (SPEC.md §13). */
+    the recommended links awaiting Accept (SPEC.md §13). Only the project's
+    links, and the links with no project. */
 export async function documentsGraph(
   documents: { id: string; title: string; hasVideo: boolean }[],
+  notebookId: string,
 ): Promise<{ nodes: GraphNode[]; edges: GraphEdge[]; recommended: RecommendedLinkView[] }> {
   const ids = documents.map((d) => d.id);
   const [links, recommendedRows] = await Promise.all([
     db.docLink.findMany({
-      where: { fromDocumentId: { in: ids }, toDocumentId: { in: ids } },
+      where: { fromDocumentId: { in: ids }, toDocumentId: { in: ids }, ...projectLinks(notebookId) },
       orderBy: [{ recommended: "asc" }, { createdAt: "asc" }],
       select: {
         id: true,
@@ -54,7 +57,7 @@ export async function documentsGraph(
       },
     }),
     db.docLink.findMany({
-      where: { recommended: true, fromDocumentId: { in: ids }, toDocumentId: { in: ids } },
+      where: { recommended: true, fromDocumentId: { in: ids }, toDocumentId: { in: ids }, ...projectLinks(notebookId) },
       orderBy: { createdAt: "desc" },
       include: {
         fromDocument: { select: { title: true } },

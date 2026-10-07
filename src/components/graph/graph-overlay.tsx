@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GeneratedDocumentView, GraphEdge, GraphNode, RecommendedLinkView } from "@/lib/types";
 import { api } from "@/lib/api";
+import { linkPath } from "@/lib/link-scope";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { ReplyThread } from "@/components/collab/reply-thread";
@@ -380,7 +381,7 @@ export function RecommendedLinkList({
               <span className="ml-auto flex items-center gap-2">
                 <button
                   onClick={() =>
-                    void mutate(l.id, () => api(`/api/links/${l.id}`, "PATCH", { accept: true }))
+                    void mutate(l.id, () => api(linkPath(l.id, notebookId), "PATCH", { accept: true }))
                   }
                   data-track="link-accept"
                   disabled={busyId !== null}
@@ -390,7 +391,7 @@ export function RecommendedLinkList({
                   {t("panes.acceptLink")}
                 </button>
                 <button
-                  onClick={() => void mutate(l.id, () => api(`/api/links/${l.id}`, "DELETE"))}
+                  onClick={() => void mutate(l.id, () => api(linkPath(l.id, notebookId), "DELETE"))}
                   data-track="link-dismiss"
                   disabled={busyId !== null}
                   data-tip={t("panes.dismissLinkTitle")}
@@ -401,7 +402,7 @@ export function RecommendedLinkList({
               </span>
             )}
           </div>
-          <ReplyThread target={{ docLinkId: l.id }} replies={l.replies} />
+          <ReplyThread target={{ docLinkId: l.id, notebookId }} replies={l.replies} />
         </div>
         );
       })}

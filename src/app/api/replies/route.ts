@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { bumpDocument, bumpNotebook, documentAccess, noteAccess, peopleByIds } from "@/lib/collab";
+import { bumpDocument, bumpNotebook, documentAccess, linkAccess, noteAccess, peopleByIds } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { parseBody } from "@/lib/validate";
@@ -10,6 +10,9 @@ const createSchema = z
     noteId: z.string().min(1).optional(),
     blockEditId: z.string().min(1).optional(),
     docLinkId: z.string().min(1).optional(),
+    // With docLinkId: the project the reply is written in; a link of another
+    // project is not found there (SPEC.md §13).
+    notebookId: z.string().min(1).optional(),
     content: z.string().min(1).max(4000),
   })
   .refine(
@@ -68,10 +71,10 @@ export async function POST(req: Request) {
   if (data.docLinkId) {
     const link = await db.docLink.findUnique({
       where: { id: data.docLinkId },
-      select: { id: true, fromDocumentId: true },
+      select: { id: true, fromDocumentId: true, notebookId: true },
     });
     if (!link) return NextResponse.json({ error: t("api.linkNotFound") }, { status: 404 });
-    const access = await documentAccess(link.fromDocumentId, "editor");
+    const access = await linkAccess(link, "editor", data.notebookId);
     if (access instanceof NextResponse) return access;
     const reply = await db.reply.create({
       data: { docLinkId: link.id, userId: access.user.id, content: data.content.trim() },

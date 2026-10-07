@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { api } from "@/lib/api";
+import { linkPath } from "@/lib/link-scope";
 import { formatKind, type BlockKind, type FormatKind } from "@/lib/block-kind";
 import { definable, defineKey } from "@/lib/define";
 import { MARK_SWEPT_EVENT, type MarkSweptDetail } from "@/lib/mark-sweep";
@@ -4764,7 +4765,7 @@ export function ReaderInteractions({
     }
     setLinkCard({ ...card, busy: true });
     try {
-      await api(`/api/links/${card.linkId}`, "PATCH", { reason });
+      await api(linkPath(card.linkId, notebookId), "PATCH", { reason });
       setLinkReasons((prev) => ({ ...prev, [card.linkId]: reason }));
       setLinkCard(null);
       router.refresh();
@@ -5289,6 +5290,7 @@ export function ReaderInteractions({
     try {
       await flushLiveBlock(to.blockId);
       const created = await api<{ id: string }>("/api/links", "POST", {
+        notebookId,
         fromDocumentId: pending.fromDocumentId,
         toDocumentId: documentId,
         anchor: from,
@@ -6294,11 +6296,12 @@ export function ReaderInteractions({
               break;
             }
             const link = await api<{ id: string }>("/api/links", "POST", {
+              notebookId,
               fromDocumentId: documentId,
               toDocumentId: action.toDocumentId,
               anchor: action.anchor,
             });
-            undo.push({ description: action.description, run: () => api(`/api/links/${link.id}`, "DELETE") });
+            undo.push({ description: action.description, run: () => api(linkPath(link.id, notebookId), "DELETE") });
             break;
           }
           case "format_block": {

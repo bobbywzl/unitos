@@ -101,6 +101,88 @@ export async function documentAccess(
   return { user, role: best! };
 }
 
+// ── Links ───────────────────────────────────────────────────────────────────
+// A link is changed only in its own project (DocLink.notebookId, SPEC.md
+// §13); the reads are lib/link-scope.ts.
+
+/** Access gate for one link. A link of a project answers to the caller's role
+    there; a link with no project to the best role over its from-document.
+    `scope` is the project the request comes from: a link of another project
+    is not found there (404), and so is a link of a project the caller is not
+    in. */
+export async function linkAccess(
+  link: { notebookId: string | null; fromDocumentId: string },
+  min: NotebookRole,
+  scope?: string | null,
+): Promise<NotebookAccess | NextResponse> {
+  if (!link.notebookId) return documentAccess(link.fromDocumentId, min);
+  const notFound = async () => {
+    const t = await serverT();
+    return NextResponse.json({ error: t("api.linkNotFound") }, { status: 404 });
+  };
+  if (scope && scope !== link.notebookId) return notFound();
+  const access = await notebookAccess(link.notebookId, min);
+  if (access instanceof NextResponse && access.status === 404) return notFound();
+  return access;
+}
+
+/** A link with no project whose documents sit in projects of more than one
+    account: removing it would remove it for the others too, so only the
+    account that made it removes it (rule zero item 2). */
+export async function legacyLinkSharedAcrossAccounts(link: {
+  notebookId: string | null;
+  fromDocumentId: string;
+  toDocumentId: string;
+}): Promise<boolean> {
+  if (link.notebookId || !authEnabled()) return false;
+  const holders = await db.notebook.findMany({
+    where: {
+      AND: [
+        { documents: { some: { documentId: link.fromDocumentId } } },
+        { documents: { some: { documentId: link.toDocumentId } } },
+      ],
+    },
+    select: { userId: true },
+  });
+  return new Set(holders.map((h) => h.userId)).size > 1;
+}
+
+/** A document's edit history read from one project, without the LINK_ADD and
+    LINK_REMOVE edits of another project's links: meta.notebookId names the
+    link's project (edits since links carried one); an older LINK_ADD whose
+    link still exists answers by the link's project. An older edit that
+    tells neither keeps showing, as before. */
+export async function withoutOtherProjectLinkEdits<T extends { kind: string; meta: Prisma.JsonValue }>(
+  edits: T[],
+  notebookId: string,
+): Promise<T[]> {
+  const metaOf = (e: T) =>
+    (e.meta && typeof e.meta === "object" && !Array.isArray(e.meta) ? e.meta : {}) as Record<string, unknown>;
+  const isLinkEdit = (e: T) => e.kind === "LINK_ADD" || e.kind === "LINK_REMOVE";
+  const linkIds = [
+    ...new Set(
+      edits.flatMap((e) => {
+        const m = metaOf(e);
+        return isLinkEdit(e) && typeof m.notebookId !== "string" && typeof m.linkId === "string" ? [m.linkId] : [];
+      }),
+    ),
+  ];
+  const projectOf = new Map(
+    linkIds.length > 0
+      ? (
+          await db.docLink.findMany({ where: { id: { in: linkIds } }, select: { id: true, notebookId: true } })
+        ).map((l) => [l.id, l.notebookId] as const)
+      : [],
+  );
+  return edits.filter((e) => {
+    if (!isLinkEdit(e)) return true;
+    const m = metaOf(e);
+    const project =
+      typeof m.notebookId === "string" ? m.notebookId : typeof m.linkId === "string" ? projectOf.get(m.linkId) : null;
+    return !project || project === notebookId;
+  });
+}
+
 export async function sectionAccess(
   sectionId: string,
   min: NotebookRole,
