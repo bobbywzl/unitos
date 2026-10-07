@@ -15,6 +15,11 @@ import { StopPill } from "@/components/thinking";
 import { GeneratedList } from "@/components/graph/generated-list";
 import { LinkDetail } from "@/components/graph/link-detail";
 import { StitchBox } from "@/components/graph/stitch-box";
+// [graph-notes] The project's notes on the graph and the Notes list.
+import { GraphNotesProvider, type GraphNotesInput } from "@/components/graph/graph-notes";
+import { GraphNotesList, NotesListToggle } from "@/components/graph/graph-notes-list";
+import { LinkNoteComposer } from "@/components/graph/link-note-composer";
+// [/graph-notes]
 
 // reactflow loads only when the graph opens — the workspace bundle stays lean.
 const GraphView = dynamic(() => import("@/components/graph/graph-view"), {
@@ -37,6 +42,7 @@ export function GraphOverlay({
   recommended,
   generated,
   linkScansLeft,
+  notes,
   onClose,
 }: {
   notebookId: string;
@@ -47,6 +53,8 @@ export function GraphOverlay({
   generated: GeneratedDocumentView[];
   /** Runs of Recommend links this account has left this month. */
   linkScansLeft: number;
+  /** The project's notes, for the notes on the graph and the Notes list. */
+  notes?: GraphNotesInput;
   onClose: () => void;
 }) {
   const t = useT();
@@ -54,7 +62,7 @@ export function GraphOverlay({
   const { canEdit } = useCollab();
   // One folded list at a time beside the canvas: the recommended links, or
   // the generated content.
-  const [list, setList] = useState<"recommended" | "generated" | null>(null);
+  const [list, setList] = useState<"recommended" | "generated" | "notes" | null>(null);
   const listOpen = list === "recommended";
   // The documents picked for Stitch (SPEC.md §22): a ⇧-click on a node, or
   // any click while picking. Empty = every document. A node that leaves
@@ -140,6 +148,7 @@ export function GraphOverlay({
   }, [onClose]);
 
   return (
+    <GraphNotesProvider notebookId={notebookId} nodes={nodes} input={notes} onClose={onClose}>
     <div data-track-surface="sidebar" className="graph-overlay-in fixed inset-0 z-50 flex flex-col bg-paper">
       {/* Below md the row wraps, so the close button stays in view on a
           narrow screen. */}
@@ -214,6 +223,7 @@ export function GraphOverlay({
               {generated.length}
             </span>
           </button>
+          <NotesListToggle open={list === "notes"} onToggle={() => setList((v) => (v === "notes" ? null : "notes"))} />
         </div>
         <button
           onClick={onClose}
@@ -255,6 +265,9 @@ export function GraphOverlay({
           <GeneratedList notebookId={notebookId} generated={generated} onOpenDocument={onClose} />
         )}
         </Presence>
+        <Presence show={list === "notes"} exit="menu">
+        {list === "notes" && <GraphNotesList pickedIds={selectedIds} />}
+        </Presence>
         {nodes.length >= 2 && (
           <StitchBox
             notebookId={notebookId}
@@ -269,6 +282,7 @@ export function GraphOverlay({
         )}
       </div>
     </div>
+    </GraphNotesProvider>
   );
 }
 
@@ -351,6 +365,7 @@ export function RecommendedLinkList({
           {open && (
             <div className="mt-2">
               <LinkDetail link={l} onOpen={(documentId) => openDocument(documentId, l.id)} />
+              <LinkNoteComposer linkId={l.id} />
             </div>
           )}
           <div className="mt-2 flex flex-wrap items-center gap-2">

@@ -124,5 +124,36 @@ export async function documentsGraph(
       createdAt: r.createdAt.toISOString(),
     })),
   }));
-  return { nodes, edges: [...edgeByPair.values()], recommended };
+  return { nodes, edges: await withLinkReplies([...edgeByPair.values()]), recommended };
+}
+
+/** The edges with each link's replies, oldest first, and its author (SPEC.md
+    §13): the discussion the curve's list shows under an expanded link. One
+    query over the edges' links. */
+async function withLinkReplies(edges: GraphEdge[]): Promise<GraphEdge[]> {
+  const ids = edges.flatMap((e) => e.links.map((l) => l.id));
+  if (ids.length === 0) return edges;
+  const rows = await db.docLink.findMany({
+    where: { id: { in: ids } },
+    select: {
+      id: true,
+      createdById: true,
+      replies: {
+        orderBy: { createdAt: "asc" },
+        select: { id: true, content: true, userId: true, resolvedById: true, createdAt: true },
+      },
+    },
+  });
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  return edges.map((e) => ({
+    ...e,
+    links: e.links.map((l) => {
+      const row = byId.get(l.id);
+      return {
+        ...l,
+        createdById: row?.createdById ?? null,
+        replies: (row?.replies ?? []).map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })),
+      };
+    }),
+  }));
 }

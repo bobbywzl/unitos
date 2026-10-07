@@ -1,7 +1,7 @@
 "use client";
 
 import Link, { useLinkStatus } from "next/link";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type {
   CorpusDistillationView,
   GraphEdge,
@@ -187,6 +187,17 @@ export function Workspace({
     canEdit,
     activeDocumentId,
     noteScope === "document",
+  );
+  // The notes on the graph (SPEC.md §13): the whole project's outline, and
+  // the tray's own section choices and Accept / Reject.
+  const graphNotes = useMemo(
+    () => ({
+      sections: notebook.sections,
+      sectionChoices: actions.sectionChoices,
+      acceptNote: actions.acceptNote,
+      rejectNote: actions.rejectNote,
+    }),
+    [notebook.sections, actions.sectionChoices, actions.acceptNote, actions.rejectNote],
   );
   // Live sync: poll the corpus's rev, refresh when another account changes it,
   // and learn who else is here (SPEC.md gained this with sharing).
@@ -1016,6 +1027,7 @@ export function Workspace({
           recommended={graph.recommended}
           generated={graph.generated}
           linkScansLeft={graph.linkScansLeft}
+          notes={graphNotes}
           onClose={() => setGraphOpen(false)}
         />
       )}

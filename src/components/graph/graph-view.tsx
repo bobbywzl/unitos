@@ -24,6 +24,21 @@ import { FilmIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
 import { LinkDetail } from "@/components/graph/link-detail";
+// [graph-notes] The notes and the link replies on the graph (graph-notes.tsx).
+import {
+  CurveMarks,
+  NodeNotes,
+  NoteEdge,
+  PairNotes,
+  useNodeSectionDim,
+  useNoteOnlyEdges,
+  useNotesLit,
+  useSyncPinnedPair,
+  type NoteEdgeData,
+} from "@/components/graph/graph-notes";
+import { LinkReplies, LinkReplyCount } from "@/components/graph/link-replies";
+import { LinkNoteComposer } from "@/components/graph/link-note-composer";
+// [/graph-notes]
 
 // The corpus graph (SPEC.md §13; the release-edu canvas patterns): documents
 // as nodes on a pan/zoom canvas, links between them as swept curves. The more
@@ -90,15 +105,16 @@ type LinkEdgeData = {
 };
 
 function DocumentNode({ id, data }: NodeProps<DocumentNodeData>) {
-  const { litIds } = useContext(SpotlightContext);
+  const { litIds, hover } = useContext(SpotlightContext);
   const spotlight: Spotlight = litIds === null ? "base" : litIds.has(id) ? "lit" : "dim";
+  const sectionDim = useNodeSectionDim(id); // [graph-notes]
   const size = Math.min(32, 16 + data.degree * 2.5) + (data.active ? 2 : 0);
   const breatheDelay = `${(Math.abs(seeded(id, 5)) * 3).toFixed(2)}s`;
   const breatheDur = `${(3.2 + Math.abs(seeded(id, 9)) * 2).toFixed(2)}s`;
   return (
     <div
       className="flex w-36 flex-col items-center gap-1 transition-opacity duration-300"
-      style={{ opacity: spotlight === "dim" ? 0.15 : 1 }}
+      style={{ opacity: spotlight === "dim" ? 0.15 : sectionDim ? 0.35 : 1 }}
     >
       <Handle type="source" position={Position.Top} className="!pointer-events-none !h-1 !w-1 !opacity-0" style={{ top: 16 }} />
       <Handle type="target" position={Position.Top} className="!pointer-events-none !h-1 !w-1 !opacity-0" style={{ top: 16 }} />
@@ -124,6 +140,7 @@ function DocumentNode({ id, data }: NodeProps<DocumentNodeData>) {
       >
         {data.title}
       </span>
+      <NodeNotes documentId={id} hovered={hover?.nodeId === id} />
     </div>
   );
 }
@@ -174,8 +191,14 @@ function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data
       setBusyId(null);
     }
   }
-  const lit = hover?.nodeId ? source === hover.nodeId || target === hover.nodeId : hover?.edgeId === id;
-  const spotlight: Spotlight = hover === null ? "base" : lit ? "lit" : "dim";
+  // [graph-notes] A hovered note lights the curves between the documents it quotes.
+  const notesLit = useNotesLit();
+  const lit = hover
+    ? hover.nodeId
+      ? source === hover.nodeId || target === hover.nodeId
+      : hover.edgeId === id
+    : notesLit !== null && notesLit.has(source) && notesLit.has(target);
+  const spotlight: Spotlight = hover === null && notesLit === null ? "base" : lit ? "lit" : "dim";
   const count = data?.count ?? 1;
   const recommendedOnly = data?.recommendedOnly ?? false;
   const links = data?.links ?? [];
@@ -232,6 +255,7 @@ function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data
           </text>
         </g>
       )}
+      <CurveMarks pair={id} links={links} x={midX + bow / 2} y={midY} offset={count > 1 ? pillWidth / 2 : 0} />
       {listOpen && (
         <EdgeLabelRenderer>
           <div
@@ -278,6 +302,7 @@ function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data
                     {!open && l.toQuotedText && (
                       <span className="text-[11px] leading-snug text-sand-500">{clipWords(l.toQuotedText, 60)}</span>
                     )}
+                    <LinkReplyCount link={l} />
                   </button>
                   {recommended && (
                     <div className="flex flex-wrap items-center gap-1.5 px-2 pb-1.5">
@@ -311,11 +336,14 @@ function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data
                   {open && (
                     <div className="px-2 pt-1 pb-2">
                       <LinkDetail link={l} onOpen={(documentId) => openLink(l, documentId)} />
+                      <LinkReplies link={l} />
+                      <LinkNoteComposer linkId={l.id} />
                     </div>
                   )}
                 </div>
               );
             })}
+            <PairNotes pair={id} />
           </div>
         </EdgeLabelRenderer>
       )}
@@ -323,8 +351,14 @@ function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data
   );
 }
 
+// [graph-notes] A pair that only notes join: the sage dotted curve.
+function NoteEdgeHost(props: EdgeProps<NoteEdgeData>) {
+  const { hover, pinnedEdgeId, hoverEdge, scheduleClear } = useContext(SpotlightContext);
+  return <NoteEdge {...props} spotlight={{ hover, pinnedEdgeId, hoverEdge, scheduleClear }} />;
+}
+
 const nodeTypes = { document: DocumentNode };
-const edgeTypes = { link: LinkEdge };
+const edgeTypes = { link: LinkEdge, note: NoteEdgeHost };
 
 // Ring layout, linked documents adjacent: order nodes by a BFS walk over the
 // link graph (highest-degree first), so a pair's curve hugs the ring instead
@@ -441,6 +475,8 @@ function GraphCanvas({
     [router, notebookId, onOpenDocument],
   );
   const pinEdge = useCallback((edgeId: string) => setPinnedEdgeId(edgeId), []);
+  useSyncPinnedPair(pinnedEdgeId); // [graph-notes]
+  const notesLit = useNotesLit(); // [graph-notes]
   // Nothing hovered: a pinned curve keeps its pair in the spotlight.
   const shown = useMemo<HoverState>(
     () => hover ?? (pinnedEdgeId ? { edgeId: pinnedEdgeId } : null),
@@ -472,7 +508,7 @@ function GraphCanvas({
   // The hovered neighborhood: the node and its linked documents, or a curve's
   // two endpoints. Everything else dims.
   const litIds = useMemo(() => {
-    if (!shown) return null;
+    if (!shown) return notesLit; // [graph-notes] a hovered note's documents
     const lit = new Set<string>();
     if (shown.nodeId) {
       lit.add(shown.nodeId);
@@ -481,7 +517,7 @@ function GraphCanvas({
       for (const id of shown.edgeId.split("|")) lit.add(id);
     }
     return lit;
-  }, [shown, adjacency]);
+  }, [shown, adjacency, notesLit]);
 
   useEffect(() => {
     const mk = (n: GraphNode, position: { x: number; y: number }): FlowNode<DocumentNodeData> => ({
@@ -537,19 +573,29 @@ function GraphCanvas({
       });
       return;
     }
-    setFlowNodes(nodes.map((n) => mk(n, target(n))));
+    // [graph-notes] Each node keeps its measured size: a node without one
+    // hides its curves until it is measured again, which unmounts a curve's
+    // open list — an expanded link, a reply or a note being typed — on every
+    // refresh.
+    setFlowNodes((prev) => {
+      const size = new Map(prev.map((p) => [p.id, { width: p.width, height: p.height }]));
+      return nodes.map((n) => ({ ...mk(n, target(n)), ...size.get(n.id) }));
+    });
   }, [nodes, degree, breathing, layout, activeDocumentId, selectedIds, flow, setFlowNodes]);
 
-  const flowEdges = useMemo<FlowEdge<LinkEdgeData>[]>(
-    () =>
-      edges.map((e) => ({
+  const noteEdges = useNoteOnlyEdges(edges); // [graph-notes]
+  const flowEdges = useMemo<FlowEdge<LinkEdgeData | NoteEdgeData>[]>(
+    () => [
+      ...edges.map((e) => ({
         id: `${e.a}|${e.b}`,
         source: e.a,
         target: e.b,
         type: "link",
         data: { count: e.accepted + e.recommended, recommendedOnly: e.accepted === 0, links: e.links },
       })),
-    [edges],
+      ...noteEdges,
+    ],
+    [edges, noteEdges],
   );
 
   const spotlight = useMemo(
