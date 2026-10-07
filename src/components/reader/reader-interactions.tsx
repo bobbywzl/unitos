@@ -2130,6 +2130,19 @@ export function ReaderInteractions({
   const [assistantChat, setAssistantChat] = useState<AssistantChat | null>(null);
   const assistantChatRef = useRef(assistantChat);
   assistantChatRef.current = assistantChat;
+  // The card's box takes the focus when it replaces the box the reader typed
+  // in (the toolbar's, the bar's), and after Start side chat and Ask about
+  // this: the next words typed land in it, never on the page.
+  const [chatFocusTick, setChatFocusTick] = useState(0);
+  useEffect(() => {
+    if (!chatFocusTick) return;
+    const raf = requestAnimationFrame(() => {
+      // The conversation view's box when the view is open, else the card's.
+      const boxes = [...document.querySelectorAll<HTMLTextAreaElement>("textarea[data-chat-box]")];
+      (boxes.find((b) => !b.closest("[data-side-card]")) ?? boxes[0])?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [chatFocusTick]);
   // The assistant's bar at the bottom of the pane (SPEC.md §29).
   const [bar, setBar] = useState<AssistantBar | null>(null);
   // Highlighting an answer in the chat card (SPEC.md §7): Start side chat,
@@ -6894,18 +6907,30 @@ export function ReaderInteractions({
       // The reader may have moved on to other words while the answer ran:
       // their toolbar and selection stay. Only the toolbar that sent the
       // question closes.
+      // The reader still in its box goes on typing in the card's box.
+      const inBox =
+        popoverRef.current?.anchor === sent.anchor &&
+        !!document.activeElement?.closest("[data-selection-popover]");
       if (popoverRef.current?.anchor === sent.anchor) {
         setPopover(null);
         setSubmenu(null);
         window.getSelection()?.removeAllRanges();
       }
+      // The card opens beside the words where they are now; words the reader
+      // scrolled away from get a toast that brings the card and the words back.
+      const pane = containerRef.current;
+      const box = pane ? passageBox(pane, anchor) : null;
+      const inView =
+        !pane || !box || (box.bottom > pane.scrollTop + 24 && box.top < pane.scrollTop + pane.clientHeight - 24);
       // The answer landed, so the question's draft goes (SPEC.md §6, toolbar
       // drafts) — unless the box already holds a next question typed while
-      // this one ran: that one stays.
+      // this one ran: that one stays, or, with the reader in the box and the
+      // card opening, moves into the card's box, which keeps it as its draft.
       const typed = aiCommandRef.current.trim();
-      if (typed === "" || typed === command) {
+      const carried = inBox && inView && turn.noteId && typed && typed !== command ? aiCommandRef.current : "";
+      if (typed === "" || typed === command || carried) {
         clearToolbarDraft("assistant", documentId, anchor, command);
-        if (typed === command) setAiCommand("");
+        if (typed === command || carried) setAiCommand("");
       }
       // The conversation continues in a chat card docked beside the article.
       markFreshAnchor(anchor);
@@ -6918,17 +6943,12 @@ export function ReaderInteractions({
           { role: "user", content: command },
           { role: "assistant", content: turn.reply, suggestKey: turn.suggestKey },
         ],
-        input: "",
+        input: carried,
         busy: false,
       });
-      // The card opens beside the words where they are now; words the reader
-      // scrolled away from get a toast that brings the card and the words back.
-      const pane = containerRef.current;
-      const box = pane ? passageBox(pane, anchor) : null;
-      const inView =
-        !pane || !box || (box.bottom > pane.scrollTop + 24 && box.top < pane.scrollTop + pane.clientHeight - 24);
       if (inView) {
         setAssistantChat(chat(box?.top ?? sent.yTop));
+        if (inBox) setChatFocusTick((n) => n + 1);
       } else {
         showToast(
           t("reader.answerReady"),
@@ -7049,10 +7069,15 @@ export function ReaderInteractions({
   runBarRef.current = runBar;
 
   // The bar's conversation goes on in the chat card beside the words.
+  // Words typed in the bar while the command ran go into the card's box, and
+  // the reader in the bar goes on typing there.
   function barToCard(b: AssistantBar) {
+    const typed = barRef.current?.key === b.key ? barRef.current.input : "";
+    const inBar = !!document.activeElement?.closest("[data-assistant-bar]");
     setBar(null);
     const slot = claimSideSlot("assistant", b.yTop, b.anchor);
-    setAssistantChat({ anchor: b.anchor, noteId: b.noteId, ...slot, messages: b.messages, input: "", busy: false });
+    setAssistantChat({ anchor: b.anchor, noteId: b.noteId, ...slot, messages: b.messages, input: typed, busy: false });
+    if (inBar) setChatFocusTick((n) => n + 1);
   }
 
   // The bar never covers the words it acts on (SPEC.md §29): when it opens
@@ -7501,12 +7526,14 @@ export function ReaderInteractions({
         : c,
     );
     setChatCommentQuote(null);
+    setChatFocusTick((n) => n + 1);
   }
   function askAboutThisInChat() {
     const text = takeAnswerSelection();
     if (!text) return;
     setAssistantChat((c) => (c ? { ...c, quote: text } : c));
     setChatCommentQuote(null);
+    setChatFocusTick((n) => n + 1);
   }
   function openChatComment() {
     const text = takeAnswerSelection();
@@ -9193,6 +9220,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         }}
         placeholder={t(chat.busy ? "assistant.queuePlaceholder" : "reader.replyPlaceholder")}
         aria-label={t("reader.messageAssistant")}
+        data-chat-box=""
         className="field-sizing-content max-h-40 min-h-8 flex-1 resize-none rounded-xl bg-sand-100 px-3 py-1.5 text-[12.5px] outline-none placeholder:text-sand-500"
       />
       <VoiceTypingButton track="assistant-card-voice-typing" className="size-8" size={14} />

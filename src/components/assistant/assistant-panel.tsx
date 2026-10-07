@@ -601,6 +601,7 @@ export function AssistantPanel({
     setQuote(text);
     setCommentQuote(null);
     stickRef.current = true;
+    setFocusTick((n) => n + 1);
   }
   // Ask about this: the words ride into the next message of this thread.
   function askAboutThis() {
@@ -608,6 +609,7 @@ export function AssistantPanel({
     if (!text) return;
     setQuote(text);
     setCommentQuote(null);
+    setFocusTick((n) => n + 1);
   }
   function openComment() {
     const text = takeSelection();
@@ -938,6 +940,7 @@ export function AssistantPanel({
   // answer runs. The composer clears either way.
   function ask() {
     if (!composed) return;
+    if (document.activeElement === boxRef.current) setFocusTick((n) => n + 1);
     const message: OutgoingMessage = {
       content: quote ? quoteMessage(quote, question) : question.trim(),
       images: attachments.flatMap((a) =>
@@ -1157,6 +1160,13 @@ export function AssistantPanel({
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   }, [question]);
+  // The box keeps the focus when the first message swaps the resting layout
+  // for the conversation's, and takes it after Start side chat and Ask about
+  // this: the next words typed land in it, never on the page.
+  const [focusTick, setFocusTick] = useState(0);
+  useEffect(() => {
+    if (focusTick) boxRef.current?.focus({ preventScroll: true });
+  }, [focusTick]);
 
   // The thread follows the newest turn while the reader is at its foot; a
   // reader who scrolled up to read stays where they are.
