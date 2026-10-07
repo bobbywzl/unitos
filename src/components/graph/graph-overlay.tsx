@@ -445,6 +445,7 @@ export function GraphOverlay({
             <StitchBox
               notebookId={notebookId}
               nodes={nodes}
+              generatedIds={generated.map((g) => g.id)}
               selectedIds={selectedIds}
               picking={picking}
               onPickingChange={setPicking}

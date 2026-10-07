@@ -234,16 +234,30 @@ export const STITCH_SELECTED_BLOCKS = { question: 150, links: 300, page: 400 } a
 // this much skeleton, the groups at once, so no line goes unread and no
 // call reads more than a few documents' worth; the route pass runs first
 // only past STITCH_GROUPED_MAX of skeleton (about 300 articles). A question
-// past STITCH_SKELETON_BUDGET reads instead the lines ranked against it
-// (lib/graph/rank.ts), cut to STITCH_QUESTION_SKELETON: one call, not one
-// per group.
+// or a links command reads the groups up to STITCH_CUT_OVER of skeleton:
+// the groups' prefixes cache from the second command on, at about a fifth
+// of the price, which beats an uncached cut of a third of their size. Past
+// it, a question reads the lines ranked against it and the words of its
+// expansion (lib/graph/rank.ts, STITCH_EXPAND_*), cut to
+// STITCH_QUESTION_SKELETON, links to twice that: one call, not one per group.
 export const STITCH_SKELETON_GROUP = 15_000;
 export const STITCH_GROUPED_MAX = 300_000;
+export const STITCH_CUT_OVER = 100_000;
 export const STITCH_QUESTION_SKELETON = 20_000;
+export const STITCH_LINKS_SKELETON = 40_000;
+// The expansion (SPEC.md §22): one cheap call on the stitch-select model
+// writes the words a passage that answers would use — synonyms, the
+// translator's word, names, the field's terms — so the ranked cut finds a
+// line that shares no word with the command. A failed call ranks against
+// the command alone.
+export const STITCH_EXPAND_EFFORT: KimiEffort = "low";
+export const STITCH_EXPAND_MAX_OUTPUT_TOKENS = 2048;
+export const STITCH_EXPAND_WORDS = 15;
 // A generated document of the project is read with every document when
 // nothing is picked. False leaves generated documents out of that default
-// read (a picked generated document is always read). Owner's call.
-export const STITCH_READS_GENERATED = true;
+// read (a picked generated document is always read). Owner's call (pending;
+// the recommended option is false).
+export const STITCH_READS_GENERATED = false;
 export const STITCH_GROUP_CONCURRENCY = 6;
 // The route's limits: a command over STITCH_COMMAND_MAX chars is refused
 // with a message that says so; a history turn is cut to
@@ -277,6 +291,13 @@ export const SKELETON_MAX_OUTPUT_TOKENS = 32768; // a line per block of the wind
 export const SKELETON_WINDOW_CHARS = 100_000;
 export const SKELETON_STALE_FRACTION = 0.1;
 export const SKELETON_STALE_MS = 10 * 60_000; // a build older than this is a dead run
+// A skeleton builds only when it can be read: a project of the document past
+// STITCH_WHOLE_THRESHOLD tokens or ASSISTANT_WHOLE_THRESHOLD chars. While a
+// document is being written it rebuilds at most once per SKELETON_QUIET_MS:
+// an edit under that since the last build waits for the next edit, a Stitch
+// command (ensureSkeleton builds at once), or the graph opening (warmSkeletons).
+export const SKELETON_QUIET_MS = 10 * 60_000;
+export const SKELETON_BUILD_CONCURRENCY = 12; // documents ensureSkeleton builds at once
 
 // The contents of a document (SPEC.md §26): the parts the reader jumps
 // between, each with the block it starts at. One call over the whole

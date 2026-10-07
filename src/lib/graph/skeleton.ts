@@ -5,15 +5,20 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { contentsEntries, headingContents, type ContentsEntry } from "@/lib/contents";
 import {
+  ASSISTANT_WHOLE_THRESHOLD,
+  SKELETON_BUILD_CONCURRENCY,
   SKELETON_EFFORT,
   SKELETON_MAX_OUTPUT_TOKENS,
+  SKELETON_QUIET_MS,
   SKELETON_STALE_FRACTION,
   SKELETON_STALE_MS,
   SKELETON_WINDOW_CHARS,
+  STITCH_WHOLE_THRESHOLD,
 } from "@/lib/derive/config";
 import { documentPrefix, pageNames } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import { featureCall, featureConfigured } from "@/lib/feature-models";
+import { mapLimit } from "@/lib/jev";
 import { skeletonPrompt } from "@/lib/prompts/skeleton";
 import type { UsageMeta } from "@/lib/usage";
 
@@ -32,7 +37,7 @@ import type { UsageMeta } from "@/lib/usage";
 // the windows at once, each under its own cached prefix.
 
 export const SKELETON_VERSION = 1;
-const LINE_MAX = 400;
+const LINE_MAX = 4_000; // a line of a 4,000-word block: one word in ten, cut past it rather than failing the window
 const SUMMARY_MAX = 800;
 const GIST_MAX = 400;
 const FALLBACK_LINE = 200; // chars of a block's own text that stand in for a missing line
@@ -45,6 +50,7 @@ export type Skeleton = {
   parts: SkeletonPart[];
   lines: SkeletonLine[];
   chars: number; // the readable text's length when built
+  built?: number; // when it was built (ms since epoch); absent on skeletons built before it was kept
 };
 
 /** The document as the skeleton reads it: the block rows Stitch loads. */
@@ -57,9 +63,9 @@ const PART_EVERY = 25; // readable blocks per part of a document with no heading
 // line. The number maps back to the stored id below.
 const blockNumber = z.union([z.string(), z.number()]).transform((v) => String(v).replace(/[^0-9]/g, ""));
 const windowSchema = z.object({
-  gist: z.string().max(GIST_MAX).default(""),
-  parts: z.array(z.object({ blockId: blockNumber, summary: z.string().trim().min(1).max(SUMMARY_MAX) })).max(200),
-  lines: z.array(z.object({ blockId: blockNumber, text: z.string().trim().min(1).max(LINE_MAX) })).max(4000),
+  gist: z.string().transform((t) => t.slice(0, GIST_MAX)).default(""),
+  parts: z.array(z.object({ blockId: blockNumber, summary: z.string().trim().min(1).transform((t) => t.slice(0, SUMMARY_MAX)) })).max(200),
+  lines: z.array(z.object({ blockId: blockNumber, text: z.string().trim().min(1).transform((t) => t.slice(0, LINE_MAX)) })).max(4000),
 });
 
 /** The hash of a block's text: what tells a stored line its block changed. */
@@ -101,6 +107,7 @@ export function readSkeleton(value: unknown): Skeleton | null {
     parts,
     lines,
     chars: typeof row.chars === "number" ? row.chars : 0,
+    ...(typeof row.built === "number" ? { built: row.built } : {}),
   };
 }
 
@@ -170,7 +177,7 @@ export function currentSkeleton(skeleton: Skeleton | null, blocks: SkeletonBlock
 
 /** The document's parts for the skeleton's summaries: the stored contents,
     else the headings, else — a document with no headings — a part every
-    PART_EVERY readable blocks, titled with its first words; none for a
+    PART_EVERY readable blocks, titled with its blocks' numbers; none for a
     document too short to have parts (the whole document is then one
     part). Contents are built when the reader asks for them (SPEC.md §26),
     never here: the skeleton's parts live in the skeleton only. */
@@ -186,8 +193,11 @@ export function partsFor(
   if (readable.length <= PART_EVERY) return [];
   const parts: ContentsEntry[] = [];
   for (let i = 0; i < readable.length; i += PART_EVERY) {
-    const words = readable[i].text.replace(/\s+/g, " ").trim().split(" ").slice(0, 8).join(" ");
-    parts.push({ title: words.slice(0, 80), blockId: readable[i].id, level: 1 });
+    // The run's place, not its first words cut mid-sentence; the part
+    // starts at its first block that is not a footnote.
+    const end = Math.min(i + PART_EVERY, readable.length);
+    const first = readable.slice(i, end).find((b) => !/^\s*\[Footnote/i.test(b.text)) ?? readable[i];
+    parts.push({ title: `Blocks ${i + 1}–${end}`, blockId: first.id, level: 1 });
   }
   return parts;
 }
@@ -246,7 +256,11 @@ export async function buildSkeleton(
       const numbered = blocks.map((b, n) => ({ ...b, id: String(n + 1) }));
       const windowParts = blocks.filter((b) => partAt.has(b.id)).map((b) => partAt.get(b.id)!);
       const messages: ModelMessage[] = [
-        { role: "system", content: documentPrefix(document.title, numbered, i === 0 ? document.references : undefined, pageNames(document)) },
+        {
+          role: "system",
+          content: documentPrefix(document.title, numbered, i === 0 ? document.references : undefined, pageNames(document)),
+          providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
+        },
         {
           role: "user",
           content: skeletonPrompt({
@@ -295,6 +309,7 @@ export async function buildSkeleton(
     parts: parts.map((p) => ({ blockId: p.blockId, title: p.title, summary: summaryFor.get(p.blockId) ?? "" })),
     lines: readable.map((b) => ({ blockId: b.id, hash: blockHash(b.text), text: lineFor.get(b.id) ?? fallbackLine(b.text) })),
     chars: readable.reduce((sum, b) => sum + b.text.length, 0),
+    built: Date.now(),
   };
   await db.document.update({
     where: { id: documentId },
@@ -325,11 +340,45 @@ export async function ensureSkeleton(
   return currentSkeleton(stored, document.blocks);
 }
 
+/** Whether a project of the document reads skeletons: past
+    STITCH_WHOLE_THRESHOLD estimated tokens (Stitch's reading passes) or
+    ASSISTANT_WHOLE_THRESHOLD chars (the assistant at Project scope). One
+    aggregate query; the tokens are estimated as lib/tokens.ts does, a CJK
+    character (3 bytes in UTF-8) at 1 and the rest at chars / 4. A
+    document in no project reads none. by: the document, or a project. */
+export async function skeletonNeeded(by: { documentId: string } | { notebookId: string }): Promise<boolean> {
+  const rows = await db.$queryRaw<{ chars: bigint | null; cjk: bigint | null }[]>(
+    "documentId" in by
+      ? Prisma.sql`SELECT sum(length(b.text)) AS chars, sum(octet_length(b.text) - length(b.text)) / 2 AS cjk
+          FROM "NotebookDocument" nd
+          JOIN "NotebookDocument" nd2 ON nd2."notebookId" = nd."notebookId"
+          JOIN "Block" b ON b."documentId" = nd2."documentId"
+          WHERE nd."documentId" = ${by.documentId}
+          GROUP BY nd."notebookId"`
+      : Prisma.sql`SELECT sum(length(b.text)) AS chars, sum(octet_length(b.text) - length(b.text)) / 2 AS cjk
+          FROM "NotebookDocument" nd
+          JOIN "Block" b ON b."documentId" = nd."documentId"
+          WHERE nd."notebookId" = ${by.notebookId}`,
+  );
+  return rows.some((r) => {
+    const chars = Number(r.chars ?? 0);
+    const cjk = Math.min(chars, Number(r.cjk ?? 0));
+    // A tenth of headroom: Stitch counts the rendering, tags included.
+    return cjk + (chars - cjk) / 4 > STITCH_WHOLE_THRESHOLD * 0.9 || chars > ASSISTANT_WHOLE_THRESHOLD;
+  });
+}
+
 /** The background refresh, after an add or an edit: builds the skeleton
     when the document has none or more than a tenth of it changed, and
-    leaves it alone otherwise. One build at a time per document: a build
+    leaves it alone otherwise. It builds only when a project of the
+    document reads skeletons (skeletonNeeded), and while the document is
+    being written at most once per SKELETON_QUIET_MS (a stored skeleton
+    built under that ago waits). force: the caller knows the skeleton is
+    read (the graph opened): build now. A
+    skeleton not built here is built at once when Stitch or the assistant
+    needs it (ensureSkeleton). One build at a time per document: a build
     started under SKELETON_STALE_MS ago is running, and this one yields. */
-export async function refreshSkeleton(documentId: string, userId: string | null): Promise<void> {
+export async function refreshSkeleton(documentId: string, userId: string | null, options: { force?: boolean } = {}): Promise<void> {
   if (!(await featureConfigured("skeleton"))) return;
   const document = await db.document.findUnique({
     where: { id: documentId },
@@ -340,8 +389,13 @@ export async function refreshSkeleton(documentId: string, userId: string | null)
     },
   });
   if (!document) return;
-  if (!skeletonStale(readSkeleton(document.skeleton), document.blocks)) return;
+  const stored = readSkeleton(document.skeleton);
+  if (!skeletonStale(stored, document.blocks)) return;
   if (document.skeletonStartedAt && Date.now() - document.skeletonStartedAt.getTime() < SKELETON_STALE_MS) return;
+  if (!options.force) {
+    if (stored?.built !== undefined && Date.now() - stored.built < SKELETON_QUIET_MS) return;
+    if (!(await skeletonNeeded({ documentId }))) return;
+  }
   await db.document.update({ where: { id: documentId }, data: { skeletonStartedAt: new Date() } });
   try {
     await buildSkeleton(documentId, userId);
@@ -349,4 +403,14 @@ export async function refreshSkeleton(documentId: string, userId: string | null)
     console.error(`[skeleton] refresh of ${documentId} failed:`, err);
     await db.document.update({ where: { id: documentId }, data: { skeletonStartedAt: null } }).catch(() => {});
   }
+}
+
+/** The graph opened: every document of a project that reads skeletons gets
+    its missing or stale skeleton built now, so the first command does not
+    wait for them. Under the threshold nothing is built. */
+export async function warmSkeletons(notebookId: string, userId: string | null): Promise<void> {
+  if (!(await featureConfigured("skeleton"))) return;
+  if (!(await skeletonNeeded({ notebookId }))) return;
+  const rows = await db.notebookDocument.findMany({ where: { notebookId }, select: { documentId: true } });
+  await mapLimit(rows, SKELETON_BUILD_CONCURRENCY, (r) => refreshSkeleton(r.documentId, userId, { force: true }).catch(() => {}));
 }

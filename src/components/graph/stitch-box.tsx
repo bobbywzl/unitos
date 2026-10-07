@@ -10,6 +10,7 @@ import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { RatingButtons } from "@/components/rating-buttons";
 import { ThinkingIndicator } from "@/components/thinking";
+import { STITCH_READS_GENERATED } from "@/lib/derive/config";
 import { runHeartbeat } from "@/lib/derive/heartbeat-client";
 import { useImeGuard } from "@/lib/ime";
 import type { GraphNode, StitchDocument, StitchResult } from "@/lib/types";
@@ -75,6 +76,7 @@ function citedDocumentIds(result: StitchReply): string[] {
 export function StitchBox({
   notebookId,
   nodes,
+  generatedIds,
   selectedIds,
   picking,
   onPickingChange,
@@ -88,6 +90,9 @@ export function StitchBox({
 }: {
   notebookId: string;
   nodes: GraphNode[];
+  // The pages Stitch generated: left out of the every-document read while
+  // STITCH_READS_GENERATED is false, so the scope does not count them.
+  generatedIds?: string[];
   // The documents picked in the graph; empty = every document.
   selectedIds: Set<string>;
   picking: boolean;
@@ -174,6 +179,12 @@ export function StitchBox({
     return () => window.removeEventListener("keydown", onKey, true);
   }, []);
 
+  // The graph opened: the project's skeletons build now, not at the first
+  // command (SPEC.md §22). Fire and forget; nothing builds for a short project.
+  useEffect(() => {
+    if (canEdit) void fetch(`/api/notebooks/${notebookId}/stitch/warm`, { method: "POST" }).catch(() => {});
+  }, [canEdit, notebookId]);
+
   // Expanding from the pill puts the cursor in the text box.
   const wasOpen = useRef(open);
   useEffect(() => {
@@ -191,6 +202,7 @@ export function StitchBox({
   }
 
   const picked = nodes.filter((n) => selectedIds.has(n.id));
+  const everyCount = STITCH_READS_GENERATED ? nodes.length : nodes.filter((n) => !generatedIds?.includes(n.id)).length;
   // Why Send is off, said under the text box: a command over the route's
   // limit, or a pick of one document (Stitch reads two or more).
   const length = command.trim().length;
@@ -375,7 +387,7 @@ export function StitchBox({
           <span className="font-semibold text-sand-700">
             {picked.length > 0
               ? t("stitch.stitchScopePicked", { n: picked.length })
-              : t("stitch.stitchScopeAll", { n: nodes.length })}
+              : t("stitch.stitchScopeAll", { n: everyCount })}
           </span>
           {picked.map((n) => (
             <button
