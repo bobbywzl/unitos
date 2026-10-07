@@ -138,7 +138,13 @@ export function MergeUndoBar({
         </>
       ) : (
         <>
-          <span className="text-[13px] whitespace-normal text-red-500">{notice}</span>
+          {/* A failure in red; news (words kept as a new note, a quote
+              without its source) in the pill's own color. */}
+          <span
+            className={`text-[13px] whitespace-normal ${error !== null || actions.noticeFailed ? "text-red-500" : "text-sand-700"}`}
+          >
+            {notice}
+          </span>
           <button
             onClick={() => {
               setError(null);

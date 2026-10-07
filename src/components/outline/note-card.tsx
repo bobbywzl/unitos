@@ -453,10 +453,12 @@ const NoteCardBody = memo(function NoteCardBody({
 
   // Keyboard queue: `e` on the focused pending note opens the editor; the
   // floating card docking reopens it on the card's draft. Adjust-during-render;
-  // each request is a new object.
+  // each request is a new object. An editor already open keeps its text: a
+  // note kept as a new note asks its own card, whose editor holds every key
+  // typed (use-outline.ts).
   if (editRequest && handledEdit !== editRequest) {
     setHandledEdit(editRequest);
-    if (!floating) {
+    if (!floating && !editing) {
       setDraft(editRequest.draft ?? editDraft(note.content));
       setEditing(true);
     }

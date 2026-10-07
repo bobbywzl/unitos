@@ -69,10 +69,30 @@ function both(theirs: string[], mine: string[], labels: ConflictLabels): string[
   return [`**${labels.other}**`, "", ...block(theirs), `**${labels.yours}**`, "", ...block(mine), `**${labels.end}**`];
 }
 
+/** `text` as `base` with one run of words put in at one place: where, and
+    the run. Null when `text` changed `base` any other way. */
+function insertion(base: string, text: string): { at: number; run: string } | null {
+  if (text.length <= base.length) return null;
+  let at = 0;
+  while (at < base.length && base[at] === text[at]) at++;
+  let tail = 0;
+  while (tail < base.length - at && base[base.length - 1 - tail] === text[text.length - 1 - tail]) tail++;
+  if (at + tail !== base.length) return null;
+  return { at, run: text.slice(at, text.length - tail) };
+}
+
 /** The reader's text put together with the stored text, both made from `base`. */
 export function reconcileNoteText(base: string, theirs: string, mine: string, labels: ConflictLabels): Reconciled {
   if (theirs === base || theirs === mine) return { text: mine, conflict: false };
   if (mine === base) return { text: theirs, conflict: false };
+  // The stored text put words in at one place, and the reader's text put in
+  // more at the same place, the stored run among them: the reader typed on
+  // from it (the same typing saved twice, once by an editor that closed and
+  // once by the editor that took its place). The reader's text keeps every
+  // word and undoes nothing, so it stands alone, with no marker lines.
+  const added = insertion(base, theirs);
+  const typed = added ? insertion(base, mine) : null;
+  if (added && typed && typed.at === added.at && typed.run.includes(added.run)) return { text: mine, conflict: false };
   const b = base.split("\n");
   const t = theirs.split("\n");
   const m = mine.split("\n");

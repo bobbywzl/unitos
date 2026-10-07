@@ -279,7 +279,7 @@ export function SectionBoard({
             style={tileVars}
           >
             {notes.map((note) => (
-              <SortableItem key={note.id} id={note.id}>
+              <SortableItem key={actions.noteKey(note.id)} id={note.id}>
                 {(handle) => <NoteTile note={note} actions={actions} handle={canEdit ? handle : undefined} onOpen={setOpen} />}
               </SortableItem>
             ))}

@@ -174,7 +174,7 @@ export function DocumentColumns({
                       className="flex min-w-0 flex-col gap-2.5 border-b border-l border-line px-3 py-3"
                     >
                       {notes.map((note) => (
-                        <NoteCard key={note.id} note={note} actions={actions} variant="page" search={search} />
+                        <NoteCard key={actions.noteKey(note.id)} note={note} actions={actions} variant="page" search={search} />
                       ))}
                     </div>
                   );

@@ -220,7 +220,12 @@ function replayBody(record: QueuedWrite): unknown {
     source, words kept as a new note. */
 async function announce(record: QueuedWrite, res: Response): Promise<void> {
   if (typeof window === "undefined" || !NOTE_WRITE.test(record.path) || record.method === "DELETE") return;
-  const answer = (await res.json().catch(() => null)) as { id?: unknown; sourceDropped?: unknown; keptAs?: unknown } | null;
+  const answer = (await res.json().catch(() => null)) as {
+    id?: unknown;
+    sourceDropped?: unknown;
+    keptAs?: unknown;
+    content?: unknown;
+  } | null;
   if (!answer) return;
   const from = NOTE_WRITE.exec(record.path)?.[1];
   const id = typeof answer.id === "string" ? answer.id : from;
@@ -228,7 +233,8 @@ async function announce(record: QueuedWrite, res: Response): Promise<void> {
     window.dispatchEvent(new CustomEvent(SOURCE_LOST_EVENT, { detail: { noteId: id } }));
   }
   if (typeof answer.keptAs === "string" && from && from !== answer.keptAs) {
-    window.dispatchEvent(new CustomEvent(NOTE_KEPT_EVENT, { detail: { from, to: answer.keptAs } }));
+    const content = typeof answer.content === "string" ? answer.content : undefined;
+    window.dispatchEvent(new CustomEvent(NOTE_KEPT_EVENT, { detail: { from, to: answer.keptAs, content } }));
   }
 }
 

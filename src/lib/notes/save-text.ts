@@ -25,11 +25,15 @@ export type SavedText = {
 };
 
 /** Tell the page that words written to a gone note were kept as a new note
-    (lib/notes/gone.ts): the notes put the new note in its place. */
+    (lib/notes/gone.ts): the notes put the new note in its place. content:
+    the new note's text as the server answered it, the text its next save
+    is made from. */
 export function announceKept(from: string, answer: unknown) {
-  const to = (answer as { keptAs?: unknown } | null)?.keptAs;
+  const kept = answer as { keptAs?: unknown; content?: unknown } | null;
+  const to = kept?.keptAs;
   if (typeof to !== "string" || to === from || typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent(NOTE_KEPT_EVENT, { detail: { from, to } }));
+  const content = typeof kept?.content === "string" ? kept.content : undefined;
+  window.dispatchEvent(new CustomEvent(NOTE_KEPT_EVENT, { detail: { from, to, content } }));
 }
 
 const MAX_TRIES = 3;

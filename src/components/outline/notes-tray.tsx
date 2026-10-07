@@ -250,7 +250,7 @@ export function NotesTray({
             <span className="ml-auto text-[11px] text-sand-500">{t("outline.trayKeyHint")}</span>
           </div>
           {shownPending.map((note) => (
-            <NoteCard key={note.id} note={note} actions={actions} variant="tray" search={query} />
+            <NoteCard key={actions.noteKey(note.id)} note={note} actions={actions} variant="tray" search={query} />
           ))}
         </div>
       )}
@@ -474,7 +474,7 @@ function TraySection({
             className="flex flex-col gap-2"
           >
             {accepted.map((note, i) => (
-              <SortableItem key={note.id} id={note.id}>
+              <SortableItem key={actions.noteKey(note.id)} id={note.id}>
                 {(handle) => (
                   <NoteCard
                     note={note}

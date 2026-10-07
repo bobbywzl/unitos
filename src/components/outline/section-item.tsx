@@ -169,7 +169,7 @@ export function SectionItem({
           className="flex flex-col gap-2.5"
         >
           {notes.map((note) => (
-            <SortableItem key={note.id} id={note.id}>
+            <SortableItem key={actions.noteKey(note.id)} id={note.id}>
               {(noteHandle) => (
                 <NoteCard note={note} actions={actions} handle={noteHandle} variant="page" search={search} />
               )}

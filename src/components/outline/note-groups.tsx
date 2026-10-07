@@ -291,7 +291,7 @@ function EditedNotes({ tree, actions, variant, search, accepted }: NoteGroupsPro
       ) : (
         <div className={variant === "page" ? "grid grid-cols-1 gap-2 lg:grid-cols-2" : "flex flex-col gap-2"}>
           {sorted.map((note) => (
-            <NoteCard key={note.id} note={note} actions={actions} variant={variant} search={search} />
+            <NoteCard key={actions.noteKey(note.id)} note={note} actions={actions} variant={variant} search={search} />
           ))}
         </div>
       )}
@@ -401,7 +401,7 @@ function GroupedNotes({
             {!closed && (
               <div className={variant === "page" ? "grid grid-cols-1 gap-2 lg:grid-cols-2" : "flex flex-col gap-2"}>
                 {group.notes.map((note) => (
-                  <NoteCard key={note.id} note={note} actions={actions} variant={variant} search={search} />
+                  <NoteCard key={actions.noteKey(note.id)} note={note} actions={actions} variant={variant} search={search} />
                 ))}
               </div>
             )}
