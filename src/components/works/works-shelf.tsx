@@ -13,7 +13,7 @@ import {
   type SaveProgress,
 } from "@/lib/offline/saved";
 import { useT } from "@/components/lang-provider";
-import { ProgressBar } from "@/components/progress-bar";
+import { BOTTOM_STATUS, ProgressBar } from "@/components/progress-bar";
 import { WorkCard, type WorkItem } from "@/components/works/work-card";
 import { useEscapeLayer } from "@/lib/escape-layers";
 
@@ -220,10 +220,10 @@ export function WorksShelf({
       )}
 
       {toast && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-6">
+        <div className={`${BOTTOM_STATUS} z-50 flex w-max max-w-[calc(100vw-32px)] justify-center`}>
           <span
             role="status"
-            className="pointer-events-auto flex items-center gap-2 rounded-full bg-ink/90 px-3 py-1.5 text-xs text-paper"
+            className="flex items-center gap-2 rounded-full bg-ink/90 px-3 py-1.5 text-xs text-paper"
           >
             {toast.text}
             {toast.plans && (
