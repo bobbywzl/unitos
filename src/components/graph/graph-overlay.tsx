@@ -266,7 +266,7 @@ export function GraphOverlay({
         )}
         </Presence>
         <Presence show={list === "notes"} exit="menu">
-        {list === "notes" && <GraphNotesList pickedIds={selectedIds} />}
+        {list === "notes" && <GraphNotesList pickedIds={selectedIds} onClose={() => setList(null)} />}
         </Presence>
         {nodes.length >= 2 && (
           <StitchBox

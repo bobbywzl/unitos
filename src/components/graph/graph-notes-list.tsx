@@ -52,7 +52,7 @@ function bySection(notes: GraphNote[]): { title: string; notes: GraphNote[] }[] 
   return [...groups.values()];
 }
 
-export function GraphNotesList({ pickedIds }: { pickedIds: Set<string> }) {
+export function GraphNotesList({ pickedIds, onClose }: { pickedIds: Set<string>; onClose: () => void }) {
   const t = useT();
   const ctx = useGraphNotes();
   const [openId, setOpenId] = useState<string | null>(null);
@@ -82,7 +82,18 @@ export function GraphNotesList({ pickedIds }: { pickedIds: Set<string> }) {
       data-track-surface="graph-notes-list"
       className="menu-in absolute top-3 right-3 bottom-3 z-10 flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 shadow-float backdrop-blur-md"
     >
-      <p className="text-[11px] text-sand-500">{t("graphNotes.notesDesc")}</p>
+      <div className="flex items-start gap-2">
+        <p className="flex-1 text-[11px] text-sand-500">{t("graphNotes.notesDesc")}</p>
+        <button
+          onClick={onClose}
+          data-track="graph-notes-close"
+          aria-label={t("common.close")}
+          data-tip={t("common.close")}
+          className="-mt-1 -mr-1 flex size-7 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
+        >
+          ✕
+        </button>
+      </div>
       <label className="flex items-center gap-2 text-[12px] text-sand-600">
         {t("graphNotes.notesSection")}
         <select
