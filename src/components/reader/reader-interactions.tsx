@@ -95,7 +95,6 @@ import {
   CommentIcon,
   DefineIcon,
   ExpandIcon,
-  MaximizeIcon,
   TrashIcon,
   ExtractIcon,
   LinkIcon,
@@ -134,7 +133,6 @@ import { NotePicker } from "@/components/reader/note-picker";
 import { PANE_HEADER } from "@/components/reader/reader-panes";
 import type { FigureRenderInfo } from "@/components/reader/figure-capture";
 import { Reader, type TranscriptVariant } from "@/components/reader/reader";
-import { openVisualization } from "@/components/reader/visualization-viewer";
 import { setQuoteDragImage, writeQuoteDrag, type QuoteDrag } from "@/lib/quote-drag";
 import { blockIdOfKey, coreKey, isCoreKey } from "@/lib/anchors/core-key";
 import { MAX_SEGMENTS } from "@/lib/anchors/passage-limit";
@@ -755,6 +753,13 @@ type ToolChat = {
   sendError?: string | null;
 };
 const NO_CHAT: ToolChat = { conversation: [], chatOpen: false, input: "", busy: false, queue: [], sendError: null };
+// What Save as note sends for a tool's card (SPEC.md §7): the output and every
+// turn of the conversation it continued into — the reader's messages as the
+// question, the output and each answer as the answer.
+const savedQuestion = (card: ToolChat) =>
+  card.conversation.filter((turn) => turn.role === "user").map((turn) => turn.content).join("\n\n");
+const savedAnswer = (output: string, card: ToolChat) =>
+  [output, ...card.conversation.filter((turn) => turn.role === "assistant").map((turn) => turn.content)].join("\n\n");
 
 // The card EXPLAIN and ANALYZE stream into (SPEC.md §4, §6): one card, the
 // kind sets its title and glyph.
@@ -922,13 +927,6 @@ const suggestCode = () =>
       applyAssistantOps: assistant.applyAssistantOps,
     }),
   );
-
-// The picture a stored visualization's markdown points at, and its caption
-// (SPEC.md §20): the card's Open button shows them in the viewer.
-function visualizationImage(markdown: string): { src: string; caption: string } | null {
-  const m = /!\[([^\]]*)\]\((\/api\/images\/[A-Za-z0-9_-]+)\)/.exec(markdown);
-  return m ? { src: m[2], caption: m[1] } : null;
-}
 
 // SIMPLIFY output: a translucent bubble beside the article, level with the
 // selection. The selection stays tinted while the bubble is open (SPEC.md §6).
@@ -9044,6 +9042,8 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   ) => {
     if (!card.noteId || card.streaming || card.error) return null;
     if (!card.chatOpen) {
+      // On the card Continue is a pill in the foot row (continuePill).
+      if (!inView) return null;
       // Continuing into a conversation is Unitos Ultra (TIERS.md): every
       // account sees the mention at the end of the tool's output; a
       // non-Ultra press answers with the plain Ultra message, never the box.
@@ -9135,6 +9135,28 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       </>
     );
   };
+  // Continue on a tool card: a short pill in the foot row beside the rating
+  // and Save as note; a press opens the box in its place (toolChatFoot). Its
+  // tooltip names it whole and says when it needs Unitos Ultra.
+  const continuePill = (
+    kind: "explain" | "simplify",
+    card: ToolChat & { noteId: string | null; streaming: boolean; error: string | null },
+    tool: ToolKind,
+    className = "",
+  ) =>
+    !card.noteId || card.streaming || card.error || card.chatOpen ? null : (
+      <button
+        onClick={() => openToolChat(kind)}
+        data-track={`${tool}-continue`}
+        aria-label={t("reader.continueConversation")}
+        data-tip={ultra ? t("reader.continueConversationTitle") : t("reader.continueNeedsUltra")}
+        className={`flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 ${className}`}
+      >
+        <ToolSymbol tool={tool} plus size={11} />
+        {t("assistant.continue")}
+        {!ultra && <TierMark state="ultra" size={10} />}
+      </button>
+    );
   // The assistant card's foot: the box that sends the next turn. The card
   // beside the article and the full conversation view render the same one.
   const assistantChatFoot = (chat: AssistantChat, className: string, chipsClassName: string) => (
@@ -10655,18 +10677,10 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   {t("common.stop")}
                 </button>
               )}
-              {bubble.kind === "visualize" && !bubble.streaming && visualizationImage(bubble.text) && (
-                <button
-                  onClick={() => openVisualization(visualizationImage(bubble.text)!)}
-                  data-track="visualize-open"
-                  className={CARD_ACTION}
-                  aria-label={t("reader.openVisualization")}
-                  data-tip={t("reader.openVisualizationTitle")}
-                >
-                  <MaximizeIcon size={13} />
-                </button>
-              )}
-              {(bubble.text || bubble.conversation.length > 0) && expandButton("explain")}
+              {/* A press on the picture opens it large, so a visualization
+                  shows Expand once it holds a conversation. */}
+              {(bubble.kind === "visualize" ? bubble.conversation.length > 0 : bubble.text || bubble.conversation.length > 0) &&
+                expandButton("explain")}
               {!bubble.streaming && !bubble.busy && bubble.anchor && (
                 <button
                   onClick={() => void regenerateBubble()}
@@ -10750,10 +10764,14 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   documentId={documentId}
                   origin={bubble.kind}
                   selection={bubble.anchor?.quotedText ?? ""}
-                  answer={bubble.text}
+                  // A new turn is more to save: the button comes back.
+                  key={bubble.conversation.length}
+                  question={savedQuestion(bubble)}
+                  answer={savedAnswer(bubble.text, bubble)}
                   className="ml-auto"
                 />
               )}
+              {continuePill("explain", bubble, bubble.kind, bubble.kind === "visualize" ? "ml-auto" : "")}
             </div>
           )}
           {bubble.declined === null && toolChatFoot("explain", bubble, bubble.kind)}
@@ -10904,9 +10922,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 documentId={documentId}
                 origin="simplify"
                 selection={simplifyCard.anchor.quotedText}
-                answer={stripSimplifyMarkers(simplifyCard.text)}
+                key={simplifyCard.conversation.length}
+                question={savedQuestion(simplifyCard)}
+                answer={savedAnswer(stripSimplifyMarkers(simplifyCard.text), simplifyCard)}
                 className="ml-auto"
               />
+              {continuePill("simplify", simplifyCard, "simplify")}
             </div>
           )}
           {toolChatFoot("simplify", simplifyCard, "simplify")}
