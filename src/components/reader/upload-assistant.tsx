@@ -64,6 +64,9 @@ export type UploadRequest = (
   // The folder of the project the added documents land in (SPEC.md §6);
   // absent = the project itself.
   folderId?: string | null;
+  // The reader already said go for this list: Continue in Add a document.
+  // Files dropped on the page are not: two or more wait for Add.
+  confirmed?: boolean;
 };
 
 // What the box opens when it is done: the first added document, or the
@@ -250,9 +253,10 @@ export function UploadAssistant({
         : request.kind === "batch"
           ? Math.max(1, items.length)
           : 1;
-  // Two or more documents wait for Add before anything imports; one
-  // imports right away.
-  const [phase, setPhase] = useState<Phase>(itemCount > 1 ? "ready" : "adding");
+  // Two or more documents dropped on the page wait for Add before anything
+  // imports; one imports right away, and so does a list the dialog's
+  // Continue sent (the reader said go once already).
+  const [phase, setPhase] = useState<Phase>(itemCount > 1 && !request.confirmed ? "ready" : "adding");
   const [steps, setSteps] = useState<IngestStep[] | null>(null);
   const [headline, setHeadline] = useState<string | null>(null);
   const [added, setAdded] = useState<Added[]>([]);
@@ -590,8 +594,8 @@ export function UploadAssistant({
     return result ? { id: result.id, title: result.title } : null;
   }
 
-  // ── The add itself: runs at once for one document; after Add for two or
-  // more ──────────────────────────────────────────────────────────────────
+  // ── The add itself: runs at once for one document or a confirmed list;
+  // after Add for two or more dropped ─────────────────────────────────────
   const startedRef = useRef(false);
   async function runAdd() {
     setError(null);
@@ -742,11 +746,11 @@ export function UploadAssistant({
   }
 
   useEffect(() => {
-    if (startedRef.current || itemCount > 1) return;
+    if (startedRef.current || (itemCount > 1 && !request.confirmed)) return;
     startedRef.current = true;
     void runAdd();
     // Runs once, for the request this box was opened with; two or more
-    // documents wait for Add.
+    // documents dropped on the page wait for Add.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -798,6 +802,7 @@ export function UploadAssistant({
     "rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200";
 
   if (hidden) return null;
+  const asking = phase === "duplicate" && duplicateAsk !== null;
 
   return (
     <div
@@ -812,18 +817,26 @@ export function UploadAssistant({
         className="flex max-h-[85vh] w-[480px] max-w-full flex-col gap-3 overflow-y-auto rounded-[24px] bg-card p-5 shadow-float"
       >
         <div className="flex items-center gap-2">
-          <span className="font-display text-[17px]">{t("panes.uploadAssistant")}</span>
+          {/* A repeat add's ask (duplicate-ask.tsx) heads the box with its
+              own title, and the ✕ is its Cancel. */}
+          <span className="font-display text-[17px]">
+            {t(asking ? "panes.duplicateTitle" : "panes.uploadAssistant")}
+          </span>
           <button
             onClick={() => {
+              if (asking) {
+                duplicateAsk?.resolve("cancel");
+                return;
+              }
               if (runs(phase)) {
                 onHide();
                 return;
               }
               onClose(null);
             }}
-            data-track={runs(phase) ? "upload-hide" : "upload-close"}
-            aria-label={t(runs(phase) ? "panes.uploadHide" : "common.close")}
-            data-tip={t(runs(phase) ? "panes.uploadHide" : "common.close")}
+            data-track={asking ? "duplicate-cancel" : runs(phase) ? "upload-hide" : "upload-close"}
+            aria-label={t(asking ? "common.cancel" : runs(phase) ? "panes.uploadHide" : "common.close")}
+            data-tip={t(asking ? "common.cancel" : runs(phase) ? "panes.uploadHide" : "common.close")}
             className="ml-auto flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
           >
             ✕
@@ -880,7 +893,7 @@ export function UploadAssistant({
         {phase === "range" && rangePick && <MediaRange file={rangePick.file} onDone={rangePick.resolve} />}
 
         {phase === "duplicate" && duplicateAsk && (
-          <DuplicateAsk documents={duplicateAsk.documents} onChoose={duplicateAsk.resolve} />
+          <DuplicateAsk documents={duplicateAsk.documents} onChoose={duplicateAsk.resolve} inBox />
         )}
 
         {phase === "done" && (

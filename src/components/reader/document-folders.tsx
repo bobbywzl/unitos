@@ -19,7 +19,14 @@ import { api } from "@/lib/api";
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon, FolderIcon, MoreIcon, PlusIcon } from "@/components/icons";
 import { useLang, useT } from "@/components/lang-provider";
 import { CategoryRow, categoryLabels, useFoldedCategories } from "@/components/reader/document-organize";
-import { categorizeRows, sortByEdited, type DocumentKind, type DocumentSort, type SortRow } from "@/lib/document-order";
+import {
+  categorizeRows,
+  sortByEdited,
+  spansWeeks,
+  type DocumentKind,
+  type DocumentSort,
+  type SortRow,
+} from "@/lib/document-order";
 import { Collapse } from "@/components/presence";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import type { TFunc } from "@/lib/i18n/dictionaries";
@@ -387,16 +394,28 @@ function useTree(): Tree {
 const ROW_ACTION =
   "px-4 py-1.5 text-left text-[12.5px] text-sand-600 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40";
 
+/** A row's title is its tooltip only when the row cuts it: by words
+    (clipWords at `max`) or by the row's width. Read as the pointer comes in,
+    before the tooltip shows (tooltip.tsx reads data-tip then). */
+export function tipWhenCut(el: HTMLElement, title: string, max: number) {
+  const cut = clipWords(title, max) !== title || el.scrollWidth > el.clientWidth + 1;
+  el.setAttribute("data-tip", cut ? title : "");
+}
+
 function ErrorLine({ at }: { at: string }) {
   const { error } = useTree();
   if (error?.at !== at) return null;
   return <p className="px-4 py-1 text-[11.5px] text-red-600">{error.message}</p>;
 }
 
-// The New folder row at the foot of a level: a press opens the name box.
+// The New folder row at the foot of the root list: a press opens the name
+// box. In a folder's list the row is the name box alone, while the folder's
+// ⋮ New folder inside has it open: a folder's list keeps one row that
+// creates (New document here).
 function NewFolderRow({ parentId }: { parentId: string | null }) {
   const { t, pending, creatingIn, setCreatingIn, setError, createFolder } = useTree();
   const key = `new:${parentId ?? ""}`;
+  if (parentId !== null && creatingIn !== key) return <ErrorLine at={key} />;
   return (
     <div className="flex flex-col">
       {creatingIn === key ? (
@@ -565,7 +584,9 @@ function FolderRow({ folder, depth }: { folder: DocumentFolderView; depth: numbe
             className={`flex min-w-0 flex-1 items-center gap-2 overflow-hidden px-4 py-2 text-left text-[13px] whitespace-nowrap ${
               onActivePath ? "font-semibold text-ink" : "text-sand-700"
             } ${open ? "bg-clay-100 text-clay-800" : "hover:bg-clay-100 hover:text-clay-800"}`}
+            // The name as a tooltip only when the row cuts it.
             data-tip={folder.title}
+            onPointerEnter={(e) => tipWhenCut(e.currentTarget, folder.title, 40)}
           >
             <FolderIcon size={14} className="shrink-0 text-sand-500" />
             <span className="min-w-0 flex-1 overflow-hidden">{clipWords(folder.title, 40)}</span>
@@ -736,38 +757,40 @@ function Level({ parentId, depth }: { parentId: string | null; depth: number }) 
     </div>
   );
   let list: ReactNode;
-  if (sort === "added") {
+  type LevelRow = SortRow & { render: (i: number) => ReactNode };
+  const levelRows: LevelRow[] = [
+    ...subfolders.map((folder) => ({
+      id: folder.id,
+      title: folder.title,
+      kind: "folder" as const,
+      addedAt: folder.createdAt,
+      editedAt: folderEditedAt(folder, folders, rows),
+      render: (i: number) => folderNode(folder, i),
+    })),
+    ...own.map((row) => ({
+      id: row.id,
+      title: row.title,
+      kind: row.kind,
+      addedAt: row.addedAt,
+      editedAt: row.editedAt,
+      render: (i: number) => documentNode(row, i),
+    })),
+  ];
+  // Added: the list as it was before sorts existed; added over more than one
+  // week, a category per week (what Week added drew).
+  const categories = sort === "added" ? (spansWeeks(levelRows) ? "week" : null) : sort === "edited" ? null : sort;
+  if (sort === "added" && categories === null) {
     list = (
       <>
         {subfolders.map((folder) => folderNode(folder, index++))}
         {own.map((row) => documentNode(row, index++))}
       </>
     );
+  } else if (categories === null) {
+    list = sortByEdited(levelRows).map((row) => row.render(index++));
   } else {
-    type LevelRow = SortRow & { render: (i: number) => ReactNode };
-    const levelRows: LevelRow[] = [
-      ...subfolders.map((folder) => ({
-        id: folder.id,
-        title: folder.title,
-        kind: "folder" as const,
-        addedAt: folder.createdAt,
-        editedAt: folderEditedAt(folder, folders, rows),
-        render: (i: number) => folderNode(folder, i),
-      })),
-      ...own.map((row) => ({
-        id: row.id,
-        title: row.title,
-        kind: row.kind,
-        addedAt: row.addedAt,
-        editedAt: row.editedAt,
-        render: (i: number) => documentNode(row, i),
-      })),
-    ];
-    list =
-      sort === "edited"
-        ? sortByEdited(levelRows).map((row) => row.render(index++))
-        : categorizeRows(levelRows, sort, tree.lang, categoryLabels(t)).map((category) => {
-      const key = `${sort}:${parentId ?? ""}:${category.key}`;
+    list = categorizeRows(levelRows, categories, tree.lang, categoryLabels(t)).map((category) => {
+      const key = `${categories}:${parentId ?? ""}:${category.key}`;
       return (
         <div key={key} className="tree-row-in" style={rowStyle(index++)}>
           <CategoryRow

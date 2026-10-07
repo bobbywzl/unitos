@@ -31,6 +31,7 @@ import {
   DocumentTree,
   FolderPicker,
   folderPath,
+  tipWhenCut,
   type DocumentFolderView,
 } from "@/components/reader/document-folders";
 import { DocumentsSort, useDocumentSort } from "@/components/reader/document-organize";
@@ -379,16 +380,32 @@ export function DocumentBar({
     if (listCloseTimer.current) clearTimeout(listCloseTimer.current);
     listCloseTimer.current = setTimeout(closeList, 220);
   }
+  // Type-ahead in the open list: the letters typed within a moment of each
+  // other, and when they started.
+  const typeAhead = useRef({ text: "", at: 0 });
   // ArrowDown and ArrowUp move between the list's rows (a folder's row, a
   // document's row); from the pill, ArrowDown opens the list and goes to the
-  // first row.
+  // first row. Typed letters go to the first row whose title starts with
+  // them, as a listbox does: a big project's document without scrolling.
   function moveInList(e: React.KeyboardEvent<HTMLDivElement>) {
-    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     const target = e.target as HTMLElement;
-    if (target.closest("input, textarea, select")) return;
+    if (target.closest("input, textarea, select, [contenteditable]")) return;
     const rows = [
       ...(listRef.current?.querySelectorAll<HTMLElement>('[data-track="document-open"], [data-track="folder-open"]') ?? []),
     ].filter((el) => el.getClientRects().length > 0);
+    if (listOpen && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.trim() !== "") {
+      const now = Date.now();
+      const text = (now - typeAhead.current.at < 800 ? typeAhead.current.text : "") + e.key.toLocaleLowerCase();
+      typeAhead.current = { text, at: now };
+      const hit = rows.find((row) => (row.textContent ?? "").trim().toLocaleLowerCase().startsWith(text));
+      if (hit) {
+        e.preventDefault();
+        hit.focus();
+        hit.scrollIntoView({ block: "nearest" });
+      }
+      return;
+    }
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     const onPill = target.getAttribute("data-track") === "document-list";
     if (onPill && !listOpen) {
       if (e.key !== "ArrowDown") return;
@@ -1149,6 +1166,13 @@ export function DocumentBar({
   const rowAction =
     "px-4 py-1.5 text-left text-[12.5px] text-sand-600 hover:bg-clay-100 hover:text-clay-800";
 
+  // A row's actions open under the row, at the foot of a list that may
+  // scroll: once they have unfolded, they scroll into view.
+  const revealActions = useCallback((el: HTMLDivElement | null) => {
+    if (!el) return;
+    window.setTimeout(() => el.scrollIntoView({ block: "nearest", behavior: "smooth" }), 220);
+  }, []);
+
   // One document's row and its actions. The tree (document-folders.tsx)
   // places it under its folder.
   const renderDocumentRow = (d: AttachedDocument) => (
@@ -1166,7 +1190,9 @@ export function DocumentBar({
               ? "font-semibold text-ink"
               : "text-sand-700 hover:bg-clay-100 hover:text-clay-800"
           }`}
+          // The title as a tooltip only when the row cuts it (tipWhenCut).
           data-tip={isStale(d) ? t("panes.reparseStaleTitle") : d.title}
+          onPointerEnter={isStale(d) ? undefined : (e) => tipWhenCut(e.currentTarget, d.title, 44)}
         >
           {clipWords(d.title, 44)}
           {isStale(d) && (
@@ -1202,14 +1228,14 @@ export function DocumentBar({
       </div>
       <Collapse open={pillMenu === d.id}>
       {pillMenu === d.id && (
-        <div className="mx-2 mb-1.5 flex flex-col rounded-xl bg-sand-100 py-1">
-          {/* Re-parse, on every document: a video or audio
-              document transcribes again, a handwritten one
-              re-makes its pages and converts again, a text one
-              parses its file or URL again. A document with no
-              source (pasted text, a generated document) has
-              nothing to parse again; the row says so. */}
-          {canEdit && (
+        <div ref={revealActions} className="mx-2 mb-1.5 flex flex-col rounded-xl bg-sand-100 py-1">
+          {/* A row's actions list only what can run on this document. Re-parse:
+              a video or audio document transcribes again, a handwritten one
+              re-makes its pages and converts again, a text one parses its
+              file or URL again; a document with no source (a blank
+              document, pasted text, a generated document) has nothing to
+              parse again, and the row is not there. */}
+          {canEdit && canReparse(d) && (
             <button
               onClick={() => {
                 // A PDF asks which shape first: the row opens
@@ -1228,18 +1254,12 @@ export function DocumentBar({
                 void (d.hasVideo ? transcribeAgain(d) : reparse(d));
               }}
               data-track="document-reparse"
-              disabled={phase !== null || transcribing !== null || !canReparse(d)}
+              disabled={phase !== null || transcribing !== null}
               aria-expanded={
                 d.pdf && !d.hasVideo ? reparseChoice === d.id : d.importEdited ? editedAsk?.id === d.id : undefined
               }
               className={`${rowAction} disabled:opacity-40`}
-              data-tip={
-                d.hasVideo
-                  ? t("panes.reparseVideoTitle")
-                  : canReparse(d)
-                    ? t("panes.reparseDocumentTitle")
-                    : t("panes.reparseNoSource")
-              }
+              data-tip={d.hasVideo ? t("panes.reparseVideoTitle") : t("panes.reparseDocumentTitle")}
             >
               {t("panes.reparseDocument")}
             </button>
@@ -1335,33 +1355,30 @@ export function DocumentBar({
               {moveError && <p className="px-4 py-1 text-[11.5px] text-red-600">{moveError}</p>}
             </>
           )}
-          <button
-            onClick={() => {
-              closeList();
-              window.print();
-            }}
-            data-track="document-print"
-            disabled={d.id !== activeId}
-            className={`${rowAction} disabled:opacity-40`}
-            data-tip={
-              d.id === activeId
-                ? t("panes.printDocumentTitle")
-                : t("panes.printDocumentOpenFirst")
-            }
-          >
-            {t("panes.printDocument")}
-          </button>
-          {canEdit && (
+          {/* Print: the open document (the page editor's toolbar prints it
+              too). */}
+          {d.id === activeId && (
+            <button
+              onClick={() => {
+                closeList();
+                window.print();
+              }}
+              data-track="document-print"
+              className={rowAction}
+              data-tip={t("panes.printDocumentTitle")}
+            >
+              {t("panes.printDocument")}
+            </button>
+          )}
+          {/* Remove from this project: while another project the reader can
+              open holds the document (Delete's confirm offers it too). */}
+          {canEdit && inAnotherProject(menuReach, notebookId) && (
             <button
               onClick={() => void removeFromProject(d.id)}
               data-track="document-remove"
-              disabled={deleting || !inAnotherProject(menuReach, notebookId)}
+              disabled={deleting}
               className={`${rowAction} disabled:opacity-40`}
-              data-tip={
-                menuReachLoading || inAnotherProject(menuReach, notebookId)
-                  ? t("panes.removeFromProjectTitle")
-                  : t("panes.removeFromProjectOnly")
-              }
+              data-tip={t("panes.removeFromProjectTitle")}
             >
               {t("panes.removeFromProject")}
             </button>
@@ -1417,7 +1434,8 @@ export function DocumentBar({
             aria-expanded={listOpen}
             aria-label={t("panes.documentList")}
             data-tip={active?.title ?? t("panes.documentList")}
-            className="flex max-w-[min(50vw,32rem)] min-w-0 items-center gap-1.5 rounded-full bg-ink py-[7px] pr-3 pl-[15px] text-[13px] font-semibold text-paper"
+            // Below sm the pill takes the project title's room (workspace.tsx).
+            className="flex max-w-[min(68vw,32rem)] min-w-0 items-center gap-1.5 rounded-full bg-ink py-[7px] pr-3 pl-[15px] text-[13px] font-semibold text-paper sm:max-w-[min(50vw,32rem)]"
           >
             <span className="overflow-hidden whitespace-nowrap">{active ? clipWords(active.title, 56) : t("panes.documentList")}</span>
             <span className="shrink-0 rounded-full bg-paper/20 px-1.5 text-[11px] tabular-nums">
@@ -1495,7 +1513,7 @@ export function DocumentBar({
         phase={phase}
         error={error}
         onError={setError}
-        onSubmit={(request) => openAssistant({ ...request, folderId: addFolder })}
+        onSubmit={(request) => openAssistant({ ...request, folderId: addFolder, confirmed: true })}
         onCreateBlank={() => void createBlank()}
         fileAccept={UPLOAD_FILE_ACCEPT}
         projectTitle={

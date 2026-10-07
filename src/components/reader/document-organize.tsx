@@ -42,10 +42,17 @@ function subscribe(onChange: () => void) {
   };
 }
 
-/** The list's sort: Last edited unless the reader picked another. */
+/** The list's sort: Last edited unless the reader picked another. Week
+    added and Month added, two sorts until 2026-10-07, list by Added, which
+    draws the weeks. */
 export function useDocumentSort(): [DocumentSort, (s: DocumentSort) => void] {
   const stored = useSyncExternalStore(subscribe, () => read(SORT_STORE), () => null);
-  const sort = DOCUMENT_SORTS.includes(stored as DocumentSort) ? (stored as DocumentSort) : "edited";
+  const sort =
+    stored === "week" || stored === "month"
+      ? "added"
+      : DOCUMENT_SORTS.includes(stored as DocumentSort)
+        ? (stored as DocumentSort)
+        : "edited";
   return [sort, useCallback((s: DocumentSort) => write(SORT_STORE, s), [])];
 }
 
@@ -78,8 +85,6 @@ const SORT_KEY: Record<DocumentSort, TKey> = {
   added: "panes.documentsSortAdded",
   title: "panes.documentsSortTitle",
   kind: "panes.documentsSortKind",
-  week: "panes.documentsSortWeek",
-  month: "panes.documentsSortMonth",
 };
 
 const KIND_KEY: Record<RowKind, TKey> = {
