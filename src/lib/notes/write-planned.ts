@@ -12,7 +12,11 @@ export const plannedNoteSchema = z.object({
   content: z.string().min(1).max(50_000),
   sectionId: z.string().optional(),
   sectionTitle: z.string().max(200).optional(),
-  quotes: z.array(z.object({ blockId: z.string().min(1), quote: z.string().min(1).max(2000) })).max(30).optional(),
+  // At most 30 quotes: more are cut, never a failed save (the prompt asks for 30 at most).
+  quotes: z
+    .array(z.object({ blockId: z.string().min(1), quote: z.string().min(1).max(2000) }))
+    .transform((quotes) => quotes.slice(0, 30))
+    .optional(),
 });
 
 export const notesPlanSchema = z.object({

@@ -23,6 +23,7 @@ const docLinkSelect = {
     notebookId: true,
     formerNotebookId: true,
     createdById: true,
+    createdAt: true,
   },
 } as const;
 

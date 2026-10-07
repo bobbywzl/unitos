@@ -30,6 +30,7 @@ const en = {
   noteOnLinkSaving: "Saving…",
   noteOnLinkCancel: "Cancel",
   noteOnLinkSaved: "Note saved in {section}",
+  noteOnLinkQueued: "Note saved offline in {section}. It syncs when you are back online.",
   noteOnLinkShow: "Show",
   noteOnLinkNoSection: "Add a section in the notes tray first.",
 
@@ -43,6 +44,7 @@ const en = {
   notesOneDocument: "{n} notes quote one document; open the notes full page for all.",
   notesOneDocumentOne: "1 note quotes one document; open the notes full page for all.",
   notesEmpty: "No note quotes these documents yet.",
+  notesOnProject: "Notes on the project",
   notesSection: "Section",
   notesSectionAll: "All",
   notesSourceOne: "1 source",
@@ -75,6 +77,7 @@ const zh: Record<keyof typeof en, string> = {
   noteOnLinkSaving: "正在保存…",
   noteOnLinkCancel: "取消",
   noteOnLinkSaved: "笔记已保存到 {section}",
+  noteOnLinkQueued: "笔记已离线保存到 {section}，恢复联网后同步。",
   noteOnLinkShow: "显示",
   noteOnLinkNoSection: "请先在笔记栏中添加一个章节。",
 
@@ -87,6 +90,7 @@ const zh: Record<keyof typeof en, string> = {
   notesOneDocument: "{n} 条笔记只引用一个文档；打开整页笔记查看全部。",
   notesOneDocumentOne: "1 条笔记只引用一个文档；打开整页笔记查看全部。",
   notesEmpty: "还没有笔记引用这些文档。",
+  notesOnProject: "整个项目的笔记",
   notesSection: "章节",
   notesSectionAll: "全部",
   notesSourceOne: "1 个出处",

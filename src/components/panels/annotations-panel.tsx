@@ -46,14 +46,18 @@ function LinkAbout({
   reason,
   busy,
   onSave,
+  locked,
 }: {
   linkId: string;
   reason: string | null;
   busy: boolean;
   onSave: (id: string, reason: string) => Promise<void>;
+  /** A link of another account's project (SPEC.md §13): the reason reads only. */
+  locked?: boolean;
 }) {
   const t = useT();
-  const { canEdit } = useCollab();
+  const { canEdit: canEditProject } = useCollab();
+  const canEdit = canEditProject && !locked;
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(reason ?? "");
   // The stored text changed under the box (a refresh): the box follows.
@@ -363,7 +367,13 @@ export function AnnotationsPanel({
                   {l.targetQuotedText}
                 </p>
               )}
-              <LinkAbout linkId={l.id} reason={l.reason} busy={busyId === l.id} onSave={describeLink} />
+              <LinkAbout
+                linkId={l.id}
+                reason={l.reason}
+                busy={busyId === l.id}
+                onSave={describeLink}
+                locked={l.crossAccount?.outside}
+              />
               <div className="mt-2 flex flex-wrap items-center gap-3">
                 {l.detached ? (
                   <span className="rounded-full bg-sand-200 px-2.5 py-0.5 text-[11px] font-semibold text-sand-600">
@@ -399,7 +409,7 @@ export function AnnotationsPanel({
                   </button>
                 )}
               </div>
-              <ReplyThread target={{ docLinkId: l.id, notebookId }} replies={l.replies} />
+              <ReplyThread target={{ docLinkId: l.id, notebookId }} replies={l.replies} crossAccount={l.crossAccount} />
             </div>
           ))}
           {acceptedIn.map((l) => (
@@ -410,7 +420,13 @@ export function AnnotationsPanel({
                   {l.quotedText}
                 </p>
               )}
-              <LinkAbout linkId={l.id} reason={l.reason} busy={busyId === l.id} onSave={describeLink} />
+              <LinkAbout
+                linkId={l.id}
+                reason={l.reason}
+                busy={busyId === l.id}
+                onSave={describeLink}
+                locked={l.crossAccount?.outside}
+              />
               <div className="mt-2 flex flex-wrap items-center gap-3">
                 <Link href={`/n/${notebookId}?doc=${l.fromDocumentId}&link=${l.id}`} className={chip}>
                   ⇄ {l.fromTitle}
@@ -437,7 +453,7 @@ export function AnnotationsPanel({
                   </button>
                 )}
               </div>
-              <ReplyThread target={{ docLinkId: l.id, notebookId }} replies={l.replies} />
+              <ReplyThread target={{ docLinkId: l.id, notebookId }} replies={l.replies} crossAccount={l.crossAccount} />
             </div>
           ))}
         </div>

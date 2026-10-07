@@ -87,6 +87,7 @@ export async function POST(req: Request) {
         notebookId: true,
         formerNotebookId: true,
         createdById: true,
+        createdAt: true,
       },
     });
     if (!link) return NextResponse.json({ error: t("api.linkNotFound") }, { status: 404 });

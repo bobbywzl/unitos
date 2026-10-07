@@ -13,6 +13,8 @@ import { useT } from "@/components/lang-provider";
 // the section the reader last wrote in; Show opens it in the notes tray.
 // The answer stays as it is. onShow replaces Show's event where the tray
 // sits behind the surface (the graph closes first, then the tray opens).
+// saved/onSaved: a surface that keeps its answers (Stitch) keeps the saved
+// line with the answer, so a second press cannot save the note twice.
 export type SaveOrigin = "assistant" | "explain" | "simplify" | "analyze" | "ask" | "act" | "stitch";
 
 export function SaveAsNote({
@@ -24,6 +26,8 @@ export function SaveAsNote({
   answer,
   className = "",
   onShow,
+  saved: savedBefore,
+  onSaved,
 }: {
   notebookId: string;
   documentId?: string;
@@ -33,12 +37,14 @@ export function SaveAsNote({
   answer: string;
   className?: string;
   onShow?: (noteId: string) => void;
+  saved?: { noteId: string; section: string };
+  onSaved?: (saved: { noteId: string; section: string }) => void;
 }) {
   const t = useT();
   const router = useRouter();
   const [state, setState] = useState<
     { kind: "idle" } | { kind: "busy" } | { kind: "saved"; noteId: string; section: string } | { kind: "error"; message: string }
-  >({ kind: "idle" });
+  >(() => (savedBefore ? { kind: "saved", ...savedBefore } : { kind: "idle" }));
 
   async function save() {
     if (state.kind === "busy" || !answer.trim()) return;
@@ -53,6 +59,7 @@ export function SaveAsNote({
         answer: answer.slice(0, 60_000),
       });
       setState({ kind: "saved", noteId: saved.noteId, section: saved.sectionTitle });
+      onSaved?.({ noteId: saved.noteId, section: saved.sectionTitle });
       // The tray reads the new note from the refreshed page.
       router.refresh();
     } catch (err) {

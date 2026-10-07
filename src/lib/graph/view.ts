@@ -63,6 +63,7 @@ export async function documentsGraph(
         notebookId: true,
         formerNotebookId: true,
         createdById: true,
+        createdAt: true,
       },
     }),
     db.docLink.findMany({

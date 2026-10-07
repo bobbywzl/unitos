@@ -160,7 +160,7 @@ export type CrossAccountLink = {
   outside: boolean;
 };
 
-type LinkForRule = LinkForAccess & { id: string; createdById: string | null };
+type LinkForRule = LinkForAccess & { id: string; createdById: string | null; createdAt: Date };
 
 /** The cross-account rule for many links at once: one query over the
     projects that hold their documents. Links of a project, and every link
@@ -177,6 +177,7 @@ export async function crossAccountLinks(
     where: { documents: { some: { documentId: { in: docIds } } } },
     select: {
       userId: true,
+      createdAt: true,
       collaborators: { select: { email: true, role: true } },
       documents: { where: { documentId: { in: docIds } }, select: { documentId: true } },
     },
@@ -187,12 +188,18 @@ export async function crossAccountLinks(
       return held.has(link.fromDocumentId) && held.has(link.toDocumentId);
     });
     if (new Set(both.map((h) => h.userId)).size <= 1) continue;
+    // The maker's accounts: the account that made the link; for a link from
+    // before links named their maker, the owners of the projects that
+    // existed when it was made (a project made later is not where it was
+    // made). When that is more than one account, no one is: the link reads
+    // only, and each account changes only its own replies.
+    const earlier = new Set(both.filter((h) => h.createdAt <= link.createdAt).map((h) => h.userId));
+    const makers = link.createdById !== null ? new Set([link.createdById]) : earlier.size === 1 ? earlier : new Set();
     const inside =
       user !== null &&
-      link.createdById !== null &&
-      (user.id === link.createdById ||
+      (makers.has(user.id) ||
         both.some((h) => {
-          if (h.userId !== link.createdById) return false;
+          if (!makers.has(h.userId)) return false;
           const role = roleOf(h, user);
           return role !== null && RANK[role] >= RANK.editor;
         }));

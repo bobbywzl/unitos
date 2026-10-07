@@ -403,7 +403,8 @@ function EdgeLinkList({ edgeId, loop, anchor, links }: { edgeId: string; loop: b
   const t = useT();
   const [openId, setOpenId] = useState<string | null>(null);
   // A recommended link accepted or dismissed from the list (SPEC.md §13):
-  // the row answers at once, and the refresh brings the graph's own data.
+  // the row answers at once, before the server does, and comes back if the
+  // server refuses; the refresh brings the graph's own data.
   const { canEdit } = useCollab();
   const router = useRouter();
   const { notebookId } = useParams<{ notebookId?: string }>();
@@ -415,12 +416,18 @@ function EdgeLinkList({ edgeId, loop, anchor, links }: { edgeId: string; loop: b
     if (busyId) return;
     setBusyId(linkId);
     setDecideError(null);
+    const mark = accept ? setAccepted : setDismissed;
+    mark((prev) => new Set(prev).add(linkId));
     try {
       if (accept) await api(linkPath(linkId, notebookId), "PATCH", { accept: true });
       else await api(linkPath(linkId, notebookId), "DELETE");
-      (accept ? setAccepted : setDismissed)((prev) => new Set(prev).add(linkId));
       router.refresh();
     } catch (err) {
+      mark((prev) => {
+        const next = new Set(prev);
+        next.delete(linkId);
+        return next;
+      });
       setDecideError(err instanceof Error ? err.message : t("common.requestFailed"));
     } finally {
       setBusyId(null);
@@ -469,7 +476,7 @@ function EdgeLinkList({ edgeId, loop, anchor, links }: { edgeId: string; loop: b
                 <span className="rounded-full border border-dashed border-clay-300 px-2 text-[10.5px] font-semibold text-clay-700">
                   {t("panes.graphLinkRecommended")}
                 </span>
-                {canEdit && (
+                {canEdit && !l.crossAccount?.outside && (
                   <span className="ml-auto flex items-center gap-1.5">
                     <button
                       onClick={() => void decide(l.id, true)}

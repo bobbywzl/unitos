@@ -26,6 +26,10 @@ export type NotesOnGraph = {
   byDocument: Map<string, DocumentNotes>;
   /** The notes that belong to both documents of a pair, by pairKey. */
   byPair: Map<string, GraphNote[]>;
+  /** The notes of the project that belong to no document of the graph (no
+      document of their own, no source in one): a saved Stitch answer with
+      no quote, a note written on the notes full page. Newest edit first. */
+  projectNotes: GraphNote[];
 };
 
 /** One key per undirected pair, the same as a graph edge's id ("a|b", sorted). */
@@ -48,6 +52,7 @@ export function notesOnGraph(
 ): NotesOnGraph {
   const nodes = new Set(nodeIds);
   const notes: GraphNote[] = [];
+  const projectNotes: GraphNote[] = [];
   const walk = (list: SectionView[], inFilter: boolean, parentTitle: string | null) => {
     for (const s of list) {
       const on = inFilter || sectionId === null || s.id === sectionId;
@@ -58,7 +63,9 @@ export function notesOnGraph(
           for (const id of [note.documentId, ...note.sources.map((src) => src.documentId)]) {
             if (id && nodes.has(id) && !ids.includes(id)) ids.push(id);
           }
-          if (ids.length > 0) notes.push({ note, sectionId: s.id, sectionTitle: title, documentIds: ids });
+          const g = { note, sectionId: s.id, sectionTitle: title, documentIds: ids };
+          if (ids.length > 0) notes.push(g);
+          else projectNotes.push(g);
         }
       }
       walk(s.children, on, title);
@@ -66,6 +73,7 @@ export function notesOnGraph(
   };
   walk(sections, false, null);
   notes.sort((x, y) => Date.parse(y.note.updatedAt) - Date.parse(x.note.updatedAt));
+  projectNotes.sort((x, y) => Date.parse(y.note.updatedAt) - Date.parse(x.note.updatedAt));
 
   const byDocument = new Map<string, DocumentNotes>();
   const byPair = new Map<string, GraphNote[]>();
@@ -86,5 +94,5 @@ export function notesOnGraph(
       }
     }
   }
-  return { notes, byDocument, byPair };
+  return { notes, byDocument, byPair, projectNotes };
 }
