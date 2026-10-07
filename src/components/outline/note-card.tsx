@@ -68,7 +68,7 @@ function PinIcon({ size = 12 }: { size?: number }) {
 }
 
 function TickIcon({ size = 10 }: { size?: number }) {
-  return <RowIcon shape="check" size={size} strokeWidth="4" />;
+  return <RowIcon shape="check" size={size} bold />;
 }
 
 function AnchorIcon({ size = 11 }: { size?: number }) {

@@ -69,26 +69,18 @@ export function IconSprite() {
   );
 }
 
-/** A row shape as its own svg: a <use> of the sprite's symbol. */
+/** A row shape as its own svg: a <use> of the sprite's symbol. Its stroke
+    comes from the .row-icon rule (globals.css), so a row carries no
+    attributes but its size; the bold check is .row-icon-bold. The symbol's
+    viewBox scales it to the size. */
 export function RowIcon({
   shape,
   size = 17,
-  strokeWidth = "2.75",
+  bold = false,
   className,
-}: IconProps & { shape: RowShape; strokeWidth?: string }) {
+}: IconProps & { shape: RowShape; bold?: boolean }) {
   return (
-    <svg
-      aria-hidden
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={strokeWidth}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
+    <svg aria-hidden width={size} height={size} className={`row-icon${bold ? " row-icon-bold" : ""}${className ? ` ${className}` : ""}`}>
       <use href={`#icon-${shape}`} />
     </svg>
   );

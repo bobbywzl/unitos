@@ -1,7 +1,8 @@
 // The graph of a project saved for offline opens without a network (GR-18,
 // SPEC.md §13, §17): the copy keeps GET .../graph and each document's
 // GET .../outline, and the service worker answers them offline. Round 3
-// (COST3-03, VIEW3-06): the copy also keeps .../graph?provenance=1, every
+// (COST3-03, VIEW3-06): the copy also keeps .../graph?provenance=1 (only
+// when an edge counts provenance links, COST4-05), every
 // link's passages (.../graph/passages: a link panel draws its passages
 // offline) and the part titles (.../outline?parts=titles: the Documents list). On a dev
 // server the worker is not registered by the app, so the script registers
@@ -77,9 +78,20 @@ out.cached = await page.evaluate(async (nb) => {
 }, NB);
 check("the copy holds the graph and every outline", out.cached.includes(`/api/notebooks/${NB}/graph`) && out.cached.filter((u) => u.includes("/outline?documentId=")).length === seed.docs.length, `${out.cached.length} data routes`);
 check(
-  "the copy holds the provenance graph, the passages, and the part titles",
-  [`/api/notebooks/${NB}/graph?provenance=1`, `/api/notebooks/${NB}/graph/passages`, `/api/notebooks/${NB}/outline?parts=titles`].every((u) => out.cached.includes(u)),
+  "the copy holds the passages and the part titles",
+  [`/api/notebooks/${NB}/graph/passages`, `/api/notebooks/${NB}/outline?parts=titles`].every((u) => out.cached.includes(u)),
   out.cached.join(" "),
+);
+// COST4-05: the provenance graph only when an edge counts provenance links.
+out.provenanceLinks = await page.evaluate(async (nb) => {
+  const res = await (await caches.open(`unitos-project-${nb}`)).match(`/api/notebooks/${nb}/graph`);
+  const data = res ? await res.json() : { edges: [] };
+  return data.edges.reduce((n, e) => n + (e.provenance ?? 0), 0);
+}, NB);
+check(
+  "the copy holds the provenance graph only when there are provenance links",
+  out.cached.includes(`/api/notebooks/${NB}/graph?provenance=1`) === out.provenanceLinks > 0,
+  `${out.provenanceLinks} provenance links`,
 );
 
 await context.setOffline(true);
@@ -93,6 +105,12 @@ if ((await page.locator(".react-flow__node").count()) === 0) {
   await page.waitForSelector(".react-flow__node", { timeout: 30000 }).catch(() => {});
   await page.waitForTimeout(2500);
 }
+// The graph with ?provenance=1 answers offline from the bare entry.
+out.provenanceOffline = await page.evaluate(async (nb) => {
+  const r = await fetch(`/api/notebooks/${nb}/graph?provenance=1`).catch(() => null);
+  return r ? r.status : 0;
+}, NB);
+check("offline: ?provenance=1 answers from the copy", out.provenanceOffline === 200, String(out.provenanceOffline));
 const nodes = await page.locator(".react-flow__node").count();
 const edges = await page.locator(".react-flow__edge").count();
 check("offline: the graph draws its nodes and curves", nodes === seed.docs.length && edges > 0, `${nodes} nodes, ${edges} curves`);

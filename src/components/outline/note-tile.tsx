@@ -17,7 +17,7 @@ function AnchorIcon({ size = 11 }: { size?: number }) {
 }
 
 function TickIcon({ size = 10 }: { size?: number }) {
-  return <RowIcon shape="check" size={size} strokeWidth="4" />;
+  return <RowIcon shape="check" size={size} bold />;
 }
 
 // One tile of a section's board (SPEC.md §6): the note as a tile — its id,
