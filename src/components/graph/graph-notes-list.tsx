@@ -1,20 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import type { GraphEdge } from "@/lib/types";
 import { readGraphKeep, writeGraphKeep } from "@/components/graph/graph-keep";
 import { useCollab } from "@/components/collab/collab-context";
 import { NotesIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { useGraphNotes, useGraphNotesLit } from "@/components/graph/graph-notes";
+import { LinkReplyCount } from "@/components/graph/link-replies";
 import { noteLine, type GraphNote } from "@/lib/graph/notes";
+import { clipWords } from "@/lib/markdown-preview";
 import { splitNote } from "@/lib/note-title";
 
 // The Notes list beside the canvas (SPEC.md §13): a lens on the graph, not a
-// second notes page. It lists the notes in focus — the pinned curve's notes
-// quoting both documents, else the notes quoting the documents picked for
-// Stitch, else every note that quotes two or more documents — grouped by
-// section. Hovering a row lights the documents the note quotes; a click
+// second notes page. It lists the notes in focus — the note Show on graph
+// opened it on (its documents lit, the links between them under it), else
+// the pinned curve's notes quoting both documents, else the notes quoting
+// the documents picked for Stitch, else every note that quotes two or more
+// documents — grouped by section. The notes on one document fold under a
+// line that shows them in place, beside a link to the notes full page
+// (VIEW3-04, VIEW3-05). Hovering a row lights the documents the note quotes; a click
 // reads it here, its quotes each with Jump; editing stays in the tray.
 // Section filters the list and the graph: the node chips, the note curves,
 // and the nodes no note of the section touches dim. The notes on no
@@ -47,6 +54,9 @@ export function NotesListToggle({ open, onToggle }: { open: boolean; onToggle: (
   );
 }
 
+/** Which list of the Notes list a row is in: a rejected note keeps its place there. */
+type Where = "shown" | "single" | "project";
+
 function bySection(notes: GraphNote[]): { id: string; title: string; notes: GraphNote[] }[] {
   const groups = new Map<string, { id: string; title: string; notes: GraphNote[] }>();
   for (const g of notes) {
@@ -57,12 +67,49 @@ function bySection(notes: GraphNote[]): { id: string; title: string; notes: Grap
   return [...groups.values()];
 }
 
-export function GraphNotesList({ pickedIds, onClose }: { pickedIds: Set<string>; onClose: () => void }) {
+export function GraphNotesList({
+  pickedIds,
+  shownId,
+  onClearShown,
+  edges,
+  onOpenLink,
+  onClose,
+}: {
+  pickedIds: Set<string>;
+  /** The note Show on graph opened the list on; null = none. */
+  shownId: string | null;
+  /** Back to the usual list. */
+  onClearShown: () => void;
+  edges: GraphEdge[];
+  /** Open a link in the side panel; its Back returns here. */
+  onOpenLink: (linkId: string) => void;
+  onClose: () => void;
+}) {
   const t = useT();
   const ctx = useGraphNotes();
   const { pinnedPair } = useGraphNotesLit();
-  // The open note survives a trip to a document and Back (WALK2-07).
-  const [openId, setOpenIdState] = useState<string | null>(() => readGraphKeep(ctx?.notebookId).noteId ?? null);
+  // The open note survives a trip to a document and Back (WALK2-07); the
+  // note Show on graph opened the list on opens read.
+  const [openId, setOpenIdState] = useState<string | null>(
+    () => shownId ?? readGraphKeep(ctx?.notebookId).noteId ?? null,
+  );
+  // The notes on one document, shown in place under the list.
+  const [singleOpen, setSingleOpen] = useState(false);
+  const every = ctx?.every;
+  const shownNote = useMemo(() => {
+    if (!shownId || !every) return null;
+    return (
+      every.notes.find((g) => g.note.id === shownId) ?? every.projectNotes.find((g) => g.note.id === shownId) ?? null
+    );
+  }, [shownId, every]);
+  const shownDocs = shownNote?.documentIds.join(" ") ?? "";
+  const setFocusLit = ctx?.setFocusLit;
+  // The shown note's documents stay lit while it is shown.
+  useEffect(() => {
+    if (!setFocusLit || !shownDocs) return;
+    setFocusLit(new Set(shownDocs.split(" ")));
+    return () => setFocusLit(null);
+  }, [setFocusLit, shownDocs]);
   const setOpenId = (id: string | null) => {
     setOpenIdState(id);
     writeGraphKeep(ctx?.notebookId, { noteId: id });
@@ -70,7 +117,7 @@ export function GraphNotesList({ pickedIds, onClose }: { pickedIds: Set<string>;
   // Accept and Reject before the server answers: accepted rows read
   // accepted, rejected rows leave the list for an Undo line.
   const [acceptedNow, setAcceptedNow] = useState<Set<string>>(() => new Set());
-  const [rejectedNow, setRejectedNow] = useState<{ g: GraphNote; where: "shown" | "project" }[]>([]);
+  const [rejectedNow, setRejectedNow] = useState<{ g: GraphNote; where: Where }[]>([]);
   const [busyIds, setBusyIds] = useState<Set<string>>(() => new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
   if (!ctx) return null;
@@ -90,7 +137,7 @@ export function GraphNotesList({ pickedIds, onClose }: { pickedIds: Set<string>;
       else next[id] = text;
       return next;
     });
-  async function decide(g: GraphNote, accept: boolean, where: "shown" | "project") {
+  async function decide(g: GraphNote, accept: boolean, where: Where) {
     const id = g.note.id;
     if (busyIds.has(id)) return;
     setBusyIds((prev) => new Set(prev).add(id));
@@ -124,7 +171,7 @@ export function GraphNotesList({ pickedIds, onClose }: { pickedIds: Set<string>;
   const rejectedIds = new Set(rejectedNow.map((r) => r.g.note.id));
   // A rejected note keeps its place (the refresh drops it from the data: it
   // goes back where its last edit sorts it), and an accepted one reads accepted.
-  const live = (list: GraphNote[], where: "shown" | "project") => {
+  const live = (list: GraphNote[], where: Where) => {
     const out = list.map((g) =>
       acceptedNow.has(g.note.id) && g.note.status === "PENDING"
         ? { ...g, note: { ...g.note, status: "ACCEPTED" as const } }
@@ -142,8 +189,11 @@ export function GraphNotesList({ pickedIds, onClose }: { pickedIds: Set<string>;
   const pinned = pa && pb && pa !== pb ? pinnedPair : null;
   let heading: string;
   let shown: GraphNote[];
-  let single = 0;
-  if (pinned) {
+  let single: GraphNote[] = [];
+  if (shownNote) {
+    heading = t("graphNotes.notesShown");
+    shown = [shownNote];
+  } else if (pinned) {
     heading = t("graphNotes.notesOnPair");
     shown = view.byPair.get(pinned) ?? [];
   } else if (pickedIds.size > 0) {
@@ -153,12 +203,25 @@ export function GraphNotesList({ pickedIds, onClose }: { pickedIds: Set<string>;
   } else {
     heading = t("graphNotes.notesAcross");
     shown = view.notes.filter((g) => g.documentIds.length >= 2);
-    single = view.notes.length - shown.length;
+    single = live(
+      view.notes.filter((g) => g.documentIds.length < 2),
+      "single",
+    );
   }
   shown = live(shown, "shown");
   // Notes on no document of the graph: listed when nothing narrows the list.
-  const project = pinned || pickedIds.size > 0 ? [] : live(view.projectNotes, "project");
-  const row = (where: "shown" | "project", g: GraphNote) =>
+  const project = shownNote || pinned || pickedIds.size > 0 ? [] : live(view.projectNotes, "project");
+  // Under the shown note: the links between its documents, or the links of
+  // its one document.
+  const shownIds = new Set(shownNote?.documentIds ?? []);
+  const shownLinks = shownNote
+    ? edges
+        .filter((e) =>
+          shownIds.size >= 2 ? e.a !== e.b && shownIds.has(e.a) && shownIds.has(e.b) : shownIds.has(e.a) || shownIds.has(e.b),
+        )
+        .flatMap((e) => e.links.filter((l) => !l.provenance))
+    : [];
+  const row = (where: Where, g: GraphNote) =>
     rejectedIds.has(g.note.id) ? (
       <p
         key={g.note.id}
@@ -223,7 +286,18 @@ export function GraphNotesList({ pickedIds, onClose }: { pickedIds: Set<string>;
           ))}
         </select>
       </label>
-      <p className="text-[11px] font-bold tracking-[0.06em] text-sand-600 uppercase">{heading}</p>
+      <div className="flex items-center gap-2">
+        <p className="flex-1 text-[11px] font-bold tracking-[0.06em] text-sand-600 uppercase">{heading}</p>
+        {shownNote && (
+          <button
+            onClick={onClearShown}
+            data-track="graph-notes-shown-clear"
+            className="shrink-0 rounded-full border border-line px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+          >
+            {t("graphNotes.notesShownAll")}
+          </button>
+        )}
+      </div>
       {shown.length === 0 && <p className="text-[13px] text-sand-600">{t("graphNotes.notesEmpty")}</p>}
       {bySection(shown).map((group) => (
         <div key={group.id} className="flex flex-col gap-1.5">
@@ -231,10 +305,69 @@ export function GraphNotesList({ pickedIds, onClose }: { pickedIds: Set<string>;
           {group.notes.map((g) => row("shown", g))}
         </div>
       ))}
-      {single > 0 && (
-        <p className="text-[11.5px] text-sand-500">
-          {single === 1 ? t("graphNotes.notesOneDocumentOne") : t("graphNotes.notesOneDocument", { n: single })}
-        </p>
+      {shownNote && shownLinks.length > 0 && (
+        <div data-graph-notes-links="" className="flex flex-col gap-1">
+          <p className="text-[11px] font-bold tracking-[0.06em] text-sand-600 uppercase">
+            {shownIds.size >= 2 ? t("graphNotes.notesLinksBetween") : t("graphNotes.notesLinksOf")}
+          </p>
+          {shownLinks.map((l) => (
+            <button
+              key={l.id}
+              onClick={() => onOpenLink(l.id)}
+              data-track="graph-notes-link-open"
+              data-graph-notes-link={l.id}
+              onMouseEnter={() => ctx.setRowLit(new Set([l.fromDocumentId, l.toDocumentId]))}
+              onMouseLeave={() => ctx.setRowLit(null)}
+              className={`flex flex-col items-start gap-0.5 rounded-xl border bg-card px-3 py-2 text-left hover:bg-clay-100/60 ${
+                l.recommended ? "border-dashed border-clay-300" : "border-line"
+              }`}
+            >
+              <span className="text-[10.5px] text-sand-500">
+                {l.fromDocumentId === l.toDocumentId
+                  ? t("panes.graphLinksLoopTitle", { title: l.fromTitle })
+                  : t("panes.graphLinksPairTitle", { a: l.fromTitle, b: l.toTitle })}
+              </span>
+              <span className="text-[12.5px] leading-snug font-semibold text-ink">
+                {l.reason ?? clipWords(l.quotedText, 60)}
+              </span>
+              <LinkReplyCount link={l} />
+            </button>
+          ))}
+        </div>
+      )}
+      {single.length > 0 && (
+        <div data-graph-notes-single="" className="flex flex-col gap-1.5">
+          <p className="flex flex-wrap items-center gap-x-1.5 text-[11.5px] text-sand-500">
+            <span>
+              {single.length === 1
+                ? t("graphNotes.notesOneDocumentOne")
+                : t("graphNotes.notesOneDocument", { n: single.length })}
+            </span>
+            <button
+              onClick={() => setSingleOpen(!singleOpen)}
+              aria-expanded={singleOpen}
+              data-track="graph-notes-single"
+              className="font-semibold text-sand-700 underline-offset-2 hover:text-clay-800 hover:underline"
+            >
+              {singleOpen ? t("graphNotes.notesOneDocumentHide") : t("graphNotes.notesOneDocumentShow")}
+            </button>
+            <span aria-hidden>·</span>
+            <Link
+              href={`/n/${ctx.notebookId}/notes`}
+              data-track="graph-notes-full-page"
+              className="font-semibold text-sand-700 underline-offset-2 hover:text-clay-800 hover:underline"
+            >
+              {t("graphNotes.notesFullPage")}
+            </Link>
+          </p>
+          {singleOpen &&
+            bySection(single).map((group) => (
+              <div key={group.id} className="flex flex-col gap-1.5">
+                <p className="text-[11.5px] font-semibold text-sage-700">{group.title}</p>
+                {group.notes.map((g) => row("single", g))}
+              </div>
+            ))}
+        </div>
       )}
       {project.length > 0 && (
         <div data-graph-notes-project="" className="flex flex-col gap-1.5">

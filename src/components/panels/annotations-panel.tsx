@@ -6,6 +6,7 @@ import { useState } from "react";
 import type { AnnotationItem, LinkIn, LinkOut, SectionView } from "@/lib/types";
 import { api } from "@/lib/api";
 import { linkPath } from "@/lib/link-scope";
+import { requestGraph } from "@/components/graph/graph-keep";
 import { LINK_KIND_VAR } from "@/lib/annotations/kind";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
@@ -231,6 +232,19 @@ export function AnnotationsPanel({
     await mutate(id, () => api(linkPath(id, notebookId), "PATCH", { reason }));
   }
 
+  // Show on graph on a link card (VIEW3-02): the graph opens on the link's
+  // panel, with its passages and replies.
+  const showOnGraph = (linkId: string) => (
+    <button
+      onClick={() => requestGraph({ linkId })}
+      data-track="link-show-on-graph"
+      data-tip={t("graphNotes.showLinkOnGraphTitle")}
+      className="text-xs text-sand-600 hover:text-clay-700"
+    >
+      {t("graphNotes.showOnGraph")}
+    </button>
+  );
+
   const empty = annotations.length === 0 && acceptedOut.length === 0 && acceptedIn.length === 0;
 
   // The three-dots menu at the right of every card's header: New note, Add
@@ -360,7 +374,7 @@ export function AnnotationsPanel({
         <div className="flex flex-col gap-2">
           <GroupLabel icon={<LinkIcon size={12} />}>{t("panels.links")}</GroupLabel>
           {acceptedOut.map((l) => (
-            <div key={l.id} className={card} style={{ borderColor: LINK_KIND_VAR }}>
+            <div key={l.id} data-annotation-link-id={l.id} className={card} style={{ borderColor: LINK_KIND_VAR }}>
               <p className="line-clamp-2 text-[13px]">{l.quotedText}</p>
               {l.targetQuotedText && (
                 <p className="mt-1.5 line-clamp-2 border-l-2 border-sand-300 pl-2 text-xs text-sand-500">
@@ -398,6 +412,7 @@ export function AnnotationsPanel({
                   </span>
                 )}
                 <AuthorChip createdById={l.createdById} nameless />
+                {!l.detached && showOnGraph(l.id)}
                 {canEdit && (
                   <button
                     onClick={() => void removeLink(l.id)}
@@ -413,7 +428,7 @@ export function AnnotationsPanel({
             </div>
           ))}
           {acceptedIn.map((l) => (
-            <div key={l.id} className={card} style={{ borderColor: LINK_KIND_VAR }}>
+            <div key={l.id} data-annotation-link-id={l.id} className={card} style={{ borderColor: LINK_KIND_VAR }}>
               <p className="line-clamp-2 text-[13px]">{l.hereQuotedText ?? l.quotedText}</p>
               {l.hereQuotedText && (
                 <p className="mt-1.5 line-clamp-2 border-l-2 border-sand-300 pl-2 text-xs text-sand-500">
@@ -442,6 +457,7 @@ export function AnnotationsPanel({
                   </span>
                 )}
                 <AuthorChip createdById={l.createdById} nameless />
+                {showOnGraph(l.id)}
                 {canEdit && (
                   <button
                     onClick={() => void removeLink(l.id)}

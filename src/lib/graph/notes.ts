@@ -96,3 +96,43 @@ export function notesOnGraph(
   }
   return { notes, byDocument, byPair, projectNotes };
 }
+
+type LinkEnds = {
+  fromDocumentId: string;
+  toDocumentId: string;
+  quotedText: string;
+  toQuotedText: string | null;
+  fromBlockText: string | null;
+  toBlockText: string | null;
+};
+
+const squash = (s: string) => s.replace(/\s+/g, " ").trim();
+
+/** Whether a quote sits on a link's end: in its document, and the end's
+    quote holds it or it holds the end's quote, or it lies in the end's
+    block. A document-level end (no quote) takes any quote of its document. */
+function onEnd(
+  source: { documentId: string; quotedText: string },
+  documentId: string,
+  quote: string | null,
+  blockText: string | null,
+): boolean {
+  if (source.documentId !== documentId) return false;
+  if (quote === null) return true;
+  const mine = squash(source.quotedText);
+  const theirs = squash(quote);
+  if (!mine || !theirs) return false;
+  return mine.includes(theirs) || theirs.includes(mine) || (blockText !== null && squash(blockText).includes(mine));
+}
+
+/** The notes on a link (WALK3-03): the notes that quote a passage at each of
+    its two ends — what Note on this link writes, and an older note that
+    quotes the same two passages. Newest edit first, as `notes` comes. */
+export function notesOnLink(notes: GraphNote[], link: LinkEnds): GraphNote[] {
+  return notes.filter((g) => {
+    const sources = g.note.sources;
+    const from = sources.some((s) => onEnd(s, link.fromDocumentId, link.quotedText, link.fromBlockText));
+    const to = sources.some((s) => onEnd(s, link.toDocumentId, link.toQuotedText, link.toBlockText));
+    return from && to;
+  });
+}

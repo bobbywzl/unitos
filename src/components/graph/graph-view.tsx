@@ -893,17 +893,28 @@ function useSpotlightAttributes(
     if (!el) return;
     if (nodeIds) el.setAttribute("data-spot", "");
     else el.removeAttribute("data-spot");
-    const lit: Element[] = [];
-    for (const id of nodeIds ?? []) {
-      const node = el.querySelector(`.react-flow__node[data-id=${JSON.stringify(id)}]`);
-      if (node) lit.push(node);
-    }
-    for (const id of edgeIds ?? []) {
-      const edge = el.querySelector(`.react-flow__edge[data-testid=${JSON.stringify(`rf__edge-${id}`)}]`);
-      if (edge) lit.push(edge);
-    }
-    for (const e of lit) e.setAttribute("data-lit", "");
+    const lit = new Set<Element>();
+    // A spotlight set as the graph opens (Show on graph) comes before the
+    // nodes are drawn: look again on the next frames until each is there.
+    let raf = 0;
+    let frames = 30;
+    const apply = () => {
+      let missing = false;
+      for (const id of nodeIds ?? []) {
+        const node = el.querySelector(`.react-flow__node[data-id=${JSON.stringify(id)}]`);
+        if (node) lit.add(node);
+        else missing = true;
+      }
+      for (const id of edgeIds ?? []) {
+        const edge = el.querySelector(`.react-flow__edge[data-testid=${JSON.stringify(`rf__edge-${id}`)}]`);
+        if (edge) lit.add(edge);
+      }
+      for (const e of lit) e.setAttribute("data-lit", "");
+      if (missing && frames-- > 0) raf = requestAnimationFrame(apply);
+    };
+    apply();
     return () => {
+      cancelAnimationFrame(raf);
       for (const e of lit) e.removeAttribute("data-lit");
     };
   }, [root, nodeIds, edgeIds]);

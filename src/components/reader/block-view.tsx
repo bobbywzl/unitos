@@ -19,6 +19,7 @@ import { MediaHtml } from "@/components/reader/figure-media";
 import { bindTableMarkClicks, marksSignature, paintTableMarks } from "@/components/reader/table-marks";
 import { pageImageUrl } from "@/lib/handwritten/page-url";
 import { endSweep } from "@/lib/mark-sweep";
+import { sourceIdsAttr } from "@/lib/source-mark";
 import { OFFICE_CSS } from "@/lib/office-css";
 import { googleFontsUrl, parseFontList, webFontFamilies } from "@/lib/office-fonts";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
@@ -113,6 +114,8 @@ export type Highlight = {
   leaving?: boolean;
   // kind "link": what the link is about, typed after Close link.
   linkReason?: string | null;
+  // kind "link": the link's open replies; the chain icon counts them.
+  linkReplies?: number;
 };
 
 export function anchorClass(anchor: Highlight): string {
@@ -291,6 +294,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
       anchors.length > 1
         ? anchors.reduce((n, h) => (h.end - h.start < n.end - n.start ? h : n))
         : anchors[0];
+    const sourceIds = sourceIdsAttr(anchors);
     const salience = covering.find((h) => h.kind === "salience");
     const simplify = covering.find((h) => h.kind === "simplify");
     const term = covering.find((h) => h.kind === "term");
@@ -316,6 +320,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
           href={link.href}
           data-link-id={link.linkId}
           data-source-id={anchor?.sourceId ?? undefined}
+          data-source-ids={sourceIds}
           data-tip={linkTip || undefined}
           className={`link-mark rounded-[4px]${link.fresh ? " mark-sweep" : ""}${selectionClass}${editedClass}`}
           onAnimationEnd={
@@ -332,17 +337,33 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
         </a>,
       );
       // A completed link carries a closed chain at its right side.
+      // Its open replies ride on the chain as a count (VIEW3-02): the
+      // discussion shows from the text. data-anchor-skip keeps the count's
+      // digits out of anchor offsets (SPEC.md §5).
       if (link.end === to) {
+        const replies = link.linkReplies ?? 0;
+        const chainTip = [
+          link.linkTitle ? t("panes.linkedTo", { title: link.linkTitle }) : t("panes.linked"),
+          replies > 0
+            ? replies === 1
+              ? t("graphNotes.replyCountOne")
+              : t("graphNotes.replyCountMany", { n: replies })
+            : null,
+        ]
+          .filter((s): s is string => s !== null)
+          .join(" · ");
         parts.push(
           <a
             key={`chain-${from}`}
             href={link.href}
             data-anchor-skip
-            aria-label={link.linkTitle ? t("panes.linkedTo", { title: link.linkTitle }) : t("panes.linked")}
-            data-tip={link.linkTitle ? t("panes.linkedTo", { title: link.linkTitle }) : t("panes.linked")}
-            className={CHAIN_BUTTON}
+            data-link-replies={replies > 0 ? replies : undefined}
+            aria-label={chainTip}
+            data-tip={chainTip}
+            className={replies > 0 ? CHAIN_BUTTON.replace("size-[16px]", "h-[16px] gap-0.5 px-1") : CHAIN_BUTTON}
           >
             <LinkIcon size={10} />
+            {replies > 0 && <span className="text-[9.5px] leading-none font-semibold tabular-nums">{replies}</span>}
           </a>,
         );
       }
@@ -353,6 +374,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
           key={from}
           href={`#reference-${citation.referenceId}`}
           data-source-id={anchor?.sourceId ?? undefined}
+          data-source-ids={sourceIds}
           data-tip={citation.referenceText}
           onClick={(e) => {
             e.preventDefault();
@@ -375,6 +397,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
           key={from}
           href={`#block-${toc.targetBlockId}`}
           data-source-id={anchor?.sourceId ?? undefined}
+          data-source-ids={sourceIds}
           data-tip={t("panes.jumpToSection")}
           onClick={(e) => {
             e.preventDefault();
@@ -399,6 +422,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
           target="_blank"
           rel="noopener noreferrer"
           data-source-id={anchor?.sourceId ?? undefined}
+          data-source-ids={sourceIds}
           className={`weblink-mark${editedClass}`}
         >
           {inner}
@@ -441,6 +465,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
         <mark
           key={from}
           data-source-id={anchor?.sourceId ?? undefined}
+          data-source-ids={sourceIds}
           data-tip={
             focusable
               ? t("panes.viewAnnotation")

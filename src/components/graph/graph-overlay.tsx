@@ -14,7 +14,7 @@ import { useT } from "@/components/lang-provider";
 import { Presence } from "@/components/presence";
 import { StopPill } from "@/components/thinking";
 import { GeneratedList } from "@/components/graph/generated-list";
-import { clearGraphKeep, readGraphKeep, writeGraphKeep } from "@/components/graph/graph-keep";
+import { clearGraphKeep, readGraphKeep, writeGraphKeep, type GraphFocus } from "@/components/graph/graph-keep";
 import { LinkPanel } from "@/components/graph/link-panel";
 import { LinksList } from "@/components/graph/links-list";
 import type { GraphInsets } from "@/components/graph/graph-view";
@@ -89,6 +89,7 @@ export function GraphOverlay({
   generated,
   linkScansLeft,
   notes,
+  focus,
   onClose,
   onNavigate,
   gists,
@@ -105,6 +106,9 @@ export function GraphOverlay({
   linkScansLeft: number;
   /** The project's notes, for the notes on the graph and the Notes list. */
   notes?: GraphNotesInput;
+  /** What the graph opens on (workspace.tsx): a note's Notes list, or a
+      link's panel. Null: where the reader was (graph-keep.ts). */
+  focus?: GraphFocus | null;
   /** Close the graph: ✕, Escape, or Back. */
   onClose: () => void;
   /** The graph closes because the reader opened a document from it (the
@@ -130,24 +134,56 @@ export function GraphOverlay({
   // One folded list at a time beside the canvas: the recommended links, the
   // generated content, the notes, the links, or one link expanded (WALK2-05).
   // The open list and link come back on Back from a document (WALK2-07).
-  const [list, setListState] = useState<SideList>(() => sideList(readGraphKeep(notebookId).list));
-  const [openLinkId, setOpenLinkId] = useState<string | null>(() => readGraphKeep(notebookId).linkId ?? null);
-  // The link panel's Back: to the Links list when it was opened there.
-  const [linkFromList, setLinkFromList] = useState(false);
+  // A focus wins over the kept view: Show on graph opens the Notes list on
+  // its note, a link card's Show on graph or the rail from a reader at a
+  // link opens that link's panel (VIEW3-04, VIEW3-09).
+  const [list, setListState] = useState<SideList>(() =>
+    focus?.noteId ? "notes" : focus?.linkId ? "link" : sideList(readGraphKeep(notebookId).list),
+  );
+  const [openLinkId, setOpenLinkId] = useState<string | null>(
+    () => focus?.linkId ?? readGraphKeep(notebookId).linkId ?? null,
+  );
+  // The note Show on graph opened the Notes list on; it stays while the list is open.
+  const [shownNoteId, setShownNoteIdState] = useState<string | null>(() =>
+    focus ? (focus.noteId ?? null) : (readGraphKeep(notebookId).shownId ?? null),
+  );
+  const setShownNoteId = useCallback(
+    (id: string | null) => {
+      setShownNoteIdState(id);
+      writeGraphKeep(notebookId, { shownId: id });
+    },
+    [notebookId],
+  );
+  useEffect(() => {
+    if (!focus) return;
+    writeGraphKeep(notebookId, {
+      list: focus.noteId ? "notes" : "link",
+      ...(focus.noteId ? { noteId: focus.noteId, shownId: focus.noteId } : { linkId: focus.linkId, shownId: null }),
+    });
+    // The focus is read once, when the graph opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // The link panel's Back: to the list it was opened from (Links, or the
+  // Notes list's links between a note's documents).
+  const [linkBack, setLinkBack] = useState<"links" | "notes" | null>(null);
   const setList = useCallback(
     (next: SideList | ((prev: SideList) => SideList)) => {
       setListState((prev) => {
         const value = typeof next === "function" ? next(prev) : next;
-        writeGraphKeep(notebookId, { list: value });
+        // The shown note lasts while the Notes list, or a link opened from
+        // it, is open.
+        const keepShown = value === "notes" || value === "link";
+        if (!keepShown) setShownNoteIdState(null);
+        writeGraphKeep(notebookId, { list: value, ...(keepShown ? {} : { shownId: null }) });
         return value;
       });
     },
     [notebookId],
   );
   const openLink = useCallback(
-    (linkId: string, fromList: boolean) => {
+    (linkId: string, from: "links" | "notes" | null) => {
       setOpenLinkId(linkId);
-      setLinkFromList(fromList);
+      setLinkBack(from);
       setList("link");
       writeGraphKeep(notebookId, { linkId });
     },
@@ -554,7 +590,7 @@ export function GraphOverlay({
             citedIds={citedIds}
             onClearCited={clearCited}
             expandedLinkId={openLinkView?.id ?? null}
-            onExpandLink={(linkId) => openLink(linkId, false)}
+            onExpandLink={(linkId) => openLink(linkId, null)}
           />
         )}
         {/* One document, or no link yet: what to do next (GR-08). */}
@@ -590,7 +626,16 @@ export function GraphOverlay({
         )}
         </Presence>
         <Presence show={list === "notes"} exit="menu">
-        {list === "notes" && <GraphNotesList pickedIds={selectedIds} onClose={() => setList(null)} />}
+        {list === "notes" && (
+          <GraphNotesList
+            pickedIds={selectedIds}
+            shownId={shownNoteId}
+            onClearShown={() => setShownNoteId(null)}
+            edges={edges}
+            onOpenLink={(linkId) => openLink(linkId, "notes")}
+            onClose={() => setList(null)}
+          />
+        )}
         </Presence>
         <Presence show={list === "links"} exit="menu">
         {list === "links" && (
@@ -598,7 +643,7 @@ export function GraphOverlay({
             edges={edges}
             titleOf={titleOf}
             openLinkId={openLinkId}
-            onOpen={(l) => openLink(l.id, true)}
+            onOpen={(l) => openLink(l.id, "links")}
             onClose={() => setList(null)}
           />
         )}
@@ -608,7 +653,8 @@ export function GraphOverlay({
           <LinkPanel
             key={openLinkView.id}
             link={openLinkView}
-            onBack={linkFromList ? () => setList("links") : undefined}
+            onBack={linkBack ? () => setList(linkBack) : undefined}
+            backLabel={linkBack === "notes" ? t("graphNotes.notesBack") : undefined}
             onClose={() => setList(null)}
             onOpenDocument={leave}
           />

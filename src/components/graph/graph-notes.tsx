@@ -9,7 +9,7 @@ import { useCollab } from "@/components/collab/collab-context";
 import { CommentIcon, NotesIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { readGraphKeep, writeGraphKeep } from "@/components/graph/graph-keep";
-import { noteLine, notesOnGraph, pairKey, type GraphNote, type NotesOnGraph } from "@/lib/graph/notes";
+import { noteLine, notesOnGraph, notesOnLink, pairKey, type GraphNote, type NotesOnGraph } from "@/lib/graph/notes";
 
 // The project's notes on the graph (SPEC.md §13). The document stays the
 // node; a note shows where it is: a chip on each node it belongs to, its
@@ -32,6 +32,9 @@ type GraphNotesValue = {
   notebookId: string;
   /** The notes of the section filter (every section when none). */
   view: NotesOnGraph;
+  /** Every note on the graph, whatever the section filter: the note Show on
+      graph opened the Notes list on is found even outside the filter. */
+  every: NotesOnGraph;
   sectionId: string | null;
   setSectionId: (id: string | null) => void;
   sectionChoices: { id: string; label: string }[];
@@ -40,6 +43,9 @@ type GraphNotesValue = {
   /** Light the documents of a hovered or focused note on the canvas; null = none
       (the lit set itself: useGraphNotesLit). */
   setRowLit: (ids: Set<string> | null) => void;
+  /** Light the documents of the note Show on graph opened the list on, while
+      no row is hovered; null = none. */
+  setFocusLit: (ids: Set<string> | null) => void;
   /** The canvas reports its pinned curve ("a|b"); useGraphNotesLit reads it. */
   setPinnedPair: (pair: string | null) => void;
   titleOf: Map<string, string>;
@@ -103,6 +109,7 @@ export function GraphNotesProvider({
     [notebookId],
   );
   const [rowLit, setRowLit] = useState<Set<string> | null>(null);
+  const [focusLit, setFocusLit] = useState<Set<string> | null>(null);
   const [pinnedPair, setPinnedPair] = useState<string | null>(null);
   const sections = input?.sections;
   const nodeIds = useMemo(() => nodes.map((n) => n.id), [nodes]);
@@ -110,9 +117,10 @@ export function GraphNotesProvider({
   // A section removed elsewhere leaves the filter: every section again.
   const liveSectionId =
     sectionId && input?.sectionChoices.some((c) => c.id === sectionId) ? sectionId : null;
+  const every = useMemo(() => notesOnGraph(sections ?? [], nodeIds, null), [sections, nodeIds]);
   const view = useMemo(
-    () => notesOnGraph(sections ?? [], nodeIds, liveSectionId),
-    [sections, nodeIds, liveSectionId],
+    () => (liveSectionId ? notesOnGraph(sections ?? [], nodeIds, liveSectionId) : every),
+    [sections, nodeIds, liveSectionId, every],
   );
   const defaultSectionId = useMemo(() => {
     if (!input || input.sectionChoices.length === 0) return null;
@@ -203,11 +211,13 @@ export function GraphNotesProvider({
         ? {
             notebookId,
             view,
+            every,
             sectionId: liveSectionId,
             setSectionId,
             sectionChoices: input.sectionChoices,
             defaultSectionId,
             setRowLit,
+            setFocusLit,
             setPinnedPair,
             titleOf,
             showNote,
@@ -218,9 +228,9 @@ export function GraphNotesProvider({
             findNote,
           }
         : null,
-    [input, notebookId, view, liveSectionId, setSectionId, defaultSectionId, titleOf, showNote, openSource, restoreNote, findNote],
+    [input, notebookId, view, every, liveSectionId, setSectionId, defaultSectionId, titleOf, showNote, openSource, restoreNote, findNote],
   );
-  const lit = useMemo(() => ({ rowLit, pinnedPair }), [rowLit, pinnedPair]);
+  const lit = useMemo(() => ({ rowLit: rowLit ?? focusLit, pinnedPair }), [rowLit, focusLit, pinnedPair]);
   return (
     <GraphNotesContext.Provider value={value}>
       <GraphNotesLitContext.Provider value={lit}>{children}</GraphNotesLitContext.Provider>
@@ -375,6 +385,34 @@ export function GraphNoteRow({ note: g, hereId }: { note: GraphNote; hereId: str
           </span>
         ))}
       </span>
+    </div>
+  );
+}
+
+/** The notes on a link, in its side panel (WALK3-03): the notes that quote
+    both of its passages, each a row that shows it in the tray. Nothing when
+    there are none. */
+export function LinkNotes({ link }: { link: GraphEdgeLink }) {
+  const ctx = useGraphNotes();
+  const t = useT();
+  const view = ctx?.view;
+  const notes = useMemo(() => {
+    if (!view) return [];
+    const near =
+      link.fromDocumentId === link.toDocumentId
+        ? (view.byDocument.get(link.fromDocumentId)?.notes ?? [])
+        : (view.byPair.get(pairKey(link.fromDocumentId, link.toDocumentId)) ?? []);
+    return notesOnLink(near, link);
+  }, [view, link]);
+  if (!ctx || notes.length === 0) return null;
+  return (
+    <div data-graph-link-notes={link.id} className="-mx-1.5 flex flex-col gap-0.5 border-t border-line pt-2">
+      <p className="px-2 pb-0.5 text-[11px] font-bold tracking-[0.06em] text-sage-700 uppercase">
+        {notes.length === 1 ? t("graphNotes.linkNotesOne") : t("graphNotes.linkNotesMany", { n: notes.length })}
+      </p>
+      {notes.map((g) => (
+        <GraphNoteRow key={g.note.id} note={g} hereId={null} />
+      ))}
     </div>
   );
 }

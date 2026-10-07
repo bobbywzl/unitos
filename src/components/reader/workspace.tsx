@@ -29,6 +29,7 @@ import { OfflineStatus } from "@/components/offline-status";
 import { useNotebookSync } from "@/components/collab/use-sync";
 import { GraphOverlayLoader } from "@/components/graph/graph-data";
 import { withoutGraphParams } from "@/components/graph/graph-content";
+import { GRAPH_NOTE_PARAM, OPEN_GRAPH_EVENT, type GraphFocus } from "@/components/graph/graph-keep";
 import { VisualizationViewer } from "@/components/reader/visualization-viewer";
 import { CorpusDistillPage } from "@/components/reader/corpus-distill-page";
 import { GuideDialog } from "@/components/guide-dialog";
@@ -337,7 +338,14 @@ export function Workspace({
   const [graphOpen, setGraphOpen] = useState(false);
   const graphPushed = useRef(false);
   const graphInUrl = () => new URLSearchParams(window.location.search).get("graph") === "1";
-  const openGraph = useCallback(() => {
+  // What the graph opens on (VIEW3-04, VIEW3-09): a note shown from the tray
+  // or the notes full page, a link card's Show on graph, or, from the rail,
+  // the link the reader arrived through (?link=). Null: the graph restores
+  // where the reader was (Back from a document; graph-keep.ts).
+  const [graphFocus, setGraphFocus] = useState<GraphFocus | null>(null);
+  const openGraph = useCallback((focus?: GraphFocus) => {
+    const arrivedLink = new URLSearchParams(window.location.search).get("link");
+    setGraphFocus(focus ?? (arrivedLink ? { linkId: arrivedLink } : null));
     setGraphOpen(true);
     if (graphInUrl()) return;
     const url = new URL(window.location.href);
@@ -365,15 +373,39 @@ export function Workspace({
   }, []);
   useEffect(() => {
     // Post-hydration on purpose: the server never renders the graph.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (graphInUrl()) setGraphOpen(true);
+    if (graphInUrl()) {
+      // The notes full page's Show on graph lands here with graphNote=<id>:
+      // the graph opens on that note, and the parameter leaves the URL.
+      const url = new URL(window.location.href);
+      const noteId = url.searchParams.get(GRAPH_NOTE_PARAM);
+      if (noteId) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setGraphFocus({ noteId });
+        url.searchParams.delete(GRAPH_NOTE_PARAM);
+        window.history.replaceState(window.history.state, "", url);
+      }
+      setGraphOpen(true);
+    }
     const onPop = () => {
       graphPushed.current = false;
+      setGraphFocus(null);
       setGraphOpen(graphInUrl());
     };
+    // Show on graph from a note card in the tray or a link card in the
+    // Annotations tab. Handled here: the notes full page has no graph, and
+    // goes to the reader's graph when nobody handles it (note-card.tsx).
+    const onOpenGraph = (e: Event) => {
+      const detail = (e as CustomEvent<GraphFocus>).detail;
+      e.preventDefault();
+      openGraph(detail);
+    };
     window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
-  }, []);
+    window.addEventListener(OPEN_GRAPH_EVENT, onOpenGraph);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      window.removeEventListener(OPEN_GRAPH_EVENT, onOpenGraph);
+    };
+  }, [openGraph]);
   // The corpus distilled page: null = closed; { shownId } open (null = ask view).
   const [corpusDistill, setCorpusDistill] = useState<{ shownId: string | null } | null>(null);
 
@@ -523,6 +555,27 @@ export function Workspace({
         requestAnimationFrame(() => flash(`[data-annotation-source-id="${sourceId}"]`));
       }, 150);
     };
+    // Arriving at a link (?link=, VIEW3-02): the Annotations tab, on the
+    // link's card, so its replies read with no click. Only the tab turns: a
+    // folded tray stays folded, the sheet on a phone stays shut, and the
+    // strip of a split view stays on the documents.
+    const onFocusLink = (e: Event) => {
+      const { linkId } = (e as CustomEvent<{ linkId: string }>).detail;
+      setTab("annotations");
+      let frames = 60;
+      const find = () => {
+        const el = trayRef.current?.querySelector<HTMLElement>(`[data-annotation-link-id="${CSS.escape(linkId)}"]`);
+        const box = el?.getBoundingClientRect();
+        if (el && box && box.width > 0 && box.right > 0 && box.left < window.innerWidth) {
+          el.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+          el.classList.add("anchor-flash");
+          setTimeout(() => el.classList.remove("anchor-flash"), 2000);
+        } else if (frames-- > 0) {
+          requestAnimationFrame(find);
+        }
+      };
+      setTimeout(find, 150);
+    };
     // The page editor's Show all comments opens the Annotations tab.
     const onShowAnnotations = () => {
       setCollapsed(false);
@@ -539,11 +592,13 @@ export function Workspace({
     window.addEventListener("dissect:show-note", onShowNote);
     window.addEventListener("dissect:focus-annotation", onFocusAnnotation);
     window.addEventListener("dissect:show-annotations", onShowAnnotations);
+    window.addEventListener("dissect:focus-link", onFocusLink);
     window.addEventListener("dissect:open-corpus-distillation", onOpenCorpusDistillation);
     return () => {
       window.removeEventListener("dissect:show-note", onShowNote);
       window.removeEventListener("dissect:focus-annotation", onFocusAnnotation);
       window.removeEventListener("dissect:show-annotations", onShowAnnotations);
+      window.removeEventListener("dissect:focus-link", onFocusLink);
       window.removeEventListener("dissect:open-corpus-distillation", onOpenCorpusDistillation);
     };
   }, [revealTray, rememberTray, openSheet]);
@@ -951,7 +1006,7 @@ export function Workspace({
           )}
 
           <button
-            onClick={openGraph}
+            onClick={() => openGraph()}
             data-track="graph"
             aria-label={t("panes.graph")}
             data-tip={t("panes.graphTitle")}
@@ -1056,6 +1111,7 @@ export function Workspace({
           rev={rev}
           documents={documents}
           notes={graphNotes}
+          focus={graphFocus}
           onClose={closeGraph}
           onNavigate={leaveGraph}
         />

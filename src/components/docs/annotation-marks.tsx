@@ -23,6 +23,7 @@ import { PAGE_FLASH_EVENT } from "@/components/docs/layer/events";
 import { annotationKindColor, LINK_KIND_VAR } from "@/lib/annotations/kind";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { MARK_SWEPT_EVENT, type MarkSweptDetail } from "@/lib/mark-sweep";
+import { sourceIdsAttr, sourceMarkSelector } from "@/lib/source-mark";
 
 // The Unitos layer over the page editor (SPEC.md §29): the reader's marks —
 // notes, annotations, links, and extractions — painted
@@ -62,9 +63,23 @@ function chipWidget({ kind, highlight: h }: Chip, t: TFunc) {
       symbol = <CommentIcon size={10} />;
     } else if (kind === "link-end") {
       // A completed link's chain goes to the other end; the linked words stay text to edit.
-      look(CHAIN_BUTTON, h.linkTitle ? t("panes.linkedTo", { title: h.linkTitle }) : t("panes.linked"), "link");
+      // Its open replies ride on the chain as a count, as in the reader (block-view.tsx).
+      const replies = h.linkReplies ?? 0;
+      const linked = h.linkTitle ? t("panes.linkedTo", { title: h.linkTitle }) : t("panes.linked");
+      const count = replies === 1 ? t("graphNotes.replyCountOne") : t("graphNotes.replyCountMany", { n: replies });
+      look(
+        replies > 0 ? CHAIN_BUTTON.replace("size-[16px]", "h-[16px] gap-0.5 px-1") : CHAIN_BUTTON,
+        replies > 0 ? `${linked} · ${count}` : linked,
+        "link",
+      );
       button.dataset.href = h.href ?? "";
-      symbol = <LinkIcon size={10} />;
+      if (replies > 0) button.dataset.linkReplies = String(replies);
+      symbol = (
+        <>
+          <LinkIcon size={10} />
+          {replies > 0 && <span className="text-[9.5px] leading-none font-semibold tabular-nums">{replies}</span>}
+        </>
+      );
     } else if (kind === "link-start") {
       look(CHAIN_BUTTON, t("panes.linkToOtherTexts"), "start-link", "link-chip");
       symbol = <UnlinkIcon size={10} />;
@@ -109,6 +124,8 @@ function segmentAttrs(covering: Highlight[], blockId: string, t: TFunc): Record<
     return " mark-sweep";
   };
   if (anchor?.sourceId) attrs["data-source-id"] = anchor.sourceId;
+  const sourceIds = sourceIdsAttr(anchors);
+  if (sourceIds) attrs["data-source-ids"] = sourceIds;
   const leaving = Boolean(anchor?.leaving);
   const focusable = Boolean(anchor?.annotation && anchor.sourceId && !leaving);
   const noteMark = !anchor?.annotation && anchor?.noteId && !leaving ? anchor.noteId : null;
@@ -330,6 +347,8 @@ function objectMarks(node: PMNode, pos: number, highlights: Highlight[], t: TFun
     "data-unitos-mark": "",
   };
   if (sourceId) attrs["data-source-id"] = sourceId;
+  const sourceIds = sourceIdsAttr(anchors);
+  if (sourceIds) attrs["data-source-ids"] = sourceIds;
   if (linkId) attrs["data-link-id"] = linkId;
   const decorations = [Decoration.node(pos, pos + node.nodeSize, attrs)];
   // A link's first end alone rings, with no label.
@@ -391,7 +410,7 @@ function build(doc: PMNode, highlights: Record<string, Highlight[]>, t: TFunc): 
             side: side++,
             ignoreSelection: true,
             stopEvent: () => true,
-            key: `${chip.kind}:${h.sourceId ?? h.extractId ?? h.linkId ?? ""}:${h.start}:${h.end}:${h.plus ? 1 : 0}`,
+            key: `${chip.kind}:${h.sourceId ?? h.extractId ?? h.linkId ?? ""}:${h.start}:${h.end}:${h.plus ? 1 : 0}:${h.linkReplies ?? 0}`,
             destroy: (dom) => {
               const root = (dom as HTMLElement & { __root?: Root }).__root;
               if (root) queueMicrotask(() => root.unmount());
@@ -427,7 +446,7 @@ function flashDecorations(view: EditorView, target: HTMLElement, id: string): De
   const sourceId = target.dataset.sourceId;
   const linkId = target.dataset.linkId;
   const pieces = sourceId
-    ? [...view.dom.querySelectorAll<HTMLElement>(`[data-source-id="${CSS.escape(sourceId)}"]`)]
+    ? [...view.dom.querySelectorAll<HTMLElement>(sourceMarkSelector(sourceId))]
     : linkId
       ? [...view.dom.querySelectorAll<HTMLElement>(`[data-link-id="${CSS.escape(linkId)}"]`)]
       : [target];
