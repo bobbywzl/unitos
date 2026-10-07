@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { EdgeLabelRenderer, type Edge as FlowEdge, type EdgeProps } from "reactflow";
+import { type Edge as FlowEdge, type EdgeProps } from "reactflow";
 import type { GraphEdge, GraphEdgeLink, SectionView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { CommentIcon, NotesIcon } from "@/components/icons";
@@ -62,12 +62,15 @@ export function GraphNotesProvider({
   nodes,
   input,
   onClose,
+  onNavigate,
   children,
 }: {
   notebookId: string;
   nodes: { id: string; title: string }[];
   input: GraphNotesInput | undefined;
   onClose: () => void;
+  /** The graph closes because the URL moved to a document. Default: onClose. */
+  onNavigate?: () => void;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -118,9 +121,9 @@ export function GraphNotesProvider({
   const openSource = useCallback(
     (documentId: string, sourceId: string) => {
       router.push(`/n/${notebookId}?doc=${documentId}&src=${sourceId}`);
-      onClose();
+      (onNavigate ?? onClose)();
     },
-    [router, notebookId, onClose],
+    [router, notebookId, onClose, onNavigate],
   );
   const showNote = useCallback(
     (noteId: string) => {
@@ -128,14 +131,15 @@ export function GraphNotesProvider({
       const first = note?.sources.find((s) => s.documentId && !s.orphaned && titleOf.has(s.documentId));
       if (first) router.push(`/n/${notebookId}?doc=${first.documentId}&src=${first.id}`);
       else if (note?.documentId && titleOf.has(note.documentId)) router.push(`/n/${notebookId}?doc=${note.documentId}`);
-      onClose();
+      if (first || (note?.documentId && titleOf.has(note.documentId))) (onNavigate ?? onClose)();
+      else onClose();
       // The tray sits under the graph: it opens on the note once the graph is gone.
       window.setTimeout(
         () => window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId } })),
         60,
       );
     },
-    [allNotes, titleOf, router, notebookId, onClose],
+    [allNotes, titleOf, router, notebookId, onClose, onNavigate],
   );
 
   const value = useMemo<GraphNotesValue | null>(
@@ -476,10 +480,15 @@ export function NoteEdge({
   targetX,
   targetY,
   spotlight,
-}: EdgeProps<NoteEdgeData> & { spotlight: NoteEdgeSpotlight }) {
+  renderList,
+}: EdgeProps<NoteEdgeData> & {
+  spotlight: NoteEdgeSpotlight;
+  /** Draws the list where the canvas puts a curve's list (graph-view.tsx). */
+  renderList: (anchor: { x: number; y: number }, children: React.ReactNode) => React.ReactNode;
+}) {
   const t = useT();
   const rowLit = useNotesLit();
-  const { hover, pinnedEdgeId, hoverEdge, scheduleClear } = spotlight;
+  const { hover, pinnedEdgeId } = spotlight;
   const lit = hover
     ? hover.nodeId
       ? source === hover.nodeId || target === hover.nodeId
@@ -507,26 +516,16 @@ export function NoteEdge({
         strokeDasharray="1.5 6"
         style={{ strokeWidth: state === "lit" ? 3 : 2.2 }}
       />
-      <path d={path} fill="none" stroke="transparent" strokeWidth={16} className="react-flow__edge-interaction" />
+      <path d={path} fill="none" stroke="transparent" strokeWidth={16} className="react-flow__edge-interaction graph-edge-hit" />
       <CurveMarks pair={id} links={[]} x={midX + bow / 2} y={midY} offset={0} />
-      {listOpen && (
-        <EdgeLabelRenderer>
-          <div
-            onMouseEnter={() => hoverEdge(id)}
-            onMouseLeave={scheduleClear}
-            onClick={(e) => e.stopPropagation()}
-            data-track-surface="graph-links"
-            className="nodrag nopan menu-in absolute z-20 flex w-72 max-w-[calc(100vw-32px)] flex-col gap-0.5 rounded-2xl border border-line bg-card/95 p-2 shadow-float backdrop-blur-md"
-            style={{
-              transform: `translate(-50%, 0) translate(${midX + bow / 2}px, ${midY + 12}px)`,
-              pointerEvents: "all",
-            }}
-          >
+      {listOpen &&
+        renderList(
+          { x: midX + bow / 2, y: midY },
+          <>
             <p className="px-2 pt-0.5 text-[11px] text-sand-500">{t("graphNotes.noteCurveHint")}</p>
             <PairNotes pair={id} />
-          </div>
-        </EdgeLabelRenderer>
-      )}
+          </>,
+        )}
     </g>
   );
 }

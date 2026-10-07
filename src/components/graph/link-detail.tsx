@@ -99,18 +99,23 @@ function LinkEnd({
 export function LinkDetail({
   link,
   onOpen,
+  showReason = true,
 }: {
   link: LinkDetailLink;
   /** Open the reader on this link, in the document of one end. */
   onOpen: (documentId: string) => void;
+  /** False where the row above already shows the reason in full. */
+  showReason?: boolean;
 }) {
   const t = useT();
   return (
     <div className="flex flex-col gap-2" data-track-surface="link-detail">
-      <div>
-        <p className="text-[10.5px] font-bold tracking-[0.06em] text-sand-500 uppercase">{t("panes.linkWhy")}</p>
-        <p className="mt-0.5 text-[12.5px] leading-snug text-ink">{link.reason ?? t("panes.linkNoReason")}</p>
-      </div>
+      {showReason && (
+        <div>
+          <p className="text-[10.5px] font-bold tracking-[0.06em] text-sand-500 uppercase">{t("panes.linkWhy")}</p>
+          <p className="mt-0.5 text-[12.5px] leading-snug text-ink">{link.reason ?? t("panes.linkNoReason")}</p>
+        </div>
+      )}
       <LinkEnd
         title={link.fromTitle}
         quote={link.quotedText}

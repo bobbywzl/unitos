@@ -80,7 +80,7 @@ export function GraphNotesList({ pickedIds, onClose }: { pickedIds: Set<string>;
   return (
     <aside
       data-track-surface="graph-notes-list"
-      className="menu-in absolute top-3 right-3 bottom-3 z-10 flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 shadow-float backdrop-blur-md"
+      className="menu-in absolute top-3 right-3 bottom-3 z-10 flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 shadow-float backdrop-blur-md max-[999px]:bottom-16"
     >
       <div className="flex items-start gap-2">
         <p className="flex-1 text-[11px] text-sand-500">{t("graphNotes.notesDesc")}</p>

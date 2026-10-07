@@ -343,7 +343,50 @@ export function Workspace({
       // storage unavailable: the nudge returns next visit
     }
   }
+  // The graph lives in the URL (`graph=1`, SPEC.md §13): Back from a document
+  // opened from the graph reopens the graph, and Back while it is open
+  // closes it. Opening pushes the entry; ✕ or Escape goes back off it (or
+  // drops the parameter when the page loaded with it).
   const [graphOpen, setGraphOpen] = useState(false);
+  const graphPushed = useRef(false);
+  const graphInUrl = () => new URLSearchParams(window.location.search).get("graph") === "1";
+  const openGraph = useCallback(() => {
+    setGraphOpen(true);
+    if (graphInUrl()) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("graph", "1");
+    window.history.pushState(null, "", url);
+    graphPushed.current = true;
+  }, []);
+  const closeGraph = useCallback(() => {
+    setGraphOpen(false);
+    if (!graphInUrl()) return;
+    if (graphPushed.current) {
+      graphPushed.current = false;
+      window.history.back();
+      return;
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.delete("graph");
+    window.history.replaceState(null, "", url);
+  }, []);
+  // A document opened from the graph: the URL already moved on, and the
+  // graph's entry stays behind it for Back.
+  const leaveGraph = useCallback(() => {
+    graphPushed.current = false;
+    setGraphOpen(false);
+  }, []);
+  useEffect(() => {
+    // Post-hydration on purpose: the server never renders the graph.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (graphInUrl()) setGraphOpen(true);
+    const onPop = () => {
+      graphPushed.current = false;
+      setGraphOpen(graphInUrl());
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
   // The corpus distilled page: null = closed; { shownId } open (null = ask view).
   const [corpusDistill, setCorpusDistill] = useState<{ shownId: string | null } | null>(null);
 
@@ -921,7 +964,7 @@ export function Workspace({
           )}
 
           <button
-            onClick={() => setGraphOpen(true)}
+            onClick={openGraph}
             data-track="graph"
             aria-label={t("panes.graph")}
             data-tip={t("panes.graphTitle")}
@@ -1028,7 +1071,8 @@ export function Workspace({
           generated={graph.generated}
           linkScansLeft={graph.linkScansLeft}
           notes={graphNotes}
-          onClose={() => setGraphOpen(false)}
+          onClose={closeGraph}
+          onNavigate={leaveGraph}
         />
       )}
       </Presence>

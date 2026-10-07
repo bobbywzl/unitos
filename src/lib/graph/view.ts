@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { projectLinks } from "@/lib/link-scope";
+import type { DocumentKind } from "@/lib/document-order";
 import type { GeneratedDocumentView, GraphEdge, GraphNode, RecommendedLinkView } from "@/lib/types";
 
 // The graph's data (SPEC.md §13, §22): the nodes, the edges, the recommended
@@ -36,11 +37,11 @@ export async function listGenerated(notebookId: string): Promise<GeneratedDocume
     the recommended links awaiting Accept (SPEC.md §13). Only the project's
     links, and the links with no project. */
 export async function documentsGraph(
-  documents: { id: string; title: string; hasVideo: boolean }[],
+  documents: { id: string; title: string; hasVideo: boolean; kind?: DocumentKind }[],
   notebookId: string,
 ): Promise<{ nodes: GraphNode[]; edges: GraphEdge[]; recommended: RecommendedLinkView[] }> {
   const ids = documents.map((d) => d.id);
-  const [links, recommendedRows] = await Promise.all([
+  const [links, recommendedRows, blockCounts] = await Promise.all([
     db.docLink.findMany({
       where: { fromDocumentId: { in: ids }, toDocumentId: { in: ids }, ...projectLinks(notebookId) },
       orderBy: [{ recommended: "asc" }, { createdAt: "asc" }],
@@ -65,7 +66,13 @@ export async function documentsGraph(
         replies: { orderBy: { createdAt: "asc" } },
       },
     }),
+    // Each document's length in blocks: a node's dot grows with it, and its
+    // card says it. One grouped count, read only.
+    ids.length > 0
+      ? db.block.groupBy({ by: ["documentId"], where: { documentId: { in: ids } }, _count: { _all: true } })
+      : Promise.resolve([]),
   ]);
+  const blocksOf = new Map(blockCounts.map((row) => [row.documentId, row._count._all]));
   // The block each end's quote sits in: the passage an expanded link shows
   // around the quote (SPEC.md §13). A block a re-parse replaced is gone
   // until the reader opens the document and the link heals; the end then
@@ -83,7 +90,13 @@ export async function documentsGraph(
       : [],
   );
   const titleOf = new Map(documents.map((d) => [d.id, d.title]));
-  const nodes: GraphNode[] = documents.map((d) => ({ id: d.id, title: d.title, hasVideo: d.hasVideo }));
+  const nodes: GraphNode[] = documents.map((d) => ({
+    id: d.id,
+    title: d.title,
+    hasVideo: d.hasVideo,
+    ...(d.kind ? { kind: d.kind } : {}),
+    blockCount: blocksOf.get(d.id) ?? 0,
+  }));
   const edgeByPair = new Map<string, GraphEdge>();
   // A link with both ends in one document is an edge from the node to
   // itself: a loop on that node (SPEC.md §13).

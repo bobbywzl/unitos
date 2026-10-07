@@ -83,6 +83,8 @@ export function StitchBox({
   onOpenDocument,
   onShowRecommended,
   onCited,
+  open: openProp,
+  onOpenChange,
 }: {
   notebookId: string;
   nodes: GraphNode[];
@@ -93,6 +95,10 @@ export function StitchBox({
   onUnpick: (documentId: string) => void;
   onClearPick: () => void;
   onOpenDocument: () => void;
+  // The fold, when the graph overlay controls it (it folds the box on a
+  // narrow screen and under a side list). Unset: the box keeps its own.
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   // Opens the Recommended links list (the overlay's).
   onShowRecommended?: () => void;
   // After each reply: the documents it cites, for the graph to light.
@@ -109,7 +115,12 @@ export function StitchBox({
   // failed = the request failed, and Retry sends it again.
   const [pending, setPending] = useState<{ text: string; failed: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [open, setOpen] = useState(true);
+  const [openState, setOpenState] = useState(true);
+  const open = openProp ?? openState;
+  const setOpen = (next: boolean) => {
+    setOpenState(next);
+    onOpenChange?.(next);
+  };
   const [passage, setPassage] = useState<{ blockId: string; citation: StitchCitation } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -298,7 +309,7 @@ export function StitchBox({
         data-track="stitch-expand"
         aria-label={t("stitch.stitchExpand")}
         data-tip={t("stitch.stitchTitle")}
-        className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full bg-ink px-4 py-2 text-[13px] font-semibold text-paper shadow-float hover:bg-clay-800 print:hidden"
+        className="flex items-center gap-2 rounded-full bg-ink px-4 py-2 text-[13px] font-semibold text-paper shadow-float hover:bg-clay-800 print:hidden"
       >
         <SparkleIcon size={14} />
         {t("stitch.stitch")}
@@ -313,7 +324,7 @@ export function StitchBox({
     <div
       ref={regionRef}
       data-track-surface="sidebar"
-      className="absolute bottom-4 left-1/2 z-20 flex w-[680px] max-w-[calc(100vw-32px)] -translate-x-1/2 flex-col rounded-[22px] border border-line bg-card/95 shadow-float backdrop-blur-md print:hidden"
+      className="relative flex w-full flex-col rounded-[22px] border border-line bg-card/95 shadow-float backdrop-blur-md print:hidden"
       role="region"
       aria-label={t("stitch.stitch")}
     >
