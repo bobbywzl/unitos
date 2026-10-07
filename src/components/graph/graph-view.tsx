@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type FocusEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import ReactFlow, {
   Background,
@@ -23,16 +23,16 @@ import type { GraphEdge, GraphEdgeLink, GraphNode } from "@/lib/types";
 import { api } from "@/lib/api";
 import { linkPath } from "@/lib/link-scope";
 import { useCollab } from "@/components/collab/collab-context";
-import { FilmIcon, MaximizeIcon, NotesIcon, PageIcon, QuestionIcon } from "@/components/icons";
+import { FilmIcon, MaximizeIcon, NotesIcon, PageIcon, PlusIcon, QuestionIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
-import { LinkDetail } from "@/components/graph/link-detail";
-import { graphLayout, layoutAspect, seeded, type Point } from "@/components/graph/graph-layout";
+import { extendLayout, graphLayout, layoutAspect, seeded, type Point } from "@/components/graph/graph-layout";
 import { categoryLabels } from "@/components/reader/document-organize";
 // [graph-notes] The notes and the link replies on the graph (graph-notes.tsx).
 import {
   CurveMarks,
   NodeNotes,
+  NodeNotesRows,
   NoteEdge,
   PairNotes,
   useNodeSectionDim,
@@ -41,8 +41,7 @@ import {
   useSyncPinnedPair,
   type NoteEdgeData,
 } from "@/components/graph/graph-notes";
-import { LinkReplies, LinkReplyCount } from "@/components/graph/link-replies";
-import { LinkNoteComposer } from "@/components/graph/link-note-composer";
+import { LinkReplyCount } from "@/components/graph/link-replies";
 // [/graph-notes]
 
 // The corpus graph (SPEC.md §13; the release-edu canvas patterns): documents
@@ -50,24 +49,29 @@ import { LinkNoteComposer } from "@/components/graph/link-note-composer";
 // links between two documents, the thicker and bolder the curve; a pair held
 // together only by recommended links draws dashed (marching) until one is
 // accepted, and both its documents breathe. Hovering a node spotlights it,
-// its links, and its linked documents, and shows its card (title, kind,
-// length, links); hovering a curve spotlights the pair and lists its links
-// beside the curve; a click pins the list.
+// its links, and its linked documents, and shows its one card (title, kind,
+// length, links, its notes); hovering a curve spotlights the pair and lists
+// its links beside the curve; a click pins the list, and a click on a link
+// opens it in the overlay's side panel at full height.
 // Linked documents sit near each other and unlinked ones in a grid under
-// them (graph-layout.ts); the layout is the same on every open, and a node
-// the reader dragged stays where they put it (per browser). Nodes float in
-// scattered on first open and settle into place, framed in the part of the
+// them; generated documents sit apart in a row of their own, faded, and their
+// provenance links draw only on request (graph-layout.ts, SPEC.md §22). A
+// node keeps its place across refreshes and Stitch answers (stored per
+// browser), and a node the reader dragged stays where they put it. Nodes float
+// in scattered on first open and settle into place, framed in the part of the
 // canvas the Stitch box and the side lists leave free. Clicking a node opens
 // that document; ⇧-click, or a click while the Stitch box is picking,
 // selects it for Stitch instead (SPEC.md §22) — a selected node draws a clay
 // ring. Labels keep a readable size on screen when the view zooms out.
+// A large project (LARGE_NODES documents, or LARGE_EDGES curves) draws plain:
+// solid curves, no marching or breathing, no transitions, only the elements
+// in view, and at a far zoom only the labels that matter (REV2-09).
+// Keyboard: one Tab stop for the canvas; arrows move between documents, ]
+// and [ go through the focused document's curves (REV2-10).
 
 // "lit" = part of the hovered neighborhood; "dim" = outside it; "base" = no
-// hover anywhere. The spotlight rides a context, never node or edge data:
-// rebuilding the arrays on every hover replaces reactflow's elements, which
-// can eat a click landing in the same frame.
-type Spotlight = "base" | "lit" | "dim";
-
+// hover anywhere. The spotlight is CSS (SpotlightStyle): one style element
+// names the lit nodes and curves, so a hover renders no node and no curve.
 type HoverState = { nodeId?: string; edgeId?: string } | null;
 
 /** Screen space the overlay keeps for itself over the canvas: the Stitch
@@ -82,38 +86,92 @@ const NODE_W = 144;
 const NODE_H = 32;
 const FIT_MAX_ZOOM = 1.1;
 const FIT_MIN_ZOOM = 0.45;
-// Labels stay at least this size on screen (until the scale cap).
-const LABEL_SCALE_MAX = 1.7;
+// A large project fits every node, however far out (REV2-09).
+const FIT_MIN_ZOOM_LARGE = 0.12;
+const LARGE_NODES = 60;
+const LARGE_EDGES = 120;
+// Below this zoom a large project draws only the labels that matter: the
+// hovered, picked, cited, and best-linked documents (the card has the title).
+const LOD_ZOOM = 0.6;
+// How many: one per 60,000 px² of canvas, 4 to 12 (a phone keeps 4 or 5).
+const lodKeep = (w: number, h: number) => Math.max(4, Math.min(12, Math.round((w * h) / 60000)));
+// Labels stay at least 11px on screen down to the least fit zoom (WALK2-06).
+const LABEL_SCALE_MAX = 1 / FIT_MIN_ZOOM;
 const LABEL_WIDTH_SCALE_MAX = 1.35;
 const labelScale = (zoom: number) => Math.min(LABEL_SCALE_MAX, Math.max(1, 1 / zoom));
 
-// The canvas state the nodes and curves read: the spotlight, the pinned
-// curve, the cited documents, and the handlers a curve's link list needs (it
-// renders in the floating layer, off the curve, so its own hover has to keep
-// the spotlight alive).
+// Which curve's list is open: the hovered curve, or the pinned one. A tiny
+// store outside React state, so a hover renders only the one or two curves
+// whose list opens or closes, never every curve (REV2-09).
+type CanvasShown = { hover: HoverState; pinnedEdgeId: string | null };
+type CanvasStore = {
+  get: () => CanvasShown;
+  set: (next: CanvasShown) => void;
+  subscribe: (listener: () => void) => () => void;
+};
+function createCanvasStore(): CanvasStore {
+  let state: CanvasShown = { hover: null, pinnedEdgeId: null };
+  const listeners = new Set<() => void>();
+  return {
+    get: () => state,
+    set: (next) => {
+      if (next.hover === state.hover && next.pinnedEdgeId === state.pinnedEdgeId) return;
+      state = next;
+      for (const l of listeners) l();
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+}
+const NO_STORE = createCanvasStore();
+
+// The canvas state the nodes and curves read, all of it slow to change: the
+// cited documents, the floating layer, the free area, the drawing mode, and
+// the handlers a curve's link list needs (it renders in the floating layer,
+// off the curve, so its own hover has to keep the spotlight alive).
 const SpotlightContext = createContext<{
-  hover: HoverState;
-  litIds: Set<string> | null;
+  store: CanvasStore;
   citedIds: Set<string> | null;
-  pinnedEdgeId: string | null;
   floatHost: HTMLElement | null;
   insets: GraphInsets;
+  /** A large project: solid curves, no marching or breathing. */
+  plain: boolean;
+  /** The provenance links of generated documents are drawn (and listed). */
+  showProvenance: boolean;
+  /** The link open in the overlay's side panel. */
+  expandedLinkId: string | null;
   hoverEdge: (edgeId: string) => void;
   pinEdge: (edgeId: string) => void;
   scheduleClear: () => void;
-  openLink: (link: GraphEdgeLink, documentId: string) => void;
+  expandLink: (link: GraphEdgeLink) => void;
 }>({
-  hover: null,
-  litIds: null,
+  store: NO_STORE,
   citedIds: null,
-  pinnedEdgeId: null,
   floatHost: null,
   insets: NO_INSETS,
+  plain: false,
+  showProvenance: false,
+  expandedLinkId: null,
   hoverEdge: () => {},
   pinEdge: () => {},
   scheduleClear: () => {},
-  openLink: () => {},
+  expandLink: () => {},
 });
+
+/** True while this curve's list shows: hovered, or pinned. */
+function useEdgeListOpen(edgeId: string): boolean {
+  const { store } = useContext(SpotlightContext);
+  return useSyncExternalStore(
+    store.subscribe,
+    () => {
+      const s = store.get();
+      return s.hover?.edgeId === edgeId || s.pinnedEdgeId === edgeId;
+    },
+    () => false,
+  );
+}
 
 type DocumentNodeData = {
   title: string;
@@ -123,6 +181,7 @@ type DocumentNodeData = {
   active: boolean;
   breathing: boolean;
   selected: boolean; // picked for Stitch (SPEC.md §22)
+  keepLabel: boolean; // drawn at a far zoom too (lodKeep)
 };
 
 type LinkEdgeData = {
@@ -132,14 +191,15 @@ type LinkEdgeData = {
 };
 
 function DocumentNode({ id, data }: NodeProps<DocumentNodeData>) {
-  const { litIds, citedIds, hover } = useContext(SpotlightContext);
+  const { citedIds, plain } = useContext(SpotlightContext);
   const cited = citedIds?.has(id) ?? false;
-  const spotlight: Spotlight = litIds === null ? "base" : litIds.has(id) ? "lit" : "dim";
   const sectionDim = useNodeSectionDim(id); // [graph-notes]
   // Cited documents (the last Stitch answer) stay bright while the rest
-  // fade; so do the documents a section filter keeps [graph-notes].
-  const opacity = spotlight === "dim" ? 0.15 : sectionDim || (litIds === null && citedIds && !cited) ? 0.35 : 1;
+  // fade; so do the documents a section filter keeps [graph-notes]. The
+  // hover spotlight is the canvas's CSS, on the node's wrapper.
+  const opacity = sectionDim || (citedIds && !cited) ? 0.35 : 1;
   const size = data.size + (data.active ? 2 : 0);
+  const breathing = data.breathing && !plain;
   const breatheDelay = `${(Math.abs(seeded(id, 5)) * 3).toFixed(2)}s`;
   const breatheDur = `${(3.2 + Math.abs(seeded(id, 9)) * 2).toFixed(2)}s`;
   const ring = data.selected
@@ -148,16 +208,16 @@ function DocumentNode({ id, data }: NodeProps<DocumentNodeData>) {
       ? "ring-[3px] ring-[var(--kind-assistant)] ring-offset-2 ring-offset-paper"
       : "";
   return (
-    <div className="relative flex h-8 w-36 justify-center transition-opacity duration-300" style={{ opacity }}>
+    <div className="graph-node-body relative flex h-8 w-36 justify-center" style={opacity < 1 ? { opacity } : undefined}>
       <Handle type="source" position={Position.Top} className="!pointer-events-none !h-1 !w-1 !opacity-0" style={{ top: 16 }} />
       <Handle type="target" position={Position.Top} className="!pointer-events-none !h-1 !w-1 !opacity-0" style={{ top: 16 }} />
       <span
-        className={data.breathing ? "graph-breathe flex h-8 items-center justify-center" : "flex h-8 items-center justify-center"}
-        style={data.breathing ? { animationDelay: breatheDelay, animationDuration: breatheDur } : undefined}
+        className={breathing ? "graph-breathe flex h-8 items-center justify-center" : "flex h-8 items-center justify-center"}
+        style={breathing ? { animationDelay: breatheDelay, animationDuration: breatheDur } : undefined}
       >
         <span
           data-graph-dot
-          className={`flex items-center justify-center border-2 border-card transition-[transform,box-shadow] duration-200 ${
+          className={`flex items-center justify-center border-2 border-card ${
             data.generated ? "rounded-[7px]" : "rounded-full"
           } ${
             data.active
@@ -165,7 +225,7 @@ function DocumentNode({ id, data }: NodeProps<DocumentNodeData>) {
               : data.generated
                 ? "bg-sand-600 shadow-[0_0_12px_color-mix(in_srgb,var(--sand-600)_35%,transparent)]"
                 : "bg-sage-500 shadow-[0_0_12px_color-mix(in_srgb,var(--sage)_40%,transparent)]"
-          } ${spotlight === "lit" ? "scale-110" : ""} ${ring}`}
+          } ${ring}`}
           style={{ width: size, height: size }}
         >
           {data.hasVideo && <FilmIcon size={Math.max(10, size - 14)} className={data.active ? "text-clay-fg" : "text-sage-fg"} />}
@@ -176,9 +236,11 @@ function DocumentNode({ id, data }: NodeProps<DocumentNodeData>) {
       </span>
       {/* The label hangs under the dot and grows when the view zooms out,
           so it stays readable on screen (--graph-label-scale, set on the
-          canvas from the zoom). */}
+          canvas from the zoom). At a far zoom of a large project only a
+          kept label draws (data-keep-label). */}
       <span
         data-graph-label
+        data-keep-label={data.keepLabel || data.selected || cited || data.active ? "" : undefined}
         className={`graph-node-label absolute top-[36px] left-1/2 line-clamp-2 -translate-x-1/2 text-center leading-snug font-semibold ${
           data.active ? "text-clay-700" : "text-ink"
         }`}
@@ -188,7 +250,7 @@ function DocumentNode({ id, data }: NodeProps<DocumentNodeData>) {
       {/* [graph-notes] The notes chip sits right of the dot, clear of the
           label under it. */}
       <span className="absolute top-1/2 -translate-y-1/2" style={{ left: `calc(50% + ${size / 2 + 4}px)` }}>
-        <NodeNotes documentId={id} hovered={hover?.nodeId === id} />
+        <NodeNotes documentId={id} />
       </span>
     </div>
   );
@@ -212,28 +274,22 @@ function useScreenPoint(p: Point): Point {
 // clay deeper, deepest at the middle (SPEC.md §13). Accepted links draw clay;
 // a recommended-only pair draws sand, dashed, dashes marching until a link is
 // accepted. Hovering the curve, or clicking it to pin, lists the pair's links
-// beside the curve; a click on a link expands it — why it was made, and the
-// passage at each end, with a button that opens the reader there — and pins
-// the curve so the list stays. A loop (source === target, SPEC.md §13) is
-// the links inside one document: the curve leaves the node's top, rises,
+// beside the curve; a click on a link opens it in the side panel — why it was
+// made, and the passage at each end, its replies, and Note on this link — and
+// pins the curve so the list stays. A loop (source === target, SPEC.md §13)
+// is the links inside one document: the curve leaves the node's top, rises,
 // and returns to the same point, like a loop in graph theory; its pill and
-// list sit at the loop's top.
+// list sit at the loop's top. A large project draws the curve in one solid
+// tone, without the gradient.
 const LOOP_HEIGHT = 64; // the control points' rise above the node's center
 const LOOP_HALF_WIDTH = 34;
 function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data }: EdgeProps<LinkEdgeData>) {
-  const { hover, pinnedEdgeId } = useContext(SpotlightContext);
-  // [graph-notes] A hovered note lights the curves between the documents it quotes.
-  const notesLit = useNotesLit();
-  const lit = hover
-    ? hover.nodeId
-      ? source === hover.nodeId || target === hover.nodeId
-      : hover.edgeId === id
-    : notesLit !== null && notesLit.has(source) && notesLit.has(target);
-  const spotlight: Spotlight = hover === null && notesLit === null ? "base" : lit ? "lit" : "dim";
+  const { plain, showProvenance } = useContext(SpotlightContext);
+  const listOpen = useEdgeListOpen(id);
   const count = data?.count ?? 1;
   const recommendedOnly = data?.recommendedOnly ?? false;
-  const links = data?.links ?? [];
-  const listOpen = links.length > 0 && (hover?.edgeId === id || pinnedEdgeId === id);
+  const allLinks = data?.links ?? [];
+  const links = showProvenance ? allLinks : allLinks.filter((l) => !l.provenance);
   const loop = source === target;
   // The bow runs along the chord's normal, so side-by-side pairs bow too.
   const chord = Math.hypot(targetX - sourceX, targetY - sourceY) || 1;
@@ -249,14 +305,14 @@ function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data
   // A quadratic curve passes its control point's direction at half the bow.
   const anchor = { x: midX + (nx * bowSize) / 2, y: midY + (ny * bowSize) / 2 };
   const depth = Math.min(1, Math.max(0, count - 1) / 7);
-  const width = 1.6 + depth * 6.4 + (spotlight === "lit" ? 0.8 : 0);
-  const opacity = spotlight === "dim" ? 0.07 : spotlight === "lit" ? 0.95 : recommendedOnly ? 0.45 : 0.7;
+  const width = 1.6 + depth * 6.4;
+  const gradient = !recommendedOnly && !plain;
   const gradientId = `edge-${id.replace(/[^a-zA-Z0-9]/g, "-")}`;
   const label = String(count);
   const pillWidth = 14 + label.length * 7;
   return (
-    <g style={{ opacity, transition: "opacity 0.25s ease" }}>
-      {!recommendedOnly && (
+    <g className="graph-curve" data-rec={recommendedOnly ? "" : undefined}>
+      {gradient && (
         <defs>
           <linearGradient
             id={gradientId}
@@ -275,11 +331,11 @@ function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data
       <path
         d={path}
         fill="none"
-        stroke={recommendedOnly ? "var(--sand-500)" : `url(#${gradientId})`}
+        stroke={recommendedOnly ? "var(--sand-500)" : gradient ? `url(#${gradientId})` : edgeTone(depth * 0.8)}
         strokeLinecap="round"
         strokeDasharray={recommendedOnly ? "5 7" : undefined}
-        className={recommendedOnly ? "graph-dash-march" : undefined}
-        style={{ strokeWidth: width, transition: "stroke-width 0.25s ease" }}
+        className={recommendedOnly && !plain ? "graph-curve-stroke graph-dash-march" : "graph-curve-stroke"}
+        style={{ "--w": `${width}px` } as CSSProperties}
       />
       {/* Wide invisible twin so the thin curve is hoverable (wider still
           under a finger, graph rules in globals.css). */}
@@ -298,18 +354,42 @@ function LinkEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data
       )}
       {/* [graph-notes] Open replies and notes quoting both, beside the pill. */}
       <CurveMarks pair={id} links={links} x={anchor.x} y={loop ? midY : anchor.y} offset={count > 1 ? pillWidth / 2 : 0} />
-      {listOpen && <EdgeLinkList edgeId={id} loop={loop} anchor={loop ? { x: midX, y: midY - 10 } : anchor} links={links} />}
+      {listOpen && links.length > 0 && (
+        <EdgeLinkList edgeId={id} loop={loop} anchor={loop ? { x: midX, y: midY - 10 } : anchor} links={links} />
+      )}
+    </g>
+  );
+}
+
+// A generated document's provenance (SPEC.md §22), drawn only while the
+// reader asks for it: one thin grey dotted curve per source document, no
+// pill, no list (the generated page lists its sources in the reader).
+function ProvenanceEdge({ sourceX, sourceY, targetX, targetY }: EdgeProps) {
+  const t = useT();
+  const midX = (sourceX + targetX) / 2;
+  const midY = (sourceY + targetY) / 2;
+  return (
+    <g className="graph-prov-curve">
+      <title>{t("panes.graphProvenanceCurve")}</title>
+      <path
+        d={`M ${sourceX} ${sourceY} Q ${midX} ${midY - 24} ${targetX} ${targetY}`}
+        fill="none"
+        stroke="var(--sand-400)"
+        strokeWidth={1.2}
+        strokeDasharray="2 5"
+        strokeLinecap="round"
+      />
     </g>
   );
 }
 
 // [graph-notes] A pair that only notes join: the sage dotted curve.
 function NoteEdgeHost(props: EdgeProps<NoteEdgeData>) {
-  const { hover, pinnedEdgeId, hoverEdge, scheduleClear } = useContext(SpotlightContext);
+  const listOpen = useEdgeListOpen(props.id);
   return (
     <NoteEdge
       {...props}
-      spotlight={{ hover, pinnedEdgeId, hoverEdge, scheduleClear }}
+      listOpen={listOpen}
       renderList={(anchor, children) => (
         <CurveListFrame edgeId={props.id} loop={false} anchor={anchor} wide={false}>
           {children}
@@ -385,6 +465,7 @@ function CurveListFrame({
       onMouseDown={(e) => e.stopPropagation()}
       onPointerDown={(e) => e.stopPropagation()}
       data-track-surface="graph-links"
+      data-curve-list={edgeId}
       className="graph-float-in pointer-events-auto absolute flex flex-col gap-0.5 overflow-y-auto overscroll-contain rounded-2xl border border-line bg-card/95 p-2 shadow-float backdrop-blur-md"
       style={style}
     >
@@ -395,13 +476,13 @@ function CurveListFrame({
 }
 
 // A curve's link list: every link's description, the quote at each end with
-// its document's name, and, for a recommended link, Accept and Dismiss. An
-// expanded link shows its detail, its replies, and Note on this link; the
-// notes quoting both documents follow the links [graph-notes].
+// its document's name, and, for a recommended link, Accept and Dismiss. A
+// click on a link opens it in the overlay's side panel (its detail, its
+// replies, and Note on this link) and pins the curve; the notes quoting both
+// documents follow the links [graph-notes].
 function EdgeLinkList({ edgeId, loop, anchor, links }: { edgeId: string; loop: boolean; anchor: Point; links: GraphEdgeLink[] }) {
-  const { pinEdge, openLink } = useContext(SpotlightContext);
+  const { pinEdge, expandLink, expandedLinkId } = useContext(SpotlightContext);
   const t = useT();
-  const [openId, setOpenId] = useState<string | null>(null);
   // A recommended link accepted or dismissed from the list (SPEC.md §13):
   // the row answers at once, and the refresh brings the graph's own data.
   const { canEdit } = useCollab();
@@ -428,7 +509,7 @@ function EdgeLinkList({ edgeId, loop, anchor, links }: { edgeId: string; loop: b
   }
   const count = links.length;
   return (
-    <CurveListFrame edgeId={edgeId} loop={loop} anchor={anchor} wide={openId !== null}>
+    <CurveListFrame edgeId={edgeId} loop={loop} anchor={anchor} wide={false}>
       <p className="px-2 pt-0.5 pb-1 text-[11px] font-bold tracking-[0.06em] text-sand-600 uppercase">
         {loop
           ? count === 1
@@ -441,17 +522,17 @@ function EdgeLinkList({ edgeId, loop, anchor, links }: { edgeId: string; loop: b
       {decideError && <p className="px-2 text-[11px] text-red-500">{decideError}</p>}
       {links.map((l) => {
         if (dismissed.has(l.id)) return null;
-        const open = openId === l.id;
+        const open = expandedLinkId === l.id;
         const recommended = l.recommended && !accepted.has(l.id);
         return (
           <div key={l.id} className={open ? "rounded-xl bg-sand-100/70" : undefined}>
             <button
               onClick={() => {
-                setOpenId(open ? null : l.id);
-                if (!open) pinEdge(edgeId);
+                pinEdge(edgeId);
+                expandLink(l);
               }}
               data-track="graph-link-expand"
-              data-tip={t(open ? "panes.linkCollapse" : "panes.linkExpand")}
+              data-tip={t("panes.linkExpand")}
               aria-expanded={open}
               className="flex w-full flex-col items-start gap-0.5 rounded-xl px-2 py-1.5 text-left hover:bg-clay-100"
             >
@@ -460,8 +541,13 @@ function EdgeLinkList({ edgeId, loop, anchor, links }: { edgeId: string; loop: b
               </span>
               {/* Each quote names its document, so a pair linked both ways
                   reads plainly; a loop's quotes are all one document's. */}
-              {!open && l.reason && <QuoteLine title={loop ? null : l.fromTitle} quote={l.quotedText} tone="text-sand-600" />}
-              {!open && l.toQuotedText && <QuoteLine title={loop ? null : l.toTitle} quote={l.toQuotedText} tone="text-sand-500" />}
+              {l.reason && <QuoteLine title={loop ? null : l.fromTitle} quote={l.quotedText} tone="text-sand-600" />}
+              {l.toQuotedText && <QuoteLine title={loop ? null : l.toTitle} quote={l.toQuotedText} tone="text-sand-500" />}
+              {l.provenance && (
+                <span className="rounded-full bg-sand-200/80 px-1.5 text-[10px] font-semibold text-sand-700">
+                  {t("panes.graphProvenanceTag")}
+                </span>
+              )}
               <LinkReplyCount link={l} />
             </button>
             {recommended && (
@@ -493,14 +579,6 @@ function EdgeLinkList({ edgeId, loop, anchor, links }: { edgeId: string; loop: b
                 )}
               </div>
             )}
-            {open && (
-              <div className="px-2 pt-1 pb-2">
-                {/* The row's title already is the reason, when there is one. */}
-                <LinkDetail link={l} showReason={!l.reason} onOpen={(documentId) => openLink(l, documentId)} />
-                <LinkReplies link={l} />
-                <LinkNoteComposer linkId={l.id} />
-              </div>
-            )}
           </div>
         );
       })}
@@ -523,19 +601,28 @@ function QuoteLine({ title, quote, tone }: { title: string | null; quote: string
 }
 
 const nodeTypes = { document: DocumentNode };
-const edgeTypes = { link: LinkEdge, note: NoteEdgeHost };
+// Props reactflow compares by identity: one object each, so a canvas render
+// for a hover never re-renders reactflow's node and edge layers.
+const ZOOM_KEYS = ["Meta", "Control"];
+const PRO_OPTIONS = { hideAttribution: true };
+const edgeTypes = { link: LinkEdge, note: NoteEdgeHost, provenance: ProvenanceEdge };
 
-// A node's card (GR-14): the full title, what the document is, its length,
-// and its links, beside the hovered or focused node. It says what a click
-// does, since a click leaves the graph for the reader.
+// A node's one card (GR-14, VIEW2-01): the full title, what the document is,
+// its length, its links, and its notes [graph-notes], beside the hovered or
+// focused node. It says what a click does, since a click leaves the graph for
+// the reader. The pointer can move onto the card (to a note) and keep it.
 function NodeCard({
   node,
   counts,
   picking,
+  onEnter,
+  onLeave,
 }: {
   node: GraphNode | null;
   counts: { accepted: number; recommended: number } | undefined;
   picking: boolean;
+  onEnter: () => void;
+  onLeave: () => void;
 }) {
   const { floatHost, insets } = useContext(SpotlightContext);
   const t = useT();
@@ -551,13 +638,16 @@ function NodeCard({
   const screen = useScreenPoint(position ? { x: position.x + NODE_W / 2, y: position.y + NODE_H / 2 } : { x: 0, y: 0 });
   const zoom = useStore((s) => s.transform[2]);
   const paneW = useStore((s) => s.width);
+  const paneH = useStore((s) => s.height);
   if (!floatHost || !shown || !node || !position) return null;
   const accepted = counts?.accepted ?? 0;
   const recommended = counts?.recommended ?? 0;
-  const width = Math.min(260, paneW - 16);
-  const gap = 22 * Math.max(zoom, 0.6);
+  const width = Math.min(280, paneW - 16);
+  // Clear of the node's label, which hangs under the dot as wide as its room.
+  const gap = Math.max(22 * Math.max(zoom, 0.6), (NODE_W / 2) * zoom * Math.min(labelScale(zoom), LABEL_WIDTH_SCALE_MAX) + 8);
   const right = screen.x + gap + width <= paneW - insets.right - 8;
   const left = right ? screen.x + gap : Math.max(8, screen.x - gap - width);
+  const top = Math.max(insets.top + 8, screen.y - 18);
   const kind = node.kind ? categoryLabels(t).kind(node.kind) : null;
   const facts1 = [
     kind,
@@ -572,13 +662,17 @@ function NodeCard({
   return createPortal(
     <div
       role="tooltip"
-      className="graph-float-in pointer-events-none absolute flex flex-col gap-1 rounded-2xl border border-line bg-card/95 px-3.5 py-2.5 shadow-float backdrop-blur-md"
-      style={{ left, top: Math.max(insets.top + 8, screen.y - 18), width }}
+      data-graph-node-card={node.id}
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
+      className="graph-float-in pointer-events-auto absolute flex flex-col gap-1 overflow-y-auto overscroll-contain rounded-2xl border border-line bg-card/95 px-3.5 py-2.5 shadow-float backdrop-blur-md"
+      style={{ left, top, width, maxHeight: Math.max(120, paneH - insets.bottom - top - 8) }}
     >
       <p className="text-[13px] leading-snug font-semibold text-ink">{node.title}</p>
       {facts1.length > 0 && <p className="text-[11.5px] text-sand-600">{facts1.join(" · ")}</p>}
       <p className="text-[11.5px] text-sand-600">{linkLine.join(" · ")}</p>
       <p className="mt-0.5 text-[11px] text-sand-500">{t(picking ? "panes.graphCardPick" : "panes.graphCardOpen")}</p>
+      {!picking && <NodeNotesRows documentId={node.id} />}
     </div>,
     floatHost,
   );
@@ -615,7 +709,13 @@ function GraphKey({ onClose }: { onClose: () => void }) {
       <ul className="flex flex-col gap-1.5">
         {row(dot("rounded-full bg-clay"), "panes.graphKeyOpen")}
         {row(dot("rounded-full bg-sage-500"), "panes.graphKeyDocument")}
-        {row(dot("rounded-[4px] bg-sand-600"), "panes.graphKeyGenerated")}
+        {row(dot("rounded-[4px] bg-sand-600 opacity-50"), "panes.graphKeyGenerated")}
+        {row(
+          <svg width="28" height="10" aria-hidden>
+            <path d="M2 5 Q14 1 26 5" fill="none" stroke="var(--sand-400)" strokeWidth={1.2} strokeDasharray="2 5" strokeLinecap="round" />
+          </svg>,
+          "panes.graphKeyProvenance",
+        )}
         {row(line(false, 3), "panes.graphKeyLinks")}
         {row(line(true, 2), "panes.graphKeyRecommended")}
         {row(
@@ -674,19 +774,109 @@ function saveDragged(notebookId: string, positions: Map<string, Point>) {
   }
 }
 
-// Layouts made this tab, by shape and by the project's documents and pairs.
+// Layouts made this tab, by project, shape, and the project's documents and pairs.
 const layoutCache = new Map<string, Map<string, Point>>();
 
-// The label scale follows the zoom through a CSS variable on the canvas, so
-// a zoom re-renders no node.
-function LabelScale({ target }: { target: RefObject<HTMLDivElement | null> }) {
+// The last layout per project and shape, per browser (WALK2-03): the next
+// one keeps every node of it in place and places only new documents. A view
+// convenience: lost storage lays the project out fresh.
+const LAYOUT_KEY = (notebookId: string, aspect: number) => `unitos-graph-layout:${notebookId}:${aspect}`;
+function loadLayout(notebookId: string, aspect: number): Map<string, Point> | null {
+  try {
+    const raw = window.localStorage.getItem(LAYOUT_KEY(notebookId, aspect));
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    const out = new Map<string, Point>();
+    for (const [id, p] of Object.entries(parsed as Record<string, unknown>)) {
+      if (Array.isArray(p) && typeof p[0] === "number" && typeof p[1] === "number") out.set(id, { x: p[0], y: p[1] });
+    }
+    return out.size > 0 ? out : null;
+  } catch {
+    return null;
+  }
+}
+function saveLayout(notebookId: string, aspect: number, layout: Map<string, Point>) {
+  try {
+    const flat = Object.fromEntries([...layout].map(([id, p]) => [id, [p.x, p.y]]));
+    window.localStorage.setItem(LAYOUT_KEY(notebookId, aspect), JSON.stringify(flat));
+  } catch {
+    /* storage off: the next change lays the project out fresh */
+  }
+}
+
+// The zoom drives the label scale and the label level of detail through CSS
+// variables and an attribute on the canvas, so a zoom re-renders no node.
+function LabelScale({ target, large }: { target: RefObject<HTMLDivElement | null>; large: boolean }) {
   const zoom = useStore((s) => s.transform[2]);
   useEffect(() => {
-    const s = labelScale(zoom);
-    target.current?.style.setProperty("--graph-label-scale", s.toFixed(3));
-    target.current?.style.setProperty("--graph-label-width-scale", Math.min(s, LABEL_WIDTH_SCALE_MAX).toFixed(3));
-  }, [zoom, target]);
+    const el = target.current;
+    if (!el) return;
+    const lod = large && zoom < LOD_ZOOM;
+    // At a far zoom a large project draws few labels: those keep 11px on
+    // screen and their full width, however far out.
+    const s = lod ? Math.max(1, 1 / zoom) : labelScale(zoom);
+    el.style.setProperty("--graph-label-scale", s.toFixed(3));
+    el.style.setProperty("--graph-label-width-scale", (lod ? s * 0.85 : Math.min(s, LABEL_WIDTH_SCALE_MAX)).toFixed(3));
+    el.style.setProperty("--graph-zoom", zoom.toFixed(3));
+    if (lod) el.setAttribute("data-lod", "");
+    else el.removeAttribute("data-lod");
+  }, [zoom, target, large]);
   return null;
+}
+
+/** The spotlight (REV2-09): the canvas carries data-spot while anything is
+    lit, and each lit node and curve carries data-lit; globals.css dims the
+    rest. A hover sets a few attributes, and nothing renders. */
+function useSpotlightAttributes(
+  root: RefObject<HTMLDivElement | null>,
+  nodeIds: Set<string> | null,
+  edgeIds: Set<string> | null,
+) {
+  useLayoutEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    if (nodeIds) el.setAttribute("data-spot", "");
+    else el.removeAttribute("data-spot");
+    const lit: Element[] = [];
+    for (const id of nodeIds ?? []) {
+      const node = el.querySelector(`.react-flow__node[data-id=${JSON.stringify(id)}]`);
+      if (node) lit.push(node);
+    }
+    for (const id of edgeIds ?? []) {
+      const edge = el.querySelector(`.react-flow__edge[data-testid=${JSON.stringify(`rf__edge-${id}`)}]`);
+      if (edge) lit.push(edge);
+    }
+    for (const e of lit) e.setAttribute("data-lit", "");
+    return () => {
+      for (const e of lit) e.removeAttribute("data-lit");
+    };
+  }, [root, nodeIds, edgeIds]);
+}
+
+// The nearest document in an arrow's direction, from a node's center: ahead
+// of it, scored by distance with the sideways part counted twice.
+function nearestInDirection(from: Point, others: { id: string; p: Point }[], key: string): string | null {
+  const dir = key === "ArrowRight" ? [1, 0] : key === "ArrowLeft" ? [-1, 0] : key === "ArrowDown" ? [0, 1] : [0, -1];
+  let best: { id: string; score: number } | null = null;
+  for (const o of others) {
+    const dx = o.p.x - from.x;
+    const dy = o.p.y - from.y;
+    const ahead = dx * dir[0] + dy * dir[1];
+    if (ahead <= 1) continue;
+    const side = Math.abs(dx * dir[1] - dy * dir[0]);
+    const score = ahead + side * 2;
+    if (!best || score < best.score) best = { id: o.id, score };
+  }
+  return best?.id ?? null;
+}
+
+function MinusGlyph({ size }: { size: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="graph-stroke-icon" aria-hidden>
+      <path d="M5 12h14" />
+    </svg>
+  );
 }
 
 function GraphCanvas({
@@ -702,6 +892,8 @@ function GraphCanvas({
   insets = NO_INSETS,
   citedIds,
   onClearCited,
+  expandedLinkId = null,
+  onExpandLink,
 }: GraphViewProps) {
   const router = useRouter();
   const t = useT();
@@ -715,6 +907,7 @@ function GraphCanvas({
   const paneW = useStore((s) => s.width);
   const paneH = useStore((s) => s.height);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const keysHelpId = useId();
   const [floatHost, setFloatHost] = useState<HTMLElement | null>(null);
   const [flowNodes, setFlowNodes, onNodesChange] = useNodesState<DocumentNodeData>([]);
   // First open: nodes mount scattered, then glide into place (CSS transition
@@ -733,6 +926,8 @@ function GraphCanvas({
   // Dragging a node hides its card until the pointer rests again.
   const [dragging, setDragging] = useState(false);
   const [keyOpen, setKeyOpen] = useState(false);
+  // Generated documents' provenance links: drawn on request (WALK2-02).
+  const [showProvenance, setShowProvenance] = useState(false);
   // A curve's link list lives in the floating layer, off the curve: the
   // leave that fires on the way there waits a beat, and the list's own hover
   // cancels it. A click on a curve pins its list until the pane is clicked.
@@ -754,26 +949,32 @@ function GraphCanvas({
   const hoverEdge = useCallback(
     (edgeId: string) => {
       cancelClear();
-      setHover({ edgeId });
+      setHover((prev) => (prev?.edgeId === edgeId ? prev : { edgeId }));
     },
     [cancelClear],
   );
   const hoverNode = useCallback(
     (nodeId: string) => {
       cancelClear();
-      setHover({ nodeId });
+      setHover((prev) => (prev?.nodeId === nodeId ? prev : { nodeId }));
     },
     [cancelClear],
   );
   useEffect(() => cancelClear, [cancelClear]);
-  const openLink = useCallback(
-    (link: GraphEdgeLink, documentId: string) => {
-      router.push(`/n/${notebookId}?doc=${documentId}&link=${link.id}`);
+  const pinEdge = useCallback((edgeId: string) => setPinnedEdgeId(edgeId), []);
+  // A link opens in the overlay's side panel at full height (WALK2-05); with
+  // no panel, the reader at the link.
+  const expandLink = useCallback(
+    (link: GraphEdgeLink) => {
+      if (onExpandLink) {
+        onExpandLink(link.id);
+        return;
+      }
+      router.push(`/n/${notebookId}?doc=${link.fromDocumentId}&link=${link.id}`);
       onOpenDocument();
     },
-    [router, notebookId, onOpenDocument],
+    [onExpandLink, router, notebookId, onOpenDocument],
   );
-  const pinEdge = useCallback((edgeId: string) => setPinnedEdgeId(edgeId), []);
   useSyncPinnedPair(pinnedEdgeId); // [graph-notes]
   const notesLit = useNotesLit(); // [graph-notes]
   // Nothing hovered: a pinned curve keeps its pair in the spotlight.
@@ -781,6 +982,20 @@ function GraphCanvas({
     () => hover ?? (pinnedEdgeId ? { edgeId: pinnedEdgeId } : null),
     [hover, pinnedEdgeId],
   );
+  // The curves read which list is open from the store, never from a render.
+  const [store] = useState(createCanvasStore);
+  useLayoutEffect(() => {
+    store.set({ hover, pinnedEdgeId });
+  }, [store, hover, pinnedEdgeId]);
+
+  const generatedIds = useMemo(() => new Set(nodes.filter((n) => n.kind === "generated").map((n) => n.id)), [nodes]);
+  // The curves drawn: every pair with a reader link; a pair only provenance
+  // joins only while the reader asks for it.
+  const visibleEdges = useMemo(
+    () => edges.filter((e) => e.accepted + e.recommended > 0 || (showProvenance && (e.provenance ?? 0) > 0)),
+    [edges, showProvenance],
+  );
+  const large = nodes.length > LARGE_NODES || visibleEdges.length > LARGE_EDGES;
 
   const { adjacency, breathing, linkCounts, loops } = useMemo(() => {
     const adjacency = new Map<string, Set<string>>();
@@ -793,11 +1008,12 @@ function GraphCanvas({
       c.recommended += e.recommended;
       linkCounts.set(id, c);
     };
-    for (const e of edges) {
+    for (const e of visibleEdges) {
       if (!adjacency.has(e.a)) adjacency.set(e.a, new Set());
       if (!adjacency.has(e.b)) adjacency.set(e.b, new Set());
       count(e.a, e);
-      if (e.accepted === 0) breathing.add(e.a);
+      const waiting = e.accepted === 0 && e.recommended > 0;
+      if (waiting) breathing.add(e.a);
       // A loop (a === b) is no neighbor of its own node: it counts once
       // toward the node's links and never moves it in the layout.
       if (e.a === e.b) {
@@ -807,42 +1023,52 @@ function GraphCanvas({
       adjacency.get(e.a)!.add(e.b);
       adjacency.get(e.b)!.add(e.a);
       count(e.b, e);
-      if (e.accepted === 0) breathing.add(e.b);
+      if (waiting) breathing.add(e.b);
     }
     return { adjacency, breathing, linkCounts, loops };
-  }, [edges]);
+  }, [visibleEdges]);
+  // At a far zoom of a large project, the best-linked documents keep their labels (lodKeep).
+  const keptLabels = useMemo(() => {
+    if (!large) return new Set<string>();
+    const degree = (id: string) => (linkCounts.get(id)?.accepted ?? 0) + (linkCounts.get(id)?.recommended ?? 0);
+    const keep = lodKeep(paneW, paneH);
+    return new Set([...nodes].sort((x, y) => degree(y.id) - degree(x.id) || x.id.localeCompare(y.id)).slice(0, keep).map((n) => n.id));
+  }, [large, nodes, linkCounts, paneW, paneH]);
 
-  // The layout reads only which documents exist and which pairs link, so a
-  // refresh that changes a title or a count keeps every node in place.
+  // The layout reads only which documents exist, which are generated, and
+  // which pairs link (the reader's links), so a refresh that changes a title
+  // or a count keeps every node in place.
   const layoutKey = useMemo(
     () =>
       JSON.stringify([
         nodes.map((n) => n.id),
-        edges.map((e) => [e.a, e.b, e.accepted + e.recommended]),
+        edges.filter((e) => e.accepted + e.recommended > 0).map((e) => [e.a, e.b, e.accepted + e.recommended]),
+        [...generatedIds],
       ]),
-    [nodes, edges],
+    [nodes, edges, generatedIds],
   );
   // Shaped for the pane: wide on a laptop, tall on a phone. The height
   // leaves the Stitch box's usual room (it opens at 640px and wider), never
   // its live height, so a growing answer never moves a node.
   // Nothing is laid out before the pane has a size; a layout already made
-  // for this project and shape is reused (an open, a refresh, a reopen).
+  // for this project and shape is reused (an open, a refresh, a reopen), and
+  // a project that changed keeps its old nodes where they were (WALK2-03).
   const aspect = paneW > 0 ? layoutAspect(paneW, paneH - (paneW >= 640 ? 230 : 60)) : 0;
   const layout = useMemo(() => {
     if (aspect === 0) return new Map<string, Point>();
-    const key = `${aspect}|${layoutKey}`;
+    const key = `${notebookId}|${aspect}|${layoutKey}`;
     const cached = layoutCache.get(key);
     if (cached) return cached;
-    const [ids, pairs] = JSON.parse(layoutKey) as [string[], [string, string, number][]];
-    const made = graphLayout(
-      ids,
-      pairs.map(([a, b, weight]) => ({ a, b, weight })),
-      aspect,
-    );
+    const [ids, pairs, apartIds] = JSON.parse(layoutKey) as [string[], [string, string, number][], string[]];
+    const layoutEdges = pairs.map(([a, b, weight]) => ({ a, b, weight }));
+    const apart = new Set(apartIds);
+    const prev = loadLayout(notebookId, aspect);
+    const made = (prev && extendLayout(prev, ids, layoutEdges, apart)) ?? graphLayout(ids, layoutEdges, aspect, apart);
+    saveLayout(notebookId, aspect, made);
     if (layoutCache.size > 12) layoutCache.clear();
     layoutCache.set(key, made);
     return made;
-  }, [layoutKey, aspect]);
+  }, [layoutKey, aspect, notebookId]);
 
   // The hovered neighborhood: the node and its linked documents, or a curve's
   // two endpoints. Everything else dims.
@@ -873,16 +1099,25 @@ function GraphCanvas({
   // overlay leaves free (insets), labels included, at a zoom between
   // FIT_MIN_ZOOM and FIT_MAX_ZOOM. When the nodes do not fit at the least
   // zoom, the view shows the top of the layout, where the linked groups are.
+  // A large project fits every node (its far labels are few).
   const insetsRef = useRef(insets);
   const loopsRef = useRef(loops);
+  const layoutKeyRef = useRef(layoutKey);
+  const nodesRef = useRef(nodes);
   useLayoutEffect(() => {
     insetsRef.current = insets;
     loopsRef.current = loops;
-  }, [insets, loops]);
+    layoutKeyRef.current = layoutKey;
+    nodesRef.current = nodes;
+  }, [insets, loops, layoutKey, nodes]);
+  // What the last fit framed: the refit below runs when the free area or the
+  // documents changed since, whenever that fit ran (WALK2-15).
+  const lastFit = useRef<{ key: string; w: number; h: number; ins: GraphInsets } | null>(null);
   const fitTo = useCallback(
     (positions: { id: string; x: number; y: number }[], duration = 0) => {
       if (positions.length === 0 || paneW <= 0 || paneH <= 0) return;
       const ins = insetsRef.current;
+      lastFit.current = { key: layoutKeyRef.current, w: paneW, h: paneH, ins };
       const pad = 28;
       const freeL = ins.left + pad;
       const freeR = paneW - ins.right - pad;
@@ -895,12 +1130,15 @@ function GraphCanvas({
       }
       const aw = Math.max(80, freeR - freeL);
       const ah = freeB - freeT;
+      const minZoom = large ? FIT_MIN_ZOOM_LARGE : FIT_MIN_ZOOM;
       let zoom = 1;
       let bounds = { x0: 0, x1: 0, y0: 0, y1: 0 };
-      for (let pass = 0; pass < 2; pass++) {
-        const s = labelScale(zoom);
+      for (let pass = 0; pass < 3; pass++) {
+        const lod = large && zoom < LOD_ZOOM;
+        const s = lod ? 1 : labelScale(zoom);
         const halfLabel = (NODE_W / 2) * Math.min(s, LABEL_WIDTH_SCALE_MAX);
-        const labelH = 40 * s;
+        // A kept label at a far zoom is 11px on screen, two lines at most.
+        const labelH = lod ? 34 / zoom : 40 * s;
         bounds = { x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity };
         for (const p of positions) {
           const cx = p.x + NODE_W / 2;
@@ -912,7 +1150,7 @@ function GraphCanvas({
         }
         const bw = bounds.x1 - bounds.x0;
         const bh = bounds.y1 - bounds.y0;
-        zoom = Math.min(FIT_MAX_ZOOM, Math.max(FIT_MIN_ZOOM, Math.min(aw / bw, ah / bh)));
+        zoom = Math.min(FIT_MAX_ZOOM, Math.max(minZoom, Math.min(aw / bw, ah / bh)));
       }
       const bw = (bounds.x1 - bounds.x0) * zoom;
       const bh = (bounds.y1 - bounds.y0) * zoom;
@@ -924,26 +1162,31 @@ function GraphCanvas({
         /* non-critical */
       }
     },
-    [paneW, paneH],
+    [paneW, paneH, large],
   );
+  // The fit frames where the nodes are going, not where a settle has them now.
   const fitNow = useCallback(
-    (duration = 0) => fitTo(flowRef.current.getNodes().map((n) => ({ id: n.id, ...n.position })), duration),
-    [fitTo],
+    (duration = 0) => fitTo(nodesRef.current.map((n) => ({ id: n.id, ...target(n.id) })), duration),
+    [fitTo, target],
   );
 
   useEffect(() => {
     const mk = (n: GraphNode, position: Point): FlowNode<DocumentNodeData> => {
       const c = linkCounts.get(n.id);
       const degree = (c?.accepted ?? 0) + (c?.recommended ?? 0);
+      const generated = n.kind === "generated";
       return {
         id: n.id,
         type: "document",
         position,
+        // A generated document draws faded until the reader asks for the
+        // provenance (WALK2-02).
+        className: generated ? "graph-generated" : undefined,
         ariaLabel: t("panes.graphNodeLabel", { title: n.title, n: degree, s: degree === 1 ? "" : "s" }),
         data: {
           title: n.title,
           hasVideo: n.hasVideo,
-          generated: n.kind === "generated",
+          generated,
           // A longer document draws a bigger dot (√ of its blocks); without
           // a length, the dot grows with the links instead.
           size:
@@ -953,6 +1196,7 @@ function GraphCanvas({
           active: n.id === activeDocumentId,
           breathing: breathing.has(n.id),
           selected: selectedIds?.has(n.id) ?? false,
+          keepLabel: keptLabels.has(n.id),
         },
       };
     };
@@ -962,7 +1206,9 @@ function GraphCanvas({
       if (paneW <= 0 || paneH <= 0) return;
       const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
       fitTo(nodes.map((n) => ({ id: n.id, ...target(n.id) })));
-      if (reduce) {
+      // A large project lands in place at once: the settle would move every
+      // node through hundreds of frames (REV2-09).
+      if (reduce || large) {
         phaseRef.current = "done";
         setFlowNodes(nodes.map((n) => mk(n, target(n.id))));
         // eslint-disable-next-line react-hooks/set-state-in-effect -- the settle ends at once under reduced motion
@@ -1001,17 +1247,15 @@ function GraphCanvas({
       const size = new Map(prev.map((p) => [p.id, { width: p.width, height: p.height }]));
       return nodes.map((n) => ({ ...mk(n, target(n.id)), ...size.get(n.id) }));
     });
-  }, [nodes, linkCounts, breathing, target, activeDocumentId, selectedIds, setFlowNodes, paneW, paneH, fitTo, t]);
+  }, [nodes, linkCounts, breathing, target, activeDocumentId, selectedIds, keptLabels, setFlowNodes, paneW, paneH, fitTo, large, t]);
 
   // Refit when the free area changes — the Stitch box grows or folds, a
   // side list opens, the window resizes — or documents come and go, as long
-  // as the reader has not moved the view.
-  const lastFit = useRef<{ key: string; w: number; h: number; ins: GraphInsets } | null>(null);
+  // as the reader has not moved the view. Measured against the last fit, so
+  // a box measured while the nodes settle still refits (WALK2-15).
   useEffect(() => {
-    if (phaseRef.current === "scatter" || paneW <= 0) return;
     const prev = lastFit.current;
-    lastFit.current = { key: layoutKey, w: paneW, h: paneH, ins: insets };
-    if (!prev || userMoved.current) return;
+    if (!prev || paneW <= 0 || userMoved.current) return;
     const changed =
       prev.key !== layoutKey ||
       Math.abs(prev.w - paneW) > 8 ||
@@ -1025,39 +1269,69 @@ function GraphCanvas({
     }
   }, [insets, paneW, paneH, layoutKey, fitNow, settling]);
 
-  const noteEdges = useNoteOnlyEdges(edges); // [graph-notes]
-  const flowEdges = useMemo<FlowEdge<LinkEdgeData | NoteEdgeData>[]>(
+  const noteEdges = useNoteOnlyEdges(visibleEdges); // [graph-notes]
+  const flowEdges = useMemo<FlowEdge<LinkEdgeData | NoteEdgeData | undefined>[]>(
     () => [
-      ...edges.map((e) => ({
-        id: `${e.a}|${e.b}`,
-        source: e.a,
-        target: e.b,
-        type: "link",
-        ariaLabel:
-          e.a === e.b
-            ? t("panes.graphLoopLinks", { count: e.accepted + e.recommended })
-            : t("panes.graphPairLinks", { count: e.accepted + e.recommended }),
-        data: { count: e.accepted + e.recommended, recommendedOnly: e.accepted === 0, links: e.links },
-      })),
+      ...visibleEdges.map((e): FlowEdge<LinkEdgeData | undefined> => {
+        const count = e.accepted + e.recommended;
+        if (count === 0) {
+          // Provenance only: a thin dotted curve, no list, no Tab stop.
+          return { id: `${e.a}|${e.b}`, source: e.a, target: e.b, type: "provenance", focusable: false, ariaLabel: t("panes.graphProvenanceCurve"), data: undefined };
+        }
+        return {
+          id: `${e.a}|${e.b}`,
+          source: e.a,
+          target: e.b,
+          type: "link",
+          ariaLabel:
+            e.a === e.b
+              ? count === 1
+                ? t("panes.graphLoopLinkOne")
+                : t("panes.graphLoopLinks", { count })
+              : count === 1
+                ? t("panes.graphPairLinkOne")
+                : t("panes.graphPairLinks", { count }),
+          data: { count, recommendedOnly: e.accepted === 0, links: e.links },
+        };
+      }),
       ...noteEdges,
     ],
-    [edges, noteEdges, t],
+    [visibleEdges, noteEdges, t],
   );
+
+  // The curves the spotlight lights: a hovered node's, a hovered or pinned
+  // curve, or the curves between a hovered note's documents.
+  const litEdgeIds = useMemo(() => {
+    if (!litIds) return null;
+    const lit = new Set<string>();
+    for (const e of flowEdges) {
+      const on = shown
+        ? shown.nodeId
+          ? e.source === shown.nodeId || e.target === shown.nodeId
+          : shown.edgeId === e.id
+        : litIds.has(e.source) && litIds.has(e.target);
+      if (on) lit.add(e.id);
+    }
+    return lit;
+  }, [flowEdges, shown, litIds]);
+
+  useSpotlightAttributes(wrapRef, litIds, litEdgeIds);
 
   const spotlight = useMemo(
     () => ({
-      hover: shown,
-      litIds,
+      store,
       citedIds: citedIds && citedIds.size > 0 ? citedIds : null,
-      pinnedEdgeId,
       floatHost,
       insets,
+      plain: large,
+      showProvenance,
+      expandedLinkId,
       hoverEdge,
       pinEdge,
       scheduleClear,
-      openLink,
+      expandLink,
     }),
-    [shown, litIds, citedIds, pinnedEdgeId, floatHost, insets, hoverEdge, pinEdge, scheduleClear, openLink],
+    [store, citedIds, floatHost, insets, large, showProvenance, expandedLinkId, hoverEdge, pinEdge, scheduleClear, expandLink],
   );
 
   const onNodeDragStop = useCallback(
@@ -1084,10 +1358,108 @@ function GraphCanvas({
     [onClearCited, onToggleSelect, picking, router, docHref, notebookId, onOpenDocument],
   );
 
+  // Keyboard (GR-16, REV2-10): the canvas is one Tab stop — the roving node
+  // holds tabindex 0, every other node and every curve -1 — so Tab leaves
+  // the canvas for the controls, the lists, and the Stitch box. Arrows move
+  // between documents, ] and [ go through the focused document's curves.
+  const rovingRef = useRef<string | null>(null);
+  const curveOrigin = useRef<{ nodeId: string; index: number } | null>(null);
+  const applyRoving = useCallback(() => {
+    const root = wrapRef.current;
+    if (!root) return;
+    const nodeEls = [...root.querySelectorAll<HTMLElement>(".react-flow__node")];
+    if (nodeEls.length === 0) return;
+    let current = nodeEls.find((el) => el.getAttribute("data-id") === rovingRef.current);
+    if (!current) {
+      // The open document, else the top-left document in view.
+      current =
+        nodeEls.find((el) => el.getAttribute("data-id") === activeDocumentId) ??
+        nodeEls.reduce((best, el) => {
+          const a = el.getBoundingClientRect();
+          const b = best.getBoundingClientRect();
+          return a.top + a.left * 0.5 < b.top + b.left * 0.5 ? el : best;
+        });
+      rovingRef.current = current.getAttribute("data-id");
+    }
+    for (const el of nodeEls) {
+      const tab = el === current ? "0" : "-1";
+      if (el.getAttribute("tabindex") !== tab) el.setAttribute("tabindex", tab);
+      if (el.getAttribute("aria-describedby") !== keysHelpId) el.setAttribute("aria-describedby", keysHelpId);
+    }
+    for (const el of root.querySelectorAll<SVGElement>(".react-flow__edge[tabindex='0']")) el.setAttribute("tabindex", "-1");
+  }, [activeDocumentId, keysHelpId]);
+  useEffect(() => {
+    const root = wrapRef.current;
+    if (!root) return;
+    let frame = 0;
+    const observer = new MutationObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(applyRoving);
+    });
+    observer.observe(root.querySelector(".react-flow__viewport") ?? root, { childList: true, subtree: true });
+    applyRoving();
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+    };
+  }, [applyRoving]);
+  const nodeEl = useCallback(
+    (id: string) => wrapRef.current?.querySelector<HTMLElement>(`.react-flow__node[data-id=${JSON.stringify(id)}]`) ?? null,
+    [],
+  );
+  const edgeEl = useCallback(
+    (id: string) => wrapRef.current?.querySelector<SVGElement>(`.react-flow__edge[data-testid=${JSON.stringify(`rf__edge-${id}`)}]`) ?? null,
+    [],
+  );
+  // Focus a document: the view pans to it when it is out of the free area
+  // (a pan by keyboard is the reader's move: no refit after it).
+  const focusNode = useCallback(
+    (id: string) => {
+      rovingRef.current = id;
+      const node = flowRef.current.getNode(id);
+      const root = wrapRef.current?.getBoundingClientRect();
+      const el = nodeEl(id);
+      const r = el?.getBoundingClientRect();
+      const ins = insetsRef.current;
+      const out =
+        !r ||
+        !root ||
+        r.left < root.left + ins.left ||
+        r.right > root.right - ins.right ||
+        r.top < root.top + ins.top ||
+        r.bottom > root.bottom - ins.bottom;
+      if (out && node) {
+        userMoved.current = true;
+        flowRef.current.setCenter(node.position.x + NODE_W / 2, node.position.y + NODE_H / 2, {
+          zoom: flowRef.current.getZoom(),
+          duration: 200,
+        });
+      }
+      const go = () => {
+        applyRoving();
+        nodeEl(id)?.focus({ preventScroll: true });
+      };
+      if (el) go();
+      else requestAnimationFrame(() => requestAnimationFrame(go));
+    },
+    [nodeEl, applyRoving],
+  );
+  const focusList = useCallback(
+    (edgeId: string) => {
+      const go = () =>
+        floatHost
+          ?.querySelector<HTMLElement>(`[data-curve-list=${JSON.stringify(edgeId)}] button, [data-curve-list=${JSON.stringify(edgeId)}] a[href]`)
+          ?.focus();
+      requestAnimationFrame(() => requestAnimationFrame(go));
+    },
+    [floatHost],
+  );
+
   // Escape (GR-11) closes the innermost canvas thing first: the key, then a
   // pinned or hovered link list, then a node's card. It marks the event
   // handled, so the overlay keeps itself open. Capture phase: it runs before
-  // the overlay's own listener.
+  // the overlay's own listener. Focus goes back where the reader came from:
+  // from a list to its curve, from a curve to its document.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented) return;
@@ -1105,52 +1477,96 @@ function GraphCanvas({
       const typed = [...(floatHost?.querySelectorAll("textarea, input") ?? [])].some(
         (el) => (el as HTMLTextAreaElement | HTMLInputElement).value.trim() !== "",
       );
+      const inList = target instanceof Element && target.closest("[data-curve-list]");
+      const onCurve = target instanceof Element ? target.closest(".react-flow__edge") : null;
       if (keyOpen) setKeyOpen(false);
       else if (pinnedEdgeId && typed) {
         /* kept */
       } else if (pinnedEdgeId) {
         // The pointer may rest on the list: its hover would keep it open.
+        const curve = pinnedEdgeId;
         setPinnedEdgeId(null);
         setHover(null);
-      }
-      else if (hover) setHover(null);
+        if (inList) edgeEl(curve)?.focus();
+      } else if (onCurve && curveOrigin.current) {
+        setHover(null);
+        focusNode(curveOrigin.current.nodeId);
+      } else if (hover) setHover(null);
       else return;
       e.preventDefault();
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [keyOpen, pinnedEdgeId, hover, floatHost]);
+  }, [keyOpen, pinnedEdgeId, hover, floatHost, edgeEl, focusNode]);
 
-  // Keyboard (GR-16): Tab reaches nodes and curves; Enter on a node opens it
-  // (⇧-Enter picks it), Space picks it; Enter on a curve pins its list.
+  // Enter on a node opens it (⇧-Enter picks it), Space picks it; arrows move
+  // to the nearest document that way; ] and [ go to the node's next and
+  // previous curve. Enter on a curve pins its list and moves focus into it.
   const onKeyDown = useCallback(
     (e: ReactKeyboardEvent) => {
       if (!(e.target instanceof Element)) return;
-      const nodeEl = e.target.closest(".react-flow__node");
-      const nodeId = nodeEl?.getAttribute("data-id");
+      const nodeTarget = e.target.closest(".react-flow__node");
+      const nodeId = nodeTarget?.getAttribute("data-id");
+      const edgeTarget = e.target.closest(".react-flow__edge");
+      const edgeId = edgeTarget?.getAttribute("data-testid")?.replace(/^rf__edge-/, "");
       if (nodeId && (e.key === "Enter" || e.key === " ")) {
         e.preventDefault();
         e.stopPropagation();
         activate(nodeId, e.key === " " || e.shiftKey);
         return;
       }
-      const edgeEl = e.target.closest(".react-flow__edge");
-      const edgeId = edgeEl?.getAttribute("data-testid")?.replace(/^rf__edge-/, "");
+      if (nodeId && e.key.startsWith("Arrow")) {
+        e.preventDefault();
+        e.stopPropagation();
+        const all = flowRef.current.getNodes().map((n) => ({ id: n.id, p: { x: n.position.x + NODE_W / 2, y: n.position.y + NODE_H / 2 } }));
+        const from = all.find((n) => n.id === nodeId);
+        const next = from && nearestInDirection(from.p, all.filter((n) => n.id !== nodeId), e.key);
+        if (next) focusNode(next);
+        return;
+      }
+      if ((e.key === "]" || e.key === "[") && (nodeId || edgeId)) {
+        const origin = nodeId ?? curveOrigin.current?.nodeId ?? edgeId?.split("|")[0];
+        if (!origin) return;
+        const curves = flowEdges.filter((f) => f.type !== "provenance" && (f.source === origin || f.target === origin));
+        if (curves.length === 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const at = nodeId ? -1 : (curveOrigin.current?.nodeId === origin ? curveOrigin.current.index : -1);
+        const index = (at + (e.key === "]" ? 1 : -1) + curves.length) % curves.length;
+        curveOrigin.current = { nodeId: origin, index };
+        const id = curves[index].id;
+        hoverEdge(id);
+        edgeEl(id)?.focus();
+        return;
+      }
       if (edgeId && e.key === "Enter") {
         e.preventDefault();
         e.stopPropagation();
-        setPinnedEdgeId((pinned) => (pinned === edgeId ? null : edgeId));
+        const pinning = pinnedEdgeId !== edgeId;
+        setPinnedEdgeId(pinning ? edgeId : null);
+        if (pinning) focusList(edgeId);
       }
     },
-    [activate],
+    [activate, focusNode, flowEdges, hoverEdge, edgeEl, pinnedEdgeId, focusList],
   );
   const onFocusCapture = useCallback(
     (e: FocusEvent) => {
-      if (!(e.target instanceof Element) || !e.target.matches(".react-flow__node")) return;
-      const id = e.target.getAttribute("data-id");
-      if (id) hoverNode(id);
+      if (!(e.target instanceof Element)) return;
+      if (e.target.matches(".react-flow__node")) {
+        const id = e.target.getAttribute("data-id");
+        if (!id) return;
+        if (rovingRef.current !== id) {
+          rovingRef.current = id;
+          applyRoving();
+        }
+        curveOrigin.current = null;
+        hoverNode(id);
+      } else if (e.target.matches(".react-flow__edge")) {
+        const id = e.target.getAttribute("data-testid")?.replace(/^rf__edge-/, "");
+        if (id) hoverEdge(id);
+      }
     },
-    [hoverNode],
+    [hoverNode, hoverEdge, applyRoving],
   );
 
   // ReactFlow's handlers, stable across hovers so a hover re-renders no more
@@ -1162,7 +1578,10 @@ function GraphCanvas({
   const onNodeMouseEnter = useCallback((_: ReactMouseEvent, node: FlowNode) => hoverNode(node.id), [hoverNode]);
   const onEdgeMouseEnter = useCallback((_: ReactMouseEvent, edge: FlowEdge) => hoverEdge(edge.id), [hoverEdge]);
   const onEdgeClick = useCallback(
-    (_: ReactMouseEvent, edge: FlowEdge) => setPinnedEdgeId((pinned) => (pinned === edge.id ? null : edge.id)),
+    (_: ReactMouseEvent, edge: FlowEdge) => {
+      if (edge.type === "provenance") return;
+      setPinnedEdgeId((pinned) => (pinned === edge.id ? null : edge.id));
+    },
     [],
   );
   const onPaneClick = useCallback(
@@ -1197,15 +1616,21 @@ function GraphCanvas({
     },
     [onNodeDragStop],
   );
+  const hoveredNodeId = hover?.nodeId;
 
   return (
     <div
       ref={wrapRef}
       className={`corpus-graph relative h-full w-full ${settling ? "graph-settling" : ""}`}
+      data-large={large ? "" : undefined}
+      data-provenance={showProvenance ? "" : undefined}
       onKeyDown={onKeyDown}
       onFocusCapture={onFocusCapture}
       onBlurCapture={scheduleClear}
     >
+      <p id={keysHelpId} className="sr-only">
+        {t("panes.graphKeysHelp")}
+      </p>
       <SpotlightContext.Provider value={spotlight}>
       <ReactFlow
         nodes={flowNodes}
@@ -1231,21 +1656,32 @@ function GraphCanvas({
         panOnScroll
         zoomOnPinch
         zoomOnScroll={false}
-        zoomActivationKeyCode={["Meta", "Control"]}
+        zoomActivationKeyCode={ZOOM_KEYS}
         zoomOnDoubleClick={false}
         minZoom={0.1}
         maxZoom={2.5}
-        proOptions={{ hideAttribution: true }}
+        proOptions={PRO_OPTIONS}
         nodesDraggable
         nodesConnectable={false}
         elementsSelectable={false}
         nodesFocusable
         edgesFocusable
+        // Our own keys and their description (graphKeysHelp), not reactflow's.
+        disableKeyboardA11y
+        // A large project draws only what is in view (REV2-09).
+        onlyRenderVisibleElements={large}
       >
-        <LabelScale target={wrapRef} />
+        <LabelScale target={wrapRef} large={large} />
         <Background gap={26} size={1.5} color="var(--sand-300)" />
-        {/* Top left, clear of the Stitch box at the foot of the canvas. */}
-        <Controls position="top-left" showInteractive={false} showFitView={false}>
+        {/* Top left, clear of the Stitch box at the foot of the canvas. The
+            zoom buttons carry the UI language's names (WALK2-17). */}
+        <Controls position="top-left" showInteractive={false} showFitView={false} showZoom={false}>
+          <ControlButton onClick={() => flowRef.current.zoomIn({ duration: 200 })} title={t("panes.graphZoomIn")} aria-label={t("panes.graphZoomIn")} data-track="graph-zoom-in">
+            <PlusIcon size={14} className="graph-stroke-icon" />
+          </ControlButton>
+          <ControlButton onClick={() => flowRef.current.zoomOut({ duration: 200 })} title={t("panes.graphZoomOut")} aria-label={t("panes.graphZoomOut")} data-track="graph-zoom-out">
+            <MinusGlyph size={14} />
+          </ControlButton>
           <ControlButton
             onClick={() => {
               userMoved.current = false;
@@ -1257,6 +1693,18 @@ function GraphCanvas({
           >
             <MaximizeIcon size={13} className="graph-stroke-icon" />
           </ControlButton>
+          {generatedIds.size > 0 && (
+            <ControlButton
+              onClick={() => setShowProvenance((v) => !v)}
+              title={t(showProvenance ? "panes.graphProvenanceHide" : "panes.graphProvenanceShow")}
+              aria-label={t("panes.graphProvenanceShow")}
+              aria-pressed={showProvenance}
+              data-track="graph-provenance"
+              className={showProvenance ? "graph-control-on" : undefined}
+            >
+              <PageIcon size={13} className="graph-stroke-icon" />
+            </ControlButton>
+          )}
           <ControlButton
             onClick={() => setKeyOpen((v) => !v)}
             title={t("panes.graphKeyTitle")}
@@ -1268,12 +1716,14 @@ function GraphCanvas({
           </ControlButton>
         </Controls>
       </ReactFlow>
-      {hover?.nodeId && !dragging && (
+      {hoveredNodeId && !dragging && (
         <NodeCard
-          key={hover.nodeId}
-          node={nodes.find((n) => n.id === hover.nodeId) ?? null}
-          counts={linkCounts.get(hover.nodeId)}
+          key={hoveredNodeId}
+          node={nodes.find((n) => n.id === hoveredNodeId) ?? null}
+          counts={linkCounts.get(hoveredNodeId)}
           picking={picking}
+          onEnter={() => hoverNode(hoveredNodeId)}
+          onLeave={scheduleClear}
         />
       )}
       </SpotlightContext.Provider>
@@ -1305,6 +1755,10 @@ type GraphViewProps = {
   // or a click on the canvas (onClearCited).
   citedIds?: Set<string>;
   onClearCited?: () => void;
+  // A link clicked in a curve's list opens in the overlay's side panel
+  // (WALK2-05); expandedLinkId is the one open there.
+  expandedLinkId?: string | null;
+  onExpandLink?: (linkId: string) => void;
 };
 
 export default function GraphView(props: GraphViewProps) {
