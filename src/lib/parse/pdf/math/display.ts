@@ -1771,8 +1771,26 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext, lines: Line[
     const topRow = Math.max(...glyphs.filter((g) => !hangingFamily(g.family)).map((g) => g.y));
     const within = (g: Glyph) => g.x + g.w / 2 > box.x1 && g.x + g.w / 2 < box.x2;
     const letters = ctx.drawing.glyphs.filter((g) => !own.has(g) && g.family === null && g.size >= size * 0.9 && /\p{L}/u.test(g.unicode) && within(g) && g.y > topRow + size * 0.8);
-    const sentenceRows = letters.map((g) => g.y).filter((y, i, ys) => ys.filter((z) => Math.abs(z - y) < size * 0.1).length >= 3);
-    const sentence = (g: Glyph) => sentenceRows.some((y) => g.y >= y - size * 0.1 && g.y < y + size * 0.6);
+    // The rows, by a sweep over the sorted baselines (a filter in a filter
+    // over every letter above a display took a tenth of a book's parse).
+    const ys = letters.map((g) => g.y).sort((a, b) => a - b);
+    const sentenceRows: number[] = [];
+    for (let i = 0, lo = 0, hi = 0; i < ys.length; i++) {
+      while (Math.abs(ys[lo] - ys[i]) >= size * 0.1) lo++;
+      while (hi < ys.length && Math.abs(ys[hi] - ys[i]) < size * 0.1) hi++;
+      if (hi - lo >= 3) sentenceRows.push(ys[i]);
+    }
+    // A glyph is on a row when the lowest row under its top reach holds it.
+    const sentence = (g: Glyph) => {
+      let lo = 0;
+      let hi = sentenceRows.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (g.y < sentenceRows[mid] + size * 0.6) hi = mid;
+        else lo = mid + 1;
+      }
+      return lo < sentenceRows.length && g.y >= sentenceRows[lo] - size * 0.1;
+    };
     const stray = ctx.drawing.glyphs.some((g) => {
       if (own.has(g) || (g.family === null && g.unicode.trim() === "")) return false;
       if (past(g) || beyond(g) || brace(g) || limit(g)) return true;
