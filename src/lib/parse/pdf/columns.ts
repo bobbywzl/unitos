@@ -28,6 +28,12 @@ export function lineColumn(line: Line): [number, number] | undefined {
   return columns.get(line);
 }
 
+/** A line cut from another keeps its column (math/display.ts). */
+export function keepColumn(from: Line, to: Line) {
+  const column = columns.get(from);
+  if (column) columns.set(to, column);
+}
+
 /** A mirrored line's column (mirror.ts): its line's, mirrored across the axis. */
 export function mirrorColumn(from: Line, to: Line, axis: number) {
   const column = columns.get(from);
