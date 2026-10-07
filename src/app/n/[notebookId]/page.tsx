@@ -1244,6 +1244,35 @@ export default async function NotebookPage(props: {
   // merged with every attached document's edits, newest first, attributed.
   // Small edits are marked (lib/history/trivial.ts) so the panel folds them.
   const trivial = await trivialEdits(allEdits);
+  // A removed link still hidden in this project: its newest LINK_REMOVE
+  // entry gets Restore, for an editor or the owner (WALK5-01, WALK5-08).
+  const linkMeta = (meta: unknown) =>
+    (meta && typeof meta === "object" && !Array.isArray(meta) ? meta : {}) as { linkId?: unknown; restored?: unknown };
+  const removedLinkIds = [
+    ...new Set(
+      allEdits.flatMap((e) => {
+        const id = linkMeta(e.meta).linkId;
+        return e.kind === "LINK_REMOVE" && typeof id === "string" ? [id] : [];
+      }),
+    ),
+  ];
+  const stillHidden = new Set(
+    myRole !== "viewer" && removedLinkIds.length > 0
+      ? (
+          await db.docLinkHidden.findMany({
+            where: { notebookId, docLinkId: { in: removedLinkIds } },
+            select: { docLinkId: true },
+          })
+        ).map((h) => h.docLinkId)
+      : [],
+  );
+  const restoreOffered = new Set<string>();
+  const restoreLinkOf = (e: (typeof allEdits)[number]): string | undefined => {
+    const id = linkMeta(e.meta).linkId;
+    if (e.kind !== "LINK_REMOVE" || typeof id !== "string" || !stillHidden.has(id) || restoreOffered.has(id)) return undefined;
+    restoreOffered.add(id); // allEdits is newest first: the newest removal
+    return id;
+  };
   const history: HistoryEntry[] = [
     ...events.map(
       (e): HistoryEntry => ({
@@ -1255,8 +1284,9 @@ export default async function NotebookPage(props: {
         createdAt: e.createdAt.toISOString(),
       }),
     ),
-    ...allEdits.map(
-      (e): HistoryEntry => ({
+    ...allEdits.map((e): HistoryEntry => {
+      const restoreLinkId = restoreLinkOf(e);
+      return {
         id: e.id,
         userId: e.userId,
         kind: e.kind as HistoryEntry["kind"],
@@ -1271,8 +1301,10 @@ export default async function NotebookPage(props: {
         documentTitle: e.document.title,
         createdAt: e.createdAt.toISOString(),
         trivial: trivial.get(e.id) ?? false,
-      }),
-    ),
+        ...(restoreLinkId ? { restoreLinkId } : {}),
+        ...(e.kind === "LINK_ADD" && linkMeta(e.meta).restored === true ? { restored: true } : {}),
+      };
+    }),
   ]
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, 100);

@@ -798,7 +798,7 @@ export function Workspace({
         <SaveIndicator />
         <ShareControl notebookId={notebook.id} presence={presence} />
         <div className="hidden md:block">
-          <HistoryControl history={history} />
+          <HistoryControl notebookId={notebook.id} history={history} />
         </div>
         {/* Save for offline (SPEC.md §17, Unitos Ultra): the pill in the header.
             Saved, it reads Offline and a press removes the copy. */}

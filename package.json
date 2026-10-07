@@ -13,7 +13,8 @@
     "lint": "eslint",
     "eval": "tsx scripts/eval/run.ts",
     "eval:ratings": "tsx scripts/eval/import-ratings.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check:conflicts": "node scripts/qa/conflict-marker-check.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.49",

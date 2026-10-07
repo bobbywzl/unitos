@@ -1,7 +1,9 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { HistoryEntry } from "@/lib/types";
+import { api } from "@/lib/api";
 import { useCollab } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { HistoryIcon } from "@/components/icons";
@@ -65,10 +67,28 @@ function foldRuns(entries: HistoryEntry[]): HistoryItem[] {
 // The History panel (SPEC.md §12): every edit and deletion in the corpus,
 // newest first, each entry signed by the account that did it. A person's
 // badge in the filter row narrows the feed to their actions.
-export function HistoryControl({ history }: { history: HistoryEntry[] }) {
+export function HistoryControl({ notebookId, history }: { notebookId: string; history: HistoryEntry[] }) {
   const t = useT();
   const lang = useLang();
-  const { authOn, people } = useCollab();
+  const router = useRouter();
+  const { authOn, people, canEdit } = useCollab();
+  // Restore on "removed a link" (WALK5-01): the link shows in the project
+  // again. The link whose restore is in flight, and the last error.
+  const [restoring, setRestoring] = useState<string | null>(null);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+  async function restoreLink(linkId: string) {
+    if (restoring) return;
+    setRestoring(linkId);
+    setRestoreError(null);
+    try {
+      await api(`/api/links/${encodeURIComponent(linkId)}/hidden?notebookId=${encodeURIComponent(notebookId)}`, "DELETE");
+      router.refresh();
+    } catch (err) {
+      setRestoreError(err instanceof Error ? err.message : t("common.requestFailed"));
+    } finally {
+      setRestoring(null);
+    }
+  }
   const panelRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [personFilter, setPersonFilter] = useState<string | null>(null);
@@ -114,8 +134,22 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
               <span className="font-semibold">
                 {person?.name ?? (authOn ? "?" : t("panes.historyYou"))}
               </span>{" "}
-              <span className="text-sand-600">{t(KIND_KEY[entry.kind])}</span>
+              <span className="text-sand-600">
+                {t(entry.restored ? "panes.historyLinkRestore" : KIND_KEY[entry.kind])}
+              </span>
             </span>
+            {entry.restoreLinkId && canEdit && (
+              <button
+                onClick={() => void restoreLink(entry.restoreLinkId!)}
+                disabled={restoring !== null}
+                data-track="history-link-restore"
+                data-history-restore={entry.restoreLinkId}
+                data-tip={t("panes.historyLinkRestoreTitle")}
+                className="shrink-0 rounded-full bg-clay-100 px-2 py-0.5 text-[10px] font-semibold text-clay-800 hover:bg-clay-200 disabled:opacity-50"
+              >
+                {restoring === entry.restoreLinkId ? t("panes.historyLinkRestoring") : t("panes.historyRestore")}
+              </button>
+            )}
             <span
               suppressHydrationWarning
               className="ml-auto shrink-0 text-[10px] text-sand-500"
@@ -185,6 +219,7 @@ export function HistoryControl({ history }: { history: HistoryEntry[] }) {
             )}
           </div>
           <p className="mt-1 text-[11px] text-sand-500">{t("panes.historyDesc")}</p>
+          {restoreError && <p className="mt-1 text-[11px] text-red-600">{restoreError}</p>}
 
           <div className="mt-3 flex max-h-[420px] flex-col gap-2.5 overflow-y-auto pr-1">
             {shown.length === 0 && (

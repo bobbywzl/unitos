@@ -41,15 +41,7 @@ export async function resolveNoteQuotes(
   const seen = new Set<string>();
   for (let i = 0; i < quotes.length; i++) {
     const q = quotes[i];
-    const blocks = blocksOf.get(q.documentId) ?? [];
-    const resolved = q.quotedText === undefined ? wholeBlock(blocks, q.blockId ?? "") : resolveAnchor(blocks, {
-      blockId: q.blockId ?? "",
-      startOffset: q.startOffset ?? 0,
-      endOffset: q.endOffset ?? 0,
-      quotedText: q.quotedText.trim(),
-      prefix: q.prefix,
-      suffix: q.suffix,
-    });
+    const resolved = resolveQuote(blocksOf.get(q.documentId) ?? [], q);
     if (!resolved) return { unresolved: i };
     // The same words twice are one source.
     const key = `${q.documentId}:${resolved.blockId}:${resolved.startOffset}:${resolved.endOffset}`;
@@ -58,6 +50,61 @@ export async function resolveNoteQuotes(
     sources.push({ ...resolved, documentId: q.documentId, layer: null });
   }
   return { sources };
+}
+
+/** One quote of a gathered note, as the note keeps it: a source, or, for a
+    quote that no longer resolves or whose document left the project, its
+    words as plain quoted text with no source (REV5-06). */
+export type KeptNoteQuote = { source: NoteQuoteSource } | { text: string };
+
+/** The quotes of a gathered note replayed from the offline queue (REV5-06):
+    every quote that resolves is a source, in the order sent; every other
+    quote keeps its words as text, so the note saves and no typed word is
+    dropped. `kept` counts the quotes kept as text (a quote with no words
+    that does not resolve has nothing to keep and is counted too). */
+export async function resolveNoteQuotesKeeping(
+  notebookId: string,
+  quotes: NoteQuoteInput[],
+): Promise<{ items: KeptNoteQuote[]; kept: number }> {
+  const docIds = [...new Set(quotes.map((q) => q.documentId))];
+  const attached = new Set(
+    (await db.notebookDocument.findMany({ where: { notebookId, documentId: { in: docIds } }, select: { documentId: true } })).map(
+      (d) => d.documentId,
+    ),
+  );
+  const blocksOf = new Map(
+    await Promise.all([...attached].map(async (id) => [id, await documentBlocks(id)] as const)),
+  );
+  const items: KeptNoteQuote[] = [];
+  const seen = new Set<string>();
+  let kept = 0;
+  for (const q of quotes) {
+    const resolved = attached.has(q.documentId) ? resolveQuote(blocksOf.get(q.documentId) ?? [], q) : null;
+    if (!resolved) {
+      kept++;
+      const text = q.quotedText?.trim();
+      if (text) items.push({ text });
+      continue;
+    }
+    const key = `${q.documentId}:${resolved.blockId}:${resolved.startOffset}:${resolved.endOffset}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    items.push({ source: { ...resolved, documentId: q.documentId, layer: null } });
+  }
+  return { items, kept };
+}
+
+function resolveQuote(blocks: { id: string; text: string; type: string }[], q: NoteQuoteInput): ResolvedAnchor | null {
+  return q.quotedText === undefined
+    ? wholeBlock(blocks, q.blockId ?? "")
+    : resolveAnchor(blocks, {
+        blockId: q.blockId ?? "",
+        startOffset: q.startOffset ?? 0,
+        endOffset: q.endOffset ?? 0,
+        quotedText: q.quotedText.trim(),
+        prefix: q.prefix,
+        suffix: q.suffix,
+      });
 }
 
 // A whole-block quote keeps the block's opening words, cut at a sentence end

@@ -6,7 +6,8 @@ import { db } from "@/lib/db";
 import { sourceInputSchema } from "@/lib/anchors/input";
 import { MAX_SEGMENTS, passageSources, resolvePassage } from "@/lib/anchors/passage";
 import { layerBlocks } from "@/lib/anchors/layer";
-import { MAX_NOTE_QUOTES, noteQuoteSchema, resolveNoteQuotes } from "@/lib/anchors/note-quotes";
+import { MAX_NOTE_QUOTES, noteQuoteSchema, resolveNoteQuotes, resolveNoteQuotesKeeping } from "@/lib/anchors/note-quotes";
+import { QUOTES_KEPT_HEADER, REPLAY_HEADER } from "@/lib/constants";
 import type { ResolvedAnchor } from "@/lib/anchors/resolve";
 import { serverT } from "@/lib/i18n/server";
 import { normalizeNoteOrders } from "@/lib/order";
@@ -236,7 +237,24 @@ export async function POST(req: Request) {
         : []),
     ];
   }
-  if (data.quotes) {
+  // A gathered note replayed from the offline queue (REV5-06): the reader
+  // is not there to remove a quote that no longer resolves, and a 4xx drops
+  // the queued write with the reader's words. Such a quote keeps its words
+  // as plain quoted text with no source, the note saves, and the answer says
+  // how many were kept so (QUOTES_KEPT_HEADER). Online the reader still gets
+  // the error and fixes the quote.
+  let quotesKept = 0;
+  if (data.quotes && req.headers.get(REPLAY_HEADER) === "1") {
+    const gathered = await resolveNoteQuotesKeeping(section.notebookId, data.quotes);
+    quotesKept = gathered.kept;
+    sources = gathered.items.flatMap((item) => ("source" in item ? [item.source] : []));
+    content = [
+      content.trim(),
+      ...gathered.items.map((item) => quoteLines("source" in item ? item.source.quotedText : item.text)),
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+  } else if (data.quotes) {
     const gathered = await resolveNoteQuotes(section.notebookId, data.quotes);
     if ("notInProject" in gathered) return NextResponse.json({ error: t("api.quoteNotInProject") }, { status: 400 });
     if ("unresolved" in gathered) {
@@ -302,7 +320,10 @@ export async function POST(req: Request) {
   });
   if (data.top) await normalizeNoteOrders(data.sectionId);
   await bumpNotebook(section.notebookId);
-  return NextResponse.json(note, { status: 201 });
+  return NextResponse.json(note, {
+    status: 201,
+    ...(quotesKept > 0 ? { headers: { [QUOTES_KEPT_HEADER]: String(quotesKept) } } : {}),
+  });
 }
 
 // A quote as the note's text shows it: blockquote lines, the boxed

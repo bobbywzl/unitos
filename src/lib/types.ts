@@ -317,6 +317,11 @@ export type HistoryEntry = {
   content: string;
   documentTitle: string | null; // BlockEdit entries: the document it happened in
   createdAt: string; // ISO
+  // LINK_REMOVE: the removed link, while it is still hidden in this project
+  // and this is its newest removal; Restore brings it back (WALK5-01).
+  restoreLinkId?: string;
+  // LINK_ADD: the link came back by Undo or Restore (meta.restored).
+  restored?: boolean;
 };
 
 // ── Stitch (SPEC.md §22): the assistant over the project's documents, from the graph ──
