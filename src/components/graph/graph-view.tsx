@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import ReactFlow, {
   Background,
@@ -339,7 +339,7 @@ function EdgeLinkList({ edgeId, loop, anchor, links }: { edgeId: string; loop: b
   const besideLeft = screen.x + 40 + width <= paneW - insets.right - 8 ? screen.x + 40 : Math.max(8, screen.x - 40 - width);
   const besideTop = Math.max(freeTop, screen.y - 24);
   const style: CSSProperties = narrow
-    ? { left: 8, right: 8, bottom: Math.max(8, insets.bottom), maxHeight: "55%" }
+    ? { left: 8, right: 8, bottom: insets.bottom + 8, maxHeight: "55%" }
     : place === "above"
       ? { left, width, bottom: paneH - screen.y + 12, maxHeight: Math.max(80, roomAbove) }
       : place === "below"
@@ -452,15 +452,32 @@ const edgeTypes = { link: LinkEdge };
 // A node's card (GR-14): the full title, what the document is, its length,
 // and its links, beside the hovered or focused node. It says what a click
 // does, since a click leaves the graph for the reader.
-type NodeFacts = { node: GraphNode; accepted: number; recommended: number; center: Point };
-function NodeCard({ facts, picking }: { facts: NodeFacts; picking: boolean }) {
+function NodeCard({
+  node,
+  counts,
+  picking,
+}: {
+  node: GraphNode | null;
+  counts: { accepted: number; recommended: number } | undefined;
+  picking: boolean;
+}) {
   const { floatHost, insets } = useContext(SpotlightContext);
   const t = useT();
-  const screen = useScreenPoint(facts.center);
+  // The card waits a beat, so a pointer crossing the canvas does not flash a
+  // card on every node it passes. Its own state: the canvas does not render
+  // again when it shows.
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setShown(true), 220);
+    return () => window.clearTimeout(timer);
+  }, []);
+  const position = useStore((s) => (node ? s.nodeInternals.get(node.id)?.position : undefined));
+  const screen = useScreenPoint(position ? { x: position.x + NODE_W / 2, y: position.y + NODE_H / 2 } : { x: 0, y: 0 });
   const zoom = useStore((s) => s.transform[2]);
   const paneW = useStore((s) => s.width);
-  if (!floatHost) return null;
-  const { node, accepted, recommended } = facts;
+  if (!floatHost || !shown || !node || !position) return null;
+  const accepted = counts?.accepted ?? 0;
+  const recommended = counts?.recommended ?? 0;
   const width = Math.min(260, paneW - 16);
   const gap = 22 * Math.max(zoom, 0.6);
   const right = screen.x + gap + width <= paneW - insets.right - 8;
@@ -568,6 +585,9 @@ function saveDragged(notebookId: string, positions: Map<string, Point>) {
   }
 }
 
+// Layouts made this tab, by shape and by the project's documents and pairs.
+const layoutCache = new Map<string, Map<string, Point>>();
+
 // The label scale follows the zoom through a CSS variable on the canvas, so
 // a zoom re-renders no node.
 function LabelScale({ target }: { target: RefObject<HTMLDivElement | null> }) {
@@ -621,7 +641,8 @@ function GraphCanvas({
   // Once the reader pans or zooms, the view is theirs: no automatic refit.
   const userMoved = useRef(false);
   const [hover, setHover] = useState<HoverState>(null);
-  const [cardNodeId, setCardNodeId] = useState<string | null>(null);
+  // Dragging a node hides its card until the pointer rests again.
+  const [dragging, setDragging] = useState(false);
   const [keyOpen, setKeyOpen] = useState(false);
   // A curve's link list lives in the floating layer, off the curve: the
   // leave that fires on the way there waits a beat, and the list's own hover
@@ -656,14 +677,6 @@ function GraphCanvas({
     [cancelClear],
   );
   useEffect(() => cancelClear, [cancelClear]);
-  // The node card waits a beat, so a pointer crossing the canvas does not
-  // flash a card on every node it passes.
-  useEffect(() => {
-    const id = hover?.nodeId;
-    if (!id) return;
-    const timer = window.setTimeout(() => setCardNodeId(id), 220);
-    return () => window.clearTimeout(timer);
-  }, [hover?.nodeId]);
   const openLink = useCallback(
     (link: GraphEdgeLink, documentId: string) => {
       router.push(`/n/${notebookId}?doc=${documentId}&link=${link.id}`);
@@ -721,14 +734,23 @@ function GraphCanvas({
   // Shaped for the pane: wide on a laptop, tall on a phone. The height
   // leaves the Stitch box's usual room (it opens at 640px and wider), never
   // its live height, so a growing answer never moves a node.
-  const aspect = layoutAspect(paneW, paneH - (paneW >= 640 ? 230 : 60));
+  // Nothing is laid out before the pane has a size; a layout already made
+  // for this project and shape is reused (an open, a refresh, a reopen).
+  const aspect = paneW > 0 ? layoutAspect(paneW, paneH - (paneW >= 640 ? 230 : 60)) : 0;
   const layout = useMemo(() => {
+    if (aspect === 0) return new Map<string, Point>();
+    const key = `${aspect}|${layoutKey}`;
+    const cached = layoutCache.get(key);
+    if (cached) return cached;
     const [ids, pairs] = JSON.parse(layoutKey) as [string[], [string, string, number][]];
-    return graphLayout(
+    const made = graphLayout(
       ids,
       pairs.map(([a, b, weight]) => ({ a, b, weight })),
       aspect,
     );
+    if (layoutCache.size > 12) layoutCache.clear();
+    layoutCache.set(key, made);
+    return made;
   }, [layoutKey, aspect]);
 
   // The hovered neighborhood: the node and its linked documents, or a curve's
@@ -1010,20 +1032,50 @@ function GraphCanvas({
     [hoverNode],
   );
 
-  const cardFacts = useMemo<NodeFacts | null>(() => {
-    // Only the node still under the pointer (or focus) shows its card.
-    if (!cardNodeId || hover?.nodeId !== cardNodeId) return null;
-    const node = nodes.find((n) => n.id === cardNodeId);
-    const position = flowNodes.find((n) => n.id === cardNodeId)?.position;
-    if (!node || !position) return null;
-    const c = linkCounts.get(node.id);
-    return {
-      node,
-      accepted: c?.accepted ?? 0,
-      recommended: c?.recommended ?? 0,
-      center: { x: position.x + NODE_W / 2, y: position.y + NODE_H / 2 },
-    };
-  }, [cardNodeId, hover?.nodeId, nodes, flowNodes, linkCounts]);
+  // ReactFlow's handlers, stable across hovers so a hover re-renders no more
+  // than the spotlight needs.
+  const onNodeClick = useCallback(
+    (e: ReactMouseEvent, node: FlowNode) => activate(node.id, e.shiftKey || e.metaKey || e.ctrlKey),
+    [activate],
+  );
+  const onNodeMouseEnter = useCallback((_: ReactMouseEvent, node: FlowNode) => hoverNode(node.id), [hoverNode]);
+  const onEdgeMouseEnter = useCallback((_: ReactMouseEvent, edge: FlowEdge) => hoverEdge(edge.id), [hoverEdge]);
+  const onEdgeClick = useCallback(
+    (_: ReactMouseEvent, edge: FlowEdge) => setPinnedEdgeId((pinned) => (pinned === edge.id ? null : edge.id)),
+    [],
+  );
+  const onPaneClick = useCallback(
+    (e: ReactMouseEvent) => {
+      if (e.target instanceof Element && e.target.classList.contains("react-flow__pane")) {
+        setPinnedEdgeId(null);
+        setKeyOpen(false);
+        onClearCited?.();
+      }
+    },
+    [onClearCited],
+  );
+  // An edge's mouse-leave is lost when the hovered edge re-renders. Node and
+  // edge moves bubble here too, so clear the spotlight only when the pointer
+  // is on the pane itself — off every node and edge — after the same beat,
+  // so a move from a curve into its link list keeps the list.
+  const onPaneMouseMove = useCallback(
+    (e: ReactMouseEvent) => {
+      if (e.target instanceof Element && e.target.classList.contains("react-flow__pane")) scheduleClear();
+    },
+    [scheduleClear],
+  );
+  // A move with an input event is the reader's; the fit's own moves carry none.
+  const onMoveStart = useCallback((e: unknown) => {
+    if (e) userMoved.current = true;
+  }, []);
+  const onNodeDragStart = useCallback(() => setDragging(true), []);
+  const onNodeDragStopAll = useCallback(
+    (e: ReactMouseEvent, node: FlowNode) => {
+      setDragging(false);
+      onNodeDragStop(e, node);
+    },
+    [onNodeDragStop],
+  );
 
   return (
     <div
@@ -1040,35 +1092,17 @@ function GraphCanvas({
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
-        onNodeDragStart={() => setCardNodeId(null)}
-        onNodeDragStop={onNodeDragStop}
-        onNodeClick={(e, node) => activate(node.id, e.shiftKey || e.metaKey || e.ctrlKey)}
-        onNodeMouseEnter={(_, node) => hoverNode(node.id)}
+        onNodeDragStart={onNodeDragStart}
+        onNodeDragStop={onNodeDragStopAll}
+        onNodeClick={onNodeClick}
+        onNodeMouseEnter={onNodeMouseEnter}
         onNodeMouseLeave={scheduleClear}
-        onEdgeMouseEnter={(_, edge) => hoverEdge(edge.id)}
+        onEdgeMouseEnter={onEdgeMouseEnter}
         onEdgeMouseLeave={scheduleClear}
-        onEdgeClick={(_, edge) => setPinnedEdgeId((pinned) => (pinned === edge.id ? null : edge.id))}
-        onPaneClick={(e) => {
-          if (e.target instanceof Element && e.target.classList.contains("react-flow__pane")) {
-            setPinnedEdgeId(null);
-            setKeyOpen(false);
-            onClearCited?.();
-          }
-        }}
-        // An edge's mouse-leave is lost when the hovered edge re-renders. Node
-        // and edge moves bubble here too, so clear the spotlight only when the
-        // pointer is on the pane itself — off every node and edge — after the
-        // same beat, so a move from a curve into its link list keeps the list.
-        onPaneMouseMove={(e) => {
-          if (e.target instanceof Element && e.target.classList.contains("react-flow__pane")) {
-            scheduleClear();
-          }
-        }}
-        onMoveStart={(e) => {
-          // A move with an input event is the reader's; the fit's own moves
-          // carry none.
-          if (e) userMoved.current = true;
-        }}
+        onEdgeClick={onEdgeClick}
+        onPaneClick={onPaneClick}
+        onPaneMouseMove={onPaneMouseMove}
+        onMoveStart={onMoveStart}
         // Fluid navigation (release-edu): drag empty space to pan, trackpad
         // two-finger scroll pans, pinch or Ctrl/Cmd+wheel zooms. Double-click
         // zoom off — it fires on accidental double-taps of nodes.
@@ -1113,7 +1147,14 @@ function GraphCanvas({
           </ControlButton>
         </Controls>
       </ReactFlow>
-      {cardFacts && !shown?.edgeId && <NodeCard facts={cardFacts} picking={picking} />}
+      {hover?.nodeId && !dragging && (
+        <NodeCard
+          key={hover.nodeId}
+          node={nodes.find((n) => n.id === hover.nodeId) ?? null}
+          counts={linkCounts.get(hover.nodeId)}
+          picking={picking}
+        />
+      )}
       </SpotlightContext.Provider>
       {keyOpen && <GraphKey onClose={() => setKeyOpen(false)} />}
       {/* The floating layer: link lists and node cards, screen-sized. */}

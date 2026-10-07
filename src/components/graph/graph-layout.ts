@@ -17,7 +17,7 @@ export type Point = { x: number; y: number };
 export const SPACE_X = 200;
 export const SPACE_Y = 118;
 const GROUP_GAP = 70;
-const TICKS = 320;
+const TICKS = 240;
 
 // Deterministic pseudo-random in [-1, 1] from a string.
 export function seeded(id: string, salt: number): number {
