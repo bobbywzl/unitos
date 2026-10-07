@@ -3,7 +3,7 @@ import type { ModelMessage } from "ai";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { buildContents, contentsEntries, headingContents, type ContentsEntry } from "@/lib/contents";
+import { contentsEntries, headingContents, type ContentsEntry } from "@/lib/contents";
 import {
   SKELETON_EFFORT,
   SKELETON_MAX_OUTPUT_TOKENS,
@@ -50,10 +50,16 @@ export type Skeleton = {
 /** The document as the skeleton reads it: the block rows Stitch loads. */
 export type SkeletonBlock = { id: string; type: string; text: string; startTime?: number | null; endTime?: number | null };
 
+const PART_EVERY = 25; // readable blocks per part of a document with no headings
+
+// The window's blocks are numbered 1..n for the model (SkeletonCtx): a
+// number is a token or two where a stored id is a dozen, written once per
+// line. The number maps back to the stored id below.
+const blockNumber = z.union([z.string(), z.number()]).transform((v) => String(v).replace(/[^0-9]/g, ""));
 const windowSchema = z.object({
   gist: z.string().max(GIST_MAX).default(""),
-  parts: z.array(z.object({ blockId: z.string().min(1), summary: z.string().trim().min(1).max(SUMMARY_MAX) })).max(200),
-  lines: z.array(z.object({ blockId: z.string().min(1), text: z.string().trim().min(1).max(LINE_MAX) })).max(4000),
+  parts: z.array(z.object({ blockId: blockNumber, summary: z.string().trim().min(1).max(SUMMARY_MAX) })).max(200),
+  lines: z.array(z.object({ blockId: blockNumber, text: z.string().trim().min(1).max(LINE_MAX) })).max(4000),
 });
 
 /** The hash of a block's text: what tells a stored line its block changed. */
@@ -162,24 +168,28 @@ export function currentSkeleton(skeleton: Skeleton | null, blocks: SkeletonBlock
   };
 }
 
-// The document's parts for the skeleton's summaries: the stored contents,
-// else built now, else the headings; none for a document too short to have
-// parts (the whole document is then one part).
-async function partsFor(
-  documentId: string,
-  userId: string | null,
+/** The document's parts for the skeleton's summaries: the stored contents,
+    else the headings, else — a document with no headings — a part every
+    PART_EVERY readable blocks, titled with its first words; none for a
+    document too short to have parts (the whole document is then one
+    part). Contents are built when the reader asks for them (SPEC.md §26),
+    never here: the skeleton's parts live in the skeleton only. */
+export function partsFor(
   contents: unknown,
   blocks: (SkeletonBlock & { order: number; html: string | null })[],
-): Promise<ContentsEntry[]> {
+): ContentsEntry[] {
   const stored = contentsEntries(contents);
   if (stored.length > 0) return stored;
-  try {
-    const built = await buildContents(documentId, userId);
-    if (built.length > 0) return built;
-  } catch (err) {
-    console.warn("[skeleton] contents failed, using headings:", err);
+  const headings = headingContents(blocks);
+  if (headings.length > 0) return headings;
+  const readable = skeletonBlocks(blocks);
+  if (readable.length <= PART_EVERY) return [];
+  const parts: ContentsEntry[] = [];
+  for (let i = 0; i < readable.length; i += PART_EVERY) {
+    const words = readable[i].text.replace(/\s+/g, " ").trim().split(" ").slice(0, 8).join(" ");
+    parts.push({ title: words.slice(0, 80), blockId: readable[i].id, level: 1 });
   }
-  return headingContents(blocks);
+  return parts;
 }
 
 /** Build the skeleton now: one call per window, the windows at once, and
@@ -208,7 +218,7 @@ export async function buildSkeleton(
   if (!document) return null;
   const readable = skeletonBlocks(document.blocks);
   if (readable.length === 0) return null;
-  const parts = await partsFor(documentId, userId, document.contents, document.blocks);
+  const parts = partsFor(document.contents, document.blocks);
   const partAt = new Map(parts.map((p) => [p.blockId, p]));
 
   // Windows: readable blocks in order, cut at a block boundary past the
@@ -232,13 +242,15 @@ export async function buildSkeleton(
   const usage = { userId, feature: "skeleton", model: skeletonCall.modelId } satisfies UsageMeta;
   const results = await Promise.all(
     windows.map(async (blocks, i) => {
+      const numberOf = new Map(blocks.map((b, n) => [b.id, String(n + 1)]));
+      const numbered = blocks.map((b, n) => ({ ...b, id: String(n + 1) }));
       const windowParts = blocks.filter((b) => partAt.has(b.id)).map((b) => partAt.get(b.id)!);
       const messages: ModelMessage[] = [
-        { role: "system", content: documentPrefix(document.title, blocks, i === 0 ? document.references : undefined, pageNames(document)) },
+        { role: "system", content: documentPrefix(document.title, numbered, i === 0 ? document.references : undefined, pageNames(document)) },
         {
           role: "user",
           content: skeletonPrompt({
-            parts: windowParts.map((p) => ({ blockId: p.blockId, title: p.title })),
+            parts: windowParts.map((p) => ({ blockId: numberOf.get(p.blockId) ?? "", title: p.title })),
             window: i + 1,
             windows: windows.length,
             blockCount: blocks.length,
@@ -256,7 +268,14 @@ export async function buildSkeleton(
         abortSignal: signal,
       });
       if (!result.ok) throw new Error(result.error);
-      return result.data;
+      // The window's numbers back to the stored ids; a number that names
+      // no block of the window drops.
+      const idOf = (n: string) => blocks[Number(n) - 1]?.id ?? "";
+      return {
+        gist: result.data.gist,
+        parts: result.data.parts.map((p) => ({ ...p, blockId: idOf(p.blockId) })).filter((p) => p.blockId),
+        lines: result.data.lines.map((l) => ({ ...l, blockId: idOf(l.blockId) })).filter((l) => l.blockId),
+      };
     }),
   );
 
