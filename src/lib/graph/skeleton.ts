@@ -470,28 +470,37 @@ function readsSkeletons(r: { chars: bigint | null; cjk: bigint | null }): boolea
     (buildLocked): a build running in this process, or holding the lock
     from another, and this one yields. A page Stitch generated gets no
     skeleton here while the every-document read skips generated pages
-    (STITCH_READS_GENERATED): a picked one is built when Stitch reads it. */
-export async function refreshSkeleton(documentId: string, userId: string | null, options: { force?: boolean } = {}): Promise<void> {
+    (STITCH_READS_GENERATED): a picked one is built when Stitch reads it.
+    sqlStale: the caller ran the SQL drift already (warmSkeletons). */
+export async function refreshSkeleton(
+  documentId: string,
+  userId: string | null,
+  options: { force?: boolean; sqlStale?: boolean } = {},
+): Promise<void> {
   if (!(await featureConfigured("skeleton"))) return;
   if (running.has(documentId)) return;
+  // The cheap checks first, from one small row (COST4-04): an edit saves
+  // every few seconds, and inside the quiet period nothing is read.
+  const [head] = await db.$queryRaw<{ v: number | null; built: number | null; startedAt: Date | null; generated: boolean }[]>`
+    SELECT CASE WHEN jsonb_typeof(d.skeleton->'v') = 'number' THEN (d.skeleton->>'v')::float8 END AS v,
+      CASE WHEN jsonb_typeof(d.skeleton->'built') = 'number' THEN (d.skeleton->>'built')::float8 END AS built,
+      d."skeletonStartedAt" AS "startedAt", d."generatedCommand" IS NOT NULL AS generated
+    FROM "Document" d WHERE d.id = ${documentId}`;
+  if (!head) return;
+  if (head.generated && !STITCH_READS_GENERATED) return;
+  if (head.startedAt && Date.now() - head.startedAt.getTime() < SKELETON_STALE_MS) return;
+  const built = head.v === SKELETON_VERSION ? head.built : null;
+  if (!options.force && built !== null && Date.now() - built < SKELETON_QUIET_MS) return;
+  // Then the drift in SQL, no text read; the blocks load only when it says
+  // stale, for the exact check.
+  if (!options.sqlStale && !(await staleSkeletonDocument(documentId))) return;
   const document = await db.document.findUnique({
     where: { id: documentId },
-    select: {
-      skeleton: true,
-      skeletonStartedAt: true,
-      generatedCommand: true,
-      blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true } },
-    },
+    select: { skeleton: true, blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true } } },
   });
   if (!document) return;
-  if (document.generatedCommand !== null && !STITCH_READS_GENERATED) return;
-  const stored = readSkeleton(document.skeleton);
-  if (!skeletonStale(stored, document.blocks)) return;
-  if (document.skeletonStartedAt && Date.now() - document.skeletonStartedAt.getTime() < SKELETON_STALE_MS) return;
-  if (!options.force) {
-    if (stored?.built !== undefined && Date.now() - stored.built < SKELETON_QUIET_MS) return;
-    if (!(await skeletonNeeded({ documentId }))) return;
-  }
+  if (!skeletonStale(readSkeleton(document.skeleton), document.blocks)) return;
+  if (!options.force && !(await skeletonNeeded({ documentId }))) return;
   try {
     await buildLocked(documentId, userId);
   } catch (err) {
@@ -509,11 +518,26 @@ export async function refreshSkeleton(documentId: string, userId: string | null,
     here as changed, which only sends it to refreshSkeleton, whose check
     is exact. */
 export async function staleSkeletonDocuments(notebookId: string): Promise<string[]> {
+  return staleIn(Prisma.sql`
+    SELECT d.id, d.skeleton FROM "NotebookDocument" nd JOIN "Document" d ON d.id = nd."documentId"
+    WHERE nd."notebookId" = ${notebookId} AND (${STITCH_READS_GENERATED} OR d."generatedCommand" IS NULL)`);
+}
+
+/** staleSkeletonDocuments for one document (COST4-04): whether its
+    skeleton may be stale, in SQL, with no block text read into the
+    server. True may be a block JS trims to nothing; refreshSkeleton then
+    loads the blocks for the exact check. */
+export async function staleSkeletonDocument(documentId: string): Promise<boolean> {
+  const stale = await staleIn(Prisma.sql`
+    SELECT d.id, d.skeleton FROM "Document" d
+    WHERE d.id = ${documentId} AND (${STITCH_READS_GENERATED} OR d."generatedCommand" IS NULL)`);
+  return stale.length > 0;
+}
+
+// skeletonDrift in SQL for the documents `docs` selects (id, skeleton).
+async function staleIn(docs: Prisma.Sql): Promise<string[]> {
   const rows = await db.$queryRaw<{ id: string; v: number | null; total: bigint | null; changed: bigint | null; removed: bigint | null; lines: number | null }[]>`
-    WITH docs AS (
-      SELECT d.id, d.skeleton FROM "NotebookDocument" nd JOIN "Document" d ON d.id = nd."documentId"
-      WHERE nd."notebookId" = ${notebookId} AND (${STITCH_READS_GENERATED} OR d."generatedCommand" IS NULL)
-    ),
+    WITH docs AS (${docs}),
     lines AS MATERIALIZED (
       SELECT docs.id AS doc, l."blockId" AS "blockId", l.hash, length(l.text) AS len
       FROM docs, jsonb_to_recordset(CASE WHEN jsonb_typeof(docs.skeleton->'lines') = 'array' THEN docs.skeleton->'lines' ELSE '[]'::jsonb END)
@@ -568,5 +592,5 @@ export async function warmSkeletons(notebookId: string, userId: string | null): 
   if (warmed.size > 500) warmed.clear();
   warmed.set(notebookId, { key, at: Date.now() });
   const stale = await staleSkeletonDocuments(notebookId);
-  await mapLimit(stale, SKELETON_BUILD_CONCURRENCY, (id) => refreshSkeleton(id, userId, { force: true }).catch(() => {}));
+  await mapLimit(stale, SKELETON_BUILD_CONCURRENCY, (id) => refreshSkeleton(id, userId, { force: true, sqlStale: true }).catch(() => {}));
 }
