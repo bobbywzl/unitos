@@ -122,7 +122,8 @@ export function SectionItem({
             )}
           </>
         )}
-        <span className="text-[13px] text-sand-600">{notes.length || ""}</span>
+        {/* One count rule on every surface: the accepted notes. */}
+        <span className="text-[13px] text-sand-600">{notes.filter((n) => n.status !== "PENDING").length || ""}</span>
         {canEdit && (
           <button
             onClick={() => {

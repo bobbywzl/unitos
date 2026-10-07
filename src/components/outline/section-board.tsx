@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { isImeKey } from "@/lib/ime";
 import type { SectionView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
-import { ChevronLeftIcon, PlusIcon } from "@/components/icons";
+import { PlusIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { SortableBoard, SortableGroup, SortableItem } from "@/components/sortable";
 import { AnnotationSideHost, useAnnotationSide } from "@/components/outline/annotation-side";
@@ -36,6 +36,11 @@ import { shownSectionTitle } from "@/lib/section-title";
 // narrowest tile, and the widest.
 const TILE_GAP = 14;
 const TILE_MIN_WIDTH = 220;
+// A board narrower than this (a phone) takes two columns of smaller tiles,
+// still 3:4 at the least: one tile per screen made the reader scroll a
+// screen per note.
+const NARROW_BOARD = 500;
+const NARROW_TILE_MIN_WIDTH = 150;
 const TILE_MAX_WIDTH = 480;
 
 /** The grid's columns, and the height limits of a tile in px: never under
@@ -106,7 +111,12 @@ export function SectionBoard({
       const gridWidth = grid.clientWidth;
       const columns = Math.max(
         1,
-        Math.min(noteCount, Math.floor((gridWidth + TILE_GAP) / (TILE_MIN_WIDTH + TILE_GAP))),
+        Math.min(
+          noteCount,
+          Math.floor(
+            (gridWidth + TILE_GAP) / ((gridWidth < NARROW_BOARD ? NARROW_TILE_MIN_WIDTH : TILE_MIN_WIDTH) + TILE_GAP),
+          ),
+        ),
       );
       const rows = Math.ceil(noteCount / columns);
       const width = Math.min(TILE_MAX_WIDTH, (gridWidth - TILE_GAP * (columns - 1)) / columns);
@@ -175,14 +185,6 @@ export function SectionBoard({
   return (
     <div className="content-in fixed inset-0 z-50 flex flex-col bg-paper">
       <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-line px-5 py-3">
-        <button
-          onClick={onClose}
-          data-track="board-close"
-          className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800"
-        >
-          <ChevronLeftIcon size={14} />
-          {t("outline.notesLabel")}
-        </button>
         {parent && (
           <button
             onClick={() => onChange(parent.id)}
@@ -195,7 +197,8 @@ export function SectionBoard({
           </button>
         )}
         <span className="font-display text-[22px]">{shownSectionTitle(section.title, t)}</span>
-        <span className="text-[13px] text-sand-600">{notes.length || ""}</span>
+        {/* One count rule on every surface: the accepted notes. */}
+        <span className="text-[13px] text-sand-600">{notes.filter((n) => n.status !== "PENDING").length || ""}</span>
         {section.children.length > 0 && (
           <span className="flex flex-wrap items-center gap-1.5">
             <span className="text-[11px] font-bold tracking-[0.08em] text-sand-500 uppercase">
@@ -210,7 +213,7 @@ export function SectionBoard({
                 className={chip}
               >
                 {shownSectionTitle(child.title, t)}
-                <span className="text-sand-500">{child.notes.length || ""}</span>
+                <span className="text-sand-500">{child.notes.filter((n) => n.status !== "PENDING").length || ""}</span>
               </button>
             ))}
           </span>
