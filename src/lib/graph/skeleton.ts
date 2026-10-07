@@ -13,6 +13,8 @@ import {
   SKELETON_STALE_FRACTION,
   SKELETON_STALE_MS,
   SKELETON_WINDOW_CHARS,
+  SKELETON_WINDOW_CONCURRENCY,
+  SKELETON_WINDOWS_IN_FLIGHT,
   STITCH_READS_GENERATED,
   STITCH_WHOLE_THRESHOLD,
 } from "@/lib/derive/config";
@@ -35,7 +37,8 @@ import type { UsageMeta } from "@/lib/usage";
 // document more than a tenth changed is rebuilt — in the background after
 // an edit or an add (refreshSkeleton), and at once when Stitch needs it
 // (ensureSkeleton). Built one call per window of SKELETON_WINDOW_CHARS,
-// the windows at once, each under its own cached prefix.
+// SKELETON_WINDOW_CONCURRENCY windows at a time under a process-wide
+// SKELETON_WINDOWS_IN_FLIGHT, each under its own cached prefix.
 
 export const SKELETON_VERSION = 1;
 const LINE_MAX = 4_000; // a line of a 4,000-word block: one word in ten, cut past it rather than failing the window
@@ -62,11 +65,31 @@ const PART_EVERY = 25; // readable blocks per part of a document with no heading
 // The window's blocks are numbered 1..n for the model (SkeletonCtx): a
 // number is a token or two where a stored id is a dozen, written once per
 // line. The number maps back to the stored id below.
+// The answer keys each line and summary by its number ({"12": "…"},
+// COST4-08); a list of {blockId, text} / {blockId, summary}, the older
+// form, parses the same.
 const blockNumber = z.union([z.string(), z.number()]).transform((v) => String(v).replace(/[^0-9]/g, ""));
-const windowSchema = z.object({
+const lineText = z.string().trim().min(1).transform((t) => t.slice(0, LINE_MAX));
+const summaryText = z.string().trim().min(1).transform((t) => t.slice(0, SUMMARY_MAX));
+const byNumber = (n: string) => n.replace(/[^0-9]/g, "");
+const linesSchema = z.union([
+  z.array(z.object({ blockId: blockNumber, text: lineText })).max(4000),
+  z
+    .record(z.string(), lineText)
+    .refine((r) => Object.keys(r).length <= 4000)
+    .transform((r) => Object.entries(r).map(([n, text]) => ({ blockId: byNumber(n), text }))),
+]);
+const partsSchema = z.union([
+  z.array(z.object({ blockId: blockNumber, summary: summaryText })).max(200),
+  z
+    .record(z.string(), summaryText)
+    .refine((r) => Object.keys(r).length <= 200)
+    .transform((r) => Object.entries(r).map(([n, summary]) => ({ blockId: byNumber(n), summary }))),
+]);
+export const windowSchema = z.object({
   gist: z.string().transform((t) => t.slice(0, GIST_MAX)).default(""),
-  parts: z.array(z.object({ blockId: blockNumber, summary: z.string().trim().min(1).transform((t) => t.slice(0, SUMMARY_MAX)) })).max(200),
-  lines: z.array(z.object({ blockId: blockNumber, text: z.string().trim().min(1).transform((t) => t.slice(0, LINE_MAX)) })).max(4000),
+  parts: partsSchema,
+  lines: linesSchema,
 });
 
 /** The hash of a block's text: what tells a stored line its block changed. */
@@ -203,7 +226,22 @@ export function partsFor(
   return parts;
 }
 
-/** Build the skeleton now: one call per window, the windows at once, and
+// The process's skeleton windows in flight, across every build.
+let windowsInFlight = 0;
+const windowQueue: (() => void)[] = [];
+async function inFlight<T>(run: () => Promise<T>): Promise<T> {
+  if (windowsInFlight >= SKELETON_WINDOWS_IN_FLIGHT) await new Promise<void>((resolve) => windowQueue.push(resolve));
+  else windowsInFlight++;
+  try {
+    return await run();
+  } finally {
+    const next = windowQueue.shift();
+    if (next) next(); // the slot passes on
+    else windowsInFlight--;
+  }
+}
+
+/** Build the skeleton now: one call per window, SKELETON_WINDOW_CONCURRENCY at a time, and
     store it. Returns the skeleton, or null when the document has nothing
     to read or no model is configured. Throws on a failed model call. */
 export async function buildSkeleton(
@@ -251,28 +289,33 @@ export async function buildSkeleton(
   const skeletonCall = await featureCall("skeleton", SKELETON_EFFORT);
   const model = skeletonCall.model;
   const usage = { userId, feature: "skeleton", model: skeletonCall.modelId } satisfies UsageMeta;
-  const results = await Promise.all(
-    windows.map(async (blocks, i) => {
-      const numberOf = new Map(blocks.map((b, n) => [b.id, String(n + 1)]));
-      const numbered = blocks.map((b, n) => ({ ...b, id: String(n + 1) }));
-      const windowParts = blocks.filter((b) => partAt.has(b.id)).map((b) => partAt.get(b.id)!);
-      const messages: ModelMessage[] = [
-        {
-          role: "system",
-          content: documentPrefix(document.title, numbered, i === 0 ? document.references : undefined, pageNames(document)),
-          providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
-        },
-        {
-          role: "user",
-          content: skeletonPrompt({
-            parts: windowParts.map((p) => ({ blockId: numberOf.get(p.blockId) ?? "", title: p.title })),
-            window: i + 1,
-            windows: windows.length,
-            blockCount: blocks.length,
-          }),
-        },
-      ];
-      const result = await callForJson({
+  // A document's windows SKELETON_WINDOW_CONCURRENCY at a time, every
+  // build's under the process's SKELETON_WINDOWS_IN_FLIGHT (COST4-08); a
+  // failed window stops the windows not yet sent.
+  let failed = false;
+  const results = await mapLimit(windows, SKELETON_WINDOW_CONCURRENCY, async (blocks, i) => {
+    if (failed) throw new Error("an earlier window failed");
+    const numberOf = new Map(blocks.map((b, n) => [b.id, String(n + 1)]));
+    const numbered = blocks.map((b, n) => ({ ...b, id: String(n + 1) }));
+    const windowParts = blocks.filter((b) => partAt.has(b.id)).map((b) => partAt.get(b.id)!);
+    const messages: ModelMessage[] = [
+      {
+        role: "system",
+        content: documentPrefix(document.title, numbered, i === 0 ? document.references : undefined, pageNames(document)),
+        providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
+      },
+      {
+        role: "user",
+        content: skeletonPrompt({
+          parts: windowParts.map((p) => ({ blockId: numberOf.get(p.blockId) ?? "", title: p.title })),
+          window: i + 1,
+          windows: windows.length,
+          blockCount: blocks.length,
+        }),
+      },
+    ];
+    const result = await inFlight(() =>
+      callForJson({
         model,
         messages,
         maxOutputTokens: SKELETON_MAX_OUTPUT_TOKENS,
@@ -281,18 +324,24 @@ export async function buildSkeleton(
         label: windows.length > 1 ? `SKELETON ${i + 1}/${windows.length}` : "SKELETON",
         usage,
         abortSignal: signal,
-      });
-      if (!result.ok) throw new Error(result.error);
-      // The window's numbers back to the stored ids; a number that names
-      // no block of the window drops.
-      const idOf = (n: string) => blocks[Number(n) - 1]?.id ?? "";
-      return {
-        gist: result.data.gist,
-        parts: result.data.parts.map((p) => ({ ...p, blockId: idOf(p.blockId) })).filter((p) => p.blockId),
-        lines: result.data.lines.map((l) => ({ ...l, blockId: idOf(l.blockId) })).filter((l) => l.blockId),
-      };
-    }),
-  );
+      }),
+    ).catch((err: unknown) => {
+      failed = true;
+      throw err;
+    });
+    if (!result.ok) {
+      failed = true;
+      throw new Error(result.error);
+    }
+    // The window's numbers back to the stored ids; a number that names
+    // no block of the window drops.
+    const idOf = (n: string) => blocks[Number(n) - 1]?.id ?? "";
+    return {
+      gist: result.data.gist,
+      parts: result.data.parts.map((p) => ({ ...p, blockId: idOf(p.blockId) })).filter((p) => p.blockId),
+      lines: result.data.lines.map((l) => ({ ...l, blockId: idOf(l.blockId) })).filter((l) => l.blockId),
+    };
+  });
 
   // Every line against the stored blocks: the model's line where it named
   // the block, the block's own first words where it did not.
