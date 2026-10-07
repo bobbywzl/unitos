@@ -290,7 +290,7 @@ export async function buildSkeleton(
 
   const skeletonCall = await featureCall("skeleton", SKELETON_EFFORT);
   const model = skeletonCall.model;
-  const usage = { userId, feature: "skeleton", model: skeletonCall.modelId } satisfies UsageMeta;
+  const usage = { userId, feature: "skeleton", model: skeletonCall.modelId, pass: "skeleton" } satisfies UsageMeta;
   // A document's windows SKELETON_WINDOW_CONCURRENCY at a time, every
   // build's under the process's SKELETON_WINDOWS_IN_FLIGHT (COST4-08); a
   // failed window stops the windows not yet sent.

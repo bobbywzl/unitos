@@ -228,7 +228,10 @@ export const STITCH_SKELETON_BUDGET = 50_000; // skeleton one select call reads;
 // (commandKind, lib/graph/stitch.ts): an answer, links, or a page. A
 // question's budget stays under the whole threshold, so the reading passes
 // pay for themselves; a page keeps the breadth a gather needs.
-export const STITCH_SELECTED_BUDGET = { question: 15_000, links: 30_000, page: 50_000 } as const;
+// The question budget is held at 15,000 until UsageEvent.reasoningTokens
+// says what a question's answer pass costs in all (COST5-03); one constant.
+export const STITCH_QUESTION_BUDGET = 15_000;
+export const STITCH_SELECTED_BUDGET = { question: STITCH_QUESTION_BUDGET, links: 30_000, page: 50_000 } as const;
 export const STITCH_SELECTED_BLOCKS = { question: 150, links: 300, page: 400 } as const;
 // Past STITCH_SKELETON_BUDGET the select pass reads every line in groups of
 // this much skeleton, the groups at once, so no line goes unread and no

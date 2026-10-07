@@ -1498,7 +1498,7 @@ async function expandWords(input: {
     providerOptions: call.providerOptions,
     schema: expandSchema,
     label: "STITCH_EXPAND",
-    usage: { ...input.usage, model: call.modelId },
+    usage: { ...input.usage, model: call.modelId, pass: "expand" },
     abortSignal: input.signal,
   });
   if (!result.ok) {
@@ -1610,7 +1610,7 @@ export async function pickBlocks(input: {
         providerOptions: readRoute.providerOptions,
         schema: routeSchema,
         label: "STITCH_ROUTE",
-        usage: readUsage,
+        usage: { ...readUsage, pass: "route" },
         abortSignal: input.signal,
       });
       if (!route.ok) {
@@ -1668,7 +1668,7 @@ export async function pickBlocks(input: {
         providerOptions: readSelect.providerOptions,
         schema: selectSchema,
         label: "STITCH_SELECT",
-        usage: readUsage,
+        usage: { ...readUsage, pass: "select" },
         abortSignal: input.signal,
       });
       if (!pick.ok) {
@@ -1742,7 +1742,7 @@ export async function stitch(input: {
   // select passes, each at its own effort.
   const answer = await featureCall("stitch", STITCH_EFFORT);
   const model = answer.model;
-  const usage = { userId: input.userId, feature: "stitch" as const, model: answer.modelId };
+  const usage = { userId: input.userId, feature: "stitch" as const, model: answer.modelId, pass: "answer" as const };
 
   // ── The reading passes: the blocks the command needs, from the skeletons ──
   let selected: Set<string> | null = null;

@@ -93,9 +93,12 @@ export function priceFor(model: string): Price {
 
 export type TokenCounts = {
   inputTokens?: number;
-  outputTokens?: number;
+  outputTokens?: number; // every output token billed, the reasoning included
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
+  // Of outputTokens, the reasoning (thinking) tokens, when the provider
+  // reports them (COST5-03): stored, never priced twice.
+  reasoningTokens?: number;
 };
 
 export function computeCostUsd(model: string, t: TokenCounts): number {
@@ -113,12 +116,15 @@ export function sdkTokens(usage: {
   inputTokens?: number;
   outputTokens?: number;
   inputTokenDetails?: { cacheReadTokens?: number | null; cacheWriteTokens?: number | null };
+  outputTokenDetails?: { reasoningTokens?: number | null };
 }): TokenCounts {
+  const reasoning = usage.outputTokenDetails?.reasoningTokens;
   return {
     inputTokens: usage.inputTokens ?? 0,
     outputTokens: usage.outputTokens ?? 0,
     cacheReadTokens: usage.inputTokenDetails?.cacheReadTokens ?? 0,
     cacheWriteTokens: usage.inputTokenDetails?.cacheWriteTokens ?? 0,
+    ...(typeof reasoning === "number" ? { reasoningTokens: reasoning } : {}),
   };
 }
 
@@ -129,6 +135,9 @@ export function addTokens(a: TokenCounts, b: TokenCounts): TokenCounts {
     outputTokens: (a.outputTokens ?? 0) + (b.outputTokens ?? 0),
     cacheReadTokens: (a.cacheReadTokens ?? 0) + (b.cacheReadTokens ?? 0),
     cacheWriteTokens: (a.cacheWriteTokens ?? 0) + (b.cacheWriteTokens ?? 0),
+    ...(a.reasoningTokens !== undefined || b.reasoningTokens !== undefined
+      ? { reasoningTokens: (a.reasoningTokens ?? 0) + (b.reasoningTokens ?? 0) }
+      : {}),
   };
 }
 
@@ -136,7 +145,12 @@ export type UsageMeta = {
   userId: string | null;
   feature: string; // explain | simplify | … | assistant | act | glossary | contents | skeleton | transcribe | describe | voice | gist | merge | stitch
   model: string;
+  // Which pass of a feature of several passes the call is (COST5-03):
+  // Stitch's route, select, expand, and answer passes, and the skeleton.
+  pass?: UsagePass;
 };
+
+export type UsagePass = "route" | "select" | "expand" | "answer" | "skeleton";
 
 // Who serves each model. Ordered; first match wins. A model no rule names
 // is filed under "other", never guessed into a provider: a row under the
@@ -186,6 +200,8 @@ export function recordUsage(meta: UsageMeta, tokens: TokenCounts, costUsd?: numb
         outputTokens: tokens.outputTokens ?? 0,
         cacheReadTokens: tokens.cacheReadTokens ?? 0,
         cacheWriteTokens: tokens.cacheWriteTokens ?? 0,
+        reasoningTokens: tokens.reasoningTokens ?? null,
+        pass: meta.pass ?? null,
         costUsd: costUsd ?? computeCostUsd(meta.model, tokens),
       },
     })

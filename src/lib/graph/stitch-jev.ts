@@ -59,7 +59,7 @@ export async function jevRouteParts(
   userId: string | null,
   signal?: AbortSignal,
 ): Promise<Set<string> | null> {
-  const usage: UsageMeta = { userId, feature: "stitch", model: JEV_MODEL };
+  const usage: UsageMeta = { userId, feature: "stitch", model: JEV_MODEL, pass: "route" };
   const calls = views.filter((v) => v.parts.length > 0);
   if (calls.length === 0) return null;
   let failed = 0;
@@ -100,7 +100,7 @@ export async function jevSelectLines(
   userId: string | null,
   signal?: AbortSignal,
 ): Promise<Map<string, string[]> | null> {
-  const usage: UsageMeta = { userId, feature: "stitch", model: JEV_MODEL };
+  const usage: UsageMeta = { userId, feature: "stitch", model: JEV_MODEL, pass: "select" };
   type Chunk = { v: SkeletonView; partAlias: string | null; lines: SkeletonView["lines"] };
   const chunks: Chunk[] = [];
   for (const v of views) {
