@@ -85,6 +85,8 @@ async function openGraph({ load = true } = {}) {
     await page.click('[data-track="graph"]', { timeout: 3000 }).catch(() => {});
     await page.waitForTimeout(1500);
   }
+  // The graph's data loads after the open (GET .../graph): wait for the canvas.
+  await page.locator(".react-flow__edge").first().waitFor({ timeout: 60000 }).catch(() => {});
   await page.waitForTimeout(1200);
 }
 async function pinAB() {
