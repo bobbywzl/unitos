@@ -5,6 +5,8 @@
 // matches as a substring, since Chinese has no spaces between words. Pure
 // helpers: the route runs the SQL.
 
+import { quoteSpan } from "@/lib/graph/quote-span";
+
 export const FIND_MIN = 2;
 export const FIND_MAX = 100;
 export const FIND_PREFIX_MIN = 3; // a shorter word matches only whole (COST4-02)
@@ -96,7 +98,20 @@ export function snippet(text: string, q: string): { text: string; start: number;
   };
 }
 
-export type FindPassage = { blockId: string; text: string; start: number; end: number };
+/** What Add to note quotes from a find row (WALK5-10): the sentence or
+    sentences that hold the match, or the whole block when it is short
+    (lib/graph/quote-span.ts), so a gathered quote never stops mid-sentence. */
+export function passageQuote(text: string, q: string): string {
+  const hit = firstMatch(text, q) ?? { start: 0, end: 0 };
+  const span = quoteSpan(text, hit.start, hit.end);
+  if (span.end - span.start > hit.end - hit.start) return text.slice(span.start, span.end);
+  // No sentence fits under QUOTE_MAX: the row's own window.
+  return snippet(text, q).text.replace(/^…|…$/g, "").trim();
+}
+
+/** quote: what Add to note keeps (passageQuote); absent in an answer kept
+    from before it existed, where the row's text is the quote. */
+export type FindPassage = { blockId: string; text: string; start: number; end: number; quote?: string };
 /** A document past the first FIND_TOP has its count and no passage; its
     passages come from the documentId + after call. */
 export type FindDocument = { id: string; count: number; passages: FindPassage[] };

@@ -1,6 +1,8 @@
 "use client";
 
 import { ChevronRightIcon } from "@/components/icons";
+import { AddToNote } from "@/components/graph/note-gather";
+import { sentencePrefix } from "@/lib/graph/quote-span";
 import { useT } from "@/components/lang-provider";
 
 // What a Stitch reply cites for one [block <id>] tag (StitchResult.cited):
@@ -26,15 +28,23 @@ export function StitchCitationChip({ citation, onOpen }: { citation: StitchCitat
   );
 }
 
+// The longest text of a cited block a reply carries (lib/graph/stitch.ts
+// CITED_TEXT): a text this long was cut.
+const CITED_CUT = 600;
+
 // The passage card: over the Stitch box, inside the graph — the cited
-// document's title, the passage, and Open in reader, which closes the graph
-// and opens the document at the block.
+// document's title, the passage, Open in reader, which closes the graph and
+// opens the document at the block, and Add to note (VIEW5-04), which puts
+// the passage in the graph's new note: the block's words, up to their last
+// whole sentence when the reply cut them.
 export function StitchPassageCard({
   citation,
+  blockId,
   onOpenInReader,
   onClose,
 }: {
   citation: StitchCitation;
+  blockId?: string;
   onOpenInReader: () => void;
   onClose: () => void;
 }) {
@@ -65,15 +75,21 @@ export function StitchPassageCard({
       <blockquote className="min-h-0 overflow-y-auto border-l-2 border-clay-300 pl-3 text-[13px] leading-relaxed whitespace-pre-wrap text-sand-800">
         {citation.text}
       </blockquote>
-      <button
-        type="button"
-        onClick={onOpenInReader}
-        data-track="stitch-passage-open"
-        className="flex items-center gap-1 self-start rounded-full bg-clay px-3 py-1 text-[12px] font-semibold text-clay-fg hover:bg-clay-600"
-      >
-        {t("stitch.stitchPassageOpen")}
-        <ChevronRightIcon size={12} />
-      </button>
+      <span className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onOpenInReader}
+          data-track="stitch-passage-open"
+          className="flex items-center gap-1 rounded-full bg-clay px-3 py-1 text-[12px] font-semibold text-clay-fg hover:bg-clay-600"
+        >
+          {t("stitch.stitchPassageOpen")}
+          <ChevronRightIcon size={12} />
+        </button>
+        <AddToNote
+          quote={{ documentId: citation.documentId, ...(blockId ? { blockId } : {}), text: sentencePrefix(citation.text, CITED_CUT) }}
+          className="py-1 text-[12px]"
+        />
+      </span>
     </div>
   );
 }

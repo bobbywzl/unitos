@@ -13,6 +13,7 @@ import {
   isCjk,
   likePattern,
   normalizeQuery,
+  passageQuote,
   snippet,
   wordStartPattern,
   type FindResult,
@@ -83,7 +84,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ notebookId: str
   const byDocument = new Map<string, FindResult["documents"][number]>();
   for (const r of rows) {
     const entry = byDocument.get(r.documentId) ?? { id: r.documentId, count: Number(r.n), passages: [] };
-    if (r.id !== null && r.text !== null) entry.passages.push({ blockId: r.id, ...snippet(r.text, q) });
+    if (r.id !== null && r.text !== null) entry.passages.push({ blockId: r.id, ...snippet(r.text, q), quote: passageQuote(r.text, q) });
     byDocument.set(r.documentId, entry);
   }
   const result: FindResult = {
