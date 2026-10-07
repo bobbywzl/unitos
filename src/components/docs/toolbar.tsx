@@ -114,7 +114,7 @@ const MENUS: [string, TKey, string[], DocsMenu?][] = [
   ["styles", "docs.styles", ["paragraph styles"]],
   ["font", "docs.font", ["typeface", "more fonts", "get fonts"]],
   ["text-color", "docs.textColor", ["font color", "colour"]],
-  ["highlight-color", "docs.highlightColor", ["background color", "marker"]],
+  ["highlight-color", "docs.highlightColor", ["highlight color", "background color", "highlight", "marker"]],
   ["image", "docs.insertImage", ["picture", "photo", "add a photo", "add a picture", "add an image", "upload from computer", "by url"], "insert"],
   ["align", "docs.align", ["align & indent", "alignment"]],
   ["line-spacing", "docs.lineSpacing", ["line spacing", "paragraph spacing", "set line spacing", "change line spacing"]],
