@@ -21,6 +21,10 @@ const createSchema = z
     // anchors are copied into the new note, and the annotation stays where
     // it is, still painted in the article. content is then not sent.
     fromAnnotationId: z.string().min(1).optional(),
+    // A note on a link, written in the graph (SPEC.md §13): the reader's own
+    // words (content), with the link's two ends copied in as its sources — one
+    // for a document-level end. It lands accepted, the project's note.
+    fromLinkId: z.string().min(1).optional(),
     source: sourceInputSchema.optional(),
     // A selection over several blocks of the source's document
     // (lib/anchors/passage.ts): one anchor per block, the first being
@@ -52,6 +56,9 @@ const createSchema = z
   .refine((d) => !(d.source && d.video), { message: "Provide source or video, not both" })
   .refine((d) => Boolean(d.content) !== Boolean(d.fromAnnotationId), {
     message: "Provide content or fromAnnotationId, not both",
+  })
+  .refine((d) => !d.fromLinkId || !(d.source || d.video || d.fromAnnotationId || d.origin), {
+    message: "A note on a link takes content alone",
   });
 
 // Manual notes, with an optional anchor (manual extract). Derived notes are created by /api/derive.
@@ -165,13 +172,60 @@ export async function POST(req: Request) {
           ],
     );
   }
+  if (data.fromLinkId) {
+    const link = await db.docLink.findUnique({ where: { id: data.fromLinkId } });
+    // Both ends must be documents of this project: a link is read only where
+    // its two documents are attached.
+    const attachedEnds = link
+      ? await db.notebookDocument.count({
+          where: { notebookId: section.notebookId, documentId: { in: [link.fromDocumentId, link.toDocumentId] } },
+        })
+      : 0;
+    if (!link || attachedEnds < new Set([link.fromDocumentId, link.toDocumentId]).size) {
+      return NextResponse.json({ error: t("api.linkNotFound") }, { status: 404 });
+    }
+    const end = { layer: null, startTime: null, endTime: null };
+    copiedSources = [
+      {
+        documentId: link.fromDocumentId,
+        blockId: link.fromBlockId,
+        startOffset: link.startOffset,
+        endOffset: link.endOffset,
+        quotedText: link.quotedText,
+        prefix: link.prefix,
+        suffix: link.suffix,
+        orphaned: link.fromOrphaned,
+        ...end,
+      },
+      ...(link.toBlockId !== null &&
+      link.toStartOffset !== null &&
+      link.toEndOffset !== null &&
+      link.toQuotedText !== null
+        ? [
+            {
+              documentId: link.toDocumentId,
+              blockId: link.toBlockId,
+              startOffset: link.toStartOffset,
+              endOffset: link.toEndOffset,
+              quotedText: link.toQuotedText,
+              prefix: link.toPrefix ?? "",
+              suffix: link.toSuffix ?? "",
+              orphaned: link.toOrphaned,
+              ...end,
+            },
+          ]
+        : []),
+    ];
+  }
   if (!content.trim()) return NextResponse.json({ error: t("api.validationFailed") }, { status: 400 });
 
   // The document the note belongs to (SPEC.md §6): the passage's, the video's,
   // the annotation's first anchor's, else the one the composer named — when
   // it is attached to this project; a document that is not is nobody's.
-  let documentId: string | null =
-    sources[0]?.documentId ?? videoSource?.documentId ?? copiedSources[0]?.documentId ?? data.documentId ?? null;
+  // A note on a link belongs to the project: it quotes two documents.
+  let documentId: string | null = data.fromLinkId
+    ? null
+    : (sources[0]?.documentId ?? videoSource?.documentId ?? copiedSources[0]?.documentId ?? data.documentId ?? null);
   if (documentId) {
     const attached = await db.notebookDocument.findUnique({
       where: { notebookId_documentId: { notebookId: section.notebookId, documentId } },
