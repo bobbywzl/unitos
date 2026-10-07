@@ -199,12 +199,15 @@ export function FindList({
   onClose: () => void;
 }) {
   const t = useT();
-  const { showProvenance } = useGraphContent();
+  const { showProvenance, setShowProvenance } = useGraphContent();
   const titleOf = new Map(nodes.map((n) => [n.id, n.title]));
   const generatedIds = new Set(nodes.filter((n) => n.kind === "generated").map((n) => n.id));
   const found = (find.result?.documents ?? []).filter((d) => titleOf.has(d.id));
   const own = found.filter((d) => !generatedIds.has(d.id));
-  const docs = [...own, ...found.filter((d) => generatedIds.has(d.id))];
+  // [layer5] Generated documents list only while the provenance switch is
+  // on, as the canvas lights them and the count counts them (VIEW5-09).
+  const foundGenerated = found.filter((d) => generatedIds.has(d.id));
+  const docs = showProvenance ? [...own, ...foundGenerated] : own;
   const counted = showProvenance ? docs : own;
   const total = showProvenance ? nodes.length : nodes.length - generatedIds.size;
   const passages = counted.reduce((s, d) => s + d.count, 0);
@@ -228,7 +231,7 @@ export function FindList({
             ? t("graphView.findFailed")
             : find.result === null
               ? t("graphView.findLoading")
-              : docs.length === 0
+              : found.length === 0
                 ? t("graphView.findNone")
                 : t("graphView.findSummary", {
                     n: counted.length,
@@ -290,6 +293,18 @@ export function FindList({
           onOpenDocument={onOpenDocument}
         />
       ))}
+      {!showProvenance && foundGenerated.length > 0 && (
+        <p data-graph-find-generated-hidden={foundGenerated.length} className="text-[11.5px] leading-snug text-sand-600">
+          {t("panes.graphDocumentsGeneratedHidden", { n: foundGenerated.length, s: foundGenerated.length === 1 ? "" : "s" })}{" "}
+          <button
+            onClick={() => setShowProvenance(true)}
+            data-track="graph-find-show-generated"
+            className="font-semibold text-clay-700 underline decoration-dotted underline-offset-2 hover:text-clay-800"
+          >
+            {t("panes.graphDocumentsGeneratedShow")}
+          </button>
+        </p>
+      )}
     </aside>
   );
 }

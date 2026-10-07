@@ -13,7 +13,9 @@
 //
 // Scale (VIEW4-04, WALK4-11): a filter matches the title, the gist, and the
 // part titles; past 20 rows each row is one line (the title and its counts)
-// that opens on a click.
+// that opens on a click, and [layer5] the documents holding the reader's
+// own words (notes, open comments) come first, in the graph's order among
+// them (VIEW5-08).
 //
 // Keyboard (WALK4-09): the list is a list, each title a heading. Each row
 // is one Tab stop (its title); the arrows move through the row's controls
@@ -37,6 +39,9 @@ import { LinkReplyCount } from "@/components/graph/link-replies";
 import { useProvenanceShown } from "@/components/graph/provenance-want";
 import { useGraphGeneration } from "@/components/graph/graph-generation";
 import { CoverageHead, DocumentCoverageLine, PartDot, useCoverageGaps, useDocumentCoverage } from "@/components/graph/coverage"; // [cover4]
+// [layer5] The reader's layer: comments, gap reasons, the reader's documents first.
+import { DocumentComments, GapReasons, gapReasonLines, useProjectCoverage } from "@/components/graph/coverage";
+import { openComments } from "@/lib/graph/coverage-view";
 
 /** Each project's part titles with the graph generation they were read at. */
 const titlesKept = new Map<string, { titles: ProjectPartTitles; gen: number }>();
@@ -119,12 +124,14 @@ function onRowKeys(e: ReactKeyboardEvent<HTMLUListElement>) {
   next.scrollIntoView({ block: "nearest" });
 }
 
-function matches(words: string, title: string, gist: string | undefined, parts: PartTitle[]): boolean {
+function matches(words: string, title: string, gist: string | undefined, parts: PartTitle[], comments: string[] = []): boolean {
   if (!words) return true;
   return (
     title.toLowerCase().includes(words) ||
     (gist ?? "").toLowerCase().includes(words) ||
-    parts.some((p) => p.title.toLowerCase().includes(words))
+    parts.some((p) => p.title.toLowerCase().includes(words)) ||
+    // [layer5] the words of its open comments: "?" finds the ones that ask (VIEW5-02)
+    comments.some((c) => c.toLowerCase().includes(words))
   );
 }
 
@@ -195,16 +202,26 @@ export function DocumentsList({
     });
   }, [nodes, edges, generatedIds, showGenerated]);
   const hiddenGenerated = showGenerated ? 0 : generatedIds.size;
+  const projectCoverage = useProjectCoverage(); // [layer5]
   const matched = useMemo(
-    () => ordered.filter((n) => matches(words, n.title, gists[n.id], titles?.documents[n.id] ?? [])),
-    [ordered, words, gists, titles],
+    () =>
+      ordered.filter((n) =>
+        matches(words, n.title, gists[n.id], titles?.documents[n.id] ?? [], openComments(projectCoverage?.documents[n.id]).map((c) => c.text)),
+      ),
+    [ordered, words, gists, titles, projectCoverage],
   );
-  // [cover4] Gaps only keeps the rows, parts, and links with a gap.
-  const shown = useMemo(
-    () => matched.filter((n) => gaps.keepRow(n.id, (linksOf.get(n.id) ?? []).flatMap((g) => g.links))),
-    [matched, gaps, linksOf],
-  );
-  const compact = shown.length > COMPACT_ROWS;
+  // [cover4] Gaps only keeps the rows with a gap.
+  const kept = useMemo(() => matched.filter((n) => gaps.keepRow(n.id)), [matched, gaps]);
+  const compact = kept.length > COMPACT_ROWS;
+  // [layer5] At scale (the one-line rows), the reader's documents first:
+  // those with notes or open comments, in the graph's order (VIEW5-08).
+  const byDocument = notesCtx?.view.byDocument;
+  const shown = useMemo(() => {
+    if (!compact) return kept;
+    const mine = (id: string) =>
+      (byDocument?.get(id)?.notes.length ?? 0) > 0 || openComments(projectCoverage?.documents[id]).length > 0;
+    return [...kept.filter((n) => mine(n.id)), ...kept.filter((n) => !mine(n.id))];
+  }, [compact, kept, byDocument, projectCoverage]);
 
   const linkTotal = edges.reduce((sum, e) => sum + e.links.filter((l) => !l.recommended && !l.provenance).length, 0);
   const noteTotal = useMemo(() => {
@@ -213,6 +230,7 @@ export function DocumentsList({
     return ids.size;
   }, [ordered, notesCtx]);
   const setRowLit = notesCtx?.setRowLit;
+  const openTotal = ordered.reduce((sum, n) => sum + openComments(projectCoverage?.documents[n.id]).length, 0); // [layer5]
 
   const ref = useRef<HTMLElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -267,6 +285,12 @@ export function DocumentsList({
             ls: s(linkTotal),
             notes: noteTotal,
             ns: s(noteTotal),
+            // [layer5] the open comments, and the reader's documents first at scale
+            comments:
+              openTotal === 0
+                ? ""
+                : ` · ${openTotal === 1 ? t("graphCover.commentsOpenOne") : t("graphCover.commentsOpenMany", { n: openTotal })}`,
+            order: t(compact ? "panes.graphDocumentsOrderMine" : "panes.graphDocumentsOrder"),
           })}
         </p>
         <button
@@ -319,12 +343,14 @@ export function DocumentsList({
             generated={generatedIds.has(n.id)}
             compact={compact}
             gist={gists[n.id]}
+            gapsOn={gaps.on}
             parts={(titles?.documents[n.id] ?? []).filter((p) => gaps.keepPart(n.id, p.blockId))}
             groups={(linksOf.get(n.id) ?? []).map((g) => ({ ...g, links: g.links.filter(gaps.keepLink) })).filter((g) => g.links.length > 0)}
             notes={gaps.keepNotes ? (notesCtx?.view.byDocument.get(n.id)?.notes ?? []) : []}
             titleOf={titleOf}
             openLinkId={openLinkId}
             onOpenLink={onOpenLink}
+            onLeave={onOpenDocument}
             onGo={(href) => {
               router.push(href);
               onOpenDocument();
@@ -359,6 +385,7 @@ function DocumentRow({
   node: n,
   generated,
   compact,
+  gapsOn,
   gist,
   parts,
   groups,
@@ -367,6 +394,7 @@ function DocumentRow({
   openLinkId,
   onOpenLink,
   onGo,
+  onLeave,
   onLight,
 }: {
   notebookId: string;
@@ -374,6 +402,8 @@ function DocumentRow({
   generated: boolean;
   /** One line until opened (past COMPACT_ROWS rows). */
   compact: boolean;
+  /** [layer5] Gaps only is on: the row says why it is listed. */
+  gapsOn: boolean;
   gist: string | undefined;
   parts: PartTitle[];
   groups: LinkGroup[];
@@ -382,6 +412,8 @@ function DocumentRow({
   openLinkId: string | null;
   onOpenLink: (linkId: string) => void;
   onGo: (href: string) => void;
+  /** [layer5] The reader opened a document from the row (the URL already moved). */
+  onLeave: () => void;
   onLight: (id: string | null) => void;
 }) {
   const t = useT();
@@ -390,6 +422,7 @@ function DocumentRow({
   const [gistOpen, setGistOpen] = useState(false);
   const [allParts, setAllParts] = useState(false);
   const [allLinks, setAllLinks] = useState(false);
+  const [commentsOpen, setCommentsOpen] = useState(false); // [layer5]
   const links = groups.flatMap((g) => g.links.map((l) => ({ other: g.other, link: l })));
   const s = (k: number) => (k === 1 ? "" : "s");
   const shownParts = allParts ? parts : parts.slice(0, PARTS_SHOWN);
@@ -400,20 +433,43 @@ function DocumentRow({
   const coverage = useDocumentCoverage(n.id);
   const notedParts = coverage ? coverage.parts.filter((p) => p.noted > 0).length : 0;
 
-  // The one-line row's summary: what the row holds.
-  const counts = [
-    coverage && coverage.parts.length > 0
-      ? t("graphCover.partsNoted", { n: notedParts, m: coverage.parts.length })
-      : parts.length > 0
-        ? t("panes.graphDocumentsParts", { n: parts.length, s: s(parts.length) })
-        : null,
-    coverage && !coverage.opened ? t("graphCover.notOpened") : null,
-    links.length > 0 ? t("panes.graphDocumentsLinks", { n: links.length, s: s(links.length) }) : null,
-    notes.length > 0 ? t("panes.graphDocumentsNotes", { n: notes.length, s: s(notes.length) }) : null,
-  ].filter((c): c is string => c !== null);
+  // The one-line row's summary: what the row holds; [layer5] under Gaps
+  // only, why it is listed (WALK5-06).
+  const whole = coverage?.parts.length === 1 && coverage.parts[0].whole;
+  const openList = openComments(coverage);
+  const counts = (
+    gapsOn
+      ? gapReasonLines(t, coverage)
+      : [
+          coverage && coverage.parts.length > 0 && !whole
+            ? t("graphCover.partsNoted", { n: notedParts, m: coverage.parts.length })
+            : parts.length > 0
+              ? t("panes.graphDocumentsParts", { n: parts.length, s: s(parts.length) })
+              : null,
+          coverage && !coverage.opened ? t("graphCover.notOpened") : null,
+          // [layer5] the open comments, with a "?" when one asks
+          openList.length === 0
+            ? null
+            : `${openList.length === 1 ? t("graphCover.commentsOpenOne") : t("graphCover.commentsOpenMany", { n: openList.length })}${openList.some((c) => c.asks) ? " ?" : ""}`,
+          links.length > 0 ? t("panes.graphDocumentsLinks", { n: links.length, s: s(links.length) }) : null,
+          notes.length > 0 ? t("panes.graphDocumentsNotes", { n: notes.length, s: s(notes.length) }) : null,
+        ]
+  ).filter((c): c is string => c !== null);
 
   const lines: ReactNode[] = [
-    <DocumentCoverageLine key="coverage" documentId={n.id} /* [cover4] */ />,
+    // [layer5] Under Gaps only, why the row is listed first (WALK5-06).
+    gapsOn ? (
+      <GapReasons key="gap-why" documentId={n.id} />
+    ) : (
+      <DocumentCoverageLine
+        key="coverage"
+        documentId={n.id} /* [cover4] */
+        commentsOpen={commentsOpen}
+        onToggleComments={() => setCommentsOpen((v) => !v)}
+      />
+    ),
+    // [layer5] A press on the open comments' count lists them here (VIEW5-02).
+    commentsOpen ? <DocumentComments key="comments" notebookId={notebookId} documentId={n.id} onOpenDocument={onLeave} /> : null,
     gist ? (
       <button
         key="gist"
@@ -543,7 +599,12 @@ function DocumentRow({
           >
             <span className={`min-w-0 ${open ? "" : "truncate"}`}>{n.title}</span>
             {!open && counts.length > 0 && (
-              <span className="ml-auto shrink-0 text-[11px] font-normal text-sand-500">{counts.join(" · ")}</span>
+              <span
+                data-graph-gap-why={gapsOn ? n.id : undefined}
+                className={`ml-auto shrink-0 text-[11px] ${gapsOn ? "font-semibold text-clay-800" : "font-normal text-sand-500"}`}
+              >
+                {counts.join(" · ")}
+              </span>
             )}
           </button>
         ) : (

@@ -2019,6 +2019,19 @@ ellipse.anchor-flash {
   outline-offset: 2px;
   border-radius: 10px;
 }
+/* [layer5] The coverage ring around a node's dot (coverage.tsx
+   CoverageRing; VIEW5-08): 3.5px off the dot and a 2px stroke near zoom
+   1; at a far zoom both keep their size on screen (3px off the dot, a
+   1px track and a 2px sage arc), so the ring reads at 40 and 200 documents. --ring-dot is
+   the dot's radius; graph-view.tsx sets --graph-zoom. */
+.corpus-graph .graph-coverage-ring circle {
+  r: calc(var(--ring-dot, 7px) + max(3.5px, calc(3px / var(--graph-zoom, 1))));
+  stroke-width: max(2px, calc(1px / var(--graph-zoom, 1)));
+}
+.corpus-graph .graph-coverage-ring circle[data-arc] {
+  stroke-width: max(2px, calc(2px / var(--graph-zoom, 1)));
+}
+
 /* A curve is a thin target under a finger: a hit path about 32px wide on
    screen at any zoom, and a node at least 44px tall (REV2-12, WALK2-06).
    graph-view.tsx sets --graph-zoom. */
@@ -2132,6 +2145,7 @@ ellipse.anchor-flash {
    pinned, or its link open); the replies mark always draws. graph-view.tsx
    sets data-far below zoom 0.7. */
 .corpus-graph[data-far] [data-graph-node-notes],
+.corpus-graph[data-far] [data-graph-node-comments],
 .corpus-graph[data-far] [data-curve-marks]:not([data-lit]) [data-graph-curve-mark="count"],
 .corpus-graph[data-far] [data-curve-marks]:not([data-lit]) [data-graph-curve-mark="notes"] {
   display: none;

@@ -57,6 +57,8 @@ import { LinkReplyCount } from "@/components/graph/link-replies";
 import { useGraphContent } from "@/components/graph/graph-content";
 import { NodeCardExtras, linkLine } from "@/components/graph/node-card";
 import { CoverageRing } from "@/components/graph/coverage"; // [cover4]
+// [layer5] The reader's comments on a node, and the reader's documents first at a far zoom.
+import { NodeComments, nodeCommentsWidth, useProjectCoverage } from "@/components/graph/coverage";
 import { ownCommand } from "@/lib/graph/generated-label"; // [cover4]
 
 // The corpus graph (SPEC.md §13; the release-edu canvas patterns): documents
@@ -224,8 +226,10 @@ function DocumentNode({ id, data }: NodeProps<DocumentNodeData>) {
   const { citedIds, plain } = useContext(SpotlightContext);
   const cited = citedIds?.has(id) ?? false;
   const sectionDim = useNodeSectionDim(id); // [graph-notes]
-  const findHits = useGraphContent().findHits; // [view2]
-  const found = findHits?.get(id) ?? 0;
+  const { findHits, showProvenance } = useGraphContent(); // [view2]
+  // [layer5] Find leaves a generated document dark while the provenance
+  // switch is off, as its list and count do (VIEW5-09).
+  const found = data.generated && !showProvenance ? 0 : (findHits?.get(id) ?? 0);
   // Cited documents (the last Stitch answer) stay bright while the rest
   // fade; so do the documents a section filter keeps [graph-notes], and the
   // documents Find finds [view2]. The hover spotlight is the canvas's CSS,
@@ -285,7 +289,11 @@ function DocumentNode({ id, data }: NodeProps<DocumentNodeData>) {
       {/* [graph-notes] The notes chip sits right of the dot, clear of the
           label under it. */}
       <span className="absolute top-1/2 -translate-y-1/2" style={{ left: `calc(50% + ${size / 2 + 4}px)` }}>
-        <NodeNotes documentId={id} />
+        <span className="flex items-center gap-1">
+          <NodeNotes documentId={id} />
+          {/* [layer5] The reader's open comments (VIEW5-01). */}
+          {!data.generated && <NodeComments documentId={id} />}
+        </span>
       </span>
       {/* [view2] Find's passages in this document: a clay count left of the dot. */}
       {found > 0 && (
@@ -860,6 +868,13 @@ function GraphKey({ onClose }: { onClose: () => void }) {
           </span>,
           "graphNotes.keyCurveNotes",
         )}
+        {/* [layer5] The node's comments chip (VIEW5-01 (c)). */}
+        {row(
+          <span className="flex items-center gap-0.5 rounded-full bg-[color-mix(in_srgb,var(--kind-comment)_12%,var(--card))] px-1.5 py-px text-[10px] font-semibold tabular-nums text-[var(--kind-comment)]">
+            <CommentIcon size={10} />2<span aria-hidden>?</span>
+          </span>,
+          "graphCover.keyComments",
+        )}
       </ul>
       <p className="mt-2 text-[11.5px] leading-relaxed text-sand-600">{t("graphNotes.keyFar")}</p>
       <p className="mt-2.5 border-t border-line pt-2 text-[11.5px] leading-relaxed text-sand-600">
@@ -1252,12 +1267,23 @@ function GraphCanvas({
     return { adjacency, breathing, linkCounts, loops };
   }, [visibleEdges]);
   // At a far zoom of a large project, the best-linked documents keep their labels (lodKeep).
+  // [layer5] The documents holding the reader's own words (notes, open
+  // comments) first, the most words first; then the best-linked (VIEW5-07).
+  const wordsNotes = useGraphNotes()?.view.byDocument;
+  const wordsCoverage = useProjectCoverage();
   const keptLabels = useMemo(() => {
     if (!large) return new Set<string>();
     const degree = (id: string) => (linkCounts.get(id)?.accepted ?? 0) + (linkCounts.get(id)?.recommended ?? 0);
+    const words = (id: string) =>
+      (wordsNotes?.get(id)?.notes.length ?? 0) + (wordsCoverage?.documents[id]?.comments ?? []).filter((c) => c.open).length;
     const keep = lodKeep(paneW, paneH);
-    return new Set([...nodes].sort((x, y) => degree(y.id) - degree(x.id) || x.id.localeCompare(y.id)).slice(0, keep).map((n) => n.id));
-  }, [large, nodes, linkCounts, paneW, paneH]);
+    return new Set(
+      [...nodes]
+        .sort((x, y) => words(y.id) - words(x.id) || degree(y.id) - degree(x.id) || x.id.localeCompare(y.id))
+        .slice(0, keep)
+        .map((n) => n.id),
+    );
+  }, [large, nodes, linkCounts, paneW, paneH, wordsNotes, wordsCoverage]);
 
   // The layout reads only which documents exist, which are generated, and
   // which pairs link (the reader's links), so a refresh that changes a title
@@ -1637,6 +1663,7 @@ function GraphCanvas({
   // Where each curve's marks sit (VIEW3-01): placed together, off the
   // nodes' rooms and off each other, at the label scale of the zoom.
   const notesView = useGraphNotes()?.view;
+  const markCoverage = useProjectCoverage(); // [layer5] the comments chips are rooms too
   const markScale = useStore((s) => Math.round(labelScale(s.transform[2]) * 10) / 10);
   const markPlaces = useMemo(() => {
     const at = new Map(flowNodes.map((n) => [n.id, n.position]));
@@ -1644,7 +1671,9 @@ function GraphCanvas({
       const p = at.get(id);
       return p ? { x: p.x + NODE_W / 2, y: p.y + 16 } : null;
     };
-    const rooms = flowNodes.flatMap((n) => nodeRoom(n.position.x, n.position.y, markScale, n.data.title));
+    const rooms = flowNodes.flatMap((n) =>
+      nodeRoom(n.position.x, n.position.y, markScale, n.data.title, nodeCommentsWidth(markCoverage?.documents[n.id])),
+    );
     const curves: MarkCurve[] = [];
     for (const f of flowEdges) {
       if (f.type === "provenance") continue;
@@ -1669,7 +1698,7 @@ function GraphCanvas({
     // The widest marks first: they have the fewest free places.
     curves.sort((a, b) => b.w - a.w || a.id.localeCompare(b.id));
     return placeMarks(curves, rooms);
-  }, [flowNodes, flowEdges, notesView, markScale, showProvenance]);
+  }, [flowNodes, flowEdges, notesView, markScale, showProvenance, markCoverage]);
 
   // The curves the spotlight lights: a hovered node's, a hovered or pinned
   // curve, or the curves between a hovered note's documents.

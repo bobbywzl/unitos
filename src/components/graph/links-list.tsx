@@ -6,7 +6,7 @@ import { useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
 import { useGraphNotes } from "@/components/graph/graph-notes";
 import { LinkReplyCount } from "@/components/graph/link-replies";
-import { NoReplyToggle, hasNoReply } from "@/components/graph/coverage"; // [cover4]
+import { NoReplyToggle, useWaitsForReply } from "@/components/graph/coverage"; // [cover4]
 
 // Links, a folded list beside the canvas (SPEC.md §13; WALK2-06): every
 // accepted link of the project, grouped by the pair of documents it joins,
@@ -37,6 +37,9 @@ export function LinksList({
   const setRowLit = useGraphNotes()?.setRowLit;
   const [filter, setFilter] = useState(initialFilter);
   const [noReply, setNoReply] = useState(false); // [cover4] No reply (VIEW4-01)
+  // [layer5] No reply keeps the links waiting for this account's reply: no
+  // open reply, or the last open one is another person's (WALK5-07).
+  const waits = useWaitsForReply();
   const words = filter.trim().toLowerCase();
   const all = edges
     .map((e) => ({ edge: e, links: e.links.filter((l) => !l.recommended && !l.provenance) }))
@@ -44,7 +47,7 @@ export function LinksList({
     .sort((x, y) => y.links.length - x.links.length);
   const total = all.reduce((n, g) => n + g.links.length, 0);
   const kept = noReply
-    ? all.map((g) => ({ ...g, links: g.links.filter(hasNoReply) })).filter((g) => g.links.length > 0)
+    ? all.map((g) => ({ ...g, links: g.links.filter(waits) })).filter((g) => g.links.length > 0)
     : all;
   const groups = words
     ? kept

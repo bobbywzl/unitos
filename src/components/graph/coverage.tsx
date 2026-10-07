@@ -10,10 +10,31 @@
 // project's notes change. The pieces are small so a list hooks them in at a
 // few points: CoverageHead, DocumentCoverageLine, PartDot, CoverageRing,
 // useCoverageGaps, NoReplyToggle.
+//
+// [layer5] The reader's layer (VIEW5-01/02, WALK5-06/07): the comments on
+// each document (a small mark on the node, one line in the card and the
+// row that opens into them, the count in the head text), a document with
+// no parts as one part,
+// the whole document, Gaps only as "no note here" with the reason on each
+// row, and No reply as "waiting for your reply" (the last open reply is
+// another person's). NodeComments, NodeCommentsLine, DocumentComments,
+// GapReasons, useWaitsForReply.
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { GraphEdgeLink } from "@/lib/types";
-import { notedShare, type DocumentCoverage, type ProjectCoverage } from "@/lib/graph/coverage-view";
+import {
+  gapReasons,
+  notedShare,
+  openComments,
+  waitsForReply,
+  type DocumentCoverage,
+  type GraphComment,
+  type ProjectCoverage,
+} from "@/lib/graph/coverage-view";
+import { annotationReferenceHref } from "@/lib/annotation-reference";
+import { CommentIcon } from "@/components/icons";
+import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { useGraphNotes } from "@/components/graph/graph-notes";
 
@@ -23,7 +44,11 @@ type CoverageValue = {
   setGapsOnly: (on: boolean) => void;
 };
 
-const CoverageContext = createContext<CoverageValue>({ coverage: null, gapsOnly: false, setGapsOnly: () => undefined });
+const CoverageContext = createContext<CoverageValue>({
+  coverage: null,
+  gapsOnly: false,
+  setGapsOnly: () => undefined,
+});
 // The last answer per project, so a reopened graph draws at once.
 const kept = new Map<string, ProjectCoverage>();
 
@@ -73,9 +98,10 @@ export function useDocumentCoverage(documentId: string): DocumentCoverage | null
   return useContext(CoverageContext).coverage?.documents[documentId] ?? null;
 }
 
-/** A link nobody replied to: the Links list's No reply and Gaps only keep it. */
-export function hasNoReply(link: GraphEdgeLink): boolean {
-  return (link.replies ?? []).length === 0;
+/** [layer5] waitsForReply for the account signed in. */
+export function useWaitsForReply(): (link: GraphEdgeLink) => boolean {
+  const { myId } = useCollab();
+  return useCallback((link: GraphEdgeLink) => waitsForReply(link, myId), [myId]);
 }
 
 /** What Gaps only keeps in the Documents list. Off, everything stays. */
@@ -87,22 +113,18 @@ export function useCoverageGaps() {
       const p = doc(id)?.parts.find((x) => x.blockId === blockId);
       return p !== undefined && p.noted === 0;
     };
+    const gaps = gapsOnly && coverage !== null;
     return {
-      on: gapsOnly && coverage !== null,
+      on: gaps,
       /** A part stays when no note quotes it. */
-      keepPart: (id: string, blockId: string) => !gapsOnly || !coverage || partGap(id, blockId),
-      /** A link stays when it is the reader's (accepted) and has no reply. */
-      keepLink: (link: GraphEdgeLink) => !gapsOnly || !coverage || (!link.recommended && hasNoReply(link)),
+      keepPart: (id: string, blockId: string) => !gaps || partGap(id, blockId),
+      /** [layer5] Gaps only is about notes (WALK5-06): links hide, as notes
+          do; the Links list's No reply keeps the links waiting for a reply. */
+      keepLink: () => !gaps,
       /** A document's notes hide while Gaps only is on: they are not gaps. */
-      keepNotes: !gapsOnly || !coverage,
-      /** A row stays when it holds a gap: a part no note quotes, Not opened,
-          or a link with no reply. A generated document has no coverage. */
-      keepRow: (id: string, links: GraphEdgeLink[]) => {
-        if (!gapsOnly || !coverage) return true;
-        const c = doc(id);
-        if (!c) return false;
-        return !c.opened || c.parts.some((p) => p.noted === 0) || links.some((l) => !l.recommended && hasNoReply(l));
-      },
+      keepNotes: !gaps,
+      /** A row stays when it holds a gap (gapReasons). A generated document has no coverage. */
+      keepRow: (id: string) => !gaps || gapReasons(doc(id)).length > 0,
     };
   }, [coverage, gapsOnly]);
 }
@@ -110,10 +132,11 @@ export function useCoverageGaps() {
 const chip = "rounded-full border px-2 py-0.5 text-[11px] font-semibold tabular-nums";
 
 /** The Documents list's head: the parts noted, the documents not opened,
-    the links with no reply, and the Gaps only switch. */
+    the links waiting for a reply, and the Gaps only switch. */
 export function CoverageHead({ documentIds, links }: { documentIds: string[]; links: GraphEdgeLink[] }) {
   const t = useT();
   const { coverage, gapsOnly, setGapsOnly } = useContext(CoverageContext);
+  const waits = useWaitsForReply();
   if (!coverage) return null;
   const docs = documentIds.flatMap((id) => (coverage.documents[id] ? [coverage.documents[id]] : []));
   if (docs.length === 0) return null;
@@ -121,11 +144,11 @@ export function CoverageHead({ documentIds, links }: { documentIds: string[]; li
   const noted = docs.reduce((n, d) => n + d.parts.filter((p) => p.noted > 0).length, 0);
   const unopened = docs.filter((d) => !d.opened).length;
   const accepted = links.filter((l) => !l.recommended && !l.provenance);
-  const noReply = accepted.filter(hasNoReply).length;
+  const noReply = accepted.filter(waits).length;
   return (
     <div data-graph-coverage-head className="flex flex-wrap items-center gap-1.5">
       {parts > 0 && (
-        <span data-graph-coverage-parts={`${noted}/${parts}`} className={`${chip} border-sage-300 bg-sage-100 text-sage-800`}>
+        <span data-graph-coverage-parts={`${noted}/${parts}`} data-tip={t("graphCover.headPartsTitle")} className={`${chip} border-sage-300 bg-sage-100 text-sage-800`}>
           {t("graphCover.partsNoted", { n: noted, m: parts })}
         </span>
       )}
@@ -133,7 +156,7 @@ export function CoverageHead({ documentIds, links }: { documentIds: string[]; li
         {t("graphCover.headUnopened", { n: unopened, m: docs.length })}
       </span>
       {accepted.length > 0 && (
-        <span data-graph-coverage-noreply={`${noReply}/${accepted.length}`} className={`${chip} border-line text-sand-700`}>
+        <span data-graph-coverage-noreply={`${noReply}/${accepted.length}`} data-tip={t("graphCover.noReplyTitle")} className={`${chip} border-line text-sand-700`}>
           {t("graphCover.headNoReply", { n: noReply, m: accepted.length })}
         </span>
       )}
@@ -151,16 +174,49 @@ export function CoverageHead({ documentIds, links }: { documentIds: string[]; li
   );
 }
 
-/** Under a document's title: "N of M parts noted", and "Not opened". */
-export function DocumentCoverageLine({ documentId }: { documentId: string }) {
+/** Under a document's title: "N of M parts noted" (a document with no parts:
+    whether a note quotes it, with its dot), [layer5] its open comments (a
+    press lists them in the row), and "Not opened". */
+export function DocumentCoverageLine({
+  documentId,
+  commentsOpen = false,
+  onToggleComments,
+}: {
+  documentId: string;
+  /** [layer5] The row lists its open comments (a press on their count). */
+  commentsOpen?: boolean;
+  onToggleComments?: () => void;
+}) {
   const t = useT();
   const c = useDocumentCoverage(documentId);
   if (!c) return null;
   const noted = c.parts.filter((p) => p.noted > 0).length;
-  if (c.parts.length === 0 && c.opened) return null;
+  const whole = c.parts.length === 1 && c.parts[0].whole ? c.parts[0] : null;
+  const open = openComments(c);
   return (
     <span data-graph-coverage-line={documentId} className="flex flex-wrap items-center gap-1.5 text-[11px] text-sand-600">
-      {c.parts.length > 0 && <span data-graph-coverage-noted={`${noted}/${c.parts.length}`}>{t("graphCover.partsNoted", { n: noted, m: c.parts.length })}</span>}
+      {whole ? (
+        <span data-graph-coverage-whole={whole.noted > 0 ? "noted" : "empty"}>
+          <PartDot documentId={documentId} blockId="" />
+          {whole.noted > 0 ? t("graphCover.wholeNoted") : t("graphCover.wholeEmpty")}
+        </span>
+      ) : (
+        c.parts.length > 0 && <span data-graph-coverage-noted={`${noted}/${c.parts.length}`}>{t("graphCover.partsNoted", { n: noted, m: c.parts.length })}</span>
+      )}
+      {open.length > 0 && (
+        <button
+          onClick={onToggleComments}
+          aria-expanded={commentsOpen}
+          data-graph-coverage-comments={open.length}
+          data-track="graph-documents-comments"
+          data-tip={t("graphCover.commentsShowTitle")}
+          className="inline-flex items-center gap-0.5 font-semibold text-[var(--kind-comment)] hover:underline"
+        >
+          <CommentIcon size={10} />
+          {open.length === 1 ? t("graphCover.commentsOpenOne") : t("graphCover.commentsOpenMany", { n: open.length })}
+          {open.some((x) => x.asks) && <AsksMark />}
+        </button>
+      )}
       {!c.opened && (
         <span
           data-graph-not-opened
@@ -174,6 +230,30 @@ export function DocumentCoverageLine({ documentId }: { documentId: string }) {
   );
 }
 
+/** [layer5] Why Gaps only keeps a row (WALK5-06), one line in one shape:
+    "Not opened · No note in 7 of 8 parts" / "No note quotes this document". */
+export function GapReasons({ documentId }: { documentId: string }) {
+  const t = useT();
+  const reasons = gapReasonLines(t, useDocumentCoverage(documentId));
+  if (reasons.length === 0) return null;
+  return (
+    <span data-graph-gap-why={documentId} className="text-[11.5px] font-semibold text-clay-800">
+      {reasons.join(" · ")}
+    </span>
+  );
+}
+
+/** [layer5] The gap reasons as words, for GapReasons and the one-line row. */
+export function gapReasonLines(t: ReturnType<typeof useT>, c: DocumentCoverage | null): string[] {
+  return gapReasons(c).map((r) =>
+    r.kind === "notOpened"
+      ? t("graphCover.notOpened")
+      : r.kind === "whole"
+        ? t("graphCover.wholeEmpty")
+        : t("graphCover.gapParts", { n: r.n, m: r.m }),
+  );
+}
+
 /** Before a part's title: sage when a note quotes the part, empty when none does. */
 export function PartDot({ documentId, blockId }: { documentId: string; blockId: string }) {
   const t = useT();
@@ -181,10 +261,10 @@ export function PartDot({ documentId, blockId }: { documentId: string; blockId: 
   if (!part) return null;
   const tip = [
     part.noted === 0
-      ? t("graphCover.partEmpty")
+      ? t(part.whole ? "graphCover.wholeEmpty" : "graphCover.partEmpty")
       : part.noted === 1
-        ? t("graphCover.partNotedOne")
-        : t("graphCover.partNotedMany", { n: part.noted }),
+        ? t(part.whole ? "graphCover.wholeNotedOne" : "graphCover.partNotedOne")
+        : t(part.whole ? "graphCover.wholeNotedMany" : "graphCover.partNotedMany", { n: part.noted }),
     part.annotated === 0
       ? null
       : part.annotated === 1
@@ -207,18 +287,26 @@ export function PartDot({ documentId, blockId }: { documentId: string; blockId: 
 }
 
 /** Around a node's dot: a thin ring, its sage arc the share of the
-    document's parts noted. A document with no parts draws a full ring when
-    a note quotes it. Nothing for a document with no coverage (generated). */
+    document's parts noted (a document with no parts is one part). Nothing
+    for a document with no coverage (generated). [layer5] The ring keeps
+    its size on screen at a far zoom (VIEW5-08): its radius and stroke grow
+    as the view zooms out (.graph-coverage-ring, globals.css, from
+    --graph-zoom), so it reads at 40 and 200 documents. */
 export function CoverageRing({ documentId, size }: { documentId: string; size: number }) {
   const t = useT();
   const c = useDocumentCoverage(documentId);
   if (!c || (c.parts.length === 0 && c.notes === 0)) return null;
   const share = notedShare(c);
-  const r = size / 2 + 3.5;
-  const box = Math.ceil(r * 2 + 4);
-  const length = 2 * Math.PI * r;
+  const box = size + 11;
   const noted = c.parts.filter((p) => p.noted > 0).length;
-  const label = c.parts.length > 0 ? t("graphCover.partsNoted", { n: noted, m: c.parts.length }) : t("graphCover.wholeNoted");
+  const whole = c.parts.length === 1 && c.parts[0].whole;
+  const label =
+    c.parts.length > 0 && !whole
+      ? t("graphCover.partsNoted", { n: noted, m: c.parts.length })
+      : share > 0
+        ? t("graphCover.wholeNoted")
+        : t("graphCover.wholeEmpty");
+  const circle = { cx: box / 2, cy: box / 2, fill: "none", pathLength: 100 } as const;
   return (
     <svg
       data-graph-coverage-ring={documentId}
@@ -228,21 +316,11 @@ export function CoverageRing({ documentId, size }: { documentId: string; size: n
       width={box}
       height={box}
       viewBox={`0 0 ${box} ${box}`}
-      className="pointer-events-none absolute top-4 left-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-90"
+      style={{ "--ring-dot": `${size / 2}px` } as React.CSSProperties}
+      className="graph-coverage-ring pointer-events-none absolute top-4 left-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-90 overflow-visible"
     >
-      <circle cx={box / 2} cy={box / 2} r={r} fill="none" stroke="var(--sand-300)" strokeWidth={2} />
-      {share > 0 && (
-        <circle
-          cx={box / 2}
-          cy={box / 2}
-          r={r}
-          fill="none"
-          stroke="var(--sage-600)"
-          strokeWidth={2}
-          strokeLinecap="round"
-          strokeDasharray={`${share * length} ${length}`}
-        />
-      )}
+      <circle {...circle} stroke="var(--sand-300)" />
+      {share > 0 && <circle {...circle} data-arc stroke="var(--sage-600)" strokeLinecap="round" strokeDasharray={`${share * 100} 100`} />}
     </svg>
   );
 }
@@ -261,5 +339,150 @@ export function NoReplyToggle({ on, onChange }: { on: boolean; onChange: (on: bo
     >
       {t("graphCover.noReply")}
     </button>
+  );
+}
+
+// [layer5] The reader's comments on the graph (VIEW5-01/02): a small mark
+// right of the node's notes chip, one line in the card and in the Documents
+// row that opens into the comments. Every row opens the comment in the reader, at the address an
+// annotation reference uses. Stored rows only (the coverage answer).
+
+/** The "?" a comment that ends with a question mark carries. */
+function AsksMark() {
+  const t = useT();
+  return (
+    <span data-graph-comment-asks aria-label={t("graphCover.commentAsksTitle")} data-tip={t("graphCover.commentAsksTitle")} className="font-bold">
+      ?
+    </span>
+  );
+}
+
+export function useDocumentComments(documentId: string): GraphComment[] {
+  return useContext(CoverageContext).coverage?.documents[documentId]?.comments ?? [];
+}
+
+/** The whole coverage answer: the canvas's kept labels read it (VIEW5-07). */
+export function useProjectCoverage(): ProjectCoverage | null {
+  return useContext(CoverageContext).coverage;
+}
+
+/** On a node: the comment glyph and the open comments, a "?" when one ends
+    with a question mark. Hidden at a far zoom, like the notes chip. */
+export function NodeComments({ documentId }: { documentId: string }) {
+  const t = useT();
+  const open = useDocumentComments(documentId).filter((c) => c.open);
+  if (open.length === 0) return null;
+  const label = open.length === 1 ? t("graphCover.commentsOpenOne") : t("graphCover.commentsOpenMany", { n: open.length });
+  return (
+    <span
+      data-graph-node-comments={open.length}
+      aria-label={label}
+      data-tip={label}
+      className="flex items-center gap-px text-[10px] font-semibold tabular-nums text-[var(--kind-comment)]"
+    >
+      <CommentIcon size={10} />
+      {open.length}
+      {open.some((c) => c.asks) && "?"}
+    </span>
+  );
+}
+
+/** How wide the node's comments chip runs, in flow units (curve-place.ts
+    keeps a curve's marks off it). 0: no chip. */
+export function nodeCommentsWidth(c: DocumentCoverage | null | undefined): number {
+  const open = openComments(c);
+  if (open.length === 0) return 0;
+  return 13 + String(open.length).length * 6 + (open.some((x) => x.asks) ? 5 : 0);
+}
+
+/** One comment as a row: its words (three lines), a "?" when it asks, its
+    replies; a click opens it in the reader. */
+function CommentRow({ notebookId, documentId, comment: c, onOpenDocument }: { notebookId: string; documentId: string; comment: GraphComment; onOpenDocument: () => void }) {
+  const t = useT();
+  const router = useRouter();
+  return (
+    <button
+      data-graph-comment={c.id}
+      data-track="graph-comment-open"
+      onClick={() => {
+        router.push(annotationReferenceHref(notebookId, { annotationId: c.id, documentId, sourceId: c.sourceId, kind: "comment" }));
+        onOpenDocument();
+      }}
+      data-tip={t("graphCover.commentOpenTitle")}
+      className={`flex w-full items-start gap-1.5 rounded-xl px-2 py-1.5 text-left hover:bg-[color-mix(in_srgb,var(--kind-comment)_8%,transparent)] ${c.open ? "" : "opacity-60"}`}
+    >
+      <CommentIcon size={12} className="mt-[3px] shrink-0 text-[var(--kind-comment)]" />
+      <span className="min-w-0 flex-1">
+        <span className="line-clamp-3 text-[12.5px] leading-snug text-ink">{c.text}</span>
+        {(c.replies > 0 || !c.open) && (
+          <span className="mt-0.5 flex items-center gap-1.5 text-[10.5px] text-sand-600">
+            {c.replies > 0 && <span>{c.replies === 1 ? t("graphNotes.replyCountOne") : t("graphNotes.replyCountMany", { n: c.replies })}</span>}
+            {!c.open && <span>{t("graphCover.commentResolved")}</span>}
+          </span>
+        )}
+      </span>
+      {c.open && c.asks && (
+        <span className="shrink-0 rounded-full bg-[color-mix(in_srgb,var(--kind-comment)_12%,transparent)] px-1.5 text-[11px] text-[var(--kind-comment)]">
+          <AsksMark />
+        </span>
+      )}
+    </button>
+  );
+}
+
+/** The node card's comments: one line, "2 open comments ? · 1 resolved",
+    that a press opens into the comments (open first), each a row that
+    opens the comment in the reader. */
+export function NodeCommentsLine({ notebookId, documentId, onOpenDocument }: { notebookId: string; documentId: string; onOpenDocument: () => void }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const [shownFor, setShownFor] = useState(documentId);
+  if (shownFor !== documentId) {
+    setShownFor(documentId);
+    setOpen(false);
+  }
+  const comments = useDocumentComments(documentId);
+  if (comments.length === 0) return null;
+  const openOnes = comments.filter((c) => c.open);
+  const resolved = comments.length - openOnes.length;
+  return (
+    <div data-graph-card-comments={comments.length} className="-mt-1.5">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        data-track="graph-card-comments"
+        data-tip={t("graphCover.commentsShowTitle")}
+        className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-[var(--kind-comment)] hover:underline"
+      >
+        <CommentIcon size={11} />
+        {openOnes.length === 1 ? t("graphCover.commentsOpenOne") : t("graphCover.commentsOpenMany", { n: openOnes.length })}
+        {openOnes.some((c) => c.asks) && <AsksMark />}
+        {resolved > 0 && (
+          <span className="font-normal text-sand-600">
+            · {resolved === 1 ? t("common.resolvedCountOne") : t("common.resolvedCountMany", { n: resolved })}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="mt-1 flex flex-col gap-0.5">
+          {comments.map((c) => (
+            <CommentRow key={c.id} notebookId={notebookId} documentId={documentId} comment={c} onOpenDocument={onOpenDocument} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A Documents row's open comments, once their count is pressed: every one, in reading order. */
+export function DocumentComments({ notebookId, documentId, onOpenDocument }: { notebookId: string; documentId: string; onOpenDocument: () => void }) {
+  const open = useDocumentComments(documentId).filter((c) => c.open);
+  if (open.length === 0) return null;
+  return (
+    <div data-graph-documents-comments={open.length} className="flex flex-col gap-0.5">
+      {open.map((c) => (
+        <CommentRow key={c.id} notebookId={notebookId} documentId={documentId} comment={c} onOpenDocument={onOpenDocument} />
+      ))}
+    </div>
   );
 }

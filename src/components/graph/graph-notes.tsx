@@ -13,6 +13,7 @@ import { withoutGraphParams } from "@/components/graph/graph-content";
 import { useLinkPassages } from "@/components/graph/link-passages";
 import { noteLine, notesOnGraph, notesOnLink, pairKey, type GraphNote, type NotesOnGraph } from "@/lib/graph/notes";
 import type { Point } from "@/lib/graph/curve-place";
+import { useAnyNewReplies } from "@/components/graph/link-replies"; // [layer5]
 
 // The project's notes on the graph (SPEC.md §13). The document stays the
 // node; a note shows where it is: a chip on each node it belongs to, its
@@ -509,6 +510,7 @@ export function CurveMarks({
   const t = useT();
   const places = useContext(MarkPlacesContext);
   const open = openReplies(links);
+  const fresh = useAnyNewReplies(links); // [layer5] WALK5-07
   const notes = ctx?.view.byPair.get(pair)?.length ?? 0;
   const showCount = count > 1;
   if (!showCount && open === 0 && notes === 0) return null;
@@ -542,6 +544,10 @@ export function CurveMarks({
             >
               <CommentIcon size={11} />
               <span data-n>{open}</span>
+              {/* [layer5] A reply another person wrote since this account last opened the link. */}
+              {fresh && (
+                <span data-graph-curve-new aria-label={t("graphCover.newRepliesTitle")} className="size-1.5 rounded-full bg-[var(--kind-comment)]" />
+              )}
             </span>
           )}
           {notes > 0 && (
