@@ -153,8 +153,11 @@ function figureWordsRules(figureBlockId: string, edits: DocumentEdits): string[]
     "a. A command that asks to read, extract, transcribe, or summarize what the figure shows (its text, a screenshot's paragraph, its key points, its numbers): put the words in reply and return no actions.",
     `b. A command that asks to put those words in the document under the figure (below it, beneath it, under the image, insert it, add it to the document, or a confirmation of such a change): return insert_paragraph actions with afterBlockId "${figureBlockId}", one per paragraph, heading, or list, in reading order. reply: one sentence on what goes under the figure. The words land under the figure as the assistant's suggestion, and the reader accepts or rejects it.`,
     ...(edits === "suggestions" ? [`   The action: ${insertParagraphLine()} Use it only right after the figure; every other change to the words is the suggest action.`] : []),
-    "c. Text the figure shows: copy it exactly as the figure shows it, word for word, with its numbers, its punctuation, and its spelling. Join a paragraph's lines into one line, and join a word the figure hyphenates at a line's end. Never correct, translate, or add words. Write [illegible] for words you cannot read. Skip words cut off at the figure's edges.",
-    "d. Key points or a summary: a list (kind list), one point per line, in plain words, each with the figure's own numbers and names exactly as the figure shows them. Only what the figure shows; the document may explain a term.",
-    "e. Never write a number, a name, or a quotation the figure and the document do not show.",
+    "c. The shape is the one the command names, and only that one, in reply and in actions alike. Never give both shapes unless the command asks for both:",
+    "   - The text: the command says text, extract, transcribe, copy, or names no shape. Give the text the figure shows (rule d), nothing else: no list, no summary. Under rule a, reply is the words alone, with no comment before or after them.",
+    "   - The key points: the command says key points, main points, summary, summarize, or bullet points. Give the list (rule e), nothing else: never the text itself.",
+    "d. Text the figure shows: copy it exactly as the figure shows it, word for word, with its numbers, its punctuation, and its spelling. Join a paragraph's lines into one line, and join a word the figure hyphenates at a line's end. Never correct, translate, or add words. Write [illegible] for words you cannot read. Skip words cut off at the figure's edges.",
+    "e. Key points or a summary: a list (kind list), one point per line, in plain words, each with the figure's own numbers and names exactly as the figure shows them. Only what the figure shows; the document may explain a term.",
+    "f. Never write a number, a name, or a quotation the figure and the document do not show.",
   ];
 }

@@ -76,7 +76,7 @@ async function run() {
 
   // A chip that reads the image: an answer, nothing in the text.
   await bar.locator("button", { hasText: "Extract the text" }).click();
-  const answer = page.getByText("The figure reads: A study led by Jane Gillette", { exact: false }).first();
+  const answer = page.getByText("A study led by Jane Gillette (1999) tested college undergraduates on 24 video clips.", { exact: true }).first();
   await answer.waitFor({ timeout: 20000 });
   check("Extract the text answers in the chat card", await answer.isVisible());
   check("an answer adds nothing to the text", (await page.locator(`${editor} p`, { hasText: "Jane Gillette" }).count()) === 0);
@@ -96,8 +96,7 @@ async function run() {
     return imgEl && words ? Boolean(imgEl.compareDocumentPosition(words) & Node.DOCUMENT_POSITION_FOLLOWING) : null;
   });
   check("the words land under the image", order === true, String(order));
-  const points = await page.locator(`${editor} li`, { hasText: "Verbs were harder than nouns" }).count();
-  check("the key points land as a list", points === 1);
+  check("Put the text under the image gives the text alone, no list", (await page.locator(`${editor} li`).count()) === 0);
   const accept = bar.locator('button[data-track="assistant-suggestions:accept-all"]');
   check("the bar offers Accept for the suggestion", (await accept.count()) === 1);
   await accept.click();
@@ -105,6 +104,18 @@ async function run() {
   const pending = await page.locator(editor).evaluate((el) => el.querySelectorAll("[data-suggestion-id], .suggestion-insertion, ins").length);
   check("Accept keeps the words as text, no suggestion left", pending === 0 && (await page.locator(`${editor} p`, { hasText: "Jane Gillette" }).count()) === 1, `pending marks: ${pending}`);
   await page.screenshot({ path: `${SHOT}/figure-words-accepted.png` });
+
+  // The key points chip: the list alone, never the text again.
+  await img.click();
+  await button.click();
+  await bar.waitFor({ timeout: 5000 });
+  await bar.locator("button", { hasText: "Put the key points under the image" }).click();
+  await page.locator(`${editor} li`, { hasText: "Verbs were harder than nouns" }).first().waitFor({ timeout: 20000 });
+  check(
+    "Put the key points under the image gives the list alone, not the text again",
+    (await page.locator(`${editor} li`).count()) === 2 && (await page.locator(`${editor} p`, { hasText: "Jane Gillette" }).count()) === 1,
+  );
+  await page.screenshot({ path: `${SHOT}/figure-words-points.png` });
   await fetch(`${base}/api/documents/${doc.id}`, { method: "DELETE" });
 }
 

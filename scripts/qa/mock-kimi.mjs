@@ -110,13 +110,19 @@ function buildResponse(all) {
   if (figure && all.includes('"actions"')) {
     const command = all.match(/^Command: (.*)$/m)?.[1] ?? "";
     const text = "A study led by Jane Gillette (1999) tested college undergraduates on 24 video clips.";
-    if (!/under|below|beneath/i.test(command)) return JSON.stringify({ reply: `The figure reads: ${text}`, actions: [], matches: [] });
+    const points = "Students guessed 24 clips\nVerbs were harder than nouns";
+    // One shape, the one the command names: the key points, else the text.
+    const keyPoints = /key points|main points|summar|bullet/i.test(command);
+    if (!/under|below|beneath/i.test(command)) {
+      return JSON.stringify({ reply: keyPoints ? `- ${points.replace("\n", "\n- ")}` : text, actions: [], matches: [] });
+    }
     return JSON.stringify({
-      reply: "The figure's text and its key points go under it.",
+      reply: keyPoints ? "The figure's key points go under it." : "The figure's text goes under it.",
       matches: [],
       actions: [
-        { type: "insert_paragraph", afterBlockId: figure, text, description: "Put the figure's text under it" },
-        { type: "insert_paragraph", afterBlockId: figure, kind: "list", text: "Students guessed 24 clips\nVerbs were harder than nouns", description: "Put the key points under it" },
+        keyPoints
+          ? { type: "insert_paragraph", afterBlockId: figure, kind: "list", text: points, description: "Put the key points under the image" }
+          : { type: "insert_paragraph", afterBlockId: figure, text, description: "Put the text under the image" },
       ],
     });
   }

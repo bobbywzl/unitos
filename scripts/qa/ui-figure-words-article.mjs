@@ -91,7 +91,7 @@ async function run({ notebookId, documentId, figureId }) {
   await ask(figureId, "Put the text under the image");
   await card.waitFor({ timeout: 20000 });
   check("the suggestion shows under the figure", await card.isVisible());
-  check("the suggestion holds the figure's words and the key points", (await card.textContent())?.includes("Jane Gillette") && (await card.textContent())?.includes("• Verbs were harder than nouns"));
+  check("the text chip's suggestion holds the text alone, no list", (await card.textContent())?.includes("Jane Gillette") && !(await card.textContent())?.includes("•"));
   check("the plan card does not open for the words under the figure", (await page.getByText("Apply", { exact: false }).count()) === 0);
   await page.screenshot({ path: `${SHOT}/figure-words-article-suggestion.png` });
   await card.locator('button[data-track="figure-suggestion-reject"]').click();
@@ -109,9 +109,16 @@ async function run({ notebookId, documentId, figureId }) {
   const blocks = await db.block.findMany({ where: { documentId }, orderBy: { order: "asc" }, select: { type: true, text: true } });
   const at = blocks.findIndex((b) => b.type === "FIGURE");
   check(
-    "✓ writes the words right after the figure, in order",
-    blocks[at + 1]?.text.includes("Jane Gillette") && blocks[at + 2]?.type === "LIST" && blocks[at + 3]?.text.startsWith("The next chapter"),
+    "✓ writes the words right after the figure",
+    blocks[at + 1]?.text.includes("Jane Gillette") && blocks[at + 2]?.text.startsWith("The next chapter"),
     blocks.map((b) => `${b.type}:${b.text.slice(0, 20)}`).join(" | "),
   );
   await page.screenshot({ path: `${SHOT}/figure-words-article-accepted.png` });
+
+  // The key points: the list alone.
+  await page.keyboard.press("Escape");
+  await ask(figureId, "Put the key points under the image");
+  await card.waitFor({ timeout: 20000 });
+  check("the key points' suggestion holds the list alone, not the text", (await card.textContent())?.includes("• Verbs were harder than nouns") && !(await card.textContent())?.includes("Jane Gillette"));
+  await page.screenshot({ path: `${SHOT}/figure-words-article-points.png` });
 }
