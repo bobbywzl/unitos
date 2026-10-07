@@ -11,7 +11,8 @@ import { useT } from "@/components/lang-provider";
 // title, the key points with their reasoning, and under each the document's
 // words as quotes (`POST /api/notes/organize`). The note lands pending in
 // the section the reader last wrote in; Show opens it in the notes tray.
-// The answer stays as it is.
+// The answer stays as it is. onShow replaces Show's event where the tray
+// sits behind the surface (the graph closes first, then the tray opens).
 export type SaveOrigin = "assistant" | "explain" | "simplify" | "analyze" | "ask" | "act" | "stitch";
 
 export function SaveAsNote({
@@ -22,6 +23,7 @@ export function SaveAsNote({
   selection = "",
   answer,
   className = "",
+  onShow,
 }: {
   notebookId: string;
   documentId?: string;
@@ -30,6 +32,7 @@ export function SaveAsNote({
   selection?: string;
   answer: string;
   className?: string;
+  onShow?: (noteId: string) => void;
 }) {
   const t = useT();
   const router = useRouter();
@@ -64,7 +67,11 @@ export function SaveAsNote({
         {t("assistant.savedAsNote", { section: state.section })}
         <button
           type="button"
-          onClick={() => window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: state.noteId } }))}
+          onClick={() =>
+            onShow
+              ? onShow(state.noteId)
+              : window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: state.noteId } }))
+          }
           data-track="assistant-saved-note-show"
           className="rounded-full bg-sage-100 px-2 py-0.5 font-semibold text-sage-800 hover:bg-sage-200"
         >
