@@ -277,6 +277,8 @@ for (const lang of ["en", "zh"]) {
       const card = await page.locator(`[data-note-id="${noteId}"]`).count();
       check(overlay === 0 && card > 0, "Open in notes closes the graph and the tray shows the note", `overlay ${overlay}, cards ${card}`);
       await page.screenshot({ path: `${OUT}/link-note-open-in-notes-${tag}.png` });
+      // The check's own note goes, so the next pass's node card shows the same notes (a card lists 5).
+      if (DB !== "dissect" && noteId) sql(`delete from "Source" where "noteId"='${noteId}'; delete from "Note" where id='${noteId}'`);
     }
     await ctx.close();
   }
