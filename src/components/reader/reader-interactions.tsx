@@ -10221,19 +10221,19 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               <div className="flex flex-wrap items-center gap-1.5">
                 <ThinkingChips small />
                 <WebChip small />
-              </div>
-              <div className="flex items-center gap-1.5">
-                <VoiceTypingButton track="assistant-voice" />
+                <span className="ml-auto flex items-center gap-1.5">
+                <VoiceTypingButton track="assistant-voice" className="size-8" size={14} />
                 <button
                   disabled={!aiBusy && !aiCommand.trim()}
                   onClick={() => (aiBusy ? stopAssistantChat() : void runAssistant())}
                   data-track="assistant-run"
-                  data-tip={aiBusy ? t("reader.stopAssistant") : t("reader.runTitle")}
+                  data-tip={aiBusy ? t("reader.stopAssistant") : t("reader.sendTitle")}
                   aria-label={aiBusy ? t("reader.stopAssistant") : undefined}
-                  className="ml-auto rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+                  className="rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
                 >
-                  {aiBusy ? <StopIcon size={11} /> : t("reader.run")}
+                  {aiBusy ? <StopIcon size={11} /> : t("reader.send")}
                 </button>
+                </span>
               </div>
               {aiBusy && <ThinkingIndicator className="px-1 pb-0.5 text-[11.5px]" />}
               {/* A failed run says so here, where the reader asked (SPEC.md §6). */}
@@ -11505,7 +11505,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               aria-label={t("reader.barPlaceholder")}
               className="min-w-0 flex-1 rounded-xl bg-sand-100 px-3 py-1.5 text-[13px] outline-none placeholder:text-sand-500"
             />
-            <VoiceTypingButton track="assistant-voice" />
+            <VoiceTypingButton track="assistant-voice" className="size-8" size={14} />
             <button
               type="button"
               disabled={bar.busy || !bar.input.trim()}

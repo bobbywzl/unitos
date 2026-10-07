@@ -11,11 +11,11 @@ const en = {
   // Scope control (SPEC.md §7): This page, or Project
   scopeDocumentLabel: "This page",
   scopeDocumentHint:
-    "This page: the open document in full, plus every note, annotation, and distillation on it.",
+    "This page: the open document in full, plus every note, annotation, and extraction on it.",
   scopeDocumentNoDocument: "Open a document to ask about this page",
   scopeProjectLabel: "Project",
   scopeProjectHint:
-    "This project: every document in full, plus every note, annotation, and distillation.",
+    "This project: every document in full, plus every note, annotation, and extraction.",
   // Ask
   askPlaceholderDocument: "Ask about this page",
   askPlaceholderProject: "Ask about this project",
@@ -76,13 +76,17 @@ const en = {
   backToConversation: "Back",
   backToConversationTitle: "Back to the conversation this side chat came from.",
   sideChatOpened: "Side chat",
-  // Thinking control (SPEC.md §7): Fast Thinking, or Deep Thinking
+  // A tool's output continued into a conversation (SPEC.md §21): the pill on
+  // the card's foot row; its tooltip names it whole.
+  continue: "Continue",
+  // Thinking control (SPEC.md §7): one chip that names the choice, Fast
+  // Thinking or Deep Thinking; a click switches to the other.
   thinkingFast: "Fast Thinking",
   thinkingFastHint:
-    "Fast Thinking: the assistant reasons as little as it can before it answers. Quicker, and enough for a question the material answers directly.",
+    "Fast Thinking is on: the assistant reasons as little as it can before it answers. Quicker, and enough for a question the material answers directly. Click for Deep Thinking.",
   thinkingDeep: "Deep Thinking",
   thinkingDeepHint:
-    "Deep Thinking: the assistant reasons the question through before it answers. Slower, and better for a question that has to be worked out across the material.",
+    "Deep Thinking is on: the assistant reasons the question through before it answers. Slower, and better for a question that has to be worked out across the material. Click for Fast Thinking.",
   // Web access (SPEC.md §7)
   web: "Web",
   webOnTitle:
@@ -169,10 +173,10 @@ const zh: Record<keyof typeof en, string> = {
   recProfessionalLabel: "专业摘要",
   recProfessionalHint: "用作者所在行业的措辞",
   scopeDocumentLabel: "此页面",
-  scopeDocumentHint: "此页面：当前文档的全文，以及它上面的每条笔记、批注和提炼。",
+  scopeDocumentHint: "此页面：当前文档的全文，以及它上面的每条笔记、批注和提取。",
   scopeDocumentNoDocument: "打开一篇文档后才能就此页面提问",
   scopeProjectLabel: "项目",
-  scopeProjectHint: "此项目：每篇文档的全文，以及每条笔记、批注和提炼。",
+  scopeProjectHint: "此项目：每篇文档的全文，以及每条笔记、批注和提取。",
   askPlaceholderDocument: "就此页面提问",
   askPlaceholderProject: "就此项目提问",
   ask: "提问",
@@ -224,10 +228,11 @@ const zh: Record<keyof typeof en, string> = {
   backToConversation: "返回",
   backToConversationTitle: "返回这条支线对话所属的对话。",
   sideChatOpened: "支线对话",
+  continue: "继续",
   thinkingFast: "快速思考",
-  thinkingFastHint: "快速思考：助手作答前尽量少推理。更快，适合材料能直接回答的问题。",
+  thinkingFastHint: "快速思考已开启：助手作答前尽量少推理。更快，适合材料能直接回答的问题。点击改为深度思考。",
   thinkingDeep: "深度思考",
-  thinkingDeepHint: "深度思考：助手作答前把问题想透。更慢，适合需要在材料中推演的问题。",
+  thinkingDeepHint: "深度思考已开启：助手作答前把问题想透。更慢，适合需要在材料中推演的问题。点击改为快速思考。",
   web: "联网",
   webOnTitle: "联网已开启：助手会用网络核对答案，并注明所用的外部来源。点击后只根据项目作答。",
   webOffTitle: "联网已关闭：助手只根据项目作答。点击后允许它搜索网络并注明外部来源。",
