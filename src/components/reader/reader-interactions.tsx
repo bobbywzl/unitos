@@ -2253,6 +2253,15 @@ export function ReaderInteractions({
       top = Math.min(...clears) + CARD_GAP;
       side = sides[0];
     }
+    // Dropped under the window, the card would open out of view: it opens at
+    // its words instead, and the older card above gives up height
+    // (settleSideCards).
+    const pane = containerRef.current;
+    if (pane && top > Math.max(8, preferredTop) && top + CAP_MIN > pane.scrollTop + pane.clientHeight) {
+      const over = blocksOnSide(rects, articleMid, sides[0], Math.max(8, preferredTop), CARD_ESTIMATE);
+      top = Math.max(8, preferredTop, ...over.map((r) => r.top + CAP_MIN + CARD_GAP));
+      side = sides[0];
+    }
     return { ...dockSideCard(side, col, cardsRoomRef.current), top, side };
   }
   // Closing a card mid-stream stops its run: nobody will read the rest. A
@@ -9203,9 +9212,8 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         data-track={`${tool}-continue`}
         aria-label={t("reader.continueConversation")}
         data-tip={ultra ? t("reader.continueConversationTitle") : t("reader.continueNeedsUltra")}
-        className={`flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 ${className}`}
+        className={`flex items-center gap-1 rounded-full border border-line px-1.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 ${className}`}
       >
-        <ToolSymbol tool={tool} plus size={11} />
         {t("assistant.continue")}
         {!ultra && <TierMark state="ultra" size={10} />}
       </button>
