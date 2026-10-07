@@ -171,12 +171,16 @@ export const STITCH_EMPTY_ANSWER = "empty answer";
 /** What the command asks for, which sets what the answer pass reads after
     selection (STITCH_SELECTED_BUDGET) and how the reading passes read: a
     page, links, or else an answer. A page is asked by a page verb at the
-    start (gather, collect, write, make, list, "give me a page …") or a
-    page noun anywhere (a page, timeline, study guide, every passage). A
+    start, after a polite opening ("could you", "I want you to", 请, 帮我):
+    gather, collect, write, list every …, make a timeline, put them
+    together, turn these into …, "give me a page …", 汇集, 整理成, 列出所有;
+    or by a page noun anywhere (a page, a timeline, study guide, every
+    passage). A bare noun (the timeline in my notes, 第一页, 页面) is not. A
     summary or an overview is an answer in the reply unless it asks for a
     page; the answer prompt routes it the same way (stitchRules);
-    links by a contradiction word, or a command to draw links (connect …,
-    find connections, conflicts between); anything else is a question — so
+    links by a contradiction word (contradict, disagree, 矛盾, 不一致,
+    意见不同), or a command to draw links (connect …, find connections,
+    conflicts between); anything else is a question — so
     "what did he write about pity" and "how does he link X and Y" stay
     questions. A rule, not a model call: the kind is needed before the
     select pass runs — a question's select pass may read the lines ranked
@@ -185,15 +189,36 @@ export const STITCH_EMPTY_ANSWER = "empty answer";
     as a question, whose budget still holds about 60,000 characters of the
     blocks picked. */
 export function commandKind(command: string): StitchCommandKind {
-  const c = command.toLowerCase().trim();
-  const pageVerb =
-    /^(please\s+|now\s+|then\s+)?(gather|collect|compile|write|draft|combine|make|create|build|put|turn|list|give me (a|an|one) (page|timeline|list|table|study guide))\b/;
+  const c = command.toLowerCase().trim().replace(/[‘’]/g, "'");
+  // A polite opening before the verb: "could you gather", "I want you to
+  // write", "please list".
+  const lead =
+    String.raw`^(?:(?:please|now|then|ok(?:ay)?|so)[,\s]+|(?:can|could|would|will) you\s+(?:please\s+)?|i(?: would|'d)? (?:want|need|like) you to\s+|help me\s+)*`;
+  // Verbs that ask for a page on their own; list only with every, all, or
+  // each ("list every claim"; "list the three reasons" is a question).
+  // make, create, build, put, and turn only with what they make: "make a
+  // timeline", "put them together", "turn these into a page" — never "make
+  // sense of", "put simply", "turn to", "build an argument".
+  const pageVerb = new RegExp(
+    lead +
+      String.raw`(?:(?:gather|collect|compile|write|draft|combine)\b|list\b.*\b(?:every|all|each)\b|give me (?:a|an|one) (?:page|timeline|list|table|study guide)\b|(?:make|create|build|draw up|produce|prepare) (?:me )?(?:a|an|one|the|that|this|it)?\s*(?:[\w-]+\s+){0,2}?(?:page|timeline|list|table|study guide|cheat sheet|chronology|glossary|reading list)\b|put (?:(?:them|these|those|it|this|that)(?: [\w-]+)?|all (?:the )?[\w-]+|every [\w-]+|the [\w-]+(?: [\w-]+)?) (?:together|into|in one|on one)\b|turn (?:(?:it|this|that|these|them|those)(?: [\w-]+)?|the [\w-]+(?: [\w-]+)?) into\b)`,
+  );
+  // Nouns that ask for a page anywhere; a timeline only as a thing to make
+  // ("a timeline"), never "the timeline in my notes".
   const pageNoun =
-    /\b(one page|a page|new page|into (one|a) page|that a page|it a page|timeline|study guide|every passage|all (the )?passages|cheat sheet)\b/;
-  if (pageVerb.test(c) || pageNoun.test(c) || /汇集|收集|汇总|整理|写一|写成|一页|页面|合并|时间线/.test(c)) return "page";
-  const links =
-    /\b(contradict\w*|disagree\w*|inconsisten\w*)\b|^(please\s+)?(connect|link|draw|propose)\b|\b(draw|propose|find|add|make)\s+(the\s+|some\s+)?(links?|connections?)\b|\bconflict\w* between\b/;
-  if (links.test(c) || /矛盾|冲突|分歧|连接|关联/.test(c)) return "links";
+    /\b(one page|a page|new page|into (one|a) page|that a page|it a page|(a|one) timeline|study guide|every passage|all (the )?passages|cheat sheet)\b/;
+  // Chinese: the page verb opens the command (after a polite opening or a
+  // 把 object), as in English; 列出 only with 所有, 每, 各, or 全部.
+  const zhLead = "^(?:请|帮我|帮忙|麻烦你?|你能|你可以|能不能|能否|可以|可不可以)*";
+  const zhVerb = new RegExp(`${zhLead}(?:把.{1,30}?)?(?:汇集|收集|汇总|整理成|整理出|写成|写一页|写一篇|做成|合并成|生成|列出.*(?:所有|每|各|全部))`);
+  const zhNoun = /一页纸|新页面|成一页|做成页面|(给我|做|画|列|写)(一个|一条|一份)?时间线|时间线页面|学习指南|所有段落|每一段/;
+  if (pageVerb.test(c) || pageNoun.test(c) || zhVerb.test(c) || zhNoun.test(c)) return "page";
+  const links = new RegExp(
+    String.raw`\b(contradict\w*|disagree\w*|inconsisten\w*)\b|` +
+      lead +
+      String.raw`(connect|link|draw|propose)\b|\b(draw|propose|find|add|make)\s+(the\s+|some\s+)?(links?|connections?)\b|\bconflict\w* between\b`,
+  );
+  if (links.test(c) || /矛盾|冲突|分歧|不一致|意见不同|看法不同|相反|连接|关联/.test(c)) return "links";
   return "question";
 }
 

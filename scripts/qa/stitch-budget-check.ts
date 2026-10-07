@@ -78,8 +78,67 @@ const kinds: [string, ReturnType<typeof commandKind>][] = [
   ["请给我一个时间线", "page"],
   ["Summarise the chronology into one page", "page"],
   ["总结这些文档对教育的看法", "question"],
+  // Round 3 (ANS3-02): Chinese page words open the command; a bare noun
+  // (第一页, 时间线, 页面) or a verb inside a question is not a page.
+  ["讲义第一页说了叔本华的哪些生平？", "question"],
+  ["这些文档是怎么整理尼采的思想的？", "question"],
+  ["讲义里的时间线对吗？", "question"],
+  ["讲义和原文有没有不一致的地方？", "links"],
+  ["尼采写一本书要多久？", "question"],
+  ["页面上的引文是谁说的？", "question"],
+  ["What does the timeline in my notes get wrong?", "question"],
+  ["Which page does Mencken mention Parsifal on?", "question"],
+  ["汇集所有关于怜悯的段落", "page"],
+  ["把每份文档关于怜悯的说法整理成一页", "page"],
+  ["写一页关于永恒轮回的总结", "page"],
+  ["请列出查拉图斯特拉各部分的写作时间", "page"],
+  ["Make a timeline of Nietzsche's life from these documents", "page"],
+  ["Gather every passage on pity", "page"],
+  ["Write a page on pity in each document.", "page"],
+  ["Do my notes contradict any of the other documents?", "links"],
+  ["叔本华认为自杀是罪行吗？", "question"],
+  // Round 3 (REV3-06): everyday phrasings — a polite opening before the
+  // verb, idiom verbs that make nothing, list without every/all/each.
+  ["Could you gather what each author says about pity?", "page"],
+  ["Can you collect the passages on suffering into one place?", "page"],
+  ["I want a page of every quote about pity", "page"],
+  ["Please write one page that combines what they say about the will", "page"],
+  ["Summarize the project", "question"],
+  ["Make sense of Nietzsche's view of pity for me", "question"],
+  ["Put simply, what is the will to power?", "question"],
+  ["List the three reasons Schopenhauer gives for pity", "question"],
+  ["Turn to the Genealogy: what does he mean by ressentiment?", "question"],
+  ["Build an argument: is pity a virtue?", "question"],
+  ["What links pity and the will?", "question"],
+  ["Where do they disagree about suffering?", "links"],
+  ["Link the passages on pity", "links"],
+  ["Find the contradictions", "links"],
+  ["Is there any inconsistency in his use of 'pity'?", "links"],
+  ["把关于同情的段落整理成一页", "page"],
+  ["总结这些文档", "question"],
+  ["列出所有关于同情的段落", "page"],
+  ["他们在哪些地方意见不同？", "links"],
+  ["尼采怎么看待同情与意志的联系？", "question"],
+  // More everyday phrasings of the same rules.
+  ["I'd like you to put these passages together in one place", "page"],
+  ["Could you turn these quotes into a page?", "page"],
+  ["Would you please make me a reading list from these documents", "page"],
+  ["Can you connect the notes to the essay?", "links"],
+  ["Make the case that pity is a weakness, from the documents", "question"],
+  ["Could you tell me what Schopenhauer means by the will?", "question"],
+  ["你能把这些段落汇总成一页吗？", "page"],
+  ["列出叔本华给出的三个理由", "question"],
+  ["尼采和叔本华的看法相反吗？", "links"],
 ];
 for (const [command, want] of kinds) check(`commandKind "${command}"`, commandKind(command) === want, commandKind(command));
+// The round 3 answers audit's 37 commands: every one a question.
+try {
+  const ans3 = JSON.parse(readFileSync("/home/user/unitos/.qa-tmp/stitch/r3/ans/commands.json", "utf8")) as { id: string; command: string }[];
+  const wrong = ans3.filter((c) => commandKind(c.command) !== "question");
+  check(`commandKind: the round 3 answers audit's ${ans3.length} commands are questions`, wrong.length === 0, wrong.map((c) => c.id).join(" "));
+} catch {
+  console.log("skip the round 3 answers audit's commands (not on this machine)");
+}
 // The answers audit's 27 commands (round 2), when its data is on this machine.
 const ANS = "/home/user/unitos/.qa-tmp/stitch/r2/ans/commands.json";
 const ANS_KIND: Record<string, ReturnType<typeof commandKind>> = { "P1-11": "links", "P1-12": "page", "P2-10": "links" };
