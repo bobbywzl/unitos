@@ -896,7 +896,26 @@ export function GraphOverlay({
           />
         )}
         {/* [cover4] Add to note's new note, at the foot of the side list (VIEW4-03). */}
-        <NoteGatherDock notebookId={notebookId} onOpenDocument={leave} />
+        <NoteGatherDock
+          notebookId={notebookId}
+          onOpenDocument={leave}
+          onWritePage={
+            canEdit
+              ? (ids, command) => {
+                  // Write a page from these (VIEW5-05): the quotes' documents
+                  // join the pick, the command goes in the box, nothing is sent.
+                  setPickedIds((prev) => new Set([...prev, ...ids]));
+                  view2.askStitch(command);
+                  if (window.innerWidth < WIDE) {
+                    setList(null);
+                    setBoxOpen(true);
+                  }
+                }
+              : undefined
+          }
+          boxOpen={boxShown}
+          onFoldBox={() => setBoxOpen(false)}
+        />
         {nodes.length >= 2 && (
           // Where the box sits (BOX-03..06, BOX-19): centered at the foot;
           // left of an open list on a wide screen; clear of the Feedback

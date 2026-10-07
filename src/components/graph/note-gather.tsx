@@ -14,10 +14,10 @@
 // a failed save never loses them. Discard drops them, after a confirm.
 
 import { useRouter } from "next/navigation";
-import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { MAX_NOTE_QUOTES } from "@/lib/anchors/note-quotes-limit";
-import { readGatherDraft, writeGatherDraft, type GatherDraftQuote } from "@/lib/note-drafts";
+import { gatherDraftKey, readGatherDraft, writeGatherDraft, type GatherDraftQuote } from "@/lib/note-drafts";
 import { refreshWhenOnline } from "@/lib/offline/queue";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import { clipWords } from "@/lib/markdown-preview";
@@ -27,6 +27,10 @@ import { useT } from "@/components/lang-provider";
 import { useGraphNotes } from "@/components/graph/graph-notes";
 
 export type GatherQuote = GatherDraftQuote;
+
+// graph-overlay.tsx's WIDE: under it the dock sits at bottom-16 and an open
+// Stitch box closes the side list.
+const WIDE = 1000;
 
 const keyOf = (q: GatherQuote) => `${q.documentId}:${q.blockId ?? ""}:${q.whole ? "" : q.text}`;
 
@@ -41,6 +45,8 @@ type GatherValue = {
   setContent: (text: string) => void;
   setSectionId: (id: string) => void;
   clear: () => void;
+  /** After a save: drops what was sent, keeps what came after (REV5-04). */
+  settle: (sent: GatherSent) => void;
   full: boolean;
   open: boolean;
   setOpen: (open: boolean) => void;
@@ -52,22 +58,69 @@ export function useNoteGather(): GatherValue | null {
   return useContext(GatherContext);
 }
 
+type Draft = { content: string; sectionId: string | null; quotes: GatherQuote[] };
+const EMPTY: Draft = { content: "", sectionId: null, quotes: [] };
+
+/** What a save sent (REV5-04): the quotes' keys and the words as typed. */
+export type GatherSent = { keys: Set<string>; content: string };
+
+/** The words to keep after a save: none when they are still what was sent;
+    what was typed after them when they start with it; else all of them. */
+function wordsAfter(content: string, sent: string): string {
+  if (!sent.trim()) return content;
+  if (content === sent) return "";
+  return content.startsWith(sent) ? content.slice(sent.length).trimStart() : content;
+}
+
+/** Words changed in another tab since this tab last read them (REV5-03):
+    the words typed here win when they hold the other tab's, the other tab's
+    when they hold these; else both are kept, the other tab's first. */
+function mergeWords(stored: string, seen: string, typed: string): string {
+  if (stored === seen || typed.includes(stored)) return typed;
+  if (stored.includes(typed)) return stored;
+  return `${stored}\n\n${typed}`;
+}
+
 export function NoteGatherProvider({ notebookId, children }: { notebookId: string; children: React.ReactNode }) {
   const { myId, canEdit } = useCollab();
   // The graph renders in the browser only, so the draft is read at once.
-  const [draft, setDraft] = useState(() =>
-    typeof window === "undefined"
-      ? { content: "", sectionId: null as string | null, quotes: [] as GatherQuote[] }
-      : (readGatherDraft(myId, notebookId) ?? { content: "", sectionId: null, quotes: [] }),
+  const [draft, setDraft] = useState<Draft>(() =>
+    typeof window === "undefined" ? EMPTY : (readGatherDraft(myId, notebookId) ?? EMPTY),
   );
+  // This tab's draft as of the last change, for the next change: a change is
+  // worked out once, outside a state updater, which React may run twice.
+  const current = useRef(draft);
   const [open, setOpen] = useState(true);
+  // Another tab's change lands here (REV5-03): the stored draft is the one draft.
+  useEffect(() => {
+    const key = gatherDraftKey(myId, notebookId);
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== key && e.key !== null) return;
+      const stored = readGatherDraft(myId, notebookId);
+      current.current = stored ? { content: stored.content, sectionId: stored.sectionId, quotes: stored.quotes } : EMPTY;
+      setDraft(current.current);
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [myId, notebookId]);
+  // Each change reads the stored draft first and applies itself to it, so a
+  // change in one tab never writes over what another tab added (REV5-03).
+  // Storage blocked: the stored draft reads null, and this tab's own goes on.
+  // Words another tab changed that this tab has not seen are merged, never
+  // written over (mergeWords).
   const update = useCallback(
-    (next: (d: typeof draft) => typeof draft) =>
-      setDraft((prev) => {
-        const d = next(prev);
-        writeGatherDraft(myId, notebookId, d);
-        return d;
-      }),
+    (next: (d: Draft, prev: Draft, storedWords: string) => Draft) => {
+      const prev = current.current;
+      const stored = readGatherDraft(myId, notebookId);
+      const storedWords = stored ? stored.content : prev.content;
+      const base = stored
+        ? { content: mergeWords(storedWords, prev.content, prev.content), sectionId: stored.sectionId, quotes: stored.quotes }
+        : prev;
+      const d = next(base, prev, storedWords);
+      writeGatherDraft(myId, notebookId, d);
+      current.current = d;
+      setDraft(d);
+    },
     [myId, notebookId],
   );
   const value = useMemo<GatherValue | null>(() => {
@@ -87,9 +140,15 @@ export function NoteGatherProvider({ notebookId, children }: { notebookId: strin
         );
       },
       remove: (q) => update((d) => ({ ...d, quotes: d.quotes.filter((x) => keyOf(x) !== keyOf(q)) })),
-      setContent: (text) => update((d) => ({ ...d, content: text })),
+      setContent: (text) => update((d, prev, storedWords) => ({ ...d, content: mergeWords(storedWords, prev.content, text) })),
       setSectionId: (id) => update((d) => ({ ...d, sectionId: id })),
-      clear: () => update(() => ({ content: "", sectionId: null, quotes: [] })),
+      clear: () => update(() => EMPTY),
+      settle: (sent) =>
+        update((d) => {
+          const quotes = d.quotes.filter((q) => !sent.keys.has(keyOf(q)));
+          const content = wordsAfter(d.content, sent.content);
+          return { content, quotes, sectionId: content || quotes.length > 0 ? d.sectionId : null };
+        }),
       full: draft.quotes.length >= MAX_NOTE_QUOTES,
       open,
       setOpen,
@@ -130,8 +189,25 @@ export function AddToNote({ quote, className = "" }: { quote: GatherQuote; class
 
 /** The new note, docked at the foot of the side list: shown while it holds
     quotes or words, or just after a save. It tells the dialog its height
-    (--graph-gather-h), so the side list ends above it. */
-export function NoteGatherDock({ notebookId, onOpenDocument }: { notebookId: string; onOpenDocument: () => void }) {
+    (--graph-gather-h), so the side list ends above it. Where the Stitch box
+    would cover it, it sits above the box; under WIDE it folds there to its
+    header line, whose unfold folds the box (WALK5-12). */
+export function NoteGatherDock({
+  notebookId,
+  onOpenDocument,
+  onWritePage,
+  boxOpen = false,
+  onFoldBox,
+}: {
+  notebookId: string;
+  onOpenDocument: () => void;
+  /** Write a page from these (VIEW5-05): pick the quotes' documents and put
+      a write-a-page command in the Stitch box. Nothing is sent. Editors only. */
+  onWritePage?: (documentIds: string[], command: string) => void;
+  /** The Stitch box is open (its fold), and how to fold it. */
+  boxOpen?: boolean;
+  onFoldBox?: () => void;
+}) {
   const t = useT();
   const router = useRouter();
   const ime = useImeGuard();
@@ -145,10 +221,46 @@ export function NoteGatherDock({ notebookId, onOpenDocument }: { notebookId: str
     | null
   >(null);
   const ref = useRef<HTMLDivElement>(null);
+  // One save at a time: a second ⌘↵ before the first answers does nothing (REV5-04).
+  const saving = useRef(false);
+  // The quotes and words of the note just saved, so its saved line can still
+  // write a page from them (VIEW5-05).
+  const [lastSaved, setLastSaved] = useState<{ quotes: GatherQuote[]; content: string } | null>(null);
   const drafting = Boolean(gather && (gather.quotes.length > 0 || gather.content));
-  // A new quote after a save starts the next note: the saved line gives way.
+  // A new quote after a save, or words kept from during it, start the next
+  // note: the saved line moves into its composer.
   const savedLine = saved !== null && !drafting;
   const shown = drafting || savedLine;
+  // How far the dock sits above the dialog's foot to clear the Stitch box, 0
+  // when the box does not reach it (WALK5-12).
+  const [lift, setLift] = useState(0);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const dialog = el?.closest<HTMLElement>(".graph-overlay");
+    const slot = dialog?.querySelector<HTMLElement>("[data-stitch-slot]");
+    if (!el || !dialog || !slot) {
+      setLift(0);
+      return;
+    }
+    const measure = () => {
+      const box = (slot.firstElementChild ?? slot).getBoundingClientRect();
+      const frame = dialog.getBoundingClientRect();
+      const dock = el.getBoundingClientRect();
+      const base = window.innerWidth < WIDE ? 64 : 12; // bottom-16 / bottom-3
+      const across = box.width > 0 && box.left < dock.right && box.right > dock.left;
+      const reaches = box.height > 0 && box.top < frame.bottom - base;
+      setLift(across && reaches ? Math.round(frame.bottom - box.top + 8) : 0);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(slot);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [shown, boxOpen]);
+  const compact = lift > 0 && typeof window !== "undefined" && window.innerWidth < WIDE;
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -180,16 +292,33 @@ export function NoteGatherDock({ notebookId, onOpenDocument }: { notebookId: str
       ? saved.noteId
       : ctx.findNote(saved.queued.sectionId, saved.queued.content, saved.queued.at);
 
+  // Write a page from these (VIEW5-05): the command, each quote with its
+  // document, then the reader's words. The draft is kept.
+  function writePage(quotes: GatherQuote[], content: string) {
+    if (!onWritePage || !ctx || quotes.length === 0) return;
+    const lines = quotes.map((q, i) => `${i + 1}. "${clipWords(q.text, 300)}" (${ctx.titleOf.get(q.documentId) ?? ""})`);
+    const words = content.trim();
+    onWritePage(
+      [...new Set(quotes.map((q) => q.documentId))],
+      [t("graphCover.composerWritePageCommand"), ...lines, ...(words ? [words] : [])].join("\n"),
+    );
+  }
+
   async function save() {
-    if (!gather || !chosen || busy || gather.quotes.length === 0) return;
+    if (!gather || !chosen || saving.current || gather.quotes.length === 0) return;
+    saving.current = true;
     setBusy(true);
     setError(null);
-    const words = gather.content.trim();
+    // What is sent: only this leaves the draft when the save answers. Words
+    // typed and quotes added meanwhile stay as the next note (REV5-04).
+    const sentQuotes = gather.quotes;
+    const sentContent = gather.content;
+    const words = sentContent.trim();
     try {
       const note = await api<{ id: string; content: string } | { queued: true }>("/api/notes", "POST", {
         sectionId: chosen.id,
         ...(words ? { content: words } : {}),
-        quotes: gather.quotes.map((q) => ({
+        quotes: sentQuotes.map((q) => ({
           documentId: q.documentId,
           ...(q.blockId ? { blockId: q.blockId } : {}),
           ...(q.whole ? {} : { quotedText: q.text }),
@@ -201,54 +330,83 @@ export function NoteGatherDock({ notebookId, onOpenDocument }: { notebookId: str
           ? { queued: { sectionId: chosen.id, content: words, at: Date.now() }, section: chosen.label }
           : { noteId: note.id, section: chosen.label },
       );
-      gather.clear();
+      setLastSaved({ quotes: sentQuotes, content: words });
+      gather.settle({ keys: new Set(sentQuotes.map(keyOf)), content: sentContent });
       refreshWhenOnline(router);
     } catch (err) {
       // The draft stays in the browser: the quotes and the words are kept.
       setError(err instanceof Error ? err.message : t("common.requestFailed"));
     } finally {
+      saving.current = false;
       setBusy(false);
     }
   }
 
+  const writePageButton = (quotes: GatherQuote[], content: string, track: string, extra = "") =>
+    onWritePage && quotes.length > 0 ? (
+      <button
+        type="button"
+        onClick={() => writePage(quotes, content)}
+        data-track={track}
+        data-graph-note-gather-write-page
+        data-tip={t("graphCover.composerWritePageTitle")}
+        className={`shrink-0 rounded-full border border-[color-mix(in_srgb,var(--kind-assistant)_45%,transparent)] px-2.5 py-0.5 text-[11px] font-semibold text-[var(--kind-assistant)] hover:bg-[color-mix(in_srgb,var(--kind-assistant)_8%,transparent)] ${extra}`}
+      >
+        {t("graphCover.composerWritePage")}
+      </button>
+    ) : null;
+
+  // The saved line: alone after a save, or at the head of the next note's
+  // composer when words or quotes came after the ones sent.
+  const savedRow = saved ? (
+    <p data-graph-note-gather-saved={savedId ?? ""} role="status" className="flex items-center gap-1.5 text-[12px] text-sage-700">
+      <NotesIcon size={12} />
+      <span className="min-w-0 flex-1">
+        {savedId ? t("graphCover.composerSaved", { section: saved.section }) : t("graphCover.composerQueued", { section: saved.section })}
+      </span>
+      {!drafting && lastSaved && writePageButton(lastSaved.quotes, lastSaved.content, "graph-note-gather-saved-write-page")}
+      {savedId && (
+        <button
+          onClick={() => ctx.showNote(savedId)}
+          data-track="graph-note-gather-show"
+          className="rounded-full bg-sage-100 px-2 py-0.5 text-[11px] font-semibold text-sage-800 hover:bg-sage-200"
+        >
+          {t("graphCover.composerShow")}
+        </button>
+      )}
+      <button
+        onClick={() => setSaved(null)}
+        aria-label={t("common.close")}
+        data-tip={t("common.close")}
+        className="flex size-6 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
+      >
+        ✕
+      </button>
+    </p>
+  ) : null;
+
   const frame =
     "graph-note-gather menu-in absolute z-20 flex flex-col gap-1.5 rounded-[20px] border border-sage-300 bg-card/95 p-3 shadow-float backdrop-blur-md right-3 bottom-3 w-[400px] max-w-[calc(100vw-24px)] max-[999px]:bottom-16";
+  const place = lift > 0 ? { bottom: lift } : undefined;
 
   if (saved && savedLine) {
     return (
-      <div ref={ref} data-graph-note-gather="saved" className={frame}>
-        <p
-          data-graph-note-gather-saved={savedId ?? ""}
-          className="flex items-center gap-1.5 text-[12px] text-sage-700"
-        >
-          <NotesIcon size={12} />
-          <span className="min-w-0 flex-1">
-            {savedId ? t("graphCover.composerSaved", { section: saved.section }) : t("graphCover.composerQueued", { section: saved.section })}
-          </span>
-          {savedId && (
-            <button
-              onClick={() => ctx.showNote(savedId)}
-              data-track="graph-note-gather-show"
-              className="rounded-full bg-sage-100 px-2 py-0.5 text-[11px] font-semibold text-sage-800 hover:bg-sage-200"
-            >
-              {t("graphCover.composerShow")}
-            </button>
-          )}
-          <button
-            onClick={() => setSaved(null)}
-            aria-label={t("common.close")}
-            data-tip={t("common.close")}
-            className="flex size-6 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
-          >
-            ✕
-          </button>
-        </p>
+      <div ref={ref} data-graph-note-gather="saved" className={frame} style={place}>
+        {savedRow}
       </div>
     );
   }
 
   return (
-    <div ref={ref} data-graph-note-gather={gather.open ? "open" : "folded"} data-track-surface="graph-note-gather" className={frame}>
+    <div
+      ref={ref}
+      data-graph-note-gather={gather.open && !compact ? "open" : "folded"}
+      data-graph-note-gather-lift={lift > 0 ? lift : undefined}
+      data-track-surface="graph-note-gather"
+      className={frame}
+      style={place}
+    >
+      {!compact && savedRow}
       <div className="flex items-center gap-2">
         <NotesIcon size={13} />
         <p className="min-w-0 flex-1 truncate text-[12.5px]">
@@ -256,17 +414,23 @@ export function NoteGatherDock({ notebookId, onOpenDocument }: { notebookId: str
           <span data-graph-note-gather-summary className="text-sand-600"> · {summary}</span>
         </p>
         <button
-          onClick={() => gather.setOpen(!gather.open)}
-          aria-expanded={gather.open}
-          aria-label={t(gather.open ? "graphCover.composerFold" : "graphCover.composerUnfold")}
-          data-tip={t(gather.open ? "graphCover.composerFold" : "graphCover.composerUnfold")}
+          onClick={() => {
+            // Folded over the Stitch box: unfolding folds the box (WALK5-12).
+            if (compact) {
+              gather.setOpen(true);
+              onFoldBox?.();
+            } else gather.setOpen(!gather.open);
+          }}
+          aria-expanded={gather.open && !compact}
+          aria-label={t(gather.open && !compact ? "graphCover.composerFold" : "graphCover.composerUnfold")}
+          data-tip={t(gather.open && !compact ? "graphCover.composerFold" : "graphCover.composerUnfold")}
           data-track="graph-note-gather-fold"
           className="flex size-6 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
         >
-          <ChevronDownIcon size={13} className={gather.open ? "" : "rotate-180"} />
+          <ChevronDownIcon size={13} className={gather.open && !compact ? "" : "rotate-180"} />
         </button>
       </div>
-      {gather.open && (
+      {gather.open && !compact && (
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -346,12 +510,14 @@ export function NoteGatherDock({ notebookId, onOpenDocument }: { notebookId: str
                 {error}
               </span>
             )}
+            {writePageButton(gather.quotes, gather.content, "graph-note-gather-write-page", error ? "" : "mr-auto")}
             <button
               type="button"
               onClick={() => {
                 if (!window.confirm(t("graphCover.composerDiscardConfirm"))) return;
                 gather.clear();
                 setError(null);
+                setSaved(null);
               }}
               data-track="graph-note-gather-discard"
               className="rounded-full border border-line px-2.5 py-0.5 text-[11px] text-sand-700 hover:bg-clay-100"

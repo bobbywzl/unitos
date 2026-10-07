@@ -198,6 +198,8 @@ export type GatherDraftQuote = {
 export type GatherDraft = { content: string; sectionId: string | null; quotes: GatherDraftQuote[]; savedAt: number };
 
 const gatherKey = (account: string, notebookId: string) => `${GATHER_PREFIX}${accountPart(account)}:${notebookId}`;
+/** The storage key of the draft, for a storage event from another tab (REV5-03). */
+export const gatherDraftKey = gatherKey;
 
 function gatherQuote(raw: unknown): GatherDraftQuote | null {
   if (!raw || typeof raw !== "object") return null;

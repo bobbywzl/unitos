@@ -47,6 +47,10 @@ const en = {
   composerQueued: "Saved offline. It lands in {section} once you are back online.",
   composerShow: "Show",
   composerOpenQuote: "Open this passage in the reader",
+  // Write a page from these (note-gather.tsx, VIEW5-05).
+  composerWritePage: "Write a page from these",
+  composerWritePageTitle: "Adds these quotes' documents to the pick and puts a command in the Stitch box. Nothing is sent until you press Send.",
+  composerWritePageCommand: "Write one page from these passages, in this order, and keep each as a quote:",
 
   // The reader's Annotations tab (link-card-extras.tsx)
   provenanceUsedBy: "Used by {title}",
@@ -96,6 +100,9 @@ const zh: Record<keyof typeof en, string> = {
   composerQueued: "已离线保存。恢复联网后会存入 {section}。",
   composerShow: "查看",
   composerOpenQuote: "在阅读器中打开这个片段",
+  composerWritePage: "用这些写一页",
+  composerWritePageTitle: "把这些引文所在的文档加入选取，并在缝合框中写好命令。按发送之前不会发出任何内容。",
+  composerWritePageCommand: "按这个顺序，用下面这些片段写一页，每段都作为引文保留：",
 
   provenanceUsedBy: "被 {title} 使用",
   provenanceFrom: "来自 {title}",
