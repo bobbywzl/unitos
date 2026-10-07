@@ -324,7 +324,7 @@ export function StitchBox({
     <div
       ref={regionRef}
       data-track-surface="sidebar"
-      className="relative flex w-full flex-col rounded-[22px] border border-line bg-card/95 shadow-float backdrop-blur-md print:hidden"
+      className="relative flex max-h-full min-h-0 w-full flex-col rounded-[22px] border border-line bg-card/95 shadow-float backdrop-blur-md print:hidden"
       role="region"
       aria-label={t("stitch.stitch")}
     >
@@ -415,7 +415,9 @@ export function StitchBox({
       )}
 
       {(turns.length > 0 || pending) && (
-        <div ref={bodyRef} className="flex max-h-[40vh] flex-col gap-2.5 overflow-y-auto px-4 pt-3">
+        // The conversation scrolls inside the box, which the overlay caps
+        // (WALK2-04); a screen reader hears each answer land (REV2-11).
+        <div ref={bodyRef} role="log" aria-live="polite" className="flex max-h-[40vh] min-h-0 flex-col gap-2.5 overflow-y-auto px-4 pt-3">
           {turns.map((turn, i) =>
             turn.role === "user" ? (
               <p key={i} className="ml-auto max-w-[85%] rounded-2xl bg-sand-100 px-3.5 py-2 text-[13px] text-sand-800">

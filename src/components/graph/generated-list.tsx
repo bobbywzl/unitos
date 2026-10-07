@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/api";
 import { useCollab } from "@/components/collab/collab-context";
-import { useT } from "@/components/lang-provider";
+import { useLang, useT } from "@/components/lang-provider";
+import { replyTime } from "@/components/collab/reply-thread";
 import type { GeneratedDocumentView } from "@/lib/types";
 
 // Generated content (SPEC.md §22): every document Stitch wrote for the
@@ -22,6 +23,7 @@ export function GeneratedList({
   onOpenDocument: () => void;
 }) {
   const t = useT();
+  const lang = useLang();
   const router = useRouter();
   const { canEdit } = useCollab();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -73,7 +75,7 @@ export function GeneratedList({
               </span>
             )}
             <span className="mt-1 block text-[11px] text-sand-500">
-              {t("stitch.blockCount", { n: g.blockCount })} · {new Date(g.createdAt).toLocaleString()}
+              {t("stitch.blockCount", { n: g.blockCount })} · {replyTime(g.createdAt, lang)}
             </span>
           </button>
           {canEdit && (
