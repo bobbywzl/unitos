@@ -433,6 +433,23 @@ const TOOL_LAYER = "z-40";
 // to press (the narrow reader puts cards in the text, under the words).
 const TOOLBOX_LAYER = "z-[41]";
 
+// The keyboard and the layers (SPEC.md §6): the box of each card a key can
+// open, what in it can take the focus, and how long after a key press an
+// opening or a closing counts as the key's.
+const CARD_OF_LAYER: Record<string, string> = {
+  explain: '[data-side-card="explain"]',
+  simplify: '[data-side-card="simplify"]',
+  assistant: '[data-side-card="assistant"]',
+  comment: '[data-side-card="comment"]',
+  link: '[data-side-card="link"]',
+  annotation: "[data-annotation-card]",
+  extract: "[data-extract-card]",
+  chooser: "[data-stack-chooser]",
+};
+const FOCUSABLE =
+  'button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+const KEY_FOCUS_MS = 2000;
+
 // One toolbar per content kind (SPEC.md §6). The popover shows the tools of
 // the kind under the selection and nothing else: a tool missing from a
 // kind's list is not offered there. The first tool of a kind after the
@@ -2747,6 +2764,35 @@ export function ReaderInteractions({
     layerSeenRef.current[layer] = key;
     if (key !== null) layerOpenedRef.current[layer] = nextLayerSeq();
   }
+  // The keyboard (SPEC.md §6): a card opened from the keys takes the focus,
+  // and a layer closed from the keys gives it back to what opened it — the
+  // mark or chip, the page editor's words — else to a mark in the card's
+  // paragraph. Each layer's opening and closing is noted here and acted on
+  // after the render (useEffect below).
+  const layerShownRef = useRef<Record<string, boolean>>({});
+  const layerOpenerRef = useRef<Record<string, { el: HTMLElement | null; blockId: string | null }>>({});
+  const layerFocusRef = useRef<{ opened: string | null; closed: string[] }>({ opened: null, closed: [] });
+  const layerBlocks: Record<string, string | null | undefined> = {
+    explain: bubble?.anchor?.blockId,
+    simplify: simplifyCard?.anchor?.blockId,
+    assistant: assistantChat?.anchor?.blockId,
+    comment: commentCard?.anchor?.blockId,
+    link: linkCard?.anchor?.blockId,
+    annotation: annotationCard?.anchor?.blockId,
+  };
+  for (const [layer, key] of Object.entries(layerKeys)) {
+    const shown = key !== null;
+    if (Boolean(layerShownRef.current[layer]) === shown) continue;
+    layerShownRef.current[layer] = shown;
+    if (shown) {
+      const active = typeof document === "undefined" ? null : document.activeElement;
+      layerOpenerRef.current[layer] = {
+        el: active instanceof HTMLElement && active !== document.body ? active : null,
+        blockId: layerBlocks[layer] ?? null,
+      };
+      layerFocusRef.current.opened = layer;
+    } else layerFocusRef.current.closed.push(layer);
+  }
   // What a card's box holds that the reader typed and has not sent: kept by
   // the card's annotation, so a card closed by Escape or a click reopens from
   // its mark with the words still in its box.
@@ -2918,6 +2964,114 @@ export function ReaderInteractions({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
+  // The keyboard and the layers (SPEC.md §6), after each render: a card
+  // opened from the keys takes the focus — its field, else its first
+  // control; a layer closed from the keys, with the focus gone with it,
+  // gives the focus back to what opened it.
+  const keyAtRef = useRef(0);
+  // The card the keys opened, while its run lands: a card that draws its
+  // answer anew (its streaming box gives way to the answer) loses the focus
+  // to the page, and it comes back to the card — until a press elsewhere.
+  const keyCardRef = useRef<{ layer: string; until: number } | null>(null);
+  useEffect(() => {
+    const onKey = () => {
+      keyAtRef.current = Date.now();
+    };
+    const onPointer = () => {
+      keyAtRef.current = 0;
+      keyCardRef.current = null;
+    };
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("pointerdown", onPointer, true);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("pointerdown", onPointer, true);
+    };
+  }, []);
+  useEffect(() => {
+    const { opened, closed } = layerFocusRef.current;
+    const held = keyCardRef.current;
+    if (opened === null && closed.length === 0) {
+      if (!held || Date.now() > held.until || document.activeElement !== document.body) return;
+      const card = containerRef.current?.querySelector<HTMLElement>(CARD_OF_LAYER[held.layer] ?? "");
+      Array.from(card?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])
+        .find((el) => el.dataset.track !== "annotation-drag")
+        ?.focus({ preventScroll: true });
+      return;
+    }
+    keyCardRef.current = null;
+    layerFocusRef.current = { opened: null, closed: [] };
+    const container = containerRef.current;
+    if (!container || Date.now() - keyAtRef.current > KEY_FOCUS_MS) return;
+    const words = (blockId: string | null) => {
+      const editor = richTextRef.current ? pageEditorIn(container) : null;
+      if (editor) {
+        editor.view.focus();
+        return;
+      }
+      if (!blockId) return;
+      container
+        .querySelector<HTMLElement>(`[data-block-id="${CSS.escape(blockId)}"] [data-source-id][tabindex="0"]`)
+        ?.focus({ preventScroll: true });
+    };
+    requestAnimationFrame(() => {
+      const active = document.activeElement;
+      const card = opened && CARD_OF_LAYER[opened] ? container.querySelector<HTMLElement>(CARD_OF_LAYER[opened]) : null;
+      if (card) {
+        if (card.contains(active)) return;
+        // Its field, else its first control past the grip that drags it.
+        const target =
+          card.querySelector<HTMLElement>("textarea:not([disabled]), input:not([disabled])") ??
+          Array.from(card.querySelectorAll<HTMLElement>(FOCUSABLE)).find((el) => el.dataset.track !== "annotation-drag");
+        target?.focus({ preventScroll: true });
+        if (opened) keyCardRef.current = { layer: opened, until: Date.now() + 15_000 };
+        return;
+      }
+      // The focus is gone with the layer: on the page's body, or in the
+      // card that leaves (Presence keeps it for its exit, inert).
+      if (active && active !== document.body && active.isConnected && !active.closest(".presence-exit")) return;
+      const layer = closed[closed.length - 1];
+      const opener = layer ? layerOpenerRef.current[layer] : undefined;
+      if (!opener) return;
+      if (opener.el?.isConnected && !opener.el.closest(".ProseMirror")) opener.el.focus({ preventScroll: true });
+      else if (opener.el?.closest(".ProseMirror") || layer !== "popover") words(opener.blockId);
+    });
+  });
+  // Tab and the toolbox (SPEC.md §6): while the toolbox is open and the
+  // focus is on the page — the words, the page editor's text — Tab goes to
+  // its first row, before the marks and chips after the words; Shift+Tab on
+  // its first row gives the focus back to the words, the selection kept.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const onTab = (e: KeyboardEvent) => {
+      if (e.key !== "Tab" || e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+      if (!popoverRef.current) return;
+      const box = container.querySelector<HTMLElement>("[data-layer-toolbar]");
+      const rows = box ? Array.from(box.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => el.getClientRects().length > 0) : [];
+      if (!box || rows.length === 0) return;
+      const active = document.activeElement;
+      if (active && box.contains(active)) {
+        if (!e.shiftKey || active !== rows[0]) return;
+        e.preventDefault();
+        const editor = richTextRef.current ? pageEditorIn(container) : null;
+        if (editor) editor.view.focus();
+        else (active as HTMLElement).blur();
+        return;
+      }
+      const onPage =
+        !active ||
+        active === document.body ||
+        (container.contains(active) &&
+          (active.closest(".ProseMirror") !== null || active.matches("mark") || !active.matches(FOCUSABLE)));
+      if (!onPage || e.shiftKey) return;
+      e.preventDefault();
+      e.stopPropagation();
+      rows[0].focus({ preventScroll: true });
+    };
+    document.addEventListener("keydown", onTab, true);
+    return () => document.removeEventListener("keydown", onTab, true);
+  }, []);
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -9076,6 +9230,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   // the other (the pair's box is display: contents).
   const pairRow = (both: boolean) => (coarse && both ? "grid grid-cols-2 gap-0.5" : "contents");
   const halfRow = "px-2.5 py-2.5 text-[14px]";
+  // The head icons of a card a mark opens (✓, Link, Delete, ✕): 36px on a
+  // coarse pointer, as the toolbox's rows are.
+  const cardIcon = coarse ? "size-9" : "size-6";
   // The assistant's bar (SPEC.md §29) takes the selection box's Assistant on
   // a blank document or an import, for a reader who can edit it, out of
   // Viewing mode. A figure has no words to change: its Assistant keeps the
@@ -10076,18 +10233,52 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               {annotationGrip(annotationCardReference)}
               {annotationCard.kind === "highlight" ? t("reader.highlight") : t("reader.comment")}
             </span>
-            <button
-              onClick={() => setAnnotationCard(null)}
-              data-track="annotation-close"
-              aria-label={t("common.close")}
-              data-tip={t("common.close")}
-              className="rounded-full px-1.5 text-sand-500 hover:text-clay-800"
-            >
-              ✕
-            </button>
+            {/* One head for every card a mark opens (SPEC.md §6): the kind,
+                then Link across texts (a highlight), Delete, and ✕. */}
+            <span className="ml-auto flex items-center gap-0.5">
+              {/* A link across texts starts from the highlight: the next
+                  words the reader selects, here or in another text, close it. */}
+              {annotationCard.kind === "highlight" && (
+                <button
+                  onClick={(e) => {
+                    window.dispatchEvent(
+                      new CustomEvent("dissect:start-link", {
+                        detail: { sourceId: annotationCard.sourceId, origin: e.currentTarget },
+                      }),
+                    );
+                    setAnnotationCard(null);
+                  }}
+                  data-track="link-chip"
+                  aria-label={t("reader.linkAcrossTexts")}
+                  data-tip={t("reader.linkTitle")}
+                  className={`flex ${cardIcon} items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800`}
+                >
+                  <UnlinkIcon size={coarse ? 15 : 13} />
+                </button>
+              )}
+              <button
+                onClick={() => void deleteAnnotation()}
+                data-track="annotation-delete"
+                aria-label={t("common.delete")}
+                data-tip={annotationCard.kind === "highlight" ? t("reader.deleteHighlightTitle") : t("reader.deleteCommentTitle")}
+                disabled={annotationCard.busy}
+                className={`flex ${cardIcon} items-center justify-center rounded-full text-sand-600 hover:bg-red-50 hover:text-red-600 disabled:opacity-40`}
+              >
+                <TrashIcon size={coarse ? 15 : 13} />
+              </button>
+              <button
+                onClick={() => setAnnotationCard(null)}
+                data-track="annotation-close"
+                aria-label={t("common.close")}
+                data-tip={t("common.close")}
+                className={`flex ${cardIcon} items-center justify-center rounded-full text-xs text-sand-500 hover:text-clay-800`}
+              >
+                ✕
+              </button>
+            </span>
           </div>
           {annotationCard.kind === "highlight" && (
-            <div className="mb-2.5 flex items-center gap-2">
+            <div className={`mb-2.5 flex items-center ${coarse ? "gap-3" : "gap-2"}`}>
               {HIGHLIGHT_HUES.map((color) => (
                 <button
                   key={color}
@@ -10096,7 +10287,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   disabled={annotationCard.busy}
                   aria-label={t("reader.recolor", { color: t(HUE_KEY[color]) })}
                   data-tip={t("reader.recolor", { color: t(HUE_KEY[color]) })}
-                  className={`size-5 rounded-full disabled:opacity-40 ${
+                  className={`${coarse ? "size-7" : "size-5"} rounded-full disabled:opacity-40 ${
                     annotationCard.color === color ? "ring-2 ring-sand-600 ring-offset-2" : ""
                   }`}
                   style={{ background: HUE_DOT[color] }}
@@ -10138,45 +10329,14 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 : "group-focus-within/hlcard:min-h-[4.5rem]"
             }`}
           />
-          <div className="mt-2 flex items-center justify-between">
-            <span className="flex items-center gap-3">
-              <button
-                onClick={() => void deleteAnnotation()}
-                data-track="annotation-delete"
-                data-tip={annotationCard.kind === "highlight" ? t("reader.deleteHighlightTitle") : t("reader.deleteCommentTitle")}
-                disabled={annotationCard.busy}
-                className="text-xs font-semibold text-red-500 hover:text-red-700 disabled:opacity-40"
-              >
-                {t("common.delete")}
-              </button>
-              {/* A link across texts starts from the highlight: the next
-                  words the reader selects, here or in another text, close it. */}
-              {annotationCard.kind === "highlight" && (
-                <button
-                  onClick={(e) => {
-                    window.dispatchEvent(
-                      new CustomEvent("dissect:start-link", {
-                        detail: { sourceId: annotationCard.sourceId, origin: e.currentTarget },
-                      }),
-                    );
-                    setAnnotationCard(null);
-                  }}
-                  data-track="link-chip"
-                  aria-label={t("panes.linkToOtherTexts")}
-                  data-tip={t("panes.linkToOtherTexts")}
-                  className="flex size-6 items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800"
-                >
-                  <UnlinkIcon size={12} />
-                </button>
-              )}
-            </span>
-            {/* The mic and Save show once the reader writes: a card opened to
-                recolor or delete holds no dead buttons. */}
-            <span
-              className={`items-center gap-1.5 ${
-                annotationCard.draft.trim() !== annotationCard.saved.trim() ? "flex" : "hidden group-focus-within/hlcard:flex"
-              }`}
-            >
+          {/* The mic and Save show once the reader writes: a card opened to
+              recolor or delete holds no dead buttons. */}
+          <div
+            className={`mt-2 items-center justify-end ${
+              annotationCard.draft.trim() !== annotationCard.saved.trim() ? "flex" : "hidden group-focus-within/hlcard:flex"
+            }`}
+          >
+            <span className="flex items-center gap-1.5">
               <VoiceTypingButton track="annotation-voice-typing" />
               <button
                 onClick={() => void saveAnnotation()}
@@ -10200,6 +10360,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           return (
             <div
               data-selection-popover
+              data-extract-card
               className={`pop-in absolute ${TOOL_LAYER} w-[300px] rounded-2xl bg-card p-3 shadow-float${underView}`}
               style={{ top: extractCard.top, left: extractCard.left }}
             >
@@ -11242,9 +11403,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   data-track="comment-card-resolve"
                   aria-label={t("common.resolve")}
                   data-tip={t("docsLayer.resolveTitle")}
-                  className="flex size-6 items-center justify-center rounded-full text-sand-600 hover:bg-sage-100 hover:text-sage-700"
+                  className={`flex ${cardIcon} items-center justify-center rounded-full text-sand-600 hover:bg-sage-100 hover:text-sage-700`}
                 >
-                  <CheckIcon size={14} />
+                  <CheckIcon size={coarse ? 16 : 14} />
                 </button>
               )}
               {commentCard.noteId && (
@@ -11254,15 +11415,15 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   aria-label={t("common.delete")}
                   data-tip={t("reader.deleteCommentTitle")}
                   disabled={commentCard.busy}
-                  className="flex size-6 items-center justify-center rounded-full text-sand-600 hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                  className={`flex ${cardIcon} items-center justify-center rounded-full text-sand-600 hover:bg-red-50 hover:text-red-600 disabled:opacity-40`}
                 >
-                  <TrashIcon size={13} />
+                  <TrashIcon size={coarse ? 15 : 13} />
                 </button>
               )}
               <button
                 onClick={closeCommentCard}
                 data-track="comment-card-close"
-                className="flex size-6 items-center justify-center rounded-full text-xs text-sand-500 hover:text-clay-700"
+                className={`flex ${cardIcon} items-center justify-center rounded-full text-xs text-sand-500 hover:text-clay-700`}
                 aria-label={t("common.close")}
                 data-tip={t("common.close")}
               >
@@ -11352,7 +11513,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             <button
               onClick={closeLinkCard}
               data-track="link-card-close"
-              className="text-xs text-sand-500 hover:text-clay-700"
+              className={`flex ${cardIcon} items-center justify-center rounded-full text-xs text-sand-500 hover:text-clay-700`}
               aria-label={t("common.close")}
               data-tip={t("common.close")}
             >
