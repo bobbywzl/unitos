@@ -1258,6 +1258,12 @@ export function attachFigureRegions(
       follow.page !== cap.page ||
       follow.lineSize === undefined ||
       cap.lineSize === undefined ||
+      // A paragraph wholly beside the caption, sharing no column with it,
+      // is the text's (parse loop finding: a Tufte book's margin caption
+      // "Figure 29.4:", its words left out, took the paragraph left of it,
+      // "where z is measured in picometers…", for its words).
+      follow.box.x2 <= box.x1 ||
+      follow.box.x1 >= box.x2 ||
       (Math.abs(follow.lineSize - cap.lineSize) >= 0.6 && !(tail !== undefined && Math.abs(follow.lineSize - tail) < 0.6)) ||
       box.y1 - follow.box.y2 > cap.lineSize * ctx.leading * 0.9 ||
       (cap.lineSize >= ctx.bodySize * 0.98 && follow.text.length >= 240 && box.y1 - follow.box.y2 > cap.lineSize * 0.35) ||

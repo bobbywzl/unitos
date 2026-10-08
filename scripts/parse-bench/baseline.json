@@ -4396,9 +4396,9 @@
     "free.import.mathRows": 0
   },
   "qm-madsen-ch29-34": {
-    "free.parse.composite": 98.6892,
+    "free.parse.composite": 98.6871,
     "free.parse.coverage": 0.9846,
-    "free.parse.coverageRecall": 0.9785,
+    "free.parse.coverageRecall": 0.9784,
     "free.parse.coveragePrecision": 0.9909,
     "free.parse.furniture": 1,
     "free.parse.furnitureLeaks": 0,
@@ -4431,9 +4431,9 @@
     "free.parse.mathPassed": 1,
     "free.parse.mathCheck": 1,
     "free.parse.mathRows": 0,
-    "free.import.composite": 98.7846,
+    "free.import.composite": 98.7826,
     "free.import.coverage": 0.9846,
-    "free.import.coverageRecall": 0.9785,
+    "free.import.coverageRecall": 0.9784,
     "free.import.coveragePrecision": 0.9909,
     "free.import.furniture": 1,
     "free.import.furnitureLeaks": 0,
