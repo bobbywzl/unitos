@@ -125,7 +125,7 @@ export type OutlineActions = {
   /** Delete with Undo (SPEC.md §6): the notes leave the list at once, and
       the Undo pill offers them back until it goes; only then does the
       server delete them. */
-  removeNotes: (ids: string[]) => void;
+  removeNotes: (ids: string[], composed?: boolean) => void;
   lastDelete: LastDelete | null;
   undoDelete: () => void;
   /** A line for the pill under the notes: a change that did not reach the
@@ -157,8 +157,14 @@ export type OutlineActions = {
   mergeUndoable: boolean;
   /** Undo the last merge. Resolves to the reason when it could not run. */
   undoMerge: () => Promise<string | null>;
-  /** The pill's ✕: the merge stays, and a delete waiting on Undo runs now. */
+  /** The pill's ✕: the merge stays, a canceled edit stays canceled, and a
+      delete waiting on Undo runs now. */
   dismissMerge: () => void;
+  /** An editor's Cancel put a note back to its text when the editor opened:
+      the pill offers the typed words back (SPEC.md §6). */
+  editCanceled: (noteId: string, typed: string) => void;
+  lastCancel: { noteId: string; content: string } | null;
+  undoCancel: () => void;
   setPinned: (id: string, pinned: boolean) => Promise<void>;
   acceptNote: (id: string) => Promise<void>;
   rejectNote: (id: string) => Promise<void>;
@@ -606,6 +612,13 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
   // and says so: a note is never gone from the screen while it is still
   // on the server, nor gone from the server while Undo is on the screen.
   const [lastDelete, setLastDelete] = useState<LastDelete | null>(null);
+  // The words an editor's Cancel took out of a note, while Undo can put them back.
+  const [lastCancel, setLastCancel] = useState<{ noteId: string; content: string } | null>(null);
+  useEffect(() => {
+    if (!lastCancel) return;
+    const timer = setTimeout(() => setLastCancel(null), MERGE_UNDO_MS);
+    return () => clearTimeout(timer);
+  }, [lastCancel]);
   const waitingDelete = useRef<{ ids: string[]; timer: ReturnType<typeof setTimeout> } | null>(null);
   // A note History's Restore put back (lib/notes/removed.ts): if this tab
   // deleted it, it is in hidden still; it shows again with the refresh.
@@ -684,8 +697,9 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
     };
   }, []);
   const removeNotes = useCallback(
-    (ids: string[]) => {
-      const present = ids.filter((id) => placeOf(treeRef.current, id));
+    (ids: string[], composed = false) => {
+      // composed: the composer's own note, which the list may not hold yet.
+      const present = composed ? ids : ids.filter((id) => placeOf(treeRef.current, id));
       if (present.length === 0) return;
       commitDelete();
       setLastMerge(null);
@@ -1282,7 +1296,24 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
     undoMerge,
     dismissMerge() {
       setLastMerge(null);
+      setLastCancel(null);
       commitDelete();
+    },
+    editCanceled(noteId, typed) {
+      setLastCancel({ noteId, content: typed });
+    },
+    lastCancel,
+    undoCancel() {
+      const canceled = lastCancel;
+      if (!canceled) return;
+      setLastCancel(null);
+      // The typed words go back into the note. The local draft holds them
+      // until the server has them, as for any save.
+      const before = placeOf(treeRef.current, canceled.noteId)?.note.content;
+      writeNoteDraft(canceled.noteId, canceled.content, before ?? canceled.content);
+      void actions
+        .saveNote(canceled.noteId, canceled.content)
+        .then(() => confirmNoteDraft(canceled.noteId, canceled.content), failure);
     },
     async setPinned(id, pinned) {
       // Optimistic: pinning also moves the note to the top of its section.

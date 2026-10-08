@@ -74,6 +74,8 @@ const en = {
   noteDeleted: "Note deleted",
   notesDeleted: "{n} notes deleted",
   undoDeleteTitle: "Put the deleted notes back",
+  editCanceled: "Edit canceled",
+  undoCancelTitle: "Put back the words typed in this edit",
   deleteFailed: "The note was not deleted and is back in its place: {reason}",
   // Words kept when their note went (SPEC.md §6, lib/notes/gone.ts).
   keptAsNewNote: "This note was deleted elsewhere. Your words are kept in a new note in its place.",
@@ -316,6 +318,8 @@ const zh: Record<keyof typeof en, string> = {
   noteDeleted: "笔记已删除",
   notesDeleted: "已删除 {n} 条笔记",
   undoDeleteTitle: "把删除的笔记放回原处",
+  editCanceled: "已取消编辑",
+  undoCancelTitle: "放回这次编辑里输入的文字",
   deleteFailed: "笔记没有删除，已放回原处：{reason}",
   keptAsNewNote: "这条笔记已在别处删除。你写的字已保存为原位置的一条新笔记。",
   quoteSourceLost: "引文已加入笔记。文档中的这段文字已改动，所以引文没有出处。",

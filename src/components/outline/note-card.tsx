@@ -177,6 +177,7 @@ type NoteCommands = Pick<
   | "acceptNote"
   | "rejectNote"
   | "removeNotes"
+  | "editCanceled"
 >;
 
 /** The outline's commands as one object for the card's life, each calling
@@ -204,6 +205,7 @@ function useCommands(actions: OutlineActions): NoteCommands {
       acceptNote: (...args) => latest.current.acceptNote(...args),
       rejectNote: (...args) => latest.current.rejectNote(...args),
       removeNotes: (...args) => latest.current.removeNotes(...args),
+      editCanceled: (...args) => latest.current.editCanceled(...args),
     }),
     [],
   );
@@ -529,7 +531,11 @@ const NoteCardBody = memo(function NoteCardBody({
   // Cancel takes the quote's words back out, so it gives them up too.
   const sitting = useRef<string[]>([]);
 
+  // Cancel puts the note back to its text when the editor opened; the pill
+  // offers the typed words back (SPEC.md §6).
   function cancel() {
+    const typed = draft.trim();
+    if (typed && typed !== getOriginal().trim()) commands.editCanceled(note.id, typed);
     cancelDraft();
     refocus.current = true;
     setEditing(false);
@@ -920,7 +926,8 @@ const NoteCardBody = memo(function NoteCardBody({
           onKeyDown={(e) => {
             if (isImeKey(e)) return;
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void done();
-            if (e.key === "Escape") cancel();
+            // Escape closes the editor keeping the words, as Done does.
+            if (e.key === "Escape") void done();
           }}
           full={!tray}
           onQuoteDrop={(drag) =>
@@ -933,7 +940,7 @@ const NoteCardBody = memo(function NoteCardBody({
               value={edit.title}
               onChange={editTitle}
               onEnter={() => focusBodyEditor(editCardRef.current)}
-              onEscape={cancel}
+              onEscape={() => void done()}
               className="shrink-0"
             />
           }

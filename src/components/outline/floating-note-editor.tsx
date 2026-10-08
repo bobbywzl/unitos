@@ -368,8 +368,10 @@ export function FloatingNoteEditor({
     actions.dockNote(editing);
   }
 
+  // Back to the tray, from the editing row: the words typed stay, as Done
+  // keeps them.
   function close() {
-    cancel();
+    void done();
     actions.dockNote(false);
   }
 
@@ -381,6 +383,9 @@ export function FloatingNoteEditor({
 
   // Cancel: the draft goes back; the card returns to its draggable mode.
   function cancelEdit() {
+    // The pill offers the typed words back (SPEC.md §6).
+    const typed = draft.trim();
+    if (note && typed && typed !== getOriginal().trim()) actions.editCanceled(note.id, typed);
     cancel();
     setEditing(false);
     const ids = sitting.current;
@@ -660,7 +665,8 @@ export function FloatingNoteEditor({
             onKeyDown={(e) => {
               if (isImeKey(e)) return;
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void done();
-              if (e.key === "Escape") cancelEdit();
+              // Escape closes the editor keeping the words, as Done does.
+              if (e.key === "Escape") void done();
             }}
             onQuoteDrop={(drag) =>
               note
@@ -676,7 +682,7 @@ export function FloatingNoteEditor({
                   setTitle(title);
                 }}
                 onEnter={() => focusBodyEditor(cardRef.current)}
-                onEscape={cancelEdit}
+                onEscape={() => void done()}
                 className="shrink-0"
               />
             }

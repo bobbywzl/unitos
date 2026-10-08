@@ -292,13 +292,22 @@ export function useNoteCompose({
     reset();
   }
 
-  /** Cancel: the draft is dropped, and the note the composer created is deleted. */
+  /** Cancel: the draft is dropped, and the note the composer created is
+      deleted — with Undo when it holds words: they are saved first, and the
+      pill gives the note back with them. */
   async function cancel() {
+    const typed = draftRef.current.trim();
     if (creatingRef.current) await creatingRef.current;
     // A create whose answer never came may still have made the note: its id names it.
     const id = noteIdRef.current ?? createIdRef.current;
+    if (id && typed && noteIdRef.current !== null) {
+      await chainRef.current;
+      if (typed !== lastSavedRef.current) await actions.saveNote(id, typed, baseRef.current).catch(() => {});
+    }
     reset();
-    if (id) await actions.deleteNote(id).catch(() => {});
+    if (!id) return;
+    if (typed) actions.removeNotes([id], true);
+    else await actions.deleteNote(id).catch(() => {});
   }
 
   /** Escape: a note with text is kept (Save); an empty one is dropped (Cancel). */
