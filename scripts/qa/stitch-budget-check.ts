@@ -788,8 +788,15 @@ check("replyLanguage command: a mixed or short command keeps the UI's", replyLan
   const cutB = skeletonSystem(views6, rd, new Set(["A2", "B1", "B4"]), prof6);
   const linesAt = cutA.indexOf("The skeleton lines read for this command:");
   check("skeletonSystem: a cut's headers and gists come first, byte-identical across cuts", linesAt > 0 && cutA.slice(0, linesAt) === cutB.slice(0, cutB.indexOf("The skeleton lines read for this command:")) && cutA.slice(0, linesAt).includes("gist: On pity.") && cutA.slice(0, linesAt).includes("gist: On the will."));
-  check("skeletonSystem: a cut's lines under [document X] \"title\": N of M skeleton lines shown, the gap marked (…)", cutA.includes("[document A] \"Pity\": 2 of 6 skeleton lines shown\n[block A1] line 1\n(…)\n[part at A3] \"Part two\": the second part\n[block A5] line 5") && !cutA.includes("not shown)"));
+  // COST7-01: the cut's part line has the summary only for a part the route pass named.
+  const cutRouted = skeletonSystem(views6, rd, new Set(["A1", "A5", "B2"]), prof6, new Set(["A3"]));
+  check("skeletonSystem: a cut's lines under [document X] \"title\": N of M skeleton lines shown, the gap marked (…)", cutRouted.includes("[document A] \"Pity\": 2 of 6 skeleton lines shown\n[block A1] line 1\n(…)\n[part at A3] \"Part two\": the second part\n[block A5] line 5") && !cutRouted.includes("not shown)"));
+  check("skeletonSystem: a cut prints an unrouted part's title and no summary (COST7-01)", cutA.includes("(…)\n[part at A3] \"Part two\"\n[block A5] line 5") && !cutA.includes("the second part"));
+  const cutOther = skeletonSystem(views6, rd, new Set(["A1", "A5", "B4"]), prof6, new Set(["B3"]));
+  check("skeletonSystem: a routed part keeps its summary, an unrouted one in the same cut drops it (COST7-01)", cutOther.includes("[part at B3] \"Part two\": the second part\n[block B4] line 4") && cutOther.includes("[part at A3] \"Part two\"\n[block A5]"));
+  check("skeletonSystem: a cut's lines and headers are the same with or without summaries (COST7-01)", cutA.replace(/: the second part/g, "") === cutRouted.replace(/: the second part/g, ""));
   const whole6 = skeletonSystem(views6, rd, null, prof6);
+  check("skeletonSystem: every line shown keeps every part's summary (COST7-01)", whole6.includes("[part at A3] \"Part two\": the second part\n[block A3] line 3") && whole6.includes("[part at B3] \"Part two\": the second part"));
   check("skeletonSystem: every line shown keeps the header, gist and lines together, no gap mark", /\[document A\] "Pity" \([^)]*\)\ngist: On pity\.\n\[block A1\] line 1\n\[block A2\]/.test(whole6) && !whole6.includes("(…)") && !whole6.includes("lines read for this command"));
   check("select prompt: the partial note names the gap mark", stitchSelectPrompt({ documents: [], command: "x", continued: false, earlier: [], cited: [], maxBlocks: 10, partial: true }).includes("(…) marks lines not shown between two lines."));
 
