@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useT } from "@/components/lang-provider";
 import { useModKey } from "@/components/outline/note-editor";
 import type { OutlineActions } from "@/components/outline/use-outline";
+import { usePostedUndo } from "@/lib/notes/undo-pill";
 
 /** The bottom pills (this one and the selection bar) are drawn on the body:
     inside the tray's scroll box a transformed ancestor would carry them off
@@ -44,18 +45,22 @@ export function MergeUndoBar({
     rejected: unknown;
     canceled: unknown;
     section: unknown;
-    newest: "merge" | "delete" | "reject" | "cancel" | "section" | null;
-  }>({ merge: null, removed: null, rejected: null, canceled: null, section: null, newest: null });
+    posted: unknown;
+    newest: "merge" | "delete" | "reject" | "cancel" | "section" | "posted" | null;
+  }>({ merge: null, removed: null, rejected: null, canceled: null, section: null, posted: null, newest: null });
   if (
     seen.merge !== actions.lastMerge ||
     seen.removed !== actions.lastDelete ||
     seen.rejected !== rejected ||
     seen.canceled !== actions.lastCancel ||
-    seen.section !== actions.lastSectionDelete
+    seen.section !== actions.lastSectionDelete ||
+    seen.posted !== actions.posted
   ) {
     const newest =
       rejected !== null && rejected !== seen.rejected
         ? "reject"
+        : actions.posted !== null && actions.posted !== seen.posted
+          ? "posted"
         : actions.lastCancel !== null && actions.lastCancel !== seen.canceled
           ? "cancel"
           : actions.lastSectionDelete !== null && actions.lastSectionDelete !== seen.section
@@ -71,13 +76,15 @@ export function MergeUndoBar({
       rejected,
       canceled: actions.lastCancel,
       section: actions.lastSectionDelete,
+      posted: actions.posted,
       newest,
     });
   }
-  const order = [seen.newest, "reject", "cancel", "section", "delete", "merge"] as const;
+  const order = [seen.newest, "reject", "posted", "cancel", "section", "delete", "merge"] as const;
   const shown = order.find(
     (kind) =>
       (kind === "reject" && rejected !== null) ||
+      (kind === "posted" && actions.posted !== null) ||
       (kind === "cancel" && actions.lastCancel !== null) ||
       (kind === "section" && actions.lastSectionDelete !== null) ||
       (kind === "delete" && actions.lastDelete !== null) ||
@@ -88,6 +95,7 @@ export function MergeUndoBar({
   const reject = shown === "reject" ? rejected : null;
   const canceled = shown === "cancel" ? actions.lastCancel : null;
   const section = shown === "section" ? actions.lastSectionDelete : null;
+  const posted = shown === "posted" ? actions.posted : null;
 
   // Ctrl+Z (⌘Z on a Mac) outside a text box presses the pill's Undo, so a
   // keyboard reader reaches it without walking to it. The article's own
@@ -95,7 +103,9 @@ export function MergeUndoBar({
   const mod = useModKey();
   const undo: (() => void) | null = reject
     ? () => onUndoReject?.()
-    : canceled
+    : posted
+      ? () => actions.undoPosted()
+      : canceled
       ? () => actions.undoCancel()
       : section
         ? () => void actions.undoSectionDelete()
@@ -108,23 +118,7 @@ export function MergeUndoBar({
                 });
               }
             : null;
-  const undoRef = useRef(undo);
-  useEffect(() => {
-    undoRef.current = undo;
-  });
-  const offered = undo !== null;
-  useEffect(() => {
-    if (!offered) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || !(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== "z") return;
-      const active = document.activeElement as HTMLElement | null;
-      if (active && (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active instanceof HTMLSelectElement || active.isContentEditable)) return;
-      e.preventDefault();
-      undoRef.current?.();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [offered]);
+  useUndoKey(undo);
   const keyTip = (title: string) => `${title}\n${mod}+Z`;
 
   useEffect(() => {
@@ -133,7 +127,7 @@ export function MergeUndoBar({
     return () => clearTimeout(timer);
   }, [error]);
 
-  if (!merge && !removed && !reject && !canceled && !section && !notice) return null;
+  if (!merge && !removed && !reject && !canceled && !section && !posted && !notice) return null;
   return onBody(
     <div role="status" data-undo-pill="" className={BOTTOM_PILL}>
       {reject ? (
@@ -148,6 +142,13 @@ export function MergeUndoBar({
             {t("outline.undo")}
           </button>
         </>
+      ) : posted ? (
+        <UndoRow
+          message={posted.message}
+          onUndo={() => actions.undoPosted()}
+          onDismiss={() => actions.dismissMerge()}
+          undoTip={keyTip(t("outline.undoPostedTitle"))}
+        />
       ) : canceled ? (
         <>
           {/* Cancel put the note back; Undo gives the typed words back. */}
@@ -269,6 +270,85 @@ export function MergeUndoBar({
           </button>
         </>
       )}
+    </div>,
+  );
+}
+
+/** What went, Undo, and ✕: the row of a posted delete. */
+function UndoRow({
+  message,
+  onUndo,
+  onDismiss,
+  undoTip,
+}: {
+  message: string;
+  onUndo: () => void;
+  onDismiss: () => void;
+  undoTip: string;
+}) {
+  const t = useT();
+  return (
+    <>
+      <span className="text-[13px] text-sand-600">{message}</span>
+      <button
+        onClick={onUndo}
+        data-track="undo-posted"
+        data-tip={undoTip}
+        className="rounded-full bg-clay px-3.5 py-1 text-xs font-semibold text-clay-fg hover:bg-clay-600"
+      >
+        {t("outline.undo")}
+      </button>
+      <button
+        onClick={onDismiss}
+        data-track="dismiss-posted"
+        aria-label={t("common.close")}
+        data-tip={t("common.close")}
+        className="text-sand-500 hover:text-clay-700"
+      >
+        ✕
+      </button>
+    </>
+  );
+}
+
+/** Ctrl+Z (⌘Z on a Mac) outside a text box presses Undo while `undo` is set. */
+function useUndoKey(undo: (() => void) | null) {
+  const undoRef = useRef(undo);
+  useEffect(() => {
+    undoRef.current = undo;
+  });
+  const offered = undo !== null;
+  useEffect(() => {
+    if (!offered) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || !(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== "z") return;
+      const active = document.activeElement as HTMLElement | null;
+      if (active && (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active instanceof HTMLSelectElement || active.isContentEditable)) return;
+      e.preventDefault();
+      undoRef.current?.();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [offered]);
+}
+
+/** The pill on a page without the notes (the annotations full page): a
+    delete posted to it (lib/notes/undo-pill.ts) shows here, with Undo, ✕,
+    and Ctrl+Z, as it does under the notes. */
+export function PostedUndoPill() {
+  const t = useT();
+  const mod = useModKey();
+  const { posted, undoPosted, settlePosted } = usePostedUndo();
+  useUndoKey(posted ? undoPosted : null);
+  if (!posted) return null;
+  return onBody(
+    <div role="status" data-undo-pill="" className={BOTTOM_PILL}>
+      <UndoRow
+        message={posted.message}
+        onUndo={undoPosted}
+        onDismiss={settlePosted}
+        undoTip={`${t("outline.undoPostedTitle")}\n${mod}+Z`}
+      />
     </div>,
   );
 }

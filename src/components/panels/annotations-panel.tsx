@@ -6,6 +6,7 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import type { AnnotationItem, LinkIn, LinkOut, SectionView } from "@/lib/types";
 import { api } from "@/lib/api";
+import { deleteNoteWithUndo, deletedKey } from "@/lib/notes/undo-pill";
 import { LINK_KIND_VAR } from "@/lib/annotations/kind";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
@@ -205,16 +206,10 @@ export function AnnotationsPanel({
 
   async function deleteAnnotation(id: string) {
     // The reader fades the annotation's mark at once (reader-interactions.tsx),
-    // and puts it back if the delete fails.
-    window.dispatchEvent(new CustomEvent("dissect:note-removed", { detail: { noteId: id } }));
-    await mutate(id, async () => {
-      try {
-        await api(`/api/notes/${id}`, "DELETE");
-      } catch (err) {
-        window.dispatchEvent(new CustomEvent("dissect:note-restored", { detail: { noteId: id } }));
-        throw err;
-      }
-    });
+    // and puts it back if the delete fails. The notes' pill offers Undo
+    // (lib/notes/undo-pill.ts).
+    const kind = every.find((a) => a.id === id)?.kind ?? "";
+    await mutate(id, () => deleteNoteWithUndo(id, t(deletedKey(kind)), () => router.refresh()));
   }
 
   async function removeLink(id: string) {

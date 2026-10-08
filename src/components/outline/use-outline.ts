@@ -22,6 +22,7 @@ import {
 } from "@/lib/note-drafts";
 import { announceKept, saveNoteText } from "@/lib/notes/save-text";
 import { joinNoteContents } from "@/lib/notes/join";
+import { usePostedUndo, type UndoPillPost } from "@/lib/notes/undo-pill";
 import type { QuoteDrag } from "@/lib/quote-drag";
 import { appendToBody } from "@/lib/note-title";
 import type { NotebookView, NoteView, SectionView } from "@/lib/types";
@@ -137,6 +138,10 @@ export type OutlineActions = {
   lastSectionDelete: LastSectionDelete | null;
   /** Put the deleted section back with its notes: History's Restore. */
   undoSectionDelete: () => Promise<void>;
+  /** A delete posted from outside the notes (lib/notes/undo-pill.ts): an
+      annotation, a comment, a conversation. The pill offers its Undo. */
+  posted: UndoPillPost | null;
+  undoPosted: () => void;
   /** A line for the pill under the notes: a change that did not reach the
       server and was put back, or news (words kept as a new note, a quote
       without its source). Null when there is nothing to say. */
@@ -765,12 +770,21 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
       commitDeleteRef.current();
     };
   }, []);
+  // A delete posted from outside the notes takes the pill: the notes' own
+  // waiting delete runs, and the other pills give way, as for a note's delete.
+  const { posted, undoPosted, settlePosted } = usePostedUndo(() => {
+    commitDeleteRef.current();
+    setLastMerge(null);
+    setLastCancel(null);
+    setLastSectionDelete(null);
+  });
   const removeNotes = useCallback(
     (ids: string[], composed = false) => {
       // composed: the composer's own note, which the list may not hold yet.
       const present = composed ? ids : ids.filter((id) => placeOf(treeRef.current, id));
       if (present.length === 0) return;
       commitDelete();
+      settlePosted();
       setLastMerge(null);
       setHidden((prev) => new Set([...prev, ...present]));
       // The reader fades the notes' marks at once (reader-interactions.tsx),
@@ -779,7 +793,7 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
       waitingDelete.current = { ids: present, timer: setTimeout(() => commitDeleteRef.current(), DELETE_UNDO_MS) };
       setLastDelete({ ids: present });
     },
-    [commitDelete],
+    [commitDelete, settlePosted],
   );
   const undoDelete = useCallback(() => {
     const waiting = waitingDelete.current;
@@ -1032,6 +1046,7 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
       const title = findSection(treeRef.current, id)?.title ?? "";
       const answer = await api<{ eventId?: unknown; noteCount?: unknown }>(`/api/sections/${id}`, "DELETE");
       if (typeof answer?.eventId === "string") {
+        settlePosted();
         setLastMerge(null);
         setLastCancel(null);
         setLastSectionDelete({
@@ -1232,6 +1247,8 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
     lastDelete,
     undoDelete,
     lastSectionDelete,
+    posted,
+    undoPosted,
     async undoSectionDelete() {
       const last = lastSectionDelete;
       if (!last) return;
@@ -1369,7 +1386,10 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
               : s,
           ),
         );
-        if (undoId) setLastMerge({ undoId, targetId, count: ids.length + 1, content, before });
+        if (undoId) {
+          settlePosted();
+          setLastMerge({ undoId, targetId, count: ids.length + 1, content, before });
+        }
         // The target open in its editor: the merged text takes the draft's
         // place, saved and ready to keep editing.
         if (mode === "join") replaceNoteDraft(targetId, content);
@@ -1407,6 +1427,7 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
       setLastCancel(null);
       setLastSectionDelete(null);
       commitDelete();
+      settlePosted();
     },
     editCanceled(noteId, typed) {
       setLastCancel({ noteId, content: typed });

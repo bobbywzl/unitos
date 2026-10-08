@@ -377,10 +377,12 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ noteId: str
     where: { id: note.sectionId },
     select: { notebookId: true, title: true },
   });
+  let eventId: string | null = null;
   if (section) {
     // Deletions are corpus history (SPEC.md §12): the History panel shows who
-    // removed what.
-    await db.notebookEvent.create({
+    // removed what. The answer names the event, so the Undo pill after the
+    // delete is History's Restore of it (lib/notes/undo-pill.ts).
+    ({ id: eventId } = await db.notebookEvent.create({
       data: {
         notebookId: section.notebookId,
         userId: access.user.id,
@@ -388,8 +390,9 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ noteId: str
         content: note.content.slice(0, 500),
         meta: { sectionTitle: section.title, ...(kept ? { kept: kept as unknown as Prisma.InputJsonValue } : {}) },
       },
-    });
+      select: { id: true },
+    }));
     await bumpNotebook(section.notebookId);
   }
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, ...(eventId && section ? { eventId, notebookId: section.notebookId } : {}) });
 }
