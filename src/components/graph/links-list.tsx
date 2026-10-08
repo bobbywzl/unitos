@@ -1,6 +1,6 @@
 "use client";
 
-import { CLOSE } from "./graph-ui";
+import { CLOSE, LIST_HEAD } from "./graph-ui";
 import { useState } from "react";
 import type { GraphEdge, GraphEdgeLink } from "@/lib/types";
 import { useT } from "@/components/lang-provider";
@@ -21,7 +21,7 @@ import { ListName } from "@/components/graph/list-name"; // [lists7]
 // the one sure way on a phone, and a fast one on a crowded canvas. Hovering
 // or focusing a row lights its two documents. Provenance links are not
 // listed: they are the generated document's, not the reader's. A filter at
-// the top keeps the links whose documents or reason hold its words; opened
+// the top keeps the links whose documents, reason or [lists8] replies hold its words; opened
 // while a node card is pinned, it starts on that document (WALK3-15).
 // [panel6] Waiting on you (WALK6-06): the switch keeps the links waiting on
 // this account; the links whose last open reply is another person's come
@@ -76,7 +76,12 @@ export function LinksList({
           const titles = `${titleOf.get(edge.a) ?? ""} ${titleOf.get(edge.b) ?? ""}`.toLowerCase();
           return {
             edge,
-            links: titles.includes(words) ? links : links.filter((l) => (l.reason ?? l.quotedText).toLowerCase().includes(words)),
+            // [lists8] WALK8-08: the replies' words count too.
+            links: titles.includes(words)
+              ? links
+              : links.filter((l) =>
+                  [l.reason ?? l.quotedText, ...(l.replies ?? []).map((r) => r.content)].some((x) => x.toLowerCase().includes(words)),
+                ),
           };
         })
         .filter((g) => g.links.length > 0)
@@ -91,7 +96,7 @@ export function LinksList({
       aria-label={t("panes.graphLinks")}
       className="menu-in absolute top-3 right-3 z-10 max-h-[calc(100%-24px)] flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 shadow-float outline-none backdrop-blur-md max-[999px]:max-h-[calc(100%-76px)]"
     >
-      <div className="flex items-center gap-2">
+      <div className={LIST_HEAD /* [lists8] WALK8-09 */}>
         <ListName grow={total <= 1}>{t("panes.graphLinks")}</ListName>
         {total > 1 && (
           <>

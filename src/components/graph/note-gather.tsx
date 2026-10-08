@@ -22,6 +22,7 @@ import { gatherDraftKey, readGatherDraft, writeGatherDraft, type GatherDraftQuot
 import { refreshWhenOnline } from "@/lib/offline/queue";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import { clipWords } from "@/lib/markdown-preview";
+import { FIND_MIN, firstMatch, snippet } from "@/lib/graph/find";
 import { useCollab } from "@/components/collab/collab-context";
 import { ChevronDownIcon, NotesIcon, SparkleIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
@@ -33,6 +34,16 @@ export type GatherQuote = GatherDraftQuote;
 // graph-overlay.tsx's WIDE: under it the dock sits at bottom-16 and an open
 // Stitch box closes the side list.
 const WIDE = 1000;
+
+/** [lists8] WALK7-13: a quote's chip, clipped to 140 characters; when Find's
+    words lie past the clip, the part around them, as Find's row shows it. */
+function chipText(text: string, words: string): string {
+  const clipped = clipWords(text, 140);
+  const q = words.trim();
+  if (q.length < FIND_MIN || text.length <= 140) return clipped;
+  const hit = firstMatch(text, q);
+  return hit && hit.end > clipped.replace(/…$/, "").length ? snippet(text, q).text : clipped;
+}
 
 const keyOf = (q: GatherQuote) => `${q.documentId}:${q.blockId ?? ""}:${q.whole ? "" : q.text}`;
 
@@ -214,8 +225,11 @@ export function NoteGatherDock({
   onWritePage,
   boxOpen = false,
   onFoldBox,
+  findWords = "",
 }: {
   notebookId: string;
+  /** [lists8] WALK7-13: Find's words: a long quote's chip shows the part around them. */
+  findWords?: string;
   onOpenDocument: () => void;
   /** Write a page from these (VIEW5-05): pick the quotes' documents and put
       a write-a-page command in the Stitch box. Nothing is sent. Editors only. */
@@ -489,7 +503,7 @@ export function NoteGatherDock({
                   >
                     {ctx.titleOf.get(q.documentId) ?? ""}
                   </button>
-                  {q.whole ? <span className="font-semibold">¶ {q.text}</span> : clipWords(q.text, 140)}
+                  {q.whole ? <span className="font-semibold">¶ {q.text}</span> : chipText(q.text, findWords)}
                 </span>
                 <button
                   type="button"

@@ -4,7 +4,6 @@ import { projectPartTitles } from "@/lib/graph/outline-titles";
 import {
   COVERAGE_COUNTS_ANNOTATIONS,
   COVERAGE_COUNTS_COMMENTS,
-  commentAsks,
   type DocumentCoverage,
   type GraphComment,
   type ProjectCoverage,
@@ -21,7 +20,8 @@ export { COVERAGE_COUNTS_ANNOTATIONS, COVERAGE_COUNTS_COMMENTS, notedShare, type
 // reader's own words beside the notes (VIEW5-01). Read only, never a model
 // call, stored rows only: the part titles' three queries, then one query
 // for the part starts, one for the sources, one for the opened documents,
-// and one for the comments.
+// and one for the comments (with [lists8] their authors and the author of
+// each one's last open reply, WALK8-01).
 
 export async function projectCoverage(notebookId: string, userId: string): Promise<ProjectCoverage> {
   const [titles, attached] = await Promise.all([
@@ -67,10 +67,24 @@ export async function projectCoverage(notebookId: string, userId: string): Promi
     // comment at its first live source (VIEW5-01): an annotation with no
     // tool and no highlight color, the rule of annotationKind.
     db.$queryRaw<
-      { id: string; content: string; open: boolean; replies: number; sourceId: string; documentId: string; blockId: string; order: number }[]
+      {
+        id: string;
+        content: string;
+        open: boolean;
+        replies: number;
+        authorId: string | null;
+        lastReplyBy: string | null;
+        sourceId: string;
+        documentId: string;
+        blockId: string;
+        order: number;
+      }[]
     >`
       SELECT DISTINCT ON (n.id) n.id, left(n.content, 280) AS content, n."resolvedById" IS NULL AS open,
         (SELECT count(*)::int FROM "Reply" r WHERE r."noteId" = n.id) AS replies,
+        n."createdById" AS "authorId",
+        (SELECT r."userId" FROM "Reply" r WHERE r."noteId" = n.id AND r."resolvedById" IS NULL
+          ORDER BY r."createdAt" DESC, r.id DESC LIMIT 1) AS "lastReplyBy",
         s.id AS "sourceId", s."documentId", s."blockId", b."order"
       FROM "Section" sec
       JOIN "Note" n ON n."sectionId" = sec.id
@@ -88,7 +102,16 @@ export async function projectCoverage(notebookId: string, userId: string): Promi
   for (const c of commentRows) {
     const text = c.content.replace(/\s+/g, " ").trim();
     if (!text) continue;
-    const row: GraphComment = { id: c.id, sourceId: c.sourceId, blockId: c.blockId, text, open: c.open, replies: c.replies, asks: commentAsks(text) };
+    const row: GraphComment = {
+      id: c.id,
+      sourceId: c.sourceId,
+      blockId: c.blockId,
+      text,
+      open: c.open,
+      replies: c.replies,
+      authorId: c.authorId,
+      lastById: c.lastReplyBy ?? c.authorId,
+    };
     commentOrder.set(c.id, c.order);
     commentsOf.set(c.documentId, [...(commentsOf.get(c.documentId) ?? []), row]);
   }

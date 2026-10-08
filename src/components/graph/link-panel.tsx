@@ -45,8 +45,14 @@ export function LinkPanel({
   onClose,
   onOpenDocument,
   onRemoved,
+  curveLinks,
+  onStep,
 }: {
   link: GraphEdgeLink;
+  /** [lists8] WALK8-05: the links of the open link's curve, in the curve
+      list's order. Two or more: the head reads "1 of 2" with ‹ ›. */
+  curveLinks?: GraphEdgeLink[];
+  onStep?: (link: GraphEdgeLink) => void;
   /** Back to the list the link was opened from: Links, the Notes list, the node card, or Documents. */
   onBack?: () => void;
   /** The back arrow's label; default "Back to Links". */
@@ -143,6 +149,13 @@ export function LinkPanel({
     }
   }
 
+  // [lists8] WALK8-05: where the link sits among its curve's links; the step wraps.
+  const at = curveLinks && onStep && curveLinks.length > 1 ? curveLinks.findIndex((l) => l.id === link.id) : -1;
+  const step = (by: number) => {
+    if (!curveLinks || !onStep || at < 0) return;
+    onStep(curveLinks[(at + by + curveLinks.length) % curveLinks.length]);
+  };
+
   // [lists7] WALK7-03: as tall as what it holds, like the node card.
   return (
     <aside
@@ -172,6 +185,29 @@ export function LinkPanel({
             ? t("panes.graphLinksLoopTitle", { title: link.fromTitle })
             : t("panes.graphLinksPairTitle", { a: link.fromTitle, b: link.toTitle })}
         </h2>
+        {at >= 0 && curveLinks && (
+          <span data-graph-link-step={`${at + 1}/${curveLinks.length}`} className="-mt-1 flex shrink-0 items-center text-[11px] text-sand-600 tabular-nums">
+            <button
+              onClick={() => step(-1)}
+              data-track="graph-link-prev"
+              aria-label={t("panes.graphLinkStepPrev")}
+              data-tip={t("panes.graphLinkStepPrev")}
+              className={CLOSE}
+            >
+              ‹
+            </button>
+            {t("panes.graphLinkStep", { i: at + 1, n: curveLinks.length })}
+            <button
+              onClick={() => step(1)}
+              data-track="graph-link-next"
+              aria-label={t("panes.graphLinkStepNext")}
+              data-tip={t("panes.graphLinkStepNext")}
+              className={CLOSE}
+            >
+              ›
+            </button>
+          </span>
+        )}
         <button
           onClick={onClose}
           data-track="graph-link-panel-close"

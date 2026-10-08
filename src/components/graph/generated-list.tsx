@@ -1,6 +1,6 @@
 "use client";
 
-import { ACTION_DANGER, CLOSE } from "./graph-ui";
+import { ACTION_DANGER, CLOSE, LIST_HEAD } from "./graph-ui";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/api";
@@ -68,7 +68,7 @@ export function GeneratedList({
       {/* [chrome6] WALK6-08: the list's intro is the pill's tooltip.
           [lists7] WALK7-01: the head row names the list, ✕ at its end; the
           switch takes the line under it. */}
-      <div className="flex items-center gap-2">
+      <div className={LIST_HEAD /* [lists8] */}>
         <ListName grow>{t("stitch.generated")}</ListName>
         <button
           onClick={onClose}

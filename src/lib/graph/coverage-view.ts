@@ -17,7 +17,8 @@ export const COVERAGE_COUNTS_COMMENTS = true;
 
 /** [layer5] One comment on a document, for the graph (VIEW5-01): its words
     (the first 280 characters), where it sits, whether it is open (not
-    resolved), its replies, and whether its words end in a question mark. */
+    resolved), its replies, [lists8] who wrote it and who wrote its last
+    open words (WALK8-01). */
 export type GraphComment = {
   id: string;
   sourceId: string;
@@ -25,8 +26,12 @@ export type GraphComment = {
   text: string;
   open: boolean;
   replies: number;
-  /** The words end with "?" or "？": the node's chip and the row draw a "?". */
-  asks: boolean;
+  /** [lists8] The account that wrote the comment; null for a row from
+      before authors were kept. */
+  authorId: string | null;
+  /** [lists8] Who wrote the thread's last open words: its last open reply's
+      author, else the comment's (WALK8-01). commentWaits reads it. */
+  lastById: string | null;
 };
 
 /** blockId: the part's start block. whole: the document has no parts, and
@@ -62,9 +67,12 @@ export function openComments(c: DocumentCoverage | null | undefined): GraphComme
   return (c?.comments ?? []).filter((x) => x.open);
 }
 
-/** [layer5] Whether a comment's words end with a question mark (en or zh). */
-export function commentAsks(text: string): boolean {
-  return /[?？]\s*$/.test(text);
+/** [lists8] WALK8-01: a comment waits on this account when it is open and
+    its last open words (its last open reply, else the comment) are another
+    person's: the rule waitingReply keeps for a link. The node's chip, the
+    row and the card draw a "?" on these; the Documents head counts them. */
+export function commentWaits(c: Pick<GraphComment, "open" | "lastById">, myId: string): boolean {
+  return c.open && myId !== "" && c.lastById !== null && c.lastById !== myId;
 }
 
 /** [layer5] A link waiting for this account's reply. [lists7] WALK7-04: only
