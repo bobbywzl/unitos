@@ -182,6 +182,20 @@ function sameCard(a: Suggestion | null, b: Suggestion | null): boolean {
   );
 }
 
+/** The keys reach one suggestion (SPEC.md §29): the caret goes into it,
+    its card opens, and the focus takes the card's Accept, after the card
+    has drawn. Tab moves to Reject, Enter presses, Escape goes back to the
+    caret. */
+export function focusSuggestionCard(editor: Editor, id: string): void {
+  focusSuggestion(editor, id);
+  const pane = editor.view.dom.closest("[data-reader-root]") ?? document;
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      pane.querySelector<HTMLElement>(`[data-suggestion-card="${CSS.escape(id)}"][data-active] [data-track="suggestion-accept"]`)?.focus();
+    }),
+  );
+}
+
 /** One suggestion's card in the margin: the one the caret stands in shows
     whole, with Accept and Reject for an editor; the others show one line,
     and a press opens them. With no card column (a narrow pane, a split
@@ -220,7 +234,24 @@ export const SuggestionCard = memo(function SuggestionCard({
   const asker = shared && isAssistantAuthor(author) ? authorOf(askerOf(author)) : undefined;
   const why = whyOf(id);
   const lines = describe(suggestion, t);
-  const settle = (accept: boolean) => settleSuggestions(editor, accept, id);
+  // Settled from the keys (Enter or Space on Accept or Reject): the next
+  // suggestion's Accept takes the focus, or the page when none is left.
+  const settle = (accept: boolean, e?: React.MouseEvent) => {
+    const order = readSuggestions(editor.state.doc).map((s) => s.id);
+    settleSuggestions(editor, accept, id);
+    if (e?.detail !== 0) return;
+    const left = new Set(readSuggestions(editor.state.doc).map((s) => s.id));
+    const next = [...order.slice(order.indexOf(id) + 1), ...order].find((other) => left.has(other));
+    if (next) focusSuggestionCard(editor, next);
+    else editor.view.focus();
+  };
+  // Escape on the card's buttons: back to the caret.
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== "Escape" || !(e.target instanceof HTMLButtonElement)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    editor.view.focus();
+  };
   const style = { borderColor: person?.color ?? personColor(author) };
   if (!active || under) {
     const settleHere = active && canSettle;
@@ -234,6 +265,7 @@ export const SuggestionCard = memo(function SuggestionCard({
         aria-label={t("docsSuggest.suggestion")}
         data-tip={active ? replyTime(new Date(suggestionTime(id)).toISOString(), lang) : undefined}
         onMouseDown={(e) => (active ? e.preventDefault() : openLine(e, () => focusSuggestion(editor, id)))}
+        onKeyDown={onKeyDown}
         className="docs-comment docs-suggest-card docs-card-line absolute z-30"
         style={style}
       >
@@ -245,7 +277,7 @@ export const SuggestionCard = memo(function SuggestionCard({
           <div className="docs-comment-buttons">
             <button
               type="button"
-              onClick={() => settle(true)}
+              onClick={(e) => settle(true, e)}
               data-track="suggestion-accept"
               aria-label={t("docsSuggest.acceptSuggestion")}
               data-tip={t("docsSuggest.acceptSuggestion")}
@@ -255,7 +287,7 @@ export const SuggestionCard = memo(function SuggestionCard({
             </button>
             <button
               type="button"
-              onClick={() => settle(false)}
+              onClick={(e) => settle(false, e)}
               data-track="suggestion-reject"
               aria-label={t("docsSuggest.rejectSuggestion")}
               data-tip={t("docsSuggest.rejectSuggestion")}
@@ -277,6 +309,7 @@ export const SuggestionCard = memo(function SuggestionCard({
       aria-label={t("docsSuggest.suggestion")}
       // The caret stays in the suggestion, so the card stays.
       onMouseDown={(e) => e.preventDefault()}
+      onKeyDown={onKeyDown}
       className="docs-comment docs-suggest-card bubble-in absolute z-40"
       style={style}
     >
@@ -291,7 +324,7 @@ export const SuggestionCard = memo(function SuggestionCard({
           <div className="docs-comment-buttons">
             <button
               type="button"
-              onClick={() => settle(true)}
+              onClick={(e) => settle(true, e)}
               data-track="suggestion-accept"
               aria-label={t("docsSuggest.acceptSuggestion")}
               data-tip={t("docsSuggest.acceptSuggestion")}
@@ -301,7 +334,7 @@ export const SuggestionCard = memo(function SuggestionCard({
             </button>
             <button
               type="button"
-              onClick={() => settle(false)}
+              onClick={(e) => settle(false, e)}
               data-track="suggestion-reject"
               aria-label={t("docsSuggest.rejectSuggestion")}
               data-tip={t("docsSuggest.rejectSuggestion")}

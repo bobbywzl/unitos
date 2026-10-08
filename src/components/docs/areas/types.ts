@@ -14,7 +14,11 @@ export type DocsAreaProps = {
   projectEditor: boolean;
   /** The page takes typing now: canEdit and the mode is Editing or Suggesting. */
   editing: boolean;
+  /** The document's saved page setup: what every save starts from. */
   pageSetup: PageSetup;
+  /** Its pages are drawn pageless in this browser (page/reflow.tsx); the
+      page store's drawn setup carries it to what draws. */
+  reflowed: boolean;
   /** The project's documents, for links and file chips. */
   documents: { id: string; title: string }[];
 };

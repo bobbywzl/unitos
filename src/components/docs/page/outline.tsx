@@ -13,7 +13,7 @@ import { coreSlotOf } from "@/components/docs/layer/core-slot";
 import { flashInPage } from "@/components/docs/layer/events";
 import { scrollParent } from "@/components/docs/page/geometry";
 import { usePageRect } from "@/components/docs/page/ruler";
-import { OUTLINE_MAX, OUTLINE_MIN, usePageState, type PageStore } from "@/components/docs/page/store";
+import { OUTLINE_MAX, OUTLINE_MIN, useDrawnSetup, usePageState, type PageStore } from "@/components/docs/page/store";
 import { useContents } from "@/components/reader/contents-menu";
 import { StopPill } from "@/components/thinking";
 import type { ContentsEntry } from "@/lib/contents";
@@ -265,7 +265,7 @@ function OutlineContents({
     margin. */
 export function OutlineButton({ editor, store, ruler }: { editor: Editor; store: PageStore; ruler: boolean }) {
   const t = useT();
-  const setup = usePageState(store, (s) => s.setup);
+  const setup = useDrawnSetup(store);
   const scale = usePageState(store, (s) => s.scale);
   const page = usePageRect(editor, [setup, scale]);
   const home = ruler ? 32 : 50;

@@ -16,7 +16,7 @@ import {
   type LengthUnit,
   type PageFrame,
 } from "@/components/docs/page/geometry";
-import { usePageState, type PageStore } from "@/components/docs/page/store";
+import { useDrawnSetup, usePageState, type PageStore } from "@/components/docs/page/store";
 import { editTabStops, parseTabStops, type TabAlign, type TabStop } from "@/components/docs/page/tabs";
 import type { PageSetup } from "@/lib/docs/schema";
 
@@ -304,7 +304,7 @@ export function setIndents(editor: Editor, patch: { indentLeft?: number; indentF
 export function HorizontalRuler({ editor, store, editing }: { editor: Editor; store: PageStore; editing: boolean }) {
   const t = useT();
   const unit = lengthUnitFor(useLang());
-  const setup = usePageState(store, (s) => s.setup);
+  const setup = useDrawnSetup(store);
   const pages = usePageState(store, (s) => s.pages);
   const scale = usePageState(store, (s) => s.scale);
   const textWidth = usePageState(store, (s) => s.textWidth);
@@ -590,7 +590,7 @@ export function VerticalRuler({
 }) {
   const t = useT();
   const unit = lengthUnitFor(useLang());
-  const setup = usePageState(store, (s) => s.setup);
+  const setup = useDrawnSetup(store);
   const pages = usePageState(store, (s) => s.pages);
   const scale = usePageState(store, (s) => s.scale);
   const frame = useMemo(() => pageFrame(setup), [setup]);

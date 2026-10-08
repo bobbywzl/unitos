@@ -168,7 +168,7 @@ export function WordCountDialog({ editor }: { editor: Editor }) {
   const [extras, setExtras] = useState(false);
   const [menu, setMenu] = useState(false);
   const prefs = useSyncExternalStore(subscribeTypingPrefs, typingPrefs, serverTypingPrefs);
-  const pageless = insertContext(editor)?.pageSetup.pageless ?? false;
+  const pageless = insertContext(editor)?.drawnPageless ?? false;
   const metric: Metric = pageless && prefs.counterMetric === "pages" ? "words" : prefs.counterMetric;
   const snap = useCounts(editor, open || show, open && extras);
   const counterRef = useRef<HTMLButtonElement>(null);

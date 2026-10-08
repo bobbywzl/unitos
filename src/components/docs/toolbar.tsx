@@ -580,21 +580,14 @@ export function DocsToolbar({
   const AlignGlyph = ALIGNS.find((a) => a.align === s.align)?.Icon ?? AlignLeftIcon;
   const bodyOnly = (node: ReactNode) => <ControlsOff.Provider value={inHeader}>{node}</ControlsOff.Provider>;
 
+  // Viewing's row folds as Editing's does: Zoom and Print first, then Add
+  // comment, Search the menus last.
   const groups: ToolbarGroup[] = off
     ? [
-        {
-          key: "view",
-          sep: false,
-          content: (
-            <>
-              {searchMenus}
-              {button(A.print)}
-              {canEdit && button(A.comment)}
-              <Sep />
-              {zoomBox}
-            </>
-          ),
-        },
+        { key: "search", sep: false, fold: 100, content: <>{searchMenus}</> },
+        { key: "print", sep: false, fold: 20, content: <>{button(A.print)}</> },
+        ...(canEdit ? [{ key: "comment", sep: false, fold: 70, content: <>{button(A.comment)}</> }] : []),
+        { key: "zoom", sep: true, fold: 10, content: <>{zoomBox}</> },
       ]
     : [
         {
@@ -790,7 +783,7 @@ export function DocsToolbar({
       <ToolbarRow
         groups={groups}
         label={t("docs.toolbar")}
-        moreLabel={t("docs.more")}
+        moreLabel={t("docs.moreTools")}
         onEscape={focusPage}
         right={
           <>

@@ -1,7 +1,7 @@
 "use client";
 
 import type { Editor } from "@tiptap/core";
-import { useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import type { PageSetup } from "@/lib/docs/schema";
 import type { TextWidth } from "@/components/docs/page/geometry";
 import { MAX_WAIT_MS, SAVE_DELAY_MS, retryWait, saveOnLeave, type SaveState } from "@/components/docs/use-docs-save";
@@ -12,6 +12,12 @@ import { MAX_WAIT_MS, SAVE_DELAY_MS, retryWait, saveOnLeave, type SaveState } fr
 // with PATCH /api/documents/[documentId]/rich-text); the ruler, the outline,
 // and the text width are the reader's own, kept per browser. A header or
 // footer saves as the text does (use-docs-save.ts).
+//
+// The saved setup and the drawn page are apart: `setup` is only ever the
+// saved setup, and `reflowed` says the pages are drawn pageless for this
+// browser (a phone, a PDF import read pageless: page/reflow.tsx). What draws
+// the page reads drawnSetup / useDrawnSetup; what saves reads `setup`, so a
+// page drawn pageless never saves `pageless: true`.
 
 export type HeaderArea = "header" | "footer";
 
@@ -33,7 +39,11 @@ export type EditHeaderDetail = { area: HeaderArea };
 
 type PageState = {
   documentId: string;
+  /** The document's saved page setup. Every save starts from it. */
   setup: PageSetup;
+  /** A paged document drawn pageless in this browser (page/reflow.tsx): a
+      view; the setup stays as it is. */
+  reflowed: boolean;
   /** The page's zoom as a factor, Fit worked out. */
   scale: number;
   /** The pages the pagination drew. */
@@ -120,6 +130,7 @@ function createStore(editor: Editor, documentId: string, setup: PageSetup): Page
   let state: PageState = {
     documentId,
     setup,
+    reflowed: false,
     scale: 1,
     pages: 1,
     showRuler: readPref(RULER_KEY) !== "0",
@@ -250,6 +261,23 @@ export function pageStore(editor: Editor, documentId: string, setup: PageSetup):
 /** The page store, when the page has mounted. */
 export function findPageStore(editor: Editor): PageStore | null {
   return stores.get(editor) ?? null;
+}
+
+/** The setup the page is drawn with: the saved setup, pageless while the
+    pages are drawn pageless. Never saved. */
+export function drawnSetup(setup: PageSetup, reflowed: boolean): PageSetup {
+  return reflowed && !setup.pageless ? { ...setup, pageless: true } : setup;
+}
+
+/** The page is drawn pageless: the document is pageless, or its pages are
+    drawn pageless in this browser. */
+export const drawnPageless = (state: Pick<PageState, "setup" | "reflowed">): boolean => state.setup.pageless || state.reflowed;
+
+/** The drawn setup, followed. */
+export function useDrawnSetup(store: PageStore): PageSetup {
+  const setup = usePageState(store, (s) => s.setup);
+  const reflowed = usePageState(store, (s) => s.reflowed);
+  return useMemo(() => drawnSetup(setup, reflowed), [setup, reflowed]);
 }
 
 /** Read one value of the page state and follow it. */

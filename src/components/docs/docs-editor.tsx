@@ -36,7 +36,7 @@ import { SuggestLayer } from "@/components/docs/suggest/layer";
 import { PageBanner, PageCanvas, PageRuler } from "@/components/docs/areas/page";
 import { StatusPopup } from "@/components/docs/page/status-popup";
 import { scrollParent } from "@/components/docs/page/geometry";
-import { PAGE_EVENT, useOutlineRoom, useSaveState } from "@/components/docs/page/store";
+import { PAGE_EVENT, drawnSetup, pageStore, useOutlineRoom, useSaveState } from "@/components/docs/page/store";
 import { TypingLayer } from "@/components/docs/areas/typing";
 import { VersionHistory, VersionHistoryButton } from "@/components/docs/versions/version-history";
 import type { DocsAreaProps } from "@/components/docs/areas/types";
@@ -61,6 +61,8 @@ const FONTS_LINK_ID = "unitos-docs-fonts";
 
 /** A pane narrower than this starts with the title row hidden. */
 const NARROW_PANE = 600;
+/** A pane shorter than this (a phone held sideways) hides the title row too. */
+const SHORT_PANE = 500;
 
 /** An import (SPEC.md §29): a document made from a PDF, a web page, a
     Markdown or text file, or a Word file, as the page sends it. origin: the
@@ -508,17 +510,20 @@ export function DocsEditor({
   const mode: DocsMode = locked ? "viewing" : chosenMode;
   const [zoom, setZoom] = useState<Zoom>(100);
   const [headerHidden, setHeaderHidden] = useState(false);
-  // A pane too narrow for the page (a phone, a narrow split) starts with the
-  // title row hidden: 44 px of the screen above the first line go to the
-  // words, and the title, the status and the version clock stay reachable
-  // (the title in the document pill and File > Rename, the status and the
-  // clock in the toolbar's row).
+  // A pane too narrow for the page (a phone, a narrow split), too short
+  // (a phone held sideways), or one of a split view (whose pane header
+  // names the document) starts with the title row hidden: 44 px of the
+  // screen above the first line go to the words, and the title, the status
+  // and the version clock stay reachable (the title in the document pill,
+  // the pane header and File > Rename, the status and the clock in the
+  // toolbar's row).
   const shellRef = useRef<HTMLDivElement>(null);
   const [narrow, setNarrow] = useState(false);
-  const [narrowWas, setNarrowWas] = useState(false);
-  if (narrow !== narrowWas) {
-    setNarrowWas(narrow);
-    setHeaderHidden(narrow);
+  const [tight, setTight] = useState(false);
+  const [tightWas, setTightWas] = useState(false);
+  if (tight !== tightWas) {
+    setTightWas(tight);
+    setHeaderHidden(tight);
   }
   // View > Full screen: the title row, the toolbar, and the rulers hide,
   // as in Google Docs; Esc brings them back.
@@ -576,10 +581,19 @@ export function DocsEditor({
   useEffect(() => {
     const shell = shellRef.current;
     if (!shell) return;
-    const measure = () => setNarrow(shell.clientWidth > 0 && shell.clientWidth < NARROW_PANE);
+    const pane = scrollParent(shell);
+    // A split view's pane header stands just before the reader's root.
+    const split = shell.closest("[data-reader-root]")?.previousElementSibling?.classList.contains("pane-header") === true;
+    const measure = () => {
+      const isNarrow = shell.clientWidth > 0 && shell.clientWidth < NARROW_PANE;
+      const short = pane !== null && pane.clientHeight > 0 && pane.clientHeight < SHORT_PANE;
+      setNarrow(isNarrow);
+      setTight(isNarrow || short || split);
+    };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(shell);
+    if (pane) observer.observe(pane);
     return () => observer.disconnect();
   }, [editor]);
 
@@ -636,18 +650,26 @@ export function DocsEditor({
     if (chosenModeRef.current === "viewing") setMode(back);
   }, [collapseOn, setMode]);
 
-  // A document in pages may be read pageless in Viewing (page/reflow.tsx):
-  // a view of this browser; the document's page setup stays as it is, and
-  // Editing and Suggesting draw the pages. A PDF import offers it with its
-  // bar; a pane too narrow for the page (a phone) reads pageless at once,
-  // with no bar — the pages there are drawn at 42%, where no one reads
-  // them — and Search the menus > View keeps Show pages.
+  // A document in pages may be read pageless (page/reflow.tsx): a view of
+  // this browser; the document's page setup stays as it is (the page store
+  // keeps the saved setup apart from the drawn page). A PDF import offers it
+  // in Viewing with its bar, and Editing and Suggesting draw its pages; a
+  // pane too narrow for the page (a phone) reads pageless at once in every
+  // mode, with no bar — the pages there are drawn at 42%, where no one reads
+  // or writes them — and Search the menus > View keeps Show pages.
   const paged = !pageSetup.pageless;
   const pdfPages = imported?.kind === "pdf" && paged;
   const [reflowChoice, chooseReflow] = useReflow(editor, documentId, pdfPages || (paged && narrow));
-  const reflowing = (pdfPages || (paged && narrow)) && mode === "viewing";
+  const reflowing = (pdfPages && mode === "viewing") || (paged && narrow);
   const reflowed = reflowing && (reflowChoice === "pageless" || (narrow && reflowChoice === null));
-  const shownSetup = useMemo(() => (reflowed ? { ...pageSetup, pageless: true } : pageSetup), [reflowed, pageSetup]);
+  // The drawn setup: what the page, the frame, and the toolbar draw. It is
+  // never handed to what saves.
+  const shownSetup = useMemo(() => drawnSetup(pageSetup, reflowed), [reflowed, pageSetup]);
+  useLayoutEffect(() => {
+    if (!editor) return;
+    const store = pageStore(editor, documentId, pageSetup);
+    if (store.get().reflowed !== reflowed) store.set({ reflowed });
+  }, [editor, documentId, pageSetup, reflowed]);
   // Pages to pageless and back keep the block at the reading line in view.
   useKeepPlace(editor, shownSetup.pageless ? "pageless" : "pages");
 
@@ -665,10 +687,10 @@ export function DocsEditor({
     enabled: writable,
   });
   // The header's and footer's saves show in the same status.
-  const shownSaveState = useSaveState(editor, documentId, shownSetup, saveState);
+  const shownSaveState = useSaveState(editor, documentId, pageSetup, saveState);
   // The outline button stands beside the text column when the margin has
   // the room for it; else the toolbar's row carries it (areas/page.tsx).
-  const outlineRoom = useOutlineRoom(editor, documentId, shownSetup);
+  const outlineRoom = useOutlineRoom(editor, documentId, pageSetup);
 
   useEffect(() => {
     const settle = async () => {
@@ -853,11 +875,12 @@ export function DocsEditor({
   );
 
   // The areas take a locked import as a page they may not edit: no
-  // suggestions to settle, no version to restore.
+  // suggestions to settle, no version to restore. They get the saved setup
+  // and whether its pages are drawn pageless, never a drawn setup to save.
   const editing = writable && mode !== "viewing";
   const area = useMemo<DocsAreaProps | null>(
-    () => (editor ? { editor, documentId, notebookId, canEdit: writable, projectEditor: canEdit, editing, pageSetup: shownSetup, documents } : null),
-    [editor, documentId, notebookId, writable, canEdit, editing, shownSetup, documents],
+    () => (editor ? { editor, documentId, notebookId, canEdit: writable, projectEditor: canEdit, editing, pageSetup, reflowed, documents } : null),
+    [editor, documentId, notebookId, writable, canEdit, editing, pageSetup, reflowed, documents],
   );
 
   // Every save changes the save state, which redraws the title row alone:
@@ -971,7 +994,7 @@ export function DocsEditor({
               <ReflowBar
                 editor={editor}
                 documentId={documentId}
-                setup={shownSetup}
+                setup={pageSetup}
                 choice={reflowChoice}
                 reflowed={reflowed}
                 onChoose={chooseReflow}

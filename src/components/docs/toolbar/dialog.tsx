@@ -43,6 +43,7 @@ export function ToolbarDialog({
   const showClose = closeButton && !submit;
   const cardRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
+  const hasForm = useRef(submit !== undefined);
   useEffect(() => {
     closeRef.current = onClose;
   });
@@ -55,10 +56,14 @@ export function ToolbarDialog({
       closeRef.current();
     };
     document.addEventListener("keydown", onKey, true);
-    // The first field takes the focus, else the dialog.
+    // The first field takes the focus, else the dialog. A dialog with no
+    // form and nothing to type in (Word count, Details: a checkbox at most)
+    // gives it to its last footer button, so Enter closes it.
     const card = cardRef.current;
+    const typed = card?.querySelector<HTMLElement>("input:not([type=checkbox]):not([type=radio]), select, textarea, [data-autofocus]");
+    const footer = hasForm.current || typed ? null : [...(card?.querySelectorAll<HTMLElement>(".docs-tb-dialog-actions button:not(:disabled)") ?? [])].at(-1);
     const first = card?.querySelector<HTMLElement>("input, select, textarea, [data-autofocus]");
-    (first ?? card)?.focus();
+    (footer ?? first ?? card)?.focus();
     return () => document.removeEventListener("keydown", onKey, true);
   }, []);
   if (typeof document === "undefined") return null;

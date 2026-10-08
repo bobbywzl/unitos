@@ -714,7 +714,7 @@ function turned(by: number) {
 function moveFloating(editor: Editor, dx: number, dy: number, pixel: boolean): boolean {
   const hit = selectedImage(editor.state);
   const ctx = insertContext(editor);
-  if (!hit || !ctx || ctx.pageSetup.pageless) return false;
+  if (!hit || !ctx || ctx.drawnPageless) return false;
   const a = imageAttrs(hit.node);
   if (a.wrap !== "behind" && a.wrap !== "front") return false;
   const step = pixel ? 1 : (lengthUnitFor(ctx.lang) === "cm" ? PT_PER_UNIT.cm : PT_PER_UNIT.in / 4) * PX_PER_PT;

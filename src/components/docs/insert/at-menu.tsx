@@ -325,7 +325,7 @@ function AtMenu({
         const command = docsCommands().find((c) => c.id === id);
         if (!command) return [];
         const off = command.enabled?.(editor) === false;
-        const why = ctx.pageSetup.pageless ? "docsInsert.pagesOnly" : "docsInsert.headersOnly";
+        const why = ctx.drawnPageless ? "docsInsert.pagesOnly" : "docsInsert.headersOnly";
         return [{ ...item(id, "page", command.label, words, icon, here(() => command.run(editor))), disabled: off ? t(why) : undefined }];
       }),
       {
