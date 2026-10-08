@@ -125,12 +125,20 @@ function withPanels(figure: Segment, panels: CaptionPart[]) {
 // The most words in a row a line holds: runs of three letters or more with a
 // vowel, apart by spaces or commas alone. A chart's labels and an OCR's
 // specks ("I N I (J Curve") hold one at a time; a sentence holds several.
+// A cell's gap ends a run, and a word counts once in it: the same label
+// over panels side by side ("Horizontal\tHorizontal", "Rotor axis Rotor
+// axis") is no sentence (parse loop finding: NACA Report 515 p. 9, three
+// vector sheaves; the walk up from their captions stopped at the labels,
+// and the upper panels' words stood as text).
 function wordRun(line: string): number {
   let best = 0;
-  let run = 0;
-  for (const token of line.split(/[\s,;]+/)) {
-    run = /^\p{L}{3,}[.:]?$/u.test(token) && /[aeiouy]/i.test(token) ? run + 1 : 0;
-    best = Math.max(best, run);
+  for (const cell of line.split("\t")) {
+    let run: string[] = [];
+    for (const token of cell.split(/[\s,;]+/)) {
+      const word = /^\p{L}{3,}[.:]?$/u.test(token) && /[aeiouy]/i.test(token);
+      run = word ? [...run, token.replace(/[.:]$/, "").toLowerCase()] : [];
+      best = Math.max(best, new Set(run).size);
+    }
   }
   return best;
 }
@@ -1430,7 +1438,29 @@ export function attachFigureRegions(
     // The caption's neighbors are in its column: on a page read as columns,
     // the segment before it may end the other column (a synthetic paper's
     // caption took the left column's last line for the figure's top).
-    const [x1, x2] = columnOf(cap.box);
+    // Captions set level, side by side, each caption its own figure's,
+    // part the column halfway between them, and the words of their panels
+    // read as one line across the row are the row's (parse loop finding:
+    // NACA Report 515 p. 9, three vector sheaves with "Rotor axis" under
+    // each read as one line over the three captions; each caption's walk
+    // up to its panel stopped there, and the captions stood as paragraphs
+    // under the panels' words).
+    const capBox0 = cap.box;
+    const level = withMath.filter(
+      (s) =>
+        s !== cap &&
+        s.type === "PARAGRAPH" &&
+        s.page === cap.page &&
+        s.box !== undefined &&
+        (s.box.x1 >= capBox0.x2 || s.box.x2 <= capBox0.x1) &&
+        Math.min(s.box.y2, capBox0.y2) > Math.max(s.box.y1, capBox0.y1) &&
+        (isCaption(s.text, s.runs) || isOcrCaption(s.text, ctx)) &&
+        !TABLE_CAPTION_RE.test(s.text),
+    );
+    const [c1, c2] = columnOf(cap.box);
+    const x1 = Math.max(c1, ...level.filter((s) => s.box!.x2 <= capBox0.x1).map((s) => (s.box!.x2 + capBox0.x1) / 2));
+    const x2 = Math.min(c2, ...level.filter((s) => s.box!.x1 >= capBox0.x2).map((s) => (s.box!.x1 + capBox0.x2) / 2));
+    const [rowX1, rowX2] = level.reduce<[number, number]>(([a, b], s) => [Math.min(a, s.box!.x1), Math.max(b, s.box!.x2)], [c1, c2]);
     const inColumn = (s: Segment) => s.box !== undefined && s.box.x1 < x2 && s.box.x2 > x1;
     // Above the caption: debris up to the previous body segment. A table
     // under its own "Table N" caption is data, not debris.
@@ -1510,8 +1540,10 @@ export function attachFigureRegions(
         !graphics.some((g) => g.box.x1 < x2 && g.box.x2 > x1 && g.box.y2 <= cap.box!.y1 + 1 && cap.box!.y1 - g.box.y2 < rowGap * 2);
       if (!isFigureDebris(prev, ctx) && !inDrawing && !byGraphic && !underGraphic && !diagramPart && !step && !mathFigure) break;
       // What reaches well past the column (a table across both columns) is
-      // no debris of a figure in it.
-      if (prev.box && (prev.box.x1 < x1 - ctx.bodySize * 2 || prev.box.x2 > x2 + ctx.bodySize * 2)) break;
+      // no debris of a figure in it. Past the columns of the captions set
+      // level with this one, it is: their panels' labels read as one line
+      // across the row (NACA Report 515 p. 9, above).
+      if (prev.box && (prev.box.x1 < rowX1 - ctx.bodySize * 2 || prev.box.x2 > rowX2 + ctx.bodySize * 2)) break;
       if (prev.type === "TABLE" && column.length >= 2 && TABLE_CAPTION_RE.test(column[column.length - 2].text)) break;
       // On an OCR page a table whose first line holds a sentence's words
       // (three words of letters in a row) is the text's: a caption's last
@@ -1564,7 +1596,8 @@ export function attachFigureRegions(
         const ceiling = Math.min(above?.box ? top : Infinity, Number.isFinite(roof) ? roof : pageTop);
         if (tops.length > 0) box.y2 = Math.min(ceiling, Math.max(...tops) + ctx.bodySize * 0.2);
       }
-      for (const s of swept) if (s.box) box = unionBox(box, s.box);
+      // A line across a row of captions is the row's: it widens no panel's crop.
+      for (const s of swept) if (s.box) box = unionBox(box, { ...s.box, x1: Math.max(s.box.x1, level.length > 0 ? x1 : -Infinity), x2: Math.min(s.box.x2, level.length > 0 ? x2 : Infinity) });
       // The drawing sets the width: a chart wider than the text column keeps
       // its axis labels.
       if (drawnAbove) box = unionBox(box, { ...drawnAbove, y1: Math.max(drawnAbove.y1, box.y1), y2: Math.min(drawnAbove.y2, box.y2) });
