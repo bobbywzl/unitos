@@ -198,7 +198,9 @@ export function HistoryPanel({
       wait.done();
     }
   }, [history, documentHistory]);
-  const refreshUntilRestored = (entryId: string) =>
+  // refresh: false when a refresh is already on its way (the notes' own,
+  // on dissect:note-back).
+  const refreshUntilRestored = (entryId: string, refresh = true) =>
     new Promise<void>((resolve) => {
       const done = () => {
         clearTimeout(timer);
@@ -209,7 +211,7 @@ export function HistoryPanel({
         resolve();
       }, REFRESH_WAIT_MS);
       waiting.current = { entryId, done };
-      router.refresh();
+      if (refresh) router.refresh();
     });
   const setOlder = (patch: (prev: OlderPages) => OlderPages) =>
     setOlderByScope((prev) => ({ ...prev, [scope]: patch(prev[scope]) }));
@@ -248,14 +250,15 @@ export function HistoryPanel({
       entry,
       async () => {
         const done = await api<{ noteId?: unknown }>(`/api/notebooks/${notebookId}/history/${entry.id}`, "POST");
-        // The row says Loading until the note is in the page's data; then
+        const detail = typeof done?.noteId === "string" ? { noteId: done.noteId } : null;
+        // The notes take it back at once (a tab that deleted it hides it
+        // until told) and refresh the page's data; that one refresh is the
+        // wait: the row says Loading until the note is in the data, then
         // the tray switches to Notes with the note there.
-        await refreshUntilRestored(entry.id);
-        if (typeof done?.noteId === "string") {
-          // The notes take it back (a tab that deleted it hides it until
-          // told), the reader repaints its marks, and the tray shows it.
-          const detail = { noteId: done.noteId };
-          window.dispatchEvent(new CustomEvent("dissect:note-back", { detail }));
+        if (detail) window.dispatchEvent(new CustomEvent("dissect:note-back", { detail }));
+        await refreshUntilRestored(entry.id, !detail);
+        if (detail) {
+          // The reader repaints its marks, and the tray shows it.
           window.dispatchEvent(new CustomEvent("dissect:note-restored", { detail }));
           window.dispatchEvent(new CustomEvent("dissect:show-note", { detail }));
         }
