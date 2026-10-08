@@ -1041,6 +1041,17 @@ function captionPart(lines: Line[]): CaptionPart {
   return { text: text.replace(/\n/g, " "), runs, box };
 }
 
+// A paragraph that opens with a bold numbered label of its own ("Active
+// Reading 3.1:", "Exercise 22.1") starts a new element: it is no caption's
+// words (parse loop finding: a Tufte book's margin caption "Figure 3.1:"
+// took the margin note under it, "Active Reading 3.1: Make sure you work
+// through these!", for its words).
+const NUMBERED_LABEL_RE = /^\p{Lu}[\p{L} ]*\s\d+(\.\d+)*[:.]?\s*$/u;
+export function numberedLabel(s: Segment): boolean {
+  const first = s.runs?.[0];
+  return first !== undefined && first.start === 0 && first.bold && NUMBERED_LABEL_RE.test(s.text.slice(0, first.end));
+}
+
 export function attachFigureRegions(
   segments: Segment[],
   lines: Line[],
@@ -1258,6 +1269,13 @@ export function attachFigureRegions(
       follow.page !== cap.page ||
       follow.lineSize === undefined ||
       cap.lineSize === undefined ||
+      // A paragraph wholly beside the caption, sharing no column with it,
+      // is the text's (parse loop finding: a Tufte book's margin caption
+      // "Figure 29.4:", its words left out, took the paragraph left of it,
+      // "where z is measured in picometers…", for its words).
+      follow.box.x2 <= box.x1 ||
+      follow.box.x1 >= box.x2 ||
+      numberedLabel(follow) ||
       (Math.abs(follow.lineSize - cap.lineSize) >= 0.6 && !(tail !== undefined && Math.abs(follow.lineSize - tail) < 0.6)) ||
       box.y1 - follow.box.y2 > cap.lineSize * ctx.leading * 0.9 ||
       (cap.lineSize >= ctx.bodySize * 0.98 && follow.text.length >= 240 && box.y1 - follow.box.y2 > cap.lineSize * 0.35) ||

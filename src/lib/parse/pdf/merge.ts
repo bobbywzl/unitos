@@ -1,7 +1,7 @@
 // Blocks cut by a page break: a paragraph, a list, or a table joins its other
 // half on the next page, and the block keeps where each later page begins.
 
-import { CAPTION_RE } from "@/lib/parse/pdf/figures";
+import { CAPTION_RE, numberedLabel } from "@/lib/parse/pdf/figures";
 import { BULLET_RE, follows, opensSequence, readMarker } from "@/lib/parse/pdf/markers";
 import { endAs, endsFull, wrapsAt } from "@/lib/parse/pdf/paragraphs";
 import { joinWrapped } from "@/lib/parse/pdf/text";
@@ -76,13 +76,19 @@ const END_MARK_RE = /[♢◇◆♦□■∎▢◁▷⊣]$/u;
 const ABBREVIATION_END_RE = /(?:\bet al|\be\.g|\bi\.e|\bcf|\bvs|\bFigs?|\bEqs?|\bRefs?|\bSecs?|\bNo|\bpp?)\.$/;
 
 // The next part goes on the first's sentence: it opens lowercase or with a
-// parenthesis, or with a number that closes a parenthesis the first left
-// open ("(Federico," | "2016). This leads…") or follows a word that takes
-// one ("40 CFR part" | "178. To ensure…"). A number after any other word
-// opens something of its own: an algorithm's line ("8: end for"), a
-// section's heading ("3.2.3 Interim Conclusion.").
+// parenthesis, or with a bracket only a formula opens (an angle, a
+// ceiling, a floor, a norm) where the formula ends the sentence in a line
+// (the MML book's note "…is denoted by a⊤b or" | "⟨a,b⟩.", its formula's
+// line read apart, parse loop finding; a display read as words, a long
+// line with no sentence's end, stays a block of its own), or with a
+// number that closes a parenthesis the first left open ("(Federico," |
+// "2016). This leads…") or follows a word that takes one ("40 CFR part" |
+// "178. To ensure…"). A number after any other word opens something of its
+// own: an algorithm's line ("8: end for"), a section's heading ("3.2.3
+// Interim Conclusion.").
 function goesOn(prev: string, next: string): boolean {
   if (/^[a-z(]/.test(next)) return true;
+  if (/^[⟨⌈⌊‖]/.test(next)) return next.length <= 60 && /[.!?]$/.test(next.trim());
   if (!/^\d/.test(next)) return false;
   const open = (prev.match(/\(/g) ?? []).length - (prev.match(/\)/g) ?? []).length;
   if (open > 0 && /^\d[\d.,–-]*[a-z]?\)/.test(next)) return true;
@@ -113,6 +119,12 @@ function continuesOnPage(prev: Segment, next: Segment, setting: PageSetting): bo
   // 7), and a pull quote is no part of the text it quotes (the Earth
   // Observer p. 10).
   if (/^\([a-h]\)\s+\p{Lu}/u.test(next.text) || /\bquote\b/.test(next.html ?? "")) return false;
+  // A part that opens with a bold numbered label of its own ("Active
+  // Reading 22.1:", "Exercise 3.1") starts a new element: no sentence goes
+  // on in it (parse loop finding: a Tufte book's "…by a phase factor eiα
+  // which", cut at the page's foot, went on in the margin note "Active
+  // Reading 22.1: The 68% property is a good one…" above it).
+  if (numberedLabel(next)) return false;
   const sizes = prev.lineSize !== undefined && next.lineSize !== undefined ? [prev.lineSize, next.lineSize] : undefined;
   if (sizes && !/^[a-z]/.test(next.text) && Math.abs(sizes[0] - sizes[1]) > Math.min(...sizes) * 0.5) return false;
   // A part set in another face and another size is another text: a
@@ -155,6 +167,22 @@ function continuesOnPage(prev: Segment, next: Segment, setting: PageSetting): bo
     next.box.y1 >= prev.box.y1 - lineSize &&
     next.text.length <= 40;
   if (noteRight && sizes && sizes[1] < sizes[0] * 0.95) return false;
+  // A note of two lines or more set at the body's size in the margin right
+  // of the paragraph, narrow beside it, starts a line or more under the
+  // paragraph's top and ends within two lines of its foot: a column the
+  // paragraph went on in starts at the column's top, as wide as the
+  // paragraph (parse loop finding: a Tufte book's notes, "This notation is
+  // used in atomic physics contexts…", read on the sentence a display cut:
+  // "…following our model from Chapter 13, is This notation…").
+  const noteBeside =
+    prev.box !== undefined &&
+    next.box !== undefined &&
+    next.box.x1 > prev.box.x2 + lineSize &&
+    next.box.y2 <= prev.box.y2 - lineSize &&
+    next.box.y1 >= prev.box.y1 - lineSize * 2 &&
+    next.box.y2 - next.box.y1 > lineSize * 1.6 &&
+    next.box.x2 - next.box.x1 <= (prev.box.x2 - prev.box.x1) * 0.6;
+  if (noteBeside) return false;
   if ((/[a-z,;\-–—]$/.test(prev.text) || ABBREVIATION_END_RE.test(prev.text)) && goesOn(prev.text, next.text)) return true;
   const size = prev.lineSize ?? 10;
   const columnBreak = prev.box !== undefined && next.box !== undefined && next.box.y2 > prev.box.y1 && next.box.x1 > prev.box.x2 - size;
@@ -230,7 +258,7 @@ export function joinOnPage(input: Segment[]): Segment[] {
 // "that leverages Coherence Relations …": arXiv 2503.10997 p. 2).
 function itemGoesOn(list: Segment, next: Segment): boolean {
   if (list.type !== "LIST" || list.tocEntries || next.type !== "PARAGRAPH" || next.listItem || list.page !== next.page) return false;
-  if (/[.!?:…"”)]$/.test(list.text.trim()) || !/^\p{Ll}/u.test(next.text) || !list.box || !next.box) return false;
+  if (/[.!?:…"”)]$/.test(list.text.trim()) || END_MARK_RE.test(list.text.trim()) || !/^\p{Ll}/u.test(next.text) || !list.box || !next.box) return false;
   const size = list.lineSize ?? 10;
   return next.box.y2 > list.box.y1 && next.box.x1 > list.box.x2 - size;
 }

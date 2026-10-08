@@ -1130,6 +1130,20 @@ export function buildLines(items: Item[], page: number): Line[] {
       kept[k] = kept[k].filter((i) => i !== item);
     }
   }
+  // A script of a script stays in its group only for its base there: once
+  // every glyph of the group's size left, the glyphs set under them follow
+  // to the line their bases joined (parse loop finding: an algorithm's
+  // "{…}^{T_roll−1}", its 5 pt "roll" left alone between two lines once
+  // the 7 pt "T" and "−1" joined the line under it).
+  for (let k = 0; k < grouped.length; k++) {
+    if (kept[k].length === 0 || kept[k].length === grouped[k].length || kept[k].some((i) => i.size >= stats[k].size * 0.75)) continue;
+    const bases = grouped[k].filter((i) => i.size >= stats[k].size * 0.75);
+    if (!kept[k].every((item) => bases.some((base) => touches(base, item)))) continue;
+    const target = moved.findIndex((m, n) => n !== k && m.some((i) => bases.includes(i)));
+    if (target < 0) continue;
+    moved[target].push(...kept[k]);
+    kept[k] = [];
+  }
   // A group whose every glyph left is no line: what moved into it follows
   // its glyphs (a macron over a letter landed in the emptied group of the
   // subscripts beside it — import compare loop finding).

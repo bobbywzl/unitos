@@ -8,7 +8,7 @@ import type { Glyph } from "@/lib/parse/pdf/drawing";
 import { CAPTION_RE } from "@/lib/parse/pdf/figures";
 import { geom, lineMathShare, median } from "@/lib/parse/pdf/geometry";
 import { BULLET_RE, GLYPH_BULLET_RE, follows, isGlyphMarker, opensSequence, readMarker, type Marker } from "@/lib/parse/pdf/markers";
-import { boldShare, endsBold, fillsMargin, isMonoLine, joinGroup, startsWithBoldLead } from "@/lib/parse/pdf/text";
+import { boldShare, endsBold, fillsMargin, isMonoLine, joinGroup, quoteSide, startsWithBoldLead } from "@/lib/parse/pdf/text";
 import type { Box, Line, PageContext, Segment, Step } from "@/lib/parse/pdf/types";
 import type { Indent } from "@/lib/parse/types";
 
@@ -663,6 +663,17 @@ function sizesDiffer(a: Line, b: Line, ctx: PageContext): boolean {
   return Math.abs(a.size - b.size) > (ctx.ocr ? Math.max(a.size, b.size) * 0.2 : 0.6);
 }
 
+// The size of a line's words after its bold lead: a label set larger than
+// its words ("Exercise 32.2" in 10.9 pt before 10.2 pt words) is not the
+// size the paragraph's next line goes on at (parse loop finding: a Tufte
+// book's exercises split after their first line). A line with no bold lead
+// is its size.
+function wordSize(line: Line): number {
+  if (!startsWithBoldLead(line)) return line.size;
+  const words = line.items.filter((i) => !i.bold && i.str.trim() !== "");
+  return words.length > 0 ? Math.max(...words.map((i) => i.size)) : line.size;
+}
+
 // A display's number set left of it, in a cell of its own ("(33) ⇥ ⟨u, v⟩",
 // amsart's leqno).
 const EQ_NUMBER_RE = /^\(\d{1,3}[a-z]?\)$/;
@@ -826,9 +837,18 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
     // word: dated lines one under another and a paper's author lines ran
     // together.
     const word = firstWord(next);
-    const roomy = prev.xEnd + prev.size * 1.28 + word < sentenceEdge;
+    // Lines set beside a pull quote end or start at the quote, not at the
+    // column's edges (quoteSide): a line beside a quote right of it has no
+    // room, and a line beside a quote left of it starts at its column's
+    // edge where it meets a line not beside the quote; two lines beside it
+    // keep their own starts (a first line's indent there).
+    const quoted = quoteSide(prev) === "right";
+    const start = (l: Line, other: Line) => (quoteSide(l) === "left" && quoteSide(other) !== "left" ? leftEdge(l, ctx) : l.x);
+    const [prevX, nextX] = [start(prev, next), start(next, prev)];
+    const roomy = !quoted && prev.xEnd + prev.size * 1.28 + word < sentenceEdge;
     const endsShort =
       !centered &&
+      !quoted &&
       sentenceEdge > 0 &&
       (prevTerminal || roomy) &&
       prev.xEnd + prev.size * 0.28 + word <= sentenceEdge - 1 &&
@@ -842,6 +862,7 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
     // to tell.
     const lastLine =
       !centered &&
+      !quoted &&
       !ctx.ocr &&
       prevTerminal &&
       OPENS_SENTENCE_RE.test(next.text) &&
@@ -906,9 +927,9 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
         !(gap <= next.size * ctx.leading * 1.3 && colEdge > 0 && fillsMargin(prev, next, colEdge) && !LEADERS_RE.test(prev.text))) ||
       // The paragraph gap: looser than the text leading by a third.
       (gap > next.size * ctx.leading * 1.3 && !pushedApart(prev, next)) ||
-      sizesDiffer(next, prev, ctx) ||
-      (next.x > prev.x + next.size * 1.1 && !hanging && !centered) ||
-      (next.x < prev.x - next.size * 1.1 && !(group.length === 1 && firstLineIndent) && !centered) ||
+      (sizesDiffer(next, prev, ctx) && !(group.length === 1 && !sizesDiffer(next, { ...prev, size: wordSize(prev) }, ctx))) ||
+      (nextX > prevX + next.size * 1.1 && !hanging && !centered) ||
+      (nextX < prevX - next.size * 1.1 && !(group.length === 1 && firstLineIndent) && !centered) ||
       // A line set larger than the body stands alone (no heading reader
       // took it), unless it goes on a centered line of its own size: a
       // title page's author line, set large and wrapped in two
@@ -944,7 +965,7 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
         prev.xEnd + prev.size * 1.28 + next.firstWordWidth < (lineColumn(prev)?.[1] ?? 0)) ||
       TOC_LABEL_RE.test(next.text.trim()) ||
       // A line stretched into cells tells no indent of its own.
-      (isIndented(next, ctx) && prev.cells.length === 1 && !isIndented(prev, ctx) && !hanging && !centered) ||
+      (isIndented(next, ctx) && prev.cells.length === 1 && !isIndented(prev, ctx) && !hanging && !centered && quoteSide(next) !== "left") ||
       // An equation's line and a text line never share a paragraph: the
       // label under an underbrace joined the formula and diluted its math
       // share below the equation threshold (import compare loop finding).

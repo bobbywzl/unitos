@@ -102,7 +102,14 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
     // ends the block before it, as the page shows it. So does a remark's
     // (parse loop finding: the MML book's ♢ under "… are linearly
     // independent." read as a display equation of its own).
-    const last = segments[segments.length - 1];
+    // A block in the margin right of the mark (a note, a side caption)
+    // is no block the mark ends: it ends the last block of its column
+    // (parse loop finding: the MML book's ♢ under a list read as "column
+    // space ♢", the note beside the list, and the side caption's last line
+    // beside the figure over a Remark's end read "Φ : V → W. ♢").
+    const inColumn = (s: Segment) => s.box === undefined || s.box.x1 < line.x;
+    const over = segments.slice(-4).findLast((s) => s.page === line.page && (s.type === "PARAGRAPH" || s.type === "LIST") && inColumn(s));
+    const last = over ?? segments[segments.length - 1];
     if (PROOF_END_RE.test(line.text.trim()) && last !== undefined && (last.type === "PARAGRAPH" || last.type === "LIST")) {
       appendProofBox(last, line);
       i++;
@@ -255,16 +262,20 @@ function blockText(stack: Line[]): { text: string; runs: Run[] } {
 // that holds four in five of its words: a pull quote, the text's own words
 // set apart ("Many Earth science missions, both airborne and on orbit, …"
 // beside the paragraph it quotes, the Earth Observer p. 7: read as a
-// paragraph).
+// paragraph). A part set smaller than the paragraph is a note in the
+// margin that glosses it, no pull quote (parse loop finding: the MML book's
+// note "coordinate of the orthogonal projection of x onto the subspace
+// spanned by bj" read as a quote, apart from its first line).
 function markPullQuotes(segments: Segment[]): void {
   const wordsOf = (text: string) => text.toLowerCase().match(/\p{L}{3,}/gu) ?? [];
   const width = (s: Segment) => (s.box ? s.box.x2 - s.box.x1 : 0);
+  const smaller = (s: Segment, t: Segment) => s.lineSize !== undefined && t.lineSize !== undefined && s.lineSize < t.lineSize * 0.9;
   for (const s of segments) {
     if (s.type !== "PARAGRAPH" || /\b(?:quote|caption|center)\b/.test(s.html ?? "")) continue;
     const words = wordsOf(s.text);
     if (words.length < 8) continue;
     const quoted = segments.some((t) => {
-      if (t === s || t.type !== "PARAGRAPH" || t.text.length <= s.text.length || width(s) * 2 > width(t)) return false;
+      if (t === s || t.type !== "PARAGRAPH" || t.text.length <= s.text.length || width(s) * 2 > width(t) || smaller(s, t)) return false;
       const theirs = new Set(wordsOf(t.text));
       return words.filter((w) => theirs.has(w)).length >= words.length * 0.8;
     });
