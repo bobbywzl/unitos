@@ -1,7 +1,7 @@
 "use client";
 
 import { useEditorState, type Editor } from "@tiptap/react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/components/lang-provider";
 import { CloseIcon, ExpandLessIcon, ExpandMoreIcon, MoreHorizIcon } from "@/components/docs/icons";
@@ -156,6 +156,8 @@ export function FindBar({
   }
 
   const placed = pos !== null;
+  const barRef = useRef<HTMLDivElement>(null);
+  useDockedRoom(editor, barRef, open && docked && placed);
   useEffect(() => {
     if (!open || !placed) return;
     inputRef.current?.focus();
@@ -173,6 +175,7 @@ export function FindBar({
   ];
   return createPortal(
     <div
+      ref={barRef}
       role="search"
       className="docs-findbar"
       data-docked={docked || undefined}
@@ -228,6 +231,30 @@ export function FindBar({
     </div>,
     document.body,
   );
+}
+
+/** While the docked bar is open, the page under the sticky header moves
+    down by the bar's height, so a result near the top of the document never
+    lies under the bar. */
+function useDockedRoom(editor: Editor, barRef: RefObject<HTMLDivElement | null>, on: boolean) {
+  useLayoutEffect(() => {
+    const bar = barRef.current;
+    const header = editor.view.dom.closest("[data-docs-editor]")?.querySelector<HTMLElement>(".docs-header");
+    if (!on || !bar || !header) return;
+    let below: HTMLElement | null = editor.view.dom;
+    while (below?.parentElement && !below.parentElement.contains(header)) below = below.parentElement;
+    if (!below || below.contains(header)) return;
+    const page = below;
+    const before = page.style.getPropertyValue("margin-top");
+    const fit = () => page.style.setProperty("margin-top", `${bar.offsetHeight + 8}px`);
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(bar);
+    return () => {
+      ro.disconnect();
+      page.style.setProperty("margin-top", before);
+    };
+  }, [editor, barRef, on]);
 }
 
 /** The docked bar's replace rows: Replace with, the three boxes, Replace and
