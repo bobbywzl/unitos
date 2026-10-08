@@ -23,7 +23,13 @@ import { MEDIA_EXTENSIONS, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 // Each record names the account that queued it and is sent only while that
 // account is signed in; records of other accounts wait, uncounted and not
 // drawn. One tab drains at a
-// time (a Web Lock), so two open tabs never send a record twice. A note write
+// time (a Web Lock), so two open tabs never send a record twice, and the
+// tabs share one wait between tries (TRIED_KEY): a failing write is tried
+// by one tab at a time, never once per tab. A write the server cannot take
+// now holds back only the later writes that name the same note, section,
+// reply, or annotation; the writes after it that name other things go on.
+// A queueable write to something a queued write names queues behind it
+// (lib/api.ts): one sender per edit, in order. A note write
 // is never refused for a part of it: a quote whose anchor no longer resolves
 // lands its words without the source (replayBody), and words written to a
 // note deleted meanwhile land in a new note (lib/notes/gone.ts). While
@@ -53,7 +59,11 @@ export const NOTE_KEPT_EVENT = "unitos:note-kept";
 // Wi-Fi handover, a proxy reset) sends no online event, and a server that
 // answered 5xx (a deploy) is tried again the same way. Tries count time,
 // not page loads.
-const RETRY_MS = [2_000, 4_000, 8_000, 15_000, 30_000];
+const RETRY_MS = [2_000, 4_000, 8_000, 15_000];
+// The last drain that ended with writes still waiting, in any tab, and how
+// many such drains ran one after another: the wait before the next try is
+// the same for every tab.
+const TRIED_KEY = "unitos-offline-tried";
 
 export type QueuedWrite = {
   path: string;
@@ -262,6 +272,47 @@ function waitsAlready(path: string, method: string, account: string | null, body
   );
 }
 
+// An id the database or the browser made (lib/notes/client-id.ts).
+const ID = /^[a-z0-9]{20,40}$/;
+
+/** The notes, sections, replies, and annotations a write names: the ids in
+    its path, and the body's id fields (`id`, `sectionId`, `sourceIds`, …). */
+function idsOf(record: Pick<QueuedWrite, "path" | "body">): string[] {
+  const ids = record.path
+    .split("?")[0]
+    .split("/")
+    .filter((part) => ID.test(part));
+  const body = record.body;
+  if (body && typeof body === "object") {
+    for (const [key, value] of Object.entries(body as Record<string, unknown>)) {
+      if (/(^id|Id)$/.test(key) && typeof value === "string" && ID.test(value)) ids.push(value);
+      if (/Ids$/.test(key) && Array.isArray(value)) {
+        for (const v of value) if (typeof v === "string" && ID.test(v)) ids.push(v);
+      }
+    }
+  }
+  return ids;
+}
+
+// False once a drain found the queue empty and nothing queued since in this
+// tab: a write then needs no look at the queue before it leaves.
+let mayWait = true;
+
+/** True when a write of this account waits in the queue for something this
+    write names: the write queues behind it (lib/api.ts), so the queue alone
+    sends the edits of that note, in order. */
+export async function waitsInQueue(path: string, body: unknown): Promise<boolean> {
+  if (!mayWait || typeof indexedDB === "undefined") return false;
+  const ids = new Set(idsOf({ path, body }));
+  if (ids.size === 0) return false;
+  try {
+    const all = await tx<QueuedWrite[]>(WRITES, "readonly", (s) => s.getAll() as IDBRequest<QueuedWrite[]>);
+    return all.some((r) => !(r.held && r.held.length > 0) && queuedForThisAccount(r) && idsOf(r).some((id) => ids.has(id)));
+  } catch {
+    return false;
+  }
+}
+
 /** A status that says the server is down or busy, not that the write is
     wrong: the write is tried again. */
 export function isServerError(status: number): boolean {
@@ -269,13 +320,17 @@ export function isServerError(status: number): boolean {
 }
 
 /** Queue a write. attempts: 1 when the server already answered it with an
-    error (lib/api.ts): the notes mark it Not saved from the start. */
+    error (lib/api.ts): the notes mark it Not saved from the start. behind:
+    it never left, queued behind a write that waits (waitsInQueue); the
+    queue's next try sends both. */
 export async function queueWrite(
   path: string,
   method: QueuedWrite["method"],
   body?: unknown,
   attempts = 0,
+  behind = false,
 ): Promise<void> {
+  mayWait = true;
   const record: QueuedWrite = {
     path,
     method,
@@ -296,8 +351,10 @@ export async function queueWrite(
   queuedSinceSync = true;
   notify();
   // Queued with the browser online: the server was out of reach for a
-  // moment, so try again now rather than at the next online event.
-  if (!isOffline()) void syncQueue();
+  // moment, so try again now rather than at the next online event. Queued
+  // behind a write that waits: at that write's next try.
+  if (behind) retryLater();
+  else if (!isOffline()) void syncQueue();
 }
 
 export async function queueUpload(file: File, notebookId: string): Promise<void> {
@@ -396,6 +453,55 @@ async function announce(record: QueuedWrite, res: Response): Promise<void> {
   }
 }
 
+// What the server answered for a queued delete that landed, by its path:
+// the History event an Undo pressed after the landing restores.
+const deleted = new Map<string, unknown>();
+
+/** The answer to a queued delete of `path` that landed in this tab, if any. */
+export function landedDelete(path: string): unknown {
+  return deleted.get(path);
+}
+
+/** Take the last queued write of `path` and `method` of this account out of
+    the queue before it is sent: the pill's Undo of a delete that waits. True
+    when one was taken out; false when it was sent already (or never queued). */
+export async function dropQueuedWrite(path: string, method: QueuedWrite["method"]): Promise<boolean> {
+  try {
+    const db = await openDb();
+    const taken = await new Promise<boolean>((resolve, reject) => {
+      let last: IDBValidKey | null = null;
+      const t = db.transaction(WRITES, "readwrite");
+      const store = t.objectStore(WRITES);
+      const req = store.openCursor();
+      req.onsuccess = () => {
+        const cursor = req.result;
+        if (cursor) {
+          const record = cursor.value as QueuedWrite;
+          if (record.path === path && record.method === method && queuedForThisAccount(record)) last = cursor.primaryKey;
+          cursor.continue();
+          return;
+        }
+        if (last === null) {
+          resolve(false);
+          return;
+        }
+        const del = store.delete(last);
+        del.onsuccess = () => resolve(true);
+        del.onerror = () => reject(del.error);
+      };
+      req.onerror = () => reject(req.error);
+      t.oncomplete = () => db.close();
+    });
+    if (taken) {
+      await holdQueuedNoteDrafts();
+      notify();
+    }
+    return taken;
+  } catch {
+    return false;
+  }
+}
+
 async function sendWrite(record: QueuedWrite): Promise<Sent> {
   try {
     const body = replayBody(record);
@@ -407,6 +513,7 @@ async function sendWrite(record: QueuedWrite): Promise<Sent> {
     const held = await heldBy(res);
     if (held) return { held };
     const result = await outcome(res, record.path);
+    if (res.ok && record.method === "DELETE") deleted.set(record.path, await res.clone().json().catch(() => null));
     if (res.ok) await announce(record, res);
     return result;
   } catch {
@@ -473,16 +580,18 @@ async function sendUpload(record: QueuedUpload): Promise<Sent> {
   }
 }
 
-// The oldest record in a store that is not held for the reader's word and
-// belongs to the account signed in now, with its key — the next one to sync.
-function firstRecord<T extends { held?: unknown; account: string | null }>(
+// The oldest record in a store after the key `after` that is not held for
+// the reader's word and belongs to the account signed in now, with its key —
+// the next one to sync.
+function nextRecord<T extends { held?: unknown; account: string | null }>(
   store: string,
+  after: IDBValidKey | null,
 ): Promise<{ key: IDBValidKey; record: T } | null> {
   return openDb().then(
     (db) =>
       new Promise((resolve, reject) => {
         const t = db.transaction(store, "readonly");
-        const req = t.objectStore(store).openCursor();
+        const req = t.objectStore(store).openCursor(after === null ? null : IDBKeyRange.lowerBound(after, true));
         req.onsuccess = () => {
           const cursor = req.result;
           if (cursor && ((cursor.value as T).held || !queuedForThisAccount(cursor.value as T))) {
@@ -499,23 +608,62 @@ function firstRecord<T extends { held?: unknown; account: string | null }>(
 
 let syncing = false;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
-let retries = 0;
 
-/** Run the drain again after a growing wait, while the browser says online. */
+function readTried(): { at: number; n: number } {
+  try {
+    const value = JSON.parse(localStorage.getItem(TRIED_KEY) ?? "null") as { at?: unknown; n?: unknown } | null;
+    if (typeof value?.at === "number" && typeof value.n === "number") return { at: value.at, n: value.n };
+  } catch {
+    // Storage blocked or unreadable: each tab waits on its own.
+  }
+  return { at: 0, n: 0 };
+}
+
+function writeTried(n: number) {
+  try {
+    localStorage.setItem(TRIED_KEY, JSON.stringify({ at: Date.now(), n }));
+  } catch {
+    // Storage blocked: each tab waits on its own.
+  }
+}
+
+/** Run the drain again after a growing wait, while the browser says online.
+    The wait counts from the last try of any tab: a tab whose timer ends
+    while another tab tried meanwhile waits on. */
 function retryLater() {
   if (typeof window === "undefined" || retryTimer || isOffline()) return;
-  const wait = RETRY_MS[Math.min(retries, RETRY_MS.length - 1)];
-  retries++;
+  const tried = readTried();
+  const wait = RETRY_MS[Math.min(tried.n, RETRY_MS.length - 1)];
+  const due = Math.max(500, tried.at + wait - Date.now());
   retryTimer = setTimeout(() => {
     retryTimer = null;
-    void syncQueue();
-  }, wait);
+    const now = readTried();
+    if (now.at + RETRY_MS[Math.min(now.n, RETRY_MS.length - 1)] - Date.now() > 250) retryLater();
+    else void syncQueue(true);
+  }, due);
+  window.addEventListener("visibilitychange", onShown);
+}
+
+function onShown() {
+  if (document.visibilityState === "visible") serverAnswered();
+}
+
+/** A request of the page got an answer from the server, or the tab is shown
+    again: writes waiting for their next try go now, not after the wait (at
+    most once per 2 s). */
+export function serverAnswered(): void {
+  if (!retryTimer || isOffline() || Date.now() - readTried().at < RETRY_MS[0]) return;
+  clearTimeout(retryTimer);
+  retryTimer = null;
+  void syncQueue();
 }
 
 // Drain the queue in order, writes before uploads. Called on the online event,
 // on app start, and after new records land while online. One tab at a time:
 // a tab waits out another tab's drain, then finds the records it sent gone.
-export async function syncQueue(): Promise<void> {
+// timed: the drain of a retry's wait; when another tab is draining, that
+// tab's drain is the try, and this one waits again.
+export async function syncQueue(timed = false): Promise<void> {
   // The drafts of note writes queued in an earlier page are held too.
   await holdQueuedNoteDrafts();
   if (syncing || isOffline()) return;
@@ -525,10 +673,25 @@ export async function syncQueue(): Promise<void> {
   let held = 0;
   try {
     const drain = async () => {
+      let waiting = false;
       for (const store of [WRITES, UPLOADS] as const) {
+        // What the writes the server could not take now name: a later write
+        // that names one of them waits too, so the writes to one note,
+        // section, reply, or annotation land in their order.
+        const blocked = new Set<string>();
+        let after: IDBValidKey | null = null;
         for (;;) {
-          const head = await firstRecord<QueuedWrite | QueuedUpload>(store);
+          const head: { key: IDBValidKey; record: QueuedWrite | QueuedUpload } | null = await nextRecord<
+            QueuedWrite | QueuedUpload
+          >(store, after);
           if (!head) break;
+          after = head.key;
+          mayWait = true;
+          const ids = store === WRITES ? idsOf(head.record as QueuedWrite) : [];
+          if (ids.some((id) => blocked.has(id))) {
+            for (const id of ids) blocked.add(id);
+            continue;
+          }
           const result =
             store === WRITES
               ? await sendWrite(head.record as QueuedWrite)
@@ -541,10 +704,15 @@ export async function syncQueue(): Promise<void> {
             continue;
           }
           if (result === "retry") {
-            const attempts = (head.record.attempts ?? 0) + 1;
-            await tx(store, "readwrite", (s) => s.put({ ...head.record, attempts }, head.key));
-            notify();
-            return "retry" as const;
+            // Tried again after the wait; the writes after it that name
+            // other things go on now.
+            waiting = true;
+            for (const id of ids) blocked.add(id);
+            if (!head.record.attempts) {
+              await tx(store, "readwrite", (s) => s.put({ ...head.record, attempts: 1 }, head.key));
+              notify();
+            }
+            continue;
           }
           await tx(store, "readwrite", (s) => s.delete(head.key));
           sent++;
@@ -558,19 +726,25 @@ export async function syncQueue(): Promise<void> {
           notify();
         }
       }
-      return "drained" as const;
+      return waiting ? ("retry" as const) : ("drained" as const);
     };
     const ended =
       typeof navigator !== "undefined" && navigator.locks
-        ? await navigator.locks.request(SYNC_LOCK, drain)
+        ? await navigator.locks.request(SYNC_LOCK, timed ? { ifAvailable: true } : {}, (lock) =>
+            lock ? drain() : ("busy" as const),
+          )
         : await drain();
     if (ended === "drained") {
       queuedSinceSync = false;
-      retries = 0;
+      mayWait = false;
+      writeTried(0);
       // Every write that failed and queued has landed: the save line
       // stops reading Not saved.
       settleQueuedWrites();
-    } else retryLater();
+    } else {
+      if (ended !== "busy") writeTried(readTried().n + 1);
+      retryLater();
+    }
   } finally {
     syncing = false;
     notify();

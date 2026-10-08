@@ -127,6 +127,9 @@ const en = {
   notSaved: "Not saved. Try again.",
   // A read that failed (a list, a conversation, an attachment): the same shape.
   notLoaded: "Not loaded. Try again.",
+  // A write refused because the account can no longer edit the project (a
+  // role changed, a share removed): the words stay in the browser's draft.
+  notSavedNoEdit: "Not saved: you can no longer edit this project. Your words are kept in this browser.",
   offline: "Not saved. Try again when you are online.",
   offlineQueued: "Offline · AI is off · {n} saved for sync · Unitos Premium",
   offlinePremium: "Offline · AI is off · notes and edits save and sync later · Unitos Premium",
@@ -224,6 +227,7 @@ const zh: Record<keyof typeof en, string> = {
   // Offline work (SPEC.md §17, Unitos Premium)
   notSaved: "未保存。请重试。",
   notLoaded: "未加载。请重试。",
+  notSavedNoEdit: "未保存：你已不能编辑此项目。你的文字保留在此浏览器中。",
   offline: "未保存。恢复联网后请重试。",
   offlineQueued: "离线 · AI 不可用 · 已保存 {n} 项待同步 · Unitos Premium",
   offlinePremium: "离线 · AI 不可用 · 笔记和编辑会保存并稍后同步 · Unitos Premium",

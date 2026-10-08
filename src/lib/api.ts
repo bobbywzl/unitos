@@ -3,7 +3,7 @@ import { DEFAULT_LANG, isLang, LANG_COOKIE, type Lang } from "@/lib/i18n/config"
 import { translate } from "@/lib/i18n/dictionaries";
 import { newNoteId } from "@/lib/notes/client-id";
 import { isAiCall } from "@/lib/offline/ai-routes";
-import { isOffline, offlinePremium, queueWrite, isServerError } from "@/lib/offline/queue";
+import { isOffline, offlinePremium, queueWrite, isServerError, serverAnswered, waitsInQueue } from "@/lib/offline/queue";
 import { beginWrite, endWrite } from "@/lib/save-state";
 import { tabAccount } from "@/lib/tab-account";
 
@@ -14,7 +14,10 @@ import { tabAccount } from "@/lib/tab-account";
 // way and is tried again, so a flaky server costs no more than no network.
 // Everything else still fails — a queued response could not stand in for the
 // real one. A caller that reads the answer but takes a queued one too says so
-// (`queue: true`).
+// (`queue: true`). A queueable write to a note (a section, a reply, an
+// annotation) that a queued write names queues behind that write without
+// leaving: the queue alone sends that note's edits, one after another, so a
+// failing server is not sent the same edit by two senders.
 const QUEUEABLE: { method: string; path: RegExp }[] = [
   { method: "POST", path: /^\/api\/notes$/ },
   { method: "PATCH", path: /^\/api\/notes\/[^/]+$/ },
@@ -131,6 +134,9 @@ async function send<T>(
       throw new Error(translate(clientLang(), "common.offlineAi"));
     }
     if (isOffline()) throw new TypeError("offline");
+    if (offlinePremium() && queueable(path, method, body, init?.queue) && (await waitsInQueue(path, body))) {
+      return queue<T>(path, method, body, true, true);
+    }
     res = await fetch(path, {
       method,
       headers: {
@@ -152,6 +158,8 @@ async function send<T>(
     console.warn("Not saved:", method, path, err instanceof Error ? err.message : String(err));
     throw new Error(isAiCall(path, body) && !isOffline() && err instanceof Error ? err.message : notSaved());
   }
+  // The server answers: writes waiting in the queue for their next try go now.
+  if (res.ok) serverAnswered();
   if (!res.ok) {
     const detail = await res.json().catch(() => null);
     const said =
@@ -168,7 +176,12 @@ async function send<T>(
     // model keeps its own words (the assistant's failure lines).
     let message: string;
     if (isAiCall(path, body)) message = said ?? translate(clientLang(), "common.requestFailedStatus", { status: res.status });
-    else if (said && !serverError) message = said;
+    else if (lostEdit(res.status, said)) {
+      // The account lost the right to write here (a role changed, a share
+      // removed): the words are kept in the browser, and the line says so.
+      console.warn("Not saved:", method, path, res.status, said ?? "");
+      message = translate(clientLang(), "common.notSavedNoEdit");
+    } else if (said && !serverError) message = said;
     else {
       console.warn("Not saved:", method, path, res.status, said ?? "");
       message = notSaved();
@@ -178,12 +191,23 @@ async function send<T>(
   return res.json() as Promise<T>;
 }
 
+/** A refusal that says the account can no longer write in the project: a
+    viewer now (403), or no longer a collaborator (404, the project hidden). */
+function lostEdit(status: number, said: string | null): boolean {
+  if (said === null) return false;
+  const lang = clientLang();
+  return (
+    (status === 403 && said === translate(lang, "api.viewingOnly")) ||
+    (status === 404 && said === translate(lang, "common.corpusNotFound"))
+  );
+}
+
 /** Queue the write (SPEC.md §17) and answer as the queue does. serverError:
     the server answered with an error; the save line reads Not saved and the
     queued note is marked Not saved until the queue lands it. */
-async function queue<T>(path: string, method: string, body: unknown, serverError: boolean): Promise<T> {
+async function queue<T>(path: string, method: string, body: unknown, serverError: boolean, behind = false): Promise<T> {
   const queued = queuedBody(path, method, body);
-  await queueWrite(path, method as "POST" | "PATCH" | "DELETE", queued, serverError ? 1 : 0);
+  await queueWrite(path, method as "POST" | "PATCH" | "DELETE", queued, serverError ? 1 : 0, behind);
   const id = queued && typeof queued === "object" && "id" in queued ? queued.id : undefined;
   return { queued: true, ...(typeof id === "string" ? { id } : {}), ...(serverError ? { serverError: true } : {}) } as T;
 }
