@@ -11,6 +11,7 @@ import {
   useSyncExternalStore,
   type CSSProperties,
   type Dispatch,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type SetStateAction,
@@ -218,6 +219,8 @@ const FLYOUT_EDGE = 6;
 
 // The rows the keys move between, in a list or a fly-out.
 export const LIST_ROWS = '[data-track="document-open"], [data-track="folder-open"]';
+// The controls at a folder's list's foot.
+const FLYOUT_FOOT = '[data-track="folder-new-file"], [data-track="folder-new"]';
 
 
 // A folder's list beside its row: a fixed panel in a portal (the root list
@@ -282,8 +285,10 @@ function Flyout({
       style={place.wrapper}
       onKeyDown={(e) => {
         if (e.key !== "Escape" && e.key !== "ArrowLeft") return;
-        // Only from a row: a folder's open actions take their own Escape.
-        if (!(e.target instanceof Element) || !e.target.matches(LIST_ROWS)) return;
+        // Only from a row or the list's foot (New document here, in an
+        // empty folder the only control): a folder's open actions take
+        // their own Escape.
+        if (!(e.target instanceof Element) || !e.target.matches(`${LIST_ROWS}, ${FLYOUT_FOOT}`)) return;
         // The innermost fly-out takes it; the list and the fly-outs under
         // it stay.
         e.preventDefault();
@@ -310,18 +315,21 @@ function roomBeside(panelEl: HTMLElement): boolean {
 }
 
 // The name box for a new folder or a rename. Enter keeps it, Escape drops
-// it, and a blur keeps a name that was typed — a tap elsewhere on a phone
-// is how the box closes there.
+// it and gives the focus to `escapeTo` (New folder, or the folder's row),
+// and a blur keeps a name that was typed — a tap elsewhere on a phone is
+// how the box closes there.
 function FolderNameInput({
   initial,
   placeholder,
   onKeep,
   onDrop,
+  escapeTo,
 }: {
   initial: string;
   placeholder: string;
   onKeep: (title: string) => void;
   onDrop: () => void;
+  escapeTo: string;
 }) {
   const ime = useImeGuard();
   const [value, setValue] = useState(initial);
@@ -355,6 +363,7 @@ function FolderNameInput({
           e.preventDefault();
           e.stopPropagation();
           drop();
+          focusWhenDrawn(escapeTo);
         }
       }}
       {...ime.props}
@@ -463,6 +472,9 @@ type Tree = {
   dragOver: string | null;
   // A press on a row: a hold picks it up.
   press: (e: ReactPointerEvent<HTMLElement>, drag: TreeDrag) => void;
+  // Alt+↑ or Alt+↓ on a row: the row moves one place in its list, as a drag
+  // to the line above the row before it, or below the row after it, does.
+  nudge: (e: ReactKeyboardEvent<HTMLElement>, item: TreeDrag) => void;
   // The drag may land on this target (a folder id, or null = the project):
   // never where it sits now, and a folder never into itself.
   canDropOn: (target: string | null) => boolean;
@@ -511,6 +523,7 @@ function NewFolderRow({ parentId }: { parentId: string | null }) {
             createFolder(parentId, title);
           }}
           onDrop={() => setCreatingIn(null)}
+          escapeTo={parentId === null ? '[data-track="folder-new"]' : `[data-folder-row="${parentId}"]`}
         />
       ) : (
         <button
@@ -612,7 +625,8 @@ function FolderRow({
   // The folder's actions are a layer of their own: Escape closes them, not
   // the list, and the focus goes back to ⋮.
   useEscapeLayer(menuOpen, () => tree.setMenu(null));
-  const focusFlyout = () => focusWhenDrawn(`[data-flyout-for="${folder.id}"] :is(${LIST_ROWS})`);
+  // Into the list: its first row, else (an empty folder) New document here.
+  const focusFlyout = () => focusWhenDrawn(`[data-flyout-for="${folder.id}"] :is(${LIST_ROWS}, ${FLYOUT_FOOT})`);
   return (
     <div ref={setRowEl} className="flex flex-col">
       <div
@@ -622,6 +636,7 @@ function FolderRow({
         // Its list open under the row: a drop at the row's lower edge lands
         // at that list's start.
         data-tree-open-under={open && !flyout ? "" : undefined}
+        data-held={tree.held === folder.id || dragged ? "" : undefined}
         className={`flex items-center transition-[transform,opacity,background-color] duration-150 [-webkit-touch-callout:none] ${
           over ? "bg-clay-200 ring-1 ring-clay ring-inset" : ""
         } ${dragged ? "opacity-40" : ""} ${tree.held === folder.id ? "scale-[0.98] bg-clay-100" : ""}`}
@@ -629,6 +644,11 @@ function FolderRow({
         onPointerDown={
           canEdit && tree.renaming !== folder.id && !pending
             ? (e) => tree.press(e, { kind: "folder", id: folder.id, from: parentId })
+            : undefined
+        }
+        onKeyDown={
+          canEdit && tree.renaming !== folder.id && !pending
+            ? (e) => tree.nudge(e, { kind: "folder", id: folder.id, from: parentId })
             : undefined
         }
       >
@@ -642,6 +662,7 @@ function FolderRow({
                 tree.renameFolder(folder, title);
               }}
               onDrop={() => tree.setRenaming(null)}
+              escapeTo={`[data-folder-row="${folder.id}"]`}
             />
           </div>
         ) : (
@@ -843,10 +864,13 @@ function Level({ parentId, depth }: { parentId: string | null; depth: number }) 
           tree.drag?.kind === "document" && tree.drag.id === entry.id ? "[&>*]:opacity-40" : ""
         } ${tree.held === entry.id ? "scale-[0.98] bg-clay-100" : ""}`}
         style={rowStyle(i)}
+        // Held or carried: no long-press name over it (tooltip.tsx).
+        data-held={tree.held === entry.id || (tree.drag?.kind === "document" && tree.drag.id === entry.id) ? "" : undefined}
         aria-roledescription={canEdit ? t("panes.dragDocumentTitle") : undefined}
         onPointerDown={
           canEdit && !pending ? (e) => tree.press(e, { kind: "document", id: entry.id, from: parentId }) : undefined
         }
+        onKeyDown={canEdit && !pending ? (e) => tree.nudge(e, { kind: "document", id: entry.id, from: parentId }) : undefined}
       >
         {entry.row.node}
       </div>
@@ -1112,9 +1136,8 @@ export function DocumentTree<
     }
   }
 
-  // A level's rows in the order Sort by draws them.
-  const layout = (parentId: string | null): LevelLayout => {
-    const entries: LevelEntry[] = [
+  // A level's rows, and the order Sort by draws them in.
+  const entriesOf = (parentId: string | null): LevelEntry[] => [
       ...childFolders(folders, parentId).map((folder) => ({
         entry: "folder" as const,
         folder,
@@ -1137,7 +1160,9 @@ export function DocumentTree<
           addedAt: row.addedAt,
           editedAt: row.editedAt,
         })),
-    ];
+  ];
+  const layout = (parentId: string | null): LevelLayout => {
+    const entries = entriesOf(parentId);
     // Added: the list as it was before sorts existed; added over more than
     // one week, a category per week (what Week added drew).
     if (sort === "added") {
@@ -1221,6 +1246,31 @@ export function DocumentTree<
     return null;
   };
 
+  // A drop offers Undo on the notes' pill (SPEC.md §6): the lists it
+  // changed go back to the Custom order they had, the row back into the
+  // list it came from, and Sort by back to what it was.
+  const undoDrop = (lists: (string | null)[]) => {
+    const wasSort = sort;
+    const was = [...new Set(lists)]
+      .map((parentId) => ({ parentId, items: sortByPosition(entriesOf(parentId)).map(itemOf) }))
+      .filter((list) => list.items.length > 0);
+    return () => {
+      window.dispatchEvent(
+        new CustomEvent("dissect:undo-pill", {
+          cancelable: true,
+          detail: {
+            message: t("panes.rowMoved"),
+            undo: () =>
+              run("drag", async () => {
+                for (const list of was) await api(`/api/notebooks/${notebookId}/order`, "PUT", list);
+                if (wasSort !== "custom") onSort?.(wasSort);
+              }),
+          },
+        }),
+      );
+    };
+  };
+
   // Reorder a list: the drag lands at the line, and the list's whole order
   // is saved, so it stays as the reader sees it.
   const reorder = (moving: TreeDrag, hint: Extract<TreeHint, { kind: "line" }>) => {
@@ -1239,11 +1289,12 @@ export function DocumentTree<
       basis,
       map: new Map(order.map((e, position) => [`${e.kind}:${e.id}`, { parentId: hint.parentId, position }])),
     });
+    const offerUndo = undoDrop([moving.from, hint.parentId]);
     if (sort !== "custom") onSort?.("custom");
     void run(
       "drag",
       () => api(`/api/notebooks/${notebookId}/order`, "PUT", { parentId: hint.parentId, items: order }),
-      undefined,
+      offerUndo,
       () => setPlaced(null),
     );
   };
@@ -1254,6 +1305,7 @@ export function DocumentTree<
   const moveInto = (moving: TreeDrag, target: string | null) => {
     if (moving.from === target) return;
     if (moving.kind === "folder" && target !== null && folderSubtree(folders, moving.id).has(target)) return;
+    const offerUndo = undoDrop([moving.from]);
     setPlaced({ basis, map: new Map([[`${moving.kind}:${moving.id}`, { parentId: target, position: null }]]) });
     void run(
       "drag",
@@ -1261,7 +1313,7 @@ export function DocumentTree<
         moving.kind === "document"
           ? api(`/api/notebooks/${notebookId}/documents/${moving.id}`, "PATCH", { folderId: target })
           : api(`/api/notebooks/${notebookId}/folders/${moving.id}`, "PATCH", { parentId: target }),
-      undefined,
+      offerUndo,
       () => setPlaced(null),
     );
   };
@@ -1293,7 +1345,12 @@ export function DocumentTree<
 
   const showHint = (hint: TreeHint | null) => {
     hintRef.current = hint;
-    setLine(hint?.kind === "line" ? hint.at : null);
+    // A move that leaves the line where it is renders nothing: the list
+    // draws again only when the line moves.
+    const at = hint?.kind === "line" ? hint.at : null;
+    setLine((was) =>
+      was && at && was.top === at.top && was.left === at.left && was.width === at.width ? was : at,
+    );
     setDragOver(hint?.kind === "into" ? (hint.folderId ?? ROOT_TARGET) : null);
     // Held over a folder, the drag opens its list, so it can go deeper.
     const over = hint?.kind === "into" ? hint.folderId : null;
@@ -1437,6 +1494,20 @@ export function DocumentTree<
     held,
     dragOver,
     press,
+    nudge: (e, item) => {
+      if (!e.altKey || e.ctrlKey || e.metaKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (busy.current || drag) return;
+      const order = levelOrder(item.from).filter((row) => !(row.kind === item.kind && row.id === item.id));
+      const at = levelOrder(item.from).findIndex((row) => row.kind === item.kind && row.id === item.id);
+      const up = e.key === "ArrowUp";
+      const target = order[up ? at - 1 : at];
+      if (at < 0 || !target) return;
+      reorder(item, { kind: "line", parentId: item.from, target, before: up, at: { top: 0, left: 0, width: 0 } });
+      // The row keeps the focus where it lands.
+      focusWhenDrawn(item.kind === "document" ? `[data-doc-row="${item.id}"]` : `[data-folder-row="${item.id}"]`);
+    },
     canDropOn,
     // What the folder holds moves up one level; the route does it.
     deleteFolder: (folder) => {

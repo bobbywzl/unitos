@@ -46,7 +46,7 @@ const KEYS: [string, TKey][] = [
   ["⌘/Ctrl + Enter", "works.guideKeySaveNote"],
   ["Tab · ⇧ + Tab", "works.guideKeyIndent"],
   ["⇧ + click", "works.guideKeyPick"],
-  ["↑ ↓ · → ← · a–z", "works.guideKeyList"],
+  ["↑ ↓ · → ← · a–z · Alt + ↑ ↓", "works.guideKeyList"],
   ["Enter · ⌫", "works.guideKeyQueueDecide"],
   ["J · K", "works.guideKeyQueueMove"],
   ["E", "works.guideKeyQueueEdit"],

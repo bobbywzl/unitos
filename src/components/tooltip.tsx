@@ -184,8 +184,8 @@ export function TooltipLayer() {
       const timer = window.setTimeout(() => {
         if (!longPress || longPress.id !== id) return;
         longPress = null;
-        // A card the hold lifted is being dragged: no tip over it.
-        if (!target.isConnected || target.closest("[aria-roledescription][aria-pressed='true']")) return;
+        // A card or a row the hold lifted is being dragged: no tip over it.
+        if (!target.isConnected || target.closest("[aria-roledescription][aria-pressed='true'], [data-held]")) return;
         show(target);
         swallow = { target, until: performance.now() + 1500 };
         timerRef.current = window.setTimeout(hide, TOUCH_TIP_MS);

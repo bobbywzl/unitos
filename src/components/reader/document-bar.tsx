@@ -38,8 +38,6 @@ import {
 import { DocumentsSort, useDocumentSort } from "@/components/reader/document-organize";
 import {
   DocumentDeleteConfirm,
-  inAnotherProject,
-  prefetchDocumentReach,
   useDocumentReach,
 } from "@/components/reader/document-delete";
 import { ReparseLossList, useReparseLosses } from "@/components/reader/reparse-losses";
@@ -126,8 +124,6 @@ function sleep(ms: number) {
 const REPARSE_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 // How long the pointer rests on the document pill before the list opens.
 const LIST_HOVER_MS = 300;
-// How long a row's actions wait for where the document is before they draw.
-const REACH_WAIT_MS = 600;
 function reparseKey(documentId: string): string {
   return `unitos:reparse:${documentId}:${PARSER_VERSION}`;
 }
@@ -262,10 +258,10 @@ export function DocumentBar({
   const t = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
-  // The list's Sort by (SPEC.md §6): one choice per browser. It orders every
-  // list, folders among the documents, and every sort but Added puts them
-  // in categories.
-  const [documentSort, setDocumentSort] = useDocumentSort();
+  // The list's Sort by (SPEC.md §6): one choice per project in this browser.
+  // It orders every list, folders among the documents, and every sort but
+  // Added puts them in categories.
+  const [documentSort, setDocumentSort] = useDocumentSort(notebookId);
   const [phase, setPhase] = useState<IngestPhase | null>(null);
   const [dialog, setDialog] = useState(false);
   // The folder the add-document dialog adds to (SPEC.md §6): the + of a
@@ -309,25 +305,12 @@ export function DocumentBar({
   const [moveError, setMoveError] = useState<string | null>(null);
   // Delete document opens its confirm under the row (document-delete.tsx).
   // Where the document is — this project, its other projects — is read when
-  // the row's actions open, so Remove from this project and the confirm
-  // both know it.
+  // the row's actions open, so the confirm knows it, and offers Remove from
+  // this project beside Delete document when another project holds it. The
+  // actions themselves never depend on it: they draw at the press.
   const [deleteAsk, setDeleteAsk] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const { reach: menuReach, loading: menuReachLoading } = useDocumentReach(canEdit ? pillMenu : null);
-  // The rows wait for that answer, REACH_WAIT_MS at most, and draw once:
-  // Remove from this project never lands where Delete was (NAV13-03).
-  const [reachWaited, setReachWaited] = useState<string | null>(null);
-  useEffect(() => {
-    if (!pillMenu) return;
-    const id = pillMenu;
-    const timer = setTimeout(() => setReachWaited(id), REACH_WAIT_MS);
-    // A later open of the same row waits again.
-    return () => {
-      clearTimeout(timer);
-      setReachWaited(null);
-    };
-  }, [pillMenu]);
-  const menuRowsReady = !canEdit || !menuReachLoading || reachWaited === pillMenu;
   // The ask before Replace the edits names the quotes it costs.
   const { losing: reparseLosing, loading: reparseLosingLoading } = useReparseLosses(
     canEdit ? (editedAsk?.id ?? null) : null,
@@ -1333,10 +1316,6 @@ export function DocumentBar({
             setDeleteAsk(null);
             setPillMenu(pillMenu === d.id ? null : d.id);
           }}
-          // The menu's rows depend on where the document is: read it as the
-          // pointer or the focus comes to ⋮, so they draw once (NAV13-03).
-          onPointerEnter={canEdit ? () => prefetchDocumentReach(d.id) : undefined}
-          onFocus={canEdit ? () => prefetchDocumentReach(d.id) : undefined}
           data-track="document-actions"
           aria-label={t("panes.documentActionsFor", { title: d.title })}
           aria-expanded={pillMenu === d.id}
@@ -1346,8 +1325,8 @@ export function DocumentBar({
           <MoreIcon size={13} />
         </button>
       </div>
-      <Collapse open={pillMenu === d.id && menuRowsReady}>
-      {pillMenu === d.id && menuRowsReady && (
+      <Collapse open={pillMenu === d.id}>
+      {pillMenu === d.id && (
         <div ref={revealActions} data-no-drag className="mx-2 mb-1.5 flex flex-col rounded-xl bg-sand-100 py-1">
           {/* A row's actions list only what can run on this document. Re-parse:
               a video or audio document transcribes again, a handwritten one
@@ -1490,19 +1469,8 @@ export function DocumentBar({
               {t("panes.printDocument")}
             </button>
           )}
-          {/* Remove from this project: while another project the reader can
-              open holds the document (Delete's confirm offers it too). */}
-          {canEdit && inAnotherProject(menuReach, notebookId) && (
-            <button
-              onClick={() => void removeFromProject(d.id)}
-              data-track="document-remove"
-              disabled={deleting}
-              className={`${rowAction} disabled:opacity-40`}
-              data-tip={t("panes.removeFromProjectTitle")}
-            >
-              {t("panes.removeFromProject")}
-            </button>
-          )}
+          {/* Remove from this project is in Delete document's confirm,
+              beside Delete document, while another project holds it. */}
           {canEdit && (
             <button
               onClick={() => setDeleteAsk(deleteAsk === d.id ? null : d.id)}
@@ -1574,7 +1542,7 @@ export function DocumentBar({
           {listOpen && (
             <div
               ref={placeList}
-              className="menu-in absolute top-full left-0 z-40 mt-2 flex max-h-[min(60vh,480px)] w-80 max-w-[calc(100vw-96px)] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-card py-1.5 shadow-float"
+              className="menu-in absolute top-full left-0 z-40 mt-2 flex max-h-[min(60vh,480px)] w-80 sm:max-h-[calc(100dvh-96px)] max-w-[calc(100vw-96px)] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-card py-1.5 shadow-float"
             >
               <DocumentTree
                 header={<DocumentsSort sort={documentSort} onSort={setDocumentSort} />}

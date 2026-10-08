@@ -154,7 +154,7 @@ const en = {
   guideKeyQueueMove: "In the pending queue: go to the next or the previous pending note.",
   guideKeyQueueEdit: "In the pending queue: edit the pending note.",
   guideKeyQueueJump: "In the pending queue: jump to the pending note's quote in the article.",
-  guideKeyList: "In the document list: move between documents, or type a title's first letters to go to it. → opens a folder, ← leaves it.",
+  guideKeyList: "In the document list: move between documents, or type a title's first letters to go to it. → opens a folder, ← leaves it. Alt + ↑ ↓ moves the row one place.",
   guideLeftOffBody:
     "A document opens where you left off, in any tab and on any device you sign in on. A small ribbon above the block marks the place, so you can find it again after you scroll away.",
   // The release notifications (SPEC.md §18, lib/releases.ts): one per release, on the dashboard.
@@ -344,7 +344,7 @@ const zh: Record<keyof typeof en, string> = {
   guideKeyQueueMove: "在待定队列中：转到下一条或上一条待定笔记。",
   guideKeyQueueEdit: "在待定队列中：编辑待定笔记。",
   guideKeyQueueJump: "在待定队列中：跳到待定笔记在文章中的引文。",
-  guideKeyList: "在文档列表中：在文档之间移动，或输入标题的开头几个字跳到它。→ 打开文件夹，← 离开。",
+  guideKeyList: "在文档列表中：在文档之间移动，或输入标题的开头几个字跳到它。→ 打开文件夹，← 离开。Alt + ↑ ↓ 把这一行移动一位。",
   guideLeftOffBody:
     "文档会在你上次读到的位置打开，无论在哪个标签页，还是在你登录的任何设备上。块上方的小书签标出这个位置，滚动离开后也能找回来。",
   release20260924Title: "新功能：折叠、整页批注、按文档、对话列表",
