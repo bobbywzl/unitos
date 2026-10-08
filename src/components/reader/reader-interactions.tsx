@@ -200,6 +200,8 @@ import {
   type PageGeometry,
 } from "@/components/docs/layer/margin";
 import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
+import { KeptInput, KeptTextarea, type KeptFieldHandle } from "@/components/kept-field";
+import { AnswerMarkdown } from "@/components/assistant/answer-markdown";
 
 // One block's span of a selection (SPEC.md §5).
 type Segment = Omit<SourceInput, "documentId">;
@@ -876,6 +878,11 @@ function joinWords(first: string, then: string): string {
 // A card's draft: the messages queued under it, which never went out, then
 // the box's words. A card closed before its queue went out reopens with them
 // in its box (SPEC.md §7).
+// The words in a form's box as the press found them: a box keeps its own
+// words while the reader types (kept-field.tsx).
+function formBoxText(form: HTMLFormElement): string | undefined {
+  return form.querySelector("textarea")?.value;
+}
 function withQueued(input: string, queued: readonly QueuedText[]): string {
   return queued.reduceRight((text, q) => joinWords(q.content, text), input);
 }
@@ -1384,6 +1391,10 @@ export function ReaderInteractions({
   const [submenu, setSubmenu] = useState<null | "add" | "ai" | "comment" | "define">(null);
   // Kept per selection as a toolbar draft (lib/toolbar-drafts.ts) until the save lands.
   const [commentDraft, setCommentDraft] = useToolbarDraft("comment", documentId, popover?.anchor ?? null);
+  // The box keeps its own words while the reader types (kept-field.tsx); a
+  // press in the toolbox, which keeps the focus in the box, reads them here.
+  const commentFieldRef = useRef<KeptFieldHandle>(null);
+  const commentNow = () => commentFieldRef.current?.value() ?? commentDraft;
   // The page editor's right-click Explain, waiting for its popover (below).
   const [pendingExplain, setPendingExplain] = useState(false);
   // Its Add to notes, the same: one press adds, as the toolbox's does.
@@ -2096,6 +2107,10 @@ export function ReaderInteractions({
   }, [documentId]);
   const aiCommandRef = useRef("");
   aiCommandRef.current = aiCommand;
+  // The box keeps its own words while the reader types (kept-field.tsx):
+  // what the box holds now, sent or not yet handed over.
+  const aiFieldRef = useRef<KeptFieldHandle>(null);
+  const aiTyped = () => aiFieldRef.current?.value() ?? aiCommandRef.current;
   // The question is kept per selection as a toolbar draft (lib/toolbar-drafts.ts) until the answer lands.
   useToolbarDraftRestore(submenu === "ai", "assistant", documentId, popover?.anchor ?? null, aiCommand, setAiCommand);
   // The running assistant turn, so Stop can abort it — the popover's Run
@@ -2480,20 +2495,29 @@ export function ReaderInteractions({
       // layout leaves it alone (layoutNarrowCards).
       const kind = card?.dataset.sideCard;
       let moved = false;
+      // While the pointer moves, the card moves by its style alone, so a move
+      // renders nothing (TOOL14-02); the drop writes where it landed.
+      let at = start;
       const onMove = (ev: PointerEvent) => {
         if (!moved && kind) {
           moved = true;
           movedCardsRef.current.add(`${kind}:${layerSeenRef.current[kind] ?? ""}`);
         }
         const maxLeft = (container?.clientWidth ?? 1200) - 80;
-        apply(
-          Math.max(4, Math.min(start.left + ev.clientX - fromX, maxLeft)),
-          Math.max(4, start.top + ev.clientY - fromY),
-        );
+        at = {
+          left: Math.max(4, Math.min(start.left + ev.clientX - fromX, maxLeft)),
+          top: Math.max(4, start.top + ev.clientY - fromY),
+        };
+        if (card) card.style.translate = `${at.left - start.left}px ${at.top - start.top}px`;
+        else apply(at.left, at.top);
       };
       const onUp = () => {
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
+        if (card && moved) {
+          flushSync(() => apply(at.left, at.top));
+          card.style.translate = "";
+        }
         card?.removeAttribute("data-dragging");
       };
       window.addEventListener("pointermove", onMove);
@@ -2860,6 +2884,14 @@ export function ReaderInteractions({
     if (draftShownRef.current.has(noteId) && draftShownRef.current.get(noteId) === next) return;
     draftShownRef.current.set(noteId, next);
     setCardDraft(noteId, next, saved);
+  };
+  // The page closes, or a box goes, with words the card's state does not
+  // hold yet (kept-field.tsx): the draft goes to storage now.
+  const persistCardDraftNow = (noteId: string | null | undefined, text: string, saved: string | null = null) => {
+    keepCardDraft(noteId, text, saved);
+    writeCardDrafts(draftChangesRef.current, baseChangesRef.current);
+    draftChangesRef.current = new Map();
+    baseChangesRef.current = new Map();
   };
   // Words that never reached the server go back to the card's draft when the
   // card is closed: they show in its box when its mark opens it again.
@@ -5288,6 +5320,8 @@ export function ReaderInteractions({
   // The comment is kept per selection as a toolbar draft (lib/toolbar-drafts.ts) until the save lands.
   const [addComment, keepAddComment] = useToolbarDraft("add", documentId, popover?.anchor ?? null);
   const setAddComment = keepAddComment;
+  // The field keeps its own words while the reader types (kept-field.tsx).
+  const addFieldRef = useRef<KeptFieldHandle>(null);
   useEffect(() => {
     if (!popover || !popoverAnchorKey || popover.term || popover.figure) return;
     const text = popover.anchor.quotedText.trim();
@@ -5792,7 +5826,7 @@ export function ReaderInteractions({
       .split("\n")
       .map((line) => (line ? `> ${line}` : ">"))
       .join("\n");
-    const comment = addComment.trim();
+    const comment = (addFieldRef.current?.value() ?? addComment).trim();
     return comment ? `${quote}\n\n${comment}` : quote;
   }
 
@@ -6412,10 +6446,11 @@ export function ReaderInteractions({
     }
   }
 
-  async function saveAnnotation() {
+  async function saveAnnotation(typedNow?: string) {
     const card = annotationCard;
     if (!card || card.busy) return;
-    const draft = card.draft.trim();
+    // typedNow: the box's words as the press found them (kept-field.tsx).
+    const draft = (typedNow ?? card.draft).trim();
     // A comment needs text; a highlight with its comment cleared keeps the
     // quote as content — the same convention the create route uses.
     const content = draft || (card.kind === "highlight" ? (card.quotedText ?? "").slice(0, 5000) : "");
@@ -6423,7 +6458,7 @@ export function ReaderInteractions({
       showToast(t("reader.commentEmpty"));
       return;
     }
-    setAnnotationCard({ ...card, busy: true });
+    setAnnotationCard({ ...card, draft: typedNow ?? card.draft, busy: true });
     try {
       // Made from the text the card opened on (a pure highlight stores its
       // quote): a note changed elsewhere meanwhile keeps both sides' words
@@ -6443,6 +6478,8 @@ export function ReaderInteractions({
     }
   }
 
+  // The highlight card's box keeps its own words while the reader types.
+  const annotationFieldRef = useRef<KeptFieldHandle>(null);
   async function deleteAnnotation() {
     const card = annotationCard;
     if (!card || card.busy) return;
@@ -6454,24 +6491,31 @@ export function ReaderInteractions({
   }
 
   // The comment card edits in place too: same notes API, same refresh.
+  // The comment card's box keeps its own words while the reader types.
+  const commentCardFieldRef = useRef<KeptFieldHandle>(null);
   async function saveCommentCard() {
     const card = commentCard;
     if (!card || card.busy || !card.noteId) return;
-    const content = card.draft.trim();
+    // The box's words as the press found them (kept-field.tsx).
+    const typedNow = commentCardFieldRef.current?.value() ?? card.draft;
+    const content = typedNow.trim();
     if (!content) {
       showToast(t("reader.commentEmpty"));
       return;
     }
-    setCommentCard({ ...card, busy: true });
+    setCommentCard({ ...card, draft: typedNow, busy: true });
     try {
       // Made from the comment the card opened on: a comment changed elsewhere
       // meanwhile keeps both sides' words (lib/notes/save-text.ts, SPEC.md §6).
       const saved = await saveNoteText(card.noteId, content, card.saved);
       router.refresh();
       // Words typed while the save ran stay in the box.
-      setCommentCard((c) =>
-        c ? { ...c, draft: c.draft.trim() === content ? saved.content : c.draft, saved: saved.content, busy: false } : c,
-      );
+      const typedSince = commentCardFieldRef.current?.value();
+      setCommentCard((c) => {
+        if (!c) return c;
+        const now = typedSince ?? c.draft;
+        return { ...c, draft: now.trim() === content ? saved.content : now, saved: saved.content, busy: false };
+      });
       // The header says Saved; a toast says only that both sides were kept.
       if (saved.conflict) showToast(t("outline.savedBoth"));
     } catch (err) {
@@ -7191,7 +7235,7 @@ export function ReaderInteractions({
   // The assistant engine: command → server-validated plan → approval → the
   // normal API routes.
   async function runAssistant(commandText?: string) {
-    const command = (commandText ?? aiCommandRef.current).trim();
+    const command = (commandText ?? aiTyped()).trim();
     if (!command || aiBusy || !popover) return;
     const sent = popover;
     const { anchor } = sent;
@@ -7228,8 +7272,8 @@ export function ReaderInteractions({
       // drafts) — unless the box already holds a next question typed while
       // this one ran: that one stays, or, with the reader in the box and the
       // card opening, moves into the card's box, which keeps it as its draft.
-      const typed = aiCommandRef.current.trim();
-      const carried = inBox && inView && turn.noteId && typed && typed !== command ? aiCommandRef.current : "";
+      const typed = aiTyped().trim();
+      const carried = inBox && inView && turn.noteId && typed && typed !== command ? aiTyped() : "";
       if (typed === "" || typed === command || carried) {
         clearToolbarDraft("assistant", documentId, anchor, command);
         if (typed === command || carried) setAiCommand("");
@@ -7273,7 +7317,7 @@ export function ReaderInteractions({
     } catch (err) {
       // Stopped, not failed: the question comes back to the box to edit or
       // resend, unless the reader typed a new one meanwhile.
-      if (!commandText) setAiCommand((c) => (c.trim() ? c : command));
+      if (!commandText && !aiTyped().trim()) setAiCommand(command);
       if (controller.signal.aborted) return;
       const message = err instanceof Error ? err.message : t("reader.assistantFailed");
       // The error shows in the box that asked; with that box gone, as a toast.
@@ -7973,9 +8017,10 @@ export function ReaderInteractions({
     });
   }
 
-  async function sendChatMessage(queued?: QueuedText & { openKey: string | null }) {
+  async function sendChatMessage(queued?: QueuedText & { openKey: string | null }, typedNow?: string) {
     const chat = assistantChat;
-    const typed = queued ? queued.content : chat?.input.trim();
+    // typedNow: the box's words as the press found them (kept-field.tsx).
+    const typed = queued ? queued.content : (typedNow ?? chat?.input)?.trim();
     if (!chat || !typed) return;
     // While an answer runs the message queues (SPEC.md §7); a queued message
     // sends once the answer lands, into the thread it was queued for.
@@ -8158,13 +8203,14 @@ export function ReaderInteractions({
     toolChatAbortRef.current[kind] = null;
     setToolChat(kind, () => ({ busy: false }));
   }
-  async function sendToolMessage(kind: "explain" | "simplify", queued?: QueuedText) {
+  async function sendToolMessage(kind: "explain" | "simplify", queued?: QueuedText, typedNow?: string) {
     if (!ultra) {
       showToast(t("reader.continueNeedsUltra"), plansAction);
       return;
     }
     const card = kind === "explain" ? bubble : simplifyCard;
-    const text = queued ? queued.content : card?.input.trim();
+    // typedNow: the box's words as the press found them (kept-field.tsx).
+    const text = queued ? queued.content : (typedNow ?? card?.input)?.trim();
     if (!card || !text || !card.noteId) return;
     const noteId = card.noteId;
     // While a turn runs the message queues (SPEC.md §7).
@@ -9410,7 +9456,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             </p>
           ) : (
             <div key={i} className="text-[13px]">
-              <Markdown>{message.content}</Markdown>
+              <AnswerMarkdown>{message.content}</AnswerMarkdown>
             </div>
           ),
         )}
@@ -9472,24 +9518,22 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         className={`${inView ? "" : "mt-2"} flex items-end gap-1.5`}
         onSubmit={(e) => {
           e.preventDefault();
-          void sendToolMessage(kind);
+          void sendToolMessage(kind, undefined, formBoxText(e.currentTarget));
         }}
       >
-        <textarea
+        <KeptTextarea
           autoFocus
           value={card.input}
           rows={1}
           onFocus={caretToEnd}
-          onChange={(e) => {
-            const value = e.target.value;
-            setToolChat(kind, () => ({ input: value, sendError: null }));
-          }}
+          onCommit={(value) => setToolChat(kind, () => ({ input: value, sendError: null }))}
+          persist={(value) => persistCardDraftNow(card.noteId, withQueued(value, card.queue))}
           {...ime.props}
           onKeyDown={(e) => {
             if (ime.isImeEnter(e)) return;
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
-              void sendToolMessage(kind);
+              void sendToolMessage(kind, undefined, e.currentTarget.value);
             }
           }}
           placeholder={t(card.busy ? "assistant.queuePlaceholder" : "reader.continuePlaceholder")}
@@ -9607,19 +9651,23 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       className={`${className} flex-wrap`}
       onSubmit={(e) => {
         e.preventDefault();
-        void sendChatMessage();
+        void sendChatMessage(undefined, formBoxText(e.currentTarget));
       }}
     >
-      <textarea
+      <KeptTextarea
         value={chat.input}
         rows={1}
-        onChange={(e) => setAssistantChat((c) => (c ? { ...c, input: e.target.value, sendError: null } : c))}
+        onCommit={(text) => setAssistantChat((c) => (c ? { ...c, input: text, sendError: null } : c))}
+        persist={(text) => {
+          const side = chat.openKey ? (chat.sideChats ?? []).find((s) => s.key === chat.openKey) : null;
+          persistCardDraftNow(side ? side.noteId : chat.noteId, withQueued(text, queuedIn(chat, chat.openKey ?? null)));
+        }}
         {...ime.props}
         onKeyDown={(e) => {
           if (ime.isImeEnter(e)) return;
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
-            void sendChatMessage();
+            void sendChatMessage(undefined, e.currentTarget.value);
           }
         }}
         placeholder={t(chat.busy ? "assistant.queuePlaceholder" : "reader.replyPlaceholder")}
@@ -10390,11 +10438,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               ))}
             </div>
           )}
-          <textarea
+          <KeptTextarea
+            handle={annotationFieldRef}
             value={annotationCard.draft}
-            onChange={(e) =>
-              setAnnotationCard((c) => (c ? { ...c, draft: e.target.value } : c))
-            }
+            saved={annotationCard.saved}
+            onCommit={(text) => setAnnotationCard((c) => (c ? { ...c, draft: text } : c))}
+            persist={(text) => persistCardDraftNow(annotationCard.noteId, text, annotationCard.saved)}
             onKeyDown={(e) => {
               if (isImeKey(e)) return;
               const styled = markdownStyleKey(e);
@@ -10404,7 +10453,8 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               }
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();
-                if (annotationCard.draft.trim() !== annotationCard.saved.trim()) void saveAnnotation();
+                const typed = e.currentTarget.value;
+                if (typed.trim() !== annotationCard.saved.trim()) void saveAnnotation(typed);
                 return;
               }
               if (e.key === "Escape") {
@@ -10434,7 +10484,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             <span className="flex items-center gap-1.5">
               <VoiceTypingButton track="annotation-voice-typing" />
               <button
-                onClick={() => void saveAnnotation()}
+                onClick={() => void saveAnnotation(annotationFieldRef.current?.value())}
                 data-track="annotation-save"
                 disabled={annotationCard.busy || annotationCard.draft.trim() === annotationCard.saved.trim()}
                 className="rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
@@ -10601,7 +10651,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 key={color}
                 disabled={busy}
                 // A comment kept from before rides along only while its box is open.
-                onClick={() => void annotate({ color, comment: (submenu === "comment" && commentDraft.trim()) || undefined })}
+                onClick={() => void annotate({ color, comment: (submenu === "comment" && commentNow().trim()) || undefined })}
                 data-track={`highlight:${color}`}
                 aria-label={t("reader.highlightIn", { color: t(HUE_KEY[color]) })}
                 data-tip={t(
@@ -10746,11 +10796,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             };
             const panel = submenu === "add" && (
               <div data-add-panel className="flex flex-col gap-0.5">
-                <input
+                <KeptInput
+                  handle={addFieldRef}
                   autoFocus={!coarse}
                   value={addComment}
+                  onCommit={setAddComment}
                   onFocus={caretToEnd}
-                  onChange={(e) => setAddComment(e.target.value)}
                   {...ime.props}
                   onKeyDown={(e) => {
                     if (ime.isImeEnter(e) || isImeKey(e)) return;
@@ -10842,14 +10893,16 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   {aiSent.text}
                 </p>
               )}
-              <textarea
+              <KeptTextarea
+                handle={aiFieldRef}
                 autoFocus
                 value={aiCommand}
-                onFocus={caretToEnd}
-                onChange={(e) => {
-                  setAiCommand(e.target.value);
-                  if (popover) writeToolbarDraft("assistant", documentId, popover.anchor, e.target.value);
+                onCommit={(text) => {
+                  aiCommandRef.current = text;
+                  setAiCommand(text);
+                  if (popover) writeToolbarDraft("assistant", documentId, popover.anchor, text);
                 }}
+                onFocus={caretToEnd}
                 {...ime.props}
                 onKeyDown={(e) => {
                   if (ime.isImeEnter(e) || isImeKey(e)) return;
@@ -11011,16 +11064,18 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               className="flex flex-col gap-1.5 p-1"
               onSubmit={(e) => {
                 e.preventDefault();
-                if (commentDraft.trim()) void annotate({ comment: commentDraft });
+                const typed = commentNow();
+                if (typed.trim()) void annotate({ comment: typed });
               }}
             >
-              <textarea
+              <KeptTextarea
+                handle={commentFieldRef}
                 autoFocus
                 value={commentDraft}
+                onCommit={setCommentDraft}
                 onFocus={caretToEnd}
-                onChange={(e) => {
-                  setCommentDraft(e.target.value);
-                  setCommentError(null);
+                onType={() => {
+                  if (commentError) setCommentError(null);
                 }}
                 {...ime.props}
                 onKeyDown={(e) => {
@@ -11030,9 +11085,10 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                     setCommentDraft(styled);
                     return;
                   }
-                  if (e.key === "Enter" && !e.shiftKey && commentDraft.trim()) {
+                  const typed = e.currentTarget.value;
+                  if (e.key === "Enter" && !e.shiftKey && typed.trim()) {
                     e.preventDefault();
-                    void annotate({ comment: commentDraft });
+                    void annotate({ comment: typed });
                   }
                   if (e.key === "Escape") {
                     e.stopPropagation();
@@ -11548,11 +11604,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           </div>
           {commentCard.noteId ? (
             <>
-              <textarea
+              <KeptTextarea
+                handle={commentCardFieldRef}
                 value={commentCard.draft}
-                onChange={(e) =>
-                  setCommentCard((c) => (c ? { ...c, draft: e.target.value } : c))
-                }
+                saved={commentCard.saved}
+                onCommit={(text) => setCommentCard((c) => (c ? { ...c, draft: text } : c))}
+                persist={(text) => persistCardDraftNow(commentCard.noteId, text, commentCard.saved)}
                 onKeyDown={(e) => {
                   if (isImeKey(e)) return;
                   const styled = markdownStyleKey(e);
@@ -11763,7 +11820,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   {/* Highlighting the answer offers the side chat, the quoted
                       question, and the comment (SPEC.md §7). */}
                   <div {...{ [ANSWER_MARK]: "" }}>
-                    <Markdown>{message.content}</Markdown>
+                    <AnswerMarkdown>{message.content}</AnswerMarkdown>
                   </div>
                   {/* The rating (SPEC.md §25): the question and the selection
                       it ran on, the answer it gave; the suggestions' row

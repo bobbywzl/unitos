@@ -67,6 +67,8 @@ import { splitActionsFence } from "@/lib/assistant/fence";
 import { RatingButtons } from "@/components/rating-buttons";
 import { LoadingDots, ThinkingIndicator } from "@/components/thinking";
 import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
+import { KeptTextarea } from "@/components/kept-field";
+import { AnswerMarkdown } from "@/components/assistant/answer-markdown";
 
 type Scope = "document" | "notebook";
 type Task = "contradictions" | "gaps" | "unsourced";
@@ -548,7 +550,7 @@ export function AssistantPanel({
   // whatever the box holds now, its quote chip when the box has none, its
   // attachments.
   function restoreMessage(m: OutgoingMessage) {
-    const current = boxText.get(notebookId) ?? "";
+    const current = boxRef.current?.value ?? boxText.get(notebookId) ?? "";
     const plain = !current.trim() && !quoteRef.current;
     const words = plain ? m.question : m.content;
     const next = current.trim() ? (words.trim() ? `${current}\n\n${words}` : current) : words;
@@ -1094,10 +1096,12 @@ export function AssistantPanel({
   function ask() {
     if (!composed) return;
     if (document.activeElement === boxRef.current) setFocusTick((n) => n + 1);
+    // The box keeps its own words while the reader types (kept-field.tsx).
+    const typed = boxRef.current?.value ?? question;
     const message: OutgoingMessage = {
       key: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      content: quote ? quoteMessage(quote, question) : question.trim(),
-      question: question.trim(),
+      content: quote ? quoteMessage(quote, typed) : typed.trim(),
+      question: typed.trim(),
       quote,
       images: attachments.flatMap((a) =>
         a.kind === "image" ? [{ id: a.id, url: a.url, name: a.name }] : [],
@@ -1360,14 +1364,16 @@ export function AssistantPanel({
   // screen, so the first layout never returns while one is open.
   const inConversation = turns.length > 0 || openSideChat !== null;
 
-  // The composer's box grows with the message, up to six lines.
+  // The composer's box grows with the message, up to six lines: as the
+  // reader types, and when the box takes words (sent, put back, a draft).
   const boxRef = useRef<HTMLTextAreaElement>(null);
-  useLayoutEffect(() => {
+  const fitBox = () => {
     const el = boxRef.current;
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
-  }, [question]);
+  };
+  useLayoutEffect(fitBox, [question]);
   // The box keeps the focus when the first message swaps the resting layout
   // for the conversation's, and takes it after Start side chat and Ask about
   // this: the next words typed land in it, never on the page.
@@ -1535,11 +1541,15 @@ export function AssistantPanel({
       )}
       {/* A side chat's header already shows the quote it started on. */}
       {quote && quote !== openSideChat?.quote && <QuoteChip quote={quote} onClear={dropQuote} className="mb-1.5" />}
-      <textarea
-        ref={boxRef}
+      <KeptTextarea
+        fieldRef={boxRef}
         value={question}
         rows={1}
-        onChange={(e) => setQuestion(e.target.value)}
+        onCommit={(text) => {
+          boxText.set(notebookId, text);
+          setQuestion(text);
+        }}
+        onType={fitBox}
         {...ime.props}
         onKeyDown={(e) => {
           if (e.key !== "Enter" || e.shiftKey) return;
@@ -1789,7 +1799,7 @@ export function AssistantPanel({
                     <div {...{ [ANSWER_MARK]: "" }}>
                       {/* An older answer may still carry its actions block:
                           the reader never sees the JSON (SPEC.md §7). */}
-                      <Markdown>{splitActionsFence(turn.content).text}</Markdown>
+                      <AnswerMarkdown>{splitActionsFence(turn.content).text}</AnswerMarkdown>
                     </div>
                     {/* The plan the answer came with: the count, and the way
                         back to the plan card once it was closed. */}
