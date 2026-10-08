@@ -3999,11 +3999,14 @@ export function ReaderInteractions({
   // keeping the passage's first line on screen.
   const movedCardsRef = useRef(new Set<string>());
   const narrowShownRef = useRef(new Set<string>());
+  // On a phone, how far a card rose over its paragraph's words after the
+  // passage to find room (below), by card kind, for the passage it is on.
+  const narrowLiftRef = useRef(new Map<string, { at: number; lift: number }>());
   const layoutNarrowCards = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
     const narrow = narrowRef.current && !richTextRef.current && !distillOpenRef.current && !conversationViewRef.current;
-    const hosts = new Map<HTMLElement, { kind: string; el: HTMLElement; anchorTop: number }[]>();
+    const hosts = new Map<HTMLElement, { kind: string; el: HTMLElement; anchorTop: number; anchorBottom: number }[]>();
     if (narrow) {
       for (const el of container.querySelectorAll<HTMLElement>("[data-side-card]")) {
         if (el.closest(".presence-exit")) continue;
@@ -4015,7 +4018,7 @@ export function ReaderInteractions({
         const host = drawnBlock(container, box.blockId);
         if (!host) continue;
         const list = hosts.get(host) ?? [];
-        list.push({ kind, el, anchorTop: box.top });
+        list.push({ kind, el, anchorTop: box.top, anchorBottom: box.bottom });
         hosts.set(host, list);
       }
     }
@@ -4051,12 +4054,14 @@ export function ReaderInteractions({
       host.style.marginBottom = `${base + room}px`;
       let y = host.getBoundingClientRect().bottom - crect.top + container.scrollTop + 8;
       for (const card of cards) {
-        tops[card.kind] = y;
+        const key = `${card.kind}:${layerSeenRef.current[card.kind] ?? ""}`;
+        const held = narrowLiftRef.current.get(card.kind);
+        const lifted = held && Math.abs(held.at - card.anchorTop) < 2 ? held.lift : 0;
+        tops[card.kind] = y - lifted;
         y += card.el.offsetHeight + CARD_GAP;
         // A card that just opened under the window comes into view, its foot
         // too (its buttons), as far as its words stay in view. A run that
         // lands is a new layer key: the card, grown, is checked again.
-        const key = `${card.kind}:${layerSeenRef.current[card.kind] ?? ""}`;
         if (!narrowShownRef.current.has(key)) {
           narrowShownRef.current.add(key);
           const viewBottom = container.scrollTop + shownHeight;
@@ -4071,7 +4076,17 @@ export function ReaderInteractions({
           // gives up height (its body scrolls), so its foot — the box, the
           // buttons — stays in reach above the bar.
           if (railTop !== Infinity) {
-            const room = Math.floor(shownHeight - (tops[card.kind] - container.scrollTop - Math.max(0, by)) - 16);
+            let room = Math.floor(shownHeight - (tops[card.kind] - container.scrollTop - Math.max(0, by)) - 16);
+            // Short of room, the card first rises over the paragraph's
+            // words after the passage, up to just under the selected words,
+            // so its answer and its plan's Accept show without a scroll
+            // inside (TOOL15-07).
+            const lift = Math.max(0, Math.min(card.el.offsetHeight - room, tops[card.kind] - (card.anchorBottom + 8)));
+            if (lift > 0) {
+              narrowLiftRef.current.set(card.kind, { at: card.anchorTop, lift: lifted + lift });
+              tops[card.kind] -= lift;
+              room += lift;
+            }
             if (card.el.offsetHeight > room && room >= CAP_MIN) phoneCaps[card.kind] = room;
           }
         }
@@ -5246,6 +5261,20 @@ export function ReaderInteractions({
     setAnnotationCard((c) => (c && !drawn(c.anchor) && !c.busy && c.draft === c.saved ? null : c));
     setLogCard(null);
   }, [collapseView]);
+  // Collapse on or off keeps the reader's place: the block at the reading
+  // line stays there, cut at the same share (lib/reading-position.ts), read
+  // just before the article changes view and put back once it has.
+  const collapsePlaceRef = useRef<ReturnType<typeof readReadingPosition> | null>(null);
+  function keepCollapsePlace() {
+    const container = containerRef.current;
+    collapsePlaceRef.current = container ? readReadingPosition(container, Date.now()) : null;
+  }
+  useLayoutEffect(() => {
+    const place = collapsePlaceRef.current;
+    const container = containerRef.current;
+    collapsePlaceRef.current = null;
+    if (place && container) applyReadingPosition(container, place, false);
+  }, [collapseView]);
   const collapseStoreKey = `unitos-collapse-${documentId}`;
   // Whether the cores the article opens with have been read (a jump waits
   // for them: coresComingRef).
@@ -5304,11 +5333,13 @@ export function ReaderInteractions({
     setSubmenu(null);
     if (!richTextRef.current) window.getSelection()?.removeAllRanges();
     if (collapseOn) {
+      keepCollapsePlace();
       setCollapseOn(false);
       rememberCollapse(false);
       return;
     }
     if (cores) {
+      keepCollapsePlace();
       setCollapseOn(true);
       rememberCollapse(true);
       return;
@@ -10101,7 +10132,11 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       }${collapseNew.isNew ? ` ${NEW_GLOW_CLASS}` : ""}`}
     >
       {collapseBusy ? <SpinnerIcon size={13} className="motion-safe:animate-spin" /> : <CollapseIcon size={13} />}
-      {t(collapseBusy ? "reader.collapsing" : collapseOn ? "reader.collapsed" : "reader.collapse")}
+      {/* On a narrow screen the running button is the spinner and Stop, so
+          it keeps its place in the row beside Extract. */}
+      <span className={collapseBusy ? "max-sm:sr-only" : undefined}>
+        {t(collapseBusy ? "reader.collapsing" : collapseOn ? "reader.collapsed" : "reader.collapse")}
+      </span>
       {collapseBusy && <StopPill />}
       {collapseNew.isNew && <NewPill />}
     </button>
