@@ -89,7 +89,8 @@ export type ReturnedAdd = { items: UploadItem[]; error: string; edit: boolean };
 // waits for the reader's word (components/reader/duplicate-ask.tsx).
 type Phase = "ready" | "adding" | "range" | "duplicate" | "done";
 /** The add is under way: ✕, Escape, and a click outside hide the box, and
-    the add runs on (a range pick or an ask waits for the box to come back). */
+    the add runs on (a range pick waits for the box to come back). An ask's
+    ✕, Escape, and click outside are its Cancel (see `dismiss`). */
 function runs(phase: Phase): boolean {
   return phase === "adding" || phase === "range" || phase === "duplicate";
 }
@@ -222,10 +223,7 @@ export function UploadAssistant({
   notebookId,
   request,
   hidden,
-  onHide,
-  onShow,
-  onOpenEarly,
-  onClose,
+  ...callbacks
 }: {
   notebookId: string;
   request: UploadRequest;
@@ -244,6 +242,17 @@ export function UploadAssistant({
   onClose: (target: OpenTarget | null, back?: ReturnedAdd) => void;
 }) {
   const t = useT();
+  // The add runs on in the render it started in, and the bar's callbacks
+  // read the bar's state (the adds waiting their turn): the box calls the
+  // latest ones, so an add queued while this one ran is not dropped.
+  const latest = useRef(callbacks);
+  useEffect(() => {
+    latest.current = callbacks;
+  });
+  const onHide = () => latest.current.onHide();
+  const onShow = () => latest.current.onShow();
+  const onOpenEarly = (docId: string) => latest.current.onOpenEarly(docId);
+  const onClose = (target: OpenTarget | null, back?: ReturnedAdd) => latest.current.onClose(target, back);
   const boxRef = useRef<HTMLDivElement>(null);
   useModalFocus(boxRef, !hidden);
   const hiddenRef = useRef(hidden);
@@ -783,13 +792,20 @@ export function UploadAssistant({
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || isImeKey(e)) return;
       e.stopPropagation();
-      if (runs(phase)) onHide();
-      else finish(null);
+      dismiss();
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, hidden]);
+  }, [phase, hidden, duplicateAsk]);
+
+  // ✕, Escape, and a click outside: a repeat add's ask is cancelled, as the
+  // offline add's ask dialog is; a running add hides; a done box closes.
+  function dismiss() {
+    if (phase === "duplicate" && duplicateAsk) duplicateAsk.resolve("cancel");
+    else if (runs(phase)) onHide();
+    else finish(null);
+  }
 
   // The final figure check (SPEC.md §15): the save step's counts of a single
   // add. A batch's last page would stand for the whole batch, so none shows.
@@ -829,7 +845,7 @@ export function UploadAssistant({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4"
-      onClick={() => (runs(phase) ? onHide() : finish(null))}
+      onClick={dismiss}
       role="dialog"
       aria-modal
       aria-label={t("panes.uploadAssistant")}
@@ -846,17 +862,7 @@ export function UploadAssistant({
             {t(asking ? "panes.duplicateTitle" : "panes.uploadAssistant")}
           </span>
           <button
-            onClick={() => {
-              if (asking) {
-                duplicateAsk?.resolve("cancel");
-                return;
-              }
-              if (runs(phase)) {
-                onHide();
-                return;
-              }
-              finish(null);
-            }}
+            onClick={dismiss}
             data-track={asking ? "duplicate-cancel" : runs(phase) ? "upload-hide" : "upload-close"}
             aria-label={t(asking ? "common.cancel" : runs(phase) ? "panes.uploadHide" : "common.close")}
             data-tip={t(asking ? "common.cancel" : runs(phase) ? "panes.uploadHide" : "common.close")}

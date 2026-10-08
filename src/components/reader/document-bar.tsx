@@ -829,7 +829,7 @@ export function DocumentBar({
   // One box at a time: an add that arrives while one runs waits here and
   // starts when the running one closes, so neither replaces the other. The
   // run counter keys the box, so each request mounts a fresh one.
-  const [pending, setPending] = useState<UploadRequest[]>([]);
+  const pendingRef = useRef<UploadRequest[]>([]);
   const [assistantRun, setAssistantRun] = useState(0);
   // The box hidden while its add runs on (SPEC.md §15): the header shows the
   // running pill instead, and clicking the pill brings the box back.
@@ -841,10 +841,20 @@ export function DocumentBar({
   // What the last failed add handed back to Add a document.
   const [returned, setReturned] = useState<{ items: UploadItem[]; seq: number } | null>(null);
   // The links of an add stay in the browser until the add lands, so a
-  // reload while it runs or after it failed puts them back in Add a
-  // document's field (CLAUDE.md rule zero 6). Files cannot be kept.
+  // reload while it runs, while it waits its turn, or after it failed puts
+  // them back in Add a document's field (CLAUDE.md rule zero 6). Files
+  // cannot be kept. The store holds the links that failed, the running
+  // add's, and every waiting add's.
   const linksKey = `unitos:add-links:${notebookId}`;
-  const keepLinks = (items: UploadItem[]) => {
+  const linksRef = useRef<{ back: UploadItem[]; running: UploadItem[] }>({ back: [], running: [] });
+  const requestItems = (request: UploadRequest): UploadItem[] =>
+    request.kind === "batch" ? request.items : request.kind === "url" || request.kind === "video-url" ? [request] : [];
+  const keepLinks = () => {
+    const items = [
+      ...linksRef.current.back,
+      ...linksRef.current.running,
+      ...pendingRef.current.flatMap(requestItems),
+    ];
     const links = items.filter((i) => i.kind === "url" || i.kind === "video-url").map((i) => ({ kind: i.kind, url: i.url }));
     try {
       if (links.length > 0) localStorage.setItem(linksKey, JSON.stringify({ at: Date.now(), links }));
@@ -857,6 +867,7 @@ export function DocumentBar({
     try {
       const kept = JSON.parse(localStorage.getItem(linksKey) ?? "null") as { at: number; links: UploadItem[] } | null;
       if (!kept || Date.now() - kept.at > 86_400_000) return;
+      linksRef.current.back = kept.links;
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setReturned({ items: kept.links, seq: 1 });
     } catch {
@@ -872,7 +883,8 @@ export function DocumentBar({
         : assistant.url;
 
   function startAssistant(request: UploadRequest) {
-    keepLinks(request.kind === "batch" ? request.items : request.kind === "url" || request.kind === "video-url" ? [request] : []);
+    linksRef.current.running = requestItems(request);
+    keepLinks();
     setAssistant(request);
     setAssistantRun((n) => n + 1);
     setAssistantHidden(false);
@@ -921,7 +933,8 @@ export function DocumentBar({
     setDialog(false);
     if (assistant) {
       // A box is running: this add waits its turn (one box at a time).
-      setPending((queue) => [...queue, request]);
+      pendingRef.current = [...pendingRef.current, request];
+      keepLinks();
       setNotice(t("panes.uploadQueuedBehind"));
       setTimeout(() => setNotice(null), 4000);
       return;
@@ -1629,7 +1642,12 @@ export function DocumentBar({
         phase={phase}
         error={error}
         onError={setError}
-        onSubmit={(request) => openAssistant({ ...request, folderId: addFolder, confirmed: true })}
+        onSubmit={(request) => {
+          // The field's links are in this add now: what failed before is
+          // sent again with it, or the reader took it out.
+          linksRef.current.back = [];
+          openAssistant({ ...request, folderId: addFolder, confirmed: true });
+        }}
         onCreateBlank={() => void createBlank()}
         fileAccept={UPLOAD_FILE_ACCEPT}
         projectTitle={
@@ -1714,7 +1732,9 @@ export function DocumentBar({
             const opened = assistantOpened;
             // What failed goes back into Add a document (rule zero 6);
             // Edit the link opens it there with the error under the field.
-            keepLinks(back ? back.items : []);
+            linksRef.current.back = back ? [...linksRef.current.back, ...back.items] : linksRef.current.back;
+            linksRef.current.running = [];
+            keepLinks();
             if (back) {
               setReturned((was) => ({ items: back.items, seq: (was?.seq ?? 0) + 1 }));
               if (back.edit) {
@@ -1724,8 +1744,8 @@ export function DocumentBar({
             }
             setAssistantOpened(null);
             // The next add waiting its turn starts now; none: the box goes.
-            const [next, ...rest] = pending;
-            setPending(rest);
+            const [next, ...rest] = pendingRef.current;
+            pendingRef.current = rest;
             if (next) startAssistant(next);
             else {
               setAssistant(null);
