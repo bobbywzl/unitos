@@ -67,6 +67,9 @@ const en = {
   stitchLinksWaitingN: "{n} of the links proposed were proposed before and wait under Recommended links.",
   stitchLinksRemoved1: "{n} of the links proposed was removed before, so it was not added again.",
   stitchLinksRemovedN: "{n} of the links proposed were removed before, so they were not added again.",
+  // A link between a passage and its word-for-word copy (ANS6-07).
+  stitchLinksCopy1: "{n} of the links proposed joined a passage to its word-for-word copy, so it was not added.",
+  stitchLinksCopyN: "{n} of the links proposed joined a passage to its word-for-word copy, so they were not added.",
   // Under the reply when the answer wrote a page: what the page holds, as
   // stored (ANS5-04). "The page holds 7 quotes, 3 headings, and 6 paragraphs of writing."
   stitchPageHolds: "The page holds {list}.",
@@ -97,6 +100,8 @@ const en = {
   // What was read of each document (StitchDocument). A document not read
   // shows why; a transcript that failed shows the stored reason.
   stitchDocumentsRead: "Read {read} of {total} documents",
+  // The same line after a pick (ANS6-02): the documents the pick left out.
+  stitchDocumentsReadPicked: "Read {read} of {total} picked · {rest} not picked",
   stitchNotEnoughRead: "Stitch did not run. It needs two documents it can read.",
   stitchUnitText: "blocks",
   stitchUnitTranscript: "transcript lines",
@@ -167,6 +172,8 @@ const zh: Record<keyof typeof en, string> = {
   stitchLinksWaitingN: "提出的链接中有 {n} 条之前已提出，正在推荐链接中等待接受。",
   stitchLinksRemoved1: "提出的链接中有 {n} 条之前已被移除，没有重复添加。",
   stitchLinksRemovedN: "提出的链接中有 {n} 条之前已被移除，没有重复添加。",
+  stitchLinksCopy1: "提出的链接中有 {n} 条连接的是一段文字和它逐字相同的副本，没有添加。",
+  stitchLinksCopyN: "提出的链接中有 {n} 条连接的是一段文字和它逐字相同的副本，没有添加。",
   stitchPageHolds: "页面包含 {list}。",
   stitchPage_quotes1: "{n} 段引文",
   stitchPage_quotesN: "{n} 段引文",
@@ -194,6 +201,7 @@ const zh: Record<keyof typeof en, string> = {
   stitchPassageClose: "关闭片段",
   stitchViewer: "查看者可以阅读文档。请让编辑者运行缝合。",
   stitchDocumentsRead: "已读 {read} / {total} 篇文档",
+  stitchDocumentsReadPicked: "已读 {read} / {total} 篇选取的文档 · {rest} 篇未选取",
   stitchNotEnoughRead: "缝合没有运行。它需要两篇可读的文档。",
   stitchUnitText: "个块",
   stitchUnitTranscript: "行逐字稿",

@@ -697,7 +697,7 @@ function ResultLine({
           </button>
         </p>
       )}
-      <DocumentsRead documents={result.documents} readCount={readCount} />
+      <DocumentsRead documents={result.documents} readCount={readCount} notPicked={result.notPicked ?? 0} />
     </div>
   );
 }
@@ -705,7 +705,9 @@ function ResultLine({
 // What went to the model of each document, or why nothing did: one line,
 // "Read 7 of 7 documents", that opens one row per document. It opens by
 // itself when a document was not read, so the reason shows.
-function DocumentsRead({ documents, readCount }: { documents: StitchDocument[]; readCount: number }) {
+// With a pick it says how many documents the pick left out (ANS6-02):
+// "Read 2 of 2 picked · 5 not picked".
+function DocumentsRead({ documents, readCount, notPicked }: { documents: StitchDocument[]; readCount: number; notPicked: number }) {
   const t = useT();
   const [shown, setShown] = useState(() => documents.some((d) => d.status === "empty"));
   return (
@@ -717,7 +719,9 @@ function DocumentsRead({ documents, readCount }: { documents: StitchDocument[]; 
         data-track="stitch-documents-read"
         className="flex items-center gap-1 self-start text-sand-500 hover:text-clay-800"
       >
-        {t("stitch.stitchDocumentsRead", { read: readCount, total: documents.length })}
+        {notPicked > 0
+          ? t("stitch.stitchDocumentsReadPicked", { read: readCount, total: documents.length, rest: notPicked })
+          : t("stitch.stitchDocumentsRead", { read: readCount, total: documents.length })}
         <ChevronRightIcon size={11} className={`transition-transform ${shown ? "rotate-90" : ""}`} />
       </button>
       {shown && (

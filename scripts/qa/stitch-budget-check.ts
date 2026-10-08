@@ -11,6 +11,9 @@ import { readFileSync } from "node:fs";
 import {
   answerMessages,
   assignSources,
+  backSelection,
+  copyOriginals,
+  copyPair,
   checkReplyQuotes,
   duplicateLink,
   duplicateOf,
@@ -44,7 +47,7 @@ import {
   titleMatches,
   type SkeletonView,
 } from "../../src/lib/graph/stitch";
-import { asksEvery, asksWhere, stitchExpandPrompt, stitchPrompt, stitchRules, stitchSelectPrompt } from "../../src/lib/prompts/stitch";
+import { asksEvery, asksWhere, refersBack, stitchExpandPrompt, stitchPrompt, stitchRules, stitchSelectPrompt } from "../../src/lib/prompts/stitch";
 import { skeletonPrompt } from "../../src/lib/prompts/skeleton";
 import { estTokens } from "../../src/lib/tokens";
 
@@ -306,7 +309,7 @@ check("answer prompt: a which-documents list on a partial read says it covers th
 check("answer rules: an unread document that could hold the answer", rules.includes("say in one sentence that it has no text to read"));
 check("answer rules: a why question leads with the reason", rules.includes("A why question starts with the reason the documents give"));
 // ANS5-04: the server states the page's counts; the model never counts them.
-check("answer rules: the page's parts are never counted in reply", rules.includes("Never count the parts of the page: the count is added under the reply."));
+check("answer rules: the page's parts are never counted in reply", rules.includes("Never describe the page or count its parts: the count is added under the reply."));
 check("answer prompt: unread named only when it bears", first.includes("only when the command asks about them"));
 const select = stitchSelectPrompt({ documents: docs, command: "And the second one?", continued: true, earlier: ["List the two studies."], cited: ["B3"], maxBlocks: 150, partial: false });
 check("select prompt: earlier commands", select.includes("- List the two studies."));
@@ -360,12 +363,12 @@ check("skeleton prompt: the line cap scales past 400 words", skeletonPrompt({ pa
   const msg = (command: string) =>
     String(answerMessages({ reading: r2, selected: sel2, lang: "en", profile: null as unknown as Parameters<typeof answerMessages>[0]["profile"], history: [], command })[0].content);
   const s2 = msg("What does Schopenhauer say about noise?");
-  check("short lists: past 20 documents the nothing-shown line is a count", s2.includes("No block shown for this command: 19 more documents, none titled with a word of the command."), /No block shown[^\n]*/.exec(s2)?.[0]);
+  check("short lists: past 20 documents the nothing-shown line is a count", s2.includes("No block shown for this command: 19 documents, none whose title or gist holds a word of the command."), /No block shown[^\n]*/.exec(s2)?.[0]);
   check("short lists: a document with 2 blocks shown, off the command, has no gist", !s2.includes("Gist of Essay 0 on the will."));
   check("short lists: a document with 4 blocks shown keeps its gist", s2.includes("Gist of Essay 1 on the will."));
   check("short lists: a document whose title holds a command word keeps its gist", s2.includes("Gist of On Noise."));
   const s3 = msg("Which documents discuss women?");
-  check("short lists: the nothing-shown titles that hold a command word are named", s3.includes('No block shown for this command: 19 more documents; the ones whose title holds a word of the command: "Of Women" (10 blocks).'), /No block shown[^\n]*/.exec(s3)?.[0]);
+  check("short lists: the nothing-shown titles that hold a command word are named", s3.includes('No block shown for this command: 19 documents; the ones whose title or gist holds a word of the command: "Of Women" (10 blocks).'), /No block shown[^\n]*/.exec(s3)?.[0]);
   check("titleMatches: 'documents', 'which', 'the' never match", titleMatches([{ doc: { title: "The documents which matter" } }], "Which documents discuss the will?").length === 0);
   check("titleMatches: two CJK characters in a row match", titleMatches([{ doc: { title: "人生的智慧（第3篇）" } }], "《人生的智慧》对幸福补充了什么？").length === 1);
   check("titleMatches: one CJK character alone does not", titleMatches([{ doc: { title: "道德的谱系" } }], "人如何看待痛苦？").length === 0);
@@ -816,6 +819,90 @@ check("replyLanguage command: a mixed or short command keeps the UI's", replyLan
   const whole6a = answerMessages({ reading: r6, selected: null, lang: "en", profile: prof6, history: turns6, command: "x" });
   check("answerMessages: a pick reads the trimmed history; the whole read (cached) reads it whole", pick6[2].content === t6[1].content && whole6a[2].content === turns6[1].content);
   check("citedAliases reads every answer whole (the reading passes)", citedAliases(turns6, r6.blockByRef).includes("B3"));
+}
+
+// ── Round 6 (ENGINE6) ──
+{
+  const docs6 = [{ tag: "A", title: "Mencken", read: true }, { tag: "B", title: "Notes", read: true }];
+  // ANS6-06: two tags pair only across a dash or "and".
+  const ex6 = [
+    { id: "l1", from: "E2", to: "D32", state: "waiting" as const },
+    { id: "l2", from: "D32", to: "G9", state: "waiting" as const },
+    { id: "l3", from: "G9", to: "E21", state: "accepted" as const },
+    { id: "l4", from: "A1", to: "B2", state: "accepted" as const },
+  ];
+  const y1 = "Link 1 joins BOOK TWO §225 [block E2] [block D32]. Link 3 joins the notes [block G9] [block E21].\nAlso [block A1] and [block B2]。另 [block D32]";
+  check("existingNamed: tags of two sentences with two tags each do not pair (ANS6-06)", existingNamed(y1, ex6, null, false).sort().join(",") === "l1,l3,l4", existingNamed(y1, ex6, null, false).join(","));
+  check("existingNamed: one sentence that compares the two ends pairs them", existingNamed("Mencken says 1895 [block D32]; the notes say 1889 [block G9].", ex6, null, false).join(",") === "l2" && existingNamed("门肯说 1895 [block D32] [block E2]。笔记说 1889 [block G9] [block E21]。", ex6, null, false).sort().join(",") === "l1,l3");
+  check("existingNamed: two sentences of one paragraph pair when one cites a single block", existingNamed("Mencken says 1895 [block D32]. Your notes agree [block G9].", ex6, null, false).join(",") === "l2" && existingNamed("Mencken says 1895 [block D32].\nYour notes agree [block G9].", ex6, null, false).length === 0);
+
+  // ANS6-07: a block and its word-for-word copy.
+  const para = "The more a man suffers, the more he knows of the world; suffering is the condition of knowledge.";
+  check("copyPair: equal texts, folded, are a copy", copyPair(para, `  ${para.toUpperCase()} `));
+  check("copyPair: a block that holds the other whole is a copy", copyPair(para, `${para} And so on to the next sentence.`));
+  check("copyPair: a short heading inside a passage is not", !copyPair("On Suffering", "On Suffering of the World, and much more besides that."));
+  check("copyPair: two different passages are not", !copyPair(para, "Pity is the practice of nihilism, and it multiplies suffering."));
+  const blk = (id: string, alias: string, documentId: string, text: string) => ({ id, alias, type: "PARAGRAPH", text, documentId });
+  const orig = copyOriginals([
+    { doc: { generatedCommand: "a page" }, blocks: [blk("g1", "A1", "gen", para)] },
+    { doc: { generatedCommand: null }, blocks: [blk("b17", "B17", "part1", para), blk("b18", "B18", "part1", "Short.")] },
+    { doc: { generatedCommand: null }, blocks: [blk("db13", "DB13", "part14", para)] },
+  ]);
+  check("copyOriginals: the copy in a later document points at the earlier one", orig.get("db13")?.id === "b17");
+  check("copyOriginals: a generated document's copy points at the document it copied", orig.get("g1")?.id === "b17");
+  check("copyOriginals: the original and a short block have none", !orig.has("b17") && !orig.has("b18"));
+  const en6 = translatorFor("en");
+  const zh6 = translatorFor("zh");
+  check("reply line: a link to a copy, en and zh", en6("stitch.stitchLinksCopy1", { n: 1 }).includes("word-for-word copy") && zh6("stitch.stitchLinksCopyN", { n: 2 }).includes("副本"));
+  check("recordText: a link to a copy keeps its number", recordText({ links: [{ id: "", from: "a", to: "b", status: "copy" }], document: null }, new Map(), null).includes("- link 1: not stored (it joined a passage to its word-for-word copy)"));
+
+  // ANS6-01: the title or the gist; a Chinese command through the expansion's words.
+  const women = { doc: { id: "w", title: "Of Women" } };
+  const gists6 = new Map([["w", "Schopenhauer's essay on women: their nature, reason, and place."]]);
+  check("titleMatches: a gist holds the command's word (ANS6-01)", titleMatches([women], "What does Schopenhauer say about Darwin?", gists6).length === 1 && titleMatches([women], "What does Schopenhauer say about Darwin?").length === 0);
+  check("titleMatches: a Chinese command matches through the expansion's words", titleMatches([women], "叔本华如何看待达尔文？", gists6, ["Schopenhauer", "Darwin"]).length === 1 && titleMatches([women], "叔本华如何看待达尔文？", gists6).length === 0);
+  check("titleMatches: an English command does not read the expansion's words", titleMatches([women], "What about Darwin?", gists6, ["Schopenhauer"]).length === 0);
+  check("titleMatches: 'art' and 'works' never match", titleMatches([{ doc: { title: "Works of Art" } }], "Is art a work of pity?").length === 0);
+
+  // ANS6-01: parts of one work share one gist, written once.
+  {
+    const mkp = (id: string, title: string) => ({ id, title, generatedCommand: null, skeleton: null, handwritten: false, importRev: null, pageLabels: null, conversionStatus: null, conversionError: null, video: null, blocks: [{ id: `${id}b1`, type: "PARAGRAPH", text: "Call me Ishmael.", startTime: null, endTime: null, cell: null, page: null }] });
+    const parts = Array.from({ length: 3 }, (_, i) => mkp(`md${i}`, `Moby-Dick — part ${i + 1}`));
+    const rp = readingOf(parts as unknown as Parameters<typeof readingOf>[0]);
+    for (const d of parts) rp.gists.set(d.id, "A passage of Melville's Moby-Dick: Ishmael's voyage under Captain Ahab.");
+    const sp = String(answerMessages({ reading: rp, selected: new Set(["A1", "B1", "C1"]), lang: "en", profile: null as unknown as Parameters<typeof answerMessages>[0]["profile"], history: [], command: "What does Ahab want?" })[0].content);
+    check("selected sections: a gist repeated by the next parts reads 'as [document A]'", (sp.match(/gist: A passage of Melville/g) ?? []).length === 1 && (sp.match(/gist: as \[document A\]/g) ?? []).length === 2, sp.slice(0, 300));
+  }
+
+  // ANS6-02: the documents a pick left out.
+  const np = (count: number, titles: string[]) => stitchPrompt({ documents: docs6, command: "What does Schopenhauer say pity does?", continued: false, selected: true, notPicked: { count, titles } });
+  check("answer prompt: every unpicked document named when all are", np(1, ["Arthur Schopenhauer"]).includes('Not picked in the graph, so not read: 1 other document of the project: "Arthur Schopenhauer". Never cite them or guess what they say. When the answer could be in one of them, say in one sentence to pick it in the graph.'));
+  check("answer prompt: past 8, the matching ones", np(30, ["Of Women"]).includes('30 other documents of the project; the ones whose title or gist holds a word of the command: "Of Women".'));
+  check("answer prompt: past 8 with no match, the count", np(30, []).includes("30 other documents of the project, none whose title or gist holds a word of the command."));
+  check("answer prompt: a pick says the blocks come from the documents picked", np(5, ["a", "b", "c", "d", "e"]).includes("out of every document picked;"));
+  check("answer prompt: no pick, no line", !stitchPrompt({ documents: docs6, command: "x", continued: false, selected: true }).includes("Not picked") && stitchPrompt({ documents: docs6, command: "x", continued: false, selected: true }).includes("out of every document;"));
+  check("box line: read of picked, en and zh", en6("stitch.stitchDocumentsReadPicked", { read: 2, total: 2, rest: 5 }) === "Read 2 of 2 picked · 5 not picked" && zh6("stitch.stitchDocumentsReadPicked", { read: 2, total: 2, rest: 5 }).includes("未选取"));
+
+  // ANS6-03: follow-ups about the last answers skip the select pass.
+  const back = ["Draw links between those passages.", "Why did you link the second one?", "Which of these two is right about it?", "How many passages did that page quote, and from which documents?", "Why did you link the third one?", "Make a page of those links: each pair of passages, with one line on how they relate.", "Quote the passage the second link starts from.", "Remove the fourth link, it is wrong.", "Which of those links connect Schopenhauer to Nietzsche?", "Which link did the page leave out?", "Why was the second link not added?", "第二点的原文是什么？"];
+  const fresh = ["And what does Schopenhauer say about it?", "Different question: when was The Antichrist first printed?", "门肯认为出版推迟是谁造成的？", "What does Nietzsche say pity does?", "And who does Mencken blame for that delay?", "Sum up in three sentences what Nietzsche and Schopenhauer each say about the will and about pity.", "Add up the days Nietzsche spent writing the first three parts of Zarathustra.", "Gather the passages on suffering.", "Draw links on the will.", "Back to the first answer: quote the sentence about natural selection.", "Make that a page: the passages on pity from both of them."];
+  check("refersBack: the follow-ups about the last answers", back.every(refersBack), back.filter((c) => !refersBack(c)).join(" | "));
+  check("refersBack: the follow-ups that need new blocks", !fresh.some(refersBack), fresh.filter(refersBack).join(" | "));
+  const bb = new Map([["A1", blk("a1", "A1", "d1", "One.")], ["a1", blk("a1", "A1", "d1", "One.")], ["B3", blk("b3", "B3", "d2", "Three.")], ["b3", blk("b3", "B3", "d2", "Three.")], ["B4", blk("b4", "B4", "d2", "Four.")]]);
+  const hist6 = [{ role: "user" as const, content: "What does Nietzsche say pity does?" }, { role: "assistant" as const, content: "It multiplies suffering [block A1].\n\n(Stored by this answer, in the order it proposed them:\n- link 1: [block A1] – [block B3])" }];
+  check("backSelection: the cited and stored blocks", [...(backSelection("Why did you link the first one?", hist6, bb, [], "question") ?? [])].sort().join(",") === "A1,B3");
+  const big = new Map([...bb, ["C1", blk("c1", "C1", "d3", "word ".repeat(30_000))]]);
+  check("backSelection: null when the blocks cited cost more than the select pass", backSelection("Why did you link the first one?", [{ role: "user", content: "x" }, { role: "assistant", content: "[block C1] [block A1]" }], big, [], "question") === null);
+  check("backSelection: null without a back reference, without history, or with an uncited rare name", backSelection("What does Darwin say?", hist6, bb, [], "question") === null && backSelection("Why did you link the first one?", [], bb, [], "question") === null && backSelection("Quote that passage on Darwin", hist6, bb, [{ term: "Darwin", aliases: ["B4"] }], "question") === null);
+  const hedge6 = "say in one sentence that the list covers the blocks read for this command";
+  check("answer prompt: no list sentence on 'Which of those links' as a follow-up (ANS6-11)", !stitchPrompt({ documents: docs6, command: "Which of those links connect Schopenhauer to Nietzsche?", continued: true, selected: true, names: [] }).includes(hedge6) && stitchPrompt({ documents: docs6, command: "Which documents discuss pity?", continued: true, selected: true, names: [] }).includes(hedge6));
+
+  // ANS6-04, -05: the reply and page rules.
+  const rules6 = stitchRules("en");
+  check("answer rules: one-sentence lead, one line per new piece of evidence, no closer", rules6.includes("start with the answer in one sentence. Then one line per piece of evidence the first sentence does not already say") && rules6.includes("Never restate the first sentence as a list.") && rules6.includes("no closing remark"));
+  check("answer rules: a page reply says what the page finds, never describes it", rules6.includes("A command to gather or write a page gets one sentence: what the page finds") && rules6.includes("Never describe the page or count its parts"));
+  check("answer rules: a text part never repeats its heading", rules6.includes("A text part never repeats its heading, and is never a lead-in alone"));
+  check("answer rules: no per-block link cap (ANS6-10 measured: no link of F1, L2 or Z1 would change)", !rules6.includes("Link one block at most twice"));
 }
 
 // ── Round 3 (ANS3-03): a cut where no line shares a word with the query ──

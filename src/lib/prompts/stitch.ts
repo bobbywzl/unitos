@@ -54,7 +54,13 @@ export type StitchSelectCtx = ReadingCtx & {
   names?: StitchNameCtx[];
 };
 
+// The documents of the project a pick left out (ANS6-02): how many, and the
+// titles named — every one up to 8, else the ones whose title or gist holds
+// a word of the command (lib/graph/stitch.ts notPickedOf).
+export type StitchNotPickedCtx = { count: number; titles: string[] };
+
 export type StitchCtx = CommandCtx & {
+  notPicked?: StitchNotPickedCtx;
   // True when the blocks above are the select pass's pick, not every document whole.
   selected: boolean;
   // The command's rare names: how many blocks of the documents read name
@@ -79,6 +85,17 @@ export function asksEvery(command: string): boolean {
   return asksWhere(command) || /\b(which|every|all|each|list)\b|哪些|哪几|所有|每一|全部/i.test(command);
 }
 
+/** True when the command is about the last answers themselves (ANS6-03):
+    "why did you link the third one", "how many passages did that page
+    quote", "which of those links", 第二点的原文. With earlier turns, such a
+    command reads the blocks the earlier answers cited and stored, and no
+    select pass runs (lib/graph/stitch.ts backSelection). "Back to the first
+    answer" and "both of them" are left to the select pass: they name an
+    older answer, or new passages. */
+export function refersBack(command: string): boolean {
+  return /\b(?:(?:that|this|those|these) (?:page|links?|passages?|quotes?|answers?|ones?|points?|numbers?|two|sentences?)\b|the (?:first|second|third|fourth|fifth|last|other|\d+(?:st|nd|rd|th)) (?:one|link|point|passage|quote|sentence)\b|the (?:page|link)\b|(?:first|second|third|fourth|fifth|last) link\b|you (?:linked|cited|quoted|said|wrote|drew|proposed|made|left)\b|which of (?:those|these)\b)|第.(?:点|条|个|段)|原文|那页|这页|那一页|这一页|那条|这条|这些链接|那些链接|这些段落|那些段落|这两|那两/i.test(command);
+}
+
 // The documents with no text above. Named only when the command bears on
 // them: the box lists every document under every reply already.
 function unreadLines(documents: StitchDocumentCtx[]): string[] {
@@ -86,6 +103,23 @@ function unreadLines(documents: StitchDocumentCtx[]): string[] {
   if (unread.length === 0) return [];
   return [
     `Not read: ${unread.map((m) => `"${m.title}"`).join(", ")}. These documents have no text above. Never cite them and never guess what they say. Name them in reply, with the reason given, only when the command asks about them or its answer could be in them.`,
+  ];
+}
+
+// The documents a pick left out (ANS6-02): the answer pass knows they
+// exist, so "the passages read do not give it" can point at the one to pick.
+function notPickedLines(n: StitchNotPickedCtx | undefined): string[] {
+  if (!n || n.count === 0) return [];
+  const docs = `${n.count} other document${n.count === 1 ? "" : "s"} of the project`;
+  const named = n.titles.map((t) => `"${t}"`).join(", ");
+  const list =
+    n.titles.length === n.count
+      ? `${docs}: ${named}`
+      : n.titles.length > 0
+        ? `${docs}; the ones whose title or gist holds a word of the command: ${named}`
+        : `${docs}, none whose title or gist holds a word of the command`;
+  return [
+    `Not picked in the graph, so not read: ${list}. Never cite them or guess what they say. When the answer could be in one of them, say in one sentence to pick it in the graph.`,
   ];
 }
 
@@ -206,9 +240,9 @@ export function stitchRules(lang: Lang): string {
     `2. document: a new page built from the documents, when the command asks for one — a page of every passage on a topic, the answers to a question gathered, the contradictions laid out, a synthesis the command asks to have as a page. title: short, in ${name}. parts, in reading order:`,
     '   - {"kind": "heading", "text": "…"}: a section heading. Use a document\'s title as a heading when the page groups passages by document.',
     '   - {"kind": "quote", "blockId": "<alias>"}: one whole block of a document, copied as it is. Add "quote": "…" with a verbatim part of the block to keep that part alone. Use quote parts for everything the command asks to gather, collect, or list from the documents; a quote part never rewrites.',
-    `   - {"kind": "text", "markdown": "…", "sources": [{"blockId": "<alias>", "quote": "…"}]}: your own writing, in ${name}, in markdown (one paragraph or one list, bold). sources: the blocks the writing rests on, up to 8, each with a verbatim quote of 8 to 300 characters. Every text part needs at least one source. A finding in two paragraphs is two text parts, each with its own sources. A quote in the writing is copied exactly from a block. Write nothing the documents do not support.`,
+    `   - {"kind": "text", "markdown": "…", "sources": [{"blockId": "<alias>", "quote": "…"}]}: your own writing, in ${name}, in markdown (one paragraph or one list, bold). sources: the blocks the writing rests on, up to 8, each with a verbatim quote of 8 to 300 characters. Every text part needs at least one source. A finding in two paragraphs is two text parts, each with its own sources. A text part never repeats its heading, and is never a lead-in alone: put the lead-in in the list's text part. A quote in the writing is copied exactly from a block. Write nothing the documents do not support.`,
     "   Up to 200 parts. A command that asks to gather and to summarise gets both: the quote parts, then a text part with the summary. A page that combines findings gets one heading per topic and one text part per finding, each with its own sources; no finding of the documents on the topic is left out. null when the command asks for no page.",
-    `3. reply: the answer to the command, in ${name}. A question gets its answer here: start with the answer in one or two sentences, then the evidence, each claim naming the document it comes from by its title and citing its block as [block <alias>]. A why question starts with the reason the documents give, in their words; say no reason is given only when no block shown names a cause, a method, or an adjustment. A summary gives the key points of every document that bears on the topic, each with its document and block. Before you say a document says nothing on the topic, check its blocks for the topic's causes and effects: a block on what causes it or on what it causes is on the topic. When the documents give different values or claims on the same point, give each with its document and say they differ; never pick one. Except: when a later-dated document of the reader's says the value changed (moved, now, new, replaced, instead), give the later value first as the current one, and the earlier one as what it replaced. Two documents that name different causes differ only when one denies the other's cause; else give both causes. When two figures differ in what they cover, say what each covers. Never say which to use for a purpose the documents do not name. When the documents answer only in part, answer that part, then say in one sentence what they do not answer. When they do not answer at all, say so in one sentence. Then give a figure only when a block shown gives the same quantity for another scope or date; else stop. When a document marked not read could hold the answer, say in one sentence that it has no text to read. A number you work out from the documents' numbers is marked as worked out and shows the numbers it comes from. A command to gather, link, or write gets one to three sentences on what the page holds, how many links, or why the command could not be done with these documents. Never count the parts of the page: the count is added under the reply. A count of links equals the number of links you propose. A link listed as already in the project is never proposed again: say in one sentence that it is already in the graph. Never restate the page. A command that also asks a question gets its answer first, as a question does, then one sentence on the links or the page. Answer only what the command asks, from the documents only: no fact, number, comparison, or label the documents do not state (never call a figure a "lab rating" or a cause a "delay" unless a document does), and no topic the command did not ask about. At most 3,000 characters. Markdown: short paragraphs, a list when the answer has three or more parallel items, bold for the one or two key figures, no headings. ${SPECIFICITY_RULE} ${STYLE_RULE}`,
+    `3. reply: the answer to the command, in ${name}. A question gets its answer here: start with the answer in one sentence. Then one line per piece of evidence the first sentence does not already say: its document by its title, the shortest quote that proves it (one clause), and its block as [block <alias>]. Never restate the first sentence as a list. Stop when the command is answered: no closing remark, no point the command did not ask about. A why question starts with the reason the documents give, in their words; say no reason is given only when no block shown names a cause, a method, or an adjustment. A summary gives the key points of every document that bears on the topic, each with its document and block. Before you say a document says nothing on the topic, check its blocks for the topic's causes and effects: a block on what causes it or on what it causes is on the topic. When the documents give different values or claims on the same point, give each with its document and say they differ; never pick one. Except: when a later-dated document of the reader's says the value changed (moved, now, new, replaced, instead), give the later value first as the current one, and the earlier one as what it replaced. Two documents that name different causes differ only when one denies the other's cause; else give both causes. When two figures differ in what they cover, say what each covers. Never say which to use for a purpose the documents do not name. When the documents answer only in part, answer that part, then say in one sentence what they do not answer. When they do not answer at all, say so in one sentence. Then give a figure only when a block shown gives the same quantity for another scope or date; else stop. When a document marked not read could hold the answer, say in one sentence that it has no text to read. A number you work out from the documents' numbers is marked as worked out and shows the numbers it comes from. A command to gather or write a page gets one sentence: what the page finds (the agreement, the contradiction, the answer), or why the command could not be done with these documents. Never describe the page or count its parts: the count is added under the reply. A command to link gets the count of links, then one clause per group of links, or why no link could be drawn. A count of links equals the number of links you propose. A link listed as already in the project is never proposed again: say in one sentence that it is already in the graph. Never restate the page. A command that also asks a question gets its answer first, as a question does, then one sentence on the links or the page. Answer only what the command asks, from the documents only: no fact, number, comparison, or label the documents do not state (never call a figure a "lab rating" or a cause a "delay" unless a document does), and no topic the command did not ask about. At most 3,000 characters. Markdown: short paragraphs, a list when the answer has three or more parallel items, bold for the one or two key figures, no headings, no bold label on a line of its own. ${SPECIFICITY_RULE} ${STYLE_RULE}`,
     `Rules: every blockId is an alias tagged below, copied exactly; never invent one. In reply, cite a block as [block <alias>], one block per tag: [block B19] [block B21], never [block B19, B21]. Every quote is real text of the named block, copied exactly. A quote in reply is copied exactly from the block it cites; cut words with … instead of rewording. A quote is the document's words in the document's language: a translation or a paraphrase gets no quote marks. When a block repeats another document's block word for word, cite the original, not the copy: the original is in a document not marked "a page Stitch generated", else in the earlier document. Name a document by its title, never by its letter: the reader does not see the letters. When the command cannot be done with these documents, say so in reply and return empty links and a null document.`,
     "You read only the documents' text: never the reader's notes, the replies on links, or the links in the graph, except the links listed as already in the project and what your earlier answers stored. A command about the reader's notes, replies, or links gets one sentence saying you cannot read them, and where they are: notes in the Notes list, replies in the link's panel, links in the graph. Never add the partial-read sentence or advise picking documents for it. You cannot remove, accept, or edit a link, a note, or a document: say so in one sentence, and where the reader does it: a link in its panel, a recommended link under Recommended links, a note in the Notes list.",
   ].join("\n");
@@ -217,15 +251,16 @@ export function stitchRules(lang: Lang): string {
 export function stitchPrompt(ctx: StitchCtx): string {
   return [
     ...unreadLines(ctx.documents),
+    ...notPickedLines(ctx.notPicked),
     ...(ctx.selected
       ? [
-          `A first read picked the blocks above for this command out of every document; each document's header says how many of its blocks are shown. Answer from the blocks shown. A block not shown was judged off the command: when the blocks shown do not answer, say that the passages read do not answer it, not that the documents do not. When the answer is missing or incomplete, add one sentence, for the one document most likely to hold the rest (its title or its other blocks bear on the topic): when its header says "read whole when picked", "Only <shown> of <total> blocks of "<title>" were read for this command; pick it and one short document in the graph to have it read whole."; else "Only <shown> of <total> blocks of "<title>" were read for this command; ask about one part of it to have that part read." Never add it when no document is likely to hold the answer, and never for a document with no blocks shown.`,
+          `A first read picked the blocks above for this command out of every document${ctx.notPicked?.count ? " picked" : ""}; each document's header says how many of its blocks are shown. Answer from the blocks shown. A block not shown was judged off the command: when the blocks shown do not answer, say that the passages read do not answer it, not that the documents do not. When the answer is missing or incomplete, add one sentence, for the one document most likely to hold the rest (its title or its other blocks bear on the topic): when its header says "read whole when picked", "Only <shown> of <total> blocks of "<title>" were read for this command; pick it and one short document in the graph to have it read whole."; else "Only <shown> of <total> blocks of "<title>" were read for this command; ask about one part of it to have that part read." Never add it when no document is likely to hold the answer, and never for a document with no blocks shown.`,
           // A rare name whose every block is shown answers "which documents
           // mention it" in full: no hedge then.
           // A command with no rare name gets it only when it asks where or
-          // for every one (ANS5-10).
+          // for every one (ANS5-10), and not about the last answers (ANS6-11).
           ...(((ctx.names ?? []).length > 0 && (ctx.names ?? []).every((n) => n.shown >= n.total)) ||
-          ((ctx.names ?? []).length === 0 && !asksEvery(ctx.command))
+          ((ctx.names ?? []).length === 0 && (!asksEvery(ctx.command) || (ctx.continued && refersBack(ctx.command))))
             ? []
             : [
                 `A command that asks which documents or passages mention something, or asks for every one of them: when some document is only partly shown, say in one sentence that the list covers the blocks read for this command.`,
