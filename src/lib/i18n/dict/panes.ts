@@ -492,6 +492,7 @@ const en = {
   recommendedLinksDesc:
     "Links the AI proposed. Accept a link to make it real; dismiss what does not hold.",
   recommendedLinksToggleTitle: "Recommended links awaiting Accept, for the whole project",
+  recommendedLinksScanHere: "Scan for links is at the top of the list.",
   recommendedLinksEmpty: "No recommended links. Press Scan for links above to have the AI propose some.",
   openLinkEnd: "Open {title} at this link",
   acceptLinkTitle: "Make this recommended link real; it paints in both texts",
@@ -1008,6 +1009,7 @@ const zh: Record<keyof typeof en, string> = {
   recommendedLinksShort: "推荐",
   recommendedLinksDesc: "AI 提出的链接。接受即成为正式链接；不成立的可忽略。",
   recommendedLinksToggleTitle: "整个项目中待接受的推荐链接",
+  recommendedLinksScanHere: "“扫描推荐链接”在列表顶部。",
   recommendedLinksEmpty: "没有推荐链接。按上方的“扫描推荐链接”让 AI 提出链接。",
   openLinkEnd: "在此链接处打开{title}",
   acceptLinkTitle: "接受此推荐链接；它会在两篇文本中显示",

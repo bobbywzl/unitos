@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import type { GeneratedDocumentView, GraphEdge, GraphNode, RecommendedLinkView } from "@/lib/types";
 import { api } from "@/lib/api";
 import { linkPath } from "@/lib/link-scope";
@@ -71,6 +71,8 @@ function linkFromValue(value: string | null | undefined): LinkFrom {
   return LINK_FROMS.find((l) => l === value) ?? null;
 }
 // [/ui5]
+
+const NO_WRITTEN: Set<string> = new Set();
 
 /** The id of a side list, for its pill's aria-controls. */
 function sideListId(list: Exclude<SideList, null>): string {
@@ -576,6 +578,14 @@ export function GraphOverlay({
   const generatedCount = nodes.filter((n) => n.kind === "generated").length;
   const ownDocs = nodes.length - generatedCount;
   const generatedNodeIds = useMemo(() => nodes.filter((n) => n.kind === "generated").map((n) => n.id), [nodes]);
+  // [chrome6] VIEW6-03: the generated documents the graph opened with. One
+  // that appears later is a page Stitch wrote in this visit: the canvas
+  // keeps it drawn and lit until the graph closes, switch off or on.
+  const [generatedAtOpen] = useState(() => new Set(nodes.filter((n) => n.kind === "generated").map((n) => n.id)));
+  const writtenIds = useMemo(() => {
+    const fresh = generatedNodeIds.filter((id) => !generatedAtOpen.has(id));
+    return fresh.length === 0 ? NO_WRITTEN : new Set(fresh);
+  }, [generatedNodeIds, generatedAtOpen]);
   const allLinks = edges.reduce((sum, e) => sum + e.links.filter((l) => !l.recommended && !l.provenance).length, 0) + acceptedHere;
   const anyLink = edges.some((e) => e.accepted + e.recommended > 0);
   const emptyCard = loading
@@ -680,13 +690,14 @@ export function GraphOverlay({
             data-track="graph-links"
             aria-expanded={linksOpen}
             aria-controls={sideListId("links")}
-            data-tip={t("panes.graphLinksToggleTitle")}
-            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 ${
+            data-tip={t("panes.graphLinksDesc") /* [chrome6] WALK6-08: the list's intro, here */}
+            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 max-md:gap-1 max-md:px-2 ${
               linksOpen ? "border-line bg-clay-100 text-clay-800" : "border-line text-sand-600"
             }`}
           >
             <LinkIcon size={13} />
-            {t("panes.graphLinks")}
+            {/* [chrome6] VIEW6-08: on a phone, the mark and the count. */}
+            <span className="max-md:sr-only">{t("panes.graphLinks")}</span>
             <span className="rounded-full bg-sand-200 px-1.5 text-[11px] font-semibold tabular-nums text-sand-700">
               {allLinks}
             </span>
@@ -696,8 +707,8 @@ export function GraphOverlay({
             data-track="graph-recommended-links"
             aria-expanded={listOpen}
             aria-controls={sideListId("recommended")}
-            data-tip={`${t("panes.recommendedLinks")}: ${t("panes.recommendedLinksToggleTitle")}`}
-            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 max-[1399px]:px-2.5 ${
+            data-tip={`${t("panes.recommendedLinks")}: ${t("panes.recommendedLinksDesc")}${canEdit && nodes.length >= 2 ? ` ${t("panes.recommendedLinksScanHere")}` : ""}`}
+            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 max-[1399px]:px-2.5 max-md:gap-1 max-md:px-2 ${
               listOpen
                 ? "border-line bg-clay-100 text-clay-800"
                 : recommended.length > 0
@@ -707,59 +718,30 @@ export function GraphOverlay({
           >
             <UnlinkIcon size={13} />
             <span className="max-[1399px]:sr-only">{t("panes.recommendedLinks")}</span>
-            <span aria-hidden className="min-[1400px]:hidden">{t("panes.recommendedLinksShort")}</span>
+            <span aria-hidden className="max-md:hidden min-[1400px]:hidden">{t("panes.recommendedLinksShort")}</span>
             <span className="rounded-full bg-sand-200 px-1.5 text-[11px] font-semibold tabular-nums text-sand-700">
               {recommended.length}
             </span>
           </button>
+          {/* [chrome6] VIEW6-03: no pill for an empty list. */}
+          {generated.length > 0 && (
           <button
             onClick={(e) => togglePill("generated", e)}
             data-track="graph-generated"
             aria-expanded={list === "generated"}
             aria-controls={sideListId("generated")}
-            data-tip={`${t("stitch.generated")}: ${t("stitch.generatedToggleTitle")}`}
-            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 max-[1399px]:px-2.5 ${
+            data-tip={`${t("stitch.generated")}: ${t("stitch.generatedDesc")}`}
+            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 max-[1399px]:px-2.5 max-md:gap-1 max-md:px-2 ${
               list === "generated" ? "border-line bg-clay-100 text-clay-800" : "border-line text-sand-600"
             }`}
           >
             <PageIcon size={13} />
             <span className="max-[1399px]:sr-only">{t("stitch.generated")}</span>
-            <span aria-hidden className="min-[1400px]:hidden">{t("stitch.generatedShort")}</span>
+            <span aria-hidden className="max-md:hidden min-[1400px]:hidden">{t("stitch.generatedShort")}</span>
             <span className="rounded-full bg-sand-200 px-1.5 text-[11px] font-semibold tabular-nums text-sand-700">
               {generated.length}
             </span>
           </button>
-          {canEdit && nodes.length >= 2 && (
-            <button
-              onClick={() => void scan()}
-              data-track={scanning ? "graph-recommend-links-stop" : "graph-recommend-links"}
-              disabled={!scanning && scanLeft <= 0}
-              data-tip={
-                scanning
-                  ? t("panes.recommendScanStopTitle")
-                  : scanLeft > 0
-                    ? `${t("panes.recommendScan")}: ${t("panes.recommendScanTitle", { left: scanLeft })}`
-                    : t("panes.recommendScanSpentTitle")
-              }
-              className="flex items-center gap-1.5 rounded-full border border-line px-3.5 py-1.5 text-[13px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40 max-[1399px]:px-2.5"
-            >
-              <SparkleIcon size={13} />
-              <span className="max-[1399px]:sr-only">{scanning ? t("panes.recommendScanRunning") : t("panes.recommendScan")}</span>
-              {!scanning && (
-                <span aria-hidden className="min-[1400px]:hidden">
-                  {t("panes.recommendScanShort")}
-                </span>
-              )}
-              {/* The runs left this month: plain text, never a count chip,
-                  so it does not read as a number of links (GR-07). */}
-              {scanning ? (
-                <StopPill />
-              ) : (
-                <span className="text-[11.5px] tabular-nums text-sand-500 max-[1399px]:sr-only">
-                  · {t("panes.recommendScanLeft", { left: scanLeft })}
-                </span>
-              )}
-            </button>
           )}
         </div>
         <button
@@ -822,6 +804,7 @@ export function GraphOverlay({
             onClearCited={clearCited}
             expandedLinkId={openLinkView?.id ?? null}
             onExpandLink={(linkId) => openLink(linkId, null)}
+            writtenIds={writtenIds /* [chrome6] */}
           />
         )}
         {/* One document, or no link yet: what to do next (GR-08). */}
@@ -848,12 +831,41 @@ export function GraphOverlay({
             links={recommended}
             onOpenDocument={leave}
             proposedLinkIds={view2.proposedLinkIds /* [view2] */}
+            onClose={() => setList(null)}
+            scan={
+              canEdit && nodes.length >= 2 ? (
+                // [chrome6] VIEW6-02, WALK6-08: Scan for links heads the list it fills.
+                <button
+                  onClick={() => void scan()}
+                  data-track={scanning ? "graph-recommend-links-stop" : "graph-recommend-links"}
+                  disabled={!scanning && scanLeft <= 0}
+                  data-tip={
+                    scanning
+                      ? t("panes.recommendScanStopTitle")
+                      : scanLeft > 0
+                        ? t("panes.recommendScanTitle", { left: scanLeft })
+                        : t("panes.recommendScanSpentTitle")
+                  }
+                  className="flex min-w-0 items-center gap-1.5 rounded-full border border-line px-3 py-1 text-[12px] whitespace-nowrap text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+                >
+                  <SparkleIcon size={12} />
+                  {scanning ? t("panes.recommendScanRunning") : t("panes.recommendScan")}
+                  {/* The runs left this month: plain text, never a count chip,
+                      so it does not read as a number of links (GR-07). */}
+                  {scanning ? (
+                    <StopPill />
+                  ) : (
+                    <span className="text-[11px] tabular-nums text-sand-500">· {t("panes.recommendScanLeft", { left: scanLeft })}</span>
+                  )}
+                </button>
+              ) : null
+            }
           />
         )}
         </Presence>
         <Presence show={list === "generated"} exit="menu">
         {list === "generated" && (
-          <GeneratedList notebookId={notebookId} generated={generated} onOpenDocument={leave} />
+          <GeneratedList notebookId={notebookId} generated={generated} onOpenDocument={leave} onClose={() => setList(null)} />
         )}
         </Presence>
         <Presence show={list === "notes"} exit="menu">
@@ -1024,12 +1036,18 @@ export function RecommendedLinkList({
   links,
   onOpenDocument,
   proposedLinkIds,
+  scan,
+  onClose,
 }: {
   notebookId: string;
   links: RecommendedLinkView[];
   onOpenDocument: () => void;
   // [view2] The links the last Stitch answer proposed: first, and marked.
   proposedLinkIds?: Set<string>;
+  /** [chrome6] Scan for links, at the head of the list (VIEW6-02). */
+  scan?: ReactNode;
+  /** [chrome6] The ✕ the other side lists have (VIEW6-11). */
+  onClose?: () => void;
 }) {
   const t = useT();
   const router = useRouter();
@@ -1068,8 +1086,9 @@ export function RecommendedLinkList({
     onOpenDocument();
   }
 
+  // [chrome6] VIEW6-11: the two ends on one line, each at most 45%.
   const quoteChip =
-    "max-w-full truncate rounded-full bg-sand-200 px-2.5 py-0.5 text-left text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800";
+    "min-w-0 max-w-[45%] truncate rounded-full bg-sand-200 px-2.5 py-0.5 text-left text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800";
 
   return (
     <aside
@@ -1080,7 +1099,22 @@ export function RecommendedLinkList({
       aria-label={t("panes.recommendedLinks")}
       className="menu-in absolute top-3 right-3 bottom-3 z-10 flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 pb-24 shadow-float outline-none backdrop-blur-md max-[999px]:bottom-16 max-[999px]:pb-4"
     >
-      {shown.length > 0 && <p className="text-[11px] text-sand-500">{t("panes.recommendedLinksDesc")}</p>}
+      {/* [chrome6] VIEW6-02, VIEW6-11: one head row, Scan for links and ✕.
+          The list's intro is the pill's tooltip (WALK6-08). */}
+      <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center">{scan}</div>
+        {onClose && (
+          <button
+            onClick={onClose}
+            data-track="graph-recommended-close"
+            aria-label={t("common.close")}
+            data-tip={t("common.close")}
+            className="-mr-1 flex size-7 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
+          >
+            ✕
+          </button>
+        )}
+      </div>
       {errorText && <p className="text-[13px] text-red-600">{errorText}</p>}
       {shown.length === 0 && (
         <p className="text-[13px] text-sand-600">{t("panes.recommendedLinksEmpty")}</p>
@@ -1092,56 +1126,21 @@ export function RecommendedLinkList({
           {proposedLinkIds?.has(l.id) && (
             <p className="mb-1 text-[10.5px] font-semibold text-[var(--kind-assistant)]">{t("graphView.fromLastAnswer")}</p>
           )}
-          <button
-            onClick={() => setOpenId(open ? null : l.id)}
-            data-track="graph-link-expand"
-            data-tip={t(open ? "panes.linkCollapse" : "panes.linkExpand")}
-            aria-expanded={open}
-            className="block w-full rounded-lg text-left hover:bg-clay-100/60"
-          >
-            <p className="text-[12.5px] leading-snug font-semibold">{l.reason ?? t("panes.linkNoReason")}</p>
-            {!open && (
-              <p className="mt-1.5 line-clamp-2 border-l-2 border-clay-300 pl-2 text-xs text-sand-600">
-                {l.quotedText}
-              </p>
-            )}
-            {!open && l.toQuotedText && (
-              <p className="mt-1 line-clamp-2 border-l-2 border-sand-300 pl-2 text-xs text-sand-500">
-                {l.toQuotedText}
-              </p>
-            )}
-          </button>
-          {open && (
-            <div className="mt-2">
-              <LinkDetail link={l} onOpen={(documentId) => openDocument(documentId, l.id)} />
-              <LinkNoteComposer linkId={l.id} />
-            </div>
-          )}
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            {!open && (
-              <>
-                <button
-                  onClick={() => openDocument(l.fromDocumentId, l.id)}
-                  data-track="graph-link-open"
-                  data-tip={t("panes.openLinkEnd", { title: l.fromTitle })}
-                  className={quoteChip}
-                >
-                  {l.fromTitle}
-                </button>
-                <span className="text-[11px] text-sand-500">⇄</span>
-                <button
-                  onClick={() => openDocument(l.toDocumentId, l.id)}
-                  data-track="graph-link-open"
-                  data-tip={t("panes.openLinkEnd", { title: l.toTitle })}
-                  className={quoteChip}
-                >
-                  {l.toTitle}
-                </button>
-              </>
-            )}
-            <AuthorChip createdById={l.createdById} nameless />
+          {/* [chrome6] VIEW6-11: Accept and Dismiss on the reason's line,
+              each passage one line until the card opens, the two ends on
+              one line: about 120 px a card. */}
+          <div className="flex items-start gap-2">
+            <button
+              onClick={() => setOpenId(open ? null : l.id)}
+              data-track="graph-link-expand"
+              data-tip={t(open ? "panes.linkCollapse" : "panes.linkExpand")}
+              aria-expanded={open}
+              className="block min-w-0 flex-1 rounded-lg text-left hover:bg-clay-100/60"
+            >
+              <span className="block text-[12.5px] leading-snug font-semibold">{l.reason ?? t("panes.linkNoReason")}</span>
+            </button>
             {canEdit && !l.crossAccount?.outside && (
-              <span className="ml-auto flex items-center gap-2">
+              <span className="flex shrink-0 items-center gap-1.5">
                 <button
                   onClick={() =>
                     void mutate(l.id, async () => {
@@ -1176,6 +1175,52 @@ export function RecommendedLinkList({
                 )}
               </span>
             )}
+          </div>
+          {!open && (
+            // The passages open the card too; the reason is its Tab stop.
+            <button
+              onClick={() => setOpenId(l.id)}
+              tabIndex={-1}
+              aria-hidden
+              className="mt-1 block w-full rounded-lg text-left hover:bg-clay-100/60"
+            >
+              <span className="block truncate border-l-2 border-clay-300 pl-2 text-xs text-sand-600">{l.quotedText}</span>
+              {l.toQuotedText && (
+                <span className="mt-0.5 block truncate border-l-2 border-sand-300 pl-2 text-xs text-sand-500">{l.toQuotedText}</span>
+              )}
+            </button>
+          )}
+          {open && (
+            <div className="mt-2">
+              <LinkDetail link={l} onOpen={(documentId) => openDocument(documentId, l.id)} />
+              <LinkNoteComposer linkId={l.id} />
+            </div>
+          )}
+          <div className="mt-1.5 flex min-w-0 items-center gap-1.5">
+            {!open && (
+              <>
+                <button
+                  onClick={() => openDocument(l.fromDocumentId, l.id)}
+                  data-track="graph-link-open"
+                  data-tip={t("panes.openLinkEnd", { title: l.fromTitle })}
+                  className={quoteChip}
+                >
+                  {l.fromTitle}
+                </button>
+                <span className="shrink-0 text-[11px] text-sand-500">⇄</span>
+                <button
+                  onClick={() => openDocument(l.toDocumentId, l.id)}
+                  data-track="graph-link-open"
+                  data-tip={t("panes.openLinkEnd", { title: l.toTitle })}
+                  className={quoteChip}
+                >
+                  {l.toTitle}
+                </button>
+              </>
+            )}
+            <span className="ml-auto shrink-0">
+              <AuthorChip createdById={l.createdById} nameless />
+            </span>
           </div>
           <ReplyThread target={{ docLinkId: l.id, notebookId }} replies={l.replies} crossAccount={l.crossAccount} />
         </div>

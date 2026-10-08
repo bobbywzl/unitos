@@ -24,7 +24,7 @@ export function FindBox({ find }: { find: FindState }) {
   return (
     <label
       data-graph-find
-      className="flex h-[34px] min-w-0 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-3 text-[13px] text-sand-600 focus-within:border-clay-400 max-[900px]:w-[220px] max-md:w-[150px] min-[901px]:w-[200px] min-[901px]:max-[1099px]:w-[170px] min-[1600px]:w-[260px]"
+      className="flex h-[34px] min-w-0 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-3 text-[13px] text-sand-600 focus-within:border-clay-400 max-[900px]:w-[220px] max-md:w-[104px] max-md:focus-within:w-[200px] min-[901px]:w-[200px] min-[901px]:max-[1099px]:w-[170px] min-[1600px]:w-[260px]"
     >
       <SearchIcon size={13} />
       <input
@@ -252,13 +252,16 @@ export function FindList({
       </div>
       {counted.length > 0 && (
         <div className="flex flex-wrap gap-2">
-          {canPick && (
+          {/* [chrome6] WALK6-08: Ask Stitch picks these documents too, so it
+              is the one button; Pick shows only where Ask cannot run (one
+              document, nothing else picked). */}
+          {canPick && counted.length + others < 2 && (
             <button
               onClick={() => onPickAll(pickIds)}
               data-track="graph-find-pick"
               className="rounded-full border border-line px-3 py-1.5 text-[12px] text-sand-700 hover:bg-clay-100 hover:text-clay-800"
             >
-              {counted.length === 1 ? t("graphView.findPickOne") : t("graphView.findPick", { n: counted.length })}
+              {t("graphView.findPickOne")}
             </button>
           )}
           {canPick && counted.length + others >= 2 && (

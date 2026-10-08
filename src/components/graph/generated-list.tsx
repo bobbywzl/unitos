@@ -19,10 +19,13 @@ export function GeneratedList({
   notebookId,
   generated,
   onOpenDocument,
+  onClose,
 }: {
   notebookId: string;
   generated: GeneratedDocumentView[];
   onOpenDocument: () => void;
+  /** [chrome6] The ✕ the other side lists have. */
+  onClose: () => void;
 }) {
   const t = useT();
   const lang = useLang();
@@ -60,14 +63,16 @@ export function GeneratedList({
       aria-label={t("stitch.generated")}
       className="menu-in absolute top-3 right-3 bottom-3 z-10 flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 pb-24 shadow-float outline-none backdrop-blur-md max-[999px]:bottom-16 max-[999px]:pb-4"
     >
-      <p className="text-[11px] text-sand-500">{t("stitch.generatedDesc")}</p>
-      {generated.length > 0 && (
+      {/* [chrome6] WALK6-08: one head row, the switch and ✕; the list's
+          intro is the pill's tooltip. */}
+      <div className="flex items-center gap-2">
+      {generated.length > 0 ? (
         <button
           role="switch"
           aria-checked={showProvenance}
           onClick={() => setShowProvenance(!showProvenance)}
           data-track="graph-provenance-switch"
-          className="flex items-center gap-2 self-start rounded-full px-1 py-0.5 text-[12.5px] text-sand-700 hover:text-clay-800"
+          className="flex min-w-0 items-center gap-2 rounded-full px-1 py-0.5 text-[12.5px] text-sand-700 hover:text-clay-800"
         >
           <span
             aria-hidden
@@ -79,7 +84,19 @@ export function GeneratedList({
           </span>
           {t("stitch.generatedProvenance")}
         </button>
+      ) : (
+        <span className="flex-1" />
       )}
+        <button
+          onClick={onClose}
+          data-track="graph-generated-close"
+          aria-label={t("common.close")}
+          data-tip={t("common.close")}
+          className="-mr-1 ml-auto flex size-7 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
+        >
+          ✕
+        </button>
+      </div>
       {error && <p className="text-[13px] text-red-600">{error}</p>}
       {generated.length === 0 && (
         <p className="text-[13px] text-sand-600">{t("stitch.generatedEmpty")}</p>
