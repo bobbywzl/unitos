@@ -44,6 +44,7 @@ import { jevEnabled, mapLimit } from "@/lib/jev";
 import { rank, tokenize } from "@/lib/graph/rank";
 import {
   asksMore,
+  asksWhere,
   refersBack,
   stitchExpandPrompt,
   stitchPrompt,
@@ -233,12 +234,20 @@ export function commandKind(command: string): StitchCommandKind {
   const zhNoun = /一页纸|新页面|成一页|做成页面|(给我|做|画|列|写)(一个|一条|一份)?时间线|时间线页面|学习指南|所有段落|每一段/;
   if (pageVerb.test(c) || pageNoun.test(c) || zhVerb.test(c) || zhNoun.test(c)) return "page";
   const links = new RegExp(
-    String.raw`\b(contradict\w*|disagree\w*|inconsisten\w*)\b|` +
-      lead +
-      String.raw`(connect|link|draw|propose)\b|\b(draw|propose|find|add|make)\s+(the\s+|some\s+)?(links?|connections?)\b|\bconflict\w* between\b`,
+    lead +
+      String.raw`(connect|link|draw|propose)\b|\b(draw|propose|find|add|make)\s+(the\s+|some\s+)?(links?|connections?)\b`,
   );
-  if (links.test(c) || /矛盾|冲突|分歧|不一致|意见不同|看法不同|相反|连接|关联/.test(c)) return "links";
+  if (asksContradictions(command) || links.test(c) || /连接|关联/.test(c)) return "links";
   return "question";
+}
+
+/** True when the command asks for contradictions or disagreements: a links
+    command, questions included ("Do the documents contradict each other
+    on any date?"). Its reply lights only the links it names (ANS8-04):
+    the links in view are agreements as often as not. */
+export function asksContradictions(command: string): boolean {
+  const c = command.toLowerCase();
+  return /\b(contradict\w*|disagree\w*|inconsisten\w*)\b|\bconflict\w* between\b/.test(c) || /矛盾|冲突|分歧|不一致|意见不同|看法不同|相反/.test(c);
 }
 
 // Words of a command that are never a name, though capitalised.
@@ -246,7 +255,21 @@ const NAME_STOP = new Set(
   "what which who whom whose when where why how does did do is are was were has have had the a an and or of in on to for from with about i my me we our you your he his she her they their it its this that these those quote list compare gather collect write make find show tell give please can could would will should".split(" "),
 );
 const NAME_HITS_MAX = 8; // a name in more blocks than this (or a quarter of the documents) is common: the select pass finds it in the lines
+const NAME_WHERE_MAX = 24; // the same, for a command that asks which documents or passages name it (asksWhere, ANS8-03)
 const NAME_TERMS_MAX = 6;
+const NAME_EXPANDED_MAX = 3; // names taken from the expansion's words (expandedNames)
+
+/** The names among the expansion's words (ANS8-02): the capitalised Latin
+    words and terms, the first NAME_EXPANDED_MAX not in a title of
+    titles. A Chinese command over English documents has no capitalised
+    word: 瓦格纳 is Wagner in the expansion. */
+export function expandedNames(words: string[], titles: string[] = []): string[] {
+  const titled = titles.map((t) => t.toLowerCase());
+  return words
+    .map((w) => w.trim())
+    .filter((w) => /^\p{Lu}[\p{L}\p{N}-]{2,}(?:\s+\p{Lu}[\p{L}\p{N}-]{2,})*$/u.test(w) && !NAME_STOP.has(w.toLowerCase()) && !titled.some((t) => t.includes(w.toLowerCase())))
+    .slice(0, NAME_EXPANDED_MAX);
+}
 
 /** The rare names of a command: its capitalised words after the first
     word (Darwin, Parsifal; Nietzsche's is Nietzsche), and its quoted
@@ -278,21 +301,25 @@ export function commandNames(command: string): string[] {
     long block can be missing from its line: the select pass is told
     which blocks name it (ANS3-01). A term in a title of a document read
     (titles) names the document, not a topic, and drops: "Beyond Good" of
-    "Beyond Good and Evil" is not a rare name (ANS4-06). */
+    "Beyond Good and Evil" is not a rare name (ANS4-06). words: the
+    expansion's words, when one ran; its names count as the command's
+    (expandedNames). A command that asks which documents or passages name
+    something keeps a name in up to NAME_WHERE_MAX blocks (ANS8-03). */
 export function nameHits(
   command: string,
   blocks: { alias: string; text: string }[],
   titles: string[] = [],
+  words: string[] = [],
 ): { term: string; aliases: string[] }[] {
   const out: { term: string; aliases: string[] }[] = [];
   const titled = titles.map((t) => t.toLowerCase());
   // More documents, more blocks a rare name can be in (ANS5-09): 9 of 36
   // documents' blocks name Darwin.
-  const max = Math.max(NAME_HITS_MAX, Math.ceil(titles.length / 4));
-  for (const term of commandNames(command)) {
+  const max = Math.max(asksWhere(command) ? NAME_WHERE_MAX : NAME_HITS_MAX, Math.ceil(titles.length / 4));
+  const terms = [...new Set([...commandNames(command), ...expandedNames(words, titles)])].slice(0, NAME_TERMS_MAX);
+  for (const term of terms) {
     if (titled.some((t) => t.includes(term.toLowerCase()))) continue;
-    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const rx = /^[\p{L}\p{N}]/u.test(term) && !/[㐀-鿿]/.test(term) ? new RegExp(`(?<![\\p{L}\\p{N}])${escaped}`, "iu") : new RegExp(escaped, "iu");
+    const rx = nameRx(term);
     const aliases: string[] = [];
     for (const b of blocks) {
       if (!rx.test(b.text)) continue;
@@ -302,6 +329,13 @@ export function nameHits(
     if (aliases.length >= 1 && aliases.length <= max) out.push({ term, aliases });
   }
   return out;
+}
+
+// A name's match in a block's text: at a word start, any case (Darwin
+// finds Darwinian); a CJK or punctuated term anywhere.
+function nameRx(term: string): RegExp {
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return /^[\p{L}\p{N}]/u.test(term) && !/[㐀-鿿]/.test(term) ? new RegExp(`(?<![\\p{L}\\p{N}])${escaped}`, "iu") : new RegExp(escaped, "iu");
 }
 
 /** One turn of the conversation as the box sends it; an assistant turn may
@@ -847,7 +881,7 @@ export function answerMessages(input: {
   const historyTokens = input.history.reduce((sum, m) => sum + estTokens(textOf(m)), 0);
   if (selected && historyTokens >= (input.historyFirstMin ?? STITCH_HISTORY_FIRST_MIN)) {
     return [
-      systemMessage(systemOf(rules, input.profile, "The blocks a first read picked for the command are in the reader's last message.", "")),
+      systemMessage(systemOf(rules, input.profile, "The blocks read for the command are in the reader's last message.", "")),
       ...input.history,
       { role: "user", content: `${selectedSections(rendered, selected, gists, input.command, input.reading.words)}\n\n${prompt}` },
     ];
@@ -855,7 +889,7 @@ export function answerMessages(input: {
   if (selected) {
     // Behind the blocks picked nothing caches, so the older answers are cut
     // (COST6-05); the whole read's history caches and stays whole.
-    const system = systemOf(rules, input.profile, "The blocks a first read picked for the command follow.", selectedSections(rendered, selected, gists, input.command, input.reading.words));
+    const system = systemOf(rules, input.profile, "The blocks read for the command follow.", selectedSections(rendered, selected, gists, input.command, input.reading.words));
     return [systemMessage(system), ...trimmedHistory(input.history), { role: "user", content: prompt }];
   }
   const system = systemOf(rules, input.profile, "Every document follows.", rendered.map((r) => wholeSection(r, gists)).join("\n\n"));
@@ -1220,6 +1254,41 @@ export function firstsFirst(
     firsts.push(alias);
   }
   return [...firsts, ...rest];
+}
+
+/** True when the command is over every document as a whole: each or
+    every document, all the documents, an overview (ANS8-05). */
+export function overEvery(command: string): boolean {
+  return /\b(?:each|every) (?:document|text|source)s?\b|\ball (?:of )?(?:the |these |my )?(?:documents|texts|sources)\b|\boverview\b|每个文档|每篇|每份|各文档|各个文档|所有文档|全部文档|概述|总览/i.test(command);
+}
+
+/** The picks shared by document (ANS8-05), each document's in the given
+    order: the next pick is always the next one of the document that has
+    taken the fewest tokens so far (costOf; without it, the fewest picks:
+    every document's first, then every document's second), ties going to
+    the document picked first. A document of short blocks, such as notes,
+    keeps its picks, and a document of long ones does not take the budget
+    because the select pass listed it first. docOf: the document of an
+    alias; an alias with none drops. */
+export function byDocument(aliases: string[], docOf: (alias: string) => string | undefined, costOf: (alias: string) => number = () => 1): string[] {
+  const lists = new Map<string, string[]>();
+  for (const alias of aliases) {
+    const doc = docOf(alias);
+    if (doc === undefined) continue;
+    const list = lists.get(doc);
+    if (list) list.push(alias);
+    else lists.set(doc, [alias]);
+  }
+  const queues = [...lists.values()].map((list) => ({ list, at: 0, used: 0 }));
+  const out: string[] = [];
+  for (;;) {
+    let next: (typeof queues)[number] | undefined;
+    for (const q of queues) if (q.at < q.list.length && (!next || q.used < next.used)) next = q;
+    if (!next) return out;
+    const alias = next.list[next.at++];
+    next.used += costOf(alias);
+    out.push(alias);
+  }
 }
 
 // A block's cost in the answer pass, in estimated tokens: its text and its tag line.
@@ -1711,7 +1780,7 @@ export async function pickBlocks(input: {
   const cited = citedAliases(input.history, blockByRef);
   // The blocks whose full text names the command's rare names: the select
   // pass is told of them, and a cut keeps their lines.
-  const names = nameHits(input.command, read.flatMap((r) => r.blocks), read.map((r) => r.doc.title));
+  const names = nameHits(input.command, read.flatMap((r) => r.blocks), read.map((r) => r.doc.title), input.reading.words);
   const jevCommand =
     earlier.length > 0
       ? `Earlier commands of the conversation:\n${earlier.join("\n")}\n\nThe command:\n${input.command}`
@@ -1724,16 +1793,18 @@ export async function pickBlocks(input: {
     throw new Error("aborted");
   };
   // The ranker's query: the earlier commands, the command, and the words
-  // of its expansion — asked for once, and only when a cut ranks.
+  // of its expansion — asked for once, and only when a cut ranks or the
+  // command is in CJK over documents that are not (stitch, cjkExpansion).
   let query: Promise<string> | null = null;
+  const known = input.reading.words;
   const rankQuery = () =>
-    (query ??= expandWords({
+    (query ??= (known ? Promise.resolve(known) : expandWords({
       command: input.command,
       earlier,
       titles: read.map((r) => r.doc.title),
       usage: { userId: input.userId, feature: input.feature },
       signal: input.signal,
-    }).then((words) => {
+    })).then((words) => {
       input.reading.words = words;
       return [...earlier, input.command, ...(words.length > 0 ? [words.join(" ")] : [])].join("\n");
     }));
@@ -1857,10 +1928,15 @@ export async function pickBlocks(input: {
   // name the command's rare names, NAME_FALLBACK per name (COST6-04), or,
   // when no name hits, every document's opening, so it has text to say so
   // from.
-  let picks = firstsFirst(interleave(lists), (alias) => blockByRef.get(alias)?.documentId, {
-    tokens: STITCH_SELECTED_BUDGET[kind] / 3,
-    costOf: (alias) => blockCost(blockByRef.get(alias)?.text ?? ""),
-  });
+  // A command over every document ("each document", an overview) shares
+  // the budget by document (byDocument, ANS8-05): a select pass that lists
+  // one document after another would have the cut fall on the last ones.
+  let picks = overEvery(input.command)
+    ? byDocument(interleave(lists), (alias) => blockByRef.get(alias)?.documentId, (alias) => blockCost(blockByRef.get(alias)?.text ?? ""))
+    : firstsFirst(interleave(lists), (alias) => blockByRef.get(alias)?.documentId, {
+        tokens: STITCH_SELECTED_BUDGET[kind] / 3,
+        costOf: (alias) => blockCost(blockByRef.get(alias)?.text ?? ""),
+      });
   if (picks.length === 0) picks = namePicks(names);
   if (picks.length === 0) picks = interleave(read.map((r) => opening(r, share)));
   if (input.signal?.aborted) aborted();
@@ -1870,6 +1946,13 @@ export async function pickBlocks(input: {
 // The blocks per rare name the answer pass reads when the select pass
 // picked nothing (COST6-04).
 const NAME_FALLBACK = 2;
+
+/** True when the command is in CJK and no title of the documents read is
+    (ANS8-02): 瓦格纳 is in no English block, Wagner is. */
+export function cjkExpansion(command: string, titles: string[]): boolean {
+  const cjk = /[㐀-鿿]/;
+  return cjk.test(command) && !titles.some((t) => cjk.test(t));
+}
 
 /** The blocks the answer pass reads when the select pass picked nothing:
     the first NAME_FALLBACK blocks that name each of the command's rare
@@ -1888,9 +1971,16 @@ export function namePicks(names: { aliases: string[] }[]): string[] {
     blocks were not cited, when it holds a word of a document's title and
     no document whose title holds that word has a block cited (ANS7-01:
     "What does Schopenhauer say about those points?" after an answer from
-    The Antichrist alone; nameHits drops a title's words), or when the
+    The Antichrist alone; nameHits drops a title's words), when a name of
+    the command (commandNames) is in
+    some block read and in no block cited, however many blocks name it
+    (ANS8-01: "Is the third point true of Buddhism?"), or when the
     blocks cited cost more than BACK_BUDGET tokens. docs: the documents
-    read. */
+    read. words: the expansion's words, for a CJK command over documents
+    that are not (cjkExpansion): 叔本华 matches no English title, its
+    expansion's Schopenhauer does. Only the title check reads them: the
+    expansion's names are a model's guess at what the passages say, and
+    a follow-up about the answer would lose its skip to one of them. */
 export function backSelection(
   command: string,
   history: ModelMessage[],
@@ -1898,13 +1988,25 @@ export function backSelection(
   names: { term: string; aliases: string[] }[],
   kind: StitchCommandKind,
   docs: { doc: { id: string; title: string } }[] = [],
+  words: string[] = [],
 ): Set<string> | null {
   if (history.length === 0 || !refersBack(command) || asksMore(command)) return null;
   const cited = citedAliases(history, blockByRef);
   if (cited.length === 0) return null;
   if (names.some((n) => !n.aliases.some((a) => cited.includes(a)))) return null;
+  const titled = docs.map((d) => d.doc.title.toLowerCase());
+  const terms = commandNames(command).filter((t) => !titled.some((x) => x.includes(t.toLowerCase())));
+  if (terms.length > 0) {
+    const citedText = cited.map((a) => blockByRef.get(a)?.text ?? "");
+    const blocks = [...new Set(blockByRef.values())];
+    for (const term of terms) {
+      const rx = nameRx(term);
+      if (!citedText.some((t) => rx.test(t)) && blocks.some((b) => rx.test(b.text))) return null;
+    }
+  }
   const citedDocs = new Set(cited.map((a) => blockByRef.get(a)?.documentId));
-  for (const word of new Set(tokenize(command))) {
+  const cjk = /[㐀-鿿]/.test(command);
+  for (const word of new Set(tokenize([command, ...(cjk ? words : [])].join("\n")))) {
     const titled = titleMatches(docs, word);
     if (titled.length > 0 && !titled.some((d) => citedDocs.has(d.doc.id))) return null;
   }
@@ -1968,16 +2070,31 @@ export async function stitch(input: {
 
   // ── The reading passes: the blocks the command needs, from the skeletons ──
   let selected: Set<string> | null = null;
+  // A CJK command over documents that are not shares no name and no title
+  // word with them: its expansion's words stand in (ANS8-02), for the
+  // rare names, the back selection's title and name checks, and the
+  // ranked cut, which reuses them.
+  if (reading.tokens > STITCH_WHOLE_THRESHOLD && cjkExpansion(input.command, read.map((r) => r.doc.title))) {
+    reading.words = await expandWords({
+      command: input.command,
+      earlier: history.filter((m) => m.role === "user").map(textOf).filter((t) => t.trim()).slice(-STITCH_READ_HISTORY),
+      titles: read.map((r) => r.doc.title),
+      usage: { userId: input.userId, feature: "stitch" },
+      signal: input.signal,
+    });
+  }
   // The command's rare names (nameHits), for the back selection and the
   // answer pass.
-  const names = reading.tokens > STITCH_WHOLE_THRESHOLD ? nameHits(input.command, read.flatMap((r) => r.blocks), read.map((r) => r.doc.title)) : undefined;
+  const names = reading.tokens > STITCH_WHOLE_THRESHOLD ? nameHits(input.command, read.flatMap((r) => r.blocks), read.map((r) => r.doc.title), reading.words) : undefined;
   if (reading.tokens > STITCH_WHOLE_THRESHOLD) {
     // A command about the last answers reads the blocks they cited and
     // stored, with no select pass (ANS6-03). Only when the last answer came
     // back with its record: without it the history names no stored link or
     // page block (F4n, F5n: the block asked about was missing).
     const lastAnswer = [...input.history].reverse().find((t) => t.role === "assistant");
-    if (lastAnswer?.record) selected = backSelection(input.command, history, blockByRef, names ?? [], kind, read);
+    // The back selection's names are the command's own, not the expansion's.
+    const own = reading.words ? nameHits(input.command, read.flatMap((r) => r.blocks), read.map((r) => r.doc.title)) : (names ?? []);
+    if (lastAnswer?.record) selected = backSelection(input.command, history, blockByRef, own, kind, read, reading.words);
   }
   const back = selected !== null;
   if (reading.tokens > STITCH_WHOLE_THRESHOLD && !selected) {
@@ -2206,8 +2323,9 @@ export async function stitch(input: {
   const linksNote = [addedLead, existingNote].filter(Boolean).join(" ");
   // The links already in the project the answer is about are lit with the
   // new ones (ANS5-05): every one a links command was told of, and any
-  // whose two blocks the reply cites side by side.
-  for (const id of existingNamed(checked.reply, existingAliases, selected, kind === "links")) existingLinkIds.add(id);
+  // whose two blocks the reply cites side by side. A contradictions command
+  // lights only the ones its reply names (ANS8-04).
+  for (const id of existingNamed(checked.reply, existingAliases, selected, kind === "links" && !asksContradictions(input.command))) existingLinkIds.add(id);
   const reply = replyWithIds([checked.reply, pageNote, linksNote].filter(Boolean).join("\n\n"), blockByRef);
   // No reply and nothing stored: the reader would see an empty turn.
   if (!reply && linkCount === 0 && !document) throw input.onFailure(STITCH_EMPTY_ANSWER);

@@ -82,10 +82,11 @@ export function asksWhere(command: string): boolean {
 }
 
 /** True when the command asks where something is, or for every one of a
-    kind: which, every, all, each, 哪些, 所有, 每 (ANS5-10). Only then is the
+    kind: which, every, all, each, 哪些, 所有, 每个, 各自, 分别 (ANS5-10,
+    ANS8-02). Only then is the
     sentence that a list covers the blocks read worth its tokens. */
 export function asksEvery(command: string): boolean {
-  return asksWhere(command) || /\b(which|every|all|each|list)\b|哪些|哪几|所有|每一|全部/i.test(command);
+  return asksWhere(command) || /\b(which|every|all|each|list)\b|哪些|哪几|所有|每一|每个|各个|各自|各文档|分别|全部/i.test(command);
 }
 
 /** True when the command is about the last answers themselves (ANS6-03):
@@ -101,11 +102,15 @@ export function refersBack(command: string): boolean {
 
 /** True when a follow-up asks for passages beyond the ones cited (ANS7-01):
     other documents, more passages, agreement or disagreement, what someone
-    says about the points, a comparison. Such a follow-up runs the select
-    pass even when it refers back ("Does any other document disagree with
-    the second point?"). */
+    says about the points, a comparison, support or evidence, whether a
+    point holds for something else, what someone thinks of it (怎么看), or
+    whether it is somewhere (有吗; ANS8-01). Such a follow-up runs the
+    select pass even when it refers back ("Does any other document disagree
+    with the second point?"). "Different" is a word about the answer ("a
+    different way of dating"), not a request for more: only differ,
+    differs, differed count. */
 export function asksMore(command: string): boolean {
-  return /\b(?:other|others|else|elsewhere|more|another|also|too|agree\w*|disagree\w*|differ\w*|contradict\w*|like (?:the|that|those|this|these)|says? about|think (?:of|about)|compare)\b|其他|别的|另外|对应|还有|也|同意|反对|矛盾/i.test(command);
+  return /\b(?:other|others|else|elsewhere|anywhere|more|another|also|too|as well|agree\w*|disagree\w*|differ|differs|differed|contradict\w*|like (?:the|that|those|this|these)|says? about|think (?:of|about)|compare|support\w*|backs? up|backed up|evidence|confirm\w*|true (?:of|for|in)|appl(?:y|ies) to|holds? for)\b|其他|别的|另外|对应|还有|也|同意|反对|矛盾|怎么看|如何看|看法|怎么说|如何评价|有没有|有吗|是否/i.test(command);
 }
 
 // The documents with no text above. Named only when the command bears on
@@ -256,7 +261,7 @@ export function stitchRules(lang: Lang): string {
     "   Up to 200 parts. A command that asks to gather and to summarise gets both: the quote parts, then a text part with the summary. A page that combines findings gets one heading per topic and one text part per finding, each with its own sources; no finding of the documents on the topic is left out. null when the command asks for no page.",
     `3. reply: the answer to the command, in ${name}. A question gets its answer here: start with the answer in one sentence. Then one line per piece of evidence the first sentence does not already say: its document's title, even if the line before named it, the shortest quote that proves that line's claim (one clause), and its block as [block <alias>]. To which of several things changed or hold, end with one clause on the ones that did not. Never restate the first sentence as a list. Stop when the command is answered: no closing remark, no point the command did not ask about. A why question starts with the reason the documents give, in their words; say no reason is given only when no block shown names a cause, a method, or an adjustment. A summary gives the key points of every document that bears on the topic, each with its document and block. Before you say a document says nothing on the topic, check its blocks for the topic's causes and effects: a block on what causes it or on what it causes is on the topic. When the documents give different values or claims on the same point, give each with its document and say they differ; never pick one. Except: when a later-dated document of the reader's says the value changed (moved, now, new, replaced, instead), give the later value first as the current one, and the earlier one as what it replaced. Two documents that name different causes differ only when one denies the other's cause; else give both causes. When two figures differ in what they cover, say what each covers. Never say which to use for a purpose the documents do not name. When the documents answer only in part, answer that part, then say in one sentence what they do not answer. When they do not answer at all, say so in one sentence. Then give a figure only when a block shown gives the same quantity for another scope or date; else stop. When a document marked not read could hold the answer, say in one sentence that it has no text to read. A number you work out from the documents' numbers is marked as worked out and shows the numbers it comes from. A command to gather or write a page gets one sentence: what the page finds (the agreement, the contradiction, the answer), or why the command could not be done with these documents. Never describe the page or count its parts: the count is added under the reply. A command to link gets the count of links, then one clause per group of links, or why no link could be drawn. A count of links equals the number of links you propose. A link listed as already in the project is never proposed again: say in one sentence that it is already in the graph. Never restate the page. A command that also asks a question gets its answer first, as a question does, then one sentence on the links or the page. Answer only what the command asks, from the documents only: no fact, number, comparison, or label the documents do not state (never call a figure a "lab rating" or a cause a "delay" unless a document does), and no topic the command did not ask about. At most 3,000 characters. Markdown: short paragraphs, a list when the answer has three or more parallel items, bold for the one or two key figures, no headings, no bold label on a line of its own. ${SPECIFICITY_RULE} ${STYLE_RULE}`,
     `Rules: every blockId is an alias tagged below, copied exactly; never invent one. In reply, cite a block as [block <alias>], one block per tag: [block B19] [block B21], never [block B19, B21]. Every quote is real text of the named block, copied exactly. A quote in reply is copied exactly from the block it cites; cut words with … instead of rewording. A quote is the document's words in the document's language: a translation or a paraphrase gets no quote marks. When a block repeats another document's block word for word, cite the original, not the copy: the original is in a document not marked "a page Stitch generated", else in the earlier document. Name a document by its title, never by its letter: the reader does not see the letters. When the command cannot be done with these documents, say so in reply and return empty links and a null document.`,
-    "You read only the documents' text: never the reader's notes, the replies on links, or the links in the graph, except the links listed as already in the project and what your earlier answers stored. A command about the reader's notes, replies, or links gets one sentence saying you cannot read them, and where they are: notes in the Notes list, replies in the link's panel, links in the graph. Never add the partial-read sentence or advise picking documents for it. You cannot remove, accept, or edit a link, a note, or a document: say so in one sentence, and where the reader does it: a link in its panel, a recommended link under Recommended links, a note in the Notes list.",
+    "You read only the documents' text: never the reader's notes, the replies on links, or the links in the graph, except the links listed as already in the project and what your earlier answers stored. A command about the reader's notes, replies, or links gets one sentence saying you cannot read them, and where they are: notes in the Notes list, replies in the link's panel, links in the graph. Never add the partial-read sentence or advise picking documents for it. A document read that is the reader's own notes, log, or plan is a document: answer \"my notes\" from it, and say you cannot read the Notes list only when no document fits. You cannot remove, accept, or edit a link, a note, or a document: say so in one sentence, and where the reader does it: a link in its panel, a recommended link under Recommended links, a note in the Notes list.",
   ].join("\n");
 }
 
@@ -266,7 +271,7 @@ export function stitchPrompt(ctx: StitchCtx): string {
     ...notPickedLines(ctx.notPicked),
     ...(ctx.selected && ctx.back
       ? [
-          "These are the blocks the earlier answers cited; no other block was read for this command. Answer from them. When they do not answer, say that the passages read do not answer it, and say in one sentence to ask again without pointing back to the earlier answers, so that every document is read.",
+          "These are the blocks the earlier answers cited; no other block was read for this command. Answer from them. When they do not answer, say that the passages read do not answer it, and say in one sentence to ask again, with the new wording in italics, without pointing back to the earlier answers, so that every document is read.",
         ]
       : []),
     ...(ctx.selected && !ctx.back
