@@ -207,7 +207,7 @@ import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 import { KeptInput, KeptTextarea, type KeptFieldHandle } from "@/components/kept-field";
 import { AnswerMarkdown } from "@/components/assistant/answer-markdown";
 import { deleteConversationWithUndo } from "@/components/assistant/conversation-delete";
-import { callFailure, callLine, modelFetch, noReason } from "@/components/assistant/failure";
+import { callFailure, callLine, failureLine, modelFetch, noReason } from "@/components/assistant/failure";
 import { ACCEPT_CLASS, REJECT_CLASS, SEND_CLASS } from "@/components/assistant/decision-classes";
 
 // One block's span of a selection (SPEC.md §5).
@@ -5317,31 +5317,35 @@ export function ReaderInteractions({
     const controller = new AbortController();
     collapseAbortRef.current = controller;
     try {
-      // An editor writes the cores the document lacks; a viewer reads what is stored.
-      const res = await fetch(`/api/documents/${documentId}/collapse`, {
-        method: canEdit ? "POST" : "GET",
-        signal: controller.signal,
-      });
+      // An editor writes the cores the document lacks; a viewer reads what
+      // is stored. A dropped connection or a server failure reads as the
+      // assistant's plain line, the technical text to the console (failure.ts).
+      const res = await modelFetch(
+        `/api/documents/${documentId}/collapse`,
+        { method: canEdit ? "POST" : "GET", signal: controller.signal },
+        t,
+      );
       const body = (await res.json().catch(() => null)) as
         | { cores?: Record<string, string>; complete?: boolean; error?: string }
         | null;
       if (!res.ok || !body?.cores) {
-        throw new Error(body?.error ?? t("common.requestFailedStatus", { status: res.status }));
+        throw new Error(body?.error ?? noReason(res, t));
       }
       if (Object.keys(body.cores).length === 0) {
         showToast(t("reader.collapseViewer"));
         return;
       }
+      keepCollapsePlace();
       setCores(body.cores);
       setCollapseOn(true);
       rememberCollapse(true);
       // Some blocks got no core — no model, or a failed call: they read
       // whole, and the toast says why.
-      if (body.error) showToast(t("reader.collapseFailed", { reason: body.error }));
+      if (body.error) showToast(body.error);
     } catch (err) {
       // Stopped, not failed: no toast.
       if (controller.signal.aborted) return;
-      showToast(t("reader.collapseFailed", { reason: err instanceof Error ? err.message : t("common.requestFailed") }));
+      showToast(failureLine(err, t));
     } finally {
       if (collapseAbortRef.current === controller) collapseAbortRef.current = null;
       setCollapseBusy(false);
@@ -6116,7 +6120,7 @@ export function ReaderInteractions({
         setDefinition((d) => (d && d.key === key ? (d.text.trim() ? { ...d, streaming: false } : null) : d));
         return;
       }
-      settle({ streaming: false, error: err instanceof Error ? err.message : t("reader.deriveFailed") });
+      settle({ streaming: false, error: failureLine(err, t) });
     } finally {
       if (defineAbortRef.current === controller) defineAbortRef.current = null;
     }
@@ -6314,7 +6318,7 @@ export function ReaderInteractions({
       if (replaceNoteId && noteId) await discardNote(replaceNoteId);
       router.refresh();
     } catch (err) {
-      const message = controller.signal.aborted ? null : err instanceof Error ? err.message : t("reader.deriveFailed");
+      const message = controller.signal.aborted ? null : failureLine(err, t);
       // Regenerate stopped or failed: the output that stands comes back.
       if (replacing) {
         setBubble((b) => (mine(b) ? { ...replacing, ...slotOf(b), run, runError: message } : b));
@@ -6408,7 +6412,7 @@ export function ReaderInteractions({
       if (replaceNoteId && noteId) await discardNote(replaceNoteId);
       router.refresh();
     } catch (err) {
-      const message = controller.signal.aborted ? null : err instanceof Error ? err.message : t("reader.simplifyFailed");
+      const message = controller.signal.aborted ? null : failureLine(err, t);
       // Regenerate stopped or failed: the output that stands comes back.
       if (replacing) {
         setSimplifyCard((c) => (mine(c) ? { ...replacing, ...slotOf(c), run, runError: message } : c));
@@ -6510,7 +6514,7 @@ export function ReaderInteractions({
       const stopped = controller.signal.aborted;
       // Regenerate stopped or failed: the picture that stands comes back.
       if (replacing) {
-        const why = stopped ? null : err instanceof Error ? err.message : t("reader.visualizeFailed");
+        const why = stopped ? null : failureLine(err, t);
         setBubble((b) => (mine(b) ? { ...replacing, ...slotOf(b), run, runError: why } : b));
         return;
       }
@@ -6519,7 +6523,7 @@ export function ReaderInteractions({
         setBubble((b) => (mine(b) ? null : b));
         return;
       }
-      const message = err instanceof Error ? err.message : t("reader.visualizeFailed");
+      const message = failureLine(err, t);
       setBubble((b) => (mine(b) ? { ...b, streaming: false, error: message } : b));
     } finally {
       toolRunsRef.current.delete(run);
@@ -6833,7 +6837,7 @@ export function ReaderInteractions({
       // A cancelled run is not a failure: the ask view keeps the question.
       if (controller.signal.aborted) return;
       if (documentIdRef.current !== runDocumentId) return;
-      const message = err instanceof Error ? err.message : t("reader.distillFailed");
+      const message = failureLine(err, t);
       setDistillError(message);
       reportError(message, runDocumentId);
       if (!distillOpenRef.current) showToast(message);
@@ -11523,8 +11527,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               </button>
             </span>
           </div>
-          {bubble.error ? (
-            <p className="text-sm text-red-600">{bubble.error}</p>
+          {/* A failure keeps the words that had arrived, the line under them. */}
+          {bubble.error && !bubble.text.trim() ? (
+            <p className="text-sm break-words text-red-600">{bubble.error}</p>
           ) : bubble.declined !== null ? (
             <div className="min-h-0 flex-1 overflow-y-auto text-sm text-sand-700">
               <p className="font-semibold">{t("reader.visualizeDeclined")}</p>
@@ -11534,6 +11539,11 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           ) : bubble.text ? (
             <div ref={explainBodyRef} className="min-h-0 flex-1 overflow-y-auto text-sm">
               <Markdown>{bubble.text}</Markdown>
+              {bubble.error && (
+                <p role="alert" className="mt-2 text-[12px] font-medium break-words text-red-600">
+                  {bubble.error}
+                </p>
+              )}
               {bubble.runError && (
                 <p data-run-error role="alert" className="mt-2 text-[12px] font-medium text-red-600">
                   {bubble.runError}
@@ -11646,8 +11656,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               </button>
             </span>
           </div>
-          {simplifyCard.error ? (
-            <p className="text-sm text-red-600">{simplifyCard.error}</p>
+          {/* A failure keeps the words that had arrived, the line under them. */}
+          {simplifyCard.error && !simplifyCard.text.trim() ? (
+            <p className="text-sm break-words text-red-600">{simplifyCard.error}</p>
           ) : (
           <div ref={simplifyBodyRef} className="min-h-0 flex-1 overflow-y-auto">
           {simplifyCard.sentences ? (
@@ -11681,6 +11692,11 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               {stripSimplifyMarkers(simplifyCard.text) || (
                 <ThinkingIndicator className="py-1 text-[12.5px]" />
               )}
+            </p>
+          )}
+          {simplifyCard.error && (
+            <p role="alert" className="mt-2 text-[12px] font-medium break-words text-red-600">
+              {simplifyCard.error}
             </p>
           )}
           {simplifyCard.runError && (

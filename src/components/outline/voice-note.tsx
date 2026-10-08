@@ -11,6 +11,7 @@ import { readNdjson } from "@/lib/ndjson";
 import type { VoiceEvent, VoiceStage } from "@/app/api/notes/voice/route";
 import { flushDocument } from "@/components/docs/layer/flush";
 import { isOffline } from "@/lib/offline/queue";
+import { failureLine, modelFetch, noReason } from "@/components/assistant/failure";
 
 // The voice command (SPEC.md §6): press to record, press again to stop. The
 // recording goes to /api/notes/voice with the section and the open document;
@@ -170,14 +171,16 @@ export function VoiceNoteButton({
         // A blank document's typing is saved before the command reads it.
         await flushDocument(documentId);
       }
-      const res = await fetch(`/api/notes/voice?${params}`, {
-        method: "POST",
-        headers: { "Content-Type": blob.type || "audio/webm" },
-        body: blob,
-      });
+      // A dropped connection or a server failure reads as the assistant's
+      // plain line, the technical text to the console (failure.ts).
+      const res = await modelFetch(
+        `/api/notes/voice?${params}`,
+        { method: "POST", headers: { "Content-Type": blob.type || "audio/webm" }, body: blob },
+        t,
+      );
       if (!res.ok) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(detail?.error ?? t("common.requestFailedStatus", { status: res.status }));
+        throw new Error(detail?.error ?? noReason(res, t));
       }
       for await (const event of readNdjson<VoiceEvent>(res)) {
         if ("error" in event) throw new Error(event.error);
@@ -190,7 +193,7 @@ export function VoiceNoteButton({
       // error, or an answer the route could not finish. An empty recording
       // has nothing to send again.
       if (blob.size > 0) setFailed(blob);
-      onError?.(err instanceof Error ? err.message : t("outline.voiceNoteFailed"));
+      onError?.(failureLine(err, t));
     } finally {
       setState("idle");
     }
