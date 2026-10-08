@@ -9,10 +9,9 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 import { markdownPreview } from "@/lib/markdown-preview";
 import { useGist } from "@/lib/gist-client";
 import { stripSimplifyMarkers } from "@/lib/sentences";
-import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { ReplyThread } from "@/components/collab/reply-thread";
-import { ChevronDownIcon, ChevronRightIcon, ExpandIcon, LocateIcon } from "@/components/icons";
+import { ChevronDownIcon, ChevronRightIcon, ExpandIcon } from "@/components/icons";
 import { AnnotationKindIcon } from "@/components/annotation-kind-icon";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
@@ -325,46 +324,18 @@ export function AnnotationBody({ annotation: a }: { annotation: AnnotationItem }
 
 export function AnnotationActions({
   annotation,
-  notebookId,
-  documentId,
-  onDelete,
   onExpand,
 }: {
   annotation: AnnotationItem;
-  notebookId: string;
-  documentId: string | null;
-  onDelete: (id: string) => Promise<void>;
   onExpand: (id: string) => void;
 }) {
-  const router = useRouter();
   const t = useT();
-  const { canEdit } = useCollab();
-  const canJump = canJumpTo(annotation, documentId);
 
-  function jump() {
-    if (annotation.sourceId && documentId) jumpToAnnotation(router, notebookId, documentId, annotation.sourceId);
-  }
-
+  // Jump and Delete are in the header's ⋯ menu (annotation-menu.tsx), once.
   return (
     <>
     <div className="mt-2 flex items-center gap-2">
-      {canJump && (
-        <button
-          onClick={jump}
-          data-track="annotation-jump"
-          aria-label={t("panels.jumpToAnchor")}
-          data-tip={
-            annotation.figureLabel
-              ? `${t("panels.jumpToAnchor")}\n${t("panels.figureLabelTitle", { label: annotation.figureLabel })}`
-              : t("panels.jumpToAnchor")
-          }
-          className="inline-flex items-center gap-1.5 rounded-full bg-clay-100 px-2.5 py-1 text-[11px] font-semibold text-clay-800 hover:bg-clay-200"
-        >
-          <LocateIcon size={11} />
-          {annotation.figureLabel ?? t("panels.jump")}
-        </button>
-      )}
-      {!canJump && annotation.figureLabel && (
+      {annotation.figureLabel && (
         <span
           className="rounded-full bg-sand-200 px-2.5 py-1 text-[11px] font-semibold text-sand-600"
           data-tip={t("panels.figureLabelTitle", { label: annotation.figureLabel })}
@@ -390,16 +361,6 @@ export function AnnotationActions({
           </button>
         )}
         <AuthorChip createdById={annotation.createdById} nameless />
-        {canEdit && (
-          <button
-            onClick={() => void onDelete(annotation.id)}
-            data-track="annotation-delete"
-            data-tip={t("panels.deleteAnnotationTitle")}
-            className="text-xs text-red-500 hover:text-red-700"
-          >
-            {t("common.delete")}
-          </button>
-        )}
       </span>
     </div>
     <ReplyThread target={{ noteId: annotation.id }} replies={annotation.replies} />
