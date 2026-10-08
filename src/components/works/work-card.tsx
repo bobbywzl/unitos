@@ -3,6 +3,9 @@
 import Link, { useLinkStatus } from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useT } from "@/components/lang-provider";
+import { MoreIcon } from "@/components/icons";
+import { useEscapeLayer } from "@/lib/escape-layers";
+import { isImeKey, useImeGuard } from "@/lib/ime";
 import { LoadingDots } from "@/components/thinking";
 import { TierMark } from "@/components/tier-mark";
 import { Instruments } from "@/components/works/instruments";
@@ -21,6 +24,9 @@ export type WorkItem = {
 
 // A work: a 5.5 × 8.5 book with a spine, its counts as tags, and the instrument
 // fan behind the cover (design 2a). Rename and delete sit behind the quiet ⋯.
+// Rename turns the title into a field in place, as the reader's title does
+// (notebook-title.tsx): Enter keeps, Escape drops, a blur keeps typed words.
+// The menu opens under the title, so the reader sees which project it acts on.
 // The title starts under the ⋯, with no empty band above it; on a phone two
 // books stand side by side, so the type and the tags are a size smaller.
 export function WorkCard({
@@ -31,7 +37,7 @@ export function WorkCard({
   offline,
 }: {
   work: WorkItem;
-  onRename: (id: string, current: string) => void;
+  onRename: (id: string, title: string) => Promise<void>;
   onDelete: (id: string) => void;
   onLeave?: (id: string) => void;
   // Offline copy (SPEC.md §17, Unitos Ultra): the card's state and the toggle.
@@ -39,24 +45,41 @@ export function WorkCard({
   offline?: { saved: boolean; saving: boolean; ultra: boolean; onToggle: (id: string) => void };
 }) {
   const t = useT();
+  const ime = useImeGuard();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  // The inline rename: the field's words, and the title shown until the
+  // page's data has the new one.
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [savedTitle, setSavedTitle] = useState<string | null>(null);
+  const [seenTitle, setSeenTitle] = useState(work.title);
+  if (seenTitle !== work.title) {
+    setSeenTitle(work.title);
+    setSavedTitle(null);
+  }
+  const title = savedTitle ?? work.title;
+  async function keepRename() {
+    const next = renaming?.trim() ?? "";
+    setRenaming(null);
+    if (!next || next === title) return;
+    setSavedTitle(next);
+    try {
+      await onRename(work.id, next);
+    } catch {
+      setSavedTitle(null);
+    }
+  }
 
   useEffect(() => {
     if (!menuOpen) return;
     const onPointerDown = (e: PointerEvent) => {
       if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
     };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenuOpen(false);
-    };
     window.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("keydown", onKeyDown);
-    };
+    return () => window.removeEventListener("pointerdown", onPointerDown);
   }, [menuOpen]);
+  // One Escape layer; the focus goes back to ⋯ (lib/escape-layers.ts).
+  useEscapeLayer(menuOpen, () => setMenuOpen(false));
 
   return (
     <li className="work relative list-none">
@@ -70,7 +93,11 @@ export function WorkCard({
           aria-hidden
           className="absolute top-3 bottom-3 left-[13px] w-[3px] rounded-full bg-sand-300"
         />
-        <span className="mt-6 px-2 font-display text-[17px] leading-[1.25] break-words sm:text-[22px]">{work.title}</span>
+        <span
+          className={`mt-6 px-2 font-display text-[17px] leading-[1.25] break-words sm:text-[22px] ${renaming !== null ? "invisible" : ""}`}
+        >
+          {title}
+        </span>
         {work.shared && (
           <span className="mt-1.5 px-2 text-xs text-sand-600">
             {t("works.byOwner", { name: work.shared.ownerName })}
@@ -120,23 +147,10 @@ export function WorkCard({
           aria-expanded={menuOpen}
           className="flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800"
         >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.75"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle cx="12" cy="12" r="1" />
-            <circle cx="5" cy="12" r="1" />
-            <circle cx="19" cy="12" r="1" />
-          </svg>
+          <MoreIcon size={16} />
         </button>
         {menuOpen && (
-          <div className="absolute right-0 mt-1 flex w-44 flex-col overflow-hidden rounded-2xl bg-card py-1 shadow-float">
+          <div className="absolute top-[calc(100%+64px)] right-0 flex w-44 flex-col overflow-hidden rounded-2xl bg-card py-1 shadow-float sm:top-[calc(100%+80px)]">
             <Link
               href={`/n/${work.id}/notes`}
               className="px-4 py-2 text-left text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
@@ -169,8 +183,9 @@ export function WorkCard({
               <button
                 onClick={() => {
                   setMenuOpen(false);
-                  onRename(work.id, work.title);
+                  setRenaming(title);
                 }}
+                data-track="project-rename"
                 className="px-4 py-2 text-left text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
               >
                 {t("works.rename")}
@@ -200,6 +215,28 @@ export function WorkCard({
           </div>
         )}
       </div>
+      {renaming !== null && (
+        <input
+          autoFocus
+          value={renaming}
+          onFocus={(e) => e.currentTarget.select()}
+          onChange={(e) => setRenaming(e.target.value)}
+          onBlur={() => void keepRename()}
+          {...ime.props}
+          onKeyDown={(e) => {
+            if (ime.isImeEnter(e) || isImeKey(e)) return;
+            if (e.key === "Enter") void keepRename();
+            if (e.key === "Escape") {
+              e.stopPropagation();
+              setRenaming(null);
+            }
+          }}
+          maxLength={200}
+          aria-label={t("works.corpusTitle")}
+          data-track="project-rename-field"
+          className="absolute inset-x-2 top-[52px] z-3 rounded-full bg-card px-3 py-1 text-center font-display text-[17px] shadow-soft outline-none sm:inset-x-3 sm:text-[20px]"
+        />
+      )}
     </li>
   );
 }
