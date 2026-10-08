@@ -7,6 +7,8 @@ const en = {
   selectWordsFirst: "Select the words first",
   // A comment's card, as Google Docs draws it.
   resolveTitle: "Close this comment; it moves under Resolved",
+  // The Undo pill after Resolve.
+  commentResolved: "Comment resolved",
   moreOptions: "More options",
   getLink: "Get link to this comment",
   // View > Comments, in Search the menus.
@@ -27,6 +29,7 @@ const zh: Record<keyof typeof en, string> = {
   leftOut: "选中内容中的图片、插图和公式不计入",
   selectWordsFirst: "先选中文字",
   resolveTitle: "关闭此评论；它会移到“已解决”下",
+  commentResolved: "评论已解决",
   moreOptions: "更多选项",
   getLink: "获取此评论的链接",
   showAllComments: "显示所有评论",

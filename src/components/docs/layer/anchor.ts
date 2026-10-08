@@ -1,5 +1,6 @@
 import type { Editor } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
+import type { EditorState } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 import type { SourceInput } from "@/lib/anchors/input";
 import { inlineText, outOfIndex } from "@/lib/docs/blocks";
@@ -223,4 +224,23 @@ export function wordAtCaret(editor: Editor): { from: number; to: number } | null
     if (offset < end) break;
   }
   return word && { from: posInBlock(block, blockPos, word.start), to: posInBlock(block, blockPos, word.end, true) };
+}
+
+/** Words selected inside one line (not the whole line, not over lines,
+    list items, or cells): Tab there goes to the AI toolbar in every mode
+    (SPEC.md §6), never a tab in place of the words. The reader moves the
+    focus (reader-interactions.tsx); the text takes no tab (typing/keys.ts). */
+export function tabOpensToolbox(state: EditorState): boolean {
+  const sel = state.selection;
+  // A text selection only: not an image (a node) or table cells.
+  if (sel.empty || "node" in sel || "$anchorCell" in sel) return false;
+  let blocks = 0;
+  let whole = false;
+  state.doc.nodesBetween(sel.from, sel.to, (node, pos) => {
+    if (!node.isTextblock) return true;
+    blocks++;
+    whole = sel.from <= pos + 1 && sel.to >= pos + 1 + node.content.size;
+    return false;
+  });
+  return blocks === 1 && !whole;
 }

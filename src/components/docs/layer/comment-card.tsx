@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useAuthor, useCollab } from "@/components/collab/collab-context";
 import { TrashIcon } from "@/components/icons";
 import { PersonBadge } from "@/components/collab/person-badge";
@@ -14,7 +14,7 @@ import { DialogButton } from "@/components/docs/toolbar/dialog";
 import { useLang, useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { annotationKindColor } from "@/lib/annotations/kind";
-import { setCommentResolved } from "@/lib/annotations/resolve";
+import { resolveCommentWithUndo } from "@/lib/annotations/resolve";
 import { isImeKey } from "@/lib/ime";
 import { markdownStyleKey } from "@/lib/markdown-style";
 import type { ReplyView } from "@/lib/types";
@@ -36,7 +36,6 @@ export function CommentCard({
   draft,
   saved,
   busy,
-  grip,
   className,
   style,
   onPointerDown,
@@ -52,8 +51,6 @@ export function CommentCard({
   draft: string;
   saved: string;
   busy: boolean;
-  /** The grip that drags the comment into a note. */
-  grip: ReactNode;
   className: string;
   style: CSSProperties;
   onPointerDown: (e: React.PointerEvent) => void;
@@ -129,16 +126,17 @@ export function CommentCard({
     if (editor) toast(text, editor);
   };
 
-  // The card goes with the mark, and the text takes the keys again; a failed
-  // request paints the mark again.
+  // The card goes with the mark, and the text takes the keys again; the
+  // pill's Undo reopens the comment, and a failed request paints the mark
+  // again.
   async function resolve() {
     if (!canEdit) return;
     exit();
     try {
-      await setCommentResolved(noteId, true);
+      await resolveCommentWithUndo(noteId, t("docsLayer.commentResolved"), () => router.refresh());
       router.refresh();
     } catch (err) {
-      say(err instanceof Error ? err.message : t("common.requestFailed"));
+      say(err instanceof Error ? err.message : t("common.notSaved"));
     }
   }
 
@@ -213,14 +211,14 @@ export function CommentCard({
       className={`docs-comment ${className}`}
       style={style}
     >
-      <div className="docs-comment-head">
+      {/* A hold on the head row lifts the comment onto a note (onPointerDown). */}
+      <div className="docs-comment-head" data-hold-head>
         {person && <PersonBadge person={person} size={32} />}
         <div className="docs-comment-who">
           {person && <div className="docs-comment-name">{person.name}</div>}
           {written && <div className="docs-comment-time">{replyTime(written.at, lang)}</div>}
         </div>
         <div className="docs-comment-buttons">
-          {grip}
           {canEdit && (
             <button
               type="button"

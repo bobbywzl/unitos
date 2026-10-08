@@ -30,6 +30,10 @@ export type SearchAction = {
   enabled?: boolean;
   /** Why the action is off, under its label. */
   note?: string;
+  /** The row writes into the document (Insert, Format): on a tie it ranks
+      under a row that opens or shows something, so Enter never writes on a
+      guess. */
+  writes?: boolean;
 };
 
 /** Raised on the editor's text, opens Search the menus (Alt+/). */
@@ -49,14 +53,15 @@ function score(action: SearchAction, query: string): number {
   return 0;
 }
 
-/** The actions that match, best first. */
+/** The actions that match, best first; on a tie, a row that opens or shows
+    something before a row that writes, then the menus' order. */
 function searchActions(actions: SearchAction[], query: string): SearchAction[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
   return actions
     .map((a, i) => ({ a, i, s: score(a, q) }))
     .filter((r) => r.s > 0)
-    .sort((x, y) => y.s - x.s || x.i - y.i)
+    .sort((x, y) => y.s - x.s || Number(!!x.a.writes) - Number(!!y.a.writes) || x.i - y.i)
     .slice(0, 40)
     .map((r) => r.a);
 }
