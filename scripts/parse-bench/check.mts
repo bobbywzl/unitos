@@ -1865,6 +1865,19 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
   );
   const byline = await shape(`<p>${prose(1)}</p><p><strong>Jane Doe, river correspondent</strong></p><p>${prose(2)}</p><p>${prose(3)}</p>`);
   check("url: one bold line over prose stays a paragraph", byline.includes("PARAGRAPH Jane Doe, river correspo"), byline.join(" / "));
+  // A row of short heading labels beside short values is one paragraph; a heading over a sentence keeps its shape.
+  const labels = (
+    await parseHtmlContent(
+      `<!doctype html><html><head><title>Notes on river flow</title></head><body><article><p>${prose(1)}</p><div><h5>Depth:</h5>4.2 m<br><h5>Width:</h5>36 m</div><p>${prose(2)}</p><div><h5>kcal</h5>4512</div><p>${prose(3)}</p><div><h2>Gravel bars</h2>Sand settles behind every bar, and silt settles further down the bend.</div><p>${prose(4)}</p></article></body></html>`,
+      "https://example.org/rivers",
+    )
+  ).blocks.map((b) => `${b.type} ${b.text}`);
+  check(
+    "url: a row of heading labels beside their values is one paragraph",
+    labels.some((b) => b.startsWith("PARAGRAPH Depth: 4.2 m")) && labels.includes("PARAGRAPH kcal 4512") && !labels.some((b) => /^HEADING (Depth|Width|kcal)/.test(b)),
+    labels.join(" / "),
+  );
+  check("url: a heading beside a sentence stays a heading", labels.includes("HEADING Gravel bars"), labels.join(" / "));
 }
 
 {
