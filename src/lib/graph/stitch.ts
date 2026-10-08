@@ -43,6 +43,7 @@ import { jevRouteParts, jevSelectLines } from "@/lib/graph/stitch-jev";
 import { jevEnabled, mapLimit } from "@/lib/jev";
 import { rank, tokenize } from "@/lib/graph/rank";
 import {
+  refersBack,
   stitchExpandPrompt,
   stitchPrompt,
   stitchRoutePrompt,
@@ -51,6 +52,7 @@ import {
   stitchSelectPrompt,
   stitchSelectRules,
   type StitchDocumentCtx,
+  type StitchNotPickedCtx,
 } from "@/lib/prompts/stitch";
 import { profileLines } from "@/lib/prompts/types";
 import { estTokens } from "@/lib/tokens";
@@ -123,6 +125,7 @@ const SELECT_GROUP_MIN = 20; // ids a select call of many groups may still name 
 // or fewer blocks shown has no gist line.
 const SHORT_LISTS_PAST = 20;
 const GIST_MIN_SHOWN = 4;
+const NOT_SHOWN_NAMED = 8; // documents the "No block shown" line names past SHORT_LISTS_PAST
 const MAX_CITED = 40; // blocks of the earlier answers the reading passes are told of
 const CITED_TEXT = 600; // chars of a cited block's text in the result
 
@@ -683,15 +686,17 @@ function wholeSection(r: Rendered, gists: Map<string, string>): string {
     to read is declared with its reason, as in the whole rendering; the
     documents none of whose blocks were picked share one line at the end.
     Past SHORT_LISTS_PAST documents (COST5-04) that line is their count and
-    the titles that hold a word of the command (titleMatches), and a gist
-    goes only under a document with GIST_MIN_SHOWN blocks shown or more, or
-    whose title holds a word of the command: a document of one to three
-    blocks shown, off the command's words, is read from its blocks. */
+    up to NOT_SHOWN_NAMED of the ones whose title or gist holds a word of
+    the command (titleMatches), and a gist goes only under a document with
+    GIST_MIN_SHOWN blocks shown or more, or whose title or gist holds a word
+    of the command: a document of one to three blocks shown, off the
+    command's words, is read from its blocks. */
 function selectedSections(
   rendered: Rendered[],
   selected: Set<string>,
   gists: Map<string, string> = new Map(),
   command = "",
+  words?: string[],
 ): string {
   const sections: string[] = [];
   const none: Rendered[] = [];
@@ -709,7 +714,7 @@ function selectedSections(
     }
     const shortest = Math.min(Infinity, ...read.filter((x) => x !== r).map((x) => x.tokens));
     const whole = shown.length < r.blocks.length && r.tokens + shortest <= STITCH_WHOLE_THRESHOLD;
-    const gist = short && shown.length < GIST_MIN_SHOWN && titleMatches([r], command).length === 0 ? "" : gistLine(r, gists);
+    const gist = short && shown.length < GIST_MIN_SHOWN && titleMatches([r], command, gists, words).length === 0 ? "" : gistLine(r, gists);
     const head = `${header(r.letter, r.doc, `${coverageNote(r.coverage, shown.length)}${whole ? "; read whole when picked with one short document" : ""}`)}${gist}`;
     const lines: string[] = [];
     let last = -1;
@@ -730,25 +735,58 @@ function selectedSections(
   const named = (list: Rendered[]) => list.map((r) => `"${r.doc.title}" (${r.coverage.blocks} ${UNIT[r.coverage.kind]})`).join(", ");
   if (none.length > 0 && !short) sections.push(`No block shown for this command: ${named(none)}.`);
   else if (none.length > 0) {
-    const matching = titleMatches(none, command);
+    const matching = titleMatches(none, command, gists, words);
+    const more = matching.length > NOT_SHOWN_NAMED ? ` and ${matching.length - NOT_SHOWN_NAMED} more` : "";
     sections.push(
-      `No block shown for this command: ${none.length} more ${none.length === 1 ? "document" : "documents"}` +
-        (matching.length > 0 ? `; the ones whose title holds a word of the command: ${named(matching)}.` : `, none titled with a word of the command.`),
+      `No block shown for this command: ${none.length} ${none.length === 1 ? "document" : "documents"}` +
+        (matching.length > 0
+          ? `; the ones whose title or gist holds a word of the command: ${named(matching.slice(0, NOT_SHOWN_NAMED))}${more}.`
+          : `, none whose title or gist holds a word of the command.`),
     );
   }
   return sections.join("\n\n");
 }
 
 // Words of a command that never make a title match (titleMatches).
-const TITLE_STOP = new Set([...NAME_STOP, ..."all any every each more most other some such than then there into over only also not no yes say says said document documents project passage passages text texts part parts".split(" ")]);
+const TITLE_STOP = new Set([..."all any every each more most other some such than then there into over only also not no yes say says said document documents project passage passages text texts part parts art work works".split(" "), ...NAME_STOP]);
 
-/** The documents whose title holds a word of the command: a Latin word of
-    three letters or more that is not a question word or the like, or two
-    CJK characters in a row (the ranker's tokens, lib/graph/rank.ts). */
-export function titleMatches<T extends { doc: { title: string } }>(docs: T[], command: string): T[] {
-  const words = new Set(tokenize(command).filter((t) => (/[^\x00-\u024f]/.test(t) ? [...t].length >= 2 : t.length >= 3 && !TITLE_STOP.has(t))));
-  if (words.size === 0) return [];
-  return docs.filter((d) => tokenize(d.doc.title).some((t) => words.has(t)));
+/** The documents whose title or gist holds a word of the command (ANS6-01):
+    a Latin word of three letters or more that is not a question word or
+    the like, or two CJK characters in a row (the ranker's tokens,
+    lib/graph/rank.ts). gists: the documents' gists by document id. words:
+    the expansion's words (Reading.words), matched too when the command is
+    in CJK: a Chinese command shares no word with English titles. */
+export function titleMatches<T extends { doc: { id?: string; title: string } }>(
+  docs: T[],
+  command: string,
+  gists?: Map<string, string>,
+  words?: string[],
+): T[] {
+  const cjk = /[㐀-鿿]/.test(command);
+  const wanted = new Set(
+    tokenize([command, ...(cjk ? (words ?? []) : [])].join("\n")).filter((t) =>
+      /[^\x00-\u024f]/.test(t) ? [...t].length >= 2 : t.length >= 3 && !TITLE_STOP.has(t),
+    ),
+  );
+  if (wanted.size === 0) return [];
+  return docs.filter((d) => tokenize(`${d.doc.title}\n${(d.doc.id && gists?.get(d.doc.id)) || ""}`).some((t) => wanted.has(t)));
+}
+
+/** The documents of the project a pick left out (ANS6-02), for the answer
+    pass's line: their count, and every title up to NOT_SHOWN_NAMED, else up
+    to NOT_SHOWN_NAMED of the ones whose title or gist holds a word of the
+    command (titleMatches). Generated documents are left out, as in an
+    every-document read. One light query: titles and stored gists only. */
+export async function notPickedOf(notebookId: string, picked: string[], command: string, words?: string[]): Promise<StitchNotPickedCtx> {
+  const rows = await db.$queryRaw<{ id: string; title: string; gist: string | null }[]>`
+    SELECT d."id", d."title", d."skeleton"->>'gist' AS "gist"
+    FROM "NotebookDocument" nd JOIN "Document" d ON d."id" = nd."documentId"
+    WHERE nd."notebookId" = ${notebookId} AND d."generatedCommand" IS NULL AND NOT (d."id" = ANY(${picked}))
+    ORDER BY d."createdAt" ASC, d."id" ASC`;
+  const docs = rows.map((r) => ({ doc: { id: r.id, title: r.title } }));
+  const gists = new Map(rows.flatMap((r) => (r.gist ? [[r.id, r.gist] as [string, string]] : [])));
+  const named = docs.length <= NOT_SHOWN_NAMED ? docs : titleMatches(docs, command, gists, words).slice(0, NOT_SHOWN_NAMED);
+  return { count: rows.length, titles: named.map((d) => d.doc.title) };
 }
 
 /** The answer pass's messages: the system message (the rules, the reader
@@ -770,6 +808,8 @@ export function answerMessages(input: {
   // The history's tokens past which it comes before the blocks
   // (STITCH_HISTORY_FIRST_MIN).
   historyFirstMin?: number;
+  // The documents of the project a pick left out (notPickedOf).
+  notPicked?: StitchNotPickedCtx;
 }): ModelMessage[] {
   const { rendered, documentList, gists } = input.reading;
   const selected = input.selected;
@@ -784,6 +824,7 @@ export function answerMessages(input: {
       ? (input.names ?? []).map((n) => ({ term: n.term, total: n.aliases.length, shown: n.aliases.filter((a) => selected.has(a)).length }))
       : undefined,
     existing: existingPairs(input.links ?? [], shownBlock),
+    notPicked: input.notPicked,
   });
   // The blocks picked change every command, so behind them nothing caches:
   // past STITCH_HISTORY_FIRST_MIN tokens of history the conversation comes
@@ -795,11 +836,11 @@ export function answerMessages(input: {
     return [
       systemMessage(systemOf(rules, input.profile, "The blocks a first read picked for the command are in the reader's last message.", "")),
       ...input.history,
-      { role: "user", content: `${selectedSections(rendered, selected, gists, input.command)}\n\n${prompt}` },
+      { role: "user", content: `${selectedSections(rendered, selected, gists, input.command, input.reading.words)}\n\n${prompt}` },
     ];
   }
   const system = selected
-    ? systemOf(rules, input.profile, "The blocks a first read picked for the command follow.", selectedSections(rendered, selected, gists, input.command))
+    ? systemOf(rules, input.profile, "The blocks a first read picked for the command follow.", selectedSections(rendered, selected, gists, input.command, input.reading.words))
     : systemOf(rules, input.profile, "Every document follows.", rendered.map((r) => wholeSection(r, gists)).join("\n\n"));
   return [systemMessage(system), ...input.history, { role: "user", content: prompt }];
 }
@@ -1340,6 +1381,10 @@ export function recordText(
       lines.push(`- link ${i + 1}: not stored (its passages did not resolve)`);
       return;
     }
+    if (l.status === "copy") {
+      lines.push(`- link ${i + 1}: not stored (it joined a passage to its word-for-word copy)`);
+      return;
+    }
     if (l.status === "removed") {
       lines.push(`- link ${i + 1}: removed by the reader before, not stored again${l.from && l.to ? ` ("${l.from}" – "${l.to}")` : ""}`);
       return;
@@ -1484,6 +1529,9 @@ export type Reading = {
   // Each document's skeleton gist by document id: the stored ones, and the
   // ones the reading passes build (pickBlocks).
   gists: Map<string, string>;
+  // The expansion's words, when the reading passes asked for them
+  // (pickBlocks): what a CJK command's titleMatches reads.
+  words?: string[];
 };
 
 /** The documents loaded by loadDocuments, ready for the reading passes.
@@ -1621,7 +1669,10 @@ export async function pickBlocks(input: {
       titles: read.map((r) => r.doc.title),
       usage: { userId: input.userId, feature: input.feature },
       signal: input.signal,
-    }).then((words) => [...earlier, input.command, ...(words.length > 0 ? [words.join(" ")] : [])].join("\n")));
+    }).then((words) => {
+      input.reading.words = words;
+      return [...earlier, input.command, ...(words.length > 0 ? [words.join(" ")] : [])].join("\n");
+    }));
 
   // Every document's skeleton: stored, patched for small edits, or built
   // now, SKELETON_BUILD_CONCURRENCY at a time. A build that fails reads
@@ -1747,6 +1798,27 @@ export async function pickBlocks(input: {
   return cutSelection(picks, blockByRef, kind);
 }
 
+/** The blocks a command about the last answers reads (ANS6-03): the
+    blocks the earlier answers cited and stored (citedAliases, which reads
+    the records under the replies), cut to the kind's budget, so no select
+    pass runs; that pass returned these same blocks. null — run the select
+    pass — when the command is not a follow-up that refers back
+    (refersBack), when nothing was cited, or when it names a rare name
+    whose blocks were not cited. */
+export function backSelection(
+  command: string,
+  history: ModelMessage[],
+  blockByRef: Map<string, DocBlock>,
+  names: { term: string; aliases: string[] }[],
+  kind: StitchCommandKind,
+): Set<string> | null {
+  if (history.length === 0 || !refersBack(command)) return null;
+  const cited = citedAliases(history, blockByRef);
+  if (cited.length === 0) return null;
+  if (names.some((n) => !n.aliases.some((a) => cited.includes(a)))) return null;
+  return cutSelection(cited, blockByRef, kind);
+}
+
 /** The ids one select call may name (COST5-01): the kind's block cap
     (STITCH_SELECTED_BLOCKS) shared over the groups, twice over, so a group
     that holds most of the answer still names enough, and never under
@@ -1800,7 +1872,15 @@ export async function stitch(input: {
 
   // ── The reading passes: the blocks the command needs, from the skeletons ──
   let selected: Set<string> | null = null;
+  // The command's rare names (nameHits), for the back selection and the
+  // answer pass.
+  const names = reading.tokens > STITCH_WHOLE_THRESHOLD ? nameHits(input.command, read.flatMap((r) => r.blocks), read.map((r) => r.doc.title)) : undefined;
   if (reading.tokens > STITCH_WHOLE_THRESHOLD) {
+    // A command about the last answers reads the blocks they cited and
+    // stored, with no select pass (ANS6-03).
+    selected = backSelection(input.command, history, blockByRef, names ?? [], kind);
+  }
+  if (reading.tokens > STITCH_WHOLE_THRESHOLD && !selected) {
     selected = await pickBlocks({
       reading,
       command: input.command,
@@ -1846,6 +1926,10 @@ export async function stitch(input: {
     return from && to ? [{ id: l.id, from, to, state: l.state }] : [];
   });
 
+  // The documents a pick left out: the answer pass is told of them, and the
+  // box says how many (ANS6-02).
+  const notPicked = input.documentIds ? await notPickedOf(input.notebookId, docs.map((d) => d.id), input.command, reading.words) : undefined;
+
   // ── The answer pass ──────────────────────────────────────────────────────
   const result = await callForJson({
     model,
@@ -1856,9 +1940,10 @@ export async function stitch(input: {
       profile,
       history,
       command: input.command,
-      names: selected ? nameHits(input.command, read.flatMap((r) => r.blocks), read.map((r) => r.doc.title)) : undefined,
+      names: selected ? names : undefined,
       links: existingAliases,
       historyFirstMin: input.historyFirstMin,
+      notPicked,
     }),
     maxOutputTokens: STITCH_MAX_OUTPUT_TOKENS,
     providerOptions: answer.providerOptions,
@@ -1892,10 +1977,29 @@ export async function stitch(input: {
   const existingLinkIds = new Set<string>();
   const recordLinks: StitchRecord["links"] = [];
   const titleOf = new Map(rendered.map((r) => [r.doc.id, r.doc.title]));
+  // A link between a passage and its word-for-word copy is not stored, and
+  // an end on a copy moves to the original (ANS6-07).
+  const originals = result.data.links.length > 0 ? copyOriginals(rendered) : new Map<string, DocBlock>();
+  const original = (end: Resolved | null): Resolved | null => {
+    const o = end ? originals.get(end.blockId) : undefined;
+    if (!end || !o) return end;
+    const whole = end.startOffset === 0 && end.endOffset === (blockByRef.get(end.blockId)?.text.length ?? -1);
+    return resolveQuote(blockByRef, o.id, whole ? undefined : end.quotedText) ?? end;
+  };
+  let linksCopied = 0;
   for (const link of result.data.links) {
-    const from = resolveQuote(blockByRef, link.fromBlockId, link.fromQuote);
-    const to = resolveQuote(blockByRef, link.toBlockId, link.toQuote);
+    const named = [resolveQuote(blockByRef, link.fromBlockId, link.fromQuote), resolveQuote(blockByRef, link.toBlockId, link.toQuote)];
+    const copied =
+      named[0] !== null && named[1] !== null &&
+      copyPair(blockByRef.get(named[0].blockId)?.text ?? "", blockByRef.get(named[1].blockId)?.text ?? "");
+    const from = original(named[0]);
+    const to = original(named[1]);
     const sides = { from: from ? (titleOf.get(from.documentId) ?? "") : "", to: to ? (titleOf.get(to.documentId) ?? "") : "" };
+    if (from && to && (copied || from.blockId === to.blockId || (from.documentId === to.documentId && named[0]?.documentId !== named[1]?.documentId))) {
+      linksCopied++;
+      recordLinks.push({ id: "", ...sides, status: "copy" });
+      continue;
+    }
     if (!from || !to || from.documentId === to.documentId || linkCount >= MAX_LINKS) {
       recordLinks.push({ id: "", ...sides, status: "unstored" });
       continue;
@@ -1978,6 +2082,7 @@ export async function stitch(input: {
   const existingNote = (["accepted", "waiting", "removed"] as const)
     .filter((state) => again[state] > 0)
     .map((state) => t(`stitch.${EXISTING_NOTE[state]}${again[state] === 1 ? "1" : "N"}`, { n: again[state] }))
+    .concat(linksCopied > 0 ? [t(`stitch.stitchLinksCopy${linksCopied === 1 ? "1" : "N"}`, { n: linksCopied })] : [])
     .join(" ");
   // The links already in the project the answer is about are lit with the
   // new ones (ANS5-05): every one a links command was told of, and any
@@ -2005,7 +2110,48 @@ export async function stitch(input: {
     document,
     documents,
     cited: citedBlocks(reply, blockByRef, titleOf),
+    ...(notPicked && notPicked.count > 0 ? { notPicked: notPicked.count } : {}),
   };
+}
+
+// Folded chars a block needs before one that holds it whole counts as its
+// copy (copyPair): a short heading inside a long passage is not a copy.
+const COPY_MIN = 40;
+
+/** True when one block is a word-for-word copy of the other (ANS6-07): the
+    folded texts are equal, or the longer holds the shorter whole and the
+    shorter has COPY_MIN folded chars or more. */
+export function copyPair(a: string, b: string): boolean {
+  const x = foldQuote(a);
+  const y = foldQuote(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  const [short, long] = x.length <= y.length ? [x, y] : [y, x];
+  return short.length >= COPY_MIN && long.includes(short);
+}
+
+/** The original of every copied block of the documents read (ANS6-07), by
+    the copy's stored id: the first block with the same folded text, in a
+    document that is not a generated document when one holds it, else in
+    the earlier document. Blocks under COPY_MIN folded chars have none. */
+export function copyOriginals(rendered: { doc: { generatedCommand: string | null }; blocks: DocBlock[] }[]): Map<string, DocBlock> {
+  const first = new Map<string, DocBlock>();
+  const all: [string, DocBlock][] = [];
+  const order = [...rendered.filter((r) => !r.doc.generatedCommand), ...rendered.filter((r) => r.doc.generatedCommand)];
+  for (const r of order) {
+    for (const b of r.blocks) {
+      const key = foldQuote(b.text);
+      if (key.length < COPY_MIN) continue;
+      all.push([key, b]);
+      if (!first.has(key)) first.set(key, b);
+    }
+  }
+  const out = new Map<string, DocBlock>();
+  for (const [key, b] of all) {
+    const original = first.get(key);
+    if (original && original.id !== b.id) out.set(b.id, original);
+  }
+  return out;
 }
 
 /** A link's two ends: each end's block (or the document, for a link to a
@@ -2044,6 +2190,9 @@ const EXISTING_NOTE = {
   removed: "stitchLinksRemoved",
 } as const satisfies Record<ExistingState, string>;
 
+// What may lie between two block tags that name one link (existingNamed).
+const PAIR_GAP = /^\s*(?:[-–—↔]|and|和|与)?\s*$/i;
+
 /** The links already in the project a reply is about (ANS5-05), as ids:
     with `all` (a links command), every one the answer pass was told of —
     both blocks shown (existingPairs) — the reply's "these are already in
@@ -2061,8 +2210,15 @@ export function existingNamed(
   if (all) return visible.filter((l) => shown(l.from) && shown(l.to)).map((l) => l.id);
   const pairs = new Set<string>();
   for (const line of reply.split("\n")) {
-    const tags = [...line.matchAll(/\[block ([A-Za-z]+\d+)\]/g)].map((m) => m[1].toUpperCase());
-    for (let i = 1; i < tags.length; i++) pairs.add([tags[i - 1], tags[i]].sort().join("|"));
+    const tags = [...line.matchAll(/\[block ([A-Za-z]+\d+)\]/g)];
+    for (let i = 1; i < tags.length; i++) {
+      // Two tags pair only when nothing but a dash or "and" lies between
+      // them (ANS6-06): "§225 [block E2] [block D32]. Link 3 joins … [block
+      // G9]" names E2–D32, not D32–G9.
+      const between = line.slice(tags[i - 1].index + tags[i - 1][0].length, tags[i].index);
+      if (!PAIR_GAP.test(between)) continue;
+      pairs.add([tags[i - 1][1].toUpperCase(), tags[i][1].toUpperCase()].sort().join("|"));
+    }
   }
   return visible.filter((l) => pairs.has([l.from, l.to].sort().join("|"))).map((l) => l.id);
 }

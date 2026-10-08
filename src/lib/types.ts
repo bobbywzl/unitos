@@ -395,6 +395,9 @@ export type StitchResult = {
   // What this answer stored, for the next command's history (ANS4-02): the
   // box sends it back with the reply as the turn's record.
   record?: StitchRecord;
+  // The documents of the project the pick left out (ANS6-02): "Read 2 of 2
+  // picked · 5 not picked". Absent when nothing was picked.
+  notPicked?: number;
 };
 
 /** What one Stitch answer stored, as the box sends it back with the turn
@@ -413,8 +416,9 @@ export type StitchRecord = {
 
 /** Why a proposed link of a record was not stored: already in the graph
     (accepted or waiting under Recommended links), removed from the
-    project before, or not resolved to two blocks of two documents. */
-export type StitchRecordLinkStatus = "existing" | "removed" | "unstored";
+    project before, not resolved to two blocks of two documents, or a
+    passage and its word-for-word copy (ANS6-07). */
+export type StitchRecordLinkStatus = "existing" | "removed" | "unstored" | "copy";
 
 /** What a Stitch command asks for (lib/graph/stitch.ts commandKind): an
     answer, links, or a page. It sets what the answer pass reads after
