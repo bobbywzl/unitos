@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { api } from "@/lib/api";
+import { dropEarlyKeys, earlyKeysFor, keepEarlyKeys } from "@/lib/docs/early-keys";
 import type { DriveConfig } from "@/lib/drive/config";
 import { pickDriveFiles } from "@/lib/drive/picker-client";
 import { parseDriveFileId, type DrivePickedFile } from "@/lib/drive/types";
@@ -517,18 +518,22 @@ export function DocumentBar({
       return;
     }
     setError(null);
+    // The keys typed until the new page takes the caret go into it.
+    keepEarlyKeys();
     try {
       const created = await api<{ id: string; title: string }>("/api/documents/blank", "POST", {
         notebookId,
         title: t("panes.untitledDocument"),
         ...(addFolder ? { folderId: addFolder } : {}),
       });
+      earlyKeysFor(created.id);
       setDialog(false);
       const params = new URLSearchParams();
       params.set("doc", created.id);
       startOpening(() => router.push(`/n/${notebookId}?${params.toString()}`));
       router.refresh();
     } catch (err) {
+      dropEarlyKeys();
       setError(err instanceof Error ? err.message : t("common.requestFailed"));
     }
   }
