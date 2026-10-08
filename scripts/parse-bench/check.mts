@@ -1930,6 +1930,22 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     )
   ).blocks.map((b) => `${b.type} ${b.html ?? ""} ${b.text.slice(0, 12)}`);
   check("url: a figure's caption whose media is refused is a caption", orphan.includes('PARAGRAPH <p class="caption"> The gauge at'), orphan.join(" / "));
+  // A heading of the bare word "Autor" over the author's box at the story's end cuts the box; at the top, over prose, it stays.
+  const boxed2 = async (body: string) =>
+    (
+      await parseHtmlContent(
+        `<!doctype html><html><head><title>Notes on river flow</title></head><body><article>${body}</article></body></html>`,
+        "https://example.org/rivers",
+      )
+    ).blocks.map((b) => b.text);
+  const story = [1, 2, 3, 4, 5, 6].map((n) => `<p>${prose(n)}</p>`).join("");
+  const authorEnd = await boxed2(`${story}<h2>Autor</h2><h3>Jil Wanner</h3><p>Alle Artikel</p><p>Kontakt</p>`);
+  const authorTop = await boxed2(`<h3>Autor</h3><p>Jil Wanner</p>${story}`);
+  check(
+    "url: a bare Autor heading over the author's box at the end is cut",
+    !authorEnd.some((t) => t === "Autor" || t === "Jil Wanner") && authorEnd.some((t) => t.startsWith("Paragraph 6")) && authorTop.includes("Autor"),
+    `end ${authorEnd.join(" / ")}; top ${authorTop.join(" / ")}`,
+  );
 }
 
 {
