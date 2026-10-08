@@ -10,6 +10,7 @@ import { serverT } from "@/lib/i18n/server";
 import { personOf } from "@/lib/person";
 import { Logo } from "@/components/logo";
 import { AccountGuard } from "@/components/account-guard";
+import { FeedbackHeaderButton } from "@/components/feedback-button";
 import { SettingsForm } from "@/components/settings-form";
 import { accountStorage } from "@/lib/storage";
 import { accountTier, betaOn, tierState } from "@/lib/tiers";
@@ -60,6 +61,11 @@ export default async function SettingsPage() {
           {t("common.works")}
         </Link>
         <h1 className="text-[28px]">{t("common.settings")}</h1>
+        {/* Feedback on a phone: the floating pill would lie on the plan's
+            words (FeedbackButton hides it below sm here). */}
+        <div className="ml-auto">
+          <FeedbackHeaderButton />
+        </div>
       </header>
       <SettingsForm
         account={account}

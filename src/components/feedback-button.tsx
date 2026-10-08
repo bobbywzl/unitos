@@ -30,9 +30,10 @@ function parseLink(raw: string): string | null {
     menu (workspace.tsx) carry Feedback. */
 export const FEEDBACK_OPEN_EVENT = "unitos:feedback-open";
 
-/** Feedback in the header of the dashboard and of the notes and annotations
-    full pages, on a phone only: there the floating pill would lie on a
-    card's ⋯ or a row's controls (FeedbackButton hides it). */
+/** Feedback in the header of the dashboard, the notes and annotations full
+    pages, and Settings, on a phone only: there the floating pill would lie
+    on a card's ⋯, a row's controls, or the plan's words (FeedbackButton
+    hides it). */
 export function FeedbackHeaderButton() {
   const t = useT();
   return (
@@ -81,6 +82,9 @@ export function FeedbackButton() {
   // pending note's Accept and the rows' pencils (EDGE13-02); there Feedback
   // is a button in the page's header (FeedbackHeaderButton).
   const onFullPage = /^\/n\/[^/]+\/(notes|annotations)\/?$/.test(pathname ?? "");
+  // Settings on a phone: the pill lay on the plan's words; Feedback is a
+  // button in its header.
+  const onSettings = pathname === "/settings";
   const [open, setOpen] = useState(false);
   const [category, setCategory] = useState<"bug" | "idea" | "other">("bug");
   const [message, setMessage] = useState("");
@@ -202,14 +206,14 @@ export function FeedbackButton() {
           Feedback: it lay on the tray's last row, on the article's last
           lines, and on a short screen on the rail's Extract. There it is in
           the guide's head at md and up and a row of the bar's More menu
-          below md (FEEDBACK_OPEN_EVENT). On a phone's dashboard and
-          full pages it is a button in the header. */}
+          below md (FEEDBACK_OPEN_EVENT). On a phone's dashboard, full
+          pages, and Settings it is a button in the header. */}
       <button
         onClick={() => setOpen(!open)}
         data-feedback-button=""
         className={`fixed right-4 bottom-[calc(64px+env(safe-area-inset-bottom))] z-20 rounded-full bg-card px-4 py-2 text-sm text-sand-700 shadow-lift hover:bg-clay-100 hover:text-clay-800 md:bottom-[60px] print:hidden ${
           inReader ? "hidden" : ""
-        } ${onDashboard || onFullPage ? "max-sm:hidden" : ""}`}
+        } ${onDashboard || onFullPage || onSettings ? "max-sm:hidden" : ""}`}
       >
         {t("works.feedback")}
       </button>

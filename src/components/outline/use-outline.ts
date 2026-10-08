@@ -104,7 +104,10 @@ export type OutlineActions = {
       written in the tray is its. Null on the notes full page. */
   documentId: string | null;
   addSection: (parentId: string | null, title: string) => Promise<void>;
-  renameSection: (id: string, title: string) => Promise<void>;
+  /** The answer says whether the rename waits in the offline queue
+      (queued), after the server answered with an error (serverError). A
+      refusal throws. */
+  renameSection: (id: string, title: string) => Promise<{ queued?: boolean; serverError?: boolean }>;
   deleteSection: (id: string) => Promise<void>;
   reorderSection: (parentId: string | null, id: string, toIndex: number) => void;
   /** id: the id the note's create carries (lib/notes/client-id.ts), so a
@@ -1154,8 +1157,9 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
       refresh();
     },
     async renameSection(id, title) {
-      await api(`/api/sections/${id}`, "PATCH", { title });
+      const answer = await api<{ queued?: boolean; serverError?: boolean } | null>(`/api/sections/${id}`, "PATCH", { title });
       refresh();
+      return { queued: answer?.queued === true, serverError: answer?.serverError === true };
     },
     async deleteSection(id) {
       // The section leaves the screen at once and the pill shows; the

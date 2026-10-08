@@ -170,7 +170,7 @@ import type { SuggestCommand } from "@/lib/prompts/suggest";
 import { readNdjson } from "@/lib/ndjson";
 import { conflictLabels, saveNoteText } from "@/lib/notes/save-text";
 import { reconcileNoteText } from "@/lib/notes/conflict";
-import { deleteNoteWithUndo } from "@/lib/notes/undo-pill";
+import { deletedKey, deleteNoteWithUndo } from "@/lib/notes/undo-pill";
 import {
   cardCommentKey,
   caretToEnd,
@@ -204,7 +204,7 @@ import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 import { KeptInput, KeptTextarea, type KeptFieldHandle } from "@/components/kept-field";
 import { AnswerMarkdown } from "@/components/assistant/answer-markdown";
 import { deleteConversationWithUndo } from "@/components/assistant/conversation-delete";
-import { modelFetch, noReason } from "@/components/assistant/failure";
+import { callFailure, callLine, modelFetch, noReason } from "@/components/assistant/failure";
 import { ACCEPT_CLASS, REJECT_CLASS, SEND_CLASS } from "@/components/assistant/decision-classes";
 
 // One block's span of a selection (SPEC.md §5).
@@ -2347,21 +2347,6 @@ export function ReaderInteractions({
   function stopExplain() {
     abortToolRun(bubble?.run);
   }
-  // Deleting is optimistic: the card leaves and the mark fades at once; the
-  // server's refresh confirms, and a failure puts the mark back with a toast.
-  async function deleteNote(noteId: string, removedMessage: string) {
-    broadcastNoteRemoved(noteId);
-    try {
-      await api(`/api/notes/${noteId}`, "DELETE");
-      router.refresh();
-      showToast(removedMessage);
-      return true;
-    } catch (err) {
-      broadcastNoteRestored(noteId);
-      showError(err instanceof Error ? err.message : t("reader.deleteFailed"));
-      return false;
-    }
-  }
   // Regenerate replaces (SPEC.md §4): the annotation a run replaced goes once
   // the new one is stored, so one selection never carries two of the same
   // tool's marks. No toast — the new output is the notice.
@@ -2377,16 +2362,7 @@ export function ReaderInteractions({
     const card = bubble;
     if (!card?.noteId || card.streaming || card.busy) return;
     setBubble(null);
-    await deleteNote(
-      card.noteId,
-      t(
-        card.kind === "analyze"
-          ? "reader.analysisRemoved"
-          : card.kind === "visualize"
-            ? "reader.visualizationRemoved"
-            : "reader.explanationRemoved",
-      ),
-    );
+    await deleteWithPill(card.noteId, t(deletedKey(card.kind)));
   }
   function closeSimplify() {
     abortToolRun(simplifyCard?.run);
@@ -2400,7 +2376,7 @@ export function ReaderInteractions({
     const card = simplifyCard;
     if (!card?.noteId || card.streaming || card.busy) return;
     setSimplifyCard(null);
-    await deleteNote(card.noteId, t("reader.simplifiedRemoved"));
+    await deleteWithPill(card.noteId, t(deletedKey("simplify")));
   }
   // Regenerate: the tool runs again on the same selection, in the same card,
   // and the new output replaces the old (SPEC.md §4). Visualize regenerates
@@ -2440,7 +2416,7 @@ export function ReaderInteractions({
     setAssistantChat(null);
     deleteConversationWithUndo({
       noteId,
-      message: t("assistant.conversationDeleted"),
+      message: t("outline.conversationDeleted"),
       gone: () => broadcastNoteRemoved(noteId),
       back: () => broadcastNoteRestored(noteId),
       failed: () => showError(t("assistant.conversationDeleteFailed")),
@@ -6590,7 +6566,8 @@ export function ReaderInteractions({
     await deleteWithPill(card.noteId, t(card.kind === "highlight" ? "outline.highlightDeleted" : "outline.commentDeleted"));
   }
 
-  // A highlight's or a comment's trash: the notes' Undo pill offers it back
+  // An annotation's trash (a highlight, a comment, an Explain, Analyze,
+  // Visualize, or Simplify card): the notes' Undo pill offers it back
   // (lib/notes/undo-pill.ts); History keeps it after the pill goes.
   async function deleteWithPill(noteId: string, message: string) {
     try {
@@ -8055,7 +8032,7 @@ export function ReaderInteractions({
         body: JSON.stringify({ noteId: chatNoteId, content: quoteMessage(chatCommentQuote ?? "", text) }),
       });
       const json = (await res.json().catch(() => null)) as (AnswerComment & { error?: string }) | null;
-      if (!res.ok || !json?.id) throw new Error(json?.error ?? t("assistant.commentFailed"));
+      if (!res.ok || !json?.id) throw callFailure(res, json, t("common.notSaved"));
       // Posted: the comment's draft is done.
       setCardDraft(cardCommentKey(chatNoteId, chatCommentQuote ?? ""), null);
       setChatComments((list) => [...list, json]);
@@ -8064,7 +8041,7 @@ export function ReaderInteractions({
       // The Annotations tab lists the comment under the conversation.
       router.refresh();
     } catch (err) {
-      showError(err instanceof Error ? err.message : t("assistant.commentFailed"));
+      showError(callLine(err, t("common.notSaved")));
     } finally {
       setChatCommentBusy(false);
     }
@@ -9883,10 +9860,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         {pendingLink && !embedded && (
           <div
             data-link-banner
-            // Too narrow a band for it: it wraps under the controls.
-            className={`pointer-events-auto flex max-w-full items-center gap-1 rounded-full bg-card pr-1 pl-4 shadow-float ${bandBanner ? "min-w-[min(100%,24rem)] py-0.5" : "min-w-0 py-1"}`}
+            // Too narrow a band for it: it wraps under the controls. Its
+            // sentence wraps too, so the steps always show: one line is a
+            // pill, more lines a rounded box.
+            className={`pointer-events-auto flex max-w-full items-center gap-1 rounded-[14px] bg-card pr-1 pl-4 shadow-float ${bandBanner ? "min-w-[min(100%,24rem)] py-0.5" : "min-w-0 py-1"}`}
           >
-            <span className="truncate text-[12.5px] text-sand-700">
+            <span className="min-w-0 py-[3px] text-[12.5px] leading-[18px] text-sand-700">
               {t("reader.linkingBanner", {
                 // In the band, a shorter quote leaves room for the steps.
                 quote:
@@ -10457,6 +10436,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 // An import's References section stands under its pages,
                 // under the page editor's header.
                 footer: <Bibliography references={references} />,
+                split,
               }
             : null
         }

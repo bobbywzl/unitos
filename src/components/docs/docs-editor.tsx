@@ -44,6 +44,7 @@ import type { DocsAreaProps } from "@/components/docs/areas/types";
 import type { Highlight } from "@/components/reader/block-view";
 import { api } from "@/lib/api";
 import { inlineText } from "@/lib/docs/blocks";
+import { keepingKeysFor, takeEarlyKeys } from "@/lib/docs/early-keys";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
 import type { PageRange } from "@/lib/pdf-pages";
 import { POSITION_HOLD_MS, READING_LINE_PX } from "@/lib/reading-position";
@@ -473,6 +474,7 @@ export function DocsEditor({
   translations = null,
   collapse = null,
   leftOffBlockId = null,
+  split = false,
 }: {
   documentId: string;
   notebookId: string;
@@ -505,6 +507,9 @@ export function DocsEditor({
   /** The block of the reading position the document opened with: the
       left-off mark stands above it (layer/left-off.ts). */
   leftOffBlockId?: string | null;
+  /** A pane of a split view, whose pane header names the document
+      (reader-interactions.tsx draws the header when this is true). */
+  split?: boolean;
 }) {
   const t = useT();
   useDocsFonts();
@@ -531,7 +536,9 @@ export function DocsEditor({
   // toolbar's row).
   const shellRef = useRef<HTMLDivElement>(null);
   const [narrow, setNarrow] = useState(false);
-  const [tight, setTight] = useState(false);
+  // Narrow or short, as measured; a split pane is tight from its first frame.
+  const [measuredTight, setMeasuredTight] = useState(false);
+  const tight = measuredTight || split;
   const [tightWas, setTightWas] = useState(false);
   if (tight !== tightWas) {
     setTightWas(tight);
@@ -595,17 +602,13 @@ export function DocsEditor({
     if (!shell) return;
     const pane = scrollParent(shell);
     const measure = () => {
-      // A split view's pane header stands just before the reader's root;
-      // read on every resize, since a switch to Side by side keeps this
-      // editor and only narrows its pane.
-      const split = shell.closest("[data-reader-root]")?.previousElementSibling?.classList.contains("pane-header") === true;
       const isNarrow = shell.clientWidth > 0 && shell.clientWidth < NARROW_PANE;
       const short = pane !== null && pane.clientHeight > 0 && pane.clientHeight < SHORT_PANE;
       // A short pane (a phone held sideways) reads as a narrow one does:
       // pageless, with no ruler; the page's margins and the ruler would
       // leave the words a third of the screen.
       setNarrow(isNarrow || short);
-      setTight(isNarrow || short || split);
+      setMeasuredTight(isNarrow || short);
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -620,12 +623,19 @@ export function DocsEditor({
   // settle) has the caret there: at the start of the block at the reading
   // line, so the first key types where the reader looks and the pane stays.
   // In Viewing the page takes no focus: the pending queue's keys reach the
-  // notes tray.
+  // notes tray. A new blank document puts the keys typed while it was being
+  // made at its start (lib/docs/early-keys.ts), as typing.
   useEffect(() => {
-    if (!editor || !writable || openedIn === "viewing" || document.activeElement !== document.body) return;
+    if (!editor || !writable || openedIn === "viewing") return;
+    if (!keepingKeysFor(documentId) && document.activeElement !== document.body) return;
+    const early = takeEarlyKeys(documentId);
+    if (early) {
+      editor.chain().focus("start", { scrollIntoView: false }).insertContent({ type: "text", text: early }).run();
+      return;
+    }
     editor.commands.focus("start", { scrollIntoView: false });
     return caretAtReadingPosition(editor);
-  }, [editor, writable, openedIn]);
+  }, [editor, writable, openedIn, documentId]);
 
   // The mode: an import keeps the reader's choice. On a locked import only
   // Viewing is left, and a key or a command that asks for another mode says
@@ -972,7 +982,7 @@ export function DocsEditor({
   if (!editor || outdated) {
     return (
       <>
-        <DocsFrame title={title} pageSetup={shownSetup} />
+        <DocsFrame title={title} pageSetup={shownSetup} split={split} />
         {outdated === "stale" && (
           <p
             role="alert"

@@ -125,6 +125,8 @@ const en = {
   // The one failure line of a write (SPEC.md §17, lib/api.ts): "Not saved"
   // and what the reader can do. A write that retries by itself shows no line.
   notSaved: "Not saved. Try again.",
+  // A read that failed (a list, a conversation, an attachment): the same shape.
+  notLoaded: "Not loaded. Try again.",
   offline: "Not saved. Try again when you are online.",
   offlineQueued: "Offline · AI is off · {n} saved for sync · Unitos Premium",
   offlinePremium: "Offline · AI is off · notes and edits save and sync later · Unitos Premium",
@@ -221,6 +223,7 @@ const zh: Record<keyof typeof en, string> = {
   tierExpired: "Unitos Premium · 试用已于 {date} 结束",
   // Offline work (SPEC.md §17, Unitos Premium)
   notSaved: "未保存。请重试。",
+  notLoaded: "未加载。请重试。",
   offline: "未保存。恢复联网后请重试。",
   offlineQueued: "离线 · AI 不可用 · 已保存 {n} 项待同步 · Unitos Premium",
   offlinePremium: "离线 · AI 不可用 · 笔记和编辑会保存并稍后同步 · Unitos Premium",

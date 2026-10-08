@@ -10,6 +10,7 @@ import { DragHandle, SortableGroup, SortableItem, useDropHeader, type HandleProp
 import { notesList, sectionsList } from "@/components/outline/board-lists";
 import { NoteCard } from "@/components/outline/note-card";
 import { NoteComposer, focusComposer } from "@/components/outline/note-composer";
+import { SaveStateLabel } from "@/components/outline/save-state";
 import { SECTION_ACTION, SECTION_ADD_NOTE } from "@/components/outline/section-action";
 import { useNoteCompose } from "@/components/outline/use-note-compose";
 import { VoiceNoteButton } from "@/components/outline/voice-note";
@@ -61,18 +62,44 @@ export function SectionItem({
   const headerLit = useDropHeader(notesList(section.id));
   // The bin was pressed: the row closes without a rename.
   const deleting = useRef(false);
+  // A rename on its way, or one that did not save: the typed title shows in
+  // place of the stored one until the server's title changes (SPEC.md §6).
+  // "failed": the server answered with an error, so the write waits in the
+  // queue and is tried again (lib/api.ts), or it refused the title, and the
+  // field opens again on it, for the reader to change it or try again;
+  // "offline": it waits for the network.
+  const [kept, setKept] = useState<{ title: string; from: string; state: "saving" | "failed" | "offline" } | null>(null);
+  if (kept && section.title !== kept.from) setKept(null);
+  // The field opened again after a refused rename: it takes no focus.
+  const [reopened, setReopened] = useState(false);
   if (searching && notes.length === 0 && childrenShown.length === 0) return null;
 
   async function saveTitle() {
     const trimmed = title.trim();
     setEditing(false);
+    setReopened(false);
     if (deleting.current) return;
     if (!trimmed || trimmed === section.title) {
       setTitle(section.title);
+      setKept(null);
       return;
     }
-    await actions.renameSection(section.id, trimmed);
+    const from = section.title;
+    setKept({ title: trimmed, from, state: "saving" });
+    try {
+      const answer = await actions.renameSection(section.id, trimmed);
+      if (answer.queued) setKept({ title: trimmed, from, state: answer.serverError ? "failed" : "offline" });
+    } catch (err) {
+      // Refused: the typed title stays in the field, marked Not saved.
+      console.warn("section rename", err);
+      setKept({ title: trimmed, from, state: "failed" });
+      setTitle(trimmed);
+      setReopened(true);
+      setEditing(true);
+    }
   }
+  const shownTitle = kept?.title ?? section.title;
+  const keptState = kept && kept.state !== "saving" ? kept.state : null;
 
   return (
     <section ref={rootRef} className={`group flex flex-col gap-2.5 ${nested ? "mt-4 pl-5" : ""}`}>
@@ -96,7 +123,7 @@ export function SectionItem({
             }}
           >
             <input
-              autoFocus
+              autoFocus={!reopened}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               {...ime.props}
@@ -106,6 +133,8 @@ export function SectionItem({
                 if (e.key === "Escape") {
                   setTitle(section.title);
                   setEditing(false);
+                  setReopened(false);
+                  setKept(null);
                 }
               }}
               aria-label={t("outline.sectionTitle")}
@@ -124,6 +153,7 @@ export function SectionItem({
                 deleting.current = true;
                 setEditing(false);
                 setTitle(section.title);
+                setKept(null);
                 void actions.deleteSection(section.id).finally(() => {
                   deleting.current = false;
                 });
@@ -135,6 +165,7 @@ export function SectionItem({
             >
               <TrashIcon size={13} />
             </button>
+            <SaveStateLabel state={keptState} />
           </span>
         ) : (
           // The title and its pencil stay on one row: a long title wraps
@@ -151,8 +182,9 @@ export function SectionItem({
               className={`min-w-0 break-words text-left font-display hover:text-clay-800 ${nested ? "text-lg" : "text-[22px]"}`}
               data-tip={t("outline.openBoardTitle")}
             >
-              {shownSectionTitle(section.title, t)}
+              {shownSectionTitle(shownTitle, t)}
             </button>
+            <SaveStateLabel state={keptState} />
             {canEdit && (
               <span className="flex items-center gap-0.5 self-center opacity-0 transition-opacity group-hover/head:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
                 <button

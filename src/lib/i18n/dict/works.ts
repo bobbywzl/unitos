@@ -169,7 +169,6 @@ const en = {
     "- **Where you left off** — a document opens where you left off, in any tab and on any device you sign in on.\n- **The left-off mark** — a small ribbon above the block marks the place, so you can find it again after you scroll away.\n\nOpen the guide with the ? at the top right of the reader, or More › Guide on a phone.",
   // Feedback button
   feedback: "Feedback",
-  sendFeedback: "Send feedback",
   feedbackBug: "bug",
   feedbackIdea: "idea",
   feedbackOther: "other",
@@ -358,7 +357,6 @@ const zh: Record<keyof typeof en, string> = {
     "- **上次读到的位置**——文档会在你上次读到的位置打开，无论在哪个标签页，还是在你登录的任何设备上。\n- **阅读标记**——块上方的小书签标出这个位置，滚动离开后也能找回来。\n\n点阅读器右上角的 ? 打开指南；手机上在“更多 › 指南”。",
   // Feedback button
   feedback: "反馈",
-  sendFeedback: "发送反馈",
   feedbackBug: "问题",
   feedbackIdea: "想法",
   feedbackOther: "其他",

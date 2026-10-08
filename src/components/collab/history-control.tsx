@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import type { HistoryEntry } from "@/lib/types";
 import type { Person } from "@/lib/person";
 import { CollabProvider, useCollab } from "@/components/collab/collab-context";
@@ -12,12 +12,11 @@ import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { markdownPreview } from "@/lib/markdown-preview";
 import { api } from "@/lib/api";
 import { refreshWhenOnline } from "@/lib/offline/queue";
+import { tellNoteBack } from "@/lib/notes/undo-pill";
 
 // One page of History rows (lib/history/list.ts HISTORY_PAGE): a first page
 // this long may have older rows under it.
 const HISTORY_PAGE = 100;
-// How long Restore waits for the page's data before the tray switches.
-const REFRESH_WAIT_MS = 8000;
 
 const KIND_KEY: Record<HistoryEntry["kind"], TKey> = {
   TEXT_EDIT: "panes.historyTextEdit",
@@ -185,34 +184,6 @@ export function HistoryPanel({
     document: NO_OLDER,
   });
   const older = olderByScope[scope];
-  // Restore waits for the page's data to have the note back (the row
-  // reads restored in the refreshed History), so the tray switches to Notes
-  // with the note there (NAV13-05); REFRESH_WAIT_MS at most.
-  const waiting = useRef<{ entryId: string; done: () => void } | null>(null);
-  useEffect(() => {
-    const wait = waiting.current;
-    if (!wait) return;
-    const row = [...history, ...documentHistory].find((e) => e.id === wait.entryId);
-    if (row?.restored) {
-      waiting.current = null;
-      wait.done();
-    }
-  }, [history, documentHistory]);
-  // refresh: false when a refresh is already on its way (the notes' own,
-  // on dissect:note-back).
-  const refreshUntilRestored = (entryId: string, refresh = true) =>
-    new Promise<void>((resolve) => {
-      const done = () => {
-        clearTimeout(timer);
-        resolve();
-      };
-      const timer = setTimeout(() => {
-        if (waiting.current?.entryId === entryId) waiting.current = null;
-        resolve();
-      }, REFRESH_WAIT_MS);
-      waiting.current = { entryId, done };
-      if (refresh) router.refresh();
-    });
   const setOlder = (patch: (prev: OlderPages) => OlderPages) =>
     setOlderByScope((prev) => ({ ...prev, [scope]: patch(prev[scope]) }));
 
@@ -249,19 +220,14 @@ export function HistoryPanel({
     act(
       entry,
       async () => {
-        const done = await api<{ noteId?: unknown }>(`/api/notebooks/${notebookId}/history/${entry.id}`, "POST");
-        const detail = typeof done?.noteId === "string" ? { noteId: done.noteId } : null;
-        // The notes take it back at once (a tab that deleted it hides it
-        // until told) and refresh the page's data; that one refresh is the
-        // wait: the row says Loading until the note is in the data, then
-        // the tray switches to Notes with the note there.
-        if (detail) window.dispatchEvent(new CustomEvent("dissect:note-back", { detail }));
-        await refreshUntilRestored(entry.id, !detail);
-        if (detail) {
-          // The reader repaints its marks, and the tray shows it.
-          window.dispatchEvent(new CustomEvent("dissect:note-restored", { detail }));
-          window.dispatchEvent(new CustomEvent("dissect:show-note", { detail }));
-        }
+        const done = await api<unknown>(`/api/notebooks/${notebookId}/history/${entry.id}`, "POST");
+        // A note: the restore's answer carries it, so the notes put it in
+        // its section at once and refresh in the background, the reader
+        // repaints its marks, and the tray shows it. A section: the
+        // refresh brings it.
+        const noteId = tellNoteBack(done);
+        if (noteId) window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId } }));
+        else router.refresh();
       },
       "panes.historyRestoreFailed",
     );

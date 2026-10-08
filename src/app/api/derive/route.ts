@@ -40,6 +40,7 @@ import {
   salienceOutputSchema,
 } from "@/lib/derive/json";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
+import { failureLine } from "@/app/api/assistant/failure-line";
 import { streamTextTo } from "@/lib/derive/text-stream";
 import {
   renderVisual,
@@ -257,11 +258,8 @@ export async function POST(req: Request) {
   try {
     return await handle(req, t);
   } catch (err) {
-    console.error("[derive] failed:", err);
-    return NextResponse.json(
-      { error: t("api.deriveFailed", { reason: modelErrorMessage(err) }) },
-      { status: 500 },
-    );
+    // The reader's line is the plain one; the reason goes to the log.
+    return NextResponse.json({ error: failureLine(t, err, "derive") }, { status: 500 });
   }
 }
 
@@ -439,7 +437,7 @@ async function handle(req: Request, t: TFunc) {
           });
           if (corpusCancelled || req.signal.aborted) return;
           if (!result.ok) {
-            fail(t("api.distillFailed", { reason: result.error }));
+            fail(failureLine(t, result.error, "derive DISTILL"));
             return;
           }
           const quotes = result.data.quotes
@@ -502,7 +500,7 @@ async function handle(req: Request, t: TFunc) {
         } catch (err) {
           if (!corpusCancelled && !req.signal.aborted) {
             console.error("[derive] DISTILL:corpus failed:", err);
-            fail(t("api.distillFailed", { reason: modelErrorMessage(err) }));
+            fail(failureLine(t, err, "derive DISTILL"));
           }
         } finally {
           if (corpusHeartbeat) clearInterval(corpusHeartbeat);
@@ -1244,7 +1242,8 @@ async function handle(req: Request, t: TFunc) {
           // Stopped by the reader: nobody is listening, and nothing persists.
           if (req.signal.aborted) return;
           try {
-            send(`${STREAM_ERROR_TOKEN}${modelErrorMessage(err)}`);
+            // The plain line for the reader; the reason goes to the log.
+            send(`${STREAM_ERROR_TOKEN}${failureLine(t, err, "derive stream")}`);
             controller.close();
           } catch {
             // The reader left before the reason could be sent.
@@ -1654,7 +1653,7 @@ async function handle(req: Request, t: TFunc) {
           if (cancelled || req.signal.aborted) return;
           if (!result.ok) {
             if (best) break;
-            fail(t("api.distillFailed", { reason: result.error }));
+            fail(failureLine(t, result.error, "derive DISTILL"));
             return;
           }
           const resolved: ResolvedQuote[] = result.data.quotes
@@ -1740,7 +1739,7 @@ async function handle(req: Request, t: TFunc) {
       } catch (err) {
         if (!cancelled && !req.signal.aborted) {
           console.error("[derive] DISTILL failed:", err);
-          fail(t("api.distillFailed", { reason: modelErrorMessage(err) }));
+          fail(failureLine(t, err, "derive DISTILL"));
         }
       } finally {
         if (heartbeat) clearInterval(heartbeat);

@@ -95,6 +95,15 @@ export function NoteComposer({
         e.preventDefault();
         save();
       }}
+      // Escape on Done, Cancel, or a button of the editor's bar closes the
+      // composer as Escape in the text does (the text's fields call
+      // escape themselves; an open menu keeps its own Escape).
+      onKeyDown={(e) => {
+        if (e.key !== "Escape" || e.defaultPrevented || isImeKey(e)) return;
+        if (!(e.target as HTMLElement).closest("button")) return;
+        e.preventDefault();
+        escape();
+      }}
     >
       {/* The save state at the top of the composer (SPEC.md §6). */}
       <div className="mb-1 flex min-h-4 justify-end">

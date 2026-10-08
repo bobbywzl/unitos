@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { splitStreamError } from "@/lib/derive/config";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import { DISTILL_REGENERATE_MAX, type CorpusDistillation, type CorpusDistillationView } from "@/lib/types";
+import { failureLine, modelFetch, noReason } from "@/components/assistant/failure";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { ChevronLeftIcon } from "@/components/icons";
@@ -86,15 +87,21 @@ export function CorpusDistillPage({
     setError(null);
     setCurrentId(null);
     try {
-      const res = await fetch("/api/derive", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify({ type: "DISTILL", scope: "corpus", notebookId, question: trimmed, replaceId }),
-      });
+      // A dropped connection or a server failure reads as the plain line;
+      // the status and the server's text go to the console (failure.ts).
+      const res = await modelFetch(
+        "/api/derive",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
+          body: JSON.stringify({ type: "DISTILL", scope: "corpus", notebookId, question: trimmed, replaceId }),
+        },
+        t,
+      );
       if (!res.ok || !res.body) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(detail?.error ?? t("reader.distillFailedStatus", { status: res.status }));
+        throw new Error(detail?.error ?? noReason(res, t));
       }
       // Heartbeat spaces while the model works; the payload is the trailer —
       // the distillation JSON, or the in-band error.
@@ -131,7 +138,7 @@ export function CorpusDistillPage({
       router.refresh();
     } catch (err) {
       if (controller.signal.aborted) return;
-      setError(err instanceof Error ? err.message : t("reader.distillFailed"));
+      setError(failureLine(err, t));
     } finally {
       if (abortRef.current === controller) abortRef.current = null;
       setRunning(null);

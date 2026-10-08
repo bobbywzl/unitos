@@ -298,13 +298,19 @@ export function Workspace({
   // browser already holds a copy, a save under way, and the one-line result.
   // True once this browser is known to hold a cache: set after mount, so the
   // server render and the first client render agree (no window on the server).
-  const [offlineOn, setOfflineOn] = useState(false);
+  // Null until then: the header keeps the button's place, so History and the
+  // icons beside it do not move when it appears.
+  const [offlineOn, setOfflineOn] = useState<boolean | null>(null);
   const [offlineSaved, setOfflineSaved] = useState(false);
   const [offlineSaving, setOfflineSaving] = useState(false);
   const [offlineProgress, setOfflineProgress] = useState<SaveProgress | null>(null);
   const [offlineToast, setOfflineToast] = useState<{ text: string; plans: boolean } | null>(null);
   useEffect(() => {
-    if (!offlineSupported()) return;
+    if (!offlineSupported()) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setOfflineOn(false);
+      return;
+    }
     const update = () =>
       void listSaved().then((rows) => {
         setOfflineSaved(rows.some((r) => r.id === notebook.id));
@@ -653,13 +659,16 @@ export function Workspace({
   // or card open) gives it back to the rail's button. A press leaves the
   // focus where it was.
   const railOpener = useRef<HTMLElement | null>(null);
-  function intoPanel(e: React.MouseEvent<HTMLElement>) {
+  // first: where the focus goes when it is drawn (the pending note's
+  // Accept), else the panel's first control.
+  function intoPanel(e: React.MouseEvent<HTMLElement>, first?: string) {
     if (e.detail !== 0) {
       railOpener.current = null;
       return;
     }
     railOpener.current = e.currentTarget;
-    focusWhenDrawn("[data-track-surface='tray'] .panel-in :is(button, a[href], input, textarea, [tabindex='0'])");
+    const panel = "[data-track-surface='tray'] .panel-in :is(button, a[href], input, textarea, [tabindex='0'])";
+    focusWhenDrawn(first ? [first, panel] : panel);
   }
   function backToRail(e: React.KeyboardEvent) {
     const opener = railOpener.current;
@@ -674,9 +683,10 @@ export function Workspace({
   // pending count did; with the notes open, a press is the tab's own.
   function showNotes(e: React.MouseEvent<HTMLElement>) {
     if (pending.length > 0 && !isOpen("notes")) {
-      window.dispatchEvent(
-        new CustomEvent("dissect:show-note", { detail: { noteId: actions.focusedPendingId ?? pending[0].id } }),
-      );
+      const noteId = actions.focusedPendingId ?? pending[0].id;
+      window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId } }));
+      // By a key, the focus goes to that note's Accept.
+      intoPanel(e, `[data-track-surface='tray'] [data-note-id="${CSS.escape(noteId)}"] [data-track="note-accept"]`);
       return;
     }
     show("notes");
@@ -811,7 +821,9 @@ export function Workspace({
         </button>
         {/* Save for offline (SPEC.md §17, Unitos Ultra): an icon in the
             header, its name in the tooltip; saved, it is filled and a press
-            removes the copy. Below md it is a row of the bar's More menu. */}
+            removes the copy. Below md it is a row of the bar's More menu.
+            Until the browser's copy is known, its place stands empty. */}
+        {offlineOn === null && <span aria-hidden className="hidden size-[34px] shrink-0 md:block" />}
         {offlineOn && (
           <button
             onClick={() => void toggleOffline()}

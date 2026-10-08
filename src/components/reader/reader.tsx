@@ -50,7 +50,7 @@ import type { DocsMedia, Imported } from "@/components/docs/docs-editor";
 // The page editor (SPEC.md §29) loads with a blank document or an import
 // only: its editor library stays out of every other document's bundle.
 // Until it has loaded, its frame stands there.
-const DocsFrameContext = createContext<{ title: string; pageSetup: PageSetup } | null>(null);
+const DocsFrameContext = createContext<{ title: string; pageSetup: PageSetup; split: boolean } | null>(null);
 const DocsEditor = dynamic(() => import("@/components/docs/docs-editor").then((m) => m.DocsEditor), {
   ssr: false,
   loading: function Loading() {
@@ -630,6 +630,8 @@ export function Reader({
     media?: DocsMedia | null;
     /** Under the pages: an import's References section. */
     footer?: React.ReactNode;
+    /** A pane of a split view: the page editor starts with its title row hidden. */
+    split?: boolean;
   } | null;
   /** The block the left-off mark sits above (SPEC.md §6); reading mode only. */
   leftOffBlockId?: string | null;
@@ -1216,7 +1218,7 @@ export function Reader({
 
   if (richText && documentId) {
     return (
-      <DocsFrameContext.Provider value={{ title, pageSetup: richText.pageSetup }}>
+      <DocsFrameContext.Provider value={{ title, pageSetup: richText.pageSetup, split: richText.split ?? false }}>
         <DocsEditor
           // A re-parse of an import stores new text, figures, and page
           // labels: the page editor is built anew on them, never patched.
@@ -1239,6 +1241,7 @@ export function Reader({
           translations={translations ?? null}
           collapse={collapse ?? null}
           leftOffBlockId={leftOffBlockId ?? null}
+          split={richText.split ?? false}
         />
       </DocsFrameContext.Provider>
     );
