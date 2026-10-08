@@ -404,7 +404,7 @@ export function HistoryPanel({
   const doneLabel = "shrink-0 text-[11px] font-semibold text-sage-700";
 
   // The one action a row carries, at the right of its name line: Restore a
-  // removed note, Add back a removed document, and — in the open document,
+  // removed note or section, Add back a removed document, and — in the open document,
   // for editors — Revert an edit or Restore a removed paragraph.
   const actionOf = (entry: HistoryEntry): React.ReactNode => {
     const busy = working === entry.id;
@@ -419,7 +419,7 @@ export function HistoryPanel({
           onClick={() => void restoreNote(entry)}
           disabled={working !== null}
           data-track="history-restore"
-          data-tip={t("panes.historyRestoreTitle")}
+          data-tip={t(entry.kind === "SECTION_REMOVE" ? "panes.historyRestoreSectionTitle" : "panes.historyRestoreTitle")}
           className={actionButton}
         >
           {busy ? t("common.loading") : t("panes.historyRestore")}
