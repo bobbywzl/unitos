@@ -198,11 +198,24 @@ export async function restoreSection(kept: KeptSection, notebookId: string): Pro
     ? await db.section.findFirst({ where: { id: section.parentId, notebookId }, select: { id: true } })
     : null;
   const parentId = parent?.id ?? null;
-  const siblings = await db.section.findMany({
-    where: { notebookId, parentId },
-    orderBy: { order: "asc" },
-    select: { id: true },
-  });
+  // The sections the delete lifted to the top go back under it, when they
+  // are still at the top of this project.
+  const children = kept.childIds.length
+    ? (
+        await db.section.findMany({
+          where: { id: { in: kept.childIds }, notebookId, parentId: null },
+          select: { id: true },
+        })
+      ).map((c) => c.id)
+    : [];
+  // Its siblings, without those sections: they leave the top level.
+  const siblings = (
+    await db.section.findMany({
+      where: { notebookId, parentId },
+      orderBy: { order: "asc" },
+      select: { id: true },
+    })
+  ).filter((s) => !children.includes(s.id));
   const at = Math.max(0, Math.min(section.order, siblings.length));
   const docIds = kept.notes
     .flatMap((n) => [n.documentId, ...n.sources.map((s) => s.documentId), ...n.sideChats.flatMap((c) => [c.documentId, ...c.sources.map((s) => s.documentId)])])
@@ -224,16 +237,6 @@ export async function restoreSection(kept: KeptSection, notebookId: string): Pro
     ...noteWrites(note, section.id, order++, documents),
     ...note.sideChats.filter((c) => !back.has(c.id)).flatMap((chat) => noteWrites(chat, section.id, order++, documents)),
   ]);
-  // The sections the delete lifted to the top go back under it, when they
-  // are still at the top of this project.
-  const children = kept.childIds.length
-    ? (
-        await db.section.findMany({
-          where: { id: { in: kept.childIds }, notebookId, parentId: null },
-          select: { id: true },
-        })
-      ).map((c) => c.id)
-    : [];
   await db.$transaction([
     db.section.create({
       data: { id: section.id, notebookId, title: section.title, order: at, hidden: section.hidden, parentId },
