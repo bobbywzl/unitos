@@ -1910,6 +1910,18 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     `quirks ${quirks.join(" ")}; standards ${standards.join(" ")}`,
   );
   check("url: a table's align centers its box, not its text", boxed.length === 3 && boxed.every((h) => !h.includes("center")), boxed.join(" "));
+  // A box the page names a pull quote is a display line, whatever its tag.
+  const pulled = (
+    await parseHtmlContent(
+      `<!doctype html><html><head><title>Notes on river flow</title></head><body><article><p>${prose(1)}</p><table align="right"><tr><td class="pullquote">“Every bar moves a little with each flood,” the surveyor said.</td></tr></table><p>${prose(2)}</p><div class="pull-quote pull-quote--left"><span class="pull-quote__text">“Silt settles where the current slows.”</span></div><p>${prose(3)}</p></article></body></html>`,
+      "https://example.org/rivers",
+    )
+  ).blocks.map((b) => `${b.type} ${b.html ?? ""} ${b.text.slice(0, 12)}`);
+  check(
+    "url: a pull quote in a table's cell or a div is a display line",
+    pulled.filter((b) => b.includes('class="display"')).length === 2 && !pulled.some((b) => b.includes("Paragraph") && b.includes("display")),
+    pulled.join(" / "),
+  );
 }
 
 {
