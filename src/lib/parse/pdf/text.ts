@@ -291,10 +291,19 @@ export function joinGroup(lines: Line[], proseJoin = false, columnEdge = 0): { t
       columnEdge > 0 &&
       !/[\p{L}\p{N}][-‐]$/u.test(prevText) &&
       lines[i - 1].xEnd + lines[i - 1].size * 3 + lines[i].firstWordWidth < Math.max(rightEdge, columnEdge);
+    // A formula opening the next line, under a line that ends in a
+    // lowercase word, goes on the sentence as a lowercase word does (parse
+    // loop finding: the MML book's "… it holds that" | "θMAP = mN." in a
+    // margin note, p. 313). A label's line ("Bemerkung 13") and a formula's
+    // step ("… ⊆ U" | "⇒ …") end in no such word.
+    const opensFormula =
+      /\p{Ll}$/u.test(prevText) &&
+      (lines[i].items.find((it) => it.str.trim() !== "")?.math ?? false) &&
+      !(lines[i - 1].items.findLast((it) => it.str.trim() !== "")?.math ?? true);
     const midSentence =
       proseJoin &&
       !/[.!?:…。！？：]["'”]?$/.test(prevText) &&
-      ((/^[a-z0-9($€£"'“]/.test(nextText) && !typed) || CJK_CHAR_RE.test(nextText[0] ?? "") || !roomy);
+      (((/^[a-z0-9($€£"'“]/.test(nextText) || opensFormula) && !typed) || CJK_CHAR_RE.test(nextText[0] ?? "") || !roomy);
     let sep: " " | "\n" | "" = fieldList ? "\n" : wrapped || midSentence ? " " : "\n";
     if (sep === " ") {
       const lastChar = prevText[prevText.length - 1] ?? "";
