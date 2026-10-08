@@ -467,7 +467,12 @@ export function rowHeights(cand: Flat, placed: number[][], pdf: PdfText): RowHei
     const pairs = tops.slice(1).flatMap((t, k) => (t.row === tops[k].row + 1 && t.page === tops[k].page && t.top > tops[k].top ? [{ page: t.top - tops[k].top, drawn: Math.max(line, least[tops[k].row] ?? 0) }] : []));
     if (pairs.length < 2) return;
     const median = (values: number[]) => values.sort((a, c) => a - c)[Math.floor(values.length / 2)];
-    const page = median(pairs.map((p) => p.page));
+    // The page's step is the lower middle of an even count: a step across a rule (booktabs's rule under the
+    // header) stands taller than the rows' own step, never shorter, so of a table of three rows the lower of
+    // the two steps is the rows' own (parse loop finding: Language Science Press's Table 3, a header and two
+    // rows, steps 18.8 pt over its rule and 13.5 pt between the rows; the measure took 18.8 pt, where Table 4,
+    // the same header over four rows, took 13.5 pt).
+    const page = pairs.map((p) => p.page).sort((a, c) => a - c)[Math.floor((pairs.length - 1) / 2)];
     const drawnPt = median(pairs.map((p) => p.drawn));
     tables++;
     if (Math.abs(drawnPt - page) <= 0.2 * page) right++;
