@@ -170,8 +170,9 @@ import type { SuggestCommand } from "@/lib/prompts/suggest";
 import { readNdjson } from "@/lib/ndjson";
 import { conflictLabels, saveNoteText } from "@/lib/notes/save-text";
 import { reconcileNoteText } from "@/lib/notes/conflict";
-import { deletedKey, deleteNoteWithUndo } from "@/lib/notes/undo-pill";
-import { deleteWithUndo, resumeDeletes } from "@/components/reader/attachment-delete";
+import { deletedKey } from "@/lib/notes/undo-pill";
+import { deleteWithUndo, resumeDeletes } from "@/lib/deferred-delete";
+import { CardMore, type CardMoreItem } from "@/components/reader/card-more";
 import { clearExtractDraft } from "@/components/reader/extract-draft";
 import {
   cardCommentKey,
@@ -1735,9 +1736,10 @@ export function ReaderInteractions({
   const [goneExtractions, setGoneExtractions] = useState<Set<string>>(new Set());
   // A reload while a delete's pill showed: the new page may have rendered
   // before the delete landed; the rows stay hidden and the delete goes
-  // again (attachment-delete.ts).
+  // again (lib/deferred-delete.ts).
   useEffect(() => {
-    const ids = resumeDeletes(`/api/notebooks/${notebookId}/documents/${documentId}`);
+    const url = `/api/notebooks/${notebookId}/documents/${documentId}`;
+    const ids = resumeDeletes((u) => u === url);
     if (ids.length === 0) return;
     const hide = (prev: Set<string>) => new Set([...prev, ...ids]);
     setGoneDistillations(hide);
@@ -1846,6 +1848,9 @@ export function ReaderInteractions({
       restoreNoteMarks((e as CustomEvent<{ noteId: string }>).detail.noteId);
     window.addEventListener("dissect:note-removed", onRemoved);
     window.addEventListener("dissect:note-restored", onRestored);
+    // A reload while a delete's pill showed: its marks stay gone and the
+    // DELETE goes again (lib/deferred-delete.ts).
+    for (const id of resumeDeletes((u) => u.startsWith("/api/notes/"))) removeNoteMarks(id);
     return () => {
       window.removeEventListener("dissect:note-removed", onRemoved);
       window.removeEventListener("dissect:note-restored", onRestored);
@@ -2372,11 +2377,11 @@ export function ReaderInteractions({
       broadcastNoteRestored(noteId);
     }
   }
-  async function deleteExplain() {
+  function deleteExplain() {
     const card = bubble;
     if (!card?.noteId || card.streaming || card.busy) return;
     setBubble(null);
-    await deleteWithPill(card.noteId, t(deletedKey(card.kind)));
+    deleteWithPill(card.noteId, t(deletedKey(card.kind)));
   }
   function closeSimplify() {
     abortToolRun(simplifyCard?.run);
@@ -2386,11 +2391,11 @@ export function ReaderInteractions({
   function stopSimplify() {
     abortToolRun(simplifyCard?.run);
   }
-  async function deleteSimplify() {
+  function deleteSimplify() {
     const card = simplifyCard;
     if (!card?.noteId || card.streaming || card.busy) return;
     setSimplifyCard(null);
-    await deleteWithPill(card.noteId, t(deletedKey("simplify")));
+    deleteWithPill(card.noteId, t(deletedKey("simplify")));
   }
   // Regenerate: the tool runs again on the same selection, in the same card,
   // and the new output replaces the old (SPEC.md §4). Visualize regenerates
@@ -6581,15 +6586,18 @@ export function ReaderInteractions({
   }
 
   // An annotation's trash (a highlight, a comment, an Explain, Analyze,
-  // Visualize, or Simplify card): the notes' Undo pill offers it back
-  // (lib/notes/undo-pill.ts); History keeps it after the pill goes.
-  async function deleteWithPill(noteId: string, message: string) {
-    try {
-      await deleteNoteWithUndo(noteId, message, () => router.refresh());
-      router.refresh();
-    } catch (err) {
-      showError(err instanceof Error ? err.message : t("reader.deleteFailed"));
-    }
+  // Visualize, or Simplify card): its marks go at once and the notes' Undo
+  // pill shows at the press; the DELETE waits for the pill to go (keepalive
+  // on page close), so Undo puts the marks back at once with nothing to
+  // restore. History keeps it after the pill goes (conversation-delete.ts).
+  function deleteWithPill(noteId: string, message: string) {
+    deleteConversationWithUndo({
+      noteId,
+      message,
+      gone: () => broadcastNoteRemoved(noteId),
+      back: () => broadcastNoteRestored(noteId),
+      failed: () => showError(t("common.notSaved")),
+    });
   }
 
   // The comment card edits in place too: same notes API, same refresh.
@@ -6841,7 +6849,7 @@ export function ReaderInteractions({
 
   // The selected extractions go in one call (SPEC.md §4), with no ask: they
   // leave the page at once, the pill offers Undo, and the PATCH waits for
-  // the pill to go (attachment-delete.ts).
+  // the pill to go (lib/deferred-delete.ts).
   function deleteDistillations(ids: string[]) {
     if (ids.length === 0) return;
     const setGone = (gone: boolean) =>
@@ -6928,7 +6936,7 @@ export function ReaderInteractions({
 
   // The stored match goes with no ask: its spans and its card leave at once,
   // the pill offers Undo, and the PATCH waits for the pill to go
-  // (attachment-delete.ts). Match-it makes no new matches, so Undo is the
+  // (lib/deferred-delete.ts). Match-it makes no new matches, so Undo is the
   // only way back.
   function deleteExtraction(id: string) {
     const setGone = (gone: boolean) =>
@@ -9807,6 +9815,24 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       >
         {chat.busy ? (chat.input.trim() ? t("assistant.queue") : <StopIcon size={11} />) : t("reader.send")}
       </button>
+      {/* Delete, out of the head (card-more.tsx). */}
+      <CardMore
+        items={
+          chat.noteId
+            ? [
+                {
+                  label: t("common.delete"),
+                  tip: t("reader.deleteConversationTitle"),
+                  track: "assistant-card-delete",
+                  icon: <TrashIcon size={13} />,
+                  danger: true,
+                  onSelect: deleteAssistantConversation,
+                },
+              ]
+            : []
+        }
+        className={CARD_ACTION}
+      />
     </form>
     {chat.sendError && (
       <p data-send-error role="alert" className={`${chipsClassName} text-[12px] font-medium text-red-600`}>
@@ -9881,6 +9907,69 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       <ExpandIcon size={13} />
     </button>
   );
+  // A tool card's ⋯ (card-more.tsx): Regenerate and Delete, out of the head.
+  const bubbleMore = (card: ExplainBubble): CardMoreItem[] => [
+    ...(!card.streaming && !card.busy && card.anchor
+      ? [
+          {
+            label: t("common.regenerate"),
+            tip: t(
+              card.kind === "analyze"
+                ? "reader.regenerateAnalysisTitle"
+                : card.kind === "visualize"
+                  ? "reader.regenerateVisualizationTitle"
+                  : "reader.regenerateExplanationTitle",
+            ),
+            track: `${card.kind}-regenerate`,
+            icon: <RegenerateIcon size={13} />,
+            onSelect: () => void regenerateBubble(),
+          },
+        ]
+      : []),
+    ...(card.noteId && !card.streaming
+      ? [
+          {
+            label: t("common.delete"),
+            tip: t(
+              card.kind === "analyze"
+                ? "reader.deleteAnalysisTitle"
+                : card.kind === "visualize"
+                  ? "reader.deleteVisualizeTitle"
+                  : "reader.deleteExplainTitle",
+            ),
+            track: `${card.kind}-delete`,
+            icon: <TrashIcon size={13} />,
+            danger: true,
+            onSelect: deleteExplain,
+          },
+        ]
+      : []),
+  ];
+  const simplifyMore = (card: SimplifyCard): CardMoreItem[] => [
+    ...(!card.streaming && !card.busy
+      ? [
+          {
+            label: t("common.regenerate"),
+            tip: t("reader.regenerateSimplifyTitle"),
+            track: "simplify-regenerate",
+            icon: <RegenerateIcon size={13} />,
+            onSelect: () => void regenerateSimplify(),
+          },
+        ]
+      : []),
+    ...(card.noteId && !card.streaming
+      ? [
+          {
+            label: t("common.delete"),
+            tip: t("reader.deleteSimplifyTitle"),
+            track: "simplify-delete",
+            icon: <TrashIcon size={13} />,
+            danger: true,
+            onSelect: deleteSimplify,
+          },
+        ]
+      : []),
+  ];
 
   // A pending link's banner (SPEC.md §6). The block reader's band holds it
   // between Contents and the controls, where no word sits.
@@ -11423,40 +11512,6 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   shows Expand once it holds a conversation. */}
               {(bubble.kind === "visualize" ? bubble.conversation.length > 0 : bubble.text || bubble.conversation.length > 0) &&
                 expandButton("explain")}
-              {!bubble.streaming && !bubble.busy && bubble.anchor && (
-                <button
-                  onClick={() => void regenerateBubble()}
-                  data-track={`${bubble.kind}-regenerate`}
-                  className={CARD_ACTION}
-                  aria-label={t("common.regenerate")}
-                  data-tip={t(
-                    bubble.kind === "analyze"
-                      ? "reader.regenerateAnalysisTitle"
-                      : bubble.kind === "visualize"
-                        ? "reader.regenerateVisualizationTitle"
-                        : "reader.regenerateExplanationTitle",
-                  )}
-                >
-                  <RegenerateIcon size={13} />
-                </button>
-              )}
-              {bubble.noteId && !bubble.streaming && (
-                <button
-                  onClick={() => void deleteExplain()}
-                  data-track={`${bubble.kind}-delete`}
-                  className={CARD_ACTION}
-                  aria-label={t("common.delete")}
-                  data-tip={t(
-                    bubble.kind === "analyze"
-                      ? "reader.deleteAnalysisTitle"
-                      : bubble.kind === "visualize"
-                        ? "reader.deleteVisualizeTitle"
-                        : "reader.deleteExplainTitle",
-                  )}
-                >
-                  <TrashIcon size={13} />
-                </button>
-              )}
               <button
                 onClick={closeExplain}
                 data-track={`${bubble.kind}-close`}
@@ -11515,6 +11570,14 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 />
               )}
               {continuePill("explain", bubble, bubble.kind, bubble.kind === "visualize" ? "ml-auto" : "")}
+              <CardMore items={bubbleMore(bubble)} className={CARD_ACTION} />
+            </div>
+          )}
+          {/* No foot row (a failed or declined run): the ⋯ alone, so
+              Regenerate stays in reach. */}
+          {!(bubble.noteId && !bubble.streaming && !bubble.error && bubble.declined === null) && !bubble.streaming && (
+            <div className="mt-2 flex shrink-0 justify-end empty:hidden">
+              <CardMore items={bubbleMore(bubble)} className={CARD_ACTION} />
             </div>
           )}
           {bubble.declined === null && toolChatFoot("explain", bubble, bubble.kind)}
@@ -11572,28 +11635,6 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 </button>
               )}
               {simplifyCard.conversation.length > 0 && expandButton("simplify")}
-              {!simplifyCard.streaming && !simplifyCard.busy && (
-                <button
-                  onClick={() => void regenerateSimplify()}
-                  data-track="simplify-regenerate"
-                  className={CARD_ACTION}
-                  aria-label={t("common.regenerate")}
-                  data-tip={t("reader.regenerateSimplifyTitle")}
-                >
-                  <RegenerateIcon size={13} />
-                </button>
-              )}
-              {simplifyCard.noteId && !simplifyCard.streaming && (
-                <button
-                  onClick={() => void deleteSimplify()}
-                  data-track="simplify-delete"
-                  className={CARD_ACTION}
-                  aria-label={t("common.delete")}
-                  data-tip={t("reader.deleteSimplifyTitle")}
-                >
-                  <TrashIcon size={13} />
-                </button>
-              )}
               <button
                 onClick={closeSimplify}
                 data-track="simplify-close"
@@ -11672,6 +11713,13 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 className="ml-auto"
               />
               {continuePill("simplify", simplifyCard, "simplify")}
+              <CardMore items={simplifyMore(simplifyCard)} className={CARD_ACTION} />
+            </div>
+          )}
+          {/* No foot row (a failed run): the ⋯ alone, so Regenerate stays in reach. */}
+          {!(simplifyCard.noteId && !simplifyCard.streaming && !simplifyCard.error) && !simplifyCard.streaming && (
+            <div className="mt-2 flex shrink-0 justify-end empty:hidden">
+              <CardMore items={simplifyMore(simplifyCard)} className={CARD_ACTION} />
             </div>
           )}
           {toolChatFoot("simplify", simplifyCard, "simplify")}
@@ -12001,17 +12049,6 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             </span>
             <span className="flex shrink-0 items-center gap-0.5">
               {assistantChat.messages.length > 0 && expandButton("assistant")}
-              {assistantChat.noteId && (
-                <button
-                  onClick={deleteAssistantConversation}
-                  data-track="assistant-card-delete"
-                  className={CARD_ACTION}
-                  aria-label={t("common.delete")}
-                  data-tip={t("reader.deleteConversationTitle")}
-                >
-                  <TrashIcon size={13} />
-                </button>
-              )}
               <button
                 onClick={closeAssistantChat}
                 data-track="assistant-card-close"

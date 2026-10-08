@@ -12,7 +12,7 @@ import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { ChevronLeftIcon } from "@/components/icons";
 import { useLang, useT } from "@/components/lang-provider";
-import { deleteWithUndo, resumeDeletes } from "@/components/reader/attachment-delete";
+import { deleteWithUndo, resumeDeletes } from "@/lib/deferred-delete";
 import { clearExtractDraft, useExtractDraft } from "@/components/reader/extract-draft";
 import { ExtractionList } from "@/components/reader/extraction-list";
 import { jumpUnlessSelecting as onQuoteClick, SelectionNotes } from "@/components/reader/selection-notes";
@@ -58,7 +58,7 @@ export function CorpusDistillPage({
   const [local, setLocal] = useState<CorpusDistillationView[]>([]);
   // Deleted or replaced: gone from the list at once, before the page reloads.
   // A delete still pending from before a reload stays hidden and goes again.
-  const [gone, setGone] = useState<Set<string>>(() => new Set(resumeDeletes(`/api/notebooks/${notebookId}`)));
+  const [gone, setGone] = useState<Set<string>>(() => new Set(resumeDeletes((u) => u === `/api/notebooks/${notebookId}`)));
   const [saved, setSaved] = useState<Set<string>>(new Set());
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -162,7 +162,7 @@ export function CorpusDistillPage({
 
   // The selected extractions go in one call (SPEC.md §13), with no ask: they
   // leave the page at once, the pill offers Undo, and the PATCH waits for
-  // the pill to go (attachment-delete.ts).
+  // the pill to go (lib/deferred-delete.ts).
   function removeMany(ids: string[]) {
     if (ids.length === 0) return;
     const setGoneIds = (isGone: boolean) =>
@@ -306,9 +306,9 @@ export function CorpusDistillPage({
             )}
             {shown && !running && canEdit && (
               <button
-                onClick={() => void remove(shown.id)}
+                onClick={() => remove(shown.id)}
                 data-track="distill-corpus-delete"
-                className="text-xs font-semibold text-red-500 hover:text-red-700"
+                className="text-xs font-semibold text-red-500 hover:text-red-700 pointer-coarse:py-2.5"
                 data-tip={t("panes.deleteDistillation")}
               >
                 {t("common.delete")}
@@ -460,8 +460,8 @@ export function CorpusDistillPage({
                 canEdit={canEdit}
                 openTrack="distill-corpus-open"
                 onOpen={setCurrentId}
-                onDelete={(id) => void remove(id)}
-                onDeleteMany={(ids) => void removeMany(ids)}
+                onDelete={(id) => remove(id)}
+                onDeleteMany={(ids) => removeMany(ids)}
               />
             )}
           </div>

@@ -8,7 +8,7 @@
 // the comments on its answers for History's Restore. A page with no pill on
 // it deletes at once.
 
-import { postUndoPill } from "@/lib/notes/undo-pill";
+import { deleteWithUndo } from "@/lib/deferred-delete";
 
 /** Delete the conversation note `noteId` once the pill goes without Undo.
     gone: the conversation leaves the screen now; back: Undo puts it back;
@@ -27,24 +27,15 @@ export function deleteConversationWithUndo({
   back: () => void;
   failed: () => void;
 }): boolean {
-  gone();
-  return postUndoPill({
+  // keepalive: the pill runs commit when the page closes too; a reload
+  // while the pill shows sends it again (lib/deferred-delete.ts).
+  return deleteWithUndo({
+    url: `/api/notes/${encodeURIComponent(noteId)}`,
+    method: "DELETE",
+    ids: [noteId],
     message,
-    undo: back,
-    // keepalive: the pill runs commit when the page closes too.
-    commit: async () => {
-      try {
-        const res = await fetch(`/api/notes/${encodeURIComponent(noteId)}`, { method: "DELETE", keepalive: true });
-        if (res.ok || res.status === 404) return;
-        const json = (await res.json().catch(() => null)) as { error?: string } | null;
-        console.error("conversation delete", res.status, json?.error);
-        back();
-        failed();
-      } catch (err) {
-        console.error("conversation delete", err);
-        back();
-        failed();
-      }
-    },
+    gone,
+    back,
+    failed,
   });
 }
