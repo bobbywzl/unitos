@@ -118,6 +118,18 @@ await graph();
       await page.mouse.move(5, H / 2);
     }
   }
+  // The note-on-link composer keeps round 6's sizes: Save and Cancel 44 px under a finger, 12 px apart (ui-link-remove).
+  const noteBtn = panel.locator('[data-track="graph-link-note"]');
+  if (await noteBtn.count()) {
+    await noteBtn.first().click();
+    const cancel = page.locator('[data-track="graph-link-note-cancel"]');
+    await cancel.waitFor({ timeout: 10000 }).catch(() => {});
+    const [cb, sb] = [await box(cancel), await box(page.locator('[data-track="graph-link-note-save"]'))];
+    const want = touch ? 44 : 24;
+    check("WALK6-09: the composer's Save and Cancel keep their size", !!cb && !!sb && cb.height >= want && sb.height >= want && (!touch || sb.x - (cb.x + cb.width) >= 12), `${cb?.height} ${sb?.height} gap ${sb && cb ? Math.round(sb.x - cb.x - cb.width) : "?"}`);
+    if (cb) await cancel.click();
+    await page.waitForTimeout(500);
+  }
   // WALK7-10: Undo after Remove (writes: the link is hidden in this project, then Undo brings it back).
   if (writes && (await remove.count())) {
     await remove.first().click();
@@ -129,7 +141,7 @@ await graph();
     if (ub) {
       await undo.click();
       await undo.waitFor({ state: "detached", timeout: 20000 }).catch(() => {});
-      await page.waitForTimeout(1000);
+      await page.locator('[data-track="graph-link-remove"]').waitFor({ timeout: 15000 }).catch(() => {});
       const [left, removeBack, line] = [await undo.count(), await page.locator('[data-track="graph-link-remove"]').count(), await page.locator("[data-link-removed]").count()];
       check("WALK7-10: Undo brings the link back", left === 0 && removeBack === 1, `undo ${left}, Remove ${removeBack}, removed line ${line}`);
     }
