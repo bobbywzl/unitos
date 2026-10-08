@@ -798,10 +798,44 @@ export function answerMessages(input: {
       { role: "user", content: `${selectedSections(rendered, selected, gists, input.command)}\n\n${prompt}` },
     ];
   }
-  const system = selected
-    ? systemOf(rules, input.profile, "The blocks a first read picked for the command follow.", selectedSections(rendered, selected, gists, input.command))
-    : systemOf(rules, input.profile, "Every document follows.", rendered.map((r) => wholeSection(r, gists)).join("\n\n"));
+  if (selected) {
+    // Behind the blocks picked nothing caches, so the older answers are cut
+    // (COST6-05); the whole read's history caches and stays whole.
+    const system = systemOf(rules, input.profile, "The blocks a first read picked for the command follow.", selectedSections(rendered, selected, gists, input.command));
+    return [systemMessage(system), ...trimmedHistory(input.history), { role: "user", content: prompt }];
+  }
+  const system = systemOf(rules, input.profile, "Every document follows.", rendered.map((r) => wholeSection(r, gists)).join("\n\n"));
   return [systemMessage(system), ...input.history, { role: "user", content: prompt }];
+}
+
+const HISTORY_FULL_ANSWERS = 2; // the latest answers the answer pass reads whole
+const HISTORY_SHORT_LEAD = 40; // tokens under which an answer's first paragraph keeps the next
+const RECORD_START = /(?:^|\n\n)\((?:Stored|Proposed) by this answer/;
+
+/** The history as the answer pass reads it after the blocks picked
+    (COST6-05): every answer older than the last HISTORY_FULL_ANSWERS keeps
+    its first paragraph — and the next when the first is under
+    HISTORY_SHORT_LEAD tokens ("两份文档的说法不一致。") —, one line naming
+    the block tags of the text cut, and its record. The commands stay
+    whole, and the reading passes read every answer whole (citedAliases). */
+export function trimmedHistory(history: ModelMessage[]): ModelMessage[] {
+  const answers = history.flatMap((m, i) => (m.role === "assistant" ? [i] : []));
+  const cut = new Set(answers.slice(0, Math.max(0, answers.length - HISTORY_FULL_ANSWERS)));
+  return history.map((m, i) => {
+    if (!cut.has(i) || typeof m.content !== "string") return m;
+    const at = m.content.search(RECORD_START);
+    const body = (at === -1 ? m.content : m.content.slice(0, at)).trim();
+    const record = at === -1 ? "" : m.content.slice(at).trim();
+    const paras = body.split(/\n\s*\n/);
+    const n = paras.length > 1 && estTokens(paras[0]) < HISTORY_SHORT_LEAD ? 2 : 1;
+    const kept = paras.slice(0, n).join("\n\n");
+    const tagsOf = (text: string) => [...text.matchAll(BLOCK_TAG)].map((t) => t[0]);
+    const keptTags = new Set(tagsOf(kept));
+    const tags = [...new Set(tagsOf(paras.slice(n).join("\n\n")))].filter((t) => !keptTags.has(t));
+    const also = tags.length > 0 ? `(This answer also cited ${tags.join(" ")}.)` : "";
+    const content = [kept, also, record].filter(Boolean).join("\n\n");
+    return content === m.content ? m : { ...m, content };
+  });
 }
 
 const EXISTING_MAX = 40; // links listed to the answer pass
@@ -899,26 +933,26 @@ function routeSystem(views: SkeletonView[], rendered: Rendered[], profile: Profi
 }
 
 /** The select pass's system message: every document's skeleton lines, or
-    the lines in `shown` (a gap between two shown lines declared), each
+    the lines in `shown` (a gap between two shown lines marked "(…)"), each
     part's summary above its first shown line. Byte-identical from turn to
-    turn when every line is shown. */
-function skeletonSystem(views: SkeletonView[], rendered: Rendered[], shown: Set<string> | null, profile: Profile): string {
+    turn when every line is shown. A cut puts every document's header and
+    gist first, the same bytes every command, and the lines after them
+    under "[document X] N of M skeleton lines shown", so the headers cache
+    (COST6-02). */
+export function skeletonSystem(views: SkeletonView[], rendered: Rendered[], shown: Set<string> | null, profile: Profile): string {
   const byLetter = new Map(views.map((v) => [v.r.letter, v]));
-  const sections = rendered.map((r) => {
+  const head = (r: Rendered, v: SkeletonView) => `${header(r.letter, r.doc, coverageNote(r.coverage))}${v.gist ? `\ngist: ${v.gist}` : ""}`;
+  const sections = rendered.flatMap((r) => {
     const v = byLetter.get(r.letter);
-    if (!v) return r.section;
+    if (!v) return shown ? [] : [r.section];
     const lines = shown ? v.lines.filter((l) => shown.has(l.alias)) : v.lines;
-    const note = coverageNote(r.coverage);
-    const out: string[] = [
-      header(r.letter, r.doc, shown ? `${note}; ${lines.length} of ${v.lines.length} skeleton lines shown` : note),
-    ];
-    if (v.gist) out.push(`gist: ${v.gist}`);
+    const out: string[] = [shown ? `[document ${r.letter}] ${lines.length} of ${v.lines.length} skeleton lines shown` : head(r, v)];
     const partOf = new Map(v.parts.map((p) => [p.alias, p]));
     let lastIndex = -1;
     let lastPart: string | null = null;
     for (const line of lines) {
       const at = v.lines.indexOf(line);
-      if (lastIndex !== -1 && at - lastIndex > 1) out.push(notShown(at - lastIndex - 1, "line"));
+      if (lastIndex !== -1 && at - lastIndex > 1) out.push(shown ? "(…)" : notShown(at - lastIndex - 1, "line"));
       if (line.partAlias && line.partAlias !== lastPart) {
         const p = partOf.get(line.partAlias);
         if (p && !p.opening) out.push(`[part at ${p.alias}] "${p.title}"${p.summary ? `: ${p.summary}` : ""}`);
@@ -928,13 +962,25 @@ function skeletonSystem(views: SkeletonView[], rendered: Rendered[], shown: Set<
       lastIndex = at;
     }
     if (lines.length === 0) out.push("(no lines shown)");
-    return out.join("\n");
+    return [out.join("\n")];
+  });
+  if (!shown) {
+    return systemOf(
+      stitchSelectRules(),
+      profile,
+      "Each document's skeleton follows: one line per block, tagged [block <alias>], what the block says at a tenth of its length.",
+      sections.join("\n\n"),
+    );
+  }
+  const heads = rendered.map((r) => {
+    const v = byLetter.get(r.letter);
+    return v ? head(r, v) : r.section;
   });
   return systemOf(
     stitchSelectRules(),
     profile,
-    "Each document's skeleton follows: one line per block, tagged [block <alias>], what the block says at a tenth of its length.",
-    sections.join("\n\n"),
+    "Each document's title and gist follow, then the skeleton lines read for this command: one line per block, tagged [block <alias>], what the block says at a tenth of its length, under its document's letter.",
+    `${heads.join("\n\n")}\n\nThe skeleton lines read for this command:\n\n${sections.join("\n\n")}`,
   );
 }
 
@@ -1736,15 +1782,29 @@ export async function pickBlocks(input: {
   // Every document's first pick, up to a third of the budget, then the
   // rest in the select pass's order (firstsFirst), cut to the kind's budget. A document the select pass
   // read and picked nothing of is left out: none of its blocks are shown.
-  // When nothing at all was picked, every document reads as its opening,
-  // so the answer pass has text to say so from.
+  // When nothing at all was picked, the answer pass reads the blocks that
+  // name the command's rare names, NAME_FALLBACK per name (COST6-04), or,
+  // when no name hits, every document's opening, so it has text to say so
+  // from.
   let picks = firstsFirst(interleave(lists), (alias) => blockByRef.get(alias)?.documentId, {
     tokens: STITCH_SELECTED_BUDGET[kind] / 3,
     costOf: (alias) => blockCost(blockByRef.get(alias)?.text ?? ""),
   });
+  if (picks.length === 0) picks = namePicks(names);
   if (picks.length === 0) picks = interleave(read.map((r) => opening(r, share)));
   if (input.signal?.aborted) aborted();
   return cutSelection(picks, blockByRef, kind);
+}
+
+// The blocks per rare name the answer pass reads when the select pass
+// picked nothing (COST6-04).
+const NAME_FALLBACK = 2;
+
+/** The blocks the answer pass reads when the select pass picked nothing:
+    the first NAME_FALLBACK blocks that name each of the command's rare
+    names (COST6-04), once each. Empty when no name hits. */
+export function namePicks(names: { aliases: string[] }[]): string[] {
+  return [...new Set(names.flatMap((n) => n.aliases.slice(0, NAME_FALLBACK)))];
 }
 
 /** The ids one select call may name (COST5-01): the kind's block cap
