@@ -667,7 +667,10 @@ function FolderRow({
           </div>
         ) : (
           <button
-            onClick={() => tree.toggleFolder(folder)}
+            // A fly-out opens on the pointer's hover: a click there opens
+            // it and never closes it (another row, Escape or ← close it).
+            // Under the row (a phone, a narrow panel) a click toggles.
+            onClick={() => (flyout ? tree.openFolder(folder) : tree.toggleFolder(folder))}
             // By keys, a fly-out is a submenu: Enter, Space or → opens the
             // folder's list and moves into it.
             onKeyDown={(e) => {
