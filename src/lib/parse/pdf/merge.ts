@@ -142,6 +142,19 @@ function continuesOnPage(prev: Segment, next: Segment, setting: PageSetting): bo
   // basis of V", and "coordinate of x with respect to B").
   const beside = lone && next.box !== undefined && Math.abs(next.box.y2 - prev.box!.y2) <= lineSize * 0.5 && next.box.x1 > prev.box!.x2;
   if (beside && sizes && sizes[0] < sizes[1] * 0.95) return false;
+  // A note of a few words set smaller right of the paragraph, level with
+  // its lines, is a note in the margin too (parse loop finding: the MML
+  // book's "orthogonal complement", read after its paragraph at the page's
+  // foot, went on its sentence: "…x∈V can be orthogonal complement
+  // uniquely decomposed into").
+  const noteRight =
+    prev.box !== undefined &&
+    next.box !== undefined &&
+    next.box.x1 > prev.box.x2 &&
+    next.box.y2 <= prev.box.y2 + lineSize &&
+    next.box.y1 >= prev.box.y1 - lineSize &&
+    next.text.length <= 40;
+  if (noteRight && sizes && sizes[1] < sizes[0] * 0.95) return false;
   if ((/[a-z,;\-–—]$/.test(prev.text) || ABBREVIATION_END_RE.test(prev.text)) && goesOn(prev.text, next.text)) return true;
   const size = prev.lineSize ?? 10;
   const columnBreak = prev.box !== undefined && next.box !== undefined && next.box.y2 > prev.box.y1 && next.box.x1 > prev.box.x2 - size;
@@ -361,7 +374,10 @@ function liftFloatsOffParagraphBreaks(segments: Segment[], setting: PageSetting,
     while (k < out.length && out[k].page === out[b].page && (isPageFloat(out[k]) || isLabel(out[k], prev))) k++;
     if (k >= out.length || (k === b && a === b - 1) || !(footLine || out.slice(a + 1, k).some(isPageFloat))) continue;
     const tail = out[k];
-    if (tail.page !== out[b].page || debris(tail.text)) continue;
+    // A part set smaller than the paragraph is a figure's label, no half of
+    // it (parse loop finding: the MML book's "…linear mappings where" took
+    // "Original", the label atop Figure 10.16, once its notes stood apart).
+    if (tail.page !== out[b].page || debris(tail.text) || (smaller(tail) && !smaller(prev))) continue;
     // A references entry's end at the page's top goes with the list after it.
     const lift = listBreak && hangingTail(tail, out[k + 1]) ? 2 : 1;
     const opens = /^[a-z($€£0-9"'“]/.test(tail.text) && !(/[.!?:…"”)]$/.test(prev.text.trim()) && !ABBREVIATION_END_RE.test(prev.text.trim()));
