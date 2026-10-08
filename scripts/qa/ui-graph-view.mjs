@@ -276,7 +276,9 @@ for (const lang of ["en", "zh"]) {
     // ── The last Stitch answer (P3) ─────────────────────────────────────
     if (tag === "1440-en") {
       const before = new Set(psql(`SELECT id FROM "DocLink" WHERE "notebookId" = '${NB}' AND recommended`).split("\n").filter(Boolean));
-      // The chip fills the box (WALK4-02); Send asks.
+      // The chip fills the box (WALK4-02); Send asks. The suggestions show
+      // while the empty field has the focus (WALK6-02).
+      await page.locator("[data-stitch-slot] textarea").focus();
       await page.locator('[data-track="stitch-suggest:contradict"]').click();
       await page.locator('[data-track="stitch-send"]').click();
       await page.waitForSelector("[data-graph-proposed]", { timeout: 180000 }).catch(() => {});

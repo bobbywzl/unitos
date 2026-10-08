@@ -195,7 +195,7 @@ if (want("esc")) {
   await box.click();
   await box.fill("words kept");
   await page.keyboard.press("Escape");
-  check("Esc in the Stitch box: focus on its title, words kept", (await active(page)) === "data-stitch-title" && (await box.inputValue()) === "words kept", await active(page));
+  check("Esc in the Stitch box: focus on its title, words kept", (await active(page)).split(",").includes("data-stitch-title") && (await box.inputValue()) === "words kept", await active(page));
   await box.fill("");
   // Find.
   const find = page.locator('[data-track="graph-find"]');
@@ -255,6 +255,30 @@ if (want("box")) {
   await openGraph(page, LINDA);
   const box = page.locator("[data-stitch-slot] textarea");
   const n0 = calls.filter((c) => c.includes("/stitch") && !c.includes("warm")).length;
+  // [box6] WALK6-02: at rest the box is its head row and its field line;
+  // the suggestions show while the empty field has the focus, over the box,
+  // so the box keeps its height. Shift+Tab reaches them; typing or Esc hides them.
+  const chips = page.locator('[data-stitch-suggestions] [data-track^="stitch-suggest:"]');
+  const boxH = () => page.locator("[data-stitch-slot] [role=region]").evaluate((el) => Math.round(el.getBoundingClientRect().height));
+  await box.fill("");
+  await page.locator("[data-stitch-title]").focus();
+  const rest = { chips: await chips.count(), h: await boxH() };
+  await box.focus();
+  await page.waitForTimeout(200);
+  const focused = { chips: await chips.count(), h: await boxH() };
+  check("WALK6-02: at rest no suggestion and the box ≤ 100px; the focused empty field shows the 5 suggestions, the box keeps its height",
+    rest.chips === 0 && rest.h <= 100 && focused.chips === 5 && focused.h === rest.h, JSON.stringify({ rest, focused }));
+  await page.keyboard.press("Shift+Tab");
+  const onChip = await page.evaluate(() => document.activeElement?.getAttribute("data-track") ?? "");
+  await box.focus();
+  await box.pressSequentially("x");
+  const typed = await chips.count();
+  await box.fill("");
+  const emptied = await chips.count();
+  await page.keyboard.press("Escape");
+  check("WALK6-02: Shift+Tab from the field reaches a suggestion; typing hides them, emptying shows them, Esc hides them",
+    onChip.startsWith("stitch-suggest:") && typed === 0 && emptied === 5 && (await chips.count()) === 0, JSON.stringify({ onChip, typed, emptied }));
+  await box.focus();
   await page.locator('[data-track="stitch-suggest:contradict"]').click();
   await page.waitForTimeout(800);
   const v = await box.inputValue();

@@ -1953,14 +1953,25 @@ ellipse.anchor-flash {
 }
 /* On a wide screen the Stitch box stands left of the new note, as it does
    left of an open side list (graph-overlay.tsx), so neither covers the
-   other (WALK5-12). Under 1000 px the note sits above the box instead. */
+   other (WALK5-12). Under 1000 px the note sits above the box instead.
+   Only `translate` is undone (the slot's -translate-x-1/2 sets it, never
+   `transform`): beside `transform: none` the minifier folds both into one
+   `transform` and drops `translate: none`, which put the box 340 px off the
+   left edge in a production build (WALK6-01). */
 @media (min-width: 1000px) {
   .graph-overlay[data-gather] [data-stitch-slot] {
     left: max(16px, calc((100% - 412px - 680px) / 2));
     width: min(680px, calc(100% - 412px - 32px));
     max-width: none;
-    transform: none;
     translate: none;
+  }
+}
+/* Under 1000 px the new note sits right above the Stitch box, where the
+   suggestions would show: they stay hidden while the note is up, so they
+   never cover its header (stitch-box.tsx). */
+@media (max-width: 999px) {
+  .graph-overlay[data-gather] [data-stitch-suggestions] {
+    display: none;
   }
 }
 
