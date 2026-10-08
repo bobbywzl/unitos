@@ -1849,6 +1849,22 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     crosshead.includes("HEADING Floods in the delta") && crosshead.includes("PARAGRAPH Jane Doe, river correspo") && crosshead.includes("HEADING Gravel bars"),
     crosshead.join(" / "),
   );
+  // Bold subheads in markup alone (no stylesheet): two or more over prose are headings; a lone one, a label, a bracketed source, and bold lines side by side stay paragraphs.
+  const subheads = await shape(
+    `<p>${prose(1)}</p><p><strong>Gravel bars</strong></p><p>${prose(2)}</p><p><b>Floods in the delta</b></p><p>${prose(3)}</p><p><strong>[River Times]</strong></p><p>${prose(4)}</p><p><strong>Gauge: the delta survey</strong></p><p>${prose(5)}</p><p><strong>Delta 14 11 — 25</strong></p><p><strong>Banks 10 8 — 18</strong></p><p>${prose(6)}</p>`,
+  );
+  check(
+    "url: bold subheads set in markup alone are headings",
+    subheads.includes("HEADING Gravel bars") && subheads.includes("HEADING Floods in the delta"),
+    subheads.join(" / "),
+  );
+  check(
+    "url: a bracketed source, a label, and bold lines side by side stay paragraphs",
+    ["PARAGRAPH [River Times]", "PARAGRAPH Gauge: the delta survey", "PARAGRAPH Delta 14 11 — 25", "PARAGRAPH Banks 10 8 — 18"].every((b) => subheads.includes(b)),
+    subheads.join(" / "),
+  );
+  const byline = await shape(`<p>${prose(1)}</p><p><strong>Jane Doe, river correspondent</strong></p><p>${prose(2)}</p><p>${prose(3)}</p>`);
+  check("url: one bold line over prose stays a paragraph", byline.includes("PARAGRAPH Jane Doe, river correspo"), byline.join(" / "));
 }
 
 {
