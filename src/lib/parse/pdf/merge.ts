@@ -76,13 +76,19 @@ const END_MARK_RE = /[♢◇◆♦□■∎▢◁▷⊣]$/u;
 const ABBREVIATION_END_RE = /(?:\bet al|\be\.g|\bi\.e|\bcf|\bvs|\bFigs?|\bEqs?|\bRefs?|\bSecs?|\bNo|\bpp?)\.$/;
 
 // The next part goes on the first's sentence: it opens lowercase or with a
-// parenthesis, or with a number that closes a parenthesis the first left
-// open ("(Federico," | "2016). This leads…") or follows a word that takes
-// one ("40 CFR part" | "178. To ensure…"). A number after any other word
-// opens something of its own: an algorithm's line ("8: end for"), a
-// section's heading ("3.2.3 Interim Conclusion.").
+// parenthesis, or with a bracket only a formula opens (an angle, a
+// ceiling, a floor, a norm) where the formula ends the sentence in a line
+// (the MML book's note "…is denoted by a⊤b or" | "⟨a,b⟩.", its formula's
+// line read apart, parse loop finding; a display read as words, a long
+// line with no sentence's end, stays a block of its own), or with a
+// number that closes a parenthesis the first left open ("(Federico," |
+// "2016). This leads…") or follows a word that takes one ("40 CFR part" |
+// "178. To ensure…"). A number after any other word opens something of its
+// own: an algorithm's line ("8: end for"), a section's heading ("3.2.3
+// Interim Conclusion.").
 function goesOn(prev: string, next: string): boolean {
   if (/^[a-z(]/.test(next)) return true;
+  if (/^[⟨⌈⌊‖]/.test(next)) return next.length <= 60 && /[.!?]$/.test(next.trim());
   if (!/^\d/.test(next)) return false;
   const open = (prev.match(/\(/g) ?? []).length - (prev.match(/\)/g) ?? []).length;
   if (open > 0 && /^\d[\d.,–-]*[a-z]?\)/.test(next)) return true;
