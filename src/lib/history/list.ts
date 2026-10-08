@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { trivialEdits } from "@/lib/history/trivial";
+import { NOTE_MERGE_KIND } from "@/lib/notes/merge-snapshot";
 import type { EditItem, HistoryEntry } from "@/lib/types";
 
 // The History panel's rows (SPEC.md §12): the project's events (deletions,
@@ -92,14 +93,27 @@ export async function historyPage(
   // A removed note or section kept whole can be restored (lib/notes/removed.ts): read
   // as two flags, never the kept note itself. A removed document's row
   // reads its document's id, so the row can offer Add back.
+  // A merge keeps the notes it took (lib/notes/merge-snapshot.ts): its
+  // row restores them, and reads as restored once its Undo or a Restore
+  // put them back.
   const flagged = events
-    .filter((e) => e.kind === "NOTE_REMOVE" || e.kind === "SECTION_REMOVE" || e.kind === "DOCUMENT_DETACH")
+    .filter(
+      (e) =>
+        e.kind === "NOTE_REMOVE" ||
+        e.kind === "SECTION_REMOVE" ||
+        e.kind === "DOCUMENT_DETACH" ||
+        e.kind === NOTE_MERGE_KIND,
+    )
     .map((e) => e.id);
   const flags =
     flagged.length === 0
       ? []
       : await db.$queryRaw<{ id: string; kept: boolean; restored: boolean; documentId: string | null }[]>`
-          SELECT "id", ("meta" -> 'kept') IS NOT NULL AS "kept", ("meta" -> 'restoredAt') IS NOT NULL AS "restored",
+          SELECT "id",
+                 (CASE WHEN "kind" = ${NOTE_MERGE_KIND}
+                       THEN jsonb_typeof("meta" -> 'notes') = 'array' AND jsonb_array_length("meta" -> 'notes') > 0
+                       ELSE ("meta" -> 'kept') IS NOT NULL END) IS TRUE AS "kept",
+                 (("meta" -> 'restoredAt') IS NOT NULL OR ("kind" = ${NOTE_MERGE_KIND} AND ("meta" -> 'undoneAt') IS NOT NULL)) AS "restored",
                  ("meta" ->> 'documentId') AS "documentId"
           FROM "NotebookEvent" WHERE "id" = ANY(${flagged})`;
   const flagsOf = new Map(flags.map((r) => [r.id, r]));
@@ -129,7 +143,8 @@ export async function historyPage(
         kind: e.kind as HistoryEntry["kind"],
         content: e.content,
         documentTitle: null,
-        ...((e.kind === "NOTE_REMOVE" || e.kind === "SECTION_REMOVE") && flagsOf.get(e.id)?.kept
+        ...((e.kind === "NOTE_REMOVE" || e.kind === "SECTION_REMOVE" || e.kind === NOTE_MERGE_KIND) &&
+        flagsOf.get(e.id)?.kept
           ? { restorable: true, restored: flagsOf.get(e.id)!.restored }
           : {}),
         ...(e.kind === "DOCUMENT_DETACH" && addBackOf(e.id) ? { addBackDocumentId: addBackOf(e.id)! } : {}),

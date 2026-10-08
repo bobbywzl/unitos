@@ -25,7 +25,7 @@ export async function keepNote(noteId: string): Promise<KeptNote | null> {
 const json = (value: unknown) =>
   value === null || value === undefined ? undefined : (value as Prisma.InputJsonValue);
 
-function noteWrites(row: NoteRow, sectionId: string, order: number, documents: Set<string>) {
+export function noteWrites(row: NoteRow, sectionId: string, order: number, documents: Set<string>) {
   // Only the note's own columns go into its create: the kept relations
   // (and a side chat list, on the top note) are written as their own rows.
   const { sources, replies, edits, section: _section, sideChats: _chats, ...note } = row as NoteRow & {
@@ -130,7 +130,12 @@ const keptSchema = noteSchema.extend({ sideChats: z.array(noteSchema) });
 /** The kept note in a history event's meta, or null (a removal made before
     removals kept the note). */
 export function keptNoteOf(meta: unknown): KeptNote | null {
-  const parsed = keptSchema.safeParse((meta as { kept?: unknown } | null)?.kept);
+  return keptNoteFrom((meta as { kept?: unknown } | null)?.kept);
+}
+
+/** A kept note stored anywhere (a removal's meta, a merge's snapshot), or null. */
+export function keptNoteFrom(value: unknown): KeptNote | null {
+  const parsed = keptSchema.safeParse(value);
   return parsed.success ? (parsed.data as unknown as KeptNote) : null;
 }
 

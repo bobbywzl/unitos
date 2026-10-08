@@ -3,22 +3,54 @@ import { Prisma } from "@prisma/client";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
+import { NOTE_MERGE_KIND } from "@/lib/notes/merge-snapshot";
+import { restoreMerge } from "@/lib/notes/merge-restore";
 import { keptNoteOf, keptSectionOf, restoreNote, restoreSection } from "@/lib/notes/removed";
 import { noteViewOf } from "@/lib/notes/view";
 import { normalizeSectionOrders } from "@/lib/order";
 
 // Restore from History (SPEC.md §12): a removed note comes back whole, with
 // its sources, replies, edits, and side chats (lib/notes/removed.ts); a
-// removed section comes back with every note it held. The
-// event stays in History, marked restored; a second Restore answers 409.
+// removed section comes back with every note it held; a merge's notes come
+// back beside the merged note, which keeps its text (lib/notes/merge-restore.ts).
+// The event stays in History, marked restored; a second Restore answers 409.
 export async function POST(_req: Request, ctx: { params: Promise<{ notebookId: string; eventId: string }> }) {
   const t = await serverT();
   const { notebookId, eventId } = await ctx.params;
   const access = await notebookAccess(notebookId, "editor");
   if (access instanceof NextResponse) return access;
   const event = await db.notebookEvent.findFirst({
-    where: { id: eventId, notebookId, kind: { in: ["NOTE_REMOVE", "SECTION_REMOVE"] } },
+    where: { id: eventId, notebookId, kind: { in: ["NOTE_REMOVE", "SECTION_REMOVE", NOTE_MERGE_KIND] } },
   });
+  if (event?.kind === NOTE_MERGE_KIND) {
+    const back = await restoreMerge(event.meta, notebookId);
+    if (!back.ok) {
+      return NextResponse.json(
+        { error: t(back.reason === "restored" ? "api.historyRestored" : "api.historyNotRestorable") },
+        { status: back.reason === "restored" ? 409 : 404 },
+      );
+    }
+    await db.notebookEvent.update({
+      where: { id: eventId },
+      data: {
+        meta: { ...(event.meta as Prisma.JsonObject), restoredAt: new Date().toISOString(), restoredById: access.user.id },
+      },
+    });
+    await bumpNotebook(notebookId);
+    // Each note as the outline draws it, the first one as a note's restore
+    // answers, so the tray shows them at once.
+    const notes = (await Promise.all(back.notes.map((n) => noteViewOf(n.noteId)))).flatMap((v, i) =>
+      v ? [{ noteId: back.notes[i].noteId, sectionId: v.sectionId, note: v.note }] : [],
+    );
+    const first = notes[0];
+    return NextResponse.json({
+      ok: true,
+      noteId: first?.noteId ?? back.notes[0].noteId,
+      sectionId: first?.sectionId ?? back.notes[0].sectionId,
+      note: first?.note ?? null,
+      notes,
+    });
+  }
   // A removed section comes back with its notes (lib/notes/removed.ts).
   if (event?.kind === "SECTION_REMOVE") {
     const section = keptSectionOf(event.meta);

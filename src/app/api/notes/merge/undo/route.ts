@@ -1,4 +1,4 @@
-import { Prisma, type DerivationType } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
@@ -6,16 +6,13 @@ import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { recordNoteEdit } from "@/lib/notes/edits";
 import { mergeSnapshotSchema, NOTE_MERGE_KIND, type MergedNote } from "@/lib/notes/merge-snapshot";
+import { liveDocumentsOf, mergedNoteWrites } from "@/lib/notes/merge-restore";
 import { normalizeNoteOrders } from "@/lib/order";
 import { shiftNoteOrders } from "@/lib/notes/order-writes";
 import { parseBody } from "@/lib/validate";
 
 const undoSchema = z.object({ undoId: z.string().min(1) });
 
-/** A stored JSON value as Prisma writes it back: null as a database null. */
-function json(value: unknown): Prisma.InputJsonValue | typeof Prisma.DbNull {
-  return value === null || value === undefined ? Prisma.DbNull : (value as Prisma.InputJsonValue);
-}
 
 // Undo a merge (SPEC.md §6): the target gets its text back, the notes the
 // merge consumed come back with their ids, their anchors, and their replies,
@@ -40,7 +37,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: t("api.mergeUndoNotFound") }, { status: 404 });
   }
   const snapshot = parsed.data;
-  if (snapshot.undoneAt) {
+  // Undone, or put back by History's Restore (lib/notes/merge-restore.ts).
+  if (snapshot.undoneAt || snapshot.restoredAt) {
     return NextResponse.json({ error: t("api.mergeUndoneAlready") }, { status: 409 });
   }
 
@@ -71,6 +69,10 @@ export async function POST(req: Request) {
   // Each note comes back at the row it had: the rows from there on move down
   // one first. In order, so two notes of one section land in their order.
   const restored = [...snapshot.notes].sort((a, b) => a.order - b.order);
+  // A note kept whole comes back with its edits and side chats too; the
+  // side chats go to the end of its section, as a removed note's do.
+  const documents = await liveDocumentsOf(restored);
+  const chatOrder = 1_000_000;
   await db.$transaction([
     db.note.update({
       where: { id: target.id },
@@ -80,23 +82,7 @@ export async function POST(req: Request) {
       const sectionId = sectionOf(n);
       return [
         shiftNoteOrders(sectionId, n.order),
-        db.note.create({
-          data: {
-            id: n.id,
-            sectionId,
-            order: n.order,
-            content: n.content,
-            gist: n.gist,
-            status: n.status,
-            derivationType: n.derivationType as DerivationType | null,
-            color: n.color,
-            pinned: n.pinned,
-            createdById: n.createdById,
-            createdAt: new Date(n.createdAt),
-            conversation: json(n.conversation),
-            log: json(n.log),
-          },
-        }),
+        ...mergedNoteWrites(n, sectionId, n.order, chatOrder, documents, new Set()),
         ...(n.sourceIds.length > 0
           ? [db.source.updateMany({ where: { id: { in: n.sourceIds }, noteId: target.id }, data: { noteId: n.id } })]
           : []),
