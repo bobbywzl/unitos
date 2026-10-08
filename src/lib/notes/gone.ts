@@ -6,6 +6,7 @@ import { NOTE_MERGE_KIND } from "@/lib/notes/merge-snapshot";
 import { sourcesLeftByQuotes } from "@/lib/notes/quote-sources";
 import { keptNoteOf } from "@/lib/notes/removed";
 import { normalizeNoteOrders } from "@/lib/order";
+import { shiftNoteOrders } from "@/lib/notes/order-writes";
 
 // Words written to a note that is gone (SPEC.md §6): another tab, a
 // collaborator, or a merge took the note away while this tab typed in it, or
@@ -166,10 +167,7 @@ export async function keepGoneWords(
       );
       const kept = own.filter((_, i) => !dropped.has(String(i)));
       // Its place: the notes at and after it move down one.
-      await tx.note.updateMany({
-        where: { sectionId: section.id, order: { gte: home.order } },
-        data: { order: { increment: 1 } },
-      });
+      await shiftNoteOrders(section.id, home.order, tx);
       const note = await tx.note.create({
         data: {
           sectionId: section.id,

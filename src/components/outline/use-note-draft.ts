@@ -45,6 +45,24 @@ type DraftHandle = {
 };
 const openDrafts = new Map<string, DraftHandle>();
 
+// Notes whose words went to a new note (lib/notes/gone.ts). The note's card
+// keeps its key (use-outline.ts noteKey), so its open editor goes on as the
+// new note's editor. Where a new editor opens in its place instead, the keys
+// typed in between — after the server answered, before the new editor
+// opened — are in the old editor alone: as it closes, it puts its text into
+// the new note's local draft, which the new editor opens on, and clears its
+// own. Either way nothing goes to the gone note, and no key typed is lost.
+const handedOff = new Map<string, string>();
+// The old editor's text exactly as it stood, by the new note: the local
+// draft keeps words, and this keeps the space typed last too, which a draft
+// equal to the note's text but for spaces would not bring back.
+const handedText = new Map<string, string>();
+
+/** The editor of `from` gives way to the editor of `to` (use-outline.ts). */
+export function handOffNoteDraft(from: string, to: string) {
+  if (openDrafts.has(from)) handedOff.set(from, to);
+}
+
 /** Save the open drafts of these notes, so a merge reads what is on screen. */
 export async function flushNoteDrafts(noteIds: string[]): Promise<void> {
   await Promise.all(noteIds.map((id) => openDrafts.get(id)?.flush()));
@@ -118,6 +136,15 @@ export function useNoteDraft({
     setFailed(null);
     setBoth(null);
     setQueued(null);
+    // The editor of a gone note gave way to this one (handOffNoteDraft): the
+    // same text, spaces and all, when it holds no word the note lacks.
+    const handed = handedText.get(noteId);
+    handedText.delete(noteId);
+    if (canEdit && handed !== undefined && handed.trim() === original.trim()) {
+      draftRef.current = handed;
+      setDraft(handed);
+      return;
+    }
     // A local draft that holds words the server never confirmed (a save that
     // failed, then a reload): the editor opens on those words, marked Not
     // saved, and saves them made from the text they were made from — never
@@ -244,6 +271,9 @@ export function useNoteDraft({
 
   useEffect(() => {
     if (!active || !canEdit) return;
+    // The same editor goes on for the new note (its card kept its key): its
+    // text is the one on screen, and nothing waits to be handed to it.
+    handedText.delete(noteId);
     const flush = () => {
       const trimmed = draftRef.current.trim();
       if (!trimmed || trimmed === lastSavedRef.current) return;
@@ -276,6 +306,18 @@ export function useNoteDraft({
     return () => {
       window.removeEventListener("pagehide", flush);
       window.removeEventListener("beforeunload", flush);
+      const to = handedOff.get(noteId);
+      if (to !== undefined) {
+        handedOff.delete(noteId);
+        const text = draftRef.current;
+        const target = readNoteDraft(to);
+        if (text.trim()) {
+          writeNoteDraft(to, text, target?.base ?? lastSavedRef.current);
+          handedText.set(to, text);
+        }
+        clearNoteDraft(noteId);
+        return;
+      }
       flush();
     };
   }, [active, canEdit, noteId]);

@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { normalizeNoteOrders } from "@/lib/order";
+import { shiftNoteOrders } from "@/lib/notes/order-writes";
 
 // A removed note, kept whole in its NOTE_REMOVE history event (SPEC.md §12):
 // the note's fields, its sources, its replies, its edits, and its side chats
@@ -103,7 +104,7 @@ export async function restoreNote(kept: KeptNote, notebookId: string, sectionTit
   // lands at the end.
   const at = section.id === kept.sectionId ? Math.max(0, Math.min(kept.order, count)) : count;
   await db.$transaction([
-    db.note.updateMany({ where: { sectionId: section.id, order: { gte: at } }, data: { order: { increment: 1 } } }),
+    shiftNoteOrders(section.id, at),
     ...noteWrites(kept, section.id, at, documents),
     ...kept.sideChats.flatMap((chat, i) => noteWrites(chat, section.id, count + 1 + i, documents)),
   ]);

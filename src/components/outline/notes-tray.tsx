@@ -23,7 +23,7 @@ import { useNoteCompose } from "@/components/outline/use-note-compose";
 import { VoiceNoteButton } from "@/components/outline/voice-note";
 import { Collapse } from "@/components/presence";
 import { SelectionBar } from "@/components/outline/selection-bar";
-import { NoteGroups, NotesOrganize, useNoteGrouping, type NoteScope } from "@/components/outline/note-groups";
+import { NoteGroups, NotesViewMenu, useNoteGrouping, type NoteScope } from "@/components/outline/note-groups";
 import { shownSectionTitle } from "@/lib/section-title";
 import {
   filterSections,
@@ -71,6 +71,8 @@ export function NotesTray({
   const shown = filterSections(tree, query);
   const needle = query.trim();
   const shownPending = pending.filter((n) => noteMatches(n, query));
+  // The project holds no note yet: nothing to search, fold, or group.
+  const noNotes = scope === "project" && pending.length === 0 && flattenNotes(tree).length === 0 && !query;
 
   // Every note by id: the drag asks per card on every pointer move whether the
   // two can merge, and the overlay draws the card under the pointer.
@@ -214,17 +216,26 @@ export function NotesTray({
       {...quoteDrop}
       data-note-drop-target={canEdit && lastSection ? "tray-space" : undefined}
     >
+      {/* One row before the notes (SPEC.md §6): the search, Expand all, the
+          view menu (which notes show, Group by), and the notes full page.
+          A project with no note yet shows the full page arrows alone: the
+          rest act on notes. */}
       <div className="flex items-center gap-1.5">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => e.key === "Escape" && !isImeKey(e) && setQuery("")}
-          placeholder={t("outline.searchNotes")}
-          aria-label={t("outline.searchNotes")}
-          type="search"
-          className="min-w-0 flex-1 rounded-full bg-card px-4 py-2 text-[13px] shadow-soft outline-none placeholder:text-sand-500"
-        />
-        <CollapsedViewToggle view={actions.notesView} onChange={actions.setNotesView} track="notes-view" />
+        {!noNotes && (
+          <>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Escape" && !isImeKey(e) && setQuery("")}
+              placeholder={t("outline.searchNotes")}
+              aria-label={t("outline.searchNotes")}
+              type="search"
+              className="min-w-0 flex-1 rounded-full bg-card px-4 py-2 text-[13px] shadow-soft outline-none placeholder:text-sand-500"
+            />
+            <CollapsedViewToggle view={actions.notesView} onChange={actions.setNotesView} track="notes-view" />
+            <NotesViewMenu grouping={grouping} onGrouping={setGrouping} scope={scope} onScope={onScope} />
+          </>
+        )}
         {/* The notes full page, one press away (SPEC.md §6): the four arrows
             say the notes open out to fill the screen. */}
         <Link
@@ -233,13 +244,13 @@ export function NotesTray({
           data-nudge="fullPage"
           aria-label={t("panes.notesFullPage")}
           data-tip={t("panes.notesFullPageTitle")}
-          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-card text-sand-700 shadow-soft hover:bg-clay-100 hover:text-clay-800"
+          className={`flex size-8 shrink-0 items-center justify-center rounded-full bg-card text-sand-700 shadow-soft hover:bg-clay-100 hover:text-clay-800${
+            noNotes ? " ml-auto" : ""
+          }`}
         >
           <MaximizeIcon size={15} />
         </Link>
       </div>
-
-      <NotesOrganize grouping={grouping} onGrouping={setGrouping} scope={scope} onScope={onScope} />
 
       {shownPending.length > 0 && (
         <div data-pending-queue="" className="flex flex-col gap-2">
@@ -247,10 +258,23 @@ export function NotesTray({
             <span className={`${label} text-clay-800`}>
               {t("outline.pendingHeader", { n: shownPending.length })}
             </span>
-            <span className="ml-auto text-[11px] text-sand-500">{t("outline.trayKeyHint")}</span>
+            {/* Enter and Backspace still accept and reject the note the
+                reader is on; their tooltips say so. */}
+            {canEdit && shownPending.length > 1 && (
+              <button
+                onClick={() => {
+                  for (const note of shownPending) void actions.acceptNote(note.id);
+                }}
+                data-track="notes-accept-all"
+                data-tip={t("outline.acceptAllTitle")}
+                className="ml-auto text-[11.5px] font-semibold text-sage-700 hover:text-sage-800"
+              >
+                {t("outline.acceptAll")}
+              </button>
+            )}
           </div>
           {shownPending.map((note) => (
-            <NoteCard key={note.id} note={note} actions={actions} variant="tray" search={query} />
+            <NoteCard key={actions.noteKey(note.id)} note={note} actions={actions} variant="tray" search={query} />
           ))}
         </div>
       )}
@@ -271,7 +295,17 @@ export function NotesTray({
           held over another until the ring closes joins it, and a note let go
           over the article floats there. */}
       {grouping !== "section" ? (
-        <NoteGroups tree={tree} grouping={grouping} documents={documents} actions={actions} variant="tray" search={query} accepted />
+        <NoteGroups
+          tree={tree}
+          grouping={grouping}
+          documents={documents}
+          actions={actions}
+          variant="tray"
+          search={query}
+          accepted
+          onMerge={onMerge}
+          onDropOutside={onDropOutside}
+        />
       ) : (
         <SortableBoard
           id="tray-board"
@@ -442,7 +476,7 @@ function TraySection({
           </button>
         )}
         {!collapsed && canEdit && !litTop && (
-          <VoiceNoteButton sectionId={section.id} onError={setVoiceError} className={SECTION_ACTION} />
+          <VoiceNoteButton sectionId={section.id} onError={setVoiceError} className={SECTION_ACTION} compact />
         )}
       </div>
       {voiceError && <p className="text-xs text-red-500">{voiceError}</p>}
@@ -463,7 +497,6 @@ function TraySection({
               compose={compose}
               onRelease={() => actions.expectComposed(section.id)}
               full={false}
-              moreHref={`/n/${actions.notebookId}/notes`}
               padding="p-3"
             />
           )}
@@ -474,7 +507,7 @@ function TraySection({
             className="flex flex-col gap-2"
           >
             {accepted.map((note, i) => (
-              <SortableItem key={note.id} id={note.id}>
+              <SortableItem key={actions.noteKey(note.id)} id={note.id}>
                 {(handle) => (
                   <NoteCard
                     note={note}

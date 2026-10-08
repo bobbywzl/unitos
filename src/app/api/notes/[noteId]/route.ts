@@ -13,6 +13,7 @@ import { keepNote } from "@/lib/notes/removed";
 import { recordNoteEdit } from "@/lib/notes/edits";
 import { sourcesLeftByQuotes } from "@/lib/notes/quote-sources";
 import { normalizeNoteOrders, movedOrder } from "@/lib/order";
+import { writeNoteOrders } from "@/lib/notes/order-writes";
 import { parseBody } from "@/lib/validate";
 
 const MAX_CONTENT = 50_000;
@@ -188,9 +189,10 @@ async function writeNote(noteId: string, data: PatchData, t: T, keptAs?: string)
     const target = await db.section.findUnique({ where: { id: data.sectionId } });
     if (!target) return NextResponse.json({ error: t("api.sectionNotFound") }, { status: 404 });
     const count = await db.note.count({ where: { sectionId: data.sectionId } });
+    // A move is not an edit: the note keeps its time (Last edited).
     await db.note.update({
       where: { id: noteId },
-      data: { sectionId: data.sectionId, order: count },
+      data: { sectionId: data.sectionId, order: count, updatedAt: note.updatedAt },
     });
   }
 
@@ -267,6 +269,11 @@ async function writeNote(noteId: string, data: PatchData, t: T, keptAs?: string)
             ...(data.status !== undefined ? { status: data.status } : {}),
             ...(data.color !== undefined ? { color: data.color } : {}),
             ...(data.pinned !== undefined ? { pinned: data.pinned } : {}),
+            // Last edited ranks by this time: only new words or a new status
+            // move it; a pin, a color, or the same words keep the note's time.
+            ...((content === undefined || content === stored) && data.status === undefined
+              ? { updatedAt: row.updatedAt }
+              : {}),
           },
         });
         // A changed text is the note's history (SPEC.md §12).
@@ -304,10 +311,8 @@ async function writeNote(noteId: string, data: PatchData, t: T, keptAs?: string)
         orderBy: { order: "asc" },
         select: { id: true },
       });
-      const ids = movedOrder(siblings.map((n) => n.id), noteId, targetOrder);
-      await db.$transaction(
-        ids.map((id, i) => db.note.update({ where: { id }, data: { order: i } })),
-      );
+      // The notes' places change, not their times (lib/notes/order-writes.ts).
+      await writeNoteOrders(movedOrder(siblings.map((n) => n.id), noteId, targetOrder));
     }
   }
 

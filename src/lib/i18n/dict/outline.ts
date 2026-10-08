@@ -74,6 +74,8 @@ const en = {
   noteDeleted: "Note deleted",
   notesDeleted: "{n} notes deleted",
   undoDeleteTitle: "Put the deleted notes back",
+  editCanceled: "Edit canceled",
+  undoCancelTitle: "Put back the words typed in this edit",
   deleteFailed: "The note was not deleted and is back in its place: {reason}",
   // Words kept when their note went (SPEC.md §6, lib/notes/gone.ts).
   keptAsNewNote: "This note was deleted elsewhere. Your words are kept in a new note in its place.",
@@ -142,7 +144,8 @@ const en = {
 
   // Pending queue
   pendingHeader: "Pending · {n}",
-  trayKeyHint: "⏎ accept · ⌫ reject",
+  acceptAll: "Accept all",
+  acceptAllTitle: "Accept every pending note shown here",
   noteRejected: "Note rejected",
   undo: "Undo",
 
@@ -164,15 +167,16 @@ const en = {
   // under the queue counts the pending notes the notes full page holds.
   pendingElsewhere: "{n} pending in other documents · Notes full page",
   pendingElsewhereTitle: "Pending notes of other documents and of the project wait on the notes full page",
-  // By document (SPEC.md §6): the project's notes as a grid over the page,
+  // Document columns (SPEC.md §6): the project's notes as a grid over the page,
   // one column per document, one row per section.
-  byDocument: "By document",
+  documentColumns: "Document columns",
+  notesViewMenu: "Show and group the notes",
   groupBy: "Group by",
   groupByEdited: "Last edited",
   groupBySection: "Section",
   groupByDocument: "Document",
-  groupByWeek: "Week made",
-  groupByMonth: "Month made",
+  groupByWeek: "Week added",
+  groupByMonth: "Month added",
   groupByTitle: "Title, A to Z",
   groupProject: "Project",
   groupUntitled: "No title",
@@ -235,8 +239,8 @@ const en = {
   tipOutdent: "Outdent\nShift+Tab",
   tipIndent: "Indent\nTab",
   tipImage: "Add an image or GIF\nPick a file, drop it on the note, or paste it. Drag the corner to resize.",
-  // The tray's editor has the core tools; the notes full page has them all.
-  moreOnFullPage: "More tools on the notes full page",
+  // The tray's editor has the core tools; the notes full page adds H1, indent, and the image.
+  tipColors: "Color the text\nFour colors",
   // The note's history (SPEC.md §12): who wrote and edited this note, and when.
   history: "History",
   historyTitle: "Who wrote and edited this note, and when",
@@ -314,6 +318,8 @@ const zh: Record<keyof typeof en, string> = {
   noteDeleted: "笔记已删除",
   notesDeleted: "已删除 {n} 条笔记",
   undoDeleteTitle: "把删除的笔记放回原处",
+  editCanceled: "已取消编辑",
+  undoCancelTitle: "放回这次编辑里输入的文字",
   deleteFailed: "笔记没有删除，已放回原处：{reason}",
   keptAsNewNote: "这条笔记已在别处删除。你写的字已保存为原位置的一条新笔记。",
   quoteSourceLost: "引文已加入笔记。文档中的这段文字已改动，所以引文没有出处。",
@@ -362,7 +368,8 @@ const zh: Record<keyof typeof en, string> = {
   holdToMerge: "按住不动直到圆环合拢，即合并进这条笔记",
 
   pendingHeader: "待定 · {n}",
-  trayKeyHint: "⏎ 接受 · ⌫ 拒绝",
+  acceptAll: "全部接受",
+  acceptAllTitle: "接受这里显示的每条待定笔记",
   noteRejected: "笔记已拒绝",
   undo: "撤销",
 
@@ -381,13 +388,14 @@ const zh: Record<keyof typeof en, string> = {
   layoutRows: "上下",
   pendingElsewhere: "其他文档还有 {n} 条待定 · 整页笔记",
   pendingElsewhereTitle: "其他文档和项目的待定笔记在整页笔记里",
-  byDocument: "按文档",
+  documentColumns: "文档分栏",
+  notesViewMenu: "显示与分组笔记",
   groupBy: "分组",
   groupByEdited: "最后编辑",
   groupBySection: "章节",
   groupByDocument: "文档",
-  groupByWeek: "创建周",
-  groupByMonth: "创建月",
+  groupByWeek: "添加周",
+  groupByMonth: "添加月",
   groupByTitle: "标题，A 到 Z",
   groupProject: "项目",
   groupUntitled: "无标题",
@@ -445,7 +453,7 @@ const zh: Record<keyof typeof en, string> = {
   tipOutdent: "减少缩进\nShift+Tab",
   tipIndent: "增加缩进\nTab",
   tipImage: "添加图片或 GIF\n选择文件、拖到笔记上或粘贴。拖动右下角调整大小。",
-  moreOnFullPage: "整页笔记有更多工具",
+  tipColors: "给文字上色\n四种颜色",
   history: "历史",
   historyTitle: "谁在何时写了和编辑了这条笔记",
   historyCreated: "写了笔记",

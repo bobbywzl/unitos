@@ -66,7 +66,8 @@ export async function writeGists(
       // the meantime cleared it for a new one.
       const written = await db.note.updateMany({
         where: { id, updatedAt: note.updatedAt },
-        data: { gist: text },
+        // The gist is not an edit: the note keeps its time (Last edited).
+        data: { gist: text, updatedAt: note.updatedAt },
       });
       if (written.count > 0) gists[id] = text;
     }

@@ -27,7 +27,7 @@ import { appendToBody } from "@/lib/note-title";
 import type { NotebookView, NoteView, SectionView } from "@/lib/types";
 import { useT } from "@/components/lang-provider";
 import { useCollapsedView, type CollapsedView } from "@/components/use-collapsed-view";
-import { flushNoteDrafts, openDraftSave, replaceNoteDraft } from "@/components/outline/use-note-draft";
+import { flushNoteDrafts, handOffNoteDraft, openDraftSave, replaceNoteDraft } from "@/components/outline/use-note-draft";
 
 // The floating card: one note taken out of the tray, over the article
 // (floating-note-editor.tsx). It opens in its draggable mode; the pencil
@@ -78,6 +78,9 @@ export const NOTE_ABSORBED_EVENT = "dissect:note-absorbed";
 
 export type OutlineActions = {
   notebookId: string;
+  /** The React key of a note's card: a note kept as a new note keeps its
+      card's key, so its open editor stays as it is, caret and all. */
+  noteKey: (id: string) => string;
   /** The open document (SPEC.md §6): the tray's notes are its, and a note
       written in the tray is its. Null on the notes full page. */
   documentId: string | null;
@@ -122,12 +125,15 @@ export type OutlineActions = {
   /** Delete with Undo (SPEC.md §6): the notes leave the list at once, and
       the Undo pill offers them back until it goes; only then does the
       server delete them. */
-  removeNotes: (ids: string[]) => void;
+  removeNotes: (ids: string[], composed?: boolean) => void;
   lastDelete: LastDelete | null;
   undoDelete: () => void;
-  /** A change that did not reach the server and was put back: the pill under
-      the notes says so. Null when there is nothing to say. */
+  /** A line for the pill under the notes: a change that did not reach the
+      server and was put back, or news (words kept as a new note, a quote
+      without its source). Null when there is nothing to say. */
   notice: string | null;
+  /** The notice is a failure: it alone is drawn in red. */
+  noticeFailed: boolean;
   dismissNotice: () => void;
   /** The composer of this section is letting its note go (Save, Escape):
       the note joins the section's list the moment the server has it. */
@@ -151,8 +157,14 @@ export type OutlineActions = {
   mergeUndoable: boolean;
   /** Undo the last merge. Resolves to the reason when it could not run. */
   undoMerge: () => Promise<string | null>;
-  /** The pill's ✕: the merge stays, and a delete waiting on Undo runs now. */
+  /** The pill's ✕: the merge stays, a canceled edit stays canceled, and a
+      delete waiting on Undo runs now. */
   dismissMerge: () => void;
+  /** An editor's Cancel put a note back to its text when the editor opened:
+      the pill offers the typed words back (SPEC.md §6). */
+  editCanceled: (noteId: string, typed: string) => void;
+  lastCancel: { noteId: string; content: string } | null;
+  undoCancel: () => void;
   setPinned: (id: string, pinned: boolean) => Promise<void>;
   acceptNote: (id: string) => Promise<void>;
   rejectNote: (id: string) => Promise<void>;
@@ -349,15 +361,21 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
   useLayoutEffect(() => {
     treeRef.current = tree;
   });
-  const [notice, setNotice] = useState<string | null>(null);
+  // The pill's line (merge-undo.tsx): news, or a failure, which alone is
+  // drawn in red.
+  const [shownNotice, setShownNotice] = useState<{ text: string; failed: boolean } | null>(null);
+  const setNotice = useCallback(
+    (text: string | null, failed = false) => setShownNotice(text === null ? null : { text, failed }),
+    [],
+  );
   useEffect(() => {
-    if (!notice) return;
-    const timer = setTimeout(() => setNotice(null), 8000);
+    if (!shownNotice) return;
+    const timer = setTimeout(() => setShownNotice(null), 8000);
     return () => clearTimeout(timer);
-  }, [notice]);
+  }, [shownNotice]);
   const failure = useCallback(
-    (err: unknown) => setNotice(err instanceof Error && err.message ? err.message : t("common.requestFailed")),
-    [t],
+    (err: unknown) => setNotice(err instanceof Error && err.message ? err.message : t("common.requestFailed"), true),
+    [setNotice, t],
   );
   // Words this tab holds for a note that the server's copy may not show
   // yet: a save on its way (a document switch brings the server's copy
@@ -477,25 +495,43 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
   // Words written to a note that went elsewhere were kept as a new note in
   // its place (lib/notes/gone.ts): the new note takes the old one's place
   // in the list, its local draft and its open editor follow it, and the
-  // pill says so.
+  // pill says so. The new note's text is the text the server answered for
+  // it, and its next save is made from that text — never from the gone
+  // note's, which the new note never held: a save made from it is refused
+  // as changed elsewhere, and the words came back two and three times
+  // under marker lines.
+  const [noteKeys, setNoteKeys] = useState<ReadonlyMap<string, string>>(new Map());
   useEffect(() => {
     const seen = new Set<string>();
     const onKept = (e: Event) => {
-      const detail = (e as CustomEvent<{ from?: unknown; to?: unknown }>).detail;
+      const detail = (e as CustomEvent<{ from?: unknown; to?: unknown; content?: unknown }>).detail;
       const from = detail?.from;
       const to = detail?.to;
+      const kept = typeof detail?.content === "string" ? detail.content : null;
       if (typeof from !== "string" || typeof to !== "string" || seen.has(from)) return;
       seen.add(from);
+      // The new note's card is the gone note's card: the editor in it stays
+      // open with every key typed in it, and saves to the new note.
+      setNoteKeys((prev) => new Map(prev).set(to, prev.get(from) ?? from));
       const draft = readNoteDraft(from);
       const open = openDraftSave(from) !== null;
+      // The open editor gives way to the new note's, carrying what is typed
+      // until it closes (use-note-draft.ts).
+      if (open) handOffNoteDraft(from, to);
       if (draft) {
-        writeNoteDraft(to, draft.content, draft.base, draft.sent);
+        if (kept !== null) writeNoteDraft(to, draft.content, kept);
+        else writeNoteDraft(to, draft.content, draft.base, draft.sent);
         clearNoteDraft(from);
       }
       setTree((prev) =>
         mapSections(prev, (s) =>
           s.notes.some((n) => n.id === from)
-            ? { ...s, notes: s.notes.map((n) => (n.id === from ? { ...n, id: to } : n)) }
+            ? {
+                ...s,
+                notes: s.notes.map((n) =>
+                  n.id === from ? { ...n, id: to, ...(kept !== null ? { content: kept } : {}) } : n,
+                ),
+              }
             : s,
         ),
       );
@@ -511,7 +547,7 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
       window.removeEventListener(NOTE_KEPT_EVENT, onKept);
       window.removeEventListener(SOURCE_LOST_EVENT, onSourceLost);
     };
-  }, [refresh, t]);
+  }, [refresh, setNotice, t]);
 
   // The notes the AI is merging right now: their cards say so while it runs.
   const [merging, setMergingIds] = useState<ReadonlySet<string>>(new Set());
@@ -576,6 +612,13 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
   // and says so: a note is never gone from the screen while it is still
   // on the server, nor gone from the server while Undo is on the screen.
   const [lastDelete, setLastDelete] = useState<LastDelete | null>(null);
+  // The words an editor's Cancel took out of a note, while Undo can put them back.
+  const [lastCancel, setLastCancel] = useState<{ noteId: string; content: string } | null>(null);
+  useEffect(() => {
+    if (!lastCancel) return;
+    const timer = setTimeout(() => setLastCancel(null), MERGE_UNDO_MS);
+    return () => clearTimeout(timer);
+  }, [lastCancel]);
   const waitingDelete = useRef<{ ids: string[]; timer: ReturnType<typeof setTimeout> } | null>(null);
   // A note History's Restore put back (lib/notes/removed.ts): if this tab
   // deleted it, it is in hidden still; it shows again with the refresh.
@@ -632,12 +675,12 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
         const reason = results.find((r): r is PromiseRejectedResult => r.status === "rejected")?.reason;
         if (failed.length > 0) {
           restoreNotes(failed);
-          setNotice(t("outline.deleteFailed", { reason: reason instanceof Error ? reason.message : String(reason) }));
+          setNotice(t("outline.deleteFailed", { reason: reason instanceof Error ? reason.message : String(reason) }), true);
         }
         refresh();
       });
     },
-    [refresh, restoreNotes, t],
+    [refresh, restoreNotes, setNotice, t],
   );
   const commitDeleteRef = useRef(commitDelete);
   useLayoutEffect(() => {
@@ -654,8 +697,9 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
     };
   }, []);
   const removeNotes = useCallback(
-    (ids: string[]) => {
-      const present = ids.filter((id) => placeOf(treeRef.current, id));
+    (ids: string[], composed = false) => {
+      // composed: the composer's own note, which the list may not hold yet.
+      const present = composed ? ids : ids.filter((id) => placeOf(treeRef.current, id));
       if (present.length === 0) return;
       commitDelete();
       setLastMerge(null);
@@ -905,6 +949,7 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
 
   const actions: OutlineActions = {
     notebookId: notebook.id,
+    noteKey: (id) => noteKeys.get(id) ?? id,
     documentId,
     async addSection(parentId, title) {
       await api("/api/sections", "POST", { notebookId: notebook.id, title, parentId });
@@ -1107,7 +1152,8 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
     removeNotes,
     lastDelete,
     undoDelete,
-    notice,
+    notice: shownNotice?.text ?? null,
+    noticeFailed: shownNotice?.failed ?? false,
     dismissNotice() {
       setNotice(null);
     },
@@ -1250,7 +1296,24 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
     undoMerge,
     dismissMerge() {
       setLastMerge(null);
+      setLastCancel(null);
       commitDelete();
+    },
+    editCanceled(noteId, typed) {
+      setLastCancel({ noteId, content: typed });
+    },
+    lastCancel,
+    undoCancel() {
+      const canceled = lastCancel;
+      if (!canceled) return;
+      setLastCancel(null);
+      // The typed words go back into the note. The local draft holds them
+      // until the server has them, as for any save.
+      const before = placeOf(treeRef.current, canceled.noteId)?.note.content;
+      writeNoteDraft(canceled.noteId, canceled.content, before ?? canceled.content);
+      void actions
+        .saveNote(canceled.noteId, canceled.content)
+        .then(() => confirmNoteDraft(canceled.noteId, canceled.content), failure);
     },
     async setPinned(id, pinned) {
       // Optimistic: pinning also moves the note to the top of its section.

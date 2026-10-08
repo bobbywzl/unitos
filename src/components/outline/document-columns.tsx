@@ -133,7 +133,7 @@ export function DocumentColumns({
           <ChevronLeftIcon size={14} />
           {t("outline.notesLabel")}
         </button>
-        <span className="font-display text-[18px]">{t("outline.byDocument")}</span>
+        <span className="font-display text-[18px]">{t("outline.documentColumns")}</span>
         {columns.length > 0 && (
           <span className="text-[12px] text-sand-500">{t("outline.byDocumentCount", { n: documents.filter((d) => used.has(d.id)).length })}</span>
         )}
@@ -174,7 +174,7 @@ export function DocumentColumns({
                       className="flex min-w-0 flex-col gap-2.5 border-b border-l border-line px-3 py-3"
                     >
                       {notes.map((note) => (
-                        <NoteCard key={note.id} note={note} actions={actions} variant="page" search={search} />
+                        <NoteCard key={actions.noteKey(note.id)} note={note} actions={actions} variant="page" search={search} />
                       ))}
                     </div>
                   );

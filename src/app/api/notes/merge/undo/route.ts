@@ -7,6 +7,7 @@ import { serverT } from "@/lib/i18n/server";
 import { recordNoteEdit } from "@/lib/notes/edits";
 import { mergeSnapshotSchema, NOTE_MERGE_KIND, type MergedNote } from "@/lib/notes/merge-snapshot";
 import { normalizeNoteOrders } from "@/lib/order";
+import { shiftNoteOrders } from "@/lib/notes/order-writes";
 import { parseBody } from "@/lib/validate";
 
 const undoSchema = z.object({ undoId: z.string().min(1) });
@@ -78,10 +79,7 @@ export async function POST(req: Request) {
     ...restored.flatMap((n) => {
       const sectionId = sectionOf(n);
       return [
-        db.note.updateMany({
-          where: { sectionId, order: { gte: n.order } },
-          data: { order: { increment: 1 } },
-        }),
+        shiftNoteOrders(sectionId, n.order),
         db.note.create({
           data: {
             id: n.id,

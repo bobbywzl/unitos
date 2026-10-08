@@ -1218,5 +1218,9 @@ function readNarrow() {
 }
 
 function countNotes(sections: NotebookView["sections"]): number {
-  return sections.reduce((sum, s) => sum + s.notes.length + countNotes(s.children), 0);
+  // Accepted notes only, as every other note count: pending notes have their own count on Notes.
+  return sections.reduce(
+    (sum, s) => sum + s.notes.filter((n) => n.status === "ACCEPTED").length + countNotes(s.children),
+    0,
+  );
 }

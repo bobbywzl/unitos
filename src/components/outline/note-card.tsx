@@ -53,11 +53,14 @@ type Variant = "tray" | "page" | "pane";
 
 // One padding per variant, the same in every state — open, collapsed, editing —
 // so the note keeps its shape when the editor opens and when Done closes it.
+// A collapsed row in the tray is one line: it keeps the sides and takes less
+// height (ROW_PADDING), so more notes fit the tray.
 const PADDING: Record<Variant, string> = {
   tray: "p-3.5",
   page: "px-[18px] py-4",
   pane: "px-5 py-4",
 };
+const ROW_PADDING = "px-3.5 py-2";
 
 function PinIcon({ size = 12 }: { size?: number }) {
   return (
@@ -142,6 +145,7 @@ export function NoteCard({
       focusedPending={actions.focusedPendingId === note.id}
       floating={actions.floating?.id === note.id}
       selected={actions.selected.has(note.id)}
+      selecting={actions.selected.size > 0}
       merging={actions.merging.has(note.id)}
       collapsedInView={actions.isCollapsed(note.id)}
       viewExpanded={actions.notesView === "expanded"}
@@ -173,6 +177,7 @@ type NoteCommands = Pick<
   | "acceptNote"
   | "rejectNote"
   | "removeNotes"
+  | "editCanceled"
 >;
 
 /** The outline's commands as one object for the card's life, each calling
@@ -200,6 +205,7 @@ function useCommands(actions: OutlineActions): NoteCommands {
       acceptNote: (...args) => latest.current.acceptNote(...args),
       rejectNote: (...args) => latest.current.rejectNote(...args),
       removeNotes: (...args) => latest.current.removeNotes(...args),
+      editCanceled: (...args) => latest.current.editCanceled(...args),
     }),
     [],
   );
@@ -282,6 +288,7 @@ const NoteCardBody = memo(function NoteCardBody({
   focusedPending,
   floating,
   selected: isSelected,
+  selecting,
   merging,
   collapsedInView,
   viewExpanded,
@@ -301,6 +308,8 @@ const NoteCardBody = memo(function NoteCardBody({
   floating: boolean;
   /** Selected on the ticker. */
   selected: boolean;
+  /** Some note is selected: every card shows its select circle. */
+  selecting: boolean;
   /** The AI is writing the note that takes this one and the merged notes'
       place (the ticker's Merge with AI). The card blooms as the merge
       starts and settles as the text lands (globals.css .note-absorb /
@@ -328,6 +337,11 @@ const NoteCardBody = memo(function NoteCardBody({
   const [copied, setCopied] = useState(false);
   // The note's own history, open under the note (note-history.tsx).
   const [historyOpen, setHistoryOpen] = useState(false);
+  // A pending note's body opened whole in the tray, and whether its three
+  // lines cut it (the fade then says there is more).
+  const [whole, setWhole] = useState(false);
+  const [cut, setCut] = useState(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const [dropError, setDropError] = useState<string | null>(null);
   const [handledEdit, setHandledEdit] = useState<{ id: string } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -427,6 +441,14 @@ const NoteCardBody = memo(function NoteCardBody({
   // flashes the quote — the exact position the note came from.
   const jumpSource = note.sources.find((s) => !s.orphaned) ?? null;
 
+  // A pending note in the tray shows three lines until the reader opens it
+  // whole: a click on it, or the keyboard queue landing on it.
+  const clamp = pending && tray && !focused && !whole && !searching && !collapsed;
+  useLayoutEffect(() => {
+    const el = bodyRef.current;
+    setCut(clamp && el !== null && el.scrollHeight > el.clientHeight + 1);
+  }, [clamp, note.content]);
+
   // A jump to this note (an issue card, the workspace's show-note choreography)
   // opens a collapsed note, so the jump lands on the note whole.
   useEffect(() => {
@@ -453,10 +475,12 @@ const NoteCardBody = memo(function NoteCardBody({
 
   // Keyboard queue: `e` on the focused pending note opens the editor; the
   // floating card docking reopens it on the card's draft. Adjust-during-render;
-  // each request is a new object.
+  // each request is a new object. An editor already open keeps its text: a
+  // note kept as a new note asks its own card, whose editor holds every key
+  // typed (use-outline.ts).
   if (editRequest && handledEdit !== editRequest) {
     setHandledEdit(editRequest);
-    if (!floating) {
+    if (!floating && !editing) {
       setDraft(editRequest.draft ?? editDraft(note.content));
       setEditing(true);
     }
@@ -507,7 +531,11 @@ const NoteCardBody = memo(function NoteCardBody({
   // Cancel takes the quote's words back out, so it gives them up too.
   const sitting = useRef<string[]>([]);
 
+  // Cancel puts the note back to its text when the editor opened; the pill
+  // offers the typed words back (SPEC.md §6).
   function cancel() {
+    const typed = draft.trim();
+    if (typed && typed !== getOriginal().trim()) commands.editCanceled(note.id, typed);
     cancelDraft();
     refocus.current = true;
     setEditing(false);
@@ -627,9 +655,14 @@ const NoteCardBody = memo(function NoteCardBody({
   // The header row, the same in every state: collapse chevron and id at the
   // left; edit, jump, pin, and select at the right. Collapsed, the title (or
   // the gist) and the source count sit between them.
+  // At rest on a pointer that hovers, a row shows its line and its pencil:
+  // the id waits for the hover (the open note shows it), and the select
+  // circle too, until some note is selected. On touch the circle stays.
+  const row = collapsed && !editing;
+  const restHidden = "pointer-fine:hidden pointer-fine:group-hover/note:flex pointer-fine:group-focus-within/note:flex";
   const header = (
     <div className="flex min-h-[18px] items-center gap-1.5">
-      {foldable && !editing && !merging && (
+      {foldable && !editing && !merging && !collapsed && (
         <button
           onClick={() => commands.toggleCollapsed(note.id)}
           data-track="note-collapse"
@@ -641,7 +674,7 @@ const NoteCardBody = memo(function NoteCardBody({
           {collapsed ? <ChevronRightIcon size={11} /> : <ChevronDownIcon size={11} />}
         </button>
       )}
-      <NoteId id={note.id} />
+      <NoteId id={note.id} className={row ? "hidden group-hover/note:inline-flex group-focus-within/note:inline-flex" : ""} />
       {/* The AI is writing the note that takes this one and the merged notes'
           place (SPEC.md §6). It takes the row: the line is about to be
           rewritten, and every control here acts on a note still being
@@ -657,19 +690,67 @@ const NoteCardBody = memo(function NoteCardBody({
       {/* The line ends at the last whole word that fits (word-line.tsx):
           the row can be narrower than the gist's budget beside a source
           count. A press opens the note whole. */}
-      {collapsed && !merging && (
+      {/* One control opens the row: its chevron and its line. */}
+      {row && !merging && (
         <button
           onClick={() => commands.toggleCollapsed(note.id)}
           data-track="note-collapse"
+          aria-expanded={false}
           data-tip={t("outline.expandNote")}
-          className={`note-merging-under min-w-0 flex-1 text-left text-[13px] leading-[18px] hover:text-clay-800 ${
+          className={`note-merging-under flex min-w-0 flex-1 items-center gap-1.5 text-left text-[13px] leading-[18px] hover:text-clay-800 ${
             parts.title ? "font-semibold text-ink" : "text-sand-800"
           }`}
         >
-          <WordLine text={line} />
+          {foldable && (
+            <span aria-hidden className="-ml-0.5 flex size-[18px] shrink-0 items-center justify-center text-sand-400">
+              <ChevronRightIcon size={11} />
+            </span>
+          )}
+          <span className="min-w-0 flex-1">
+            <WordLine text={line} />
+          </span>
         </button>
       )}
-      {collapsed && note.sources.length > 0 && (
+      {/* Copy, History, Delete on the open note's header row: on a hover
+          and on focus where the pointer hovers, at rest on touch. */}
+      {!collapsed && !editing && !merging && !pending && (
+        <span className="flex shrink-0 items-center gap-2 transition-opacity pointer-fine:opacity-0 pointer-fine:group-hover/note:opacity-100 pointer-fine:focus-within:opacity-100">
+          <button
+            onClick={() => {
+              void navigator.clipboard.writeText(note.content);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1500);
+            }}
+            data-track="note-copy"
+            className="text-[11.5px] text-sand-600 hover:text-clay-700"
+            data-tip={t("outline.copyTitle")}
+          >
+            {copied ? t("outline.copied") : t("outline.copy")}
+          </button>
+          <button
+            onClick={() => setHistoryOpen(!historyOpen)}
+            data-track="note-history"
+            aria-expanded={historyOpen}
+            data-tip={t("outline.historyTitle")}
+            className={`text-[11.5px] hover:text-clay-700 ${historyOpen ? "text-clay-700" : "text-sand-600"}`}
+          >
+            {t("outline.history")}
+          </button>
+          {canEdit && (
+            <button
+              // No confirm: the note leaves at once, and the Undo pill offers
+              // it back (SPEC.md §6).
+              onClick={() => commands.removeNotes([note.id])}
+              data-track="note-delete"
+              data-tip={t("outline.deleteNoteTitle")}
+              className="text-[11.5px] text-red-500 hover:text-red-700"
+            >
+              {t("common.delete")}
+            </button>
+          )}
+        </span>
+      )}
+      {row && note.sources.length > 0 && (
         <span
           className="flex shrink-0 items-center gap-1 text-[11px] text-sand-500"
           data-tip={sourcesTip(note.sources, t)}
@@ -678,7 +759,7 @@ const NoteCardBody = memo(function NoteCardBody({
           {note.sources.length}
         </span>
       )}
-      {collapsed && note.replies.length > 0 && (
+      {row && note.replies.length > 0 && (
         <span
           className="flex shrink-0 items-center gap-1 text-[11px] text-sand-500"
           data-tip={t("outline.repliesTitle", { n: note.replies.length })}
@@ -687,7 +768,7 @@ const NoteCardBody = memo(function NoteCardBody({
           {note.replies.length}
         </span>
       )}
-      {collapsed && author && <PersonBadge person={author} size={14} />}
+      {row && author && <PersonBadge person={author} size={14} />}
       <span className="ml-auto flex shrink-0 items-center gap-1.5">
         {/* The save state, while editing (SPEC.md §6). */}
         {editing && <SaveStateLabel state={saveState} />}
@@ -730,6 +811,29 @@ const NoteCardBody = memo(function NoteCardBody({
             <PinIcon />
           </button>
         )}
+        {/* A pending note's Accept and Reject sit in its header row (SPEC.md
+            §6); Enter and Backspace do the same from the keyboard queue. */}
+        {pending && canEdit && !editing && (
+          <>
+            <button
+              onClick={() => void commands.acceptNote(note.id)}
+              data-track="note-accept"
+              className="rounded-full bg-sage-600 px-2.5 py-1 text-[11.5px] leading-none font-semibold text-sage-fg hover:bg-sage-700"
+              data-tip={t("outline.acceptTitle")}
+            >
+              {t("common.accept")}
+            </button>
+            <button
+              onClick={() => void commands.rejectNote(note.id)}
+              data-track="note-reject"
+              aria-label={t("common.reject")}
+              className="flex size-6 items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+              data-tip={t("outline.rejectTitle")}
+            >
+              ✕
+            </button>
+          </>
+        )}
         {selectable && !editing && !merging && (
           <button
             onClick={() => commands.toggleSelect(note.id)}
@@ -738,7 +842,9 @@ const NoteCardBody = memo(function NoteCardBody({
             aria-checked={isSelected}
             aria-label={t("outline.selectNote")}
             data-tip={t(tray ? "outline.selectNoteTitle" : "outline.selectNoteTitleCompare")}
-            className={`flex h-[18px] w-[18px] items-center justify-center rounded-full border transition-colors ${
+            className={`h-[18px] w-[18px] items-center justify-center rounded-full border transition-colors ${
+              isSelected || selecting ? "flex" : `flex ${restHidden}`
+            } ${
               isSelected
                 ? "border-clay bg-clay text-clay-fg opacity-100"
                 : "border-sand-400 bg-card text-transparent opacity-50 hover:border-clay-500 hover:opacity-100"
@@ -820,10 +926,10 @@ const NoteCardBody = memo(function NoteCardBody({
           onKeyDown={(e) => {
             if (isImeKey(e)) return;
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void done();
-            if (e.key === "Escape") cancel();
+            // Escape closes the editor keeping the words, as Done does.
+            if (e.key === "Escape") void done();
           }}
           full={!tray}
-          moreHref={tray ? `/n/${notebookId}/notes` : undefined}
           onQuoteDrop={(drag) =>
             commands.attachSource(note.id, drag).then((ids) => {
               sitting.current.push(...ids);
@@ -834,12 +940,16 @@ const NoteCardBody = memo(function NoteCardBody({
               value={edit.title}
               onChange={editTitle}
               onEnter={() => focusBodyEditor(editCardRef.current)}
-              onEscape={cancel}
+              onEscape={() => void done()}
               className="shrink-0"
             />
           }
         />
-        <div className="mt-2 flex shrink-0 items-center gap-2">
+        {/* Done, Cancel, and the note's assistant (SPEC.md §6) on one row:
+            the assistant's button at the row's end; opened, its panel takes
+            a row of its own under them, and a change it proposes lands in
+            the draft on Apply. */}
+        <div className="mt-2 flex shrink-0 flex-wrap items-center gap-2">
           <button
             data-no-drag
             onClick={() => void done()}
@@ -856,10 +966,15 @@ const NoteCardBody = memo(function NoteCardBody({
           >
             {t("common.cancel")}
           </button>
+          {canEdit && (
+            <NoteAssistant
+              noteId={note.id}
+              draft={draft}
+              onApply={setDraft}
+              className="ml-auto [&.flex-col]:mt-0.5 [&.flex-col]:basis-full"
+            />
+          )}
         </div>
-        {/* The note's assistant (SPEC.md §6), docked at the bottom: a change
-            it proposes lands in the draft on Apply. */}
-        {canEdit && <NoteAssistant noteId={note.id} draft={draft} onApply={setDraft} className="mt-2.5" />}
       </div>
     );
   }
@@ -869,7 +984,7 @@ const NoteCardBody = memo(function NoteCardBody({
   const surface = [
     "group/note relative",
     pane ? "" : "rounded-2xl bg-card shadow-soft",
-    PADDING[variant],
+    collapsed && tray ? ROW_PADDING : PADDING[variant],
     focused ? "outline-2 outline-clay-400" : "",
     pending && !focused ? (tray ? "opacity-82" : "opacity-85") : "",
     isMergeTarget ? "outline-2 outline-sage-500" : isSelected ? "outline-2 outline-clay-300" : "",
@@ -927,7 +1042,13 @@ const NoteCardBody = memo(function NoteCardBody({
       {dropError && <p className="mt-1 text-[11px] text-red-500">{dropError}</p>}
 
       {!collapsed && (
-        <div className="note-body mt-1.5">
+        <div
+          ref={bodyRef}
+          className={`note-body mt-1.5${clamp ? " max-h-[4.5em] cursor-pointer overflow-hidden" : ""}`}
+          style={clamp && cut ? { maskImage: "linear-gradient(to bottom, black 55%, transparent)" } : undefined}
+          onClick={clamp ? () => setWhole(true) : undefined}
+          data-tip={clamp && cut ? t("outline.expandNote") : undefined}
+        >
           {parts.title && (
             <h3 className="note-title mb-1">
               <Highlight text={parts.title} needle={hit} />
@@ -963,65 +1084,6 @@ const NoteCardBody = memo(function NoteCardBody({
         </div>
       )}
 
-      {collapsed || (pending && !canEdit) ? null : pending ? (
-        // Tray: buttons on their own row (design 1a). Page: Accept pushed right
-        // (design 2b). No source chips: the header's jump button reaches the
-        // source, and a quote in the note carries its own.
-        <div className={`${tray ? "mt-3" : "mt-2.5"} flex flex-wrap items-center gap-2`}>
-          <button
-            onClick={() => void commands.acceptNote(note.id)}
-            data-track="note-accept"
-            className={`rounded-full bg-sage-600 px-3.5 py-1.5 text-xs font-semibold text-sage-fg hover:bg-sage-700 ${tray ? "" : "ml-auto"}`}
-            data-tip={t("outline.acceptTitle")}
-          >
-            {t("common.accept")}
-          </button>
-          <button
-            onClick={() => void commands.rejectNote(note.id)}
-            data-track="note-reject"
-            className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-            data-tip={t("outline.rejectTitle")}
-          >
-            {t("common.reject")}
-          </button>
-        </div>
-      ) : (
-        <div className="mt-2 flex items-center gap-3 opacity-0 transition-opacity group-hover/note:opacity-100 focus-within:opacity-100">
-          <button
-            onClick={() => {
-              void navigator.clipboard.writeText(note.content);
-              setCopied(true);
-              setTimeout(() => setCopied(false), 1500);
-            }}
-            data-track="note-copy"
-            className="text-xs text-sand-600 hover:text-clay-700"
-            data-tip={t("outline.copyTitle")}
-          >
-            {copied ? t("outline.copied") : t("outline.copy")}
-          </button>
-          <button
-            onClick={() => setHistoryOpen(!historyOpen)}
-            data-track="note-history"
-            aria-expanded={historyOpen}
-            data-tip={t("outline.historyTitle")}
-            className={`text-xs hover:text-clay-700 ${historyOpen ? "text-clay-700" : "text-sand-600"}`}
-          >
-            {t("outline.history")}
-          </button>
-          {canEdit && (
-            <button
-              // No confirm: the note leaves at once, and the Undo pill offers
-              // it back (SPEC.md §6).
-              onClick={() => commands.removeNotes([note.id])}
-              data-track="note-delete"
-              data-tip={t("outline.deleteNoteTitle")}
-              className="text-xs text-red-500 hover:text-red-700"
-            >
-              {t("common.delete")}
-            </button>
-          )}
-        </div>
-      )}
       {historyOpen && !collapsed && note.status === "ACCEPTED" && (
         <NoteHistory
           noteId={note.id}

@@ -15,7 +15,6 @@ export function NoteComposer({
   compose,
   onRelease,
   full,
-  moreHref,
   padding,
 }: {
   compose: ReturnType<typeof useNoteCompose>;
@@ -24,8 +23,6 @@ export function NoteComposer({
   onRelease?: () => void;
   /** The whole bar (the notes full page); false: the core tools (the tray). */
   full: boolean;
-  /** With the core bar: where the whole bar is — the notes full page. */
-  moreHref?: string;
   /** The card's padding: the tray's or the page's. */
   padding: string;
 }) {
@@ -67,7 +64,6 @@ export function NoteComposer({
           }}
           placeholder={t("outline.writeNotePlaceholder")}
           full={full}
-          moreHref={moreHref}
           autoFocus={false}
           onQuoteDrop={compose.attachQuote}
           title={
@@ -87,7 +83,8 @@ export function NoteComposer({
           data-track="note-compose-save"
           className="rounded-full bg-sage-600 px-3.5 py-1 text-xs font-semibold text-sage-fg hover:bg-sage-700"
         >
-          {t("common.save")}
+          {/* Done, as in the note's editor: the note saves as it is typed. */}
+          {t("common.done")}
         </button>
         <button
           type="button"

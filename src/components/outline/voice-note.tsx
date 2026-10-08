@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { MicIcon, StopIcon } from "@/components/icons";
+import { StopIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { ProgressBar } from "@/components/progress-bar";
 import { useOpenDocument } from "@/components/reader/open-document-context";
@@ -43,13 +43,30 @@ function recordingMime(): string | undefined {
   );
 }
 
+/** Command's own glyph: a microphone with the assistant's spark, so it never
+    reads as voice typing, whose plain microphone types what is said. */
+function CommandIcon({ size = 11 }: { size?: number }) {
+  return (
+    <svg aria-hidden width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z" />
+      <path d="M16 11a7 7 0 0 1-14 0" />
+      <path d="M9 18v3" />
+      <path d="M19 2v6M16 5h6" />
+    </svg>
+  );
+}
+
 export function VoiceNoteButton({
   sectionId,
   className,
+  compact = false,
   onError,
 }: {
   sectionId: string;
   className?: string;
+  /** The glyph alone, its name in the tooltip: the tray, where Command sits
+      beside the Note button on every section. */
+  compact?: boolean;
   /** Where the reason shows when recording or transcription fails. */
   onError?: (message: string | null) => void;
 }) {
@@ -192,8 +209,8 @@ export function VoiceNoteButton({
     return (
       <>
         <span className={`${base} inline-flex items-center gap-1 text-sand-600 opacity-60`} data-tip={label}>
-          <MicIcon size={11} />
-          {t("outline.speakNote")}
+          <CommandIcon />
+          {!compact && t("outline.speakNote")}
         </span>
         <ProgressBar label={label} done={STAGES.indexOf(stage)} total={STAGES.length} />
       </>
@@ -227,7 +244,7 @@ export function VoiceNoteButton({
           data-tip={t("outline.sendCommandAgainTitle")}
           className={`${base} inline-flex items-center gap-1`}
         >
-          <MicIcon size={11} />
+          <CommandIcon />
           {t("outline.sendCommandAgain")}
         </button>
         <button
@@ -252,11 +269,11 @@ export function VoiceNoteButton({
       onClick={() => void start()}
       data-track="voice-note"
       aria-label={t("outline.speakNote")}
-      data-tip={t("outline.speakNoteTitle")}
+      data-tip={compact ? `${t("outline.speakNote")}\n${t("outline.speakNoteTitle")}` : t("outline.speakNoteTitle")}
       className={`${base} inline-flex items-center gap-1`}
     >
-      <MicIcon size={11} />
-      {t("outline.speakNote")}
+      <CommandIcon size={compact ? 13 : 11} />
+      {!compact && t("outline.speakNote")}
     </button>
   );
 }
