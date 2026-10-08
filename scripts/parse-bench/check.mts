@@ -1835,6 +1835,18 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
   );
   check("url: a list among a container's loose words is a list", loose.some((b) => b.startsWith("LIST - Sand settles")), loose.join(" / "));
   check("url: a container's loose words around its blocks stay paragraphs, one each", loose.filter((b) => b.startsWith("PARAGRAPH Paragraph")).length === 5, loose.join(" / "));
+  // A bold line right under a crosshead of its size is the section's first line; a bold line between paragraphs is a heading.
+  const crosshead = (
+    await parseHtmlContent(
+      `<!doctype html><html><head><title>Notes on river flow</title><style>p, h2 { font-size: 16px }</style></head><body><article><p>${prose(1)}</p><p>${prose(2)}</p><h2>Floods in the delta</h2><p><strong>Jane Doe, river correspondent</strong></p><p>${prose(3)}</p><p>${prose(4)}</p><p><strong>Gravel bars</strong></p><p>${prose(5)}</p></article></body></html>`,
+      "https://example.org/rivers",
+    )
+  ).blocks.map((b) => `${b.type} ${b.text.slice(0, 24)}`);
+  check(
+    "url: a bold line under a crosshead leaves the crosshead a heading and stays a paragraph",
+    crosshead.includes("HEADING Floods in the delta") && crosshead.includes("PARAGRAPH Jane Doe, river correspo") && crosshead.includes("HEADING Gravel bars"),
+    crosshead.join(" / "),
+  );
 }
 
 {
