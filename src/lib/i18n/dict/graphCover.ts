@@ -50,9 +50,6 @@ const en = {
   // [lists8] WALK8-11: a card whose comments are all resolved.
   commentsResolvedOne: "1 resolved comment",
   commentsResolvedMany: "{n} resolved comments",
-  // [lists8] WALK8-07: the key's ring and not-opened rows.
-  keyRing: "The ring: how much of the document your notes quote",
-  keyNotOpened: "A hollow dot: you have not opened the document",
   // [layer5] Replies another person wrote since this account last opened the link (WALK5-07).
   newRepliesOne: "1 new",
   newRepliesMany: "{n} new",
@@ -131,8 +128,6 @@ const zh: Record<keyof typeof en, string> = {
   commentsAllTitle: "按文档列出每条未解决的评论。再按一次回到文档。",
   commentsResolvedOne: "1 条已解决的评论",
   commentsResolvedMany: "{n} 条已解决的评论",
-  keyRing: "圆环：你的笔记引用了文档的多少",
-  keyNotOpened: "空心圆点：你还没有打开这个文档",
   newRepliesOne: "1 条新回复",
   newRepliesMany: "{n} 条新回复",
   newRepliesTitle: "你上次打开这条链接之后的回复",

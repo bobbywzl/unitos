@@ -397,7 +397,8 @@ const en = {
   // The key behind the ? button with the zoom controls (graph-view.tsx).
   graphKeyTitle: "How to read the graph",
   graphKeyOpen: "The open document",
-  graphKeyDocument: "A document; a longer one draws a bigger dot",
+  // [lists8] WALK8-07: the ring and the hollow dot in the same row.
+  graphKeyDocument: "A document: bigger when longer; its ring, how much your notes quote; hollow until you open it",
   graphKeyGenerated: "A generated document: in a row of its own, faded",
   graphKeyProvenance: "Where a generated document's paragraphs come from (shown with the page button)",
   graphKeyLinks: "Links between two documents; thicker means more",
@@ -937,7 +938,7 @@ const zh: Record<keyof typeof en, string> = {
   graphTitle: "项目图谱：文档与它们之间的链接（M）",
   graphKeyTitle: "如何阅读图谱",
   graphKeyOpen: "当前打开的文档",
-  graphKeyDocument: "一个文档；越长的文档圆点越大",
+  graphKeyDocument: "一个文档：越长圆点越大；圆环表示你的笔记引用了多少；未打开时为空心",
   graphKeyGenerated: "生成文档：单独一行，淡色显示",
   graphKeyProvenance: "生成文档的段落出自哪里（用页面按钮显示）",
   graphKeyLinks: "两个文档之间的链接；越粗表示越多",

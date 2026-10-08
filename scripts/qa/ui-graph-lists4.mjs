@@ -52,7 +52,8 @@ async function openGraph(page, nb) {
 const list = (page) => page.locator("[data-graph-documents-list]");
 // [chrome6] VIEW6-04: rows are one line until opened; open the first row with a link.
 async function openRowWithLink(page) {
-  const row = page.locator("[data-graph-documents-row]").filter({ hasText: /\blinks?\b|条链接/ }).first();
+  // [lists8] WALK8-03: a shut row no longer counts links; linked documents come first (the graph's order).
+  const row = page.locator("[data-graph-documents-row]").first();
   if ((await row.getAttribute("data-open")) === null) await row.locator("[data-row-head]").click();
   await page.waitForTimeout(200);
 }

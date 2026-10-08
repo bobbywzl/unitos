@@ -848,15 +848,14 @@ function GraphKey({
           t("panes.graphDocuments"),
           <>
             {row(dot("rounded-full bg-clay"), "panes.graphKeyOpen")}
-            {row(dot("rounded-full bg-sage-500"), "panes.graphKeyDocument")}
-            {/* [lists8] WALK8-07: the not-opened dot and the ring. */}
-            {row(<span className="block size-3.5 rounded-full border-[3px] border-sage-500 bg-card" />, "graphCover.keyNotOpened")}
+            {/* [lists8] WALK8-07: the document row explains the ring and the hollow (not opened) dot too, in one row. */}
             {row(
-              <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden className="-rotate-90">
-                <circle cx="10" cy="10" r="8" fill="none" stroke="var(--sand-300)" strokeWidth={1.5} />
-                <circle cx="10" cy="10" r="8" fill="none" stroke="var(--sage-600)" strokeWidth={1.5} strokeLinecap="round" pathLength={100} strokeDasharray="40 100" />
+              <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden className="-rotate-90">
+                <circle cx="11" cy="11" r="9.5" fill="none" stroke="var(--sand-300)" strokeWidth={1.5} />
+                <circle cx="11" cy="11" r="9.5" fill="none" stroke="var(--sage-600)" strokeWidth={1.5} strokeLinecap="round" pathLength={100} strokeDasharray="40 100" />
+                <circle cx="11" cy="11" r="5.5" fill="var(--sage-500)" />
               </svg>,
-              "graphCover.keyRing",
+              "panes.graphKeyDocument",
             )}
             {generated && row(dot("rounded-[4px] bg-sand-600 opacity-50"), "panes.graphKeyGenerated")}
             {cited && row(dot("rounded-full bg-sage-500 ring-2 ring-[var(--kind-assistant)] ring-offset-1 ring-offset-card"), "panes.graphKeyCited")}

@@ -225,7 +225,8 @@ for (const [w, h, touch] of [
   await btn.click();
   await list(page).waitFor();
   await page.waitForTimeout(800);
-  const head = await list(page).locator("p").first().textContent();
+  // [lists8] WALK8-02: the order is the list name's tooltip.
+  const head = await list(page).locator("[data-graph-list-name]").first().getAttribute("data-tip");
   check(`zh ${w}: the list's head reads in zh`, /按图谱的顺序/.test(head ?? ""), head ?? "");
   const ai = await list(page).locator("p").last().textContent();
   check(`zh ${w}: the AI line reads in zh`, /AI/.test(ai ?? "") && /核对/.test(ai ?? ""), ai ?? "");

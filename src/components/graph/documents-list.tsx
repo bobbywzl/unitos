@@ -623,15 +623,16 @@ function DocumentRow({
             onClick={() => setOpen((v) => !v)}
             data-track="graph-documents-row-open"
             aria-expanded={open}
-            className={`flex min-h-6 min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0 text-left leading-snug font-semibold hover:text-clay-800 ${open ? "" : "px-3 py-1.5 max-[639px]:py-1"}`}
+            className={`flex min-h-6 min-w-0 flex-1 items-baseline gap-2 text-left leading-snug font-semibold hover:text-clay-800 max-[639px]:flex-wrap max-[639px]:gap-y-0 ${open ? "" : "px-3 py-1.5 max-[639px]:py-1"}`}
           >
-            {/* [lists8] WALK8-03: the title keeps its words: counts that do not fit beside it go under it, at its right. */}
-            <span className={`min-w-0 ${open ? "" : "max-w-full truncate"} max-[639px]:basis-full`}>{n.title}</span>
+            {/* [lists8] WALK8-03: the title keeps its words (up to three quarters of the row); the counts give way, whole in their tooltip. */}
+            <span className={`min-w-0 ${open ? "" : "max-w-[75%] shrink-0 truncate"} max-[639px]:max-w-full max-[639px]:basis-full`}>{n.title}</span>
             {/* [chrome6] VIEW6-04: below 640 px the counts go under the title. */}
             {!open && counts.length > 0 && (
               <span
                 data-graph-gap-why={gapsOn ? n.id : undefined}
-                className={`ml-auto shrink-0 text-[11px] max-[639px]:ml-0 max-[639px]:shrink max-[639px]:leading-tight ${gapsOn ? "font-semibold text-clay-800" : "font-normal text-sand-500"}`}
+                data-tip={counts.join(" · ")}
+                className={`ml-auto min-w-0 truncate text-[11px] max-[639px]:ml-0 max-[639px]:whitespace-normal max-[639px]:leading-tight ${gapsOn ? "font-semibold text-clay-800" : "font-normal text-sand-500"}`}
               >
                 {counts.join(" · ")}
               </span>
