@@ -32,7 +32,7 @@ import { Collapse } from "@/components/presence";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { clipWords } from "@/lib/markdown-preview";
-import { useEscapeLayer } from "@/lib/escape-layers";
+import { focusWhenDrawn, useEscapeLayer } from "@/lib/escape-layers";
 
 // Folders in the document list (SPEC.md §6). A folder is a named group of a
 // project's documents; a folder can hold folders. The list draws a folder as
@@ -204,19 +204,6 @@ const FLYOUT_EDGE = 6;
 // The rows the keys move between, in a list or a fly-out.
 export const LIST_ROWS = '[data-track="document-open"], [data-track="folder-open"]';
 
-/** Focus the element the selector names once it is drawn: a fly-out takes
-    a frame or two to place itself. Gives up after half a second. */
-export function focusWhenDrawn(selector: string): void {
-  let frames = 30;
-  const tryFocus = () => {
-    const el = [...document.querySelectorAll<HTMLElement>(selector)].find((e) => e.getClientRects().length > 0);
-    if (el) {
-      el.focus();
-      el.scrollIntoView({ block: "nearest" });
-    } else if (--frames > 0) requestAnimationFrame(tryFocus);
-  };
-  requestAnimationFrame(tryFocus);
-}
 
 // A folder's list beside its row: a fixed panel in a portal (the root list
 // scrolls and would clip it), placed off the row's top and the panel's right

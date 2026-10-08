@@ -9,7 +9,7 @@ const querySchema = z.object({
   // The last row shown: its time and id. Rows older than it come back.
   beforeAt: z.string().datetime(),
   beforeId: z.string().min(1).max(64),
-  // History's This document: that document's edits alone.
+  // History's This document: that document's rows alone.
   documentId: z.string().min(1).max(64).optional(),
 });
 
@@ -35,7 +35,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ notebookId: str
     ids,
     { at: new Date(parsed.data.beforeAt), id: parsed.data.beforeId },
     undefined,
-    { editsOnly: documentId !== undefined },
+    documentId !== undefined ? { documentId } : {},
   );
   const people = await peopleByIds(
     entries.flatMap((e) => [...(e.userId ? [e.userId] : []), ...(e.edit?.replies.map((r) => r.userId) ?? [])]),

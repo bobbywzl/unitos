@@ -141,6 +141,20 @@ export function useEscapeLayer(open: boolean, close: () => void): void {
   }, [open]);
 }
 
+/** Focus the element the selector names once it is drawn: a fly-out or a
+    panel takes a frame or two to show. Gives up after half a second. */
+export function focusWhenDrawn(selector: string): void {
+  let frames = 30;
+  const tryFocus = () => {
+    const el = [...document.querySelectorAll<HTMLElement>(selector)].find((e) => e.getClientRects().length > 0);
+    if (el) {
+      el.focus();
+      el.scrollIntoView({ block: "nearest" });
+    } else if (--frames > 0) requestAnimationFrame(tryFocus);
+  };
+  requestAnimationFrame(tryFocus);
+}
+
 // ── The modal focus trap ────────────────────────────────────────────────
 
 const TABBABLE =

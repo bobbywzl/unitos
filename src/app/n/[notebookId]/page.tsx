@@ -1136,10 +1136,10 @@ export default async function NotebookPage(props: {
     positionRows,
   ] =
     await Promise.all([
-      // History's This document (SPEC.md §12): the open document's edits,
-      // newest first, each with its replies — the rows the rail's Edits tab
-      // listed. Show older reads the rest.
-      paneOne ? historyPage(notebookId, [paneOne.document.id], null, undefined, { editsOnly: true }) : null,
+      // History's This document (SPEC.md §12): the open document's rows,
+      // newest first: its edits, each with its replies, and the notes and
+      // annotations removed from it. Show older reads the rest.
+      paneOne ? historyPage(notebookId, [paneOne.document.id], null, undefined, { documentId: paneOne.document.id }) : null,
       corpusQuoteDocIds.length > 0
         ? db.document.findMany({
             where: { id: { in: corpusQuoteDocIds } },

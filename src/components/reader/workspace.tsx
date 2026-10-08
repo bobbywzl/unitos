@@ -52,7 +52,7 @@ import {
   type SaveProgress,
 } from "@/lib/offline/saved";
 import { TierMark } from "@/components/tier-mark";
-import { useEscapeLayer } from "@/lib/escape-layers";
+import { focusWhenDrawn, useEscapeLayer } from "@/lib/escape-layers";
 import { FloatingNoteEditor } from "@/components/outline/floating-note-editor";
 import { readTrayFold, subscribeTrayFold } from "@/lib/assistant/side-chat-open";
 import { NotesTray } from "@/components/outline/notes-tray";
@@ -618,14 +618,29 @@ export function Workspace({
   const isOpen = (which: Tab) => tab === which && (phone ? mobileTray : !collapsed);
   // The header's History: opens the tray on History; a second press, History
   // open, folds the tray as the rail's chevron does.
-  function toggleHistory() {
+  // Opened from the header, History is a layer: Escape folds it (closes
+  // the sheet on a phone) and the focus goes back to History. Opened by a
+  // key, the focus moves into the panel.
+  const [historyLayer, setHistoryLayer] = useState(false);
+  function toggleHistory(e: React.MouseEvent) {
     if (!phone && isOpen("history")) {
       setCollapsed(true);
       rememberTray({ collapsed: true, tab });
       return;
     }
     show("history");
+    setHistoryLayer(true);
+    if (e.detail === 0) focusWhenDrawn("[data-history-panel] :is(button, a[href], [tabindex='0'])");
   }
+  useEscapeLayer(historyLayer && isOpen("history"), () => {
+    setHistoryLayer(false);
+    // The sheet's flag too: show() reads it as open and would close it.
+    setMobileTray(false);
+    if (!phone) {
+      setCollapsed(true);
+      rememberTray({ collapsed: true, tab });
+    }
+  });
   // The Notes button with notes waiting for Accept: the tray opens on notes
   // with the first pending note in view and flashed, as the header's
   // pending count did; with the notes open, a press is the tab's own.
@@ -1091,7 +1106,15 @@ export function Workspace({
                 <GraphIcon size={15} />
                 {t("panes.graph")}
               </button>
-              <button data-more-row onClick={() => show("history")} data-track="more:history" className={MORE_ROW}>
+              <button
+                data-more-row
+                onClick={() => {
+                  show("history");
+                  setHistoryLayer(true);
+                }}
+                data-track="more:history"
+                className={MORE_ROW}
+              >
                 <EditsIcon size={15} />
                 {t("panes.history")}
               </button>

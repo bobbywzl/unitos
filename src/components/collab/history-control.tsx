@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { HistoryEntry } from "@/lib/types";
 import type { Person } from "@/lib/person";
 import { CollabProvider, useCollab } from "@/components/collab/collab-context";
@@ -16,6 +16,8 @@ import { refreshWhenOnline } from "@/lib/offline/queue";
 // One page of History rows (lib/history/list.ts HISTORY_PAGE): a first page
 // this long may have older rows under it.
 const HISTORY_PAGE = 100;
+// How long Restore waits for the page's data before the tray switches.
+const REFRESH_WAIT_MS = 8000;
 
 const KIND_KEY: Record<HistoryEntry["kind"], TKey> = {
   TEXT_EDIT: "panes.historyTextEdit",
@@ -183,6 +185,32 @@ export function HistoryPanel({
     document: NO_OLDER,
   });
   const older = olderByScope[scope];
+  // Restore waits for the page's data to have the note back (the row
+  // reads restored in the refreshed History), so the tray switches to Notes
+  // with the note there (NAV13-05); REFRESH_WAIT_MS at most.
+  const waiting = useRef<{ entryId: string; done: () => void } | null>(null);
+  useEffect(() => {
+    const wait = waiting.current;
+    if (!wait) return;
+    const row = [...history, ...documentHistory].find((e) => e.id === wait.entryId);
+    if (row?.restored) {
+      waiting.current = null;
+      wait.done();
+    }
+  }, [history, documentHistory]);
+  const refreshUntilRestored = (entryId: string) =>
+    new Promise<void>((resolve) => {
+      const done = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = setTimeout(() => {
+        if (waiting.current?.entryId === entryId) waiting.current = null;
+        resolve();
+      }, REFRESH_WAIT_MS);
+      waiting.current = { entryId, done };
+      router.refresh();
+    });
   const setOlder = (patch: (prev: OlderPages) => OlderPages) =>
     setOlderByScope((prev) => ({ ...prev, [scope]: patch(prev[scope]) }));
 
@@ -220,7 +248,9 @@ export function HistoryPanel({
       entry,
       async () => {
         const done = await api<{ noteId?: unknown }>(`/api/notebooks/${notebookId}/history/${entry.id}`, "POST");
-        router.refresh();
+        // The row says Loading until the note is in the page's data; then
+        // the tray switches to Notes with the note there.
+        await refreshUntilRestored(entry.id);
         if (typeof done?.noteId === "string") {
           // The notes take it back (a tab that deleted it hides it until
           // told), the reader repaints its marks, and the tray shows it.
@@ -370,7 +400,7 @@ export function HistoryPanel({
   };
 
   const actionButton =
-    "shrink-0 rounded-full border border-line px-2.5 py-0.5 text-[11px] font-semibold text-clay-800 hover:bg-clay-100 disabled:opacity-60";
+    "shrink-0 rounded-full border border-line px-2.5 py-0.5 text-[11px] font-semibold text-clay-800 hover:bg-clay-100 disabled:opacity-60 pointer-coarse:px-3.5 pointer-coarse:py-2";
   const doneLabel = "shrink-0 text-[11px] font-semibold text-sage-700";
 
   // The one action a row carries, at the right of its name line: Restore a
@@ -512,11 +542,12 @@ export function HistoryPanel({
     );
   };
 
-  const pill = "rounded-full px-3 py-1 text-[11.5px] font-semibold";
+  // A finger gets a 36 px target (NAV13-12); a mouse the small pill.
+  const pill = "rounded-full px-3 py-1 text-[11.5px] font-semibold pointer-coarse:py-2.5";
   return (
     // Older pages' people sign their rows and their replies too.
     <CollabProvider value={{ ...collab, people: { ...olderPeople, ...people } }}>
-      <div className="flex flex-col gap-3">
+      <div data-history-panel className="flex flex-col gap-3">
         {(documentId || authors.length > 1) && (
           <div className="flex flex-wrap items-center gap-1.5">
             {documentId && (

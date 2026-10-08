@@ -396,8 +396,8 @@ const en = {
   historyScopeProject: "All",
   historyScopeProjectTitle: "Every edit and deletion in this project",
   historyScopeDocument: "This document",
-  historyScopeDocumentTitle: "Every edit to the open document",
-  historyDocumentEmpty: "No edits to this document yet.",
+  historyScopeDocumentTitle: "Every edit and deletion in the open document",
+  historyDocumentEmpty: "No edits or deletions in this document yet.",
   // Below md: the bottom bar's last button, a menu of the reader views, the
   // graph, History, Save for offline, the guide, and Feedback.
   more: "More",
@@ -892,8 +892,8 @@ const zh: Record<keyof typeof en, string> = {
   historyScopeProject: "全部",
   historyScopeProjectTitle: "此项目中的所有编辑与删除",
   historyScopeDocument: "此文档",
-  historyScopeDocumentTitle: "对当前文档的每次编辑",
-  historyDocumentEmpty: "此文档还没有编辑。",
+  historyScopeDocumentTitle: "当前文档中的所有编辑与删除",
+  historyDocumentEmpty: "此文档还没有编辑与删除。",
   more: "更多",
   historyEmpty: "还没有编辑或删除。",
   historySmallEdits: "{n} 处小改动",
