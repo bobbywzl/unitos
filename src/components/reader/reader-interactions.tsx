@@ -191,6 +191,7 @@ import {
   SuggestionRow,
   type SuggestRequest,
 } from "@/components/assistant/suggestion-row";
+import { FIGURE_ASSISTANT_EVENT, publishFigureSuggestion, splitFigureSuggestions } from "@/components/reader/figure-suggestion";
 import {
   belowSlot,
   marginPlace,
@@ -723,6 +724,14 @@ const SUGGEST_CHIPS: Chip[] = [
   { name: "bulleted", key: "reader.commandBulleted" },
   { name: "fix", key: "reader.commandFix" },
 ];
+// The bar on an image (SPEC.md §7, words from a figure): typed commands,
+// sent as the reader's message. The last two put the words under the image.
+const FIGURE_CHIPS: TKey[] = [
+  "reader.figureExtractText",
+  "reader.figureKeyPoints",
+  "reader.figureTextUnder",
+  "reader.figureKeyPointsUnder",
+];
 
 // A tool's output continued into a conversation — Explain+, Simplify+,
 // Analyze+, Visualize+ (SPEC.md §21). Continue opens the box; the turns
@@ -909,6 +918,8 @@ type SuggestionRun = {
 type AssistantBar = {
   key: string;
   anchor: Anchor;
+  // Opened on an image (SPEC.md §7, words from a figure): its chips read the image.
+  figure?: boolean;
   yTop: number;
   wordsBottom: number; // the selection's last line's bottom, container coords
   noteId: string | null;
@@ -2050,10 +2061,12 @@ export function ReaderInteractions({
     const onPlan = (e: Event) => {
       const detail = (e as CustomEvent<{ documentId: string; actions: AssistantAction[]; warnings: string[] }>).detail;
       if (!detail || detail.documentId !== documentId) return;
-      setAiPlan({ reply: null, actions: detail.actions, warnings: detail.warnings, conversationNoteId: null });
+      const actions = offerFigureSuggestionsRef.current(detail.actions);
+      if (actions.length === 0) return;
+      setAiPlan({ reply: null, actions, warnings: detail.warnings, conversationNoteId: null });
       setPlanFrom("panel");
       setPlanNoteId(null);
-      setPlanChecked(new Set(detail.actions.map((_, i) => i)));
+      setPlanChecked(new Set(actions.map((_, i) => i)));
     };
     window.addEventListener("dissect:assistant-plan", onPlan);
     return () => window.removeEventListener("dissect:assistant-plan", onPlan);
@@ -7090,12 +7103,18 @@ export function ReaderInteractions({
     if (open) writeToolbarDraft("assistant", documentId, open.anchor, input);
     setBar((b) => (b ? { ...b, input } : b));
   }
-  function openBar(target: Popover): AssistantBar {
+  // A figure's bar opens from its block, with no selection under it: its
+  // words' bottom is its top.
+  function openBar(
+    target: Pick<Popover, "anchor" | "yTop"> & Partial<Pick<Popover, "y" | "side">>,
+    figure = false,
+  ): AssistantBar {
     const opened: AssistantBar = {
       key: queuedKey(),
       anchor: target.anchor,
+      figure,
       yTop: target.yTop,
-      wordsBottom: target.y - (target.side === "below" ? 14 : 6),
+      wordsBottom: target.y === undefined ? target.yTop : target.y - (target.side === "below" ? 14 : 6),
       noteId: null,
       messages: [],
       input: readToolbarDraft("assistant", documentId, target.anchor) ?? "",
@@ -7109,6 +7128,27 @@ export function ReaderInteractions({
   }
   const openBarRef = useRef(openBar);
   openBarRef.current = openBar;
+
+  // The image toolbar's Assistant (SPEC.md §7, words from a figure): the bar
+  // opens on the image. An image has no words, so its anchor quotes none and
+  // the request names the figure by its block id (assistantTurn). The page
+  // editor that sent it picks this reader in a split pane.
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const detail = (e as CustomEvent<{ blockId: string; top: number; from: Element }>).detail;
+      const container = containerRef.current;
+      if (!detail || !container || !container.contains(detail.from)) return;
+      if (!canEditRef.current) return;
+      const text = blocksRef.current.find((b) => b.id === detail.blockId)?.text ?? "";
+      const rect = container.getBoundingClientRect();
+      openBarRef.current({
+        anchor: { blockId: detail.blockId, startOffset: 0, endOffset: text.length, quotedText: text, prefix: "", suffix: "" },
+        yTop: Math.max(8, detail.top - rect.top + container.scrollTop),
+      }, true);
+    };
+    window.addEventListener(FIGURE_ASSISTANT_EVENT, onOpen);
+    return () => window.removeEventListener(FIGURE_ASSISTANT_EVENT, onOpen);
+  }, []);
 
   // The bar's edit: its last command's suggestions.
   const barRunKey = (b: AssistantBar) => b.messages.findLast((m) => m.suggestKey)?.suggestKey ?? null;
@@ -7216,6 +7256,9 @@ export function ReaderInteractions({
     // A follow-up's suggestions take the place of these, still pending.
     replacing?: readonly string[],
   ): Promise<{ reply: string; noteId: string | null; suggestKey?: string }> {
+    // A figure with no words (an image) has no quote to anchor to: the
+    // request names it by its block id (SPEC.md §7, words from a figure).
+    const figureOnly = anchor && !toolNoteId && !anchor.quotedText ? anchor.blockId : undefined;
     const res = await aiFetch("/api/assistant/act", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -7224,8 +7267,9 @@ export function ReaderInteractions({
         notebookId,
         documentId,
         command,
-        anchor: anchor && !toolNoteId ? anchorBody(anchor) : undefined,
-        ...(anchor && !toolNoteId ? segmentsBody(anchor) : {}),
+        anchor: anchor && !toolNoteId && !figureOnly ? anchorBody(anchor) : undefined,
+        ...(anchor && !toolNoteId && !figureOnly ? segmentsBody(anchor) : {}),
+        figureBlockId: figureOnly,
         history: history.slice(-12).map(({ role, content }) => ({ role, content })),
         conversationNoteId: conversationNoteId ?? undefined,
         toolNoteId,
@@ -7243,11 +7287,14 @@ export function ReaderInteractions({
       throw new Error(plan?.error ?? t("reader.assistantFailedStatus", { status: res.status }));
     const parts: string[] = [];
     if (plan.reply) parts.push(plan.reply);
-    if (plan.actions.length > 0) {
-      const n = plan.actions.length;
+    // Words for under a figure wait there as the assistant's suggestion.
+    const actions = offerFigureSuggestions(plan.actions);
+    if (actions.length < plan.actions.length) parts.push(t("reader.figureSuggestionOffered"));
+    if (actions.length > 0) {
+      const n = actions.length;
       // Every plan waits for approval (SPEC.md §1: nothing applies unaccepted).
-      setAiPlan(plan);
-      setPlanChecked(new Set(plan.actions.map((_, i) => i)));
+      setAiPlan({ ...plan, actions });
+      setPlanChecked(new Set(actions.map((_, i) => i)));
       setPlanFrom(toolNoteId ? "tool" : "chat");
       setPlanNoteId(toolNoteId ?? plan.conversationNoteId ?? conversationNoteId);
       // The plan under the answer and its Apply say the count; a plan with
@@ -7954,7 +8001,7 @@ export function ReaderInteractions({
   // Every applied action records the request that takes it back; Undo runs
   // them newest first. A block's text and kind come from the article as it
   // is now; the rest from the ids the write routes return.
-  async function executePlan(actions: AssistantAction[], warnings: string[] = []) {
+  async function executePlan(actions: AssistantAction[], warnings: string[] = []): Promise<boolean> {
     // The routes edit what is stored: typing on screen is saved first.
     await flushEditRef.current?.();
     const sectionIdByTitle = new Map(
@@ -8182,12 +8229,32 @@ export function ReaderInteractions({
       ...(failed.length > 0 ? [t("reader.failedPrefix", { what: failed[0] })] : []),
       ...(warnings.length > 0 ? [warnings[0]] : []),
     ].join(" · ");
-    if (undo.length === 0) {
-      showToast(summary);
-      return;
-    }
-    showToast(summary, { label: t("reader.undo"), run: () => void undoPlan(undo) }, UNDO_MS);
+    if (undo.length === 0) showToast(summary);
+    else showToast(summary, { label: t("reader.undo"), run: () => void undoPlan(undo) }, UNDO_MS);
+    return failed.length === 0;
   }
+  const executePlanRef = useRef(executePlan);
+  executePlanRef.current = executePlan;
+
+  // Words from a figure (SPEC.md §7): a plan's new blocks right after a
+  // figure are the assistant's suggestion under it (figure-suggestion.tsx);
+  // Accept runs them as the plan card's Apply does, Reject drops them. The
+  // other actions go on to the plan card.
+  function offerFigureSuggestions(actions: AssistantAction[]): AssistantAction[] {
+    const { byFigure, rest } = splitFigureSuggestions(
+      actions,
+      (id) => blocksRef.current.find((b) => b.id === id)?.type === "FIGURE",
+    );
+    for (const [blockId, list] of byFigure) {
+      publishFigureSuggestion(documentId, blockId, {
+        actions: list,
+        settle: async (accept) => (accept ? executePlanRef.current(list) : true),
+      });
+    }
+    return rest;
+  }
+  const offerFigureSuggestionsRef = useRef(offerFigureSuggestions);
+  offerFigureSuggestionsRef.current = offerFigureSuggestions;
 
   // Undo, pressed in time: every applied action taken back, newest first.
   async function undoPlan(undo: { description: string; run: () => Promise<unknown> }[]) {
@@ -9640,6 +9707,8 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
     (planNoteId === null || shownThreadNoteId === null || shownThreadNoteId === planNoteId);
   const planFloats = aiPlan !== null && planFrom === "panel";
   const barKey = bar ? barRunKey(bar) : null;
+  // The bar on an image (SPEC.md §7): its chips read the image.
+  const barFigure = bar?.figure === true;
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       {/* A split view: the pane header — the pane's document, the article
@@ -11645,8 +11714,8 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 e.preventDefault();
                 void runBar(bar);
               }}
-              placeholder={t("reader.barPlaceholder")}
-              aria-label={t("reader.barPlaceholder")}
+              placeholder={t(barFigure ? "reader.figureBarPlaceholder" : "reader.barPlaceholder")}
+              aria-label={t(barFigure ? "reader.figureBarPlaceholder" : "reader.barPlaceholder")}
               className="min-w-0 flex-1 rounded-xl bg-sand-100 px-3 py-1.5 text-[13px] outline-none placeholder:text-sand-500"
             />
             <VoiceTypingButton track="assistant-voice" className="size-8" size={14} />
@@ -11661,7 +11730,24 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               {t("reader.send")}
             </button>
           </div>
-          {!barKey && !bar.busy && (
+          {!barKey && !bar.busy && barFigure && (
+            <div className="flex flex-wrap items-center gap-1">
+              {FIGURE_CHIPS.map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => void runBar({ ...bar, input: t(key) })}
+                  data-track={`assistant-figure:${key.slice("reader.figure".length)}`}
+                  data-tip={t("reader.figureChipTitle")}
+                  className="rounded-full bg-sand-100 px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                >
+                  {t(key)}
+                </button>
+              ))}
+              <ThinkingChips small className="ml-auto" />
+            </div>
+          )}
+          {!barKey && !bar.busy && !barFigure && (
             <div className="flex flex-wrap items-center gap-1">
               {SUGGEST_CHIPS.map((c) => (
                 <button

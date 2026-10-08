@@ -91,6 +91,14 @@ const en = {
   commandFix: "Fix spelling and grammar",
   commandTitle: "The assistant writes this change into the text as suggestions. Accept or reject each one.",
   barPlaceholder: "Tell the assistant how to change the selected words…",
+  // Words from a figure (SPEC.md §7): the bar on an image.
+  figureBarPlaceholder: "Ask about the image, or say what to put under it…",
+  figureExtractText: "Extract the text",
+  figureKeyPoints: "Summarize the key points",
+  figureTextUnder: "Put the text under the image",
+  figureKeyPointsUnder: "Put the key points under the image",
+  figureChipTitle: "The assistant reads the image. A chip that says under the image puts the words there as a suggestion to accept or reject.",
+  figureSuggestionOffered: "The words are under the figure as a suggestion. Accept or reject it there.",
   // Contents (SPEC.md §26): the article's parts, each a jump to where it
   // starts. Two clicks make them: Contents opens the list, Generate
   // contents runs the model call.
@@ -397,6 +405,13 @@ const zh: Record<keyof typeof en, string> = {
   commandFix: "修正拼写和语法",
   commandTitle: "助手把这处修改以建议的形式写进文中。逐条接受或拒绝。",
   barPlaceholder: "告诉助手怎样修改选中内容…",
+  figureBarPlaceholder: "询问这张图片，或说明要在它下方放什么…",
+  figureExtractText: "提取文字",
+  figureKeyPoints: "总结要点",
+  figureTextUnder: "把文字放在图片下方",
+  figureKeyPointsUnder: "把要点放在图片下方",
+  figureChipTitle: "助手读取这张图片。写着“图片下方”的选项会把文字作为建议放在那里，由你接受或拒绝。",
+  figureSuggestionOffered: "文字已作为建议放在插图下方。请在那里接受或拒绝。",
   contents: "目录",
   contentsTitle: "文章的目录：各个部分，每一项跳转到它开始的位置。",
   contentsAsk: "生成目录？AI 阅读文章，写出各个部分，每一项跳转到它开始的位置。",
