@@ -866,7 +866,9 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
     // under it, set in by an em, are its description, no hanging indent
     // (parse loop finding: a LaTeX package's manual sets each option over
     // its description, "circletype = chem|math ... Default: chem", and the
-    // two read as one paragraph).
+    // two read as one paragraph). A default of up to eight words is short:
+    // "plus-space = {⟨skip⟩} … Default: .3em plus .1em minus .1em" took its
+    // description "A rubber length." into its line.
     const last = prev.cells[prev.cells.length - 1];
     const before = last ? Math.max(...prev.items.filter((it) => it.x + it.w <= last.x + 0.5).map((it) => it.x + it.w)) : -Infinity;
     const headLine =
@@ -874,7 +876,7 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
       prev.cells.length >= 2 &&
       colEdge > 0 &&
       prev.xEnd >= colEdge - prev.size &&
-      last.text.trim().split(/\s+/).length <= 4 &&
+      last.text.trim().split(/\s+/).length <= 8 &&
       last.x - before >= prev.size * 2 &&
       next.x > prev.x + next.size * 0.5;
     // A wrapped line whose stretched word gaps read as cells is still one

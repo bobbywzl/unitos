@@ -147,7 +147,12 @@ function continuesOnPage(prev: Segment, next: Segment, setting: PageSetting): bo
   // formula goes on in the next part (parse loop finding: ICML p. 6's "to
   // leading order uniform dropout yields ξ_eff ∼" | "h̄^{−1/2} while the
   // step schedule gives", cut by a column break, read as two paragraphs).
-  if (alike && /[=∼≈≃≤≥<>+−×·∝≡→↦]$/.test(prev.text.trimEnd())) return true;
+  // A sign set raised is a charge or an exponent's, no operator: a
+  // listing's output "SO₄²⁻ NH₄⁺ Na⁺" went on into the paragraph under the
+  // listing (parse loop finding).
+  const end = prev.text.trimEnd().length - 1;
+  const raised = prev.runs?.some((r) => r.sup && r.start <= end && r.end > end) ?? false;
+  if (alike && !raised && /[=∼≈≃≤≥<>+−×·∝≡→↦]$/.test(prev.text.trimEnd())) return true;
   // A column's last line that ran to its edge goes on as a page's does
   // (wrapsOver).
   if (columnBreak && alike && wrapsOver(prev, next, setting)) return true;
