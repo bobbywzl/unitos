@@ -11,7 +11,7 @@ import { AnnotationSideHost, useAnnotationSide } from "@/components/outline/anno
 import { dropIndex, notesList, parseListId } from "@/components/outline/board-lists";
 import { MergeUndoBar } from "@/components/outline/merge-undo";
 import { NoteCard } from "@/components/outline/note-card";
-import { NoteComposer } from "@/components/outline/note-composer";
+import { NoteComposer, focusComposer } from "@/components/outline/note-composer";
 import { NoteTile } from "@/components/outline/note-tile";
 import { SECTION_ACTION, SECTION_ADD_NOTE } from "@/components/outline/section-action";
 import { SelectionBar } from "@/components/outline/selection-bar";
@@ -255,7 +255,17 @@ export function SectionBoard({
         <div className="ml-auto flex items-center gap-2">
           {canEdit && (
             <button
-              onClick={compose.open}
+              onClick={(e) => {
+                // A second press while the composer is open puts the caret
+                // back in it, as the tray's and the full page's + Note do.
+                if (!compose.composing) {
+                  compose.open();
+                  return;
+                }
+                let root: HTMLElement | null = e.currentTarget;
+                while (root && !root.querySelector("[data-note-composer]")) root = root.parentElement;
+                focusComposer(root);
+              }}
               data-track="section-add-note"
               data-tip={t("outline.addNoteTitle")}
               className={SECTION_ADD_NOTE}
@@ -283,7 +293,7 @@ export function SectionBoard({
             the section (SPEC.md §6). */}
         {compose.composing && (
           <div className="mb-5 max-w-[760px]">
-            <NoteComposer compose={compose} onRelease={() => actions.expectComposed(section.id)} full padding="p-4" />
+            <NoteComposer compose={compose} onRelease={() => actions.expectComposed(section.id)} padding="p-4" />
           </div>
         )}
 
