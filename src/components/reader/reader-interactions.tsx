@@ -3301,10 +3301,10 @@ export function ReaderInteractions({
     const onDocumentMouseDown = (event: MouseEvent) => {
       pressStartedInside = event.target instanceof Node && container.contains(event.target);
       lastPressInside = event.target instanceof Element && event.target.closest("[data-reader-root]") === container;
+      lastPressedPane = event.target instanceof Element ? event.target.closest("[data-reader-root]") : null;
       pressTarget = event.target instanceof Element ? event.target : null;
     };
     const onMouseUp = (event: MouseEvent) => {
-      if (!canEditRef.current) return;
       const inside = event.target instanceof Node && container.contains(event.target);
       if (!inside && !pressStartedInside) return;
       const startedInside = pressStartedInside;
@@ -3329,6 +3329,12 @@ export function ReaderInteractions({
         // pane's edge.
         if (startedInside) clipSelectionToPane(event.clientX, event.clientY);
         const captured = captureSelection();
+        // A viewer's toolbox holds Define alone (SPEC.md §12): it persists
+        // nothing. Any other selection opens nothing.
+        if (!canEditRef.current) {
+          showTools(captured && offersDefine(captured) ? captured : null);
+          return;
+        }
         // The VIDEO block (the player's own block) refuses annotation: a
         // selection over it shows the refusal instead of tools. Transcript
         // lines take every text tool (SPEC.md §11).
@@ -3490,7 +3496,7 @@ export function ReaderInteractions({
     // opens the toolbar once Shift, Ctrl, or Cmd is let go, as the page
     // editor's does.
     const onReaderKeyUp = (e: KeyboardEvent) => {
-      if (richTextRef.current || !canEditRef.current) return;
+      if (richTextRef.current) return;
       if (e.key !== "Shift" && e.key !== "Control" && e.key !== "Meta") return;
       if (e.target instanceof HTMLElement && isTextEntry(e.target)) return;
       const selection = window.getSelection();
@@ -3498,32 +3504,43 @@ export function ReaderInteractions({
       if (!container.contains(selection.getRangeAt(0).commonAncestorContainer)) return;
       requestAnimationFrame(() => {
         const captured = captureSelection();
+        if (!canEditRef.current && !(captured && offersDefine(captured))) return;
         if (captured && JSON.stringify(popoverRef.current?.anchor) !== JSON.stringify(captured.anchor)) {
           showTools(captured);
         }
       });
     };
-    // Ctrl/Cmd+A in the block reader selects the article's blocks — not the
+    // Ctrl/Cmd+A outside a text field selects the article's words — not the
     // page around them, its header and the tray — and opens the toolbar on
-    // them, after a press in the pane or with the focus in it (a mark the
-    // keys reached). In edit mode and in a field, the browser's own Select
-    // all runs.
+    // them (SPEC.md §6), in the block reader and the page editor alike,
+    // wherever the focus is: in this pane, or, when no pane holds the focus
+    // or the last press, the first pane on the page. In edit mode and in a
+    // field (the page editor's text in Editing among them), the browser's
+    // or the editor's own Select all runs.
     const onSelectAll = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== "a") return;
-      const focusInside = document.activeElement !== null && container.contains(document.activeElement);
-      if (!(lastPressInside || focusInside) || richTextRef.current || editModeRef.current || !canEditRef.current) return;
       const active = document.activeElement;
+      const focusInside = active !== null && container.contains(active);
+      const anyPane = !active?.closest("[data-reader-root]") && !lastPressedPane?.isConnected;
+      const ours = lastPressInside || focusInside || (anyPane && document.querySelector("[data-reader-root]") === container);
+      if (!ours || editModeRef.current || !canEditRef.current) return;
       if (active instanceof HTMLElement && isTextEntry(active)) return;
-      const blocks = Array.from(container.querySelectorAll<HTMLElement>("[data-block-id]")).filter(
-        (el) => el.closest("[data-reader-root]") === container && el.getClientRects().length > 0,
-      );
-      const firstBlock = blocks[0];
-      const lastBlock = blocks[blocks.length - 1];
-      if (!firstBlock || !lastBlock) return;
-      e.preventDefault();
       const range = document.createRange();
-      range.setStart(firstBlock, 0);
-      range.setEnd(lastBlock, lastBlock.childNodes.length);
+      const page = richTextRef.current ? pageEditorIn(container) : null;
+      if (richTextRef.current) {
+        if (!page) return;
+        range.selectNodeContents(page.view.dom);
+      } else {
+        const blocks = Array.from(container.querySelectorAll<HTMLElement>("[data-block-id]")).filter(
+          (el) => el.closest("[data-reader-root]") === container && el.getClientRects().length > 0,
+        );
+        const firstBlock = blocks[0];
+        const lastBlock = blocks[blocks.length - 1];
+        if (!firstBlock || !lastBlock) return;
+        range.setStart(firstBlock, 0);
+        range.setEnd(lastBlock, lastBlock.childNodes.length);
+      }
+      e.preventDefault();
       const selection = window.getSelection();
       selection?.removeAllRanges();
       selection?.addRange(range);
@@ -3540,11 +3557,12 @@ export function ReaderInteractions({
     const coarse = window.matchMedia("(pointer: coarse)").matches;
     let selectionTimer: ReturnType<typeof setTimeout> | null = null;
     const onSelectionChange = () => {
-      if (!coarse || !canEditRef.current) return;
+      if (!coarse) return;
       if (selectionTimer) clearTimeout(selectionTimer);
       selectionTimer = setTimeout(() => {
         const captured = captureSelection();
         if (!captured) return;
+        if (!canEditRef.current && !offersDefine(captured)) return;
         // The same words again (the tint repaints and puts the selection
         // back over its marks): the open toolbox stays as it stands, with
         // the place fitToolbox gave it, above the words when the room under
@@ -5490,7 +5508,7 @@ export function ReaderInteractions({
   // The field keeps its own words while the reader types (kept-field.tsx).
   const addFieldRef = useRef<KeptFieldHandle>(null);
   useEffect(() => {
-    if (!popover || !popoverAnchorKey || popover.term || popover.figure) return;
+    if (!popover || !popoverAnchorKey || popover.term || popover.figure || !canEdit) return;
     const text = popover.anchor.quotedText.trim();
     if (!text) return;
     const blockType = blocksRef.current.find((b) => b.id === popover.anchor.blockId)?.type;
@@ -9542,6 +9560,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   const passageTooLong = popover !== null && (popover.anchor.segments?.length ?? 1) > MAX_SEGMENTS;
   // Define shows on one word alone (offersDefine).
   const has = (tool: Tool) =>
+    (canEdit || tool === "define") &&
     TOOLBARS[popoverKind].includes(tool) &&
     !((inCore || pendingLink) && tool === "link") &&
     (tool !== "define" || (popover !== null && offersDefine(popover)));
@@ -10530,6 +10549,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         }
         transcript={transcript}
         embedded={embedded}
+        band={!split && !transcript && !embedded && !richText}
         banner={
           <TranslationBar
             documentId={documentId}
@@ -11159,6 +11179,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           )}
 
 
+          {has("assistant") && (
           <button
             onClick={() => (barOffered ? openBar(popover) : setSubmenu(submenu === "ai" ? null : "ai"))}
             data-track="assistant"
@@ -11174,6 +11195,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             <SparkleIcon size={coarse ? 14 : 12} />
             {t(barOffered ? "reader.editWithAssistant" : "reader.assistant")}
           </button>
+          )}
           <Collapse open={submenu === "ai"}>
           {submenu === "ai" && (
             <div className="flex flex-col gap-1.5 p-1">

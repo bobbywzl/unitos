@@ -176,6 +176,21 @@ function TranscriptBody({
   // renamed to. Keyed by the row, not by the speaker — a voice heads many
   // rows, and an editor on each would take focus from the one just opened.
   const [renaming, setRenaming] = useState<{ row: number; name: string } | null>(null);
+  // The line whose tools show in the margin. The first line the pointer
+  // reaches shows them at once; another line takes them after the pointer
+  // rests on it, so a pointer on its way to the margin, across the words
+  // of the line before, keeps the tools it is going to.
+  const [toolsLine, setToolsLine] = useState<string | null>(null);
+  const toolsLineRef = useRef<string | null>(null);
+  const toolsTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const pointTools = (id: string | null, wait: number) => {
+    clearTimeout(toolsTimer.current);
+    toolsTimer.current = setTimeout(() => {
+      toolsLineRef.current = id;
+      setToolsLine(id);
+    }, wait);
+  };
+  useEffect(() => () => clearTimeout(toolsTimer.current), []);
 
   useEffect(() => {
     const pause = () => {
@@ -208,19 +223,24 @@ function TranscriptBody({
   }, [activeLineId]);
 
   // A click seeks; a drag that ends in a selection is the toolbar's, not a
-  // seek. Marks inside the line stop their own clicks.
-  const seek = (line: TranscriptLine) => {
+  // seek. Marks inside the line stop their own clicks. After a click the
+  // focus is the player's, so Space plays from the line, as the player's
+  // tip says; the keys reach a line with Tab and seek with Enter.
+  const seek = (line: TranscriptLine, e: React.MouseEvent) => {
     if (!window.getSelection()?.isCollapsed) return;
     onSeek(line);
+    if (e.detail > 0) {
+      listRef.current?.closest("article")?.querySelector<HTMLElement>("[data-video-player]")?.focus({ preventScroll: true });
+    }
   };
 
   return (
-    <div ref={listRef} className="mx-auto w-full max-w-[720px]">
+    <div ref={listRef} className="mx-auto w-full max-w-[720px]" onPointerLeave={() => pointTools(null, 300)}>
       {paragraphs.map((paragraph, pi) => {
         const speaker = speakerById.get(paragraph[0].speaker ?? "");
         return (
         <div key={paragraph[0].id} className={pi === 0 ? "" : "mt-5"}>
-          <p className="text-sand-800">
+          <p className="text-sand-800 sm:relative">
             <button
               onClick={() => onSeek(paragraph[0])}
               data-anchor-skip
@@ -278,21 +298,35 @@ function TranscriptBody({
               };
               const annotated = annotatedLineIds.has(line.id);
               return (
-                <span key={line.id} className="group/line relative">
+                <span key={line.id} className="group/line relative sm:static">
+                  {/* The line's tools: in the margin left of the row the
+                      line starts on, over no word (first in the line, so
+                      that is its place); on a phone, over the line. */}
+                  {toolsLine === line.id && (
+                    <span className="pointer-events-none absolute bottom-full left-0 z-10 inline-flex pb-1 sm:top-auto sm:right-full sm:bottom-auto sm:left-auto sm:mr-2 sm:pb-0">
+                      <span
+                        data-anchor-skip
+                        onPointerEnter={() => clearTimeout(toolsTimer.current)}
+                        className="pointer-events-auto flex items-center gap-0.5 rounded-full bg-card px-1 py-0.5 whitespace-nowrap shadow-float"
+                      >
+                        {lineTools(line)}
+                      </span>
+                    </span>
+                  )}
                   {documentId && (
                     <BlockBookmark documentId={documentId} blockId={line.id} text={line.text} inline />
                   )}
                   <span
-                    onClick={() => seek(line)}
+                    onClick={(e) => seek(line, e)}
+                    onPointerEnter={() => pointTools(line.id, toolsLineRef.current ? 250 : 0)}
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
+                      if (e.key === "Enter") {
                         e.preventDefault();
                         onSeek(line);
                       }
                     }}
-                    data-tip={t("video.jumpHere")}
                   >
                     <BlockView
                       block={block}
@@ -304,15 +338,6 @@ function TranscriptBody({
                       }}
                     />
                   </span>{" "}
-                  {/* The line's tools, floating over the text on hover. */}
-                  <span className="pointer-events-none absolute bottom-full left-0 z-10 hidden pb-1 group-hover/line:inline-flex">
-                    <span
-                      data-anchor-skip
-                      className="pointer-events-auto flex items-center gap-0.5 rounded-full bg-card px-1 py-0.5 whitespace-nowrap shadow-float"
-                    >
-                      {lineTools(line)}
-                    </span>
-                  </span>
                 </span>
               );
             })}
@@ -608,6 +633,7 @@ export function Reader({
   collapse,
   transcript,
   embedded,
+  band = false,
   richText,
   leftOffBlockId,
   accountPositionAtOpen = false,
@@ -640,6 +666,9 @@ export function Reader({
   accountPositionAtOpen?: boolean;
   /** The article card in the video pane (SPEC.md §11): no column padding, no block count. */
   embedded?: boolean;
+  /** The pane's band (Contents, Collapse, Extract, Done) stands over the
+      article: the edit bar sits under it, so it covers none of them. */
+  band?: boolean;
   /** Above the title: the Translate offer (SPEC.md §19). */
   banner?: React.ReactNode;
   /** A video document: the blocks are transcript lines (SPEC.md §11). */
@@ -982,6 +1011,17 @@ export function Reader({
     ids: new Set(),
   });
   const typeById = useMemo(() => new Map(blocks.map((b) => [b.id, b.type])), [blocks]);
+  // An article with no mark on the Tab path is one Tab stop itself (SPEC.md
+  // §6), so the keys reach it: from there Ctrl+A selects the article and
+  // opens the toolbar. A press leaves the focus on the page, as a mark's does.
+  const markStop = useMemo(
+    () =>
+      Object.values(highlightsByBlock).some((list) =>
+        list.some((h) => h.kind === "anchor" && h.sourceId && h.annotation && !h.leaving),
+      ),
+    [highlightsByBlock],
+  );
+  const articleStop = mode === "read" && !embedded && !markStop;
   useLayoutEffect(() => {
     if (!wrapSpacer) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -1285,7 +1325,7 @@ export function Reader({
       {mode === "edit" && (
         <div
           data-edit-toolbar
-          className="sticky top-3 z-30 mx-auto flex w-fit items-center gap-0.5 rounded-full bg-card px-2 py-1.5 shadow-float print:hidden"
+          className={`sticky z-30 mx-auto flex w-fit max-w-[calc(100%-1rem)] flex-wrap items-center justify-center gap-0.5 rounded-[18px] bg-card px-2 py-1.5 shadow-float print:hidden ${band ? "top-14 mt-4 pointer-coarse:top-[66px]" : "top-3"}`}
         >
           <button
             onMouseDown={keep}
@@ -1420,6 +1460,17 @@ export function Reader({
 
       <article
         ref={articleRef}
+        tabIndex={articleStop ? 0 : undefined}
+        onMouseDown={
+          articleStop
+            ? (e) => {
+                const article = e.currentTarget;
+                window.setTimeout(() => {
+                  if (document.activeElement === article) article.blur();
+                }, 0);
+              }
+            : undefined
+        }
         className={`reader-prose reader-column w-full ${embedded ? "px-0 py-0" : "px-6 py-11 print:py-0"}`}
         data-font={font ?? "default"}
         data-nudge="select"
