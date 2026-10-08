@@ -914,16 +914,35 @@
 .docs-tb-backdrop-clear {
   background: transparent;
 }
+/* A flex column: the head and the buttons stay, the body scrolls when the
+   screen is short (a phone held sideways). */
 .docs-tb-dialog {
+  display: flex;
+  flex-direction: column;
   max-width: calc(100vw - 32px);
   max-height: calc(100vh - 32px);
-  overflow: auto;
+  max-height: calc(100dvh - 32px);
+  overflow: hidden;
   padding: 24px;
   border-radius: 24px;
   background: var(--docs-tb-dialog);
   box-shadow: var(--elev-lg);
   color: var(--docs-text);
   font: 400 14px/20px var(--docs-ui-font);
+}
+.docs-tb-dialog-form {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.docs-tb-dialog-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  /* Room for the focus rings at the body's edges. */
+  margin: -4px;
+  padding: 4px;
 }
 .docs-tb-dialog-head {
   display: flex;
@@ -952,6 +971,7 @@
   color: var(--docs-accent-text);
 }
 .docs-tb-dialog-actions {
+  flex: none;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
@@ -991,6 +1011,10 @@
   outline: 2px solid var(--docs-blue);
   outline-offset: 2px;
   border-radius: 9999px;
+}
+/* Opened by the pointer: no ring until a key is pressed in the dialog. */
+.docs-tb-dialog[data-quiet] .docs-tb-button:focus-visible {
+  outline: none;
 }
 .docs-tb-field {
   height: 36px;
@@ -1113,7 +1137,7 @@
   margin: 20px 0 8px;
   font: 600 14px/20px var(--docs-ui-font);
 }
-.docs-fields-dialog form > h3:first-child {
+.docs-fields-dialog .docs-tb-dialog-body > h3:first-child {
   margin-top: 0;
 }
 .docs-fields-row {
