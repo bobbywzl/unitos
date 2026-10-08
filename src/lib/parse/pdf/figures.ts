@@ -512,9 +512,11 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     return ends.filter((e) => edge - e <= textSize * 1.5).length >= 4 ? edge : null;
   })();
   // A chart's ticks: three numbers or more in a row, or right-aligned in a
-  // column, on the box or within a line of it.
+  // column, on the box or within a line of it. A minus may stand a space
+  // before its digits (parse loop finding: a Tufte textbook's plot of ψ(x)
+  // reads its ticks "− 4", "− 2", "2", "4", and was no figure).
   const ticked = (box: Box) => {
-    const numbers = runs.filter((r) => shareInside(r.box, grow(box, textSize)) >= 0.7 && /^[-−–+]?\d[\d.,]*%?$/.test(textOf(r).trim()));
+    const numbers = runs.filter((r) => shareInside(r.box, grow(box, textSize)) >= 0.7 && /^[-−–+]?\s?\d[\d.,]*%?$/.test(textOf(r).trim()));
     const lined = (at: (r: TextRun) => number, by: number) => numbers.some((a) => numbers.filter((b) => Math.abs(at(a) - at(b)) <= by).length >= 3);
     return lined((r) => r.box.y1, 1) || lined((r) => r.box.x2, 2);
   };
