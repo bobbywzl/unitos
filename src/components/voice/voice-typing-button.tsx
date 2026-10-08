@@ -106,13 +106,21 @@ export function VoiceTypingButton({
     if (el) typeHeardInto(el, phrase, english);
   });
   const { listening, status, interim } = speech;
-  const [rect, setRect] = useState<DOMRect | null>(null);
+  const [rect, setRect] = useState<{ left: number; width: number; top: number; bottom: number } | null>(null);
   const showCard = listening || status !== "";
 
   // The card sits over the button while it shows, and follows it on scroll.
+  // A box above the button (the toolbar's assistant box) keeps its words in
+  // view: the card sits over the box and the button both (TOOL13-13).
   useEffect(() => {
     if (!showCard) return;
-    const place = () => setRect(buttonRef.current?.getBoundingClientRect() ?? null);
+    const place = () => {
+      const button = buttonRef.current?.getBoundingClientRect();
+      if (!button) return setRect(null);
+      const box = targetRef.current?.isConnected ? targetRef.current.getBoundingClientRect() : null;
+      const top = box && box.bottom <= button.top + 4 && button.top - box.top < 240 ? box.top : button.top;
+      setRect({ left: button.left, width: button.width, top, bottom: button.bottom });
+    };
     place();
     window.addEventListener("scroll", place, true);
     window.addEventListener("resize", place);
