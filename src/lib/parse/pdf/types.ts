@@ -48,6 +48,7 @@ export type Item = Flags & {
   table?: TableRegion; // a ruled table's place in the text flow (ruled.ts takeTables)
   space?: true; // a space item on a page TeX did not set: the page draws it (index.ts)
   spaced?: boolean; // the page draws a space right before it (columns.ts pageLines)
+  around?: Box; // a pull quote the column runs around, beside the item's line (columns.ts splitAt): the line's measure ends or starts at it
 };
 // A run over a tab (text.ts) carries its stop, and fill when the page
 // draws a fill-in rule under it (an underlined tab).

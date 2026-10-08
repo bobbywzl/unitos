@@ -787,7 +787,16 @@ function splitAt(items: Item[], graphics: Placed[], page: number, pageWidth: num
     while (j < separators.length && floats.includes(separators[j])) j++;
     const under = separators[j];
     const run = separators.splice(k, j - k);
-    separators.splice(k, 0, { y: (under?.y ?? bottom - maxSize) + 0.001, size: 0, piece: { items: run.flatMap((s) => (s.piece && "items" in s.piece ? s.piece.items : [])) } as Piece });
+    // The columns' lines beside the quote, from a line of the column over
+    // its first row's top to a line under its last row's foot (the text
+    // keeps that far from it), end or start at it: a
+    // line there stops short of its column's edge, or starts past it, for
+    // the quote, not for a break (the lines wrapped around a MagPi quote
+    // kept their breaks, and the paragraph split at the quote's foot).
+    const quote = run.flatMap((s) => (s.piece && "items" in s.piece ? s.piece.items : []));
+    const box = { x1: Math.min(...quote.map((i) => i.x)), x2: Math.max(...quote.map((i) => i.x + i.w)), y1: Math.min(...quote.map((i) => i.y - i.size * 0.25)), y2: Math.max(...quote.map((i) => i.y + i.size)) };
+    for (const item of items) if (!spanning.has(item) && item.y <= box.y2 + columnSize * 1.5 && item.y >= box.y1 - columnSize * 1.5) item.around = box;
+    separators.splice(k, 0, { y: (under?.y ?? bottom - maxSize) + 0.001, size: 0, piece: { items: quote } as Piece });
   }
   separators.sort((a, b) => b.y - a.y);
   const bands: Band[] = separators.map((s) => ({ left: { items: [], graphics: [] }, right: { items: [], graphics: [] }, separator: s.piece }));

@@ -226,6 +226,16 @@ export function lineAsPart(line: Line): { text: string; runs: Run[] } {
   return (place && withTabs(line, place)) ?? { text: line.text.replace(/\t/g, " "), runs: line.runs };
 }
 
+/** Where the pull quote a line is set beside stands (Item.around): "right"
+    when the line's measure ends at it, "left" when the line's measure
+    starts past it, null when the line stands beside none. */
+export function quoteSide(line: Line): "left" | "right" | null {
+  const box = line.items.find((i) => i.around)?.around;
+  if (!box) return null;
+  if (box.x1 >= line.xEnd - 1) return "right";
+  return box.x2 <= line.x + 1 ? "left" : null;
+}
+
 // Would the next line's first word have fit on this line? If yes, the break
 // was intentional — keep it as a line break instead of a joining space.
 export function fillsMargin(line: Line, next: Line, rightEdge: number): boolean {
@@ -273,8 +283,11 @@ export function joinGroup(lines: Line[], proseJoin = false, columnEdge = 0): { t
     const prevText = lines[i - 1].text.trim();
     const nextText = lines[i].text;
     const wrapped = fillsMargin(lines[i - 1], lines[i], rightEdge);
-    const roomy = lines[i - 1].xEnd + lines[i - 1].size * 1.28 + lines[i].firstWordWidth < rightEdge;
+    // A line set beside a pull quote right of it ends at the quote: no room.
+    const quoted = quoteSide(lines[i - 1]) === "right";
+    const roomy = !quoted && lines[i - 1].xEnd + lines[i - 1].size * 1.28 + lines[i].firstWordWidth < rightEdge;
     const typed =
+      !quoted &&
       columnEdge > 0 &&
       !/[\p{L}\p{N}][-‐]$/u.test(prevText) &&
       lines[i - 1].xEnd + lines[i - 1].size * 3 + lines[i].firstWordWidth < Math.max(rightEdge, columnEdge);
