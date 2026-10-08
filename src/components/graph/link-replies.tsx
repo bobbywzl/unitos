@@ -21,40 +21,40 @@ import { useT } from "@/components/lang-provider";
 // a per-viewer convenience, so a lost one loses no work, and replies older
 // than the store's first read never count as new.
 
+// REV6-05: the store is read during render and written only from effects
+// (the first look's `since`, a thread opened, a prune); another tab's write
+// reaches this one by the `storage` event; a link that is gone leaves it.
+
 type Seen = { since: string; links: Record<string, string> };
-const SEEN_KEY = (accountId: string, notebookId: string) => `unitos-link-seen:${accountId}:${notebookId}`;
+const SEEN_PREFIX = "unitos-link-seen:";
+const SEEN_KEY = (accountId: string, notebookId: string) => `${SEEN_PREFIX}${accountId}:${notebookId}`;
 const seenListeners = new Set<() => void>();
 const seenCache = new Map<string, Seen>();
+const SEEN_KEEP_MS = 90 * 24 * 3600_000;
 
-function readSeen(key: string): Seen {
-  const kept = seenCache.get(key);
-  if (kept) return kept;
-  let seen: Seen | null = null;
+function stored(key: string): Seen | null {
   try {
     const raw = window.localStorage.getItem(key);
     const parsed: unknown = raw ? JSON.parse(raw) : null;
     if (parsed && typeof parsed === "object" && typeof (parsed as Seen).since === "string" && typeof (parsed as Seen).links === "object") {
-      seen = parsed as Seen;
+      return parsed as Seen;
     }
   } catch {
-    seen = null;
+    // storage off: the replies are not marked new
   }
-  if (!seen) {
-    seen = { since: new Date().toISOString(), links: {} };
-    try {
-      window.localStorage.setItem(key, JSON.stringify(seen));
-    } catch {
-      // storage off: the replies are not marked new
-    }
-  }
+  return null;
+}
+
+/** Read only: a first look starts now, and an effect stores it (keepSeen). */
+function readSeen(key: string): Seen {
+  const kept = seenCache.get(key);
+  if (kept) return kept;
+  const seen = stored(key) ?? { since: new Date().toISOString(), links: {} };
   seenCache.set(key, seen);
   return seen;
 }
 
-function markSeen(key: string, linkId: string, at: string) {
-  const seen = readSeen(key);
-  if ((seen.links[linkId] ?? "") >= at) return;
-  const next = { ...seen, links: { ...seen.links, [linkId]: at } };
+function writeSeen(key: string, next: Seen) {
   seenCache.set(key, next);
   try {
     window.localStorage.setItem(key, JSON.stringify(next));
@@ -64,18 +64,70 @@ function markSeen(key: string, linkId: string, at: string) {
   for (const l of seenListeners) l();
 }
 
+/** The first look's `since` goes to storage, unless another tab stored one. */
+function keepSeen(key: string) {
+  if (stored(key)) return;
+  writeSeen(key, readSeen(key));
+}
+
+function markSeen(key: string, linkId: string, at: string) {
+  // Another tab's marks are read first, so this write keeps them.
+  const seen = stored(key) ?? readSeen(key);
+  if ((seen.links[linkId] ?? "") >= at) return;
+  writeSeen(key, { ...seen, links: { ...seen.links, [linkId]: at } });
+}
+
+/** Drop the marks of links the graph's answer no longer holds: every one
+    when the answer is whole (it holds the provenance links), else those
+    whose last reply is older than 90 days. */
+export function usePruneLinkSeen(notebookId: string, linkIds: string[] | null, whole: boolean) {
+  const { myId, authOn } = useCollab();
+  useEffect(() => {
+    if (!authOn || !myId || !linkIds) return;
+    const key = SEEN_KEY(myId, notebookId);
+    const seen = stored(key);
+    if (!seen) return;
+    const live = new Set(linkIds);
+    const cutoff = new Date(Date.now() - SEEN_KEEP_MS).toISOString();
+    const links = Object.fromEntries(
+      Object.entries(seen.links).filter(([id, at]) => live.has(id) || (!whole && at >= cutoff)),
+    );
+    if (Object.keys(links).length < Object.keys(seen.links).length) writeSeen(key, { ...seen, links });
+  }, [authOn, myId, notebookId, linkIds, whole]);
+}
+
+function onStorage(e: StorageEvent) {
+  if (e.key !== null && !e.key.startsWith(SEEN_PREFIX)) return;
+  if (e.key === null) seenCache.clear();
+  else seenCache.delete(e.key);
+  for (const l of seenListeners) l();
+}
+
 function subscribeSeen(listener: () => void) {
+  if (seenListeners.size === 0) window.addEventListener("storage", onStorage);
   seenListeners.add(listener);
-  return () => seenListeners.delete(listener);
+  return () => {
+    seenListeners.delete(listener);
+    if (seenListeners.size === 0) window.removeEventListener("storage", onStorage);
+  };
+}
+
+/** The store of this account and project, kept from an effect. */
+function useSeen(): { seen: Seen | null; myId: string } {
+  const { notebookId } = useParams<{ notebookId?: string }>();
+  const { myId, authOn } = useCollab();
+  const key = authOn && myId && notebookId ? SEEN_KEY(myId, notebookId) : null;
+  const seen = useSyncExternalStore(subscribeSeen, () => (key ? readSeen(key) : null), () => null);
+  useEffect(() => {
+    if (key) keepSeen(key);
+  }, [key]);
+  return { seen, myId };
 }
 
 /** The open replies on a link another person wrote after this account last
     opened its thread. 0 on the server and with sign-in off (one reader). */
 export function useNewReplies(link: GraphEdgeLink): number {
-  const { notebookId } = useParams<{ notebookId?: string }>();
-  const { myId, authOn } = useCollab();
-  const key = authOn && myId && notebookId ? SEEN_KEY(myId, notebookId) : null;
-  const seen = useSyncExternalStore(subscribeSeen, () => (key ? readSeen(key) : null), () => null);
+  const { seen, myId } = useSeen();
   if (!seen) return 0;
   const after = link.id in seen.links ? seen.links[link.id] : seen.since;
   return (link.replies ?? []).filter((r) => r.resolvedById === null && r.userId !== myId && r.createdAt > after).length;
@@ -83,10 +135,7 @@ export function useNewReplies(link: GraphEdgeLink): number {
 
 /** The new replies on any of a curve's links (the curve's replies mark). */
 export function useAnyNewReplies(links: GraphEdgeLink[]): boolean {
-  const { notebookId } = useParams<{ notebookId?: string }>();
-  const { myId, authOn } = useCollab();
-  const key = authOn && myId && notebookId ? SEEN_KEY(myId, notebookId) : null;
-  const seen = useSyncExternalStore(subscribeSeen, () => (key ? readSeen(key) : null), () => null);
+  const { seen, myId } = useSeen();
   if (!seen) return false;
   return links.some((l) => {
     const after = l.id in seen.links ? seen.links[l.id] : seen.since;
