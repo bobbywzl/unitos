@@ -1777,6 +1777,37 @@ export function attachFigureRegions(
       placed.find((s) => s.type === "FIGURE" && s.box && inside(s.box, box));
     // A caption set beside the graphic takes the place of one under it.
     const sides = sideCaptions.get(graphic) ?? [];
+    // A drawing with no caption of its own right under a captioned drawn
+    // figure, as wide as it (within a fifth), two lines or less under it
+    // with no figure between, is the figure's lower part (parse loop
+    // finding: a quantum mechanics book's Figure 30.1, a grid of four plots
+    // in two rows with its caption beside the top row, read as two crops,
+    // the lower one with no caption). Two drawings with no caption stand
+    // apart: each sits by its own lines (the same book's p. 47, the
+    // expected and the actual result). A line level with the drawing that
+    // opens with a figure's label is its caption in the margin (the MML
+    // book's Figures 8.5 and 8.6, stacked, each with its caption beside it).
+    const meets = (s: Segment) => s.box !== undefined && s.page === page && Math.min(s.box.x2, box.x2) - Math.max(s.box.x1, box.x1) >= Math.max(s.box.x2 - s.box.x1, box.x2 - box.x1) * 0.8;
+    const labeled = placed.some((s) => s.page === page && s.box !== undefined && s.box.y1 < box.y2 && s.box.y2 > box.y1 && LABEL_START_RE.test(s.text));
+    const over =
+      !host && !caption && sides.length === 0 && graphic.pictures.length === 0 && !labeled
+        ? placed.find(
+            (s) =>
+              s.type === "FIGURE" &&
+              !s.mathCrop &&
+              (s.captionBox !== undefined || LABEL_START_RE.test(s.text)) &&
+              meets(s) &&
+              !ctx.drawing.images.some((m) => m.x1 < s.box!.x2 && m.x2 > s.box!.x1 && m.y1 < s.box!.y2 && m.y2 > s.box!.y1) &&
+              s.box!.y1 >= box.y2 - 1 &&
+              s.box!.y1 - box.y2 <= ctx.bodySize * 2.5 &&
+              !placed.some((t) => t !== s && meets(t) && t.box!.y2 <= s.box!.y1 + 1 && t.box!.y1 >= box.y2 - 1),
+          )
+        : undefined;
+    if (over?.box) {
+      over.box = unionBox(over.box, box);
+      over.region = toRegion(over.box);
+      continue;
+    }
     if (host?.box) {
       if (!inside(box, host.box)) {
         host.box = unionBox(host.box, box);
