@@ -1182,6 +1182,28 @@ export function findTableRuns(lines: Line[], ctx: PageContext): number[] {
       i++;
       continue;
     }
+    // Entries are no table: a term's line, its default set flush right, and
+    // a sentence set in under it, at no column of the run (a LaTeX
+    // package's manual sets each option so; parse loop finding: two
+    // options between two margin notes read as a table of two rows, each
+    // description inside its option's cell). Two sentences or more, under
+    // half the rows or more.
+    const runColumns = clusterColumns(multiCell.map((k) => lines[k]));
+    const sentences = members.filter((k) => {
+      const line = lines[k];
+      return (
+        line.cells.length === 1 &&
+        line.x > runColumns[0] + 8 &&
+        !isAlignedLine(line, runColumns) &&
+        /^\p{Lu}/u.test(line.text.trim()) &&
+        /[.!?:]$/.test(line.text.trim()) &&
+        line.text.replace(/[^\p{L}]/gu, "").length >= 15
+      );
+    }).length;
+    if (sentences >= 2 && sentences * 2 >= multiCell.length) {
+      i++;
+      continue;
+    }
     // Text that only lines up is no table: two columns of prose side by side
     // (a page whose columns were not split: MMWR p. 21's text above Table 3,
     // arXiv 2504.02736's reference list), form lines with no rule drawn (a

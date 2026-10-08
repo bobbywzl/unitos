@@ -384,6 +384,37 @@ function readLigatures(items: Item[]) {
   }
 }
 
+/** Items in reading order, each combining mark joined to the glyph it is
+    set over, the mark after it, as one item over both: a mark item drawn
+    wider than its base starts left of it, and the sort by x read it first.
+    Parse loop finding: a LaTeX package's manual draws its circled charge as
+    "⃝" (U+20DD) over "+", and "\fplus ⊕" read "\fplus ⃝+", the circle
+    alone. */
+function marksAfterBases(items: Item[]): Item[] {
+  const out: Item[] = [];
+  for (let k = 0; k < items.length; k++) {
+    const [mark, base] = [items[k], items[k + 1]];
+    const middle = base ? base.x + base.w / 2 : NaN;
+    if (
+      base &&
+      /^\p{M}+$/u.test(mark.str) &&
+      Array.from(base.str).length === 1 &&
+      !/\p{M}/u.test(base.str) &&
+      middle > mark.x &&
+      middle < mark.x + mark.w &&
+      Math.abs(base.y - mark.y) < mark.size * 0.5
+    ) {
+      const x = Math.min(mark.x, base.x);
+      const w = Math.max(mark.x + mark.w, base.x + base.w) - x;
+      out.push({ ...base, str: base.str + mark.str, x, w, glyphs: base.glyphs && mark.glyphs ? [...base.glyphs, ...mark.glyphs] : base.glyphs });
+      k++;
+      continue;
+    }
+    out.push(mark);
+  }
+  return out;
+}
+
 // A ligature's letters: two or more of a right-to-left script, no marks.
 const LIGATURE_RE = /^[\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}]+$/u;
 
@@ -630,38 +661,82 @@ function readingOrder(items: Item[], size: number): { order: Item[]; gaps: Map<I
 /** A left-to-right line's items, or a table cell's, with each run of
     right-to-left words read from the right, as one item: items of
     right-to-left letters side by side, in one style, a word space apart at
-    most (a code font's space is 0.6 em). Parse loop finding: an Arabic
-    book's code listing "printf '%s\\n' \"مرحبًا $name\"" drew "مرحبًا" as
-    three items, "مرح", "بً", and "ا", and read "ابًمرح"; its comment "#
-    مرحبًا غازي" read its two words backwards. */
+    most (a code font's space is 0.6 em), and the marks between them.
+    Parse loop finding: an Arabic book's code listing "printf '%s\\n'
+    \"مرحبًا $name\"" drew "مرحبًا" as three items, "مرح", "بً", and "ا", and
+    read "ابًمرح"; its comment "# مرحبًا غازي" read its two words backwards.
+    A number after the words and the marks between, up to the string's
+    closing quote, are the run's too: the page sets them left of the words
+    (a number after Arabic letters reads right to left with them), and they
+    read after the words, each mark and number in its own order reversed
+    (parse loop finding: the book's 'echo "رفضت إعادة الضبط: مسار غير متوقع"
+    >&2' is drawn 'echo "2&> "متوقع غير مسار :الضبط إعادة رفضت', and read
+    'echo "2&> "مسار غير متوقع :رفضت إعادة الضبط': the colon split the run,
+    and ">&2" stood before the string). */
 export function rightToLeftRuns(items: Item[], size: number): Item[] {
   const rtlOnly = (i: Item) => RTL_RE.test(i.str) && !/[\p{Script=Latin}\p{N}]/u.test(i.str) && !i.math;
   if (!items.some(rtlOnly)) return items;
+  const neutral = (i: Item) => !i.math && !/[\p{L}\p{N}]/u.test(i.str);
+  // A bar parts two cells of a table typed as text: it never joins a run.
+  const joins = (i: Item) => neutral(i) && !i.str.includes("|");
+  const number = (i: Item) => !i.math && /\p{N}/u.test(i.str) && !/\p{L}/u.test(i.str);
+  const close = (a: Item, b: Item) => b.x - (a.x + a.w) < size * 0.75;
+  // A mark's or a number's characters in reading order: its digits keep
+  // theirs, the rest reverse.
+  const reversed = (str: string) => (str.match(/\p{N}+(?:[.,]\p{N}+)*|[^]/gu) ?? []).reverse().join("");
   const out: Item[] = [];
   let run: Item[] = [];
+  // Marks after the run's last word, waiting for its next.
+  let between: Item[] = [];
   const flush = () => {
-    const tail: Item[] = [];
-    while (run.length > 0 && run[run.length - 1].str.trim() === "") tail.unshift(run.pop()!);
     if (run.length > 1) {
       let str = "";
       for (let k = run.length - 1; k >= 0; k--) {
         const gap = k + 1 < run.length ? run[k + 1].x - (run[k].x + run[k].w) : 0;
         const space = (gap > size * 0.15 || run[k].str.trim() === "") && str !== "" && !str.endsWith(" ");
-        str += (space ? " " : "") + run[k].str.trim();
+        str += (space ? " " : "") + (rtlOnly(run[k]) ? run[k].str.trim() : reversed(run[k].str.trim()));
       }
       const x = run[0].x;
-      out.push({ ...run[0], str, x, w: Math.max(...run.map((i) => i.x + i.w)) - x, glyphs: run.flatMap((i) => i.glyphs ?? []) });
+      // The run takes its words' style, its leftmost item's drawn space,
+      // and the typewriter face of its marks: a listing's string stays code.
+      const word = run.find(rtlOnly) ?? run[0];
+      const mono = word.mono || run.some((i) => !rtlOnly(i) && i.str.trim() !== "" && i.mono);
+      out.push({ ...word, str, x, w: Math.max(...run.map((i) => i.x + i.w)) - x, glyphs: run.flatMap((i) => i.glyphs ?? []), spaced: run[0].spaced, mono });
     } else out.push(...run);
-    out.push(...tail);
+    out.push(...between);
     run = [];
+    between = [];
+  };
+  // The number and marks a run opens with, taken back from the items read
+  // before it: from the closing quote just left of its first word back to
+  // the nearest number, every item close to the next.
+  const opening = (word: Item): Item[] => {
+    const quote = out.at(-1);
+    if (!quote || !neutral(quote) || !/["'”’]/.test(quote.str) || !close(quote, word)) return [];
+    let k = out.length - 1;
+    let first = -1;
+    while (k > 0 && (neutral(out[k - 1]) || number(out[k - 1])) && close(out[k - 1], out[k])) {
+      k--;
+      if (number(out[k])) first = k;
+    }
+    return first < 0 ? [] : out.splice(first);
   };
   for (const item of items) {
-    const last = run[run.length - 1];
-    const blank = item.str.trim() === "";
-    const joins = last !== undefined && (rtlOnly(item) || blank) && sameFlags(last, item) && item.x - (last.x + last.w) < size * 0.75;
-    if (!joins) flush();
-    if (rtlOnly(item) || (joins && blank)) run.push(item);
-    else out.push(item);
+    const word = run.at(-1);
+    const last = between.at(-1) ?? word;
+    if (rtlOnly(item)) {
+      if (word && last && close(last, item) && (between.length > 0 || sameFlags(word, item))) {
+        run.push(...between, item);
+        between = [];
+        continue;
+      }
+      flush();
+      run = [...opening(item), item];
+    } else if (last && joins(item) && close(last, item)) between.push(item);
+    else {
+      flush();
+      out.push(item);
+    }
   }
   flush();
   return out;
@@ -670,9 +745,11 @@ export function rightToLeftRuns(items: Item[], size: number): Item[] {
 function buildLine(rawItems: Item[], page: number, rtlText = false): Line {
   const merged = mergeSpacedItems(
     composeAccents(
-      rawItems
-        .map((i) => ({ ...i, str: i.mono ? i.str : collapseSpacedStr(i.str) }))
-        .sort((a, b) => a.x - b.x),
+      marksAfterBases(
+        rawItems
+          .map((i) => ({ ...i, str: i.mono ? i.str : collapseSpacedStr(i.str) }))
+          .sort((a, b) => a.x - b.x),
+      ),
     ),
   );
   // A line's size is its text's: KaTeX sets a formula 1.21 times its prose,

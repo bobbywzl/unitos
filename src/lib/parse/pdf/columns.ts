@@ -28,6 +28,12 @@ export function lineColumn(line: Line): [number, number] | undefined {
   return columns.get(line);
 }
 
+/** A line cut from another keeps its column (math/display.ts). */
+export function keepColumn(from: Line, to: Line) {
+  const column = columns.get(from);
+  if (column) columns.set(to, column);
+}
+
 /** A mirrored line's column (mirror.ts): its line's, mirrored across the axis. */
 export function mirrorColumn(from: Line, to: Line, axis: number) {
   const column = columns.get(from);
@@ -35,6 +41,16 @@ export function mirrorColumn(from: Line, to: Line, axis: number) {
 }
 
 const chars = (list: Item[]) => list.reduce((n, i) => n + i.str.trim().length, 0);
+
+// The size half the items' characters are set in or under: a code
+// listing's or a formula's many short items say little of a column's size.
+function textSize(list: Item[]): number {
+  const sorted = list.filter((i) => i.str.trim() !== "").sort((a, b) => a.size - b.size);
+  const half = chars(sorted) / 2;
+  let seen = 0;
+  for (const i of sorted) if ((seen += i.str.trim().length) >= half) return i.size;
+  return median(list.map((i) => i.size));
+}
 
 // The page's horizontal rules outside its tables, while pageLines reads it:
 // a rule across a gutter ends the band of columns above it (splitAt).
@@ -854,7 +870,7 @@ function isNoteBand(band: Band, page: number): boolean {
   if (band.left.items.length === 0 || band.right.items.length === 0 || !sideNote(band, page)) return false;
   const [note, wide] = chars(band.left.items) < chars(band.right.items) ? [band.left, band.right] : [band.right, band.left];
   if (note.items.reduce((n, i) => n + i.str.replace(/[^\p{L}]/gu, "").length, 0) < 10) return false;
-  const size = median(wide.items.map((i) => i.size));
+  const size = textSize(wide.items);
   const gutter = Math.min(...band.right.items.map((i) => i.x)) - Math.max(...band.left.items.map((i) => i.x + i.w));
   // A note set smaller than the column stands closer: three quarters of
   // the column's size apart (parse loop finding: a LaTeX package's manual
@@ -933,7 +949,9 @@ function sideNote(band: Band, page: number): Side[] | null {
   const onLeft = chars(band.left.items) < chars(band.right.items);
   const [note, wide] = onLeft ? [band.left, band.right] : [band.right, band.left];
   if (note.items.length === 0 || chars(note.items) * 7 > chars(note.items) + chars(wide.items)) return null;
-  const size = (list: Item[]) => median(list.map((i) => i.size));
+  // A note's size is its items'; the column's, its characters' (textSize).
+  const noteSize = median(note.items.map((i) => i.size));
+  const columnSize = textSize(wide.items);
   const italic = (list: Item[]) => list.filter((i) => i.italic).length * 2 > list.length;
   const lines = buildLines(wide.items, page);
   // A note set at the column's size and shape stands in the margin
@@ -948,7 +966,7 @@ function sideNote(band: Band, page: number): Side[] | null {
   // the margin joined the display beside it once the figure was found).
   const inMargin = () => {
     const edge = Math.max(...lines.map((l) => l.xEnd));
-    const em = size(wide.items);
+    const em = columnSize;
     return (
       !onLeft &&
       lines.filter((l) => edge - l.xEnd <= em * 0.25).length >= 4 &&
@@ -957,9 +975,14 @@ function sideNote(band: Band, page: number): Side[] | null {
     );
   };
   if (note.graphics.length > 0 && !inMargin()) return null;
-  if (Math.abs(size(note.items) - size(wide.items)) < size(wide.items) * 0.1 && italic(note.items) === italic(wide.items) && !inMargin()) return null;
+  if (Math.abs(noteSize - columnSize) < columnSize * 0.1 && italic(note.items) === italic(wide.items) && !inMargin()) return null;
   const gaps = lines.slice(1).map((l, k) => lines[k].y - l.y);
-  const pitch = median(gaps);
+  // The pitch: the gaps at the text's leading, within 1.6 of the smaller
+  // line's size (a column of entries, each a line over its description,
+  // sets as many gaps between entries as within them, and their median
+  // parted none of them).
+  const leading = gaps.filter((gap, k) => gap <= Math.min(lines[k].size, lines[k + 1].size) * 1.6);
+  const pitch = median(leading.length > 0 ? leading : gaps);
   // A paragraph parts from the next where the gap between them is wider
   // than the lines' pitch, a pitch scaled to the smaller line's size: a
   // title's lines set at twice the body's size stand twice the pitch apart

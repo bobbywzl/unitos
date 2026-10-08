@@ -13,10 +13,11 @@
 // before, and stays a crop; so does a display those lines missed.
 
 import type { Glyph, Rule } from "@/lib/parse/pdf/drawing";
+import { keepColumn } from "@/lib/parse/pdf/columns";
 import { CAPTION_RE } from "@/lib/parse/pdf/figures";
 import { SPACING_ACCENTS, isTextMath, isUnreadMath, sameFlags } from "@/lib/parse/pdf/glyphs";
 import { regionOf, unionBox } from "@/lib/parse/pdf/geometry";
-import { ATTACH_PUNCT_RE, spaceGap } from "@/lib/parse/pdf/lines";
+import { ATTACH_PUNCT_RE, buildLines, spaceGap } from "@/lib/parse/pdf/lines";
 import { drawnBulletAt } from "@/lib/parse/pdf/lists";
 import { BULLET_RE } from "@/lib/parse/pdf/markers";
 import { layoutLatex } from "@/lib/parse/pdf/math/check";
@@ -801,13 +802,86 @@ function columnOf(lines: Line[], n: number, ctx: PageContext): { left: number; r
   return Number.isFinite(left) ? { left, right } : { left: ctx.columnLeft, right: Infinity };
 }
 
+/** A fraction's numerator or denominator set on the baseline of words a
+    wide gap beside it (a slide's label left of its display, a side note
+    right of it) is the formula's, not the words' line. A cell all in math
+    leaves the words' line when it stands over or under a fraction bar (a
+    rule or a thin path its width) and a line all in math stands within two
+    of its sizes over or under it and within an em and a half across; the
+    words stand two ems or more from it. The words read before the
+    formula when they stand left of it, after its last row when right
+    (parse loop finding: a PowerPoint deck set "Goodman and Kruskal's
+    Gamma" level with the numerator of γ = (N_s − N_d)/(N_s + N_d), and
+    the notes "N_s… concordant pair" and "N_d… discordant pair" level with
+    τ's numerator and denominator: the numerators read in the words'
+    paragraphs, γ's crop lost its numerator, and τ read in four pieces). */
+function formulaCellsApart(input: Line[], ctx: PageContext): Line[] {
+  const inked = (items: Item[]) => items.filter((i) => i.str.trim() !== "");
+  const allMath = (items: Item[]) => inked(items).length > 0 && inked(items).every((i) => i.math);
+  const hasWords = (items: Item[]) => items.some((i) => !i.math && /\p{L}{3}/u.test(i.str));
+  const rows = input.filter((l) => l.cells.length === 1 && allMath(l.items));
+  if (rows.length === 0) return input;
+  const bars = [...ctx.drawing.rules.filter((r) => r.dir === "h"), ...ctx.drawing.paths.filter((p) => !p.clip && p.y2 - p.y1 <= 1.5)];
+  const splits = new Map<Line, { words: Line; formula: Line; left: boolean }>();
+  for (const line of input) {
+    if (line.cells.length !== 2 || line.table || line.display) continue;
+    const at = line.cells[1].x;
+    const [first, second] = [line.items.filter((i) => i.x + i.w / 2 < at), line.items.filter((i) => i.x + i.w / 2 >= at)];
+    const mathFirst = allMath(first) && hasWords(second);
+    if (!mathFirst && !(allMath(second) && hasWords(first))) continue;
+    const [math, words] = mathFirst ? [first, second] : [second, first];
+    const size = line.size;
+    const span = (list: Item[]) => [Math.min(...list.map((i) => i.x)), Math.max(...list.map((i) => i.x + i.w))];
+    const [mx1, mx2] = span(inked(math));
+    const [wx1, wx2] = span(inked(words));
+    const near = rows.filter(
+      (r) => r !== line && Math.min(Math.abs(r.yMax - line.yMin), Math.abs(line.yMax - r.yMin)) <= size * 2 && r.x <= mx2 + size * 1.5 && r.xEnd >= mx1 - size * 1.5,
+    );
+    if (near.length === 0 || (mathFirst ? wx1 - mx2 : mx1 - wx2) < size * 2) continue;
+    const y = Math.min(...inked(math).map((i) => i.y));
+    const under = (b: Box) => y >= b.y2 && y - b.y2 <= size * 0.8;
+    const over = (b: Box) => b.y1 > y && b.y1 - y <= size * 1.2;
+    const barred = bars.some((b) => b.x1 <= mx1 + size * 0.5 && b.x2 >= mx2 - size * 0.5 && b.x2 - b.x1 <= (mx2 - mx1) * 3 && (under(b) || over(b)));
+    if (!barred) continue;
+    const [formula] = buildLines(math, line.page);
+    const [wordLine] = buildLines(words, line.page);
+    if (!formula || !wordLine) continue;
+    keepColumn(line, formula);
+    keepColumn(line, wordLine);
+    splits.set(line, { words: wordLine, formula, left: !mathFirst });
+  }
+  if (splits.size === 0) return input;
+  const out: Line[] = [];
+  let side: Line[] = [];
+  let last: Line | null = null;
+  for (const line of input) {
+    const split = splits.get(line);
+    const formula = split?.formula ?? (rows.includes(line) ? line : null);
+    const apart = (a: Line, b: Line) => Math.min(Math.abs(a.yMin - b.yMax), Math.abs(b.yMin - a.yMax)) > Math.max(a.size, b.size) * 2;
+    if (side.length > 0 && (!formula || !last || apart(last, formula))) {
+      out.push(...side);
+      side = [];
+    }
+    last = formula;
+    if (!split) out.push(line);
+    else if (split.left) out.push(split.words, split.formula);
+    else {
+      out.push(split.formula);
+      side.push(split.words);
+    }
+  }
+  out.push(...side);
+  return out;
+}
+
 /** A TeX page's lines with each display equation's lines joined into one:
     runs of math lines, labels, and fragments the display holds (a limit, a
     fraction's part), close together, with two lines or more, a label, or a
     fraction bar among them; a math line alone is a display when it is
     centered, or set in with space over or under it. One label to a
     display: a second starts the next. */
-export function displayLines(input: Line[], ctx: PageContext): Line[] {
+export function displayLines(page: Line[], ctx: PageContext): Line[] {
+  const input = formulaCellsApart(page, ctx);
   if (!ctx.tex) return input;
   const fences = fencesOf(ctx);
   const fenced = (l: Line) => fences.some((f) => l.y <= f.y2 && l.y >= f.y1 && f.x1 < l.xEnd + l.size * 2 && f.x2 > l.x - l.size * 2);
@@ -1697,8 +1771,26 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext, lines: Line[
     const topRow = Math.max(...glyphs.filter((g) => !hangingFamily(g.family)).map((g) => g.y));
     const within = (g: Glyph) => g.x + g.w / 2 > box.x1 && g.x + g.w / 2 < box.x2;
     const letters = ctx.drawing.glyphs.filter((g) => !own.has(g) && g.family === null && g.size >= size * 0.9 && /\p{L}/u.test(g.unicode) && within(g) && g.y > topRow + size * 0.8);
-    const sentenceRows = letters.map((g) => g.y).filter((y, i, ys) => ys.filter((z) => Math.abs(z - y) < size * 0.1).length >= 3);
-    const sentence = (g: Glyph) => sentenceRows.some((y) => g.y >= y - size * 0.1 && g.y < y + size * 0.6);
+    // The rows, by a sweep over the sorted baselines (a filter in a filter
+    // over every letter above a display took a tenth of a book's parse).
+    const ys = letters.map((g) => g.y).sort((a, b) => a - b);
+    const sentenceRows: number[] = [];
+    for (let i = 0, lo = 0, hi = 0; i < ys.length; i++) {
+      while (Math.abs(ys[lo] - ys[i]) >= size * 0.1) lo++;
+      while (hi < ys.length && Math.abs(ys[hi] - ys[i]) < size * 0.1) hi++;
+      if (hi - lo >= 3) sentenceRows.push(ys[i]);
+    }
+    // A glyph is on a row when the lowest row under its top reach holds it.
+    const sentence = (g: Glyph) => {
+      let lo = 0;
+      let hi = sentenceRows.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (g.y < sentenceRows[mid] + size * 0.6) hi = mid;
+        else lo = mid + 1;
+      }
+      return lo < sentenceRows.length && g.y >= sentenceRows[lo] - size * 0.1;
+    };
     const stray = ctx.drawing.glyphs.some((g) => {
       if (own.has(g) || (g.family === null && g.unicode.trim() === "")) return false;
       if (past(g) || beyond(g) || brace(g) || limit(g)) return true;
@@ -1895,8 +1987,22 @@ export function displayEquations(
       k++;
       continue;
     }
-    if (above?.box && above.page === group[0].page && above.box.y1 > crop.y1) crop = { ...crop, y2: Math.min(crop.y2, above.box.y1 - 1) };
-    if (below?.box && below.page === group[0].page && below.box.y2 < crop.y2) crop = { ...crop, y1: Math.max(crop.y1, below.box.y2 + 1) };
+    // A block set beside the crop (its label, or a side note read after
+    // it) bounds it across, never over or under: the nearest block over
+    // and under it that shares its width does (parse loop findings: a
+    // slide's "Estimation:", level with the top of r's fraction, cut its
+    // numerator off; a manual's listing beside its output, four reactions,
+    // cut the crop to the last).
+    const bound = (s?: Segment) => (s?.box && s.page === group[0].page && s.box.x1 < box.x2 && s.box.x2 > box.x1 ? s.box : undefined);
+    const overBox = out.slice(-3).reverse().map(bound).find((b) => b !== undefined);
+    const underBox = segments.slice(m, m + 3).map(bound).find((b) => b !== undefined);
+    if (overBox && overBox.y1 > crop.y1) crop = { ...crop, y2: Math.min(crop.y2, overBox.y1 - 1) };
+    if (underBox && underBox.y2 < crop.y2) crop = { ...crop, y1: Math.max(crop.y1, underBox.y2 + 1) };
+    for (const s of [above, below]) {
+      if (!s?.box || s.page !== group[0].page || s.box === overBox || s.box === underBox || s.box.y1 >= crop.y2 || s.box.y2 <= crop.y1) continue;
+      if (s.box.x2 <= box.x1) crop = { ...crop, x1: Math.max(crop.x1, s.box.x2 + 1) };
+      else if (s.box.x1 >= box.x2) crop = { ...crop, x2: Math.min(crop.x2, s.box.x1 - 1) };
+    }
     // A crop takes the marks drawn against it: a shape, a picture, or a
     // lone glyph no line reads, inside the crop's width and within a line
     // and a half of its edge, is the picture's, with the short rules
@@ -1920,8 +2026,8 @@ export function displayEquations(
         ...ctx.drawing.images.map((box) => ({ box, rule: false })),
         ...lone.filter((g) => !inWord(g)).map((g) => ({ box: { x1: g.x, x2: g.x + Math.max(g.w, 0), y1: g.y - 0.2 * g.size, y2: g.y + 0.7 * g.size }, rule: false })),
       ];
-      const top = above?.box && above.page === group[0].page && above.box.y1 > crop.y1 ? above.box.y1 - 1 : Infinity;
-      const bottom = below?.box && below.page === group[0].page && below.box.y2 < crop.y2 ? below.box.y2 + 1 : -Infinity;
+      const top = overBox && overBox.y1 > crop.y1 ? overBox.y1 - 1 : Infinity;
+      const bottom = underBox && underBox.y2 < crop.y2 ? underBox.y2 + 1 : -Infinity;
       const inWidth = (b: Box) => b.x1 >= crop.x1 - em * 2 && b.x2 <= crop.x2 + em * 2 && Math.min(b.x2, crop.x2) - Math.max(b.x1, crop.x1) >= (b.x2 - b.x1) * 0.5;
       const taken = new Set<{ box: Box; rule: boolean }>();
       for (let grew = true; grew; ) {
