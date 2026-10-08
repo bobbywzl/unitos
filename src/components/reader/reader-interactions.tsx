@@ -9860,10 +9860,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         {pendingLink && !embedded && (
           <div
             data-link-banner
-            // Too narrow a band for it: it wraps under the controls.
-            className={`pointer-events-auto flex max-w-full items-center gap-1 rounded-full bg-card pr-1 pl-4 shadow-float ${bandBanner ? "min-w-[min(100%,24rem)] py-0.5" : "min-w-0 py-1"}`}
+            // Too narrow a band for it: it wraps under the controls. Its
+            // sentence wraps too, so the steps always show: one line is a
+            // pill, more lines a rounded box.
+            className={`pointer-events-auto flex max-w-full items-center gap-1 rounded-[14px] bg-card pr-1 pl-4 shadow-float ${bandBanner ? "min-w-[min(100%,24rem)] py-0.5" : "min-w-0 py-1"}`}
           >
-            <span className="truncate text-[12.5px] text-sand-700">
+            <span className="min-w-0 py-[3px] text-[12.5px] leading-[18px] text-sand-700">
               {t("reader.linkingBanner", {
                 // In the band, a shorter quote leaves room for the steps.
                 quote:
