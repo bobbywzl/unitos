@@ -90,8 +90,6 @@ import { AnnotationGrip } from "@/components/outline/annotation-grip";
 import { useCardDropOpen } from "@/components/outline/use-card-drop";
 import {
   ChevronDownIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
   CheckIcon,
   CollapseIcon,
   CommentIcon,
@@ -1386,18 +1384,10 @@ export function ReaderInteractions({
   const [submenu, setSubmenu] = useState<null | "add" | "ai" | "comment" | "define">(null);
   // Kept per selection as a toolbar draft (lib/toolbar-drafts.ts) until the save lands.
   const [commentDraft, setCommentDraft] = useToolbarDraft("comment", documentId, popover?.anchor ?? null);
-  // The Add to notes bubble (SPEC.md §6): the comment that goes under the
-  // quote, and whether the bubble lists the sections for a new note or the
-  // notes to append to. Keyed to the selection it was typed for: a new
-  // selection starts the bubble over, so a comment typed for one passage
-  // does not go under another.
-  const [addDraft, setAddDraft] = useState<{ key: string | null; comment: string; mode: "sections" | "notes" }>({
-    key: null,
-    comment: "",
-    mode: "sections",
-  });
   // The page editor's right-click Explain, waiting for its popover (below).
   const [pendingExplain, setPendingExplain] = useState(false);
+  // Its Add to notes, the same: one press adds, as the toolbox's does.
+  const [pendingAdd, setPendingAdd] = useState(false);
   // The lead tool Jev predicts for a popover (SPEC.md §6), keyed by the
   // popover it answers: another popover reads it as null until its own
   // answer lands. Null answers: no key, no confident answer, a fixed lead.
@@ -3467,8 +3457,9 @@ export function ReaderInteractions({
       }
       popoverRef.current = captured;
       setPopover(captured);
-      setSubmenu(tool === "add-to-notes" ? "add" : tool === "assistant" ? "ai" : null);
+      setSubmenu(tool === "assistant" ? "ai" : null);
       if (tool === "explain") setPendingExplain(true);
+      if (tool === "add-to-notes") setPendingAdd(true);
     };
     // Ctrl+Alt+G (⌘+Option+G) opens the assistant's bar on the selection.
     const onKey = (e: KeyboardEvent) => {
@@ -5264,13 +5255,7 @@ export function ReaderInteractions({
     leadAnswer && leadAnswer.key === popoverAnchorKey ? leadAnswer.tool : kindLead();
   // The comment is kept per selection as a toolbar draft (lib/toolbar-drafts.ts) until the save lands.
   const [addComment, keepAddComment] = useToolbarDraft("add", documentId, popover?.anchor ?? null);
-  const addMode = addDraft.key === popoverAnchorKey ? addDraft.mode : "sections";
-  const setAddComment = (comment: string) => {
-    keepAddComment(comment);
-    setAddDraft((d) => ({ key: popoverAnchorKey, comment, mode: d.key === popoverAnchorKey ? d.mode : "sections" }));
-  };
-  const setAddMode = (mode: "sections" | "notes") =>
-    setAddDraft((d) => ({ key: popoverAnchorKey, mode, comment: d.key === popoverAnchorKey ? d.comment : "" }));
+  const setAddComment = keepAddComment;
   useEffect(() => {
     if (!popover || !popoverAnchorKey || popover.term || popover.figure) return;
     const text = popover.anchor.quotedText.trim();
@@ -5784,7 +5769,6 @@ export function ReaderInteractions({
   function addedToNotes(anchor: Anchor) {
     markFreshAnchor(anchor);
     setPopover(null);
-    setAddDraft({ key: null, comment: "", mode: "sections" });
     clearToolbarDraft("add", documentId, anchor);
     window.getSelection()?.removeAllRanges();
     refreshWhenOnline(router);
@@ -5818,6 +5802,16 @@ export function ReaderInteractions({
       setBusy(false);
     }
   }
+  // Add to notes asked for from outside the toolbox (the page editor's
+  // right-click menu) adds once the popover it needs has rendered: a new
+  // note in the first section, as the toolbox's one press does.
+  useEffect(() => {
+    if (!pendingAdd || !popover) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPendingAdd(false);
+    if (sectionChoices.length > 0) void addToSection(sectionChoices[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAdd, popover]);
   // The box stays open on the words, the reason under Add to notes.
   function addFailed(err: unknown) {
     const text = err instanceof Error ? err.message : t("reader.addFailed");
@@ -10495,6 +10489,37 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             </button>
           )}
 
+          {/* Highlight: the color dots are the toolbox's first row, and the
+              voice ends it. */}
+          {has("highlight") && (
+          <div
+            className={`order-first flex items-center justify-around rounded-full ${coarse ? "px-2 py-2" : "px-1.5 py-1"}${leadRing("highlight")}`}
+          >
+            {HIGHLIGHT_HUES.map((color) => (
+              <button
+                key={color}
+                disabled={busy}
+                // A comment kept from before rides along only while its box is open.
+                onClick={() => void annotate({ color, comment: (submenu === "comment" && commentDraft.trim()) || undefined })}
+                data-track={`highlight:${color}`}
+                aria-label={t("reader.highlightIn", { color: t(HUE_KEY[color]) })}
+                data-tip={t(
+                  submenu === "comment" && commentDraft.trim() ? "reader.highlightInWithNote" : "reader.highlightIn",
+                  { color: t(HUE_KEY[color]) },
+                )}
+                className={`${coarse ? "size-7" : "size-5"} rounded-full transition-transform hover:scale-110 disabled:opacity-40`}
+                style={{ background: HUE_DOT[color] }}
+              />
+            ))}
+            {has("readAloud") && voiceButton}
+          </div>
+          )}
+          {toolError?.at === "highlight" && toolError.from === popover.anchor && (
+            <p data-tool-error role="alert" className="order-first px-2 py-1 text-[12px] font-medium text-red-600">
+              {toolError.text}
+            </p>
+          )}
+
           {/* Define (SPEC.md §6): the first row when the selection is one
               word, right under the highlight colors — in the compact
               toolbox, where the colors are the toolbox's first row, the row
@@ -10559,6 +10584,138 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               </Collapse>
             </div>
           )}
+
+          {/* Add to notes: the toolbox's second row. One press makes a new
+              note in the first section with the words as its quote, as Enter
+              in its field does; the ▾ half opens the panel in the tools'
+              place: the field for the note's words, the sections when there
+              are two or more, and the notes to add the words to. The tools
+              fold away while it is open ([&~*]:hidden); ▾ or Escape brings
+              them back. */}
+          {has("addToNotes") && sectionChoices.length > 0 && (
+            <div
+              className={`-order-1 flex flex-col gap-0.5 rounded-2xl${leadRing("addToNotes")}${
+                submenu === "add" ? " [&~*]:hidden" : ""
+              }`}
+            >
+              <div className="flex w-full items-stretch gap-px">
+                <button
+                  disabled={busy}
+                  onClick={() => void addToSection(sectionChoices[0].id)}
+                  data-track="add-to-notes"
+                  data-tip={t("reader.addToNotesTitle", { section: sectionChoices[0].label })}
+                  className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-l-full bg-clay ${toolRow} text-left font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-60`}
+                >
+                  <NotesIcon size={coarse ? 14 : 12} />
+                  {t("reader.addToNotes")}
+                </button>
+                <button
+                  onClick={() => setSubmenu(submenu === "add" ? null : "add")}
+                  data-track="add-to-notes-more"
+                  aria-expanded={submenu === "add"}
+                  aria-label={t("reader.addToNotesMoreTitle")}
+                  data-tip={t("reader.addToNotesMoreTitle")}
+                  className={`flex items-center justify-center rounded-r-full bg-clay ${coarse ? "w-11" : "w-7"} text-clay-fg hover:bg-clay-600`}
+                >
+                  <ChevronDownIcon size={coarse ? 14 : 12} className={submenu === "add" ? "rotate-180" : undefined} />
+                </button>
+              </div>
+              {toolError?.at === "add" && toolError.from === popover.anchor && (
+                <p data-tool-error role="alert" className="px-2 py-0.5 text-[12px] font-medium text-red-600">
+                  {toolError.text}
+                </p>
+              )}
+          {(() => {
+            // The panel: the field for the note's words on top, then "New
+            // note in" and the sections (with one section the press above is
+            // that row), then "Which note?" and the notes.
+            const first = sectionChoices[0];
+            const hasNotes = sections.some((s) =>
+              [s, ...s.children].some((x) => x.notes.some((n) => n.status === "ACCEPTED")),
+            );
+            const smallLabel = `${coarse ? "text-[11px]" : "text-[10px]"} font-bold tracking-[0.08em] text-sand-500 uppercase`;
+            // Escape folds the panel and gives the tools back, the focus on ▾.
+            const foldPanel = () => {
+              setSubmenu(null);
+              requestAnimationFrame(() =>
+                containerRef.current
+                  ?.querySelector<HTMLElement>('[data-selection-popover] [data-track="add-to-notes-more"]')
+                  ?.focus({ preventScroll: true }),
+              );
+            };
+            const panel = submenu === "add" && (
+              <div data-add-panel className="flex flex-col gap-0.5">
+                <input
+                  autoFocus={!coarse}
+                  value={addComment}
+                  onFocus={caretToEnd}
+                  onChange={(e) => setAddComment(e.target.value)}
+                  {...ime.props}
+                  onKeyDown={(e) => {
+                    if (ime.isImeEnter(e) || isImeKey(e)) return;
+                    // Enter: the fastest path, a new note in the first section.
+                    if (e.key === "Enter" && !busy) {
+                      e.preventDefault();
+                      void addToSection(first.id);
+                    }
+                    if (e.key === "Escape") {
+                      e.stopPropagation();
+                      foldPanel();
+                    }
+                  }}
+                  placeholder={t("reader.addNotePlaceholder")}
+                  aria-label={t("reader.addNotePlaceholder")}
+                  data-tip={t("reader.addCommentTitle", { section: first.label })}
+                  data-track="add-to-notes-comment"
+                  className={`w-full rounded-full bg-sand-100 ${
+                    coarse ? "px-3.5 py-2.5 text-[14px]" : "px-2.5 py-1.5 text-[12px]"
+                  } outline-none placeholder:text-sand-500`}
+                />
+                {sectionChoices.length > 1 && (
+                  <>
+                    <span className={`px-2.5 pt-1.5 pb-0.5 ${smallLabel}`}>{t("reader.addNewNoteIn")}</span>
+                    <div className="flex max-h-32 flex-col overflow-y-auto">
+                      {sectionChoices.map((choice) => (
+                        <button
+                          key={choice.id}
+                          disabled={busy}
+                          onClick={() => void addToSection(choice.id)}
+                          data-track="add-to-notes-section"
+                          data-tip={t("reader.addPendingNote", { section: choice.label })}
+                          className={`truncate rounded-full ${toolRow} text-left text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
+                        >
+                          {choice.label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+                {hasNotes && (
+                  <>
+                    <span
+                      data-tip={t("reader.addToExistingNoteTitle")}
+                      className={`px-2.5 pt-1.5 pb-0.5 ${smallLabel}`}
+                    >
+                      {t("reader.addPickNote")}
+                    </span>
+                    <NotePicker
+                      sections={sections}
+                      onPick={(note) => void addToNote(note)}
+                      disabled={busy}
+                      autoFocus={false}
+                      listClassName="max-h-[min(14rem,40vh)]"
+                      // Escape in an empty search folds the panel, as the field's does.
+                      onEscape={foldPanel}
+                    />
+                  </>
+                )}
+              </div>
+            );
+            return <Collapse open={submenu === "add"}>{panel}</Collapse>;
+          })()}
+            </div>
+          )}
+
 
           <button
             onClick={() => (barOffered ? openBar(popover) : setSubmenu(submenu === "ai" ? null : "ai"))}
@@ -10800,168 +10957,6 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             <UnlinkIcon size={coarse ? 14 : 12} />
             {t("reader.linkAcrossTexts")}
           </button>
-          )}
-
-          {/* Highlight: the color dots are the toolbox's first row, and the
-              voice ends it. */}
-          {has("highlight") && (
-          <div
-            className={`order-first flex items-center justify-around rounded-full ${coarse ? "px-2 py-2" : "px-1.5 py-1"}${leadRing("highlight")}`}
-          >
-            {HIGHLIGHT_HUES.map((color) => (
-              <button
-                key={color}
-                disabled={busy}
-                // A comment kept from before rides along only while its box is open.
-                onClick={() => void annotate({ color, comment: (submenu === "comment" && commentDraft.trim()) || undefined })}
-                data-track={`highlight:${color}`}
-                aria-label={t("reader.highlightIn", { color: t(HUE_KEY[color]) })}
-                data-tip={t(
-                  submenu === "comment" && commentDraft.trim() ? "reader.highlightInWithNote" : "reader.highlightIn",
-                  { color: t(HUE_KEY[color]) },
-                )}
-                className={`${coarse ? "size-7" : "size-5"} rounded-full transition-transform hover:scale-110 disabled:opacity-40`}
-                style={{ background: HUE_DOT[color] }}
-              />
-            ))}
-            {has("readAloud") && voiceButton}
-          </div>
-          )}
-          {toolError?.at === "highlight" && toolError.from === popover.anchor && (
-            <p data-tool-error role="alert" className="order-first px-2 py-1 text-[12px] font-medium text-red-600">
-              {toolError.text}
-            </p>
-          )}
-
-          {/* Add to notes: the toolbox's second row. One press makes a new
-              note in the first section with the words as its quote, as Enter
-              in its field does; the ▾ half opens the panel: the field for the
-              note's words, the sections, and Add to a note…. */}
-          {has("addToNotes") && sectionChoices.length > 0 && (
-            <div className={`-order-1 flex flex-col gap-0.5 rounded-2xl${leadRing("addToNotes")}`}>
-              <div className="flex w-full items-stretch gap-px">
-                <button
-                  disabled={busy}
-                  onClick={() => void addToSection(sectionChoices[0].id)}
-                  data-track="add-to-notes"
-                  data-tip={t("reader.addToNotesTitle", { section: sectionChoices[0].label })}
-                  className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-l-full bg-clay ${toolRow} text-left font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-60`}
-                >
-                  <NotesIcon size={coarse ? 14 : 12} />
-                  {t("reader.addToNotes")}
-                </button>
-                <button
-                  onClick={() => setSubmenu(submenu === "add" ? null : "add")}
-                  data-track="add-to-notes-more"
-                  aria-expanded={submenu === "add"}
-                  aria-label={t("reader.addToNotesMoreTitle")}
-                  data-tip={t("reader.addToNotesMoreTitle")}
-                  className={`flex items-center justify-center rounded-r-full bg-clay ${coarse ? "w-11" : "w-7"} text-clay-fg hover:bg-clay-600`}
-                >
-                  <ChevronDownIcon size={coarse ? 14 : 12} className={submenu === "add" ? "rotate-180" : undefined} />
-                </button>
-              </div>
-              {toolError?.at === "add" && toolError.from === popover.anchor && (
-                <p data-tool-error role="alert" className="px-2 py-0.5 text-[12px] font-medium text-red-600">
-                  {toolError.text}
-                </p>
-              )}
-          {(() => {
-            // The panel: the field for the note's words on top, then the
-            // sections for a new note under "New note in", then Add to a
-            // note…, which swaps the sections for the note picker.
-            const first = sectionChoices[0];
-            const hasNotes = sections.some((s) =>
-              [s, ...s.children].some((x) => x.notes.some((n) => n.status === "ACCEPTED")),
-            );
-            const smallLabel = `${coarse ? "text-[11px]" : "text-[10px]"} font-bold tracking-[0.08em] text-sand-500 uppercase`;
-            const panel = submenu === "add" && (
-              <div className="flex flex-col gap-0.5">
-                <input
-                  autoFocus={!coarse}
-                  value={addComment}
-                  onFocus={caretToEnd}
-                  onChange={(e) => setAddComment(e.target.value)}
-                  {...ime.props}
-                  onKeyDown={(e) => {
-                    if (ime.isImeEnter(e) || isImeKey(e)) return;
-                    // Enter: the fastest path, a new note in the first section.
-                    if (e.key === "Enter" && !busy) {
-                      e.preventDefault();
-                      void addToSection(first.id);
-                    }
-                    // Escape folds the box and leaves the toolbar, as Comment's does.
-                    if (e.key === "Escape") {
-                      e.stopPropagation();
-                      setSubmenu(null);
-                      focusPageAfterComment();
-                    }
-                  }}
-                  placeholder={t("reader.addNotePlaceholder")}
-                  aria-label={t("reader.addNotePlaceholder")}
-                  data-tip={t("reader.addCommentTitle", { section: first.label })}
-                  data-track="add-to-notes-comment"
-                  className={`w-full rounded-full bg-sand-100 ${
-                    coarse ? "px-3.5 py-2.5 text-[14px]" : "px-2.5 py-1.5 text-[12px]"
-                  } outline-none placeholder:text-sand-500`}
-                />
-                {addMode === "sections" ? (
-                  <>
-                    <span className={`px-2.5 pt-1.5 pb-0.5 ${smallLabel}`}>{t("reader.addNewNoteIn")}</span>
-                    <div className="flex max-h-44 flex-col overflow-y-auto">
-                      {sectionChoices.map((choice) => (
-                        <button
-                          key={choice.id}
-                          disabled={busy}
-                          onClick={() => void addToSection(choice.id)}
-                          data-track="add-to-notes-section"
-                          data-tip={t("reader.addPendingNote", { section: choice.label })}
-                          className={`truncate rounded-full ${toolRow} text-left text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
-                        >
-                          {choice.label}
-                        </button>
-                      ))}
-                    </div>
-                    {hasNotes && (
-                      <>
-                        <div className="mx-2.5 my-0.5 border-t border-line" />
-                        <button
-                          disabled={busy}
-                          onClick={() => setAddMode("notes")}
-                          data-track="add-to-notes-existing"
-                          data-tip={t("reader.addToExistingNoteTitle")}
-                          className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
-                        >
-                          <span className="truncate">{t("reader.addToExistingNote")}</span>
-                          <ChevronRightIcon size={coarse ? 14 : 12} />
-                        </button>
-                      </>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <button
-                      onClick={() => setAddMode("sections")}
-                      data-track="add-to-notes-back"
-                      className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left ${smallLabel} hover:bg-clay-100 hover:text-clay-800`}
-                    >
-                      <ChevronLeftIcon size={coarse ? 14 : 12} />
-                      {t("reader.addPickNote")}
-                    </button>
-                    <NotePicker
-                      sections={sections}
-                      onPick={(note) => void addToNote(note)}
-                      disabled={busy}
-                      // Escape in the search goes back to the sections, not out of the bubble.
-                      onEscape={() => setAddMode("sections")}
-                    />
-                  </>
-                )}
-              </div>
-            );
-            return <Collapse open={submenu === "add"}>{panel}</Collapse>;
-          })()}
-            </div>
           )}
 
           </>)}

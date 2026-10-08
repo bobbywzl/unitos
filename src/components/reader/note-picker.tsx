@@ -54,6 +54,8 @@ export function NotePicker({
   onEscape,
   disabled,
   track = "add-to-note-pick",
+  autoFocus = true,
+  listClassName = "max-h-[min(20rem,45vh)]",
 }: {
   /** The project's sections with their notes: where the words can go. */
   sections: SectionView[];
@@ -66,6 +68,10 @@ export function NotePicker({
   disabled?: boolean;
   /** The rows' `data-track`, for the admin clicks page. */
   track?: string;
+  /** False where a field above the picker takes the focus first. */
+  autoFocus?: boolean;
+  /** The list's height: as many rows as the room allows; it scrolls past them. */
+  listClassName?: string;
 }) {
   const t = useT();
   const [query, setQuery] = useState("");
@@ -113,7 +119,7 @@ export function NotePicker({
   return (
     <div className="flex flex-col gap-1">
       <input
-        autoFocus
+        autoFocus={autoFocus}
         type="search"
         value={query}
         onChange={(e) => {
@@ -127,7 +133,7 @@ export function NotePicker({
         className="w-full rounded-full bg-sand-100 px-3 py-1.5 text-[12.5px] outline-none placeholder:text-sand-500"
       />
       {/* As many rows as the room allows; the list scrolls past them. */}
-      <div ref={listRef} role="menu" className="max-h-[min(20rem,45vh)] overflow-y-auto">
+      <div ref={listRef} role="menu" className={`${listClassName} overflow-y-auto`}>
         {rows.length === 0 && (
           <p className="px-2.5 py-2 text-[12px] text-sand-600">{t("panels.annotationNoNotes")}</p>
         )}
