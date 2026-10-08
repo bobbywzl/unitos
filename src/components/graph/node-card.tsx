@@ -222,7 +222,9 @@ export function NodeCardPanel({
       className={`menu-in absolute z-10 flex flex-col gap-3 overflow-y-auto overscroll-contain border border-line bg-card/95 p-4 shadow-float backdrop-blur-md ${
         sheet
           ? "inset-x-0 bottom-0 h-[60%] rounded-t-[20px] border-b-0 pb-16"
-          : "top-3 right-3 bottom-3 w-[400px] max-w-[calc(100vw-24px)] rounded-[20px] pb-24 max-[999px]:bottom-16 max-[999px]:pb-4"
+          : // [panel6] The card is as tall as what it holds (WALK6-08), at most the
+            // canvas less the Feedback button's room.
+            "top-3 right-3 max-h-[calc(100%-108px)] w-[400px] max-w-[calc(100vw-24px)] rounded-[20px] max-[999px]:max-h-[calc(100%-76px)]"
       }`}
     >
       <div className="flex items-start gap-2">
@@ -335,7 +337,7 @@ export function NodeCardPanel({
                         }}
                         data-track="graph-card-neighbour"
                         data-tip={t("graphView.cardNeighbourTitle")}
-                        className="min-w-0 truncate rounded-full bg-sand-200 px-2.5 py-0.5 text-[12px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                        className="min-h-6 min-w-0 truncate rounded-full bg-sand-200 px-2.5 py-0.5 text-[12px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
                       >
                         {titleOf.get(g.other) ?? ""}
                       </button>
@@ -386,7 +388,7 @@ export function NodeCardPanel({
                   {g.links.length > GROUP_ROWS && !open && (
                     <button
                       onClick={() => setOpenGroups((prev) => new Set(prev).add(g.other))}
-                      className="mt-1 px-1.5 text-[11.5px] text-clay-700 hover:underline"
+                      className="mt-1 min-h-6 px-1.5 text-[11.5px] text-clay-700 hover:underline pointer-coarse:min-h-10"
                     >
                       {t("graphView.cardMore", { n: g.links.length - GROUP_ROWS })}
                     </button>
@@ -407,7 +409,7 @@ export function NodeCardPanel({
             ))}
           </div>
           {notes.length > NOTE_ROWS && !showAllNotes && (
-            <button onClick={() => setShowAllNotes(true)} className="mt-1 px-2 text-[11.5px] text-clay-700 hover:underline">
+            <button onClick={() => setShowAllNotes(true)} className="mt-1 min-h-6 px-2 text-[11.5px] text-clay-700 hover:underline pointer-coarse:min-h-10">
               {t("graphView.cardMore", { n: notes.length - NOTE_ROWS })}
             </button>
           )}
@@ -416,7 +418,7 @@ export function NodeCardPanel({
       <p role="status" data-graph-card-walk className="text-[12px] text-clay-800 empty:hidden">
         {walkNote}
       </p>
-      {!sheet && !coarse && <p className="mt-auto pt-1 text-[11px] text-sand-500">{t("graphView.cardKeys")}</p>}
+      {!sheet && !coarse && <p className="text-[11px] text-sand-500">{t("graphView.cardKeys")}</p>}
     </aside>
   );
 }
