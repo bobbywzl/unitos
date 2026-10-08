@@ -2067,6 +2067,17 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     JSON.stringify({ logo, reworded }),
   );
   check("url: an h1 that shares no word with the title stays a heading", unrelated.title === "Notes on river flow" && unrelated.headings.join() === "Field reports today", JSON.stringify(unrelated));
+  // A heading that names the contents list in another language ("Inhalt") is the list's label line, no part.
+  const labeled = await parseHtmlContent(
+    `<!doctype html><html><head><title>Notes on river flow</title></head><body><article><h1>Notes on river flow</h1><p>${prose(1)}</p><h2>Inhalt</h2><ul class="toc"><li><a href="#bars">Gravel bars</a></li><li><a href="#floods">Floods</a></li></ul><p>${prose(2)}</p><h2 id="bars">Gravel bars</h2><p>${prose(3)}</p><h2 id="floods">Floods</h2><p>${prose(4)}</p></article></body></html>`,
+    "https://example.org/rivers",
+  );
+  const labeledHeadings = labeled.blocks.filter((b) => b.type === "HEADING").map((b) => b.text);
+  check(
+    "url: a heading that names the contents list in another language is its label line",
+    labeledHeadings.join() === "Gravel bars,Floods" && labeled.blocks.some((b) => b.type === "PARAGRAPH" && b.text === "Inhalt"),
+    labeled.blocks.map((b) => `${b.type} ${b.text.slice(0, 20)}`).join(" / "),
+  );
   check(
     "url: a first section's question and a short first heading stay headings",
     question.includes("HEADING What does a gauge measur") && short.includes("HEADING Channels and banks"),
