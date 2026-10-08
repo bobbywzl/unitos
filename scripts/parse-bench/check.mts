@@ -1982,6 +1982,16 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     shorter.title === "Notes on river flow" && lead.title === "Notes on river flow in the delta" && longer.title === "Notes on river flow in the delta" && !shorter.heading && !lead.heading && !longer.heading,
     JSON.stringify({ shorter, lead, longer }),
   );
+  // A title that adds words of the headline's own to the h1, with no colon, bar, dash, or bullet among them and no word of the site's name, keeps them.
+  const own = await headline("Notes on river flow (delta edition)", "Notes on river flow");
+  const ownLead = await headline("Field notes on river flow in the delta", "Notes on river flow in the delta");
+  const ownSite = await headline("Notes on river flow (Example Weekly)", "Notes on river flow");
+  const ownKicker = await headline("Field guide: Notes on river flow - Example Online", "Notes on river flow");
+  check(
+    "url: a title that adds its own words to the opening heading keeps them; the heading goes",
+    own.title === "Notes on river flow (delta edition)" && !own.heading && ownLead.title === "Field notes on river flow in the delta" && !ownLead.heading && ownSite.title === "Notes on river flow" && ownKicker.title === "Notes on river flow",
+    JSON.stringify({ own, ownLead, ownSite, ownKicker }),
+  );
   check(
     "url: a heading that shares no edge with the title stays a heading; one that adds a tail set apart by a bullet is not the title",
     other.title === "Notes on river flow" && other.heading && dated.title === "Notes on river flow",
