@@ -106,6 +106,13 @@ function onKeyDown(e: KeyboardEvent) {
 function listen() {
   window.addEventListener("keydown", onKeyDown);
 }
+
+/** Whether Escape has a layer to close now: a menu, a card, a toolbox. */
+export function escapeLayerOpen(): boolean {
+  if (layers.size > 0) return true;
+  for (const source of sources) if (source()) return true;
+  return false;
+}
 function unlisten() {
   if (layers.size + sources.size === 0) window.removeEventListener("keydown", onKeyDown);
 }
