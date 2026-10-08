@@ -11,8 +11,8 @@
    "recall": 1
   },
   "04a6711caa": {
-   "f1": 0.965,
-   "precision": 0.933,
+   "f1": 0.968,
+   "precision": 0.939,
    "recall": 1
   },
   "05844573ca": {
@@ -341,8 +341,8 @@
    "recall": 1
   },
   "63db31a161": {
-   "f1": 0.996,
-   "precision": 0.993,
+   "f1": 1,
+   "precision": 1,
    "recall": 1
   },
   "65408257db": {
@@ -361,8 +361,8 @@
    "recall": 1
   },
   "680c2848e9": {
-   "f1": 0.994,
-   "precision": 0.988,
+   "f1": 1,
+   "precision": 1,
    "recall": 1
   },
   "686bb170ef": {
@@ -631,8 +631,8 @@
    "recall": 1
   },
   "b3c19dd5f0": {
-   "f1": 0.986,
-   "precision": 0.971,
+   "f1": 1,
+   "precision": 1,
    "recall": 1
   },
   "b6906ca016": {

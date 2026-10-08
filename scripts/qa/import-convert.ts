@@ -80,6 +80,8 @@ type Fixture = {
   titleFont?: TextFont;
   titleAlign?: "center" | "right";
   titlePage?: number;
+  /** A synthetic page's headline: the Title's words, once. */
+  expectTitle?: string;
   parseMs: number;
 };
 type Converted = Awaited<ReturnType<typeof richTextFromImport>>;
@@ -129,7 +131,7 @@ function defaultSources(): string[] {
         .sort()
         .map((f) => join("scripts/eval/fixtures", f))
     : [];
-  return [...fromList, ...markdown, "synthetic:pdf", "synthetic:url", "synthetic:markdown"];
+  return [...fromList, ...markdown, "synthetic:pdf", "synthetic:url", "synthetic:markdown", "synthetic:html-h1", "synthetic:html-site", "synthetic:html-kicker"];
 }
 
 // ── Text helpers ────────────────────────────────────────────────────────────
@@ -1234,6 +1236,17 @@ async function checkFixture(f: Fixture): Promise<Report> {
       "one Title",
       `${titles.length} Title paragraph(s)${title ? ` "${clip(inlineText(title), 50)}" at ${at}${titleAt >= 0 ? ` (the parse's heading ${titleAt}, promoted where it stands)` : ""}` : ""}`,
     );
+    // A page whose og:title sets its site's name, or another dash than its
+    // h1 (lib/parse/url.ts pageTitle): the Title is the headline, once.
+    if (f.expectTitle !== undefined) {
+      const letters = (t: string) => t.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+      const repeats = top.filter((n) => n !== title && n.type === "heading" && letters(inlineText(n)) === letters(f.expectTitle ?? ""));
+      check(
+        title !== undefined && norm(inlineText(title)) === norm(f.expectTitle) && repeats.length === 0,
+        "the Title is the page's headline, once, without the site's name",
+        `"${clip(title ? inlineText(title) : "", 60)}"${repeats.length ? `; ${repeats.length} heading(s) repeat it` : ""}`,
+      );
+    }
     if (at > kickers) note("the Title is not first on the page", `${at} paragraph(s) above it, the first "${clip(inlineText(top[0]), 60)}"`);
     const nextHeading = top.slice(at + 1).find((n) => n.type === "heading" || n.attrs?.docStyle === "title");
     const firstText = top.slice(at + 1).find((n) => norm(inlineText(n)));
@@ -1968,10 +1981,43 @@ Footnote here.[^1]
 [^1]: The footnote text.
 `;
 
+// Two web pages whose og:title is not their h1's words, parsed as an add
+// parses them (lib/parse/url.ts pageTitle): one sets the site's name after
+// the headline and a hyphen where the h1 sets a dash; one sets the site's
+// name after the headline and has no h1; one sets a kicker in its h1, apart
+// from the headline by a colon only a screen reader reads.
+const ARTICLE_BODY = Array.from(
+  { length: 6 },
+  (_, k) => `<p>Paragraph ${k + 1} of the review says what the game does well and where it stops short, in enough words to read as prose.</p>`,
+).join("");
+const SYNTHETIC_HTML: Record<string, { html: string; url: string; title: string }> = {
+  "synthetic:html-h1": {
+    url: "https://www.vg247.example/2019/11/20/fallen-order-review/",
+    title: "Fallen Order review – shoots for the moon, lands among the stars",
+    html: `<html><head><title>Fallen Order review - shoots for the moon, lands among the stars - VG247</title><meta property="og:title" content="Fallen Order review - shoots for the moon, lands among the stars - VG247"><meta property="og:site_name" content="VG247"></head><body><main><article><h1>Fallen Order review – shoots for the moon, lands among the stars</h1>${ARTICLE_BODY}</article></main></body></html>`,
+  },
+  "synthetic:html-site": {
+    url: "https://9to5mac.example/2019/11/18/macbook-deals/",
+    title: "MacBook sale at Amazon from $700, AirPods, more",
+    html: `<html><head><title>MacBook sale at Amazon from $700, AirPods, more - 9to5Mac</title><meta property="og:title" content="MacBook sale at Amazon from $700, AirPods, more - 9to5Mac"></head><body><main><article>${ARTICLE_BODY}</article></main></body></html>`,
+  },
+  "synthetic:html-kicker": {
+    url: "https://www.zeit.example/mobilitaet/2021-11/zugverkehr-ice-frankfurt-barcelona",
+    title: "Zugverkehr: Im ICE von Frankfurt nach Barcelona",
+    html: `<html><head><title>Zugverkehr: Im ICE von Frankfurt nach Barcelona | ZEIT ONLINE</title><meta property="og:title" content="Zugverkehr: Im ICE von Frankfurt nach Barcelona"></head><body><main><article><h1><span class="kicker">Zugverkehr</span><span class="visually-hidden">: </span><span class="headline">Im ICE von Frankfurt nach Barcelona</span></h1>${ARTICLE_BODY}</article></main></body></html>`,
+  },
+};
+
+async function syntheticHtml(source: string): Promise<Fixture> {
+  const page = SYNTHETIC_HTML[source];
+  return { ...(await htmlFixture(source, page.html, page.url, "url")), expectTitle: page.title };
+}
+
 async function synthetic(source: string): Promise<Fixture> {
   if (source === "synthetic:pdf") return syntheticPdf();
   if (source === "synthetic:url") return syntheticUrl();
   if (source === "synthetic:markdown") return markdownFixture("synthetic.md", SYNTHETIC_MARKDOWN);
+  if (source in SYNTHETIC_HTML) return syntheticHtml(source);
   throw new Error(`unknown fixture ${source}`);
 }
 
