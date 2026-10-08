@@ -809,6 +809,16 @@ check("replyLanguage command: a mixed or short command keeps the UI's", replyLan
   check("titleMatches: an English command does not read the expansion's words", titleMatches([women], "What about Darwin?", gists6, ["Schopenhauer"]).length === 0);
   check("titleMatches: 'art' and 'works' never match", titleMatches([{ doc: { title: "Works of Art" } }], "Is art a work of pity?").length === 0);
 
+  // ANS6-01: parts of one work share one gist, written once.
+  {
+    const mkp = (id: string, title: string) => ({ id, title, generatedCommand: null, skeleton: null, handwritten: false, importRev: null, pageLabels: null, conversionStatus: null, conversionError: null, video: null, blocks: [{ id: `${id}b1`, type: "PARAGRAPH", text: "Call me Ishmael.", startTime: null, endTime: null, cell: null, page: null }] });
+    const parts = Array.from({ length: 3 }, (_, i) => mkp(`md${i}`, `Moby-Dick — part ${i + 1}`));
+    const rp = readingOf(parts as unknown as Parameters<typeof readingOf>[0]);
+    for (const d of parts) rp.gists.set(d.id, "A passage of Melville's Moby-Dick: Ishmael's voyage under Captain Ahab.");
+    const sp = String(answerMessages({ reading: rp, selected: new Set(["A1", "B1", "C1"]), lang: "en", profile: null as unknown as Parameters<typeof answerMessages>[0]["profile"], history: [], command: "What does Ahab want?" })[0].content);
+    check("selected sections: a gist repeated by the next parts reads 'as [document A]'", (sp.match(/gist: A passage of Melville/g) ?? []).length === 1 && (sp.match(/gist: as \[document A\]/g) ?? []).length === 2, sp.slice(0, 300));
+  }
+
   // ANS6-02: the documents a pick left out.
   const np = (count: number, titles: string[]) => stitchPrompt({ documents: docs6, command: "What does Schopenhauer say pity does?", continued: false, selected: true, notPicked: { count, titles } });
   check("answer prompt: every unpicked document named when all are", np(1, ["Arthur Schopenhauer"]).includes('Not picked in the graph, so not read: 1 other document of the project: "Arthur Schopenhauer". Never cite them or guess what they say. When the answer could be in one of them, say in one sentence to pick it in the graph.'));

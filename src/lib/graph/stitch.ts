@@ -703,6 +703,7 @@ function selectedSections(
   const none: Rendered[] = [];
   const read = rendered.filter((r) => r.coverage.status === "read");
   const short = rendered.length > SHORT_LISTS_PAST;
+  const gistFirst = new Map<string, string>();
   for (const r of rendered) {
     if (r.coverage.status === "empty") {
       sections.push(r.section);
@@ -715,7 +716,12 @@ function selectedSections(
     }
     const shortest = Math.min(Infinity, ...read.filter((x) => x !== r).map((x) => x.tokens));
     const whole = shown.length < r.blocks.length && r.tokens + shortest <= STITCH_WHOLE_THRESHOLD;
-    const gist = short && shown.length < GIST_MIN_SHOWN && titleMatches([r], command, gists, words).length === 0 ? "" : gistLine(r, gists);
+    let gist = short && shown.length < GIST_MIN_SHOWN && titleMatches([r], command, gists, words).length === 0 ? "" : gistLine(r, gists);
+    // The parts of one long work share one gist: past the first, the line
+    // names the document it is the same as (ANS6-01: I-4's 18 gists).
+    const first = gist ? gistFirst.get(gist) : undefined;
+    if (first) gist = `\ngist: as [document ${first}]`;
+    else if (gist) gistFirst.set(gist, r.letter);
     const head = `${header(r.letter, r.doc, `${coverageNote(r.coverage, shown.length)}${whole ? "; read whole when picked with one short document" : ""}`)}${gist}`;
     const lines: string[] = [];
     let last = -1;
