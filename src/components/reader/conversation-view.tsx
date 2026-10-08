@@ -19,6 +19,7 @@ export function ConversationView({
   icon,
   output,
   messages,
+  turns,
   busy = false,
   after,
   foot,
@@ -28,6 +29,10 @@ export function ConversationView({
   icon?: React.ReactNode;
   output?: string | null; // a tool's output, read as the conversation's first message
   messages: ChatTurn[];
+  // The turns as the card draws them (the assistant's: each answer's rating
+  // and Save as note, the plan under its answer), in place of `messages`
+  // drawn plain; `messages` still moves the view to a new turn.
+  turns?: React.ReactNode;
   busy?: boolean;
   after?: React.ReactNode; // under the turns: the queue (SPEC.md §7)
   foot?: React.ReactNode; // the box; a stored conversation read from a panel has none
@@ -61,6 +66,7 @@ export function ConversationView({
     // the pane (docs/css/layer.css).
     <div
       data-selection-popover
+      data-conversation-view
       className="content-in absolute inset-0 z-35 flex flex-col bg-paper print:hidden"
     >
       <div className="flex shrink-0 items-center gap-2 border-b border-line px-6 py-3">
@@ -69,6 +75,8 @@ export function ConversationView({
           {title}
         </span>
         <button
+          // A press keeps the focus in the box, which the card's box takes back.
+          onMouseDown={(e) => e.preventDefault()}
           onClick={onClose}
           data-track="conversation-view-close"
           aria-label={t("common.close")}
@@ -88,7 +96,7 @@ export function ConversationView({
               <Markdown>{output}</Markdown>
             </div>
           )}
-          {messages.map((message, i) =>
+          {turns ?? messages.map((message, i) =>
             message.role === "user" ? (
               <p
                 key={i}
@@ -104,7 +112,7 @@ export function ConversationView({
               </div>
             ),
           )}
-          {busy && <ThinkingIndicator className="text-[12.5px]" />}
+          {!turns && busy && <ThinkingIndicator className="text-[12.5px]" />}
           {after}
         </div>
       </div>

@@ -9752,21 +9752,31 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   // Expand: the conversation read whole over the pane (SPEC.md §21). The card
   // stays open under the view, so closing it puts the reader back where the
   // card was, at the scroll position the pane left.
+  // The focus goes with the reader: in the card's box, Expand moves it to
+  // the view's box, and closing the view moves it back.
+  const focusBox = (scope: string) =>
+    requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(`${scope} textarea`)?.focus());
+  const boxHasFocus = (scope: string) => document.activeElement?.matches(`${scope} textarea`) === true;
   function openConversationView(kind: "assistant" | "explain" | "simplify") {
     const container = containerRef.current;
     if (container && !conversationViewRef.current) {
       conversationReturnScroll.current = container.scrollTop;
       container.scrollTo({ top: 0 });
     }
+    const typing = boxHasFocus(CARD_OF_LAYER[kind]);
     setConversationView(kind);
+    if (typing) focusBox("[data-conversation-view]");
   }
   function closeConversationView() {
+    const kind = conversationView;
+    const typing = boxHasFocus("[data-conversation-view]");
     setConversationView(null);
     const container = containerRef.current;
     if (container && conversationReturnScroll.current !== null) {
       container.scrollTo({ top: conversationReturnScroll.current });
       conversationReturnScroll.current = null;
     }
+    if (typing && kind) focusBox(CARD_OF_LAYER[kind]);
   }
   // Expand, on the header of every card that holds a conversation.
   // Every action in a card's header is one button: a 24px circle around a
@@ -9778,6 +9788,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
     "flex size-6 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:size-9";
   const expandButton = (kind: "assistant" | "explain" | "simplify") => (
     <button
+      // A press keeps the focus where it was, so the view's box takes it
+      // from the card's box.
+      onMouseDown={(e) => e.preventDefault()}
       onClick={() => openConversationView(kind)}
       data-track={`${kind}-expand`}
       className={CARD_ACTION}
@@ -10031,6 +10044,86 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
     });
     return () => cancelAnimationFrame(raf);
   }, [planInCard, chatMessageCount]);
+  // The assistant's turns (SPEC.md §7, §21): the card draws them, and the
+  // full conversation view draws the same turns wider: each answer with its
+  // rating and Save as note, the plan under its answer, the queue. While the
+  // view is open the plan shows in the view only.
+  const assistantTurns = (chat: AssistantChat, inView: boolean) => (
+    <>
+      {(chatOpenSide ? chatOpenSide.messages : chat.messages).map((message, i, list) =>
+        message.role === "user" ? (
+          <p
+            key={i}
+            className={`self-end rounded-2xl bg-clay-100 whitespace-pre-wrap text-clay-800 ${
+              inView ? "ml-10 px-3.5 py-2 text-[13.5px]" : "ml-6 px-3 py-1.5 text-[12.5px]"
+            }`}
+          >
+            {message.content}
+          </p>
+        ) : (
+          <div
+            key={i}
+            // An older answer shows its rating row on hover or focus; a
+            // tap focuses the answer on a touch screen (TOOL13-12).
+            tabIndex={-1}
+            data-chat-answer
+            className={`group/answer outline-none ${inView ? "text-[14px]" : "text-[13px]"}`}
+          >
+            {/* Highlighting the answer offers the side chat, the quoted
+                question, and the comment (SPEC.md §7). */}
+            <div {...{ [ANSWER_MARK]: "" }}>
+              <AnswerMarkdown>{message.content}</AnswerMarkdown>
+            </div>
+            {/* The rating (SPEC.md §25): the question and the selection
+                it ran on, the answer it gave; the suggestions' row
+                rates the suggestions. */}
+            {message.suggestKey ? (
+              <SuggestionRow runKey={message.suggestKey} />
+            ) : !chat.busy && (
+              <div
+                className={`mt-1 flex flex-wrap items-center gap-2${
+                  i < list.findLastIndex((m) => m.role === "assistant")
+                    ? " opacity-0 transition-opacity group-focus-within/answer:opacity-100 group-hover/answer:opacity-100"
+                    : ""
+                }`}
+              >
+                <RatingButtons
+                  tool="act"
+                  input={[chat.anchor?.quotedText ?? "", list[i - 1]?.content ?? ""]
+                    .filter(Boolean)
+                    .join("\n\n")}
+                  output={message.content}
+                  notebookId={notebookId}
+                  documentId={documentId}
+                  noteId={chatNoteId}
+                  inRow
+                />
+                <SaveAsNote
+                  notebookId={notebookId}
+                  documentId={documentId}
+                  origin="act"
+                  question={list[i - 1]?.content ?? ""}
+                  selection={chat.anchor?.quotedText ?? ""}
+                  answer={message.content}
+                  className="ml-auto"
+                />
+              </div>
+            )}
+          </div>
+        ),
+      )}
+      {chat.busy && <ThinkingIndicator className="py-0.5 text-[12px]" />}
+      {/* The plan this conversation proposed, under its answer (SPEC.md
+          §7): it scrolls with the turns, so a short card still shows
+          the answer, and the box stays the card's last row. */}
+      {planInCard && inView === (conversationView === "assistant") && (
+        <div data-plan-in-card className="flex shrink-0 flex-col rounded-2xl border border-line bg-sand-50 p-3">
+          {planBody}
+        </div>
+      )}
+      <QueuedList items={chatQueueShown(chat)} onRemove={removeQueuedChat} />
+    </>
+  );
   const planFloats = aiPlan !== null && planFrom === "panel";
   const barKey = bar ? barRunKey(bar) : null;
   // The bar on an image (SPEC.md §7): its chips read the image.
@@ -11829,76 +11922,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             </span>
           </div>
           <div ref={chatScrollRef} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 py-2">
-            {(chatOpenSide ? chatOpenSide.messages : assistantChat.messages).map((message, i, list) =>
-              message.role === "user" ? (
-                <p
-                  key={i}
-                  className="ml-6 self-end rounded-2xl bg-clay-100 px-3 py-1.5 text-[12.5px] whitespace-pre-wrap text-clay-800"
-                >
-                  {message.content}
-                </p>
-              ) : (
-                <div
-                  key={i}
-                  // An older answer shows its rating row on hover or focus; a
-                  // tap focuses the answer on a touch screen (TOOL13-12).
-                  tabIndex={-1}
-                  data-chat-answer
-                  className="group/answer text-[13px] outline-none"
-                >
-                  {/* Highlighting the answer offers the side chat, the quoted
-                      question, and the comment (SPEC.md §7). */}
-                  <div {...{ [ANSWER_MARK]: "" }}>
-                    <AnswerMarkdown>{message.content}</AnswerMarkdown>
-                  </div>
-                  {/* The rating (SPEC.md §25): the question and the selection
-                      it ran on, the answer it gave; the suggestions' row
-                      rates the suggestions. */}
-                  {message.suggestKey ? (
-                    <SuggestionRow runKey={message.suggestKey} />
-                  ) : !assistantChat.busy && (
-                    <div
-                      className={`mt-1 flex flex-wrap items-center gap-2${
-                        i < list.findLastIndex((m) => m.role === "assistant")
-                          ? " opacity-0 transition-opacity group-focus-within/answer:opacity-100 group-hover/answer:opacity-100"
-                          : ""
-                      }`}
-                    >
-                      <RatingButtons
-                        tool="act"
-                        input={[assistantChat.anchor?.quotedText ?? "", list[i - 1]?.content ?? ""]
-                          .filter(Boolean)
-                          .join("\n\n")}
-                        output={message.content}
-                        notebookId={notebookId}
-                        documentId={documentId}
-                        noteId={chatNoteId}
-                        inRow
-                      />
-                      <SaveAsNote
-                        notebookId={notebookId}
-                        documentId={documentId}
-                        origin="act"
-                        question={list[i - 1]?.content ?? ""}
-                        selection={assistantChat.anchor?.quotedText ?? ""}
-                        answer={message.content}
-                        className="ml-auto"
-                      />
-                    </div>
-                  )}
-                </div>
-              ),
-            )}
-            {assistantChat.busy && <ThinkingIndicator className="py-0.5 text-[12px]" />}
-            {/* The plan this conversation proposed, under its answer (SPEC.md
-                §7): it scrolls with the turns, so a short card still shows
-                the answer, and the box stays the card's last row. */}
-            {planInCard && (
-              <div data-plan-in-card className="flex shrink-0 flex-col rounded-2xl border border-line bg-sand-50 p-3">
-                {planBody}
-              </div>
-            )}
-            <QueuedList items={chatQueueShown(assistantChat)} onRemove={removeQueuedChat} />
+            {assistantTurns(assistantChat, false)}
           </div>
           {assistantChatFoot(assistantChat, "flex items-end gap-1.5 px-3 pb-3", "px-3 pb-1.5")}
         </div>
@@ -11943,8 +11967,8 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           title={t("reader.assistant")}
           icon={<SparkleIcon size={12} />}
           messages={chatOpenSide ? chatOpenSide.messages : assistantChat.messages}
+          turns={assistantTurns(assistantChat, true)}
           busy={assistantChat.busy}
-          after={<QueuedList items={chatQueueShown(assistantChat)} onRemove={removeQueuedChat} />}
           foot={assistantChatFoot(assistantChat, "flex items-end gap-1.5", "pb-1.5")}
           onClose={closeConversationView}
         />
