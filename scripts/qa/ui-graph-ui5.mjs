@@ -231,6 +231,9 @@ if (ONLY.includes("show") && after) {
     // parameters, so the URL moves at once (WALK5-05).
     const nl = page.locator('[data-graph-side-list="notes"]');
     await nl.locator('[data-track="graph-notes-open"]').first().waitFor({ timeout: 15000 }).catch(() => {});
+    // The list narrows to the shown note once the graph's data holds it (about a second after Show on dev):
+    // until then its first row is another note.
+    await page.waitForFunction(() => document.querySelectorAll('[data-graph-side-list="notes"] [data-graph-notes-row]').length === 1, null, { timeout: 15000 }).catch(() => {});
     const before = page.url();
     await nl.locator('[data-track="graph-notes-open"]').first().click();
     const t2 = Date.now();
