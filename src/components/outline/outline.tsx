@@ -1,5 +1,6 @@
 "use client";
 
+import { TOUCH_HIT } from "@/components/outline/touch-hit";
 import { useMemo, useState } from "react";
 import { isImeKey } from "@/lib/ime";
 import type { NotebookView } from "@/lib/types";
@@ -93,12 +94,27 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
     <div className="flex flex-col">
       <div inert={behind} className="mb-2 flex flex-wrap items-baseline gap-3.5">
         <h1 className="text-[38px]">{notebook.title}</h1>
+        {/* The tray's queue head (SPEC.md §6): the count, and Accept all.
+            The keys stay; Accept all's tooltip and each card's say them. */}
         {pending.length > 0 && (
-          <span className="rounded-full bg-clay-200 px-3.5 py-1 text-xs font-semibold text-clay-800">
-            {t("outline.pendingCount", { n: pending.length })}
+          <span className="flex items-baseline gap-2">
+            <span className="text-[11px] font-bold tracking-[0.08em] text-clay-800 uppercase">
+              {t("outline.pendingHeader", { n: pending.length })}
+            </span>
+            {canEdit && pending.length > 1 && (
+              <button
+                onClick={() => {
+                  for (const note of pending) void actions.acceptNote(note.id);
+                }}
+                data-track="notes-accept-all"
+                data-tip={t("outline.acceptAllTitle")}
+                className={`text-[11.5px] font-semibold text-sage-700 hover:text-sage-800 ${TOUCH_HIT}`}
+              >
+                {t("outline.acceptAll")}
+              </button>
+            )}
           </span>
         )}
-        <span className="text-[11px] text-sand-500">{t("outline.pageKeyHint")}</span>
       </div>
 
       {/* One row on a phone too: the search takes what the icons leave. */}
@@ -140,6 +156,9 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
             search={query}
             onMerge={(id, intoId) => void actions.mergeNotes(intoId, [id], "join")}
           />
+          {needle && found.length === 0 && (
+            <p className="text-sm text-sand-600">{t("outline.noNotesMatch", { query: needle })}</p>
+          )}
         </div>
       ) : (
       <div inert={behind} className="flex flex-col gap-[30px] pt-[22px]">
@@ -212,7 +231,10 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
           }}
         />
       )}
-      {board === null && <MergeUndoBar actions={actions} />}
+      {/* One pill on every surface: a reject's Undo too (SPEC.md §6). */}
+      {board === null && (
+        <MergeUndoBar actions={actions} rejected={lastRejected} onUndoReject={() => void undoReject()} />
+      )}
 
       <Presence show={board !== null} exit="fade">
         {board && (
@@ -222,6 +244,8 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
             actions={actions}
             onChange={setBoard}
             onClose={() => setBoard(null)}
+            rejected={lastRejected}
+            onUndoReject={() => void undoReject()}
           />
         )}
       </Presence>
@@ -253,19 +277,6 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
           />
         )}
       </Presence>
-
-      {lastRejected && (
-        <div className="fixed bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full bg-card px-5 py-2.5 shadow-float">
-          <span className="text-[13px] text-sand-600">{t("outline.noteRejected")}</span>
-          <button
-            onClick={() => void undoReject()}
-            data-tip={t("outline.undoRejectTitle")}
-            className="rounded-full bg-clay px-3.5 py-1 text-xs font-semibold text-clay-fg hover:bg-clay-600"
-          >
-            {t("outline.undo")}
-          </button>
-        </div>
-      )}
     </div>
   );
 }

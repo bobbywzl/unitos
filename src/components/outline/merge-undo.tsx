@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/components/lang-provider";
+import { useModKey } from "@/components/outline/note-editor";
 import type { OutlineActions } from "@/components/outline/use-outline";
 
 /** The bottom pills (this one and the selection bar) are drawn on the body:
@@ -88,6 +89,44 @@ export function MergeUndoBar({
   const canceled = shown === "cancel" ? actions.lastCancel : null;
   const section = shown === "section" ? actions.lastSectionDelete : null;
 
+  // Ctrl+Z (⌘Z on a Mac) outside a text box presses the pill's Undo, so a
+  // keyboard reader reaches it without walking to it. The article's own
+  // history answers first when it has a step (reader-interactions.tsx).
+  const mod = useModKey();
+  const undo: (() => void) | null = reject
+    ? () => onUndoReject?.()
+    : canceled
+      ? () => actions.undoCancel()
+      : section
+        ? () => void actions.undoSectionDelete()
+        : removed
+          ? () => actions.undoDelete()
+          : merge && actions.mergeUndoable
+            ? () => {
+                void actions.undoMerge().then((reason) => {
+                  if (reason) setError(reason);
+                });
+              }
+            : null;
+  const undoRef = useRef(undo);
+  useEffect(() => {
+    undoRef.current = undo;
+  });
+  const offered = undo !== null;
+  useEffect(() => {
+    if (!offered) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || !(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== "z") return;
+      const active = document.activeElement as HTMLElement | null;
+      if (active && (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active instanceof HTMLSelectElement || active.isContentEditable)) return;
+      e.preventDefault();
+      undoRef.current?.();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [offered]);
+  const keyTip = (title: string) => `${title}\n${mod}+Z`;
+
   useEffect(() => {
     if (!error) return;
     const timer = setTimeout(() => setError(null), 5000);
@@ -103,7 +142,7 @@ export function MergeUndoBar({
           <button
             onClick={() => onUndoReject?.()}
             data-track="undo-reject"
-            data-tip={t("outline.undoRejectTitle")}
+            data-tip={keyTip(t("outline.undoRejectTitle"))}
             className="rounded-full bg-clay px-3.5 py-1 text-xs font-semibold text-clay-fg hover:bg-clay-600"
           >
             {t("outline.undo")}
@@ -116,7 +155,7 @@ export function MergeUndoBar({
           <button
             onClick={() => actions.undoCancel()}
             data-track="undo-cancel"
-            data-tip={t("outline.undoCancelTitle")}
+            data-tip={keyTip(t("outline.undoCancelTitle"))}
             className="rounded-full bg-clay px-3.5 py-1 text-xs font-semibold text-clay-fg hover:bg-clay-600"
           >
             {t("outline.undo")}
@@ -139,7 +178,7 @@ export function MergeUndoBar({
           <button
             onClick={() => void actions.undoSectionDelete()}
             data-track="undo-section-delete"
-            data-tip={t("outline.undoSectionDeleteTitle")}
+            data-tip={keyTip(t("outline.undoSectionDeleteTitle"))}
             className="rounded-full bg-clay px-3.5 py-1 text-xs font-semibold text-clay-fg hover:bg-clay-600"
           >
             {t("outline.undo")}
@@ -162,7 +201,7 @@ export function MergeUndoBar({
           <button
             onClick={() => actions.undoDelete()}
             data-track="undo-delete"
-            data-tip={t("outline.undoDeleteTitle")}
+            data-tip={keyTip(t("outline.undoDeleteTitle"))}
             className="rounded-full bg-clay px-3.5 py-1 text-xs font-semibold text-clay-fg hover:bg-clay-600"
           >
             {t("outline.undo")}
@@ -191,7 +230,7 @@ export function MergeUndoBar({
                 });
               }}
               data-track="undo-merge"
-              data-tip={t("outline.undoMergeTitle")}
+              data-tip={keyTip(t("outline.undoMergeTitle"))}
               className="rounded-full bg-clay px-3.5 py-1 text-xs font-semibold text-clay-fg hover:bg-clay-600"
             >
               {t("outline.undo")}

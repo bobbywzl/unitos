@@ -149,6 +149,9 @@ export type OutlineActions = {
   expectComposed: (sectionId: string) => void;
   reorderNote: (sectionId: string, id: string, toIndex: number) => void;
   moveNoteToSection: (id: string, sectionId: string, toIndex?: number) => Promise<void>;
+  /** Alt+↑ and Alt+↓ on a note: one place up or down in its section, and
+      past the section's first or last place into the section above or below. */
+  nudgeNote: (id: string, delta: -1 | 1) => void;
   /** Merge notes into the target (SPEC.md §6). join, the default: the notes'
       text lands in the target as it is, in the order the notes stand in. ai:
       the model writes the one note that takes their place. An annotation
@@ -1278,6 +1281,22 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
       // The tray shows where the note went: a folded section unfolds on it,
       // and the note flashes.
       window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: id } }));
+    },
+    nudgeNote(id, delta) {
+      const place = placeOf(treeRef.current, id);
+      if (!place) return;
+      const section = findSection(treeRef.current, place.sectionId);
+      if (!section) return;
+      const index = place.index + delta;
+      if (index >= 0 && index < section.notes.length) {
+        actions.reorderNote(section.id, id, index);
+        return;
+      }
+      // The sections in page order: each root, then the sections nested in it.
+      const order = treeRef.current.flatMap((s) => [s, ...s.children]);
+      const next = order[order.findIndex((s) => s.id === section.id) + delta];
+      if (!next) return;
+      void actions.moveNoteToSection(id, next.id, delta < 0 ? next.notes.length : 0);
     },
     async mergeNotes(targetId, sourceIds, mode = "join") {
       const all = flattenNotes(tree);

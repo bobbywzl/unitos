@@ -20,7 +20,11 @@ export function CollapsedViewToggle({
   const t = useT();
   const next: CollapsedView = view === "collapsed" ? "expanded" : "collapsed";
   const label = next === "expanded" ? t("outline.expandAll") : t("outline.collapseAll");
-  const tip = next === "expanded" ? t("outline.expandAllTitle") : t("outline.collapseAllTitle");
+  const annotations = track === "annotations-view";
+  const tip =
+    next === "expanded"
+      ? t(annotations ? "outline.expandAllAnnotationsTitle" : "outline.expandAllTitle")
+      : t(annotations ? "outline.collapseAllAnnotationsTitle" : "outline.collapseAllTitle");
   return (
     <button
       type="button"

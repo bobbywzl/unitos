@@ -1,8 +1,10 @@
 "use client";
 
+import { TOUCH_HIT } from "@/components/outline/touch-hit";
 import { useRouter } from "next/navigation";
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeKey } from "@/lib/ime";
+import { NOTE_DRAFT_CLEARED_EVENT } from "@/lib/note-drafts";
 import type { NoteView, SourceChip } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
@@ -159,6 +161,41 @@ export function NoteCard({
   );
 }
 
+/** After the frame: the focus on `track` in the note's card (else its first
+    button), when the focus fell to the page. */
+function focusInCard(noteId: string, track: string) {
+  requestAnimationFrame(() => {
+    const active = document.activeElement;
+    if (active && active !== document.body && active.isConnected) return;
+    const card = document.querySelector<HTMLElement>(`[data-note-id="${noteId}"]`);
+    (card?.querySelector<HTMLElement>(`[data-track="${track}"]`) ?? card?.querySelector<HTMLElement>("button"))?.focus({ preventScroll: true });
+  });
+}
+
+/** The card after this one on screen (else the one before) takes the focus
+    on `track` (else its first button) once this card has gone: an Accept, a
+    reject, or a Delete never drops the focus to the top of the page. */
+function focusNextCard(noteId: string, track: string) {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement) || !active.closest(`[data-note-id="${noteId}"]`)) return;
+  const cards = [...document.querySelectorAll<HTMLElement>("[data-note-id]")].filter((c) => c.offsetParent !== null && !c.closest("[inert]"));
+  const at = cards.findIndex((c) => c.dataset.noteId === noteId);
+  const order = [...cards.slice(at + 1), ...cards.slice(0, Math.max(0, at)).reverse()];
+  const ids = order.map((c) => c.dataset.noteId).filter((id): id is string => !!id && id !== noteId);
+  requestAnimationFrame(() => {
+    if (document.activeElement && document.activeElement !== document.body && document.activeElement.isConnected) return;
+    for (const id of ids) {
+      const card = document.querySelector<HTMLElement>(`[data-note-id="${id}"]`);
+      if (!card) continue;
+      const target = card.querySelector<HTMLElement>(`[data-track="${track}"]`) ?? card.querySelector<HTMLElement>("button");
+      if (target) {
+        target.focus({ preventScroll: true });
+        return;
+      }
+    }
+  });
+}
+
 /** What a card runs on the outline: the commands of its buttons and drops. */
 type NoteCommands = Pick<
   OutlineActions,
@@ -178,6 +215,7 @@ type NoteCommands = Pick<
   | "rejectNote"
   | "removeNotes"
   | "editCanceled"
+  | "nudgeNote"
 >;
 
 /** The outline's commands as one object for the card's life, each calling
@@ -206,6 +244,7 @@ function useCommands(actions: OutlineActions): NoteCommands {
       rejectNote: (...args) => latest.current.rejectNote(...args),
       removeNotes: (...args) => latest.current.removeNotes(...args),
       editCanceled: (...args) => latest.current.editCanceled(...args),
+      nudgeNote: (...args) => latest.current.nudgeNote(...args),
     }),
     [],
   );
@@ -343,6 +382,19 @@ const NoteCardBody = memo(function NoteCardBody({
   const [cut, setCut] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
   const [dropError, setDropError] = useState<string | null>(null);
+  // The error under the header came from Done's save: it clears when the
+  // words reach the server (the retry in use-outline.ts clears the draft).
+  const [saveFailed, setSaveFailed] = useState(false);
+  useEffect(() => {
+    if (!saveFailed) return;
+    const onCleared = (e: Event) => {
+      if ((e as CustomEvent<{ noteId?: unknown }>).detail?.noteId !== note.id) return;
+      setSaveFailed(false);
+      setDropError(null);
+    };
+    window.addEventListener(NOTE_DRAFT_CLEARED_EVENT, onCleared);
+    return () => window.removeEventListener(NOTE_DRAFT_CLEARED_EVENT, onCleared);
+  }, [saveFailed, note.id]);
   const [handledEdit, setHandledEdit] = useState<{ id: string } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const mergeTarget = useMergeTarget();
@@ -562,6 +614,7 @@ const NoteCardBody = memo(function NoteCardBody({
       // The words stay on the card, marked Not saved (use-outline.ts), and
       // the local draft keeps them for the next load.
       setDropError(err instanceof Error ? err.message : t("common.requestFailed"));
+      setSaveFailed(true);
     }
   }
 
@@ -664,7 +717,12 @@ const NoteCardBody = memo(function NoteCardBody({
     <div className="flex min-h-[18px] items-center gap-1.5">
       {foldable && !editing && !merging && !collapsed && (
         <button
-          onClick={() => commands.toggleCollapsed(note.id)}
+          onClick={() => {
+            commands.toggleCollapsed(note.id);
+            // The row and the open header are two buttons: the focus stays
+            // on the note, not on the page.
+            focusInCard(note.id, "note-collapse");
+          }}
           data-track="note-collapse"
           aria-expanded={!collapsed}
           aria-label={collapseLabel}
@@ -693,7 +751,12 @@ const NoteCardBody = memo(function NoteCardBody({
       {/* One control opens the row: its chevron and its line. */}
       {row && !merging && (
         <button
-          onClick={() => commands.toggleCollapsed(note.id)}
+          onClick={() => {
+            commands.toggleCollapsed(note.id);
+            // The row and the open header are two buttons: the focus stays
+            // on the note, not on the page.
+            focusInCard(note.id, "note-collapse");
+          }}
           data-track="note-collapse"
           aria-expanded={false}
           data-tip={t("outline.expandNote")}
@@ -722,7 +785,7 @@ const NoteCardBody = memo(function NoteCardBody({
               setTimeout(() => setCopied(false), 1500);
             }}
             data-track="note-copy"
-            className="text-[11.5px] text-sand-600 hover:text-clay-700"
+            className={`text-[11.5px] text-sand-600 hover:text-clay-700 ${TOUCH_HIT}`}
             data-tip={t("outline.copyTitle")}
           >
             {copied ? t("outline.copied") : t("outline.copy")}
@@ -732,7 +795,7 @@ const NoteCardBody = memo(function NoteCardBody({
             data-track="note-history"
             aria-expanded={historyOpen}
             data-tip={t("outline.historyTitle")}
-            className={`text-[11.5px] hover:text-clay-700 ${historyOpen ? "text-clay-700" : "text-sand-600"}`}
+            className={`text-[11.5px] hover:text-clay-700 ${TOUCH_HIT} ${historyOpen ? "text-clay-700" : "text-sand-600"}`}
           >
             {t("outline.history")}
           </button>
@@ -740,10 +803,14 @@ const NoteCardBody = memo(function NoteCardBody({
             <button
               // No confirm: the note leaves at once, and the Undo pill offers
               // it back (SPEC.md §6).
-              onClick={() => commands.removeNotes([note.id])}
+              onClick={() => {
+                // The focus goes on to the next note, not to the page.
+                focusNextCard(note.id, "note-collapse");
+                commands.removeNotes([note.id]);
+              }}
               data-track="note-delete"
               data-tip={t("outline.deleteNoteTitle")}
-              className="text-[11.5px] text-red-500 hover:text-red-700"
+              className={`text-[11.5px] text-red-500 hover:text-red-700 ${TOUCH_HIT}`}
             >
               {t("common.delete")}
             </button>
@@ -795,7 +862,7 @@ const NoteCardBody = memo(function NoteCardBody({
             data-track="note-jump"
             aria-label={t("panels.jumpToAnchor")}
             data-tip={t("panels.jumpToAnchor")}
-            className="flex size-[18px] items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800"
+            className={`flex size-[18px] items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800 ${TOUCH_HIT}`}
           >
             <LocateIcon size={11} />
           </button>
@@ -816,18 +883,25 @@ const NoteCardBody = memo(function NoteCardBody({
         {pending && canEdit && !editing && (
           <>
             <button
-              onClick={() => void commands.acceptNote(note.id)}
+              onClick={() => {
+                // The focus goes on to the next pending note's Accept.
+                focusNextCard(note.id, "note-accept");
+                void commands.acceptNote(note.id);
+              }}
               data-track="note-accept"
-              className="rounded-full bg-sage-600 px-2.5 py-1 text-[11.5px] leading-none font-semibold text-sage-fg hover:bg-sage-700"
+              className={`rounded-full bg-sage-600 px-2.5 py-1 text-[11.5px] leading-none font-semibold text-sage-fg hover:bg-sage-700 ${TOUCH_HIT}`}
               data-tip={t("outline.acceptTitle")}
             >
               {t("common.accept")}
             </button>
             <button
-              onClick={() => void commands.rejectNote(note.id)}
+              onClick={() => {
+                focusNextCard(note.id, "note-reject");
+                void commands.rejectNote(note.id);
+              }}
               data-track="note-reject"
               aria-label={t("common.reject")}
-              className="flex size-6 items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+              className={`flex size-6 items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:ml-1 ${TOUCH_HIT}`}
               data-tip={t("outline.rejectTitle")}
             >
               ✕
@@ -842,7 +916,7 @@ const NoteCardBody = memo(function NoteCardBody({
             aria-checked={isSelected}
             aria-label={t("outline.selectNote")}
             data-tip={t(tray ? "outline.selectNoteTitle" : "outline.selectNoteTitleCompare")}
-            className={`h-[18px] w-[18px] items-center justify-center rounded-full border transition-colors ${
+            className={`h-[18px] w-[18px] items-center justify-center rounded-full border transition-colors ${TOUCH_HIT} ${
               isSelected || selecting ? "flex" : `flex ${restHidden}`
             } ${
               isSelected
@@ -1018,6 +1092,36 @@ const NoteCardBody = memo(function NoteCardBody({
       // out of the tray onto the article.
       data-nudge={nudge && draggable ? "merge float" : undefined}
       onDoubleClick={editOnDoubleClick}
+      onKeyDown={(e) => {
+        // Alt+↑ and Alt+↓ move the note, as a hold does (use-outline.ts
+        // nudgeNote); the focus stays on the control it was on.
+        if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+        const target = e.target as HTMLElement;
+        if (target.closest("input, textarea, select, [contenteditable=true], [role=menu]")) return;
+        // ↑ and ↓ on a note's control: the same control on the note above
+        // or below, so the list reads by arrows, not by every control's Tab.
+        if (!e.altKey) {
+          if (e.shiftKey || e.metaKey || e.ctrlKey || target.tagName !== "BUTTON") return;
+          const cards = [...document.querySelectorAll<HTMLElement>("[data-note-id]")].filter(
+            (c) => c.offsetParent !== null && !c.closest("[inert]"),
+          );
+          const next = cards[cards.findIndex((c) => c.dataset.noteId === note.id) + (e.key === "ArrowUp" ? -1 : 1)];
+          if (!next) return;
+          e.preventDefault();
+          const track = target.getAttribute("data-track");
+          ((track && next.querySelector<HTMLElement>(`[data-track="${track}"]`)) || next.querySelector<HTMLElement>("button"))?.focus();
+          return;
+        }
+        if (!canEdit || !draggable) return;
+        e.preventDefault();
+        const track = target.getAttribute("data-track");
+        commands.nudgeNote(note.id, e.key === "ArrowUp" ? -1 : 1);
+        requestAnimationFrame(() => {
+          const card = document.querySelector<HTMLElement>(`[data-note-id="${note.id}"]`);
+          const back = (track && card?.querySelector<HTMLElement>(`[data-track="${track}"]`)) || card?.querySelector<HTMLElement>("button");
+          if (back && document.activeElement !== back) back.focus({ preventScroll: false });
+        });
+      }}
       {...noteDrop.handlers}
       {...dragProps}
       className={surface}
