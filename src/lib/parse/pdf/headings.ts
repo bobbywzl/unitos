@@ -208,8 +208,13 @@ function largeHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[
     // is that edge: a title slide's widest line makes the column
     // (real-gslides-oer-5rs p2: "OER, the 5Rs, and" over "Creative
     // Commons" read as two headings).
+    // The middle is the first line's or the line's above (parse loop
+    // finding: a MagPi pull quote's three centered lines are 16 pt; the
+    // third's middle stands 14 pt off the first's and 7 pt off the
+    // second's, and the third, "LCD screens", read as a heading).
+    const middle = (l: Line) => (l.x + l.xEnd) / 2;
     const centered =
-      Math.abs((next.x + next.xEnd) / 2 - (line.x + line.xEnd) / 2) <= 12 &&
+      Math.min(Math.abs(middle(next) - middle(line)), Math.abs(middle(next) - middle(run[run.length - 1]))) <= 12 &&
       (next.x > ctx.columnLeft + 12 || (!ocr && Math.abs(next.size - line.size) < 0.1));
     const hung = hang !== undefined && run.length === 1 && Math.abs(next.x - hang) <= 2;
     if (
