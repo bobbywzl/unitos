@@ -8,32 +8,39 @@ import { NoteTitleField, focusBodyEditor, useNoteParts } from "@/components/outl
 import { SaveStateLabel } from "@/components/outline/save-state";
 import type { useNoteCompose } from "@/components/outline/use-note-compose";
 
+// The last input before a composer opened: a key or a press (pointer).
+let lastInput: "key" | "pointer" = "pointer";
+if (typeof window !== "undefined") {
+  window.addEventListener("keydown", () => (lastInput = "key"), true);
+  window.addEventListener("pointerdown", () => (lastInput = "pointer"), true);
+}
+
 // A section's composer (SPEC.md §6): a new note being written — the title
 // field, then the body's editor, in one card above the section's notes. The
-// tray and the notes full page render the same form; the tray's editor
-// carries the core tools, the page's the whole bar.
+// tray and the notes full page render the same form, with the one editor
+// bar (note-editor.tsx).
 export function NoteComposer({
   compose,
   onRelease,
-  full,
   padding,
 }: {
   compose: ReturnType<typeof useNoteCompose>;
   /** Save or Escape is letting the note go: the list takes it as the
       composer closes (use-outline.ts expectComposed). */
   onRelease?: () => void;
-  /** The whole bar (the notes full page); false: the core tools (the tray). */
-  full: boolean;
   /** The card's padding: the tray's or the page's. */
   padding: string;
 }) {
   const t = useT();
   const { parts, setTitle, setBody } = useNoteParts(compose.draft, compose.setDraft);
-  // The composer closes with the caret in it (Done, Escape, Cancel): the
-  // focus goes back to the section's + Note, not to the top of the page.
+  // The composer closes with the caret in it (Done, Escape, Cancel): when
+  // a key opened it, the focus goes back to the section's + Note, not to
+  // the top of the page. When a press opened it, the focus goes to the
+  // page: a key typed after the close never presses + Note.
   const formRef = useRef<HTMLFormElement>(null);
   const focusedRef = useRef(false);
   useEffect(() => {
+    if (lastInput !== "key") return;
     const scopes: HTMLElement[] = [];
     for (let el = formRef.current?.parentElement ?? null; el && scopes.length < 6; el = el.parentElement) scopes.push(el);
     return () => {
@@ -103,7 +110,6 @@ export function NoteComposer({
             if (e.key === "Escape") escape();
           }}
           placeholder={t("outline.writeNotePlaceholder")}
-          full={full}
           autoFocus={false}
           onQuoteDrop={compose.attachQuote}
           title={

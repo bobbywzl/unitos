@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import {
   DndContext,
@@ -15,7 +15,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, useSortable, type SortingStrategy } from "@dnd-kit/sortable";
 import { getEventCoordinates } from "@dnd-kit/utilities";
-import { HoldSensor } from "@/components/hold-sensor";
+import { HoldSensor, restoreLiftScroll } from "@/components/hold-sensor";
 
 // One drag across many lists (SPEC.md §6). Every list is a SortableGroup
 // inside a SortableBoard, and the board owns the one DndContext, so a drag
@@ -74,12 +74,6 @@ export type HandleProps = {
     left or the right. */
 export type ListLayout = "column" | "grid";
 
-/** The card the dragged card covers, or null. Cards read it to draw their ring. */
-const MergeTargetContext = createContext<string | null>(null);
-export function useMergeTarget() {
-  return useContext(MergeTargetContext);
-}
-
 /** The card a hold is on, before it lifts: it presses down a little. Each
     card asks whether it is the one, so a press draws that card again and
     leaves the board's other cards alone. */
@@ -107,12 +101,60 @@ function heldStore(): HeldStore {
 const HeldContext = createContext<HeldStore | null>(null);
 const noSubscribe = () => () => {};
 
+/** The card the dragged card covers, or null, as a store (heldStore): each
+    card asks whether it is the one, so a new cover draws again the card it
+    left and the card it reached, never every card of the board. */
+const MergeTargetContext = createContext<HeldStore | null>(null);
+/** Whether the dragged card covers this card: it draws its ring. */
+export function useIsMergeTarget(id: string) {
+  const target = useContext(MergeTargetContext);
+  return useSyncExternalStore(
+    target?.subscribe ?? noSubscribe,
+    () => target?.get() === id,
+    () => false,
+  );
+}
+
 /** Where the dragged card would land: before this card, or at the end of this
     list. Items and groups read it to draw the line. header: the pointer is
     on the list's header (a section's title row), which lands the card at the
     top of the list and lights up. */
 type DropLine = { listId: string; beforeId: string | null; header?: boolean };
-const DropLineContext = createContext<DropLine | null>(null);
+/** The line, as a store each item and list reads its own answer from: a
+    move of the line draws again the card it left and the card it reached,
+    never every card of the board. */
+type LineStore = {
+  get: () => DropLine | null;
+  set: (line: DropLine | null) => void;
+  subscribe: (listener: () => void) => () => void;
+};
+function lineStore(): LineStore {
+  let line: DropLine | null = null;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => line,
+    set(next) {
+      if (next === line) return;
+      line = next;
+      for (const listener of listeners) listener();
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => void listeners.delete(listener);
+    },
+  };
+}
+const DropLineContext = createContext<LineStore | null>(null);
+/** This item's or this list's answer about the line: a primitive, so it
+    draws again only when its own answer changes. */
+function useLine<T extends string | boolean | null>(pick: (line: DropLine | null) => T): T {
+  const store = useContext(DropLineContext);
+  return useSyncExternalStore(
+    store?.subscribe ?? noSubscribe,
+    () => pick(store?.get() ?? null),
+    () => pick(null),
+  );
+}
 
 /** The list an item is in: its id, its ids, and its layout, so the item
     draws the line the layout calls for. */
@@ -310,12 +352,17 @@ export function SortableBoard({
   // The card a hold is on, before it lifts.
   const [held] = useState(heldStore);
   const [line, setLine] = useState<DropLine | null>(null);
+  const [lines] = useState(lineStore);
+  const [target] = useState(heldStore);
   // The card the dragged card covers: the ring draws around it, and at the
   // full ring the merge runs. rect is the card's box, for the ring.
   const [covered, setCovered] = useState<{ id: string; rect: DOMRect } | null>(null);
   // The held card falling into the card it merges into: where it starts and
   // where it lands. It clears itself when the fall is done.
   const [fall, setFall] = useState<{ from: DOMRect; to: DOMRect } | null>(null);
+  // No line while the dragged card covers a card it would merge into.
+  useLayoutEffect(() => lines.set(covered ? null : line), [lines, covered, line]);
+  useLayoutEffect(() => target.set(covered?.id ?? null), [target, covered]);
   const registry = useRef<Registry>(new Map());
   // The board's own element: every card of this board is measured inside it.
   const rootRef = useRef<HTMLDivElement>(null);
@@ -474,10 +521,14 @@ export function SortableBoard({
       // Off every list, over the article: the note leaves the list.
       if (onDropOutside && at && overReader(at.x, at.y)) {
         onDropOutside(itemId, { x: at.x, y: at.y, grab: grab ? { dx: grab.dx, dy: grab.dy } : { dx: 0, dy: 0 } });
-      }
+      } else restoreLiftScroll();
       return;
     }
-    if (landing.listId === from[0] && landing.beforeId === itemId) return;
+    // Let go where it was: nothing moved, and the lists scroll back.
+    if (landing.listId === from[0] && landing.beforeId === itemId) {
+      restoreLiftScroll();
+      return;
+    }
     onDrop?.(from[0], landing.listId, itemId, landing.beforeId);
   }
 
@@ -563,9 +614,9 @@ export function SortableBoard({
         {/* The card rings as soon as the dragged card covers it — the reader
             sees the hold is lined up and has only to keep still. The root
             takes no space of its own: the board is measured inside it. */}
-        <MergeTargetContext.Provider value={covered?.id ?? null}>
+        <MergeTargetContext.Provider value={target}>
           <HeldContext.Provider value={held}>
-            <DropLineContext.Provider value={covered ? null : line}>
+            <DropLineContext.Provider value={lines}>
               <div ref={rootRef} data-sortable-board={id} className="contents">
                 {children}
               </div>
@@ -603,8 +654,7 @@ export function SortableBoard({
 /** Whether the dragged card would land through this list's header: the
     header lights up (it carries data-drop-header with the list's id). */
 export function useDropHeader(listId: string): boolean {
-  const line = useContext(DropLineContext);
-  return Boolean(line?.header && line.listId === listId);
+  return useLine((line) => Boolean(line?.header && line.listId === listId));
 }
 
 // One list inside a board. It holds no DndContext of its own — the board's
@@ -630,11 +680,12 @@ export function SortableGroup({
   registry?.current.set(id, { ids, layout });
   useEffect(() => () => void registry?.current.delete(id), [registry, id]);
   const { setNodeRef, isOver } = useDroppable({ id: dropId(id) });
-  const line = useContext(DropLineContext);
+  const lineHere = useLine((line) => line?.listId === id);
+  const lineAtEnd = useLine((line) => line?.listId === id && line.beforeId === null);
   const empty = ids.length === 0;
   // The line at the end of a column sits under its last card; in a grid the
   // last tile draws it at its right (SortableItem).
-  const endLine = layout === "column" && line?.listId === id && line.beforeId === null && !empty;
+  const endLine = layout === "column" && lineAtEnd && !empty;
   return (
     <SortableContext items={ids} strategy={holdStillStrategy}>
       <GroupContext.Provider value={{ id, ids, layout }}>
@@ -645,7 +696,7 @@ export function SortableGroup({
           className={`relative ${className ?? ""}${
             empty
               ? ` min-h-9 rounded-2xl border-[1.5px] border-dashed ${
-                  isOver || line?.listId === id ? "border-clay bg-clay-100/60" : "border-transparent"
+                  isOver || lineHere ? "border-clay bg-clay-100/60" : "border-transparent"
                 }`
               : ""
           }`}
@@ -666,7 +717,12 @@ export function SortableItem({
   children: (handle: HandleProps) => React.ReactNode;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useSortable({ id });
-  const line = useContext(DropLineContext);
+  // One handle object while the sortable's own pieces stay the same: a card
+  // drawn from it (memoized, note-card.tsx) draws again only when they change.
+  const handle = useMemo(() => ({ attributes, listeners }), [attributes, listeners]);
+  // dnd-kit draws the item again on every move of a drag; what it holds is
+  // drawn again only when the list or the handle changes.
+  const content = useMemo(() => children(handle), [children, handle]);
   const group = useContext(GroupContext);
   const heldCards = useContext(HeldContext);
   const held = useSyncExternalStore(
@@ -675,10 +731,12 @@ export function SortableItem({
     () => false,
   );
   const grid = group?.layout === "grid";
-  const before = line?.beforeId === id;
+  const before = useLine((line) => line?.beforeId === id);
   // In a grid the last tile also draws the line for a drop at the end.
-  const after =
-    grid && group && line?.listId === group.id && line.beforeId === null && group.ids[group.ids.length - 1] === id;
+  const lastOfGroup = group ? group.ids[group.ids.length - 1] === id : false;
+  const after = useLine(
+    (line) => Boolean(grid && group && lastOfGroup && line?.listId === group.id && line.beforeId === null),
+  );
   return (
     <div
       ref={setNodeRef}
@@ -687,7 +745,7 @@ export function SortableItem({
     >
       {before && <span aria-hidden className={grid ? "drop-line-grid" : "drop-line"} />}
       {after && <span aria-hidden className="drop-line-grid drop-line-grid-end" />}
-      {children({ attributes, listeners })}
+      {content}
     </div>
   );
 }

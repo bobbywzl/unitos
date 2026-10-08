@@ -11,7 +11,7 @@ import { AnnotationSideHost, useAnnotationSide } from "@/components/outline/anno
 import { dropIndex, notesList, parseListId } from "@/components/outline/board-lists";
 import { MergeUndoBar } from "@/components/outline/merge-undo";
 import { NoteCard } from "@/components/outline/note-card";
-import { NoteComposer } from "@/components/outline/note-composer";
+import { NoteComposer, focusComposer } from "@/components/outline/note-composer";
 import { NoteTile } from "@/components/outline/note-tile";
 import { SECTION_ACTION, SECTION_ADD_NOTE } from "@/components/outline/section-action";
 import { SelectionBar } from "@/components/outline/selection-bar";
@@ -52,6 +52,10 @@ function parentOf(tree: SectionView[], id: string): SectionView | null {
   for (const s of tree) if (s.children.some((c) => c.id === id)) return s;
   return null;
 }
+
+/** How many tiles a board draws as it opens, and how many each frame after. */
+const FIRST_TILES = 12;
+const TILES_A_FRAME = 12;
 
 export function SectionBoard({
   tree,
@@ -141,6 +145,16 @@ export function SectionBoard({
     observer.observe(el);
     return () => observer.disconnect();
   }, [noteCount, composing]);
+  // The tiles in view first: the board opens with the first tiles drawn,
+  // and the rest follow a frame at a time (a board of 50 notes took 0.3 to
+  // 0.4 s to open in one long task).
+  const [drawn, setDrawn] = useState(FIRST_TILES);
+  useEffect(() => {
+    if (drawn >= noteCount) return;
+    const frame = requestAnimationFrame(() => setDrawn((n) => n + TILES_A_FRAME));
+    return () => cancelAnimationFrame(frame);
+  }, [drawn, noteCount]);
+  const shownNotes = drawn >= noteCount ? notes : notes.slice(0, drawn);
   const tileVars = tileSize
     ? ({
         "--tile-cols": tileSize.columns,
@@ -255,7 +269,17 @@ export function SectionBoard({
         <div className="ml-auto flex items-center gap-2">
           {canEdit && (
             <button
-              onClick={compose.open}
+              onClick={(e) => {
+                // A second press while the composer is open puts the caret
+                // back in it, as the tray's and the full page's + Note do.
+                if (!compose.composing) {
+                  compose.open();
+                  return;
+                }
+                let root: HTMLElement | null = e.currentTarget;
+                while (root && !root.querySelector("[data-note-composer]")) root = root.parentElement;
+                focusComposer(root);
+              }}
               data-track="section-add-note"
               data-tip={t("outline.addNoteTitle")}
               className={SECTION_ADD_NOTE}
@@ -283,7 +307,7 @@ export function SectionBoard({
             the section (SPEC.md §6). */}
         {compose.composing && (
           <div className="mb-5 max-w-[760px]">
-            <NoteComposer compose={compose} onRelease={() => actions.expectComposed(section.id)} full padding="p-4" />
+            <NoteComposer compose={compose} onRelease={() => actions.expectComposed(section.id)} padding="p-4" />
           </div>
         )}
 
@@ -310,12 +334,12 @@ export function SectionBoard({
         >
           <SortableGroup
             id={notesList(section.id)}
-            ids={notes.map((n) => n.id)}
+            ids={shownNotes.map((n) => n.id)}
             layout="grid"
             className={`note-board${sizedClass}`}
             style={tileVars}
           >
-            {notes.map((note) => (
+            {shownNotes.map((note) => (
               <SortableItem key={actions.noteKey(note.id)} id={note.id}>
                 {(handle) => <NoteTile note={note} actions={actions} handle={canEdit ? handle : undefined} onOpen={setOpen} />}
               </SortableItem>

@@ -529,7 +529,6 @@ function SectionComposer({
           <NoteComposer
             compose={compose}
             onRelease={() => actions.expectComposed(section.id)}
-            full={variant === "page"}
             padding={variant === "page" ? "p-4" : "p-3"}
           />
         </>

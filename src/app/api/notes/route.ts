@@ -8,6 +8,7 @@ import { MAX_SEGMENTS, passageSources, resolvePassage } from "@/lib/anchors/pass
 import { layerBlocks } from "@/lib/anchors/layer";
 import type { ResolvedAnchor } from "@/lib/anchors/resolve";
 import { serverT } from "@/lib/i18n/server";
+import { sectionAfterRemoval } from "@/lib/notes/gone";
 import { normalizeNoteOrders } from "@/lib/order";
 import { videoAnchorFor } from "@/lib/video/anchor";
 import { timeRangeSchema } from "@/lib/video/types";
@@ -73,9 +74,13 @@ export async function POST(req: Request) {
   const { data, error } = await parseBody(req, createSchema);
   if (error) return error;
 
-  const section = await db.section.findUnique({ where: { id: data.sectionId } });
+  // A section deleted elsewhere while its composer was writing (lib/notes/gone.ts):
+  // the note goes to the section that takes the deleted one's notes' words.
+  const section =
+    (await db.section.findUnique({ where: { id: data.sectionId } })) ?? (await sectionAfterRemoval(data.sectionId));
   if (!section) return NextResponse.json({ error: t("api.sectionNotFound") }, { status: 404 });
-  const access = await sectionAccess(data.sectionId, "editor");
+  const sectionId = section.id;
+  const access = await sectionAccess(sectionId, "editor");
   if (access instanceof NextResponse) return access;
 
   // The same create again: the note it made, as it is now.
@@ -207,11 +212,11 @@ export async function POST(req: Request) {
     if (!attached) documentId = null;
   }
 
-  const count = await db.note.count({ where: { sectionId: data.sectionId } });
+  const count = await db.note.count({ where: { sectionId } });
   const note = await db.note.create({
     data: {
       ...(data.id ? { id: data.id } : {}),
-      sectionId: data.sectionId,
+      sectionId,
       content,
       // Find, distill, ask, and voice output is AI output: it lands PENDING, no exceptions (SPEC.md §1).
       status: data.pending || alwaysPending ? "PENDING" : "ACCEPTED",
@@ -249,7 +254,7 @@ export async function POST(req: Request) {
     }
     throw err;
   });
-  if (data.top) await normalizeNoteOrders(data.sectionId);
+  if (data.top) await normalizeNoteOrders(sectionId);
   await bumpNotebook(section.notebookId);
   return NextResponse.json(sourceDropped ? { ...note, sourceDropped: true } : note, { status: 201 });
 }

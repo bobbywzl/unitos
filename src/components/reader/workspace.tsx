@@ -251,6 +251,10 @@ export function Workspace({
   // transition; the slide is for collapse and expand.
   const [resizing, setResizing] = useState(false);
   const [tab, setTab] = useState<Tab>("notes");
+  // The notes stay mounted, hidden, once shown: a return to Notes draws no
+  // card anew (NOTE14-06).
+  const [notesShown, setNotesShown] = useState(tab === "notes");
+  if (tab === "notes" && !notesShown) setNotesShown(true);
   // The tray per tab and per project: the reader's own open or fold and the
   // tab, saved when the reader makes them (the rail, a jump to a note or an
   // annotation, Show all comments), so a full page load (a new deploy turns
@@ -938,7 +942,7 @@ export function Workspace({
             {/* The rail's chevron collapses the tray; the header stays clean. */}
             <div className="flex items-center gap-2.5">
               <span className="font-display text-[18px]">{t(TAB_TITLES[tab])}</span>
-              {tab === "notes" && <span className="text-[13px] text-sand-600">{noteCount}</span>}
+              {tab === "notes" && noteCount > 0 && <span className="text-[13px] text-sand-600">{noteCount}</span>}
               {tab === "distill" && distillationCount > 0 && (
                 <span className="text-[13px] text-sand-600">{distillationCount}</span>
               )}
@@ -959,9 +963,11 @@ export function Workspace({
               </button>
             </div>
 
-            {/* Keyed by tab: switching remounts the panel, and it rises in. */}
-            <div key={tab} className="panel-in min-h-0 flex-1 overflow-y-auto">
-              {tab === "notes" && (
+            {notesShown && (
+              <div
+                hidden={tab !== "notes"}
+                className={tab === "notes" ? "panel-in min-h-0 flex-1 overflow-y-auto" : undefined}
+              >
                 <NotesTray
                   tree={tree}
                   pending={pending}
@@ -971,7 +977,10 @@ export function Workspace({
                   scope={noteScope}
                   onScope={setNoteScope}
                 />
-              )}
+              </div>
+            )}
+            {/* Keyed by tab: switching remounts the panel, and it rises in. */}
+            <div key={tab} hidden={tab === "notes"} className="panel-in min-h-0 flex-1 overflow-y-auto">
               {tab === "assistant" && assistant}
               {tab === "distill" && distillPanel}
               {tab === "annotations" && annotationsPanel}

@@ -2608,6 +2608,26 @@ li[data-checked] > .note-box::before {
   top: auto;
   bottom: -5px;
 }
+/* The knob at the line's start: the document list's drop line has the same
+   (document-folders.tsx), so one drag reads the same everywhere. */
+.drop-line::before,
+.drop-line-grid::before {
+  content: "";
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--clay);
+  border-radius: 9999px;
+  background: var(--card);
+}
+.drop-line::before {
+  left: -4px;
+  top: -3px;
+}
+.drop-line-grid::before {
+  top: -4px;
+  left: -3px;
+}
 
 /* The dragged card under the pointer. It carries the card's own look, lifted
    and tilted a little so it reads as picked up. */

@@ -1,7 +1,8 @@
 "use client";
 
 import { TOUCH_HIT } from "@/components/outline/touch-hit";
-import { useMemo, useState } from "react";
+import { useEditingNotes } from "@/components/outline/editing-notes";
+import { useDeferredValue, useMemo, useState } from "react";
 import { isImeKey } from "@/lib/ime";
 import type { NotebookView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
@@ -42,7 +43,12 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
   const t = useT();
   const { canEdit } = useCollab();
   const { tree, pending, actions, lastRejected, undoReject } = useOutline(notebook, canEdit);
-  const [query, setQuery] = useState("");
+  // The field takes every key at once; the list follows a moment later
+  // (useDeferredValue), so typing never waits for the list.
+  const [typed, setQuery] = useState("");
+  const query = useDeferredValue(typed);
+  // An editor opening or closing redraws the search's list (noteMatches).
+  useEditingNotes();
   const [grouping, setGrouping] = useNoteGrouping();
   const needle = query.trim();
   const found = needle ? filterSections(tree, query) : tree;
@@ -120,7 +126,7 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
       {/* One row on a phone too: the search takes what the icons leave. */}
       <div inert={behind} className="mt-2 flex items-center gap-2">
         <input
-          value={query}
+          value={typed}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => e.key === "Escape" && !isImeKey(e) && setQuery("")}
           placeholder={t("outline.searchNotes")}

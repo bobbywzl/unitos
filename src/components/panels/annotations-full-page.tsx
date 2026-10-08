@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { AnnotationItem, SectionView } from "@/lib/types";
-import { api } from "@/lib/api";
+import { deleteNoteWithUndo, deletedKey } from "@/lib/notes/undo-pill";
 import { TOOL_KINDS, type ToolKind } from "@/lib/conversation";
 import { stripSimplifyMarkers } from "@/lib/sentences";
 import { CollapsedViewToggle } from "@/components/collapsed-view-toggle";
@@ -24,6 +24,7 @@ import {
 } from "@/components/panels/annotation-card";
 import { ToolSymbol } from "@/components/reader/block-view";
 import { ConversationView } from "@/components/reader/conversation-view";
+import { PostedUndoPill } from "@/components/outline/merge-undo";
 import { useCollapsedView } from "@/components/use-collapsed-view";
 import { inLayer, LayerSwitch, type AnnotationLayer } from "@/components/panels/layer-switch";
 
@@ -78,7 +79,9 @@ export function AnnotationsFullPage({
   async function deleteAnnotation(id: string) {
     setErrorText(null);
     try {
-      await api(`/api/notes/${id}`, "DELETE");
+      // The pill below offers Undo (lib/notes/undo-pill.ts).
+      const kind = every.find((a) => a.id === id)?.kind ?? "";
+      await deleteNoteWithUndo(id, t(deletedKey(kind)), () => router.refresh());
       router.refresh();
     } catch (err) {
       setErrorText(err instanceof Error ? err.message : t("common.requestFailed"));
@@ -178,6 +181,8 @@ export function AnnotationsFullPage({
         ))}
         {all.length === 0 && <p className="text-sm text-sand-600">{t("panels.annotationsPageEmpty")}</p>}
       </div>
+      {/* The notes' Undo pill: a delete here offers Undo for 12 seconds. */}
+      <PostedUndoPill />
     </div>
   );
 }

@@ -15,7 +15,7 @@ import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { markdownPreview } from "@/lib/markdown-preview";
 import { useGist } from "@/lib/gist-client";
-import { useMergeTarget, type HandleProps } from "@/components/sortable";
+import { useIsMergeTarget, type HandleProps } from "@/components/sortable";
 import { quoteLanded, useNoteDrop } from "@/components/use-note-drop";
 import { referenceMarkdownForDrop } from "@/components/outline/reference-drop";
 import { quoteMarkdown, type QuoteDrag } from "@/lib/quote-drag";
@@ -35,6 +35,7 @@ import { NoteId } from "@/components/outline/note-id";
 import { NoteTitleField, focusBodyEditor, useNoteParts } from "@/components/outline/note-title-field";
 import { SaveStateLabel } from "@/components/outline/save-state";
 import { useNoteDraft } from "@/components/outline/use-note-draft";
+import { holdEditing } from "@/components/outline/editing-notes";
 import { NoteAssistant } from "@/components/outline/note-assistant";
 import { WordLine } from "@/components/outline/word-line";
 import { NOTE_ABSORBED_EVENT, type OutlineActions } from "@/components/outline/use-outline";
@@ -117,7 +118,9 @@ function AnchorIcon({ size = 11 }: { size?: number }) {
 //   card still takes every drop: an annotation or a quote lands in the
 //   draft, a note held over it joins it once its draft is saved
 //   (use-note-draft.ts).
-export function NoteCard({
+// A board draws its items again on every move of a drag (dnd-kit); the
+// card is memoized on its props, so a move leaves it alone.
+export const NoteCard = memo(function NoteCard({
   note,
   actions,
   handle,
@@ -159,6 +162,23 @@ export function NoteCard({
       nudge={nudge}
     />
   );
+});
+
+/** The note's first line that holds the needle, as words (its line marker
+    and inline marks taken off), started a little before the match when the
+    match sits far into a long line; null when no line holds it. */
+function matchLine(content: string, needle: string): string | null {
+  const wanted = needle.toLowerCase();
+  for (const raw of content.split("\n")) {
+    const text = raw
+      .replace(/^\s*(?:#{1,6}|[-*+](?:\s\[[ xX]\])?|\d{1,3}[.)]|>)\s*/, "")
+      .replace(/[*_~`]+/g, "")
+      .trim();
+    const at = text.toLowerCase().indexOf(wanted);
+    if (at === -1) continue;
+    return at > 40 ? `…${text.slice(at - 20).trimStart()}` : text;
+  }
+  return null;
 }
 
 /** After the frame: the focus on `track` in the note's card (else its first
@@ -373,6 +393,8 @@ const NoteCardBody = memo(function NoteCardBody({
   // the note (annotation-side.tsx). Elsewhere it opens the reader.
   const annotationSide = useAnnotationSide();
   const [editing, setEditing] = useState(false);
+  // An open editor keeps its note in a list a search filters (editing-notes.ts).
+  useEffect(() => (editing ? holdEditing(note.id) : undefined), [editing, note.id]);
   const [copied, setCopied] = useState(false);
   // The note's own history, open under the note (note-history.tsx).
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -397,7 +419,7 @@ const NoteCardBody = memo(function NoteCardBody({
   }, [saveFailed, note.id]);
   const [handledEdit, setHandledEdit] = useState<{ id: string } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
-  const mergeTarget = useMergeTarget();
+  const isCovered = useIsMergeTarget(note.id);
   const pending = note.status === "PENDING";
   const focused = pending && focusedPending;
   const tray = variant === "tray";
@@ -405,7 +427,7 @@ const NoteCardBody = memo(function NoteCardBody({
   // The ticker: accepted notes can be selected for bulk delete, merge, pin, and compare.
   const selectable = note.status === "ACCEPTED" && canEdit && !pane;
   // The dragged card covers this one: the ring says a hold here merges them.
-  const isMergeTarget = mergeTarget === note.id && note.status === "ACCEPTED";
+  const isMergeTarget = isCovered && note.status === "ACCEPTED";
   // The note's title and body (SPEC.md §6, lib/note-title.ts).
   const parts = useMemo(() => splitNote(note.content), [note.content]);
   // The search the note was found by: the note shows whole, and the words
@@ -479,16 +501,19 @@ const NoteCardBody = memo(function NoteCardBody({
   }, [absorbed]);
 
   // Accepted notes collapse to one line; pending notes are read before they are
-  // accepted, a compare pane exists to show the note whole, and a search shows
-  // every note it found whole.
+  // accepted, and a compare pane exists to show the note whole. A search
+  // keeps a row a row: it shows the line the search found (matchLine).
   const foldable = note.status === "ACCEPTED" && !pane;
-  const collapsed = !useStagedOpen(!(foldable && !searching && collapsedInView), viewExpanded, cardRef);
+  const collapsed = !useStagedOpen(!(foldable && collapsedInView), viewExpanded, cardRef);
   // The collapsed row's line (SPEC.md §6): the note's title; without one,
   // the gist, its first words until the gist arrives. The floating
   // placeholder shows the same line.
   const preview = useMemo(() => markdownPreview(note.content), [note.content]);
   const gist = useGist(note.id, note.gist, preview, (collapsed || floating) && !parts.title);
   const line = parts.title || gist;
+  // Under a search, the row shows the line that holds the first match,
+  // with the match lit, in place of the title or the gist.
+  const found = useMemo(() => (hit ? matchLine(note.content, hit) : null), [hit, note.content]);
   // The source the card jumps to: the reader opens on the document and
   // flashes the quote — the exact position the note came from.
   const jumpSource = note.sources.find((s) => !s.orphaned) ?? null;
@@ -770,7 +795,13 @@ const NoteCardBody = memo(function NoteCardBody({
             </span>
           )}
           <span className="min-w-0 flex-1">
-            <WordLine text={line} />
+            {found ? (
+              <span className="block truncate">
+                <Highlight text={found} needle={hit} />
+              </span>
+            ) : (
+              <WordLine text={line} />
+            )}
           </span>
         </button>
       )}
@@ -1003,7 +1034,6 @@ const NoteCardBody = memo(function NoteCardBody({
             // Escape closes the editor keeping the words, as Done does.
             if (e.key === "Escape") void done();
           }}
-          full={!tray}
           onQuoteDrop={(drag) =>
             commands.attachSource(note.id, drag).then((ids) => {
               sitting.current.push(...ids);

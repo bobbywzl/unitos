@@ -7,7 +7,7 @@ import { PersonBadge } from "@/components/collab/person-badge";
 import { CommentIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
-import { useMergeTarget, type HandleProps } from "@/components/sortable";
+import { useIsMergeTarget, type HandleProps } from "@/components/sortable";
 import { splitNote } from "@/lib/note-title";
 import { NoteId } from "@/components/outline/note-id";
 import { sourcesTip } from "@/components/outline/sources-tip";
@@ -59,7 +59,7 @@ export function NoteTile({
   const { canEdit, shared, people } = useCollab();
   const parts = splitNote(note.content);
   const pending = note.status === "PENDING";
-  const isMergeTarget = useMergeTarget() === note.id && note.status === "ACCEPTED";
+  const isMergeTarget = useIsMergeTarget(note.id) && note.status === "ACCEPTED";
   const selectable = note.status === "ACCEPTED" && canEdit;
   const isSelected = actions.selected.has(note.id);
   const author = shared && note.createdById ? people[note.createdById] : undefined;

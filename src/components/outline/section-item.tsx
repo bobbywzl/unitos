@@ -16,8 +16,8 @@ import { VoiceNoteButton } from "@/components/outline/voice-note";
 import { filterSections, noteMatches, type OutlineActions } from "@/components/outline/use-outline";
 import { shownSectionTitle } from "@/lib/section-title";
 
-// The rename and delete buttons beside a section's title: 24px drawn, a
-// 36px hit area on a touch screen.
+// The rename button beside a section's title, and the delete button at the
+// end of its title field: 24px drawn, a 36px hit area on a touch screen.
 const SECTION_HEAD_TOOL =
   "flex size-6 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:size-9";
 
@@ -59,11 +59,14 @@ export function SectionItem({
   // A note held over the title row lands at the top of the section
   // (sortable.tsx data-drop-header).
   const headerLit = useDropHeader(notesList(section.id));
+  // The bin was pressed: the row closes without a rename.
+  const deleting = useRef(false);
   if (searching && notes.length === 0 && childrenShown.length === 0) return null;
 
   async function saveTitle() {
     const trimmed = title.trim();
     setEditing(false);
+    if (deleting.current) return;
     if (!trimmed || trimmed === section.title) {
       setTitle(section.title);
       return;
@@ -84,34 +87,68 @@ export function SectionItem({
           <DragHandle handle={handle} label={t("outline.reorderSection", { title: section.title })} />
         </span>
         {editing ? (
-          <input
-            autoFocus
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            onBlur={() => void saveTitle()}
-            {...ime.props}
-            onKeyDown={(e) => {
-              if (ime.isImeEnter(e) || isImeKey(e)) return;
-              if (e.key === "Enter") void saveTitle();
-              if (e.key === "Escape") {
-                setTitle(section.title);
-                setEditing(false);
-              }
+          <span
+            className="flex items-center gap-2 self-center"
+            // The row closes, saving the title, when the focus leaves it:
+            // Tab from the field to its bin keeps it open.
+            onBlur={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) void saveTitle();
             }}
-            aria-label={t("outline.sectionTitle")}
-            className={`rounded-full bg-card px-4 py-1 font-display shadow-soft outline-none ${nested ? "text-lg" : "text-[22px]"}`}
-          />
+          >
+            <input
+              autoFocus
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              {...ime.props}
+              onKeyDown={(e) => {
+                if (ime.isImeEnter(e) || isImeKey(e)) return;
+                if (e.key === "Enter") void saveTitle();
+                if (e.key === "Escape") {
+                  setTitle(section.title);
+                  setEditing(false);
+                }
+              }}
+              aria-label={t("outline.sectionTitle")}
+              className={`rounded-full bg-card px-4 py-1 font-display shadow-soft outline-none ${nested ? "text-lg" : "text-[22px]"}`}
+            />
+            {/* Delete sits in the rename row, never beside a resting
+                control: one slip on the header never takes a section. No
+                confirm: the pill under the notes offers Undo, and History
+                keeps the section whole with Restore. A press keeps the
+                field's focus, so its blur never closes the row first. */}
+            <button
+              type="button"
+              onPointerDown={(e) => e.preventDefault()}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                deleting.current = true;
+                setEditing(false);
+                setTitle(section.title);
+                void actions.deleteSection(section.id).finally(() => {
+                  deleting.current = false;
+                });
+              }}
+              data-track="section-delete"
+              aria-label={t("outline.deleteSectionTitle")}
+              data-tip={t("outline.deleteSectionTitle")}
+              className={`${SECTION_HEAD_TOOL} hover:!text-red-600`}
+            >
+              <TrashIcon size={13} />
+            </button>
+          </span>
         ) : (
-          <>
+          // The title and its pencil stay on one row: a long title wraps
+          // inside its own space, never pushing the pencil to the next row.
+          <span className="flex min-w-0 max-w-full items-center gap-x-1.5">
             {/* The title opens the section's board (SPEC.md §6); the pencil
-                beside it renames the section, and the bin deletes it, with
-                Undo. Both show on the header's hover and focus, and at rest
-                on a touch screen. */}
+                beside it opens the title's field, with the bin that deletes
+                the section at its end. The pencil shows on the header's
+                hover and focus, and at rest on a touch screen. */}
             <button
               onClick={() => onOpenBoard(section.id)}
               data-track="section-board"
               data-nudge={nudge ? "board" : undefined}
-              className={`text-left font-display hover:text-clay-800 ${nested ? "text-lg" : "text-[22px]"}`}
+              className={`min-w-0 break-words text-left font-display hover:text-clay-800 ${nested ? "text-lg" : "text-[22px]"}`}
               data-tip={t("outline.openBoardTitle")}
             >
               {shownSectionTitle(section.title, t)}
@@ -127,20 +164,9 @@ export function SectionItem({
                 >
                   <PencilIcon size={13} />
                 </button>
-                {/* No confirm: the pill under the notes offers Undo, and
-                    History keeps the section whole with Restore. */}
-                <button
-                  onClick={() => void actions.deleteSection(section.id)}
-                  data-track="section-delete"
-                  aria-label={t("outline.deleteSectionTitle")}
-                  data-tip={t("outline.deleteSectionTitle")}
-                  className={`${SECTION_HEAD_TOOL} hover:!text-red-600`}
-                >
-                  <TrashIcon size={13} />
-                </button>
               </span>
             )}
-          </>
+          </span>
         )}
         {/* One count rule on every surface: the accepted notes. */}
         <span className="text-[13px] text-sand-600">{notes.filter((n) => n.status !== "PENDING").length || ""}</span>
@@ -168,7 +194,7 @@ export function SectionItem({
       <div className="flex flex-col gap-2.5">
         {/* The composer sits above the notes: a new note lands at the top of
             the section (SPEC.md §6). */}
-        {compose.composing && <NoteComposer compose={compose} onRelease={() => actions.expectComposed(section.id)} full padding="p-4" />}
+        {compose.composing && <NoteComposer compose={compose} onRelease={() => actions.expectComposed(section.id)} padding="p-4" />}
 
         {/* The page's one board holds every section's notes, so a note
             dragged out of this section drops into another; a note held over
