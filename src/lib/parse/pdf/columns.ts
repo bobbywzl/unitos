@@ -814,7 +814,7 @@ function splitAt(items: Item[], graphics: Placed[], page: number, pageWidth: num
   if (band) return { bands: stacked(band, items, graphics, "columns", page) };
   // A note beside a column, a gutter apart (sideNote): the band it stands
   // in is columns, and the note reads beside the paragraph at its top.
-  if (twoSided.length === 1 && isNoteBand(twoSided[0], page)) return { bands: stacked(twoSided[0], items, graphics, "columns", page) };
+  if (twoSided.length === 1 && isNoteBand(twoSided[0], page, margin)) return { bands: stacked(twoSided[0], items, graphics, "columns", page) };
   // Blocks a band's gutter finds (bandGutter) stand beside each other (a
   // court's caption line over a run-in heading at the column's edge is no
   // pair), hold words on both sides (a contents list's page numbers beside
@@ -878,7 +878,8 @@ function isTextColumn(lines: Line[]): boolean {
 // A band that is a column and a note beside it (sideNote): the wide side a
 // prose column at the text's leading, the note words (ten letters or more)
 // an em or more from it.
-function isNoteBand(band: Band, page: number): boolean {
+// margin: the band's gutter is a column of notes' (marginGutter).
+function isNoteBand(band: Band, page: number, margin = false): boolean {
   if (band.left.items.length === 0 || band.right.items.length === 0 || !sideNote(band, page)) return false;
   const [note, wide] = chars(band.left.items) < chars(band.right.items) ? [band.left, band.right] : [band.right, band.left];
   if (note.items.reduce((n, i) => n + i.str.replace(/[^\p{L}]/gu, "").length, 0) < 10) return false;
@@ -888,7 +889,11 @@ function isNoteBand(band: Band, page: number): boolean {
   // the column's size apart (parse loop finding: a LaTeX package's manual
   // sets its "Introduced in version 4.11" notes in 9 pt, 10.6 pt left of
   // its 10.9 pt column, and each note ran into the column's line beside
-  // it: "Introduced	chemformula offers …").
+  // it: "Introduced	chemformula offers …"). In the margin a gutter no item
+  // crosses parts them, and half an em is enough (parse loop finding: the
+  // MML book sets its 8 pt notes 0.68 em past its justified column, and a
+  // page whose notes took no row of their own read each note inside the
+  // sentence beside it: "the truncated SVD. truncated SVD It is possible").
   const smaller = median(note.items.map((i) => i.size)) <= size * 0.9;
   // Beside smaller notes, a column whose entries stand apart (a command's
   // line over its description, a blank line under each) is dense enough
@@ -899,7 +904,7 @@ function isNoteBand(band: Band, page: number): boolean {
   const gaps = lines.slice(1).map((l, k) => lines[k].y - l.y);
   const close = gaps.filter((g) => g <= size * 1.6).length;
   const dense = isDense(lines) || (smaller && close * 3 >= gaps.length);
-  return gutter >= size * (smaller ? 0.75 : 1) && isColumn(wide.items, page) && dense;
+  return gutter >= size * (smaller ? (margin ? 0.5 : 0.75) : 1) && isColumn(wide.items, page) && dense;
 }
 
 // A region cut above and under one band: what stands above it, the band,
