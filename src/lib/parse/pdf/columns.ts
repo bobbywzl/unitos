@@ -538,16 +538,37 @@ function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: n
   // picture's edge made the picture a row across the page (parse loop
   // finding: a PowerPoint deck's "Example: The Iris Data Matrix" over its
   // picture read between two bullets of the list beside it).
+  // Where every x crosses some words, an x that only the region's running
+  // head or foot crosses is the gutter: its top or bottom row, two lines or
+  // more from every other item, with a page number in it (parse loop
+  // finding: a quantum mechanics book's even pages set "a quantum
+  // mechanic's guide 96" over the gutter between the text and its notes;
+  // the gutter fell through the equation numbers instead, and a note ran
+  // on in the line beside it).
+  const ys = items.map((i) => i.y);
+  const edgeRow = (y: number) => {
+    const row = items.filter((i) => Math.abs(i.y - y) < i.size * 0.5);
+    const apart = items.every((i) => row.includes(i) || Math.abs(i.y - y) >= i.size * 2.4);
+    return apart && row.some((i) => /^\d+$/.test(i.str.trim())) ? row : [];
+  };
+  const edge = new Set([...edgeRow(Math.max(...ys)), ...edgeRow(Math.min(...ys))]);
   let best: { g: number; cross: number; pictured: number } | null = null;
+  let clear: { g: number; cross: number; pictured: number } | null = null;
   const middle = x0 + width / 2;
   for (let g = x0 + width * 0.2; g <= x0 + width * 0.8; g += width * 0.01) {
-    let cross = 0;
-    for (const i of items) if (i.x < g && i.x + i.w > g) cross += i.str.trim().length;
-    const pictured = graphics.filter((p) => p.box.x1 < g && p.box.x2 > g).length;
-    if (!best || cross < best.cross || (cross === best.cross && (pictured < best.pictured || (pictured === best.pictured && Math.abs(g - middle) < Math.abs(best.g - middle))))) {
-      best = { g, cross, pictured };
+    let [cross, head] = [0, 0];
+    for (const i of items) {
+      if (!(i.x < g && i.x + i.w > g)) continue;
+      if (edge.has(i)) head += i.str.trim().length;
+      else cross += i.str.trim().length;
     }
+    const pictured = graphics.filter((p) => p.box.x1 < g && p.box.x2 > g).length;
+    const better = (b: { g: number; cross: number; pictured: number } | null, n: number) =>
+      !b || n < b.cross || (n === b.cross && (pictured < b.pictured || (pictured === b.pictured && Math.abs(g - middle) < Math.abs(b.g - middle))));
+    if (better(best, cross + head)) best = { g, cross: cross + head, pictured };
+    if (cross === 0 && better(clear, 0)) clear = { g, cross: 0, pictured };
   }
+  if (best && best.cross > 0 && clear) best = clear;
   // A column of notes in the margin parts first: the column beside it is
   // then tested on its own (parse loop finding: a LaTeX package's manual
   // sets "Introduced in version 4.16" in the margin beside its options,
