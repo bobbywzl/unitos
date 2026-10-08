@@ -5,8 +5,10 @@
 // per week. Title and Kind put the list's rows in categories: a letter for
 // Title, a kind for Kind. A folder is a row
 // like a document: its own title and the day it was made sort it, not what
-// it holds; under Kind, folders are a kind of their own. Read only: nothing
-// here writes a document, a folder, or an order.
+// it holds; under Kind, folders are a kind of their own. Custom order is the
+// order a drag left each list in (NotebookDocument.position,
+// DocumentFolder.position). Read only: nothing here writes a document, a
+// folder, or an order.
 
 // What a document is, by what it was made from.
 export type DocumentKind =
@@ -42,13 +44,15 @@ export const ROW_KINDS: RowKind[] = [
 ];
 
 // edited: the rows newest edit first, folders among the documents, with no
-// categories; the default. added: the list as it was before sorts existed —
-// folders by title, then documents oldest first — and, over more than one
-// week, every row oldest first in a category per week (Week added and Month
-// added were two more sorts until 2026-10-07; a browser that kept either
-// lists by Added).
-export type DocumentSort = "edited" | "added" | "title" | "kind";
-export const DOCUMENT_SORTS: DocumentSort[] = ["edited", "added", "title", "kind"];
+// categories; the default. custom: the order a drag left each list in (the
+// rows a drag never placed first, newest edit first), with no categories; a
+// drag that reorders a list picks it. added: the list as it was before sorts
+// existed — folders by title, then documents oldest first — and, over more
+// than one week, every row oldest first in a category per week (Week added
+// and Month added were two more sorts until 2026-10-07; a browser that kept
+// either lists by Added).
+export type DocumentSort = "edited" | "custom" | "added" | "title" | "kind";
+export const DOCUMENT_SORTS: DocumentSort[] = ["edited", "custom", "added", "title", "kind"];
 // The categories a list can draw: Title's, Kind's, and Added's weeks.
 export type CategorySort = "title" | "kind" | "week";
 
@@ -103,6 +107,20 @@ export function sortByEdited<T extends SortRow>(rows: T[]): T[] {
 export function spansWeeks(rows: SortRow[]): boolean {
   const weeks = new Set(rows.map((row) => weekStart(time(row.addedAt)).getTime()));
   return weeks.size > 1;
+}
+
+/** A list's rows in Custom order: the rows a drag never placed (null
+    position) first, newest edit first, so a document added since shows at
+    the top; then the placed rows by position. Ties keep the list's own
+    order. */
+export function sortByPosition<T extends SortRow & { position: number | null }>(rows: T[]): T[] {
+  const unplaced = sortByEdited(rows.filter((row) => row.position === null));
+  const placed = rows
+    .map((row, index) => ({ row, index }))
+    .filter(({ row }) => row.position !== null)
+    .sort((a, b) => a.row.position! - b.row.position! || a.index - b.index)
+    .map(({ row }) => row);
+  return [...unplaced, ...placed];
 }
 
 /** A list's rows in categories, for Title, Kind, and Added over weeks.

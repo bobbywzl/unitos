@@ -55,7 +55,12 @@ export async function PATCH(
     }
     await db.notebookDocument.update({
       where: { notebookId_documentId: { notebookId, documentId } },
-      data: { folderId: data.folderId },
+      // A move into another list drops the place it had in the old one
+      // (Custom order, SPEC.md §6): it lists first in the new one.
+      data: {
+        folderId: data.folderId,
+        ...(data.folderId !== attachment.folderId ? { position: null } : {}),
+      },
     });
     await bumpNotebook(notebookId);
     return NextResponse.json({ ok: true });

@@ -90,6 +90,9 @@ export type AttachedDocument = {
   // The folder the document sits in within this project (SPEC.md §6); null
   // = the project itself.
   folderId: string | null;
+  // Its place in its list under Sort by Custom order (SPEC.md §6); null =
+  // never placed by a drag.
+  position: number | null;
   // An import edited since it was imported (SPEC.md §29): Re-parse asks
   // before it replaces the edits. Absent: the server's 409 "edited" asks.
   importEdited?: boolean;
@@ -396,12 +399,16 @@ export function DocumentBar({
     setEditedAsk(null);
     setDeleteAsk(null);
   }
+  // A row of the list is being dragged (document-folders.tsx): the list
+  // stays open while the pointer is outside it, until the drop.
+  const listDragging = useRef(false);
   function scheduleCloseList() {
     if (listOpenTimer.current) {
       clearTimeout(listOpenTimer.current);
       listOpenTimer.current = null;
     }
     if (!listOpen || listPressed.current) return;
+    if (listDragging.current) return;
     if (listCloseTimer.current) clearTimeout(listCloseTimer.current);
     listCloseTimer.current = setTimeout(closeList, 220);
   }
@@ -1328,7 +1335,7 @@ export function DocumentBar({
       </div>
       <Collapse open={pillMenu === d.id && menuRowsReady}>
       {pillMenu === d.id && menuRowsReady && (
-        <div ref={revealActions} className="mx-2 mb-1.5 flex flex-col rounded-xl bg-sand-100 py-1">
+        <div ref={revealActions} data-no-drag className="mx-2 mb-1.5 flex flex-col rounded-xl bg-sand-100 py-1">
           {/* A row's actions list only what can run on this document. Re-parse:
               a video or audio document transcribes again, a handwritten one
               re-makes its pages and converts again, a text one parses its
@@ -1571,6 +1578,14 @@ export function DocumentBar({
                   openAddDialog(folderId);
                 }}
                 revealRef={revealRef}
+                onSort={setDocumentSort}
+                onDragging={(dragging) => {
+                  listDragging.current = dragging;
+                  if (dragging) {
+                    setPillMenu(null);
+                    openList();
+                  }
+                }}
               />
             </div>
           )}
