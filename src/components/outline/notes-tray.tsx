@@ -225,39 +225,35 @@ export function NotesTray({
     >
       {/* One row before the notes (SPEC.md §6): the search, Expand all, the
           view menu (which notes show, Group by), and the notes full page.
-          A project with no note yet shows the full page arrows alone: the
-          rest act on notes. */}
-      <div className="flex items-center gap-1.5">
-        {!noNotes && (
-          <>
-            <input
-              value={typed}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => e.key === "Escape" && !isImeKey(e) && setQuery("")}
-              placeholder={t("outline.searchNotes")}
-              aria-label={t("outline.searchNotes")}
-              type="search"
-              className="min-w-0 flex-1 rounded-full bg-card px-4 py-2 text-[13px] shadow-soft outline-none placeholder:text-sand-500"
-            />
-            <CollapsedViewToggle view={actions.notesView} onChange={actions.setNotesView} track="notes-view" />
-            <NotesViewMenu grouping={grouping} onGrouping={setGrouping} scope={scope} onScope={onScope} />
-          </>
-        )}
-        {/* The notes full page, one press away (SPEC.md §6): the four arrows
-            say the notes open out to fill the screen. */}
-        <Link
-          href={`/n/${actions.notebookId}/notes`}
-          data-track="notes-full-page"
-          data-nudge="fullPage"
-          aria-label={t("panes.notesFullPage")}
-          data-tip={t("panes.notesFullPageTitle")}
-          className={`flex size-8 shrink-0 items-center justify-center rounded-full bg-card text-sand-700 shadow-soft hover:bg-clay-100 hover:text-clay-800${
-            noNotes ? " ml-auto" : ""
-          }`}
-        >
-          <MaximizeIcon size={15} />
-        </Link>
-      </div>
+          A project with no note yet shows no row: every control in it acts
+          on notes, and the empty state is its one line. */}
+      {!noNotes && (
+        <div className="flex items-center gap-1.5">
+          <input
+            value={typed}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => e.key === "Escape" && !isImeKey(e) && setQuery("")}
+            placeholder={t("outline.searchNotes")}
+            aria-label={t("outline.searchNotes")}
+            type="search"
+            className="min-w-0 flex-1 rounded-full bg-card px-4 py-2 text-[13px] shadow-soft outline-none placeholder:text-sand-500"
+          />
+          <CollapsedViewToggle view={actions.notesView} onChange={actions.setNotesView} track="notes-view" />
+          <NotesViewMenu grouping={grouping} onGrouping={setGrouping} scope={scope} onScope={onScope} />
+          {/* The notes full page, one press away (SPEC.md §6): the four arrows
+              say the notes open out to fill the screen. */}
+          <Link
+            href={`/n/${actions.notebookId}/notes`}
+            data-track="notes-full-page"
+            data-nudge="fullPage"
+            aria-label={t("panes.notesFullPage")}
+            data-tip={t("panes.notesFullPageTitle")}
+            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-card text-sand-700 shadow-soft hover:bg-clay-100 hover:text-clay-800"
+          >
+            <MaximizeIcon size={15} />
+          </Link>
+        </div>
+      )}
 
       {shownPending.length > 0 && (
         <div data-pending-queue="" className="flex flex-col gap-2">

@@ -919,7 +919,7 @@ export function Workspace({
             {/* The rail's chevron collapses the tray; the header stays clean. */}
             <div className="flex items-center gap-2.5">
               <span className="font-display text-[18px]">{t(TAB_TITLES[tab])}</span>
-              {tab === "notes" && <span className="text-[13px] text-sand-600">{noteCount}</span>}
+              {tab === "notes" && noteCount > 0 && <span className="text-[13px] text-sand-600">{noteCount}</span>}
               {tab === "distill" && distillationCount > 0 && (
                 <span className="text-[13px] text-sand-600">{distillationCount}</span>
               )}

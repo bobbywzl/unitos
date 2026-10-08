@@ -608,6 +608,13 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
   // that holds words its note lacks. A note open in an editor is its
   // editor's to save, and a draft younger than 5 seconds may still have its
   // save on the way. The Not saved mark clears with the save.
+  // The server's tree as the page last drew it: a retry's save is made from
+  // the server's text, never from a card that draws the queued or local
+  // words over it.
+  const serverTree = useRef(notebook.sections);
+  useLayoutEffect(() => {
+    serverTree.current = notebook.sections;
+  });
   useEffect(() => {
     if (!canEdit) return;
     let running = false;
@@ -620,7 +627,8 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
         // only when the server confirms its words, says what is unsaved.
         const note = placeOf(treeRef.current, noteId)?.note;
         if (!note || !draftHoldsWords(draft) || openDraftSave(noteId) !== null || now - draft.savedAt < 5000) continue;
-        due.push({ id: noteId, content: draft.content.trim(), base: noteDraftBase(draft, note.content) ?? note.content });
+        const server = placeOf(serverTree.current, noteId)?.note.content ?? note.content;
+        due.push({ id: noteId, content: draft.content.trim(), base: noteDraftBase(draft, server) ?? server });
       }
       if (due.length === 0) return;
       running = true;
