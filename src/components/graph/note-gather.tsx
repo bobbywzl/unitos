@@ -173,6 +173,22 @@ export function AddToNote({ quote, className = "" }: { quote: GatherQuote; class
         e.stopPropagation();
         gather.toggle(quote);
       }}
+      onKeyDown={(e) => {
+        // [lists7] WALK7-07: the focus stays on the button for the next Add,
+        // and a typed character goes on into the new note's words.
+        // An input method's first key ("Process") only moves the focus there.
+        const ime = e.key === "Process";
+        if (!ime && (e.key.length !== 1 || e.key === " " || e.ctrlKey || e.metaKey || e.altKey)) return;
+        const words = document.querySelector<HTMLTextAreaElement>("textarea[data-graph-note-gather-words]");
+        if (!words) return;
+        if (ime) {
+          words.focus();
+          return;
+        }
+        e.preventDefault();
+        words.focus();
+        gather.setContent(gather.content + e.key);
+      }}
       disabled={blocked}
       aria-pressed={inNote}
       data-track={inNote ? "graph-note-gather-remove" : "graph-note-gather-add"}
