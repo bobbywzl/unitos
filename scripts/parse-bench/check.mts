@@ -2078,6 +2078,18 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     labeledHeadings.join() === "Gravel bars,Floods" && labeled.blocks.some((b) => b.type === "PARAGRAPH" && b.text === "Inhalt"),
     labeled.blocks.map((b) => `${b.type} ${b.text.slice(0, 20)}`).join(" / "),
   );
+  // A paragraph set as a heading (two sentences or more, twenty words or more) reads as a paragraph; a long question stays a heading.
+  const proseHeadings = (
+    await parseHtmlContent(
+      `<!doctype html><html><head><title>Notes on river flow</title></head><body><article><h1>Notes on river flow</h1><p>${prose(1)}</p><h2>Gravel bars</h2><p>${prose(2)}</p><h3>The river drops its sand where the current slows. Bars grow there, year after year, until a flood moves them again downstream.</h3><h3>What does a gauge at the mouth of the delta measure, and why do the readings move from one week to the next week?</h3><p>${prose(3)}</p><h2>Floods</h2><p>${prose(4)}</p></article></body></html>`,
+      "https://example.org/rivers",
+    )
+  ).blocks.map((b) => `${b.type} ${b.text.slice(0, 24)}`);
+  check(
+    "url: a heading of two sentences or more is a paragraph; a long question stays a heading",
+    proseHeadings.includes("PARAGRAPH The river drops its sand") && proseHeadings.includes("HEADING What does a gauge at the") && proseHeadings.includes("HEADING Gravel bars"),
+    proseHeadings.join(" / "),
+  );
   check(
     "url: a first section's question and a short first heading stay headings",
     question.includes("HEADING What does a gauge measur") && short.includes("HEADING Channels and banks"),
