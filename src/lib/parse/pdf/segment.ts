@@ -23,7 +23,8 @@ import type { Cell, Line, PageContext, Run, Segment, Step } from "@/lib/parse/pd
 // A contents list that runs past the page break continues on the next page.
 let tocCarry = false;
 
-const PROOF_END_RE = /^[□■∎]$/;
+// An end mark: a proof's (□, ∎), or a remark's or an example's (♢, ◇).
+const PROOF_END_RE = /^[□■∎▢♢◇]$/;
 
 export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
   const segments: Segment[] = [];
@@ -98,7 +99,9 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
     tocMode = false;
 
     // A proof's end mark alone on its line (flush right under a display)
-    // ends the block before it, as the page shows it.
+    // ends the block before it, as the page shows it. So does a remark's
+    // (parse loop finding: the MML book's ♢ under "… are linearly
+    // independent." read as a display equation of its own).
     const last = segments[segments.length - 1];
     if (PROOF_END_RE.test(line.text.trim()) && last !== undefined && (last.type === "PARAGRAPH" || last.type === "LIST")) {
       appendProofBox(last, line);

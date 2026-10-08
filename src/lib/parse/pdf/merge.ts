@@ -67,6 +67,9 @@ function otherText(s: Segment, paragraph: Segment): boolean {
 const CJK_END_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}ー、]$/u;
 const CJK_START_RE = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
 
+// An end mark: a remark's, an example's, or a proof's. It ends its block.
+const END_MARK_RE = /[♢◇◆♦□■∎▢◁▷⊣]$/u;
+
 // A part that ends in an abbreviation ends no sentence when the next opens
 // with a number or a lowercase word ("(Zhuravlev et al. 2010; Erban et
 // al." | "2014) and …": Springer p. 1).
@@ -351,7 +354,8 @@ function liftFloatsOffParagraphBreaks(segments: Segment[], setting: PageSetting,
     // A list cut by the page break continues under the floats too (import
     // compare loop finding: a rubric list split in two by a figure).
     const listBreak = prev.type === "LIST" && !prev.tocEntries;
-    const ended = /[.!?:…"”)]$/.test(prev.text.trim()) && !ABBREVIATION_END_RE.test(prev.text.trim()) && !endsAtEdge(prev, setting);
+    const ended =
+      END_MARK_RE.test(prev.text.trim()) || (/[.!?:…"”)]$/.test(prev.text.trim()) && !ABBREVIATION_END_RE.test(prev.text.trim()) && !endsAtEdge(prev, setting));
     if (!listBreak && (prev.type !== "PARAGRAPH" || isPageFloat(prev) || ended)) continue;
     let k = b;
     while (k < out.length && out[k].page === out[b].page && (isPageFloat(out[k]) || isLabel(out[k], prev))) k++;
@@ -488,9 +492,6 @@ function wrapsOver(prev: Segment, next: Segment, setting: PageSetting): boolean 
   );
 }
 
-// An end mark: a remark's, an example's, or a proof's.
-const END_MARK_RE = /[♢◇◆♦□■∎▢◁▷⊣]$/u;
-
 // A paragraph's last line at a page's foot wrapped, and the paragraph at the
 // next page's top opens where the column's lines start: the page break cut
 // the paragraph after a sentence, on a page whose paragraphs open flush as
@@ -505,10 +506,6 @@ function wrapsAcross(prev: Segment, next: Segment): boolean {
   return (
     next.type === "PARAGRAPH" &&
     !prev.listItem &&
-    // An end mark set flush right (a remark's ♢, a proof's ∎) ends its
-    // block at the line's edge: the MML book's "…b = X⊤y. ♢" is no part
-    // of the next page's "Example 9.2 (Fitting Lines)".
-    !END_MARK_RE.test(prev.text.trim()) &&
     !/\b(?:center|right|caption|quote|footnote)\b/.test(prev.html ?? "") &&
     !/\b(?:indent-first|indent-hanging|indent-block|center|right|caption|quote|footnote)\b/.test(next.html ?? "") &&
     wrapsAt(prev, next)
@@ -542,6 +539,12 @@ export function mergeAcrossPages(input: Segment[]): Segment[] {
       !debris(segment.text) &&
       (!prev.listItem || /^\p{Ll}/u.test(segment.text) || wrapsOver(prev, segment, setting)) &&
       !isCaptionText(prev) &&
+      // An end mark set flush right (a remark's ♢, a proof's ∎) ends its
+      // block at the line's edge: the MML book's "…b = X⊤y. ♢" is no part
+      // of the next page's "Example 9.2 (Fitting Lines)", nor "…subspace
+      // U: λ. ♢" of "Example 3.10 (Projection onto a Line)" on a page that
+      // sets its paragraphs in.
+      !END_MARK_RE.test(prev.text.trim()) &&
       setAlike(prev, segment, body) &&
       sameFace(prev, segment) &&
       // A numbered heading read as a paragraph starts its own block: with
