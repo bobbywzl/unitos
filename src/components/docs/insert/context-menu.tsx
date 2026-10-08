@@ -165,8 +165,19 @@ export function ContextMenuHost({ editor, ctx }: { editor: Editor; ctx: InsertCo
       if (!byKeys) return;
       e.preventDefault();
       e.stopPropagation();
-      const c = editor.view.coordsAtPos(editor.state.selection.head);
-      setPlace({ x: c.left, y: c.bottom, byKeys: true });
+      const view = editor.view;
+      const sel = view.state.selection;
+      const c = view.coordsAtPos(sel.head);
+      const opened: Place = { x: c.left, y: c.bottom, byKeys: true };
+      setPlace(opened);
+      // The word at the caret: its spelling suggestions head the menu, as
+      // they do for a right-click.
+      const before = view.state;
+      const spelling = sel instanceof TextSelection ? misspellingAt(editor, sel.empty ? sel.head : sel.from) : null;
+      void spelling?.then((found) => {
+        if (!found || view.state.doc !== before.doc || !view.state.selection.eq(before.selection)) return;
+        setPlace((p) => (p === opened ? { ...p, spelling: found } : p));
+      });
     };
     dom.addEventListener("contextmenu", onContext);
     dom.addEventListener("mouseup", onUp);
@@ -181,7 +192,9 @@ export function ContextMenuHost({ editor, ctx }: { editor: Editor; ctx: InsertCo
   if (!place) return null;
   return (
     <ContextMenu
-      key={`${place.x},${place.y}`}
+      // Opened by keys, the menu opens again when the spelling suggestions
+      // join it, so the first suggestion takes the highlight.
+      key={`${place.x},${place.y}${place.byKeys && place.spelling ? ",spelling" : ""}`}
       editor={editor}
       ctx={ctx}
       place={place}
