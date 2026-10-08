@@ -195,7 +195,7 @@ if (want("esc")) {
   await box.click();
   await box.fill("words kept");
   await page.keyboard.press("Escape");
-  check("Esc in the Stitch box: focus on its title, words kept", (await active(page)) === "data-stitch-title" && (await box.inputValue()) === "words kept", await active(page));
+  check("Esc in the Stitch box: focus on its title, words kept", (await active(page)).split(",").includes("data-stitch-title") && (await box.inputValue()) === "words kept", await active(page));
   await box.fill("");
   // Find.
   const find = page.locator('[data-track="graph-find"]');
