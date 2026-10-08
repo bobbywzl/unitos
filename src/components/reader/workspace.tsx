@@ -653,13 +653,16 @@ export function Workspace({
   // or card open) gives it back to the rail's button. A press leaves the
   // focus where it was.
   const railOpener = useRef<HTMLElement | null>(null);
-  function intoPanel(e: React.MouseEvent<HTMLElement>) {
+  // first: where the focus goes when it is drawn (the pending note's
+  // Accept), else the panel's first control.
+  function intoPanel(e: React.MouseEvent<HTMLElement>, first?: string) {
     if (e.detail !== 0) {
       railOpener.current = null;
       return;
     }
     railOpener.current = e.currentTarget;
-    focusWhenDrawn("[data-track-surface='tray'] .panel-in :is(button, a[href], input, textarea, [tabindex='0'])");
+    const panel = "[data-track-surface='tray'] .panel-in :is(button, a[href], input, textarea, [tabindex='0'])";
+    focusWhenDrawn(first ? [first, panel] : panel);
   }
   function backToRail(e: React.KeyboardEvent) {
     const opener = railOpener.current;
@@ -674,9 +677,10 @@ export function Workspace({
   // pending count did; with the notes open, a press is the tab's own.
   function showNotes(e: React.MouseEvent<HTMLElement>) {
     if (pending.length > 0 && !isOpen("notes")) {
-      window.dispatchEvent(
-        new CustomEvent("dissect:show-note", { detail: { noteId: actions.focusedPendingId ?? pending[0].id } }),
-      );
+      const noteId = actions.focusedPendingId ?? pending[0].id;
+      window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId } }));
+      // By a key, the focus goes to that note's Accept.
+      intoPanel(e, `[data-track-surface='tray'] [data-note-id="${CSS.escape(noteId)}"] [data-track="note-accept"]`);
       return;
     }
     show("notes");

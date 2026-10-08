@@ -149,11 +149,15 @@ export function useEscapeLayer(open: boolean, close: () => void): void {
 }
 
 /** Focus the element the selector names once it is drawn: a fly-out or a
-    panel takes a frame or two to show. Gives up after half a second. */
-export function focusWhenDrawn(selector: string): void {
+    panel takes a frame or two to show. Gives up after half a second. A list
+    of selectors is tried in its order: the first one drawn takes the focus. */
+export function focusWhenDrawn(selector: string | string[]): void {
   let frames = 30;
+  const selectors = Array.isArray(selector) ? selector : [selector];
+  const drawn = (s: string) => [...document.querySelectorAll<HTMLElement>(s)].find((e) => e.getClientRects().length > 0);
   const tryFocus = () => {
-    const el = [...document.querySelectorAll<HTMLElement>(selector)].find((e) => e.getClientRects().length > 0);
+    let el: HTMLElement | undefined;
+    for (const s of selectors) if (!el) el = drawn(s);
     if (el) {
       el.focus();
       el.scrollIntoView({ block: "nearest" });
