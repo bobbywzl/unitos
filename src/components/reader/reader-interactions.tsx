@@ -170,6 +170,7 @@ import type { SuggestCommand } from "@/lib/prompts/suggest";
 import { readNdjson } from "@/lib/ndjson";
 import { conflictLabels, saveNoteText } from "@/lib/notes/save-text";
 import { reconcileNoteText } from "@/lib/notes/conflict";
+import { deleteNoteWithUndo } from "@/lib/notes/undo-pill";
 import {
   cardCommentKey,
   caretToEnd,
@@ -6447,10 +6448,18 @@ export function ReaderInteractions({
     const card = annotationCard;
     if (!card || card.busy) return;
     setAnnotationCard(null);
-    await deleteNote(
-      card.noteId,
-      card.kind === "highlight" ? t("reader.highlightRemoved") : t("reader.commentRemoved"),
-    );
+    await deleteWithPill(card.noteId, t(card.kind === "highlight" ? "outline.highlightDeleted" : "outline.commentDeleted"));
+  }
+
+  // A highlight's or a comment's trash: the notes' Undo pill offers it back
+  // (lib/notes/undo-pill.ts); History keeps it after the pill goes.
+  async function deleteWithPill(noteId: string, message: string) {
+    try {
+      await deleteNoteWithUndo(noteId, message, () => router.refresh());
+      router.refresh();
+    } catch (err) {
+      showError(err instanceof Error ? err.message : t("reader.deleteFailed"));
+    }
   }
 
   // The comment card edits in place too: same notes API, same refresh.
@@ -6484,7 +6493,7 @@ export function ReaderInteractions({
     const card = commentCard;
     if (!card || card.busy || !card.noteId) return;
     setCommentCard(null);
-    await deleteNote(card.noteId, t("reader.commentRemoved"));
+    await deleteWithPill(card.noteId, t("outline.commentDeleted"));
   }
 
   // Resolve (SPEC.md §29): the card and the mark go; Reopen is in the Annotations tab.
