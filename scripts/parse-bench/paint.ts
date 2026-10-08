@@ -212,8 +212,9 @@ export function inkRight(path: string, page: number, box: Rect): number | null {
 
 /** A run of rows with ink: its top and bottom, and where its letters stand
     (the last row with a third of the band's most ink or more: under it only
-    descenders reach), in points. */
-export type InkBand = { top: number; bottom: number; baseline: number };
+    descenders reach), in points; ink: the median of its rows' ink across, in
+    points (a frame's side is a rule's width, a line of words far more). */
+export type InkBand = { top: number; bottom: number; baseline: number; ink?: number };
 
 /** The bands of ink in a box of a page, top to bottom. */
 export function inkBands(path: string, page: number, box: Rect): InkBand[] {
@@ -232,7 +233,8 @@ export function inkBands(path: string, page: number, box: Rect): InkBand[] {
     const most = Math.max(...band);
     let base = r - 1;
     while (base > start && counts[base] * 3 < most) base--;
-    out.push({ top: top + start / SCALE, bottom: top + r / SCALE, baseline: top + (base + 1) / SCALE });
+    const ink = [...band].sort((x, y) => x - y)[band.length >> 1] / SCALE;
+    out.push({ top: top + start / SCALE, bottom: top + r / SCALE, baseline: top + (base + 1) / SCALE, ink });
   }
   return out;
 }

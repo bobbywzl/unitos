@@ -289,12 +289,36 @@ export function displayGaps(rich: RichNode, parse: Doc, pdf: PdfText, bandsOf: (
     const column = pdf.lines.filter((l) => l.page === at.page && Math.min(l.right, x2) > Math.max(l.left, x1) && l.bottom > y1 - 60 && l.top < y2 + 60);
     const left = Math.max(0, Math.min(x1, ...column.map((l) => l.left)) - 2);
     const width = Math.min(size.width, Math.max(x2, ...column.map((l) => l.right)) + 2);
-    const bands = bandsOf(at.page, { x1: left, x2: width, y1: Math.max(0, y1 - 45), y2: Math.min(size.height, y2 + 45) });
-    const own = bands.filter((b) => b.bottom > y1 && b.top < y2);
+    const [top, bottom] = [Math.max(0, y1 - 45), Math.min(size.height, y2 + 45)];
+    const bands = bandsOf(at.page, { x1: left, x2: width, y1: top, y2: bottom });
+    let own = bands.filter((b) => b.bottom > y1 && b.top < y2);
     if (own.length === 0) return;
+    let [higher, lower] = [bands, bands];
+    // Ink that runs on past the display's region joins it to a neighbor: the
+    // line over it where the display stands beside that line's foot (a
+    // quantum mechanics book's "with normalization" and the display under
+    // it read as one band, and the space over the display as 28 pt where it
+    // is 4), or a frame's side down to the frame's rule (a listing's output:
+    // chemformula p. 5 read 14 pt under the display where the line stands
+    // 25 pt under it). The display's ink is then read in its own width, and
+    // each neighbor in its own: the text line next over and under that ink.
+    if (own[0].top < y1 - 3 || own[own.length - 1].bottom > y2 + 3) {
+      own = bandsOf(at.page, { x1: Math.max(0, x1 - 1), x2: Math.min(size.width, x2 + 1), y1: top, y2: bottom }).filter((b) => b.bottom > y1 && b.top < y2);
+      if (own.length === 0) return;
+      const [a, b] = [own[0].top, own[own.length - 1].bottom];
+      const near = pdf.lines.filter((l) => l.page === at.page && l.right > left && l.left < width && !(l.right > x1 && l.left < x2 && l.bottom > y1 && l.top < y2));
+      const up = near.filter((l) => (l.top + l.bottom) / 2 < a && l.bottom > top).sort((m, n) => n.bottom - m.bottom)[0];
+      const down = near.filter((l) => (l.top + l.bottom) / 2 > b && l.top < bottom).sort((m, n) => m.top - n.top)[0];
+      const inLine = (l: (typeof near)[number], from: number, to: number) => bandsOf(at.page, { x1: l.left - 0.5, x2: l.right + 0.5, y1: Math.max(from, l.top - 1), y2: Math.min(to, l.bottom + 1) });
+      higher = up ? inLine(up, top, a - 0.5) : [];
+      lower = down ? inLine(down, b + 0.5, bottom) : [];
+    }
     const [inkTop, inkBottom] = [own[0].top, own[own.length - 1].bottom];
-    const above = bands.filter((b) => b.bottom <= inkTop - 0.5).at(-1);
-    const below = bands.find((b) => b.top >= inkBottom + 0.5);
+    // A band under 1.5 pt tall, or under a point of ink across, is a rule or
+    // a frame's side, no line.
+    const line = (b: InkBand) => b.bottom - b.top >= 1.5 && (b.ink ?? Infinity) >= 1;
+    const above = higher.filter((b) => b.bottom <= inkTop - 0.5 && line(b)).at(-1);
+    const below = lower.find((b) => b.top >= inkBottom + 0.5 && line(b));
     const judge = (page: number | null, drawnPt: number | null, what: string) => {
       if (page === null || drawnPt === null || page > 36) return;
       edges++;

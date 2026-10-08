@@ -1589,6 +1589,8 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     drawn !== null && drawn.above !== null && drawn.above > 4 && asPage.right === 2 && asPage.edges === 2 && offPage.right === 0,
     `${JSON.stringify(drawn)} ${JSON.stringify(asPage)} ${JSON.stringify(offPage)}`,
   );
+  const ruled = displayGaps(doc(4), parse, pdf, () => [...ink(drawn?.above ?? 0, drawn?.below ?? 0)().slice(0, 2), { top: 322, bottom: 322.5, baseline: 322.5 }, ...ink(drawn?.above ?? 0, drawn?.below ?? 0)().slice(2)]);
+  check("look: a rule between a display and the line under it is no line: the space under reads to the line", ruled.right === 2 && ruled.edges === 2, JSON.stringify(ruled));
   check("look: a display's space is the paragraph's space after plus the math block's own", near((displayDrawn(doc(8), 1)?.above ?? 0) - (drawn?.above ?? 0), 4) && space.top >= 0);
   // A table of one-line rows the page sets at the page editor's row height, and at twice it.
   const row = rowHeight(10, 1);
