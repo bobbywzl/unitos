@@ -1,6 +1,6 @@
 "use client";
 
-import { ACTION, ACTION_ACCEPT, CLOSE, LIST_HEAD, SECTION_HEAD, TEXT_HIT } from "./graph-ui";
+import { ACTION, ACTION_ACCEPT, CLOSE, LIST_HEAD, SECTION_HEAD, TEXT_BODY, TEXT_HIT, TEXT_META } from "./graph-ui";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { GraphEdge } from "@/lib/types";
@@ -54,13 +54,13 @@ export function NotesListToggle({
       aria-expanded={open}
       aria-controls={controls}
       data-tip={t("graphNotes.notesToggleTitle")}
-      className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] whitespace-nowrap hover:bg-clay-100 max-md:gap-1 max-md:px-2 hover:text-clay-800 ${
+      className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 ${TEXT_BODY} whitespace-nowrap hover:bg-clay-100 max-md:gap-1 max-md:px-2 hover:text-clay-800 ${
         open ? "border-line bg-clay-100 text-clay-800" : ctx.sectionId ? "border-sage-400 text-sage-800" : "border-line text-sand-600"
       }`}
     >
       <NotesIcon size={13} />
       <span className="max-md:sr-only">{t("graphNotes.notes")}</span>
-      <span className="rounded-full bg-sand-200 px-1.5 text-[11px] font-semibold tabular-nums text-sand-700">
+      <span className={`rounded-full bg-sand-200 px-1.5 ${TEXT_META} font-semibold tabular-nums text-sand-700`}>
         {ctx.view.notes.length + ctx.view.projectNotes.length}
       </span>
     </button>
@@ -241,7 +241,7 @@ export function GraphNotesList({
       <p
         key={g.note.id}
         data-graph-notes-rejected={g.note.id}
-        className="flex flex-wrap items-center gap-1.5 rounded-xl bg-sand-100 px-3 py-1.5 text-[11.5px] text-sand-700"
+        className={`flex flex-wrap items-center gap-1.5 rounded-xl bg-sand-100 px-3 py-1.5 ${TEXT_META} text-sand-700`}
       >
         <span className="min-w-0 flex-1 truncate">
           {t("outline.noteRejected")} · {noteLine(g.note)}
@@ -254,7 +254,7 @@ export function GraphNotesList({
         >
           {t("outline.undo")}
         </button>
-        {errors[g.note.id] && <span className="w-full text-[11px] text-red-500">{errors[g.note.id]}</span>}
+        {errors[g.note.id] && <span className={`w-full ${TEXT_META} text-red-500`}>{errors[g.note.id]}</span>}
       </p>
     ) : (
       <NotesListRow
@@ -282,13 +282,13 @@ export function GraphNotesList({
           section field's tooltip. */}
       <div className={LIST_HEAD /* [lists8] */}>
       <ListName>{t("graphNotes.notes")}</ListName>
-      <label data-tip={t("graphNotes.notesDesc")} className="flex min-w-0 flex-1 items-center gap-2 text-[12px] text-sand-600">
+      <label data-tip={t("graphNotes.notesDesc")} className={`flex min-w-0 flex-1 items-center gap-2 ${TEXT_BODY} text-sand-600`}>
         {t("graphNotes.notesSection")}
         <select
           value={ctx.sectionId ?? ""}
           onChange={(e) => ctx.setSectionId(e.target.value || null)}
           data-track="graph-notes-section"
-          className="min-w-0 flex-1 rounded-full border border-line bg-card px-2.5 py-1 text-[12.5px] text-ink"
+          className={`min-w-0 flex-1 rounded-full border border-line bg-card px-2.5 py-1 ${TEXT_BODY} text-ink`}
         >
           <option value="">{t("graphNotes.notesSectionAll")}</option>
           {ctx.sectionChoices.map((c) => (
@@ -320,10 +320,10 @@ export function GraphNotesList({
           </button>
         )}
       </div>
-      {shown.length === 0 && <p className="text-[13px] text-sand-600">{t("graphNotes.notesEmpty")}</p>}
+      {shown.length === 0 && <p className={`${TEXT_BODY} text-sand-600`}>{t("graphNotes.notesEmpty")}</p>}
       {bySection(shown).map((group) => (
         <div key={group.id} className="flex flex-col gap-1.5">
-          <p className="text-[11.5px] font-semibold text-sage-700">{group.title}</p>
+          <p className={`${TEXT_META} font-semibold text-sage-700`}>{group.title}</p>
           {group.notes.map((g) => row("shown", g))}
         </div>
       ))}
@@ -344,12 +344,12 @@ export function GraphNotesList({
                 l.recommended ? "border-dashed border-clay-300" : "border-line"
               }`}
             >
-              <span className="text-[10.5px] text-sand-500">
+              <span className={`${TEXT_META} text-sand-500`}>
                 {l.fromDocumentId === l.toDocumentId
                   ? t("panes.graphLinksLoopTitle", { title: l.fromTitle })
                   : t("panes.graphLinksPairTitle", { a: l.fromTitle, b: l.toTitle })}
               </span>
-              <span className="text-[12.5px] leading-snug font-semibold text-ink">
+              <span className={`${TEXT_BODY} leading-snug font-semibold text-ink`}>
                 {l.reason ?? clipWords(l.quotedText, 60)}
               </span>
               <LinkReplyCount link={l} />
@@ -359,7 +359,7 @@ export function GraphNotesList({
       )}
       {single.length > 0 && (
         <div data-graph-notes-single="" className="flex flex-col gap-1.5">
-          <p className="flex flex-wrap items-center gap-x-1.5 text-[11.5px] text-sand-500">
+          <p className={`flex flex-wrap items-center gap-x-1.5 ${TEXT_META} text-sand-500`}>
             <span>
               {single.length === 1
                 ? t("graphNotes.notesOneDocumentOne")
@@ -385,7 +385,7 @@ export function GraphNotesList({
           {singleOpen &&
             bySection(single).map((group) => (
               <div key={group.id} className="flex flex-col gap-1.5">
-                <p className="text-[11.5px] font-semibold text-sage-700">{group.title}</p>
+                <p className={`${TEXT_META} font-semibold text-sage-700`}>{group.title}</p>
                 {group.notes.map((g) => row("single", g))}
               </div>
             ))}
@@ -396,7 +396,7 @@ export function GraphNotesList({
           <p className={SECTION_HEAD}>{t("graphNotes.notesOnProject")}</p>
           {bySection(project).map((group) => (
             <div key={group.id} className="flex flex-col gap-1.5">
-              <p className="text-[11.5px] font-semibold text-sage-700">{group.title}</p>
+              <p className={`${TEXT_META} font-semibold text-sage-700`}>{group.title}</p>
               {group.notes.map((g) => row("project", g))}
             </div>
           ))}
@@ -453,7 +453,7 @@ function NotesListRow({
           aria-expanded={open}
           className="block min-w-0 flex-1 rounded-lg text-left hover:bg-clay-100/60"
         >
-          <span className="text-[12.5px] leading-snug font-semibold text-ink">{noteLine(note)}</span>
+          <span className={`${TEXT_BODY} leading-snug font-semibold text-ink`}>{noteLine(note)}</span>
         </button>
         <button
           onClick={() => ctx.showNote(note.id)}
@@ -467,18 +467,18 @@ function NotesListRow({
         {g.documentIds.map((id) => (
           <span
             key={id}
-            className="max-w-44 truncate rounded-full bg-sand-200 px-2 py-px text-[10.5px] font-semibold text-sand-700"
+            className={`max-w-44 truncate rounded-full bg-sand-200 px-2 py-px ${TEXT_META} font-semibold text-sand-700`}
           >
             {ctx.titleOf.get(id) ?? ""}
           </span>
         ))}
-        <span className="text-[10.5px] text-sand-500">
+        <span className={`${TEXT_META} text-sand-500`}>
           {note.sources.length === 1
             ? t("graphNotes.notesSourceOne")
             : t("graphNotes.notesSourceMany", { n: note.sources.length })}
         </span>
         {openReplies > 0 && (
-          <span className="text-[10.5px] text-sand-500">
+          <span className={`${TEXT_META} text-sand-500`}>
             ·{" "}
             {openReplies === 1 ? t("graphNotes.replyCountOne") : t("graphNotes.replyCountMany", { n: openReplies })}
           </span>
@@ -486,7 +486,7 @@ function NotesListRow({
       </div>
       {open && (
         <div className="mt-2 flex flex-col gap-2">
-          <div className="text-[12.5px]">
+          <div className={`${TEXT_BODY}`}>
             <Markdown breaks sources={note.sources} notebookId={ctx.notebookId}>
               {splitNote(note.content).body || note.content}
             </Markdown>
@@ -494,7 +494,7 @@ function NotesListRow({
           {note.sources.map((s) => (
             <div key={s.id} className="rounded-xl border border-line bg-sand-50/60 p-2">
               <div className="flex items-center gap-2">
-                <span className="min-w-0 flex-1 truncate text-[11.5px] font-semibold text-ink">{s.documentTitle}</span>
+                <span className={`min-w-0 flex-1 truncate ${TEXT_META} font-semibold text-ink`}>{s.documentTitle}</span>
                 {s.documentId && ctx.titleOf.has(s.documentId) && (
                   <button
                     onClick={() => ctx.openSource(s.documentId, s.id)}
@@ -506,7 +506,7 @@ function NotesListRow({
                   </button>
                 )}
               </div>
-              <p className="mt-1 line-clamp-3 text-[12px] leading-relaxed text-sand-700">
+              <p className={`mt-1 line-clamp-3 ${TEXT_BODY} leading-relaxed text-sand-700`}>
                 <mark className="link-detail-quote">{s.quotedText}</mark>
               </p>
             </div>
@@ -551,7 +551,7 @@ function NotesListRow({
           </span>
       </div>
       )}
-      {error && <p className="mt-1.5 text-[11px] text-red-500">{error}</p>}
+      {error && <p className={`mt-1.5 ${TEXT_META} text-red-500`}>{error}</p>}
     </div>
   );
 }

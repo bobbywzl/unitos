@@ -1,6 +1,6 @@
 "use client";
 
-import { ACTION_DANGER, CLOSE, LIST_HEAD } from "./graph-ui";
+import { ACTION_DANGER, CLOSE, LIST_HEAD, TEXT_BODY, TEXT_META, TEXT_NAME } from "./graph-ui";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/api";
@@ -86,7 +86,7 @@ export function GeneratedList({
           aria-checked={showProvenance}
           onClick={() => setShowProvenance(!showProvenance)}
           data-track="graph-provenance-switch"
-          className="-mt-1 flex min-h-6 min-w-0 items-center gap-2 self-start rounded-full px-1 py-0.5 text-[12.5px] text-sand-700 hover:text-clay-800 pointer-coarse:min-h-10"
+          className={`-mt-1 flex min-h-6 min-w-0 items-center gap-2 self-start rounded-full px-1 py-0.5 ${TEXT_BODY} text-sand-700 hover:text-clay-800 pointer-coarse:min-h-10`}
         >
           <span
             aria-hidden
@@ -99,9 +99,9 @@ export function GeneratedList({
           {t("stitch.generatedProvenance")}
         </button>
       )}
-      {error && <p className="text-[13px] text-red-600">{error}</p>}
+      {error && <p className={`${TEXT_BODY} text-red-600`}>{error}</p>}
       {generated.length === 0 && (
-        <p className="text-[13px] text-sand-600">{t("stitch.generatedEmpty")}</p>
+        <p className={`${TEXT_BODY} text-sand-600`}>{t("stitch.generatedEmpty")}</p>
       )}
       {generated.map((g) => (
         <div key={g.id} className="flex items-start gap-3 rounded-2xl border border-line bg-card px-4 py-3 shadow-soft">
@@ -111,15 +111,15 @@ export function GeneratedList({
             data-tip={t("stitch.openGenerated")}
             className="min-w-0 flex-1 text-left"
           >
-            <span className="block truncate text-[14px] font-semibold text-sand-800 hover:text-clay-800">
+            <span className={`block truncate ${TEXT_NAME} font-semibold text-sand-800 hover:text-clay-800`}>
               {g.title}
             </span>
             {g.command && (
-              <span className="mt-0.5 line-clamp-2 block text-xs text-sand-500">
+              <span className={`mt-0.5 line-clamp-2 block ${TEXT_BODY} text-sand-500`}>
                 {t("stitch.generatedFrom", { command: g.command })}
               </span>
             )}
-            <span className="mt-1 block text-[11px] text-sand-500">
+            <span className={`mt-1 block ${TEXT_META} text-sand-500`}>
               {t("stitch.blockCount", { n: g.blockCount })} · {replyTime(g.createdAt, lang)}
             </span>
           </button>

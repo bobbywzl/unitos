@@ -13,7 +13,7 @@
 // walk the links. Everything is read from what is stored (GET .../outline):
 // the card never calls a model.
 
-import { CLOSE, DOC_CHIP, HEAD_PLAIN, LEAD, LEAD_PRIMARY, SECTION_HEAD } from "./graph-ui";
+import { CLOSE, DOC_CHIP, HEAD_PLAIN, LEAD, LEAD_PRIMARY, SECTION_HEAD, TEXT_BODY, TEXT_META, TEXT_TITLE } from "./graph-ui";
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { GraphEdge, GraphEdgeLink, GraphNode } from "@/lib/types";
@@ -231,7 +231,7 @@ export function NodeCardPanel({
       }`}
     >
       <div className="flex items-start gap-2">
-        <h2 className="min-w-0 flex-1 text-[16px] leading-snug font-semibold text-ink">{node.title}</h2>
+        <h2 className={`min-w-0 flex-1 ${TEXT_TITLE} leading-snug font-semibold text-ink`}>{node.title}</h2>
         <button
           onClick={onClose}
           aria-label={t("common.close")}
@@ -241,12 +241,16 @@ export function NodeCardPanel({
           ✕
         </button>
       </div>
-      <p className="-mt-2 text-[11.5px] text-sand-600">{facts.join(" · ")}</p>
-      {/* [layer5] The reader's comments: one line that opens into them (VIEW5-01). */}
-      {node.kind !== "generated" && <NodeCommentsLine notebookId={notebookId} documentId={node.id} onOpenDocument={onOpenDocument} />}
+      {/* [layer5] The reader's comments: one press that opens into them (VIEW5-01).
+          [style8] VIEW8-04: it ends the facts line, so the two take one line. */}
+      {node.kind !== "generated" ? (
+        <NodeCommentsLine notebookId={notebookId} documentId={node.id} onOpenDocument={onOpenDocument} facts={facts.join(" · ")} />
+      ) : (
+        <p className={`-mt-2 ${TEXT_META} text-sand-600`}>{facts.join(" · ")}</p>
+      )}
       {/* A generated document says so, and which command wrote it (WALK3-09). */}
       {generated && (
-        <p data-graph-card-generated className="-mt-1.5 rounded-xl bg-sand-100 px-3 py-2 text-[12px] leading-snug text-sand-700">
+        <p data-graph-card-generated className={`-mt-1.5 rounded-xl bg-sand-100 px-3 py-2 ${TEXT_BODY} leading-snug text-sand-700`}>
           {command ? t("graphView.cardGeneratedFrom", { command }) : t("graphView.cardGenerated")}
         </p>
       )}
@@ -274,13 +278,13 @@ export function NodeCardPanel({
       </div>
 
       {outline === null ? (
-        <p className="text-[12.5px] text-sand-500">{t("graphView.cardLoading")}</p>
+        <p className={`${TEXT_BODY} text-sand-500`}>{t("graphView.cardLoading")}</p>
       ) : outline.gist ? (
-        <p data-graph-gist className="rounded-xl bg-sand-100 px-3 py-2 text-[13px] leading-relaxed text-ink">
+        <p data-graph-gist className={`rounded-xl bg-sand-100 px-3 py-2 ${TEXT_BODY} leading-relaxed text-ink`}>
           {outline.gist}
         </p>
       ) : (
-        <p data-graph-no-summary className="text-[12px] leading-snug text-sand-500">
+        <p data-graph-no-summary className={`${TEXT_BODY} leading-snug text-sand-500`}>
           {t("graphView.cardNoSummary")}
         </p>
       )}
@@ -298,7 +302,7 @@ export function NodeCardPanel({
                 <div key={g.other} data-graph-card-group={g.other} className="rounded-xl border border-line p-2.5">
                   <div className="flex items-center gap-2">
                     {loop ? (
-                      <span className="text-[12.5px] font-semibold text-sand-700">{t("graphView.cardWithin")}</span>
+                      <span className={`${TEXT_BODY} font-semibold text-sand-700`}>{t("graphView.cardWithin")}</span>
                     ) : (
                       <button
                         onClick={() => {
@@ -312,7 +316,7 @@ export function NodeCardPanel({
                         {titleOf.get(g.other) ?? ""}
                       </button>
                     )}
-                    <span className="ml-auto shrink-0 text-[11px] text-sand-500">{linkLine(t, g.accepted, g.recommended)}</span>
+                    <span className={`ml-auto shrink-0 ${TEXT_META} text-sand-500`}>{linkLine(t, g.accepted, g.recommended)}</span>
                   </div>
                   <ul className="mt-1.5 flex flex-col gap-1">
                     {(open ? ordered : ordered.slice(0, GROUP_ROWS)).map((l) => {
@@ -331,21 +335,21 @@ export function NodeCardPanel({
                             }`}
                           >
                             {proposed && (
-                              <span className="mb-0.5 block text-[10.5px] font-semibold text-[var(--kind-assistant)]">
+                              <span className={`mb-0.5 block ${TEXT_META} font-semibold text-[var(--kind-assistant)]`}>
                                 {t("graphView.fromLastAnswer")}
                               </span>
                             )}
-                            <span className="block text-[12px] leading-snug text-ink">
+                            <span className={`block ${TEXT_BODY} leading-snug text-ink`}>
                               {l.reason ?? clipWords(l.quotedText, 60)}
                               <LinkDraftTag linkId={l.id} className="ml-1.5" /* [ui5] WALK5-13 */ />
                             </span>
                             {part && (
-                              <span className="mt-0.5 block text-[11px] text-sand-500">
+                              <span className={`mt-0.5 block ${TEXT_META} text-sand-500`}>
                                 {t("graphView.cardInPart", { part: part.title })}
                               </span>
                             )}
                             {l.provenance && (
-                              <span className="mt-0.5 inline-block rounded-full bg-sand-200/80 px-1.5 text-[10px] font-semibold text-sand-700">
+                              <span className={`mt-0.5 inline-block rounded-full bg-sand-200/80 px-1.5 ${TEXT_META} font-semibold text-sand-700`}>
                                 {t("panes.graphProvenanceTag")}
                               </span>
                             )}
@@ -358,7 +362,7 @@ export function NodeCardPanel({
                   {g.links.length > GROUP_ROWS && !open && (
                     <button
                       onClick={() => setOpenGroups((prev) => new Set(prev).add(g.other))}
-                      className="mt-1 min-h-6 px-1.5 text-[11.5px] text-clay-700 hover:underline pointer-coarse:min-h-10"
+                      className={`mt-1 min-h-6 px-1.5 ${TEXT_META} text-clay-700 hover:underline pointer-coarse:min-h-10`}
                     >
                       {t("graphView.cardMore", { n: g.links.length - GROUP_ROWS })}
                     </button>
@@ -379,7 +383,7 @@ export function NodeCardPanel({
             ))}
           </div>
           {notes.length > NOTE_ROWS && !showAllNotes && (
-            <button onClick={() => setShowAllNotes(true)} className="mt-1 min-h-6 px-2 text-[11.5px] text-clay-700 hover:underline pointer-coarse:min-h-10">
+            <button onClick={() => setShowAllNotes(true)} className={`mt-1 min-h-6 px-2 ${TEXT_META} text-clay-700 hover:underline pointer-coarse:min-h-10`}>
               {t("graphView.cardMore", { n: notes.length - NOTE_ROWS })}
             </button>
           )}
@@ -402,11 +406,11 @@ export function NodeCardPanel({
                       data-tip={t("graphView.cardPartTitle")}
                       className="block min-w-0 flex-1 rounded-lg px-1.5 py-1 text-left hover:bg-clay-100/60"
                     >
-                      <span className="block text-[12.5px] leading-snug font-semibold text-ink">
+                      <span className={`block ${TEXT_BODY} leading-snug font-semibold text-ink`}>
                         <PartDot documentId={node.id} blockId={p.blockId} /* [cover4] */ />
                         {p.title}
                       </span>
-                      {p.summary && <span className="mt-0.5 block text-[12px] leading-snug text-sand-600">{p.summary}</span>}
+                      {p.summary && <span className={`mt-0.5 block ${TEXT_BODY} leading-snug text-sand-600`}>{p.summary}</span>}
                     </button>
                     {/* [cover4] The part's opening words as a quote (VIEW4-03). */}
                     <AddToNote quote={{ documentId: node.id, blockId: p.blockId, text: p.title, whole: true }} className="mt-1" />
@@ -416,14 +420,14 @@ export function NodeCardPanel({
             </section>
           )}
           {(outline.gist || outline.parts.some((p) => p.summary)) && (
-            <p className="-mt-1.5 text-[11px] text-sand-500">{t("graphView.cardAiLine")}</p>
+            <p className={`-mt-1.5 ${TEXT_META} text-sand-500`}>{t("graphView.cardAiLine")}</p>
           )}
         </>
       )}
-      <p role="status" data-graph-card-walk className="text-[12px] text-clay-800 empty:hidden">
+      <p role="status" data-graph-card-walk className={`${TEXT_BODY} text-clay-800 empty:hidden`}>
         {walkNote}
       </p>
-      {!sheet && !coarse && <p className="text-[11px] text-sand-500">{t("graphView.cardKeys")}</p>}
+      {!sheet && !coarse && <p className={`${TEXT_META} text-sand-500`}>{t("graphView.cardKeys")}</p>}
     </aside>
   );
 }
@@ -438,7 +442,7 @@ export function NodeCardExtras({ documentId, notes: withNotes = true }: { docume
   return (
     <>
       {gist && (
-        <p data-graph-hover-gist className="mt-0.5 text-[12px] leading-snug text-ink">
+        <p data-graph-hover-gist className={`mt-0.5 ${TEXT_BODY} leading-snug text-ink`}>
           {gist.length > 140 ? `${gist.slice(0, 140).replace(/\s+\S*$/, "")}…` : gist}
         </p>
       )}
@@ -448,11 +452,11 @@ export function NodeCardExtras({ documentId, notes: withNotes = true }: { docume
             {notes.length === 1 ? t("graphNotes.nodeNotesOne") : t("graphNotes.nodeNotesMany", { n: notes.length })}
           </p>
           {notes.slice(0, 3).map((g) => (
-            <p key={g.note.id} className="truncate text-[11.5px] text-sand-700">
+            <p key={g.note.id} className={`truncate ${TEXT_META} text-sand-700`}>
               {noteLine(g.note)}
             </p>
           ))}
-          {notes.length > 3 && <p className="text-[11px] text-sand-500">{t("graphNotes.nodeNotesMore", { n: notes.length - 3 })}</p>}
+          {notes.length > 3 && <p className={`${TEXT_META} text-sand-500`}>{t("graphNotes.nodeNotesMore", { n: notes.length - 3 })}</p>}
         </div>
       )}
     </>

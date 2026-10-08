@@ -20,7 +20,7 @@
 // another person's). NodeComments, NodeCommentsLine, DocumentComments,
 // GapReasons, useWaitsForReply.
 
-import { ACTION, ACTION_ON, TEXT_HIT } from "./graph-ui";
+import { ACTION, ACTION_ON, TEXT_BODY, TEXT_HIT, TEXT_META } from "./graph-ui";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { GraphEdgeLink } from "@/lib/types";
@@ -211,11 +211,12 @@ export function CoverageHead({
   ].filter(Boolean);
   return (
     <div data-graph-coverage-head className="flex items-center gap-2">
-      <p className="min-w-0 flex-1 text-[11px] leading-snug text-sand-600 tabular-nums">
+      <p className={`min-w-0 flex-1 ${TEXT_META} leading-snug text-sand-600 tabular-nums`}>
+        {/* [style8] VIEW8-03: a line breaks at a "·", never inside a count. */}
         {counts.map((c, i) => (
           <span key={i}>
             {i > 0 && <span className="text-sand-400"> · </span>}
-            {c}
+            <span className="whitespace-nowrap">{c}</span>
           </span>
         ))}
       </p>
@@ -246,7 +247,7 @@ export function DocumentCoverageLine({ documentId }: { documentId: string }) {
   const whole = c.parts.length === 1 && c.parts[0].whole ? c.parts[0] : null;
   const open = openComments(c);
   return (
-    <span data-graph-coverage-line={documentId} className="flex flex-wrap items-center gap-1.5 text-[11px] text-sand-600">
+    <span data-graph-coverage-line={documentId} className={`flex flex-wrap items-center gap-1.5 ${TEXT_META} text-sand-600`}>
       {whole ? (
         <span data-graph-coverage-whole={whole.noted > 0 ? "noted" : "empty"}>
           <PartDot documentId={documentId} blockId="" />
@@ -266,7 +267,7 @@ export function DocumentCoverageLine({ documentId }: { documentId: string }) {
         <span
           data-graph-not-opened
           data-tip={t("graphCover.notOpenedTitle")}
-          className="rounded-full border border-dashed border-sand-400 px-1.5 text-[10.5px] font-semibold text-sand-600"
+          className={`rounded-full border border-dashed border-sand-400 px-1.5 ${TEXT_META} font-semibold text-sand-600`}
         >
           {t("graphCover.notOpened")}
         </span>
@@ -282,7 +283,7 @@ export function GapReasons({ documentId }: { documentId: string }) {
   const reasons = gapReasonLines(t, useDocumentCoverage(documentId));
   if (reasons.length === 0) return null;
   return (
-    <span data-graph-gap-why={documentId} className="text-[11.5px] font-semibold text-clay-800">
+    <span data-graph-gap-why={documentId} className={`${TEXT_META} font-semibold text-clay-800`}>
       {reasons.join(" · ")}
     </span>
   );
@@ -425,7 +426,7 @@ export function NodeComments({ documentId }: { documentId: string }) {
       data-graph-node-comments={open.length}
       aria-label={label}
       data-tip={label}
-      className="flex items-center gap-px text-[10px] font-semibold tabular-nums text-[var(--kind-comment)]"
+      className={`flex items-center gap-px ${TEXT_META} font-semibold tabular-nums text-[var(--kind-comment)]`}
     >
       <CommentIcon size={10} />
       {open.length}
@@ -460,20 +461,20 @@ function CommentRow({ notebookId, documentId, comment: c, onOpenDocument }: { no
         onOpenDocument();
       }}
       data-tip={t("graphCover.commentOpenTitle")}
-      className={`flex w-full items-start gap-1.5 rounded-xl px-2 py-1.5 text-left hover:bg-[color-mix(in_srgb,var(--kind-comment)_8%,transparent)] ${c.open ? "" : "opacity-60"}`}
+      className={`flex w-full items-start gap-1.5 rounded-xl px-2 py-1.5 text-left pointer-coarse:min-h-11 hover:bg-[color-mix(in_srgb,var(--kind-comment)_8%,transparent)] ${c.open ? "" : "opacity-60"}`}
     >
       {author ? <PersonBadge person={author} size={16} /> : <CommentIcon size={12} className="mt-[3px] shrink-0 text-[var(--kind-comment)]" />}
       <span className="min-w-0 flex-1">
-        <span className="line-clamp-3 text-[12.5px] leading-snug text-ink">{c.text}</span>
+        <span className={`line-clamp-3 ${TEXT_BODY} leading-snug text-ink`}>{c.text}</span>
         {(c.replies > 0 || !c.open) && (
-          <span className="mt-0.5 flex items-center gap-1.5 text-[10.5px] text-sand-600">
+          <span className={`mt-0.5 flex items-center gap-1.5 ${TEXT_META} text-sand-600`}>
             {c.replies > 0 && <span>{c.replies === 1 ? t("graphNotes.replyCountOne") : t("graphNotes.replyCountMany", { n: c.replies })}</span>}
             {!c.open && <span>{t("graphCover.commentResolved")}</span>}
           </span>
         )}
       </span>
       {commentWaits(c, myId) && (
-        <span className="shrink-0 rounded-full bg-[color-mix(in_srgb,var(--kind-comment)_12%,transparent)] px-1.5 text-[11px] text-[var(--kind-comment)]">
+        <span className={`shrink-0 rounded-full bg-[color-mix(in_srgb,var(--kind-comment)_12%,transparent)] px-1.5 ${TEXT_META} text-[var(--kind-comment)]`}>
           <WaitsMark />
         </span>
       )}
@@ -484,7 +485,18 @@ function CommentRow({ notebookId, documentId, comment: c, onOpenDocument }: { no
 /** The node card's comments: one line, "2 open comments ? · 1 resolved",
     that a press opens into the comments (open first), each a row that
     opens the comment in the reader. */
-export function NodeCommentsLine({ notebookId, documentId, onOpenDocument }: { notebookId: string; documentId: string; onOpenDocument: () => void }) {
+export function NodeCommentsLine({
+  notebookId,
+  documentId,
+  onOpenDocument,
+  facts,
+}: {
+  notebookId: string;
+  documentId: string;
+  onOpenDocument: () => void;
+  /** [style8] VIEW8-04: the card's facts line; the comments press ends it, so the two take one line. */
+  facts?: string;
+}) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const [shownFor, setShownFor] = useState(documentId);
@@ -494,35 +506,39 @@ export function NodeCommentsLine({ notebookId, documentId, onOpenDocument }: { n
   }
   const comments = useDocumentComments(documentId);
   const waits = useCommentWaits();
-  if (comments.length === 0) return null;
+  const factsLine = facts ? <span className="text-sand-600">{facts}</span> : null;
+  if (comments.length === 0) return factsLine ? <p className={`-mt-2 ${TEXT_META}`}>{factsLine}</p> : null;
   const openOnes = comments.filter((c) => c.open);
   const resolved = comments.length - openOnes.length;
   // [lists8] WALK8-11: none open says "1 resolved comment", in grey.
   const noneOpen = openOnes.length === 0;
   return (
-    <div data-graph-card-comments={comments.length} className="-mt-1.5">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        data-track="graph-card-comments"
-        data-tip={t("graphCover.commentsShowTitle")}
-        className={`inline-flex min-h-6 items-center gap-1 text-[11.5px] font-semibold hover:underline pointer-coarse:min-h-10 ${noneOpen ? "text-sand-600" : "text-[var(--kind-comment)]"}`}
-      >
-        <CommentIcon size={11} />
-        {noneOpen
-          ? resolved === 1
-            ? t("graphCover.commentsResolvedOne")
-            : t("graphCover.commentsResolvedMany", { n: resolved })
-          : openOnes.length === 1
-            ? t("graphCover.commentsOpenOne")
-            : t("graphCover.commentsOpenMany", { n: openOnes.length })}
-        {openOnes.some(waits) && <WaitsMark />}
-        {!noneOpen && resolved > 0 && (
-          <span className="font-normal text-sand-600">
-            · {resolved === 1 ? t("common.resolvedCountOne") : t("common.resolvedCountMany", { n: resolved })}
-          </span>
-        )}
-      </button>
+    <div data-graph-card-comments={comments.length} className="-mt-2">
+      <p className={`flex flex-wrap items-center gap-x-2 ${TEXT_META}`}>
+        {factsLine}
+        <button
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          data-track="graph-card-comments"
+          data-tip={t("graphCover.commentsShowTitle")}
+          className={`inline-flex min-h-6 items-center gap-1 ${TEXT_META} font-semibold hover:underline pointer-coarse:min-h-10 ${noneOpen ? "text-sand-600" : "text-[var(--kind-comment)]"}`}
+        >
+          <CommentIcon size={11} />
+          {noneOpen
+            ? resolved === 1
+              ? t("graphCover.commentsResolvedOne")
+              : t("graphCover.commentsResolvedMany", { n: resolved })
+            : openOnes.length === 1
+              ? t("graphCover.commentsOpenOne")
+              : t("graphCover.commentsOpenMany", { n: openOnes.length })}
+          {openOnes.some(waits) && <WaitsMark />}
+          {!noneOpen && resolved > 0 && (
+            <span className="font-normal text-sand-600">
+              · {resolved === 1 ? t("common.resolvedCountOne") : t("common.resolvedCountMany", { n: resolved })}
+            </span>
+          )}
+        </button>
+      </p>
       {open && (
         <div className="mt-1 flex flex-col gap-0.5">
           {comments.map((c) => (
@@ -571,14 +587,14 @@ export function AllComments({
     <div data-graph-documents-all-comments={groups.reduce((n, g) => n + g.open.length, 0)} className="flex flex-col gap-2">
       {groups.map((g) => (
         <div key={g.id} className="flex flex-col gap-0.5">
-          <p className="px-2 text-[11.5px] font-semibold text-sage-700">{g.title}</p>
+          <p className={`px-2 ${TEXT_META} font-semibold text-sage-700`}>{g.title}</p>
           {g.open.map((c) => (
             <CommentRow key={c.id} notebookId={notebookId} documentId={g.id} comment={c} onOpenDocument={onOpenDocument} />
           ))}
         </div>
       ))}
       {resolved > 0 && (
-        <p className="px-2 text-[11px] text-sand-500">{resolved === 1 ? t("common.resolvedCountOne") : t("common.resolvedCountMany", { n: resolved })}</p>
+        <p className={`px-2 ${TEXT_META} text-sand-500`}>{resolved === 1 ? t("common.resolvedCountOne") : t("common.resolvedCountMany", { n: resolved })}</p>
       )}
     </div>
   );

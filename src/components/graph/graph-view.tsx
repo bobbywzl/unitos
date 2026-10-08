@@ -1,6 +1,6 @@
 "use client";
 
-import { ACTION, ACTION_ACCEPT, CLOSE, SECTION_HEAD } from "./graph-ui";
+import { ACTION, ACTION_ACCEPT, CLOSE, SECTION_HEAD, TEXT_BODY, TEXT_META, TEXT_NAME } from "./graph-ui";
 import { useParams, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type FocusEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
@@ -313,7 +313,7 @@ function DocumentNode({ id, data }: NodeProps<DocumentNodeData>) {
       {found > 0 && (
         <span
           data-graph-find-count={found}
-          className="absolute top-1/2 -translate-x-full -translate-y-1/2 rounded-full bg-clay px-1.5 py-px text-[10px] font-semibold tabular-nums text-clay-fg"
+          className={`absolute top-1/2 -translate-x-full -translate-y-1/2 rounded-full bg-clay px-1.5 py-px ${TEXT_META} font-semibold tabular-nums text-clay-fg`}
           style={{ left: `calc(50% - ${size / 2 + 4}px)` }}
         >
           {found}
@@ -609,7 +609,7 @@ function EdgeLinkList({ edgeId, loop, anchor, links }: { edgeId: string; loop: b
   const count = links.length;
   return (
     <CurveListFrame edgeId={edgeId} loop={loop} anchor={anchor} wide={false}>
-      <p className="px-2 pt-0.5 pb-1 text-[11px] font-bold tracking-[0.06em] text-sand-600 uppercase">
+      <p className={`px-2 pt-0.5 pb-1 ${TEXT_META} font-bold tracking-[0.06em] text-sand-600 uppercase`}>
         {loop
           ? count === 1
             ? t("panes.graphLoopLinkOne")
@@ -618,7 +618,7 @@ function EdgeLinkList({ edgeId, loop, anchor, links }: { edgeId: string; loop: b
             ? t("panes.graphPairLinkOne")
             : t("panes.graphPairLinks", { count })}
       </p>
-      {decideError && <p className="px-2 text-[11px] text-red-500">{decideError}</p>}
+      {decideError && <p className={`px-2 ${TEXT_META} text-red-500`}>{decideError}</p>}
       {(proposedLinkIds.size > 0
         ? [...links].sort((a, b) => Number(proposedLinkIds.has(b.id)) - Number(proposedLinkIds.has(a.id)))
         : links
@@ -630,7 +630,7 @@ function EdgeLinkList({ edgeId, loop, anchor, links }: { edgeId: string; loop: b
           <div key={l.id} className={open ? "rounded-xl bg-sand-100/70" : undefined}>
             {/* [view2] The last Stitch answer's links come first, marked. */}
             {proposedLinkIds.has(l.id) && (
-              <p data-graph-from-answer className="px-2 pt-1 text-[10.5px] font-semibold text-[var(--kind-assistant)]">
+              <p data-graph-from-answer className={`px-2 pt-1 ${TEXT_META} font-semibold text-[var(--kind-assistant)]`}>
                 {t("graphView.fromLastAnswer")}
               </p>
             )}
@@ -641,7 +641,7 @@ function EdgeLinkList({ edgeId, loop, anchor, links }: { edgeId: string; loop: b
               aria-expanded={open}
               className="flex w-full flex-col items-start gap-0.5 rounded-xl px-2 py-1.5 text-left hover:bg-clay-100"
             >
-              <span className="text-[12.5px] leading-snug font-semibold text-ink">
+              <span className={`${TEXT_BODY} leading-snug font-semibold text-ink`}>
                 {l.reason ?? clipWords(l.quotedText, 60)}
               </span>
               {/* Each quote names its document, so a pair linked both ways
@@ -649,7 +649,7 @@ function EdgeLinkList({ edgeId, loop, anchor, links }: { edgeId: string; loop: b
               {l.reason && <QuoteLine title={loop ? null : l.fromTitle} quote={l.quotedText} tone="text-sand-600" />}
               {l.toQuotedText && <QuoteLine title={loop ? null : l.toTitle} quote={l.toQuotedText} tone="text-sand-500" />}
               {l.provenance && (
-                <span className="rounded-full bg-sand-200/80 px-1.5 text-[10px] font-semibold text-sand-700">
+                <span className={`rounded-full bg-sand-200/80 px-1.5 ${TEXT_META} font-semibold text-sand-700`}>
                   {t("panes.graphProvenanceTag")}
                 </span>
               )}
@@ -657,7 +657,7 @@ function EdgeLinkList({ edgeId, loop, anchor, links }: { edgeId: string; loop: b
             </button>
             {recommended && (
               <div className="flex flex-wrap items-center gap-1.5 px-2 pb-1.5">
-                <span className="rounded-full border border-dashed border-clay-300 px-2 text-[10.5px] font-semibold text-clay-700">
+                <span className={`rounded-full border border-dashed border-clay-300 px-2 ${TEXT_META} font-semibold text-clay-700`}>
                   {t("panes.graphLinkRecommended")}
                 </span>
                 {canEdit && !l.crossAccount?.outside && (
@@ -696,9 +696,9 @@ function EdgeLinkList({ edgeId, loop, anchor, links }: { edgeId: string; loop: b
 
 function QuoteLine({ title, quote, tone }: { title: string | null; quote: string; tone: string }) {
   return (
-    <span className={`text-[11px] leading-snug ${tone}`}>
+    <span className={`${TEXT_META} leading-snug ${tone}`}>
       {title && (
-        <span className="mr-1 inline-block max-w-[9rem] truncate rounded-full bg-sand-200/80 px-1.5 align-bottom text-[10px] font-semibold text-sand-700">
+        <span className={`mr-1 inline-block max-w-[9rem] truncate rounded-full bg-sand-200/80 px-1.5 align-bottom ${TEXT_META} font-semibold text-sand-700`}>
           {title}
         </span>
       )}
@@ -773,18 +773,18 @@ function NodeCard({
       className="graph-float-in pointer-events-auto absolute flex flex-col gap-1 overflow-y-auto overscroll-contain rounded-2xl border border-line bg-card/95 px-3.5 py-2.5 shadow-float backdrop-blur-md"
       style={{ left, top, width, maxHeight: Math.max(120, paneH - insets.bottom - top - 8) }}
     >
-      <p className="text-[13px] leading-snug font-semibold text-ink">{node.title}</p>
-      {facts1.length > 0 && <p className="text-[11.5px] text-sand-600">{facts1.join(" · ")}</p>}
+      <p className={`${TEXT_NAME} leading-snug font-semibold text-ink`}>{node.title}</p>
+      {facts1.length > 0 && <p className={`${TEXT_META} text-sand-600`}>{facts1.join(" · ")}</p>}
       {/* A generated document: the command that wrote it (WALK3-09). */}
       {node.kind === "generated" && generatedCommands.get(node.id) && (
-        <p className="line-clamp-2 text-[11.5px] text-sand-600">
+        <p className={`line-clamp-2 ${TEXT_BODY} text-sand-600`}>
           {t("stitch.generatedFrom", { command: generatedCommands.get(node.id) ?? "" })}
         </p>
       )}
-      <p className="text-[11.5px] text-sand-600">{linkLine(t, accepted, recommended)}</p>
+      <p className={`${TEXT_META} text-sand-600`}>{linkLine(t, accepted, recommended)}</p>
       {/* [view2] The gist's first words; the notes as rows: one card per node (VIEW2-01). */}
       <NodeCardExtras documentId={node.id} notes={false} />
-      <p className="mt-0.5 text-[11px] text-sand-500">
+      <p className={`mt-0.5 ${TEXT_META} text-sand-500`}>
         {t(picking ? "panes.graphCardPick" : clickSelects ? "graphView.cardHintSelect" : "graphView.cardHintOpen")}
       </p>
       {!picking && <NodeNotesRows documentId={node.id} />}
@@ -835,10 +835,10 @@ function GraphKey({
       role="dialog"
       aria-label={t("panes.graphKeyTitle")}
       data-graph-key
-      className="graph-float-in pointer-events-auto absolute top-3 left-14 z-30 max-h-[calc(100%-24px)] w-[540px] max-w-[calc(100%-72px)] overflow-y-auto overscroll-contain rounded-2xl border border-line bg-card/95 p-3.5 text-[12px] text-sand-700 shadow-float backdrop-blur-md"
+      className={`graph-float-in pointer-events-auto absolute top-3 left-14 z-30 max-h-[calc(100%-24px)] w-[540px] max-w-[calc(100%-72px)] overflow-y-auto overscroll-contain rounded-2xl border border-line bg-card/95 p-3.5 ${TEXT_META} text-sand-700 shadow-float backdrop-blur-md`}
     >
       <div className="mb-2 flex items-center">
-        <p className="flex-1 text-[11px] font-bold tracking-[0.06em] text-sand-600 uppercase">{t("panes.graphKeyTitle")}</p>
+        <p className={`flex-1 ${TEXT_META} font-bold tracking-[0.06em] text-sand-600 uppercase`}>{t("panes.graphKeyTitle")}</p>
         <button onClick={onClose} aria-label={t("common.close")} data-tip={t("common.close")} className={CLOSE}>
           ✕
         </button>
@@ -876,11 +876,11 @@ function GraphKey({
             {/* The marks on a curve (WALK4-13): the link count, the open
                 replies, the notes that quote both documents. */}
             {row(
-              <span className="flex h-[18px] items-center rounded-full border border-line bg-card px-1.5 text-[10px] font-semibold tabular-nums text-sand-700">3</span>,
+              <span className={`flex h-[18px] items-center rounded-full border border-line bg-card px-1.5 ${TEXT_META} font-semibold tabular-nums text-sand-700`}>3</span>,
               "graphNotes.keyCurveCount",
             )}
             {row(
-              <span className="flex h-[18px] items-center gap-1 rounded-full border-[1.5px] border-[var(--kind-comment)] bg-card px-1.5 text-[10px] font-bold tabular-nums text-[var(--kind-comment)]">
+              <span className={`flex h-[18px] items-center gap-1 rounded-full border-[1.5px] border-[var(--kind-comment)] bg-card px-1.5 ${TEXT_META} font-bold tabular-nums text-[var(--kind-comment)]`}>
                 <CommentIcon size={11} />2
               </span>,
               "graphNotes.keyCurveReplies",
@@ -905,26 +905,26 @@ function GraphKey({
               "graphNotes.noteCurveHint",
             )}
             {row(
-              <span className="flex items-center gap-1 rounded-full bg-sage-100 px-1.5 py-px text-[10px] font-semibold tabular-nums text-sage-800">
+              <span className={`flex items-center gap-1 rounded-full bg-sage-100 px-1.5 py-px ${TEXT_META} font-semibold tabular-nums text-sage-800`}>
                 <NotesIcon size={10} />2
               </span>,
               "graphNotes.nodeNotesTitle",
             )}
             {row(
-              <span className="flex items-center gap-1 rounded-full bg-sage-100 px-1.5 py-px text-[10px] font-semibold tabular-nums text-sage-800">
+              <span className={`flex items-center gap-1 rounded-full bg-sage-100 px-1.5 py-px ${TEXT_META} font-semibold tabular-nums text-sage-800`}>
                 <NotesIcon size={10} />2<span className="size-1.5 rounded-full bg-clay" />
               </span>,
               "graphNotes.keyPending",
             )}
             {row(
-              <span className="flex h-[18px] items-center gap-1 rounded-full border border-dashed border-sage-500 bg-sage-100 px-1.5 text-[10px] font-semibold tabular-nums text-sage-800">
+              <span className={`flex h-[18px] items-center gap-1 rounded-full border border-dashed border-sage-500 bg-sage-100 px-1.5 ${TEXT_META} font-semibold tabular-nums text-sage-800`}>
                 <NotesIcon size={11} />2
               </span>,
               "graphNotes.keyCurveNotes",
             )}
             {/* [layer5] The node's comments chip (VIEW5-01 (c)). */}
             {row(
-              <span className="flex items-center gap-0.5 rounded-full bg-[color-mix(in_srgb,var(--kind-comment)_12%,var(--card))] px-1.5 py-px text-[10px] font-semibold tabular-nums text-[var(--kind-comment)]">
+              <span className={`flex items-center gap-0.5 rounded-full bg-[color-mix(in_srgb,var(--kind-comment)_12%,var(--card))] px-1.5 py-px ${TEXT_META} font-semibold tabular-nums text-[var(--kind-comment)]`}>
                 <CommentIcon size={10} />2<span aria-hidden>?</span>
               </span>,
               "graphCover.keyComments",
@@ -932,7 +932,7 @@ function GraphKey({
           </>,
         )}
       </div>
-      <p className="border-t border-line pt-2 text-[11.5px] leading-relaxed text-sand-600">
+      <p className={`border-t border-line pt-2 ${TEXT_META} leading-relaxed text-sand-600`}>
         {t(clickSelects ? "graphView.gesturesSelect" : "graphView.gesturesOpen") /* [view2] */}
         <span className="mt-1 block">{t("graphNotes.keyFar")}</span>
       </p>

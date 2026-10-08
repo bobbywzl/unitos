@@ -1,6 +1,6 @@
 "use client";
 
-import { CLOSE, LIST_HEAD } from "./graph-ui";
+import { CLOSE, LIST_HEAD, TEXT_BODY, TEXT_META } from "./graph-ui";
 import { useState } from "react";
 import type { GraphEdge, GraphEdgeLink } from "@/lib/types";
 import { useT } from "@/components/lang-provider";
@@ -108,7 +108,7 @@ export function LinksList({
               aria-label={t("panes.graphLinksFilter")}
               data-track="graph-links-filter"
               maxLength={100}
-              className="min-w-0 flex-1 rounded-full border border-line bg-card px-3 py-1.5 text-[12.5px] text-ink placeholder:text-sand-500 focus:border-clay-400"
+              className={`min-w-0 flex-1 rounded-full border border-line bg-card px-3 py-1.5 ${TEXT_BODY} text-ink placeholder:text-sand-500 focus:border-clay-400`}
             />
             <NoReplyToggle on={noReply} onChange={setNoReply} />
           </>
@@ -123,9 +123,9 @@ export function LinksList({
           ✕
         </button>
       </div>
-      {total === 0 && <p className="text-[13px] text-sand-600">{t("panes.graphLinksEmpty")}</p>}
+      {total === 0 && <p className={`${TEXT_BODY} text-sand-600`}>{t("panes.graphLinksEmpty")}</p>}
       {total > 0 && groups.length === 0 && (
-        <p className="text-[13px] text-sand-600">{noReply && kept.length === 0 ? t("graphCover.noReplyNone") : t("panes.graphLinksFilterNone")}</p>
+        <p className={`${TEXT_BODY} text-sand-600`}>{noReply && kept.length === 0 ? t("graphCover.noReplyNone") : t("panes.graphLinksFilterNone")}</p>
       )}
       {groups.map(({ edge, links }) => (
         <div
@@ -136,7 +136,7 @@ export function LinksList({
           onFocus={() => light(edge)}
           onBlur={() => light(null)}
         >
-          <p className="text-[11.5px] font-semibold text-sage-700">
+          <p className={`${TEXT_META} font-semibold text-sage-700`}>
             {edge.a === edge.b
               ? t("panes.graphLinksLoopTitle", { title: titleOf.get(edge.a) ?? "" })
               : t("panes.graphLinksPairTitle", { a: titleOf.get(edge.a) ?? "", b: titleOf.get(edge.b) ?? "" })}
@@ -155,17 +155,17 @@ export function LinksList({
                   openLinkId === l.id ? "border-clay-300 bg-clay-100/50" : "border-line bg-card"
                 }`}
               >
-                <span className="text-[12.5px] leading-snug font-semibold text-ink">
+                <span className={`${TEXT_BODY} leading-snug font-semibold text-ink`}>
                   {l.reason ?? clipWords(l.quotedText, 60)}
                   <LinkDraftTag linkId={l.id} className="ml-1.5" /* [ui5] WALK5-13 */ />
                 </span>
                 {ask ? (
-                  <span data-graph-links-asks={ask.id} className="flex items-start gap-1.5 text-[11.5px] leading-snug text-ink">
+                  <span data-graph-links-asks={ask.id} className={`flex items-start gap-1.5 ${TEXT_BODY} leading-snug text-ink`}>
                     {asker && <PersonBadge person={asker} size={16} />}
                     <span className="line-clamp-2 min-w-0">{clipWords(ask.content, 160)}</span>
                   </span>
                 ) : (
-                  l.reason && <span className="text-[11px] leading-snug text-sand-600">{clipWords(l.quotedText, 40)}</span>
+                  l.reason && <span className={`${TEXT_META} leading-snug text-sand-600`}>{clipWords(l.quotedText, 40)}</span>
                 )}
                 <LinkReplyCount link={l} />
               </button>

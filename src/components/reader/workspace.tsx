@@ -785,7 +785,7 @@ export function Workspace({
         <span aria-hidden className="hidden size-[5px] shrink-0 rounded-full bg-sand-400 sm:block" />
         {/* No overflow clipping here: the document list and the + menu drop
             below the header. The one pill truncates instead of scrolling. */}
-        <div className="mr-auto flex min-w-0">
+        <div className="mr-auto flex min-w-0 max-sm:min-w-38">
           <DocumentBar
             notebookId={notebook.id}
             title={notebook.title}
@@ -812,7 +812,7 @@ export function Workspace({
             data-track="offline-save"
             aria-label={t(offlineSaved ? "works.removeOffline" : "works.saveOffline")}
             data-tip={t(offlineSaved ? "works.removeOffline" : "works.saveOffline")}
-            className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40 ${
+            className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40 max-sm:px-2.5 ${
               offlineSaved
                 ? "border border-sage-300 bg-sage-200 text-sage-800"
                 : "border border-dashed border-sand-400 text-sand-600"

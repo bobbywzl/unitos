@@ -1198,7 +1198,9 @@ export function DocumentBar({
       {documents.length > 0 && (
         <div
           ref={listRef}
-          className="relative min-w-0"
+          // A flex box, so the pill shrinks to the room the header leaves and
+          // never draws over Share (STYLE8: the reader header at 390).
+          className="relative flex min-w-0"
           onMouseEnter={openList}
           onMouseLeave={scheduleCloseList}
         >
@@ -1208,9 +1210,9 @@ export function DocumentBar({
             aria-expanded={listOpen}
             aria-label={t("panes.documentList")}
             data-tip={active?.title ?? t("panes.documentList")}
-            className="flex max-w-[min(50vw,32rem)] min-w-0 items-center gap-1.5 rounded-full bg-ink py-[7px] pr-3 pl-[15px] text-[13px] font-semibold text-paper"
+            className="flex max-w-[min(50vw,32rem)] min-w-0 items-center gap-1.5 rounded-full bg-ink py-[7px] pr-3 pl-[15px] text-[13px] font-semibold text-paper max-sm:min-w-28"
           >
-            <span className="overflow-hidden whitespace-nowrap">{active ? clipWords(active.title, 56) : t("panes.documentList")}</span>
+            <span className="min-w-0 truncate">{active ? clipWords(active.title, 56) : t("panes.documentList")}</span>
             <span className="shrink-0 rounded-full bg-paper/20 px-1.5 text-[11px] tabular-nums">
               {/* [cover4] The documents the graph counts: generated ones aside (WALK4-03). */}
               {opening ? <LoadingDots /> : documents.filter((d) => d.kind !== "generated").length || documents.length}

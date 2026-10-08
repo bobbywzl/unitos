@@ -1,6 +1,6 @@
 "use client";
 
-import { SECTION_HEAD } from "./graph-ui";
+import { SECTION_HEAD, TEXT_BODY, TEXT_META } from "./graph-ui";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
@@ -331,7 +331,7 @@ export function NodeNotes({ documentId }: { documentId: string }) {
     <span
       data-graph-node-notes={documentId}
       data-tip={t("graphNotes.nodeNotesTitle")}
-      className="flex shrink-0 items-center gap-1 rounded-full bg-sage-100 px-1.5 py-px text-[10px] font-semibold whitespace-nowrap tabular-nums text-sage-800" /* [ui5] WALK5-15: never wraps */
+      className={`flex shrink-0 items-center gap-1 rounded-full bg-sage-100 px-1.5 py-px ${TEXT_META} font-semibold whitespace-nowrap tabular-nums text-sage-800`} /* [ui5] WALK5-15: never wraps */
     >
       <NotesIcon size={10} />
       {entry.accepted === 0 && entry.pending > 0 ? (
@@ -366,7 +366,7 @@ export function NodeNotesRows({ documentId }: { documentId: string }) {
         <GraphNoteRow key={g.note.id} note={g} hereId={documentId} />
       ))}
       {notes.length > CARD_ROWS && (
-        <p className="px-2 pt-0.5 text-[11px] text-sand-500">
+        <p className={`px-2 pt-0.5 ${TEXT_META} text-sand-500`}>
           {t("graphNotes.nodeNotesMore", { n: notes.length - CARD_ROWS })}
         </p>
       )}
@@ -399,21 +399,21 @@ export function GraphNoteRow({ note: g, hereId }: { note: GraphNote; hereId: str
         data-tip={t("graphNotes.showNote")}
         className="flex min-h-6 items-start gap-1.5 text-left pointer-coarse:min-h-10"
       >
-        <span className="min-w-0 flex-1 text-[12.5px] leading-snug font-semibold text-ink">{noteLine(g.note)}</span>
+        <span className={`min-w-0 flex-1 ${TEXT_BODY} leading-snug font-semibold text-ink`}>{noteLine(g.note)}</span>
         {g.note.status === "PENDING" && (
-          <span className="shrink-0 rounded-full border border-dashed border-clay-300 px-1.5 text-[10px] font-semibold text-clay-700">
+          <span className={`shrink-0 rounded-full border border-dashed border-clay-300 px-1.5 ${TEXT_META} font-semibold text-clay-700`}>
             {t("common.pending")}
           </span>
         )}
       </button>
       <span className="flex flex-wrap items-center gap-1">
-        <span className="text-[10.5px] text-sand-500">{g.sectionTitle}</span>
+        <span className={`${TEXT_META} text-sand-500`}>{g.sectionTitle}</span>
         {others.map((id) => (
           <span
             key={id}
             onMouseEnter={() => lightWith(id)}
             onMouseLeave={() => lightWith(null)}
-            className="max-w-40 truncate rounded-full bg-sand-200 px-2 py-px text-[10.5px] font-semibold text-sand-700"
+            className={`max-w-40 truncate rounded-full bg-sand-200 px-2 py-px ${TEXT_META} font-semibold text-sand-700`}
           >
             {ctx.titleOf.get(id) ?? ""}
           </span>
@@ -533,7 +533,7 @@ export function CurveMarks({
   const showCount = count > 1;
   if (!showCount && open === 0 && notes === 0) return null;
   const p = places.get(pair) ?? at;
-  const pill = "flex h-[18px] items-center gap-1 rounded-full px-1.5 text-[10px] font-semibold tabular-nums";
+  const pill = `flex h-[18px] items-center gap-1 rounded-full px-1.5 ${TEXT_META} font-semibold tabular-nums`;
   return (
     <EdgeLabelRenderer>
       <div
@@ -639,7 +639,7 @@ export function NoteEdge({
         renderList(
           { x: midX + bow / 2, y: midY },
           <>
-            <p className="px-2 pt-0.5 text-[11px] text-sand-500">{t("graphNotes.noteCurveHint")}</p>
+            <p className={`px-2 pt-0.5 ${TEXT_META} text-sand-500`}>{t("graphNotes.noteCurveHint")}</p>
             <PairNotes pair={id} />
           </>,
         )}
