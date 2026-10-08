@@ -171,6 +171,8 @@ import { readNdjson } from "@/lib/ndjson";
 import { conflictLabels, saveNoteText } from "@/lib/notes/save-text";
 import { reconcileNoteText } from "@/lib/notes/conflict";
 import { deletedKey, deleteNoteWithUndo } from "@/lib/notes/undo-pill";
+import { deleteWithUndo, resumeDeletes } from "@/components/reader/attachment-delete";
+import { clearExtractDraft } from "@/components/reader/extract-draft";
 import {
   cardCommentKey,
   caretToEnd,
@@ -1729,6 +1731,18 @@ export function ReaderInteractions({
   // Stored extractions of the old Match-it tool (SPEC.md §4): the layer and
   // its card still show, and Delete still removes one; nothing makes new ones.
   const [localExtractions, setLocalExtractions] = useState<ExtractionView[]>([]);
+  // Matches deleted while their pill shows: hidden until Undo or the delete lands.
+  const [goneExtractions, setGoneExtractions] = useState<Set<string>>(new Set());
+  // A reload while a delete's pill showed: the new page may have rendered
+  // before the delete landed; the rows stay hidden and the delete goes
+  // again (attachment-delete.ts).
+  useEffect(() => {
+    const ids = resumeDeletes(`/api/notebooks/${notebookId}/documents/${documentId}`);
+    if (ids.length === 0) return;
+    const hide = (prev: Set<string>) => new Set([...prev, ...ids]);
+    setGoneDistillations(hide);
+    setGoneExtractions(hide);
+  }, [notebookId, documentId]);
   // The document's translation (SPEC.md §19), one text per block, shown
   // under each block while the reader has it on.
   const [translations, setTranslations] = useState<Record<string, string> | null>(null);
@@ -6717,7 +6731,7 @@ export function ReaderInteractions({
   const allExtractions = [
     ...extractions,
     ...localExtractions.filter((x) => !extractions.some((p) => p.id === x.id)),
-  ];
+  ].filter((x) => !goneExtractions.has(x.id));
   const allExtractionsRef = useRef(allExtractions);
   allExtractionsRef.current = allExtractions;
 
@@ -6799,6 +6813,8 @@ export function ReaderInteractions({
       };
       setLocalDistillations((prev) => [fresh, ...prev]);
       setDistillShownId(fresh.id);
+      // The question landed: its draft in the box goes (extract-draft.ts).
+      clearExtractDraft(`doc:${runDocumentId}`, q);
       // The route dropped the replaced extraction with the new one's arrival.
       if (replaceId) setGoneDistillations((prev) => new Set(prev).add(replaceId));
       // The page may be closed: the pill's progress bar stops, and the toast
@@ -6819,28 +6835,37 @@ export function ReaderInteractions({
     }
   }
 
-  async function deleteDistillation(id: string) {
-    await deleteDistillations([id]);
+  function deleteDistillation(id: string) {
+    deleteDistillations([id]);
   }
 
-  // The selected extractions go in one call (SPEC.md §4).
-  async function deleteDistillations(ids: string[]) {
+  // The selected extractions go in one call (SPEC.md §4), with no ask: they
+  // leave the page at once, the pill offers Undo, and the PATCH waits for
+  // the pill to go (attachment-delete.ts).
+  function deleteDistillations(ids: string[]) {
     if (ids.length === 0) return;
-    try {
-      await api(`/api/notebooks/${notebookId}/documents/${documentId}`, "PATCH", {
-        removeDistillationIds: ids,
-      });
-      setLocalDistillations((prev) => prev.filter((d) => !ids.includes(d.id)));
+    const setGone = (gone: boolean) =>
       setGoneDistillations((prev) => {
         const next = new Set(prev);
-        for (const id of ids) next.add(id);
+        for (const id of ids) {
+          if (gone) next.add(id);
+          else next.delete(id);
+        }
         return next;
       });
-      if (distillShownId && ids.includes(distillShownId)) setDistillShownId(null);
-      router.refresh();
-    } catch (err) {
-      showError(err instanceof Error ? err.message : t("reader.deleteFailed"));
-    }
+    deleteWithUndo({
+      url: `/api/notebooks/${notebookId}/documents/${documentId}`,
+      body: { removeDistillationIds: ids },
+      ids,
+      message:
+        ids.length === 1 ? t("reader.extractionDeleted") : t("reader.extractionsDeleted", { n: ids.length }),
+      gone: () => {
+        setGone(true);
+        if (distillShownId && ids.includes(distillShownId)) setDistillShownId(null);
+      },
+      back: () => setGone(false),
+      failed: () => showError(t("common.notSaved")),
+    });
   }
 
   // A distilled quote lands as a note: caption as content, quote as source,
@@ -6901,25 +6926,30 @@ export function ReaderInteractions({
     flashSpan(quote.blockId, quote.start, quote.end);
   }
 
-  // The stored match goes; the caller says whether the reader hears about it.
-  async function removeExtraction(id: string) {
-    try {
-      await api(`/api/notebooks/${notebookId}/documents/${documentId}`, "PATCH", {
-        removeExtractionId: id,
+  // The stored match goes with no ask: its spans and its card leave at once,
+  // the pill offers Undo, and the PATCH waits for the pill to go
+  // (attachment-delete.ts). Match-it makes no new matches, so Undo is the
+  // only way back.
+  function deleteExtraction(id: string) {
+    const setGone = (gone: boolean) =>
+      setGoneExtractions((prev) => {
+        const next = new Set(prev);
+        if (gone) next.add(id);
+        else next.delete(id);
+        return next;
       });
-      setLocalExtractions((prev) => prev.filter((x) => x.id !== id));
-      return true;
-    } catch (err) {
-      showError(err instanceof Error ? err.message : t("reader.deleteFailed"));
-      return false;
-    }
-  }
-
-  async function deleteExtraction(id: string) {
-    if (!(await removeExtraction(id))) return;
-    setExtractCard(null);
-    router.refresh();
-    showToast(t("reader.extractionRemoved"));
+    deleteWithUndo({
+      url: `/api/notebooks/${notebookId}/documents/${documentId}`,
+      body: { removeExtractionId: id },
+      ids: [id],
+      message: t("reader.extractionRemoved"),
+      gone: () => {
+        setGone(true);
+        setExtractCard(null);
+      },
+      back: () => setGone(false),
+      failed: () => showError(t("common.notSaved")),
+    });
   }
 
   // Voice: stop whatever is reading — the audio element or the browser voice.
@@ -10750,7 +10780,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 {canEdit && (
                   <span className="flex items-center gap-3">
                     <button
-                      onClick={() => void deleteExtraction(extraction.id)}
+                      onClick={() => deleteExtraction(extraction.id)}
                       data-track="extract-card-delete"
                       className="text-xs font-semibold text-red-500 hover:text-red-700"
                       data-tip={t("reader.deleteExtractionTitle")}
@@ -12096,6 +12126,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       <Presence show={distillOpen} exit="fade">
       {distillOpen && (
         <DistillPage
+          documentId={documentId}
           distillations={allDistillations}
           shownId={distillShownId}
           running={distillRun}
@@ -12114,8 +12145,8 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           }}
           onAsk={() => setDistillShownId(null)}
           onClose={closeDistillPage}
-          onDelete={(id) => void deleteDistillation(id)}
-          onDeleteMany={(ids) => void deleteDistillations(ids)}
+          onDelete={(id) => deleteDistillation(id)}
+          onDeleteMany={(ids) => deleteDistillations(ids)}
           onJump={jumpToQuote}
           onAddNote={addQuoteNote}
           onAddSelection={(text, quote) => addSelectionNote(text, quote)}

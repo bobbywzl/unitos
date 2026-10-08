@@ -5,12 +5,15 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { splitStreamError } from "@/lib/derive/config";
 import { isImeKey, useImeGuard } from "@/lib/ime";
+import { quoteMarkdown } from "@/lib/quote-drag";
 import { DISTILL_REGENERATE_MAX, type CorpusDistillation, type CorpusDistillationView } from "@/lib/types";
 import { failureLine, modelFetch, noReason } from "@/components/assistant/failure";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { ChevronLeftIcon } from "@/components/icons";
 import { useLang, useT } from "@/components/lang-provider";
+import { deleteWithUndo, resumeDeletes } from "@/components/reader/attachment-delete";
+import { clearExtractDraft, useExtractDraft } from "@/components/reader/extract-draft";
 import { ExtractionList } from "@/components/reader/extraction-list";
 import { jumpUnlessSelecting as onQuoteClick, SelectionNotes } from "@/components/reader/selection-notes";
 import { ThinkingIndicator } from "@/components/thinking";
@@ -44,13 +47,18 @@ export function CorpusDistillPage({
   const ime = useImeGuard();
   const { canEdit } = useCollab();
   const dateLocale = lang === "zh" ? "zh-CN" : undefined;
-  const [question, setQuestion] = useState("");
+  // The question box keeps a draft per project until its extraction lands
+  // (extract-draft.ts).
+  const draftScope = `project:${notebookId}`;
+  const draft = useExtractDraft(draftScope);
+  const question = draft.text;
   const [currentId, setCurrentId] = useState<string | null>(shownId);
   const [running, setRunning] = useState<{ question: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [local, setLocal] = useState<CorpusDistillationView[]>([]);
   // Deleted or replaced: gone from the list at once, before the page reloads.
-  const [gone, setGone] = useState<Set<string>>(new Set());
+  // A delete still pending from before a reload stays hidden and goes again.
+  const [gone, setGone] = useState<Set<string>>(() => new Set(resumeDeletes(`/api/notebooks/${notebookId}`)));
   const [saved, setSaved] = useState<Set<string>>(new Set());
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -83,6 +91,7 @@ export function CorpusDistillPage({
     if (!trimmed || running) return;
     const controller = new AbortController();
     abortRef.current = controller;
+    draft.flush();
     setRunning({ question: trimmed });
     setError(null);
     setCurrentId(null);
@@ -133,6 +142,8 @@ export function CorpusDistillPage({
       };
       setLocal((prev) => [fresh, ...prev]);
       setCurrentId(fresh.id);
+      // The question landed: its draft in the box goes.
+      clearExtractDraft(draftScope, trimmed);
       // The route dropped the replaced extraction with the new one's arrival.
       if (replaceId) setGone((prev) => new Set(prev).add(replaceId));
       router.refresh();
@@ -145,26 +156,37 @@ export function CorpusDistillPage({
     }
   }
 
-  async function remove(id: string) {
-    await removeMany([id]);
+  function remove(id: string) {
+    removeMany([id]);
   }
 
-  // The selected extractions go in one call (SPEC.md §13).
-  async function removeMany(ids: string[]) {
+  // The selected extractions go in one call (SPEC.md §13), with no ask: they
+  // leave the page at once, the pill offers Undo, and the PATCH waits for
+  // the pill to go (attachment-delete.ts).
+  function removeMany(ids: string[]) {
     if (ids.length === 0) return;
-    try {
-      await api(`/api/notebooks/${notebookId}`, "PATCH", { removeDistillationIds: ids });
-      setLocal((prev) => prev.filter((d) => !ids.includes(d.id)));
+    const setGoneIds = (isGone: boolean) =>
       setGone((prev) => {
         const next = new Set(prev);
-        for (const id of ids) next.add(id);
+        for (const id of ids) {
+          if (isGone) next.add(id);
+          else next.delete(id);
+        }
         return next;
       });
-      if (currentId && ids.includes(currentId)) setCurrentId(null);
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("common.requestFailed"));
-    }
+    deleteWithUndo({
+      url: `/api/notebooks/${notebookId}`,
+      body: { removeDistillationIds: ids },
+      ids,
+      message:
+        ids.length === 1 ? t("reader.extractionDeleted") : t("reader.extractionsDeleted", { n: ids.length }),
+      gone: () => {
+        setGoneIds(true);
+        if (currentId && ids.includes(currentId)) setCurrentId(null);
+      },
+      back: () => setGoneIds(false),
+      failed: () => setError(t("common.notSaved")),
+    });
   }
 
   // Clicking a quote opens its document; the same document just closes the page.
@@ -398,7 +420,7 @@ export function CorpusDistillPage({
               <textarea
                 autoFocus
                 value={question}
-                onChange={(e) => setQuestion(e.target.value)}
+                onChange={(e) => draft.change(e.target.value)}
                 {...ime.props}
                 onKeyDown={(e) => {
                   if (ime.isImeEnter(e)) return;
