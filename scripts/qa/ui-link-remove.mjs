@@ -60,12 +60,19 @@ async function openCard(page) {
   await page.goto(`${BASE}/n/rev3-p?doc=rev4-d3&link=${LINK}`, { waitUntil: "networkidle", timeout: 300000 });
   // On a phone the Annotations tab opens from the rail.
   if (PHONE) {
-    await page.waitForTimeout(1500);
-    await page.getByRole("button", { name: zh ? "批注" : "Annotations", exact: true }).first().tap();
-    await page.waitForTimeout(1500);
-    if (process.env.DEBUG) await page.screenshot({ path: process.env.DEBUG });
+    // A tap before the page hydrates does nothing (a busy dev server takes seconds): tap again until the tab opens.
+    const tab = page.getByRole("button", { name: zh ? "批注" : "Annotations", exact: true }).first();
+    for (let i = 0; i < 6; i++) {
+      await page.waitForTimeout(1500);
+      await tab.tap();
+      await card(page).waitFor({ timeout: 5000 }).catch(() => {});
+      if (await card(page).isVisible().catch(() => false)) break;
+    }
   }
-  await card(page).waitFor({ timeout: 60000 });
+  await card(page).waitFor({ timeout: 60000 }).catch(async (e) => {
+    if (process.env.DEBUG) await page.screenshot({ path: process.env.DEBUG });
+    throw e;
+  });
   await card(page).scrollIntoViewIfNeeded();
 }
 const press = async (loc) => (PHONE ? loc.tap() : loc.click());
