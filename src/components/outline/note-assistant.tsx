@@ -6,6 +6,8 @@ import { api } from "@/lib/api";
 import { isImeKey } from "@/lib/ime";
 import { splitNote } from "@/lib/note-title";
 import { quotesOf } from "@/lib/notes/quote-sources";
+import { failureLine } from "@/components/assistant/failure";
+import { ACCEPT_CLASS, REJECT_CLASS, SEND_CLASS } from "@/components/assistant/decision-classes";
 import { useThinking } from "@/components/assistant/thinking-chips";
 import { useWeb, WebChip } from "@/components/assistant/web-chip";
 import { SparkleIcon } from "@/components/icons";
@@ -183,7 +185,7 @@ export function NoteAssistant({
     } catch (err) {
       // The message stays in the box: nothing was answered.
       setTurns((prev) => prev.slice(0, -1));
-      if (!controller.signal.aborted) setError(err instanceof Error ? err.message : String(err));
+      if (!controller.signal.aborted) setError(failureLine(err, t));
     } finally {
       setBusy(false);
       abortRef.current = null;
@@ -284,7 +286,6 @@ export function NoteAssistant({
       {turns.length === 0 && !busy && focused && !input.trim() && (
         <p className="px-3.5 pt-0.5 pb-1 text-[11.5px] leading-snug text-sand-500">{t("assistant.noteAssistantEmpty")}</p>
       )}
-      {error && <p className="px-3.5 pb-1 text-[11.5px] text-red-500">{error}</p>}
 
       <div className="flex items-end gap-2 border-t border-line px-3 py-2">
         <textarea
@@ -314,11 +315,18 @@ export function NoteAssistant({
           data-track="note-assistant-send"
           data-tip={t("reader.sendTitle")}
           // The card's Send (reader-interactions.tsx): one size and color.
-          className="mb-1 shrink-0 rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+          className={`mb-1 shrink-0 ${SEND_CLASS}`}
         >
           {t("assistant.send")}
         </button>
       </div>
+      {/* Why the message did not go, under the box that sent it; its words
+          are still in the box (SPEC.md §7). */}
+      {error && (
+        <p role="alert" className="-mt-1 px-3.5 pb-2 text-[12px] font-medium text-red-600">
+          {error}
+        </p>
+      )}
     </section>
   );
 }
@@ -370,7 +378,7 @@ function Proposal({
               type="button"
               onClick={onApply}
               data-track="note-assistant-apply"
-              className="rounded-full bg-sage-600 px-3 py-1 text-xs font-semibold text-sage-fg hover:bg-sage-700"
+              className={ACCEPT_CLASS}
             >
               {t("common.accept")}
             </button>
@@ -378,7 +386,7 @@ function Proposal({
               type="button"
               onClick={onDiscard}
               data-track="note-assistant-discard"
-              className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+              className={REJECT_CLASS}
             >
               {t("common.reject")}
             </button>
@@ -391,7 +399,7 @@ function Proposal({
               type="button"
               onClick={onUndo}
               data-track="note-assistant-undo"
-              className="ml-auto rounded-full border border-line px-2.5 py-0.5 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+              className={REJECT_CLASS}
             >
               {t("assistant.noteAssistantUndo")}
             </button>

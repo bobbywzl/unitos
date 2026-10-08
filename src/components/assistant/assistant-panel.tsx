@@ -67,6 +67,9 @@ import { splitActionsFence } from "@/lib/assistant/fence";
 import { RatingButtons } from "@/components/rating-buttons";
 import { LoadingDots, ThinkingIndicator } from "@/components/thinking";
 import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
+import { deleteConversationWithUndo } from "@/components/assistant/conversation-delete";
+import { failureLine, modelFetch } from "@/components/assistant/failure";
+import { SEND_CLASS } from "@/components/assistant/decision-classes";
 import { KeptTextarea } from "@/components/kept-field";
 import { AnswerMarkdown } from "@/components/assistant/answer-markdown";
 
@@ -683,30 +686,38 @@ export function AssistantPanel({
     }
   }
 
-  // Delete a conversation from the list: the note is gone, its side chats
-  // and comments with it. The open one deleted leaves an empty thread.
-  async function deleteConversation(id: string) {
-    if (!confirm(t("assistant.conversationDeleteConfirm"))) return;
+  // Delete a conversation from the list (SPEC.md §7): no ask; the notes'
+  // Undo pill offers Undo, and once it goes the note goes through
+  // DELETE /api/notes/:id, its side chats and comments with it, all kept for
+  // History's Restore. The open one deleted leaves an empty thread; Undo
+  // brings it back.
+  function deleteConversation(id: string) {
     setListError(null);
-    try {
-      const res = await fetch("/api/assistant/conversation", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notebookId, conversationNoteId: id }),
-      });
-      if (!res.ok) {
-        const json = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(json?.error ?? t("assistant.requestFailedStatus", { status: res.status }));
-      }
-    } catch (err) {
-      setListError(err instanceof Error ? err.message : t("common.requestFailed"));
-      return;
-    }
-    setConversations((list) => (list ? list.filter((c) => c.id !== id) : list));
-    if (id === conversationNoteId) {
-      showConversation({ noteId: null, turns: [], sideChats: [] });
-      setListOpen(true);
-    }
+    const wasOpen = id === conversationNoteId;
+    const shown = wasOpen
+      ? { noteId: noteIdRef.current, turns: turnsRef.current, sideChats: sideChatsRef.current }
+      : null;
+    deleteConversationWithUndo({
+      noteId: id,
+      message: t("assistant.conversationDeleted"),
+      gone: () => {
+        setConversations((all) => (all ? all.filter((c) => c.id !== id) : all));
+        if (wasOpen) {
+          showConversation({ noteId: null, turns: [], sideChats: [] });
+          setListOpen(true);
+        }
+      },
+      // Undo: the list reads the server again (the note is still there), and
+      // the thread comes back when nothing took its place.
+      back: () => {
+        void loadConversations();
+        if (shown && noteIdRef.current === null && turnsRef.current.length === 0) {
+          showConversation(shown);
+          setListOpen(true);
+        }
+      },
+      failed: () => setListError(t("assistant.conversationDeleteFailed")),
+    });
   }
 
   // The comments under the open thread, reloaded when the thread changes.
@@ -885,12 +896,12 @@ export function AssistantPanel({
     const controller = new AbortController();
     recAbortRef.current = controller;
     try {
-      const res = await fetch("/api/derive", {
+      const res = await modelFetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
         body: JSON.stringify({ type: "SUMMARIZE", documentId, notebookId, depth }),
-      });
+      }, t);
       if (!res.ok || !res.body) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
         throw new Error(detail?.error ?? t("assistant.requestFailedStatus", { status: res.status }));
@@ -1203,12 +1214,12 @@ export function AssistantPanel({
         // Where "here" is on the open page (SPEC.md §29).
         caretBlockId: scope === "document" && documentId ? caretBlockIn(documentId) : undefined,
       };
-      const res = await fetch("/api/assistant", {
+      const res = await modelFetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
         body: JSON.stringify(body),
-      });
+      }, t);
       if (!res.ok || !res.body) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
         throw new Error(
@@ -1262,7 +1273,7 @@ export function AssistantPanel({
         return;
       }
       takeBack();
-      setError(err instanceof Error ? err.message : t("assistant.assistantFailed"));
+      setError(failureLine(err, t));
     } finally {
       if (runAbortRef.current === controller) runAbortRef.current = null;
       setBusy(false);
@@ -1292,12 +1303,12 @@ export function AssistantPanel({
     const controller = new AbortController();
     runAbortRef.current = controller;
     try {
-      const res = await fetch("/api/assistant", {
+      const res = await modelFetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
         body: JSON.stringify({ notebookId, scope: "notebook", task, thinking }),
-      });
+      }, t);
       const json = (await res.json().catch(() => null)) as
         | { issues?: Issue[]; error?: string }
         | null;
@@ -1307,7 +1318,7 @@ export function AssistantPanel({
     } catch (err) {
       // Stopped, not failed: no cards, no error.
       if (controller.signal.aborted) return;
-      setError(err instanceof Error ? err.message : t("assistant.taskFailed"));
+      setError(failureLine(err, t));
     } finally {
       if (runAbortRef.current === controller) runAbortRef.current = null;
       setBusy(false);
@@ -1627,7 +1638,7 @@ export function AssistantPanel({
           data-tip={busy ? t(canQueue ? "assistant.queueTitle" : "assistant.stopAsk") : t("reader.sendTitle")}
           aria-label={busy && !canQueue ? t("assistant.stopAsk") : undefined}
           // The card's Send (reader-interactions.tsx): one size and color.
-          className="rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+          className={SEND_CLASS}
         >
           {busy && !canQueue ? <StopIcon size={11} /> : t(canQueue ? "assistant.queue" : "assistant.send")}
         </button>
@@ -1708,7 +1719,7 @@ export function AssistantPanel({
                       </span>
                     </button>
                     <button
-                      onClick={() => void deleteConversation(c.id)}
+                      onClick={() => deleteConversation(c.id)}
                       data-track="assistant-conversation-delete"
                       aria-label={t("assistant.conversationDelete")}
                       data-tip={t("assistant.conversationDelete")}
@@ -1912,7 +1923,6 @@ export function AssistantPanel({
               ))}
             </div>
           )}
-          {error && <p className="text-sm text-red-600">{error}</p>}
           <CommentList
             comments={comments}
             people={{ ...people, ...commentPeople }}
@@ -1943,6 +1953,13 @@ export function AssistantPanel({
             {scopeRow}
             {composer}
           </>
+        )}
+        {/* Why the last message (or comment) did not go, under the box that
+            sent it; its words are back in the box (SPEC.md §7). */}
+        {error && (
+          <p role="alert" className="-mt-1.5 px-1 text-[12px] font-medium text-red-600">
+            {error}
+          </p>
         )}
         <AnswerTint rects={tintRects} />
         {selection && (

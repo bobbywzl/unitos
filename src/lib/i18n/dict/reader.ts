@@ -158,9 +158,9 @@ const en = {
   fontMono: "Mono",
   backToReading: "Back to reading (Esc)",
   editHint:
-    "Double-click any paragraph to edit it. Click the title to edit it. Hold and draw a small circle on a figure or a table for its tools.",
+    "Double-click any paragraph to edit it. Click the title to edit it. Click a figure, or hold and draw a small circle on a table, for its tools.",
   touchHint:
-    "Hold a word and drag the handles to select text. The tools open next to the selection. Double-tap any paragraph to edit it. Tap the title to edit it. Hold and draw a small circle on a figure or a table for its tools.",
+    "Hold a word and drag the handles to select text. The tools open next to the selection. Double-tap any paragraph to edit it. Tap the title to edit it. Tap a figure, or hold and draw a small circle on a table, for its tools.",
   documentTitle: "Document title",
   renameDocumentTitle: "Click to edit the title",
 
@@ -306,7 +306,7 @@ const en = {
   appliedActions: "Applied {n} action{s}.",
   proposedActions: "Proposed {n} action{s} — approve them in the plan card.",
   noActions: "The assistant proposed no actions.",
-  actionsApplied: "{n} action{s} applied",
+  actionsApplied: "{n} action{s} accepted",
   actionsUndone: "{n} action{s} undone",
   undo: "Undo",
   failedPrefix: "failed: {what}",
@@ -461,9 +461,9 @@ const zh: Record<keyof typeof en, string> = {
   fontMono: "等宽",
   backToReading: "返回阅读（Esc）",
   editHint:
-    "双击任意段落即可编辑。点击标题即可编辑。在插图或表格上按住并画一个小圈，可打开它的工具。",
+    "双击任意段落即可编辑。点击标题即可编辑。点击插图，或在表格上按住并画一个小圈，可打开它的工具。",
   touchHint:
-    "长按一个词并拖动选择柄以选中文本，工具出现在选中内容旁边。双击任意段落即可编辑。点击标题即可编辑。在插图或表格上按住并画一个小圈，可打开它的工具。",
+    "长按一个词并拖动选择柄以选中文本，工具出现在选中内容旁边。双击任意段落即可编辑。点击标题即可编辑。点击插图，或在表格上按住并画一个小圈，可打开它的工具。",
   documentTitle: "文档标题",
   renameDocumentTitle: "点击编辑标题",
 
@@ -606,7 +606,7 @@ const zh: Record<keyof typeof en, string> = {
   appliedActions: "已应用 {n} 个操作。",
   proposedActions: "已提议 {n} 个操作——请在计划卡片中批准。",
   noActions: "助手未提议任何操作。",
-  actionsApplied: "已应用 {n} 个操作",
+  actionsApplied: "已接受 {n} 个操作",
   actionsUndone: "已撤销 {n} 个操作",
   undo: "撤销",
   failedPrefix: "失败：{what}",

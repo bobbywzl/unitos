@@ -202,6 +202,9 @@ import {
 import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 import { KeptInput, KeptTextarea, type KeptFieldHandle } from "@/components/kept-field";
 import { AnswerMarkdown } from "@/components/assistant/answer-markdown";
+import { deleteConversationWithUndo } from "@/components/assistant/conversation-delete";
+import { modelFetch } from "@/components/assistant/failure";
+import { ACCEPT_CLASS, REJECT_CLASS, SEND_CLASS } from "@/components/assistant/decision-classes";
 
 // One block's span of a selection (SPEC.md §5).
 type Segment = Omit<SourceInput, "documentId">;
@@ -340,13 +343,14 @@ function isTextEntry(el: HTMLElement): boolean {
 /** A call that needs a model, outside api() (a stream, or a call that
     must not count in the save indicator). Offline it fails at once with the
     plain message (SPEC.md §17), as api() does, and a request the network
-    drops while offline says the same. */
-async function fetchWithModel(path: string, init: RequestInit, offlineMessage: string): Promise<Response> {
+    drops while offline says the same; online, a dropped request or a server
+    failure reads as the assistant's one failure line (failure.ts). */
+async function fetchWithModel(path: string, init: RequestInit, offlineMessage: string, t: TFunc): Promise<Response> {
   if (isOffline()) throw new Error(offlineMessage);
   try {
-    return await fetch(path, init);
+    return await modelFetch(path, init, t);
   } catch (err) {
-    if (!init.signal?.aborted && err instanceof TypeError && isOffline()) throw new Error(offlineMessage);
+    if (!init.signal?.aborted && isOffline()) throw new Error(offlineMessage);
     throw err;
   }
 }
@@ -1950,8 +1954,11 @@ export function ReaderInteractions({
       ...referenceContent(input.kind, input.content, input.quote, input.turns ?? 0),
     };
   };
+  // On a touch screen the grip takes the 36 px target the head's buttons have.
   const annotationGrip = (reference: AnnotationReference | null) =>
-    dropOpen && reference ? <AnnotationGrip reference={reference} className="-ml-1" /> : null;
+    dropOpen && reference ? (
+      <AnnotationGrip reference={reference} className="-ml-1 justify-center pointer-coarse:size-9" />
+    ) : null;
   // A hold on the card's blank space, off its controls and off the header
   // that moves the card (data-no-drag), lifts the annotation. A press on the
   // card's text — where the pointer shows the I-beam — selects the text and
@@ -2420,11 +2427,21 @@ export function ReaderInteractions({
     // a message queued under it waits in the card's draft.
     setAssistantChat(null);
   }
-  async function deleteAssistantConversation() {
+  // The card's trash (SPEC.md §7): no ask; the notes' Undo pill offers Undo,
+  // and once it goes the conversation goes through DELETE /api/notes/:id,
+  // kept for History's Restore. Its mark goes now and comes back on Undo.
+  function deleteAssistantConversation() {
     const chat = assistantChat;
     if (!chat?.noteId || chat.busy) return;
+    const noteId = chat.noteId;
     setAssistantChat(null);
-    await deleteNote(chat.noteId, t("reader.conversationRemoved"));
+    deleteConversationWithUndo({
+      noteId,
+      message: t("assistant.conversationDeleted"),
+      gone: () => broadcastNoteRemoved(noteId),
+      back: () => broadcastNoteRestored(noteId),
+      failed: () => showError(t("assistant.conversationDeleteFailed")),
+    });
   }
   function closeCommentCard() {
     setCommentCard(null);
@@ -2496,7 +2513,7 @@ export function ReaderInteractions({
       const kind = card?.dataset.sideCard;
       let moved = false;
       // While the pointer moves, the card moves by its style alone, so a move
-      // renders nothing (TOOL14-02); the drop writes where it landed.
+      // renders nothing; the drop writes where it landed.
       let at = start;
       const onMove = (ev: PointerEvent) => {
         if (!moved && kind) {
@@ -2533,7 +2550,7 @@ export function ReaderInteractions({
   // Offline, the tools that need a model are off (SPEC.md §17): their rows
   // are dimmed, their tooltip says why, and a press shows the plain message.
   const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine, () => true);
-  const aiFetch = (path: string, init: RequestInit) => fetchWithModel(path, init, t("common.offlineAi"));
+  const aiFetch = (path: string, init: RequestInit) => fetchWithModel(path, init, t("common.offlineAi"), t);
 
   // Coarse pointer (tablet, phone): the selection tools dock under the
   // selection, the rows are tap-sized, and the colors and Add to notes sit
@@ -7331,10 +7348,10 @@ export function ReaderInteractions({
       if (!commandText && !aiTyped().trim()) setAiCommand(command);
       if (controller.signal.aborted) return;
       const message = err instanceof Error ? err.message : t("reader.assistantFailed");
-      // The error shows in the box that asked; with that box gone, as a toast.
+      // The error shows in the box that asked, once (not in the article's
+      // error log as well); with that box gone, as a toast.
       if (popoverRef.current?.anchor === sent.anchor) {
         setAiError({ text: message, from: anchor });
-        reportError(message, documentId);
       } else showError(message);
     } finally {
       if (chatAbortRef.current === controller) chatAbortRef.current = null;
@@ -8283,8 +8300,9 @@ export function ReaderInteractions({
     }
   }
 
-  // How long the Undo toast stays after the plan's actions run.
-  const UNDO_MS = 8000;
+  // How long the Undo toast stays after the plan's actions run: the notes'
+  // Undo pill's 12 s, one Undo time everywhere.
+  const UNDO_MS = 12000;
 
   // Every applied action records the request that takes it back; Undo runs
   // them newest first. A block's text and kind come from the article as it
@@ -9565,7 +9583,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           disabled={!card.busy && !card.input.trim()}
           data-tip={card.busy ? t(card.input.trim() ? "assistant.queueTitle" : "reader.stopAssistant") : t("reader.sendTitle")}
           aria-label={card.busy && !card.input.trim() ? t("reader.stopAssistant") : undefined}
-          className="rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+          className={SEND_CLASS}
         >
           {card.busy ? (card.input.trim() ? t("assistant.queue") : <StopIcon size={11} />) : t("reader.send")}
         </button>
@@ -9704,7 +9722,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         disabled={!chat.busy && !chat.input.trim()}
         data-tip={chat.busy ? t(chat.input.trim() ? "assistant.queueTitle" : "reader.stopAssistant") : t("reader.sendTitle")}
         aria-label={chat.busy && !chat.input.trim() ? t("reader.stopAssistant") : undefined}
-        className="rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+        className={SEND_CLASS}
       >
         {chat.busy ? (chat.input.trim() ? t("assistant.queue") : <StopIcon size={11} />) : t("reader.send")}
       </button>
@@ -9975,7 +9993,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           onClick={() => void approvePlan()}
           data-track="plan-apply"
           data-tip={t("reader.applyActionsTitle")}
-          className="rounded-full bg-clay px-4 py-1.5 text-xs font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+          className={ACCEPT_CLASS}
         >
           {t("reader.applyActions", { n: planChecked.size, s: plural(planChecked.size) })}
         </button>
@@ -9983,7 +10001,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           onClick={() => setAiPlan(null)}
           data-track="plan-cancel"
           data-tip={t("reader.discardPlanTitle")}
-          className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+          className={REJECT_CLASS}
         >
           {t("common.reject")}
         </button>
@@ -10958,7 +10976,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   data-track="assistant-run"
                   data-tip={aiBusy ? t("reader.stopAssistant") : t("reader.sendTitle")}
                   aria-label={aiBusy ? t("reader.stopAssistant") : undefined}
-                  className="rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+                  className={SEND_CLASS}
                 >
                   {aiBusy ? <StopIcon size={11} /> : t("reader.send")}
                 </button>
@@ -11790,7 +11808,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               {assistantChat.messages.length > 0 && expandButton("assistant")}
               {assistantChat.noteId && (
                 <button
-                  onClick={() => void deleteAssistantConversation()}
+                  onClick={deleteAssistantConversation}
                   data-track="assistant-card-delete"
                   className={CARD_ACTION}
                   aria-label={t("common.delete")}
@@ -12078,7 +12096,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               onClick={() => void runBar(bar)}
               data-track="assistant-run"
               data-tip={t("reader.sendTitle")}
-              className="rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40 pointer-coarse:py-2"
+              className={SEND_CLASS}
             >
               {t("reader.send")}
             </button>
