@@ -322,6 +322,9 @@ export type HistoryEntry = {
   restoreLinkId?: string;
   // LINK_ADD: the link came back by Undo or Restore (meta.restored).
   restored?: boolean;
+  // LINK_REMOVE: a recommended link dismissed and hidden, not deleted
+  // (meta.dismissed; REV6-02).
+  dismissed?: boolean;
 };
 
 // ── Stitch (SPEC.md §22): the assistant over the project's documents, from the graph ──

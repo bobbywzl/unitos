@@ -1,9 +1,10 @@
 // Remove on a link hides it and never deletes it; Undo and History's Restore
 // bring it back (WALK5-01, WALK5-08); an older tab's Remove of a link that
 // must stay for another account answers 409 Reload and hides nothing
-// (REV5-01). Runs on a COPY of the database seeded with the round 3, 4 and 5
+// (REV5-01); Remove hides in the project it was pressed in (REV6-01); a
+// Dismiss that hides is recorded and restores (REV6-02). Runs on a COPY of the database seeded with the round 3, 4 and 5
 // review seeds (.qa-tmp/stitch/r3/rev/seed.sql, seed2.sql, r4/rev/seed4.sql,
-// r5/audit/rev/seed5.sql): A (rev3-sa) owns P (rev3-p) and Q, B (rev3-sb)
+// r5/audit/rev/seed5.sql, r6/audit/rev/seed6.sql): A (rev3-sa) owns P (rev3-p) and Q, B (rev3-sb)
 // owns Z (rev5-z) holding rev4-d3/d4 too, C (rev3-sc) edits P and Z, V
 // (rev5-sv) views P. A sign-in-on dev server must run on the same copy.
 //
@@ -156,11 +157,52 @@ async function main() {
   const r5 = await call("A", "DELETE", `/api/links/${rec}?notebookId=${P}`);
   check("Dismiss on A's recommended link with no replies: 200, the proposal is deleted, no history record", r5.status === 200 && !(await db.docLink.findUnique({ where: { id: rec } })) && !(await removeEdit(rec)), String(r5.status));
 
+  // ── 6. REV6-01: Remove hides in the project it was pressed in ───────────
+  // rev6-d7/d8 (r6/audit/rev/seed6.sql): only A's P and Q hold them.
+  console.log("== Remove in P leaves Q's link (REV6-01)");
+  const Q = "rev3-q";
+  const d78 = { from: "rev6-d7", fromBlock: "rev6-b7", to: "rev6-d8", toBlock: "rev6-b8" };
+  const sib = await link({ by: U.A, notebookId: null, ...d78 });
+  const r6 = await call("A", "DELETE", `/api/links/${sib}?notebookId=${P}`);
+  check("A removes a link with no project from P: hidden in P only", r6.status === 200 && JSON.stringify(await hiddenIn(sib)) === JSON.stringify([P]), `${r6.status} ${await hiddenIn(sib)}`);
+  check("…Q still draws it, P does not", (await graphLinks("A", Q)).includes(sib) && !(await graphLinks("A", P)).includes(sib));
+  await call("A", "DELETE", `/api/links/${sib}/hidden?notebookId=${P}`);
+  // A record a round 5 build wrote (notebookId P, hiddenIn P and Q) lists, with
+  // Restore, in Q too: History reads hiddenIn first.
+  const old5 = await link({ by: U.A, notebookId: null, ...d78 });
+  await db.docLinkHidden.createMany({ data: [P, Q].map((notebookId) => ({ docLinkId: old5, notebookId, userId: U.A })) });
+  await db.blockEdit.create({
+    data: { documentId: "rev6-d7", blockId: "rev6-b7", kind: "LINK_REMOVE", userId: U.A, meta: { linkId: old5, notebookId: P, hiddenIn: [P, Q], toDocumentId: "rev6-d8", toTitle: "REV6 D8", quotedText: "Suffering" } },
+  });
+  const pageQ = await fetch(`${BASE}/n/${Q}`, { headers: { Cookie: `dissect-session=${S.A}` } }).then((r) => r.text());
+  check("a round 5 removal hidden in P and Q: Q's History offers Restore", offersRestore(pageQ, old5), `page ${pageQ.length} bytes`);
+  const rq = await call("A", "DELETE", `/api/links/${old5}/hidden?notebookId=${Q}`);
+  check("…Restore in Q: 200, Q draws it, P still does not", rq.status === 200 && (await graphLinks("A", Q)).includes(old5) && !(await graphLinks("A", P)).includes(old5), String(rq.status));
+
+  // ── 7. REV6-02: a Dismiss that hides records it, and Restore brings it back ──
+  console.log("== Dismiss with another account's reply (REV6-02)");
+  const recC = await link({ by: U.A, notebookId: null, ...d78, recommended: true, reason: "SAFE6: Stitch proposed this" });
+  await db.reply.create({ data: { docLinkId: recC, userId: U.C, content: "SAFE6: C's reply, keep this one" } });
+  const r7 = await call("A", "DELETE", `/api/links/${recC}?notebookId=${P}`);
+  const meta7 = (await removeEdit(recC))?.meta as Record<string, unknown> | null;
+  check("A dismisses it in P: 200, hidden in P only, row and C's reply kept", r7.status === 200 && JSON.stringify(await hiddenIn(recC)) === JSON.stringify([P]) && (await db.reply.count({ where: { docLinkId: recC } })) === 1, `${r7.status} ${r7.text.slice(0, 160)}`);
+  check("…a LINK_REMOVE record with dismissed: true", meta7?.dismissed === true && JSON.stringify(meta7?.hiddenIn) === JSON.stringify([P]), JSON.stringify(meta7));
+  const page7 = await fetch(`${BASE}/n/${P}`, { headers: { Cookie: `dissect-session=${S.A}` } }).then((r) => r.text());
+  check("…P's History offers Restore and marks the row dismissed", offersRestore(page7, recC) && (page7.includes(`"dismissed":true`) || page7.includes(`\\"dismissed\\":true`)));
+  const recIds = async (nb: string) => ((JSON.parse((await call("A", "GET", `/api/notebooks/${nb}/graph`)).text) as { recommendedIds?: string[] }).recommendedIds ?? []);
+  check("…Q still lists it under Recommended links, P does not", (await recIds(Q)).includes(recC) && !(await recIds(P)).includes(recC));
+  const r7b = await call("C", "DELETE", `/api/links/${recC}/hidden?notebookId=${P}`);
+  check("C (editor) restores it: 200, back under P's Recommended links, still recommended", r7b.status === 200 && (await recIds(P)).includes(recC) && (await db.docLink.findUnique({ where: { id: recC } }))?.recommended === true, String(r7b.status));
+  const rec2 = await link({ by: U.A, notebookId: P, ...d78, recommended: true });
+  const r7c = await call("A", "DELETE", `/api/links/${rec2}?notebookId=${P}`);
+  check("a Dismiss nobody replied on still deletes and records nothing", r7c.status === 200 && !(await db.docLink.findUnique({ where: { id: rec2 } })) && !(await removeEdit(rec2)));
+
   // ── Every reply this run did not make is untouched ───────────────────────
-  check("Reply rows: only this run's 2 were added", (await db.reply.count()) === replies0 + 2);
+  check("Reply rows: only this run's 3 were added", (await db.reply.count()) === replies0 + 3);
 
   // Clean up only this run's rows.
   await db.blockEdit.deleteMany({ where: { OR: made.map((id) => ({ meta: { path: ["linkId"], equals: id } })) } });
+  await db.docLinkHidden.deleteMany({ where: { docLinkId: { in: made } } });
   await db.docLink.deleteMany({ where: { id: { in: made } } });
   await db.notebookDocument.deleteMany({ where: { documentId: { in: docs.map((d) => d.id) } } });
   await db.document.deleteMany({ where: { id: { in: docs.map((d) => d.id) } } });

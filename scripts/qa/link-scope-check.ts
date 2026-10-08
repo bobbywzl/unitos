@@ -13,7 +13,8 @@
 //   4. No project named (an older tab): a removal of a link that must stay
 //      for another account answers 409 Reload and hides nothing (REV5-01),
 //      also when a second owner's project holds both documents; asked from
-//      a project it hides the link there only; a hidden link answers 404 to
+//      a project it hides the link there only, also when another project of
+//      the same owner holds both documents (REV6-01); a hidden link answers 404 to
 //      reason edits, replies, and removals.
 //
 // Run, with a dev server on the same database copy, sign-in on, and the mock
@@ -239,11 +240,12 @@ check(
   `${legacyOld.status} ${legacyOld.text.slice(0, 160)}`,
 );
 check("A removes A's own link with no project from A's project, though B's project holds both documents (the maker may)", (await call(A, "DELETE", `/api/links/${legacyA}?notebookId=${PA}`)).status === 200);
-// B's project still shows it (REV3-02): the removal hides it in A's projects only.
+// B's project still shows it (REV3-02), and so does A's other project A2:
+// the removal hides it in the project it was removed from only (REV6-01).
 check(
-  "the removed link stays in B's project: hidden in A's projects, not in B's",
-  (await db.docLinkHidden.count({ where: { docLinkId: legacyA } })) > 0 &&
-    (await db.docLinkHidden.count({ where: { docLinkId: legacyA, notebookId: PB } })) === 0,
+  "the removed link stays in B's project and in A's A2: hidden in A's project PA only",
+  (await db.docLinkHidden.count({ where: { docLinkId: legacyA, notebookId: PA } })) === 1 &&
+    (await db.docLinkHidden.count({ where: { docLinkId: legacyA } })) === 1,
 );
 await db.docLink.delete({ where: { id: legacyA } }); // this run's row
 check("digest: A's project lists A's link, B's does not", (await digestHas(PA)) && !(await digestHas(PB)));
@@ -368,10 +370,16 @@ check(
   `${cScoped2.status} ${cScoped2.text.slice(0, 160)}`,
 );
 await db.notebook.delete({ where: { id: B2 } }); // this run's project
+// A's other project holds X and Y too: a removal from PA3 leaves it there (REV6-01).
+const PA4 = await project(A.id, "QA Link Scope A4", [X.id, Y.id]);
 const cRemove = await call(C, "DELETE", `/api/links/${legacy}?notebookId=${PA3}`);
 const kept = await db.docLink.findUnique({ where: { id: legacy }, include: { replies: true } });
 check("C removes A's link from A's project: 200, the row and A's reply stay", cRemove.status === 200 && !!kept && kept.replies.length === 1, `${cRemove.status} ${cRemove.text.slice(0, 160)}`);
 check("…and it is hidden in A's project C edits", (await db.docLinkHidden.count({ where: { docLinkId: legacy, notebookId: PA3 } })) === 1);
+check("…and not in A's other project that holds both documents", (await db.docLinkHidden.count({ where: { docLinkId: legacy, notebookId: PA4 } })) === 0);
+const removal = await db.blockEdit.findFirst({ where: { kind: "LINK_REMOVE", meta: { path: ["linkId"], equals: legacy } } });
+check("…its record names PA3 alone in hiddenIn", JSON.stringify((removal?.meta as { hiddenIn?: unknown } | null)?.hiddenIn) === JSON.stringify([PA3]));
+await db.notebook.delete({ where: { id: PA4 } }); // this run's project
 const hiddenTries: [string, { status: number }][] = [
   ["PATCH reason", await call(A, "PATCH", `/api/links/${legacy}`, { reason: "set from an older tab" })],
   ["reply", await call(A, "POST", "/api/replies", { docLinkId: legacy, content: "reply from an older tab" })],

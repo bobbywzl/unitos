@@ -1247,7 +1247,7 @@ export default async function NotebookPage(props: {
   // A removed link still hidden in this project: its newest LINK_REMOVE
   // entry gets Restore, for an editor or the owner (WALK5-01, WALK5-08).
   const linkMeta = (meta: unknown) =>
-    (meta && typeof meta === "object" && !Array.isArray(meta) ? meta : {}) as { linkId?: unknown; restored?: unknown };
+    (meta && typeof meta === "object" && !Array.isArray(meta) ? meta : {}) as { linkId?: unknown; restored?: unknown; dismissed?: unknown };
   const removedLinkIds = [
     ...new Set(
       allEdits.flatMap((e) => {
@@ -1303,6 +1303,7 @@ export default async function NotebookPage(props: {
         trivial: trivial.get(e.id) ?? false,
         ...(restoreLinkId ? { restoreLinkId } : {}),
         ...(e.kind === "LINK_ADD" && linkMeta(e.meta).restored === true ? { restored: true } : {}),
+        ...(e.kind === "LINK_REMOVE" && linkMeta(e.meta).dismissed === true ? { dismissed: true } : {}),
       };
     }),
   ]
