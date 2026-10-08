@@ -3,14 +3,18 @@ import { DEFAULT_LANG, isLang, LANG_COOKIE, type Lang } from "@/lib/i18n/config"
 import { translate } from "@/lib/i18n/dictionaries";
 import { newNoteId } from "@/lib/notes/client-id";
 import { isAiCall } from "@/lib/offline/ai-routes";
-import { isOffline, offlinePremium, queueWrite } from "@/lib/offline/queue";
+import { isOffline, offlinePremium, queueWrite, isServerError } from "@/lib/offline/queue";
 import { beginWrite, endWrite } from "@/lib/save-state";
 import { tabAccount } from "@/lib/tab-account";
 
 // Offline work (SPEC.md §17, Unitos Premium): these writes replay cleanly and
 // their callers never read the response body, so while offline they queue in
-// IndexedDB and sync when the browser is back online. Everything else still
-// fails offline — a queued response could not stand in for the real one.
+// IndexedDB and sync when the browser is back online. A write the server
+// answered with an error (a 5xx, a 408, a 429: down or busy) queues the same
+// way and is tried again, so a flaky server costs no more than no network.
+// Everything else still fails — a queued response could not stand in for the
+// real one. A caller that reads the answer but takes a queued one too says so
+// (`queue: true`).
 const QUEUEABLE: { method: string; path: RegExp }[] = [
   { method: "POST", path: /^\/api\/notes$/ },
   { method: "PATCH", path: /^\/api\/notes\/[^/]+$/ },
@@ -29,8 +33,9 @@ const QUEUEABLE: { method: string; path: RegExp }[] = [
   { method: "DELETE", path: /^\/api\/links\/[^/]+$/ },
 ];
 
-function queueable(path: string, method: string, body: unknown): boolean {
-  return QUEUEABLE.some((q) => q.method === method && q.path.test(path)) && !isAiCall(path, body);
+function queueable(path: string, method: string, body: unknown, optIn = false): boolean {
+  if (isAiCall(path, body) || method === "PUT") return false;
+  return optIn || QUEUEABLE.some((q) => q.method === method && q.path.test(path));
 }
 
 // A note write as it waits in the offline queue (SPEC.md §17). A create
@@ -48,6 +53,12 @@ function queuedBody(path: string, method: string, body: unknown): unknown {
 }
 
 /** A refused call: the status and the body the route answered with. */
+/** The one failure line of a write (SPEC.md §17): "Not saved" and what the
+    reader can do. The status and the server's text go to the console. */
+function notSaved(): string {
+  return translate(clientLang(), isOffline() ? "common.offline" : "common.notSaved");
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -80,12 +91,17 @@ export async function api<T = unknown>(
   // refusalIsAnswer: a refusal (409, a 4xx) answers a question, such as
   // whether an undo can still run; nothing went unsaved, so the save
   // indicator does not read Not saved.
-  init?: { signal?: AbortSignal; refusalIsAnswer?: boolean },
+  // queue: the caller takes a queued answer ({queued: true}) for a write
+  // that is not in QUEUEABLE (the toolbox's highlight and comment).
+  init?: { signal?: AbortSignal; refusalIsAnswer?: boolean; queue?: boolean },
 ): Promise<T> {
   beginWrite();
   try {
     const result = await send<T>(path, method, body, init);
-    endWrite(true, path.split("?")[0]);
+    // Queued after the server answered with an error: Not saved until the
+    // queue lands it (lib/offline/queue.ts settles the line).
+    const failedQueued = Boolean(result && typeof result === "object" && (result as { serverError?: unknown }).serverError);
+    endWrite(!failedQueued, failedQueued ? undefined : path.split("?")[0], failedQueued);
     return result;
   } catch (err) {
     const answered = Boolean(init?.refusalIsAnswer) && err instanceof ApiError && err.status >= 400 && err.status < 500;
@@ -102,7 +118,7 @@ async function send<T>(
   path: string,
   method: "POST" | "PUT" | "PATCH" | "DELETE",
   body: unknown,
-  init?: { signal?: AbortSignal },
+  init?: { signal?: AbortSignal; queue?: boolean },
 ): Promise<T> {
   // The tab's rendered account rides along; the middleware rejects the call
   // when the browser has since signed into a different account (stale tab).
@@ -130,23 +146,44 @@ async function send<T>(
     if (err instanceof Error && !(err instanceof TypeError)) throw err;
     // Network failure. With Unitos Premium the queueable writes save offline
     // and sync later (SPEC.md §17); everything else reports plainly.
-    if (offlinePremium() && queueable(path, method, body)) {
-      const queued = queuedBody(path, method, body);
-      await queueWrite(path, method as "POST" | "PATCH" | "DELETE", queued);
-      const id = queued && typeof queued === "object" && "id" in queued ? queued.id : undefined;
-      return (typeof id === "string" ? { queued: true, id } : { queued: true }) as T;
+    if (offlinePremium() && queueable(path, method, body, init?.queue)) {
+      return queue<T>(path, method, body, false);
     }
-    throw new Error(
-      isOffline() ? translate(clientLang(), "common.offline") : err instanceof Error ? err.message : String(err),
-    );
+    console.warn("Not saved:", method, path, err instanceof Error ? err.message : String(err));
+    throw new Error(isAiCall(path, body) && !isOffline() && err instanceof Error ? err.message : notSaved());
   }
   if (!res.ok) {
     const detail = await res.json().catch(() => null);
-    const message =
-      detail && typeof detail === "object" && "error" in detail && typeof detail.error === "string"
-        ? detail.error
-        : translate(clientLang(), "common.requestFailedStatus", { status: res.status });
+    const said =
+      detail && typeof detail === "object" && "error" in detail && typeof detail.error === "string" ? detail.error : null;
+    const serverError = isServerError(res.status);
+    // The server is down or busy: the write queues and is tried again.
+    if (serverError && offlinePremium() && queueable(path, method, body, init?.queue)) {
+      console.warn("Not saved, queued to try again:", method, path, res.status, said ?? "");
+      return queue<T>(path, method, body, true);
+    }
+    // A refusal the route words for the reader (a 4xx) is shown as it is; a
+    // server error or a refusal with no words is the one failure line, with
+    // the status and the server's text in the console. A call that needs a
+    // model keeps its own words (the assistant's failure lines).
+    let message: string;
+    if (isAiCall(path, body)) message = said ?? translate(clientLang(), "common.requestFailedStatus", { status: res.status });
+    else if (said && !serverError) message = said;
+    else {
+      console.warn("Not saved:", method, path, res.status, said ?? "");
+      message = notSaved();
+    }
     throw new ApiError(message, res.status, detail);
   }
   return res.json() as Promise<T>;
+}
+
+/** Queue the write (SPEC.md §17) and answer as the queue does. serverError:
+    the server answered with an error; the save line reads Not saved and the
+    queued note is marked Not saved until the queue lands it. */
+async function queue<T>(path: string, method: string, body: unknown, serverError: boolean): Promise<T> {
+  const queued = queuedBody(path, method, body);
+  await queueWrite(path, method as "POST" | "PATCH" | "DELETE", queued, serverError ? 1 : 0);
+  const id = queued && typeof queued === "object" && "id" in queued ? queued.id : undefined;
+  return { queued: true, ...(typeof id === "string" ? { id } : {}), ...(serverError ? { serverError: true } : {}) } as T;
 }

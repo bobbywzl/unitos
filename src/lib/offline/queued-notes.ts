@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { WRITES, tx } from "@/lib/offline/db";
-import { QUEUE_SYNCED_EVENT, subscribeQueue, type QueuedWrite } from "@/lib/offline/queue";
+import { QUEUE_SYNCED_EVENT, queuedForThisAccount, subscribeQueue, type QueuedWrite } from "@/lib/offline/queue";
 import type { NoteView, SectionView } from "@/lib/types";
 
 // Notes saved offline, drawn in the notes while they wait (SPEC.md §17). A
@@ -11,7 +11,9 @@ import type { NoteView, SectionView } from "@/lib/types";
 // types it again. The queue itself is read instead: a queued create (it
 // carries its id, lib/api.ts) is drawn in its section, a queued edit puts its
 // text on the note, a queued delete takes the note away; each such note is
-// marked as waiting to sync (`queued`). The marks go when the queue drains
+// marked as waiting to sync (`queued`), or Not saved (`unsaved`) once the
+// server answered its write with an error and the queue tries it again. Only
+// the signed-in account's writes are drawn. The marks go when the queue drains
 // and the refresh brings the server's copy. Read from IndexedDB, so a reload
 // while offline still draws them.
 
@@ -29,7 +31,7 @@ function isNoteWrite(record: QueuedWrite): boolean {
 async function readNoteWrites(): Promise<QueuedWrite[]> {
   try {
     const all = await tx<QueuedWrite[]>(WRITES, "readonly", (s) => s.getAll() as IDBRequest<QueuedWrite[]>);
-    return all.filter(isNoteWrite);
+    return all.filter((w) => isNoteWrite(w) && queuedForThisAccount(w));
   } catch {
     return [];
   }
@@ -87,6 +89,12 @@ export function overlayQueuedNotes(
   const created = createdNotes(writes);
   // The text each queued edit leaves, in queue order; null = deleted.
   const texts = new Map<string, string | null>();
+  // Notes whose queued write the server answered with an error: Not saved.
+  const refused = new Set<string>();
+  for (const w of writes) {
+    const id = NOTE_PATH.exec(w.path)?.[1] ?? (typeof field(w.body, "id") === "string" ? (field(w.body, "id") as string) : undefined);
+    if (id && (w.attempts ?? 0) > 0) refused.add(id);
+  }
   for (const w of writes) {
     const id = NOTE_PATH.exec(w.path)?.[1];
     if (!id) continue;
@@ -103,8 +111,10 @@ export function overlayQueuedNotes(
       texts.set(id, before === undefined ? `\u0000${append}` : before === null ? null : `${before.replace(/\n+$/, "")}\n\n${append}`);
     }
   }
+  const mark = (note: NoteView): NoteView =>
+    refused.has(note.id) ? { ...note, queued: false, unsaved: true } : { ...note, queued: true };
   const textOf = (note: NoteView): NoteView | null => {
-    if (!texts.has(note.id)) return note;
+    if (!texts.has(note.id)) return note.queued && refused.has(note.id) ? mark(note) : note;
     const text = texts.get(note.id) ?? null;
     if (text === null) return null;
     const content = text.startsWith("\u0000")
@@ -114,7 +124,7 @@ export function overlayQueuedNotes(
           return head ? `${head}\n\n${words}` : words;
         })()
       : text;
-    return { ...note, content, gist: null, queued: true };
+    return mark({ ...note, content, gist: null });
   };
   const shown = new Set<string>();
   const walk = (s: SectionView): SectionView => {

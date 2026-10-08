@@ -1,5 +1,7 @@
 "use client";
 
+import { readAccountCookie, tabAccount } from "@/lib/tab-account";
+
 // Local drafts (SPEC.md §6): the text of an open note editor, written to
 // localStorage on every edit. The server save is debounced and the closing
 // flush is a network call, so the last words typed before a crash, a power
@@ -7,6 +9,14 @@
 // synchronously with the keystroke, cleared when the server confirms the same
 // content, and replayed on the next load when it did not (use-outline.ts,
 // use-note-compose.ts).
+//
+// A draft is kept until the server confirms its words. A save that waits in
+// the offline queue is not a confirmation: while the queue holds a note's
+// text (holdNoteDraft), confirmNoteDraft leaves the draft that holds that
+// text, and the queue confirms it when its write lands (lib/offline/queue.ts).
+// Each draft names the account that wrote it; a page signed in as another
+// account neither reads nor sends it, so one account's words never go out
+// as another's.
 //
 // Two kinds. A note draft belongs to a note that exists (its editor in the
 // tray, on the notes full page, or in the floating card). A compose draft
@@ -22,8 +32,10 @@ const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 // base: the note's text the draft was made from (lib/notes/save-text.ts);
 // sent: the text of a save that was on its way when the draft was written —
 // when the note holds it, the save landed and the draft was made from it.
-// Both absent in a draft written before they existed.
-export type NoteDraft = { content: string; savedAt: number; base?: string; sent?: string };
+// Both absent in a draft written before they existed. account: the account
+// that wrote it; absent in a draft written before drafts named it, or with
+// sign-in off.
+export type NoteDraft = { content: string; savedAt: number; base?: string; sent?: string; account?: string };
 // createId: the id the composer's create carries (lib/notes/client-id.ts),
 // written before the create leaves, so a reload adopts the note it made.
 export type ComposeDraft = { content: string; noteId: string | null; savedAt: number; createId?: string };
@@ -56,24 +68,68 @@ function remove(key: string) {
   }
 }
 
+/** The account signed in on this page, when sign-in is on. */
+function currentAccount(): string | null {
+  return tabAccount() ?? readAccountCookie();
+}
+
+/** True when the draft was written by another account than this page's. */
+function foreign(draft: { account?: unknown }): boolean {
+  const account = currentAccount();
+  return typeof draft.account === "string" && account !== null && draft.account !== account;
+}
+
 export function readNoteDraft(noteId: string): NoteDraft | null {
   const draft = read<NoteDraft>(NOTE_PREFIX + noteId);
-  if (!draft || typeof draft.content !== "string") return null;
+  if (!draft || typeof draft.content !== "string" || foreign(draft)) return null;
   return {
     content: draft.content,
     savedAt: draft.savedAt,
     ...(typeof draft.base === "string" ? { base: draft.base } : {}),
     ...(typeof draft.sent === "string" ? { sent: draft.sent } : {}),
+    ...(typeof draft.account === "string" ? { account: draft.account } : {}),
   };
 }
 
 export function writeNoteDraft(noteId: string, content: string, base?: string, sent?: string | null) {
+  const account = currentAccount();
   write(NOTE_PREFIX + noteId, {
     content,
     savedAt: Date.now(),
     ...(base !== undefined ? { base } : {}),
     ...(sent ? { sent } : {}),
+    ...(account ? { account } : {}),
   } satisfies NoteDraft);
+}
+
+// The note texts the offline queue holds, by note, with the time each was
+// held: a mirror of the queue's note writes (lib/offline/queue.ts), added to
+// as a write queues and set again from the queue whenever a record leaves it.
+let held = new Map<string, Map<string, number>>();
+
+/** The offline queue holds `content` for the note: a draft holding it stays. */
+export function holdNoteDraft(noteId: string, content: string) {
+  const texts = held.get(noteId) ?? new Map<string, number>();
+  texts.set(content.trim(), Date.now());
+  held.set(noteId, texts);
+}
+
+/** The note texts the offline queue held when it was read at `readAt`.
+    A text held since that read stays held: its write queued meanwhile. */
+export function setHeldNoteDrafts(texts: { noteId: string; content: string }[], readAt: number) {
+  const next = new Map<string, Map<string, number>>();
+  const add = (noteId: string, content: string, at: number) => {
+    const set = next.get(noteId) ?? new Map<string, number>();
+    set.set(content, at);
+    next.set(noteId, set);
+  };
+  for (const [noteId, set] of held) for (const [content, at] of set) if (at >= readAt) add(noteId, content, at);
+  for (const { noteId, content } of texts) add(noteId, content.trim(), readAt);
+  held = next;
+}
+
+function isHeld(noteId: string, content: string): boolean {
+  return held.get(noteId)?.has(content.trim()) ?? false;
 }
 
 /** The text a draft was made from, given the note's text now: the save that
@@ -118,8 +174,10 @@ export function listNoteDrafts(): { noteId: string; draft: NoteDraft }[] {
   return out;
 }
 
-/** Clear the note's draft when it holds this content: the server has it now. */
+/** Clear the note's draft when it holds this content: the server has it now.
+    A text the offline queue still holds is not on the server: its draft stays. */
 export function confirmNoteDraft(noteId: string, content: string) {
+  if (isHeld(noteId, content)) return;
   const draft = readNoteDraft(noteId);
   if (draft && draft.content.trim() === content.trim()) clearNoteDraft(noteId);
 }
