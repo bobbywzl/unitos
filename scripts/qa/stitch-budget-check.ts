@@ -10,7 +10,12 @@ import { currentSkeleton, partsFor, type Skeleton } from "../../src/lib/graph/sk
 import { readFileSync } from "node:fs";
 import {
   answerMessages,
+  asksContradictions,
   assignSources,
+  byDocument,
+  cjkExpansion,
+  expandedNames,
+  overEvery,
   backSelection,
   copyOriginals,
   copyPair,
@@ -345,6 +350,9 @@ check("skeleton prompt: the line cap scales past 400 words", skeletonPrompt({ pa
   const reading = readingOf(docs as unknown as Parameters<typeof readingOf>[0]);
   const sel = new Set(["A1", "A3", "B1", "C2", "C4"]);
   const sys = String(answerMessages({ reading, selected: sel, lang: "en", profile: null as unknown as Parameters<typeof answerMessages>[0]["profile"], history: [], command: "x" })[0].content);
+  // COST8-03 puts the first read's paragraph ("A first read picked the blocks below…") in this
+  // system message; the system line itself must be ENGINE8's wording, and nothing else may say "first read picked".
+  check("answer system: the blocks read for the command follow, not 'a first read picked' (ANS8-07)", sys.includes("The blocks read for the command follow.") && !sys.includes("The blocks a first read picked") && !sys.replace(firstReadParagraph(false, "below"), "").includes("first read picked"));
   check("answer sections: a long document is not 'read whole when picked'", /\[document A\] "Long book" \([^)]*shown\)/.test(sys) && !/Long book" \([^)]*read whole/.test(sys));
   check("answer sections: a medium document is 'read whole when picked'", /Medium essay" \([^)]*; read whole when picked with one short document\)/.test(sys));
   check("answer sections: a gap of one is '1 block not shown'", sys.includes("(1 block not shown)") && !sys.includes("(1 blocks not shown)"));
@@ -658,7 +666,7 @@ check("replyLanguage command: a mixed or short command keeps the UI's", replyLan
   const fr = (m: ReturnType<typeof answerMessages>) => m.map((x) => String(x.content));
   const frSel = fr(lay(short, new Set(["A1"])));
   const frSys = frSel[0];
-  const frAt = frSys.indexOf(`The blocks a first read picked for the command follow.\n${firstReadParagraph(false, "below")}\n\n`);
+  const frAt = frSys.indexOf(`The blocks read for the command follow.\n${firstReadParagraph(false, "below")}\n\n`);
   check("answer layout: the first read's paragraph opens the blocks in the system message, \"below\", before the first [document A] (COST8-03)", frAt > 0 && frAt < frSys.indexOf("[document A]") && !frSel[3].includes("A first read picked"));
   check("answer layout: the paragraph's words are the same as in the user message but \"below\" (COST8-03)", firstReadParagraph(false, "below").replace("the blocks below", "the blocks above") === firstReadParagraph(false, "above") && stitchPrompt({ documents: [], command: "x", continued: false, selected: true }).includes(firstReadParagraph(false, "above")));
   const frPicked = fr(answerMessages({ reading: gReading, selected: new Set(["A1"]), lang: "en", profile: prof, history: [], command: "x", notPicked: { count: 2, titles: ["Notes"] } }));
@@ -957,7 +965,7 @@ check("replyLanguage command: a mixed or short command keeps the UI's", replyLan
   const docsP7 = [{ tag: "A", title: "The Antichrist", read: true }, { tag: "B", title: "Arthur Schopenhauer", read: true }];
   const backP = stitchPrompt({ documents: docsP7, command: "Why did you link the second one?", continued: true, selected: true, back: true });
   const pickP = stitchPrompt({ documents: docsP7, command: "Why did you link the second one?", continued: true, selected: true });
-  check("answer prompt: a back selection says no other block was read, and to ask again without pointing back", backP.includes("These are the blocks the earlier answers cited; no other block was read for this command.") && backP.includes("ask again without pointing back") && !backP.includes("A first read picked"));
+  check("answer prompt: a back selection says no other block was read, and to ask again without pointing back", backP.includes("These are the blocks the earlier answers cited; no other block was read for this command.") && backP.includes("ask again, with the new wording in italics, without pointing back") && !backP.includes("A first read picked"));
   check("answer prompt: a select pass's pick keeps its line", pickP.includes("A first read picked the blocks above") && !pickP.includes("no other block was read"));
 
   // ANS7-02: an edited block's line runs to 600 characters beside a stored skeleton.
@@ -989,6 +997,71 @@ check("replyLanguage command: a mixed or short command keeps the UI's", replyLan
   check("answer rules: a contradictions command proposes only contradictions (ANS7-04)", rules7.includes("A command for contradictions or disagreements gets only links whose passages contradict: never a paraphrase, an agreement, or an echo."));
   check("answer rules: each line names its document and its quote proves its claim (ANS7-03)", rules7.includes("its document's title, even if the line before named it, the shortest quote that proves that line's claim (one clause)") && rules7.includes("To which of several things changed or hold, end with one clause on the ones that did not."));
   check("answer rules: a mixed section's heading names its documents (ANS7-05)", rules7.includes("A section quoting several documents names them in its heading, or puts a text part naming the document before each quote."));
+}
+
+// ── Round 8 (ENGINE8) ──
+{
+  const blk8 = (alias: string, documentId: string, text = "Pity is the practice of nihilism.") => ({ id: alias.toLowerCase(), alias, type: "PARAGRAPH", text, documentId });
+  const titles8 = ["Friedrich Nietzsche", "How Zarathustra came into being", "Beyond Good and Evil (Chapters I–III)", "BOOK TWO", "Arthur Schopenhauer", "The Antichrist", "Nietzsche combined notes"];
+  const docs8 = titles8.map((title, i) => ({ doc: { id: `d${i}`, title } }));
+  const bb8 = new Map<string, ReturnType<typeof blk8>>();
+  const put8 = (b: ReturnType<typeof blk8>) => {
+    bb8.set(b.alias, b);
+    bb8.set(b.id, b);
+  };
+  for (const [a, d] of [["F24", "d5"], ["F25", "d5"], ["F11", "d5"], ["G15", "d6"]]) put8(blk8(a, d));
+  put8(blk8("E34", "d4", "In Buddhism, Nirvana is the denial of the will to live."));
+  put8(blk8("F10", "d5", "The weak and the botched shall perish: first principle of our charity."));
+  const hist8 = [{ role: "user" as const, content: "What does Nietzsche say pity does?" }, { role: "assistant" as const, content: "It multiplies suffering [block F24] [block F25] [block F11] [block G15]." }];
+  const skips8 = (c: string, words: string[] = []) => backSelection(c, hist8, bb8, [], "question", docs8, words) !== null;
+  // ANS8-01: the audit's 25 follow-ups (r8 audit ans/guard8.ts). FU9 asks
+  // about the answer but says "contradiction": it runs the select pass, which costs tokens only.
+  const goodSkips8 = ["Draw links between those passages.", "Why did you link the second one?", "How many passages did that page quote, and from which documents?", "Why did you link the third one?", "Make a page of those links: each pair of passages, with one line on how they relate.", "How many passages on that page come from Arthur Schopenhauer?", "Quote the passage the second link starts from.", "Remove the fourth link, it is wrong.", "Which of those links connect Schopenhauer to Nietzsche?", "Which link did the page leave out?", "Why was the second link not added?", "第二点的原文是什么？", "Quote both passages of the second link in full.", "What did the third link leave out of Schopenhauer's view?"];
+  const needsNew8 = ["Does any other document disagree with the second point?", "第二点在叔本华的文档里有对应的说法吗？", "What does Schopenhauer say about those points?", "Are there passages like the first link in the other documents?", "Is there a passage that backs up the second point?", "叔本华对第二点怎么看？", "Is the third point true of Buddhism as well?", "第三点在我的笔记里有吗？"];
+  check("asksMore: backs up, true of, as well, 怎么看, 有吗 ask for more (ANS8-01)", needsNew8.every(asksMore), needsNew8.filter((c) => !asksMore(c)).join(" | "));
+  check("asksMore: none of the 14 follow-ups about the answer asks for more", !goodSkips8.some(asksMore), goodSkips8.filter(asksMore).join(" | "));
+  check("asksMore: 'a different way' is a word about the answer; differ, differs, differed still ask", !asksMore("Is that just a different way of dating?") && asksMore("Where does Schopenhauer differ from the second point?"));
+  check("backSelection: the follow-ups that need new passages run the select pass (ANS8-01)", !needsNew8.some((c) => skips8(c)), needsNew8.filter((c) => skips8(c)).join(" | "));
+  check("backSelection: a name in some block and in no block cited runs the select pass, whatever its count", !skips8("Is the third point about Buddhism?") && skips8("Is the third point about pity?"));
+  const hist8b = [{ role: "user" as const, content: "What does Schopenhauer say Nirvana is?" }, { role: "assistant" as const, content: "The denial of the will [block E34]." }];
+  check("backSelection: the name of a cited block skips", backSelection("Is the first point about Buddhism?", hist8b, bb8, [], "question", docs8) !== null);
+  check("backSelection: a CJK follow-up's expansion word in an uncited title runs the select pass", skips8("第二点在叔本华那里呢？") && !skips8("第二点在叔本华那里呢？", ["Schopenhauer", "pity"]) && skips8("第二点在笔记那里呢？", ["notes"]));
+  // ANS8-02: a CJK command over English documents.
+  check("cjkExpansion: a CJK command over English titles; not an English command; not a CJK title", cjkExpansion("每个文档关于瓦格纳都说了什么？", titles8) && !cjkExpansion("What does each document say about Wagner?", titles8) && !cjkExpansion("瓦格纳", [...titles8, "讲义"]));
+  check("expandedNames: the capitalised words of the expansion, the first 3", expandedNames(["Wagner", "music", "Richard Wagner", "The", "Bayreuth", "Parsifal"]).join("|") === "Wagner|Richard Wagner|Bayreuth");
+  const wag = ["A7", "A8", "B30", "C53", "D39", "F24", "G6"].map((a) => ({ alias: a, text: `Here Wagner and Parsifal ${a}.` })).concat([{ alias: "E1", text: "Nothing on music." }]);
+  const zhNames = nameHits("每个文档关于瓦格纳都说了什么？", wag, titles8, ["Wagner", "music", "opera"]);
+  check("nameHits: a zh command gets the expansion's names (瓦格纳 → Wagner, 7 blocks)", zhNames.length === 1 && zhNames[0].term === "Wagner" && zhNames[0].aliases.length === 7, JSON.stringify(zhNames));
+  check("nameHits: without the expansion a zh command has no names, as before", nameHits("每个文档关于瓦格纳都说了什么？", wag, titles8).length === 0);
+  check("asksEvery: 每个, 各自, 分别 (ANS8-02)", asksEvery("每个文档关于瓦格纳都说了什么？") && asksEvery("门肯和福斯特-尼采各自如何描述？") && asksEvery("分别说了什么？") && !asksEvery("叔本华认为动物比人更幸福吗？"));
+  // ANS8-03: "which documents discuss X" keeps a name up to 24 blocks.
+  const buddh = Array.from({ length: 10 }, (_, i) => ({ alias: `B${i}`, text: `Buddhism ${i}` }));
+  check("nameHits: a name in 10 blocks is kept for 'which documents', dropped otherwise (ANS8-03)", nameHits("Which documents discuss Buddhism, and what does each say about it?", buddh, titles8)[0]?.aliases.length === 10 && nameHits("What does Nietzsche say about Buddhism?", buddh, titles8).length === 0);
+  const many = Array.from({ length: 25 }, (_, i) => ({ alias: `B${i}`, text: `Buddhism ${i}` }));
+  check("nameHits: past 24 blocks a name is common even for 'which documents'", nameHits("Which documents discuss Buddhism?", many, titles8).length === 0);
+  // ANS8-04: a contradictions command lights only the links its reply names.
+  check("asksContradictions: contradict, disagree, conflict between, 矛盾; not a plain links command", asksContradictions("Do the documents contradict each other on any date?") && asksContradictions("Find the contradictions between my notes and Beyond Good and Evil.") && asksContradictions("讲义里的矛盾") && !asksContradictions("Draw links between the passages that trace Christian morality to ressentiment."));
+  check("commandKind: a contradictions question is still a links command", commandKind("Do the documents contradict each other on any date?") === "links" && commandKind("Where do they conflict between the two essays?") === "links");
+  const lit8 = [{ id: "l1", from: "G6", to: "B20", state: "accepted" as const }, { id: "l2", from: "G6", to: "B29", state: "accepted" as const }, { id: "l3", from: "G7", to: "A8", state: "waiting" as const }];
+  const reply8 = "Two dates differ. The notes give summer 1883 [block G6]; Ecce Homo gives August 1881 [block B20]. Mencken puts it in 1895 [block A8], the notes in 1889 [block G7].";
+  check("existingNamed: a contradictions reply lights the links it names, not every link in view", existingNamed(reply8, lit8, null, false).sort().join(",") === "l1,l3" && existingNamed(reply8, lit8, null, true).length === 3);
+  // ANS8-05: an every-document command is cut round-robin by document.
+  const doc8 = (a: string) => a[0];
+  check("byDocument: one pick of every document, then the next", byDocument(["A1", "A2", "A3", "B1", "B2", "C1", "X"], (a) => (a === "X" ? undefined : doc8(a))).join(",") === "A1,B1,C1,A2,B2,A3");
+  const cost8 = (a: string) => (a[0] === "A" ? 500 : 50);
+  check("byDocument: with costs, a document of short blocks keeps its picks beside one of long blocks", byDocument(["A1", "A2", "A3", "B1", "B2", "B3", "B4"], doc8, cost8).join(",") === "A1,B1,B2,B3,B4,A2,A3");
+  check("overEvery: each document, an overview, 每个文档; not a topic question", overEvery("Give me an overview of the project: what does each document argue, one line per document?") && overEvery("What does each document say about Christianity?") && overEvery("每个文档关于瓦格纳都说了什么？") && !overEvery("What does Nietzsche say pity does?") && !overEvery("Which documents discuss Buddhism?"));
+  // ANS8-07: the back reply's new wording is in italics, which the quote check keeps.
+  const ask8 = "The passages read do not answer it [block F24]. Ask again without pointing back to the earlier answers, for example *Does Nietzsche say Buddhism denies life?*, so that every document is read.";
+  const quoted8 = 'The passages read do not answer it [block F24]. Ask again, for example "Does Nietzsche say Buddhism denies life?", so that every document is read.';
+  check("checkReplyQuotes: the back reply's wording in italics stays as written; in quote marks it loses them (ANS8-07)", checkReplyQuotes(ask8, bb8 as unknown as Parameters<typeof checkReplyQuotes>[1], new Set()).reply === ask8 && !checkReplyQuotes(quoted8, bb8 as unknown as Parameters<typeof checkReplyQuotes>[1], new Set()).reply.includes('"Does'));
+  // ANS8-06: a document that is the reader's notes is read.
+  check("answer rules: a document of the reader's own notes answers 'my notes' (ANS8-06)", stitchRules("en").includes("A document read that is the reader's own notes, log, or plan is a document: answer \"my notes\" from it, and say you cannot read the Notes list only when no document fits."));
+  // Round 8 cost note: an edit at the end of a long paragraph is in its line.
+  const longText = `${"The will is blind and strives without end. ".repeat(20)}Correction: he calls suicide a mistake, not a crime.`;
+  const stored8: Skeleton = { v: 1, gist: "", parts: [], lines: [{ blockId: "b5", hash: "old", text: "the will" }], chars: 0 };
+  const line8 = currentSkeleton(stored8, [{ id: "b5", type: "PARAGRAPH", text: longText }]).lines[0].text;
+  check("currentSkeleton: an edit past the 600th character of a long paragraph is in its line", line8.endsWith("Correction: he calls suicide a mistake, not a crime.") && line8.startsWith("The will is blind") && line8.includes(" … ") && line8.length <= 610, `${line8.length}: ${line8.slice(-80)}`);
 }
 
 // ── Round 3 (ANS3-03): a cut where no line shares a word with the query ──

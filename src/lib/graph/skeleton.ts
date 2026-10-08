@@ -206,13 +206,30 @@ function fallbackLine(text: string, max = FALLBACK_LINE): string {
   return word > max / 2 ? head.slice(0, word) : head;
 }
 
+/** The line of a block edited beside a stored skeleton (ANS7-02): its
+    text to CHANGED_LINE characters; a longer block's first half of that
+    and its last, joined by " … " (round 8): an edit at the end of a
+    long paragraph, where a correction usually goes, stays in its line. */
+function changedLine(text: string): string {
+  const t = text.replace(/\s+/g, " ").trim();
+  if (t.length <= CHANGED_LINE) return t;
+  const half = CHANGED_LINE / 2;
+  const head = fallbackLine(t, half);
+  const end = t.slice(-half);
+  // The tail opens at a sentence start when one falls in its first half, else at a word.
+  const sentence = Math.min(...[". ", "。", "! ", "? "].map((m) => end.indexOf(m)).filter((i) => i >= 0 && i < half / 2).concat(Infinity));
+  const tail = sentence !== Infinity ? end.slice(sentence + 1).trim() : end.slice(Math.max(0, end.indexOf(" ") + 1));
+  return `${head} … ${tail}`;
+}
+
 /** The skeleton as Stitch reads it now: one line per current readable
     block, in the document's order — the stored line where the block is
     unchanged, the block's own first words where it is new or changed or
     the skeleton is missing — and the parts whose block still exists.
     Beside a stored skeleton, a new or changed block's words run to
-    CHANGED_LINE characters, up to CHANGED_LINES_MAX per document (ANS7-02):
-    an edit late in a long paragraph stays in its line until the skeleton is
+    CHANGED_LINE characters, a longer block's opening and its end
+    (changedLine), up to CHANGED_LINES_MAX per document (ANS7-02): an edit
+    late in a long paragraph stays in its line until the skeleton is
     rebuilt. */
 export function currentSkeleton(skeleton: Skeleton | null, blocks: SkeletonBlock[]): Skeleton {
   const readable = skeletonBlocks(blocks);
@@ -222,7 +239,7 @@ export function currentSkeleton(skeleton: Skeleton | null, blocks: SkeletonBlock
     const hash = blockHash(b.text);
     const line = stored.get(b.id);
     if (line && line.hash === hash) return line;
-    const long = skeleton ? fallbackLine(b.text, CHANGED_LINE) : "";
+    const long = skeleton ? changedLine(b.text) : "";
     const text = long && changedChars + long.length <= CHANGED_LINES_MAX ? long : fallbackLine(b.text);
     if (text === long) changedChars += long.length;
     return { blockId: b.id, hash, text };
