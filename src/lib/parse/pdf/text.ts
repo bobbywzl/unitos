@@ -511,7 +511,13 @@ function withTabs(line: Line, place: TabPlace): { text: string; runs: Run[] } | 
   const gaps = words.slice(1).flatMap((w, k) => (text.slice(words[k].end, w.start).trim() === "" && w.start > words[k].end ? [w.x1 - words[k].x2] : []));
   const middle = gaps.length >= 3 ? median(gaps) : 0;
   const wide = (gap: number) => gap >= size * TAB_EM && (middle < size * STRETCHED_EM || gap >= middle * TAB_SPACES);
-  const centered = right !== null && line.x - origin >= size * 2 && Math.abs(line.x - origin - (right - line.xEnd)) <= size;
+  // A row of three phrases or more, each a word space within and three
+  // ems or more apart, is labels set under figures side by side, centered
+  // or not (parse loop finding: "(a) Overfitting", "(b) Underfitting.",
+  // "(c) Fitting well." under a figure centered in its column read as one
+  // phrase).
+  const labels = gaps.filter((g) => g >= size * 3).length >= 2 && gaps.every((g) => g < size * 0.6 || g >= size * 3);
+  const centered = right !== null && line.x - origin >= size * 2 && Math.abs(line.x - origin - (right - line.xEnd)) <= size && !labels;
   const full = right !== null && line.xEnd >= right - size;
   const width = right === null ? line.xEnd - origin : right - origin;
   const fills = [...place.fills].sort((a, b) => a.x1 - b.x1);
