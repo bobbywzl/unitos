@@ -1966,6 +1966,14 @@ ellipse.anchor-flash {
     translate: none;
   }
 }
+/* Under 1000 px the new note sits right above the Stitch box, where the
+   suggestions would show: they stay hidden while the note is up, so they
+   never cover its header (stitch-box.tsx). */
+@media (max-width: 999px) {
+  .graph-overlay[data-gather] [data-stitch-suggestions] {
+    display: none;
+  }
+}
 
 /* Documents whose recommended links await acceptance breathe on their own
    rhythm — the living tips of the graph still calling for review. */

@@ -147,6 +147,10 @@ export function StitchBox({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const regionRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLSpanElement>(null);
+  // The suggestions show while the text box has the focus, and while the
+  // focus is on one of them (Shift+Tab from the text box reaches them).
+  const suggestRef = useRef<HTMLDivElement>(null);
+  const [fieldFocus, setFieldFocus] = useState(false);
 
   function setTurns(update: (turns: Turn[]) => Turn[]) {
     setTurnsState((prev) => {
@@ -399,23 +403,74 @@ export function StitchBox({
           onClose={() => setPassage(null)}
         />
       )}
-      <div className="flex items-center gap-2 px-4 pt-3">
-        <SparkleIcon size={15} className="shrink-0 text-clay" />
-        <span ref={titleRef} tabIndex={-1} data-stitch-title className="font-display text-[16px] outline-none">
-          {t("stitch.stitch")}
-        </span>
+      {/* One head row: the title, the scope, Pick documents, New and the
+          fold. The description is the title's tooltip, and the suggestions
+          show over the box while the empty text box has the focus, so the
+          box at rest is two short rows and the graph keeps the room
+          (WALK6-02, VIEW6-01). */}
+      <div className="flex flex-wrap items-center gap-1.5 px-4 pt-2.5 text-[11px] text-sand-600">
+        <SparkleIcon size={14} className="shrink-0 text-clay" />
         <span
-          data-stitch-hint
+          ref={titleRef}
+          tabIndex={-1}
+          data-stitch-title
           data-tip={t("stitch.stitchHintDetail")}
-          className="min-w-0 flex-1 truncate text-xs text-sand-500"
+          className="font-display text-[15px] text-ink outline-none"
         >
-          {t("stitch.stitchHint")}
+          {t("stitch.stitch")}
+          <span className="sr-only">{`: ${t("stitch.stitchHint")}`}</span>
         </span>
+        {/* The scope: which documents the command reads. */}
+        {canEdit && (
+          <>
+            <span className="font-semibold text-sand-700">
+              {picked.length === 1
+                ? t("stitch.stitchScopePickedOne")
+                : picked.length > 0
+                  ? t("stitch.stitchScopePicked", { n: picked.length })
+                  : t("stitch.stitchScopeAll", { n: everyCount })}
+            </span>
+            {picked.map((n) => (
+              <button
+                key={n.id}
+                onClick={() => onUnpick(n.id)}
+                data-track="stitch-unpick"
+                data-tip={t("stitch.stitchUnpick", { title: n.title })}
+                className="flex max-w-[200px] items-center gap-1 rounded-full bg-clay-100 px-2.5 py-0.5 text-clay-800 hover:bg-clay-200"
+              >
+                <span className="truncate">{n.title}</span>
+                <span aria-hidden>✕</span>
+              </button>
+            ))}
+            <button
+              onClick={() => onPickingChange(!picking)}
+              data-track="stitch-pick"
+              aria-pressed={picking}
+              data-tip={t(coarse ? "stitch.stitchPickTitleTouch" : "stitch.stitchPickTitle")}
+              className={`rounded-full border px-2.5 py-0.5 hover:bg-clay-100 hover:text-clay-800 ${
+                picking ? "border-clay bg-clay text-clay-fg hover:bg-clay-600 hover:text-clay-fg" : "border-line"
+              }`}
+            >
+              {t(picking ? "stitch.stitchPickDone" : "stitch.stitchPick")}
+            </button>
+            {picked.length > 0 && (
+              <button
+                onClick={onClearPick}
+                data-track="stitch-pick-clear"
+                data-tip={t("stitch.stitchPickClearTitle")}
+                className="rounded-full px-2 py-0.5 text-sand-500 hover:bg-clay-100 hover:text-clay-800"
+              >
+                {t("stitch.stitchPickClear")}
+              </button>
+            )}
+            {picking && <span className="text-clay-700">{t(coarse ? "stitch.stitchPickHintTouch" : "stitch.stitchPickHint")}</span>}
+          </>
+        )}
         {turns.length > 0 && !running && (
           <button
             onClick={() => setTurns(() => [])}
             data-track="stitch-new"
-            className="shrink-0 rounded-full px-2.5 py-1 text-[11px] text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+            className="ml-auto shrink-0 rounded-full px-2.5 py-0.5 text-[11px] text-sand-600 hover:bg-clay-100 hover:text-clay-800"
           >
             {t("stitch.stitchNew")}
           </button>
@@ -429,58 +484,11 @@ export function StitchBox({
           data-track="stitch-collapse"
           aria-label={t("stitch.stitchCollapse")}
           data-tip={t("stitch.stitchCollapse")}
-          className="flex size-7 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
+          className={`${turns.length > 0 && !running ? "" : "ml-auto "}-mr-1.5 flex size-6 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700 pointer-coarse:size-7`}
         >
-          <ChevronDownIcon size={16} />
+          <ChevronDownIcon size={15} />
         </button>
       </div>
-
-      {/* The scope: which documents the command reads. */}
-      {canEdit && (
-        <div className="flex flex-wrap items-center gap-1.5 px-4 pt-2 text-[11px] text-sand-600">
-          <span className="font-semibold text-sand-700">
-            {picked.length === 1
-              ? t("stitch.stitchScopePickedOne")
-              : picked.length > 0
-                ? t("stitch.stitchScopePicked", { n: picked.length })
-                : t("stitch.stitchScopeAll", { n: everyCount })}
-          </span>
-          {picked.map((n) => (
-            <button
-              key={n.id}
-              onClick={() => onUnpick(n.id)}
-              data-track="stitch-unpick"
-              data-tip={t("stitch.stitchUnpick", { title: n.title })}
-              className="flex max-w-[200px] items-center gap-1 rounded-full bg-clay-100 px-2.5 py-0.5 text-clay-800 hover:bg-clay-200"
-            >
-              <span className="truncate">{n.title}</span>
-              <span aria-hidden>✕</span>
-            </button>
-          ))}
-          <button
-            onClick={() => onPickingChange(!picking)}
-            data-track="stitch-pick"
-            aria-pressed={picking}
-            data-tip={t(coarse ? "stitch.stitchPickTitleTouch" : "stitch.stitchPickTitle")}
-            className={`rounded-full border px-2.5 py-0.5 hover:bg-clay-100 hover:text-clay-800 ${
-              picking ? "border-clay bg-clay text-clay-fg hover:bg-clay-600 hover:text-clay-fg" : "border-line"
-            }`}
-          >
-            {t(picking ? "stitch.stitchPickDone" : "stitch.stitchPick")}
-          </button>
-          {picked.length > 0 && (
-            <button
-              onClick={onClearPick}
-              data-track="stitch-pick-clear"
-              data-tip={t("stitch.stitchPickClearTitle")}
-              className="rounded-full px-2 py-0.5 text-sand-500 hover:bg-clay-100 hover:text-clay-800"
-            >
-              {t("stitch.stitchPickClear")}
-            </button>
-          )}
-          {picking && <span className="text-clay-700">{t(coarse ? "stitch.stitchPickHintTouch" : "stitch.stitchPickHint")}</span>}
-        </div>
-      )}
 
       {(turns.length > 0 || pending) && (
         // The conversation scrolls inside the box, which the overlay caps
@@ -550,11 +558,22 @@ export function StitchBox({
         </div>
       )}
 
-      {turns.length === 0 && !pending && canEdit && (
-        <div className="flex flex-wrap gap-1.5 px-4 pt-3">
+      {turns.length === 0 && !pending && canEdit && fieldFocus && !command.trim() && (
+        // Over the box, not in it: the box keeps its height, so the graph
+        // does not refit while the reader picks one. A press keeps the focus
+        // in the text box.
+        <div
+          ref={suggestRef}
+          data-stitch-suggestions
+          onBlur={(e) => {
+            if (e.relatedTarget !== inputRef.current && !suggestRef.current?.contains(e.relatedTarget as Node | null)) setFieldFocus(false);
+          }}
+          className="absolute right-3 bottom-full left-3 mb-2 flex flex-wrap gap-1.5 rounded-2xl border border-line bg-card/95 p-2 shadow-float backdrop-blur-md"
+        >
           {SUGGESTIONS.map((suggestion) => (
             <button
               key={suggestion.label}
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => suggest(suggestion)}
               disabled={running}
               data-track={`stitch-suggest:${suggestion.label.replace("stitch.stitchSuggest", "").toLowerCase()}`}
@@ -568,7 +587,7 @@ export function StitchBox({
 
       {canEdit ? (
         <form
-          className="flex items-end gap-2 p-3"
+          className="flex items-end gap-2 px-3 pt-2 pb-2.5"
           onSubmit={(e) => {
             e.preventDefault();
             void send();
@@ -578,6 +597,10 @@ export function StitchBox({
             ref={inputRef}
             value={command}
             onChange={(e) => setCommand(e.target.value)}
+            onFocus={() => setFieldFocus(true)}
+            onBlur={(e) => {
+              if (!suggestRef.current?.contains(e.relatedTarget as Node | null)) setFieldFocus(false);
+            }}
             {...ime.props}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey && !ime.isImeEnter(e)) {
