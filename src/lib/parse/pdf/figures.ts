@@ -761,6 +761,18 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     } else merged.push({ box: { ...box }, drawn, pictures, caption, panel });
   }
 
+  // The page's first or last line of text that holds words is its running
+  // head or foot: its page number is no tick of a drawing under or over it
+  // (parse loop finding: the MML book's p. 25 took "19", right of "2.1
+  // Systems of Linear Equations" and 13 pt over Figure 2.2's mind map, for
+  // the map's label; the crop then showed the running head).
+  const inEdgeLine = (r: TextRun) => {
+    const row = runs.filter((o) => Math.abs(o.box.y1 - r.box.y1) < r.size * 0.5);
+    if (!row.some((o) => o !== r && o.chars > 12 && /\p{L}{4}/u.test(textOf(o)))) return false;
+    const rest = runs.filter((o) => !row.includes(o));
+    return !rest.some((o) => o.box.y1 > r.box.y2) || !rest.some((o) => o.box.y2 < r.box.y1);
+  };
+
   // A chart's axis labels sit just outside its plot: the ticks under it and
   // beside it, a short word or number each, the first and the last centered
   // on the axis's ends, no farther off than a line and a half (arXiv
@@ -778,6 +790,7 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
       // matrices; the drawing's box then crossed the notes' gutter, and
       // the notes read into the lines beside them).
       if (EQUATION_NUMBER_RE.test(textOf(r).trim())) return false;
+      if (inEdgeLine(r)) return false;
       const reach = Math.max(r.size, textSize) * 1.7;
       const cx = (r.box.x1 + r.box.x2) / 2;
       const cy = (r.box.y1 + r.box.y2) / 2;
