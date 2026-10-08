@@ -91,8 +91,19 @@ export function findFurniture(pages: Line[][], pageHeights: number[], pageNumber
       const words = wordsOf(r.text);
       return margin || (words.length > 0 && words.every((w) => said.get(w) === 1));
     };
-    while (bare(pageRows[0]) || mark(pageRows[0])) specks.push(pageRows.shift()!);
-    while (bare(pageRows[pageRows.length - 1]) || mark(pageRows[pageRows.length - 1])) specks.push(pageRows.pop()!);
+    // So is a row of marks: three or more, no digit, no word of three
+    // letters, and three in four of them a lone letter or none (parse loop
+    // finding: the OCR read the paper's edge under DTIC's text as ", I, i I
+    // I I I I I I i ........" on p. 14, and the dashes of a ruler as ",•
+    // ----. - -- --- -" on p. 17; each read as a paragraph mid-page).
+    const marks = (r: Row | undefined) => {
+      if (r === undefined || /\p{N}|\p{L}{3}/u.test(r.text)) return false;
+      const tokens = r.text.split(" ");
+      return tokens.length >= 3 && tokens.filter((t) => (t.match(/\p{L}/gu) ?? []).length <= 1).length * 4 >= tokens.length * 3;
+    };
+    const speck = (r: Row | undefined) => bare(r) || mark(r) || marks(r);
+    while (speck(pageRows[0])) specks.push(pageRows.shift()!);
+    while (speck(pageRows[pageRows.length - 1])) specks.push(pageRows.pop()!);
   });
   const { lead, bodySize } = measures(pages, rows);
   // A ruled table stands in the flow as one line without words (placeTables):
