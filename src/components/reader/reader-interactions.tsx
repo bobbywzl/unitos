@@ -3881,6 +3881,17 @@ export function ReaderInteractions({
     const viewTop = container.scrollTop + band + PANE_EDGE_GAP;
     const viewBottom = container.scrollTop + container.clientHeight - PANE_EDGE_GAP;
     if (top >= viewBottom || top + el.offsetHeight <= viewTop) return;
+    // A card with room to read under its top keeps its top: it stops at the
+    // pane's foot and scrolls inside, so the answer the reader is reading
+    // never climbs as it lands (SPEC.md §6). Only a card with less room than
+    // that is lifted.
+    const roomBelow = viewBottom - top;
+    if (top >= viewTop && roomBelow >= CAP_MIN) {
+      if (el.offsetHeight > roomBelow) {
+        setCardCaps((caps) => (caps[grown] === roomBelow ? caps : { ...caps, [grown]: roomBelow }));
+      }
+      return;
+    }
     const want = Math.max(viewTop, Math.min(top, viewBottom - el.offsetHeight));
     // A card above it in the same column stays uncovered: the lift stops
     // under that card's foot, and the card runs on below the pane instead.
