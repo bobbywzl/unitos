@@ -951,15 +951,17 @@ check("replyLanguage command: a mixed or short command keeps the UI's", replyLan
   const q157 = "157. The thought of suicide is a great consolation: by means of it one gets successfully through many a bad night.";
   const qb = quoteBlocks(q157, "PARAGRAPH");
   check("quoteBlocks: a quote of a paragraph that starts '157.' is one paragraph with its text as it is", qb.length === 1 && qb[0].type === "PARAGRAPH" && qb[0].text === q157, JSON.stringify(qb.map((b) => b.type)));
-  check("quoteBlocks: the quote is italic over its whole text", qb[0].styles?.length === 1 && qb[0].styles[0].style === "italic" && qb[0].styles[0].start === 0 && qb[0].styles[0].end === q157.length);
-  check("quoteBlocks: '> ', '*' and '- ' in a quote are kept as written", quoteBlocks("> the *will* - to live", "PARAGRAPH")[0].text === "> the *will* - to live");
+  check("quoteBlocks: the quote is italic over its whole text", qb[0].styles?.[0].style === "italic" && qb[0].styles[0].start === 0 && qb[0].styles[0].end === q157.length);
+  const qm = quoteBlocks("> from a _mistake_ to a _crime_ is a far cry", "PARAGRAPH")[0];
+  check("quoteBlocks: a leading '> ' stays as written; '_mistake_' is italic as before", qm.type === "PARAGRAPH" && qm.text === "> from a mistake to a crime is a far cry" && (qm.styles ?? []).some((st) => st.style === "italic" && qm.text.slice(st.start, st.end) === "mistake"), JSON.stringify(qm));
+  check("quoteBlocks: '- ' and '# ' at the start stay as written", quoteBlocks("- not a dash list", "PARAGRAPH")[0].text === "- not a dash list" && quoteBlocks("# not a heading", "HEADING")[0].type === "PARAGRAPH");
   check("quoteBlocks: a quote of a list block is still a list", quoteBlocks("1. one\n2. two", "LIST")[0].type === "LIST");
 
   // ANS7-03, -04, -05: rule sentences.
   const rules7 = stitchRules("en");
-  check("answer rules: a contradictions command proposes only contradictions (ANS7-04)", rules7.includes("When the command asks for contradictions or disagreements, propose only links whose two passages contradict each other: a paraphrase, an agreement, or an echo is not one."));
-  check("answer rules: each line names its document and its quote proves its claim (ANS7-03)", rules7.includes("Each line names its document by its title as given, even when the line before named it, and its quote proves the line's claim on its own.") && rules7.includes("end with one clause on the ones that did not"));
-  check("answer rules: a mixed section's heading names its documents (ANS7-05)", rules7.includes("When a section's quotes come from more than one document, its heading names them, or each quote follows a text part that names its document."));
+  check("answer rules: a contradictions command proposes only contradictions (ANS7-04)", rules7.includes("A command for contradictions or disagreements gets only links whose passages contradict: never a paraphrase, an agreement, or an echo."));
+  check("answer rules: each line names its document and its quote proves its claim (ANS7-03)", rules7.includes("its document's title, even if the line before named it, the shortest quote that proves that line's claim (one clause)") && rules7.includes("To which of several things changed or hold, end with one clause on the ones that did not."));
+  check("answer rules: a mixed section's heading names its documents (ANS7-05)", rules7.includes("A section quoting several documents names them in its heading, or puts a text part naming the document before each quote."));
 }
 
 // ── Round 3 (ANS3-03): a cut where no line shares a word with the query ──

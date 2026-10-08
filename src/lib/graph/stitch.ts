@@ -2182,11 +2182,20 @@ export async function stitch(input: {
     .map((state) => t(`stitch.${EXISTING_NOTE[state]}${again[state] === 1 ? "1" : "N"}`, { n: again[state] }))
     .concat(linksCopied > 0 ? [t(`stitch.stitchLinksCopy${linksCopied === 1 ? "1" : "N"}`, { n: linksCopied })] : [])
     .join(" ");
+  // When some of two or more links proposed were not added, the note leads
+  // with how many were (ANS7-06): the reply's "I proposed 2 links" is then
+  // not read as 2 added.
+  const proposed = result.data.links.length;
+  const addedLead =
+    existingNote && proposed >= 2 && linkCount < proposed
+      ? t(`stitch.stitchLinksAdded${linkCount === 0 ? "None" : linkCount === 1 ? "Of1" : "OfN"}`, { n: proposed, added: linkCount })
+      : "";
+  const linksNote = [addedLead, existingNote].filter(Boolean).join(" ");
   // The links already in the project the answer is about are lit with the
   // new ones (ANS5-05): every one a links command was told of, and any
   // whose two blocks the reply cites side by side.
   for (const id of existingNamed(checked.reply, existingAliases, selected, kind === "links")) existingLinkIds.add(id);
-  const reply = replyWithIds([checked.reply, pageNote, existingNote].filter(Boolean).join("\n\n"), blockByRef);
+  const reply = replyWithIds([checked.reply, pageNote, linksNote].filter(Boolean).join("\n\n"), blockByRef);
   // No reply and nothing stored: the reader would see an empty turn.
   if (!reply && linkCount === 0 && !document) throw input.onFailure(STITCH_EMPTY_ANSWER);
   const picked = selected;
@@ -2408,14 +2417,25 @@ export function assignSources<S extends { quotedText: string }>(blocks: { type: 
   return out;
 }
 
-/** A quote part's blocks (ANS7-05): the passage as it is, one paragraph in
-    italic over its whole text, so the documents' words read apart from the
-    page's own writing and "157. The thought of suicide…" stays the
-    paragraph it is, not a list item. A quote of any other block (a list,
-    a table, a transcript line) parses as markdown, as before. */
+/** A quote part's blocks (ANS7-05): one paragraph, in italic over its whole
+    text, so the documents' words read apart from the page's own writing. A
+    leading list, heading or quote marker ("157. The thought of suicide…",
+    "- ", "# ", "> ") stays as written, so the passage is not a list item;
+    the rest parses as markdown, as before, so "_mistake_" is italic. A quote
+    of any other block (a list, a table, a transcript line) parses as
+    markdown, as before. */
 export function quoteBlocks(text: string, sourceType: string | undefined): ParsedBlock[] {
   if (sourceType !== "PARAGRAPH" && sourceType !== "HEADING") return parseMarkdown(text);
-  return [{ type: "PARAGRAPH", text, styles: [{ start: 0, end: text.length, style: "italic", quotedText: text }] }];
+  const lead = /^\s*(?:\d+[.)]|[-*+]|#{1,6}|>)\s+/.exec(text)?.[0] ?? "";
+  const parsed = parseMarkdown(text.slice(lead.length));
+  const one = parsed.length === 1 && parsed[0].type === "PARAGRAPH" && !parsed[0].html ? parsed[0] : null;
+  const shift = <S extends { start: number; end: number }>(spans: S[] | undefined): S[] =>
+    (spans ?? []).map((sp) => ({ ...sp, start: sp.start + lead.length, end: sp.end + lead.length }));
+  const block: ParsedBlock = one
+    ? { ...one, text: lead + one.text, styles: shift(one.styles), citations: one.citations && shift(one.citations), links: one.links && shift(one.links) }
+    : { type: "PARAGRAPH", text };
+  const italic = { start: 0, end: block.text.length, style: "italic" as const, quotedText: block.text };
+  return [{ ...block, styles: [italic, ...(block.styles ?? [])] }];
 }
 
 // The generated document: parts become markdown, the markdown becomes blocks
