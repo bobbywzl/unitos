@@ -89,6 +89,8 @@ export function isCaption(text: string, runs: Run[] | undefined): boolean {
 // the panel's label, which the figure's caption names; a symbol and its
 // script is a caption ("(c) Ω₃", GeoTopo's Abbildung 1.12: it was lost).
 const PANEL_RE = /^(?:\(\p{L}\)|\p{L}[.)])\s+(?=[^]*\p{L})[^]{2,}/u;
+// An equation's number: "(2.17)", "(4b)".
+const EQUATION_NUMBER_RE = /^\(\d{1,3}(?:\.\d{1,3})*[a-z]?\)$/;
 const NOTE_RE = /^(?:(?:notes?|sources?)\s*[:.]\s+\S|[（(](?:出典|注|資料|来源|來源)[）)]|(?:出典|注|来源|來源)[:：])/i;
 // Panel letters alone ("(c) (d)") are a chart's labels, no caption.
 const LETTERS_RE = /^(?:\s*(?:\(\p{L}\)|\p{L}[.)]))+\s*$/u;
@@ -510,9 +512,11 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     return ends.filter((e) => edge - e <= textSize * 1.5).length >= 4 ? edge : null;
   })();
   // A chart's ticks: three numbers or more in a row, or right-aligned in a
-  // column, on the box or within a line of it.
+  // column, on the box or within a line of it. A minus may stand a space
+  // before its digits (parse loop finding: a Tufte textbook's plot of ψ(x)
+  // reads its ticks "− 4", "− 2", "2", "4", and was no figure).
   const ticked = (box: Box) => {
-    const numbers = runs.filter((r) => shareInside(r.box, grow(box, textSize)) >= 0.7 && /^[-−–+]?\d[\d.,]*%?$/.test(textOf(r).trim()));
+    const numbers = runs.filter((r) => shareInside(r.box, grow(box, textSize)) >= 0.7 && /^[-−–+]?\s?\d[\d.,]*%?$/.test(textOf(r).trim()));
     const lined = (at: (r: TextRun) => number, by: number) => numbers.some((a) => numbers.filter((b) => Math.abs(at(a) - at(b)) <= by).length >= 3);
     return lined((r) => r.box.y1, 1) || lined((r) => r.box.x2, 2);
   };
@@ -608,8 +612,15 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     // the page's text and next to no ink inside it, is a drawing too
     // (parse loop finding: GeoTopo p. 17's uncaptioned picture of a
     // compact set, eight shapes, was no figure: its labels read as an
-    // equation and two crops).
-    const sparse = shapes >= 5 && shapes >= paths.length * 0.8 && sized && ink < area(box) * 0.05 && !inside.some(isPageText);
+    // equation and two crops). With labels inside it, under a hundredth of
+    // its area in ink, a third of its paths may be shapes, the rest its
+    // axes and arrows (parse loop finding: a Tufte textbook's potential
+    // well, two gray walls, a bump, and an axis in fifteen paths, was no
+    // figure: its labels "V(z)", "V0", "z", "−L/2" read as two equations
+    // and two crops). A chart's panel with no label inside is no drawing
+    // of its own: its boxes and whiskers are a third of its paths too.
+    const labeled = inside.length > 0 && ink < area(box) * 0.01;
+    const sparse = shapes >= 5 && shapes >= paths.length * (labeled ? 0.3 : 0.8) && sized && ink < area(box) * 0.05 && !inside.some(isPageText);
     // A drawing in the margin beside the text column: three paths or
     // more, a shape among them, a figure's width and a line tall at the
     // least, its box an em or more past the column's right edge, with no
@@ -761,6 +772,12 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     runs.filter((r) => {
       if (taken.has(r) || r.chars > 12 || shareInside(r.box, plot) >= 0.7 || LABEL_START_RE.test(textOf(r))) return false;
       if (/[.!?;:,]$/.test(r.items.map((i) => i.str).join("").trim())) return false;
+      // An equation's number at the column's edge is no tick of a drawing
+      // in the margin beside it (parse loop finding: the MML book's p. 23
+      // took "(2.17)" for the y-axis label of Figure 2.5's colored
+      // matrices; the drawing's box then crossed the notes' gutter, and
+      // the notes read into the lines beside them).
+      if (EQUATION_NUMBER_RE.test(textOf(r).trim())) return false;
       const reach = Math.max(r.size, textSize) * 1.7;
       const cx = (r.box.x1 + r.box.x2) / 2;
       const cy = (r.box.y1 + r.box.y2) / 2;

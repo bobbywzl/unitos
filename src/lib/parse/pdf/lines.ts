@@ -489,7 +489,8 @@ function composeAccents(items: Item[]): Item[] {
   return out;
 }
 
-const QED_RE = /^[□■∎]$/;
+// An end mark: a proof's (□, ∎), or a remark's or an example's (♢, ◇).
+const QED_RE = /^[□■∎▢♢◇]$/;
 
 /** The least gap between two items of a line, in points, that reads as a
     space: 0.12 of the line's size, or 0.2 after a script (an item set at
@@ -798,9 +799,12 @@ function buildLine(rawItems: Item[], page: number, rtlText = false): Line {
   let prevItem: Item | null = null;
   for (const [n, item] of read.entries()) {
     const gap = rtl ? (rtl.gaps.get(item) ?? 0) : prevEnd === null ? 0 : item.x - prevEnd;
-    // An end-of-proof mark set flush right closes the line's text, not a cell
-    // of its own (read by its code, □ turned "as claimed." and a running
-    // head into a table).
+    // An end mark set flush right closes the line's text, not a cell of its
+    // own (read by its code, □ turned "as claimed." and a running head into
+    // a table). Parse loop finding: the MML book closes a remark with ♢ at
+    // the column's edge; read as a cell, the line told no paragraph's end,
+    // and "…in more detail in (7.27). ♢" ran into the indented "Recall
+    // that …" under it.
     const proofEnd = item === items[items.length - 1] && QED_RE.test(item.str.trim());
     const wide = rtl ? rtl.opens.has(item) : prevItem !== null && !proofEnd && opensCell(prevItem, item, size, items[n + 1]);
     const least = prevItem !== null ? spaceGap(prevItem, item, size) : size * 0.12;

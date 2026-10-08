@@ -117,15 +117,17 @@ function markSpaces(items: Item[], text: Item[]) {
 // own, it stood after the description under its line (parse loop
 // finding: a LaTeX package's manual sets each option so; a line in a
 // typewriter face set smaller than its default broke away, and its
-// default read after its description). A run that starts where other
-// lines start, past the page's flush-right runs, is a column's line.
+// default read after its description). A run that opens with a label
+// and a colon may run to eight words: a length's default, "Default: .1667em
+// plus .0333em minus .0117em". A run that starts where other lines start,
+// past the page's flush-right runs, is a column's line.
 function joinRightRuns(lines: Line[], page: number): Line[] {
   // The right margin: the farthest line end that two other lines share.
   const ends = lines.map((l) => l.xEnd).filter((x, k, all) => all.filter((o, j) => j !== k && Math.abs(o - x) <= 1).length >= 2);
   if (ends.length === 0) return lines;
   const right = Math.max(...ends);
   const words = (l: Line) => l.text.trim().split(/\s+/).length;
-  const flush = (l: Line) => Math.abs(l.xEnd - right) <= l.size * 0.5 && words(l) <= 4;
+  const flush = (l: Line) => Math.abs(l.xEnd - right) <= l.size * 0.5 && words(l) <= (/^\p{L}+:\s/u.test(l.text.trim()) ? 8 : 4);
   const out = [...lines];
   for (const run of lines) {
     if (!flush(run) || run.cells.length !== 1) continue;
@@ -814,7 +816,7 @@ function splitAt(items: Item[], graphics: Placed[], page: number, pageWidth: num
   if (band) return { bands: stacked(band, items, graphics, "columns", page) };
   // A note beside a column, a gutter apart (sideNote): the band it stands
   // in is columns, and the note reads beside the paragraph at its top.
-  if (twoSided.length === 1 && isNoteBand(twoSided[0], page)) return { bands: stacked(twoSided[0], items, graphics, "columns", page) };
+  if (twoSided.length === 1 && isNoteBand(twoSided[0], page, margin)) return { bands: stacked(twoSided[0], items, graphics, "columns", page) };
   // Blocks a band's gutter finds (bandGutter) stand beside each other (a
   // court's caption line over a run-in heading at the column's edge is no
   // pair), hold words on both sides (a contents list's page numbers beside
@@ -878,7 +880,8 @@ function isTextColumn(lines: Line[]): boolean {
 // A band that is a column and a note beside it (sideNote): the wide side a
 // prose column at the text's leading, the note words (ten letters or more)
 // an em or more from it.
-function isNoteBand(band: Band, page: number): boolean {
+// margin: the band's gutter is a column of notes' (marginGutter).
+function isNoteBand(band: Band, page: number, margin = false): boolean {
   if (band.left.items.length === 0 || band.right.items.length === 0 || !sideNote(band, page)) return false;
   const [note, wide] = chars(band.left.items) < chars(band.right.items) ? [band.left, band.right] : [band.right, band.left];
   if (note.items.reduce((n, i) => n + i.str.replace(/[^\p{L}]/gu, "").length, 0) < 10) return false;
@@ -888,7 +891,11 @@ function isNoteBand(band: Band, page: number): boolean {
   // the column's size apart (parse loop finding: a LaTeX package's manual
   // sets its "Introduced in version 4.11" notes in 9 pt, 10.6 pt left of
   // its 10.9 pt column, and each note ran into the column's line beside
-  // it: "Introduced	chemformula offers …").
+  // it: "Introduced	chemformula offers …"). In the margin a gutter no item
+  // crosses parts them, and half an em is enough (parse loop finding: the
+  // MML book sets its 8 pt notes 0.68 em past its justified column, and a
+  // page whose notes took no row of their own read each note inside the
+  // sentence beside it: "the truncated SVD. truncated SVD It is possible").
   const smaller = median(note.items.map((i) => i.size)) <= size * 0.9;
   // Beside smaller notes, a column whose entries stand apart (a command's
   // line over its description, a blank line under each) is dense enough
@@ -899,7 +906,7 @@ function isNoteBand(band: Band, page: number): boolean {
   const gaps = lines.slice(1).map((l, k) => lines[k].y - l.y);
   const close = gaps.filter((g) => g <= size * 1.6).length;
   const dense = isDense(lines) || (smaller && close * 3 >= gaps.length);
-  return gutter >= size * (smaller ? 0.75 : 1) && isColumn(wide.items, page) && dense;
+  return gutter >= size * (smaller ? (margin ? 0.5 : 0.75) : 1) && isColumn(wide.items, page) && dense;
 }
 
 // A region cut above and under one band: what stands above it, the band,
@@ -1002,6 +1009,20 @@ function sideNote(band: Band, page: number): Side[] | null {
   // sets its 20 pt title beside a column of the report's number, date, and
   // authors, and each line of the column read between two of the title's).
   const parted = (k: number) => gaps[k] > Math.max(pitch, Math.min(lines[k].size, lines[k + 1].size) * 1.15) * 1.3;
+  // A paragraph also ends at the line before an indented first line, with
+  // no gap between them: the line, at the column's edge, ends a sentence
+  // (or an end mark), and the next line starts half an em to three ems in
+  // (parse loop finding: the MML book's "weak duality" note read inside
+  // the sentence after its paragraph, "…with respect to λ is weak
+  // duality", and the next one split display (7.28) between its rows). A
+  // list's items stand in from the edge, all of them: an item's end is no
+  // paragraph's. The edge is where most lines start: a head set out left of
+  // it is no edge (qm-madsen p. 91: "13.2 Quantum States" split "…their own
+  // measurement system?" | "In that case").
+  const at = (x: number) => lines.filter((l) => Math.abs(l.x - x) <= 1).length;
+  const left = lines.map((l) => l.x).reduce((a, x) => (at(x) > at(a) ? x : a));
+  const indented = (l: Line) => l.x - left >= l.size * 0.5 && l.x - left <= l.size * 3;
+  const ends = (k: number) => parted(k) || (/[.!?:♢◇□■∎]$/u.test(lines[k].text.trim()) && !indented(lines[k]) && indented(lines[k + 1]));
   // A group of the note: its lines at their own pitch (a stray mark on the
   // note's side, its page number, is a group of its own).
   const noteLines = buildLines(note.items, page);
@@ -1036,7 +1057,7 @@ function sideNote(band: Band, page: number): Side[] | null {
       if (start < 0) start = 0;
       cuts.push(start === 0 ? Infinity : lines[start].y + lines[start].size * 0.5);
     } else {
-      const end = lines.findIndex((l, k) => l.y <= top && (k === lines.length - 1 || parted(k)));
+      const end = lines.findIndex((l, k) => l.y <= top && (k === lines.length - 1 || ends(k)));
       if (end < 0) return null;
       cuts.push(lines[end].y - lines[end].size * 0.5);
     }

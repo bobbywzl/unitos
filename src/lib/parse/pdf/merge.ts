@@ -67,6 +67,9 @@ function otherText(s: Segment, paragraph: Segment): boolean {
 const CJK_END_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}ー、]$/u;
 const CJK_START_RE = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
 
+// An end mark: a remark's, an example's, or a proof's. It ends its block.
+const END_MARK_RE = /[♢◇◆♦□■∎▢◁▷⊣]$/u;
+
 // A part that ends in an abbreviation ends no sentence when the next opens
 // with a number or a lowercase word ("(Zhuravlev et al. 2010; Erban et
 // al." | "2014) and …": Springer p. 1).
@@ -139,6 +142,19 @@ function continuesOnPage(prev: Segment, next: Segment, setting: PageSetting): bo
   // basis of V", and "coordinate of x with respect to B").
   const beside = lone && next.box !== undefined && Math.abs(next.box.y2 - prev.box!.y2) <= lineSize * 0.5 && next.box.x1 > prev.box!.x2;
   if (beside && sizes && sizes[0] < sizes[1] * 0.95) return false;
+  // A note of a few words set smaller right of the paragraph, level with
+  // its lines, is a note in the margin too (parse loop finding: the MML
+  // book's "orthogonal complement", read after its paragraph at the page's
+  // foot, went on its sentence: "…x∈V can be orthogonal complement
+  // uniquely decomposed into").
+  const noteRight =
+    prev.box !== undefined &&
+    next.box !== undefined &&
+    next.box.x1 > prev.box.x2 &&
+    next.box.y2 <= prev.box.y2 + lineSize &&
+    next.box.y1 >= prev.box.y1 - lineSize &&
+    next.text.length <= 40;
+  if (noteRight && sizes && sizes[1] < sizes[0] * 0.95) return false;
   if ((/[a-z,;\-–—]$/.test(prev.text) || ABBREVIATION_END_RE.test(prev.text)) && goesOn(prev.text, next.text)) return true;
   const size = prev.lineSize ?? 10;
   const columnBreak = prev.box !== undefined && next.box !== undefined && next.box.y2 > prev.box.y1 && next.box.x1 > prev.box.x2 - size;
@@ -351,13 +367,33 @@ function liftFloatsOffParagraphBreaks(segments: Segment[], setting: PageSetting,
     // A list cut by the page break continues under the floats too (import
     // compare loop finding: a rubric list split in two by a figure).
     const listBreak = prev.type === "LIST" && !prev.tocEntries;
-    const ended = /[.!?:…"”)]$/.test(prev.text.trim()) && !ABBREVIATION_END_RE.test(prev.text.trim()) && !endsAtEdge(prev, setting);
+    const ended =
+      END_MARK_RE.test(prev.text.trim()) || (/[.!?:…"”)]$/.test(prev.text.trim()) && !ABBREVIATION_END_RE.test(prev.text.trim()) && !endsAtEdge(prev, setting));
     if (!listBreak && (prev.type !== "PARAGRAPH" || isPageFloat(prev) || ended)) continue;
     let k = b;
     while (k < out.length && out[k].page === out[b].page && (isPageFloat(out[k]) || isLabel(out[k], prev))) k++;
-    if (k >= out.length || (k === b && a === b - 1) || !(footLine || out.slice(a + 1, k).some(isPageFloat))) continue;
     const tail = out[k];
-    if (tail.page !== out[b].page || debris(tail.text)) continue;
+    // A note set smaller atop the next page, in the margin beside the
+    // paragraph's second half, stands between the halves as a float does
+    // (parse loop finding: the MML book's "classification" in the margin of
+    // p. 22 kept "…the fourth" | "pillar: classification." apart, and the
+    // notes atop p. 300 kept "Using (9.9) in the" | "negative log-likelihood
+    // (9.8)"). Its words fit its box: a paragraph that took a note's first
+    // words keeps the note's box and size, and is no note (p. 44: "outer
+    // product (which we usually do), we can use …").
+    const note = (s: Segment) =>
+      smaller(s) &&
+      isLabel(s, prev) &&
+      s.box !== undefined &&
+      tail?.box !== undefined &&
+      (s.box.x1 > tail.box.x2 || s.box.x2 < tail.box.x1) &&
+      s.text.length * (s.lineSize ?? 10) ** 2 * 0.3 <= (s.box.x2 - s.box.x1) * (s.box.y2 - s.box.y1);
+    const between = out.slice(a + 1, k);
+    if (k >= out.length || (k === b && a === b - 1) || !(footLine || between.some(isPageFloat) || between.some(note))) continue;
+    // A part set smaller than the paragraph is a figure's label, no half of
+    // it (parse loop finding: the MML book's "…linear mappings where" took
+    // "Original", the label atop Figure 10.16, once its notes stood apart).
+    if (tail.page !== out[b].page || debris(tail.text) || (smaller(tail) && !smaller(prev))) continue;
     // A references entry's end at the page's top goes with the list after it.
     const lift = listBreak && hangingTail(tail, out[k + 1]) ? 2 : 1;
     const opens = /^[a-z($€£0-9"'“]/.test(tail.text) && !(/[.!?:…"”)]$/.test(prev.text.trim()) && !ABBREVIATION_END_RE.test(prev.text.trim()));
@@ -488,9 +524,6 @@ function wrapsOver(prev: Segment, next: Segment, setting: PageSetting): boolean 
   );
 }
 
-// An end mark: a remark's, an example's, or a proof's.
-const END_MARK_RE = /[♢◇◆♦□■∎▢◁▷⊣]$/u;
-
 // A paragraph's last line at a page's foot wrapped, and the paragraph at the
 // next page's top opens where the column's lines start: the page break cut
 // the paragraph after a sentence, on a page whose paragraphs open flush as
@@ -505,10 +538,6 @@ function wrapsAcross(prev: Segment, next: Segment): boolean {
   return (
     next.type === "PARAGRAPH" &&
     !prev.listItem &&
-    // An end mark set flush right (a remark's ♢, a proof's ∎) ends its
-    // block at the line's edge: the MML book's "…b = X⊤y. ♢" is no part
-    // of the next page's "Example 9.2 (Fitting Lines)".
-    !END_MARK_RE.test(prev.text.trim()) &&
     !/\b(?:center|right|caption|quote|footnote)\b/.test(prev.html ?? "") &&
     !/\b(?:indent-first|indent-hanging|indent-block|center|right|caption|quote|footnote)\b/.test(next.html ?? "") &&
     wrapsAt(prev, next)
@@ -542,6 +571,12 @@ export function mergeAcrossPages(input: Segment[]): Segment[] {
       !debris(segment.text) &&
       (!prev.listItem || /^\p{Ll}/u.test(segment.text) || wrapsOver(prev, segment, setting)) &&
       !isCaptionText(prev) &&
+      // An end mark set flush right (a remark's ♢, a proof's ∎) ends its
+      // block at the line's edge: the MML book's "…b = X⊤y. ♢" is no part
+      // of the next page's "Example 9.2 (Fitting Lines)", nor "…subspace
+      // U: λ. ♢" of "Example 3.10 (Projection onto a Line)" on a page that
+      // sets its paragraphs in.
+      !END_MARK_RE.test(prev.text.trim()) &&
       setAlike(prev, segment, body) &&
       sameFace(prev, segment) &&
       // A numbered heading read as a paragraph starts its own block: with

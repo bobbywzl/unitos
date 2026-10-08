@@ -23,7 +23,8 @@ import type { Cell, Line, PageContext, Run, Segment, Step } from "@/lib/parse/pd
 // A contents list that runs past the page break continues on the next page.
 let tocCarry = false;
 
-const PROOF_END_RE = /^[□■∎]$/;
+// An end mark: a proof's (□, ∎), or a remark's or an example's (♢, ◇).
+const PROOF_END_RE = /^[□■∎▢♢◇]$/;
 
 export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
   const segments: Segment[] = [];
@@ -98,7 +99,9 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
     tocMode = false;
 
     // A proof's end mark alone on its line (flush right under a display)
-    // ends the block before it, as the page shows it.
+    // ends the block before it, as the page shows it. So does a remark's
+    // (parse loop finding: the MML book's ♢ under "… are linearly
+    // independent." read as a display equation of its own).
     const last = segments[segments.length - 1];
     if (PROOF_END_RE.test(line.text.trim()) && last !== undefined && (last.type === "PARAGRAPH" || last.type === "LIST")) {
       appendProofBox(last, line);
@@ -413,10 +416,13 @@ function withDrawnSeparators(
     // A chart's axis: a vertical rule crosses it in its middle, an em past
     // either end and reaching an em over and under it. A separator stands
     // alone (parse loop finding: a textbook's circle drawn on two axes, its
-    // x axis read as a separator under the figure).
+    // x axis read as a separator under the figure). So does one that
+    // stands on it and reaches an em up or down (a potential well's axis,
+    // V(z) drawn up from z, read as a separator under its figure).
     const crossed = ctx.drawing.rules.some((r) => {
       const x = (r.x1 + r.x2) / 2;
-      return r.dir === "v" && x > rule.x1 + size && x < rule.x2 - size && r.y1 < y - size && r.y2 > y + size;
+      const meets = r.y1 <= y + 2 && r.y2 >= y - 2 && (r.y1 < y - size || r.y2 > y + size);
+      return r.dir === "v" && x > rule.x1 + size && x < rule.x2 - size && meets;
     });
     if (crossed) continue;
     at.add(start.at);

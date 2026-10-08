@@ -751,11 +751,13 @@ function firstWord(line: Line): number {
 
 // A line's words, less the marks set apart after them: a form's box dash
 // ("… whose number to enter.  –") ends no sentence ("Part II
-// Certification" under it joined its paragraph: the W-9).
+// Certification" under it joined its paragraph: the W-9). An end mark set
+// flush right is one of them, in the line's last cell: "… do not match. ♢"
+// ends its sentence.
 function wordsText(line: Line): string {
   let n = line.cells.length;
   while (n > 1 && !/[\p{L}\p{N}]/u.test(line.cells[n - 1].text)) n--;
-  return (n === line.cells.length ? line.text : line.cells.slice(0, n).map((c) => c.text).join(" ")).trim();
+  return (n === line.cells.length ? line.text : line.cells.slice(0, n).map((c) => c.text).join(" ")).trim().replace(/\s+[□■∎▢♢◇]$/u, "");
 }
 
 // A line a few under line k, at its place, whose marker goes on the
@@ -845,6 +847,11 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
       OPENS_SENTENCE_RE.test(next.text) &&
       justifiedPage(lines, ctx) &&
       blockEdge(lines, i, j + 1) - prev.xEnd > prev.size * 0.33;
+    // An end mark closes its block: a remark's ♢, a proof's □ (parse loop
+    // finding: the MML book's "… do not match. ♢" over "Remark. Matrix
+    // multiplication …", a gap at the text's leading between them, read
+    // as one paragraph).
+    const closed = /\s[□■∎▢♢◇]$/u.test(prev.text.trim()) && OPENS_SENTENCE_RE.test(next.text);
     // A line that opens with a raised label (an affiliation's "1Department
     // of Physics…", a note's "²") starts a paragraph of its own: the
     // affiliations of arxiv-2504-02736 ran into one.
@@ -908,6 +915,7 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
       // (real-jnlp-31-47-p1).
       (next.size > body * (ctx.ocr ? 1.3 : 1.14) && !(centered && !ctx.ocr && Math.abs(next.size - prev.size) <= 0.5)) ||
       endsShort ||
+      closed ||
       headLine ||
       lastLine ||
       stepsIn ||

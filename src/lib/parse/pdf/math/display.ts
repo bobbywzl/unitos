@@ -1538,6 +1538,11 @@ function isMathSegment(s: Segment, ctx: PageContext): boolean {
   if (!numbered && (s.mathShare ?? 0) < 0.25) return false;
   // A lone symbol (a footnote marker, a sum limit) is not an equation.
   if (s.text.replace(/\s/g, "").length < 4) return false;
+  // A line that opens with a word or two and a colon opens a sentence,
+  // set in or not (parse loop finding: GeoTopo p. 18's "Es gilt:
+  // f(f⁻¹(V)) = V ∩ f(X)", set in under a proof's arrows, was a crop of
+  // the formula with its words).
+  if (/^\p{L}{2,}(?:\s+\p{L}{2,})?:\s/u.test(s.text)) return false;
   // Prose with inline math starts at the column edge and runs long, or
   // carries words ("Here χ = 1 if … and zero otherwise." — import compare
   // loop finding: a short sentence under a display merged into its crop).
