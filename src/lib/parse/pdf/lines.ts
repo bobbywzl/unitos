@@ -901,8 +901,46 @@ function baselineOf(items: Item[], hangs: (i: Item) => boolean): number {
   return median(pool.filter((i) => i.size >= size * 0.75).map((i) => i.y));
 }
 
-const LIST_MARK_RE = /^\s*[•▪◦‣●○■□◆❖➢➤►✓✔*·∙–—-]\s*$/;
+// The lines built from each list of items while a page's reading holds the
+// memo open (withLineMemo): the column finder tests one list many times (a
+// side as a column, as a note, as prose), and building is most of its time.
+// A list is the same list when it holds the same items in the same order.
+// The lines are the builder's copies, so a caller's change to an item
+// after the build is in no cached line: whoever changes an item clears
+// the memo (forgetLines).
+let memo: Map<string, Line[]> | null = null;
+const itemIds = new WeakMap<Item, number>();
+let nextItemId = 0;
+
+export function withLineMemo<T>(work: () => T): T {
+  const outer = memo;
+  memo = new Map();
+  try {
+    return work();
+  } finally {
+    memo = outer;
+  }
+}
+
+export function forgetLines() {
+  memo?.clear();
+}
+
 export function buildLines(items: Item[], page: number): Line[] {
+  if (!memo) return linesOf(items, page);
+  let key = String(page);
+  for (const item of items) {
+    let id = itemIds.get(item);
+    if (id === undefined) itemIds.set(item, (id = nextItemId++));
+    key += `,${id}`;
+  }
+  let lines = memo.get(key);
+  if (!lines) memo.set(key, (lines = linesOf(items, page)));
+  return [...lines];
+}
+
+const LIST_MARK_RE = /^\s*[•▪◦‣●○■□◆❖➢➤►✓✔*·∙–—-]\s*$/;
+function linesOf(items: Item[], page: number): Line[] {
   const { items: sorted, starts } = dropCaps(items.filter((i) => i.str.trim().length > 0));
   sorted.sort((a, b) => b.y - a.y || a.x - b.x);
   // A line is the items near one baseline. The anchor is the line's largest

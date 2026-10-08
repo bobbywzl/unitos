@@ -7,7 +7,7 @@
 // its figure goes.
 
 import { median } from "@/lib/parse/pdf/geometry";
-import { buildLines } from "@/lib/parse/pdf/lines";
+import { buildLines, forgetLines, withLineMemo } from "@/lib/parse/pdf/lines";
 import type { Fill } from "@/lib/parse/pdf/drawing";
 import type { Box, Item, Line } from "@/lib/parse/pdf/types";
 
@@ -73,20 +73,22 @@ export function pageLines(items: Item[], pageWidth: number, page: number, graphi
   pageFrames = frames;
   pageDividers = dividers;
   pageFills = fills;
-  const pieces = readRegion(text, graphics, page, pageWidth, 0);
-  const lines: Line[] = [];
-  let order = 0;
-  for (const piece of pieces) {
-    if ("graphic" in piece) {
-      Object.assign(piece.graphic, { after: lines[lines.length - 1] ?? null, order: order++ });
-      continue;
+  return withLineMemo(() => {
+    const pieces = readRegion(text, graphics, page, pageWidth, 0);
+    const lines: Line[] = [];
+    let order = 0;
+    for (const piece of pieces) {
+      if ("graphic" in piece) {
+        Object.assign(piece.graphic, { after: lines[lines.length - 1] ?? null, order: order++ });
+        continue;
+      }
+      const built = piece.lines ?? buildLines(piece.items, page);
+      const extent = piece.extent ?? [Math.min(...built.map((l) => l.x)), Math.max(...built.map((l) => l.xEnd))];
+      for (const line of built) columns.set(line, extent);
+      lines.push(...built);
     }
-    const built = piece.lines ?? buildLines(piece.items, page);
-    const extent = piece.extent ?? [Math.min(...built.map((l) => l.x)), Math.max(...built.map((l) => l.xEnd))];
-    for (const line of built) columns.set(line, extent);
-    lines.push(...built);
-  }
-  return joinRightRuns(lines, page);
+    return joinRightRuns(lines, page);
+  });
 }
 
 /** The words a space item stands right before, on their baseline or a
@@ -817,6 +819,7 @@ function splitAt(items: Item[], graphics: Placed[], page: number, pageWidth: num
     const quote = run.flatMap((s) => (s.piece && "items" in s.piece ? s.piece.items : []));
     const box = { x1: Math.min(...quote.map((i) => i.x)), x2: Math.max(...quote.map((i) => i.x + i.w)), y1: Math.min(...quote.map((i) => i.y - i.size * 0.25)), y2: Math.max(...quote.map((i) => i.y + i.size)) };
     for (const item of items) if (!spanning.has(item) && item.y <= box.y2 + columnSize * 1.5 && item.y >= box.y1 - columnSize * 1.5) item.around = box;
+    forgetLines();
     separators.splice(k, 0, { y: (under?.y ?? bottom - maxSize) + 0.001, size: 0, piece: { items: quote } as Piece });
   }
   separators.sort((a, b) => b.y - a.y);
