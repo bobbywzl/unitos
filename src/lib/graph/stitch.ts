@@ -822,7 +822,7 @@ export function trimmedHistory(history: ModelMessage[]): ModelMessage[] {
   const answers = history.flatMap((m, i) => (m.role === "assistant" ? [i] : []));
   const cut = new Set(answers.slice(0, Math.max(0, answers.length - HISTORY_FULL_ANSWERS)));
   return history.map((m, i) => {
-    if (!cut.has(i) || typeof m.content !== "string") return m;
+    if (!cut.has(i) || m.role !== "assistant" || typeof m.content !== "string") return m;
     const at = m.content.search(RECORD_START);
     const body = (at === -1 ? m.content : m.content.slice(0, at)).trim();
     const record = at === -1 ? "" : m.content.slice(at).trim();
