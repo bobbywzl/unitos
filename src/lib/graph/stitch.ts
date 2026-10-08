@@ -44,6 +44,7 @@ import { jevEnabled, mapLimit } from "@/lib/jev";
 import { rank, tokenize } from "@/lib/graph/rank";
 import {
   asksMore,
+  firstReadParagraph,
   refersBack,
   stitchExpandPrompt,
   stitchPrompt,
@@ -827,6 +828,16 @@ export function answerMessages(input: {
   const selected = input.selected;
   const rules = stitchRules(input.lang);
   const shownBlock = (alias: string) => (selected ? selected.has(alias) : input.reading.blockByRef.has(alias));
+  // The blocks picked change every command, so behind them nothing caches:
+  // past STITCH_HISTORY_FIRST_MIN tokens of history the conversation comes
+  // before them, and turn t reads turn t-1's history from the cache
+  // (COST4-01). The documents read whole stay in the system message: they
+  // are the same every command.
+  const historyTokens = input.history.reduce((sum, m) => sum + estTokens(textOf(m)), 0);
+  const historyFirst = selected !== null && historyTokens >= (input.historyFirstMin ?? STITCH_HISTORY_FIRST_MIN);
+  // The first read's paragraph opens the blocks in the system message,
+  // where it caches (COST8-03); history-first keeps it in the last message.
+  const firstReadInSystem = selected !== null && input.back !== true && !historyFirst;
   const prompt = stitchPrompt({
     documents: documentList,
     command: input.command,
@@ -838,14 +849,9 @@ export function answerMessages(input: {
       : undefined,
     existing: existingPairs(input.links ?? [], shownBlock),
     notPicked: input.notPicked,
+    firstReadInSystem,
   });
-  // The blocks picked change every command, so behind them nothing caches:
-  // past STITCH_HISTORY_FIRST_MIN tokens of history the conversation comes
-  // before them, and turn t reads turn t-1's history from the cache
-  // (COST4-01). The documents read whole stay in the system message: they
-  // are the same every command.
-  const historyTokens = input.history.reduce((sum, m) => sum + estTokens(textOf(m)), 0);
-  if (selected && historyTokens >= (input.historyFirstMin ?? STITCH_HISTORY_FIRST_MIN)) {
+  if (selected && historyFirst) {
     return [
       systemMessage(systemOf(rules, input.profile, "The blocks a first read picked for the command are in the reader's last message.", "")),
       ...input.history,
@@ -855,7 +861,10 @@ export function answerMessages(input: {
   if (selected) {
     // Behind the blocks picked nothing caches, so the older answers are cut
     // (COST6-05); the whole read's history caches and stays whole.
-    const system = systemOf(rules, input.profile, "The blocks a first read picked for the command follow.", selectedSections(rendered, selected, gists, input.command, input.reading.words));
+    const intro = firstReadInSystem
+      ? `The blocks a first read picked for the command follow.\n${firstReadParagraph(Boolean(input.notPicked?.count), "below")}`
+      : "The blocks a first read picked for the command follow.";
+    const system = systemOf(rules, input.profile, intro, selectedSections(rendered, selected, gists, input.command, input.reading.words));
     return [systemMessage(system), ...trimmedHistory(input.history), { role: "user", content: prompt }];
   }
   const system = systemOf(rules, input.profile, "Every document follows.", rendered.map((r) => wholeSection(r, gists)).join("\n\n"));
@@ -995,8 +1004,9 @@ function routeSystem(views: SkeletonView[], rendered: Rendered[], profile: Profi
     (COST7-01). Byte-identical from turn to
     turn when every line is shown. A cut puts every document's header and
     gist first, the same bytes every command, and the lines after them
-    under '[document X] "<title>": N of M skeleton lines shown', so the headers cache
-    (COST6-02). */
+    under '[document X]: N of M skeleton lines shown', so the headers cache
+    (COST6-02); the title is in the header only, the uncached lines name
+    the letter (COST8-04). */
 export function skeletonSystem(views: SkeletonView[], rendered: Rendered[], shown: Set<string> | null, profile: Profile, routed: Set<string> | null = null): string {
   const byLetter = new Map(views.map((v) => [v.r.letter, v]));
   const head = (r: Rendered, v: SkeletonView) => `${header(r.letter, r.doc, coverageNote(r.coverage))}${v.gist ? `\ngist: ${v.gist}` : ""}`;
@@ -1004,7 +1014,7 @@ export function skeletonSystem(views: SkeletonView[], rendered: Rendered[], show
     const v = byLetter.get(r.letter);
     if (!v) return shown ? [] : [r.section];
     const lines = shown ? v.lines.filter((l) => shown.has(l.alias)) : v.lines;
-    const out: string[] = [shown ? `[document ${r.letter}] "${r.doc.title}": ${lines.length} of ${v.lines.length} skeleton lines shown` : head(r, v)];
+    const out: string[] = [shown ? `[document ${r.letter}]: ${lines.length} of ${v.lines.length} skeleton lines shown` : head(r, v)];
     const partOf = new Map(v.parts.map((p) => [p.alias, p]));
     let lastIndex = -1;
     let lastPart: string | null = null;
@@ -1038,7 +1048,7 @@ export function skeletonSystem(views: SkeletonView[], rendered: Rendered[], show
   return systemOf(
     stitchSelectRules(),
     profile,
-    "Each document's title and gist follow, then the skeleton lines read for this command: one line per block, tagged [block <alias>], what the block says at a tenth of its length, under its document's letter and title.",
+    "Each document's title and gist follow, then the skeleton lines read for this command: one line per block, tagged [block <alias>], what the block says at a tenth of its length, under its document's letter; the titles are in the list above.",
     `${heads.join("\n\n")}\n\nThe skeleton lines read for this command:\n\n${sections.join("\n\n")}`,
   );
 }

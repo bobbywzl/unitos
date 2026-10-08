@@ -49,7 +49,7 @@ import {
   titleMatches,
   type SkeletonView,
 } from "../../src/lib/graph/stitch";
-import { asksEvery, asksMore, asksWhere, refersBack, stitchExpandPrompt, stitchPrompt, stitchRules, stitchSelectPrompt } from "../../src/lib/prompts/stitch";
+import { asksEvery, asksMore, asksWhere, firstReadParagraph, refersBack, stitchExpandPrompt, stitchPrompt, stitchRules, stitchSelectPrompt } from "../../src/lib/prompts/stitch";
 import { skeletonPrompt } from "../../src/lib/prompts/skeleton";
 import { estTokens } from "../../src/lib/tokens";
 
@@ -653,6 +653,21 @@ check("replyLanguage command: a mixed or short command keeps the UI's", replyLan
   check("answer layout: the whole read never moves", String(lay(long, null)[0].content).includes("[block A1]"));
   check("answer layout: the history-first system message is the same bytes every turn", String(l1[0].content) === String(lay([...long, ...long], new Set(["A1", "B1"]))[0].content));
   check("answer layout: off by default (STITCH_HISTORY_FIRST_MIN), a long history still after the blocks", STITCH_HISTORY_FIRST_MIN === Infinity && String(answerMessages({ reading: gReading, selected: new Set(["A1"]), lang: "en", profile: prof, history: long, command: "And then?" })[0].content).includes("[block A1]"));
+
+  // COST8-03: the first read's paragraph opens the blocks in the system message, where it caches.
+  const fr = (m: ReturnType<typeof answerMessages>) => m.map((x) => String(x.content));
+  const frSel = fr(lay(short, new Set(["A1"])));
+  const frSys = frSel[0];
+  const frAt = frSys.indexOf(`The blocks a first read picked for the command follow.\n${firstReadParagraph(false, "below")}\n\n`);
+  check("answer layout: the first read's paragraph opens the blocks in the system message, \"below\", before the first [document A] (COST8-03)", frAt > 0 && frAt < frSys.indexOf("[document A]") && !frSel[3].includes("A first read picked"));
+  check("answer layout: the paragraph's words are the same as in the user message but \"below\" (COST8-03)", firstReadParagraph(false, "below").replace("the blocks below", "the blocks above") === firstReadParagraph(false, "above") && stitchPrompt({ documents: [], command: "x", continued: false, selected: true }).includes(firstReadParagraph(false, "above")));
+  const frPicked = fr(answerMessages({ reading: gReading, selected: new Set(["A1"]), lang: "en", profile: prof, history: [], command: "x", notPicked: { count: 2, titles: ["Notes"] } }));
+  check("answer layout: a pick in the graph says \"every document picked\" in the system message (COST8-03)", frPicked[0].includes(firstReadParagraph(true, "below")) && !frPicked[1].includes("A first read picked"));
+  const frFirst = fr(lay(long, new Set(["A1"])));
+  check("answer layout: history-first keeps the paragraph in the last message, \"above\" (COST8-03)", !frFirst[0].includes("A first read picked the blocks") && frFirst[3].includes(firstReadParagraph(false, "above")));
+  const frBack = fr(answerMessages({ reading: gReading, selected: new Set(["A1"]), lang: "en", profile: prof, history: short, command: "Why did you cite that?", back: true }));
+  check("answer layout: a back selection has no first read's paragraph (COST8-03)", frBack.every((c) => !c.includes("A first read picked the blocks")));
+  check("answer layout: the whole read has no first read's paragraph (COST8-03)", fr(lay(short, null)).every((c) => !c.includes("A first read picked the blocks")));
 }
 
 // ── Round 5 (ENGINE5) ──
@@ -792,7 +807,7 @@ check("replyLanguage command: a mixed or short command keeps the UI's", replyLan
   check("skeletonSystem: a cut's headers and gists come first, byte-identical across cuts", linesAt > 0 && cutA.slice(0, linesAt) === cutB.slice(0, cutB.indexOf("The skeleton lines read for this command:")) && cutA.slice(0, linesAt).includes("gist: On pity.") && cutA.slice(0, linesAt).includes("gist: On the will."));
   // COST7-01: the cut's part line has the summary only for a part the route pass named.
   const cutRouted = skeletonSystem(views6, rd, new Set(["A1", "A5", "B2"]), prof6, new Set(["A3"]));
-  check("skeletonSystem: a cut's lines under [document X] \"title\": N of M skeleton lines shown, the gap marked (…)", cutRouted.includes("[document A] \"Pity\": 2 of 6 skeleton lines shown\n[block A1] line 1\n(…)\n[part at A3] \"Part two\": the second part\n[block A5] line 5") && !cutRouted.includes("not shown)"));
+  check("skeletonSystem: a cut's lines under [document X]: N of M skeleton lines shown, the gap marked (…); the title only in the head (COST8-04)", cutRouted.includes("[document A]: 2 of 6 skeleton lines shown\n[block A1] line 1\n(…)\n[part at A3] \"Part two\": the second part\n[block A5] line 5") && !cutRouted.includes("not shown)") && cutRouted.split("\"Pity\"").length === 2 && cutRouted.includes("under its document's letter; the titles are in the list above."));
   check("skeletonSystem: a cut prints an unrouted part's title and no summary (COST7-01)", cutA.includes("(…)\n[part at A3] \"Part two\"\n[block A5] line 5") && !cutA.includes("the second part"));
   const cutOther = skeletonSystem(views6, rd, new Set(["A1", "A5", "B4"]), prof6, new Set(["B3"]));
   check("skeletonSystem: a routed part keeps its summary, an unrouted one in the same cut drops it (COST7-01)", cutOther.includes("[part at B3] \"Part two\": the second part\n[block B4] line 4") && cutOther.includes("[part at A3] \"Part two\"\n[block A5]"));
