@@ -86,7 +86,8 @@ export function ToolbarRow({
     if (unitos && !rightEl.hasAttribute("data-folded")) unitosOpen.current = unitos.offsetWidth;
     const base = rightEl.offsetWidth + 4 - (caption?.offsetWidth ?? 0) - (unitos?.offsetWidth ?? 0);
     const rightOpen = base + (caption ? CAPTION_OPEN : 0) + (unitos ? unitosOpen.current : 0);
-    const tools = unitos?.querySelectorAll("button").length ?? 0;
+    // Only the drawn tools: Extract is hidden below md.
+    const tools = unitos ? [...unitos.querySelectorAll("button")].filter((b) => b.getClientRects().length > 0).length : 0;
     const unitosFolded = tools * UNITOS_FOLDED + Math.max(0, tools - 1) * UNITOS_GAP;
     const rightTools = base + (caption ? CAPTION_OPEN : 0) + unitosFolded;
     const rightFolded = base + (caption ? CAPTION_FOLDED : 0) + unitosFolded;
