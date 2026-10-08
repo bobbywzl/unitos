@@ -163,6 +163,23 @@ export const NoteCard = memo(function NoteCard({
   );
 });
 
+/** The note's first line that holds the needle, as words (its line marker
+    and inline marks taken off), started a little before the match when the
+    match sits far into a long line; null when no line holds it. */
+function matchLine(content: string, needle: string): string | null {
+  const wanted = needle.toLowerCase();
+  for (const raw of content.split("\n")) {
+    const text = raw
+      .replace(/^\s*(?:#{1,6}|[-*+](?:\s\[[ xX]\])?|\d{1,3}[.)]|>)\s*/, "")
+      .replace(/[*_~`]+/g, "")
+      .trim();
+    const at = text.toLowerCase().indexOf(wanted);
+    if (at === -1) continue;
+    return at > 40 ? `…${text.slice(at - 20).trimStart()}` : text;
+  }
+  return null;
+}
+
 /** After the frame: the focus on `track` in the note's card (else its first
     button), when the focus fell to the page. */
 function focusInCard(noteId: string, track: string) {
@@ -481,16 +498,19 @@ const NoteCardBody = memo(function NoteCardBody({
   }, [absorbed]);
 
   // Accepted notes collapse to one line; pending notes are read before they are
-  // accepted, a compare pane exists to show the note whole, and a search shows
-  // every note it found whole.
+  // accepted, and a compare pane exists to show the note whole. A search
+  // keeps a row a row: it shows the line the search found (matchLine).
   const foldable = note.status === "ACCEPTED" && !pane;
-  const collapsed = !useStagedOpen(!(foldable && !searching && collapsedInView), viewExpanded, cardRef);
+  const collapsed = !useStagedOpen(!(foldable && collapsedInView), viewExpanded, cardRef);
   // The collapsed row's line (SPEC.md §6): the note's title; without one,
   // the gist, its first words until the gist arrives. The floating
   // placeholder shows the same line.
   const preview = useMemo(() => markdownPreview(note.content), [note.content]);
   const gist = useGist(note.id, note.gist, preview, (collapsed || floating) && !parts.title);
   const line = parts.title || gist;
+  // Under a search, the row shows the line that holds the first match,
+  // with the match lit, in place of the title or the gist.
+  const found = useMemo(() => (hit ? matchLine(note.content, hit) : null), [hit, note.content]);
   // The source the card jumps to: the reader opens on the document and
   // flashes the quote — the exact position the note came from.
   const jumpSource = note.sources.find((s) => !s.orphaned) ?? null;
@@ -772,7 +792,13 @@ const NoteCardBody = memo(function NoteCardBody({
             </span>
           )}
           <span className="min-w-0 flex-1">
-            <WordLine text={line} />
+            {found ? (
+              <span className="block truncate">
+                <Highlight text={found} needle={hit} />
+              </span>
+            ) : (
+              <WordLine text={line} />
+            )}
           </span>
         </button>
       )}

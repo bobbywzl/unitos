@@ -2,7 +2,7 @@
 
 import { TOUCH_HIT } from "@/components/outline/touch-hit";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { dropCardOn, type CardDragEndDetail } from "@/lib/card-drag";
 import { isImeKey } from "@/lib/ime";
 import { hasQuoteDrag, quoteMarkdown, readQuoteDrag, type QuoteDrag } from "@/lib/quote-drag";
@@ -66,7 +66,10 @@ export function NotesTray({
 }) {
   const t = useT();
   const { canEdit } = useCollab();
-  const [query, setQuery] = useState("");
+  // The field takes every key at once; the list follows a moment later
+  // (useDeferredValue), so typing never waits for the list.
+  const [typed, setQuery] = useState("");
+  const query = useDeferredValue(typed);
   const [grouping, setGrouping] = useNoteGrouping();
   const label = "text-[11px] font-bold tracking-[0.08em] uppercase";
   const shown = filterSections(tree, query);
@@ -225,7 +228,7 @@ export function NotesTray({
         {!noNotes && (
           <>
             <input
-              value={query}
+              value={typed}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Escape" && !isImeKey(e) && setQuery("")}
               placeholder={t("outline.searchNotes")}
