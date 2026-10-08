@@ -53,6 +53,10 @@ function parentOf(tree: SectionView[], id: string): SectionView | null {
   return null;
 }
 
+/** How many tiles a board draws as it opens, and how many each frame after. */
+const FIRST_TILES = 12;
+const TILES_A_FRAME = 12;
+
 export function SectionBoard({
   tree,
   sectionId,
@@ -141,6 +145,16 @@ export function SectionBoard({
     observer.observe(el);
     return () => observer.disconnect();
   }, [noteCount, composing]);
+  // The tiles in view first: the board opens with the first tiles drawn,
+  // and the rest follow a frame at a time (a board of 50 notes took 0.3 to
+  // 0.4 s to open in one long task).
+  const [drawn, setDrawn] = useState(FIRST_TILES);
+  useEffect(() => {
+    if (drawn >= noteCount) return;
+    const frame = requestAnimationFrame(() => setDrawn((n) => n + TILES_A_FRAME));
+    return () => cancelAnimationFrame(frame);
+  }, [drawn, noteCount]);
+  const shownNotes = drawn >= noteCount ? notes : notes.slice(0, drawn);
   const tileVars = tileSize
     ? ({
         "--tile-cols": tileSize.columns,
@@ -320,12 +334,12 @@ export function SectionBoard({
         >
           <SortableGroup
             id={notesList(section.id)}
-            ids={notes.map((n) => n.id)}
+            ids={shownNotes.map((n) => n.id)}
             layout="grid"
             className={`note-board${sizedClass}`}
             style={tileVars}
           >
-            {notes.map((note) => (
+            {shownNotes.map((note) => (
               <SortableItem key={actions.noteKey(note.id)} id={note.id}>
                 {(handle) => <NoteTile note={note} actions={actions} handle={canEdit ? handle : undefined} onOpen={setOpen} />}
               </SortableItem>
