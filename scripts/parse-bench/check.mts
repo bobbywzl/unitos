@@ -2127,6 +2127,18 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     closing.length === 3 && closing.every((t) => t.startsWith("PARAGRAPH Paragraph")),
     closing.join(" / "),
   );
+  // A paywall's heading ("Sie möchten gerne weiterlesen?") closes the article; the sign-up form under it goes.
+  const paywall = (
+    await parseHtmlContent(
+      `<!doctype html><html><head><title>Notes on river flow</title></head><body><article><h1>Notes on river flow</h1><p>${prose(1)}</p><p>${prose(2)}</p><p>${prose(3)}</p><p>${prose(4)}</p><p>${prose(5)}</p><p>${prose(6)}</p><h2>Sie möchten gerne weiterlesen?</h2><h3>Registrieren Sie sich jetzt kostenlos:</h3><p>Mit der Registrierung akzeptiere ich die Nutzungsbedingungen.</p><p>Hier anmelden</p></article></body></html>`,
+      "https://example.org/rivers",
+    )
+  ).blocks.map((b) => `${b.type} ${b.text.slice(0, 24)}`);
+  check(
+    "url: a paywall's heading closes the article",
+    paywall.length === 6 && paywall.every((t) => t.startsWith("PARAGRAPH Paragraph")),
+    paywall.join(" / "),
+  );
   // The site's logo set as an h1 (a link to the home page) is no title: the <title> is, less the logo's part and the parts after it.
   const logoTitle = async (title: string) =>
     (
