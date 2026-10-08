@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import type { NoteView } from "@/lib/types";
 
 // The notes' Undo pill, posted from outside the notes (SPEC.md §6): a delete
 // of an annotation, a comment, or a conversation asks nothing and shows the
@@ -57,13 +58,47 @@ export async function deleteNoteWithUndo(noteId: string, message: string, onBack
   postUndoPill({
     message,
     undo: async () => {
-      const back = await api<{ noteId?: unknown } | null>(`/api/notebooks/${notebookId}/history/${eventId}`, "POST");
-      const id = typeof back?.noteId === "string" ? back.noteId : noteId;
-      tell("dissect:note-back", id);
-      tell("dissect:note-restored", id);
+      const back = await api<unknown>(`/api/notebooks/${notebookId}/history/${eventId}`, "POST");
+      tellNoteBack(back, noteId);
       onBack?.();
     },
   });
+}
+
+/** A note History's Restore put back: the outline takes it at once
+    (use-outline.ts), and the reader repaints its marks. */
+export const NOTE_BACK_EVENT = "dissect:note-back";
+export type NoteBack = { noteId: string; sectionId?: string; note?: NoteView };
+
+/** Tell the page a restored note is back, from the restore route's answer
+    (POST /api/notebooks/:id/history/:eventId answers { noteId, sectionId,
+    note }): the outline puts the note in its section at once, with no wait
+    for a refresh, and the reader repaints its marks. fallbackId: the note's
+    id when the answer names none. Returns the note's id. */
+export function tellNoteBack(answer: unknown, fallbackId?: string): string | null {
+  const a = (answer ?? {}) as { noteId?: unknown; sectionId?: unknown; note?: unknown };
+  const noteId = typeof a.noteId === "string" ? a.noteId : fallbackId;
+  if (!noteId || typeof window === "undefined") return noteId ?? null;
+  const detail: NoteBack = { noteId };
+  if (typeof a.sectionId === "string") detail.sectionId = a.sectionId;
+  if (isNoteView(a.note) && a.note.id === noteId) detail.note = a.note;
+  window.dispatchEvent(new CustomEvent(NOTE_BACK_EVENT, { detail }));
+  window.dispatchEvent(new CustomEvent("dissect:note-restored", { detail: { noteId } }));
+  return noteId;
+}
+
+function isNoteView(value: unknown): value is NoteView {
+  const n = value as Partial<NoteView> | null;
+  return (
+    !!n &&
+    typeof n.id === "string" &&
+    typeof n.content === "string" &&
+    typeof n.status === "string" &&
+    typeof n.order === "number" &&
+    typeof n.updatedAt === "string" &&
+    Array.isArray(n.sources) &&
+    Array.isArray(n.replies)
+  );
 }
 
 /** The pill's words for a deleted annotation, by its kind. */

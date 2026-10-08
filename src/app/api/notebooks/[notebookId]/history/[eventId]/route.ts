@@ -4,6 +4,7 @@ import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import { keptNoteOf, keptSectionOf, restoreNote, restoreSection } from "@/lib/notes/removed";
+import { noteViewOf } from "@/lib/notes/view";
 import { normalizeSectionOrders } from "@/lib/order";
 
 // Restore from History (SPEC.md §12): a removed note comes back whole, with
@@ -56,5 +57,8 @@ export async function POST(_req: Request, ctx: { params: Promise<{ notebookId: s
     },
   });
   await bumpNotebook(notebookId);
-  return NextResponse.json({ ok: true, noteId: result.noteId, sectionId: result.sectionId });
+  // The note itself, as the outline draws it: the tray shows it at once
+  // (lib/notes/undo-pill.ts tellNoteBack), and a refresh confirms.
+  const back = await noteViewOf(result.noteId);
+  return NextResponse.json({ ok: true, noteId: result.noteId, sectionId: back?.sectionId ?? result.sectionId, note: back?.note ?? null });
 }
