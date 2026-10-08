@@ -13,7 +13,7 @@
 // server, or the offline queue, has the note: closing the graph, a reload, or
 // a failed save never loses them. Discard drops them, after a confirm.
 
-import { ACTION, ACTION_ACCEPT, ACTION_NOTE, ACTION_NOTE_IN } from "./graph-ui";
+import { ACTION, ACTION_ACCEPT, ACTION_NOTE, ACTION_NOTE_IN, TEXT_BODY, TEXT_META } from "./graph-ui";
 import { useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
@@ -390,7 +390,7 @@ export function NoteGatherDock({
   // The saved line: alone after a save, or at the head of the next note's
   // composer when words or quotes came after the ones sent.
   const savedRow = saved ? (
-    <p data-graph-note-gather-saved={savedId ?? ""} role="status" className="flex items-center gap-1.5 text-[12px] text-sage-700">
+    <p data-graph-note-gather-saved={savedId ?? ""} role="status" className={`flex items-center gap-1.5 ${TEXT_BODY} text-sage-700`}>
       <NotesIcon size={12} />
       <span className="min-w-0 flex-1">
         {savedId ? t("graphCover.composerSaved", { section: saved.section }) : t("graphCover.composerQueued", { section: saved.section })}
@@ -439,7 +439,7 @@ export function NoteGatherDock({
       {!compact && savedRow}
       <div className="flex items-center gap-2">
         <NotesIcon size={13} />
-        <p className="min-w-0 flex-1 truncate text-[12.5px]">
+        <p className={`min-w-0 flex-1 truncate ${TEXT_BODY}`}>
           <span className="font-semibold text-ink">{t("graphCover.composerTitle")}</span>
           <span data-graph-note-gather-summary className="text-sand-600"> · {summary}</span>
         </p>
@@ -470,15 +470,15 @@ export function NoteGatherDock({
           className="flex flex-col gap-1.5"
         >
           {choices.length === 0 ? (
-            <p className="text-[11px] text-sand-600">{t("graphCover.composerNoSection")}</p>
+            <p className={`${TEXT_META} text-sand-600`}>{t("graphCover.composerNoSection")}</p>
           ) : (
-            <label className="flex items-center gap-1.5 text-[11px] text-sand-600">
+            <label className={`flex items-center gap-1.5 ${TEXT_META} text-sand-600`}>
               {t("graphCover.composerSection")}
               <select
                 value={chosen?.id ?? ""}
                 onChange={(e) => gather.setSectionId(e.target.value)}
                 data-track="graph-note-gather-section"
-                className="min-w-0 flex-1 rounded-full border border-line bg-card px-2 py-0.5 text-[11.5px] text-ink"
+                className={`min-w-0 flex-1 rounded-full border border-line bg-card px-2 py-0.5 ${TEXT_BODY} text-ink`}
               >
                 {choices.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -491,7 +491,7 @@ export function NoteGatherDock({
           <ul data-graph-note-gather-quotes className="flex max-h-[168px] flex-col gap-1 overflow-y-auto overscroll-contain">
             {gather.quotes.map((q) => (
               <li key={keyOf(q)} data-graph-note-gather-quote={q.documentId} className="flex items-start gap-1.5 rounded-xl bg-sand-100 px-2 py-1">
-                <span className="min-w-0 flex-1 text-[11.5px] leading-snug text-sand-700">
+                <span className={`min-w-0 flex-1 ${TEXT_META} leading-snug text-sand-700`}>
                   <button
                     type="button"
                     onClick={() => {
@@ -499,7 +499,7 @@ export function NoteGatherDock({
                       onOpenDocument();
                     }}
                     data-tip={t("graphCover.composerOpenQuote")}
-                    className="mr-1 inline-block max-w-40 truncate rounded-full bg-sand-200 px-1.5 align-bottom text-[10.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                    className={`mr-1 inline-block max-w-40 truncate rounded-full bg-sand-200 px-1.5 align-bottom ${TEXT_META} font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800`}
                   >
                     {ctx.titleOf.get(q.documentId) ?? ""}
                   </button>
@@ -533,11 +533,11 @@ export function NoteGatherDock({
             aria-label={t("graphCover.composerPlaceholder")}
             rows={2}
             data-graph-note-gather-words
-            className="resize-none rounded-xl bg-sand-100 px-2.5 py-1.5 text-[12.5px] outline-none placeholder:text-sand-500"
+            className={`resize-none rounded-xl bg-sand-100 px-2.5 py-1.5 ${TEXT_BODY} outline-none placeholder:text-sand-500`}
           />
           <span className="flex items-center justify-end gap-1.5">
             {error && (
-              <span role="alert" className="mr-auto text-[11px] text-red-500">
+              <span role="alert" className={`mr-auto ${TEXT_META} text-red-500`}>
                 {error}
               </span>
             )}

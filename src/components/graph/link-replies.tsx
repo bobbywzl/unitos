@@ -1,5 +1,6 @@
 "use client";
 
+import { TEXT_META } from "./graph-ui";
 import { useParams } from "next/navigation";
 import { useEffect, useSyncExternalStore } from "react";
 import type { GraphEdgeLink } from "@/lib/types";
@@ -152,7 +153,7 @@ export function LinkReplyCount({ link }: { link: GraphEdgeLink }) {
   const fresh = useNewReplies(link); // [layer5]
   if (replies.length === 0) return null;
   return (
-    <span data-graph-link-replies={link.id} className="flex items-center gap-1.5 text-[11px] font-semibold text-sand-600">
+    <span data-graph-link-replies={link.id} className={`flex items-center gap-1.5 ${TEXT_META} font-semibold text-sand-600`}>
       <CommentIcon size={11} />
       {open > 0 && (open === 1 ? t("graphNotes.replyCountOne") : t("graphNotes.replyCountMany", { n: open }))}
       {open > 0 && resolved > 0 && <span className="text-sand-400">·</span>}

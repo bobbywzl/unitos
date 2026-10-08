@@ -1,6 +1,6 @@
 "use client";
 
-import { ACTION, ACTION_ACCEPT, ACTION_DANGER, ACTION_NOTE, CLOSE, SECTION_HEAD } from "./graph-ui";
+import { ACTION, ACTION_ACCEPT, ACTION_DANGER, ACTION_NOTE, CLOSE, SECTION_HEAD, TEXT_BODY, TEXT_META, TEXT_TITLE } from "./graph-ui";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { GraphEdgeLink } from "@/lib/types";
@@ -180,13 +180,13 @@ export function LinkPanel({
           </button>
         )}
         {/* [style7] VIEW7-04: the panel's title, as the node card's (same place, same size). */}
-        <h2 className="min-w-0 flex-1 text-[16px] leading-snug font-semibold text-ink">
+        <h2 className={`min-w-0 flex-1 ${TEXT_TITLE} leading-snug font-semibold text-ink`}>
           {loop
             ? t("panes.graphLinksLoopTitle", { title: link.fromTitle })
             : t("panes.graphLinksPairTitle", { a: link.fromTitle, b: link.toTitle })}
         </h2>
         {at >= 0 && curveLinks && (
-          <span data-graph-link-step={`${at + 1}/${curveLinks.length}`} className="-mt-1 flex shrink-0 items-center text-[11px] text-sand-600 tabular-nums">
+          <span data-graph-link-step={`${at + 1}/${curveLinks.length}`} className={`-mt-1 flex shrink-0 items-center ${TEXT_META} text-sand-600 tabular-nums`}>
             <button
               onClick={() => step(-1)}
               data-track="graph-link-prev"
@@ -220,7 +220,7 @@ export function LinkPanel({
       </div>
       {link.recommended && decided !== "accepted" && (
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="rounded-full border border-dashed border-clay-300 px-2 text-[10.5px] font-semibold text-clay-700">
+          <span className={`rounded-full border border-dashed border-clay-300 px-2 ${TEXT_META} font-semibold text-clay-700`}>
             {t("panes.graphLinkRecommended")}
           </span>
           {canEdit && !link.crossAccount?.outside && (
@@ -249,9 +249,9 @@ export function LinkPanel({
           )}
         </div>
       )}
-      {error && <p className="text-[12px] text-red-600">{error}</p>}
+      {error && <p className={`${TEXT_BODY} text-red-600`}>{error}</p>}
       {removed ? (
-        <p role="status" data-link-removed={link.id} className="text-[12.5px] text-sand-700">
+        <p role="status" data-link-removed={link.id} className={`${TEXT_BODY} text-sand-700`}>
           {t("panels.linkRemoved")}
           {removed === "undo" && (
             <>
@@ -271,7 +271,7 @@ export function LinkPanel({
         <>
           <div>
             <p className={SECTION_HEAD}>{t("panes.linkWhy")}</p>
-            <p className="mt-0.5 text-[12.5px] leading-snug text-ink">{link.reason ?? t("panes.linkNoReason")}</p>
+            <p className={`mt-0.5 ${TEXT_BODY} leading-snug text-ink`}>{link.reason ?? t("panes.linkNoReason")}</p>
           </div>
           {(canReply || canEdit) && (
             <div data-graph-link-actions className="flex flex-wrap items-center gap-1.5">

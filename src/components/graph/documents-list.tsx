@@ -26,7 +26,7 @@
 // part titles from GET .../outline?parts=titles, again after each rev move
 // (the offline copy keeps that call), the links and the notes are on the page already.
 
-import { ACTION, CLOSE, LIST_HEAD, TEXT_HIT } from "./graph-ui";
+import { ACTION, CLOSE, LIST_HEAD, TEXT_BODY, TEXT_HIT, TEXT_META, TEXT_NAME } from "./graph-ui";
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
 import type { GraphEdge, GraphEdgeLink, GraphNode } from "@/lib/types";
@@ -317,7 +317,7 @@ export function DocumentsList({
             data-track="graph-documents-filter"
             data-graph-documents-filter
             maxLength={100}
-            className="min-w-0 flex-1 rounded-full border border-line bg-card px-3 py-1.5 text-[12.5px] text-ink placeholder:text-sand-500 focus:border-clay-400"
+            className={`min-w-0 flex-1 rounded-full border border-line bg-card px-3 py-1.5 ${TEXT_BODY} text-ink placeholder:text-sand-500 focus:border-clay-400`}
           />
         )}
         <button
@@ -338,13 +338,13 @@ export function DocumentsList({
         onToggleComments={() => setAllComments((v) => !v)}
       />
       {allComments && <AllComments notebookId={notebookId} documents={matched} onOpenDocument={onOpenDocument} />}
-      {ordered.length === 0 && <p className="text-[13px] text-sand-600">{t("panes.graphDocumentsEmpty")}</p>}
-      {!allComments && gaps.on && matched.length > 0 && shown.length === 0 && <p className="text-[13px] text-sand-600">{t("graphCover.gapsNone")}</p>}
+      {ordered.length === 0 && <p className={`${TEXT_BODY} text-sand-600`}>{t("panes.graphDocumentsEmpty")}</p>}
+      {!allComments && gaps.on && matched.length > 0 && shown.length === 0 && <p className={`${TEXT_BODY} text-sand-600`}>{t("graphCover.gapsNone")}</p>}
       {ordered.length > 0 && matched.length === 0 && (
-        <p className="text-[13px] text-sand-600">{t("panes.graphDocumentsFilterNone")}</p>
+        <p className={`${TEXT_BODY} text-sand-600`}>{t("panes.graphDocumentsFilterNone")}</p>
       )}
       {words && matched.length > 0 && (
-        <p role="status" className="text-[11.5px] text-sand-600" data-graph-documents-found>
+        <p role="status" className={`${TEXT_META} text-sand-600`} data-graph-documents-found>
           {t("panes.graphDocumentsFound", { n: matched.length, total: ordered.length, ts: s(ordered.length) })}
         </p>
       )}
@@ -381,7 +381,7 @@ export function DocumentsList({
         ))}
       </ul>
       {hiddenGenerated > 0 && !words && (
-        <p data-graph-documents-generated-hidden className="text-[11.5px] leading-snug text-sand-600">
+        <p data-graph-documents-generated-hidden className={`${TEXT_META} leading-snug text-sand-600`}>
           {t("panes.graphDocumentsGeneratedHidden", { n: hiddenGenerated, s: s(hiddenGenerated) })}{" "}
           <button
             onClick={() => setShowProvenance(true)}
@@ -392,7 +392,7 @@ export function DocumentsList({
           </button>
         </p>
       )}
-      {ordered.length > 0 && <p className="pt-1 text-[11px] text-sand-500">{t("panes.graphDocumentsAiLine")}</p>}
+      {ordered.length > 0 && <p className={`pt-1 ${TEXT_META} text-sand-500`}>{t("panes.graphDocumentsAiLine")}</p>}
     </aside>
   );
 }
@@ -501,17 +501,17 @@ function DocumentRow({
         data-graph-documents-gist
         aria-expanded={gistOpen}
         data-tip={t(gistOpen ? "panes.graphDocumentsGistLess" : "panes.graphDocumentsGistMore")}
-        className={`text-left text-[12.5px] leading-snug text-ink ${gistOpen ? "" : "line-clamp-3"}`}
+        className={`text-left ${TEXT_BODY} leading-snug text-ink ${gistOpen ? "" : "line-clamp-3"}`}
       >
         {gist}
       </button>
     ) : (
-      <p key="gist" data-graph-no-summary className="text-[12px] leading-snug text-sand-500">
+      <p key="gist" data-graph-no-summary className={`${TEXT_BODY} leading-snug text-sand-500`}>
         {t("graphView.cardNoSummary")}
       </p>
     ),
     parts.length > 0 ? (
-      <p key="parts" className="text-[11.5px] leading-relaxed text-sand-600">
+      <p key="parts" className={`${TEXT_META} leading-relaxed text-sand-600`}>
         {shownParts.map((p, i) => (
           <span key={p.blockId}>
             {i > 0 && <span className="text-sand-400"> · </span>}
@@ -553,7 +553,7 @@ function DocumentRow({
         data-graph-documents-link={l.id}
         aria-expanded={openLinkId === l.id}
         data-tip={t("panes.graphDocumentsLinkTitle")}
-        className={`flex flex-col items-start gap-0.5 border-l-2 border-clay-300 py-0.5 pl-2 text-left text-[12px] leading-snug text-sand-700 hover:bg-clay-100/60 ${
+        className={`flex flex-col items-start gap-0.5 border-l-2 border-clay-300 py-0.5 pl-2 text-left ${TEXT_BODY} leading-snug text-sand-700 hover:bg-clay-100/60 ${
           l.recommended ? "border-dashed" : ""
         }`}
       >
@@ -564,7 +564,7 @@ function DocumentRow({
           {l.reason ?? clipWords(l.quotedText, 40)}
         </span>
         {l.recommended && (
-          <span className="rounded-full border border-dashed border-clay-300 px-1.5 text-[10px] font-semibold text-clay-700">
+          <span className={`rounded-full border border-dashed border-clay-300 px-1.5 ${TEXT_META} font-semibold text-clay-700`}>
             {t("panes.graphLinkRecommended")}
           </span>
         )}
@@ -577,7 +577,7 @@ function DocumentRow({
         onClick={() => setAllLinks((v) => !v)}
         data-graph-documents-links-more
         aria-expanded={allLinks}
-        className={`${TEXT_HIT} self-start pl-2.5 text-[11.5px] font-semibold text-clay-700 hover:text-clay-800`}
+        className={`${TEXT_HIT} self-start pl-2.5 ${TEXT_META} font-semibold text-clay-700 hover:text-clay-800`}
       >
         {allLinks
           ? t("panes.graphDocumentsFewer")
@@ -596,7 +596,7 @@ function DocumentRow({
   const generatedMark = generated && (
     <span
       data-graph-documents-generated
-      className={`shrink-0 rounded-full bg-sand-200 px-1.5 text-[10px] font-semibold text-sand-700 ${compact && !open ? "mt-2 mr-3" : ""}`}
+      className={`shrink-0 rounded-full bg-sand-200 px-1.5 ${TEXT_META} font-semibold text-sand-700 ${compact && !open ? "mt-2 mr-3" : ""}`}
     >
       {t("panes.documentKindGenerated")}
     </span>
@@ -615,7 +615,7 @@ function DocumentRow({
         compact && !open ? "" : "gap-1.5 p-3"
       } ${generated ? "opacity-80" : ""}`}
     >
-      <h3 style={HEADING_PLAIN} className="flex items-start gap-2 text-[13.5px] text-ink">
+      <h3 style={HEADING_PLAIN} className={`flex items-start gap-2 ${TEXT_NAME} text-ink`}>
         {compact ? (
           // One line: the title and its counts; a click opens the row.
           <button
@@ -623,7 +623,7 @@ function DocumentRow({
             onClick={() => setOpen((v) => !v)}
             data-track="graph-documents-row-open"
             aria-expanded={open}
-            className={`flex min-h-6 min-w-0 flex-1 items-baseline gap-2 text-left leading-snug font-semibold hover:text-clay-800 max-[639px]:flex-wrap max-[639px]:gap-y-0 ${open ? "" : "px-3 py-1.5 max-[639px]:py-1"}`}
+            className={`flex min-h-6 min-w-0 flex-1 items-baseline gap-2 text-left leading-snug font-semibold hover:text-clay-800 pointer-coarse:min-h-10 max-[639px]:flex-wrap max-[639px]:gap-y-0 ${open ? "" : "px-3 py-1.5 max-[639px]:py-1"}`}
           >
             {/* [lists8] WALK8-03: the title keeps its words (up to three quarters of the row); the counts give way, whole in their tooltip. */}
             <span className={`min-w-0 ${open ? "" : "max-w-[75%] shrink-0 truncate"} max-[639px]:max-w-full max-[639px]:basis-full`}>{n.title}</span>
@@ -632,7 +632,7 @@ function DocumentRow({
               <span
                 data-graph-gap-why={gapsOn ? n.id : undefined}
                 data-tip={counts.join(" · ")}
-                className={`ml-auto min-w-0 truncate text-[11px] max-[639px]:ml-0 max-[639px]:whitespace-normal max-[639px]:leading-tight ${gapsOn ? "font-semibold text-clay-800" : "font-normal text-sand-500"}`}
+                className={`ml-auto min-w-0 truncate ${TEXT_META} max-[639px]:ml-0 max-[639px]:whitespace-normal max-[639px]:leading-tight ${gapsOn ? "font-semibold text-clay-800" : "font-normal text-sand-500"}`}
               >
                 {counts.join(" · ")}
               </span>

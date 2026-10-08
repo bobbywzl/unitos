@@ -9,7 +9,7 @@
 // last and stay out of the pick and the counts unless the provenance switch
 // is on (WALK3-14). A word match, never a model call (GET .../find).
 
-import { CLOSE, DOC_CHIP, LEAD, LEAD_PRIMARY, TEXT_HIT } from "./graph-ui";
+import { CLOSE, DOC_CHIP, LEAD, LEAD_PRIMARY, TEXT_BODY, TEXT_HIT, TEXT_META } from "./graph-ui";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { GraphNode } from "@/lib/types";
@@ -25,7 +25,7 @@ export function FindBox({ find }: { find: FindState }) {
   return (
     <label
       data-graph-find
-      className="flex h-[34px] min-w-0 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-3 text-[13px] text-sand-600 focus-within:border-clay-400 max-[900px]:w-[220px] max-md:w-[104px] max-md:focus-within:w-[200px] min-[901px]:w-[200px] min-[901px]:max-[1099px]:w-[170px] min-[1600px]:w-[260px]"
+      className={`flex h-[34px] min-w-0 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-3 ${TEXT_BODY} text-sand-600 focus-within:border-clay-400 max-[900px]:w-[220px] max-md:w-[104px] max-md:focus-within:w-[200px] min-[901px]:w-[200px] min-[901px]:max-[1099px]:w-[170px] min-[1600px]:w-[260px]`}
     >
       <SearchIcon size={13} />
       <input
@@ -64,7 +64,7 @@ function Passage({ p, documentId, onOpen }: { p: FindPassage; documentId: string
       data-track="graph-find-passage"
       data-graph-find-passage={p.blockId}
       data-tip={t("graphView.findPassageTitle")}
-      className="block min-w-0 flex-1 rounded-lg px-1.5 py-1 text-left text-[12px] leading-snug text-sand-700 hover:bg-clay-100/60"
+      className={`block min-w-0 flex-1 rounded-lg px-1.5 py-1 text-left ${TEXT_BODY} leading-snug text-sand-700 hover:bg-clay-100/60`}
     >
       {p.text.slice(0, p.start)}
       <mark className="rounded-[3px] bg-clay-100 px-px font-semibold text-clay-800">{p.text.slice(p.start, p.end)}</mark>
@@ -145,8 +145,8 @@ function FindGroup({
         >
           {title}
         </button>
-        {generated && <span className="shrink-0 text-[11px] text-sand-500">{t("panes.documentKindGenerated")}</span>}
-        <span className="ml-auto shrink-0 rounded-full bg-clay-100 px-1.5 text-[11px] font-semibold tabular-nums text-clay-800">
+        {generated && <span className={`shrink-0 ${TEXT_META} text-sand-500`}>{t("panes.documentKindGenerated")}</span>}
+        <span className={`ml-auto shrink-0 rounded-full bg-clay-100 px-1.5 ${TEXT_META} font-semibold tabular-nums text-clay-800`}>
           {doc.count}
         </span>
       </div>
@@ -167,7 +167,7 @@ function FindGroup({
         <button
           onClick={() => void loadMore(FIND_MORE)}
           disabled={loading}
-          className={`${TEXT_HIT} mt-1 self-start px-1.5 text-[11.5px] text-clay-700 hover:underline disabled:opacity-50`}
+          className={`${TEXT_HIT} mt-1 self-start px-1.5 ${TEXT_META} text-clay-700 hover:underline disabled:opacity-50`}
         >
           {t("graphView.findMore", { n: Math.min(left, FIND_MORE) })}
         </button>
@@ -227,7 +227,7 @@ export function FindList({
     >
       <div className="flex items-start gap-2">
         {/* A live region: a screen reader hears what Find found (WALK4-09). */}
-        <p role="status" className="min-w-0 flex-1 text-[12.5px] leading-snug text-sand-700" data-graph-find-summary>
+        <p role="status" className={`min-w-0 flex-1 ${TEXT_BODY} leading-snug text-sand-700`} data-graph-find-summary>
           {find.error
             ? t("graphView.findFailed")
             : find.result === null
@@ -298,7 +298,7 @@ export function FindList({
         />
       ))}
       {!showProvenance && foundGenerated.length > 0 && (
-        <p data-graph-find-generated-hidden={foundGenerated.length} className="text-[11.5px] leading-snug text-sand-600">
+        <p data-graph-find-generated-hidden={foundGenerated.length} className={`${TEXT_META} leading-snug text-sand-600`}>
           {t("panes.graphDocumentsGeneratedHidden", { n: foundGenerated.length, s: foundGenerated.length === 1 ? "" : "s" })}{" "}
           <button
             onClick={() => setShowProvenance(true)}

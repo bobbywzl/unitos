@@ -1,6 +1,6 @@
 "use client";
 
-import { ACTION, SECTION_HEAD } from "./graph-ui";
+import { ACTION, SECTION_HEAD, TEXT_BODY } from "./graph-ui";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { useT } from "@/components/lang-provider";
@@ -57,7 +57,7 @@ function Passage({ quote, blockText }: { quote: string; blockText: string | null
   const at = blockText ? blockText.indexOf(quote) : -1;
   if (!blockText || at < 0) {
     return (
-      <p className="text-[12.5px] leading-relaxed text-sand-700">
+      <p className={`${TEXT_BODY} leading-relaxed text-sand-700`}>
         <mark className="link-detail-quote">{quote}</mark>
       </p>
     );
@@ -72,7 +72,7 @@ function Passage({ quote, blockText }: { quote: string; blockText: string | null
       {whole ? after : clipEnd(after)}
     </>
   );
-  if (!folds) return <p className="text-[12.5px] leading-relaxed text-sand-700">{text}</p>;
+  if (!folds) return <p className={`${TEXT_BODY} leading-relaxed text-sand-700`}>{text}</p>;
   return (
     <button
       type="button"
@@ -81,7 +81,7 @@ function Passage({ quote, blockText }: { quote: string; blockText: string | null
       data-track="graph-link-passage"
       data-link-passage={whole ? "whole" : "folded"}
       data-tip={whole ? t("panes.linkPassageFold") : t("panes.linkPassageWhole")}
-      className={`w-full rounded-md text-left text-[12.5px] leading-relaxed text-sand-700 hover:bg-clay-100/40 ${
+      className={`w-full rounded-md text-left ${TEXT_BODY} leading-relaxed text-sand-700 hover:bg-clay-100/40 ${
         whole ? "block whitespace-pre-wrap" : "line-clamp-4"
       }`}
     >
@@ -107,7 +107,7 @@ function LinkEnd({
   return (
     <div className="rounded-xl border border-line bg-sand-50/60 p-2.5">
       <div className="flex items-center gap-2">
-        <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-ink">{title}</span>
+        <span className={`min-w-0 flex-1 truncate ${TEXT_BODY} font-semibold text-ink`}>{title}</span>
         {quote && <AddToNote quote={{ documentId, text: quote }} /* [cover4] */ />}
         <button
           onClick={onOpen}
@@ -122,7 +122,7 @@ function LinkEnd({
         {quote ? (
           <Passage quote={quote} blockText={blockText} />
         ) : (
-          <p className="text-[12px] text-sand-500">{t("panes.linkEndWholeDocument")}</p>
+          <p className={`${TEXT_BODY} text-sand-500`}>{t("panes.linkEndWholeDocument")}</p>
         )}
       </div>
     </div>
@@ -148,7 +148,7 @@ export function LinkDetail({
       {showReason && (
         <div>
           <p className={SECTION_HEAD}>{t("panes.linkWhy")}</p>
-          <p className="mt-0.5 text-[12.5px] leading-snug text-ink">{link.reason ?? t("panes.linkNoReason")}</p>
+          <p className={`mt-0.5 ${TEXT_BODY} leading-snug text-ink`}>{link.reason ?? t("panes.linkNoReason")}</p>
         </div>
       )}
       <LinkEnd

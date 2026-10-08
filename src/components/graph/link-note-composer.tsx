@@ -1,6 +1,6 @@
 "use client";
 
-import { ACTION, ACTION_ACCEPT, ACTION_NOTE, ACTION_NOTE_IN } from "./graph-ui";
+import { ACTION, ACTION_ACCEPT, ACTION_NOTE, ACTION_NOTE_IN, TEXT_BODY, TEXT_META } from "./graph-ui";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
@@ -98,7 +98,7 @@ export function LinkNoteComposer({
       : ctx.findNote(saved.queued.sectionId, saved.queued.content, saved.queued.at);
   if (saved && !savedId) {
     return (
-      <p data-graph-link-note-queued="" className="mt-2 flex items-center gap-1.5 text-[11.5px] text-sage-700">
+      <p data-graph-link-note-queued="" className={`mt-2 flex items-center gap-1.5 ${TEXT_META} text-sage-700`}>
         <NotesIcon size={12} />
         {t("graphNotes.noteOnLinkQueued", { section: saved.section })}
       </p>
@@ -106,7 +106,7 @@ export function LinkNoteComposer({
   }
   if (saved && savedId) {
     return (
-      <p data-graph-link-note-saved={savedId} className="mt-2 flex items-center gap-1.5 text-[11.5px] text-sage-700">
+      <p data-graph-link-note-saved={savedId} className={`mt-2 flex items-center gap-1.5 ${TEXT_META} text-sage-700`}>
         <NotesIcon size={12} />
         {t("graphNotes.noteOnLinkSaved", { section: saved.section })}
         <button
@@ -179,9 +179,9 @@ export function LinkNoteComposer({
       className={`${opener ? "" : "mt-2 "}flex flex-col gap-1.5 rounded-xl border border-sage-300 bg-card p-2`}
     >
       {choices.length === 0 ? (
-        <p className="text-[11px] text-sand-600">{t("graphNotes.noteOnLinkNoSection")}</p>
+        <p className={`${TEXT_META} text-sand-600`}>{t("graphNotes.noteOnLinkNoSection")}</p>
       ) : (
-        <label className="flex items-center gap-1.5 text-[11px] text-sand-600">
+        <label className={`flex items-center gap-1.5 ${TEXT_META} text-sand-600`}>
           {t("graphNotes.noteOnLinkSection")}
           <select
             value={chosen?.id ?? ""}
@@ -190,7 +190,7 @@ export function LinkNoteComposer({
               writeDraft(linkId, content, e.target.value);
             }}
             data-track="graph-link-note-section"
-            className="min-w-0 flex-1 rounded-full border border-line bg-card px-2 py-0.5 text-[11.5px] text-ink"
+            className={`min-w-0 flex-1 rounded-full border border-line bg-card px-2 py-0.5 ${TEXT_BODY} text-ink`}
           >
             {choices.map((c) => (
               <option key={c.id} value={c.id}>
@@ -223,10 +223,10 @@ export function LinkNoteComposer({
         }}
         placeholder={t("graphNotes.noteOnLinkPlaceholder")}
         rows={3}
-        className="resize-none rounded-xl bg-sand-100 px-2.5 py-1.5 text-[12.5px] outline-none placeholder:text-sand-500"
+        className={`resize-none rounded-xl bg-sand-100 px-2.5 py-1.5 ${TEXT_BODY} outline-none placeholder:text-sand-500`}
       />
       <span className="flex items-center justify-end gap-1.5 pointer-coarse:gap-3">
-        {error && <span className="mr-auto text-[11px] text-red-500">{error}</span>}
+        {error && <span className={`mr-auto ${TEXT_META} text-red-500`}>{error}</span>}
         <button
           type="button"
           onClick={() => {

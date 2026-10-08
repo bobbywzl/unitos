@@ -1,6 +1,6 @@
 "use client";
 
-import { ACTION, ACTION_ACCEPT, CLOSE, DOC_CHIP, LIST_HEAD } from "./graph-ui";
+import { ACTION, ACTION_ACCEPT, CLOSE, DOC_CHIP, LIST_HEAD, TEXT_BODY, TEXT_META } from "./graph-ui";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
@@ -656,12 +656,12 @@ export function GraphOverlay({
         {/* Skip links (REV2-10): the first controls in the dialog, shown on
             focus, straight to the Stitch box or the open side list. */}
         {nodes.length >= 2 && (
-          <button onClick={skipToStitch} data-track="graph-skip-stitch" className="sr-only focus:not-sr-only focus:rounded-full focus:bg-clay-100 focus:px-3 focus:py-1 focus:text-[12px] focus:text-clay-800">
+          <button onClick={skipToStitch} data-track="graph-skip-stitch" className="sr-only focus:not-sr-only focus:rounded-full focus:bg-clay-100 focus:px-3 focus:py-1 focus:text-[12.5px] focus:text-clay-800">
             {t("panes.graphSkipStitch")}
           </button>
         )}
         {shownList !== null && (
-          <button onClick={skipToList} data-track="graph-skip-list" className="sr-only focus:not-sr-only focus:rounded-full focus:bg-clay-100 focus:px-3 focus:py-1 focus:text-[12px] focus:text-clay-800">
+          <button onClick={skipToList} data-track="graph-skip-list" className="sr-only focus:not-sr-only focus:rounded-full focus:bg-clay-100 focus:px-3 focus:py-1 focus:text-[12.5px] focus:text-clay-800">
             {t("panes.graphSkipList")}
           </button>
         )}
@@ -673,7 +673,7 @@ export function GraphOverlay({
           aria-expanded={list === "documents"}
           aria-controls={sideListId("documents")}
           data-tip={t("panes.graphDocumentsToggleTitle")}
-          className={`shrink-0 rounded-full border px-3.5 py-1.5 text-[13px] whitespace-nowrap hover:bg-clay-100 hover:text-clay-800 disabled:pointer-events-none max-md:px-2.5 ${
+          className={`shrink-0 rounded-full border px-3.5 py-1.5 ${TEXT_BODY} whitespace-nowrap hover:bg-clay-100 hover:text-clay-800 disabled:pointer-events-none max-md:px-2.5 ${
             /* [style7] VIEW7-06: drawn as the pill it is, like Notes and Links beside it. */
             list === "documents" ? "border-line bg-clay-100 text-clay-800" : "border-line text-sand-600"
           }`}
@@ -715,14 +715,14 @@ export function GraphOverlay({
             aria-expanded={linksOpen}
             aria-controls={sideListId("links")}
             data-tip={t("panes.graphLinksDesc") /* [chrome6] WALK6-08: the list's intro, here */}
-            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 max-md:gap-1 max-md:px-2 ${
+            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 ${TEXT_BODY} hover:bg-clay-100 hover:text-clay-800 max-md:gap-1 max-md:px-2 ${
               linksOpen ? "border-line bg-clay-100 text-clay-800" : "border-line text-sand-600"
             }`}
           >
             <LinkIcon size={13} />
             {/* [chrome6] VIEW6-08: on a phone, the mark and the count. */}
             <span className="max-md:sr-only">{t("panes.graphLinks")}</span>
-            <span className="rounded-full bg-sand-200 px-1.5 text-[11px] font-semibold tabular-nums text-sand-700">
+            <span className={`rounded-full bg-sand-200 px-1.5 ${TEXT_META} font-semibold tabular-nums text-sand-700`}>
               {allLinks}
             </span>
           </button>
@@ -732,7 +732,7 @@ export function GraphOverlay({
             aria-expanded={listOpen}
             aria-controls={sideListId("recommended")}
             data-tip={`${t("panes.recommendedLinks")}: ${t("panes.recommendedLinksDesc")}${canEdit && nodes.length >= 2 ? ` ${t("panes.recommendedLinksScanHere")}` : ""}`}
-            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 max-[1399px]:px-2.5 max-md:gap-1 max-md:px-2 ${
+            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 ${TEXT_BODY} hover:bg-clay-100 hover:text-clay-800 max-[1399px]:px-2.5 max-md:gap-1 max-md:px-2 ${
               listOpen
                 ? "border-line bg-clay-100 text-clay-800"
                 : recommended.length > 0
@@ -743,7 +743,7 @@ export function GraphOverlay({
             <UnlinkIcon size={13} />
             <span className="max-[1399px]:sr-only">{t("panes.recommendedLinks")}</span>
             <span aria-hidden className="max-md:hidden min-[1400px]:hidden">{t("panes.recommendedLinksShort")}</span>
-            <span className="rounded-full bg-sand-200 px-1.5 text-[11px] font-semibold tabular-nums text-sand-700">
+            <span className={`rounded-full bg-sand-200 px-1.5 ${TEXT_META} font-semibold tabular-nums text-sand-700`}>
               {recommended.length}
             </span>
           </button>
@@ -755,14 +755,14 @@ export function GraphOverlay({
             aria-expanded={list === "generated"}
             aria-controls={sideListId("generated")}
             data-tip={`${t("stitch.generated")}: ${t("stitch.generatedDesc")}`}
-            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 max-[1399px]:px-2.5 max-md:gap-1 max-md:px-2 ${
+            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 ${TEXT_BODY} hover:bg-clay-100 hover:text-clay-800 max-[1399px]:px-2.5 max-md:gap-1 max-md:px-2 ${
               list === "generated" ? "border-line bg-clay-100 text-clay-800" : "border-line text-sand-600"
             }`}
           >
             <PageIcon size={13} />
             <span className="max-[1399px]:sr-only">{t("stitch.generated")}</span>
             <span aria-hidden className="max-md:hidden min-[1400px]:hidden">{t("stitch.generatedShort")}</span>
-            <span className="rounded-full bg-sand-200 px-1.5 text-[11px] font-semibold tabular-nums text-sand-700">
+            <span className={`rounded-full bg-sand-200 px-1.5 ${TEXT_META} font-semibold tabular-nums text-sand-700`}>
               {generated.length}
             </span>
           </button>
@@ -781,17 +781,17 @@ export function GraphOverlay({
       {/* [ui5] WALK5-09 */}
       <p role="status" data-graph-status className="sr-only">{said}</p>
       {scanNotice && (
-        <p className="border-b border-line px-5 py-2 text-xs text-sand-600">{scanNotice}</p>
+        <p className={`border-b border-line px-5 py-2 ${TEXT_BODY} text-sand-600`}>{scanNotice}</p>
       )}
       {stale && (
         // A refetch failed: the graph shows what it had, and says so (REV3-10).
-        <p role="status" data-graph-stale className="flex items-center gap-3 border-b border-line px-5 py-2 text-xs text-sand-600">
+        <p role="status" data-graph-stale className={`flex items-center gap-3 border-b border-line px-5 py-2 ${TEXT_BODY} text-sand-600`}>
           {t("graphView.staleNotice", {
             time: new Date(stale.at).toLocaleTimeString(lang === "zh" ? "zh-CN" : "en-US", { hour: "numeric", minute: "2-digit" }),
           })}
           <button
             onClick={stale.retry}
-            className="rounded-full border border-line px-2.5 py-0.5 text-[11.5px] text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+            className={`rounded-full border border-line px-2.5 py-0.5 ${TEXT_META} text-sand-700 hover:bg-clay-100 hover:text-clay-800`}
           >
             {t("graphView.loadRetry")}
           </button>
@@ -800,17 +800,17 @@ export function GraphOverlay({
       <div className="relative min-h-0 flex-1">
         {loading ? null : loadFailed ? (
           // [view2] The graph's data did not arrive (offline with no copy, or a failed call).
-          <div className="flex h-full flex-col items-center justify-center gap-3 px-8 text-center text-sm text-sand-600">
+          <div className={`flex h-full flex-col items-center justify-center gap-3 px-8 text-center ${TEXT_BODY} text-sand-600`}>
             <p>{t("graphView.loadFailed")}</p>
             <button
               onClick={loadFailed}
-              className="rounded-full border border-line px-3.5 py-1.5 text-[13px] text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+              className={`rounded-full border border-line px-3.5 py-1.5 ${TEXT_BODY} text-sand-700 hover:bg-clay-100 hover:text-clay-800`}
             >
               {t("graphView.loadRetry")}
             </button>
           </div>
         ) : nodes.length === 0 ? (
-          <p className="flex h-full items-center justify-center px-8 text-center text-sm text-sand-600">
+          <p className={`flex h-full items-center justify-center px-8 text-center ${TEXT_BODY} text-sand-600`}>
             {t("panes.graphEmpty")}
           </p>
         ) : (
@@ -833,14 +833,14 @@ export function GraphOverlay({
         )}
         {/* One document, or no link yet: what to do next (GR-08). */}
         {emptyCard && (
-          <div className="absolute top-3 left-1/2 z-10 flex w-[560px] max-w-[calc(100%-120px)] -translate-x-1/2 flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-line bg-card/95 px-4 py-3 text-[13px] text-sand-700 shadow-soft backdrop-blur-md max-sm:left-14 max-sm:max-w-[calc(100%-68px)] max-sm:translate-x-0">
+          <div className={`absolute top-3 left-1/2 z-10 flex w-[560px] max-w-[calc(100%-120px)] -translate-x-1/2 flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-line bg-card/95 px-4 py-3 ${TEXT_BODY} text-sand-700 shadow-soft backdrop-blur-md max-sm:left-14 max-sm:max-w-[calc(100%-68px)] max-sm:translate-x-0`}>
             <p className="min-w-0 flex-1 basis-60">{emptyCard}</p>
             {nodes.length >= 2 && canEdit && scanLeft > 0 && (
               <button
                 onClick={() => void scan()}
                 disabled={scanning}
                 data-track="graph-empty-recommend-links"
-                className="flex shrink-0 items-center gap-1.5 rounded-full bg-clay px-3.5 py-1.5 text-[12px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-50"
+                className={`flex shrink-0 items-center gap-1.5 rounded-full bg-clay px-3.5 py-1.5 ${TEXT_BODY} font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-50`}
               >
                 <SparkleIcon size={12} />
                 {scanning ? t("panes.recommendScanRunning") : t("panes.recommendScan")}
@@ -1155,10 +1155,10 @@ export function RecommendedLinkList({
           </button>
         )}
       </div>
-      {errorText && <p className="text-[13px] text-red-600">{errorText}</p>}
+      {errorText && <p className={`${TEXT_BODY} text-red-600`}>{errorText}</p>}
       {shown.length === 0 && (
         <>
-          <p className="text-[13px] text-sand-600">{t(scan ? "panes.recommendedLinksEmpty" : "panes.recommendedLinksNone")}</p>
+          <p className={`${TEXT_BODY} text-sand-600`}>{t(scan ? "panes.recommendedLinksEmpty" : "panes.recommendedLinksNone")}</p>
           {scan?.(true)}
         </>
       )}
@@ -1167,7 +1167,7 @@ export function RecommendedLinkList({
         return (
         <div key={l.id} data-graph-recommended={l.id} className="rounded-2xl border border-dashed border-clay-300 bg-card p-3.5 shadow-soft">
           {proposedLinkIds?.has(l.id) && (
-            <p className="mb-1 text-[10.5px] font-semibold text-[var(--kind-assistant)]">{t("graphView.fromLastAnswer")}</p>
+            <p className={`mb-1 ${TEXT_META} font-semibold text-[var(--kind-assistant)]`}>{t("graphView.fromLastAnswer")}</p>
           )}
           {/* [chrome6] VIEW6-11: Accept and Dismiss on the reason's line,
               each passage one line until the card opens, the two ends on
@@ -1180,7 +1180,7 @@ export function RecommendedLinkList({
               aria-expanded={open}
               className="block min-w-0 flex-1 rounded-lg text-left hover:bg-clay-100/60"
             >
-              <span className="block text-[12.5px] leading-snug font-semibold">{l.reason ?? t("panes.linkNoReason")}</span>
+              <span className={`block ${TEXT_BODY} leading-snug font-semibold`}>{l.reason ?? t("panes.linkNoReason")}</span>
             </button>
             {canEdit && !l.crossAccount?.outside && (
               <span className="flex shrink-0 items-center gap-1.5">
@@ -1227,9 +1227,9 @@ export function RecommendedLinkList({
               aria-hidden
               className="mt-1 block w-full rounded-lg text-left hover:bg-clay-100/60"
             >
-              <span className="block truncate border-l-2 border-clay-300 pl-2 text-xs text-sand-600">{l.quotedText}</span>
+              <span className={`block truncate border-l-2 border-clay-300 pl-2 ${TEXT_BODY} text-sand-600`}>{l.quotedText}</span>
               {l.toQuotedText && (
-                <span className="mt-0.5 block truncate border-l-2 border-sand-300 pl-2 text-xs text-sand-500">{l.toQuotedText}</span>
+                <span className={`mt-0.5 block truncate border-l-2 border-sand-300 pl-2 ${TEXT_BODY} text-sand-500`}>{l.toQuotedText}</span>
               )}
             </button>
           )}
@@ -1250,7 +1250,7 @@ export function RecommendedLinkList({
                 >
                   {l.fromTitle}
                 </button>
-                <span className="shrink-0 text-[11px] text-sand-500">⇄</span>
+                <span className={`shrink-0 ${TEXT_META} text-sand-500`}>⇄</span>
                 <button
                   onClick={() => openDocument(l.toDocumentId, l.id)}
                   data-track="graph-link-open"
