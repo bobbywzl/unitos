@@ -14,6 +14,7 @@ import { ActiveTimeClock } from "@/components/active-time-clock";
 import { CollabProvider, type CollabState } from "@/components/collab/collab-context";
 import { SyncRefresh } from "@/components/collab/sync-refresh";
 import { ArrowLeftIcon } from "@/components/icons";
+import { FeedbackHeaderButton } from "@/components/feedback-button";
 import { AnnotationsFullPage, type AnnotationGroup } from "@/components/panels/annotations-full-page";
 
 export const dynamic = "force-dynamic";
@@ -246,6 +247,7 @@ export default async function AnnotationsPage(props: { params: Promise<{ noteboo
           >
             {t("outline.reader")}
           </Link>
+          <FeedbackHeaderButton />
         </div>
       </header>
       <CollabProvider value={collab}>

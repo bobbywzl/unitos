@@ -26,10 +26,11 @@ const TOOLS: [TKey, TKey][] = [
 // The side panel's tabs, in the rail's order: name key, body key.
 const PANELS: [TKey, TKey][] = [
   ["works.guideAssistant", "works.guidePanelAssistantBody"],
-  ["works.guidePanelSummary", "works.guidePanelSummaryBody"],
+  ["panes.graph", "works.guidePanelGraphBody"],
   ["works.notes", "works.guidePanelNotesBody"],
   ["works.guidePanelAnnotations", "works.guidePanelAnnotationsBody"],
   ["works.guideDistill", "works.guidePanelDistillBody"],
+  ["panes.readerView", "works.guidePanelReaderViewBody"],
   ["works.guidePanelEdits", "works.guidePanelEditsBody"],
 ];
 // Every key the reader answers to (grep the key handlers before adding one):
@@ -45,6 +46,7 @@ const KEYS: [string, TKey][] = [
   ["⌘/Ctrl + Enter", "works.guideKeySaveNote"],
   ["Tab · ⇧ + Tab", "works.guideKeyIndent"],
   ["⇧ + click", "works.guideKeyPick"],
+  ["↑ ↓ · → ← · a–z", "works.guideKeyList"],
   ["Enter · ⌫", "works.guideKeyQueueDecide"],
   ["J · K", "works.guideKeyQueueMove"],
   ["E", "works.guideKeyQueueEdit"],

@@ -555,6 +555,12 @@ export function DocumentBar({
   // request of theirs.
   const reparseAttempted = useRef(new Set<string>());
   const active = documents.find((d) => d.id === activeId) ?? null;
+  // While the next document loads after a removal, the pill names it
+  // (leaveDocument).
+  const [leftFor, setLeftFor] = useState<string | null>(null);
+  if (leftFor !== null && !opening) setLeftFor(null);
+  // An empty leftFor: the last document left, and the pill reads Documents.
+  const pillDoc = opening && leftFor !== null ? (documents.find((d) => d.id === leftFor) ?? null) : active;
   const isStale = (d: AttachedDocument) =>
     !d.hasVideo && !d.handwritten && (d.sourceUrl !== null || d.hasFile) && d.parserVersion < PARSER_VERSION;
   // The open document's figures a browser render can bring over: captions
@@ -1161,12 +1167,32 @@ export function DocumentBar({
     try {
       await api(`/api/documents/${documentId}`, "DELETE");
       closeList();
-      if (documentId === activeId) router.push(`/n/${notebookId}`);
-      router.refresh();
+      leaveDocument(documentId);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("panes.deleteFailed"));
     } finally {
       setDeleting(false);
+    }
+  }
+
+  // The open document left the project (deleted or removed): the next one
+  // in the list opens at once, in place of a round trip to the project's
+  // page, which then picked one (NAV13-18); the pill reads the next title
+  // while it loads. The last one leaves the empty project. Another row:
+  // the list refreshes.
+  function leaveDocument(documentId: string) {
+    if (documentId !== activeId) {
+      router.refresh();
+      return;
+    }
+    const at = documents.findIndex((d) => d.id === documentId);
+    const next = documents[at + 1] ?? documents[at - 1] ?? null;
+    if (next) {
+      setLeftFor(next.id);
+      open(next.id);
+    } else {
+      setLeftFor("");
+      startOpening(() => router.push(`/n/${notebookId}`));
     }
   }
 
@@ -1179,9 +1205,8 @@ export function DocumentBar({
     try {
       await api(`/api/documents/${documentId}?scope=project&notebookId=${notebookId}`, "DELETE");
       closeList();
-      if (documentId === activeId) router.push(`/n/${notebookId}`);
-      router.refresh();
       showNotice(t("panes.removeFromProjectDone"));
+      leaveDocument(documentId);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("panes.deleteFailed"));
     } finally {
@@ -1484,7 +1509,7 @@ export function DocumentBar({
             // Below sm the pill takes the project title's room (workspace.tsx).
             className="flex max-w-[min(68vw,32rem)] min-w-0 items-center gap-1.5 rounded-full bg-ink py-[7px] pr-3 pl-[15px] text-[13px] font-semibold text-paper sm:max-w-[min(50vw,32rem)]"
           >
-            <span className="overflow-hidden whitespace-nowrap">{active ? clipWords(active.title, 56) : t("panes.documentList")}</span>
+            <span className="overflow-hidden whitespace-nowrap">{pillDoc ? clipWords(pillDoc.title, 56) : t("panes.documentList")}</span>
             <span className="shrink-0 rounded-full bg-paper/20 px-1.5 text-[11px] tabular-nums">
               {opening ? <LoadingDots /> : documents.length}
             </span>
