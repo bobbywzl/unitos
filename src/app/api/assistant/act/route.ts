@@ -39,6 +39,7 @@ import {
 } from "@/lib/derive/context";
 import { figureContent, figureVisual, type FigureImage } from "@/lib/derive/figure";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
+import { failureLine, wordedReason } from "@/app/api/assistant/failure-line";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { WEB_SEARCH_MAX_USES, WEB_SEARCH_TOOL, webSearchTool, webSearchUsd } from "@/lib/kimi";
 import type { TFunc } from "@/lib/i18n/dictionaries";
@@ -165,7 +166,7 @@ export async function POST(req: Request) {
   } catch (err) {
     console.error("[assistant:act] failed:", err);
     return NextResponse.json(
-      { error: t("api.assistantFailed", { reason: modelErrorMessage(err) }) },
+      { error: t("assistant.failedServer") },
       { status: 500 },
     );
   }
@@ -476,7 +477,10 @@ async function handle(req: Request, t: TFunc) {
           : {}),
       });
   if (!result.ok) {
-    return NextResponse.json({ error: t("api.planFailed", { reason: result.error }) }, { status: 422 });
+    const error = wordedReason(t, result.error)
+      ? t("api.planFailed", { reason: result.error })
+      : failureLine(t, result.error, "assistant:act");
+    return NextResponse.json({ error }, { status: 422 });
   }
 
   // Validate and enrich every action against the real document
@@ -606,7 +610,7 @@ async function handle(req: Request, t: TFunc) {
         const moves = pass.order ? orderSuggestOps(units, pass.scope, { ...pass.order, removed: [] }, doc.rows, pass.why, first) : [];
         suggestions = { ops: [...pass.ops, ...moves], warnings: pass.warnings, summary: pass.summary };
       } catch (err) {
-        return NextResponse.json({ error: modelErrorMessage(err) }, { status: 422 });
+        return NextResponse.json({ error: failureLine(t, err, "assistant:act") }, { status: 422 });
       }
     } else {
       // A command that moves blocks: the order pass runs beside the window,
@@ -662,7 +666,7 @@ async function handle(req: Request, t: TFunc) {
           };
         }
       } catch (err) {
-        return NextResponse.json({ error: modelErrorMessage(err) }, { status: 422 });
+        return NextResponse.json({ error: failureLine(t, err, "assistant:act") }, { status: 422 });
       }
     }
   }

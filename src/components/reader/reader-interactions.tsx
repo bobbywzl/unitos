@@ -203,7 +203,7 @@ import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 import { KeptInput, KeptTextarea, type KeptFieldHandle } from "@/components/kept-field";
 import { AnswerMarkdown } from "@/components/assistant/answer-markdown";
 import { deleteConversationWithUndo } from "@/components/assistant/conversation-delete";
-import { modelFetch } from "@/components/assistant/failure";
+import { modelFetch, noReason } from "@/components/assistant/failure";
 import { ACCEPT_CLASS, REJECT_CLASS, SEND_CLASS } from "@/components/assistant/decision-classes";
 
 // One block's span of a selection (SPEC.md §5).
@@ -6024,7 +6024,7 @@ export function ReaderInteractions({
       });
       if (!res.ok || !res.body) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(detail?.error ?? t("reader.deriveFailedStatus", { status: res.status }));
+        throw new Error(detail?.error ?? noReason(res, t));
       }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -6204,7 +6204,7 @@ export function ReaderInteractions({
       });
       if (!res.ok || !res.body) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(detail?.error ?? t("reader.deriveFailedStatus", { status: res.status }));
+        throw new Error(detail?.error ?? noReason(res, t));
       }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -6297,7 +6297,7 @@ export function ReaderInteractions({
       });
       if (!res.ok || !res.body) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(detail?.error ?? t("reader.deriveFailedStatus", { status: res.status }));
+        throw new Error(detail?.error ?? noReason(res, t));
       }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -6397,7 +6397,7 @@ export function ReaderInteractions({
       });
       if (!res.ok || !res.body) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(detail?.error ?? t("reader.deriveFailedStatus", { status: res.status }));
+        throw new Error(detail?.error ?? noReason(res, t));
       }
       // Heartbeat spaces while the model works, then the payload JSON or the
       // error token with the reason.
@@ -6711,7 +6711,7 @@ export function ReaderInteractions({
       });
       if (!res.ok || !res.body) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(detail?.error ?? t("reader.distillFailedStatus", { status: res.status }));
+        throw new Error(detail?.error ?? noReason(res, t));
       }
       // The response streams heartbeat spaces while the model works; the
       // payload is the trailer — the distillation JSON, or the in-band error.
@@ -7571,7 +7571,7 @@ export function ReaderInteractions({
       | (AssistantPlan & { suggestions?: SuggestResult; error?: string })
       | null;
     if (!res.ok || !plan)
-      throw new Error(plan?.error ?? t("reader.assistantFailedStatus", { status: res.status }));
+      throw new Error(plan?.error ?? noReason(res, t));
     const parts: string[] = [];
     if (plan.reply) parts.push(plan.reply);
     // Words for under a figure wait there as the assistant's suggestion.
@@ -7773,7 +7773,7 @@ export function ReaderInteractions({
       });
       if (!res.ok) {
         const json = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(json?.error ?? t("assistant.suggestFailedStatus", { status: res.status }));
+        throw new Error(json?.error ?? noReason(res, t));
       }
       for await (const event of readNdjson<SuggestEvent>(res)) {
         if ("ops" in event) {

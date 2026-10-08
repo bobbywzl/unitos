@@ -68,7 +68,7 @@ import { RatingButtons } from "@/components/rating-buttons";
 import { LoadingDots, ThinkingIndicator } from "@/components/thinking";
 import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 import { deleteConversationWithUndo } from "@/components/assistant/conversation-delete";
-import { failureLine, modelFetch } from "@/components/assistant/failure";
+import { failureLine, modelFetch, noReason } from "@/components/assistant/failure";
 import { SEND_CLASS } from "@/components/assistant/decision-classes";
 import { KeptTextarea } from "@/components/kept-field";
 import { AnswerMarkdown } from "@/components/assistant/answer-markdown";
@@ -1223,7 +1223,7 @@ export function AssistantPanel({
       if (!res.ok || !res.body) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
         throw new Error(
-          detail?.error ?? t("assistant.assistantFailedStatus", { status: res.status }),
+          detail?.error ?? noReason(res, t),
         );
       }
       const reader = res.body.getReader();
@@ -1313,7 +1313,7 @@ export function AssistantPanel({
         | { issues?: Issue[]; error?: string }
         | null;
       if (!res.ok)
-        throw new Error(json?.error ?? t("assistant.taskFailedStatus", { status: res.status }));
+        throw new Error(json?.error ?? noReason(res, t));
       setIssues(json?.issues ?? []);
     } catch (err) {
       // Stopped, not failed: no cards, no error.
