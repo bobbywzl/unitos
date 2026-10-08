@@ -5,7 +5,7 @@ import { CAPTION_RE, numberedLabel } from "@/lib/parse/pdf/figures";
 import { BULLET_RE, follows, opensSequence, readMarker } from "@/lib/parse/pdf/markers";
 import { endAs, endsFull, wrapsAt } from "@/lib/parse/pdf/paragraphs";
 import { joinWrapped } from "@/lib/parse/pdf/text";
-import type { PageBreak, Segment } from "@/lib/parse/pdf/types";
+import type { Box, PageBreak, Segment } from "@/lib/parse/pdf/types";
 
 // ── Joins on one page ───────────────────────────────────────────────────────
 
@@ -257,6 +257,37 @@ export function joinOnPage(input: Segment[]): Segment[] {
       continue;
     }
     out.push(segment);
+  }
+  return out;
+}
+
+// A note in the margin, set smaller than the text beside it, that the
+// reading order puts between a block of text and the displays right under
+// it, moves after those displays: the sentence runs on into its display,
+// and the space over the display is the text's (parse loop finding: the
+// MML book sets "primal problem" and "Lagrangian dual problem" beside "…
+// The associated Lagrangian dual problem is given by" over (7.22) on p.
+// 240; the notes stood between them, and the import drew the space over
+// the display after the note, 9 pt where the page sets 13).
+export function notesAfterDisplays(input: Segment[]): Segment[] {
+  const out = [...input];
+  const apart = (a: Box, b: Box) => a.x2 <= b.x1 || b.x2 <= a.x1;
+  for (let k = 0; k + 2 < out.length; k++) {
+    const a = out[k];
+    const box = a.box;
+    if (!["PARAGRAPH", "LIST"].includes(a.type) || !box) continue;
+    const size = a.lineSize ?? 10;
+    const note = (s: Segment) => s.type === "PARAGRAPH" && s.page === a.page && !!s.box && (s.lineSize ?? size) < size * 0.9 && apart(s.box, box) && s.box.y2 <= box.y2 + 1;
+    let j = k + 1;
+    while (j < out.length && note(out[j])) j++;
+    if (j === k + 1 || out[j]?.type !== "EQUATION" || out[j].page !== a.page) continue;
+    let end = j;
+    while (end + 1 < out.length && out[end + 1].type === "EQUATION" && out[end + 1].page === a.page) end++;
+    const displays = out.slice(j, end + 1);
+    const notes = out.slice(k + 1, j);
+    if (!notes.every((n) => displays.every((d) => d.box !== undefined && apart(n.box!, d.box)))) continue;
+    out.splice(k + 1, end - k, ...displays, ...notes);
+    k = end;
   }
   return out;
 }

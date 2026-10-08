@@ -23,7 +23,7 @@ import { assignHeadingLevels, centerLikeOthers } from "@/lib/parse/pdf/headings"
 import { lookItems, takeBodyFont } from "@/lib/parse/pdf/look";
 import { displayEquations, displayLines, isTexPage } from "@/lib/parse/pdf/math/display";
 import { mathSpans, resolveZones } from "@/lib/parse/pdf/math/zones";
-import { firstPageOf, joinOnPage, mergeAcrossPages, shiftSpansInto } from "@/lib/parse/pdf/merge";
+import { firstPageOf, joinOnPage, mergeAcrossPages, notesAfterDisplays, shiftSpansInto } from "@/lib/parse/pdf/merge";
 import { isOcrLayer, measureSpacing, pageLeading } from "@/lib/parse/pdf/paragraphs";
 import { embeddedGlyphNames } from "@/lib/parse/pdf/programs";
 import { placeTables, ruledTables, takeTables } from "@/lib/parse/pdf/ruled";
@@ -630,7 +630,7 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
 
   // A paragraph's halves join, on its page (a column break, a float
   // between) and across pages, but never across pages the choice left out.
-  segments = runsOfPages(joinOnPage(segments), chosen).flatMap(mergeAcrossPages);
+  segments = runsOfPages(notesAfterDisplays(joinOnPage(segments)), chosen).flatMap(mergeAcrossPages);
   // A table's caption is the table's, once its rows joined across pages.
   segments = attachTableCaptions(segments);
 
