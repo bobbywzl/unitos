@@ -113,6 +113,11 @@ export function useNoteDraft({
   // The text the next save is made from: the note's text when the editor
   // opened, then the text each save left (lib/notes/save-text.ts).
   const baseRef = useRef(original.trim());
+  // The note's text as the server had it when the editor opened: the
+  // sources of the quotes the sitting removed go when it closes, read
+  // against this text (SPEC.md §6). Until then every save keeps them, so a
+  // quote deleted and brought back (Ctrl+Z, Cancel) keeps its source.
+  const openedRef = useRef(original.trim());
   // The text of the save on its way, if any: the closing flush is made from it.
   const sendingRef = useRef<string | null>(null);
   // The saves of this editor, one after another.
@@ -130,6 +135,7 @@ export function useNoteDraft({
     lastSavedRef.current = original;
     originalRef.current = original;
     baseRef.current = original.trim();
+    openedRef.current = original.trim();
     adoptingRef.current = null;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setConfirmed(original.trim());
@@ -158,6 +164,7 @@ export function useNoteDraft({
       const base = (noteDraftBase(kept, stored) ?? stored).trim();
       lastSavedRef.current = base;
       baseRef.current = base;
+      openedRef.current = base;
       originalRef.current = kept.content;
       setConfirmed(base);
       setFailed(kept.content.trim());
@@ -174,7 +181,7 @@ export function useNoteDraft({
       const run = chainRef.current.then(async () => {
         sendingRef.current = trimmed;
         try {
-          const saved = await saveNoteText(noteId, trimmed, baseRef.current);
+          const saved = await saveNoteText(noteId, trimmed, baseRef.current, { keepSources: true });
           baseRef.current = saved.content;
           setQueued(saved.queued ? saved.content : null);
           confirmNoteDraft(noteId, trimmed);
@@ -274,32 +281,59 @@ export function useNoteDraft({
     // The same editor goes on for the new note (its card kept its key): its
     // text is the one on screen, and nothing waits to be handed to it.
     handedText.delete(noteId);
-    const flush = () => {
-      const trimmed = draftRef.current.trim();
-      if (!trimmed || trimmed === lastSavedRef.current) return;
-      lastSavedRef.current = trimmed;
+    const send = (body: Record<string, unknown>, confirm: string | null) => {
       const account = tabAccount();
       // The local draft stays: a keepalive request cannot report back, so the
       // next load checks the server and clears or replays it.
-      void fetch(`/api/notes/${noteId}`, {
+      return fetch(`/api/notes/${noteId}`, {
         method: "PATCH",
         keepalive: true,
         headers: {
           "Content-Type": "application/json",
           ...(account ? { [ACCOUNT_HEADER]: account } : {}),
         },
-        // Made from the save on its way, else the last one; the tab is going
-        // away and cannot read a 409, so the route puts the texts together.
-        body: JSON.stringify({
-          content: trimmed,
-          baseContent: sendingRef.current ?? baseRef.current,
-          onConflict: "keep",
-        }),
+        body: JSON.stringify(body),
       })
         .then((res) => {
-          if (res.ok) confirmNoteDraft(noteId, trimmed);
+          if (res.ok && confirm !== null) confirmNoteDraft(noteId, confirm);
         })
         .catch(() => {});
+    };
+    // The window closes: the words go now. With no save on its way, the
+    // sources of the quotes the sitting removed go in the same write; with
+    // one on its way they stay (a source kept is never a loss).
+    const flush = () => {
+      const trimmed = draftRef.current.trim();
+      const idle = sendingRef.current === null;
+      const prune = idle && lastSavedRef.current.trim() !== openedRef.current ? { pruneSourcesFrom: openedRef.current } : {};
+      if (!trimmed || trimmed === lastSavedRef.current) {
+        if ("pruneSourcesFrom" in prune) void send(prune, null);
+        return;
+      }
+      lastSavedRef.current = trimmed;
+      // Made from the save on its way, else the last one; the tab is going
+      // away and cannot read a 409, so the route puts the texts together.
+      void send(
+        { content: trimmed, baseContent: sendingRef.current ?? baseRef.current, onConflict: "keep", keepSources: true, ...prune },
+        trimmed,
+      );
+    };
+    // The editor closes: the last words save after the saves before them,
+    // and the sources of the quotes the sitting removed go with them.
+    const close = () => {
+      const trimmed = draftRef.current.trim();
+      const typed = Boolean(trimmed) && trimmed !== lastSavedRef.current;
+      if (typed) lastSavedRef.current = trimmed;
+      else if (lastSavedRef.current.trim() === openedRef.current) return;
+      const opened = openedRef.current;
+      void chainRef.current.then(() =>
+        send(
+          typed
+            ? { content: trimmed, baseContent: baseRef.current, onConflict: "keep", pruneSourcesFrom: opened }
+            : { pruneSourcesFrom: opened },
+          typed ? trimmed : null,
+        ),
+      );
     };
     window.addEventListener("pagehide", flush);
     window.addEventListener("beforeunload", flush);
@@ -318,7 +352,7 @@ export function useNoteDraft({
         clearNoteDraft(noteId);
         return;
       }
-      flush();
+      close();
     };
   }, [active, canEdit, noteId]);
 

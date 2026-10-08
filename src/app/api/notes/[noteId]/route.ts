@@ -53,6 +53,14 @@ const patchSchema = z.object({
   // Sources a quote dropped into the open editor attached, given up with
   // the editor's Cancel (SPEC.md §6): only this note's own rows go.
   removeSources: z.array(z.string().min(1)).max(50).optional(),
+  // An open editor's save (use-note-draft.ts): the sources stay while the
+  // editor is open, so a quote deleted and brought back in the same sitting
+  // (Ctrl+Z, Cancel) keeps its source.
+  keepSources: z.boolean().optional(),
+  // The editor closed: the sources whose quote the sitting removed go now —
+  // covered by a quote in this text (the note's text when the editor
+  // opened), by none in the note's text after this write (SPEC.md §6).
+  pruneSourcesFrom: z.string().max(MAX_CONTENT).optional(),
   // A draft left of a note that is not in the project's notes on load
   // (use-outline.ts): its words go to a new note when the note is gone. A
   // note that still exists refuses the write; its own project's load saves
@@ -281,13 +289,22 @@ async function writeNote(noteId: string, data: PatchData, t: T, keptAs?: string)
           await recordNoteEdit(noteId, access.user.id || null, content, tx);
           // A quote deleted from the note takes its source with it: the mark
           // in the reader no longer points at a note that lost the words
-          // (SPEC.md §6). An append keeps every quote, so it leaves every source.
-          if (data.content !== undefined) {
+          // (SPEC.md §6). An append keeps every quote, so it leaves every
+          // source; an open editor's save keeps them until it closes.
+          if (data.content !== undefined && data.keepSources !== true) {
             const sources = await tx.source.findMany({ where: { noteId }, select: { id: true, quotedText: true } });
             const left = sourcesLeftByQuotes(stored, content, sources);
             if (left.length > 0) await tx.source.deleteMany({ where: { id: { in: left }, noteId } });
           }
         }
+      }
+      // The editor closed (use-note-draft.ts): the quotes the sitting
+      // removed take their sources now, read against the text it opened on.
+      if (data.pruneSourcesFrom !== undefined) {
+        const now = content ?? stored;
+        const sources = await tx.source.findMany({ where: { noteId }, select: { id: true, quotedText: true } });
+        const left = sourcesLeftByQuotes(data.pruneSourcesFrom, now, sources);
+        if (left.length > 0) await tx.source.deleteMany({ where: { id: { in: left }, noteId } });
       }
       return { kind: "ok" };
     },
