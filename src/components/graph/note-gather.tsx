@@ -178,7 +178,7 @@ export function AddToNote({ quote, className = "" }: { quote: GatherQuote; class
       data-track={inNote ? "graph-note-gather-remove" : "graph-note-gather-add"}
       data-graph-add-to-note={inNote ? "in" : "out"}
       data-tip={blocked ? t("graphCover.composerFull", { n: MAX_NOTE_QUOTES }) : t(inNote ? "graphCover.addedToNoteTitle" : "graphCover.addToNoteTitle")}
-      className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold disabled:opacity-40 ${
+      className={`inline-flex shrink-0 items-center gap-1 min-h-6 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold disabled:opacity-40 pointer-coarse:min-h-10 pointer-coarse:px-3 ${
         inNote ? "border-sage-400 bg-sage-100 text-sage-800" : "border-line bg-card text-sand-700 hover:bg-sage-100 hover:text-sage-800"
       } ${className}`}
     >

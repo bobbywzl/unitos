@@ -1,6 +1,6 @@
 // UI strings of what the notes cover on the graph and of Add to note
 // (SPEC.md §13; components/graph/coverage.tsx, note-gather.tsx): the parts
-// noted, Not opened, Gaps only, No reply, and the note composer that
+// noted, Not opened, Gaps only, Waiting on you, and the note composer that
 // collects quotes from the graph. zh glossary: dict/common.ts — part 部分 ·
 // note 笔记 · quote 引文 · section 章节 · link 链接 · reply 回复 ·
 // document 文档 · passage 片段.
@@ -22,14 +22,18 @@ const en = {
   wholeNotedMany: "{n} notes quote this document",
   headPartsTitle: "A document with no parts counts as one part, the whole document",
   gapParts: "No note in {n} of {m} parts",
-  headUnopened: "{n} of {m} documents not opened",
-  headNoReply: "{n} of {m} links with no reply",
+  // [panel6] The head reads as one line of text (VIEW6-07).
+  headParts: "{n}/{m} parts noted",
+  headUnopened: "{n} not opened",
+  headUnopenedTitle: "{n} of {m} documents not opened",
+  headNoReplyOne: "1 link waiting on you",
+  headNoReply: "{n} links waiting on you",
   gapsOnly: "Gaps only",
   gapsOnlyTitle: "Keep the documents you have not opened and the parts no note quotes. Each row says why it is kept.",
   gapsNone: "No gaps: every part is noted and every document is opened.",
-  noReply: "No reply",
-  noReplyTitle: "Keep the links waiting for your reply: no reply yet, or the last reply is another person's",
-  noReplyNone: "No link is waiting for your reply.",
+  noReply: "Waiting on you",
+  noReplyTitle: "Keep the links waiting on you: no reply yet, or the last reply is another person's. Their questions come first.",
+  noReplyNone: "No link is waiting on you.",
 
   // [layer5] The reader's comments on the graph (coverage.tsx; VIEW5-01/02).
   commentsOpenOne: "1 open comment",
@@ -94,14 +98,17 @@ const zh: Record<keyof typeof en, string> = {
   wholeNotedMany: "{n} 条笔记引用了这个文档",
   headPartsTitle: "没有部分的文档算作一个部分，即整个文档",
   gapParts: "{m} 个部分中 {n} 个没有笔记",
-  headUnopened: "{m} 个文档中 {n} 个未打开",
-  headNoReply: "{m} 条链接中 {n} 条无回复",
+  headParts: "{n}/{m} 个部分有笔记",
+  headUnopened: "{n} 个未打开",
+  headUnopenedTitle: "{m} 个文档中 {n} 个未打开",
+  headNoReplyOne: "1 条链接待你回复",
+  headNoReply: "{n} 条链接待你回复",
   gapsOnly: "只看空缺",
   gapsOnlyTitle: "只留下你未打开的文档和没有笔记引用的部分。每行写明留下的原因。",
   gapsNone: "没有空缺：每个部分都有笔记，每个文档都已打开。",
-  noReply: "无回复",
-  noReplyTitle: "只留下等你回复的链接：还没有回复，或最后一条回复是别人的",
-  noReplyNone: "没有等你回复的链接。",
+  noReply: "待你回复",
+  noReplyTitle: "只留下待你回复的链接：还没有回复，或最后一条回复是别人的。别人的提问排在前面。",
+  noReplyNone: "没有待你回复的链接。",
 
   commentsOpenOne: "1 条未解决的评论",
   commentsOpenMany: "{n} 条未解决的评论",

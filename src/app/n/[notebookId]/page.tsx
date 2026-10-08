@@ -1273,6 +1273,12 @@ export default async function NotebookPage(props: {
     restoreOffered.add(id); // allEdits is newest first: the newest removal
     return id;
   };
+  const linkEnds = (e: (typeof allEdits)[number]): string => {
+    const to = (e.meta as { toTitle?: unknown } | null)?.toTitle;
+    return (e.kind === "LINK_ADD" || e.kind === "LINK_REMOVE") && typeof to === "string" && to !== ""
+      ? `${e.document.title} → ${to}`
+      : e.document.title;
+  };
   const history: HistoryEntry[] = [
     ...events.map(
       (e): HistoryEntry => ({
@@ -1298,7 +1304,8 @@ export default async function NotebookPage(props: {
               : ((e.meta as { quotedText?: string; to?: string } | null)?.quotedText ??
                 (e.meta as { to?: string } | null)?.to ??
                 ""),
-        documentTitle: e.document.title,
+        // [panel6] A link's row names both ends (WALK6-11): "BOOK TWO → Extra notes".
+        documentTitle: linkEnds(e),
         createdAt: e.createdAt.toISOString(),
         trivial: trivial.get(e.id) ?? false,
         ...(restoreLinkId ? { restoreLinkId } : {}),

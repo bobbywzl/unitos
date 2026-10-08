@@ -125,7 +125,15 @@ export function LinkReplyCount({ link }: { link: GraphEdgeLink }) {
     holding words only leaves the box: the box, its words, and the curve's
     list stay (ReplyThread itself would fold the box, and the next Esc would
     close the list and lose the words). */
-export function LinkReplies({ link }: { link: GraphEdgeLink }) {
+export function LinkReplies({
+  link,
+  openRequest,
+}: {
+  link: GraphEdgeLink;
+  /** [panel6] The link panel's Reply (WALK6-05): each new value opens the
+      box, which sits above the replies. Left out: the thread's own Reply. */
+  openRequest?: number;
+}) {
   const { notebookId } = useParams<{ notebookId?: string }>();
   const { myId, authOn } = useCollab();
   // [layer5] The thread is open: its replies are seen (WALK5-07).
@@ -151,6 +159,8 @@ export function LinkReplies({ link }: { link: GraphEdgeLink }) {
         target={{ docLinkId: link.id, notebookId }}
         replies={link.replies ?? []}
         crossAccount={link.crossAccount}
+        openRequest={openRequest}
+        composerFirst={openRequest !== undefined}
       />
     </div>
   );

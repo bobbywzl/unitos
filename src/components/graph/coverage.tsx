@@ -145,28 +145,43 @@ export function CoverageHead({ documentIds, links }: { documentIds: string[]; li
   const unopened = docs.filter((d) => !d.opened).length;
   const accepted = links.filter((l) => !l.recommended && !l.provenance);
   const noReply = accepted.filter(waits).length;
-  return (
-    <div data-graph-coverage-head className="flex flex-wrap items-center gap-1.5">
-      {parts > 0 && (
-        <span data-graph-coverage-parts={`${noted}/${parts}`} data-tip={t("graphCover.headPartsTitle")} className={`${chip} border-sage-300 bg-sage-100 text-sage-800`}>
-          {t("graphCover.partsNoted", { n: noted, m: parts })}
-        </span>
-      )}
-      <span data-graph-coverage-unopened={`${unopened}/${docs.length}`} className={`${chip} border-line text-sand-700`}>
-        {t("graphCover.headUnopened", { n: unopened, m: docs.length })}
+  // [panel6] VIEW6-07: the counts are text, "·" between them; Gaps only is the one pill.
+  const counts = [
+    parts > 0 && (
+      <span key="parts" data-graph-coverage-parts={`${noted}/${parts}`} data-tip={t("graphCover.headPartsTitle")}>
+        {t("graphCover.headParts", { n: noted, m: parts })}
       </span>
-      {accepted.length > 0 && (
-        <span data-graph-coverage-noreply={`${noReply}/${accepted.length}`} data-tip={t("graphCover.noReplyTitle")} className={`${chip} border-line text-sand-700`}>
-          {t("graphCover.headNoReply", { n: noReply, m: accepted.length })}
-        </span>
-      )}
+    ),
+    <span
+      key="unopened"
+      data-graph-coverage-unopened={`${unopened}/${docs.length}`}
+      data-tip={t("graphCover.headUnopenedTitle", { n: unopened, m: docs.length })}
+    >
+      {t("graphCover.headUnopened", { n: unopened })}
+    </span>,
+    accepted.length > 0 && (
+      <span key="noreply" data-graph-coverage-noreply={`${noReply}/${accepted.length}`} data-tip={t("graphCover.noReplyTitle")}>
+        {noReply === 1 ? t("graphCover.headNoReplyOne") : t("graphCover.headNoReply", { n: noReply })}
+      </span>
+    ),
+  ].filter(Boolean);
+  return (
+    <div data-graph-coverage-head className="flex items-center gap-2">
+      <p className="min-w-0 flex-1 text-[11px] leading-snug text-sand-600 tabular-nums">
+        {counts.map((c, i) => (
+          <span key={i}>
+            {i > 0 && <span className="text-sand-400"> · </span>}
+            {c}
+          </span>
+        ))}
+      </p>
       <button
         onClick={() => setGapsOnly(!gapsOnly)}
         aria-pressed={gapsOnly}
         data-track="graph-documents-gaps"
         data-graph-gaps-only
         data-tip={t("graphCover.gapsOnlyTitle")}
-        className={`${chip} ${gapsOnly ? "border-clay-400 bg-clay-100 text-clay-800" : "border-line text-sand-700 hover:bg-clay-100/60"}`}
+        className={`shrink-0 ${chip} ${gapsOnly ? "border-clay-400 bg-clay-100 text-clay-800" : "border-line text-sand-700 hover:bg-clay-100/60"} min-h-6 pointer-coarse:min-h-10 pointer-coarse:px-3`}
       >
         {t("graphCover.gapsOnly")}
       </button>
@@ -335,7 +350,7 @@ export function NoReplyToggle({ on, onChange }: { on: boolean; onChange: (on: bo
       data-track="graph-links-no-reply"
       data-graph-links-no-reply
       data-tip={t("graphCover.noReplyTitle")}
-      className={`shrink-0 ${chip} py-1.5 text-[12px] ${on ? "border-clay-400 bg-clay-100 text-clay-800" : "border-line text-sand-700 hover:bg-clay-100/60"}`}
+      className={`shrink-0 ${chip} py-1.5 text-[12px] pointer-coarse:min-h-10 ${on ? "border-clay-400 bg-clay-100 text-clay-800" : "border-line text-sand-700 hover:bg-clay-100/60"}`}
     >
       {t("graphCover.noReply")}
     </button>
@@ -452,7 +467,7 @@ export function NodeCommentsLine({ notebookId, documentId, onOpenDocument }: { n
         aria-expanded={open}
         data-track="graph-card-comments"
         data-tip={t("graphCover.commentsShowTitle")}
-        className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-[var(--kind-comment)] hover:underline"
+        className="inline-flex min-h-6 items-center gap-1 text-[11.5px] font-semibold text-[var(--kind-comment)] hover:underline pointer-coarse:min-h-10"
       >
         <CommentIcon size={11} />
         {openOnes.length === 1 ? t("graphCover.commentsOpenOne") : t("graphCover.commentsOpenMany", { n: openOnes.length })}
