@@ -610,8 +610,15 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     // the page's text and next to no ink inside it, is a drawing too
     // (parse loop finding: GeoTopo p. 17's uncaptioned picture of a
     // compact set, eight shapes, was no figure: its labels read as an
-    // equation and two crops).
-    const sparse = shapes >= 5 && shapes >= paths.length * 0.8 && sized && ink < area(box) * 0.05 && !inside.some(isPageText);
+    // equation and two crops). With labels inside it, under a hundredth of
+    // its area in ink, a third of its paths may be shapes, the rest its
+    // axes and arrows (parse loop finding: a Tufte textbook's potential
+    // well, two gray walls, a bump, and an axis in fifteen paths, was no
+    // figure: its labels "V(z)", "V0", "z", "−L/2" read as two equations
+    // and two crops). A chart's panel with no label inside is no drawing
+    // of its own: its boxes and whiskers are a third of its paths too.
+    const labeled = inside.length > 0 && ink < area(box) * 0.01;
+    const sparse = shapes >= 5 && shapes >= paths.length * (labeled ? 0.3 : 0.8) && sized && ink < area(box) * 0.05 && !inside.some(isPageText);
     // A drawing in the margin beside the text column: three paths or
     // more, a shape among them, a figure's width and a line tall at the
     // least, its box an em or more past the column's right edge, with no
