@@ -62,7 +62,8 @@ const FONTS_LINK_ID = "unitos-docs-fonts";
 
 /** A pane narrower than this starts with the title row hidden. */
 const NARROW_PANE = 600;
-/** A pane shorter than this (a phone held sideways) hides the title row too. */
+/** A pane shorter than this (a phone held sideways) hides the title row
+    too, and reads pageless with no ruler, as a narrow one does. */
 const SHORT_PANE = 500;
 
 /** An import (SPEC.md §29): a document made from a PDF, a web page, a
@@ -600,7 +601,10 @@ export function DocsEditor({
       const split = shell.closest("[data-reader-root]")?.previousElementSibling?.classList.contains("pane-header") === true;
       const isNarrow = shell.clientWidth > 0 && shell.clientWidth < NARROW_PANE;
       const short = pane !== null && pane.clientHeight > 0 && pane.clientHeight < SHORT_PANE;
-      setNarrow(isNarrow);
+      // A short pane (a phone held sideways) reads as a narrow one does:
+      // pageless, with no ruler; the page's margins and the ruler would
+      // leave the words a third of the screen.
+      setNarrow(isNarrow || short);
       setTight(isNarrow || short || split);
     };
     measure();
@@ -667,9 +671,10 @@ export function DocsEditor({
   // this browser; the document's page setup stays as it is (the page store
   // keeps the saved setup apart from the drawn page). A PDF import offers it
   // in Viewing with its bar, and Editing and Suggesting draw its pages; a
-  // pane too narrow for the page (a phone) reads pageless at once in every
-  // mode, with no bar — the pages there are drawn at 42%, where no one reads
-  // or writes them — and Search the menus > View keeps Show pages.
+  // pane too narrow for the page (a phone) or too short for it (a phone
+  // held sideways) reads pageless at once in every mode, with no bar — the
+  // pages there are drawn at 42%, or leave six lines of words, where no one
+  // reads or writes them — and Search the menus > View keeps Show pages.
   const paged = !pageSetup.pageless;
   const pdfPages = imported?.kind === "pdf" && paged;
   const [reflowChoice, chooseReflow] = useReflow(editor, documentId, pdfPages || (paged && narrow));
@@ -794,7 +799,10 @@ export function DocsEditor({
   const modeRef = useRef(mode);
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
-    editor.setEditable(writable && mode !== "viewing");
+    // A change only: setEditable draws the whole page again, and on a long
+    // import's first frame that is a second of nothing (EDGE14-08).
+    const editable = writable && mode !== "viewing";
+    if (editor.isEditable !== editable) editor.setEditable(editable);
     const switched = modeRef.current !== mode;
     modeRef.current = mode;
     const passing = passingRef.current;

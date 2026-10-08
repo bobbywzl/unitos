@@ -8,13 +8,27 @@ import { translatorFor } from "@/lib/i18n/dictionaries";
 /** A new blank document's title, in every language: drawn gray. */
 export const UNTITLED = new Set(LANGS.flatMap((lang) => (["docsPage.untitled", "panes.untitledDocument"] as const).map((key) => translatorFor(lang)(key))));
 
+/** Gray lines where the words will stand, pulsing while the editor loads:
+    the pane says it is opening the document, not that it is empty. */
+const SKELETON = [96, 100, 92, 100, 64, null, 100, 88, 100, 96, 72];
+
+function Skeleton() {
+  return (
+    <div className="docs-frame-lines" aria-hidden>
+      {/* null: the gap between two paragraphs. */}
+      {SKELETON.map((width, i) => (width === null ? <i key={i} /> : <span key={i} style={{ width: `${width}%` }} />))}
+    </div>
+  );
+}
+
 /** The page editor's frame (SPEC.md §29) until the editor stands: the title
-    row, the toolbar's row, the ruler's row, and an empty page. It keeps
-    nothing of the editor's code, so the reader draws it while that loads. */
+    row, the toolbar's row, the ruler's row, and a page with gray lines where
+    the words will stand. It keeps nothing of the editor's code, so the
+    reader draws it while that loads. */
 export function DocsFrame({ title, pageSetup }: { title: string; pageSetup: PageSetup }) {
   const page = pageSetup.pageless ? null : pageFrame(pageSetup);
   return (
-    <div className="docs-shell">
+    <div className="docs-shell" aria-busy="true">
       <div className="docs-header">
         <div className="docs-title-row">
           <DocIcon size={26} className="docs-title-icon" />
@@ -24,9 +38,16 @@ export function DocsFrame({ title, pageSetup }: { title: string; pageSetup: Page
         <div className="docs-ruler-row" />
       </div>
       <div className="docs-canvas">
-        {page && (
+        {page ? (
           <div className="docs-page" style={{ width: page.width, height: page.height }}>
             <div className="docs-sheet" style={{ top: 0, height: page.height }} />
+            <div className="docs-frame-text" style={{ top: page.top, left: page.left, right: page.right }}>
+              <Skeleton />
+            </div>
+          </div>
+        ) : (
+          <div className="docs-frame-pageless">
+            <Skeleton />
           </div>
         )}
       </div>
