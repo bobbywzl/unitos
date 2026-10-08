@@ -1890,6 +1890,26 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     !hidden.some((b) => /Photo:|Opens in a new window/.test(b)) && hidden.some((b) => b.includes("The delta at dawn")),
     hidden.join(" / "),
   );
+  // Alignment: in quirks mode (no doctype) a table starts its text at the start edge whatever is centered around it; a table's align places its box.
+  const aligned = async (doctype: string, body: string) =>
+    (
+      await parseHtmlContent(
+        `${doctype}<html><head><title>Notes on river flow</title><style>p { font-size: 16px }</style></head><body>${body}</body></html>`,
+        "https://example.org/rivers",
+      )
+    ).blocks
+      .filter((b) => b.type === "PARAGRAPH")
+      .map((b) => b.html ?? "<p>");
+  const cell = `<table><tr><td><p>${prose(1)}</p><p>${prose(2)}</p><p>${prose(3)}</p></td></tr></table>`;
+  const quirks = await aligned("", `<div align="center">${cell}</div>`);
+  const standards = await aligned("<!doctype html>", `<div align="center">${cell}</div>`);
+  const boxed = await aligned("<!doctype html>", `<table align="center"><tr><td><p>${prose(1)}</p><p>${prose(2)}</p><p>${prose(3)}</p></td></tr></table>`);
+  check(
+    "url: centered words around a table do not center its cells in quirks mode",
+    quirks.length === 3 && quirks.every((h) => !h.includes("center")) && standards.every((h) => h.includes("center")),
+    `quirks ${quirks.join(" ")}; standards ${standards.join(" ")}`,
+  );
+  check("url: a table's align centers its box, not its text", boxed.length === 3 && boxed.every((h) => !h.includes("center")), boxed.join(" "));
 }
 
 {

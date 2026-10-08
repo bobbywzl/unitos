@@ -1442,16 +1442,23 @@ function markHidden(document: Document, rules: Rule[], page: Page) {
 }
 
 /** Text alignment inherits: every block under a centered element is
-    centered until a nearer declaration says otherwise. */
+    centered until a nearer declaration says otherwise. A table's align
+    attribute places the table's box, not its text. A page with no doctype
+    renders in quirks mode, where a table starts its text at the start edge
+    whatever the alignment around it (HTML's rendering rules). Web
+    benchmark finding: a story set in a table's cell inside <div
+    align="center">, on a page with no doctype, read with every paragraph
+    centered. */
 function markAlignment(document: Document, rules: Rule[], page: Page) {
   const aligned = matchAll(document, selectorsDeclaring(rules, ["text-align"]), page);
   for (const el of document.querySelectorAll('[style*="text-align"], [align], center')) aligned.add(el);
   const ownAlign = new Map<Element, string | null>();
+  const quirksTable = (el: Element) => document.compatMode === "BackCompat" && el.tagName.toLowerCase() === "table";
   const alignOf = (el: Element): string | null => {
     const style = styleOf(el, page);
     let value = style ? ownValue(style, "text-align") : null;
     if (value === null) {
-      const attr = (el.getAttribute("align") ?? "").toLowerCase();
+      const attr = el.tagName.toLowerCase() === "table" ? "" : (el.getAttribute("align") ?? "").toLowerCase();
       if (attr) value = attr;
       else if (el.tagName.toLowerCase() === "center") value = "center";
     }
@@ -1472,6 +1479,7 @@ function markAlignment(document: Document, rules: Rule[], page: Page) {
         if (own === "center" || own === "right") mark(child, own);
         continue;
       }
+      if (quirksTable(child)) continue;
       mark(child, align);
     }
   };
@@ -1484,6 +1492,7 @@ function markAlignment(document: Document, rules: Rule[], page: Page) {
     for (let node = el.parentElement; node && outer === undefined; node = node.parentElement) {
       const own = ownAlign.get(node);
       if (own !== undefined && own !== null) outer = own;
+      else if (quirksTable(node)) outer = null;
     }
     if (outer === align) continue;
     mark(el, align);
