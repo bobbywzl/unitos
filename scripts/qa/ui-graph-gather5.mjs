@@ -237,6 +237,23 @@ if (!only || only === "walk12") {
       check(`WALK5-12 ${lang} ${w} unfolding the note folds the box; the words are kept`, folded === 1 && words.length > 0, JSON.stringify(words));
       await shot(page, `WALK5-12-note-open-${w}-${lang}`);
     }
+    // [box6] WALK6-01: with the new note up and no side list open, the box
+    // stays on screen, left of the note (a production build dropped the
+    // rule's `translate: none` and put it at x = -166).
+    if (!before && w >= 1000) {
+      const close = page.locator('[data-graph-side-list="find"] [aria-label]').filter({ hasText: "✕" }).first();
+      if (await close.count()) await close.click();
+      else await page.keyboard.press("Escape");
+      await page.waitForTimeout(600);
+      const at = await page.evaluate(() => {
+        const r = (el) => (el ? el.getBoundingClientRect().toJSON() : null);
+        return { box: r(document.querySelector("[data-stitch-slot]")?.firstElementChild), dock: r(document.querySelector("[data-graph-note-gather]")), list: Boolean(document.querySelector("[data-graph-side-list]")) };
+      });
+      const onScreen = at.box && at.box.left >= 0 && at.box.right <= w;
+      const clear = at.box && at.dock && at.box.right <= at.dock.left;
+      check(`WALK6-01 ${lang} ${w} no list, the new note up: the Stitch box is on screen, left of the note`, !at.list && onScreen && clear, `box ${Math.round(at.box?.left)}–${Math.round(at.box?.right)}, note from ${Math.round(at.dock?.left)}, list ${at.list}`);
+      await shot(page, `WALK6-01-no-list-${w}-${lang}`);
+    }
     await ctx.close();
   }
 }
