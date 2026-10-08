@@ -8,6 +8,7 @@ import { useLang, useT } from "@/components/lang-provider";
 import { replyTime } from "@/components/collab/reply-thread";
 import type { GeneratedDocumentView } from "@/lib/types";
 import { useGraphContent } from "@/components/graph/graph-content";
+import { ListName } from "@/components/graph/list-name"; // [lists7]
 
 // Generated content (SPEC.md §22): every document Stitch wrote for the
 // project, newest first, each with the command that made it. The list
@@ -61,18 +62,30 @@ export function GeneratedList({
       id="graph-list-generated"
       tabIndex={-1}
       aria-label={t("stitch.generated")}
-      className="menu-in absolute top-3 right-3 bottom-3 z-10 flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 pb-24 shadow-float outline-none backdrop-blur-md max-[999px]:bottom-16 max-[999px]:pb-4"
+      className="menu-in absolute top-3 right-3 z-10 max-h-[calc(100%-24px)] flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 shadow-float outline-none backdrop-blur-md max-[999px]:max-h-[calc(100%-76px)]"
     >
-      {/* [chrome6] WALK6-08: one head row, the switch and ✕; the list's
-          intro is the pill's tooltip. */}
+      {/* [chrome6] WALK6-08: the list's intro is the pill's tooltip.
+          [lists7] WALK7-01: the head row names the list, ✕ at its end; the
+          switch takes the line under it. */}
       <div className="flex items-center gap-2">
-      {generated.length > 0 ? (
+        <ListName grow>{t("stitch.generated")}</ListName>
+        <button
+          onClick={onClose}
+          data-track="graph-generated-close"
+          aria-label={t("common.close")}
+          data-tip={t("common.close")}
+          className="-mr-1 flex size-7 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
+        >
+          ✕
+        </button>
+      </div>
+      {generated.length > 0 && (
         <button
           role="switch"
           aria-checked={showProvenance}
           onClick={() => setShowProvenance(!showProvenance)}
           data-track="graph-provenance-switch"
-          className="flex min-w-0 items-center gap-2 rounded-full px-1 py-0.5 text-[12.5px] text-sand-700 hover:text-clay-800"
+          className="-mt-1 flex min-w-0 items-center gap-2 self-start rounded-full px-1 py-0.5 text-[12.5px] text-sand-700 hover:text-clay-800"
         >
           <span
             aria-hidden
@@ -84,19 +97,7 @@ export function GeneratedList({
           </span>
           {t("stitch.generatedProvenance")}
         </button>
-      ) : (
-        <span className="flex-1" />
       )}
-        <button
-          onClick={onClose}
-          data-track="graph-generated-close"
-          aria-label={t("common.close")}
-          data-tip={t("common.close")}
-          className="-mr-1 ml-auto flex size-7 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
-        >
-          ✕
-        </button>
-      </div>
       {error && <p className="text-[13px] text-red-600">{error}</p>}
       {generated.length === 0 && (
         <p className="text-[13px] text-sand-600">{t("stitch.generatedEmpty")}</p>

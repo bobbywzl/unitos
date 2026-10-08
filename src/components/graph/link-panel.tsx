@@ -140,8 +140,7 @@ export function LinkPanel({
     }
   }
 
-  // pb-24: a long thread scrolls its last controls (Send, Save) clear of the
-  // Feedback button at the bottom right.
+  // [lists7] WALK7-03: as tall as what it holds, like the node card.
   return (
     <aside
       data-track-surface="graph-link-panel"
@@ -150,9 +149,7 @@ export function LinkPanel({
       id="graph-list-link"
       tabIndex={-1}
       aria-label={t("panes.graphLinkPanel")}
-      className={`menu-in absolute top-3 right-3 z-10 flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 shadow-float outline-none backdrop-blur-md ${
-        removed ? "" : "bottom-3 pb-24 max-[999px]:bottom-16 max-[999px]:pb-4"
-      }`}
+      className="menu-in absolute top-3 right-3 z-10 flex max-h-[calc(100%-24px)] w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 shadow-float outline-none backdrop-blur-md max-[999px]:max-h-[calc(100%-76px)]"
     >
       <div className="flex items-start gap-2">
         {onBack && (

@@ -556,7 +556,7 @@ function CurveListFrame({
 // replies, and Note on this link) and pins the curve; the notes quoting both
 // documents follow the links [graph-notes].
 function EdgeLinkList({ edgeId, loop, anchor, links }: { edgeId: string; loop: boolean; anchor: Point; links: GraphEdgeLink[] }) {
-  const { pinEdge, expandLink, expandedLinkId } = useContext(SpotlightContext);
+  const { expandLink, expandedLinkId } = useContext(SpotlightContext);
   const t = useT();
   const { proposedLinkIds } = useGraphContent(); // [view2]
   // A recommended link accepted or dismissed from the list (SPEC.md §13):
@@ -628,10 +628,7 @@ function EdgeLinkList({ edgeId, loop, anchor, links }: { edgeId: string; loop: b
               </p>
             )}
             <button
-              onClick={() => {
-                pinEdge(edgeId);
-                expandLink(l);
-              }}
+              onClick={() => expandLink(l) /* [lists7] WALK7-05: the list closes */}
               data-track="graph-link-expand"
               data-tip={t("panes.linkExpand")}
               aria-expanded={open}
@@ -1222,12 +1219,15 @@ function GraphCanvas({
     },
     [hoverEdge],
   );
-  const pinEdge = useCallback((edgeId: string) => setPinnedEdgeId(edgeId), []);
   // A link opens in the overlay's side panel at full height (WALK2-05); with
-  // no panel, the reader at the link.
+  // no panel, the reader at the link. [lists7] WALK7-05: the curve's list
+  // closes as the panel opens (the curve stays lit as the open link's), so
+  // the link never shows twice.
   const expandLink = useCallback(
     (link: GraphEdgeLink) => {
       if (onExpandLink) {
+        setPinnedEdgeId(null);
+        setHover(null);
         onExpandLink(link.id);
         return;
       }
@@ -1244,6 +1244,24 @@ function GraphCanvas({
   // switch kept with the view (WALK3-13).
   const { showProvenance, setShowProvenance, generatedCommands } = content;
   useWantProvenance(showProvenance, "switch"); // COST3-03: their links load when the switch turns on
+  // [lists7] WALK7-05: a click on a curve that holds one link opens that
+  // link's panel; a curve with more links pins its list.
+  const oneLink = useCallback(
+    (edgeId: string): GraphEdgeLink | null => {
+      if (!onExpandLink) return null;
+      const links = edges.find((e) => `${e.a}|${e.b}` === edgeId)?.links.filter((l) => showProvenance || !l.provenance) ?? [];
+      return links.length === 1 ? links[0] : null;
+    },
+    [edges, showProvenance, onExpandLink],
+  );
+  const pinEdge = useCallback(
+    (edgeId: string) => {
+      const link = oneLink(edgeId);
+      if (link) expandLink(link);
+      else setPinnedEdgeId(edgeId);
+    },
+    [oneLink, expandLink],
+  );
   // The curve of the link open in the side panel, however it opened (Show
   // on graph, the Links list, a card's row): its two documents and the
   // curve stay lit while the panel is open (WALK4-04).
@@ -2140,9 +2158,11 @@ function GraphCanvas({
   const onEdgeClick = useCallback(
     (_: ReactMouseEvent, edge: FlowEdge) => {
       if (edge.type === "provenance") return;
-      setPinnedEdgeId((pinned) => (pinned === edge.id ? null : edge.id));
+      const link = oneLink(edge.id); // [lists7] WALK7-05
+      if (link) expandLink(link);
+      else setPinnedEdgeId((pinned) => (pinned === edge.id ? null : edge.id));
     },
-    [],
+    [oneLink, expandLink],
   );
   const onPaneClick = useCallback(
     (e: ReactMouseEvent) => {

@@ -11,6 +11,7 @@ import { Markdown } from "@/components/markdown";
 import { useGraphNotes, useGraphNotesLit } from "@/components/graph/graph-notes";
 import { LinkReplyCount } from "@/components/graph/link-replies";
 import { ReplyThread } from "@/components/collab/reply-thread"; // [layer5]
+import { ListName } from "@/components/graph/list-name"; // [lists7]
 import { noteLine, type GraphNote } from "@/lib/graph/notes";
 import { clipWords } from "@/lib/markdown-preview";
 import { splitNote } from "@/lib/note-title";
@@ -271,11 +272,12 @@ export function GraphNotesList({
       id="graph-list-notes"
       tabIndex={-1}
       aria-label={t("graphNotes.notes")}
-      className="menu-in absolute top-3 right-3 bottom-3 z-10 flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 pb-24 shadow-float outline-none backdrop-blur-md max-[999px]:bottom-16 max-[999px]:pb-4"
+      className="menu-in absolute top-3 right-3 z-10 max-h-[calc(100%-24px)] flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 shadow-float outline-none backdrop-blur-md max-[999px]:max-h-[calc(100%-76px)]"
     >
       {/* [chrome6] VIEW6-06: one head row; the list's description is the
           section field's tooltip. */}
       <div className="flex items-center gap-2">
+      <ListName>{t("graphNotes.notes")}</ListName>
       <label data-tip={t("graphNotes.notesDesc")} className="flex min-w-0 flex-1 items-center gap-2 text-[12px] text-sand-600">
         {t("graphNotes.notesSection")}
         <select

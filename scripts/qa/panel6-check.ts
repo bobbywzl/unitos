@@ -49,7 +49,7 @@ for (const lang of ["en", "zh"] as const) {
 // Which reply a link waits on
 const r = (userId: string, at: string, resolvedById: string | null = null) => ({ id: `${userId}-${at}`, userId, content: `${userId} asks`, createdAt: at, resolvedById });
 ok(waitingReply({ replies: [] }, "me") === null, "no reply: waits on no one's question");
-ok(waitsForReply({ replies: [] }, "me"), "…but the link still waits on you (no reply yet)");
+ok(!waitsForReply({ replies: [] }, "me"), "…and the link does not wait on you either (WALK7-04)");
 ok(waitingReply({ replies: [r("mara", "2026-10-01")] }, "me")?.userId === "mara", "Mara's open reply is the question");
 ok(waitingReply({ replies: [r("mara", "2026-10-01"), r("me", "2026-10-02")] }, "me") === null, "answered by me: no question");
 ok(waitingReply({ replies: [r("me", "2026-10-01"), r("mara", "2026-10-02")] }, "me")?.userId === "mara", "Mara asked after my reply: her question");

@@ -76,7 +76,8 @@ async function cover(lang, width, height) {
       text: document.querySelector("[data-graph-coverage-head]")?.textContent,
     }));
     check(`${w} head: 7 of 19 parts noted`, head.parts === "7/19", JSON.stringify(head));
-    check(`${w} head: 4 of 5 links with no reply`, head.noReply === "4/5", JSON.stringify(head));
+    // [lists7] WALK7-04: a link with no reply waits on no one; no question here, so the head says none.
+    check(`${w} head: no question waiting, no count`, head.noReply === undefined, JSON.stringify(head));
     check(`${w} head: documents not opened counted`, /^\d+\/7$/.test(head.unopened ?? ""), JSON.stringify(head));
     check(`${w} head reads in the language`, lang === "zh" ? /个部分/.test(head.text ?? "") : /parts noted/.test(head.text ?? ""), head.text);
     // [chrome6] VIEW6-04: a row is one line until opened; open every row to read its lines.
@@ -108,7 +109,9 @@ async function cover(lang, width, height) {
     await page.locator("[data-graph-links-no-reply]").click();
     await page.waitForTimeout(300);
     const kept = await page.locator("[data-graph-links-row]").count();
-    check(`${w} No reply keeps 4 of 5 links`, all === 5 && kept === 4, `${all} → ${kept}`);
+    // [lists7] WALK7-04: Waiting on you keeps only links another person asked on: none here.
+    const none = await page.locator('[data-graph-side-list="links"]').innerText();
+    check(`${w} Waiting on you keeps 0 of 5 links and says so`, all === 5 && kept === 0 && /No link is waiting on you|没有待你回复的链接/.test(none), `${all} → ${kept}`);
     await shot(page, `VIEW4-01-noreply-${w}`);
   }
   await ctx.close();

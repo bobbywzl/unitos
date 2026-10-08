@@ -217,11 +217,12 @@ export function NodeCardPanel({
       ref={ref}
       data-track-surface="sidebar"
       data-graph-node-card={node.id}
+      data-graph-sheet={sheet ? "" : undefined}
       aria-label={node.title}
       onClick={(e) => e.stopPropagation()}
       className={`menu-in absolute z-10 flex flex-col gap-3 overflow-y-auto overscroll-contain border border-line bg-card/95 p-4 shadow-float backdrop-blur-md ${
         sheet
-          ? "inset-x-0 bottom-0 h-[60%] rounded-t-[20px] border-b-0 pb-16"
+          ? "inset-x-3 bottom-16 max-h-[60%] rounded-[20px]" // [lists7] VIEW7-09: above the Stitch pill
           : // [panel6] The card is as tall as what it holds (WALK6-08), at most the
             // canvas less its margins (Feedback hides while the graph is open).
             "top-3 right-3 max-h-[calc(100%-24px)] w-[400px] max-w-[calc(100vw-24px)] rounded-[20px] max-[999px]:max-h-[calc(100%-76px)]"

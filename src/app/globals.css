@@ -1938,16 +1938,21 @@ ellipse.anchor-flash {
   mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
 }
 /* Add to note's new note docks at the foot of the side list (note-gather.tsx,
-   VIEW4-03): while it shows, a side list ends above it, and the foot room it
-   keeps for the Feedback button is the note's. */
+   VIEW4-03): while it shows, a side list ends above it. A side list is as
+   tall as what it holds from top-3 (WALK7-03), so its cap shrinks; a phone
+   sheet stands on the note instead. */
 .graph-overlay[data-gather] [data-graph-side-list],
 .graph-overlay[data-gather] aside[data-graph-node-card] {
-  bottom: calc(var(--graph-gather-h, 0px) + 20px);
-  padding-bottom: 1rem;
+  max-height: calc(100% - var(--graph-gather-h, 0px) - 32px);
 }
 @media (max-width: 999px) {
   .graph-overlay[data-gather] [data-graph-side-list],
   .graph-overlay[data-gather] aside[data-graph-node-card] {
+    max-height: calc(100% - var(--graph-gather-h, 0px) - 84px);
+  }
+}
+@media (max-width: 639px) {
+  .graph-overlay[data-gather] [data-graph-sheet] {
     bottom: calc(var(--graph-gather-h, 0px) + 72px);
   }
 }

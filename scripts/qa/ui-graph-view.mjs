@@ -306,7 +306,9 @@ for (const lang of ["en", "zh"]) {
         else await page.locator(`[data-testid="rf__edge-${pair}"]`).click({ force: true }).catch(() => {});
         await page.waitForTimeout(700);
         const marked = await page.locator("[data-graph-from-answer]").count();
-        check(`${tag} Stitch: the curve's list marks the answer's link first`, marked > 0);
+        // [lists7] WALK7-05: a curve that holds one link opens that link's panel at once.
+        const panel = await page.locator("[data-graph-link-panel]").getAttribute("data-graph-link-panel").catch(() => null);
+        check(`${tag} Stitch: the curve's list marks the answer's link first, or its one link opens`, marked > 0 || (panel !== null && made.includes(panel)), `marked ${marked}, panel ${panel}`);
         await page.screenshot({ path: `${OUT}/P3-list-${MODE}-${tag}.png` });
       }
       // Clean up: the links this run made go (they were recommended only).

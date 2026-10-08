@@ -37,7 +37,7 @@ async function main() {
   // Pure rules.
   ok(commentAsks("Is it?") && commentAsks("是吗？ ") && !commentAsks("No? Yes."), "a comment asks when its words end with ? or ？");
   const r = (userId: string, at: string, resolved = false) => ({ userId, createdAt: at, resolvedById: resolved ? "x" : null });
-  ok(waitsForReply({ replies: [] }, "me"), "a link with no reply waits");
+  ok(!waitsForReply({ replies: [] }, "me"), "a link with no reply waits on no one (WALK7-04)");
   ok(!waitsForReply({ replies: [r("me", "2026-01-01")] }, "me"), "my own last reply does not wait on me");
   ok(waitsForReply({ replies: [r("me", "2026-01-01"), r("owner", "2026-01-02")] }, "me"), "another person's last reply waits on me (WALK5-07)");
   ok(waitsForReply({ replies: [r("owner", "2026-01-02")] }, "editor"), "the owner's question waits on the editor");

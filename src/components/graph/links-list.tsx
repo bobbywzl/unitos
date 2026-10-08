@@ -11,6 +11,7 @@ import { waitingReply } from "@/lib/graph/coverage-view";
 import { useCollab } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { LinkDraftTag } from "@/components/graph/link-draft-tag"; // [ui5]
+import { ListName } from "@/components/graph/list-name"; // [lists7]
 
 // Links, a folded list beside the canvas (SPEC.md §13; WALK2-06): every
 // accepted link of the project, grouped by the pair of documents it joins,
@@ -87,10 +88,11 @@ export function LinksList({
       id="graph-list-links"
       tabIndex={-1}
       aria-label={t("panes.graphLinks")}
-      className="menu-in absolute top-3 right-3 bottom-3 z-10 flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 pb-24 shadow-float outline-none backdrop-blur-md max-[999px]:bottom-16 max-[999px]:pb-4"
+      className="menu-in absolute top-3 right-3 z-10 max-h-[calc(100%-24px)] flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 shadow-float outline-none backdrop-blur-md max-[999px]:max-h-[calc(100%-76px)]"
     >
       <div className="flex items-center gap-2">
-        {total > 1 ? (
+        <ListName grow={total <= 1}>{t("panes.graphLinks")}</ListName>
+        {total > 1 && (
           <>
             <input
               type="search"
@@ -104,8 +106,6 @@ export function LinksList({
             />
             <NoReplyToggle on={noReply} onChange={setNoReply} />
           </>
-        ) : (
-          <p className="flex-1 text-[11.5px] font-bold tracking-[0.06em] text-sand-600 uppercase">{t("panes.graphLinks")}</p>
         )}
         <button
           onClick={onClose}
