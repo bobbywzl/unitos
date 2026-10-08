@@ -18,6 +18,12 @@ export function onBody(node: React.ReactNode): React.ReactNode {
 export const BOTTOM_PILL =
   "fixed bottom-[calc(66px+env(safe-area-inset-bottom))] left-1/2 z-[55] flex max-w-[calc(100vw-32px)] -translate-x-1/2 items-center gap-3 rounded-full bg-card px-5 py-2.5 whitespace-nowrap shadow-float md:bottom-6";
 
+// The pill's Undo and ✕: a finger gets 36px for each (SPEC.md §6).
+const UNDO_BUTTON =
+  "shrink-0 rounded-full bg-clay px-3.5 py-1 text-xs font-semibold text-clay-fg hover:bg-clay-600 pointer-coarse:py-2.5";
+const CLOSE_BUTTON =
+  "shrink-0 text-sand-500 hover:text-clay-700 pointer-coarse:flex pointer-coarse:size-9 pointer-coarse:items-center pointer-coarse:justify-center";
+
 // The pill after a merge, a delete (of notes or a section), a reject, or an editor's Cancel (SPEC.md §6): what
 // happened, and Undo, which puts the notes back as they were. It stays for a
 // while after each change, and the newest change takes it. A change that
@@ -137,9 +143,18 @@ export function MergeUndoBar({
             onClick={() => onUndoReject?.()}
             data-track="undo-reject"
             data-tip={keyTip(t("outline.undoRejectTitle"))}
-            className="rounded-full bg-clay px-3.5 py-1 text-xs font-semibold text-clay-fg hover:bg-clay-600"
+            className={UNDO_BUTTON}
           >
             {t("outline.undo")}
+          </button>
+          <button
+            onClick={() => actions.dismissMerge()}
+            data-track="dismiss-reject"
+            aria-label={t("common.close")}
+            data-tip={t("common.close")}
+            className={CLOSE_BUTTON}
+          >
+            ✕
           </button>
         </>
       ) : posted ? (
@@ -157,7 +172,7 @@ export function MergeUndoBar({
             onClick={() => actions.undoCancel()}
             data-track="undo-cancel"
             data-tip={keyTip(t("outline.undoCancelTitle"))}
-            className="rounded-full bg-clay px-3.5 py-1 text-xs font-semibold text-clay-fg hover:bg-clay-600"
+            className={UNDO_BUTTON}
           >
             {t("outline.undo")}
           </button>
@@ -166,7 +181,7 @@ export function MergeUndoBar({
             data-track="dismiss-cancel"
             aria-label={t("common.close")}
             data-tip={t("common.close")}
-            className="text-sand-500 hover:text-clay-700"
+            className={CLOSE_BUTTON}
           >
             ✕
           </button>
@@ -175,12 +190,20 @@ export function MergeUndoBar({
         <>
           {/* The section left with its notes; History keeps it whole, and
               Undo is History's Restore. */}
-          <span className="text-[13px] text-sand-600">{t("outline.sectionDeleted")}</span>
+          {/* What went: the section by its title, cut short so the count
+              of its notes always shows. */}
+          <span className="max-w-[60vw] truncate text-[13px] text-sand-600">
+            {section.count === 0
+              ? t("outline.sectionDeleted", { title: clip(section.title) })
+              : section.count === 1
+                ? t("outline.sectionDeletedOneNote", { title: clip(section.title) })
+                : t("outline.sectionDeletedNotes", { title: clip(section.title), n: section.count })}
+          </span>
           <button
             onClick={() => void actions.undoSectionDelete()}
             data-track="undo-section-delete"
             data-tip={keyTip(t("outline.undoSectionDeleteTitle"))}
-            className="rounded-full bg-clay px-3.5 py-1 text-xs font-semibold text-clay-fg hover:bg-clay-600"
+            className={UNDO_BUTTON}
           >
             {t("outline.undo")}
           </button>
@@ -189,7 +212,7 @@ export function MergeUndoBar({
             data-track="dismiss-section-delete"
             aria-label={t("common.close")}
             data-tip={t("common.close")}
-            className="text-sand-500 hover:text-clay-700"
+            className={CLOSE_BUTTON}
           >
             ✕
           </button>
@@ -203,7 +226,7 @@ export function MergeUndoBar({
             onClick={() => actions.undoDelete()}
             data-track="undo-delete"
             data-tip={keyTip(t("outline.undoDeleteTitle"))}
-            className="rounded-full bg-clay px-3.5 py-1 text-xs font-semibold text-clay-fg hover:bg-clay-600"
+            className={UNDO_BUTTON}
           >
             {t("outline.undo")}
           </button>
@@ -212,7 +235,7 @@ export function MergeUndoBar({
             data-track="dismiss-delete"
             aria-label={t("common.close")}
             data-tip={t("common.close")}
-            className="text-sand-500 hover:text-clay-700"
+            className={CLOSE_BUTTON}
           >
             ✕
           </button>
@@ -232,7 +255,7 @@ export function MergeUndoBar({
               }}
               data-track="undo-merge"
               data-tip={keyTip(t("outline.undoMergeTitle"))}
-              className="rounded-full bg-clay px-3.5 py-1 text-xs font-semibold text-clay-fg hover:bg-clay-600"
+              className={UNDO_BUTTON}
             >
               {t("outline.undo")}
             </button>
@@ -242,7 +265,7 @@ export function MergeUndoBar({
             data-track="dismiss-merge"
             aria-label={t("common.close")}
             data-tip={t("common.close")}
-            className="text-sand-500 hover:text-clay-700"
+            className={CLOSE_BUTTON}
           >
             ✕
           </button>
@@ -264,7 +287,7 @@ export function MergeUndoBar({
             data-track="dismiss-notice"
             aria-label={t("common.close")}
             data-tip={t("common.close")}
-            className="text-sand-500 hover:text-clay-700"
+            className={CLOSE_BUTTON}
           >
             ✕
           </button>
@@ -294,7 +317,7 @@ function UndoRow({
         onClick={onUndo}
         data-track="undo-posted"
         data-tip={undoTip}
-        className="rounded-full bg-clay px-3.5 py-1 text-xs font-semibold text-clay-fg hover:bg-clay-600"
+        className={UNDO_BUTTON}
       >
         {t("outline.undo")}
       </button>
@@ -303,7 +326,7 @@ function UndoRow({
         data-track="dismiss-posted"
         aria-label={t("common.close")}
         data-tip={t("common.close")}
-        className="text-sand-500 hover:text-clay-700"
+        className={CLOSE_BUTTON}
       >
         ✕
       </button>
@@ -351,4 +374,10 @@ export function PostedUndoPill() {
       />
     </div>,
   );
+}
+
+/** A title cut to the pill's room: 20 characters, then an ellipsis. */
+function clip(title: string): string {
+  const chars = [...title];
+  return chars.length > 20 ? `${chars.slice(0, 19).join("").trimEnd()}…` : title;
 }

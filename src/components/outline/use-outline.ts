@@ -22,7 +22,7 @@ import {
 } from "@/lib/note-drafts";
 import { announceKept, saveNoteText } from "@/lib/notes/save-text";
 import { joinNoteContents } from "@/lib/notes/join";
-import { usePostedUndo, type UndoPillPost } from "@/lib/notes/undo-pill";
+import { NOTE_BACK_EVENT, usePostedUndo, type NoteBack, type UndoPillPost } from "@/lib/notes/undo-pill";
 import type { QuoteDrag } from "@/lib/quote-drag";
 import { appendToBody } from "@/lib/note-title";
 import type { NotebookView, NoteView, SectionView } from "@/lib/types";
@@ -76,7 +76,19 @@ const DELETE_UNDO_MS = MERGE_UNDO_MS;
 /** The section deleted last (SPEC.md §6): the server deleted it at once and
     kept it whole in its History event (lib/notes/removed.ts), so the pill's
     Undo is History's Restore of that event. */
-export type LastSectionDelete = { eventId: string; title: string; count: number };
+/** The section deleted last: the pill names it and its notes, and Undo puts
+    it back where it stood. eventId: the delete's history event, once the
+    server answered (`request` resolves to it; null when it failed). */
+export type LastSectionDelete = {
+  eventId: string | null;
+  request: Promise<string | null>;
+  title: string;
+  count: number;
+  placed: PlacedSection | null;
+};
+
+/** A section as it stood: its parent and its place among its siblings. */
+type PlacedSection = { section: SectionView; parentId: string | null; index: number };
 
 /** The target of a merge took the other notes in: its card blooms
     (note-card.tsx listens). */
@@ -177,8 +189,8 @@ export type OutlineActions = {
   mergeUndoable: boolean;
   /** Undo the last merge. Resolves to the reason when it could not run. */
   undoMerge: () => Promise<string | null>;
-  /** The pill's ✕: the merge stays, a canceled edit stays canceled, and a
-      delete waiting on Undo runs now. */
+  /** The pill's ✕: the merge stays, a canceled edit and a reject stay, and
+      a delete waiting on Undo runs now. */
   dismissMerge: () => void;
   /** An editor's Cancel put a note back to its text when the editor opened:
       the pill offers the typed words back (SPEC.md §6). */
@@ -307,6 +319,60 @@ function localNote(id: string, content: string, documentId: string | null, row?:
 }
 
 /** The section with this id, anywhere in the tree; null when there is none. */
+/** The tree without the section, as the server leaves it: the sections
+    nested in it move to the top level, where it stood. */
+function withoutSection(sections: SectionView[], id: string): { tree: SectionView[]; placed: PlacedSection | null } {
+  const at = sections.findIndex((s) => s.id === id);
+  if (at !== -1) {
+    const section = sections[at];
+    const lifted = section.children.map((c) => ({ ...c, parentId: null }));
+    return {
+      tree: [...sections.slice(0, at), ...lifted, ...sections.slice(at + 1)],
+      placed: { section, parentId: null, index: at },
+    };
+  }
+  for (const parent of sections) {
+    const index = parent.children.findIndex((c) => c.id === id);
+    if (index === -1) continue;
+    return {
+      tree: updateSection(sections, parent.id, (p) => ({ ...p, children: p.children.filter((c) => c.id !== id) })),
+      placed: { section: parent.children[index], parentId: parent.id, index },
+    };
+  }
+  return { tree: sections, placed: null };
+}
+
+function withId(set: ReadonlySet<string>, id: string): ReadonlySet<string> {
+  return set.has(id) ? set : new Set([...set, id]);
+}
+
+function withoutId(set: ReadonlySet<string>, id: string): ReadonlySet<string> {
+  if (!set.has(id)) return set;
+  const next = new Set(set);
+  next.delete(id);
+  return next;
+}
+
+function withoutKeys<V>(map: ReadonlyMap<string, V>, keys: string[]): ReadonlyMap<string, V> {
+  if (!keys.some((k) => map.has(k))) return map;
+  const next = new Map(map);
+  for (const k of keys) next.delete(k);
+  return next;
+}
+
+/** The section back where it stood, with the sections nested in it back under it. */
+function withSection(sections: SectionView[], placed: PlacedSection): SectionView[] {
+  if (findSection(sections, placed.section.id)) return sections;
+  const childIds = new Set(placed.section.children.map((c) => c.id));
+  const kept = sections.filter((s) => !childIds.has(s.id));
+  const insert = (list: SectionView[]) => {
+    const at = Math.max(0, Math.min(placed.index, list.length));
+    return [...list.slice(0, at), placed.section, ...list.slice(at)];
+  };
+  if (placed.parentId === null || !findSection(kept, placed.parentId)) return insert(kept);
+  return updateSection(kept, placed.parentId, (p) => ({ ...p, children: insert(p.children) }));
+}
+
 export function findSection(sections: SectionView[], id: string): SectionView | null {
   for (const s of sections) {
     if (s.id === id) return s;
@@ -375,7 +441,23 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
   // the Undo pill shows and after, so a refresh that lands before the server
   // deletes them never brings them back.
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
-  const tree = useMemo(() => (hidden.size > 0 ? withoutNotes(rawTree, hidden) : rawTree), [rawTree, hidden]);
+  // Sections deleted in this tab (deleteSection), the same way: a refresh
+  // before the server deletes one never brings it back; Undo takes it out.
+  const [goneSections, setGoneSections] = useState<ReadonlySet<string>>(new Set());
+  // Sections brought back by Undo (undoSectionDelete): on screen where they
+  // stood until the server's tree holds them again, so a refresh that lands
+  // before the restore never takes one away.
+  const [backSections, setBackSections] = useState<ReadonlyMap<string, PlacedSection>>(new Map());
+  // Notes History's Restore put back (NOTE_BACK_EVENT with the note): in
+  // their section at once, until the server's tree holds them.
+  const [backNotes, setBackNotes] = useState<ReadonlyMap<string, Placed>>(new Map());
+  const tree = useMemo(() => {
+    let shown = hidden.size > 0 ? withoutNotes(rawTree, hidden) : rawTree;
+    for (const placed of backNotes.values()) shown = putBack(shown, placed);
+    for (const placed of backSections.values()) shown = withSection(shown, placed);
+    for (const id of goneSections) shown = withoutSection(shown, id).tree;
+    return shown;
+  }, [rawTree, hidden, goneSections, backSections, backNotes]);
   // The tree as it is now, for the writes that read it from an event.
   const treeRef = useRef(tree);
   useLayoutEffect(() => {
@@ -439,6 +521,10 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
   if (prevSections !== notebook.sections) {
     setPrevSections(notebook.sections);
     setTree(notebook.sections);
+    const restored = [...backSections.keys()].filter((id) => findSection(notebook.sections, id));
+    if (restored.length > 0) setBackSections((prev) => withoutKeys(prev, restored));
+    const notesIn = [...backNotes.keys()].filter((id) => placeOf(notebook.sections, id));
+    if (notesIn.length > 0) setBackNotes((prev) => withoutKeys(prev, notesIn));
   }
 
   // Offline, the refresh waits for the network (SPEC.md §17, lib/offline/queue.ts).
@@ -697,11 +783,14 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
     return () => clearTimeout(timer);
   }, [lastCancel]);
   const waitingDelete = useRef<{ ids: string[]; timer: ReturnType<typeof setTimeout> } | null>(null);
-  // A note History's Restore put back (lib/notes/removed.ts): if this tab
-  // deleted it, it is in hidden still; it shows again with the refresh.
+  // A note History's Restore put back (lib/notes/removed.ts,
+  // tellNoteBack): if this tab deleted it, it is in hidden still. With the
+  // note in the event, it shows in its section at once, at its order; a
+  // refresh confirms in the background.
   useEffect(() => {
     const onBack = (e: Event) => {
-      const id = (e as CustomEvent<{ noteId?: unknown }>).detail?.noteId;
+      const back = (e as CustomEvent<Partial<NoteBack> | null>).detail;
+      const id = back?.noteId;
       if (typeof id !== "string") return;
       setHidden((prev) => {
         if (!prev.has(id)) return prev;
@@ -709,10 +798,20 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
         next.delete(id);
         return next;
       });
+      const { note, sectionId } = back ?? {};
+      if (note && sectionId) {
+        // A section the outline does not list (the annotations') takes
+        // nothing: the refresh brings what shows.
+        const section = findSection(treeRef.current, sectionId);
+        if (section) {
+          const index = section.notes.filter((n) => n.order < note.order).length;
+          setBackNotes((prev) => new Map(prev).set(id, { note, sectionId, index }));
+        }
+      }
       refresh();
     };
-    window.addEventListener("dissect:note-back", onBack);
-    return () => window.removeEventListener("dissect:note-back", onBack);
+    window.addEventListener(NOTE_BACK_EVENT, onBack);
+    return () => window.removeEventListener(NOTE_BACK_EVENT, onBack);
   }, [refresh]);
   const restoreNotes = useCallback((ids: string[]) => {
     setHidden((prev) => {
@@ -876,7 +975,8 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
   const [lastRejected, setLastRejected] = useState<string | null>(null);
   useEffect(() => {
     if (!lastRejected) return;
-    const timer = setTimeout(() => setLastRejected(null), 8000);
+    // The same 12 seconds as every other pill's Undo.
+    const timer = setTimeout(() => setLastRejected(null), MERGE_UNDO_MS);
     return () => clearTimeout(timer);
   }, [lastRejected]);
 
@@ -1046,18 +1146,33 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
       refresh();
     },
     async deleteSection(id) {
-      const title = findSection(treeRef.current, id)?.title ?? "";
-      const answer = await api<{ eventId?: unknown; noteCount?: unknown }>(`/api/sections/${id}`, "DELETE");
-      if (typeof answer?.eventId === "string") {
-        settlePosted();
-        setLastMerge(null);
-        setLastCancel(null);
-        setLastSectionDelete({
-          eventId: answer.eventId,
-          title,
-          count: typeof answer.noteCount === "number" ? answer.noteCount : 0,
-        });
-      }
+      // The section leaves the screen at once and the pill shows; the
+      // server follows. A delete that fails puts the section back and says so.
+      const found = findSection(treeRef.current, id);
+      const { placed } = withoutSection(treeRef.current, id);
+      setGoneSections((prev) => withId(prev, id));
+      setBackSections((prev) => withoutKeys(prev, [id]));
+      const request = api<{ eventId?: unknown }>(`/api/sections/${id}`, "DELETE").then(
+        (answer) => (typeof answer?.eventId === "string" ? answer.eventId : null),
+        (err: unknown) => {
+          setGoneSections((prev) => withoutId(prev, id));
+          setLastSectionDelete((last) => (last?.request === request ? null : last));
+          failure(err);
+          return null;
+        },
+      );
+      settlePosted();
+      setLastMerge(null);
+      setLastCancel(null);
+      setLastSectionDelete({
+        eventId: null,
+        request,
+        title: found?.title ?? "",
+        count: found?.notes.length ?? 0,
+        placed,
+      });
+      const eventId = await request;
+      setLastSectionDelete((last) => (last?.request === request ? { ...last, eventId } : last));
       refresh();
     },
     reorderSection(parentId, id, toIndex) {
@@ -1260,10 +1375,23 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
       const last = lastSectionDelete;
       if (!last) return;
       setLastSectionDelete(null);
+      // The section is back on screen at once, where it stood; the restore follows.
+      const { placed } = last;
+      if (placed) {
+        setGoneSections((prev) => withoutId(prev, placed.section.id));
+        setBackSections((prev) => new Map(prev).set(placed.section.id, placed));
+      }
+      const eventId = last.eventId ?? (await last.request);
+      // The delete did not run: the section is back already.
+      if (!eventId) return;
       try {
-        await api(`/api/notebooks/${notebook.id}/history/${last.eventId}`, "POST");
+        await api(`/api/notebooks/${notebook.id}/history/${eventId}`, "POST");
       } catch (err) {
         // History keeps the section: its row's Restore is the way back still.
+        if (placed) {
+          setBackSections((prev) => withoutKeys(prev, [placed.section.id]));
+          setGoneSections((prev) => withId(prev, placed.section.id));
+        }
         setNotice(t("outline.sectionUndoFailed", { reason: err instanceof Error ? err.message : String(err) }), true);
       }
       refresh();
@@ -1433,6 +1561,7 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
       setLastMerge(null);
       setLastCancel(null);
       setLastSectionDelete(null);
+      setLastRejected(null);
       commitDelete();
       settlePosted();
     },
