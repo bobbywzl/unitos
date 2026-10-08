@@ -106,9 +106,6 @@ export function AnnotationsFullPage({
       <AnnotationBody annotation={a} />
       <AnnotationActions
         annotation={a}
-        notebookId={notebookId}
-        documentId={documentId}
-        onDelete={deleteAnnotation}
         onExpand={setExpandedId}
       />
     </AnnotationCard>

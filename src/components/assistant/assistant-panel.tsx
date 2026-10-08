@@ -1406,11 +1406,12 @@ export function AssistantPanel({
             stopRun();
           }}
           disabled={!busy && !canSend}
-          data-tip={busy ? t(canQueue ? "assistant.queueTitle" : "assistant.stopAsk") : undefined}
+          data-tip={busy ? t(canQueue ? "assistant.queueTitle" : "assistant.stopAsk") : t("reader.sendTitle")}
           aria-label={busy && !canQueue ? t("assistant.stopAsk") : undefined}
-          className="rounded-full bg-clay px-4 py-1.5 text-sm font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+          // The card's Send (reader-interactions.tsx): one size and color.
+          className="rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
         >
-          {busy && !canQueue ? <StopIcon size={13} /> : t(canQueue ? "assistant.queue" : "assistant.send")}
+          {busy && !canQueue ? <StopIcon size={11} /> : t(canQueue ? "assistant.queue" : "assistant.send")}
         </button>
       </div>
     </form>

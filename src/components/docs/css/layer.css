@@ -247,6 +247,22 @@
 .docs-comment-resolve {
   color: var(--docs-accent-text);
 }
+.docs-comment-delete:hover {
+  color: #dc2626;
+}
+.docs-comment-delete:disabled {
+  opacity: 0.4;
+}
+/* A finger's size for the head's icons, as the reader's cards have it. */
+@media (pointer: coarse) {
+  .docs-comment-button {
+    width: 36px;
+    height: 36px;
+  }
+}
+.docs-comment-text[data-editable] {
+  cursor: text;
+}
 .docs-comment-text .prose {
   color: inherit;
   font-size: inherit;

@@ -245,9 +245,6 @@ export function AnnotationsPanel({
   const actionsFor = (a: AnnotationItem) => (
     <AnnotationActions
       annotation={a}
-      notebookId={notebookId}
-      documentId={documentId}
-      onDelete={deleteAnnotation}
       onExpand={setExpandedId}
     />
   );

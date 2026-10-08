@@ -7,6 +7,7 @@ import { useT } from "@/components/lang-provider";
 import { ExpandIcon, SparkleIcon } from "@/components/icons";
 import { RatingButtons } from "@/components/rating-buttons";
 import { ThinkingIndicator } from "@/components/thinking";
+import { TOUCH_HIT } from "@/components/outline/touch-hit";
 
 // The assistant's suggestions (SPEC.md §29): the row under a command's turn,
 // in the reader's chat card and in the assistant panel, and the status line
@@ -84,7 +85,7 @@ export function SuggestionRow({
       : count === 1
         ? t("docsSuggest.oneSuggestion")
         : t("docsSuggest.suggestionCount", { n: count });
-  const button = "rounded-full bg-card px-2.5 py-0.5 font-semibold text-sand-700 shadow-soft hover:text-clay-800";
+  const button = "rounded-full bg-card px-2.5 py-0.5 font-semibold text-sand-700 shadow-soft hover:text-clay-800 pointer-coarse:py-1.5";
   const settle = (accept: boolean) => {
     act?.settle(accept);
     bar?.onSettled();
@@ -106,7 +107,7 @@ export function SuggestionRow({
       onClick={() => settle(true)}
       data-track="assistant-suggestions:accept-all"
       data-tip={t("assistant.suggestAcceptAllTitle")}
-      className={bar ? "rounded-full bg-clay px-3 py-0.5 font-semibold text-clay-fg hover:bg-clay-600" : button}
+      className={bar ? "rounded-full bg-clay px-3 py-0.5 font-semibold text-clay-fg hover:bg-clay-600 pointer-coarse:py-1.5" : button}
     >
       {t(bar ? "common.accept" : "docsSuggest.acceptAll")}
     </button>
@@ -170,7 +171,7 @@ export function SuggestionRow({
             data-track="assistant-bar-chat"
             aria-label={t("assistant.barChatTitle")}
             data-tip={t("assistant.barChatTitle")}
-            className="rounded-full p-1 text-sand-500 hover:bg-sand-100 hover:text-clay-800"
+            className={`rounded-full p-1 text-sand-500 hover:bg-sand-100 hover:text-clay-800 ${TOUCH_HIT}`}
           >
             <ExpandIcon size={13} />
           </button>

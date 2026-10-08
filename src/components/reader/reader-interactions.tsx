@@ -6913,6 +6913,29 @@ export function ReaderInteractions({
     const editor = pageEditorIn(containerRef.current);
     editor?.commands.focus(editor.state.selection.to);
   }
+  // Escape in a toolbox field closes the field, and only it: the focus goes
+  // back to the selection, the toolbox still open — the page editor's text
+  // with its selection kept, or the block reader's selected words (their
+  // tint, selected again), where Tab goes to the toolbox's first row.
+  function focusSelectionAfterField() {
+    requestAnimationFrame(() => {
+      const container = containerRef.current;
+      const editor = richTextRef.current ? pageEditorIn(container) : null;
+      if (editor) {
+        editor.view.focus();
+        return;
+      }
+      const marks = container?.querySelectorAll(".selection-mark");
+      const sel = window.getSelection();
+      if (!marks?.length || !sel) return;
+      const last = marks[marks.length - 1];
+      const range = document.createRange();
+      range.setStart(marks[0], 0);
+      range.setEnd(last, last.childNodes.length);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    });
+  }
 
   // Manual annotation: highlight (color, content = quote) or comment (user text).
   // Lands ACCEPTED in the hidden Annotations section. The mark paints instantly
@@ -10117,9 +10140,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       {/* The article's band (SPEC.md §6): Contents at the left and Collapse
           and Extract at the right stand on it, and the text scrolls under
           it, so they never sit on a word. It takes no room: the article
-          starts where it did, its first line just under the band. */}
+          starts where it did, its first line just under the band. On a
+          coarse pointer the buttons are taller (34 px): the band reaches
+          8 px under them and takes those 10 px of room, so no line, at the
+          top or opened mid-article, touches them. */}
       {!split && !transcript && !embedded && !richText && (
-        <div aria-hidden data-article-band className="pointer-events-none sticky top-0 z-[9] -mb-12 h-12 bg-paper print:hidden" />
+        <div aria-hidden data-article-band className="pointer-events-none sticky top-0 z-[9] -mb-12 h-12 bg-paper pointer-coarse:h-[58px] print:hidden" />
       )}
 
       {/* Not in a split pane: the card would sit over the title. Not on a
@@ -10834,6 +10860,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   if (e.key === "Escape") {
                     e.stopPropagation();
                     setSubmenu(null);
+                    focusSelectionAfterField();
                   }
                 }}
                 placeholder={t(popover.figure ? "reader.figureBarPlaceholder" : "reader.assistantPlaceholder")}
@@ -11010,7 +11037,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   if (e.key === "Escape") {
                     e.stopPropagation();
                     setSubmenu(null);
-                    focusPageAfterComment();
+                    focusSelectionAfterField();
                   }
                 }}
                 placeholder={t("reader.commentPlaceholder")}
@@ -11983,7 +12010,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               onClick={() => void runBar(bar)}
               data-track="assistant-run"
               data-tip={t("reader.sendTitle")}
-              className="rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+              className="rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40 pointer-coarse:py-2"
             >
               {t("reader.send")}
             </button>
@@ -11997,7 +12024,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   onClick={() => void runBar({ ...bar, input: t(chip.command) })}
                   data-track={`assistant-figure:${chip.label.slice("reader.figure".length)}`}
                   data-tip={t("reader.figureChipTitle")}
-                  className="rounded-full bg-sand-100 px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                  className="rounded-full bg-sand-100 px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:py-1.5"
                 >
                   {t(chip.label)}
                 </button>
@@ -12014,7 +12041,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   onClick={() => void runBar(bar, c)}
                   data-track={`assistant-command:${c.name}`}
                   data-tip={t("reader.commandTitle")}
-                  className="rounded-full bg-sand-100 px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                  className="rounded-full bg-sand-100 px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:py-1.5"
                 >
                   {t(c.key)}
                 </button>

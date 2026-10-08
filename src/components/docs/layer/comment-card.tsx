@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useAuthor, useCollab } from "@/components/collab/collab-context";
+import { TrashIcon } from "@/components/icons";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { ReplyThread, replyTime } from "@/components/collab/reply-thread";
 import { CheckIcon, MoreVertIcon } from "@/components/docs/icons";
@@ -21,8 +22,9 @@ import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 
 // A comment's card in the page editor's margin, as Google Docs draws it
 // (SPEC.md §29): the author's badge, name, and time, the comment, Resolve,
-// More options (Edit, Delete, Get link to this comment), and the replies
-// under it (SPEC.md §12). A comment is an annotation: Resolve hides it, its
+// Delete, More options (Edit, Get link to this comment), and the replies
+// under it (SPEC.md §12). The head is the reader's comment card's: Resolve,
+// then Delete, as icons. A click on the comment's words edits them. A comment is an annotation: Resolve hides it, its
 // mark and its card, until Reopen in the Annotations tab. On the focused
 // card, Google's keys: R reply, J the next comment, K the previous one, E
 // resolve, U back to the text. A press anywhere else closes the card.
@@ -231,6 +233,19 @@ export function CommentCard({
               <CheckIcon size={20} />
             </button>
           )}
+          {canEdit && (
+            <button
+              type="button"
+              onClick={onDelete}
+              disabled={busy}
+              data-track="comment-delete"
+              aria-label={t("common.delete")}
+              data-tip={t("reader.deleteCommentTitle")}
+              className="docs-comment-button docs-comment-delete"
+            >
+              <TrashIcon size={16} />
+            </button>
+          )}
           <button
             ref={moreRef}
             type="button"
@@ -270,7 +285,16 @@ export function CommentCard({
           </div>
         </>
       ) : (
-        <div className="docs-comment-text">
+        <div
+          className="docs-comment-text"
+          data-editable={canEdit || undefined}
+          // A click on the words edits them, as in the block reader's card;
+          // a link in them, or words being selected, keeps its own press.
+          onClick={(e) => {
+            if (!canEdit || (e.target as Element).closest("a") || !window.getSelection()?.isCollapsed) return;
+            setEditing(true);
+          }}
+        >
           <Markdown breaks>{saved}</Markdown>
         </div>
       )}
@@ -285,11 +309,6 @@ export function CommentCard({
         {canEdit && (
           <MenuItem track="comment-edit" onSelect={choose(() => setEditing(true))}>
             {t("common.edit")}
-          </MenuItem>
-        )}
-        {canEdit && (
-          <MenuItem track="comment-delete" onSelect={choose(onDelete)}>
-            {t("common.delete")}
           </MenuItem>
         )}
         <MenuItem
