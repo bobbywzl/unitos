@@ -13,7 +13,7 @@ import { useCollab } from "@/components/collab/collab-context";
 import { useT } from "@/components/lang-provider";
 import { CollapsedViewToggle } from "@/components/collapsed-view-toggle";
 import { SortableBoard, SortableGroup, SortableItem, useDropHeader } from "@/components/sortable";
-import { useCardDropTarget } from "@/components/outline/use-card-drop";
+import { CardDropShown, useCardDropTarget } from "@/components/outline/use-card-drop";
 import { quoteLanded } from "@/components/use-note-drop";
 import { referenceMarkdownForDrop } from "@/components/outline/reference-drop";
 import { dropIndex, notesList, parseListId } from "@/components/outline/board-lists";
@@ -53,6 +53,7 @@ export function NotesTray({
   documents,
   scope,
   onScope,
+  visible = true,
 }: {
   tree: SectionView[];
   pending: NoteView[];
@@ -64,6 +65,10 @@ export function NotesTray({
   /** All notes of the project, or the open document's alone. */
   scope: NoteScope;
   onScope: (scope: NoteScope) => void;
+  /** The reader sees the tray: false while another tab is on top, the tray
+      is folded, or a phone's sheet is closed. Its cards take no card drop
+      then, so no grip shows and no card head lifts (SPEC.md §6). */
+  visible?: boolean;
 }) {
   const t = useT();
   const { canEdit } = useCollab();
@@ -218,6 +223,7 @@ export function NotesTray({
   }
 
   return (
+    <CardDropShown.Provider value={visible}>
     <div
       className="flex min-h-full flex-col gap-3.5"
       {...quoteDrop}
@@ -360,6 +366,7 @@ export function NotesTray({
 
       <SelectionBar tree={tree} actions={actions} />
     </div>
+    </CardDropShown.Provider>
   );
 }
 

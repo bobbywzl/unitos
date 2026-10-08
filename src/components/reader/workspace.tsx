@@ -988,6 +988,7 @@ export function Workspace({
                   documents={notebook.documents}
                   scope={noteScope}
                   onScope={setNoteScope}
+                  visible={isOpen("notes")}
                 />
               </div>
             )}

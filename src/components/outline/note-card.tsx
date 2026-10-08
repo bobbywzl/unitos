@@ -2,7 +2,7 @@
 
 import { TOUCH_HIT } from "@/components/outline/touch-hit";
 import { useRouter } from "next/navigation";
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeKey } from "@/lib/ime";
 import { NOTE_DRAFT_CLEARED_EVENT } from "@/lib/note-drafts";
 import type { NoteView, SourceChip } from "@/lib/types";
@@ -26,7 +26,7 @@ import { setTaskChecked } from "@/lib/note-markup";
 import { appendToBody, bodyLineOffset, editDraft, splitNote } from "@/lib/note-title";
 import { searchHit } from "@/lib/search-hits";
 import type { CardDragEndDetail } from "@/lib/card-drag";
-import { useCardDropTarget } from "@/components/outline/use-card-drop";
+import { CardDropShown, useCardDropTarget } from "@/components/outline/use-card-drop";
 import { ThinkingIndicator } from "@/components/thinking";
 import { NoteEditor } from "@/components/outline/note-editor";
 import { NoteHistory } from "@/components/outline/note-history";
@@ -127,6 +127,7 @@ export const NoteCard = memo(function NoteCard({
   variant = "page",
   search,
   nudge,
+  opened,
 }: {
   note: NoteView;
   actions: OutlineActions;
@@ -137,11 +138,19 @@ export const NoteCard = memo(function NoteCard({
   search?: string;
   /** The onboarding nudge's target: the first note of the tray. */
   nudge?: boolean;
+  /** The board's open note (SPEC.md §6): it opens whole, whatever the
+      page's collapsed view says; its chevron folds this card alone. */
+  opened?: boolean;
 }) {
   // The card is drawn again only when what it shows changes: a selection, a
   // collapse, or a press on one card of a board leaves the other cards alone
   // (a notes full page of 135 notes took 200 ms to draw them all on a click).
-  const commands = useCommands(actions);
+  const shared = useCommands(actions);
+  const [folded, setFolded] = useState(false);
+  const commands = useMemo<NoteCommands>(
+    () => (opened ? { ...shared, toggleCollapsed: () => setFolded((f) => !f) } : shared),
+    [opened, shared],
+  );
   return (
     <NoteCardBody
       note={note}
@@ -152,7 +161,7 @@ export const NoteCard = memo(function NoteCard({
       selected={actions.selected.has(note.id)}
       selecting={actions.selected.size > 0}
       merging={actions.merging.has(note.id)}
-      collapsedInView={actions.isCollapsed(note.id)}
+      collapsedInView={opened ? folded : actions.isCollapsed(note.id)}
       viewExpanded={actions.notesView === "expanded"}
       editRequest={actions.editRequest?.id === note.id ? actions.editRequest : null}
       draggableHandle={Boolean(handle)}
@@ -214,6 +223,13 @@ function focusNextCard(noteId: string, track: string) {
       }
     }
   });
+}
+
+/** Whether the reader's last input was a key rather than a pointer. */
+let lastInputWasKey = false;
+if (typeof window !== "undefined") {
+  window.addEventListener("keydown", () => void (lastInputWasKey = true), true);
+  window.addEventListener("pointerdown", () => void (lastInputWasKey = false), true);
 }
 
 /** What a card runs on the outline: the commands of its buttons and drops. */
@@ -473,7 +489,8 @@ const NoteCardBody = memo(function NoteCardBody({
       setDropError(err instanceof Error ? err.message : t("common.requestFailed"));
     }
   }
-  const cardDrop = useCardDropTarget(note.id, (end) => void takeDrop(end), takesDrop);
+  const dropShown = useContext(CardDropShown);
+  const cardDrop = useCardDropTarget(note.id, (end) => void takeDrop(end), takesDrop && dropShown);
   const [wasMerging, setWasMerging] = useState(false);
   const [merged, setMerged] = useState(false);
   if (merging !== wasMerging) {
@@ -563,8 +580,11 @@ const NoteCardBody = memo(function NoteCardBody({
     }
   }
 
+  // The pending note the keys act on comes into view only when a key moved
+  // there (j, k, Enter, Notes by a key): a press, an Accept with the mouse,
+  // or the page opening leaves the page where the reader has it.
   useEffect(() => {
-    if (focused) cardRef.current?.scrollIntoView({ block: "nearest" });
+    if (focused && lastInputWasKey) cardRef.current?.scrollIntoView({ block: "nearest" });
   }, [focused]);
 
   // The editor shows as much of the note as it can (SPEC.md §6): the card
