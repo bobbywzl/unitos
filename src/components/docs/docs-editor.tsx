@@ -9,6 +9,7 @@ import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import { useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useT } from "@/components/lang-provider";
+import { importLineParts } from "@/components/docs/import-line";
 import { usePageStatusCarries } from "@/components/save-indicator";
 import { REFRESH_EVENT } from "@/components/collab/use-sync";
 import { annotationMarksKey, openMarkAt, type MarksMeta } from "@/components/docs/annotation-marks";
@@ -44,7 +45,7 @@ import type { Highlight } from "@/components/reader/block-view";
 import { api } from "@/lib/api";
 import { inlineText } from "@/lib/docs/blocks";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
-import { pageRangesLabel, type PageRange } from "@/lib/pdf-pages";
+import type { PageRange } from "@/lib/pdf-pages";
 import { POSITION_HOLD_MS, READING_LINE_PX } from "@/lib/reading-position";
 import { readSaveState, readSaveTouched, subscribeSaveState } from "@/lib/save-state";
 
@@ -112,62 +113,27 @@ function storeMode(documentId: string, mode: DocsMode): void {
   }
 }
 
-/** The site of an address, without "www.". */
-function siteOf(address: string): string {
-  try {
-    return new URL(address).hostname.replace(/^www\./, "");
-  } catch {
-    return address;
-  }
-}
-
-/** Where an import came from, after its title: "Imported from" the site, a
-    link to the page; a PDF and its page count, or the pages the reader
-    chose of it ("PDF · pages 45–60 of 409"); a text file; or a Word file.
-    Muted, the accent on hover. */
+/** The import line, after an import's title (importLineParts). Muted, the
+    accent on hover. */
 function ImportLine({ imported }: { imported: Imported }) {
   const t = useT();
-  const parts: ReactNode[] = [];
-  if (imported.origin) {
-    const from = t("docsPage.importedFrom", { site: siteOf(imported.origin) });
-    parts.push(
-      /^https?:\/\//i.test(imported.origin) ? (
-        <a
-          key="site"
-          href={imported.origin}
-          target="_blank"
-          rel="noopener noreferrer"
-          data-tip={imported.origin}
-          data-track="docs:import-origin"
-          className="rounded-sm underline-offset-2 hover:text-clay-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clay"
-        >
-          {from}
-        </a>
-      ) : (
-        <span key="site">{from}</span>
-      ),
-    );
-  }
-  if (imported.kind === "pdf") {
-    const n = imported.pages;
-    const chosen = imported.pdfPages;
-    parts.push(
-      <span key="pdf">
-        {n && chosen
-          ? t(chosen.length === 1 && chosen[0][0] === chosen[0][1] ? "docsPage.importPdfPage" : "docsPage.importPdfPages", {
-              pages: pageRangesLabel(chosen),
-              n,
-            })
-          : n
-            ? t("docsPage.importPdf", { n, s: n === 1 ? "" : "s" })
-            : "PDF"}
-      </span>,
-    );
-  } else if (imported.kind === "markdown" && !imported.origin) {
-    parts.push(<span key="file">{t("docsPage.importTextFile")}</span>);
-  } else if (imported.kind === "docx" && !imported.origin) {
-    parts.push(<span key="file">{t("docsPage.importWordFile")}</span>);
-  }
+  const parts: ReactNode[] = importLineParts(imported, t).map((part) =>
+    part.href ? (
+      <a
+        key="site"
+        href={part.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        data-tip={part.href}
+        data-track="docs:import-origin"
+        className="rounded-sm underline-offset-2 hover:text-clay-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clay"
+      >
+        {part.text}
+      </a>
+    ) : (
+      <span key={part.text}>{part.text}</span>
+    ),
+  );
   // A narrow title row (a phone, a split pane, the tray beside a small
   // window) keeps its room for the title.
   return (

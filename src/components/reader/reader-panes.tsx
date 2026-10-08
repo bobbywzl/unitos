@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/components/lang-provider";
+import type { Imported } from "@/components/docs/docs-editor";
+import { importLineParts } from "@/components/docs/import-line";
 import { clipWords } from "@/lib/markdown-preview";
 import { Presence } from "@/components/presence";
 import type { TKey } from "@/lib/i18n/dictionaries";
@@ -89,6 +91,7 @@ export function PaneDocumentSelect({
   paneOneId,
   paneTwoId,
   documents,
+  imported = null,
 }: {
   notebookId: string;
   view: ReaderViewKind;
@@ -96,8 +99,12 @@ export function PaneDocumentSelect({
   paneOneId: string;
   paneTwoId: string | null;
   documents: { id: string; title: string }[];
+  /** The pane's document, when it is an import: its import line goes in
+      the tooltip, since the pane hides the page editor's title row. */
+  imported?: Imported | null;
 }) {
   const t = useT();
+  const origin = imported ? importLineParts(imported, t).map((part) => part.text).join(" · ") : "";
   const router = useRouter();
   const value = pane === "one" ? paneOneId : (paneTwoId ?? paneOneId);
   return (
@@ -112,7 +119,7 @@ export function PaneDocumentSelect({
       }
       data-track={`pane-document:${pane}`}
       aria-label={t("panes.paneDocument")}
-      data-tip={t("panes.paneDocumentTitle")}
+      data-tip={origin ? `${t("panes.paneDocumentTitle")}\n${origin}` : t("panes.paneDocumentTitle")}
       className="min-w-0 max-w-[50%] shrink truncate rounded-full bg-sand-100 px-3 py-1.5 text-xs font-semibold text-sand-700 shadow-soft outline-none hover:text-clay-800"
     >
       {documents.map((d) => (

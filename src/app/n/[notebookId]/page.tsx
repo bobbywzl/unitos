@@ -1324,6 +1324,7 @@ export default async function NotebookPage(props: {
         paneOneId={paneOne?.document.id ?? pane.document.id}
         paneTwoId={paneTwo?.document.id ?? null}
         documents={attached.map((d) => ({ id: d.id, title: d.title }))}
+        imported={pane.imported}
       />
     ) : null;
     const articlePane = role === "one" ? articleOne : articleTwo;
