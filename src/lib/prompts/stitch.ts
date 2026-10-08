@@ -72,6 +72,9 @@ export type StitchCtx = CommandCtx & {
   // The links already in the project between blocks shown, as
   // "[block G6] – [block B20]" (lib/graph/stitch.ts existingPairs).
   existing?: string[];
+  // True when the first read's paragraph opens the blocks in the system
+  // message (answerMessages), so this message leaves it out.
+  firstReadInSystem?: boolean;
 };
 
 /** True when the command asks where something is named: which documents
@@ -260,6 +263,16 @@ export function stitchRules(lang: Lang): string {
   ].join("\n");
 }
 
+/** The answer pass's paragraph on the select pass's pick. Its words are
+    the same every command but "picked" (documents picked in the graph), so
+    it opens the blocks in the system message, where it caches, and says
+    "below" there (COST8-03: 228 tokens, 8-15% of the uncached input of a
+    real answer pass). With the blocks in the last message (history-first)
+    it stays in the user message and says "above". */
+export function firstReadParagraph(picked: boolean, where: "above" | "below"): string {
+  return `A first read picked the blocks ${where} for this command out of every document${picked ? " picked" : ""}; each document's header says how many of its blocks are shown. Answer from the blocks shown. A block not shown was judged off the command: when the blocks shown do not answer, say that the passages read do not answer it, not that the documents do not. When the answer is missing or incomplete, add one sentence, for the one document most likely to hold the rest (its title or its other blocks bear on the topic): when its header says "read whole when picked", "Only <shown> of <total> blocks of "<title>" were read for this command; pick it and one short document in the graph to have it read whole."; else "Only <shown> of <total> blocks of "<title>" were read for this command; ask about one part of it to have that part read." Never add it when no document is likely to hold the answer, and never for a document with no blocks shown.`;
+}
+
 export function stitchPrompt(ctx: StitchCtx): string {
   return [
     ...unreadLines(ctx.documents),
@@ -271,7 +284,7 @@ export function stitchPrompt(ctx: StitchCtx): string {
       : []),
     ...(ctx.selected && !ctx.back
       ? [
-          `A first read picked the blocks above for this command out of every document${ctx.notPicked?.count ? " picked" : ""}; each document's header says how many of its blocks are shown. Answer from the blocks shown. A block not shown was judged off the command: when the blocks shown do not answer, say that the passages read do not answer it, not that the documents do not. When the answer is missing or incomplete, add one sentence, for the one document most likely to hold the rest (its title or its other blocks bear on the topic): when its header says "read whole when picked", "Only <shown> of <total> blocks of "<title>" were read for this command; pick it and one short document in the graph to have it read whole."; else "Only <shown> of <total> blocks of "<title>" were read for this command; ask about one part of it to have that part read." Never add it when no document is likely to hold the answer, and never for a document with no blocks shown.`,
+          ...(ctx.firstReadInSystem ? [] : [firstReadParagraph(Boolean(ctx.notPicked?.count), "above")]),
           // A rare name whose every block is shown answers "which documents
           // mention it" in full: no hedge then.
           // A command with no rare name gets it only when it asks where or
