@@ -259,7 +259,11 @@ async function writeNote(noteId: string, data: PatchData, t: T, keptAs?: string)
         });
         const keys = new Set(held.map((s) => `${s.blockId}:${s.startOffset}:${s.endOffset}`));
         const rows = copyRows.filter((s) => !keys.has(`${s.blockId}:${s.startOffset}:${s.endOffset}`));
-        if (rows.length > 0) await tx.source.createMany({ data: rows });
+        if (rows.length > 0) {
+          // Answered as added too: the menu's Add to a note takes them back on Undo.
+          const made = await tx.source.createManyAndReturn({ data: rows, select: { id: true } });
+          added.push(...made.map((m) => m.id));
+        }
       }
 
       if (

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { AnnotationItem, SectionView } from "@/lib/types";
-import { deleteNoteWithUndo, deletedKey } from "@/lib/notes/undo-pill";
+import { deleteNoteWithUndo, deletedKey, useRemovedNotes } from "@/lib/notes/undo-pill";
 import { TOOL_KINDS, type ToolKind } from "@/lib/conversation";
 import { stripSimplifyMarkers } from "@/lib/sentences";
 import { CollapsedViewToggle } from "@/components/collapsed-view-toggle";
@@ -50,7 +50,7 @@ export type AnnotationGroup = {
 
 export function AnnotationsFullPage({
   notebookId,
-  groups,
+  groups: listed,
   sections,
 }: {
   notebookId: string;
@@ -66,6 +66,9 @@ export function AnnotationsFullPage({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   // The whole text and the collapsed view keep their own annotations (SPEC.md §28).
   const [layer, setLayer] = useState<AnnotationLayer>("whole");
+  // A deleted annotation's row goes at once; Undo brings it back.
+  const removed = useRemovedNotes();
+  const groups = removed.size > 0 ? listed.map((g) => ({ ...g, items: g.items.filter((a) => !removed.has(a.id)) })) : listed;
   const every = groups.flatMap((g) => g.items);
   const counts = {
     whole: every.filter((a) => inLayer(a, "whole")).length,

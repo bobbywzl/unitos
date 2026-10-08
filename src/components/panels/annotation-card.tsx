@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import type { AnnotationItem } from "@/lib/types";
-import { referenceContent } from "@/lib/annotation-reference";
+import { referenceContent, type AnnotationReference } from "@/lib/annotation-reference";
 import { ANNOTATION_KIND_KEY, annotationKindColor } from "@/lib/annotations/kind";
 import type { TKey } from "@/lib/i18n/dictionaries";
 import { markdownPreview } from "@/lib/markdown-preview";
@@ -131,6 +131,28 @@ export function annotationSummary(a: AnnotationItem): string {
   return markdownPreview(a.content);
 }
 
+/** The annotation as a note carries it (lib/annotation-reference.ts): what
+    its grip lifts onto a note, and what the menu's Add to a note lands —
+    the quote above the row, the text, the picture, or the conversation's
+    log under it. */
+export function annotationReferenceOf(
+  annotation: AnnotationItem,
+  documentId: string,
+  label: string,
+  words: string,
+): AnnotationReference {
+  return {
+    annotationId: annotation.id,
+    documentId,
+    sourceId: annotation.sourceId,
+    kind: annotation.kind,
+    label,
+    words,
+    ...(annotation.quotedText ? { quote: annotation.quotedText } : {}),
+    ...referenceContent(annotation.kind, annotation.content, annotation.quotedText, annotation.conversation.length),
+  };
+}
+
 export function AnnotationCard({
   annotation,
   documentId,
@@ -187,20 +209,7 @@ export function AnnotationCard({
       <div className="flex min-h-[18px] items-center gap-1.5">
         {droppable && documentId && (
           <div className="-ml-1 opacity-70 transition-opacity group-hover/annotation:opacity-100 focus-within:opacity-100">
-            <AnnotationGrip
-              reference={{
-                annotationId: annotation.id,
-                documentId,
-                sourceId,
-                kind: annotation.kind,
-                label: t(ANNOTATION_KIND_KEY[annotation.kind]),
-                words: gist,
-                // The quote lands above the row; the text, the picture, or
-                // the conversation's log under it (lib/annotation-reference.ts).
-                ...(annotation.quotedText ? { quote: annotation.quotedText } : {}),
-                ...referenceContent(annotation.kind, annotation.content, annotation.quotedText, annotation.conversation.length),
-              }}
-            />
+            <AnnotationGrip reference={annotationReferenceOf(annotation, documentId, t(ANNOTATION_KIND_KEY[annotation.kind]), gist)} />
           </div>
         )}
         <button
@@ -209,7 +218,7 @@ export function AnnotationCard({
           aria-expanded={!collapsed}
           aria-label={collapseLabel}
           title={collapseLabel}
-          className="-ml-0.5 flex size-[18px] shrink-0 items-center justify-center rounded-full text-sand-400 hover:bg-clay-100 hover:text-clay-800"
+          className="-ml-0.5 flex size-[18px] shrink-0 items-center justify-center rounded-full text-sand-400 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:-mx-[9px] pointer-coarse:-my-[9px] pointer-coarse:size-9"
         >
           {collapsed ? <ChevronRightIcon size={11} /> : <ChevronDownIcon size={11} />}
         </button>

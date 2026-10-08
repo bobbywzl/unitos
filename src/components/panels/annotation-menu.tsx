@@ -10,13 +10,21 @@ import { useCollab } from "@/components/collab/collab-context";
 import { ChevronLeftIcon, MoreIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { shortNoteId } from "@/components/outline/note-id";
+import { NOTE_ABSORBED_EVENT } from "@/components/outline/use-outline";
+import { referenceMarkdownForDrop } from "@/components/outline/reference-drop";
+import { ANNOTATION_KIND_KEY } from "@/lib/annotations/kind";
+import { postUndoPill } from "@/lib/notes/undo-pill";
 import { flatSections, menuRowClass as item, NotePicker } from "@/components/reader/note-picker";
-import { jumpToAnnotation } from "@/components/panels/annotation-card";
+import { annotationReferenceOf, annotationSummary, jumpToAnnotation } from "@/components/panels/annotation-card";
+
+/** The short id without its #: the words put the # before it. */
+const bareId = (id: string) => shortNoteId(id).slice(1);
 
 // The menu on every annotation card (SPEC.md §6): the three dots at the
 // right of the header open it, collapsed or not. It puts the annotation into
 // notes without a drag — New note makes a note of it, in a section the
-// reader picks; Add to a note joins its text into a note the reader picks —
+// reader picks; Add to a note lands in a note the reader picks what a hold
+// of the card dropped on it lands, with the Undo pill —
 // and carries Jump, Delete, and a resolved comment's Reopen, so a collapsed
 // card has every action in reach. Either way the annotation stays where it
 // is, still painted in the article: a note gets its own copy of the text
@@ -88,7 +96,7 @@ export function AnnotationMenu({
     try {
       const message = await action();
       close();
-      setDone(message);
+      if (message) setDone(message);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("common.requestFailed"));
@@ -101,15 +109,57 @@ export function AnnotationMenu({
   function newNote(sectionId: string, label: string) {
     void run(async () => {
       const note = await api<{ id?: string }>("/api/notes", "POST", { sectionId, fromAnnotationId: annotation.id });
-      return t("panels.annotationNoteMade", { id: note?.id ? shortNoteId(note.id) : "", section: label });
+      return t("panels.annotationNoteMade", { id: note?.id ? bareId(note.id) : "", section: label });
     });
   }
 
-  /** Add to a note: the annotation's text joins the note, its anchors become the note's. */
+  /** Add to a note: what a hold of the card dropped on the note lands
+      (SPEC.md §6) — the quote, the annotation reference row, and the text
+      under it, with copies of its anchors as the note's sources — and the
+      Undo pill takes it back out. */
   function addTo(note: NoteView) {
     void run(async () => {
-      await api("/api/notes/merge", "POST", { targetId: note.id, sourceIds: [annotation.id], mode: "join" });
-      return t("panels.annotationNoteAdded", { id: shortNoteId(note.id) });
+      const message = t("panels.annotationNoteAdded", { id: bareId(note.id) });
+      if (!documentId) {
+        // Anchored in no document: no reference can point to it; its text joins.
+        await api("/api/notes/merge", "POST", { targetId: note.id, sourceIds: [annotation.id], mode: "join" });
+        return message;
+      }
+      const reference = annotationReferenceOf(
+        annotation,
+        documentId,
+        t(ANNOTATION_KIND_KEY[annotation.kind]),
+        annotation.gist ?? annotationSummary(annotation),
+      );
+      const markdown = await referenceMarkdownForDrop(notebookId, reference, t);
+      const answer = await api<{ content?: unknown; addedSourceIds?: unknown } | null>(`/api/notes/${note.id}`, "PATCH", {
+        append: markdown,
+        ...(reference.quote ? { copySourcesFrom: annotation.id } : {}),
+      });
+      window.dispatchEvent(new CustomEvent(NOTE_ABSORBED_EVENT, { detail: { noteId: note.id } }));
+      const after = typeof answer?.content === "string" ? answer.content : null;
+      const before = after?.endsWith(markdown) ? after.slice(0, -markdown.length).replace(/\n+$/, "") : null;
+      const added = Array.isArray(answer?.addedSourceIds)
+        ? answer.addedSourceIds.filter((id): id is string => typeof id === "string")
+        : [];
+      // Undo takes the words and the copied sources back out, while the
+      // note still reads as the add left it: newer words are never undone.
+      const taken =
+        after !== null && before
+          ? postUndoPill({
+              message,
+              undo: async () => {
+                await api(`/api/notes/${note.id}`, "PATCH", {
+                  content: before,
+                  baseContent: after,
+                  ...(added.length > 0 ? { removeSources: added } : {}),
+                });
+                router.refresh();
+              },
+            })
+          : false;
+      // No pill on this page: the line under the menu says it.
+      return taken ? "" : message;
     });
   }
 
@@ -138,7 +188,7 @@ export function AnnotationMenu({
         aria-expanded={open}
         aria-label={t("panels.annotationMenu")}
         data-tip={t("panels.annotationMenuTitle")}
-        className="flex size-[22px] items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800"
+        className="flex size-[22px] items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:-m-[7px] pointer-coarse:size-9"
       >
         <MoreIcon size={14} />
       </button>

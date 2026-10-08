@@ -6,7 +6,7 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import type { AnnotationItem, LinkIn, LinkOut, SectionView } from "@/lib/types";
 import { api } from "@/lib/api";
-import { deleteNoteWithUndo, deletedKey } from "@/lib/notes/undo-pill";
+import { deleteNoteWithUndo, deletedKey, useRemovedNotes } from "@/lib/notes/undo-pill";
 import { LINK_KIND_VAR } from "@/lib/annotations/kind";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
@@ -147,7 +147,7 @@ function LinkAbout({
 export function AnnotationsPanel({
   notebookId,
   documentId,
-  annotations: every,
+  annotations: listed,
   linksOut,
   linksIn,
   sections,
@@ -163,6 +163,9 @@ export function AnnotationsPanel({
   const router = useRouter();
   const t = useT();
   const { canEdit } = useCollab();
+  // A deleted annotation's row goes at once, with its mark; Undo brings it back.
+  const removed = useRemovedNotes();
+  const every = removed.size > 0 ? listed.filter((a) => !removed.has(a.id)) : listed;
   const view = useCollapsedView(`${ANNOTATIONS_VIEW_STORE}:${notebookId}`);
   // The New glow (SPEC.md §18) on the four arrows until they are pressed.
   const fullPageNew = useNewFeature("annotationsFullPage");
