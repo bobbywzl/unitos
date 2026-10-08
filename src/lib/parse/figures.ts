@@ -655,6 +655,13 @@ export function tryCompositeFigure(el: Element, ctx: WalkCtx): boolean {
   // compare loop finding: an author box's bio paragraph swallowed into a
   // figure). A row holds a caption's worth per column.
   if (residual.length > CAPTION_MAX_CHARS * columns) return false;
+  // Prose in the columns outside every caption element (a line set loose in
+  // the column's div) is no caption the figure's text can hold: past one
+  // caption's worth, figureCaption reads none of it, and the words would
+  // live only in the figure's html. Each column is then walked on its own
+  // (held-out set finding: a recipe's 17 steps, each a line and its photo,
+  // read as one figure that said the first step).
+  if (row && proseLength(clone) > CAPTION_MAX_CHARS) return false;
   // The columns' allowance is for the words under each column's media. Prose
   // beside the columns is one caption's worth at most: a blog post's body
   // set in divs between its photos is not a row's captions (web benchmark
