@@ -547,7 +547,7 @@ function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: n
   // and its pages split at the options' "Default: text" column instead,
   // each note joining the option beside it).
   const margin = marginGutter(items, graphics, x0, width);
-  const notes = margin === null ? null : splitAt(items, graphics, page, pageWidth, depth, margin, total);
+  const notes = margin === null ? null : splitAt(items, graphics, page, pageWidth, depth, margin, total, false, true);
   if (notes) return notes;
   const split = best && best.cross / total < 0.5 ? splitAt(items, graphics, page, pageWidth, depth, best.g, total) : null;
   if (split || !oneBand || depth > 0) return split;
@@ -631,8 +631,9 @@ function bandGutter(items: Item[], graphics: Placed[], x0: number, width: number
 
 // The region cut at the gutter g, when it reads as columns there. banded: g
 // is a band's gutter (bandGutter), and the rows across it may hold most of
-// the region's characters.
-function splitAt(items: Item[], graphics: Placed[], page: number, pageWidth: number, depth: number, g: number, total: number, banded = false): { bands: Band[] } | null {
+// the region's characters. margin: g is a column of notes' gutter
+// (marginGutter).
+function splitAt(items: Item[], graphics: Placed[], page: number, pageWidth: number, depth: number, g: number, total: number, banded = false, margin = false): { bands: Band[] } | null {
   // Rows that span the gutter: the items that cross it, the items on either
   // side of it with no more than a word's gap between them, up to 1.2 em (a
   // full-width caption whose word gap fell on the gutter was read as two
@@ -700,7 +701,13 @@ function splitAt(items: Item[], graphics: Placed[], page: number, pageWidth: num
     beside(s).filter((item) => {
       const size = Math.max(s.size, item.size);
       const gap = Math.max(item.x - (s.x + s.w), s.x - (item.x + item.w));
-      return gap < size * 1.2 && !(item.x > s.x ? opens(s, item, size) : opens(item, s, size));
+      // A note set smaller than the words across the margin's gutter is no
+      // part of their row (parse loop finding: the MML book sets its notes
+      // 8 pt, a few points past the justified column's edge: "called a
+      // particular particular solution solution or special solution" read
+      // as a row, the note inside the sentence).
+      const apart = margin && (s.x < g) !== (item.x < g) && Math.min(s.size, item.size) < size * 0.9;
+      return gap < size * 1.2 && !apart && !(item.x > s.x ? opens(s, item, size) : opens(item, s, size));
     });
   const spanning = new Set(items.filter((i) => i.x < g && i.x + i.w > g));
   for (const item of items) {
