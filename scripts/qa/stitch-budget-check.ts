@@ -6,7 +6,7 @@
 import { STITCH_HISTORY_FIRST_MIN, STITCH_READ_HISTORY, STITCH_SELECTED_BLOCKS, STITCH_SELECTED_BUDGET } from "../../src/lib/derive/config";
 import { translatorFor } from "../../src/lib/i18n/dictionaries";
 import { parseMarkdown } from "../../src/lib/parse/markdown";
-import { partsFor } from "../../src/lib/graph/skeleton";
+import { currentSkeleton, partsFor, type Skeleton } from "../../src/lib/graph/skeleton";
 import { readFileSync } from "node:fs";
 import {
   answerMessages,
@@ -36,6 +36,8 @@ import {
   groupMaxBlocks,
   historyWithAliases,
   interleave,
+  liveLinks,
+  quoteBlocks,
   nameHits,
   readingOf,
   replyLanguage,
@@ -47,7 +49,7 @@ import {
   titleMatches,
   type SkeletonView,
 } from "../../src/lib/graph/stitch";
-import { asksEvery, asksWhere, refersBack, stitchExpandPrompt, stitchPrompt, stitchRules, stitchSelectPrompt } from "../../src/lib/prompts/stitch";
+import { asksEvery, asksMore, asksWhere, refersBack, stitchExpandPrompt, stitchPrompt, stitchRules, stitchSelectPrompt } from "../../src/lib/prompts/stitch";
 import { skeletonPrompt } from "../../src/lib/prompts/skeleton";
 import { estTokens } from "../../src/lib/tokens";
 
@@ -915,6 +917,63 @@ check("replyLanguage command: a mixed or short command keeps the UI's", replyLan
   check("answer rules: a page reply says what the page finds, never describes it", rules6.includes("A command to gather or write a page gets one sentence: what the page finds") && rules6.includes("Never describe the page or count its parts"));
   check("answer rules: a text part never repeats its heading", rules6.includes("A text part never repeats its heading, and is never a lead-in alone"));
   check("answer rules: no per-block link cap (ANS6-10 measured: no link of F1, L2 or Z1 would change)", !rules6.includes("Link one block at most twice"));
+}
+
+// ── Round 7 (ENGINE7) ──
+{
+  const blk7 = (alias: string, documentId: string) => ({ id: alias.toLowerCase(), alias, type: "PARAGRAPH", text: "Pity is the practice of nihilism.", documentId });
+  const titles7 = ["Friedrich Nietzsche", "How Zarathustra came into being", "Beyond Good and Evil (Chapters I–III)", "BOOK TWO", "Arthur Schopenhauer", "The Antichrist", "Nietzsche combined notes"];
+  const docs7 = titles7.map((title, i) => ({ doc: { id: `d${i}`, title } }));
+  const bb7 = new Map<string, ReturnType<typeof blk7>>();
+  for (const [a, d] of [["F24", "d5"], ["F25", "d5"], ["F11", "d5"], ["G15", "d6"]]) {
+    bb7.set(a, blk7(a, d));
+    bb7.set(a.toLowerCase(), blk7(a, d));
+  }
+  const hist7 = [{ role: "user" as const, content: "What does Nietzsche say pity does?" }, { role: "assistant" as const, content: "It multiplies suffering [block F24] [block F25] [block F11] [block G15]." }];
+  const skips = (c: string) => backSelection(c, hist7, bb7, [], "question", docs7) !== null;
+  // ANS7-01: the audit's 20 follow-ups (r7 audit, rb3.ts) and two more.
+  const answerOnly7 = ["Why did you link the second one?", "Quote the passage the first link starts from.", "How many passages did that page quote?", "Which of those links are contradictions?", "Make that a page.", "Turn those links into a page.", "第二点的原文是什么？", "Which document is the third point from?", "Explain the second point in simpler words."];
+  const needsNew7 = ["Is the first point backed by any other document?", "Does Schopenhauer agree with the second point?", "What does Schopenhauer say about those points?", "Are there more passages like those quotes?", "Is that passage also in my notes?", "Does any other document disagree with the second point?", "Which of those does Mencken mention too?", "Where else does Nietzsche say the first point?", "第二点在叔本华的文档里有对应的说法吗？", "这些段落在笔记里也有吗？", "Find the passages that contradict the third link.", "Are there passages like the first link in the other documents?", "Does Schopenhauer say the same as the second point?"];
+  check("backSelection: no follow-up that needs new passages skips the select pass (ANS7-01)", !needsNew7.some(skips), needsNew7.filter(skips).join(" | "));
+  check("backSelection: 7 of 9 follow-ups about the answer still skip it", answerOnly7.filter(skips).length === 7, answerOnly7.filter((c) => !skips(c)).join(" | "));
+  check("asksMore: other, disagree, say about, 对应, 也; not the answer's own words", asksMore("Does any other document disagree?") && asksMore("What does Schopenhauer say about those points?") && asksMore("第二点在叔本华的文档里有对应的说法吗？") && !asksMore("Why did you link the second one?") && !asksMore("第二点的原文是什么？"));
+  check("backSelection: a title word whose document has a block cited still skips; one with none runs the select pass", skips("Which of those links connect Nietzsche to the notes?") && !skips("Which of those links connect Nietzsche to Schopenhauer?"));
+  // The back selection's line in the answer prompt.
+  const docsP7 = [{ tag: "A", title: "The Antichrist", read: true }, { tag: "B", title: "Arthur Schopenhauer", read: true }];
+  const backP = stitchPrompt({ documents: docsP7, command: "Why did you link the second one?", continued: true, selected: true, back: true });
+  const pickP = stitchPrompt({ documents: docsP7, command: "Why did you link the second one?", continued: true, selected: true });
+  check("answer prompt: a back selection says no other block was read, and to ask again without pointing back", backP.includes("These are the blocks the earlier answers cited; no other block was read for this command.") && backP.includes("ask again without pointing back") && !backP.includes("A first read picked"));
+  check("answer prompt: a select pass's pick keeps its line", pickP.includes("A first read picked the blocks above") && !pickP.includes("no other block was read"));
+
+  // ANS7-02: an edited block's line runs to 600 characters beside a stored skeleton.
+  const edited = "Ethics: compassion (Mitleid) is the basis of morality — neminem laede, immo omnes quantum potes juva: injure no one, and help everyone as much as you can. The lecturer stressed that this is where his ethics meets everyday kindness. Suicide: I had this wrong. On re-reading the essay, he does not call it a crime; he finds the arguments for that weak, and objects only that suicide is a mistake: it destroys the phenomenon and leaves the will untouched.";
+  const stored7: Skeleton = { v: 1, gist: "", parts: [], lines: [{ blockId: "g10", hash: "old", text: "suicide called a crime" }, { blockId: "g11", hash: "x", text: "line" }], chars: 0 };
+  const cur7 = currentSkeleton(stored7, [{ id: "g10", type: "PARAGRAPH", text: edited }]);
+  check("currentSkeleton: an edited 455-character block is drawn whole, with its edit (ANS7-02)", cur7.lines[0].text === edited, cur7.lines[0].text.slice(-60));
+  const none7 = currentSkeleton(null, [{ id: "g10", type: "PARAGRAPH", text: edited }]);
+  check("currentSkeleton: with no stored skeleton a block's line stays at 200 characters", none7.lines[0].text.length <= 200, String(none7.lines[0].text.length));
+  const many7 = currentSkeleton(stored7, Array.from({ length: 40 }, (_, i) => ({ id: `n${i}`, type: "PARAGRAPH", text: `${"word ".repeat(150)}end ${i}.` })));
+  const long7 = many7.lines.filter((l) => l.text.length > 200).length;
+  const chars7 = many7.lines.filter((l) => l.text.length > 200).reduce((n, l) => n + l.text.length, 0);
+  check("currentSkeleton: changed lines past 200 characters stop at about 2k tokens a document", long7 > 0 && chars7 <= 8_000 && many7.lines.length === 40, `${long7} long lines, ${chars7} chars`);
+  const rows7 = [{ id: "a", fromOrphaned: false, toOrphaned: false }, { id: "b", fromOrphaned: true, toOrphaned: false }, { id: "c", fromOrphaned: false, toOrphaned: true }];
+  check("liveLinks: a link whose quote an edit removed is not already in the graph (ANS7-02)", liveLinks(rows7).map((l) => l.id).join(",") === "a");
+
+  // ANS7-05: a quote part stays the paragraph it is, in italic.
+  const q157 = "157. The thought of suicide is a great consolation: by means of it one gets successfully through many a bad night.";
+  const qb = quoteBlocks(q157, "PARAGRAPH");
+  check("quoteBlocks: a quote of a paragraph that starts '157.' is one paragraph with its text as it is", qb.length === 1 && qb[0].type === "PARAGRAPH" && qb[0].text === q157, JSON.stringify(qb.map((b) => b.type)));
+  check("quoteBlocks: the quote is italic over its whole text", qb[0].styles?.[0].style === "italic" && qb[0].styles[0].start === 0 && qb[0].styles[0].end === q157.length);
+  const qm = quoteBlocks("> from a _mistake_ to a _crime_ is a far cry", "PARAGRAPH")[0];
+  check("quoteBlocks: a leading '> ' stays as written; '_mistake_' is italic as before", qm.type === "PARAGRAPH" && qm.text === "> from a mistake to a crime is a far cry" && (qm.styles ?? []).some((st) => st.style === "italic" && qm.text.slice(st.start, st.end) === "mistake"), JSON.stringify(qm));
+  check("quoteBlocks: '- ' and '# ' at the start stay as written", quoteBlocks("- not a dash list", "PARAGRAPH")[0].text === "- not a dash list" && quoteBlocks("# not a heading", "HEADING")[0].type === "PARAGRAPH");
+  check("quoteBlocks: a quote of a list block is still a list", quoteBlocks("1. one\n2. two", "LIST")[0].type === "LIST");
+
+  // ANS7-03, -04, -05: rule sentences.
+  const rules7 = stitchRules("en");
+  check("answer rules: a contradictions command proposes only contradictions (ANS7-04)", rules7.includes("A command for contradictions or disagreements gets only links whose passages contradict: never a paraphrase, an agreement, or an echo."));
+  check("answer rules: each line names its document and its quote proves its claim (ANS7-03)", rules7.includes("its document's title, even if the line before named it, the shortest quote that proves that line's claim (one clause)") && rules7.includes("To which of several things changed or hold, end with one clause on the ones that did not."));
+  check("answer rules: a mixed section's heading names its documents (ANS7-05)", rules7.includes("A section quoting several documents names them in its heading, or puts a text part naming the document before each quote."));
 }
 
 // ── Round 3 (ANS3-03): a cut where no line shares a word with the query ──

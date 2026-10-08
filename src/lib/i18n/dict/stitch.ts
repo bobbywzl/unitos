@@ -67,6 +67,10 @@ const en = {
   stitchLinksWaitingN: "{n} of the links proposed were proposed before and wait under Recommended links.",
   stitchLinksRemoved1: "{n} of the links proposed was removed before, so it was not added again.",
   stitchLinksRemovedN: "{n} of the links proposed were removed before, so they were not added again.",
+  // Before those lines, when some of two or more links proposed were not added (ANS7-06).
+  stitchLinksAddedNone: "None of the {n} links proposed was added.",
+  stitchLinksAddedOf1: "{added} of the {n} links proposed was added.",
+  stitchLinksAddedOfN: "{added} of the {n} links proposed were added.",
   // A link between a passage and its word-for-word copy (ANS6-07).
   stitchLinksCopy1: "{n} of the links proposed joined a passage to its word-for-word copy, so it was not added.",
   stitchLinksCopyN: "{n} of the links proposed joined a passage to its word-for-word copy, so they were not added.",
@@ -172,6 +176,9 @@ const zh: Record<keyof typeof en, string> = {
   stitchLinksWaitingN: "提出的链接中有 {n} 条之前已提出，正在推荐链接中等待接受。",
   stitchLinksRemoved1: "提出的链接中有 {n} 条之前已被移除，没有重复添加。",
   stitchLinksRemovedN: "提出的链接中有 {n} 条之前已被移除，没有重复添加。",
+  stitchLinksAddedNone: "提出的 {n} 条链接都没有添加。",
+  stitchLinksAddedOf1: "提出的 {n} 条链接中添加了 {added} 条。",
+  stitchLinksAddedOfN: "提出的 {n} 条链接中添加了 {added} 条。",
   stitchLinksCopy1: "提出的链接中有 {n} 条连接的是一段文字和它逐字相同的副本，没有添加。",
   stitchLinksCopyN: "提出的链接中有 {n} 条连接的是一段文字和它逐字相同的副本，没有添加。",
   stitchPageHolds: "页面包含 {list}。",
