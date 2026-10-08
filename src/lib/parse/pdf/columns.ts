@@ -546,7 +546,7 @@ function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: n
   // sets "Introduced in version 4.16" in the margin beside its options,
   // and its pages split at the options' "Default: text" column instead,
   // each note joining the option beside it).
-  const margin = marginGutter(items, graphics, x0, width);
+  const margin = marginGutter(items, graphics, x0, width, page);
   const notes = margin === null ? null : splitAt(items, graphics, page, pageWidth, depth, margin, total, false, true);
   if (notes) return notes;
   const split = best && best.cross / total < 0.5 ? splitAt(items, graphics, page, pageWidth, depth, best.g, total) : null;
@@ -562,13 +562,17 @@ function findSplit(items: Item[], graphics: Placed[], page: number, pageWidth: n
 
 // The gutter of a column of notes in the region's outer fifth, the margin a
 // book sets its margin notes in: no item and no graphic crosses it, the
-// notes' side holds a seventh of the characters at most, and its words are
-// set smaller than the column's (a page number in the margin aside). The
-// gutter stands next to the column. Parse loop finding: the MML book's
-// margin notes ("associativity", "augmented matrix") stand closer to the
-// page's edge than a fifth of its width, the columns test never cut there,
-// and each note ran into the line of the column beside it.
-function marginGutter(items: Item[], graphics: Placed[], x0: number, width: number): number | null {
+// notes' side holds a seventh of the characters at most (a fifth beside a
+// prose column), and its words are set smaller than the column's (a page
+// number in the margin aside). The gutter stands next to the column. Parse
+// loop finding: the MML book's margin notes ("associativity", "augmented
+// matrix") stand closer to the page's edge than a fifth of its width, the
+// columns test never cut there, and each note ran into the line of the
+// column beside it. A page of many notes beside a short stretch of prose
+// holds more than a seventh in them (parse loop finding: the same book's
+// p. 25, five notes beside six displays, 243 of 1,664 characters, read
+// the displays and the notes as one crop of words).
+function marginGutter(items: Item[], graphics: Placed[], x0: number, width: number, page: number): number | null {
   const total = chars(items);
   const sizeOf = (list: Item[]) => median(list.filter((i) => !/^\d+$/.test(i.str.trim())).map((i) => i.size));
   const clear = (g: number) => !items.some((i) => i.x < g && i.x + i.w > g) && !graphics.some((p) => p.box.x1 < g && p.box.x2 > g);
@@ -577,7 +581,8 @@ function marginGutter(items: Item[], graphics: Placed[], x0: number, width: numb
     const right = items.filter((i) => i.x >= g);
     const [note, wide] = chars(left) < chars(right) ? [left, right] : [right, left];
     const words = note.filter((i) => !/^\d+$/.test(i.str.trim()));
-    return words.length > 0 && chars(note) * 7 <= total && sizeOf(note) < sizeOf(wide) * 0.9;
+    if (words.length === 0 || sizeOf(note) >= sizeOf(wide) * 0.9) return false;
+    return chars(note) * 7 <= total || (chars(note) * 5 <= total && isColumn(wide, page));
   };
   const step = width * 0.01;
   // Left: the gutter nearest the column, scanning in from the fifth.
