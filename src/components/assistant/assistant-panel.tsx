@@ -159,14 +159,20 @@ function formatWhen(iso: string): string {
 }
 
 // One message as it is sent: the text and the attachments read for it.
+// key: the message's own, for the queue and the held draft; question and
+// quote: the box's words and the quote chip as typed, so a failed message
+// goes back into the composer as it was.
 type OutgoingMessage = {
+  key: string;
   content: string;
+  question: string;
+  quote: string | null;
   images: { id: string; url: string; name: string }[];
   files: { name: string; text: string }[];
 };
 // A message queued while an answer runs (SPEC.md §7): it sends, in order,
 // once the answer lands. The key removes it from the queue.
-type QueuedMessage = OutgoingMessage & { key: string };
+type QueuedMessage = OutgoingMessage;
 
 // The conversation survives a tab switch and a document switch within the
 // same tab (both remount the panel, so the thread lives outside it, per
@@ -174,6 +180,88 @@ type QueuedMessage = OutgoingMessage & { key: string };
 // note per reader per project, loaded once per project per tab — see the
 // hydration effect below).
 const threads = new Map<string, Thread>();
+
+// The composer's words (SPEC.md §7, CLAUDE.md rule zero 6), one draft per
+// project in localStorage: the words in the box, and each message sent or
+// queued that the server has not yet confirmed (held). A reload, a crash, a
+// tab or document switch, or New conversation keeps them; a failed answer
+// puts its message back in the box; only a saved answer clears it.
+const PANEL_DRAFT_PREFIX = "unitos-assistant-panel-draft:";
+type HeldMessage = { key: string; content: string };
+type PanelDraft = { text: string; held: HeldMessage[] };
+function readPanelDraft(notebookId: string): PanelDraft {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(PANEL_DRAFT_PREFIX + notebookId) ?? "null");
+    if (!parsed || typeof parsed !== "object") return { text: "", held: [] };
+    const d = parsed as { text?: unknown; held?: unknown };
+    const held = Array.isArray(d.held)
+      ? d.held.filter(
+          (h): h is HeldMessage =>
+            !!h &&
+            typeof h === "object" &&
+            typeof (h as HeldMessage).key === "string" &&
+            typeof (h as HeldMessage).content === "string",
+        )
+      : [];
+    return { text: typeof d.text === "string" ? d.text : "", held };
+  } catch {
+    return { text: "", held: [] };
+  }
+}
+function writePanelDraft(notebookId: string, draft: PanelDraft) {
+  try {
+    if (!draft.text.trim() && draft.held.length === 0) localStorage.removeItem(PANEL_DRAFT_PREFIX + notebookId);
+    else localStorage.setItem(PANEL_DRAFT_PREFIX + notebookId, JSON.stringify(draft));
+  } catch {
+    // Storage blocked or full: the box still holds the words on screen.
+  }
+}
+// Per project, for the page's life: the messages this tab sent and the
+// server has not confirmed. A panel that remounts mid-answer (a tab or a
+// document switch) finds them here and does not put them back in its box.
+const heldMessages = new Map<string, HeldMessage[]>();
+// The mounted panel's way to put a failed message back in its box; a
+// message that fails while no panel is mounted waits in pendingRestore.
+const liveRestore = new Map<string, (message: OutgoingMessage) => void>();
+const pendingRestore = new Map<string, OutgoingMessage[]>();
+// The words in the mounted panel's box, per project: what the draft writes.
+const boxText = new Map<string, string>();
+function writeDraftNow(notebookId: string) {
+  writePanelDraft(notebookId, { text: boxText.get(notebookId) ?? "", held: heldMessages.get(notebookId) ?? [] });
+}
+function holdMessage(notebookId: string, message: OutgoingMessage) {
+  const held = (heldMessages.get(notebookId) ?? []).filter((h) => h.key !== message.key);
+  heldMessages.set(notebookId, [...held, { key: message.key, content: message.content }]);
+  writeDraftNow(notebookId);
+}
+function releaseMessage(notebookId: string, key: string) {
+  heldMessages.set(notebookId, (heldMessages.get(notebookId) ?? []).filter((h) => h.key !== key));
+  writeDraftNow(notebookId);
+}
+// A message that did not land goes back into the box: the mounted panel's
+// now, else the next panel's when it mounts (it stays held until then).
+function putBack(notebookId: string, message: OutgoingMessage) {
+  const restore = liveRestore.get(notebookId);
+  if (!restore) {
+    pendingRestore.set(notebookId, [...(pendingRestore.get(notebookId) ?? []), message]);
+    return;
+  }
+  restore(message);
+  releaseMessage(notebookId, message.key);
+}
+// The box's words when a panel mounts: this tab's, else the stored draft's,
+// with the messages a closed tab never had confirmed put back in front.
+function initialBoxText(notebookId: string): string {
+  if (typeof window === "undefined") return "";
+  const kept = boxText.get(notebookId);
+  if (kept !== undefined) return kept;
+  const draft = readPanelDraft(notebookId);
+  const text = [...draft.held.map((h) => h.content), draft.text].filter((s) => s.trim()).join("\n\n");
+  boxText.set(notebookId, text);
+  heldMessages.set(notebookId, []);
+  writeDraftNow(notebookId);
+  return text;
+}
 
 
 // Two scopes, both reading the digest (SPEC.md §7). Scope ids stay as wire
@@ -306,7 +394,8 @@ export function AssistantPanel({
   // Fast Thinking or Deep Thinking (SPEC.md §7): one choice for every
   // assistant surface, remembered in this browser.
   const thinking = useThinking();
-  const [question, setQuestion] = useState("");
+  // The box's words: kept as a draft (initialBoxText above).
+  const [question, setQuestion] = useState(() => initialBoxText(notebookId));
   // The conversation (SPEC.md §7, §21): the first question opens it; every
   // turn after continues it. Empty = the panel's first layout. The note it
   // is saved on, once a turn has persisted; null until then, and again once
@@ -363,6 +452,11 @@ export function AssistantPanel({
   // the quote a comment is being written on, and this thread's comments.
   const { selection, tintRects, hold: holdSelection, clear: clearSelection } = useAnswerSelection();
   const [quote, setQuote] = useState<string | null>(null);
+  // The quote as a message that comes back reads it (restoreMessage).
+  const quoteRef = useRef<string | null>(null);
+  useEffect(() => {
+    quoteRef.current = quote;
+  }, [quote]);
   const [commentQuote, setCommentQuote] = useState<string | null>(null);
   const [comments, setComments] = useState<AnswerComment[]>([]);
   const [commentPeople, setCommentPeople] = useState<Record<string, Person>>({});
@@ -428,6 +522,59 @@ export function AssistantPanel({
   // Whether a run is on, as the drain reads it: the state is stale inside
   // the run's own closure.
   const busyRef = useRef(false);
+  // The draft (PANEL_DRAFT_PREFIX above): written at most every 300 ms
+  // while the reader types, and at once when the page closes or the panel
+  // goes.
+  const draftTimer = useRef<number | null>(null);
+  useEffect(() => {
+    boxText.set(notebookId, question);
+    if (draftTimer.current !== null) return;
+    draftTimer.current = window.setTimeout(() => {
+      draftTimer.current = null;
+      writeDraftNow(notebookId);
+    }, 300);
+  }, [notebookId, question]);
+  useEffect(() => {
+    const flush = () => writeDraftNow(notebookId);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      if (draftTimer.current !== null) window.clearTimeout(draftTimer.current);
+      draftTimer.current = null;
+      flush();
+    };
+  }, [notebookId]);
+  // A message that did not land comes back as it was typed: its words after
+  // whatever the box holds now, its quote chip when the box has none, its
+  // attachments.
+  function restoreMessage(m: OutgoingMessage) {
+    const current = boxText.get(notebookId) ?? "";
+    const plain = !current.trim() && !quoteRef.current;
+    const words = plain ? m.question : m.content;
+    const next = current.trim() ? (words.trim() ? `${current}\n\n${words}` : current) : words;
+    boxText.set(notebookId, next);
+    setQuestion(next);
+    if (plain && m.quote) setQuote(m.quote);
+    const back: Attachment[] = [
+      ...m.images.map((img) => ({ key: `${m.key}-${img.id}`, kind: "image" as const, name: img.name, id: img.id, url: img.url })),
+      ...m.files.map((f, i) => ({ key: `${m.key}-f${i}`, kind: "file" as const, name: f.name, text: f.text })),
+    ];
+    if (back.length > 0) setAttachments((list) => [...list, ...back]);
+  }
+  useEffect(() => {
+    liveRestore.set(notebookId, restoreMessage);
+    const waiting = pendingRestore.get(notebookId) ?? [];
+    pendingRestore.delete(notebookId);
+    for (const m of waiting) {
+      restoreMessage(m);
+      releaseMessage(notebookId, m.key);
+    }
+    return () => {
+      if (liveRestore.get(notebookId) === restoreMessage) liveRestore.delete(notebookId);
+    };
+    // One registration per mount: restoreMessage reads refs and setters only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notebookId]);
   const [issues, setIssues] = useState<Issue[] | null>(null);
   const [taskRun, setTaskRun] = useState<Task | null>(null);
   const [busy, setBusy] = useState(false);
@@ -478,9 +625,10 @@ export function AssistantPanel({
     setComments([]);
     clearSelection();
     cacheThread();
-    setAttachments([]);
+    // The box keeps its words and its attachments (one draft per project),
+    // and the messages queued for the thread on screen go back into it.
+    for (const m of queueRef.current) putBack(notebookId, m);
     setQueue(() => []);
-    setQuestion("");
     setListOpen(false);
   }
 
@@ -680,9 +828,9 @@ export function AssistantPanel({
   // every one after updates it in place. Fire-and-forget — a save that fails
   // costs the reader nothing they would notice this session; the thread
   // stays on screen either way, from the threads cache above.
-  async function saveConversation(savedTurns: Turn[], sideChatKey: string | null) {
+  async function saveConversation(savedTurns: Turn[], sideChatKey: string | null): Promise<boolean> {
     const side = sideChatKey ? sideChatsRef.current.find((s) => s.key === sideChatKey) : null;
-    if (sideChatKey && !side) return;
+    if (sideChatKey && !side) return false;
     try {
       const res = await fetch("/api/assistant/conversation", {
         method: "POST",
@@ -702,16 +850,19 @@ export function AssistantPanel({
         }),
       });
       const json = (await res.json().catch(() => null)) as { conversationNoteId?: string } | null;
-      if (!res.ok || !json?.conversationNoteId) return;
+      if (!res.ok || !json?.conversationNoteId) return false;
       if (side) {
         const noteId = json.conversationNoteId;
         setSideChats((list) => list.map((s) => (s.key === side.key ? { ...s, noteId } : s)));
-        return;
+        return true;
       }
       setNoteId(json.conversationNoteId);
+      return true;
     } catch {
       // Offline, or the request otherwise never landed — the thread is still
-      // right here on screen; the next completed turn tries again.
+      // right here on screen; the next completed turn tries again, and the
+      // message stays held in the draft until one lands.
+      return false;
     }
   }
 
@@ -922,6 +1073,7 @@ export function AssistantPanel({
 
   function removeQueued(key: string) {
     setQueue((list) => list.filter((m) => m.key !== key));
+    releaseMessage(notebookId, key);
   }
 
   const reading = attachments.some((a) => a.pending);
@@ -943,24 +1095,35 @@ export function AssistantPanel({
     if (!composed) return;
     if (document.activeElement === boxRef.current) setFocusTick((n) => n + 1);
     const message: OutgoingMessage = {
+      key: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       content: quote ? quoteMessage(quote, question) : question.trim(),
+      question: question.trim(),
+      quote,
       images: attachments.flatMap((a) =>
         a.kind === "image" ? [{ id: a.id, url: a.url, name: a.name }] : [],
       ),
       files: attachments.flatMap((a) => (a.kind === "file" ? [{ name: a.name, text: a.text }] : [])),
     };
+    // The words leave the box and stay in the draft, held, until the
+    // answer is saved.
+    boxText.set(notebookId, "");
+    holdMessage(notebookId, message);
     setQuestion("");
     if (quote) dropQuote();
     setAttachments([]);
     if (busy) {
-      setQueue((list) => [...list, { ...message, key: `${Date.now()}-${Math.random().toString(36).slice(2)}` }]);
+      setQueue((list) => [...list, message]);
       return;
     }
     void send(message);
   }
 
   async function send(message: OutgoingMessage) {
-    if (busyRef.current) return;
+    // A run already on: the message waits its turn in the queue.
+    if (busyRef.current) {
+      setQueue((list) => [...list, message]);
+      return;
+    }
     busyRef.current = true;
     const q = message.content;
     const { images, files } = message;
@@ -987,6 +1150,32 @@ export function AssistantPanel({
     );
     const userTurn: Turn = { role: "user", content: q, images, files };
     setTurns((prev) => [...prev, userTurn, { role: "assistant", content: "" }]);
+    // The thread this message went to, as it is now: the side chat's turns,
+    // or the conversation's while it is still the one on screen.
+    const threadNow = () =>
+      sideChatKey
+        ? (sideChatsRef.current.find((s) => s.key === sideChatKey)?.turns ?? [])
+        : turnsRef.current;
+    // A message that did not land leaves the thread and goes back into the
+    // box; one on a thread no longer on screen just goes back.
+    const takeBack = () => {
+      const drop = (prev: Turn[]) => {
+        const i = prev.indexOf(userTurn);
+        if (i < 0) return prev;
+        const after = prev[i + 1];
+        const skip = after && after.role === "assistant" && !after.content ? 2 : 1;
+        return [...prev.slice(0, i), ...prev.slice(i + skip)];
+      };
+      if (sideChatKey) {
+        setSideChats((list) => list.map((s) => (s.key === sideChatKey ? { ...s, turns: drop(s.turns) } : s)));
+      } else if (turnsRef.current.includes(userTurn)) {
+        turnsRef.current = drop(turnsRef.current);
+        setTurnsState(turnsRef.current);
+        cacheThread();
+      }
+      putBack(notebookId, message);
+    };
+    let soFar = "";
     const setAnswer = (content: string, plan?: Turn["plan"], suggest?: string) =>
       setTurns((prev) => {
         const last = prev[prev.length - 1];
@@ -1029,7 +1218,8 @@ export function AssistantPanel({
         const { done, value } = await reader.read();
         if (done) break;
         streamed += decoder.decode(value, { stream: true });
-        setAnswer(splitStreamPlan(splitStreamError(streamed).text).text);
+        soFar = splitStreamPlan(splitStreamError(streamed).text).text;
+        setAnswer(soFar);
       }
       // A failure mid-stream arrives in-band; an empty stream is a failure too.
       const { text: answered, error: streamError } = splitStreamError(streamed);
@@ -1046,10 +1236,28 @@ export function AssistantPanel({
       const shown = plan ? { actions, warnings: plan.warnings } : undefined;
       setAnswer(text, shown, suggest && requestSuggestions(suggest, q, text, history));
       if (shown && actions.length > 0) proposePlan(shown);
-      void saveConversation([...threadTurns, userTurn, { role: "assistant", content: text }], sideChatKey);
+      void saveConversation([...threadTurns, userTurn, { role: "assistant", content: text }], sideChatKey).then(
+        (saved) => {
+          if (saved) releaseMessage(notebookId, message.key);
+        },
+      );
     } catch (err) {
-      // Stopped, not failed: whatever streamed in already stays on screen.
-      if (controller.signal.aborted) return;
+      // Stopped, not failed: whatever streamed in already stays on screen
+      // and is saved with its question; a stop before the first words, or
+      // a switch to another conversation, puts the message back in the box.
+      if (controller.signal.aborted) {
+        if (soFar.trim() && threadNow().includes(userTurn)) {
+          void saveConversation([...threadTurns, userTurn, { role: "assistant", content: soFar }], sideChatKey).then(
+            (saved) => {
+              if (saved) releaseMessage(notebookId, message.key);
+            },
+          );
+        } else {
+          takeBack();
+        }
+        return;
+      }
+      takeBack();
       setError(err instanceof Error ? err.message : t("assistant.assistantFailed"));
     } finally {
       if (runAbortRef.current === controller) runAbortRef.current = null;
