@@ -15,7 +15,7 @@ import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { markdownPreview } from "@/lib/markdown-preview";
 import { useGist } from "@/lib/gist-client";
-import { useMergeTarget, type HandleProps } from "@/components/sortable";
+import { useIsMergeTarget, type HandleProps } from "@/components/sortable";
 import { quoteLanded, useNoteDrop } from "@/components/use-note-drop";
 import { referenceMarkdownForDrop } from "@/components/outline/reference-drop";
 import { quoteMarkdown, type QuoteDrag } from "@/lib/quote-drag";
@@ -117,7 +117,9 @@ function AnchorIcon({ size = 11 }: { size?: number }) {
 //   card still takes every drop: an annotation or a quote lands in the
 //   draft, a note held over it joins it once its draft is saved
 //   (use-note-draft.ts).
-export function NoteCard({
+// A board draws its items again on every move of a drag (dnd-kit); the
+// card is memoized on its props, so a move leaves it alone.
+export const NoteCard = memo(function NoteCard({
   note,
   actions,
   handle,
@@ -159,7 +161,7 @@ export function NoteCard({
       nudge={nudge}
     />
   );
-}
+});
 
 /** After the frame: the focus on `track` in the note's card (else its first
     button), when the focus fell to the page. */
@@ -397,7 +399,7 @@ const NoteCardBody = memo(function NoteCardBody({
   }, [saveFailed, note.id]);
   const [handledEdit, setHandledEdit] = useState<{ id: string } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
-  const mergeTarget = useMergeTarget();
+  const isCovered = useIsMergeTarget(note.id);
   const pending = note.status === "PENDING";
   const focused = pending && focusedPending;
   const tray = variant === "tray";
@@ -405,7 +407,7 @@ const NoteCardBody = memo(function NoteCardBody({
   // The ticker: accepted notes can be selected for bulk delete, merge, pin, and compare.
   const selectable = note.status === "ACCEPTED" && canEdit && !pane;
   // The dragged card covers this one: the ring says a hold here merges them.
-  const isMergeTarget = mergeTarget === note.id && note.status === "ACCEPTED";
+  const isMergeTarget = isCovered && note.status === "ACCEPTED";
   // The note's title and body (SPEC.md §6, lib/note-title.ts).
   const parts = useMemo(() => splitNote(note.content), [note.content]);
   // The search the note was found by: the note shows whole, and the words
@@ -1003,7 +1005,6 @@ const NoteCardBody = memo(function NoteCardBody({
             // Escape closes the editor keeping the words, as Done does.
             if (e.key === "Escape") void done();
           }}
-          full={!tray}
           onQuoteDrop={(drag) =>
             commands.attachSource(note.id, drag).then((ids) => {
               sitting.current.push(...ids);
