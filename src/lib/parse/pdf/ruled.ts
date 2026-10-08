@@ -1375,6 +1375,11 @@ function spanHeadColumns(rows: TableRow[], count: number) {
 // observations (EBL Saldana) |" under "0.500 < z < 0.537 at 95 | Global
 // fit of the photohadronic model to independent | This work"; arXiv
 // 2506.06752's variables and their descriptions fill every column: rows).
+// A cell wraps only where it holds two words or more, or ends on a hyphen:
+// a grid of single letters with a short last row is rows (parse loop
+// finding: a table of the Armenian letters and their transcriptions, its
+// row "ժ խ ղ հ | ż x ġ h" under "ֆ վ ս զ շ | f v s z ṡ", read as one row
+// with two letters in each cell).
 function regionRowStarts(lines: Line[], cellsOf: Cell[][]): number[] {
   const labeled = labelRows(cellsOf);
   if (labeled) return labeled;
@@ -1410,7 +1415,8 @@ function regionRowStarts(lines: Line[], cellsOf: Cell[][]): number[] {
     const goesOn =
       filled.length >= 2 &&
       cells.some((c, j) => c.text.length === 0 && (above[j]?.text.trim().length ?? 0) > 0) &&
-      cells.every((c, j) => c.text.length === 0 || ((above[j]?.text.trim().length ?? 0) > 0 && !/[.!?:;]["'”’)\]]?$/.test(above[j].text.trim())));
+      cells.every((c, j) => c.text.length === 0 || ((above[j]?.text.trim().length ?? 0) > 0 && !/[.!?:;]["'”’)\]]?$/.test(above[j].text.trim()))) &&
+      cells.some((c, j) => c.text.length > 0 && /\s|[-‐]$/.test(above[j]?.text.trim() ?? ""));
     const wrap = gap <= pitch * 1.3 && lower && (cells[0].text.length === 0 || goesOn);
     if (!wrap) starts.push(k);
   }

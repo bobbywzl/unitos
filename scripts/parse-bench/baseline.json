@@ -3341,7 +3341,7 @@
     "free.import.qedPlace": 0
   },
   "langsci-adjarian-ch4": {
-    "free.parse.composite": 99.8771,
+    "free.parse.composite": 99.8772,
     "free.parse.coverage": 0.9973,
     "free.parse.coverageRecall": 0.9952,
     "free.parse.coveragePrecision": 0.9995,
@@ -3368,7 +3368,7 @@
     "free.parse.gridProse": 0,
     "free.parse.runInIndent": 0,
     "free.parse.qedPlace": 0,
-    "free.import.composite": 98.7957,
+    "free.import.composite": 98.4981,
     "free.import.coverage": 0.9927,
     "free.import.coverageRecall": 0.9862,
     "free.import.coveragePrecision": 0.9993,
@@ -3376,8 +3376,7 @@
     "free.import.furnitureLeaks": 0,
     "free.import.numberLines": 0,
     "free.import.garbles": 0,
-    "free.import.look": 0.875,
-    "free.import.lookFormulas": 1,
+    "free.import.look": 0.8333,
     "free.import.lookRows": 0.5,
     "free.import.lookMarkers": 1,
     "free.import.lookNumbers": 1,
