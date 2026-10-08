@@ -131,7 +131,7 @@ function defaultSources(): string[] {
         .sort()
         .map((f) => join("scripts/eval/fixtures", f))
     : [];
-  return [...fromList, ...markdown, "synthetic:pdf", "synthetic:url", "synthetic:markdown", "synthetic:html-h1", "synthetic:html-site", "synthetic:html-kicker"];
+  return [...fromList, ...markdown, "synthetic:pdf", "synthetic:url", "synthetic:markdown", "synthetic:html-h1", "synthetic:html-site", "synthetic:html-kicker", "synthetic:html-roofline"];
 }
 
 // ── Text helpers ────────────────────────────────────────────────────────────
@@ -1237,14 +1237,16 @@ async function checkFixture(f: Fixture): Promise<Report> {
       `${titles.length} Title paragraph(s)${title ? ` "${clip(inlineText(title), 50)}" at ${at}${titleAt >= 0 ? ` (the parse's heading ${titleAt}, promoted where it stands)` : ""}` : ""}`,
     );
     // A page whose og:title sets its site's name, or another dash than its
-    // h1 (lib/parse/url.ts pageTitle): the Title is the headline, once.
+    // h1 (lib/parse/url.ts pageTitle): the Title is the headline, once. No
+    // heading is the headline, and no line is a kicker and the headline.
     if (f.expectTitle !== undefined) {
       const letters = (t: string) => t.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
-      const repeats = top.filter((n) => n !== title && n.type === "heading" && letters(inlineText(n)) === letters(f.expectTitle ?? ""));
+      const headline = letters(f.expectTitle);
+      const repeats = top.filter((n) => n !== title && (n.type === "heading" ? letters(inlineText(n)) === headline : letters(inlineText(n)).endsWith(headline)));
       check(
         title !== undefined && norm(inlineText(title)) === norm(f.expectTitle) && repeats.length === 0,
         "the Title is the page's headline, once, without the site's name",
-        `"${clip(title ? inlineText(title) : "", 60)}"${repeats.length ? `; ${repeats.length} heading(s) repeat it` : ""}`,
+        `"${clip(title ? inlineText(title) : "", 60)}"${repeats.length ? `; ${repeats.length} line(s) repeat it` : ""}`,
       );
     }
     if (at > kickers) note("the Title is not first on the page", `${at} paragraph(s) above it, the first "${clip(inlineText(top[0]), 60)}"`);
@@ -1981,11 +1983,12 @@ Footnote here.[^1]
 [^1]: The footnote text.
 `;
 
-// Two web pages whose og:title is not their h1's words, parsed as an add
+// Web pages whose og:title is not their h1's words, parsed as an add
 // parses them (lib/parse/url.ts pageTitle): one sets the site's name after
 // the headline and a hyphen where the h1 sets a dash; one sets the site's
 // name after the headline and has no h1; one sets a kicker in its h1, apart
-// from the headline by a colon only a screen reader reads.
+// from the headline by a colon only a screen reader reads; one sets a
+// roofline span before the headline in its h1.
 const ARTICLE_BODY = Array.from(
   { length: 6 },
   (_, k) => `<p>Paragraph ${k + 1} of the review says what the game does well and where it stops short, in enough words to read as prose.</p>`,
@@ -2005,6 +2008,11 @@ const SYNTHETIC_HTML: Record<string, { html: string; url: string; title: string 
     url: "https://www.zeit.example/mobilitaet/2021-11/zugverkehr-ice-frankfurt-barcelona",
     title: "Zugverkehr: Im ICE von Frankfurt nach Barcelona",
     html: `<html><head><title>Zugverkehr: Im ICE von Frankfurt nach Barcelona | ZEIT ONLINE</title><meta property="og:title" content="Zugverkehr: Im ICE von Frankfurt nach Barcelona"></head><body><main><article><h1><span class="kicker">Zugverkehr</span><span class="visually-hidden">: </span><span class="headline">Im ICE von Frankfurt nach Barcelona</span></h1>${ARTICLE_BODY}</article></main></body></html>`,
+  },
+  "synthetic:html-roofline": {
+    url: "https://www.ministry.example/news/food-programme",
+    title: "Schulze: Germany stands with the food programme against hunger",
+    html: `<html><head><title>Schulze: Germany stands with the food programme against hunger | Ministry</title><meta property="og:title" content="Schulze: Germany stands with the food programme against hunger | Ministry"></head><body><main><article><h1><span class="roofline">Securing food</span> Schulze: Germany stands with the food programme against hunger</h1>${ARTICLE_BODY}</article></main></body></html>`,
   },
 };
 

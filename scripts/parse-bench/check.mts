@@ -1987,6 +1987,27 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     other.title === "Notes on river flow" && other.heading && dated.title === "Notes on river flow",
     JSON.stringify({ other, dated }),
   );
+  // A kicker before the headline in the h1 is a kicker line; the heading goes, the headline is the title.
+  // The headline is the whole title or the title less the site's part; the title less another part cuts no kicker.
+  const kickerPage = (title: string, h1: string) =>
+    parseHtmlContent(
+      `<!doctype html><html><head><title>${title}</title><meta property="og:title" content="${title}"></head><body><article><h1>${h1}</h1><p>${prose(1)}</p><p>${prose(2)}</p></article></body></html>`,
+      "https://www.rivers.example/notes",
+    );
+  const kicked = await kickerPage("Notes on river flow in the delta | Rivers", `<span class="roofline">Field notes</span> Notes on river flow in the delta`);
+  const kickedBlocks = kicked.blocks.map((b) => `${b.type} ${b.html ?? ""} ${b.text.slice(0, 24)}`);
+  check(
+    "url: a kicker before the headline in the h1 is a kicker line, the headline the title",
+    kicked.title === "Notes on river flow in the delta" && kickedBlocks[0] === 'PARAGRAPH <p class="kicker"> Field notes' && !kickedBlocks.some((b) => b.startsWith("HEADING")),
+    `${kicked.title}; ${kickedBlocks.join(" / ")}`,
+  );
+  const uncut = await kickerPage("Notes on river flow in the delta - Guide", "Short notes on river flow in the delta");
+  const uncutBlocks = uncut.blocks.map((b) => `${b.type} ${b.text.slice(0, 24)}`);
+  check(
+    "url: a heading that ends with the title less a part that names no site keeps its words in one line",
+    !uncutBlocks.some((b) => b === "PARAGRAPH Short") && uncut.title !== "Notes on river flow in the delta",
+    `${uncut.title}; ${uncutBlocks.join(" / ")}`,
+  );
   check(
     "url: a first section's question and a short first heading stay headings",
     question.includes("HEADING What does a gauge measur") && short.includes("HEADING Channels and banks"),
