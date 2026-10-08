@@ -982,12 +982,16 @@ function routeSystem(views: SkeletonView[], rendered: Rendered[], profile: Profi
 
 /** The select pass's system message: every document's skeleton lines, or
     the lines in `shown` (a gap between two shown lines marked "(…)"), each
-    part's summary above its first shown line. Byte-identical from turn to
+    part's title above its first shown line, with its summary when every
+    line is shown or the route pass named the part (`routed`): a cut chose
+    its lines by their own words and the part's title, so an unrouted
+    part's summary changes no pick and was a third of the prompt
+    (COST7-01). Byte-identical from turn to
     turn when every line is shown. A cut puts every document's header and
     gist first, the same bytes every command, and the lines after them
     under '[document X] "<title>": N of M skeleton lines shown', so the headers cache
     (COST6-02). */
-export function skeletonSystem(views: SkeletonView[], rendered: Rendered[], shown: Set<string> | null, profile: Profile): string {
+export function skeletonSystem(views: SkeletonView[], rendered: Rendered[], shown: Set<string> | null, profile: Profile, routed: Set<string> | null = null): string {
   const byLetter = new Map(views.map((v) => [v.r.letter, v]));
   const head = (r: Rendered, v: SkeletonView) => `${header(r.letter, r.doc, coverageNote(r.coverage))}${v.gist ? `\ngist: ${v.gist}` : ""}`;
   const sections = rendered.flatMap((r) => {
@@ -1003,7 +1007,8 @@ export function skeletonSystem(views: SkeletonView[], rendered: Rendered[], show
       if (lastIndex !== -1 && at - lastIndex > 1) out.push(shown ? "(…)" : notShown(at - lastIndex - 1, "line"));
       if (line.partAlias && line.partAlias !== lastPart) {
         const p = partOf.get(line.partAlias);
-        if (p && !p.opening) out.push(`[part at ${p.alias}] "${p.title}"${p.summary ? `: ${p.summary}` : ""}`);
+        const summary = p?.summary && (!shown || routed?.has(p.alias)) ? `: ${p.summary}` : "";
+        if (p && !p.opening) out.push(`[part at ${p.alias}] "${p.title}"${summary}`);
         lastPart = line.partAlias;
       }
       out.push(`[block ${line.alias}] ${line.text}`);
@@ -1746,6 +1751,7 @@ export async function pickBlocks(input: {
   // cached prefixes cost less than an uncached cut from the second
   // command on.
   let shown: Set<string> | null = null;
+  let routedParts: Set<string> | null = null;
   const jev = jevEnabled();
   const routeOver = jev ? STITCH_SKELETON_BUDGET : STITCH_GROUPED_MAX;
   const cutBudget =
@@ -1780,6 +1786,7 @@ export async function pickBlocks(input: {
         if (picked.length > 0) routed = new Set(picked);
       }
     }
+    routedParts = routed;
     shown = await cutLines(views, routed, rankQuery, Math.min(cutBudget, routeOver));
   } else if (!jev && kind !== "page" && skeletonLength > STITCH_CUT_OVER) {
     shown = await cutLines(views, null, rankQuery, cutBudget);
@@ -1805,7 +1812,7 @@ export async function pickBlocks(input: {
       const pick = await callForJson({
         model: readModel,
         messages: [
-          systemMessage(skeletonSystem(group.views, rendered.filter((r) => letters.has(r.letter)), group.shown, profile)),
+          systemMessage(skeletonSystem(group.views, rendered.filter((r) => letters.has(r.letter)), group.shown, profile, routedParts)),
           {
             role: "user",
             content: stitchSelectPrompt({
