@@ -96,7 +96,13 @@ await graph();
   if (await remove.count()) {
     const color = await style(remove, "color");
     const [r, g, b] = (color.match(/[\d.]+/g) ?? []).map(Number);
-    const red = color.startsWith("lab") ? Number(color.match(/lab\(([\d.]+) ([\d.-]+)/)?.[2]) > 30 : r > g + 60 && r > b + 60;
+    // A webpack dev build serves Tailwind's oklch() as written; turbopack lowers it to lab().
+    const ok = color.match(/oklch\(([\d.]+) ([\d.]+) ([\d.]+)/);
+    const red = ok
+      ? Number(ok[2]) > 0.1 && (Number(ok[3]) < 45 || Number(ok[3]) > 330)
+      : color.startsWith("lab")
+        ? Number(color.match(/lab\(([\d.]+) ([\d.-]+)/)?.[2]) > 30
+        : r > g + 60 && r > b + 60;
     check("VIEW7-01: Remove draws red", red, color);
   }
   const hs = [];
