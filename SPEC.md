@@ -1057,6 +1057,13 @@ One HEADING block (the sheet's name) and one SHEET block per visible sheet, in w
 - **Text.** One line per row, cells separated by tabs, values as formatted. A merged-away cell's tab rides inside the cell that covers it, so the rows stay aligned. Hidden rows and columns are left out of both the grid and the text; trailing empty rows and columns are trimmed, a colored band near the words kept. The document prefix says what a SHEET block is and that the HEADING before it is the sheet's name.
 - **Caps.** 10,000 rows, 256 columns, 200,000 cells per sheet; a cut sheet ends with a paragraph saying where.
 
+### Reading them
+
+- **Marks.** A slide's or a sheet's marks paint on the replica's words as a paragraph's do (`components/reader/table-marks.ts`): highlights, comments, notes, the tools' marks, and a link across texts the reader made, drawn as a link with its tip. An annotation's first words are on the Tab path, named View the annotation, and Enter opens its card.
+- **Selecting.** A press on a slide's chart starts the selection at the chart's first data word, and a release on the same chart selects its data whole; a press on a sheet's row number does the same for the row's cells.
+- **Cards.** In a narrow reader a card about words in a block taller than a third of the pane (a slide, a sheet, a long table) stands under the marked line, over the block, at a card's width, and the block keeps its height; under a shorter block the text below makes room (§6).
+- **No edit hint.** Slides and sheets have no edit mode and no figure, so the edit hint (§6) waits for the next article.
+
 ### Verifying them
 
 `scripts/qa/ui-office.mjs` runs the whole path against a server on :3311: the multipart and chunked uploads of the fixtures under `scripts/qa/fixtures/office/`, the parse, the pictures made after the response (LibreOffice or the browser), a note anchored on a slide's words and one on a sheet's cell, the reader (replicas, pictures over them, marks, the text toolbar, charts, sheet drawings, web fonts), and a re-parse that keeps pictures and anchors. Every run uploads fresh bytes, so no run's add asks first about another run's document.

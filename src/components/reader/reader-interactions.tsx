@@ -249,17 +249,20 @@ function drawnBlock(container: HTMLElement, blockId: string): HTMLElement | null
 }
 
 /** Where a passage is drawn, in the container's coordinates: the top of its
-    first line, the bottom of its last line, and the bottom of the block that
-    holds its last line. Null when no segment's block is drawn. */
+    first line, the bottom of its last line, the left of its last line, and
+    the bottom and height of the block that holds its last line. Null when
+    no segment's block is drawn. */
 function passageBox(
   container: HTMLElement,
   anchor: Anchor,
-): { top: number; bottom: number; blockBottom: number; blockId: string } | null {
+): { top: number; bottom: number; left: number; blockBottom: number; blockHeight: number; blockId: string } | null {
   const crect = container.getBoundingClientRect();
   const toY = (y: number) => y - crect.top + container.scrollTop;
   let top = Infinity;
   let bottom = -Infinity;
+  let left = 0;
   let blockBottom = -Infinity;
+  let blockHeight = 0;
   let blockId = "";
   for (const segment of segmentsOf(anchor)) {
     const el = drawnBlock(container, segment.blockId);
@@ -268,6 +271,7 @@ function passageBox(
     // The words' own line boxes when the text is walkable; else the block's box.
     let first = b.top;
     let last = b.bottom;
+    let lastLeft = b.left;
     try {
       const pieces = anchorablePieces(el);
       const at = (offset: number, end: boolean) => {
@@ -286,6 +290,7 @@ function passageBox(
         if (rects.length > 0) {
           first = Math.min(...rects.map((r) => r.top));
           last = Math.max(...rects.map((r) => r.bottom));
+          lastLeft = Math.min(...rects.filter((r) => r.bottom >= last - 1).map((r) => r.left));
         }
       }
     } catch {
@@ -294,11 +299,29 @@ function passageBox(
     top = Math.min(top, toY(first));
     if (toY(last) >= bottom) {
       bottom = toY(last);
+      left = lastLeft - crect.left;
       blockBottom = toY(b.bottom);
+      blockHeight = b.height;
       blockId = segment.blockId;
     }
   }
-  return Number.isFinite(top) ? { top, bottom, blockBottom, blockId } : null;
+  return Number.isFinite(top) ? { top, bottom, left, blockBottom, blockHeight, blockId } : null;
+}
+
+/** A block taller than a third of the pane — a slide, a sheet, a long
+    table — holds a narrow reader's card under the marked line itself, over
+    the block, at a card's width: under the whole block it would stand far
+    from its words, or below the screen. */
+function overBlock(box: { blockHeight: number }, paneHeight: number): boolean {
+  return paneHeight > 0 && box.blockHeight > paneHeight / 3;
+}
+
+/** The narrow reader's card over a tall block: under its words' last line,
+    from their left, at a card's width, inside the pane. */
+function dockUnderWords(wordsLeft: number, cw: number) {
+  const width = Math.min(300, cw - 16);
+  const left = Math.max(8, Math.min(wordsLeft - 12, cw - width - 8));
+  return { left, width };
 }
 
 /** The passage's text: the segments' quotes, one paragraph each. */
@@ -2297,6 +2320,9 @@ export function ReaderInteractions({
     const col = columnAtRest(measured, cardsRoomRef.current);
     const room = narrowRef.current ? null : cardRoom(col);
     if (!room) {
+      if (words && overBlock(words, containerRef.current?.clientHeight ?? 0)) {
+        return { ...dockUnderWords(words.left, cw), top: words.bottom + 8, side: "right" as const };
+      }
       return {
         ...dockBelowCard(col.articleLeft, col.articleRight, cw),
         top: words ? words.blockBottom + 8 : underWords,
@@ -2551,6 +2577,9 @@ export function ReaderInteractions({
   const [editHint, setEditHint] = useState(false);
   // Where the hint shows: beside the article, or as a row under the pane.
   const [hintBeside, setHintBeside] = useState(true);
+  // Slides and sheets have no edit mode and no figure: the hint's words are
+  // not true there, so it waits for the next article.
+  const officeDocument = blocks.some((b) => b.type === "SLIDE" || b.type === "SHEET");
 
   // Offline, the tools that need a model are off (SPEC.md §17): their rows
   // are dimmed, their tooltip says why, and a press shows the plain message.
@@ -3984,7 +4013,11 @@ export function ReaderInteractions({
     const container = containerRef.current;
     if (!container) return;
     const narrow = narrowRef.current && !richTextRef.current && !distillOpenRef.current && !conversationViewRef.current;
-    const hosts = new Map<HTMLElement, { kind: string; el: HTMLElement; anchorTop: number }[]>();
+    const hosts = new Map<
+      HTMLElement,
+      { kind: string; el: HTMLElement; anchorTop: number; over: { bottom: number; left: number } | null }[]
+    >();
+    const paneShown = container.clientHeight;
     if (narrow) {
       for (const el of container.querySelectorAll<HTMLElement>("[data-side-card]")) {
         if (el.closest(".presence-exit")) continue;
@@ -3996,13 +4029,15 @@ export function ReaderInteractions({
         const host = drawnBlock(container, box.blockId);
         if (!host) continue;
         const list = hosts.get(host) ?? [];
-        list.push({ kind, el, anchorTop: box.top });
+        // A tall block (a slide, a sheet) keeps its height: the card stands
+        // under its words, over the block (overBlock).
+        list.push({ kind, el, anchorTop: box.top, over: overBlock(box, paneShown) ? box : null });
         hosts.set(host, list);
       }
     }
     // Paragraphs that no longer hold a card give their room back.
     for (const el of container.querySelectorAll<HTMLElement>("[data-card-room]")) {
-      if (hosts.has(el)) continue;
+      if (hosts.get(el)?.some((c) => !c.over)) continue;
       el.style.marginBottom = el.dataset.cardRoom ?? "";
       delete el.dataset.cardRoom;
       delete el.dataset.cardRoomBase;
@@ -4014,6 +4049,7 @@ export function ReaderInteractions({
     const railTop = rail && getComputedStyle(rail).position === "fixed" ? rail.getBoundingClientRect().top : Infinity;
     const shownHeight = Math.min(crect.bottom, railTop) - crect.top;
     const tops: Record<string, number> = {};
+    const docks: Record<string, { left: number; width: number }> = {};
     const phoneCaps: Record<string, number> = {};
     const ordered = [...hosts.keys()].sort((a, b) =>
       a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
@@ -4022,18 +4058,29 @@ export function ReaderInteractions({
       const cards = hosts
         .get(host)!
         .sort((a, b) => (layerOpenedRef.current[a.kind] ?? 0) - (layerOpenedRef.current[b.kind] ?? 0));
-      // The paragraph's own margin, kept to give back when its cards close.
-      if (host.dataset.cardRoom === undefined) {
-        host.dataset.cardRoom = host.style.marginBottom;
-        host.dataset.cardRoomBase = String(parseFloat(getComputedStyle(host).marginBottom) || 0);
+      const under = cards.filter((c) => !c.over);
+      if (under.length > 0) {
+        // The paragraph's own margin, kept to give back when its cards close.
+        if (host.dataset.cardRoom === undefined) {
+          host.dataset.cardRoom = host.style.marginBottom;
+          host.dataset.cardRoomBase = String(parseFloat(getComputedStyle(host).marginBottom) || 0);
+        }
+        const base = parseFloat(host.dataset.cardRoomBase ?? "0") || 0;
+        const room = 8 + under.reduce((sum, c) => sum + c.el.offsetHeight + CARD_GAP, 0);
+        host.style.marginBottom = `${base + room}px`;
       }
-      const base = parseFloat(host.dataset.cardRoomBase ?? "0") || 0;
-      const room = 8 + cards.reduce((sum, c) => sum + c.el.offsetHeight + CARD_GAP, 0);
-      host.style.marginBottom = `${base + room}px`;
       let y = host.getBoundingClientRect().bottom - crect.top + container.scrollTop + 8;
+      let overY = -Infinity;
       for (const card of cards) {
-        tops[card.kind] = y;
-        y += card.el.offsetHeight + CARD_GAP;
+        if (card.over) {
+          overY = Math.max(overY, card.over.bottom + 8);
+          tops[card.kind] = overY;
+          docks[card.kind] = dockUnderWords(card.over.left, container.clientWidth);
+          overY += card.el.offsetHeight + CARD_GAP;
+        } else {
+          tops[card.kind] = y;
+          y += card.el.offsetHeight + CARD_GAP;
+        }
         // A card that just opened under the window comes into view, its foot
         // too (its buttons), as far as its words stay in view. A run that
         // lands is a new layer key: the card, grown, is checked again.
@@ -4059,8 +4106,12 @@ export function ReaderInteractions({
       }
     }
     if (Object.keys(phoneCaps).length > 0) setCardCaps((caps) => ({ ...caps, ...phoneCaps }));
-    const place = <T extends { top: number }>(kind: string) => (c: T | null): T | null =>
-      c && tops[kind] !== undefined && Math.abs(c.top - tops[kind]) > 1 ? { ...c, top: tops[kind] } : c;
+    const place = <T extends { top: number; left: number; width?: number }>(kind: string) => (c: T | null): T | null => {
+      if (!c || tops[kind] === undefined) return c;
+      const dock = docks[kind];
+      const moved = Math.abs(c.top - tops[kind]) > 1 || (dock && (Math.abs(c.left - dock.left) > 1 || c.width !== dock.width));
+      return moved ? { ...c, top: tops[kind], ...dock } : c;
+    };
     if (tops.explain !== undefined) setBubble(place<ExplainBubble>("explain"));
     if (tops.simplify !== undefined) setSimplifyCard(place<SimplifyCard>("simplify"));
     if (tops.assistant !== undefined) setAssistantChat(place<AssistantChat>("assistant"));
@@ -10386,7 +10437,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           transcript: it has no edit mode. Under the toast, which may reach
           down over it. It yields while a toolbar is open: the stack beside
           the first lines would cut its words. */}
-      {editHint && hintBeside && !editMode && !split && !transcript && !embedded && !richText && (
+      {editHint && hintBeside && !editMode && !split && !transcript && !embedded && !richText && !officeDocument && (
         <div
           onAnimationEnd={hintPlayed}
           className={`hint-fade pointer-events-none absolute top-16 right-5 z-[9] rounded-2xl bg-card px-4 py-2.5 leading-relaxed text-sand-700 shadow-lift print:hidden ${
@@ -12128,7 +12179,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           phone, a narrow window): a row under the pane, which takes its
           height from the pane's foot, so it covers no word and the lines
           the reader reads stay where they are. */}
-      {editHint && !hintBeside && !editMode && !split && !transcript && !embedded && !richText && (
+      {editHint && !hintBeside && !editMode && !split && !transcript && !embedded && !richText && !officeDocument && (
         <div
           data-edit-hint
           onAnimationEnd={hintPlayed}

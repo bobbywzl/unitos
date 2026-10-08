@@ -23,9 +23,11 @@ import { endSweep } from "@/lib/mark-sweep";
 
 const MARK = "data-table-mark";
 
-// The kinds a table paints. Links, citations, and styles live in the html
-// itself; the rest are the reader's marks.
+// The kinds a table paints. Web links, citations, and styles live in the
+// html itself; the rest are the reader's marks, and the links across texts
+// the reader made (kind "link"), drawn as a paragraph draws them.
 const PAINTED = new Set<Highlight["kind"]>([
+  "link",
   "anchor",
   "selection",
   "pending-link",
@@ -74,7 +76,7 @@ export function marksSignature(highlights: Highlight[]): string {
   return JSON.stringify(
     highlights
       .filter((h) => PAINTED.has(h.kind))
-      .map((h) => [h.kind, h.start, h.end, h.sourceId, h.color, h.fresh, h.leaving, h.noteId, h.annotation, h.comment, h.extractId, h.extractLabel, h.extractOrigin, h.definition]),
+      .map((h) => [h.kind, h.start, h.end, h.sourceId, h.color, h.fresh, h.leaving, h.noteId, h.annotation, h.comment, h.extractId, h.extractLabel, h.extractOrigin, h.definition, h.href, h.linkId, h.linkTitle, h.linkReason]),
   );
 }
 
@@ -216,9 +218,19 @@ export function paintTableMarks(container: HTMLElement, blockId: string, text: s
           : extractMark
             ? t("panes.extractOpenCard", { label: extractMark.extractLabel ?? "" })
             : undefined;
+      // The keyboard, as in a paragraph (block-view.tsx markTab): a mark's
+      // first words take the focus, named by its tip, and Enter opens what
+      // a click opens (bindTableMarkClicks).
+      let markTab = focusable && (anchor?.start === from || stack.some((h) => h.start === from));
       wrap(container, from, to, () => {
         const mark = document.createElement("mark");
         mark.setAttribute(MARK, "");
+        if (markTab) {
+          markTab = false;
+          mark.tabIndex = 0;
+          mark.setAttribute("role", "button");
+          if (tip) mark.setAttribute("aria-label", tip);
+        }
         mark.className = className.replace(/\s+/g, " ").trim();
         if (anchor?.sourceId) mark.dataset.sourceId = anchor.sourceId;
         // Stacked words: every source on them (block-view.tsx data-source-ids).
@@ -255,7 +267,78 @@ export function paintTableMarks(container: HTMLElement, blockId: string, text: s
       });
     }
   }
+  // A link across texts the reader made: its words wrapped in the link, over
+  // any mark on them, as a paragraph draws it (block-view.tsx markedText).
+  // The text is not changed, so the replica's text stays the block's.
+  for (const link of painted) {
+    if (link.kind !== "link" || !link.href) continue;
+    const tip = [link.linkTitle ? t("panes.linkedTo", { title: link.linkTitle }) : null, link.linkReason]
+      .filter((s): s is string => Boolean(s))
+      .join("\n");
+    wrap(container, Math.max(0, link.start), Math.min(domText.length, link.end), () => {
+      const a = document.createElement("a");
+      a.setAttribute(MARK, "");
+      a.href = link.href ?? "";
+      a.draggable = false;
+      a.className = "link-mark rounded-[4px]";
+      if (link.linkId) a.dataset.linkId = link.linkId;
+      if (tip) a.dataset.tip = tip;
+      return a;
+    });
+  }
   return true;
+}
+
+function caretAt(x: number, y: number): { node: Node; offset: number } | null {
+  const doc = document as Document & {
+    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+  };
+  if (doc.caretPositionFromPoint) {
+    const p = doc.caretPositionFromPoint(x, y);
+    return p ? { node: p.offsetNode, offset: p.offset } : null;
+  }
+  const r = document.caretRangeFromPoint?.(x, y);
+  return r ? { node: r.startContainer, offset: r.startOffset } : null;
+}
+
+/** A press where the browser starts no selection — a slide's chart (its
+    data rides hidden under the drawing), a sheet's row number, a link
+    across texts — starts one here (SPEC.md §27): at the chart's first data
+    word, the row's first cell, or the link's word under the pointer. The
+    selection follows the pointer until it lifts; a release on the same
+    chart or row number selects it whole. The selection toolbar opens on the
+    words as for any drag. */
+function pressSelect(container: HTMLElement, e: MouseEvent): void {
+  if (e.button !== 0 || e.detail > 1 || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
+  const target = e.target as Element | null;
+  const link = target?.closest<HTMLElement>(`a[${MARK}]`);
+  const chart = link ? null : target?.closest<HTMLElement>(".reader-slide .sh.sc");
+  const row = link || chart ? null : target?.closest<HTMLElement>("th.sheet-rn");
+  const own = link ?? chart ?? row;
+  if (!own || !container.contains(own)) return;
+  const scope = chart ? chart.querySelector<HTMLElement>(".scd-hidden") : row ? row.closest("tr") : null;
+  const words = scope ? anchorablePieces(scope as HTMLElement).filter((p) => p.node && p.text.trim()) : [];
+  const first = words[0]?.node;
+  const last = words[words.length - 1]?.node;
+  const start = link ? caretAt(e.clientX, e.clientY) : first ? { node: first, offset: 0 } : null;
+  const selection = window.getSelection();
+  if (!start || !selection) return;
+  e.preventDefault();
+  selection.collapse(start.node, start.offset);
+  const onMove = (ev: MouseEvent) => {
+    const at = caretAt(ev.clientX, ev.clientY);
+    if (at && container.contains(at.node)) selection.extend(at.node, at.offset);
+  };
+  // Capture: the selection is whole before the reader reads it on mouseup.
+  const onUp = (ev: MouseEvent) => {
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp, true);
+    if (!link && first && last && ev.target instanceof Node && own.contains(ev.target)) {
+      selection.setBaseAndExtent(first, 0, last, last.length);
+    }
+  };
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp, true);
 }
 
 // Where the last press on a mark began.
@@ -284,7 +367,20 @@ export function clickEndsDrag(e: { clientX: number; clientY: number; detail: num
 export function bindTableMarkClicks(container: HTMLElement): () => void {
   const onClick = (e: MouseEvent) => {
     const mark = (e.target as Element | null)?.closest<HTMLElement>(`[${MARK}]`);
-    if (!mark || clickEndsDrag(e)) return;
+    if (!mark) return;
+    // A link across texts: a plain click follows it; the click that ends a
+    // drag follows nothing.
+    if (mark instanceof HTMLAnchorElement) {
+      if (!clickEndsDrag(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    if (clickEndsDrag(e)) return;
+    open(mark, e.clientX, e.clientY, e);
+  };
+  // What a press on a mark opens: the annotation, the note, or the match card.
+  const open = (mark: HTMLElement, x: number, y: number, e: Event) => {
     const { openAnnotation, openNote, openExtract, sourceIds } = mark.dataset;
     if (openAnnotation) {
       e.stopPropagation();
@@ -294,7 +390,7 @@ export function bindTableMarkClicks(container: HTMLElement): () => void {
         new CustomEvent("dissect:open-annotation", {
           detail: {
             sourceId: openAnnotation,
-            ...(sources.length > 1 ? { sources, x: e.clientX, y: e.clientY } : {}),
+            ...(sources.length > 1 ? { sources, x, y } : {}),
           },
         }),
       );
@@ -311,8 +407,18 @@ export function bindTableMarkClicks(container: HTMLElement): () => void {
   // A term opens its toolbar on mousedown, so the toolbar survives the
   // selection capture on mouseup (block-view.tsx).
   const onDown = (e: MouseEvent) => {
-    if ((e.target as Element | null)?.closest(`[${MARK}]`)) pressMark(e);
+    const mark = (e.target as Element | null)?.closest<HTMLElement>(`[${MARK}]`);
+    if (mark) pressMark(e);
+    // The press focuses a mark on the Tab path after this handler: the focus
+    // goes back to the page once it has, so Space still scrolls.
+    const focused = (e.target as Element | null)?.closest<HTMLElement>(`[${MARK}][tabindex]`);
+    if (focused) {
+      window.setTimeout(() => {
+        if (document.activeElement === focused) focused.blur();
+      }, 0);
+    }
     if (e.button !== 0) return;
+    pressSelect(container, e);
     const term = (e.target as Element | null)?.closest<HTMLElement>("[data-term-start]");
     if (!term) return;
     e.stopPropagation();
@@ -322,10 +428,21 @@ export function bindTableMarkClicks(container: HTMLElement): () => void {
       }),
     );
   };
+  // Enter on a mark the keys reached opens it; Space stays the page's.
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key !== "Enter") return;
+    const mark = (e.target as Element | null)?.closest<HTMLElement>(`[${MARK}][tabindex]`);
+    if (!mark) return;
+    e.preventDefault();
+    const r = mark.getBoundingClientRect();
+    open(mark, r.left, r.bottom - 12, e);
+  };
   container.addEventListener("click", onClick);
   container.addEventListener("mousedown", onDown);
+  container.addEventListener("keydown", onKey);
   return () => {
     container.removeEventListener("click", onClick);
     container.removeEventListener("mousedown", onDown);
+    container.removeEventListener("keydown", onKey);
   };
 }
