@@ -88,18 +88,22 @@ for (const lang of ["en", "zh"]) {
   await page.keyboard.press("Escape");
   await page.waitForTimeout(400);
 
-  // VIEW6-06: Open in notes shows on hover or focus with a mouse.
+  // VIEW6-06: Open in notes shows on hover or focus with a mouse; [style7]
+  // VIEW7-11: the list's first row shows it at rest.
   await page.locator('[data-track="graph-notes"]').click();
   const notes = page.locator('[data-track-surface="graph-notes-list"]');
   await notes.waitFor();
   await page.waitForTimeout(600);
-  const btn = notes.locator('[data-track="graph-notes-open"]').first();
+  const firstBtn = notes.locator('[data-track="graph-notes-open"]').first();
+  const btn = notes.locator('[data-track="graph-notes-open"]').nth(1);
   await page.mouse.move(5, 450);
+  const firstOpacity = await firstBtn.evaluate((el) => getComputedStyle(el).opacity);
   const restOpacity = await btn.evaluate((el) => getComputedStyle(el).opacity);
   await btn.locator("xpath=ancestor::*[contains(@class,'group/row')][1]").hover();
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(700);
   const hoverOpacity = await btn.evaluate((el) => getComputedStyle(el).opacity);
-  check(`${lang} VIEW6-06: Open in notes hides at rest, shows on hover`, restOpacity === "0" && hoverOpacity === "1", `${restOpacity} → ${hoverOpacity}`);
+  check(`${lang} VIEW7-11: Open in notes shows at rest on the first row`, firstOpacity === "1", firstOpacity);
+  check(`${lang} VIEW6-06: Open in notes hides at rest on the second row, shows on hover`, restOpacity === "0" && hoverOpacity === "1", `${restOpacity} → ${hoverOpacity}`);
   await page.keyboard.press("Escape");
   await page.waitForTimeout(400);
 

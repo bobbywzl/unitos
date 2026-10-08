@@ -1,5 +1,6 @@
 "use client";
 
+import { ACTION, SECTION_HEAD } from "./graph-ui";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { useT } from "@/components/lang-provider";
@@ -112,7 +113,7 @@ function LinkEnd({
           onClick={onOpen}
           data-track="graph-link-open"
           data-tip={t("panes.openLinkEnd", { title })}
-          className="min-h-6 shrink-0 rounded-full border border-line px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:min-h-10 pointer-coarse:px-3.5"
+          className={ACTION}
         >
           {t("panes.linkOpenEnd")}
         </button>
@@ -146,7 +147,7 @@ export function LinkDetail({
     <div className="flex flex-col gap-2" data-track-surface="link-detail" data-link-passages={passages ? "" : undefined}>
       {showReason && (
         <div>
-          <p className="text-[10.5px] font-bold tracking-[0.06em] text-sand-500 uppercase">{t("panes.linkWhy")}</p>
+          <p className={SECTION_HEAD}>{t("panes.linkWhy")}</p>
           <p className="mt-0.5 text-[12.5px] leading-snug text-ink">{link.reason ?? t("panes.linkNoReason")}</p>
         </div>
       )}

@@ -9,6 +9,7 @@
 // last and stay out of the pick and the counts unless the provenance switch
 // is on (WALK3-14). A word match, never a model call (GET .../find).
 
+import { CLOSE, DOC_CHIP, LEAD, LEAD_PRIMARY, TEXT_HIT } from "./graph-ui";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { GraphNode } from "@/lib/types";
@@ -140,7 +141,7 @@ function FindGroup({
           onClick={() => select(doc.id)}
           data-track="graph-find-document"
           data-tip={t("graphView.cardNeighbourTitle")}
-          className="min-w-0 truncate rounded-full bg-sand-200 px-2.5 py-0.5 text-[12px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+          className={DOC_CHIP}
         >
           {title}
         </button>
@@ -166,7 +167,7 @@ function FindGroup({
         <button
           onClick={() => void loadMore(FIND_MORE)}
           disabled={loading}
-          className="mt-1 px-1.5 text-[11.5px] text-clay-700 hover:underline disabled:opacity-50"
+          className={`${TEXT_HIT} mt-1 self-start px-1.5 text-[11.5px] text-clay-700 hover:underline disabled:opacity-50`}
         >
           {t("graphView.findMore", { n: Math.min(left, FIND_MORE) })}
         </button>
@@ -245,7 +246,7 @@ export function FindList({
           onClick={onClose}
           aria-label={t("common.close")}
           data-tip={t("common.close")}
-          className="flex size-7 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
+          className={CLOSE}
         >
           ✕
         </button>
@@ -259,7 +260,7 @@ export function FindList({
             <button
               onClick={() => onPickAll(pickIds)}
               data-track="graph-find-pick"
-              className="rounded-full border border-line px-3 py-1.5 text-[12px] text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+              className={`${LEAD} border-line text-sand-700 hover:bg-clay-100 hover:text-clay-800`}
             >
               {t("graphView.findPickOne")}
             </button>
@@ -272,7 +273,7 @@ export function FindList({
               }}
               data-track="graph-find-ask"
               data-tip={t("graphView.findAskTitle")}
-              className="rounded-full bg-clay px-3.5 py-1.5 text-[12px] font-semibold text-clay-fg hover:bg-clay-600"
+              className={LEAD_PRIMARY}
             >
               {others > 0
                 ? t(counted.length === 1 ? "graphView.findAskWithPicksOne" : "graphView.findAskWithPicks", {
@@ -302,7 +303,7 @@ export function FindList({
           <button
             onClick={() => setShowProvenance(true)}
             data-track="graph-find-show-generated"
-            className="font-semibold text-clay-700 underline decoration-dotted underline-offset-2 hover:text-clay-800"
+            className={`${TEXT_HIT} font-semibold text-clay-700 underline decoration-dotted underline-offset-2 hover:text-clay-800`}
           >
             {t("panes.graphDocumentsGeneratedShow")}
           </button>

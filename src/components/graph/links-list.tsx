@@ -1,5 +1,6 @@
 "use client";
 
+import { CLOSE, SECTION_HEAD } from "./graph-ui";
 import { useState } from "react";
 import type { GraphEdge, GraphEdgeLink } from "@/lib/types";
 import { useT } from "@/components/lang-provider";
@@ -105,14 +106,14 @@ export function LinksList({
             <NoReplyToggle on={noReply} onChange={setNoReply} />
           </>
         ) : (
-          <p className="flex-1 text-[11.5px] font-bold tracking-[0.06em] text-sand-600 uppercase">{t("panes.graphLinks")}</p>
+          <p className={`flex-1 ${SECTION_HEAD}`}>{t("panes.graphLinks")}</p>
         )}
         <button
           onClick={onClose}
           data-track="graph-links-close"
           aria-label={t("common.close")}
           data-tip={t("common.close")}
-          className="-mr-1 flex size-7 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
+          className={`-mr-1 ${CLOSE}`}
         >
           ✕
         </button>

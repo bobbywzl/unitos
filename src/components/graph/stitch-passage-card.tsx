@@ -1,5 +1,6 @@
 "use client";
 
+import { CLOSE } from "./graph-ui";
 import { ChevronRightIcon } from "@/components/icons";
 import { AddToNote } from "@/components/graph/note-gather";
 import { sentencePrefix } from "@/lib/graph/quote-span";
@@ -67,7 +68,7 @@ export function StitchPassageCard({
           data-track="stitch-passage-close"
           aria-label={t("stitch.stitchPassageClose")}
           data-tip={t("stitch.stitchPassageClose")}
-          className="flex size-7 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
+          className={CLOSE}
         >
           ✕
         </button>
