@@ -130,6 +130,9 @@ export function FeedbackButton() {
   // Settings on a phone: the pill lay on the plan's words; Feedback is a
   // button in its header.
   const onSettings = pathname === "/settings";
+  // The offline page: Feedback cannot send without a network, and the pill
+  // lay on a card's row.
+  const onOffline = pathname === "/offline";
   const [open, setOpen] = useState(false);
   // The draft kept from an earlier visit. The form is not drawn on the
   // server, so reading the browser's storage here changes no first paint.
@@ -281,7 +284,7 @@ export function FeedbackButton() {
         }}
         data-feedback-button=""
         className={`fixed right-4 bottom-[calc(64px+env(safe-area-inset-bottom))] z-20 rounded-full bg-card px-4 py-2 text-sm text-sand-700 shadow-lift hover:bg-clay-100 hover:text-clay-800 md:bottom-[60px] print:hidden ${
-          inReader ? "hidden" : ""
+          inReader || onOffline ? "hidden" : ""
         } ${onDashboard || onFullPage || onSettings ? "max-sm:hidden" : ""}`}
       >
         {t("works.feedback")}
