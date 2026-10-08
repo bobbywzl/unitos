@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   attachmentKind,
   capFileName,
@@ -1182,10 +1183,19 @@ export function AssistantPanel({
   const conversationsNew = useNewFeature("conversations");
 
   // The panel's head (SPEC.md §7): Conversations opens the list of this
-  // reader's conversations of the project; New conversation starts an empty
-  // one and keeps the one on screen in the list.
-  const head = (
-    <div className="flex items-center gap-1.5">
+  // reader's conversations of the project; New conversation (+) starts an
+  // empty one and keeps the one on screen in the list. Both stand in the
+  // tray's head row, beside the title and ✕ (TOOL13-08), so nothing floats
+  // over the turns and the turns get the row; a panel outside the tray
+  // keeps them on a row of its own.
+  const [headSlot, setHeadSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    // The tray's head row is in the page before the panel mounts.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setHeadSlot(document.querySelector<HTMLElement>("[data-tray-head-slot]"));
+  }, []);
+  const headControls = (
+    <>
       <button
         onClick={() => {
           conversationsNew.seen();
@@ -1205,14 +1215,19 @@ export function AssistantPanel({
         <button
           onClick={newConversation}
           data-track="assistant-new-conversation"
+          aria-label={t("assistant.newConversation")}
           data-tip={t("assistant.newConversationTitle")}
-          className="ml-auto flex items-center gap-1 rounded-full bg-card px-3 py-1 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
+          className="flex size-7 shrink-0 items-center justify-center rounded-full bg-card text-sand-600 shadow-soft hover:text-clay-800 pointer-coarse:size-9"
         >
           <PlusIcon size={13} />
-          {t("assistant.newConversation")}
         </button>
       )}
-    </div>
+    </>
+  );
+  const head = headSlot ? (
+    createPortal(headControls, headSlot)
+  ) : (
+    <div className="flex items-center gap-1.5">{headControls}</div>
   );
 
   // What the next message runs with, on one row right above the composer
@@ -1478,7 +1493,7 @@ export function AssistantPanel({
                       data-track="assistant-conversation-delete"
                       aria-label={t("assistant.conversationDelete")}
                       data-tip={t("assistant.conversationDelete")}
-                      className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-sand-400 opacity-0 transition-opacity group-hover/conversation:opacity-100 hover:bg-clay-200 hover:text-clay-800 focus-visible:opacity-100"
+                      className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-sand-400 opacity-0 transition-opacity group-hover/conversation:opacity-100 hover:bg-clay-200 hover:text-clay-800 focus-visible:opacity-100 pointer-coarse:size-9 pointer-coarse:opacity-100"
                     >
                       <TrashIcon size={12} />
                     </button>
@@ -1614,6 +1629,7 @@ export function AssistantPanel({
                             output={turn.content}
                             notebookId={notebookId}
                             documentId={documentId ?? undefined}
+                            inRow
                           />
                         )}
                         {/* Save as note (SPEC.md §7): the answer organized

@@ -904,12 +904,15 @@ export function Workspace({
               {tab === "annotations" && annotationCount > 0 && (
                 <span className="text-[13px] text-sand-600">{annotationCount}</span>
               )}
+              {/* A panel's own head controls (the assistant's Conversations)
+                  stand here, in the tray's head row. */}
+              <span data-tray-head-slot className="ml-auto flex min-w-0 items-center gap-1.5" />
               <button
                 onClick={() => setMobileTray(false)}
                 data-track="close"
                 aria-label={t("common.close")}
                 data-tip={t("common.close")}
-                className="ml-auto rounded-full px-2 text-sand-500 hover:text-clay-800 md:hidden"
+                className="rounded-full px-2 text-sand-500 hover:text-clay-800 md:hidden"
               >
                 ✕
               </button>
