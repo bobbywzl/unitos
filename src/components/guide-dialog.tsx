@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useModalFocus } from "@/lib/escape-layers";
+import { FEEDBACK_OPEN_EVENT } from "@/components/feedback-button";
 import { useT } from "@/components/lang-provider";
 import { Presence } from "@/components/presence";
 import type { TKey } from "@/lib/i18n/dictionaries";
@@ -101,12 +102,26 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
       >
         <div className="flex items-center">
           <span className="font-display text-[20px]">{t("works.guideTitle")}</span>
+          {/* Feedback: where a reader with a question goes (on a phone's
+              reader, More has it too). */}
+          <button
+            onClick={() => {
+              onClose();
+              window.dispatchEvent(new Event(FEEDBACK_OPEN_EVENT));
+            }}
+            data-track="feedback-open"
+            className="ml-auto rounded-full px-3 py-1.5 text-[12px] font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+          >
+            {t("works.feedback")}
+          </button>
           <button
             onClick={onClose}
+            // The focus opens on ✕, as before Feedback stood beside it.
+            data-autofocus
             data-track="guide-close"
             aria-label={t("common.close")}
             data-tip={t("common.close")}
-            className="ml-auto flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
+            className="flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
           >
             ✕
           </button>

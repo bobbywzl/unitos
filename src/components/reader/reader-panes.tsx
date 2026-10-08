@@ -11,8 +11,6 @@ import { Presence } from "@/components/presence";
 import type { TKey } from "@/lib/i18n/dictionaries";
 import { useJumpParamCleanup } from "@/components/reader/jump-param";
 import { useEscapeLayer } from "@/lib/escape-layers";
-import { CommentIcon } from "@/components/icons";
-import { FEEDBACK_OPEN_EVENT } from "@/components/feedback-button";
 import { api } from "@/lib/api";
 
 // Reader views: Normal shows one document; Side by Side and Top and Bottom
@@ -401,8 +399,13 @@ export function ReaderPanes({
   // Escape closes the menu as one layer (lib/escape-layers.ts).
   useEscapeLayer(menu, () => setMenu(false));
 
+  // The view a row picked, until the URL brings it: the glyph and the check
+  // answer the press at once, while the split loads.
+  const [picked, setPicked] = useState<{ from: ReaderViewKind; to: ReaderViewKind } | null>(null);
+  const shownView = picked && picked.from === view ? picked.to : view;
   function go(next: ReaderViewKind) {
     setMenu(false);
+    setPicked({ from: view, to: next });
     router.push(
       viewHref(
         notebookId,
@@ -421,7 +424,7 @@ export function ReaderPanes({
       onClick={() => go(kind)}
       data-track={`view:${kind}`}
       className={`flex items-center gap-2.5 rounded-full px-2.5 py-1.5 text-left text-[12px] ${
-        view === kind ? "bg-clay-100 font-semibold text-clay-800" : "text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+        shownView === kind ? "bg-clay-100 font-semibold text-clay-800" : "text-sand-700 hover:bg-clay-100 hover:text-clay-800"
       }`}
     >
       <ViewGlyph kind={kind} size={13} />
@@ -460,7 +463,7 @@ export function ReaderPanes({
             : "flex items-center justify-center rounded-full bg-sand-100 p-2 text-sand-600 shadow-soft hover:text-clay-800"
         }
       >
-        <ViewGlyph kind={view} />
+        <ViewGlyph kind={shownView} />
       </button>
       <Presence show={menu} exit="menu">
       {menu && (
@@ -474,23 +477,8 @@ export function ReaderPanes({
           }`}
         >
           {viewRows}
-          {/* Feedback at md and up: its floating button lay on the rail's
-              Extract on a short screen (EDGE13-02). Below md it is a row of
-              the bar's More menu. */}
-          {inRail && <div className="my-1 border-t border-line" />}
-          {inRail && (
-            <button
-              onClick={() => {
-                setMenu(false);
-                window.dispatchEvent(new Event(FEEDBACK_OPEN_EVENT));
-              }}
-              data-track="feedback-open"
-              className="flex items-center gap-2.5 rounded-full px-2.5 py-1.5 text-left text-[12px] text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-            >
-              <CommentIcon size={13} />
-              {t("works.feedback")}
-            </button>
-          )}
+          {/* Reader view holds only views. Feedback is in the guide's head
+              (?) at md and up, and a row of the bar's More menu below md. */}
         </div>
       )}
       </Presence>

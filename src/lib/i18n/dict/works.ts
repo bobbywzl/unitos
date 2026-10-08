@@ -126,7 +126,7 @@ const en = {
   guidePanelEdits: "History",
   guidePanelEditsBody: "Every edit and deletion in the project, from History at the top (More › History on a phone). This document narrows it to the open document's edits and deletions.",
   guidePanelGraphBody: "The project's documents and links drawn as nodes and curves. Stitch runs across the documents you pick in it, or every document.",
-  guidePanelReaderViewBody: "Normal, Side by Side, or Top and Bottom: two documents at once. Feedback is its last row (on a phone, in More).",
+  guidePanelReaderViewBody: "Normal, Side by Side, or Top and Bottom: two documents at once.",
   // Collapse (SPEC.md §28) and Contents (SPEC.md §26): the article's own controls.
   guideCollapseHeader: "Collapse — every block to its core",
   guideCollapseBody:
@@ -319,7 +319,7 @@ const zh: Record<keyof typeof en, string> = {
   guidePanelEdits: "历史",
   guidePanelEditsBody: "此项目中的所有编辑与删除，从顶部的历史打开（手机上在“更多 › 历史”）。“此文档”只列出当前文档的编辑与删除。",
   guidePanelGraphBody: "项目的文档和链接画成节点和曲线。缝合作用于你在图谱中选取的文档，未选取时作用于每个文档。",
-  guidePanelReaderViewBody: "普通、左右分屏或上下分屏：同时看两个文档。最后一行是反馈（手机上在“更多”里）。",
+  guidePanelReaderViewBody: "普通、左右分屏或上下分屏：同时看两个文档。",
   guideCollapseHeader: "折叠——每个块折叠为核心",
   guideCollapseBody:
     "文章右上角、提取旁边的折叠按钮。每个段落、列表、插图、表格和公式都显示为它的核心：它真正要说的，用大白话，长度是原文的十分之一到三分之一，结合整篇文章写成。",
