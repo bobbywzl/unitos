@@ -759,6 +759,11 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
   const last = run[run.length - 1];
   const above = lines[i - 1];
   const below = lines[j];
+  // A label's line over a display, its words cut mid-sentence, opens the
+  // sentence the display ends: no heading (parse loop finding: a worked
+  // example's "Solution: The overlap integral is" over its display read as
+  // a heading, where "Model: We are modeling…" read as its paragraph).
+  if (labelled && !title && below !== undefined && (below.display || lineMathShare(below) >= 0.4) && !/[.!?]$/.test(text)) return null;
   const gapAbove = apartAbove(above, line, ctx);
   const gapBelow = !below || apartBelow(last, below, ctx);
   // Stacked headings: a title-like line of another size right above (itself
