@@ -2115,6 +2115,18 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     !topRated.some((t) => /Comments|View all/.test(t)) && !reviews.some((t) => /Отзывы|View all/.test(t)) && topRated.length === 3,
     `${topRated.join(" / ")}; ${reviews.join(" / ")}`,
   );
+  // A heading left closing the article once the comment box under it is cut is an empty section, and goes.
+  const closing = (
+    await parseHtmlContent(
+      `<!doctype html><html><head><title>Notes on river flow</title></head><body><article><h1>Notes on river flow</h1><p>${prose(1)}</p><p>${prose(2)}</p><p>${prose(3)}</p><h2>Watch more river videos</h2><h3>Comments</h3><p>(View all)</p></article></body></html>`,
+      "https://example.org/rivers",
+    )
+  ).blocks.map((b) => `${b.type} ${b.text.slice(0, 24)}`);
+  check(
+    "url: a heading left closing the article after the comment cut goes",
+    closing.length === 3 && closing.every((t) => t.startsWith("PARAGRAPH Paragraph")),
+    closing.join(" / "),
+  );
   // The site's logo set as an h1 (a link to the home page) is no title: the <title> is, less the logo's part and the parts after it.
   const logoTitle = async (title: string) =>
     (
