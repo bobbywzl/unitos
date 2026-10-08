@@ -298,13 +298,19 @@ export function Workspace({
   // browser already holds a copy, a save under way, and the one-line result.
   // True once this browser is known to hold a cache: set after mount, so the
   // server render and the first client render agree (no window on the server).
-  const [offlineOn, setOfflineOn] = useState(false);
+  // Null until then: the header keeps the button's place, so History and the
+  // icons beside it do not move when it appears.
+  const [offlineOn, setOfflineOn] = useState<boolean | null>(null);
   const [offlineSaved, setOfflineSaved] = useState(false);
   const [offlineSaving, setOfflineSaving] = useState(false);
   const [offlineProgress, setOfflineProgress] = useState<SaveProgress | null>(null);
   const [offlineToast, setOfflineToast] = useState<{ text: string; plans: boolean } | null>(null);
   useEffect(() => {
-    if (!offlineSupported()) return;
+    if (!offlineSupported()) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setOfflineOn(false);
+      return;
+    }
     const update = () =>
       void listSaved().then((rows) => {
         setOfflineSaved(rows.some((r) => r.id === notebook.id));
@@ -815,7 +821,9 @@ export function Workspace({
         </button>
         {/* Save for offline (SPEC.md §17, Unitos Ultra): an icon in the
             header, its name in the tooltip; saved, it is filled and a press
-            removes the copy. Below md it is a row of the bar's More menu. */}
+            removes the copy. Below md it is a row of the bar's More menu.
+            Until the browser's copy is known, its place stands empty. */}
+        {offlineOn === null && <span aria-hidden className="hidden size-[34px] shrink-0 md:block" />}
         {offlineOn && (
           <button
             onClick={() => void toggleOffline()}

@@ -292,13 +292,18 @@ export function ReaderPanes({
   // At md and up the button is the rail's last button, under Extract:
   // floating at the pane's bottom left it lay on the first words of the last
   // lines on a tablet and a landscape phone.
+  // Until the effect has looked for the rail and the bar, the button is not
+  // drawn: drawn floating first, it jumped from the pane's bottom left to
+  // the rail while the document loaded.
   const [barSlot, setBarSlot] = useState<HTMLElement | null>(null);
   const [rail, setRail] = useState<HTMLElement | null>(null);
+  const [placed, setPlaced] = useState(false);
   useEffect(() => {
     // The bar mounts with the reader, in the same commit.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setBarSlot(document.querySelector<HTMLElement>("[data-reader-view-slot]"));
     setRail(document.querySelector<HTMLElement>('nav[data-nudge="rail"]'));
+    setPlaced(true);
   }, []);
   const inBar = phone && barSlot !== null;
   const inRail = !phone && rail !== null;
@@ -498,7 +503,13 @@ export function ReaderPanes({
       }
       className={`relative flex h-full min-h-0 min-w-0 ${view === "stack" ? "flex-col" : "flex-row"}`}
     >
-      {inBar ? createPortal(viewRows, barSlot) : portalTo ? createPortal(viewControl, portalTo) : viewControl}
+      {!placed
+        ? null
+        : inBar
+          ? createPortal(viewRows, barSlot)
+          : portalTo
+            ? createPortal(viewControl, portalTo)
+            : viewControl}
 
       {missing && missingClosed !== missing.documentId && (
         <div
