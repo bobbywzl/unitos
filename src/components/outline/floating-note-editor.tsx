@@ -466,16 +466,19 @@ export function FloatingNoteEditor({
       .map((el) => el.closest<HTMLElement>("[data-reader-root] [data-block-id]"))
       .find((el): el is HTMLElement => el !== null && !cardRef.current?.contains(el));
     if (!block) return;
-    let last = block.getBoundingClientRect().left;
+    let last = block.getBoundingClientRect();
     let frame = 0;
     const until = performance.now() + FOLLOW_MS;
     const follow = () => {
       if (performance.now() > until || !block.isConnected) return;
-      const now = block.getBoundingClientRect().left;
-      if (now !== last) {
-        const moved = now - last;
+      const now = block.getBoundingClientRect();
+      // The column widens as the tray folds: the block moves across, and
+      // its lines rewrap, so it moves up or down too.
+      if (now.left !== last.left || now.top !== last.top) {
+        const dx = now.left - last.left;
+        const dy = now.top - last.top;
         last = now;
-        setPos((p) => clampPos({ left: p.left + moved, top: p.top }, cardRef.current?.offsetWidth ?? width));
+        setPos((p) => clampPos({ left: p.left + dx, top: p.top + dy }, cardRef.current?.offsetWidth ?? width));
       }
       frame = requestAnimationFrame(follow);
     };
