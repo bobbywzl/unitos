@@ -2137,13 +2137,23 @@ export function ReaderInteractions({
   // in (the toolbar's, the bar's), and after Start side chat and Ask about
   // this: the next words typed land in it, never on the page.
   const [chatFocusTick, setChatFocusTick] = useState(0);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!chatFocusTick) return;
-    const raf = requestAnimationFrame(() => {
+    const focusBox = () => {
       // The conversation view's box when the view is open, else the card's.
       const boxes = [...document.querySelectorAll<HTMLTextAreaElement>("textarea[data-chat-box]")];
-      (boxes.find((b) => !b.closest("[data-side-card]")) ?? boxes[0])?.focus({ preventScroll: true });
-    });
+      const box = boxes.find((b) => !b.closest("[data-side-card]")) ?? boxes[0];
+      if (!box) return false;
+      box.focus({ preventScroll: true });
+      // The caret goes after the words carried over from the box the reader
+      // typed in, so the next keys follow them instead of landing before them.
+      box.setSelectionRange(box.value.length, box.value.length);
+      return true;
+    };
+    // In the same commit that swaps the boxes, so no key pressed meanwhile
+    // falls between them; a box that mounts a frame later is focused then.
+    if (focusBox()) return;
+    const raf = requestAnimationFrame(focusBox);
     return () => cancelAnimationFrame(raf);
   }, [chatFocusTick]);
   // The assistant's bar at the bottom of the pane (SPEC.md §29).
@@ -10037,6 +10047,11 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 setAnnotationCard((c) => (c ? { ...c, draft: styled } : c));
                 return;
               }
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                if (annotationCard.draft.trim() !== annotationCard.saved.trim()) void saveAnnotation();
+                return;
+              }
               if (e.key === "Escape") {
                 // This card closes, and only this card (SPEC.md §6).
                 e.stopPropagation();
@@ -10044,9 +10059,15 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               }
             }}
             placeholder={t("reader.addCommentPlaceholder")}
-            // One line at rest; the field grows while the reader writes.
+            // One line at rest; the field grows while the reader writes, and
+            // stays grown while the card holds focus or unsaved words: a
+            // field that shrank on the press would move Save from under it.
             rows={1}
-            className="field-sizing-content max-h-48 min-h-9 w-full resize-none rounded-xl bg-sand-100 px-2.5 py-2 text-[13px] outline-none placeholder:text-sand-500 focus:min-h-[4.5rem]"
+            className={`field-sizing-content max-h-48 min-h-9 w-full resize-none rounded-xl bg-sand-100 px-2.5 py-2 text-[13px] outline-none placeholder:text-sand-500 ${
+              annotationCard.draft.trim() !== annotationCard.saved.trim()
+                ? "min-h-[4.5rem]"
+                : "group-focus-within/hlcard:min-h-[4.5rem]"
+            }`}
           />
           <div className="mt-2 flex items-center justify-between">
             <span className="flex items-center gap-3">
