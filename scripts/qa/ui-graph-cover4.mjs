@@ -47,6 +47,11 @@ async function openGraph(page, nb) {
   await page.locator(".react-flow__node").first().waitFor({ timeout: 60000 });
   await page.waitForTimeout(2000);
 }
+async function openRows(page) {
+  const heads = page.locator("[data-graph-documents-row]:not([data-open]) [data-row-head]");
+  for (let i = (await heads.count()) - 1; i >= 0; i--) await heads.nth(i).click();
+  await page.waitForTimeout(300);
+}
 const shot = (page, name) => page.screenshot({ path: `${SHOT}/${name}-${tag}.png` });
 
 // ── Coverage: the Documents list, the rings, No reply (VIEW4-01) ───────────
@@ -74,6 +79,8 @@ async function cover(lang, width, height) {
     check(`${w} head: 4 of 5 links with no reply`, head.noReply === "4/5", JSON.stringify(head));
     check(`${w} head: documents not opened counted`, /^\d+\/7$/.test(head.unopened ?? ""), JSON.stringify(head));
     check(`${w} head reads in the language`, lang === "zh" ? /个部分中/.test(head.text ?? "") : /parts noted/.test(head.text ?? ""), head.text);
+    // [chrome6] VIEW6-04: a row is one line until opened; open every row to read its lines.
+    await openRows(page);
     const dots = await page.locator("[data-graph-documents-list] [data-graph-part-dot]").evaluateAll((els) => els.map((e) => e.getAttribute("data-graph-part-dot")));
     check(`${w} 7 noted dots, 12 empty`, dots.filter((d) => d === "noted").length === 7 && dots.filter((d) => d === "empty").length === 12, JSON.stringify(dots));
     const lines = await page.locator("[data-graph-coverage-noted]").count();
@@ -82,6 +89,7 @@ async function cover(lang, width, height) {
     check(`${w} Not opened rows match the head`, String(unopenedRows) === head.unopened?.split("/")[0], String(unopenedRows));
     await page.locator("[data-graph-gaps-only]").click();
     await page.waitForTimeout(400);
+    await openRows(page);
     const gapDots = await page.locator("[data-graph-documents-list] [data-graph-part-dot]").evaluateAll((els) => els.map((e) => e.getAttribute("data-graph-part-dot")));
     check(`${w} Gaps only keeps the 12 empty parts`, gapDots.length === 12 && gapDots.every((d) => d === "empty"), JSON.stringify(gapDots));
     const gapLinks = await page.locator("[data-graph-documents-list] [data-graph-documents-link]").evaluateAll((els) => new Set(els.map((e) => e.getAttribute("data-graph-documents-link"))).size);

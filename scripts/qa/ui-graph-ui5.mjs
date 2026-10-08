@@ -308,7 +308,9 @@ if (ONLY.includes("draft")) {
 // ── WALK5-15: the zh chip and the reply buttons ──
 if (ONLY.includes("sizes")) {
   const { ctx, page } = await open(1440);
-  const chips = await page.locator("[data-graph-node-notes]").evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().height)));
+  // [chrome6] VIEW6-05: a small project may frame at zoom 1.3; a chip's height is read in flow units.
+  const zoom = await page.evaluate(() => Number(document.querySelector(".corpus-graph")?.style.getPropertyValue("--graph-zoom")) || 1);
+  const chips = await page.locator("[data-graph-node-notes]").evaluateAll((els, z) => els.map((e) => Math.round(e.getBoundingClientRect().height / z)), zoom);
   check(chips.every((h) => h <= 20) || !after, "every node's notes chip is one line", chips.join(","));
   await page.click('[data-track="graph-links"]');
   await page.locator(`[data-graph-links-row="${FLUTE}"]`).click();
