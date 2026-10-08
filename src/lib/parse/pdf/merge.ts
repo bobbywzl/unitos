@@ -246,7 +246,7 @@ export function joinOnPage(input: Segment[]): Segment[] {
 // "that leverages Coherence Relations …": arXiv 2503.10997 p. 2).
 function itemGoesOn(list: Segment, next: Segment): boolean {
   if (list.type !== "LIST" || list.tocEntries || next.type !== "PARAGRAPH" || next.listItem || list.page !== next.page) return false;
-  if (/[.!?:…"”)]$/.test(list.text.trim()) || !/^\p{Ll}/u.test(next.text) || !list.box || !next.box) return false;
+  if (/[.!?:…"”)]$/.test(list.text.trim()) || END_MARK_RE.test(list.text.trim()) || !/^\p{Ll}/u.test(next.text) || !list.box || !next.box) return false;
   const size = list.lineSize ?? 10;
   return next.box.y2 > list.box.y1 && next.box.x1 > list.box.x2 - size;
 }

@@ -102,7 +102,14 @@ export function segmentPage(pageLines: Line[], ctx: PageContext): Segment[] {
     // ends the block before it, as the page shows it. So does a remark's
     // (parse loop finding: the MML book's ♢ under "… are linearly
     // independent." read as a display equation of its own).
-    const last = segments[segments.length - 1];
+    // A block in the margin right of the mark (a note, a side caption)
+    // is no block the mark ends: it ends the last block of its column
+    // (parse loop finding: the MML book's ♢ under a list read as "column
+    // space ♢", the note beside the list, and the side caption's last line
+    // beside the figure over a Remark's end read "Φ : V → W. ♢").
+    const inColumn = (s: Segment) => s.box === undefined || s.box.x1 < line.x;
+    const over = segments.slice(-4).findLast((s) => s.page === line.page && (s.type === "PARAGRAPH" || s.type === "LIST") && inColumn(s));
+    const last = over ?? segments[segments.length - 1];
     if (PROOF_END_RE.test(line.text.trim()) && last !== undefined && (last.type === "PARAGRAPH" || last.type === "LIST")) {
       appendProofBox(last, line);
       i++;
