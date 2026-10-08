@@ -61,6 +61,8 @@ const FONTS_LINK_ID = "unitos-docs-fonts";
 
 /** A pane narrower than this starts with the title row hidden. */
 const NARROW_PANE = 600;
+/** A pane shorter than this (a phone held sideways) hides the title row too. */
+const SHORT_PANE = 500;
 
 /** An import (SPEC.md §29): a document made from a PDF, a web page, a
     Markdown or text file, or a Word file, as the page sends it. origin: the
@@ -508,17 +510,20 @@ export function DocsEditor({
   const mode: DocsMode = locked ? "viewing" : chosenMode;
   const [zoom, setZoom] = useState<Zoom>(100);
   const [headerHidden, setHeaderHidden] = useState(false);
-  // A pane too narrow for the page (a phone, a narrow split) starts with the
-  // title row hidden: 44 px of the screen above the first line go to the
-  // words, and the title, the status and the version clock stay reachable
-  // (the title in the document pill and File > Rename, the status and the
-  // clock in the toolbar's row).
+  // A pane too narrow for the page (a phone, a narrow split), too short
+  // (a phone held sideways), or one of a split view (whose pane header
+  // names the document) starts with the title row hidden: 44 px of the
+  // screen above the first line go to the words, and the title, the status
+  // and the version clock stay reachable (the title in the document pill,
+  // the pane header and File > Rename, the status and the clock in the
+  // toolbar's row).
   const shellRef = useRef<HTMLDivElement>(null);
   const [narrow, setNarrow] = useState(false);
-  const [narrowWas, setNarrowWas] = useState(false);
-  if (narrow !== narrowWas) {
-    setNarrowWas(narrow);
-    setHeaderHidden(narrow);
+  const [tight, setTight] = useState(false);
+  const [tightWas, setTightWas] = useState(false);
+  if (tight !== tightWas) {
+    setTightWas(tight);
+    setHeaderHidden(tight);
   }
   // View > Full screen: the title row, the toolbar, and the rulers hide,
   // as in Google Docs; Esc brings them back.
@@ -576,10 +581,19 @@ export function DocsEditor({
   useEffect(() => {
     const shell = shellRef.current;
     if (!shell) return;
-    const measure = () => setNarrow(shell.clientWidth > 0 && shell.clientWidth < NARROW_PANE);
+    const pane = scrollParent(shell);
+    // A split view's pane header stands just before the reader's root.
+    const split = shell.closest("[data-reader-root]")?.previousElementSibling?.classList.contains("pane-header") === true;
+    const measure = () => {
+      const isNarrow = shell.clientWidth > 0 && shell.clientWidth < NARROW_PANE;
+      const short = pane !== null && pane.clientHeight > 0 && pane.clientHeight < SHORT_PANE;
+      setNarrow(isNarrow);
+      setTight(isNarrow || short || split);
+    };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(shell);
+    if (pane) observer.observe(pane);
     return () => observer.disconnect();
   }, [editor]);
 
