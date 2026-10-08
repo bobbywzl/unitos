@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { IMAGE_ACCEPT, MAX_IMAGE_BYTES } from "@/lib/images";
-import { useEscapeLayer } from "@/lib/escape-layers";
+import { captureOpener, returnFocus, useEscapeLayer } from "@/lib/escape-layers";
 import { readAccountCookie } from "@/lib/tab-account";
 import { isImeKey } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
@@ -150,8 +150,21 @@ export function FeedbackButton() {
   useEffect(() => {
     writeFeedbackDraft({ category, message, links, linkDraft, photos });
   }, [category, message, links, linkDraft, photos]);
+  // The control that opened the form: Escape and ✕ give the focus back to
+  // it. The guide's Feedback goes with the guide; then ? (or More) takes it.
+  const opener = useRef<HTMLElement | null>(null);
+  const close = () => {
+    setOpen(false);
+    const back = opener.current?.isConnected
+      ? opener.current
+      : document.querySelector<HTMLElement>('[data-track="guide"], nav [data-track="more"]');
+    returnFocus(back);
+  };
   useEffect(() => {
-    const onOpen = () => setOpen(true);
+    const onOpen = () => {
+      opener.current = captureOpener();
+      setOpen(true);
+    };
     window.addEventListener(FEEDBACK_OPEN_EVENT, onOpen);
     return () => window.removeEventListener(FEEDBACK_OPEN_EVENT, onOpen);
   }, []);
@@ -208,7 +221,7 @@ export function FeedbackButton() {
 
   // Escape closes the dialog as one layer (lib/escape-layers.ts): a card
   // under it stays open for the next Escape.
-  useEscapeLayer(open, () => setOpen(false));
+  useEscapeLayer(open, close);
 
   if (pathname.startsWith("/admin")) return null;
 
@@ -261,7 +274,11 @@ export function FeedbackButton() {
           below md (FEEDBACK_OPEN_EVENT). On a phone's dashboard, full
           pages, and Settings it is a button in the header. */}
       <button
-        onClick={() => setOpen(!open)}
+        onClick={(e) => {
+          if (open) return close();
+          opener.current = e.currentTarget;
+          setOpen(true);
+        }}
         data-feedback-button=""
         className={`fixed right-4 bottom-[calc(64px+env(safe-area-inset-bottom))] z-20 rounded-full bg-card px-4 py-2 text-sm text-sand-700 shadow-lift hover:bg-clay-100 hover:text-clay-800 md:bottom-[60px] print:hidden ${
           inReader ? "hidden" : ""
@@ -292,7 +309,7 @@ export function FeedbackButton() {
                   The typed words stay for the next open. */}
               <button
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={close}
                 aria-label={t("common.close")}
                 data-tip={t("common.close")}
                 data-track="feedback-close"
@@ -301,7 +318,10 @@ export function FeedbackButton() {
                 ✕
               </button>
             </div>
+            {/* The form opens with the caret in the message, by keys or by
+                a press, so the first letters typed land there. */}
             <textarea
+              autoFocus
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               // A pasted image goes in as a photo.
