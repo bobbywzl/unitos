@@ -9,7 +9,9 @@ import type { AccountData } from "@/lib/account-data";
 import type { DriveAccess } from "@/lib/drive/types";
 import type { TKey } from "@/lib/i18n/dictionaries";
 import { PERSON_COLORS, personOf, type Person } from "@/lib/person";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
+import { ACCOUNT_HEADER } from "@/lib/constants";
+import { tabAccount } from "@/lib/tab-account";
 import { clearSaved, listSaved, subscribeSaved } from "@/lib/offline/saved";
 import type { AccountStorage } from "@/lib/storage";
 import { storageLimit, type TierState } from "@/lib/tiers";
@@ -53,6 +55,64 @@ function setTheme(theme: Theme) {
   document.documentElement.classList.toggle("dark", dark);
   for (const cb of themeListeners) cb();
 }
+
+// The profile fields Settings saves on its own, as the server holds them.
+type ProfileFields = { name: string; symbol: string; color: string; background: string };
+
+// Typed words survive (SPEC.md §6, CLAUDE.md rule zero 6): the fields typed
+// and not yet confirmed by the server stay in the browser, with the stored
+// fields they were typed over (base), one draft per account. The draft goes
+// when a save lands; Settings opens with it when the server does not hold it.
+type ProfileDraft = { fields: ProfileFields; base: ProfileFields };
+
+const draftKey = (accountId: string | null) => `unitos:draft:settings:${accountId ?? "reader"}`;
+
+function isFields(value: unknown): value is ProfileFields {
+  if (!value || typeof value !== "object") return false;
+  const f = value as Record<string, unknown>;
+  return ["name", "symbol", "color", "background"].every((k) => typeof f[k] === "string");
+}
+
+function readProfileDraft(key: string): ProfileDraft | null {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(key) ?? "null");
+    if (!parsed || typeof parsed !== "object") return null;
+    const d = parsed as Record<string, unknown>;
+    return isFields(d.fields) && isFields(d.base) ? { fields: d.fields, base: d.base } : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeProfileDraft(key: string, draft: ProfileDraft | null) {
+  try {
+    if (draft) localStorage.setItem(key, JSON.stringify(draft));
+    else localStorage.removeItem(key);
+  } catch {
+    // Storage blocked or full: the words stay in the page, and the save
+    // still runs.
+  }
+}
+
+// What a field shows when Settings opens over a draft: the draft, unless the
+// field changed elsewhere since it was typed. Then a short field keeps the
+// stored text, and the background keeps both texts, the stored one first.
+function restoredField(k: keyof ProfileFields, draft: ProfileDraft, stored: ProfileFields): string {
+  const mine = draft.fields[k];
+  const theirs = stored[k];
+  if (mine === theirs || theirs === draft.base[k]) return mine;
+  if (k !== "background" || theirs.includes(mine)) return theirs;
+  if (mine.includes(theirs)) return mine;
+  return `${theirs}\n\n${mine}`;
+}
+
+const sameFields = (a: ProfileFields, b: ProfileFields) =>
+  a.name === b.name && a.symbol === b.symbol && a.color === b.color && a.background === b.background;
+
+// A failed save is tried again after 2 s, then twice as long each time, up
+// to 30 s, and at once when the network comes back or the page gets focus.
+const RETRY_FIRST_MS = 2000;
+const RETRY_MAX_MS = 30000;
 
 // Resize the chosen image to a small square JPEG data URL. 192px covers every
 // badge size; the result stays a few tens of KB.
@@ -157,48 +217,158 @@ export function SettingsForm({
     window.history.replaceState(null, "", window.location.pathname);
   }, [t]);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastSaved = useRef(
-    JSON.stringify({
-      name: account?.name ?? "",
-      symbol: account?.storedSymbol ?? "",
-      color: account?.storedColor ?? "",
-      background: background.trim(),
-    }),
-  );
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryWait = useRef(0);
+  const inFlight = useRef(false);
+  // The fields as the server holds them, and as the page shows them now.
+  const lastSaved = useRef<ProfileFields>({
+    name: account?.name ?? "",
+    symbol: account?.storedSymbol ?? "",
+    color: account?.storedColor ?? "",
+    background: background.trim(),
+  });
+  const fields: ProfileFields = {
+    name: name.trim(),
+    symbol: symbol.trim(),
+    color,
+    background: backgroundText.trim(),
+  };
+  const latest = useRef(fields);
+  const shown = useRef<ProfileFields | null>(null);
+  const key = draftKey(account?.id ?? null);
 
-  // Debounced auto-save: the account fields to /api/account, the background to
-  // /api/profile. Purpose and application columns clear on save — the profile
-  // is one Background field now.
+  // Auto-save: the account fields to /api/account, the background to
+  // /api/profile. Purpose and application columns clear on save — the
+  // profile is one Background field now. One save at a time; a save that
+  // lands while the fields moved on saves again.
+  const save = useRef<() => Promise<void>>(async () => {});
   useEffect(() => {
-    const payload = JSON.stringify({
-      name: name.trim(),
-      symbol: symbol.trim(),
-      color,
-      background: backgroundText.trim(),
-    });
-    if (payload === lastSaved.current) return;
-    setStatus("saving");
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(async () => {
+    save.current = async () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (retryTimer.current) clearTimeout(retryTimer.current);
+      saveTimer.current = null;
+      retryTimer.current = null;
+      if (inFlight.current) return;
+      const payload = latest.current;
+      if (sameFields(payload, lastSaved.current)) return;
+      inFlight.current = true;
+      setStatus("saving");
+      let again = false;
       try {
-        if (account && name.trim()) {
-          await api("/api/account", "PUT", { name: name.trim(), symbol: symbol.trim(), color });
+        if (account && payload.name) {
+          await api("/api/account", "PUT", { name: payload.name, symbol: payload.symbol, color: payload.color });
         }
-        await api("/api/profile", "PUT", {
-          background: backgroundText.trim(),
-          purpose: "",
-          application: "",
-        });
+        await api("/api/profile", "PUT", { background: payload.background, purpose: "", application: "" });
         lastSaved.current = payload;
+        retryWait.current = 0;
+        if (sameFields(latest.current, payload)) writeProfileDraft(key, null);
+        else again = true;
         setError(null);
         setStatus("saved");
-        setTimeout(() => setStatus("idle"), 1800);
+        setTimeout(() => setStatus((s) => (s === "saved" ? "idle" : s)), 1800);
       } catch (err) {
-        setError(err instanceof Error ? err.message : t("common.requestFailed"));
+        setError(err instanceof Error ? err.message : t("common.notSaved"));
+        setStatus("idle");
+        // A refusal the route words (a 4xx) is not tried again on its own;
+        // the next change saves again.
+        if (!(err instanceof ApiError && err.status < 500)) {
+          retryWait.current = Math.min(RETRY_MAX_MS, retryWait.current ? retryWait.current * 2 : RETRY_FIRST_MS);
+          retryTimer.current = setTimeout(() => void save.current(), retryWait.current);
+        }
+      } finally {
+        inFlight.current = false;
+      }
+      if (again) void save.current();
+    };
+  });
+
+  // Settings opens with a draft the server does not hold yet, and saves it.
+  useEffect(() => {
+    const draft = readProfileDraft(key);
+    if (!draft) return;
+    const stored = lastSaved.current;
+    const next: ProfileFields = {
+      name: restoredField("name", draft, stored),
+      symbol: restoredField("symbol", draft, stored),
+      color: restoredField("color", draft, stored),
+      background: restoredField("background", draft, stored),
+    };
+    if (sameFields(next, stored)) {
+      writeProfileDraft(key, null);
+      return;
+    }
+    if (account) {
+      setName(next.name);
+      setSymbol(next.symbol);
+      setColor(next.color);
+    }
+    setBackgroundText(next.background);
+  }, [key, account]);
+
+  // Each change: kept as a draft at once, saved 700 ms after the last key.
+  useEffect(() => {
+    latest.current = fields;
+    const before = shown.current;
+    shown.current = fields;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = null;
+    if (sameFields(fields, lastSaved.current)) {
+      // Typed back to the stored text: the draft goes. Not on the first
+      // run, which comes before the draft fills the fields.
+      if (before && !sameFields(before, fields) && !inFlight.current) {
+        writeProfileDraft(key, null);
+        if (retryTimer.current) clearTimeout(retryTimer.current);
+        retryTimer.current = null;
+        setError(null);
         setStatus("idle");
       }
-    }, 700);
-  }, [name, symbol, color, backgroundText, account, t]);
+      return;
+    }
+    writeProfileDraft(key, { fields, base: lastSaved.current });
+    setStatus("saving");
+    saveTimer.current = setTimeout(() => void save.current(), 700);
+    // fields is rebuilt each render from these values.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name, symbol, color, backgroundText, key]);
+
+  // A failed save is tried again when the network comes back or the page
+  // gets focus; the page closing sends what is not saved (keepalive), and
+  // leaving Settings in the app saves at once.
+  useEffect(() => {
+    const retry = () => {
+      if (retryTimer.current) void save.current();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") retry();
+    };
+    const onHide = () => {
+      const payload = latest.current;
+      if (sameFields(payload, lastSaved.current)) return;
+      const accountId = tabAccount();
+      const headers = { "Content-Type": "application/json", ...(accountId ? { [ACCOUNT_HEADER]: accountId } : {}) };
+      const send = (path: string, body: unknown) =>
+        void fetch(path, { method: "PUT", keepalive: true, headers, body: JSON.stringify(body) }).catch(() => {});
+      if (account && payload.name) send("/api/account", { name: payload.name, symbol: payload.symbol, color: payload.color });
+      send("/api/profile", { background: payload.background, purpose: "", application: "" });
+    };
+    window.addEventListener("online", retry);
+    window.addEventListener("focus", retry);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("pagehide", onHide);
+    return () => {
+      window.removeEventListener("online", retry);
+      window.removeEventListener("focus", retry);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("pagehide", onHide);
+    };
+  }, [account]);
+  useEffect(
+    () => () => {
+      if (retryTimer.current) clearTimeout(retryTimer.current);
+      if (saveTimer.current) void save.current();
+    },
+    [],
+  );
 
   async function uploadPicture(file: File) {
     setError(null);
@@ -336,12 +506,16 @@ export function SettingsForm({
   return (
     <div className="space-y-10">
       <div className="flex h-4 items-center justify-end gap-3 text-xs text-sand-600">
-        {error && <span className="text-red-500">{error}</span>}
-        {status === "saving"
-          ? t("common.saving")
-          : status === "saved"
-            ? t("common.saved")
-            : t("settings.autoSave")}
+        {/* One line: a failed save's line takes the place of the rest. */}
+        {error && status !== "saving" ? (
+          <span className="text-red-500">{error}</span>
+        ) : status === "saving" ? (
+          t("common.saving")
+        ) : status === "saved" ? (
+          t("common.saved")
+        ) : (
+          t("settings.autoSave")
+        )}
       </div>
 
       <section className="space-y-3">
