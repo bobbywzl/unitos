@@ -436,7 +436,7 @@ export function StitchBox({
                 onClick={() => onUnpick(n.id)}
                 data-track="stitch-unpick"
                 data-tip={t("stitch.stitchUnpick", { title: n.title })}
-                className="flex max-w-[200px] items-center gap-1 rounded-full bg-clay-100 px-2.5 py-0.5 text-clay-800 hover:bg-clay-200"
+                className="flex max-w-[200px] items-center gap-1 rounded-full bg-clay-100 px-2.5 py-0.5 text-clay-800 hover:bg-clay-200 min-h-6 pointer-coarse:min-h-10 pointer-coarse:px-3.5"
               >
                 <span className="truncate">{n.title}</span>
                 <span aria-hidden>✕</span>
@@ -447,7 +447,7 @@ export function StitchBox({
               data-track="stitch-pick"
               aria-pressed={picking}
               data-tip={t(coarse ? "stitch.stitchPickTitleTouch" : "stitch.stitchPickTitle")}
-              className={`rounded-full border px-2.5 py-0.5 hover:bg-clay-100 hover:text-clay-800 ${
+              className={`rounded-full border px-2.5 py-0.5 hover:bg-clay-100 hover:text-clay-800 min-h-6 pointer-coarse:min-h-10 pointer-coarse:px-3.5 ${
                 picking ? "border-clay bg-clay text-clay-fg hover:bg-clay-600 hover:text-clay-fg" : "border-line"
               }`}
             >
@@ -458,7 +458,7 @@ export function StitchBox({
                 onClick={onClearPick}
                 data-track="stitch-pick-clear"
                 data-tip={t("stitch.stitchPickClearTitle")}
-                className="rounded-full px-2 py-0.5 text-sand-500 hover:bg-clay-100 hover:text-clay-800"
+                className="rounded-full px-2 py-0.5 text-sand-500 hover:bg-clay-100 hover:text-clay-800 min-h-6 pointer-coarse:min-h-10 pointer-coarse:px-3.5"
               >
                 {t("stitch.stitchPickClear")}
               </button>
