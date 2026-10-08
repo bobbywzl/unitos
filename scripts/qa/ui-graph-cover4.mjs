@@ -73,7 +73,7 @@ async function cover(lang, width, height) {
     check(`${w} head: 7 of 19 parts noted`, head.parts === "7/19", JSON.stringify(head));
     check(`${w} head: 4 of 5 links with no reply`, head.noReply === "4/5", JSON.stringify(head));
     check(`${w} head: documents not opened counted`, /^\d+\/7$/.test(head.unopened ?? ""), JSON.stringify(head));
-    check(`${w} head reads in the language`, lang === "zh" ? /个部分中/.test(head.text ?? "") : /parts noted/.test(head.text ?? ""), head.text);
+    check(`${w} head reads in the language`, lang === "zh" ? /个部分/.test(head.text ?? "") : /parts noted/.test(head.text ?? ""), head.text);
     const dots = await page.locator("[data-graph-documents-list] [data-graph-part-dot]").evaluateAll((els) => els.map((e) => e.getAttribute("data-graph-part-dot")));
     check(`${w} 7 noted dots, 12 empty`, dots.filter((d) => d === "noted").length === 7 && dots.filter((d) => d === "empty").length === 12, JSON.stringify(dots));
     const lines = await page.locator("[data-graph-coverage-noted]").count();

@@ -80,6 +80,16 @@ export function waitsForReply(link: { replies?: ReplyLike[] }, myId: string): bo
   return myId !== "" && last.userId !== myId;
 }
 
+/** [panel6] The reply a link waits on (WALK6-06): its last open reply when
+    another person wrote it; null when the link waits on no one's question
+    (no reply, or the last open one is this account's). */
+export function waitingReply<R extends ReplyLike>(link: { replies?: R[] }, myId: string): R | null {
+  const open = (link.replies ?? []).filter((r) => r.resolvedById === null);
+  if (open.length === 0 || myId === "") return null;
+  const last = open.reduce((a, b) => (b.createdAt > a.createdAt ? b : a));
+  return last.userId !== myId ? last : null;
+}
+
 /** [layer5] Why Gaps only keeps a document (WALK5-06), in this order: Not
     opened, then the parts no note quotes (a document with no parts is one
     part, the whole document). Empty: no gap. */
