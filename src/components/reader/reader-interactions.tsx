@@ -90,8 +90,6 @@ import { AnnotationGrip } from "@/components/outline/annotation-grip";
 import { useCardDropOpen } from "@/components/outline/use-card-drop";
 import {
   ChevronDownIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
   CheckIcon,
   CollapseIcon,
   CommentIcon,
@@ -432,6 +430,23 @@ const TOOL_LAYER = "z-40";
 // over the cards, so a card under it never hides a row the reader is about
 // to press (the narrow reader puts cards in the text, under the words).
 const TOOLBOX_LAYER = "z-[41]";
+
+// The keyboard and the layers (SPEC.md §6): the box of each card a key can
+// open, what in it can take the focus, and how long after a key press an
+// opening or a closing counts as the key's.
+const CARD_OF_LAYER: Record<string, string> = {
+  explain: '[data-side-card="explain"]',
+  simplify: '[data-side-card="simplify"]',
+  assistant: '[data-side-card="assistant"]',
+  comment: '[data-side-card="comment"]',
+  link: '[data-side-card="link"]',
+  annotation: "[data-annotation-card]",
+  extract: "[data-extract-card]",
+  chooser: "[data-stack-chooser]",
+};
+const FOCUSABLE =
+  'button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+const KEY_FOCUS_MS = 2000;
 
 // One toolbar per content kind (SPEC.md §6). The popover shows the tools of
 // the kind under the selection and nothing else: a tool missing from a
@@ -1284,7 +1299,7 @@ export function ReaderInteractions({
       end: number;
       href: string;
       title: string;
-      reason: string | null; // what the link is about, typed after Close link
+      reason: string | null; // what the link is about, typed after Link here
     }[]
   >;
   editedByBlock: Record<string, { start: number; end: number }[]>;
@@ -1369,18 +1384,10 @@ export function ReaderInteractions({
   const [submenu, setSubmenu] = useState<null | "add" | "ai" | "comment" | "define">(null);
   // Kept per selection as a toolbar draft (lib/toolbar-drafts.ts) until the save lands.
   const [commentDraft, setCommentDraft] = useToolbarDraft("comment", documentId, popover?.anchor ?? null);
-  // The Add to notes bubble (SPEC.md §6): the comment that goes under the
-  // quote, and whether the bubble lists the sections for a new note or the
-  // notes to append to. Keyed to the selection it was typed for: a new
-  // selection starts the bubble over, so a comment typed for one passage
-  // does not go under another.
-  const [addDraft, setAddDraft] = useState<{ key: string | null; comment: string; mode: "sections" | "notes" }>({
-    key: null,
-    comment: "",
-    mode: "sections",
-  });
   // The page editor's right-click Explain, waiting for its popover (below).
   const [pendingExplain, setPendingExplain] = useState(false);
+  // Its Add to notes, the same: one press adds, as the toolbox's does.
+  const [pendingAdd, setPendingAdd] = useState(false);
   // The lead tool Jev predicts for a popover (SPEC.md §6), keyed by the
   // popover it answers: another popover reads it as null until its own
   // answer lands. Null answers: no key, no confident answer, a fixed lead.
@@ -2763,6 +2770,35 @@ export function ReaderInteractions({
     layerSeenRef.current[layer] = key;
     if (key !== null) layerOpenedRef.current[layer] = nextLayerSeq();
   }
+  // The keyboard (SPEC.md §6): a card opened from the keys takes the focus,
+  // and a layer closed from the keys gives it back to what opened it — the
+  // mark or chip, the page editor's words — else to a mark in the card's
+  // paragraph. Each layer's opening and closing is noted here and acted on
+  // after the render (useEffect below).
+  const layerShownRef = useRef<Record<string, boolean>>({});
+  const layerOpenerRef = useRef<Record<string, { el: HTMLElement | null; blockId: string | null }>>({});
+  const layerFocusRef = useRef<{ opened: string | null; closed: string[] }>({ opened: null, closed: [] });
+  const layerBlocks: Record<string, string | null | undefined> = {
+    explain: bubble?.anchor?.blockId,
+    simplify: simplifyCard?.anchor?.blockId,
+    assistant: assistantChat?.anchor?.blockId,
+    comment: commentCard?.anchor?.blockId,
+    link: linkCard?.anchor?.blockId,
+    annotation: annotationCard?.anchor?.blockId,
+  };
+  for (const [layer, key] of Object.entries(layerKeys)) {
+    const shown = key !== null;
+    if (Boolean(layerShownRef.current[layer]) === shown) continue;
+    layerShownRef.current[layer] = shown;
+    if (shown) {
+      const active = typeof document === "undefined" ? null : document.activeElement;
+      layerOpenerRef.current[layer] = {
+        el: active instanceof HTMLElement && active !== document.body ? active : null,
+        blockId: layerBlocks[layer] ?? null,
+      };
+      layerFocusRef.current.opened = layer;
+    } else layerFocusRef.current.closed.push(layer);
+  }
   // What a card's box holds that the reader typed and has not sent: kept by
   // the card's annotation, so a card closed by Escape or a click reopens from
   // its mark with the words still in its box.
@@ -2934,6 +2970,114 @@ export function ReaderInteractions({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
+  // The keyboard and the layers (SPEC.md §6), after each render: a card
+  // opened from the keys takes the focus — its field, else its first
+  // control; a layer closed from the keys, with the focus gone with it,
+  // gives the focus back to what opened it.
+  const keyAtRef = useRef(0);
+  // The card the keys opened, while its run lands: a card that draws its
+  // answer anew (its streaming box gives way to the answer) loses the focus
+  // to the page, and it comes back to the card — until a press elsewhere.
+  const keyCardRef = useRef<{ layer: string; until: number } | null>(null);
+  useEffect(() => {
+    const onKey = () => {
+      keyAtRef.current = Date.now();
+    };
+    const onPointer = () => {
+      keyAtRef.current = 0;
+      keyCardRef.current = null;
+    };
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("pointerdown", onPointer, true);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("pointerdown", onPointer, true);
+    };
+  }, []);
+  useEffect(() => {
+    const { opened, closed } = layerFocusRef.current;
+    const held = keyCardRef.current;
+    if (opened === null && closed.length === 0) {
+      if (!held || Date.now() > held.until || document.activeElement !== document.body) return;
+      const card = containerRef.current?.querySelector<HTMLElement>(CARD_OF_LAYER[held.layer] ?? "");
+      Array.from(card?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])
+        .find((el) => el.dataset.track !== "annotation-drag")
+        ?.focus({ preventScroll: true });
+      return;
+    }
+    keyCardRef.current = null;
+    layerFocusRef.current = { opened: null, closed: [] };
+    const container = containerRef.current;
+    if (!container || Date.now() - keyAtRef.current > KEY_FOCUS_MS) return;
+    const words = (blockId: string | null) => {
+      const editor = richTextRef.current ? pageEditorIn(container) : null;
+      if (editor) {
+        editor.view.focus();
+        return;
+      }
+      if (!blockId) return;
+      container
+        .querySelector<HTMLElement>(`[data-block-id="${CSS.escape(blockId)}"] [data-source-id][tabindex="0"]`)
+        ?.focus({ preventScroll: true });
+    };
+    requestAnimationFrame(() => {
+      const active = document.activeElement;
+      const card = opened && CARD_OF_LAYER[opened] ? container.querySelector<HTMLElement>(CARD_OF_LAYER[opened]) : null;
+      if (card) {
+        if (card.contains(active)) return;
+        // Its field, else its first control past the grip that drags it.
+        const target =
+          card.querySelector<HTMLElement>("textarea:not([disabled]), input:not([disabled])") ??
+          Array.from(card.querySelectorAll<HTMLElement>(FOCUSABLE)).find((el) => el.dataset.track !== "annotation-drag");
+        target?.focus({ preventScroll: true });
+        if (opened) keyCardRef.current = { layer: opened, until: Date.now() + 15_000 };
+        return;
+      }
+      // The focus is gone with the layer: on the page's body, or in the
+      // card that leaves (Presence keeps it for its exit, inert).
+      if (active && active !== document.body && active.isConnected && !active.closest(".presence-exit")) return;
+      const layer = closed[closed.length - 1];
+      const opener = layer ? layerOpenerRef.current[layer] : undefined;
+      if (!opener) return;
+      if (opener.el?.isConnected && !opener.el.closest(".ProseMirror")) opener.el.focus({ preventScroll: true });
+      else if (opener.el?.closest(".ProseMirror") || layer !== "popover") words(opener.blockId);
+    });
+  });
+  // Tab and the toolbox (SPEC.md §6): while the toolbox is open and the
+  // focus is on the page — the words, the page editor's text — Tab goes to
+  // its first row, before the marks and chips after the words; Shift+Tab on
+  // its first row gives the focus back to the words, the selection kept.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const onTab = (e: KeyboardEvent) => {
+      if (e.key !== "Tab" || e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+      if (!popoverRef.current) return;
+      const box = container.querySelector<HTMLElement>("[data-layer-toolbar]");
+      const rows = box ? Array.from(box.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => el.getClientRects().length > 0) : [];
+      if (!box || rows.length === 0) return;
+      const active = document.activeElement;
+      if (active && box.contains(active)) {
+        if (!e.shiftKey || active !== rows[0]) return;
+        e.preventDefault();
+        const editor = richTextRef.current ? pageEditorIn(container) : null;
+        if (editor) editor.view.focus();
+        else (active as HTMLElement).blur();
+        return;
+      }
+      const onPage =
+        !active ||
+        active === document.body ||
+        (container.contains(active) &&
+          (active.closest(".ProseMirror") !== null || active.matches("mark") || !active.matches(FOCUSABLE)));
+      if (!onPage || e.shiftKey) return;
+      e.preventDefault();
+      e.stopPropagation();
+      rows[0].focus({ preventScroll: true });
+    };
+    document.addEventListener("keydown", onTab, true);
+    return () => document.removeEventListener("keydown", onTab, true);
+  }, []);
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -3153,7 +3297,7 @@ export function ReaderInteractions({
       }
       selection.setBaseAndExtent(anchorNode, selection.anchorOffset, node, offset);
     };
-    // The toolbar on a selection. With a link pending, Close link is its
+    // The toolbar on a selection. With a link pending, Link here is its
     // first row, and pressing it closes the link there — an accidental
     // selection creates nothing.
     const showTools = (captured: Popover | null) => {
@@ -3345,8 +3489,9 @@ export function ReaderInteractions({
       }
       popoverRef.current = captured;
       setPopover(captured);
-      setSubmenu(tool === "add-to-notes" ? "add" : tool === "assistant" ? "ai" : null);
+      setSubmenu(tool === "assistant" ? "ai" : null);
       if (tool === "explain") setPendingExplain(true);
+      if (tool === "add-to-notes") setPendingAdd(true);
     };
     // Ctrl+Alt+G (⌘+Option+G) opens the assistant's bar on the selection.
     const onKey = (e: KeyboardEvent) => {
@@ -5142,13 +5287,7 @@ export function ReaderInteractions({
     leadAnswer && leadAnswer.key === popoverAnchorKey ? leadAnswer.tool : kindLead();
   // The comment is kept per selection as a toolbar draft (lib/toolbar-drafts.ts) until the save lands.
   const [addComment, keepAddComment] = useToolbarDraft("add", documentId, popover?.anchor ?? null);
-  const addMode = addDraft.key === popoverAnchorKey ? addDraft.mode : "sections";
-  const setAddComment = (comment: string) => {
-    keepAddComment(comment);
-    setAddDraft((d) => ({ key: popoverAnchorKey, comment, mode: d.key === popoverAnchorKey ? d.mode : "sections" }));
-  };
-  const setAddMode = (mode: "sections" | "notes") =>
-    setAddDraft((d) => ({ key: popoverAnchorKey, mode, comment: d.key === popoverAnchorKey ? d.comment : "" }));
+  const setAddComment = keepAddComment;
   useEffect(() => {
     if (!popover || !popoverAnchorKey || popover.term || popover.figure) return;
     const text = popover.anchor.quotedText.trim();
@@ -5662,7 +5801,6 @@ export function ReaderInteractions({
   function addedToNotes(anchor: Anchor) {
     markFreshAnchor(anchor);
     setPopover(null);
-    setAddDraft({ key: null, comment: "", mode: "sections" });
     clearToolbarDraft("add", documentId, anchor);
     window.getSelection()?.removeAllRanges();
     refreshWhenOnline(router);
@@ -5696,6 +5834,16 @@ export function ReaderInteractions({
       setBusy(false);
     }
   }
+  // Add to notes asked for from outside the toolbox (the page editor's
+  // right-click menu) adds once the popover it needs has rendered: a new
+  // note in the first section, as the toolbox's one press does.
+  useEffect(() => {
+    if (!pendingAdd || !popover) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPendingAdd(false);
+    if (sectionChoices.length > 0) void addToSection(sectionChoices[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAdd, popover]);
   // The box stays open on the words, the reason under Add to notes.
   function addFailed(err: unknown) {
     const text = err instanceof Error ? err.message : t("reader.addFailed");
@@ -6953,7 +7101,7 @@ export function ReaderInteractions({
         busy: false,
       });
       router.refresh();
-      showToast(t("reader.linkCreated"));
+      // No toast: the link card that opens says the link is made.
       return true;
     } catch (err) {
       showError(err instanceof Error ? err.message : t("reader.linkFailed"));
@@ -9031,7 +9179,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   // assistant's command box or the comment box takes focus; the mark stays
   // until the toolbar closes. Every block of the passage keeps it, so the
   // tint is the selection, whole, from the moment the pointer lifts. The
-  // Close link chip's highlight keeps it the same way. The page editor keeps
+  // Link here chip's highlight keeps it the same way. The page editor keeps
   // its own selection drawn, blue or gray (SPEC.md §29): no tint, so opening
   // the toolbar never repaints the page, and a repaint cannot put back a
   // selection the keys have just moved. A core's words (SPEC.md §28) are
@@ -9136,6 +9284,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   // the other (the pair's box is display: contents).
   const pairRow = (both: boolean) => (coarse && both ? "grid grid-cols-2 gap-0.5" : "contents");
   const halfRow = "px-2.5 py-2.5 text-[14px]";
+  // The head icons of a card a mark opens (✓, Link, Delete, ✕): 36px on a
+  // coarse pointer, as the toolbox's rows are.
+  const cardIcon = coarse ? "size-9" : "size-6";
   // The assistant's bar (SPEC.md §29) takes the selection box's Assistant on
   // a blank document or an import, for a reader who can edit it, out of
   // Viewing mode. A figure has no words to change: its Assistant keeps the
@@ -9147,7 +9298,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
     popover ? blocks.find((b) => b.id === popover.anchor.blockId)?.type : undefined,
   );
   // A selection in a core (SPEC.md §28) takes every tool but Link: a link
-  // joins the texts themselves. With a link pending, Close link takes Link's
+  // joins the texts themselves. With a link pending, Link here takes Link's
   // place.
   const inCore = popover ? isCoreKey(popover.anchor.blockId) : false;
   // The passage spans more blocks than a save takes (lib/anchors/passage.ts).
@@ -10151,18 +10302,52 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               {annotationGrip(annotationCardReference)}
               {annotationCard.kind === "highlight" ? t("reader.highlight") : t("reader.comment")}
             </span>
-            <button
-              onClick={() => setAnnotationCard(null)}
-              data-track="annotation-close"
-              aria-label={t("common.close")}
-              data-tip={t("common.close")}
-              className="rounded-full px-1.5 text-sand-500 hover:text-clay-800"
-            >
-              ✕
-            </button>
+            {/* One head for every card a mark opens (SPEC.md §6): the kind,
+                then Link across texts (a highlight), Delete, and ✕. */}
+            <span className="ml-auto flex items-center gap-0.5">
+              {/* A link across texts starts from the highlight: the next
+                  words the reader selects, here or in another text, close it. */}
+              {annotationCard.kind === "highlight" && (
+                <button
+                  onClick={(e) => {
+                    window.dispatchEvent(
+                      new CustomEvent("dissect:start-link", {
+                        detail: { sourceId: annotationCard.sourceId, origin: e.currentTarget },
+                      }),
+                    );
+                    setAnnotationCard(null);
+                  }}
+                  data-track="link-chip"
+                  aria-label={t("reader.linkAcrossTexts")}
+                  data-tip={t("reader.linkTitle")}
+                  className={`flex ${cardIcon} items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800`}
+                >
+                  <UnlinkIcon size={coarse ? 15 : 13} />
+                </button>
+              )}
+              <button
+                onClick={() => void deleteAnnotation()}
+                data-track="annotation-delete"
+                aria-label={t("common.delete")}
+                data-tip={annotationCard.kind === "highlight" ? t("reader.deleteHighlightTitle") : t("reader.deleteCommentTitle")}
+                disabled={annotationCard.busy}
+                className={`flex ${cardIcon} items-center justify-center rounded-full text-sand-600 hover:bg-red-50 hover:text-red-600 disabled:opacity-40`}
+              >
+                <TrashIcon size={coarse ? 15 : 13} />
+              </button>
+              <button
+                onClick={() => setAnnotationCard(null)}
+                data-track="annotation-close"
+                aria-label={t("common.close")}
+                data-tip={t("common.close")}
+                className={`flex ${cardIcon} items-center justify-center rounded-full text-xs text-sand-500 hover:text-clay-800`}
+              >
+                ✕
+              </button>
+            </span>
           </div>
           {annotationCard.kind === "highlight" && (
-            <div className="mb-2.5 flex items-center gap-2">
+            <div className={`mb-2.5 flex items-center ${coarse ? "gap-3" : "gap-2"}`}>
               {HIGHLIGHT_HUES.map((color) => (
                 <button
                   key={color}
@@ -10171,7 +10356,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   disabled={annotationCard.busy}
                   aria-label={t("reader.recolor", { color: t(HUE_KEY[color]) })}
                   data-tip={t("reader.recolor", { color: t(HUE_KEY[color]) })}
-                  className={`size-5 rounded-full disabled:opacity-40 ${
+                  className={`${coarse ? "size-7" : "size-5"} rounded-full disabled:opacity-40 ${
                     annotationCard.color === color ? "ring-2 ring-sand-600 ring-offset-2" : ""
                   }`}
                   style={{ background: HUE_DOT[color] }}
@@ -10213,45 +10398,14 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 : "group-focus-within/hlcard:min-h-[4.5rem]"
             }`}
           />
-          <div className="mt-2 flex items-center justify-between">
-            <span className="flex items-center gap-3">
-              <button
-                onClick={() => void deleteAnnotation()}
-                data-track="annotation-delete"
-                data-tip={annotationCard.kind === "highlight" ? t("reader.deleteHighlightTitle") : t("reader.deleteCommentTitle")}
-                disabled={annotationCard.busy}
-                className="text-xs font-semibold text-red-500 hover:text-red-700 disabled:opacity-40"
-              >
-                {t("common.delete")}
-              </button>
-              {/* A link across texts starts from the highlight: the next
-                  words the reader selects, here or in another text, close it. */}
-              {annotationCard.kind === "highlight" && (
-                <button
-                  onClick={(e) => {
-                    window.dispatchEvent(
-                      new CustomEvent("dissect:start-link", {
-                        detail: { sourceId: annotationCard.sourceId, origin: e.currentTarget },
-                      }),
-                    );
-                    setAnnotationCard(null);
-                  }}
-                  data-track="link-chip"
-                  aria-label={t("panes.linkToOtherTexts")}
-                  data-tip={t("panes.linkToOtherTexts")}
-                  className="flex size-6 items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800"
-                >
-                  <UnlinkIcon size={12} />
-                </button>
-              )}
-            </span>
-            {/* The mic and Save show once the reader writes: a card opened to
-                recolor or delete holds no dead buttons. */}
-            <span
-              className={`items-center gap-1.5 ${
-                annotationCard.draft.trim() !== annotationCard.saved.trim() ? "flex" : "hidden group-focus-within/hlcard:flex"
-              }`}
-            >
+          {/* The mic and Save show once the reader writes: a card opened to
+              recolor or delete holds no dead buttons. */}
+          <div
+            className={`mt-2 items-center justify-end ${
+              annotationCard.draft.trim() !== annotationCard.saved.trim() ? "flex" : "hidden group-focus-within/hlcard:flex"
+            }`}
+          >
+            <span className="flex items-center gap-1.5">
               <VoiceTypingButton track="annotation-voice-typing" />
               <button
                 onClick={() => void saveAnnotation()}
@@ -10275,6 +10429,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           return (
             <div
               data-selection-popover
+              data-extract-card
               className={`pop-in absolute ${TOOL_LAYER} w-[300px] rounded-2xl bg-card p-3 shadow-float${underView}`}
               style={{ top: extractCard.top, left: extractCard.left }}
             >
@@ -10394,7 +10549,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               {t("reader.keyTerm")}
             </p>
           )}
-          {/* With a link pending, Close link is the toolbox's first row: the
+          {/* With a link pending, Link here is the toolbox's first row: the
               selection is the link's other end once it is pressed. */}
           {pendingLink && !inCore && (
             <button
@@ -10407,6 +10562,37 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               {busy ? <SpinnerIcon size={11} className="motion-safe:animate-spin" /> : <LinkIcon size={11} />}
               {t("reader.closeLink")}
             </button>
+          )}
+
+          {/* Highlight: the color dots are the toolbox's first row, and the
+              voice ends it. */}
+          {has("highlight") && (
+          <div
+            className={`order-first flex items-center justify-around rounded-full ${coarse ? "px-2 py-2" : "px-1.5 py-1"}${leadRing("highlight")}`}
+          >
+            {HIGHLIGHT_HUES.map((color) => (
+              <button
+                key={color}
+                disabled={busy}
+                // A comment kept from before rides along only while its box is open.
+                onClick={() => void annotate({ color, comment: (submenu === "comment" && commentDraft.trim()) || undefined })}
+                data-track={`highlight:${color}`}
+                aria-label={t("reader.highlightIn", { color: t(HUE_KEY[color]) })}
+                data-tip={t(
+                  submenu === "comment" && commentDraft.trim() ? "reader.highlightInWithNote" : "reader.highlightIn",
+                  { color: t(HUE_KEY[color]) },
+                )}
+                className={`${coarse ? "size-7" : "size-5"} rounded-full transition-transform hover:scale-110 disabled:opacity-40`}
+                style={{ background: HUE_DOT[color] }}
+              />
+            ))}
+            {has("readAloud") && voiceButton}
+          </div>
+          )}
+          {toolError?.at === "highlight" && toolError.from === popover.anchor && (
+            <p data-tool-error role="alert" className="order-first px-2 py-1 text-[12px] font-medium text-red-600">
+              {toolError.text}
+            </p>
           )}
 
           {/* Define (SPEC.md §6): the first row when the selection is one
@@ -10473,6 +10659,138 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               </Collapse>
             </div>
           )}
+
+          {/* Add to notes: the toolbox's second row. One press makes a new
+              note in the first section with the words as its quote, as Enter
+              in its field does; the ▾ half opens the panel in the tools'
+              place: the field for the note's words, the sections when there
+              are two or more, and the notes to add the words to. The tools
+              fold away while it is open ([&~*]:hidden); ▾ or Escape brings
+              them back. */}
+          {has("addToNotes") && sectionChoices.length > 0 && (
+            <div
+              className={`-order-1 flex flex-col gap-0.5 rounded-2xl${leadRing("addToNotes")}${
+                submenu === "add" ? " [&~*]:hidden" : ""
+              }`}
+            >
+              <div className="flex w-full items-stretch gap-px">
+                <button
+                  disabled={busy}
+                  onClick={() => void addToSection(sectionChoices[0].id)}
+                  data-track="add-to-notes"
+                  data-tip={t("reader.addToNotesTitle", { section: sectionChoices[0].label })}
+                  className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-l-full bg-clay ${toolRow} text-left font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-60`}
+                >
+                  <NotesIcon size={coarse ? 14 : 12} />
+                  {t("reader.addToNotes")}
+                </button>
+                <button
+                  onClick={() => setSubmenu(submenu === "add" ? null : "add")}
+                  data-track="add-to-notes-more"
+                  aria-expanded={submenu === "add"}
+                  aria-label={t("reader.addToNotesMoreTitle")}
+                  data-tip={t("reader.addToNotesMoreTitle")}
+                  className={`flex items-center justify-center rounded-r-full bg-clay ${coarse ? "w-11" : "w-7"} text-clay-fg hover:bg-clay-600`}
+                >
+                  <ChevronDownIcon size={coarse ? 14 : 12} className={submenu === "add" ? "rotate-180" : undefined} />
+                </button>
+              </div>
+              {toolError?.at === "add" && toolError.from === popover.anchor && (
+                <p data-tool-error role="alert" className="px-2 py-0.5 text-[12px] font-medium text-red-600">
+                  {toolError.text}
+                </p>
+              )}
+          {(() => {
+            // The panel: the field for the note's words on top, then "New
+            // note in" and the sections (with one section the press above is
+            // that row), then "Which note?" and the notes.
+            const first = sectionChoices[0];
+            const hasNotes = sections.some((s) =>
+              [s, ...s.children].some((x) => x.notes.some((n) => n.status === "ACCEPTED")),
+            );
+            const smallLabel = `${coarse ? "text-[11px]" : "text-[10px]"} font-bold tracking-[0.08em] text-sand-500 uppercase`;
+            // Escape folds the panel and gives the tools back, the focus on ▾.
+            const foldPanel = () => {
+              setSubmenu(null);
+              requestAnimationFrame(() =>
+                containerRef.current
+                  ?.querySelector<HTMLElement>('[data-selection-popover] [data-track="add-to-notes-more"]')
+                  ?.focus({ preventScroll: true }),
+              );
+            };
+            const panel = submenu === "add" && (
+              <div data-add-panel className="flex flex-col gap-0.5">
+                <input
+                  autoFocus={!coarse}
+                  value={addComment}
+                  onFocus={caretToEnd}
+                  onChange={(e) => setAddComment(e.target.value)}
+                  {...ime.props}
+                  onKeyDown={(e) => {
+                    if (ime.isImeEnter(e) || isImeKey(e)) return;
+                    // Enter: the fastest path, a new note in the first section.
+                    if (e.key === "Enter" && !busy) {
+                      e.preventDefault();
+                      void addToSection(first.id);
+                    }
+                    if (e.key === "Escape") {
+                      e.stopPropagation();
+                      foldPanel();
+                    }
+                  }}
+                  placeholder={t("reader.addNotePlaceholder")}
+                  aria-label={t("reader.addNotePlaceholder")}
+                  data-tip={t("reader.addCommentTitle", { section: first.label })}
+                  data-track="add-to-notes-comment"
+                  className={`w-full rounded-full bg-sand-100 ${
+                    coarse ? "px-3.5 py-2.5 text-[14px]" : "px-2.5 py-1.5 text-[12px]"
+                  } outline-none placeholder:text-sand-500`}
+                />
+                {sectionChoices.length > 1 && (
+                  <>
+                    <span className={`px-2.5 pt-1.5 pb-0.5 ${smallLabel}`}>{t("reader.addNewNoteIn")}</span>
+                    <div className="flex max-h-32 flex-col overflow-y-auto">
+                      {sectionChoices.map((choice) => (
+                        <button
+                          key={choice.id}
+                          disabled={busy}
+                          onClick={() => void addToSection(choice.id)}
+                          data-track="add-to-notes-section"
+                          data-tip={t("reader.addPendingNote", { section: choice.label })}
+                          className={`truncate rounded-full ${toolRow} text-left text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
+                        >
+                          {choice.label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+                {hasNotes && (
+                  <>
+                    <span
+                      data-tip={t("reader.addToExistingNoteTitle")}
+                      className={`px-2.5 pt-1.5 pb-0.5 ${smallLabel}`}
+                    >
+                      {t("reader.addPickNote")}
+                    </span>
+                    <NotePicker
+                      sections={sections}
+                      onPick={(note) => void addToNote(note)}
+                      disabled={busy}
+                      autoFocus={false}
+                      listClassName="max-h-[min(14rem,40vh)]"
+                      // Escape in an empty search folds the panel, as the field's does.
+                      onEscape={foldPanel}
+                    />
+                  </>
+                )}
+              </div>
+            );
+            return <Collapse open={submenu === "add"}>{panel}</Collapse>;
+          })()}
+            </div>
+          )}
+
 
           <button
             onClick={() => (barOffered ? openBar(popover) : setSubmenu(submenu === "ai" ? null : "ai"))}
@@ -10730,168 +11048,6 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             <UnlinkIcon size={coarse ? 14 : 12} />
             {t("reader.linkAcrossTexts")}
           </button>
-          )}
-
-          {/* Highlight: the color dots are the toolbox's first row, and the
-              voice ends it. */}
-          {has("highlight") && (
-          <div
-            className={`order-first flex items-center justify-around rounded-full ${coarse ? "px-2 py-2" : "px-1.5 py-1"}${leadRing("highlight")}`}
-          >
-            {HIGHLIGHT_HUES.map((color) => (
-              <button
-                key={color}
-                disabled={busy}
-                // A comment kept from before rides along only while its box is open.
-                onClick={() => void annotate({ color, comment: (submenu === "comment" && commentDraft.trim()) || undefined })}
-                data-track={`highlight:${color}`}
-                aria-label={t("reader.highlightIn", { color: t(HUE_KEY[color]) })}
-                data-tip={t(
-                  submenu === "comment" && commentDraft.trim() ? "reader.highlightInWithNote" : "reader.highlightIn",
-                  { color: t(HUE_KEY[color]) },
-                )}
-                className={`${coarse ? "size-7" : "size-5"} rounded-full transition-transform hover:scale-110 disabled:opacity-40`}
-                style={{ background: HUE_DOT[color] }}
-              />
-            ))}
-            {has("readAloud") && voiceButton}
-          </div>
-          )}
-          {toolError?.at === "highlight" && toolError.from === popover.anchor && (
-            <p data-tool-error role="alert" className="order-first px-2 py-1 text-[12px] font-medium text-red-600">
-              {toolError.text}
-            </p>
-          )}
-
-          {/* Add to notes: the toolbox's second row. One press makes a new
-              note in the first section with the words as its quote, as Enter
-              in its field does; the ▾ half opens the panel: the field for the
-              note's words, the sections, and Add to a note…. */}
-          {has("addToNotes") && sectionChoices.length > 0 && (
-            <div className={`-order-1 flex flex-col gap-0.5 rounded-2xl${leadRing("addToNotes")}`}>
-              <div className="flex w-full items-stretch gap-px">
-                <button
-                  disabled={busy}
-                  onClick={() => void addToSection(sectionChoices[0].id)}
-                  data-track="add-to-notes"
-                  data-tip={t("reader.addToNotesTitle", { section: sectionChoices[0].label })}
-                  className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-l-full bg-clay ${toolRow} text-left font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-60`}
-                >
-                  <NotesIcon size={coarse ? 14 : 12} />
-                  {t("reader.addToNotes")}
-                </button>
-                <button
-                  onClick={() => setSubmenu(submenu === "add" ? null : "add")}
-                  data-track="add-to-notes-more"
-                  aria-expanded={submenu === "add"}
-                  aria-label={t("reader.addToNotesMoreTitle")}
-                  data-tip={t("reader.addToNotesMoreTitle")}
-                  className={`flex items-center justify-center rounded-r-full bg-clay ${coarse ? "w-11" : "w-7"} text-clay-fg hover:bg-clay-600`}
-                >
-                  <ChevronDownIcon size={coarse ? 14 : 12} className={submenu === "add" ? "rotate-180" : undefined} />
-                </button>
-              </div>
-              {toolError?.at === "add" && toolError.from === popover.anchor && (
-                <p data-tool-error role="alert" className="px-2 py-0.5 text-[12px] font-medium text-red-600">
-                  {toolError.text}
-                </p>
-              )}
-          {(() => {
-            // The panel: the field for the note's words on top, then the
-            // sections for a new note under "New note in", then Add to a
-            // note…, which swaps the sections for the note picker.
-            const first = sectionChoices[0];
-            const hasNotes = sections.some((s) =>
-              [s, ...s.children].some((x) => x.notes.some((n) => n.status === "ACCEPTED")),
-            );
-            const smallLabel = `${coarse ? "text-[11px]" : "text-[10px]"} font-bold tracking-[0.08em] text-sand-500 uppercase`;
-            const panel = submenu === "add" && (
-              <div className="flex flex-col gap-0.5">
-                <input
-                  autoFocus={!coarse}
-                  value={addComment}
-                  onFocus={caretToEnd}
-                  onChange={(e) => setAddComment(e.target.value)}
-                  {...ime.props}
-                  onKeyDown={(e) => {
-                    if (ime.isImeEnter(e) || isImeKey(e)) return;
-                    // Enter: the fastest path, a new note in the first section.
-                    if (e.key === "Enter" && !busy) {
-                      e.preventDefault();
-                      void addToSection(first.id);
-                    }
-                    // Escape folds the box and leaves the toolbar, as Comment's does.
-                    if (e.key === "Escape") {
-                      e.stopPropagation();
-                      setSubmenu(null);
-                      focusPageAfterComment();
-                    }
-                  }}
-                  placeholder={t("reader.addNotePlaceholder")}
-                  aria-label={t("reader.addNotePlaceholder")}
-                  data-tip={t("reader.addCommentTitle", { section: first.label })}
-                  data-track="add-to-notes-comment"
-                  className={`w-full rounded-full bg-sand-100 ${
-                    coarse ? "px-3.5 py-2.5 text-[14px]" : "px-2.5 py-1.5 text-[12px]"
-                  } outline-none placeholder:text-sand-500`}
-                />
-                {addMode === "sections" ? (
-                  <>
-                    <span className={`px-2.5 pt-1.5 pb-0.5 ${smallLabel}`}>{t("reader.addNewNoteIn")}</span>
-                    <div className="flex max-h-44 flex-col overflow-y-auto">
-                      {sectionChoices.map((choice) => (
-                        <button
-                          key={choice.id}
-                          disabled={busy}
-                          onClick={() => void addToSection(choice.id)}
-                          data-track="add-to-notes-section"
-                          data-tip={t("reader.addPendingNote", { section: choice.label })}
-                          className={`truncate rounded-full ${toolRow} text-left text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
-                        >
-                          {choice.label}
-                        </button>
-                      ))}
-                    </div>
-                    {hasNotes && (
-                      <>
-                        <div className="mx-2.5 my-0.5 border-t border-line" />
-                        <button
-                          disabled={busy}
-                          onClick={() => setAddMode("notes")}
-                          data-track="add-to-notes-existing"
-                          data-tip={t("reader.addToExistingNoteTitle")}
-                          className={`flex w-full items-center justify-between gap-2 rounded-full ${toolRow} text-left text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40`}
-                        >
-                          <span className="truncate">{t("reader.addToExistingNote")}</span>
-                          <ChevronRightIcon size={coarse ? 14 : 12} />
-                        </button>
-                      </>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <button
-                      onClick={() => setAddMode("sections")}
-                      data-track="add-to-notes-back"
-                      className={`flex w-full items-center gap-1.5 rounded-full ${toolRow} text-left ${smallLabel} hover:bg-clay-100 hover:text-clay-800`}
-                    >
-                      <ChevronLeftIcon size={coarse ? 14 : 12} />
-                      {t("reader.addPickNote")}
-                    </button>
-                    <NotePicker
-                      sections={sections}
-                      onPick={(note) => void addToNote(note)}
-                      disabled={busy}
-                      // Escape in the search goes back to the sections, not out of the bubble.
-                      onEscape={() => setAddMode("sections")}
-                    />
-                  </>
-                )}
-              </div>
-            );
-            return <Collapse open={submenu === "add"}>{panel}</Collapse>;
-          })()}
-            </div>
           )}
 
           </>)}
@@ -11335,9 +11491,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   data-track="comment-card-resolve"
                   aria-label={t("common.resolve")}
                   data-tip={t("docsLayer.resolveTitle")}
-                  className="flex size-6 items-center justify-center rounded-full text-sand-600 hover:bg-sage-100 hover:text-sage-700"
+                  className={`flex ${cardIcon} items-center justify-center rounded-full text-sand-600 hover:bg-sage-100 hover:text-sage-700`}
                 >
-                  <CheckIcon size={14} />
+                  <CheckIcon size={coarse ? 16 : 14} />
                 </button>
               )}
               {commentCard.noteId && (
@@ -11347,15 +11503,15 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   aria-label={t("common.delete")}
                   data-tip={t("reader.deleteCommentTitle")}
                   disabled={commentCard.busy}
-                  className="flex size-6 items-center justify-center rounded-full text-sand-600 hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                  className={`flex ${cardIcon} items-center justify-center rounded-full text-sand-600 hover:bg-red-50 hover:text-red-600 disabled:opacity-40`}
                 >
-                  <TrashIcon size={13} />
+                  <TrashIcon size={coarse ? 15 : 13} />
                 </button>
               )}
               <button
                 onClick={closeCommentCard}
                 data-track="comment-card-close"
-                className="flex size-6 items-center justify-center rounded-full text-xs text-sand-500 hover:text-clay-700"
+                className={`flex ${cardIcon} items-center justify-center rounded-full text-xs text-sand-500 hover:text-clay-700`}
                 aria-label={t("common.close")}
                 data-tip={t("common.close")}
               >
@@ -11418,8 +11574,8 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       </Presence>
 
       {/* The card a closed link opens: both ends, and a box for what the
-          link is about. Save stores it as the link's reason; Skip leaves the
-          link as it is. */}
+          link is about. Save stores it as the link's reason; ✕ or Escape
+          leaves the link as it is. */}
       <Presence show={linkCard !== null} exit="bubble">
       {linkCard && (
         <div
@@ -11445,7 +11601,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             <button
               onClick={closeLinkCard}
               data-track="link-card-close"
-              className="text-xs text-sand-500 hover:text-clay-700"
+              className={`flex ${cardIcon} items-center justify-center rounded-full text-xs text-sand-500 hover:text-clay-700`}
               aria-label={t("common.close")}
               data-tip={t("common.close")}
             >
@@ -11481,15 +11637,8 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               className="field-sizing-content mt-2.5 min-h-0 w-full resize-none rounded-xl bg-sand-100 px-2.5 py-2 text-[13px] outline-none placeholder:text-sand-500"
             />
           </div>
-          <div className="mt-2 flex items-center justify-between">
-            <button
-              onClick={closeLinkCard}
-              data-track="link-card-skip"
-              data-tip={t("reader.linkSkipTitle")}
-              className="text-xs text-sand-500 hover:text-clay-700"
-            >
-              {t("reader.linkSkip")}
-            </button>
+          {/* ✕ and Escape keep the link as it is: no Skip beside them. */}
+          <div className="mt-2 flex items-center justify-end">
             <span className="flex items-center gap-1.5">
               <VoiceTypingButton track="link-card-voice-typing" />
               <button

@@ -658,8 +658,10 @@ export const AnnotationMarks = Extension.create({
             // In Viewing a click on a mark opens what it opens; the
             // browser's selection tells a click from the end of a drag (the
             // editor's is stale). A chip is the page's own click handler's.
+            // On a touch screen, which has no Ctrl+click, a tap on a mark
+            // opens it in Editing too (tapMark).
             click(view, event) {
-              if (view.editable) return false;
+              if (view.editable) return tapMark(view, event);
               const target = event.target instanceof Element ? event.target : null;
               if (!target?.closest("[data-docs-open]") || target.closest("[data-anchor-skip]")) return false;
               if (!(window.getSelection()?.isCollapsed ?? true)) return false;
@@ -674,6 +676,45 @@ export const AnnotationMarks = Extension.create({
     ];
   },
 });
+
+/** The mark the last tap in Editing opened: a second tap on it places the caret. */
+let tappedMark: string | null = null;
+/** How far a tap may land from a chip and still be the chip's: a chip is a
+    24px target, however small the page draws it (a phone's page is zoomed out). */
+const CHIP_REACH = 12;
+
+/** A tap in Editing on a touch screen (SPEC.md §29): a tap on a mark opens
+    what the mark opens, as a click in Viewing does; a second tap on the same
+    mark, or a tap off the marks, places the caret. A tap next to a chip is
+    the chip's. Returns true when the tap opened something. */
+function tapMark(view: EditorView, event: MouseEvent): boolean {
+  if (!window.matchMedia("(pointer: coarse)").matches) return false;
+  if (!(window.getSelection()?.isCollapsed ?? true)) return false;
+  const target = event.target instanceof Element ? event.target : null;
+  if (target?.closest("[data-anchor-skip]")) return false;
+  const mark = target?.closest<HTMLElement>("[data-docs-open]");
+  if (!mark) {
+    tappedMark = null;
+    for (const chip of view.dom.querySelectorAll<HTMLElement>("button[data-docs-open]")) {
+      const r = chip.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const reach = Math.max(CHIP_REACH, r.width / 2, r.height / 2);
+      if (Math.abs(event.clientX - cx) <= reach && Math.abs(event.clientY - cy) <= reach) {
+        chip.click();
+        return true;
+      }
+    }
+    return false;
+  }
+  const id = mark.dataset.sourceId ?? mark.dataset.noteId ?? mark.dataset.extractId ?? mark.dataset.linkId ?? "";
+  if (id && tappedMark === id) {
+    tappedMark = null;
+    return false;
+  }
+  tappedMark = id || null;
+  return openMarkAt(mark, { x: event.clientX, y: event.clientY });
+}
 
 /** A press on a mark or a chip: what it opens in the reader, it opens here —
     an annotation's card, a note in the tray, an extraction's match card, a

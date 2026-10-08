@@ -153,7 +153,7 @@ export type Highlight = {
   // Its note was just deleted: the mark fades out (globals.css .mark-out) and
   // takes no clicks; it unpaints once the fade ends. Kind "anchor" only.
   leaving?: boolean;
-  // kind "link": what the link is about, typed after Close link.
+  // kind "link": what the link is about, typed after Link here.
   linkReason?: string | null;
 };
 
@@ -527,22 +527,51 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
       // An extract span opens the match card: the whole highlight is
       // pressable, not only its label chip.
       const extractMark = extract && !focusable && !noteMark ? extract : null;
+      // What a click on the mark opens: its card, or on stacked words the
+      // chooser of them at (x, y) (SPEC.md §6).
+      const openMark = (x: number, y: number) =>
+        window.dispatchEvent(
+          new CustomEvent("dissect:open-annotation", {
+            detail: {
+              sourceId: anchor?.sourceId ?? stack[0]?.sourceId,
+              ...(stacked ? { sources: stack.map((h) => h.sourceId as string), x, y } : {}),
+            },
+          }),
+        );
+      // The keyboard (SPEC.md §6): a mark's first words take the focus, named
+      // by its tip, and Enter opens what a click opens. The chips after the
+      // words stay for the pointer and leave the Tab order.
+      const markTab = focusable && (anchor?.start === from || stack.some((h) => h.start === from));
+      const markTip =
+        focusable && (anchor?.annotation || stack.some((h) => h.annotation))
+          ? t("panes.viewAnnotation")
+          : focusable || noteMark
+            ? t("panes.viewNote")
+            : extractMark
+              ? t("panes.extractOpenCard", { label: extractMark.extractLabel ?? "" })
+              : undefined;
       parts.push(
         <mark
           key={from}
+          tabIndex={markTab ? 0 : undefined}
+          role={markTab ? "button" : undefined}
+          aria-label={markTab ? markTip : undefined}
+          onKeyDown={
+            markTab
+              ? (e) => {
+                  if (e.key !== "Enter" && e.key !== " ") return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const r = e.currentTarget.getBoundingClientRect();
+                  openMark(r.left, r.bottom - 12);
+                }
+              : undefined
+          }
           data-source-id={anchor?.sourceId ?? undefined}
           // Stacked words: every source on them, so an annotation or a note
           // whose words another mark paints is still found by its id.
           data-source-ids={stacked ? stack.map((h) => h.sourceId).join(" ") : undefined}
-          data-tip={
-            focusable && (anchor?.annotation || stack.some((h) => h.annotation))
-              ? t("panes.viewAnnotation")
-              : focusable || noteMark
-                ? t("panes.viewNote")
-                : extractMark
-                  ? t("panes.extractOpenCard", { label: extractMark.extractLabel ?? "" })
-                  : undefined
-          }
+          data-tip={markTip}
           // A drag inside the mark selects words: the selection toolbar
           // takes it, and only a plain click opens what the mark opens.
           onMouseDown={focusable || noteMark || extractMark ? pressMark : undefined}
@@ -553,16 +582,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
                   e.stopPropagation();
                   // Stacked words: the reader picks which annotation or
                   // note opens (SPEC.md §6), in a chooser at the click.
-                  window.dispatchEvent(
-                    new CustomEvent("dissect:open-annotation", {
-                      detail: {
-                        sourceId: anchor?.sourceId ?? stack[0]?.sourceId,
-                        ...(stacked
-                          ? { sources: stack.map((h) => h.sourceId as string), x: e.clientX, y: e.clientY }
-                          : {}),
-                      },
-                    }),
-                  );
+                  openMark(e.clientX, e.clientY);
                 }
               : noteMark
                 ? (e) => {
@@ -651,6 +671,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
             type="button"
             data-anchor-skip
             data-margin-chip
+            tabIndex={-1}
             data-track="tool-chip"
             data-hover-source={toolEnding.sourceId ?? undefined}
             aria-label={tip}
@@ -676,6 +697,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
             type="button"
             data-anchor-skip
             data-margin-chip
+            tabIndex={-1}
             data-track="comment-icon"
             aria-label={t("panes.openComment")}
             data-tip={t("panes.openComment")}
