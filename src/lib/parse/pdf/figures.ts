@@ -89,6 +89,8 @@ export function isCaption(text: string, runs: Run[] | undefined): boolean {
 // the panel's label, which the figure's caption names; a symbol and its
 // script is a caption ("(c) Ω₃", GeoTopo's Abbildung 1.12: it was lost).
 const PANEL_RE = /^(?:\(\p{L}\)|\p{L}[.)])\s+(?=[^]*\p{L})[^]{2,}/u;
+// An equation's number: "(2.17)", "(4b)".
+const EQUATION_NUMBER_RE = /^\(\d{1,3}(?:\.\d{1,3})*[a-z]?\)$/;
 const NOTE_RE = /^(?:(?:notes?|sources?)\s*[:.]\s+\S|[（(](?:出典|注|資料|来源|來源)[）)]|(?:出典|注|来源|來源)[:：])/i;
 // Panel letters alone ("(c) (d)") are a chart's labels, no caption.
 const LETTERS_RE = /^(?:\s*(?:\(\p{L}\)|\p{L}[.)]))+\s*$/u;
@@ -761,6 +763,12 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     runs.filter((r) => {
       if (taken.has(r) || r.chars > 12 || shareInside(r.box, plot) >= 0.7 || LABEL_START_RE.test(textOf(r))) return false;
       if (/[.!?;:,]$/.test(r.items.map((i) => i.str).join("").trim())) return false;
+      // An equation's number at the column's edge is no tick of a drawing
+      // in the margin beside it (parse loop finding: the MML book's p. 23
+      // took "(2.17)" for the y-axis label of Figure 2.5's colored
+      // matrices; the drawing's box then crossed the notes' gutter, and
+      // the notes read into the lines beside them).
+      if (EQUATION_NUMBER_RE.test(textOf(r).trim())) return false;
       const reach = Math.max(r.size, textSize) * 1.7;
       const cx = (r.box.x1 + r.box.x2) / 2;
       const cy = (r.box.y1 + r.box.y2) / 2;
