@@ -84,9 +84,14 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
     else void actions.moveNoteToSection(itemId, to.parentId, index);
   }
 
+  // While a board covers the page, the page behind it takes no focus and no
+  // key: Tab walks the board, and a composer the page draws for the same
+  // section never takes the caret from the board's (section-board.tsx).
+  const behind = board !== null || undefined;
+
   return (
     <div className="flex flex-col">
-      <div className="mb-2 flex flex-wrap items-baseline gap-3.5">
+      <div inert={behind} className="mb-2 flex flex-wrap items-baseline gap-3.5">
         <h1 className="text-[38px]">{notebook.title}</h1>
         {pending.length > 0 && (
           <span className="rounded-full bg-clay-200 px-3.5 py-1 text-xs font-semibold text-clay-800">
@@ -97,7 +102,7 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
       </div>
 
       {/* One row on a phone too: the search takes what the icons leave. */}
-      <div className="mt-2 flex items-center gap-2">
+      <div inert={behind} className="mt-2 flex items-center gap-2">
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -125,7 +130,7 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
       </div>
 
       {grouping !== "section" ? (
-        <div className="pt-[22px]">
+        <div inert={behind} className="pt-[22px]">
           <NoteGroups
             tree={tree}
             grouping={grouping}
@@ -137,7 +142,7 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
           />
         </div>
       ) : (
-      <div className="flex flex-col gap-[30px] pt-[22px]">
+      <div inert={behind} className="flex flex-col gap-[30px] pt-[22px]">
         {/* One drag across the whole page (SPEC.md §6): a note dragged out
             of its section drops into any other, a note held over another
             joins it, and a section reorders among its siblings. */}
