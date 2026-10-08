@@ -9,6 +9,7 @@ import { isImeKey, useImeGuard } from "@/lib/ime";
 import { LoadingDots } from "@/components/thinking";
 import { TierMark } from "@/components/tier-mark";
 import { Instruments } from "@/components/works/instruments";
+import { focusMenuIfKey, menuButtonKeys, menuKeys } from "@/lib/menu-keys";
 
 export type WorkItem = {
   id: string;
@@ -158,8 +159,10 @@ export function WorkCard({
                 left: more.right - MENU_WIDTH < 16,
               });
             }
+            if (!menuOpen) focusMenuIfKey(e, `[data-card-menu="${work.id}"]`);
             setMenuOpen(!menuOpen);
           }}
+          onKeyDown={(e) => menuButtonKeys(e, menuOpen, `[data-card-menu="${work.id}"]`)}
           aria-label={t("works.moreActionsFor", { title: work.title })}
           data-tip={t("works.projectActions")}
           aria-expanded={menuOpen}
@@ -169,6 +172,8 @@ export function WorkCard({
         </button>
         {menuOpen && (
           <div
+            data-card-menu={work.id}
+            onKeyDown={menuKeys}
             className="absolute flex w-44 flex-col overflow-hidden rounded-2xl bg-card py-1 shadow-float"
             style={{ top: `calc(100% + ${menuPlace.top}px)`, ...(menuPlace.left ? { left: 0 } : { right: 0 }) }}
           >

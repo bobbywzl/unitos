@@ -41,6 +41,7 @@ import { isImeKey, useImeGuard } from "@/lib/ime";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { clipWords } from "@/lib/markdown-preview";
 import { focusWhenDrawn, useEscapeLayer } from "@/lib/escape-layers";
+import { focusMenuIfKey, menuButtonKeys, menuKeys } from "@/lib/menu-keys";
 
 // Folders in the document list (SPEC.md §6). A folder is a named group of a
 // project's documents; a folder can hold folders. The list draws a folder as
@@ -712,11 +713,13 @@ function FolderRow({
         )}
         {canEdit && tree.renaming !== folder.id && (
           <button
-            onClick={() => {
+            onClick={(e) => {
               tree.setError(null);
               tree.setMoving(null);
+              if (!menuOpen) focusMenuIfKey(e, `[data-folder-menu="${folder.id}"]`);
               tree.setMenu(menuOpen ? null : folder.id);
             }}
+            onKeyDown={(e) => menuButtonKeys(e, menuOpen, `[data-folder-menu="${folder.id}"]`)}
             data-track="folder-actions"
             aria-label={t("panes.folderActionsFor", { title: folder.title })}
             aria-expanded={menuOpen}
@@ -729,7 +732,12 @@ function FolderRow({
       </div>
       <Collapse open={menuOpen}>
         {menuOpen && (
-          <div data-no-drag className="mx-2 mb-1.5 flex flex-col rounded-xl bg-sand-100 py-1">
+          <div
+            data-no-drag
+            data-folder-menu={folder.id}
+            onKeyDown={menuKeys}
+            className="mx-2 mb-1.5 flex flex-col rounded-xl bg-sand-100 py-1"
+          >
             {tree.addIn && (
               <button
                 onClick={() => {

@@ -12,6 +12,7 @@ import type { TKey } from "@/lib/i18n/dictionaries";
 import { useJumpParamCleanup } from "@/components/reader/jump-param";
 import { useEscapeLayer } from "@/lib/escape-layers";
 import { api } from "@/lib/api";
+import { focusMenuIfKey, menuButtonKeys, menuKeys } from "@/lib/menu-keys";
 
 // Reader views: Normal shows one document; Side by Side and Top and Bottom
 // show two panes, each with the full tool set. The choice lives in the URL —
@@ -457,7 +458,11 @@ export function ReaderPanes({
       }
     >
       <button
-        onClick={() => setMenu((v) => !v)}
+        onClick={(e) => {
+          if (!menu) focusMenuIfKey(e, "[data-view-menu]");
+          setMenu((v) => !v);
+        }}
+        onKeyDown={(e) => menuButtonKeys(e, menu, "[data-view-menu]")}
         data-track="view"
         aria-label={t("panes.readerView")}
         data-tip={t("panes.readerView")}
@@ -473,6 +478,8 @@ export function ReaderPanes({
       <Presence show={menu} exit="menu">
       {menu && (
         <div
+          data-view-menu
+          onKeyDown={menuKeys}
           className={`menu-in absolute z-40 flex w-44 flex-col rounded-2xl bg-card p-1.5 shadow-float ${
             inBar
               ? "right-0 bottom-full mb-2.5"
