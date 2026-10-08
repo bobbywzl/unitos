@@ -73,13 +73,18 @@ export function ProofingCard({ box, content, onAccept, onIgnore, onAddToDictiona
             {content.issue.replacement || t("docsTyping.removeWords", { words: content.issue.wrong })}
           </button>
           {content.issue.replacement && <span className="text-[14px] text-sand-500 line-through">{content.issue.wrong}</span>}
-        </div>
-        <p className="mt-1.5 px-1 text-[13px] leading-snug text-sand-700">{content.issue.reason}</p>
-        <div className="mt-2 flex gap-2 border-t border-sand-200 pt-2">
-          <button type="button" data-track="grammar-ignore" onMouseDown={keep} onClick={onIgnore} className={`${chip} bg-sand-100 text-sand-800 hover:bg-sand-200`}>
+          {/* Ignore on the replacement's row: the card's one row of actions. */}
+          <button
+            type="button"
+            data-track="grammar-ignore"
+            onMouseDown={keep}
+            onClick={onIgnore}
+            className={`${chip} ml-auto bg-sand-100 text-sand-800 hover:bg-sand-200`}
+          >
             {t("docsTyping.ignore")}
           </button>
         </div>
+        <p className="mt-1.5 px-1 text-[13px] leading-snug text-sand-700">{content.issue.reason}</p>
       </>
     ) : (
       <>
