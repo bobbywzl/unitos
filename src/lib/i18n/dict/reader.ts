@@ -181,6 +181,8 @@ const en = {
   openVisualizationTitle: "Open the picture large, with its caption",
   dragToMove: "Drag to move",
   holdToNote: "Hold, then drag onto a note to add the annotation to it",
+  // The Undo pill after a drop made a note (use-outline.ts addDroppedNote).
+  noteAdded: "Note added",
   deleteExplainTitle: "Delete this explanation and its mark",
   deleteAnalysisTitle: "Delete this analysis and its mark",
   deleteSimplifyTitle: "Delete this simplified rewrite and its mark",
@@ -479,6 +481,7 @@ const zh: Record<keyof typeof en, string> = {
   simplified: "简化",
   dragToMove: "拖动以移动",
   holdToNote: "按住，再拖到笔记上，把这条批注加进笔记",
+  noteAdded: "笔记已添加",
   deleteExplainTitle: "删除此解释及其标记",
   deleteAnalysisTitle: "删除此分析及其标记",
   deleteSimplifyTitle: "删除此简化及其标记",

@@ -43,6 +43,7 @@ import type {
   DistillationView,
   ExtractionView,
   NoteView,
+  ReplyView,
   SectionView,
 } from "@/lib/types";
 import type { DocumentReference } from "@/lib/parse/types";
@@ -141,7 +142,8 @@ import { deriveBlocks } from "@/lib/docs/blocks";
 import { coreHiding } from "@/components/docs/layer/core-slot";
 import { announceCollapseView } from "@/components/panels/layer-switch";
 import { startCardDrag } from "@/lib/card-drag";
-import { HOLD_MS, HOLD_TOLERANCE_PX, pointsAtText, skipsDrag, stopClickAfterDrag, watchHold } from "@/lib/hold-drag";
+import { ReplyThread } from "@/components/collab/reply-thread";
+import { HOLD_TOLERANCE_PX, TOUCH_HOLD_MS, pointsAtText, skipsDrag, stopClickAfterDrag, watchHold } from "@/lib/hold-drag";
 import {
   ANNOTATION_PARAM,
   annotationReferenceHref,
@@ -512,6 +514,40 @@ const CIRCLED_TYPES = new Set(["FIGURE", "EQUATION"]);
 // figure included (lib/block-takes.ts): slides, sheets, a video's or an
 // audio's document.
 const NO_NEW_BLOCKS = new Set(["SLIDE", "SHEET", "VIDEO", "TRANSCRIPT"]);
+
+// The reader pane the last press on the page landed in, or null: a press
+// outside every pane. Ctrl/Cmd+A with no pane pressed or focused selects
+// the first pane's article (onSelectAll).
+let lastPressedPane: Element | null = null;
+
+/** The replies under an annotation (SPEC.md §6): the thread the page
+    editor's comment card and the Annotations tab show, so the card that
+    deletes the annotation shows what goes with it. Drawn once there is a
+    reply: a card with none keeps its shape. */
+function CardReplies({ noteId }: { noteId: string }) {
+  const [replies, setReplies] = useState<ReplyView[]>([]);
+  const [loads, setLoads] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/replies?noteId=${encodeURIComponent(noteId)}`)
+      .then((r) => (r.ok ? (r.json() as Promise<{ replies: ReplyView[] }>) : null))
+      .then((thread) => {
+        if (!cancelled && thread) setReplies(thread.replies);
+      })
+      .catch(() => {
+        // Offline: the card shows the annotation alone.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [noteId, loads]);
+  if (replies.length === 0) return null;
+  return (
+    <div className="mt-2 min-h-0 overflow-y-auto">
+      <ReplyThread target={{ noteId }} replies={replies} onChange={() => setLoads((n) => n + 1)} />
+    </div>
+  );
+}
 
 function contentKindOf(type: string | undefined): ContentKind {
   if (type === "FIGURE") return "figure";
@@ -1979,14 +2015,14 @@ export function ReaderInteractions({
     };
   };
   // The page editor's comment card keeps the grip; the cards over the
-  // article lift from their head row (dragCard, data-hold-head). On a touch
+  // article lift from their head row (dragCard). On a touch
   // screen the grip takes the 36 px target the head's buttons have.
   const annotationGrip = (reference: AnnotationReference | null) =>
     dropOpen && reference ? (
       <AnnotationGrip reference={reference} className="-ml-1 justify-center pointer-coarse:size-9" />
     ) : null;
-  // A hold on the card's blank space or its head row, off its controls and
-  // off the header that moves the card (data-no-drag, dragCard), lifts the
+  // A hold on the card's blank space, off its controls and off the head row
+  // that moves the card (data-no-drag, dragCard), lifts the
   // annotation. A press on the card's text — where the pointer shows the
   // I-beam — selects the text and never lifts, hold or pull (pointsAtText).
   // A pull from blank space never lifts either: only the hold does.
@@ -1994,7 +2030,7 @@ export function ReaderInteractions({
     if (!reference || !dropOpen || e.button !== 0) return;
     const target = e.target as Element;
     if (skipsDrag(target) || target.closest("button, a, [data-no-drag]")) return;
-    if (pointsAtText(e.clientX, e.clientY) && !target.closest("[data-hold-head]")) return;
+    if (pointsAtText(e.clientX, e.clientY)) return;
     watchHold(
       e,
       (at) => {
@@ -2496,9 +2532,10 @@ export function ReaderInteractions({
   }, []);
 
   // Cards are freely moveable: drag the header. Buttons and inputs still work.
-  // The card's head row is its handle (SPEC.md §6): a drag moves the card;
-  // a hold (HOLD_MS, the pointer still) lifts its annotation to carry onto a
-  // note, as a note's header row does in its editing mode.
+  // The card's head row is its handle (SPEC.md §6): a press that moves
+  // before TOUCH_HOLD_MS moves the card; a still hold of TOUCH_HOLD_MS lifts
+  // its annotation to carry onto a note — one time for a mouse and a finger,
+  // long enough that a rest before the drag still moves the card.
   function dragCard(
     getPos: () => { left: number; top: number } | null,
     apply: (left: number, top: number) => void,
@@ -2526,7 +2563,7 @@ export function ReaderInteractions({
                   document.body.style.userSelect = "";
                 },
               );
-            }, HOLD_MS)
+            }, TOUCH_HOLD_MS)
           : 0;
       const container = containerRef.current;
       // A dragged card follows the pointer at once: the slide a pushed card
@@ -10606,12 +10643,19 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             borderColor: annotationKindColor(annotationCard.kind, annotationCard.color),
           }}
         >
-          {/* The head is the card's handle: a hold carries the annotation
-              onto a note (holdAnnotation). */}
+          {/* The head is the card's handle, as on every tool card: a drag
+              moves the card, a hold carries the annotation onto a note
+              (dragCard). */}
           <div
-            data-hold-head={annotationCardReference && dropOpen ? "" : undefined}
-            data-tip={annotationCardReference && dropOpen ? t("reader.holdToNote") : undefined}
-            className={`mb-2 flex items-center justify-between${annotationCardReference && dropOpen ? " cursor-grab select-none" : ""}`}
+            onPointerDown={dragCard(
+              () => (annotationCard ? { left: annotationCard.left, top: annotationCard.top } : null),
+              (left, top) => setAnnotationCard((c) => (c ? { ...c, left, top } : c)),
+              annotationCardReference,
+            )}
+            style={{ touchAction: "none" }}
+            data-no-drag
+            data-tip={annotationCardReference && dropOpen ? `${t("reader.dragToMove")}\n${t("reader.holdToNote")}` : t("reader.dragToMove")}
+            className="mb-2 flex cursor-move items-center justify-between select-none"
           >
             <span
               className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] uppercase"
@@ -10736,6 +10780,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               </button>
             </span>
           </div>
+          <CardReplies noteId={annotationCard.noteId} />
         </div>
       )}
       </Presence>
@@ -11890,6 +11935,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   </button>
                 </span>
               </div>
+              <CardReplies noteId={commentCard.noteId} />
             </>
           ) : (
             <>
