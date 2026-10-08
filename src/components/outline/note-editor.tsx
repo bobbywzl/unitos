@@ -1,5 +1,6 @@
 "use client";
 
+import { TOUCH_HIT } from "@/components/outline/touch-hit";
 import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { attachNoteEditable, type NoteEditable, type StyleCommand } from "@/lib/note-editable";
@@ -144,7 +145,7 @@ const outdentLines = (ls: string[]) => ls.map((l) => l.replace(/^ {1,2}/, ""));
 
 /** The modifier key as the tooltips name it: ⌘ on a Mac, Ctrl elsewhere.
     Read after mount, so the server's markup and the browser's agree. */
-function useModKey(): string {
+export function useModKey(): string {
   const [mod, setMod] = useState("Ctrl");
   useEffect(() => {
     const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
@@ -416,7 +417,7 @@ export function NoteEditor({
 
   const keep = (e: React.MouseEvent) => e.preventDefault();
   const barButton =
-    "inline-flex items-center rounded-full px-2 py-0.5 text-[11.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800";
+    `inline-flex items-center rounded-full px-2 py-0.5 text-[11.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 ${TOUCH_HIT}`;
   const formats = full ? FORMATS : FORMATS.filter((f) => !f.full);
 
   return (

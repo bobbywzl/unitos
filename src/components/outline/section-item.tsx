@@ -160,7 +160,7 @@ export function SectionItem({
           </button>
         )}
         {canEdit && (
-          <VoiceNoteButton sectionId={section.id} onError={setVoiceError} className={SECTION_ACTION} />
+          <VoiceNoteButton sectionId={section.id} onError={setVoiceError} className={SECTION_ACTION} compact />
         )}
       </div>
 
