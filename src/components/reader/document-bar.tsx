@@ -59,6 +59,7 @@ import {
   UploadAssistant,
   uploadItemTitle,
   type OpenTarget,
+  type UploadItem,
   type UploadRequest,
 } from "@/components/reader/upload-assistant";
 import { throwIfDuplicate, useDuplicateAsk } from "@/components/reader/duplicate-ask";
@@ -769,6 +770,8 @@ export function DocumentBar({
   // §15): the pill says the add is finishing, and the close that ends the
   // add refreshes the open document instead of opening it again.
   const [assistantOpened, setAssistantOpened] = useState<string | null>(null);
+  // What the last failed add handed back to Add a document.
+  const [returned, setReturned] = useState<{ items: UploadItem[]; seq: number } | null>(null);
   const assistantSubject = !assistant
     ? ""
     : assistant.kind === "files" || assistant.kind === "drive"
@@ -1539,6 +1542,7 @@ export function DocumentBar({
         onAttach={(id) => void attach(id)}
         folderPath={addFolder ? folderPath(folders, addFolder).map((id) => folders.find((f) => f.id === id)?.title ?? "") : null}
         onRemoveFromLibrary={(id) => void removeFromLibrary(id)}
+        returned={returned}
       />
 
       {/* The add running on behind a hidden box (SPEC.md §15). */}
@@ -1591,8 +1595,17 @@ export function DocumentBar({
             setAssistantHidden(true);
             openAdded(docId);
           }}
-          onClose={(target) => {
+          onClose={(target, back) => {
             const opened = assistantOpened;
+            // What failed goes back into Add a document (rule zero 6);
+            // Edit the link opens it there with the error under the field.
+            if (back) {
+              setReturned((was) => ({ items: back.items, seq: (was?.seq ?? 0) + 1 }));
+              if (back.edit) {
+                setError(back.error);
+                setDialog(true);
+              }
+            }
             setAssistantOpened(null);
             // The next add waiting its turn starts now; none: the box goes.
             const [next, ...rest] = pending;

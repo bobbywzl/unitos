@@ -5,6 +5,7 @@ import { isImeKey, useImeGuard } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
 import { BlankDocumentIcon, DriveLogo, LibraryIcon, MoreIcon } from "@/components/icons";
 import { Presence } from "@/components/presence";
+import { useModalFocus } from "@/lib/escape-layers";
 import { classifyDriveFile, parseDriveFileId, type DriveAccess, type DrivePickedFile } from "@/lib/drive/types";
 import { DocumentDeleteConfirm, useDocumentReach } from "@/components/reader/document-delete";
 import { IngestProgress, type IngestStep } from "@/components/reader/ingest-progress";
@@ -101,6 +102,7 @@ export function AddDocumentDialog({
   onAttach,
   onRemoveFromLibrary,
   folderPath,
+  returned,
 }: {
   open: boolean;
   onClose: () => void;
@@ -137,6 +139,10 @@ export function AddDocumentDialog({
   // The folder the documents land in (SPEC.md §6), as its path of titles;
   // null = the project itself.
   folderPath?: string[] | null;
+  // What an add could not take, back from the upload box (CLAUDE.md rule
+  // zero 6): one link goes into the field, more into the queue. seq tells
+  // one return from the next.
+  returned?: { items: UploadItem[]; seq: number } | null;
 }) {
   const t = useT();
   const ime = useImeGuard();
@@ -187,6 +193,16 @@ export function AddDocumentDialog({
   // stay as the reader left them: Escape, ✕, or a closed dialog never throw
   // away a queued file or link (CLAUDE.md rule 6). Continue empties the
   // queue, and each item's ✕ takes it out.
+  // A failed add's links and files come back: a lone link into the field
+  // (when the field is empty), the rest into the queue.
+  const [prevReturned, setPrevReturned] = useState(returned?.seq ?? 0);
+  if (returned && returned.seq !== prevReturned) {
+    setPrevReturned(returned.seq);
+    const back = returned.items;
+    const lone = back.length === 1 && (back[0].kind === "url" || back[0].kind === "video-url") ? back[0] : null;
+    if (lone && !url.trim()) setUrl(lone.url);
+    else setItems((current) => [...current, ...back]);
+  }
   const [prevOpen, setPrevOpen] = useState(open);
   if (prevOpen !== open) {
     setPrevOpen(open);
@@ -196,15 +212,14 @@ export function AddDocumentDialog({
       setTitleDraft(titleOf(projectTitle));
     }
   }
-  // An open on a project that has its title puts the caret in the link
-  // field, so a link is paste and Continue. Not with a touch screen, where
-  // the keyboard would cover the dialog, nor for a new project, whose title
-  // field comes first.
-  useEffect(() => {
-    if (!open || projectTitle || !window.matchMedia("(pointer: fine)").matches) return;
-    const id = requestAnimationFrame(() => urlRef.current?.focus());
-    return () => cancelAnimationFrame(id);
-  }, [open, projectTitle]);
+  // The focus goes into the dialog on open and back to + on close; Tab
+  // stays in it (lib/escape-layers.ts). An open on a project that has its
+  // title puts the caret in the link field, so a link is paste and
+  // Continue; a new project's in its title field, which comes first. Not
+  // with a touch screen, where the keyboard would cover the dialog.
+  const boxRef = useRef<HTMLDivElement>(null);
+  useModalFocus(boxRef, open);
+  const caret = open && typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches;
 
   // Save the title field when it changed: on blur, Enter, and Continue. An
   // empty field keeps the title as it is.
@@ -335,6 +350,7 @@ export function AddDocumentDialog({
       data-nudge-pause
     >
       <div
+        ref={boxRef}
         onClick={(e) => e.stopPropagation()}
         className="flex max-h-[85vh] w-[600px] max-w-full flex-col gap-4 overflow-y-auto rounded-[24px] bg-card p-6 shadow-float"
       >
@@ -378,6 +394,7 @@ export function AddDocumentDialog({
                     }
                   }}
                   placeholder={projectTitle.untitled}
+                  data-autofocus={caret ? "" : undefined}
                   disabled={titleSaving}
                   maxLength={200}
                   data-track="add-project-title"
@@ -426,6 +443,7 @@ export function AddDocumentDialog({
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="https://…"
+                data-autofocus={caret && !projectTitle ? "" : undefined}
                 aria-label={t("panes.documentUrl")}
                 data-track="add-url"
                 data-tip={t("panes.urlHint")}

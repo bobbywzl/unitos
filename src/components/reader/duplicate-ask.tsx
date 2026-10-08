@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { useT } from "@/components/lang-provider";
 import { DuplicateDocumentError, duplicateOf, type DuplicateMatch } from "@/lib/documents/duplicate-answer";
 import { isImeKey } from "@/lib/ime";
+import { useModalFocus } from "@/lib/escape-layers";
 
 // The ask before a repeat add (SPEC.md §15): the account already has a
 // document with this file or this source. Every add is its own document, so
@@ -96,6 +97,8 @@ export function DuplicateAskDialog({
   onChoose: (choice: DuplicateChoice) => void;
 }) {
   const choose = useRef(onChoose);
+  const boxRef = useRef<HTMLDivElement>(null);
+  useModalFocus(boxRef, true);
   useEffect(() => {
     choose.current = onChoose;
   }, [onChoose]);
@@ -117,6 +120,7 @@ export function DuplicateAskDialog({
       aria-labelledby="duplicate-ask-title"
     >
       <div
+        ref={boxRef}
         onClick={(e) => e.stopPropagation()}
         className="w-[440px] max-w-full rounded-[24px] bg-card p-5 shadow-float"
       >

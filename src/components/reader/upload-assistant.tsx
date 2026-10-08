@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { isImeKey } from "@/lib/ime";
+import { useModalFocus } from "@/lib/escape-layers";
 import { useT } from "@/components/lang-provider";
 import { CheckIcon } from "@/components/icons";
 import { MediaRange, type MediaClip } from "@/components/reader/media-range";
@@ -74,6 +75,13 @@ export type UploadRequest = (
 // notebookId: absent, this project; a project's id, that project; null, the
 // document is in no project (the Library), and opening it attaches it here.
 export type OpenTarget = { kind: "document"; id: string; notebookId?: string | null };
+
+// What an add that failed hands back when the box closes (CLAUDE.md rule
+// zero 6): the links and files the server could not take go back into Add a
+// document, the link in the field, so the reader edits it and adds it
+// again. edit: the reader pressed Edit the link, and the dialog opens with
+// the error under the field; else they wait there for the next +.
+export type ReturnedAdd = { items: UploadItem[]; error: string; edit: boolean };
 
 // range: a video or audio file is uploaded and the reader picks the part to
 // import (components/reader/media-range.tsx) before the add completes.
@@ -231,10 +239,13 @@ export function UploadAssistant({
   // now and hide the box; the finishing step runs on. onClose follows with
   // the same id once the box is done.
   onOpenEarly: (docId: string) => void;
-  // Called once the box is done: the first added document to open, or null.
-  onClose: (target: OpenTarget | null) => void;
+  // Called once the box is done: the first added document to open, or null,
+  // and what failed, to go back into Add a document.
+  onClose: (target: OpenTarget | null, back?: ReturnedAdd) => void;
 }) {
   const t = useT();
+  const boxRef = useRef<HTMLDivElement>(null);
+  useModalFocus(boxRef, !hidden);
   const hiddenRef = useRef(hidden);
   useEffect(() => {
     hiddenRef.current = hidden;
@@ -263,6 +274,11 @@ export function UploadAssistant({
   // What Close opens once the add is done: the first document.
   const [openTarget, setOpenTarget] = useState<OpenTarget | null>(null);
   const [failures, setFailures] = useState<string[]>([]);
+  // The items behind the failures: they go back to Add a document on close.
+  const [failedItems, setFailedItems] = useState<UploadItem[]>([]);
+  function finish(target: OpenTarget | null, edit = false) {
+    onClose(target, failedItems.length > 0 ? { items: failedItems, error: failures.join(" "), edit } : undefined);
+  }
   const [error, setError] = useState<string | null>(null);
   // The range step (SPEC.md §15): a media file's bytes are up, and the add
   // waits for the part to import. The resolver ends the wait.
@@ -602,6 +618,7 @@ export function UploadAssistant({
     setPhase("adding");
     const collected: Added[] = [];
     const failed: string[] = [];
+    const back: UploadItem[] = [];
     // An add a repeat add's ask ended without Add again adds nothing and
     // fails nothing.
     const keep = (one: Added | null) => {
@@ -617,6 +634,7 @@ export function UploadAssistant({
       try {
         collected.push(...(await addLink(request.url)));
       } catch (err) {
+        back.push({ kind: request.kind, url: request.url });
         failed.push(
           t("panes.uploadPageFailed", {
             title: request.url,
@@ -645,6 +663,7 @@ export function UploadAssistant({
           else if (item.kind === "drive-file") keep(await addDriveFile(item.file, item.token, item.pdfPages));
           else collected.push(...(await addLink(item.url)));
         } catch (err) {
+          back.push(item);
           failed.push(
             t("panes.uploadPageFailed", {
               title,
@@ -671,6 +690,7 @@ export function UploadAssistant({
         try {
           keep(await addDriveFile(file, request.token));
         } catch (err) {
+          back.push({ kind: "drive-file", token: request.token, file });
           failed.push(
             t("panes.uploadPageFailed", {
               title: file.name,
@@ -690,6 +710,7 @@ export function UploadAssistant({
         try {
           keep(await addFile(file));
         } catch (err) {
+          back.push({ kind: "file", file });
           failed.push(
             t("panes.uploadPageFailed", {
               title: file.name,
@@ -702,6 +723,7 @@ export function UploadAssistant({
 
     setAdded(collected);
     setFailures(failed);
+    setFailedItems(back);
     setHeadline(null);
     // Open the one I have: that document opens when the box is done, in the
     // project that holds it.
@@ -762,7 +784,7 @@ export function UploadAssistant({
       if (e.key !== "Escape" || isImeKey(e)) return;
       e.stopPropagation();
       if (runs(phase)) onHide();
-      else onClose(null);
+      else finish(null);
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
@@ -807,12 +829,13 @@ export function UploadAssistant({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4"
-      onClick={() => (runs(phase) ? onHide() : onClose(null))}
+      onClick={() => (runs(phase) ? onHide() : finish(null))}
       role="dialog"
       aria-modal
       aria-label={t("panes.uploadAssistant")}
     >
       <div
+        ref={boxRef}
         onClick={(e) => e.stopPropagation()}
         className="flex max-h-[85vh] w-[480px] max-w-full flex-col gap-3 overflow-y-auto rounded-[24px] bg-card p-5 shadow-float"
       >
@@ -832,7 +855,7 @@ export function UploadAssistant({
                 onHide();
                 return;
               }
-              onClose(null);
+              finish(null);
             }}
             data-track={asking ? "duplicate-cancel" : runs(phase) ? "upload-hide" : "upload-close"}
             aria-label={t(asking ? "common.cancel" : runs(phase) ? "panes.uploadHide" : "common.close")}
@@ -842,9 +865,12 @@ export function UploadAssistant({
             ✕
           </button>
         </div>
-        <p className="truncate text-xs text-sand-500" data-tip={subject}>
-          {subject}
-        </p>
+        {/* A failed add's lines name what failed: no line above them. */}
+        {failures.length === 0 && (
+          <p className="truncate text-xs text-sand-500" data-tip={subject}>
+            {subject}
+          </p>
+        )}
 
         {phase === "ready" && (
           <div className="flex flex-col gap-3">
@@ -923,12 +949,22 @@ export function UploadAssistant({
                     ))}
                   </ul>
                 )}
+                {/* What failed has one action in place of Close: back into
+                    Add a document, to edit it and add it again; the added
+                    document opens behind. A lost figure alone keeps Close,
+                    which opens the document. */}
                 <button
-                  onClick={() => onClose(openTarget)}
-                  data-track="upload-done"
+                  onClick={() => finish(openTarget, failedItems.length > 0)}
+                  data-track={failedItems.length > 0 ? "upload-edit" : "upload-done"}
                   className="self-start rounded-full bg-clay px-5 py-2 text-xs font-semibold text-clay-fg hover:bg-clay-600"
                 >
-                  {t("common.close")}
+                  {failedItems.length === 0
+                    ? t("common.close")
+                    : t(
+                        failedItems.length === 1 && (failedItems[0].kind === "url" || failedItems[0].kind === "video-url")
+                          ? "panes.uploadEditLink"
+                          : "panes.uploadEditQueue",
+                      )}
                 </button>
               </>
             )}

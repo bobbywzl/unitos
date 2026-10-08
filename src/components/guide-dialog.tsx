@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { useModalFocus } from "@/lib/escape-layers";
 import { useT } from "@/components/lang-provider";
 import { Presence } from "@/components/presence";
 import type { TKey } from "@/lib/i18n/dictionaries";
@@ -55,6 +56,9 @@ const KEYS: [string, TKey][] = [
 
 export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const t = useT();
+  // The focus goes into the guide on open and back to ? on close.
+  const boxRef = useRef<HTMLDivElement>(null);
+  useModalFocus(boxRef, open);
 
   useEffect(() => {
     if (!open) return;
@@ -89,6 +93,7 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
       aria-label={t("works.guideLabel")}
     >
       <div
+        ref={boxRef}
         onClick={(e) => e.stopPropagation()}
         className="flex max-h-[85vh] w-[560px] max-w-full flex-col gap-4 overflow-y-auto rounded-[24px] bg-card p-6 shadow-float"
       >
