@@ -1,6 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
+import { useState } from "react";
 import { useT } from "@/components/lang-provider";
 import { useLinkPassages } from "@/components/graph/link-passages";
 import { AddToNote } from "@/components/graph/note-gather"; // [cover4]
@@ -24,8 +25,10 @@ export type LinkDetailLink = {
   reason: string | null;
 };
 
-// How much of the block shows on each side of the quote.
-const CONTEXT_CHARS = 260;
+// How much of the block shows on each side of the quote while the passage
+// is folded (WALK6-05): about four lines with the quote in the middle. A
+// click on the passage shows the block whole.
+const CONTEXT_CHARS = 90;
 
 function clipStart(text: string): string {
   const line = text.replace(/\s+/g, " ");
@@ -44,9 +47,12 @@ function clipEnd(text: string): string {
 }
 
 /** The passage around a quote: the block's words before and after it, the
-    quote lit between them. The quote alone when the block is gone or does
-    not hold it. */
+    quote lit between them, folded to about four lines; a click reads the
+    block whole, and another folds it. The quote alone when the block is gone
+    or does not hold it. */
 function Passage({ quote, blockText }: { quote: string; blockText: string | null }) {
+  const t = useT();
+  const [whole, setWhole] = useState(false);
   const at = blockText ? blockText.indexOf(quote) : -1;
   if (!blockText || at < 0) {
     return (
@@ -55,12 +61,31 @@ function Passage({ quote, blockText }: { quote: string; blockText: string | null
       </p>
     );
   }
-  return (
-    <p className="text-[12.5px] leading-relaxed text-sand-700">
-      {clipStart(blockText.slice(0, at))}
+  const before = blockText.slice(0, at);
+  const after = blockText.slice(at + quote.length);
+  const folds = before.trim().length > CONTEXT_CHARS || after.trim().length > CONTEXT_CHARS || quote.length > 220;
+  const text = (
+    <>
+      {whole ? before : clipStart(before)}
       <mark className="link-detail-quote">{quote}</mark>
-      {clipEnd(blockText.slice(at + quote.length))}
-    </p>
+      {whole ? after : clipEnd(after)}
+    </>
+  );
+  if (!folds) return <p className="text-[12.5px] leading-relaxed text-sand-700">{text}</p>;
+  return (
+    <button
+      type="button"
+      onClick={() => setWhole(!whole)}
+      aria-expanded={whole}
+      data-track="graph-link-passage"
+      data-link-passage={whole ? "whole" : "folded"}
+      data-tip={whole ? t("panes.linkPassageFold") : t("panes.linkPassageWhole")}
+      className={`w-full rounded-md text-left text-[12.5px] leading-relaxed text-sand-700 hover:bg-clay-100/40 ${
+        whole ? "block whitespace-pre-wrap" : "line-clamp-4"
+      }`}
+    >
+      {text}
+    </button>
   );
 }
 
@@ -87,7 +112,7 @@ function LinkEnd({
           onClick={onOpen}
           data-track="graph-link-open"
           data-tip={t("panes.openLinkEnd", { title })}
-          className="shrink-0 rounded-full border border-line px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+          className="min-h-6 shrink-0 rounded-full border border-line px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:min-h-10 pointer-coarse:px-3.5"
         >
           {t("panes.linkOpenEnd")}
         </button>

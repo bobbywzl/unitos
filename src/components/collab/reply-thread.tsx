@@ -49,6 +49,8 @@ export function ReplyThread({
   replies,
   onChange,
   crossAccount,
+  openRequest,
+  composerFirst = false,
 }: {
   target: { noteId: string } | { blockEditId: string } | { docLinkId: string; notebookId?: string };
   replies: ReplyView[];
@@ -56,6 +58,12 @@ export function ReplyThread({
       that loaded the replies itself loads them again. */
   onChange?: () => void;
   crossAccount?: CrossAccountView;
+  /** [panel6] The caller draws its own Reply (the link panel's action row,
+      WALK6-05): each new value opens the box, and the thread draws no Reply
+      of its own. Left out: the thread's own Reply. */
+  openRequest?: number;
+  /** [panel6] The box sits above the replies, under the caller's Reply. */
+  composerFirst?: boolean;
 }) {
   const router = useRouter();
   const t = useT();
@@ -69,6 +77,11 @@ export function ReplyThread({
   const [typed, setTyped] = useState<string | null>(null);
   const draft = typed ?? kept ?? "";
   const [composingState, setComposing] = useState<boolean | null>(null);
+  const [seenRequest, setSeenRequest] = useState(openRequest);
+  if (seenRequest !== openRequest) {
+    setSeenRequest(openRequest);
+    if ((openRequest ?? 0) > 0) setComposing(true);
+  }
   const composing = composingState ?? draft !== "";
   const [showResolved, setShowResolved] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -255,10 +268,48 @@ export function ReplyThread({
     );
   };
 
+  const composer = canReply && composing && (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        send();
+      }}
+      className="flex items-end gap-1.5"
+    >
+      <textarea
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        {...ime.props}
+        onKeyDown={(e) => {
+          if (ime.isImeEnter(e) || isImeKey(e)) return;
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            send();
+          }
+          if (e.key === "Escape") setComposing(false);
+        }}
+        placeholder={t("common.replyPlaceholder")}
+        rows={1}
+        className="min-w-0 flex-1 resize-none rounded-2xl bg-sand-100 px-3 py-1.5 text-[12.5px] outline-none placeholder:text-sand-500"
+      />
+      <VoiceTypingButton track="reply-voice-typing" />
+      <button
+        type="submit"
+        data-track="reply-send"
+        disabled={!draft.trim() || busy}
+        className="rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40 pointer-coarse:min-h-10 pointer-coarse:px-4"
+      >
+        {t("common.reply")}
+      </button>
+    </form>
+  );
+
   return (
     <div
       className={`flex flex-col gap-2 ${shown.length > 0 ? "mt-2.5 border-t border-line pt-2.5" : "mt-1.5"}`}
     >
+      {composerFirst && composer}
       {openReplies.map(row)}
       {sent && !shown.some(isSent) && (
         <div data-reply-sent={sent.done ? "" : "sending"} className="flex items-start gap-2">
@@ -288,7 +339,7 @@ export function ReplyThread({
       )}
       {showResolved && resolvedReplies.map(row)}
 
-      {canReply && !composing && (
+      {canReply && !composing && openRequest === undefined && (
         <button
           onClick={() => setComposing(true)}
           data-track="reply"
@@ -298,42 +349,7 @@ export function ReplyThread({
           {t("common.reply")}
         </button>
       )}
-      {canReply && composing && (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            send();
-          }}
-          className="flex items-end gap-1.5"
-        >
-          <textarea
-            autoFocus
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            {...ime.props}
-            onKeyDown={(e) => {
-              if (ime.isImeEnter(e) || isImeKey(e)) return;
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                send();
-              }
-              if (e.key === "Escape") setComposing(false);
-            }}
-            placeholder={t("common.replyPlaceholder")}
-            rows={1}
-            className="min-w-0 flex-1 resize-none rounded-2xl bg-sand-100 px-3 py-1.5 text-[12.5px] outline-none placeholder:text-sand-500"
-          />
-          <VoiceTypingButton track="reply-voice-typing" />
-          <button
-            type="submit"
-            data-track="reply-send"
-            disabled={!draft.trim() || busy}
-            className="rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40 pointer-coarse:min-h-10 pointer-coarse:px-4"
-          >
-            {t("common.reply")}
-          </button>
-        </form>
-      )}
+      {!composerFirst && composer}
       {error && <p className="text-[11px] text-red-500">{error}</p>}
     </div>
   );

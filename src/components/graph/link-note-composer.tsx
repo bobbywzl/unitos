@@ -23,7 +23,18 @@ import { announceSavedLine, onOtherSavedLine } from "@/components/graph/saved-li
 // when the reader empties the box. Offline (Unitos Premium) the note waits in the
 // offline queue: the line says so, and Show comes once the note lands.
 
-export function LinkNoteComposer({ linkId }: { linkId: string }) {
+export function LinkNoteComposer({
+  linkId,
+  openRequest = 0,
+  opener,
+}: {
+  linkId: string;
+  /** [panel6] The link panel draws Note on this link in its action row
+      (WALK6-05): each new value opens the box, and this draws no opener. */
+  openRequest?: number;
+  /** [panel6] That opener: Escape and Cancel give it the focus. */
+  opener?: React.RefObject<HTMLButtonElement | null>;
+}) {
   const t = useT();
   const router = useRouter();
   const ime = useImeGuard();
@@ -35,6 +46,7 @@ export function LinkNoteComposer({ linkId }: { linkId: string }) {
   // in the browser only (the graph loads there), so the draft is read at once.
   const [initial] = useState(() => (typeof window === "undefined" ? null : readDraft(linkId)));
   const [open, setOpen] = useState(initial !== null);
+  const [seenRequest, setSeenRequest] = useState(openRequest);
   const [content, setContent] = useState(initial?.content ?? "");
   const [sectionId, setSectionId] = useState<string | null>(initial?.sectionId ?? null);
   const [busy, setBusy] = useState(false);
@@ -42,7 +54,8 @@ export function LinkNoteComposer({ linkId }: { linkId: string }) {
   // Escape folds the composer with its words kept (here and in the browser)
   // and gives the focus back to Note on this link (WALK4-07); opening it
   // scrolls Save into view on a short screen (WALK4-17).
-  const openerRef = useRef<HTMLButtonElement>(null);
+  const ownOpener = useRef<HTMLButtonElement>(null);
+  const openerRef = opener ?? ownOpener;
   const formRef = useRef<HTMLFormElement>(null);
   const returnFocus = useRef(false);
   const scrollOnOpen = useRef(false);
@@ -55,12 +68,20 @@ export function LinkNoteComposer({ linkId }: { linkId: string }) {
       returnFocus.current = false;
       openerRef.current?.focus();
     }
-  }, [open]);
+  }, [open, openerRef]);
   const [saved, setSaved] = useState<
     | { noteId: string; section: string }
     | { queued: { sectionId: string; content: string; at: number }; section: string }
     | null
   >(null);
+  // [panel6] The panel's Note on this link opens a new box, past a saved line.
+  if (seenRequest !== openRequest) {
+    setSeenRequest(openRequest);
+    if (openRequest > 0) {
+      setOpen(true);
+      setSaved(null);
+    }
+  }
   // [ui5] WALK5-14: one saved line at a time on the graph.
   useEffect(() => (saved ? onOtherSavedLine("link", () => setSaved(null)) : undefined), [saved]);
 
@@ -99,6 +120,7 @@ export function LinkNoteComposer({ linkId }: { linkId: string }) {
   }
 
   if (!open) {
+    if (opener) return null;
     return (
       <button
         ref={openerRef}
@@ -153,7 +175,7 @@ export function LinkNoteComposer({ linkId }: { linkId: string }) {
         e.preventDefault();
         void save();
       }}
-      className="mt-2 flex flex-col gap-1.5 rounded-xl border border-sage-300 bg-card p-2"
+      className={`${opener ? "" : "mt-2 "}flex flex-col gap-1.5 rounded-xl border border-sage-300 bg-card p-2`}
     >
       {choices.length === 0 ? (
         <p className="text-[11px] text-sand-600">{t("graphNotes.noteOnLinkNoSection")}</p>

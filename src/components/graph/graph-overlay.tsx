@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import type { GeneratedDocumentView, GraphEdge, GraphNode, RecommendedLinkView } from "@/lib/types";
+import type { GeneratedDocumentView, GraphEdge, GraphEdgeLink, GraphNode, RecommendedLinkView } from "@/lib/types";
 import { api } from "@/lib/api";
 import { linkPath } from "@/lib/link-scope";
 import { useCollab } from "@/components/collab/collab-context";
@@ -273,7 +273,13 @@ export function GraphOverlay({
     [notebookId],
   );
   const linkById = useMemo(() => new Map(edges.flatMap((e) => e.links.map((l) => [l.id, l] as const))), [edges]);
-  const openLinkView = list === "link" && openLinkId ? (linkById.get(openLinkId) ?? null) : null;
+  // [panel6] A link removed from its panel keeps the panel up on its last
+  // copy, for the Undo line (WALK6-03).
+  const [removedLink, setRemovedLink] = useState<GraphEdgeLink | null>(null);
+  const openLinkView =
+    list === "link" && openLinkId
+      ? (linkById.get(openLinkId) ?? (removedLink?.id === openLinkId ? removedLink : null))
+      : null;
   const titleOf = useMemo(() => new Map(nodes.map((n) => [n.id, n.title])), [nodes]);
   const listOpen = list === "recommended";
   // [view2] The node card ("document") and the Find list ("find") are side lists too.
@@ -898,6 +904,7 @@ export function GraphOverlay({
             }
             onClose={() => setList(null)}
             onOpenDocument={leave}
+            onRemoved={setRemovedLink}
           />
         )}
         </Presence>
