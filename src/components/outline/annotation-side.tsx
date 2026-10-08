@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { LocateIcon } from "@/components/icons";
@@ -15,8 +16,9 @@ import { stripSimplifyMarkers } from "@/lib/sentences";
 
 // The annotation beside the note (SPEC.md §6): on the notes full page a click
 // on an annotation reference opens the annotation next to the note it was
-// clicked in — the page widens to two columns, the notes in one and the
-// annotation in the other — instead of leaving for the reader. The board's
+// clicked in, instead of leaving for the reader. The notes column never moves:
+// the annotation stands in the free room on its right when the window has
+// it (WIDE), else over the page at the bottom right. The board's
 // open note hosts the panel beside its card; anywhere else on the page the
 // page frame does. One annotation open at a time; the next click takes its
 // place; ✕ closes it.
@@ -54,23 +56,52 @@ export function NotesPageFrame({ children }: { children: React.ReactNode }) {
   };
   return (
     <AnnotationSideContext.Provider value={value}>
-      <main
-        className={`mx-auto w-full px-6 pt-[26px] pb-24 ${side ? "max-w-[1160px]" : "max-w-[760px]"}`}
-      >
-        <div
-          className={
-            side ? "lg:grid lg:grid-cols-[minmax(0,760px)_minmax(320px,1fr)] lg:items-start lg:gap-6" : undefined
-          }
-        >
-          <div className="min-w-0">{children}</div>
+      <main className="mx-auto w-full max-w-[760px] px-6 pt-[26px] pb-24">
+        <div className="relative">
+          {children}
           {side && host === "page" && (
-            <div className="mt-6 lg:sticky lg:top-6 lg:mt-0">
+            <SidePlace>
               <AnnotationSidePanel side={side} onClose={() => setSide(null)} />
-            </div>
+            </SidePlace>
           )}
         </div>
       </main>
     </AnnotationSideContext.Provider>
+  );
+}
+
+/** A window wide enough for the annotation beside the 760 px notes column. */
+const WIDE = "(min-width: 1400px)";
+function useWide(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      const media = window.matchMedia(WIDE);
+      media.addEventListener("change", onChange);
+      return () => media.removeEventListener("change", onChange);
+    },
+    () => window.matchMedia(WIDE).matches,
+    () => true,
+  );
+}
+
+/** Where the annotation stands. Wide: in the right gutter of the column it
+    sits in (that column is `relative`), sticky as the page scrolls. Narrow:
+    over the page at the bottom right, above the Undo pill. Either way
+    nothing on the page moves. */
+function SidePlace({ children }: { children: React.ReactNode }) {
+  const wide = useWide();
+  if (wide) {
+    return (
+      <div className="absolute top-0 left-[calc(100%+24px)] h-full w-[min(360px,calc(50vw-412px))]">
+        <div className="sticky top-6">{children}</div>
+      </div>
+    );
+  }
+  return createPortal(
+    <div className="fixed inset-x-4 bottom-20 z-[70] flex max-h-[55vh] flex-col md:inset-x-auto md:right-6 md:w-[360px] [&>aside]:min-h-0">
+      {children}
+    </div>,
+    document.body,
   );
 }
 
@@ -87,9 +118,9 @@ export function AnnotationSideHost() {
   }, [setHost]);
   if (!ctx?.side) return null;
   return (
-    <div className="w-full shrink-0 lg:sticky lg:top-0 lg:w-[360px]">
+    <SidePlace>
       <AnnotationSidePanel side={ctx.side} onClose={ctx.close} />
-    </div>
+    </SidePlace>
   );
 }
 
@@ -113,11 +144,18 @@ export function AnnotationSidePanel({ side, onClose }: { side: AnnotationSideRef
     (async () => {
       try {
         const res = await fetch(`/api/annotations/${annotationId}?doc=${encodeURIComponent(documentId)}`);
-        if (!res.ok) throw new Error();
+        // Gone: deleted, and History keeps it (SPEC.md §12). A try again
+        // would never load it, so the line says where it is.
+        if (res.status === 404) {
+          if (!cancelled) setLoaded({ key, error: t("outline.annotationGone") });
+          return;
+        }
+        if (!res.ok) throw new Error(`annotation ${annotationId}: ${res.status}`);
         const data = (await res.json()) as ReferencedAnnotation;
         if (!cancelled) setLoaded({ key, annotation: data });
-      } catch {
-        if (!cancelled) setLoaded({ key, error: t("outline.annotationLoadFailed") });
+      } catch (err) {
+        console.error(err);
+        if (!cancelled) setLoaded({ key, error: t("common.notLoaded") });
       }
     })();
     return () => {
@@ -182,7 +220,9 @@ export function AnnotationSidePanel({ side, onClose }: { side: AnnotationSideRef
         </span>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {error && <p className="text-[12px] text-red-500">{error}</p>}
+        {error && (
+          <p className={`text-[12px] ${error === t("outline.annotationGone") ? "text-sand-700" : "text-red-500"}`}>{error}</p>
+        )}
         {!annotation && !error && <p className="text-[12px] text-sand-500">{t("common.loading")}</p>}
         {annotation && (
           <>
