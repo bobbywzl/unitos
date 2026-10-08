@@ -128,6 +128,7 @@ const GIST_MIN_SHOWN = 4;
 const NOT_SHOWN_NAMED = 8; // documents the "No block shown" line names past SHORT_LISTS_PAST
 const MAX_CITED = 40; // blocks of the earlier answers the reading passes are told of
 const CITED_TEXT = 600; // chars of a cited block's text in the result
+const BACK_BUDGET = 6_000; // tokens of cited blocks a follow-up reads with no select pass (backSelection)
 
 // The answer's limits cut what runs over instead of failing it: one field
 // over its limit would otherwise fail validation and re-run the whole
@@ -1803,8 +1804,9 @@ export async function pickBlocks(input: {
     the records under the replies), cut to the kind's budget, so no select
     pass runs; that pass returned these same blocks. null — run the select
     pass — when the command is not a follow-up that refers back
-    (refersBack), when nothing was cited, or when it names a rare name
-    whose blocks were not cited. */
+    (refersBack), when nothing was cited, when it names a rare name whose
+    blocks were not cited, or when the blocks cited cost more than
+    BACK_BUDGET tokens. */
 export function backSelection(
   command: string,
   history: ModelMessage[],
@@ -1816,6 +1818,10 @@ export function backSelection(
   const cited = citedAliases(history, blockByRef);
   if (cited.length === 0) return null;
   if (names.some((n) => !n.aliases.some((a) => cited.includes(a)))) return null;
+  // The answer pass reads on the answer model, uncached: past BACK_BUDGET
+  // the select pass's few blocks cost less than every block cited.
+  const cost = cited.reduce((sum, a) => sum + blockCost(blockByRef.get(a)?.text ?? ""), 0);
+  if (cost > BACK_BUDGET) return null;
   return cutSelection(cited, blockByRef, kind);
 }
 

@@ -86,12 +86,14 @@ export function asksEvery(command: string): boolean {
 }
 
 /** True when the command is about the last answers themselves (ANS6-03):
-    "why did you link the third one", "make that a page", "which of those
-    links", 第二点的原文. With earlier turns, such a command reads the blocks
-    the earlier answers cited and stored, and no select pass runs
-    (lib/graph/stitch.ts backSelection). */
+    "why did you link the third one", "how many passages did that page
+    quote", "which of those links", 第二点的原文. With earlier turns, such a
+    command reads the blocks the earlier answers cited and stored, and no
+    select pass runs (lib/graph/stitch.ts backSelection). "Back to the first
+    answer" and "both of them" are left to the select pass: they name an
+    older answer, or new passages. */
 export function refersBack(command: string): boolean {
-  return /\b(?:(?:that|this|those|these) (?:page|links?|passages?|quotes?|answers?|ones?|points?|numbers?|two|sentences?)\b|the (?:first|second|third|fourth|fifth|last|other|\d+(?:st|nd|rd|th)) (?:one|link|point|passage|quote|answer|sentence)\b|the (?:page|link)\b|(?:first|second|third|fourth|fifth|last) link\b|you (?:linked|cited|quoted|said|wrote|drew|proposed|made|left)\b|back to the\b|of them\b|which of (?:those|these)\b)|第.(?:点|条|个|段)|原文|那页|这页|那一页|这一页|那条|这条|这些链接|那些链接|这些段落|那些段落|这两|那两/i.test(command);
+  return /\b(?:(?:that|this|those|these) (?:page|links?|passages?|quotes?|answers?|ones?|points?|numbers?|two|sentences?)\b|the (?:first|second|third|fourth|fifth|last|other|\d+(?:st|nd|rd|th)) (?:one|link|point|passage|quote|sentence)\b|the (?:page|link)\b|(?:first|second|third|fourth|fifth|last) link\b|you (?:linked|cited|quoted|said|wrote|drew|proposed|made|left)\b|which of (?:those|these)\b)|第.(?:点|条|个|段)|原文|那页|这页|那一页|这一页|那条|这条|这些链接|那些链接|这些段落|那些段落|这两|那两/i.test(command);
 }
 
 // The documents with no text above. Named only when the command bears on
@@ -234,7 +236,7 @@ export function stitchRules(lang: Lang): string {
     "Your task: answer a reader's command over the documents below, with three outputs. Use only the outputs the command needs; leave the others empty.",
     "A question (what, which, how many, when, why, does, compare) and a summary (summarise, overview, outline) get reply only: links empty and document null, unless the command also asks to link, gather, collect, list, or write a page, a timeline, or a study guide.",
     "Read every document shown before answering: a passage in the last document counts as much as one in the first.",
-    `1. links: connections between passages of different documents — passages that answer the same question, make the same claim, contradict each other, or use the same term. One link is one block in one document and one block in another document: fromBlockId and toBlockId, the aliases as tagged, in different documents. fromQuote and toQuote: the passage copied verbatim from the block text, 8 to 300 characters, never paraphrased; leave a quote out to link the whole block. reason: one plain sentence saying how the two passages relate, in ${name}, at most 600 characters. For a contradiction, say what each side claims, with its numbers. Before you call two passages a contradiction, check that they measure the same thing: when the definition, the scope, or the date differs, the reason says that instead. A block that repeats another document's block word for word is a copy: never link a block to its copy. Link one block at most twice, unless the claims differ; link two parts of one work only for a contradiction or a direct echo. Up to 24 links. An empty list is a valid answer.`,
+    `1. links: connections between passages of different documents — passages that answer the same question, make the same claim, contradict each other, or use the same term. One link is one block in one document and one block in another document: fromBlockId and toBlockId, the aliases as tagged, in different documents. fromQuote and toQuote: the passage copied verbatim from the block text, 8 to 300 characters, never paraphrased; leave a quote out to link the whole block. reason: one plain sentence saying how the two passages relate, in ${name}, at most 600 characters. For a contradiction, say what each side claims, with its numbers. Before you call two passages a contradiction, check that they measure the same thing: when the definition, the scope, or the date differs, the reason says that instead. A block that repeats another document's block word for word is a copy: never link a block to its copy. Up to 24 links. An empty list is a valid answer.`,
     `2. document: a new page built from the documents, when the command asks for one — a page of every passage on a topic, the answers to a question gathered, the contradictions laid out, a synthesis the command asks to have as a page. title: short, in ${name}. parts, in reading order:`,
     '   - {"kind": "heading", "text": "…"}: a section heading. Use a document\'s title as a heading when the page groups passages by document.',
     '   - {"kind": "quote", "blockId": "<alias>"}: one whole block of a document, copied as it is. Add "quote": "…" with a verbatim part of the block to keep that part alone. Use quote parts for everything the command asks to gather, collect, or list from the documents; a quote part never rewrites.',
