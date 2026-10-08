@@ -1,7 +1,8 @@
 // [style7] One look per role across the graph's panels: the node card, the
 // link panel, the side lists, Find, and the key. A control that does the same
-// job looks the same everywhere (VIEW7-01..04). Sizes: 24 px under a mouse,
-// 40 px under a finger (WALK6-09).
+// job looks the same everywhere (VIEW7-01..04). Sizes: 24 px under a mouse;
+// under a finger a row action is 44 px (WALK6-09), ✕ and a lead button 40, a
+// document chip 32.
 
 /** An h3 takes Caprasimo from globals.css (unlayered, so a utility class cannot
     override it): a panel head that is an h3 adds this style. */
@@ -11,7 +12,7 @@ export const HEAD_PLAIN = { fontFamily: "inherit", fontWeight: 700, letterSpacin
 export const SECTION_HEAD = "text-[11px] font-bold tracking-[0.06em] text-sand-600 uppercase";
 
 const ACTION_BASE =
-  "inline-flex min-h-6 shrink-0 items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap disabled:opacity-40 pointer-coarse:min-h-10 pointer-coarse:px-3.5";
+  "inline-flex min-h-6 shrink-0 items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap disabled:opacity-40 pointer-coarse:min-h-11 pointer-coarse:px-3.5";
 
 /** A row action: Reply, Note on this link, Add to note, Open in reader, Dismiss, Gaps only, Waiting on you, Scan for links. */
 export const ACTION = `${ACTION_BASE} border-line text-sand-700 hover:bg-clay-100 hover:text-clay-800`;
@@ -36,7 +37,7 @@ export const DOC_CHIP =
 
 /** ✕ on a panel or a list. */
 export const CLOSE =
-  "flex size-7 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700 pointer-coarse:size-10";
+  "flex size-7 shrink-0 items-center justify-center rounded-full text-[16px] text-sand-500 hover:bg-clay-100 hover:text-clay-700 pointer-coarse:size-10";
 
 /** A text link inside a line (Show them, Notes full page, Turn it on, N more):
     its hit area grows to 24 px (40 under a finger) and the line keeps its height. */
