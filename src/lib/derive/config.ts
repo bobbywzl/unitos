@@ -377,7 +377,7 @@ export function splitStreamError(text: string): { text: string; error: string | 
   // the routes worded every reason, a proxy) is not for the reader: the
   // plain line shows, and the reason goes to the console.
   const raw = RAW_REASON.test(reason.trim());
-  if (raw) console.error("stream failed:", reason.slice(0, 500));
+  if (raw) console.warn("stream failed:", reason.slice(0, 500));
   return {
     text: text.slice(0, at).trimStart(),
     error: reason && !raw ? reason : modelCallFailed(),
