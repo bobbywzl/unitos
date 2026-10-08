@@ -93,11 +93,11 @@ const en = {
   barPlaceholder: "Tell the assistant how to change the selected words…",
   // Words from a figure (SPEC.md §7): the bar on an image.
   figureBarPlaceholder: "Ask about the image, or say what to put under it…",
-  figureExtractText: "Extract the text",
-  figureKeyPoints: "Summarize the key points",
+  figureText: "The text",
+  figureKeyPoints: "The key points",
   figureTextUnder: "Put the text under the image",
   figureKeyPointsUnder: "Put the key points under the image",
-  figureChipTitle: "The assistant reads the image. A chip that says under the image puts the words there as a suggestion to accept or reject.",
+  figureChipTitle: "The assistant reads the image and puts the words under it as a suggestion to accept or reject.",
   figureSuggestionOffered: "The words are under the figure as a suggestion. Accept or reject it there.",
   // Contents (SPEC.md §26): the article's parts, each a jump to where it
   // starts. Two clicks make them: Contents opens the list, Generate
@@ -136,7 +136,7 @@ const en = {
   coreSlide: "Slide",
   coreSheet: "Sheet",
   applyActionsTitle: "Run the checked actions on the document",
-  discardPlanTitle: "Discard the plan. Nothing changes.",
+  discardPlanTitle: "Reject the plan. Nothing changes.",
   deleteCommentTitle: "Delete this comment and its mark",
   deleteHighlightTitle: "Delete this highlight and its comment",
 
@@ -225,7 +225,7 @@ const en = {
   // Plan card
   assistantPlan: "Assistant plan",
   askFirst: "Ask first",
-  applyActions: "Apply {n} action{s}",
+  applyActions: "Accept {n} action{s}",
   actionEdit: "Edit",
   actionAddParagraph: "Add paragraph",
   actionRemove: "Remove",
@@ -406,8 +406,8 @@ const zh: Record<keyof typeof en, string> = {
   commandTitle: "助手把这处修改以建议的形式写进文中。逐条接受或拒绝。",
   barPlaceholder: "告诉助手怎样修改选中内容…",
   figureBarPlaceholder: "询问这张图片，或说明要在它下方放什么…",
-  figureExtractText: "提取文字",
-  figureKeyPoints: "总结要点",
+  figureText: "文字",
+  figureKeyPoints: "要点",
   figureTextUnder: "把文字放在图片下方",
   figureKeyPointsUnder: "把要点放在图片下方",
   figureChipTitle: "助手读取这张图片。写着“图片下方”的选项会把文字作为建议放在那里，由你接受或拒绝。",
@@ -443,7 +443,7 @@ const zh: Record<keyof typeof en, string> = {
   coreSlide: "幻灯片",
   coreSheet: "工作表",
   applyActionsTitle: "对文档执行勾选的操作",
-  discardPlanTitle: "放弃计划。不做任何更改。",
+  discardPlanTitle: "拒绝计划。不做任何更改。",
   deleteCommentTitle: "删除此评论及其标记",
   deleteHighlightTitle: "删除此高亮及其评论",
 
@@ -531,7 +531,7 @@ const zh: Record<keyof typeof en, string> = {
   // Plan card
   assistantPlan: "助手计划",
   askFirst: "先询问",
-  applyActions: "应用 {n} 个操作",
+  applyActions: "接受 {n} 个操作",
   actionEdit: "编辑",
   actionAddParagraph: "添加段落",
   actionRemove: "移除",

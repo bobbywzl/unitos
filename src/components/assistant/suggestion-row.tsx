@@ -144,8 +144,8 @@ export function SuggestionRow({
         {act && count > 0 &&
           (bar ? (
             <>
-              {reject}
               {accept}
+              {reject}
             </>
           ) : (
             <>

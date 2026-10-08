@@ -373,7 +373,7 @@ function Proposal({
               data-track="note-assistant-apply"
               className="rounded-full bg-sage-600 px-3 py-1 text-xs font-semibold text-sage-fg hover:bg-sage-700"
             >
-              {t("assistant.noteAssistantApply")}
+              {t("common.accept")}
             </button>
             <button
               type="button"
@@ -381,7 +381,7 @@ function Proposal({
               data-track="note-assistant-discard"
               className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
             >
-              {t("assistant.noteAssistantDiscard")}
+              {t("common.reject")}
             </button>
           </>
         )}
