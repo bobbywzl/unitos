@@ -1,5 +1,5 @@
 // UI strings of the page editor's page area (SPEC.md §29): the title row, the
-// pages, the rulers, the outline panel, page setup, headers and
+// pages, the rulers, the contents panel, page setup, headers and
 // footers. The English follows Google Docs' own labels. zh glossary:
 // dict/common.ts — page 页面 · document 文档 · pages(分页格式) 分页 · pageless 无分页.
 
@@ -22,10 +22,10 @@ const en = {
   // Commands (Search the menus)
   pageSetup: "Page setup",
   showRuler: "Show ruler",
-  showOutline: "Show the outline",
+  showOutline: "Show the contents",
   fullScreen: "Full screen",
   fullScreenHint: "Full screen. Press Esc to bring the toolbar back.",
-  hideOutline: "Hide the outline",
+  hideOutline: "Hide the contents",
   switchToPageless: "Switch to Pageless format",
   switchToPages: "Switch to Pages format",
   // A PDF import read pageless in Viewing (page/reflow.tsx).
@@ -148,9 +148,9 @@ const en = {
   addRightTabStop: "Add right tab-stop",
   collapseHeading: "Collapse heading",
   expandHeading: "Expand heading",
-  // The outline panel
+  // The contents panel (code keeps `outline`)
   outlineEmpty: "Headings you add to the document will appear here.",
-  tabsOutlines: "Outline",
+  tabsOutlines: "Contents",
   resizePanel: "Drag to resize",
   // Headers, footers, page numbers
   firstPageHeader: "First page header",
@@ -192,10 +192,10 @@ const zh: Record<keyof typeof en, string> = {
   importWordFile: "Word 文件",
   pageSetup: "页面设置",
   showRuler: "显示标尺",
-  showOutline: "显示大纲",
+  showOutline: "显示目录",
   fullScreen: "全屏",
   fullScreenHint: "全屏模式。按 Esc 恢复工具栏。",
-  hideOutline: "隐藏大纲",
+  hideOutline: "隐藏目录",
   switchToPageless: "切换到无分页格式",
   switchToPages: "切换到分页格式",
   readPageless: "无分页阅读",
@@ -309,7 +309,7 @@ const zh: Record<keyof typeof en, string> = {
   collapseHeading: "收起标题",
   expandHeading: "展开标题",
   outlineEmpty: "你添加到文档中的标题会显示在这里。",
-  tabsOutlines: "大纲",
+  tabsOutlines: "目录",
   resizePanel: "拖动以调整大小",
   firstPageHeader: "首页页眉",
   firstPageFooter: "首页页脚",
