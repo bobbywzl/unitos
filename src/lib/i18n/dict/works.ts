@@ -197,6 +197,7 @@ const en = {
   shareAddNothing: "Nothing to add. Share a link or a PDF to Unitos from another app.",
   shareAddNoProjects: "No projects yet. Create one first.",
   shareAddGoHome: "Go to Projects",
+  shareAddFailed: "Not added. Try again.",
   // Shared with you shelf
   sharedWithYou: "Shared with you",
   byOwner: "by {name}",
@@ -381,6 +382,7 @@ const zh: Record<keyof typeof en, string> = {
   shareAddNothing: "没有可添加的内容。从其他应用把链接或 PDF 分享给 Unitos。",
   shareAddNoProjects: "还没有项目。请先创建一个。",
   shareAddGoHome: "前往全部项目",
+  shareAddFailed: "未添加。请重试。",
   sharedWithYou: "与你共享",
   byOwner: "来自 {name}",
   sharedBadge: "已共享 · {n}",

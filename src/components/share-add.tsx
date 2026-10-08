@@ -15,6 +15,16 @@ import {
   type IngestStep,
 } from "@/components/reader/ingest-progress";
 
+// The add's failure line: the route's words for a refusal it words (a 4xx),
+// "Upload too large for the server." for a 413, else "Not added. Try again."
+// The status and the server's text go to the console.
+function failedLine(t: ReturnType<typeof useT>, status: number, said: string | undefined): string {
+  console.warn("Not added:", status, said ?? "");
+  if (status === 413) return t("panes.uploadTooLarge");
+  if (said && status >= 400 && status < 500) return said;
+  return t("works.shareAddFailed");
+}
+
 export type SharePayload =
   | { kind: "url"; url: string }
   | { kind: "file"; uploadId: string; filename: string; fileKind: "pdf" | "video" };
@@ -74,7 +84,7 @@ export function ShareAdd({
       if (!res.ok) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
         throwIfDuplicate(detail, t("panes.duplicateTitle"));
-        throw new Error(detail?.error ?? t("common.requestFailedStatus", { status: res.status }));
+        throw new Error(failedLine(t, res.status, detail?.error));
       }
       let result: IngestEvent | null = null;
       for await (const event of readNdjson<IngestEvent>(res)) {
@@ -94,7 +104,9 @@ export function ShareAdd({
     } catch (err) {
       setSteps(null);
       if (!(err instanceof DuplicateDocumentError)) {
-        setError(err instanceof Error ? err.message : t("panes.ingestFailed"));
+        // No answer at all (the network): the one line, never "Failed to fetch".
+        if (err instanceof TypeError) console.warn("Not added:", err.message);
+        setError(err instanceof Error && !(err instanceof TypeError) ? err.message : t("works.shareAddFailed"));
         return;
       }
       const choice = await ask(err.documents);
@@ -110,7 +122,8 @@ export function ShareAdd({
           body: JSON.stringify({ documentId: match.id }),
         });
         if (!res.ok) {
-          setError(t("common.requestFailedStatus", { status: res.status }));
+          const detail = (await res.json().catch(() => null)) as { error?: string } | null;
+          setError(failedLine(t, res.status, detail?.error));
           return;
         }
       }
