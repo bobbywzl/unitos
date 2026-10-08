@@ -26,8 +26,8 @@ function parseLink(raw: string): string | null {
 }
 
 /** Opens the feedback form from elsewhere: the reader has no floating
-    Feedback pill; the Reader view menu (reader-panes.tsx) and the phone's
-    More menu (workspace.tsx) carry a Feedback row. */
+    Feedback pill; the guide's head (guide-dialog.tsx) and the phone's More
+    menu (workspace.tsx) carry Feedback. */
 export const FEEDBACK_OPEN_EVENT = "unitos:feedback-open";
 
 /** Feedback in the header of the dashboard and of the notes and annotations
@@ -38,8 +38,8 @@ export function FeedbackHeaderButton() {
   return (
     <button
       onClick={() => window.dispatchEvent(new Event(FEEDBACK_OPEN_EVENT))}
-      aria-label={t("works.sendFeedback")}
-      data-tip={t("works.sendFeedback")}
+      aria-label={t("works.feedback")}
+      data-tip={t("works.feedback")}
       className="flex size-[38px] items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800 sm:hidden"
     >
       <FeedbackIcon />
@@ -200,14 +200,12 @@ export function FeedbackButton() {
       {/* Above the mobile bottom bar; on md+ above the rail's More button,
           which sits in the bottom-right corner. The reader has no floating
           Feedback: it lay on the tray's last row, on the article's last
-          lines, and on a short screen on the rail's Extract. There it is a
-          row of the Reader view menu at md and up and of the bar's More
-          menu below md (FEEDBACK_OPEN_EVENT). On a phone's dashboard and
+          lines, and on a short screen on the rail's Extract. There it is in
+          the guide's head at md and up and a row of the bar's More menu
+          below md (FEEDBACK_OPEN_EVENT). On a phone's dashboard and
           full pages it is a button in the header. */}
       <button
         onClick={() => setOpen(!open)}
-        aria-label={t("works.sendFeedback")}
-        data-tip={t("works.sendFeedback")}
         data-feedback-button=""
         className={`fixed right-4 bottom-[calc(64px+env(safe-area-inset-bottom))] z-20 rounded-full bg-card px-4 py-2 text-sm text-sand-700 shadow-lift hover:bg-clay-100 hover:text-clay-800 md:bottom-[60px] print:hidden ${
           inReader ? "hidden" : ""

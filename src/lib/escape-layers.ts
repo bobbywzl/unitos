@@ -106,6 +106,13 @@ function onKeyDown(e: KeyboardEvent) {
 function listen() {
   window.addEventListener("keydown", onKeyDown);
 }
+
+/** Whether Escape has a layer to close now: a menu, a card, a toolbox. */
+export function escapeLayerOpen(): boolean {
+  if (layers.size > 0) return true;
+  for (const source of sources) if (source()) return true;
+  return false;
+}
 function unlisten() {
   if (layers.size + sources.size === 0) window.removeEventListener("keydown", onKeyDown);
 }
@@ -219,8 +226,15 @@ export function installModalTrap(): void {
 
 /** A dialog's focus: on open the focus moves into it ([data-autofocus],
     else its first control, else the dialog), unless it is in it already;
-    on close it goes back to the control that opened it. */
-export function useModalFocus(ref: { current: HTMLElement | null }, open: boolean): void {
+    on close it goes back to the control that opened it. A dialog that
+    closes because it opened something (Blank document, Continue, a Library
+    pick) sets `handedOff` first: the focus leaves the dialog for the page,
+    and what opened takes it (a new blank document takes the caret). */
+export function useModalFocus(
+  ref: { current: HTMLElement | null },
+  open: boolean,
+  handedOff?: { current: boolean },
+): void {
   useEffect(() => {
     if (!open) return;
     installModalTrap();
@@ -232,8 +246,14 @@ export function useModalFocus(ref: { current: HTMLElement | null }, open: boolea
       target.focus({ preventScroll: true });
     }
     return () => {
-      // A dialog's close always gives the focus back, by key or by press:
-      // its controls are gone with it.
+      if (handedOff?.current) {
+        handedOff.current = false;
+        const now = document.activeElement;
+        if (now instanceof HTMLElement && box?.contains(now)) now.blur();
+        return;
+      }
+      // A dialog's close otherwise gives the focus back, by key or by
+      // press: its controls are gone with it.
       requestAnimationFrame(() => {
         const now = document.activeElement;
         // A dialog that fades out holds the focus until it is gone.
@@ -241,5 +261,5 @@ export function useModalFocus(ref: { current: HTMLElement | null }, open: boolea
         if (lost && opener?.isConnected && opener.getClientRects().length > 0) opener.focus({ preventScroll: true });
       });
     };
-  }, [open, ref]);
+  }, [open, ref, handedOff]);
 }

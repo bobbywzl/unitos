@@ -38,8 +38,6 @@ import {
 import { DocumentsSort, useDocumentSort } from "@/components/reader/document-organize";
 import {
   DocumentDeleteConfirm,
-  inAnotherProject,
-  prefetchDocumentReach,
   useDocumentReach,
 } from "@/components/reader/document-delete";
 import { ReparseLossList, useReparseLosses } from "@/components/reader/reparse-losses";
@@ -126,8 +124,6 @@ function sleep(ms: number) {
 const REPARSE_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 // How long the pointer rests on the document pill before the list opens.
 const LIST_HOVER_MS = 300;
-// How long a row's actions wait for where the document is before they draw.
-const REACH_WAIT_MS = 600;
 function reparseKey(documentId: string): string {
   return `unitos:reparse:${documentId}:${PARSER_VERSION}`;
 }
@@ -262,10 +258,10 @@ export function DocumentBar({
   const t = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
-  // The list's Sort by (SPEC.md §6): one choice per browser. It orders every
-  // list, folders among the documents, and every sort but Added puts them
-  // in categories.
-  const [documentSort, setDocumentSort] = useDocumentSort();
+  // The list's Sort by (SPEC.md §6): one choice per project in this browser.
+  // It orders every list, folders among the documents, and every sort but
+  // Added puts them in categories.
+  const [documentSort, setDocumentSort] = useDocumentSort(notebookId);
   const [phase, setPhase] = useState<IngestPhase | null>(null);
   const [dialog, setDialog] = useState(false);
   // The folder the add-document dialog adds to (SPEC.md §6): the + of a
@@ -309,25 +305,12 @@ export function DocumentBar({
   const [moveError, setMoveError] = useState<string | null>(null);
   // Delete document opens its confirm under the row (document-delete.tsx).
   // Where the document is — this project, its other projects — is read when
-  // the row's actions open, so Remove from this project and the confirm
-  // both know it.
+  // the row's actions open, so the confirm knows it, and offers Remove from
+  // this project beside Delete document when another project holds it. The
+  // actions themselves never depend on it: they draw at the press.
   const [deleteAsk, setDeleteAsk] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const { reach: menuReach, loading: menuReachLoading } = useDocumentReach(canEdit ? pillMenu : null);
-  // The rows wait for that answer, REACH_WAIT_MS at most, and draw once:
-  // Remove from this project never lands where Delete was (NAV13-03).
-  const [reachWaited, setReachWaited] = useState<string | null>(null);
-  useEffect(() => {
-    if (!pillMenu) return;
-    const id = pillMenu;
-    const timer = setTimeout(() => setReachWaited(id), REACH_WAIT_MS);
-    // A later open of the same row waits again.
-    return () => {
-      clearTimeout(timer);
-      setReachWaited(null);
-    };
-  }, [pillMenu]);
-  const menuRowsReady = !canEdit || !menuReachLoading || reachWaited === pillMenu;
   // The ask before Replace the edits names the quotes it costs.
   const { losing: reparseLosing, loading: reparseLosingLoading } = useReparseLosses(
     canEdit ? (editedAsk?.id ?? null) : null,
@@ -829,7 +812,7 @@ export function DocumentBar({
   // One box at a time: an add that arrives while one runs waits here and
   // starts when the running one closes, so neither replaces the other. The
   // run counter keys the box, so each request mounts a fresh one.
-  const [pending, setPending] = useState<UploadRequest[]>([]);
+  const pendingRef = useRef<UploadRequest[]>([]);
   const [assistantRun, setAssistantRun] = useState(0);
   // The box hidden while its add runs on (SPEC.md §15): the header shows the
   // running pill instead, and clicking the pill brings the box back.
@@ -841,10 +824,20 @@ export function DocumentBar({
   // What the last failed add handed back to Add a document.
   const [returned, setReturned] = useState<{ items: UploadItem[]; seq: number } | null>(null);
   // The links of an add stay in the browser until the add lands, so a
-  // reload while it runs or after it failed puts them back in Add a
-  // document's field (CLAUDE.md rule zero 6). Files cannot be kept.
+  // reload while it runs, while it waits its turn, or after it failed puts
+  // them back in Add a document's field (CLAUDE.md rule zero 6). Files
+  // cannot be kept. The store holds the links that failed, the running
+  // add's, and every waiting add's.
   const linksKey = `unitos:add-links:${notebookId}`;
-  const keepLinks = (items: UploadItem[]) => {
+  const linksRef = useRef<{ back: UploadItem[]; running: UploadItem[] }>({ back: [], running: [] });
+  const requestItems = (request: UploadRequest): UploadItem[] =>
+    request.kind === "batch" ? request.items : request.kind === "url" || request.kind === "video-url" ? [request] : [];
+  const keepLinks = () => {
+    const items = [
+      ...linksRef.current.back,
+      ...linksRef.current.running,
+      ...pendingRef.current.flatMap(requestItems),
+    ];
     const links = items.filter((i) => i.kind === "url" || i.kind === "video-url").map((i) => ({ kind: i.kind, url: i.url }));
     try {
       if (links.length > 0) localStorage.setItem(linksKey, JSON.stringify({ at: Date.now(), links }));
@@ -857,6 +850,7 @@ export function DocumentBar({
     try {
       const kept = JSON.parse(localStorage.getItem(linksKey) ?? "null") as { at: number; links: UploadItem[] } | null;
       if (!kept || Date.now() - kept.at > 86_400_000) return;
+      linksRef.current.back = kept.links;
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setReturned({ items: kept.links, seq: 1 });
     } catch {
@@ -872,7 +866,8 @@ export function DocumentBar({
         : assistant.url;
 
   function startAssistant(request: UploadRequest) {
-    keepLinks(request.kind === "batch" ? request.items : request.kind === "url" || request.kind === "video-url" ? [request] : []);
+    linksRef.current.running = requestItems(request);
+    keepLinks();
     setAssistant(request);
     setAssistantRun((n) => n + 1);
     setAssistantHidden(false);
@@ -921,7 +916,8 @@ export function DocumentBar({
     setDialog(false);
     if (assistant) {
       // A box is running: this add waits its turn (one box at a time).
-      setPending((queue) => [...queue, request]);
+      pendingRef.current = [...pendingRef.current, request];
+      keepLinks();
       setNotice(t("panes.uploadQueuedBehind"));
       setTimeout(() => setNotice(null), 4000);
       return;
@@ -1320,10 +1316,6 @@ export function DocumentBar({
             setDeleteAsk(null);
             setPillMenu(pillMenu === d.id ? null : d.id);
           }}
-          // The menu's rows depend on where the document is: read it as the
-          // pointer or the focus comes to ⋮, so they draw once (NAV13-03).
-          onPointerEnter={canEdit ? () => prefetchDocumentReach(d.id) : undefined}
-          onFocus={canEdit ? () => prefetchDocumentReach(d.id) : undefined}
           data-track="document-actions"
           aria-label={t("panes.documentActionsFor", { title: d.title })}
           aria-expanded={pillMenu === d.id}
@@ -1333,8 +1325,8 @@ export function DocumentBar({
           <MoreIcon size={13} />
         </button>
       </div>
-      <Collapse open={pillMenu === d.id && menuRowsReady}>
-      {pillMenu === d.id && menuRowsReady && (
+      <Collapse open={pillMenu === d.id}>
+      {pillMenu === d.id && (
         <div ref={revealActions} data-no-drag className="mx-2 mb-1.5 flex flex-col rounded-xl bg-sand-100 py-1">
           {/* A row's actions list only what can run on this document. Re-parse:
               a video or audio document transcribes again, a handwritten one
@@ -1477,19 +1469,8 @@ export function DocumentBar({
               {t("panes.printDocument")}
             </button>
           )}
-          {/* Remove from this project: while another project the reader can
-              open holds the document (Delete's confirm offers it too). */}
-          {canEdit && inAnotherProject(menuReach, notebookId) && (
-            <button
-              onClick={() => void removeFromProject(d.id)}
-              data-track="document-remove"
-              disabled={deleting}
-              className={`${rowAction} disabled:opacity-40`}
-              data-tip={t("panes.removeFromProjectTitle")}
-            >
-              {t("panes.removeFromProject")}
-            </button>
-          )}
+          {/* Remove from this project is in Delete document's confirm,
+              beside Delete document, while another project holds it. */}
           {canEdit && (
             <button
               onClick={() => setDeleteAsk(deleteAsk === d.id ? null : d.id)}
@@ -1561,7 +1542,7 @@ export function DocumentBar({
           {listOpen && (
             <div
               ref={placeList}
-              className="menu-in absolute top-full left-0 z-40 mt-2 flex max-h-[min(60vh,480px)] w-80 max-w-[calc(100vw-96px)] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-card py-1.5 shadow-float"
+              className="menu-in absolute top-full left-0 z-40 mt-2 flex max-h-[min(60vh,480px)] w-80 sm:max-h-[calc(100dvh-96px)] max-w-[calc(100vw-96px)] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-card py-1.5 shadow-float"
             >
               <DocumentTree
                 header={<DocumentsSort sort={documentSort} onSort={setDocumentSort} />}
@@ -1629,7 +1610,12 @@ export function DocumentBar({
         phase={phase}
         error={error}
         onError={setError}
-        onSubmit={(request) => openAssistant({ ...request, folderId: addFolder, confirmed: true })}
+        onSubmit={(request) => {
+          // The field's links are in this add now: what failed before is
+          // sent again with it, or the reader took it out.
+          linksRef.current.back = [];
+          openAssistant({ ...request, folderId: addFolder, confirmed: true });
+        }}
         onCreateBlank={() => void createBlank()}
         fileAccept={UPLOAD_FILE_ACCEPT}
         projectTitle={
@@ -1714,7 +1700,9 @@ export function DocumentBar({
             const opened = assistantOpened;
             // What failed goes back into Add a document (rule zero 6);
             // Edit the link opens it there with the error under the field.
-            keepLinks(back ? back.items : []);
+            linksRef.current.back = back ? [...linksRef.current.back, ...back.items] : linksRef.current.back;
+            linksRef.current.running = [];
+            keepLinks();
             if (back) {
               setReturned((was) => ({ items: back.items, seq: (was?.seq ?? 0) + 1 }));
               if (back.edit) {
@@ -1724,8 +1712,8 @@ export function DocumentBar({
             }
             setAssistantOpened(null);
             // The next add waiting its turn starts now; none: the box goes.
-            const [next, ...rest] = pending;
-            setPending(rest);
+            const [next, ...rest] = pendingRef.current;
+            pendingRef.current = rest;
             if (next) startAssistant(next);
             else {
               setAssistant(null);

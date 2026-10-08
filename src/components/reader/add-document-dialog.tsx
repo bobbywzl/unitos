@@ -177,11 +177,16 @@ export function AddDocumentDialog({
   const [titleDraft, setTitleDraft] = useState(titleOf(projectTitle));
   const [titleSaving, setTitleSaving] = useState(false);
 
+  // Blank document, Continue, and a Library pick open something: the focus
+  // goes there, not back to + (a new blank document takes the caret).
+  // ✕, Escape, and a click outside open nothing: the focus goes back.
+  const handedOff = useRef(false);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !isImeKey(e)) {
         e.stopPropagation();
+        handedOff.current = false;
         onClose();
       }
     };
@@ -218,7 +223,11 @@ export function AddDocumentDialog({
   // Continue; a new project's in its title field, which comes first. Not
   // with a touch screen, where the keyboard would cover the dialog.
   const boxRef = useRef<HTMLDivElement>(null);
-  useModalFocus(boxRef, open);
+  useModalFocus(boxRef, open, handedOff);
+  const dismiss = () => {
+    handedOff.current = false;
+    onClose();
+  };
   const caret = open && typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches;
 
   // Save the title field when it changed: on blur, Enter, and Continue. An
@@ -302,6 +311,7 @@ export function AddDocumentDialog({
     const all = [...items, ...(typedDrive ? [] : linkItems(typedLinks))];
     if (all.length === 0) return;
     await saveTitle();
+    handedOff.current = true;
     // A PDF goes with its chosen pages; every page needs none.
     onSubmit(
       requestFor(
@@ -343,7 +353,7 @@ export function AddDocumentDialog({
     {open && (
     <div
       className="dialog-in fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4"
-      onClick={onClose}
+      onClick={dismiss}
       role="dialog"
       aria-modal
       aria-label={t("panes.addDocument")}
@@ -362,7 +372,7 @@ export function AddDocumentDialog({
             </span>
           )}
           <button
-            onClick={onClose}
+            onClick={dismiss}
             data-track="add-dialog-close"
             aria-label={t("common.close")}
             data-tip={t("common.close")}
@@ -516,7 +526,10 @@ export function AddDocumentDialog({
                 its end. */}
             <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
               <button
-                onClick={onCreateBlank}
+                onClick={() => {
+                  handedOff.current = true;
+                  onCreateBlank();
+                }}
                 data-track="add-blank"
                 data-tip={t("panes.blankDocumentTitle")}
                 disabled={busy}
@@ -597,7 +610,10 @@ export function AddDocumentDialog({
                     <li key={d.id} className="flex flex-col">
                       <div className="flex items-center gap-1">
                         <button
-                          onClick={() => onAttach(d.id)}
+                          onClick={() => {
+                            handedOff.current = true;
+                            onAttach(d.id);
+                          }}
                           data-track="add-library-attach"
                           data-tip={t("panes.attachTitle")}
                           className="min-w-0 flex-1 truncate rounded-full px-3 py-2 text-left text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"

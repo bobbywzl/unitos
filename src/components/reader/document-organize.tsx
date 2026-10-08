@@ -9,9 +9,10 @@ import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { DOCUMENT_SORTS, type DocumentSort, type RowKind } from "@/lib/document-order";
 
 // Sort by, at the top of the document list (SPEC.md §6; lib/document-order.ts),
-// and the row a category draws in each list. One choice per browser, the
-// same in every project, as the notes tray keeps its grouping; which
-// categories are folded is kept too.
+// and the row a category draws in each list. One choice per project in this
+// browser, so a drag that turns one list to Custom order leaves the others
+// alone; a project with no choice of its own takes the browser's last
+// choice from before. Which categories are folded is kept too.
 
 const SORT_STORE = "unitos-documents-sort";
 const FOLDED_STORE = "unitos-documents-folded";
@@ -46,15 +47,16 @@ function subscribe(onChange: () => void) {
 /** The list's sort: Last edited unless the reader picked another. Week
     added and Month added, two sorts until 2026-10-07, list by Added, which
     draws the weeks. */
-export function useDocumentSort(): [DocumentSort, (s: DocumentSort) => void] {
-  const stored = useSyncExternalStore(subscribe, () => read(SORT_STORE), () => null);
+export function useDocumentSort(projectId: string): [DocumentSort, (s: DocumentSort) => void] {
+  const own = `${SORT_STORE}:${projectId}`;
+  const stored = useSyncExternalStore(subscribe, () => read(own) ?? read(SORT_STORE), () => null);
   const sort =
     stored === "week" || stored === "month"
       ? "added"
       : DOCUMENT_SORTS.includes(stored as DocumentSort)
         ? (stored as DocumentSort)
         : "edited";
-  return [sort, useCallback((s: DocumentSort) => write(SORT_STORE, s), [])];
+  return [sort, useCallback((s: DocumentSort) => write(own, s), [own])];
 }
 
 /** The folded categories, by key, and the toggle. */

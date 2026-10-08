@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { ContentsEntry } from "@/lib/contents";
 import { useEscapeLayer } from "@/lib/escape-layers";
@@ -37,6 +37,32 @@ const loaded = new Map<string, Loaded>();
 
 type Answer = { parts: ContentsEntry[]; fallback: boolean };
 const toLoaded = (answer: Answer): Loaded => ({ parts: answer.parts, generated: !answer.fallback });
+
+/** The article's own headings, read from the page (block-view.tsx draws a
+    HEADING block as h1–h6 with its id): what the read answers when nothing
+    is stored, so the list draws at the press instead of after the read. A
+    first heading that stands above every other heading is the title, as
+    lib/contents.ts reads it. */
+function headingsOnPage(documentId: string): ContentsEntry[] | null {
+  if (typeof document === "undefined") return null;
+  const root = document.querySelector(`[data-document-id="${CSS.escape(documentId)}"]`);
+  if (!root) return null;
+  const blocks = [...root.querySelectorAll<HTMLElement>("[data-block-id]")];
+  const depth = (el: HTMLElement) => (/^H([1-6])$/.exec(el.tagName) ? Number(el.tagName[1]) : null);
+  const headings = blocks.filter((el) => depth(el) !== null && (el.textContent ?? "").trim() !== "");
+  const top = blocks[0] && depth(blocks[0]) !== null ? blocks[0] : null;
+  const title = top && headings.slice(1).every((el) => depth(el)! > depth(top)!) ? top : null;
+  const out: ContentsEntry[] = [];
+  let hasTop = false;
+  for (const el of headings) {
+    if (el === title) continue;
+    const level: 1 | 2 = depth(el)! >= 3 && hasTop ? 2 : 1;
+    if (level === 1) hasTop = true;
+    out.push({ title: (el.textContent ?? "").trim().slice(0, 200), blockId: el.dataset.blockId ?? "", level });
+    if (out.length >= 80) break;
+  }
+  return out.length > 0 ? out : null;
+}
 
 /** A document's contents for this tab, read when `open` turns on, and
     Generate contents: the Contents menu's, and the page editor's tabs &
@@ -132,7 +158,16 @@ export function ContentsMenu({
 }) {
   const t = useT();
   const { canEdit } = useCollab();
-  const { state, reading, readError, generating, generateError, generate } = useContents(documentId, open);
+  const contents = useContents(documentId, open);
+  const { readError, generating, generateError, generate } = contents;
+  // Before the first read of this tab lands, the headings on the page stand
+  // in: the list draws at the press, with no Loading row.
+  const onPage = useMemo(
+    () => (open && !contents.state ? headingsOnPage(documentId) : null),
+    [open, contents.state, documentId],
+  );
+  const state = contents.state ?? (onPage ? { parts: onPage, generated: false } : null);
+  const reading = contents.reading && !onPage;
 
   // A click outside the list and the button (both carry data-contents)
   // closes the list.

@@ -52,7 +52,7 @@ import {
   type SaveProgress,
 } from "@/lib/offline/saved";
 import { TierMark } from "@/components/tier-mark";
-import { focusWhenDrawn, useEscapeLayer } from "@/lib/escape-layers";
+import { escapeLayerOpen, focusWhenDrawn, useEscapeLayer } from "@/lib/escape-layers";
 import { FloatingNoteEditor } from "@/components/outline/floating-note-editor";
 import { readTrayFold, subscribeTrayFold } from "@/lib/assistant/side-chat-open";
 import { NotesTray } from "@/components/outline/notes-tray";
@@ -644,10 +644,31 @@ export function Workspace({
       rememberTray({ collapsed: true, tab });
     }
   });
+  // The rail's Notes and Annotations by a key, as History by a key: the
+  // focus moves into the panel, and Escape on a control there (with no menu
+  // or card open) gives it back to the rail's button. A press leaves the
+  // focus where it was.
+  const railOpener = useRef<HTMLElement | null>(null);
+  function intoPanel(e: React.MouseEvent<HTMLElement>) {
+    if (e.detail !== 0) {
+      railOpener.current = null;
+      return;
+    }
+    railOpener.current = e.currentTarget;
+    focusWhenDrawn("[data-track-surface='tray'] .panel-in :is(button, a[href], input, textarea, [tabindex='0'])");
+  }
+  function backToRail(e: React.KeyboardEvent) {
+    const opener = railOpener.current;
+    if (e.key !== "Escape" || e.defaultPrevented || !opener?.isConnected || escapeLayerOpen()) return;
+    const target = e.target as HTMLElement;
+    if (target.closest("input, textarea, select, [contenteditable='true'], [contenteditable='']")) return;
+    railOpener.current = null;
+    opener.focus();
+  }
   // The Notes button with notes waiting for Accept: the tray opens on notes
   // with the first pending note in view and flashed, as the header's
   // pending count did; with the notes open, a press is the tab's own.
-  function showNotes() {
+  function showNotes(e: React.MouseEvent<HTMLElement>) {
     if (pending.length > 0 && !isOpen("notes")) {
       window.dispatchEvent(
         new CustomEvent("dissect:show-note", { detail: { noteId: actions.focusedPendingId ?? pending[0].id } }),
@@ -655,6 +676,7 @@ export function Workspace({
       return;
     }
     show("notes");
+    intoPanel(e);
   }
   // The More menu closes on a press outside it and on any row's press (the
   // reader views are rows reader-panes.tsx puts in its slot, outside this
@@ -905,6 +927,7 @@ export function Workspace({
           </div>
           <aside
             ref={trayRef}
+            onKeyDown={backToRail}
             data-track-surface="tray"
             className={`${
               mobileTray
@@ -1061,7 +1084,10 @@ export function Workspace({
           </button>
 
           <button
-            onClick={() => show("annotations")}
+            onClick={(e) => {
+              show("annotations");
+              intoPanel(e);
+            }}
             data-track="annotations"
             aria-label={t("panes.annotations")}
             data-tip={t("panes.annotationsTabTitle")}
