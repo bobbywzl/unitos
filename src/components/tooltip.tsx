@@ -15,7 +15,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 // sideways. It hides on press, scroll, resize, and Escape, and never shows on
 // touch. Moving from one control to the next while a bubble shows switches
 // at once, so sweeping along a toolbar reads as one tooltip following the
-// pointer.
+// pointer. After a press, no bubble shows until the pointer moves.
 
 const SHOW_DELAY_MS = 260;
 // Leaving one control and entering the next within this window skips the
@@ -67,8 +67,12 @@ export function TooltipLayer() {
     const tipTarget = (node: EventTarget | null): Element | null =>
       node instanceof Element ? node.closest("[data-tip]") : null;
 
+    // A press re-renders the page under a still pointer: a panel opening in
+    // place of a list puts a new control under it, and the browser fires
+    // pointerover for it. A bubble waits for the pointer to move (VIEW7-10).
+    let still = false;
     const onPointerOver = (e: PointerEvent) => {
-      if (e.pointerType === "touch" || e.buttons !== 0) return;
+      if (e.pointerType === "touch" || e.buttons !== 0 || still) return;
       const target = tipTarget(e.target);
       const current = tipRef.current?.target ?? null;
       if (!target) return hide();
@@ -89,8 +93,16 @@ export function TooltipLayer() {
     };
     // The control can leave the page while hovered (a popover closing under
     // the pointer); the next move notices.
-    const onPointerMove = () => {
+    const onPointerMove = (e: PointerEvent) => {
+      if (still && e.pointerType !== "touch" && e.buttons === 0) {
+        still = false;
+        onPointerOver(e);
+      }
       if (tipRef.current && !tipRef.current.target.isConnected) hide();
+    };
+    const onPointerDown = () => {
+      hide();
+      still = true;
     };
     const onFocusIn = (e: FocusEvent) => {
       const target = tipTarget(e.target);
@@ -105,7 +117,7 @@ export function TooltipLayer() {
     document.addEventListener("pointerover", onPointerOver);
     document.addEventListener("pointerout", onPointerOut);
     document.addEventListener("pointermove", onPointerMove);
-    document.addEventListener("pointerdown", hide, true);
+    document.addEventListener("pointerdown", onPointerDown, true);
     document.addEventListener("focusin", onFocusIn);
     document.addEventListener("focusout", onFocusOut);
     document.addEventListener("keydown", onKeyDown, true);
@@ -117,7 +129,7 @@ export function TooltipLayer() {
       document.removeEventListener("pointerover", onPointerOver);
       document.removeEventListener("pointerout", onPointerOut);
       document.removeEventListener("pointermove", onPointerMove);
-      document.removeEventListener("pointerdown", hide, true);
+      document.removeEventListener("pointerdown", onPointerDown, true);
       document.removeEventListener("focusin", onFocusIn);
       document.removeEventListener("focusout", onFocusOut);
       document.removeEventListener("keydown", onKeyDown, true);
