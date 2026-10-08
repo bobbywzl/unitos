@@ -6,7 +6,8 @@
 
 /** [style8] VIEW7-08: the graph's text sizes, four steps. Every panel, list,
     card, and the key take their size from here; a new line picks one of four.
-    - TEXT_META 11: heads, chips, actions, counts, facts lines, dates, marks.
+    - TEXT_META 11: heads, chips, actions, counts, facts lines, dates, marks,
+      the key.
     - TEXT_BODY 12.5: reasons, gists, quotes, note titles in a list, fields,
       empty states, lead actions, the header's pills.
     - TEXT_NAME 13.5: a name that heads a row or a list: a Documents row, a

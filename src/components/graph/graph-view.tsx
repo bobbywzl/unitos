@@ -835,7 +835,7 @@ function GraphKey({
       role="dialog"
       aria-label={t("panes.graphKeyTitle")}
       data-graph-key
-      className={`graph-float-in pointer-events-auto absolute top-3 left-14 z-30 max-h-[calc(100%-24px)] w-[540px] max-w-[calc(100%-72px)] overflow-y-auto overscroll-contain rounded-2xl border border-line bg-card/95 p-3.5 ${TEXT_BODY} text-sand-700 shadow-float backdrop-blur-md`}
+      className={`graph-float-in pointer-events-auto absolute top-3 left-14 z-30 max-h-[calc(100%-24px)] w-[540px] max-w-[calc(100%-72px)] overflow-y-auto overscroll-contain rounded-2xl border border-line bg-card/95 p-3.5 ${TEXT_META} text-sand-700 shadow-float backdrop-blur-md`}
     >
       <div className="mb-2 flex items-center">
         <p className={`flex-1 ${TEXT_META} font-bold tracking-[0.06em] text-sand-600 uppercase`}>{t("panes.graphKeyTitle")}</p>
