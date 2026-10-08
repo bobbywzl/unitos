@@ -501,6 +501,57 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // A note save that failed is tried again while the page stays open: when
+  // the network comes back, when the tab is shown again, and every 20
+  // seconds — the same save the load's replay runs, for every local draft
+  // that holds words its note lacks. A note open in an editor is its
+  // editor's to save, and a draft younger than 5 seconds may still have its
+  // save on the way. The Not saved mark clears with the save.
+  useEffect(() => {
+    if (!canEdit) return;
+    let running = false;
+    const retry = () => {
+      if (running || isOffline() || document.visibilityState === "hidden") return;
+      const now = Date.now();
+      const due: { id: string; content: string; base: string }[] = [];
+      for (const { noteId, draft } of listNoteDrafts()) {
+        // The card may already draw the draft's words: the draft, cleared
+        // only when the server confirms its words, says what is unsaved.
+        const note = placeOf(treeRef.current, noteId)?.note;
+        if (!note || !draftHoldsWords(draft) || openDraftSave(noteId) !== null || now - draft.savedAt < 5000) continue;
+        due.push({ id: noteId, content: draft.content.trim(), base: noteDraftBase(draft, note.content) ?? note.content });
+      }
+      if (due.length === 0) return;
+      running = true;
+      void Promise.all(
+        due.map(async ({ id, content, base }) => {
+          try {
+            const saved = await saveNoteText(id, content, base);
+            confirmNoteDraft(id, content);
+            confirmNoteDraft(id, saved.content);
+            setLocalText(id, null);
+          } catch {
+            // Still not saved: the next try, or the next load.
+          }
+        }),
+      ).finally(() => {
+        running = false;
+        refresh();
+      });
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") retry();
+    };
+    window.addEventListener("online", retry);
+    document.addEventListener("visibilitychange", onVisible);
+    const timer = setInterval(retry, 20_000);
+    return () => {
+      window.removeEventListener("online", retry);
+      document.removeEventListener("visibilitychange", onVisible);
+      clearInterval(timer);
+    };
+  }, [canEdit, refresh, setLocalText]);
+
   // Words written to a note that went elsewhere were kept as a new note in
   // its place (lib/notes/gone.ts): the new note takes the old one's place
   // in the list, its local draft and its open editor follow it, and the
