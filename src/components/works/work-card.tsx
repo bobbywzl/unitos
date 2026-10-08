@@ -29,6 +29,9 @@ export type WorkItem = {
 // The menu opens under the title, so the reader sees which project it acts on.
 // The title starts under the ⋯, with no empty band above it; on a phone two
 // books stand side by side, so the type and the tags are a size smaller.
+// The card menu's width (w-44).
+const MENU_WIDTH = 176;
+
 export function WorkCard({
   work,
   onRename,
@@ -47,6 +50,7 @@ export function WorkCard({
   const t = useT();
   const ime = useImeGuard();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPlace, setMenuPlace] = useState({ top: 64, left: false });
   const menuRef = useRef<HTMLDivElement>(null);
   // The inline rename: the field's words, and the title shown until the
   // page's data has the new one.
@@ -94,6 +98,7 @@ export function WorkCard({
           className="absolute top-3 bottom-3 left-[13px] w-[3px] rounded-full bg-sand-300"
         />
         <span
+          data-card-title
           className={`mt-6 px-2 font-display text-[17px] leading-[1.25] break-words sm:text-[22px] ${renaming !== null ? "invisible" : ""}`}
         >
           {title}
@@ -141,7 +146,20 @@ export function WorkCard({
 
       <div ref={menuRef} className="absolute top-2.5 right-2.5 z-2">
         <button
-          onClick={() => setMenuOpen(!menuOpen)}
+          onClick={(e) => {
+            // The menu opens just under the title, so the title stays in
+            // view, and inside the screen's 16 px gutter: right-aligned to ⋯,
+            // or left-aligned when that would cross the left gutter.
+            if (!menuOpen) {
+              const more = e.currentTarget.getBoundingClientRect();
+              const titleBottom = e.currentTarget.closest("li")?.querySelector("[data-card-title]")?.getBoundingClientRect().bottom;
+              setMenuPlace({
+                top: Math.max(4, Math.round((titleBottom ?? more.bottom + 60) - more.bottom + 6)),
+                left: more.right - MENU_WIDTH < 16,
+              });
+            }
+            setMenuOpen(!menuOpen);
+          }}
           aria-label={t("works.moreActionsFor", { title: work.title })}
           data-tip={t("works.projectActions")}
           aria-expanded={menuOpen}
@@ -150,7 +168,10 @@ export function WorkCard({
           <MoreIcon size={16} />
         </button>
         {menuOpen && (
-          <div className="absolute top-[calc(100%+64px)] right-0 flex w-44 flex-col overflow-hidden rounded-2xl bg-card py-1 shadow-float sm:top-[calc(100%+80px)]">
+          <div
+            className="absolute flex w-44 flex-col overflow-hidden rounded-2xl bg-card py-1 shadow-float"
+            style={{ top: `calc(100% + ${menuPlace.top}px)`, ...(menuPlace.left ? { left: 0 } : { right: 0 }) }}
+          >
             <Link
               href={`/n/${work.id}/notes`}
               className="px-4 py-2 text-left text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
