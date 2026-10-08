@@ -428,6 +428,14 @@ function liftFloatsOffParagraphBreaks(segments: Segment[], setting: PageSetting,
     if (lift === 1 && (listBreak ? tail.type !== "LIST" || Boolean(tail.tocEntries) : tail.type !== "PARAGRAPH" || !(opens || wrapsOver(prev, tail, setting)))) continue;
     if (out.slice(a + 1, b).some((s) => following.has(s))) continue;
     for (const s of out.slice(b, k)) following.add(s);
+    // The space measured under the block over the lifted part ran down to
+    // it (measureSpacing): with the part gone, that blank stands between
+    // the float and whatever follows it, which the page never set there
+    // (parse loop finding: the MML book's p. 317 set an 86 pt blank under
+    // Figure 9.11's last panel caption, over the paragraph's end that
+    // joins p. 316; the import drew it over the figure's side caption).
+    const over = out[k - 1];
+    if (k > b && over.box && tail.box && over.page === tail.page && tail.box.y2 <= over.box.y1 + 1 && tail.box.x1 < over.box.x2 && tail.box.x2 > over.box.x1) delete over.spaceAfter;
     const joined = out.splice(k, lift);
     const floats = out.splice(a + 1, b - a - 1);
     out.splice(a, 0, ...floats);
