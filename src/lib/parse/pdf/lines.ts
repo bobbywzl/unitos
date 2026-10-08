@@ -384,6 +384,37 @@ function readLigatures(items: Item[]) {
   }
 }
 
+/** Items in reading order, each combining mark joined to the glyph it is
+    set over, the mark after it, as one item over both: a mark item drawn
+    wider than its base starts left of it, and the sort by x read it first.
+    Parse loop finding: a LaTeX package's manual draws its circled charge as
+    "⃝" (U+20DD) over "+", and "\fplus ⊕" read "\fplus ⃝+", the circle
+    alone. */
+function marksAfterBases(items: Item[]): Item[] {
+  const out: Item[] = [];
+  for (let k = 0; k < items.length; k++) {
+    const [mark, base] = [items[k], items[k + 1]];
+    const middle = base ? base.x + base.w / 2 : NaN;
+    if (
+      base &&
+      /^\p{M}+$/u.test(mark.str) &&
+      Array.from(base.str).length === 1 &&
+      !/\p{M}/u.test(base.str) &&
+      middle > mark.x &&
+      middle < mark.x + mark.w &&
+      Math.abs(base.y - mark.y) < mark.size * 0.5
+    ) {
+      const x = Math.min(mark.x, base.x);
+      const w = Math.max(mark.x + mark.w, base.x + base.w) - x;
+      out.push({ ...base, str: base.str + mark.str, x, w, glyphs: base.glyphs && mark.glyphs ? [...base.glyphs, ...mark.glyphs] : base.glyphs });
+      k++;
+      continue;
+    }
+    out.push(mark);
+  }
+  return out;
+}
+
 // A ligature's letters: two or more of a right-to-left script, no marks.
 const LIGATURE_RE = /^[\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}]+$/u;
 
@@ -714,9 +745,11 @@ export function rightToLeftRuns(items: Item[], size: number): Item[] {
 function buildLine(rawItems: Item[], page: number, rtlText = false): Line {
   const merged = mergeSpacedItems(
     composeAccents(
-      rawItems
-        .map((i) => ({ ...i, str: i.mono ? i.str : collapseSpacedStr(i.str) }))
-        .sort((a, b) => a.x - b.x),
+      marksAfterBases(
+        rawItems
+          .map((i) => ({ ...i, str: i.mono ? i.str : collapseSpacedStr(i.str) }))
+          .sort((a, b) => a.x - b.x),
+      ),
     ),
   );
   // A line's size is its text's: KaTeX sets a formula 1.21 times its prose,
