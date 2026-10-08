@@ -9785,6 +9785,43 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
     </button>
   );
 
+  // A pending link's banner (SPEC.md §6). The block reader's band holds it
+  // between Contents and the controls, where no word sits.
+  const bandBanner = !split && !transcript && !embedded && !richText;
+  const linkBanner = (
+      <Presence show={pendingLink !== null && !embedded} exit="fade">
+        {pendingLink && !embedded && (
+          <div
+            data-link-banner
+            // Too narrow a band for it: it wraps under the controls.
+            className={`pointer-events-auto flex max-w-full items-center gap-1 rounded-full bg-card pr-1 pl-4 shadow-float ${bandBanner ? "min-w-[min(100%,24rem)] py-0.5" : "min-w-0 py-1"}`}
+          >
+            <span className="truncate text-[12.5px] text-sand-700">
+              {t("reader.linkingBanner", {
+                // In the band, a shorter quote leaves room for the steps.
+                quote:
+                  pendingLink.anchor.quotedText.slice(0, bandBanner ? 24 : 48) +
+                  (pendingLink.anchor.quotedText.length > (bandBanner ? 24 : 48) ? "…" : ""),
+                source:
+                  pendingLink.fromDocumentId === documentId
+                    ? t("reader.thisDocument")
+                    : (attachedDocuments.find((d) => d.id === pendingLink.fromDocumentId)?.title ??
+                      t("reader.anotherDocument")),
+              })}
+            </span>
+            <button
+              onClick={() => broadcastPendingLink(null)}
+              data-track="cancel-link"
+              aria-label={t("reader.cancelLink")}
+              data-tip={t("reader.cancelLink")}
+              className={`flex ${bandBanner ? "size-6" : "size-7"} shrink-0 items-center justify-center rounded-full text-xs text-sand-500 hover:bg-sand-100 hover:text-clay-700`}
+            >
+              ✕
+            </button>
+          </div>
+        )}
+      </Presence>
+  );
   // The article menu: the Contents button (SPEC.md §26) and the list it
   // opens — the article's parts, each a jump to its block. In Normal view it
   // floats at the top left of the pane and stays there as the article
@@ -10125,9 +10162,10 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       >
       <div className="absolute top-0 right-4 left-4 flex flex-col items-end gap-2">
       <div
-        className="pointer-events-auto flex items-center gap-2 rounded-full"
+        className="pointer-events-auto flex max-w-[calc(100%-7rem)] flex-wrap-reverse items-center justify-end gap-2 rounded-full [&>*]:shrink-0"
         data-nudge={!split && !transcript ? "tools" : undefined}
       >
+        {bandBanner && linkBanner}
         {editMode && (
           <select
             data-edit-control
@@ -10157,37 +10195,10 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         {!split && !transcript && !embedded && !richText && distillButton}
       </div>
       {/* A pending link's banner: under the controls, beside the toast, so
-          it covers no control. Escape or its ✕ cancels the link. */}
-      <Presence show={pendingLink !== null && !embedded} exit="fade">
-        {pendingLink && !embedded && (
-          <div
-            data-link-banner
-            className="pointer-events-auto flex max-w-full items-center gap-1 rounded-full bg-card py-1 pr-1 pl-4 shadow-float"
-          >
-            <span className="truncate text-[12.5px] text-sand-700">
-              {t("reader.linkingBanner", {
-                quote:
-                  pendingLink.anchor.quotedText.slice(0, 48) +
-                  (pendingLink.anchor.quotedText.length > 48 ? "…" : ""),
-                source:
-                  pendingLink.fromDocumentId === documentId
-                    ? t("reader.thisDocument")
-                    : (attachedDocuments.find((d) => d.id === pendingLink.fromDocumentId)?.title ??
-                      t("reader.anotherDocument")),
-              })}
-            </span>
-            <button
-              onClick={() => broadcastPendingLink(null)}
-              data-track="cancel-link"
-              aria-label={t("reader.cancelLink")}
-              data-tip={t("reader.cancelLink")}
-              className="flex size-7 shrink-0 items-center justify-center rounded-full text-xs text-sand-500 hover:bg-sand-100 hover:text-clay-700"
-            >
-              ✕
-            </button>
-          </div>
-        )}
-      </Presence>
+          it covers no control; in the block reader it stands in the band,
+          left of the controls, so it covers no line. Escape or its ✕
+          cancels the link. */}
+      {!bandBanner && linkBanner}
       <Presence show={toast !== null} exit="fade">
         {toast && (
           <span
@@ -10731,12 +10742,14 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                     <span className="text-[12px] font-semibold break-words text-sand-900">
                       {defineWord(popover.anchor.quotedText)}
                     </span>
-                    {shownDefinition.text && (
+                    {/* The words show once they are all in, in one frame:
+                        the rows under them move once, not with every line. */}
+                    {shownDefinition.text && !shownDefinition.streaming && (
                       <p className="text-[12.5px] leading-snug break-words whitespace-pre-line text-sand-800">
                         {shownDefinition.text}
                       </p>
                     )}
-                    {shownDefinition.streaming && !shownDefinition.text && (
+                    {shownDefinition.streaming && (
                       <ThinkingIndicator
                         label={t("reader.defining")}
                         className="py-0.5 text-[11.5px]"
