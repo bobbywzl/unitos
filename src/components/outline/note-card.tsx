@@ -35,6 +35,7 @@ import { NoteId } from "@/components/outline/note-id";
 import { NoteTitleField, focusBodyEditor, useNoteParts } from "@/components/outline/note-title-field";
 import { SaveStateLabel } from "@/components/outline/save-state";
 import { useNoteDraft } from "@/components/outline/use-note-draft";
+import { holdEditing } from "@/components/outline/editing-notes";
 import { NoteAssistant } from "@/components/outline/note-assistant";
 import { WordLine } from "@/components/outline/word-line";
 import { NOTE_ABSORBED_EVENT, type OutlineActions } from "@/components/outline/use-outline";
@@ -392,6 +393,8 @@ const NoteCardBody = memo(function NoteCardBody({
   // the note (annotation-side.tsx). Elsewhere it opens the reader.
   const annotationSide = useAnnotationSide();
   const [editing, setEditing] = useState(false);
+  // An open editor keeps its note in a list a search filters (editing-notes.ts).
+  useEffect(() => (editing ? holdEditing(note.id) : undefined), [editing, note.id]);
   const [copied, setCopied] = useState(false);
   // The note's own history, open under the note (note-history.tsx).
   const [historyOpen, setHistoryOpen] = useState(false);

@@ -1,6 +1,7 @@
 "use client";
 
 import { TOUCH_HIT } from "@/components/outline/touch-hit";
+import { useEditingNotes } from "@/components/outline/editing-notes";
 import { useDeferredValue, useMemo, useState } from "react";
 import { isImeKey } from "@/lib/ime";
 import type { NotebookView } from "@/lib/types";
@@ -46,6 +47,8 @@ export function Outline({ notebook }: { notebook: NotebookView }) {
   // (useDeferredValue), so typing never waits for the list.
   const [typed, setQuery] = useState("");
   const query = useDeferredValue(typed);
+  // An editor opening or closing redraws the search's list (noteMatches).
+  useEditingNotes();
   const [grouping, setGrouping] = useNoteGrouping();
   const needle = query.trim();
   const found = needle ? filterSections(tree, query) : tree;

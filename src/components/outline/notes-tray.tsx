@@ -2,6 +2,7 @@
 
 import { TOUCH_HIT } from "@/components/outline/touch-hit";
 import Link from "next/link";
+import { useEditingNotes } from "@/components/outline/editing-notes";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { dropCardOn, type CardDragEndDetail } from "@/lib/card-drag";
 import { isImeKey } from "@/lib/ime";
@@ -70,6 +71,8 @@ export function NotesTray({
   // (useDeferredValue), so typing never waits for the list.
   const [typed, setQuery] = useState("");
   const query = useDeferredValue(typed);
+  // An editor opening or closing redraws the search's list (noteMatches).
+  useEditingNotes();
   const [grouping, setGrouping] = useNoteGrouping();
   const label = "text-[11px] font-bold tracking-[0.08em] uppercase";
   const shown = filterSections(tree, query);

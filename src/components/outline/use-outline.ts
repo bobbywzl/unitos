@@ -22,6 +22,7 @@ import {
 } from "@/lib/note-drafts";
 import { announceKept, saveNoteText } from "@/lib/notes/save-text";
 import { joinNoteContents } from "@/lib/notes/join";
+import { isEditingNote } from "@/components/outline/editing-notes";
 import { NOTE_BACK_EVENT, usePostedUndo, type NoteBack, type UndoPillPost } from "@/lib/notes/undo-pill";
 import type { QuoteDrag } from "@/lib/quote-drag";
 import { appendToBody } from "@/lib/note-title";
@@ -391,6 +392,9 @@ export function flattenNotes(sections: SectionView[]): NoteView[] {
 export function noteMatches(note: NoteView, query: string): boolean {
   const needle = query.trim().toLowerCase();
   if (!needle) return true;
+  // The note being edited stays, marked by its open editor, until the
+  // editor closes (editing-notes.ts).
+  if (isEditingNote(note.id)) return true;
   if (needle.startsWith("#")) return note.id.toLowerCase().includes(needle.slice(1));
   return note.content.toLowerCase().includes(needle) || note.id.toLowerCase() === needle;
 }
