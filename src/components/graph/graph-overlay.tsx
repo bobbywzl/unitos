@@ -18,6 +18,7 @@ import { GeneratedList } from "@/components/graph/generated-list";
 import { markAccepted, unmarkAccepted, useAcceptedNow } from "@/components/graph/accepted-now";
 import { clearGraphKeep, readGraphKeep, writeGraphKeep, type GraphFocus } from "@/components/graph/graph-keep";
 import { LinkPanel } from "@/components/graph/link-panel";
+import { ListName } from "@/components/graph/list-name"; // [lists7]
 import { LinksList } from "@/components/graph/links-list";
 import type { GraphInsets } from "@/components/graph/graph-view";
 import { LinkDetail } from "@/components/graph/link-detail";
@@ -288,6 +289,7 @@ export function GraphOverlay({
   const nodeIdList = useMemo(() => nodes.map((n) => n.id), [nodes]);
   const view2 = useGraphContentState({ notebookId, nodeIds: nodeIdList, gists: gists ?? NO_GISTS, list, setList });
   const { onProposed } = view2;
+  const clearFind = view2.find.clear;
   const generatedCommands = useMemo(() => new Map(generated.map((g) => [g.id, g.command ?? null])), [generated]);
   const recommendedLinkIds = useMemo(() => new Set(recommended.map((l) => l.id)), [recommended]);
   const openLinkFromCard = useCallback((linkId: string) => openLink(linkId, "document"), [openLink]);
@@ -518,12 +520,13 @@ export function GraphOverlay({
       }
       if (picking) setPicking(false);
       else if (list === "link" && linkFrom && openLinkView) backFromLink();
+      else if (list === "find") clearFind(); // [lists7] WALK7-08
       else if (list) setList(null);
       else close();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [close, picking, list, setList, linkFrom, openLinkView, backFromLink, leaveTextBox]);
+  }, [close, picking, list, setList, linkFrom, openLinkView, backFromLink, leaveTextBox, clearFind]);
 
   // The skip links (REV2-10): to the Stitch text box (the box opens first
   // when it is folded), or to the first control of the open side list.
@@ -609,7 +612,8 @@ export function GraphOverlay({
     () => ({
       top: emptyCard ? 96 : 0,
       right: listBesideBox || cardBeside ? LIST_ROOM : 0,
-      bottom: cardSheet && sheetHeight > 0 ? sheetHeight + 8 : boxHeight > 0 ? boxHeight + 16 : 0,
+      // [lists7] VIEW7-09: the sheet stands 64 px above the canvas's foot.
+      bottom: cardSheet && sheetHeight > 0 ? sheetHeight + 72 : boxHeight > 0 ? boxHeight + 16 : 0,
       left: 0,
     }),
     [emptyCard, listBesideBox, cardBeside, cardSheet, sheetHeight, boxHeight],
@@ -839,8 +843,10 @@ export function GraphOverlay({
             proposedLinkIds={view2.proposedLinkIds /* [view2] */}
             onClose={() => setList(null)}
             scan={
-              canEdit && nodes.length >= 2 ? (
-                // [chrome6] VIEW6-02, WALK6-08: Scan for links heads the list it fills.
+              canEdit && nodes.length >= 2 ? (main: boolean) => (
+                // [chrome6] VIEW6-02, WALK6-08: Scan for links in the list it fills.
+                // [lists7] WALK7-02: at the head row's right end, short, beside ✕;
+                // the main action only under an empty list's line.
                 <button
                   onClick={() => void scan()}
                   data-track={scanning ? "graph-recommend-links-stop" : "graph-recommend-links"}
@@ -852,10 +858,11 @@ export function GraphOverlay({
                         ? t("panes.recommendScanTitle", { left: scanLeft })
                         : t("panes.recommendScanSpentTitle")
                   }
-                  className="flex min-w-0 items-center gap-1.5 rounded-full border border-line px-3 py-1 text-[12px] whitespace-nowrap text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+                  aria-label={main || scanning ? undefined : t("panes.recommendScan")}
+                  className="flex min-w-0 items-center gap-1.5 self-start rounded-full border border-line px-3 py-1 text-[12px] whitespace-nowrap text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
                 >
                   <SparkleIcon size={12} />
-                  {scanning ? t("panes.recommendScanRunning") : t("panes.recommendScan")}
+                  {scanning ? t("panes.recommendScanRunning") : t(main ? "panes.recommendScan" : "panes.recommendScanShort")}
                   {/* The runs left this month: plain text, never a count chip,
                       so it does not read as a number of links (GR-07). */}
                   {scanning ? (
@@ -864,7 +871,7 @@ export function GraphOverlay({
                     <span className="text-[11px] tabular-nums text-sand-500">· {t("panes.recommendScanLeft", { left: scanLeft })}</span>
                   )}
                 </button>
-              ) : null
+              ) : undefined
             }
           />
         )}
@@ -951,7 +958,7 @@ export function GraphOverlay({
               }
             }}
             onOpenDocument={leave}
-            onClose={() => setList(null)}
+            onClose={view2.find.clear /* [lists7] WALK7-08: ✕ clears the find, as the field's ✕ does */}
           />
         )}
         {/* [/view2] */}
@@ -1051,8 +1058,9 @@ export function RecommendedLinkList({
   onOpenDocument: () => void;
   // [view2] The links the last Stitch answer proposed: first, and marked.
   proposedLinkIds?: Set<string>;
-  /** [chrome6] Scan for links, at the head of the list (VIEW6-02). */
-  scan?: ReactNode;
+  /** [chrome6] Scan for links (VIEW6-02). [lists7] WALK7-02: main = the
+      empty list's one action; else the head row's short pill. */
+  scan?: (main: boolean) => ReactNode;
   /** [chrome6] The ✕ the other side lists have (VIEW6-11). */
   onClose?: () => void;
 }) {
@@ -1104,12 +1112,14 @@ export function RecommendedLinkList({
       id="graph-list-recommended"
       tabIndex={-1}
       aria-label={t("panes.recommendedLinks")}
-      className="menu-in absolute top-3 right-3 bottom-3 z-10 flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 pb-24 shadow-float outline-none backdrop-blur-md max-[999px]:bottom-16 max-[999px]:pb-4"
+      className="menu-in absolute top-3 right-3 z-10 max-h-[calc(100%-24px)] flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 shadow-float outline-none backdrop-blur-md max-[999px]:max-h-[calc(100%-76px)]"
     >
-      {/* [chrome6] VIEW6-02, VIEW6-11: one head row, Scan for links and ✕.
-          The list's intro is the pill's tooltip (WALK6-08). */}
+      {/* [chrome6] VIEW6-02, VIEW6-11: one head row. [lists7] WALK7-01/02:
+          the list's name, then Scan for links and ✕ at the right end. The
+          list's intro is the pill's tooltip (WALK6-08). */}
       <div className="flex items-center gap-2">
-        <div className="flex min-w-0 flex-1 items-center">{scan}</div>
+        <ListName grow>{t("panes.recommendedLinks")}</ListName>
+        {shown.length > 0 && scan?.(false)}
         {onClose && (
           <button
             onClick={onClose}
@@ -1124,7 +1134,10 @@ export function RecommendedLinkList({
       </div>
       {errorText && <p className="text-[13px] text-red-600">{errorText}</p>}
       {shown.length === 0 && (
-        <p className="text-[13px] text-sand-600">{t("panes.recommendedLinksEmpty")}</p>
+        <>
+          <p className="text-[13px] text-sand-600">{t(scan ? "panes.recommendedLinksEmpty" : "panes.recommendedLinksNone")}</p>
+          {scan?.(true)}
+        </>
       )}
       {ordered.map((l) => {
         const open = openId === l.id;

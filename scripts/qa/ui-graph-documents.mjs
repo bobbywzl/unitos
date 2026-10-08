@@ -200,7 +200,9 @@ for (const [w, h, touch] of [
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   check(`${w}: no sideways scroll`, overflow <= 0, String(overflow));
   if (w < 640) {
-    check(`${w}: the list is a sheet at the foot`, Math.abs(box.y + box.height - h) < 4 && box.width >= w - 2 && box.height < h * 0.7, JSON.stringify(box));
+    // [lists7] VIEW7-09: the sheet's foot is 64 px above the screen's, clear of the Stitch pill.
+    const pill = await page.locator("[data-stitch-slot] > *").first().boundingBox().catch(() => null);
+    check(`${w}: the list is a sheet above the Stitch pill`, Math.abs(box.y + box.height - (h - 64)) < 4 && box.width >= w - 26 && box.height < h * 0.7 && (!pill || pill.y >= box.y + box.height), JSON.stringify({ box, pill }));
     // The canvas fits its nodes above the sheet.
     const nodesAbove = await page.evaluate((top) => [...document.querySelectorAll(".react-flow__node")].every((n) => n.getBoundingClientRect().top < top), box.y);
     check(`${w}: the nodes sit above the sheet`, nodesAbove);

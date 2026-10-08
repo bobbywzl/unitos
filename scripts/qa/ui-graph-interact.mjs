@@ -91,7 +91,8 @@ const LIST = '[data-track-surface="graph-links"]';
     log(near && list.w >= 280 && !overlap(list, box) ? "PASS" : "FAIL", `link list ${name} at its curve, screen-sized, clear of the box`, { mid, list, box, rowLineHeight: font });
     await page.screenshot({ path: `${SHOT}GR-04-${name}-${lang}-${tag}.png` });
     // Open the first link: it opens in the side panel (WALK2-05), the reason
-    // once, at full height, clear of the box; the curve stays pinned.
+    // once, clear of the box; the curve stays lit. [lists7] WALK7-03: the
+    // panel is as tall as what it holds, so it shows all of it or reaches the cap.
     await page.mouse.click(mid.x, mid.y);
     await page.waitForTimeout(300);
     await page.locator(`${LIST} button[aria-expanded]`).first().click();
@@ -100,7 +101,8 @@ const LIST = '[data-track-surface="graph-links"]';
     const whyCount = await page.locator(`${PANEL} [data-track-surface="link-detail"]`).count();
     const inPlace = await page.locator(`${LIST} [data-track-surface="link-detail"]`).count();
     const panel = await rect(page, PANEL);
-    log(panel && panel.w >= 390 && panel.h >= 500 && whyCount === 1 && inPlace === 0 && !overlap(panel, await rect(page, BOX)) ? "PASS" : "FAIL", `link ${name} opens in the side panel, 400px wide, full height, clear of the box`, { panel, whyCount, inPlace });
+    const fits = await page.evaluate((sel) => { const e = document.querySelector(sel); const c = document.querySelector(".react-flow")?.getBoundingClientRect(); return !!e && (e.scrollHeight <= e.clientHeight + 2 || (c !== undefined && e.getBoundingClientRect().height >= c.height - 80)); }, PANEL);
+    log(panel && panel.w >= 390 && panel.h >= 200 && fits && whyCount === 1 && inPlace === 0 && !overlap(panel, await rect(page, BOX)) ? "PASS" : "FAIL", `link ${name} opens in the side panel, 400px wide, as tall as what it holds, clear of the box`, { panel, whyCount, inPlace });
     await page.screenshot({ path: `${SHOT}GR-13-${name}-expanded-${lang}-${tag}.png` });
     // Escape closes the pinned list, then the panel, never the graph (GR-11).
     await page.mouse.move(5, 300);

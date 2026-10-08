@@ -222,7 +222,7 @@ export function FindList({
       data-graph-side-list="find"
       tabIndex={-1}
       aria-label={t("graphView.findLabel")}
-      className="menu-in absolute outline-none top-3 right-3 bottom-3 z-10 flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto overscroll-contain rounded-[20px] border border-line bg-card/95 p-4 pb-24 shadow-float backdrop-blur-md max-[999px]:bottom-16 max-[999px]:pb-4"
+      className="menu-in absolute outline-none top-3 right-3 z-10 max-h-[calc(100%-24px)] flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto overscroll-contain rounded-[20px] border border-line bg-card/95 p-4 shadow-float backdrop-blur-md max-[999px]:max-h-[calc(100%-76px)]"
     >
       <div className="flex items-start gap-2">
         {/* A live region: a screen reader hears what Find found (WALK4-09). */}

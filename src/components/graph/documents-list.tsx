@@ -274,14 +274,16 @@ export function DocumentsList({
       tabIndex={-1}
       data-graph-side-list="documents"
       data-graph-documents-list
+      data-graph-sheet={sheet ? "" : undefined}
       data-compact=""
       data-mine-first={mineFirst ? "" : undefined}
       aria-label={t("panes.graphDocuments")}
       onScroll={(e) => scrollKept.set(notebookId, e.currentTarget.scrollTop)}
       className={`menu-in absolute z-10 flex flex-col gap-2.5 overflow-y-auto overscroll-contain border border-line bg-card/95 p-4 shadow-float outline-none backdrop-blur-md ${
         sheet
-          ? "inset-x-0 bottom-0 h-[60%] rounded-t-[20px] border-b-0 pb-24"
-          : "top-3 right-3 bottom-3 w-[400px] max-w-[calc(100vw-24px)] rounded-[20px] pb-24 max-[999px]:bottom-16 max-[999px]:pb-4"
+          ? // [lists7] VIEW7-09, WALK7-03: the sheet ends above the Stitch pill, as tall as what it holds.
+            "inset-x-3 bottom-16 max-h-[60%] rounded-[20px]"
+          : "top-3 right-3 max-h-[calc(100%-24px)] w-[400px] max-w-[calc(100vw-24px)] rounded-[20px] max-[999px]:max-h-[calc(100%-76px)]"
       }`}
     >
       <div className="flex items-start gap-2">
