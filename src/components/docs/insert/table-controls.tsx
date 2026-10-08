@@ -99,6 +99,18 @@ export function TableControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
     [editor],
   );
 
+  // An edit moves the table's position: the pills wait for the next move
+  // over a cell rather than read a stale one.
+  useEffect(() => {
+    const onUpdate = ({ transaction }: { transaction: { docChanged: boolean } }) => {
+      if (transaction.docChanged) setHover(null);
+    };
+    editor.on("update", onUpdate);
+    return () => {
+      editor.off("update", onUpdate);
+    };
+  }, [editor]);
+
   useEffect(() => {
     if (!ctx.editing) return;
     const dom = editor.view.dom;
@@ -146,8 +158,9 @@ export function TableControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
 function Pills({ editor, hover, onEnter, onLeave, onDone }: { editor: Editor; hover: Hover; onEnter: () => void; onLeave: () => void; onDone: () => void }) {
   const t = useT();
   const [drag, setDrag] = useState<{ axis: "row" | "col"; line: number } | null>(null);
-  const table = editor.state.doc.nodeAt(hover.tablePos);
-  if (!table || typeof document === "undefined") return null;
+  const doc = editor.state.doc;
+  const table = hover.tablePos < doc.content.size ? doc.nodeAt(hover.tablePos) : null;
+  if (!table || table.type.name !== "table" || typeof document === "undefined") return null;
   const pinned = pinnedCount(table);
   const rowPinned = hover.row < pinned;
   const pinLabel = t(rowPinned ? (pinned > 1 ? "docsInsert.unpinHeaderRows" : "docsInsert.unpinHeaderRow") : "docsInsert.pinHeaderUpToRow");
