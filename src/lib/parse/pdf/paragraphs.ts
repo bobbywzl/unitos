@@ -691,6 +691,18 @@ function isDisplayMathLine(line: Line, ctx: PageContext): boolean {
   return lineMathShare(line) >= 0.4 && line.x > ctx.columnLeft + line.size * 2;
 }
 
+// A line of math at its own column's edge, where the line of prose next to
+// it starts, is a line of that prose, no display set in: the page's column
+// stands far left of a margin note (parse loop finding: the MML book's
+// margin caption "Figure 2.12 Kernel and image of a linear mapping" ends
+// "Φ : V → W." on a line of its own, p. 65, and read as two paragraphs).
+function mathOfProse(prev: Line, next: Line, ctx: PageContext): boolean {
+  const math = isDisplayMathLine(next, ctx) ? next : prev;
+  const prose = math === next ? prev : next;
+  if (math.display || (math.cells.length >= 2 && EQ_NUMBER_RE.test(math.cells[0].text.trim()))) return false;
+  return Math.abs(math.x - prose.x) <= math.size * 0.5 && math.x <= leftEdge(math, ctx) + math.size * 2;
+}
+
 // A first-line indent (LaTeX's parindent): an unmarked indented line whose
 // next line is back at the column's left edge at text leading is the first
 // line of that paragraph, not an item (import compare loop finding: every
@@ -969,7 +981,7 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
       // An equation's line and a text line never share a paragraph: the
       // label under an underbrace joined the formula and diluted its math
       // share below the equation threshold (import compare loop finding).
-      isDisplayMathLine(prev, ctx) !== isDisplayMathLine(next, ctx) ||
+      (isDisplayMathLine(prev, ctx) !== isDisplayMathLine(next, ctx) && !mathOfProse(prev, next, ctx)) ||
       // A line of code under a line of prose that introduces it (a colon,
       // not a link's scheme, or a line short of the column's edge) opens a
       // listing (parse loop finding: ThinkDSP's "Here's an updated version
