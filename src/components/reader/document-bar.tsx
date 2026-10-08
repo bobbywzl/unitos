@@ -35,7 +35,6 @@ import {
   type DocumentFolderView,
 } from "@/components/reader/document-folders";
 import { DocumentsSort, useDocumentSort } from "@/components/reader/document-organize";
-import type { DocumentKind } from "@/lib/document-order";
 import {
   IngestProgress,
   advanceIngestSteps,
