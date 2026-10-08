@@ -1344,6 +1344,9 @@ body.docs-img-moving .docs-img-toolbar {
   flex-direction: column;
   transform: translateY(-50%);
 }
+.docs-table-pill-col {
+  transform: translate(-50%, -50%);
+}
 .docs-pill-btn {
   display: inline-flex;
   align-items: center;
@@ -1433,11 +1436,23 @@ body.docs-img-moving .docs-img-toolbar {
   right: 24px;
   z-index: 59;
   width: min(560px, calc(100vw - 32px));
+  max-height: calc(100dvh - 136px);
   padding: 20px 24px;
+}
+/* A short screen (a phone held sideways): the dialog stands at the top and
+   its body scrolls, so no part of it is off the screen. */
+@media (max-height: 560px) {
+  .docs-chars-dialog {
+    top: 8px;
+    max-height: calc(100dvh - 16px);
+  }
 }
 .docs-chars-body {
   display: flex;
   gap: 16px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
 }
 .docs-chars-body > :first-child {
   flex: 1;

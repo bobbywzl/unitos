@@ -179,10 +179,10 @@ function score(item: Item, q: string): number {
 }
 
 export function AtMenuHost({ editor, ctx }: { editor: Editor; ctx: InsertContext }) {
-  useEditorTick(editor);
   const s = atMenuState(editor.state);
   // The picker's place follows the edits made while it is open.
   const [at, setAt] = useDocPos(editor);
+  useEditorTick(editor, () => at === null && !atMenuState(editor.state).active);
   const [kind, setKind] = useState<PickerKind>("date");
   useViewportTick(s.active || at !== null);
 

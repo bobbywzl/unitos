@@ -4,9 +4,10 @@ import { useEditorState, type Editor } from "@tiptap/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/components/lang-provider";
-import { CloseIcon, ExpandLessIcon, ExpandMoreIcon, MoreVertIcon } from "@/components/docs/icons";
+import { CloseIcon, ExpandLessIcon, ExpandMoreIcon, MoreHorizIcon } from "@/components/docs/icons";
 import { keepFocus } from "@/components/docs/menu";
 import { DialogButton } from "@/components/docs/toolbar/dialog";
+import { installModalTrap, useEscapeLayer } from "@/lib/escape-layers";
 import { findState, replaceAll, replaceResult, searchFrom, stepResult, type FindOptions } from "@/components/docs/typing/find";
 
 // The find bar (Ctrl+F) and the Find and replace dialog (Ctrl+H), Google
@@ -109,7 +110,7 @@ export function FindBar({
   const buttons = [
     { label: t("docsTyping.previous"), icon: <ExpandLessIcon />, run: () => stepResult(view, -1), off: none },
     { label: t("docsTyping.next"), icon: <ExpandMoreIcon />, run: () => stepResult(view, 1), off: none },
-    { label: t("docsTyping.moreOptions"), icon: <MoreVertIcon />, run: onMore, off: false },
+    { label: t("docsTyping.moreOptions"), icon: <MoreHorizIcon />, run: onMore, off: false },
     { label: t("docs.close"), icon: <CloseIcon />, run: onClose, off: false },
   ];
   return createPortal(
@@ -174,7 +175,18 @@ const OPTIONS = [
   ["ignoreDiacritics", "docsTyping.ignoreDiacritics"],
 ] as const;
 
-export function FindReplaceDialog({ editor, open, onClose }: { editor: Editor; open: boolean; onClose: () => void }) {
+export function FindReplaceDialog({
+  editor,
+  open,
+  focusToken,
+  onClose,
+}: {
+  editor: Editor;
+  open: boolean;
+  /** Changes each time the dialog is asked to take focus (Ctrl+H again). */
+  focusToken: number;
+  onClose: () => void;
+}) {
   const t = useT();
   const find = useFind(editor);
   const findRef = useRef<HTMLInputElement>(null);
@@ -182,11 +194,17 @@ export function FindReplaceDialog({ editor, open, onClose }: { editor: Editor; o
   const [replacement, setReplacement] = useState("");
   const [message, setMessage] = useState("");
 
+  // Modal, as Docs' is: Tab stays in it (aria-modal, the app's one trap),
+  // and Escape closes it wherever the focus is, a click in the text too.
+  useEffect(() => {
+    if (open) installModalTrap();
+  }, [open]);
+  useEscapeLayer(open, onClose);
   useEffect(() => {
     if (!open) return;
     findRef.current?.focus();
     findRef.current?.select();
-  }, [open]);
+  }, [open, focusToken]);
 
   if (!open || typeof document === "undefined") return null;
   const view = editor.view;
@@ -202,6 +220,7 @@ export function FindReplaceDialog({ editor, open, onClose }: { editor: Editor; o
   return createPortal(
     <div
       role="dialog"
+      aria-modal="true"
       aria-label={t("docsTyping.findAndReplace")}
       className="docs-replace"
       data-edit-control

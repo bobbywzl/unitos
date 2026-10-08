@@ -113,7 +113,7 @@ registerDocsCommands([
     id: "page:outline",
     label: "docsPage.showOutline",
     menu: "view",
-    keywords: ["outline", "headings", "tabs", "navigation"],
+    keywords: ["outline", "contents", "headings", "tabs", "navigation", "大纲"],
     run: (editor) => {
       const s = store(editor);
       if (s) s.set({ outlineOpen: !s.get().outlineOpen });

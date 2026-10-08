@@ -6,7 +6,7 @@ import { useAuthor, useCollab } from "@/components/collab/collab-context";
 import { TrashIcon } from "@/components/icons";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { ReplyThread, replyTime } from "@/components/collab/reply-thread";
-import { CheckIcon, MoreVertIcon } from "@/components/docs/icons";
+import { CheckIcon, MoreHorizIcon } from "@/components/docs/icons";
 import { toast } from "@/components/docs/insert/context";
 import { pageEditorIn } from "@/components/docs/layer/anchor";
 import { DropdownPanel, MenuItem } from "@/components/docs/menu";
@@ -256,7 +256,7 @@ export function CommentCard({
             data-tip={t("docsLayer.moreOptions")}
             className="docs-comment-button"
           >
-            <MoreVertIcon size={20} />
+            <MoreHorizIcon size={20} />
           </button>
         </div>
       </div>

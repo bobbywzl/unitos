@@ -598,6 +598,16 @@
 }
 /* An import's contents under the headings (SPEC.md §26): a note, and
    Generate contents. */
+.docs-outline-parts {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--docs-sep);
+}
+.docs-outline-scroll > .docs-outline-parts:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
 .docs-outline-note {
   padding: 0 16px 8px 24px;
   color: var(--docs-muted);

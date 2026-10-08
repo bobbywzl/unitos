@@ -2,7 +2,7 @@
 
 import { redoDepth, undoDepth } from "@tiptap/pm/history";
 import { useEditorState, type Editor } from "@tiptap/react";
-import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { useT } from "@/components/lang-provider";
 import { docsCommands, type DocsMenu } from "@/components/docs/commands";
@@ -168,9 +168,6 @@ function readToolbar(e: Editor) {
   };
   const cell = selectedCells(state)[0];
   return {
-    // The history's depth: e.can() builds every command, on every transaction.
-    canUndo: undoDepth(state) > 0,
-    canRedo: redoDepth(state) > 0,
     bold: e.isActive("bold"),
     italic: e.isActive("italic"),
     underline: e.isActive("underline"),
@@ -192,6 +189,33 @@ function readToolbar(e: Editor) {
     // The caret's cell: the table's buttons show while the caret is in a table.
     table: cell ? { background: (cell.node.attrs.backgroundColor as string | null) ?? null, border: cellBorder(state, borderTarget(e)) } : null,
   };
+}
+
+/** A touch screen: no Ctrl+Z on its keyboard, so Undo and Redo stay on the
+    row as long as anything does but Search the menus. */
+const COARSE = "(pointer: coarse)";
+function subscribeCoarse(onChange: () => void): () => void {
+  const query = window.matchMedia(COARSE);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+const readCoarse = () => window.matchMedia(COARSE).matches;
+
+/** Whether Undo or Redo has a step: the history's depth (e.can() builds
+    every command, on every transaction). */
+function historyOn(e: Editor, redo: boolean): boolean {
+  return (redo ? redoDepth(e.state) : undoDepth(e.state)) > 0;
+}
+
+/** Undo or Redo. It reads the history on its own: the first key of a
+    document turns Undo on without a render of the whole row. */
+function HistoryButton({ editor, redo, label, tip, track, onClick }: { editor: Editor; redo: boolean; label: string; tip: string; track: string; onClick: () => void }) {
+  const on = useEditorState({ editor, selector: () => historyOn(editor, redo) });
+  return (
+    <Btn label={label} tip={tip} track={track} disabled={!on} onClick={onClick}>
+      {redo ? <RedoIcon /> : <UndoIcon />}
+    </Btn>
+  );
 }
 
 export function DocsToolbar({
@@ -239,6 +263,7 @@ export function DocsToolbar({
   const target = header ?? editor;
   const s = useEditorState({ editor: target, selector: () => readToolbar(target) });
   const paint = usePaintFormat(editor);
+  const coarse = useSyncExternalStore(subscribeCoarse, readCoarse, () => false);
   const [customFor, setCustomFor] = useState<"text" | "highlight" | null>(null);
   const [dialog, setDialog] = useState<"indent" | "numbering" | "spacing" | "borders" | null>(null);
   const off = mode === "viewing" || !canEdit;
@@ -328,8 +353,9 @@ export function DocsToolbar({
   };
 
   const A = {
-    undo: { id: "undo", key: "docs.undo", combo: "Mod+Z", Icon: UndoIcon, where: "edit", run: () => run((c) => c.undo()), on: s.canUndo },
-    redo: { id: "redo", key: "docs.redo", combo: "Mod+Y", Icon: RedoIcon, where: "edit", run: () => run((c) => c.redo()), on: s.canRedo },
+    // `on` as the history stands when Search the menus lists it; the buttons read it themselves (HistoryButton).
+    undo: { id: "undo", key: "docs.undo", combo: "Mod+Z", Icon: UndoIcon, where: "edit", run: () => run((c) => c.undo()), get on() { return historyOn(target, false); } },
+    redo: { id: "redo", key: "docs.redo", combo: "Mod+Y", Icon: RedoIcon, where: "edit", run: () => run((c) => c.redo()), get on() { return historyOn(target, true); } },
     print: { id: "print", key: "docs.print", combo: "Mod+P", Icon: PrintIcon, where: "file", words: ["printer", "print preview"], run: () => window.print() },
     spelling: { id: "spelling", key: "docsTyping.showSpelling", combo: "Mod+Alt+X", Icon: SpellcheckIcon, where: "tools", run: () => fireDocs(editor, TYPING_EVENT.spelling) },
     // Voice typing (SPEC.md §29, typing): opens the microphone box at the left of the page.
@@ -405,6 +431,9 @@ export function DocsToolbar({
     <Btn label={t(a.key)} tip={withKeys(t(a.key), a.combo)} track={a.id} pressed={pressed} disabled={a.on === false} onClick={a.run}>
       {a.Icon && <a.Icon />}
     </Btn>
+  );
+  const historyButton = (a: Act, redo: boolean) => (
+    <HistoryButton editor={target} redo={redo} label={t(a.key)} tip={withKeys(t(a.key), a.combo)} track={a.id} onClick={a.run} />
   );
 
   // Search the menus: the toolbar's actions, then the areas' commands (an
@@ -599,11 +628,11 @@ export function DocsToolbar({
         {
           key: "history",
           sep: false,
-          fold: 60,
+          fold: coarse ? 95 : 60,
           content: (
             <>
-              {button(A.undo)}
-              {button(A.redo)}
+              {historyButton(A.undo, false)}
+              {historyButton(A.redo, true)}
             </>
           ),
         },

@@ -8,7 +8,7 @@ import { createPortal } from "react-dom";
 import { useT } from "@/components/lang-provider";
 import { AddIcon, DropDownIcon } from "@/components/docs/icons";
 import { MenuItem } from "@/components/docs/menu";
-import { PX_PER_PT } from "@/components/docs/page/geometry";
+import { PX_PER_PT, scrollParent } from "@/components/docs/page/geometry";
 import { DropBtn } from "@/components/docs/toolbar/controls";
 import { ToolbarDialog } from "@/components/docs/toolbar/dialog";
 import { BorderButtons, ColorButton } from "@/components/docs/insert/colors";
@@ -82,8 +82,8 @@ function caretInCell(editor: Editor, tablePos: number, row: number, col: number)
 }
 
 export function TableControlsHost({ editor, ctx }: { editor: Editor; ctx: InsertContext }) {
-  useEditorTick(editor);
   const [hover, setHover] = useState<Hover | null>(null);
+  useEditorTick(editor, () => hover === null && tableRectOf(editor.state) === null);
   const [panel, setPanel] = useState(false);
   const [split, setSplit] = useState(false);
   const hideTimer = useRef<number | null>(null);
@@ -217,11 +217,14 @@ function Pills({ editor, hover, onEnter, onLeave, onDone }: { editor: Editor; ho
     </button>
   );
   const { tableRect } = hover;
+  // The row's pill stands left of the table, inside the pane: on a phone
+  // the table starts at the pane's edge, and the pill comes over it.
+  const paneLeft = scrollParent(editor.view.dom)?.getBoundingClientRect().left ?? 0;
   return createPortal(
     <>
       {pill(
         "row",
-        { left: tableRect.left - 30, top: hover.rowRect.top + hover.rowRect.height / 2 },
+        { left: Math.max(paneLeft + 2, tableRect.left - 30), top: hover.rowRect.top + hover.rowRect.height / 2 },
         <>
           <button
             type="button"
@@ -237,7 +240,9 @@ function Pills({ editor, hover, onEnter, onLeave, onDone }: { editor: Editor; ho
       )}
       {pill(
         "col",
-        { left: hover.colRect.left + 4, top: tableRect.top - 30 },
+        // On the table's top border, the column's middle: the line above
+        // the table stays readable.
+        { left: hover.colRect.left + hover.colRect.width / 2, top: tableRect.top },
         <>
           <DropBtn label={t("docsInsert.sortTable")} track="table-sort" arrow={false} className="docs-pill-btn" face={<SortIcon size={16} />}>
             {(close) =>

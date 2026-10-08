@@ -3,7 +3,7 @@
 import type { Editor } from "@tiptap/core";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useT } from "@/components/lang-provider";
-import { MoreVertIcon } from "@/components/docs/icons";
+import { MoreHorizIcon } from "@/components/docs/icons";
 import { SparkleIcon } from "@/components/icons";
 import { FIGURE_ASSISTANT_EVENT } from "@/components/reader/figure-suggestion";
 import { MenuItem } from "@/components/docs/menu";
@@ -100,7 +100,7 @@ type Section = "size" | "wrap" | "alt";
 
 export function ImageControlsHost({ editor, ctx }: { editor: Editor; ctx: InsertContext }) {
   const t = useT();
-  useEditorTick(editor);
+  useEditorTick(editor, () => selectedImage(editor.state) === null);
   const hit = selectedImage(editor.state);
   useViewportTick(hit !== null);
   const [panel, setPanel] = useState<Section | null>(null);
@@ -274,7 +274,7 @@ export function ImageControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
           {!compact && button("docsInsert.replaceImage", <ResetIcon />, () => setReplacing((r) => !r))}
           {!compact && button("docsInsert.resetImage", <RefreshIcon />, () => resetImage(editor, hit.pos))}
           <Sep />
-          <DropBtn label={t("docs.more")} track="image-more" arrow={false} face={<MoreVertIcon />}>
+          <DropBtn label={t("docs.more")} track="image-more" arrow={false} face={<MoreHorizIcon />}>
             {(close) => (
               <>
                 {compact && (

@@ -208,8 +208,9 @@ function OutlineContents({
   const current = useCurrent(editor, items, viewTop);
   if (items.length > 0 && items.every((item) => headings.has(item.pos))) return null;
   return (
-    <section aria-label={t("reader.contents")}>
-      <div className="docs-outline-header">{t("reader.contents")}</div>
+    // The panel is Contents: its parts follow the headings under a line,
+    // with no second "Contents" over them.
+    <section className="docs-outline-parts">
       {reading && <p className="docs-outline-note">{t("common.loading")}</p>}
       {readError && <p className="docs-outline-note docs-outline-error">{readError}</p>}
       {parts &&

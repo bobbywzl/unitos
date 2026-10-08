@@ -51,6 +51,10 @@ const NARROW_PANE = 600;
 const OUTLINE_BUTTON = 44;
 /** The canvas's padding above the first page. */
 const CANVAS_TOP = 11;
+/** A pane shorter than this (a phone held sideways) reads pageless
+    (docs-editor.tsx); there the room above the text column is this. */
+const SHORT_PANE = 500;
+const PAGELESS_TOP_SHORT = 24;
 
 /** What stands over the first page, as wide as the page: the Translate bar
     (SPEC.md §19). A context, so a new bar redraws the bar alone, never the
@@ -138,6 +142,7 @@ export function PageCanvas({
   const pageRef = useRef<HTMLElement>(null);
   const view = useView(canvasRef);
   const [canvasWidth, setCanvasWidth] = useState(0);
+  const [shortPane, setShortPane] = useState(false);
 
   // A newer stored setup that arrives with the page (another person's
   // change) replaces the one on screen — unless a change made here waits to
@@ -183,10 +188,15 @@ export function PageCanvas({
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const measure = () => setCanvasWidth(canvas.clientWidth);
+    const pane = scrollParent(canvas);
+    const measure = () => {
+      setCanvasWidth(canvas.clientWidth);
+      setShortPane(pane !== null && pane.clientHeight > 0 && pane.clientHeight < SHORT_PANE);
+    };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(canvas);
+    if (pane) observer.observe(pane);
     return () => observer.disconnect();
   }, []);
 
@@ -476,7 +486,7 @@ export function PageCanvas({
   const pageStyle: React.CSSProperties & Record<`--${string}`, string> = pageless
     ? {
         width: columnWidth,
-        padding: `${PAGELESS_TOP - CANVAS_TOP}px 0 ${PAGELESS_RUNOUT}px`,
+        padding: `${(shortPane ? PAGELESS_TOP_SHORT : PAGELESS_TOP) - CANVAS_TOP}px 0 ${PAGELESS_RUNOUT}px`,
         zoom: scale === 1 ? undefined : scale,
       }
     : {

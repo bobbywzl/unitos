@@ -62,7 +62,8 @@ const FONTS_LINK_ID = "unitos-docs-fonts";
 
 /** A pane narrower than this starts with the title row hidden. */
 const NARROW_PANE = 600;
-/** A pane shorter than this (a phone held sideways) hides the title row too. */
+/** A pane shorter than this (a phone held sideways) hides the title row
+    too, and reads pageless with no ruler, as a narrow one does. */
 const SHORT_PANE = 500;
 
 /** An import (SPEC.md §29): a document made from a PDF, a web page, a
@@ -159,6 +160,44 @@ function useDocsFonts() {
   }, []);
 }
 
+/** A value the toolbar's row shows that changes apart from the row: the
+    save state, the Unitos tools. The row is built once for it; the value's
+    own small part redraws when it changes (a save, the reader's toolbox
+    opening above the page) — on a long row a rebuild costs more than a
+    frame. */
+type Live<T> = { get: () => T; set: (value: T) => void; subscribe: (onChange: () => void) => () => void };
+
+function useLive<T>(value: T): Live<T> {
+  const [live] = useState<Live<T>>(() => {
+    let current = value;
+    const listeners = new Set<() => void>();
+    return {
+      get: () => current,
+      set: (next) => {
+        if (Object.is(next, current)) return;
+        current = next;
+        for (const listener of listeners) listener();
+      },
+      subscribe: (onChange) => {
+        listeners.add(onChange);
+        return () => {
+          listeners.delete(onChange);
+        };
+      },
+    };
+  });
+  useLayoutEffect(() => live.set(value), [live, value]);
+  return live;
+}
+
+function useLiveValue<T>(live: Live<T>): T {
+  return useSyncExternalStore(live.subscribe, live.get, live.get);
+}
+
+function LiveSlot({ live }: { live: Live<ReactNode> }) {
+  return <>{useLiveValue(live)}</>;
+}
+
 /** The document's status at the toolbar row's right end, as Google Docs
     shows it: the arrows and "Saving…" while a change waits or saves, then
     the cloud with a check and "Saved to Unitos" for 3 s, then the cloud
@@ -168,8 +207,9 @@ function useDocsFonts() {
     write that did not land always shows, in one place. The app's writes in
     flight are not drawn here — a note's draft waiting for its save would
     leave this cloud spinning over a document that is saved. */
-function SaveStatus({ state: textState }: { state: SaveState }) {
+function SaveStatus({ live }: { live: Live<SaveState> }) {
   const t = useT();
+  const textState = useLiveValue(live);
   usePageStatusCarries();
   const appState = useSyncExternalStore(subscribeSaveState, readSaveState, () => "saved" as const);
   const appTouched = useSyncExternalStore(subscribeSaveState, readSaveTouched, () => false);
@@ -561,7 +601,10 @@ export function DocsEditor({
       const split = shell.closest("[data-reader-root]")?.previousElementSibling?.classList.contains("pane-header") === true;
       const isNarrow = shell.clientWidth > 0 && shell.clientWidth < NARROW_PANE;
       const short = pane !== null && pane.clientHeight > 0 && pane.clientHeight < SHORT_PANE;
-      setNarrow(isNarrow);
+      // A short pane (a phone held sideways) reads as a narrow one does:
+      // pageless, with no ruler; the page's margins and the ruler would
+      // leave the words a third of the screen.
+      setNarrow(isNarrow || short);
       setTight(isNarrow || short || split);
     };
     measure();
@@ -628,9 +671,10 @@ export function DocsEditor({
   // this browser; the document's page setup stays as it is (the page store
   // keeps the saved setup apart from the drawn page). A PDF import offers it
   // in Viewing with its bar, and Editing and Suggesting draw its pages; a
-  // pane too narrow for the page (a phone) reads pageless at once in every
-  // mode, with no bar — the pages there are drawn at 42%, where no one reads
-  // or writes them — and Search the menus > View keeps Show pages.
+  // pane too narrow for the page (a phone) or too short for it (a phone
+  // held sideways) reads pageless at once in every mode, with no bar — the
+  // pages there are drawn at 42%, or leave six lines of words, where no one
+  // reads or writes them — and Search the menus > View keeps Show pages.
   const paged = !pageSetup.pageless;
   const pdfPages = imported?.kind === "pdf" && paged;
   const [reflowChoice, chooseReflow] = useReflow(editor, documentId, pdfPages || (paged && narrow));
@@ -662,6 +706,12 @@ export function DocsEditor({
   });
   // The header's and footer's saves show in the same status.
   const shownSaveState = useSaveState(editor, documentId, pageSetup, saveState);
+  // The save state and the Unitos tools reach the toolbar's row on their
+  // own (useLive): a save, or a render of the reader around the page (its
+  // toolbox opening), redraws them, not the whole row.
+  const saveLive = useLive(shownSaveState);
+  const aiLive = useLive<ReactNode>(aiControls ?? null);
+  const hasAi = Boolean(aiControls);
   // The outline button stands beside the text column when the margin has
   // the room for it; else the toolbar's row carries it (areas/page.tsx).
   const outlineRoom = useOutlineRoom(editor, documentId, pageSetup);
@@ -749,7 +799,10 @@ export function DocsEditor({
   const modeRef = useRef(mode);
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
-    editor.setEditable(writable && mode !== "viewing");
+    // A change only: setEditable draws the whole page again, and on a long
+    // import's first frame that is a second of nothing (EDGE14-08).
+    const editable = writable && mode !== "viewing";
+    if (editor.isEditable !== editable) editor.setEditable(editable);
     const switched = modeRef.current !== mode;
     modeRef.current = mode;
     const passing = passingRef.current;
@@ -857,9 +910,10 @@ export function DocsEditor({
     [editor, documentId, notebookId, writable, canEdit, editing, pageSetup, reflowed, documents],
   );
 
-  // Every save changes the save state, which redraws the title row alone:
-  // the toolbar and the pages are built again only when their own inputs
-  // change (on a long document one rebuild costs more than a frame).
+  // Every save changes the save state, which redraws the title row and the
+  // status alone: the toolbar and the pages are built again only when their
+  // own inputs change (on a long document one rebuild costs more than a
+  // frame).
   // The toolbar keeps the reader's own role: on a locked import it still
   // offers Add comment, and the mode menu says why the other modes are off.
   const chrome = useMemo(
@@ -875,13 +929,13 @@ export function DocsEditor({
             zoom={zoom}
             onZoom={setZoom}
             pageless={shownSetup.pageless}
-            aiControls={aiControls}
+            aiControls={hasAi ? <LiveSlot live={aiLive} /> : undefined}
             headerHidden={headerHidden}
             onToggleHeader={() => setHeaderHidden((h) => !h)}
             narrowPane={!outlineRoom}
             status={
               <>
-                {writable && <SaveStatus state={shownSaveState} />}
+                {writable && <SaveStatus live={saveLive} />}
                 <VersionHistoryButton editor={area.editor} />
               </>
             }
@@ -890,7 +944,7 @@ export function DocsEditor({
           {!narrow && <PageRuler {...area} />}
         </ModeLock.Provider>
       ),
-    [area, hfEditor, mode, setMode, locked, canEdit, zoom, shownSetup.pageless, aiControls, headerHidden, insertImage, writable, shownSaveState, outlineRoom, narrow],
+    [area, hfEditor, mode, setMode, locked, canEdit, zoom, shownSetup.pageless, hasAi, aiLive, headerHidden, insertImage, writable, saveLive, outlineRoom, narrow],
   );
   const pages = useMemo(
     () =>
