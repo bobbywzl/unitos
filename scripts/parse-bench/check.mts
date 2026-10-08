@@ -1878,6 +1878,18 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     labels.join(" / "),
   );
   check("url: a heading beside a sentence stays a heading", labels.includes("HEADING Gravel bars"), labels.join(" / "));
+  // Screen-reader text under the frameworks' own class names is not on the page.
+  const hidden = (
+    await parseHtmlContent(
+      `<!doctype html><html><head><title>Notes on river flow</title></head><body><article><p>${prose(1)}</p><figure><img src="https://example.org/delta.jpg" width="800" height="600" alt="The delta"><figcaption><span class="show-for-sr">Photo:</span>The delta at dawn</figcaption></figure><p>${prose(2)}<span class="visuallyhidden"> Opens in a new window</span></p><p>${prose(3)}</p></article></body></html>`,
+      "https://example.org/rivers",
+    )
+  ).blocks.map((b) => `${b.type} ${b.text}`);
+  check(
+    "url: screen-reader text (show-for-sr, visuallyhidden) is not read",
+    !hidden.some((b) => /Photo:|Opens in a new window/.test(b)) && hidden.some((b) => b.includes("The delta at dawn")),
+    hidden.join(" / "),
+  );
 }
 
 {
