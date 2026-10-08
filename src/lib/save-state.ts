@@ -12,6 +12,10 @@ let inflight = 0;
 const dirty = new Set<string>();
 let failed = false;
 let touched = false;
+// The paths whose last write failed and no write to them has landed since:
+// a note's save that failed stays Not saved until its retry lands, however
+// many other writes land meanwhile (the page editor's status reads it).
+const unconfirmed = new Set<string>();
 const listeners = new Set<() => void>();
 
 function notify() {
@@ -39,10 +43,20 @@ export function beginWrite(): void {
   notify();
 }
 
-export function endWrite(ok: boolean): void {
+export function endWrite(ok: boolean, path?: string): void {
   inflight = Math.max(0, inflight - 1);
   failed = !ok;
+  if (path) {
+    if (ok) unconfirmed.delete(path);
+    else unconfirmed.add(path);
+  }
   notify();
+}
+
+/** True while a write that failed has not been confirmed by a later write to
+    the same path. */
+export function readUnconfirmed(): boolean {
+  return unconfirmed.size > 0;
 }
 
 /** A draft that differs from what the server holds, until its save starts. */

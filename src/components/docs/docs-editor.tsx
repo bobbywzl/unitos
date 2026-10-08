@@ -47,7 +47,7 @@ import { inlineText } from "@/lib/docs/blocks";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
 import type { PageRange } from "@/lib/pdf-pages";
 import { POSITION_HOLD_MS, READING_LINE_PX } from "@/lib/reading-position";
-import { readSaveState, readSaveTouched, subscribeSaveState } from "@/lib/save-state";
+import { readSaveState, readSaveTouched, readUnconfirmed, subscribeSaveState } from "@/lib/save-state";
 
 // The page editor (SPEC.md §29): a blank document is written here the way a
 // Google Doc is written — a title row, the toolbar, and white pages on a gray
@@ -173,12 +173,18 @@ function SaveStatus({ state: textState }: { state: SaveState }) {
   usePageStatusCarries();
   const appState = useSyncExternalStore(subscribeSaveState, readSaveState, () => "saved" as const);
   const appTouched = useSyncExternalStore(subscribeSaveState, readSaveTouched, () => false);
-  const state: SaveState = textState === "saved" && appTouched && appState === "failed" ? "error" : textState;
+  const appUnconfirmed = useSyncExternalStore(subscribeSaveState, readUnconfirmed, () => false);
+  // A note or an annotation that did not save: Not saved, in the app's
+  // words, until its retry lands; the document's own failure reads as the
+  // document's.
+  const app = textState === "saved" && ((appTouched && appState === "failed") || appUnconfirmed);
+  const state: SaveState = app ? "error" : textState;
   // The words only while a save is in trouble: on the toolbar's row a
   // caption that came and went with every save would move the controls
   // beside it. The symbol says saving and saved, and a press tells the
   // state in words.
-  const caption = state === "offline" ? t("docs.offlineSaving") : state === "error" ? t("docs.saveFailed") : "";
+  const caption =
+    state === "offline" ? t("docs.offlineSaving") : app ? t("outline.saveFailed") : state === "error" ? t("docs.saveFailed") : "";
   const spoken =
     state === "saved"
       ? t("docs.saved")
@@ -207,7 +213,7 @@ function SaveStatus({ state: textState }: { state: SaveState }) {
           </span>
         )}
       </button>
-      {open && <StatusPopup state={state} anchorRef={buttonRef} onClose={() => setOpen(false)} />}
+      {open && <StatusPopup state={state} app={app} anchorRef={buttonRef} onClose={() => setOpen(false)} />}
     </>
   );
 }

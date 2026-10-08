@@ -66,6 +66,8 @@ export function clientLang(): Lang {
   return isLang(value) ? value : DEFAULT_LANG;
 }
 
+const NOTE_PATH = /^\/api\/notes\/[^/]+$/;
+
 // Client-side fetch helper for JSON API routes. Every call counts in the
 // save indicator (lib/save-state.ts): a call that needs a model too, so the
 // line reads Saving… while the model works, and a stopped call counts as
@@ -83,11 +85,15 @@ export async function api<T = unknown>(
   beginWrite();
   try {
     const result = await send<T>(path, method, body, init);
-    endWrite(true);
+    endWrite(true, path.split("?")[0]);
     return result;
   } catch (err) {
     const answered = Boolean(init?.refusalIsAnswer) && err instanceof ApiError && err.status >= 400 && err.status < 500;
-    endWrite(Boolean(init?.signal?.aborted) || answered);
+    const ok = Boolean(init?.signal?.aborted) || answered;
+    // A note's text that did not save stays Not saved until a write to the
+    // note lands (its retry, use-outline.ts).
+    const pathname = path.split("?")[0];
+    endWrite(ok, !ok && method === "PATCH" && NOTE_PATH.test(pathname) ? pathname : undefined);
     throw err;
   }
 }
