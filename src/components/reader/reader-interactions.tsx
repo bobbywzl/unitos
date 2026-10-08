@@ -141,7 +141,7 @@ import { deriveBlocks } from "@/lib/docs/blocks";
 import { coreHiding } from "@/components/docs/layer/core-slot";
 import { announceCollapseView } from "@/components/panels/layer-switch";
 import { startCardDrag } from "@/lib/card-drag";
-import { pointsAtText, skipsDrag, watchHold } from "@/lib/hold-drag";
+import { HOLD_MS, HOLD_TOLERANCE_PX, pointsAtText, skipsDrag, stopClickAfterDrag, watchHold } from "@/lib/hold-drag";
 import {
   ANNOTATION_PARAM,
   annotationReferenceHref,
@@ -1939,18 +1939,20 @@ export function ReaderInteractions({
       ...referenceContent(input.kind, input.content, input.quote, input.turns ?? 0),
     };
   };
+  // The page editor's comment card keeps the grip; the cards over the
+  // article lift from their head row (dragCard, data-hold-head).
   const annotationGrip = (reference: AnnotationReference | null) =>
     dropOpen && reference ? <AnnotationGrip reference={reference} className="-ml-1" /> : null;
-  // A hold on the card's blank space, off its controls and off the header
-  // that moves the card (data-no-drag), lifts the annotation. A press on the
-  // card's text — where the pointer shows the I-beam — selects the text and
-  // never lifts, hold or pull (pointsAtText). A pull from blank space never
-  // lifts either: only the hold does.
+  // A hold on the card's blank space or its head row, off its controls and
+  // off the header that moves the card (data-no-drag, dragCard), lifts the
+  // annotation. A press on the card's text — where the pointer shows the
+  // I-beam — selects the text and never lifts, hold or pull (pointsAtText).
+  // A pull from blank space never lifts either: only the hold does.
   const holdAnnotation = (reference: AnnotationReference | null) => (e: React.PointerEvent) => {
     if (!reference || !dropOpen || e.button !== 0) return;
     const target = e.target as Element;
     if (skipsDrag(target) || target.closest("button, a, [data-no-drag]")) return;
-    if (pointsAtText(e.clientX, e.clientY)) return;
+    if (pointsAtText(e.clientX, e.clientY) && !target.closest("[data-hold-head]")) return;
     watchHold(
       e,
       (at) => {
@@ -2459,9 +2461,13 @@ export function ReaderInteractions({
   }, []);
 
   // Cards are freely moveable: drag the header. Buttons and inputs still work.
+  // The card's head row is its handle (SPEC.md §6): a drag moves the card;
+  // a hold (HOLD_MS, the pointer still) lifts its annotation to carry onto a
+  // note, as a note's header row does in its editing mode.
   function dragCard(
     getPos: () => { left: number; top: number } | null,
     apply: (left: number, top: number) => void,
+    reference: AnnotationReference | null = null,
   ) {
     return (e: React.PointerEvent) => {
       if (e.button !== 0) return;
@@ -2471,6 +2477,22 @@ export function ReaderInteractions({
       e.preventDefault();
       const fromX = e.clientX;
       const fromY = e.clientY;
+      let hold =
+        reference && dropOpen
+          ? window.setTimeout(() => {
+              hold = 0;
+              onUp();
+              stopClickAfterDrag();
+              document.body.style.userSelect = "none";
+              startCardDrag(
+                { clientX: fromX, clientY: fromY },
+                { kind: "annotation", ids: [reference.annotationId], label: reference.words, reference },
+                () => {
+                  document.body.style.userSelect = "";
+                },
+              );
+            }, HOLD_MS)
+          : 0;
       const container = containerRef.current;
       // A dragged card follows the pointer at once: the slide a pushed card
       // makes (globals.css [data-side-card]) is off while the drag lasts.
@@ -2481,6 +2503,11 @@ export function ReaderInteractions({
       const kind = card?.dataset.sideCard;
       let moved = false;
       const onMove = (ev: PointerEvent) => {
+        if (hold) {
+          if (Math.hypot(ev.clientX - fromX, ev.clientY - fromY) <= HOLD_TOLERANCE_PX) return;
+          window.clearTimeout(hold);
+          hold = 0;
+        }
         if (!moved && kind) {
           moved = true;
           movedCardsRef.current.add(`${kind}:${layerSeenRef.current[kind] ?? ""}`);
@@ -2492,6 +2519,7 @@ export function ReaderInteractions({
         );
       };
       const onUp = () => {
+        window.clearTimeout(hold);
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
         card?.removeAttribute("data-dragging");
@@ -2979,6 +3007,10 @@ export function ReaderInteractions({
   // answer anew (its streaming box gives way to the answer) loses the focus
   // to the page, and it comes back to the card — until a press elsewhere.
   const keyCardRef = useRef<{ layer: string; until: number } | null>(null);
+  // Whether the keys opened each layer: only a layer the keys opened gives
+  // the focus back to its opener when it closes. A layer the pointer opened
+  // gives it to the page, with no ring.
+  const layerByKeyRef = useRef<Record<string, boolean>>({});
   useEffect(() => {
     const onKey = () => {
       keyAtRef.current = Date.now();
@@ -3008,6 +3040,7 @@ export function ReaderInteractions({
     keyCardRef.current = null;
     layerFocusRef.current = { opened: null, closed: [] };
     const container = containerRef.current;
+    if (opened) layerByKeyRef.current[opened] = Date.now() - keyAtRef.current <= KEY_FOCUS_MS;
     if (!container || Date.now() - keyAtRef.current > KEY_FOCUS_MS) return;
     const words = (blockId: string | null) => {
       const editor = richTextRef.current ? pageEditorIn(container) : null;
@@ -3039,22 +3072,33 @@ export function ReaderInteractions({
       const layer = closed[closed.length - 1];
       const opener = layer ? layerOpenerRef.current[layer] : undefined;
       if (!opener) return;
+      if (!layerByKeyRef.current[layer]) {
+        if (richTextRef.current) pageEditorIn(container)?.view.focus();
+        return;
+      }
       if (opener.el?.isConnected && !opener.el.closest(".ProseMirror")) opener.el.focus({ preventScroll: true });
       else if (opener.el?.closest(".ProseMirror") || layer !== "popover") words(opener.blockId);
     });
   });
   // Tab and the toolbox (SPEC.md §6): while the toolbox is open and the
-  // focus is on the page — the words, the page editor's text — Tab goes to
-  // its first row, before the marks and chips after the words; Shift+Tab on
-  // its first row gives the focus back to the words, the selection kept.
+  // focus is on the page — the words, the page editor's text in Viewing —
+  // Tab goes to its first row, before the marks and chips after the words;
+  // Shift+Tab on its first row gives the focus back to the words, the
+  // selection kept. In Editing and Suggesting, Tab is the text's (indent,
+  // nest a list, the next cell). Alt+F10 or Shift+F10 go to the first row
+  // in every mode and every reader.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    const toolboxRows = () => {
+      const box = container.querySelector<HTMLElement>("[data-layer-toolbar]");
+      const rows = box ? Array.from(box.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => el.getClientRects().length > 0) : [];
+      return { box, rows };
+    };
     const onTab = (e: KeyboardEvent) => {
       if (e.key !== "Tab" || e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
       if (!popoverRef.current) return;
-      const box = container.querySelector<HTMLElement>("[data-layer-toolbar]");
-      const rows = box ? Array.from(box.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => el.getClientRects().length > 0) : [];
+      const { box, rows } = toolboxRows();
       if (!box || rows.length === 0) return;
       const active = document.activeElement;
       if (active && box.contains(active)) {
@@ -3065,6 +3109,7 @@ export function ReaderInteractions({
         else (active as HTMLElement).blur();
         return;
       }
+      if (richTextRef.current && pageEditorIn(container)?.isEditable && active?.closest(".ProseMirror")) return;
       const onPage =
         !active ||
         active === document.body ||
@@ -3075,8 +3120,23 @@ export function ReaderInteractions({
       e.stopPropagation();
       rows[0].focus({ preventScroll: true });
     };
+    const onF10 = (e: KeyboardEvent) => {
+      if (e.key !== "F10" || e.altKey === e.shiftKey || e.ctrlKey || e.metaKey || e.defaultPrevented) return;
+      if (!popoverRef.current) return;
+      const { box, rows } = toolboxRows();
+      if (!box || rows.length === 0) return;
+      const active = document.activeElement;
+      if (active && active !== document.body && !container.contains(active)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      rows[0].focus({ preventScroll: true });
+    };
     document.addEventListener("keydown", onTab, true);
-    return () => document.removeEventListener("keydown", onTab, true);
+    document.addEventListener("keydown", onF10, true);
+    return () => {
+      document.removeEventListener("keydown", onTab, true);
+      document.removeEventListener("keydown", onF10, true);
+    };
   }, []);
   useEffect(() => {
     const container = containerRef.current;
@@ -3353,10 +3413,13 @@ export function ReaderInteractions({
     };
     // Ctrl/Cmd+A in the block reader selects the article's blocks — not the
     // page around them, its header and the tray — and opens the toolbar on
-    // them. In edit mode and in a field, the browser's own Select all runs.
+    // them, after a press in the pane or with the focus in it (a mark the
+    // keys reached). In edit mode and in a field, the browser's own Select
+    // all runs.
     const onSelectAll = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== "a") return;
-      if (!lastPressInside || richTextRef.current || editModeRef.current || !canEditRef.current) return;
+      const focusInside = document.activeElement !== null && container.contains(document.activeElement);
+      if (!(lastPressInside || focusInside) || richTextRef.current || editModeRef.current || !canEditRef.current) return;
       const active = document.activeElement;
       if (active instanceof HTMLElement && isTextEntry(active)) return;
       const blocks = Array.from(container.querySelectorAll<HTMLElement>("[data-block-id]")).filter(
@@ -5000,12 +5063,23 @@ export function ReaderInteractions({
       window.removeEventListener("pointercancel", back);
     };
   }, [pageHeld, docsShift]);
-  // The page editor's words changed: the toolbar closes.
+  // The page editor's words changed: the toolbar closes. A switch of mode
+  // changes no word: the toolbar stays on the selection, with the new
+  // mode's rows (Edit with the assistant in Editing, Assistant in Viewing).
+  const toolboxDocRef = useRef<unknown>(null);
+  useEffect(() => {
+    toolboxDocRef.current = popover ? (pageEditorIn(containerRef.current)?.state.doc ?? null) : null;
+  }, [popover]);
   useEffect(() => {
     if (!blankDocument) return;
     const onEdited = (e: Event) => {
       if ((e as CustomEvent<{ documentId: string }>).detail?.documentId !== documentId) return;
       if (!popoverRef.current) return;
+      const doc = pageEditorIn(containerRef.current)?.state.doc ?? null;
+      if (doc !== null && doc === toolboxDocRef.current) {
+        setPopover((p) => (p ? { ...p } : p));
+        return;
+      }
       setPopover(null);
       setSubmenu(null);
     };
@@ -9711,6 +9785,43 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
     </button>
   );
 
+  // A pending link's banner (SPEC.md §6). The block reader's band holds it
+  // between Contents and the controls, where no word sits.
+  const bandBanner = !split && !transcript && !embedded && !richText;
+  const linkBanner = (
+      <Presence show={pendingLink !== null && !embedded} exit="fade">
+        {pendingLink && !embedded && (
+          <div
+            data-link-banner
+            // Too narrow a band for it: it wraps under the controls.
+            className={`pointer-events-auto flex max-w-full items-center gap-1 rounded-full bg-card pr-1 pl-4 shadow-float ${bandBanner ? "min-w-[min(100%,24rem)] py-0.5" : "min-w-0 py-1"}`}
+          >
+            <span className="truncate text-[12.5px] text-sand-700">
+              {t("reader.linkingBanner", {
+                // In the band, a shorter quote leaves room for the steps.
+                quote:
+                  pendingLink.anchor.quotedText.slice(0, bandBanner ? 24 : 48) +
+                  (pendingLink.anchor.quotedText.length > (bandBanner ? 24 : 48) ? "…" : ""),
+                source:
+                  pendingLink.fromDocumentId === documentId
+                    ? t("reader.thisDocument")
+                    : (attachedDocuments.find((d) => d.id === pendingLink.fromDocumentId)?.title ??
+                      t("reader.anotherDocument")),
+              })}
+            </span>
+            <button
+              onClick={() => broadcastPendingLink(null)}
+              data-track="cancel-link"
+              aria-label={t("reader.cancelLink")}
+              data-tip={t("reader.cancelLink")}
+              className={`flex ${bandBanner ? "size-6" : "size-7"} shrink-0 items-center justify-center rounded-full text-xs text-sand-500 hover:bg-sand-100 hover:text-clay-700`}
+            >
+              ✕
+            </button>
+          </div>
+        )}
+      </Presence>
+  );
   // The article menu: the Contents button (SPEC.md §26) and the list it
   // opens — the article's parts, each a jump to its block. In Normal view it
   // floats at the top left of the pane and stays there as the article
@@ -10051,9 +10162,10 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       >
       <div className="absolute top-0 right-4 left-4 flex flex-col items-end gap-2">
       <div
-        className="pointer-events-auto flex items-center gap-2 rounded-full"
+        className="pointer-events-auto flex max-w-[calc(100%-7rem)] flex-wrap-reverse items-center justify-end gap-2 rounded-full [&>*]:shrink-0"
         data-nudge={!split && !transcript ? "tools" : undefined}
       >
+        {bandBanner && linkBanner}
         {editMode && (
           <select
             data-edit-control
@@ -10083,37 +10195,10 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         {!split && !transcript && !embedded && !richText && distillButton}
       </div>
       {/* A pending link's banner: under the controls, beside the toast, so
-          it covers no control. Escape or its ✕ cancels the link. */}
-      <Presence show={pendingLink !== null && !embedded} exit="fade">
-        {pendingLink && !embedded && (
-          <div
-            data-link-banner
-            className="pointer-events-auto flex max-w-full items-center gap-1 rounded-full bg-card py-1 pr-1 pl-4 shadow-float"
-          >
-            <span className="truncate text-[12.5px] text-sand-700">
-              {t("reader.linkingBanner", {
-                quote:
-                  pendingLink.anchor.quotedText.slice(0, 48) +
-                  (pendingLink.anchor.quotedText.length > 48 ? "…" : ""),
-                source:
-                  pendingLink.fromDocumentId === documentId
-                    ? t("reader.thisDocument")
-                    : (attachedDocuments.find((d) => d.id === pendingLink.fromDocumentId)?.title ??
-                      t("reader.anotherDocument")),
-              })}
-            </span>
-            <button
-              onClick={() => broadcastPendingLink(null)}
-              data-track="cancel-link"
-              aria-label={t("reader.cancelLink")}
-              data-tip={t("reader.cancelLink")}
-              className="flex size-7 shrink-0 items-center justify-center rounded-full text-xs text-sand-500 hover:bg-sand-100 hover:text-clay-700"
-            >
-              ✕
-            </button>
-          </div>
-        )}
-      </Presence>
+          it covers no control; in the block reader it stands in the band,
+          left of the controls, so it covers no line. Escape or its ✕
+          cancels the link. */}
+      {!bandBanner && linkBanner}
       <Presence show={toast !== null} exit="fade">
         {toast && (
           <span
@@ -10320,12 +10405,17 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             borderColor: annotationKindColor(annotationCard.kind, annotationCard.color),
           }}
         >
-          <div className="mb-2 flex items-center justify-between">
+          {/* The head is the card's handle: a hold carries the annotation
+              onto a note (holdAnnotation). */}
+          <div
+            data-hold-head={annotationCardReference && dropOpen ? "" : undefined}
+            data-tip={annotationCardReference && dropOpen ? t("reader.holdToNote") : undefined}
+            className={`mb-2 flex items-center justify-between${annotationCardReference && dropOpen ? " cursor-grab select-none" : ""}`}
+          >
             <span
               className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] uppercase"
               style={{ color: annotationKindColor(annotationCard.kind, annotationCard.color) }}
             >
-              {annotationGrip(annotationCardReference)}
               {annotationCard.kind === "highlight" ? t("reader.highlight") : t("reader.comment")}
             </span>
             {/* One head for every card a mark opens (SPEC.md §6): the kind,
@@ -10652,12 +10742,14 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                     <span className="text-[12px] font-semibold break-words text-sand-900">
                       {defineWord(popover.anchor.quotedText)}
                     </span>
-                    {shownDefinition.text && (
+                    {/* The words show once they are all in, in one frame:
+                        the rows under them move once, not with every line. */}
+                    {shownDefinition.text && !shownDefinition.streaming && (
                       <p className="text-[12.5px] leading-snug break-words whitespace-pre-line text-sand-800">
                         {shownDefinition.text}
                       </p>
                     )}
-                    {shownDefinition.streaming && !shownDefinition.text && (
+                    {shownDefinition.streaming && (
                       <ThinkingIndicator
                         label={t("reader.defining")}
                         className="py-0.5 text-[11.5px]"
@@ -11102,17 +11194,17 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             onPointerDown={dragCard(
               () => (bubble ? { left: bubble.left, top: bubble.top } : null),
               (left, top) => setBubble((b) => (b ? { ...b, left, top } : b)),
+              bubbleReference,
             )}
             style={{ touchAction: "none" }}
             data-no-drag
-            data-tip={t("reader.dragToMove")}
+            data-tip={bubbleReference && dropOpen ? `${t("reader.dragToMove")}\n${t("reader.holdToNote")}` : t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between gap-2"
           >
             <span
               className="flex min-w-0 items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] uppercase"
               style={{ color: annotationKindColor(bubble.kind, null) }}
             >
-              {annotationGrip(bubbleReference)}
               <ToolSymbol tool={bubble.kind} plus={toolPlus(bubble)} size={12} />
               {toolPlus(bubble)
                 ? t(TOOL_PLUS_KEY[bubble.kind])
@@ -11262,17 +11354,17 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             onPointerDown={dragCard(
               () => (simplifyCard ? { left: simplifyCard.left, top: simplifyCard.top } : null),
               (left, top) => setSimplifyCard((c) => (c ? { ...c, left, top } : c)),
+              simplifyReference,
             )}
             style={{ touchAction: "none" }}
             data-no-drag
-            data-tip={t("reader.dragToMove")}
+            data-tip={simplifyReference && dropOpen ? `${t("reader.dragToMove")}\n${t("reader.holdToNote")}` : t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between gap-2"
           >
             <span
               className="flex min-w-0 items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] uppercase"
               style={{ color: annotationKindColor("simplify", null) }}
             >
-              {annotationGrip(simplifyReference)}
               <ToolSymbol tool="simplify" plus={toolPlus(simplifyCard)} size={12} />
               {toolPlus(simplifyCard)
                 ? t(TOOL_PLUS_KEY.simplify)
@@ -11495,17 +11587,17 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             onPointerDown={dragCard(
               () => (commentCard ? { left: commentCard.left, top: commentCard.top } : null),
               (left, top) => setCommentCard((c) => (c ? { ...c, left, top } : c)),
+              commentReference,
             )}
             style={{ touchAction: "none" }}
             data-no-drag
-            data-tip={t("reader.dragToMove")}
+            data-tip={commentReference && dropOpen ? `${t("reader.dragToMove")}\n${t("reader.holdToNote")}` : t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between"
           >
             <span
               className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] uppercase"
               style={{ color: annotationKindColor("comment", null) }}
             >
-              {annotationGrip(commentReference)}
               <CommentIcon size={12} />
               {t("reader.comment")}
             </span>
@@ -11704,17 +11796,17 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             onPointerDown={dragCard(
               () => (assistantChat ? { left: assistantChat.left, top: assistantChat.top } : null),
               (left, top) => setAssistantChat((c) => (c ? { ...c, left, top } : c)),
+              assistantReference,
             )}
             style={{ touchAction: "none" }}
             data-no-drag
-            data-tip={t("reader.dragToMove")}
+            data-tip={assistantReference && dropOpen ? `${t("reader.dragToMove")}\n${t("reader.holdToNote")}` : t("reader.dragToMove")}
             className="flex cursor-move items-center justify-between px-4 pt-3 pb-1"
           >
             <span
               className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] uppercase"
               style={{ color: annotationKindColor("assistant", null) }}
             >
-              {annotationGrip(assistantReference)}
               <SparkleIcon size={12} />
               {t("reader.assistant")}
             </span>

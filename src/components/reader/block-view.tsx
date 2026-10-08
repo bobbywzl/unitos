@@ -539,8 +539,10 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
           }),
         );
       // The keyboard (SPEC.md §6): a mark's first words take the focus, named
-      // by its tip, and Enter opens what a click opens. The chips after the
-      // words stay for the pointer and leave the Tab order.
+      // by its tip, and Enter opens what a click opens. Space stays the
+      // page's scroll key. A press of the pointer leaves the focus on the
+      // page, not on the mark, so the keys after a click read on. The chips
+      // after the words stay for the pointer and leave the Tab order.
       const markTab = focusable && (anchor?.start === from || stack.some((h) => h.start === from));
       const markTip =
         focusable && (anchor?.annotation || stack.some((h) => h.annotation))
@@ -559,7 +561,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
           onKeyDown={
             markTab
               ? (e) => {
-                  if (e.key !== "Enter" && e.key !== " ") return;
+                  if (e.key !== "Enter") return;
                   e.preventDefault();
                   e.stopPropagation();
                   const r = e.currentTarget.getBoundingClientRect();
@@ -574,7 +576,21 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
           data-tip={markTip}
           // A drag inside the mark selects words: the selection toolbar
           // takes it, and only a plain click opens what the mark opens.
-          onMouseDown={focusable || noteMark || extractMark ? pressMark : undefined}
+          onMouseDown={
+            markTab
+              ? (e) => {
+                  pressMark(e);
+                  // The press focuses the mark after this handler: the focus
+                  // goes back to the page once it has.
+                  const mark = e.currentTarget;
+                  window.setTimeout(() => {
+                    if (document.activeElement === mark) mark.blur();
+                  }, 0);
+                }
+              : focusable || noteMark || extractMark
+                ? pressMark
+                : undefined
+          }
           onClick={
             focusable
               ? (e) => {
