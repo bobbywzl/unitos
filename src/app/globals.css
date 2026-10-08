@@ -933,6 +933,19 @@ mark[data-held] {
     animation: tip-in 0.12s ease-out both;
   }
 }
+/* A long press on a control shows its tip on touch: the browser's own
+   long-press menu and word selection would take the press. */
+@media (pointer: coarse) {
+  button[data-tip],
+  a[data-tip],
+  [role="button"][data-tip],
+  [role="tab"][data-tip],
+  [role^="menuitem"][data-tip] {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
 
 /* Source chip click: flash the anchor (SPEC.md §6). */
 @keyframes anchor-flash {
