@@ -1946,6 +1946,29 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     !authorEnd.some((t) => t === "Autor" || t === "Jil Wanner") && authorEnd.some((t) => t.startsWith("Paragraph 6")) && authorTop.includes("Autor"),
     `end ${authorEnd.join(" / ")}; top ${authorTop.join(" / ")}`,
   );
+  // The dek set as a heading under the h1 is a paragraph; a first section's question and a short first heading stay headings.
+  const dekPage = async (body: string) =>
+    (
+      await parseHtmlContent(
+        `<!doctype html><html><head><title>Notes on river flow</title></head><body><article><h1>Notes on river flow</h1>${body}</article></body></html>`,
+        "https://example.org/rivers",
+      )
+    ).blocks.map((b) => `${b.type} ${b.text.slice(0, 24)}`);
+  const sections = `<h2>Gravel bars</h2><p>${prose(3)}</p><h2>Floods</h2><p>${prose(4)}</p>`;
+  const dekStatement = await dekPage(`<h2>The banks of a delta move a little with each flood, and the gauges show how far.</h2><p>${prose(1)}</p><p>${prose(2)}</p>${sections}`);
+  const dekAbove = await dekPage(`<h2>Why the banks of a delta move with each flood and the gauges follow them</h2><p>${prose(1)}</p><h3>Gravel bars</h3><p>${prose(3)}</p><h3>Floods</h3><p>${prose(4)}</p>`);
+  const question = await dekPage(`<h2>What does a gauge measure at the mouth of a river delta?</h2><p>${prose(1)}</p>${sections}`);
+  const short = await dekPage(`<h2>Channels and banks</h2><p>${prose(1)}</p>${sections}`);
+  check(
+    "url: a dek set as a heading under the h1 is a paragraph",
+    dekStatement.includes("PARAGRAPH The banks of a delta mov") && dekAbove.includes("PARAGRAPH Why the banks of a delta") && dekStatement.includes("HEADING Gravel bars") && dekAbove.includes("HEADING Gravel bars"),
+    `${dekStatement.join(" / ")}; ${dekAbove.join(" / ")}`,
+  );
+  check(
+    "url: a first section's question and a short first heading stay headings",
+    question.includes("HEADING What does a gauge measur") && short.includes("HEADING Channels and banks"),
+    `${question.join(" / ")}; ${short.join(" / ")}`,
+  );
 }
 
 {
