@@ -10,7 +10,7 @@ import { IMAGE_ACCEPT, isImageFile } from "@/lib/handwritten/image";
 import { useEscapeLayer } from "@/lib/escape-layers";
 import { useCollab } from "@/components/collab/collab-context";
 import { reportError } from "@/lib/error-log";
-import { ChevronDownIcon, SpinnerIcon } from "@/components/icons";
+import { ChevronDownIcon, MoreIcon, SpinnerIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
 import { Logo } from "@/components/logo";
@@ -31,11 +31,17 @@ import {
   DocumentTree,
   FolderPicker,
   folderPath,
+  LIST_ROWS,
   tipWhenCut,
   type DocumentFolderView,
 } from "@/components/reader/document-folders";
 import { DocumentsSort, useDocumentSort } from "@/components/reader/document-organize";
-import { DocumentDeleteConfirm, inAnotherProject, useDocumentReach } from "@/components/reader/document-delete";
+import {
+  DocumentDeleteConfirm,
+  inAnotherProject,
+  prefetchDocumentReach,
+  useDocumentReach,
+} from "@/components/reader/document-delete";
 import { ReparseLossList, useReparseLosses } from "@/components/reader/reparse-losses";
 import type { DocumentKind } from "@/lib/document-order";
 import {
@@ -117,6 +123,8 @@ function sleep(ms: number) {
 const REPARSE_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 // How long the pointer rests on the document pill before the list opens.
 const LIST_HOVER_MS = 300;
+// How long a row's actions wait for where the document is before they draw.
+const REACH_WAIT_MS = 600;
 function reparseKey(documentId: string): string {
   return `unitos:reparse:${documentId}:${PARSER_VERSION}`;
 }
@@ -285,6 +293,8 @@ export function DocumentBar({
   }, []);
   const listCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [listOpen, setListOpen] = useState(false);
+  // The tree opens a document's folders and focuses its row (type-ahead).
+  const revealRef = useRef<((id: string) => void) | null>(null);
   // Per-document actions, expanded inline under the document's row; Move to
   // folder opens its picker under them.
   const [pillMenu, setPillMenu] = useState<string | null>(null);
@@ -301,6 +311,16 @@ export function DocumentBar({
   const [deleteAsk, setDeleteAsk] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const { reach: menuReach, loading: menuReachLoading } = useDocumentReach(canEdit ? pillMenu : null);
+  // The rows wait for that answer, REACH_WAIT_MS at most, and draw once:
+  // Remove from this project never lands where Delete was (NAV13-03).
+  const [reachWaited, setReachWaited] = useState<string | null>(null);
+  useEffect(() => {
+    if (!pillMenu) return;
+    const id = pillMenu;
+    const timer = setTimeout(() => setReachWaited(id), REACH_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [pillMenu]);
+  const menuRowsReady = !canEdit || !menuReachLoading || reachWaited === pillMenu;
   // The ask before Replace the edits names the quotes it costs.
   const { losing: reparseLosing, loading: reparseLosingLoading } = useReparseLosses(
     canEdit ? (editedAsk?.id ?? null) : null,
@@ -384,25 +404,49 @@ export function DocumentBar({
   // Type-ahead in the open list: the letters typed within a moment of each
   // other, and when they started.
   const typeAhead = useRef({ text: "", at: 0 });
-  // ArrowDown and ArrowUp move between the list's rows (a folder's row, a
-  // document's row); from the pill, ArrowDown opens the list and goes to the
-  // first row. Typed letters go to the first row whose title starts with
-  // them, as a listbox does: a big project's document without scrolling.
+  // ArrowDown and ArrowUp move between the rows of the list the focus is
+  // in (the root list, or a folder's fly-out: document-folders.tsx takes
+  // Enter, →, ← and Escape there); from the pill, ArrowDown opens the list
+  // and goes to the first row. Typed letters go to the first row whose
+  // title starts with them, as a listbox does: a big project's document
+  // without scrolling. A document in a folder is found too: its folder's
+  // list opens and the focus goes to its row. A space while letters are
+  // being typed is part of the title, not a press of the row.
   function moveInList(e: React.KeyboardEvent<HTMLDivElement>) {
     const target = e.target as HTMLElement;
     if (target.closest("input, textarea, select, [contenteditable]")) return;
-    const rows = [
-      ...(listRef.current?.querySelectorAll<HTMLElement>('[data-track="document-open"], [data-track="folder-open"]') ?? []),
-    ].filter((el) => el.getClientRects().length > 0);
-    if (listOpen && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.trim() !== "") {
-      const now = Date.now();
-      const text = (now - typeAhead.current.at < 800 ? typeAhead.current.text : "") + e.key.toLocaleLowerCase();
+    const panel = target.closest<HTMLElement>("[data-document-flyout]") ?? listRef.current;
+    const rows = [...(panel?.querySelectorAll<HTMLElement>(LIST_ROWS) ?? [])].filter((el) => el.getClientRects().length > 0);
+    const now = Date.now();
+    const typing = now - typeAhead.current.at < 800 && typeAhead.current.text !== "";
+    if (
+      listOpen &&
+      e.key.length === 1 &&
+      !e.ctrlKey &&
+      !e.metaKey &&
+      !e.altKey &&
+      (e.key.trim() !== "" || (e.key === " " && typing))
+    ) {
+      const text = (typing ? typeAhead.current.text : "") + e.key.toLocaleLowerCase();
       typeAhead.current = { text, at: now };
-      const hit = rows.find((row) => (row.textContent ?? "").trim().toLocaleLowerCase().startsWith(text));
+      if (e.key === " ") e.preventDefault();
+      const starts = (title: string) => title.trim().toLocaleLowerCase().startsWith(text);
+      // The rows in view first, then every document of the project.
+      const shown = [
+        ...(listRef.current?.querySelectorAll<HTMLElement>(LIST_ROWS) ?? []),
+        ...document.querySelectorAll<HTMLElement>(`[data-document-flyout] :is(${LIST_ROWS})`),
+      ].filter((el) => el.getClientRects().length > 0);
+      const hit = shown.find((row) => starts(row.textContent ?? ""));
       if (hit) {
         e.preventDefault();
         hit.focus();
         hit.scrollIntoView({ block: "nearest" });
+        return;
+      }
+      const doc = documents.find((d) => starts(d.title));
+      if (doc) {
+        e.preventDefault();
+        revealRef.current?.(doc.id);
       }
       return;
     }
@@ -441,8 +485,15 @@ export function DocumentBar({
     window.addEventListener("pointerdown", onPointerDown);
     return () => window.removeEventListener("pointerdown", onPointerDown);
   }, [listOpen]);
-  // Escape closes the list as one layer (lib/escape-layers.ts).
+  // Escape closes the list as one layer (lib/escape-layers.ts), and a row's
+  // open actions as one more, first.
   useEscapeLayer(listOpen, closeList);
+  useEscapeLayer(listOpen && pillMenu !== null, () => {
+    setPillMenu(null);
+    setMoveChoice(null);
+    setEditedAsk(null);
+    setDeleteAsk(null);
+  });
 
   // The open document's row is the visible one when the list opens.
   useEffect(() => {
@@ -1185,6 +1236,7 @@ export function DocumentBar({
             open(d.id);
           }}
           data-track="document-open"
+          data-doc-row={d.id}
           data-active-row={d.id === activeId || undefined}
           className={`min-w-0 flex-1 overflow-hidden px-4 py-2 text-left text-[13px] whitespace-nowrap ${
             d.id === activeId
@@ -1208,27 +1260,21 @@ export function DocumentBar({
             setDeleteAsk(null);
             setPillMenu(pillMenu === d.id ? null : d.id);
           }}
+          // The menu's rows depend on where the document is: read it as the
+          // pointer or the focus comes to ⋮, so they draw once (NAV13-03).
+          onPointerEnter={canEdit ? () => prefetchDocumentReach(d.id) : undefined}
+          onFocus={canEdit ? () => prefetchDocumentReach(d.id) : undefined}
           data-track="document-actions"
           aria-label={t("panes.documentActionsFor", { title: d.title })}
           aria-expanded={pillMenu === d.id}
           data-tip={t("panes.documentActions")}
-          className="mr-2 flex size-6 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800"
+          className="mr-2 flex size-6 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:size-9"
         >
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            aria-hidden
-          >
-            <circle cx="12" cy="5" r="2" />
-            <circle cx="12" cy="12" r="2" />
-            <circle cx="12" cy="19" r="2" />
-          </svg>
+          <MoreIcon size={13} />
         </button>
       </div>
-      <Collapse open={pillMenu === d.id}>
-      {pillMenu === d.id && (
+      <Collapse open={pillMenu === d.id && menuRowsReady}>
+      {pillMenu === d.id && menuRowsReady && (
         <div ref={revealActions} className="mx-2 mb-1.5 flex flex-col rounded-xl bg-sand-100 py-1">
           {/* A row's actions list only what can run on this document. Re-parse:
               a video or audio document transcribes again, a handwritten one
@@ -1471,6 +1517,7 @@ export function DocumentBar({
                   closeList();
                   openAddDialog(folderId);
                 }}
+                revealRef={revealRef}
               />
             </div>
           )}

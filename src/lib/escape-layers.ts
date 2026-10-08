@@ -71,17 +71,25 @@ export function captureOpener(): HTMLElement | null {
   return a instanceof HTMLElement && a !== document.body ? a : null;
 }
 
-/** A layer closed: after a key, when the focus fell to the page (the
+/** A layer closed: after a key, when the focus falls to the page (the
     focused row went with the layer), the focus goes back to the opener.
-    Runs after the closing render. */
+    A layer that folds away keeps its rows a moment, so this watches for
+    RETURN_FRAMES frames; a focus the reader moves on in that time stays. */
+const RETURN_FRAMES = 40;
 export function returnFocus(opener: HTMLElement | null): void {
   if (!opener || lastInput !== "key") return;
-  const back = () => {
+  const was = document.activeElement;
+  let frames = 0;
+  const check = () => {
     const a = document.activeElement;
     const lost = !a || a === document.body || !a.isConnected;
-    if (lost && opener.isConnected && opener.getClientRects().length > 0) opener.focus({ preventScroll: true });
+    if (lost) {
+      if (opener.isConnected && opener.getClientRects().length > 0) opener.focus({ preventScroll: true });
+      return;
+    }
+    if (a === was && ++frames < RETURN_FRAMES) requestAnimationFrame(check);
   };
-  requestAnimationFrame(back);
+  requestAnimationFrame(check);
 }
 
 function onKeyDown(e: KeyboardEvent) {
