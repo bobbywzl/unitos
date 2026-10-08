@@ -16,17 +16,20 @@ export async function setCommentResolved(noteId: string, resolved: boolean): Pro
 }
 
 /** Resolve a comment with the Undo pill a delete shows (SPEC.md §6): the
-    marks go at once, the pill reads `message`, and Undo (or Ctrl+Z) reopens
-    the comment and paints its marks again. onBack: the page takes the
-    comment back after Undo (a refresh). */
-export async function resolveCommentWithUndo(noteId: string, message: string, onBack?: () => void): Promise<void> {
-  await setCommentResolved(noteId, true);
+    marks go and the pill reading `message` shows at the press, and Undo (or
+    Ctrl+Z) reopens the comment, once the resolve has landed, and paints its
+    marks again. onBack: the page takes the comment back after Undo (a
+    refresh). The promise settles with the resolve's request. */
+export function resolveCommentWithUndo(noteId: string, message: string, onBack?: () => void): Promise<void> {
+  const resolved = setCommentResolved(noteId, true);
   postUndoPill({
     message,
     undo: async () => {
+      await resolved.catch(() => undefined);
       await setCommentResolved(noteId, false);
       window.dispatchEvent(new CustomEvent("dissect:note-restored", { detail: { noteId } }));
       onBack?.();
     },
   });
+  return resolved;
 }
