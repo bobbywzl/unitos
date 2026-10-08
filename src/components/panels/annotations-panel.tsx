@@ -1,5 +1,6 @@
 "use client";
 
+import { ACTION, ACTION_DANGER } from "@/components/graph/graph-ui"; // [style7] VIEW7-05: the graph's link actions
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -271,7 +272,7 @@ export function AnnotationsPanel({
       onClick={() => requestGraph({ linkId })}
       data-track="link-show-on-graph"
       data-tip={t("graphNotes.showLinkOnGraphTitle")}
-      className="text-xs text-sand-600 hover:text-clay-700"
+      className={ACTION}
     >
       {t("graphNotes.showOnGraph")}
     </button>
@@ -374,7 +375,7 @@ export function AnnotationsPanel({
             onClick={() => void undoRemove(removed)}
             disabled={busyId !== null}
             data-track="link-remove-undo"
-            className="font-semibold text-clay-700 underline-offset-2 hover:underline disabled:opacity-50 pointer-coarse:min-h-11"
+            className={`${ACTION} align-middle`}
           >
             {t("panels.linkRemovedUndo")}
           </button>
@@ -433,7 +434,7 @@ export function AnnotationsPanel({
                 onSave={describeLink}
                 locked={l.crossAccount?.outside}
               />
-              <div className="mt-2 flex flex-wrap items-center gap-3">
+              <div className="mt-2 flex flex-wrap items-center gap-2">
                 {l.detached ? (
                   <span className="rounded-full bg-sand-200 px-2.5 py-0.5 text-[11px] font-semibold text-sand-600">
                     ⇄ {l.toTitle} · {t("panels.notAttached")}
@@ -464,7 +465,7 @@ export function AnnotationsPanel({
                     onClick={() => void removeLink(l.id, l.replies, l.createdById)}
                     data-track="link-remove"
                     data-tip={t("panels.removeLinkTitle")}
-                    className="text-xs text-red-500 hover:text-red-700"
+                    className={ACTION_DANGER}
                   >
                     {t("common.remove")}
                   </button>
@@ -489,7 +490,7 @@ export function AnnotationsPanel({
                 onSave={describeLink}
                 locked={l.crossAccount?.outside}
               />
-              <div className="mt-2 flex flex-wrap items-center gap-3">
+              <div className="mt-2 flex flex-wrap items-center gap-2">
                 <Link href={`/n/${notebookId}?doc=${l.fromDocumentId}&link=${l.id}`} className={chip}>
                   ⇄ {l.fromTitle}
                 </Link>
@@ -511,7 +512,7 @@ export function AnnotationsPanel({
                     onClick={() => void removeLink(l.id, l.replies, l.createdById)}
                     data-track="link-remove"
                     data-tip={t("panels.removeLinkTitle")}
-                    className="text-xs text-red-500 hover:text-red-700"
+                    className={ACTION_DANGER}
                   >
                     {t("common.remove")}
                   </button>
