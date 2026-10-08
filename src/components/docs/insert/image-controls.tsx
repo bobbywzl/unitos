@@ -59,6 +59,9 @@ const MODES: [Wrap, TKey, (p: { size?: number }) => ReactNode][] = [
   ["front", "docsInsert.inFrontOfText", InFrontIcon],
 ];
 
+/** Under this window width the image toolbar folds (ImageControlsHost). */
+const COMPACT_BELOW = 620;
+
 /** Mask image's shapes, the image's own rectangle first. */
 const MASK_LABELS: Record<Mask | "none", TKey> = {
   none: "docsInsert.maskNone",
@@ -129,6 +132,14 @@ export function ImageControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
   const anchor = box ? { left: box.left, top: box.top, bottom: box.bottom } : null;
   const a = imageAttrs(hit.node);
   const pageless = ctx.drawnPageless;
+  // A window too narrow for the whole row (a phone; the row is about 600 px):
+  // the five wrap modes fold into one Text wrapping menu that shows the
+  // current mode, the Assistant keeps only its symbol, and Replace image and
+  // Reset image go into More, so the row fits the screen and every control
+  // stays one press away.
+  const compact = window.innerWidth < COMPACT_BELOW;
+  const shownWrap = pageless ? "inline" : a.wrap;
+  const ShownWrapIcon = MODES.find(([wrap]) => wrap === shownWrap)?.[2] ?? InLineIcon;
   const set = (attrs: Record<string, unknown>) => setImageAttrs(editor.view, hit.pos, attrs);
   const button = (label: TKey, icon: ReactNode, onClick: () => void) => (
     <button type="button" className="docs-tb-btn" aria-label={t(label)} data-tip={t(label)} onClick={onClick}>
@@ -160,12 +171,31 @@ export function ImageControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
                 }}
               >
                 <SparkleIcon size={14} />
-                <span>{t("reader.assistant")}</span>
+                {!compact && <span>{t("reader.assistant")}</span>}
               </button>
               <Sep />
             </>
           )}
-          {MODES.map(([wrap, label, Icon]) => (
+          {compact ? (
+            <DropBtn label={t("docsInsert.textWrapping")} track="image-wrap" face={<ShownWrapIcon />}>
+              {(close) =>
+                MODES.map(([wrap, label, Icon]) => (
+                  <MenuItem
+                    key={wrap}
+                    checked={shownWrap === wrap}
+                    icon={<Icon />}
+                    disabled={pageless && wrap !== "inline"}
+                    onSelect={() => {
+                      close();
+                      set({ wrap });
+                    }}
+                  >
+                    {t(label)}
+                  </MenuItem>
+                ))
+              }
+            </DropBtn>
+          ) : MODES.map(([wrap, label, Icon]) => (
             <button
               key={wrap}
               type="button"
@@ -241,29 +271,53 @@ export function ImageControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
             }
             onNone={() => set({ borderColor: null, borderWidth: 0 })}
           />
-          {button("docsInsert.replaceImage", <ResetIcon />, () => setReplacing((r) => !r))}
-          {button("docsInsert.resetImage", <RefreshIcon />, () => resetImage(editor, hit.pos))}
+          {!compact && button("docsInsert.replaceImage", <ResetIcon />, () => setReplacing((r) => !r))}
+          {!compact && button("docsInsert.resetImage", <RefreshIcon />, () => resetImage(editor, hit.pos))}
           <Sep />
           <DropBtn label={t("docs.more")} track="image-more" arrow={false} face={<MoreVertIcon />}>
-            {(close) =>
-              (
-                [
-                  ["size", "docsInsert.sizeRotation"],
-                  ["alt", "docsInsert.altText"],
-                  ["wrap", "docsInsert.allImageOptions"],
-                ] as const
-              ).map(([section, label]) => (
-                <MenuItem
-                  key={section}
-                  onSelect={() => {
-                    close();
-                    setPanel(section);
-                  }}
-                >
-                  {t(label)}
-                </MenuItem>
-              ))
-            }
+            {(close) => (
+              <>
+                {compact && (
+                  <>
+                    <MenuItem
+                      icon={<ResetIcon />}
+                      onSelect={() => {
+                        close();
+                        setReplacing(true);
+                      }}
+                    >
+                      {t("docsInsert.replaceImage")}
+                    </MenuItem>
+                    <MenuItem
+                      icon={<RefreshIcon />}
+                      onSelect={() => {
+                        close();
+                        resetImage(editor, hit.pos);
+                      }}
+                    >
+                      {t("docsInsert.resetImage")}
+                    </MenuItem>
+                  </>
+                )}
+                {(
+                  [
+                    ["size", "docsInsert.sizeRotation"],
+                    ["alt", "docsInsert.altText"],
+                    ["wrap", "docsInsert.allImageOptions"],
+                  ] as const
+                ).map(([section, label]) => (
+                  <MenuItem
+                    key={section}
+                    onSelect={() => {
+                      close();
+                      setPanel(section);
+                    }}
+                  >
+                    {t(label)}
+                  </MenuItem>
+                ))}
+              </>
+            )}
           </DropBtn>
         </FloatingBox>
       )}
