@@ -189,6 +189,25 @@ export function ContextMenuHost({ editor, ctx }: { editor: Editor; ctx: InsertCo
     };
   }, [editor]);
 
+  // Tab closes the menu and types nothing, as a menu's Tab does. Heard on
+  // the document from the start, so before the menu's own keys, which close
+  // it as well.
+  const openRef = useRef(false);
+  useEffect(() => {
+    openRef.current = place !== null;
+  }, [place]);
+  useEffect(() => {
+    const onTab = (e: KeyboardEvent) => {
+      if (e.key !== "Tab" || !openRef.current || !editor.view.dom.contains(e.target as Node)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setPlace(null);
+      editor.view.focus();
+    };
+    document.addEventListener("keydown", onTab, true);
+    return () => document.removeEventListener("keydown", onTab, true);
+  }, [editor]);
+
   if (!place) return null;
   return (
     <ContextMenu

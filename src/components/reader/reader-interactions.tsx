@@ -2979,6 +2979,10 @@ export function ReaderInteractions({
   // answer anew (its streaming box gives way to the answer) loses the focus
   // to the page, and it comes back to the card — until a press elsewhere.
   const keyCardRef = useRef<{ layer: string; until: number } | null>(null);
+  // Whether the keys opened each layer: only a layer the keys opened gives
+  // the focus back to its opener when it closes. A layer the pointer opened
+  // gives it to the page, with no ring.
+  const layerByKeyRef = useRef<Record<string, boolean>>({});
   useEffect(() => {
     const onKey = () => {
       keyAtRef.current = Date.now();
@@ -3008,6 +3012,7 @@ export function ReaderInteractions({
     keyCardRef.current = null;
     layerFocusRef.current = { opened: null, closed: [] };
     const container = containerRef.current;
+    if (opened) layerByKeyRef.current[opened] = Date.now() - keyAtRef.current <= KEY_FOCUS_MS;
     if (!container || Date.now() - keyAtRef.current > KEY_FOCUS_MS) return;
     const words = (blockId: string | null) => {
       const editor = richTextRef.current ? pageEditorIn(container) : null;
@@ -3039,22 +3044,33 @@ export function ReaderInteractions({
       const layer = closed[closed.length - 1];
       const opener = layer ? layerOpenerRef.current[layer] : undefined;
       if (!opener) return;
+      if (!layerByKeyRef.current[layer]) {
+        if (richTextRef.current) pageEditorIn(container)?.view.focus();
+        return;
+      }
       if (opener.el?.isConnected && !opener.el.closest(".ProseMirror")) opener.el.focus({ preventScroll: true });
       else if (opener.el?.closest(".ProseMirror") || layer !== "popover") words(opener.blockId);
     });
   });
   // Tab and the toolbox (SPEC.md §6): while the toolbox is open and the
-  // focus is on the page — the words, the page editor's text — Tab goes to
-  // its first row, before the marks and chips after the words; Shift+Tab on
-  // its first row gives the focus back to the words, the selection kept.
+  // focus is on the page — the words, the page editor's text in Viewing —
+  // Tab goes to its first row, before the marks and chips after the words;
+  // Shift+Tab on its first row gives the focus back to the words, the
+  // selection kept. In Editing and Suggesting, Tab is the text's (indent,
+  // nest a list, the next cell). Alt+F10 or Shift+F10 go to the first row
+  // in every mode and every reader.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    const toolboxRows = () => {
+      const box = container.querySelector<HTMLElement>("[data-layer-toolbar]");
+      const rows = box ? Array.from(box.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => el.getClientRects().length > 0) : [];
+      return { box, rows };
+    };
     const onTab = (e: KeyboardEvent) => {
       if (e.key !== "Tab" || e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
       if (!popoverRef.current) return;
-      const box = container.querySelector<HTMLElement>("[data-layer-toolbar]");
-      const rows = box ? Array.from(box.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => el.getClientRects().length > 0) : [];
+      const { box, rows } = toolboxRows();
       if (!box || rows.length === 0) return;
       const active = document.activeElement;
       if (active && box.contains(active)) {
@@ -3065,6 +3081,7 @@ export function ReaderInteractions({
         else (active as HTMLElement).blur();
         return;
       }
+      if (richTextRef.current && pageEditorIn(container)?.isEditable && active?.closest(".ProseMirror")) return;
       const onPage =
         !active ||
         active === document.body ||
@@ -3075,8 +3092,23 @@ export function ReaderInteractions({
       e.stopPropagation();
       rows[0].focus({ preventScroll: true });
     };
+    const onF10 = (e: KeyboardEvent) => {
+      if (e.key !== "F10" || e.altKey === e.shiftKey || e.ctrlKey || e.metaKey || e.defaultPrevented) return;
+      if (!popoverRef.current) return;
+      const { box, rows } = toolboxRows();
+      if (!box || rows.length === 0) return;
+      const active = document.activeElement;
+      if (active && active !== document.body && !container.contains(active)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      rows[0].focus({ preventScroll: true });
+    };
     document.addEventListener("keydown", onTab, true);
-    return () => document.removeEventListener("keydown", onTab, true);
+    document.addEventListener("keydown", onF10, true);
+    return () => {
+      document.removeEventListener("keydown", onTab, true);
+      document.removeEventListener("keydown", onF10, true);
+    };
   }, []);
   useEffect(() => {
     const container = containerRef.current;
@@ -3353,10 +3385,13 @@ export function ReaderInteractions({
     };
     // Ctrl/Cmd+A in the block reader selects the article's blocks — not the
     // page around them, its header and the tray — and opens the toolbar on
-    // them. In edit mode and in a field, the browser's own Select all runs.
+    // them, after a press in the pane or with the focus in it (a mark the
+    // keys reached). In edit mode and in a field, the browser's own Select
+    // all runs.
     const onSelectAll = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== "a") return;
-      if (!lastPressInside || richTextRef.current || editModeRef.current || !canEditRef.current) return;
+      const focusInside = document.activeElement !== null && container.contains(document.activeElement);
+      if (!(lastPressInside || focusInside) || richTextRef.current || editModeRef.current || !canEditRef.current) return;
       const active = document.activeElement;
       if (active instanceof HTMLElement && isTextEntry(active)) return;
       const blocks = Array.from(container.querySelectorAll<HTMLElement>("[data-block-id]")).filter(
@@ -5000,12 +5035,23 @@ export function ReaderInteractions({
       window.removeEventListener("pointercancel", back);
     };
   }, [pageHeld, docsShift]);
-  // The page editor's words changed: the toolbar closes.
+  // The page editor's words changed: the toolbar closes. A switch of mode
+  // changes no word: the toolbar stays on the selection, with the new
+  // mode's rows (Edit with the assistant in Editing, Assistant in Viewing).
+  const toolboxDocRef = useRef<unknown>(null);
+  useEffect(() => {
+    toolboxDocRef.current = popover ? (pageEditorIn(containerRef.current)?.state.doc ?? null) : null;
+  }, [popover]);
   useEffect(() => {
     if (!blankDocument) return;
     const onEdited = (e: Event) => {
       if ((e as CustomEvent<{ documentId: string }>).detail?.documentId !== documentId) return;
       if (!popoverRef.current) return;
+      const doc = pageEditorIn(containerRef.current)?.state.doc ?? null;
+      if (doc !== null && doc === toolboxDocRef.current) {
+        setPopover((p) => (p ? { ...p } : p));
+        return;
+      }
       setPopover(null);
       setSubmenu(null);
     };
