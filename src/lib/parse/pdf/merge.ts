@@ -1,7 +1,7 @@
 // Blocks cut by a page break: a paragraph, a list, or a table joins its other
 // half on the next page, and the block keeps where each later page begins.
 
-import { CAPTION_RE } from "@/lib/parse/pdf/figures";
+import { CAPTION_RE, numberedLabel } from "@/lib/parse/pdf/figures";
 import { BULLET_RE, follows, opensSequence, readMarker } from "@/lib/parse/pdf/markers";
 import { endAs, endsFull, wrapsAt } from "@/lib/parse/pdf/paragraphs";
 import { joinWrapped } from "@/lib/parse/pdf/text";
@@ -119,6 +119,12 @@ function continuesOnPage(prev: Segment, next: Segment, setting: PageSetting): bo
   // 7), and a pull quote is no part of the text it quotes (the Earth
   // Observer p. 10).
   if (/^\([a-h]\)\s+\p{Lu}/u.test(next.text) || /\bquote\b/.test(next.html ?? "")) return false;
+  // A part that opens with a bold numbered label of its own ("Active
+  // Reading 22.1:", "Exercise 3.1") starts a new element: no sentence goes
+  // on in it (parse loop finding: a Tufte book's "…by a phase factor eiα
+  // which", cut at the page's foot, went on in the margin note "Active
+  // Reading 22.1: The 68% property is a good one…" above it).
+  if (numberedLabel(next)) return false;
   const sizes = prev.lineSize !== undefined && next.lineSize !== undefined ? [prev.lineSize, next.lineSize] : undefined;
   if (sizes && !/^[a-z]/.test(next.text) && Math.abs(sizes[0] - sizes[1]) > Math.min(...sizes) * 0.5) return false;
   // A part set in another face and another size is another text: a
