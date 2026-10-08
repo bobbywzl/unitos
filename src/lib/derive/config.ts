@@ -372,18 +372,27 @@ export const STREAM_ERROR_TOKEN = "\u0000error\u0000";
 export function splitStreamError(text: string): { text: string; error: string | null } {
   const at = text.indexOf(STREAM_ERROR_TOKEN);
   if (at === -1) return { text: text.trimStart(), error: null };
+  const reason = text.slice(at + STREAM_ERROR_TOKEN.length);
+  // A reason with a status code or a provider's JSON (a server from before
+  // the routes worded every reason, a proxy) is not for the reader: the
+  // plain line shows, and the reason goes to the console.
+  const raw = RAW_REASON.test(reason.trim());
+  if (raw) console.warn("stream failed:", reason.slice(0, 500));
   return {
     text: text.slice(0, at).trimStart(),
-    error: text.slice(at + STREAM_ERROR_TOKEN.length) || modelCallFailed(),
+    error: reason && !raw ? reason : modelCallFailed(),
   };
 }
 
-// The token with no reason falls back to a translated line. Only the client
-// splits streams, so the language comes from the cookie, same as lib/api.ts.
+const RAW_REASON = /^\d{3}\b|[{}]|^(failed to fetch|request failed)/i;
+
+// The token with no reason, or a raw one, falls back to the assistant's
+// plain line (SPEC.md §7). Only the client splits streams, so the language
+// comes from the cookie, same as lib/api.ts.
 function modelCallFailed(): string {
-  if (typeof document === "undefined") return translate("en", "common.modelCallFailed");
+  if (typeof document === "undefined") return translate("en", "assistant.failedServer");
   const value = document.cookie.match(new RegExp(`(?:^|; )${LANG_COOKIE}=([^;]+)`))?.[1];
-  return translate(isLang(value) ? value : "en", "common.modelCallFailed");
+  return translate(isLang(value) ? value : "en", "assistant.failedServer");
 }
 
 // EXPLAIN, SIMPLIFY, and ANALYZE persist their annotation before the stream

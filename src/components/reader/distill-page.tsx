@@ -5,6 +5,7 @@ import { isImeKey, useImeGuard } from "@/lib/ime";
 import { DISTILL_REGENERATE_MAX, type DistillationView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
+import { useExtractDraft } from "@/components/reader/extract-draft";
 import { ExtractionList } from "@/components/reader/extraction-list";
 import { ChevronLeftIcon } from "@/components/icons";
 import { useLang, useT } from "@/components/lang-provider";
@@ -21,6 +22,7 @@ type DistillQuoteView = DistillationView["quotes"][number];
 // pending. Quotes whose words changed say "Anchor unresolved", never silently
 // point at the wrong words (SPEC.md §5).
 export function DistillPage({
+  documentId,
   distillations,
   shownId,
   running,
@@ -38,6 +40,7 @@ export function DistillPage({
   onAddNote,
   onAddSelection,
 }: {
+  documentId: string; // the question box's draft is kept per document
   distillations: DistillationView[];
   shownId: string | null; // null = ask view
   running: { question: string } | null;
@@ -64,7 +67,14 @@ export function DistillPage({
   // Dates follow the app language; English keeps the browser default.
   const dateLocale = lang === "zh" ? "zh-CN" : undefined;
   const surfaceRef = useRef<HTMLDivElement>(null);
-  const [question, setQuestion] = useState("");
+  // The question box keeps a draft per document until its extraction lands
+  // (extract-draft.ts).
+  const draft = useExtractDraft(`doc:${documentId}`);
+  const question = draft.text;
+  const ask = (q: string) => {
+    draft.flush();
+    onRun(q);
+  };
   const [saved, setSaved] = useState<Set<string>>(new Set());
   const [savingKey, setSavingKey] = useState<string | null>(null);
 
@@ -133,7 +143,7 @@ export function DistillPage({
                 onClick={() => onRun(shown.question, shown.id)}
                 data-track="distill-page-regenerate"
                 disabled={(shown.regenerations ?? 0) >= DISTILL_REGENERATE_MAX}
-                className="text-xs font-semibold text-sand-600 hover:text-clay-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-sand-600"
+                className="text-xs font-semibold text-sand-600 pointer-coarse:py-2.5 hover:text-clay-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-sand-600"
                 data-tip={
                   (shown.regenerations ?? 0) >= DISTILL_REGENERATE_MAX
                     ? t("panes.distillAgainLimit", { n: DISTILL_REGENERATE_MAX })
@@ -149,7 +159,7 @@ export function DistillPage({
               <button
                 onClick={() => onDelete(shown.id)}
                 data-track="distill-page-delete"
-                className="text-xs font-semibold text-red-500 hover:text-red-700"
+                className="text-xs font-semibold text-red-500 hover:text-red-700 pointer-coarse:py-2.5"
                 data-tip={t("panes.deleteDistillation")}
               >
                 {t("common.delete")}
@@ -160,7 +170,7 @@ export function DistillPage({
               data-track="distill-page-close"
               aria-label={t("common.close")}
               data-tip={t("common.close")}
-              className="flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
+              className="flex size-8 pointer-coarse:size-9 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
             >
               ✕
             </button>
@@ -244,19 +254,19 @@ export function DistillPage({
               className={canEdit ? "" : "hidden"}
               onSubmit={(e) => {
                 e.preventDefault();
-                if (question.trim()) onRun(question);
+                if (question.trim()) ask(question);
               }}
             >
               <textarea
                 autoFocus
                 value={question}
-                onChange={(e) => setQuestion(e.target.value)}
+                onChange={(e) => draft.change(e.target.value)}
                 {...ime.props}
                 onKeyDown={(e) => {
                   if (ime.isImeEnter(e)) return;
                   if (e.key === "Enter" && !e.shiftKey && question.trim()) {
                     e.preventDefault();
-                    onRun(question);
+                    ask(question);
                   }
                 }}
                 placeholder={t("panes.askPlaceholder")}

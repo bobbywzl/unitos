@@ -39,7 +39,7 @@ import {
   resolveSpan,
   salienceOutputSchema,
 } from "@/lib/derive/json";
-import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
+import { callForJson } from "@/lib/derive/json-call";
 import { failureLine } from "@/app/api/assistant/failure-line";
 import { streamTextTo } from "@/lib/derive/text-stream";
 import {
@@ -211,11 +211,15 @@ const ANCHOR_REQUIRED = new Set(["EXPLAIN", "SIMPLIFY", "ANALYZE", "VISUALIZE", 
 // A model call that holds one connection for minutes dies at idle proxies, so
 // the response streams a heartbeat space while the model works and ends with
 // the payload JSON or STREAM_ERROR_TOKEN + the reason — the DISTILL pattern.
-// Cancel aborts the request: a cancelled run persists nothing.
+// The reason is a line for the reader: a ReaderLine's own words, a reason
+// worded for the reader, or the plain line, the raw text to the log
+// (failure-line.ts). Cancel aborts the request: a cancelled run persists
+// nothing.
 function heartbeatResponse(
   req: Request,
+  t: TFunc,
   run: () => Promise<{ ok: true } & Record<string, unknown>>,
-  failure: (reason: string) => string,
+  label: string,
 ): Response {
   const encoder = new TextEncoder();
   let cancelled = false;
@@ -232,8 +236,13 @@ function heartbeatResponse(
         send(JSON.stringify(payload));
       } catch (err) {
         if (!cancelled && !req.signal.aborted) {
-          console.error("[derive] run failed:", err);
-          send(`${STREAM_ERROR_TOKEN}${failure(modelErrorMessage(err))}`);
+          send(
+            `${STREAM_ERROR_TOKEN}${
+              err instanceof ReaderLine
+                ? err.message
+                : failureLine(t, err instanceof DeriveFailure ? err.message : err, label)
+            }`,
+          );
         }
       } finally {
         if (heartbeat) clearInterval(heartbeat);
@@ -250,6 +259,8 @@ function heartbeatResponse(
 
 // A failed JSON call throws with the reason; heartbeatResponse reports it.
 class DeriveFailure extends Error {}
+// A run that ends with words for the reader (no points found): sent as they are.
+class ReaderLine extends Error {}
 
 // Any unexpected throw still answers with the reason, never a bare 500 (the
 // assistant route's pattern): the reader's card shows it, and the log keeps it.
@@ -600,6 +611,7 @@ async function handle(req: Request, t: TFunc) {
     ]);
     return heartbeatResponse(
       req,
+      t,
       async () => {
         const compareCall = await featureCall("compare", DERIVATION_EFFORT.COMPARE);
         const result = await callForJson({
@@ -637,7 +649,7 @@ async function handle(req: Request, t: TFunc) {
           comparison.disagreements.length +
           comparison.onlyFirst.length +
           comparison.onlySecond.length;
-        if (total === 0) throw new DeriveFailure(t("api.compareNoPoints"));
+        if (total === 0) throw new ReaderLine(t("api.compareNoPoints"));
         const content = comparisonMarkdown(comparison, { first: first.title, second: second.title }, t);
         // One source per distinct span, the first document's first, capped so
         // the card stays readable.
@@ -679,7 +691,7 @@ async function handle(req: Request, t: TFunc) {
         await bumpNotebook(data.notebookId);
         return { ok: true, noteId: note.id, sectionTitle: section.title, pointCount: total };
       },
-      (reason) => t("api.compareFailed", { reason }),
+      "derive COMPARE",
     );
   }
 
@@ -1031,6 +1043,7 @@ async function handle(req: Request, t: TFunc) {
   if (data.type === "VISUALIZE" && anchor) {
     return heartbeatResponse(
       req,
+      t,
       async () => {
         const visualCall = await featureCall("visualize", VISUALIZE_EFFORT);
         const visualModel = visualCall.model;
@@ -1052,7 +1065,7 @@ async function handle(req: Request, t: TFunc) {
         }
         const first = await renderVisual(drawn);
         if ("error" in first) {
-          throw new DeriveFailure(t("api.visualizeNotRendered", { reason: first.error }));
+          throw new DeriveFailure(`picture not drawn: ${first.error}`);
         }
         let visual = drawn;
         let rendered = first;
@@ -1131,7 +1144,7 @@ async function handle(req: Request, t: TFunc) {
         await bumpNotebook(data.notebookId);
         return { ok: true, noteId: note.id, kind: visual.kind, caption: visual.caption.trim(), content };
       },
-      (reason) => t("api.visualizeFailed", { reason }),
+      "derive VISUALIZE",
     );
   }
 
@@ -1477,7 +1490,7 @@ async function handle(req: Request, t: TFunc) {
             });
             if (formalizeCancelled || req.signal.aborted) return;
             if (!result.ok) {
-              fail(t("api.formalizeFailed", { reason: result.error }));
+              fail(failureLine(t, result.error, "derive FORMALIZE"));
               return;
             }
             const article: FormalizedArticle = {
@@ -1524,7 +1537,7 @@ async function handle(req: Request, t: TFunc) {
           });
           if (formalizeCancelled || req.signal.aborted) return;
           if (!result.ok) {
-            fail(t("api.formalizeFailed", { reason: result.error }));
+            fail(failureLine(t, result.error, "derive FORMALIZE"));
             return;
           }
           // Where the notes land: the requested section, else the first
@@ -1590,7 +1603,7 @@ async function handle(req: Request, t: TFunc) {
         } catch (err) {
           if (!formalizeCancelled && !req.signal.aborted) {
             console.error("[derive] FORMALIZE failed:", err);
-            fail(t("api.formalizeFailed", { reason: modelErrorMessage(err) }));
+            fail(failureLine(t, err, "derive FORMALIZE"));
           }
         } finally {
           if (formalizeHeartbeat) clearInterval(formalizeHeartbeat);

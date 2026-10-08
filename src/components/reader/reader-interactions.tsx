@@ -134,7 +134,7 @@ import { NotePicker } from "@/components/reader/note-picker";
 import { PANE_HEADER } from "@/components/reader/reader-panes";
 import type { FigureRenderInfo } from "@/components/reader/figure-capture";
 import { Reader, type TranscriptVariant } from "@/components/reader/reader";
-import { setQuoteDragImage, writeQuoteDrag, type QuoteDrag } from "@/lib/quote-drag";
+import { quoteMarkdown, setQuoteDragImage, writeQuoteDrag, type QuoteDrag } from "@/lib/quote-drag";
 import { blockIdOfKey, coreKey, isCoreKey } from "@/lib/anchors/core-key";
 import { MAX_SEGMENTS } from "@/lib/anchors/passage-limit";
 import { collapseUnits } from "@/lib/collapse-units";
@@ -172,7 +172,10 @@ import type { SuggestCommand } from "@/lib/prompts/suggest";
 import { readNdjson } from "@/lib/ndjson";
 import { conflictLabels, saveNoteText } from "@/lib/notes/save-text";
 import { reconcileNoteText } from "@/lib/notes/conflict";
-import { deletedKey, deleteNoteWithUndo } from "@/lib/notes/undo-pill";
+import { deletedKey } from "@/lib/notes/undo-pill";
+import { deleteWithUndo, resumeDeletes } from "@/lib/deferred-delete";
+import { CardMore, type CardMoreItem } from "@/components/reader/card-more";
+import { clearExtractDraft } from "@/components/reader/extract-draft";
 import {
   cardCommentKey,
   caretToEnd,
@@ -206,7 +209,7 @@ import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 import { KeptInput, KeptTextarea, type KeptFieldHandle } from "@/components/kept-field";
 import { AnswerMarkdown } from "@/components/assistant/answer-markdown";
 import { deleteConversationWithUndo } from "@/components/assistant/conversation-delete";
-import { callFailure, callLine, modelFetch, noReason } from "@/components/assistant/failure";
+import { callFailure, callLine, failureLine, modelFetch, noReason } from "@/components/assistant/failure";
 import { ACCEPT_CLASS, REJECT_CLASS, SEND_CLASS } from "@/components/assistant/decision-classes";
 
 // One block's span of a selection (SPEC.md §5).
@@ -1788,14 +1791,36 @@ export function ReaderInteractions({
   // Stored extractions of the old Match-it tool (SPEC.md §4): the layer and
   // its card still show, and Delete still removes one; nothing makes new ones.
   const [localExtractions, setLocalExtractions] = useState<ExtractionView[]>([]);
+  // Matches deleted while their pill shows: hidden until Undo or the delete lands.
+  const [goneExtractions, setGoneExtractions] = useState<Set<string>>(new Set());
+  // A reload while a delete's pill showed: the new page may have rendered
+  // before the delete landed; the rows stay hidden and the delete goes
+  // again (lib/deferred-delete.ts).
+  useEffect(() => {
+    const url = `/api/notebooks/${notebookId}/documents/${documentId}`;
+    const ids = resumeDeletes((u) => u === url);
+    if (ids.length === 0) return;
+    const hide = (prev: Set<string>) => new Set([...prev, ...ids]);
+    // The pending deletes live in sessionStorage, read once the page runs.
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setGoneDistillations(hide);
+    setGoneExtractions(hide);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [notebookId, documentId]);
   // The document's translation (SPEC.md §19), one text per block, shown
   // under each block while the reader has it on.
   const [translations, setTranslations] = useState<Record<string, string> | null>(null);
   // The card an extract span or its chip opens: the origin phrase, every
-  // passage, and Delete. Each row jumps to its text.
-  const [extractCard, setExtractCard] = useState<{ id: string; top: number; left: number } | null>(
-    null,
-  );
+  // passage, and Delete. Each row jumps to its text. The block reader docks
+  // it in the card column, like the annotation card (SPEC.md §6).
+  const [extractCard, setExtractCard] = useState<{
+    id: string;
+    top: number;
+    left: number;
+    width?: number;
+    side?: "right" | "left";
+    anchor?: Anchor | null;
+  } | null>(null);
   // Voice: the bubble under the toolbar reads the highlighted text aloud.
   // The Edge voice through /api/speech — free neural voices, Chinese and
   // English alike; when the route fails, the most natural browser voice reads
@@ -1891,6 +1916,10 @@ export function ReaderInteractions({
       restoreNoteMarks((e as CustomEvent<{ noteId: string }>).detail.noteId);
     window.addEventListener("dissect:note-removed", onRemoved);
     window.addEventListener("dissect:note-restored", onRestored);
+    // A reload while a delete's pill showed: its marks stay gone and the
+    // DELETE goes again (lib/deferred-delete.ts).
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the pending deletes live in sessionStorage
+    for (const id of resumeDeletes((u) => u.startsWith("/api/notes/"))) removeNoteMarks(id);
     return () => {
       window.removeEventListener("dissect:note-removed", onRemoved);
       window.removeEventListener("dissect:note-restored", onRestored);
@@ -2323,7 +2352,7 @@ export function ReaderInteractions({
   const CARD_ESTIMATE = 360;
   const CARD_GAP = 14;
   function claimSideSlot(
-    kind: "explain" | "simplify" | "assistant" | "comment" | "link" | "log" | "annotation",
+    kind: "explain" | "simplify" | "assistant" | "comment" | "link" | "log" | "annotation" | "extract",
     preferredTop: number,
     // The words the card is about: under them when there is no room beside.
     anchor?: Anchor | null,
@@ -2420,11 +2449,11 @@ export function ReaderInteractions({
       broadcastNoteRestored(noteId);
     }
   }
-  async function deleteExplain() {
+  function deleteExplain() {
     const card = bubble;
     if (!card?.noteId || card.streaming || card.busy) return;
     setBubble(null);
-    await deleteWithPill(card.noteId, t(deletedKey(card.kind)));
+    deleteWithPill(card.noteId, t(deletedKey(card.kind)));
   }
   function closeSimplify() {
     abortToolRun(simplifyCard?.run);
@@ -2434,11 +2463,11 @@ export function ReaderInteractions({
   function stopSimplify() {
     abortToolRun(simplifyCard?.run);
   }
-  async function deleteSimplify() {
+  function deleteSimplify() {
     const card = simplifyCard;
     if (!card?.noteId || card.streaming || card.busy) return;
     setSimplifyCard(null);
-    await deleteWithPill(card.noteId, t(deletedKey("simplify")));
+    deleteWithPill(card.noteId, t(deletedKey("simplify")));
   }
   // Regenerate: the tool runs again on the same selection, in the same card,
   // and the new output replaces the old (SPEC.md §4). Visualize regenerates
@@ -2897,6 +2926,7 @@ export function ReaderInteractions({
     comment: commentCard?.anchor?.blockId,
     link: linkCard?.anchor?.blockId,
     annotation: annotationCard?.anchor?.blockId,
+    extract: extractCard?.anchor?.blockId,
   };
   for (const [layer, key] of Object.entries(layerKeys)) {
     const shown = key !== null;
@@ -3798,6 +3828,7 @@ export function ReaderInteractions({
     link: linkCard?.anchor,
     log: logCard?.anchor,
     annotation: annotationCard?.anchor,
+    extract: extractCard?.anchor,
   };
   const measureConnectors = useCallback(() => {
     const container = containerRef.current;
@@ -3848,7 +3879,7 @@ export function ReaderInteractions({
   useEffect(() => {
     const raf = requestAnimationFrame(measureConnectors);
     return () => cancelAnimationFrame(raf);
-  }, [bubble, simplifyCard, assistantChat, commentCard, linkCard, logCard, measureConnectors]);
+  }, [bubble, simplifyCard, assistantChat, commentCard, linkCard, logCard, extractCard, measureConnectors]);
   // The line follows its ends while they move: a scroll box inside the pane
   // (the transcript's) scrolls the text under a card, and a card pushed down
   // by a growing neighbor slides to its new place (globals.css
@@ -3996,6 +4027,7 @@ export function ReaderInteractions({
     if (moved.comment !== undefined) setCommentCard(lift<NonNullable<typeof commentCard>>("comment"));
     if (moved.link !== undefined) setLinkCard(lift<LinkCard>("link"));
     if (moved.annotation !== undefined) setAnnotationCard(lift<AnnotationCard>("annotation"));
+    if (moved.extract !== undefined) setExtractCard(lift<NonNullable<typeof extractCard>>("extract"));
   }, []);
   // A card grows with its content up to the pane's height, then its body
   // scrolls (SPEC.md §6). A card anchored low in the pane still grows past the
@@ -4054,6 +4086,7 @@ export function ReaderInteractions({
     else if (grown === "comment") setCommentCard(move<NonNullable<typeof commentCard>>);
     else if (grown === "link") setLinkCard(move<LinkCard>);
     else if (grown === "annotation") setAnnotationCard(move<AnnotationCard>);
+    else if (grown === "extract") setExtractCard(move<NonNullable<typeof extractCard>>);
   }, []);
   // The narrow reader (SPEC.md §6): no room beside the words, so each card
   // opens under the paragraph that ends its passage, and that paragraph's
@@ -4064,13 +4097,22 @@ export function ReaderInteractions({
   // keeping the passage's first line on screen.
   const movedCardsRef = useRef(new Set<string>());
   const narrowShownRef = useRef(new Set<string>());
+  // On a phone, how far a card rose over its paragraph's words after the
+  // passage to find room (below), by card kind, for the passage it is on.
+  const narrowLiftRef = useRef(new Map<string, { at: number; lift: number }>());
   const layoutNarrowCards = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
     const narrow = narrowRef.current && !richTextRef.current && !distillOpenRef.current && !conversationViewRef.current;
     const hosts = new Map<
       HTMLElement,
-      { kind: string; el: HTMLElement; anchorTop: number; over: { bottom: number; left: number } | null }[]
+      {
+        kind: string;
+        el: HTMLElement;
+        anchorTop: number;
+        anchorBottom: number;
+        over: { bottom: number; left: number } | null;
+      }[]
     >();
     const paneShown = container.clientHeight;
     if (narrow) {
@@ -4086,7 +4128,7 @@ export function ReaderInteractions({
         const list = hosts.get(host) ?? [];
         // A tall block (a slide, a sheet) keeps its height: the card stands
         // under its words, over the block (overBlock).
-        list.push({ kind, el, anchorTop: box.top, over: overBlock(box, paneShown) ? box : null });
+        list.push({ kind, el, anchorTop: box.top, anchorBottom: box.bottom, over: overBlock(box, paneShown) ? box : null });
         hosts.set(host, list);
       }
     }
@@ -4127,19 +4169,21 @@ export function ReaderInteractions({
       let y = host.getBoundingClientRect().bottom - crect.top + container.scrollTop + 8;
       let overY = -Infinity;
       for (const card of cards) {
+        const key = `${card.kind}:${layerSeenRef.current[card.kind] ?? ""}`;
+        const held = narrowLiftRef.current.get(card.kind);
+        const lifted = !card.over && held && Math.abs(held.at - card.anchorTop) < 2 ? held.lift : 0;
         if (card.over) {
           overY = Math.max(overY, card.over.bottom + 8);
           tops[card.kind] = overY;
           docks[card.kind] = dockUnderWords(card.over.left, container.clientWidth);
           overY += card.el.offsetHeight + CARD_GAP;
         } else {
-          tops[card.kind] = y;
+          tops[card.kind] = y - lifted;
           y += card.el.offsetHeight + CARD_GAP;
         }
         // A card that just opened under the window comes into view, its foot
         // too (its buttons), as far as its words stay in view. A run that
         // lands is a new layer key: the card, grown, is checked again.
-        const key = `${card.kind}:${layerSeenRef.current[card.kind] ?? ""}`;
         if (!narrowShownRef.current.has(key)) {
           narrowShownRef.current.add(key);
           const viewBottom = container.scrollTop + shownHeight;
@@ -4154,7 +4198,17 @@ export function ReaderInteractions({
           // gives up height (its body scrolls), so its foot — the box, the
           // buttons — stays in reach above the bar.
           if (railTop !== Infinity) {
-            const room = Math.floor(shownHeight - (tops[card.kind] - container.scrollTop - Math.max(0, by)) - 16);
+            let room = Math.floor(shownHeight - (tops[card.kind] - container.scrollTop - Math.max(0, by)) - 16);
+            // Short of room, the card first rises over the paragraph's
+            // words after the passage, up to just under the selected words,
+            // so its answer and its plan's Accept show without a scroll
+            // inside (TOOL15-07).
+            const lift = Math.max(0, Math.min(card.el.offsetHeight - room, tops[card.kind] - (card.anchorBottom + 8)));
+            if (lift > 0) {
+              narrowLiftRef.current.set(card.kind, { at: card.anchorTop, lift: lifted + lift });
+              tops[card.kind] -= lift;
+              room += lift;
+            }
             if (card.el.offsetHeight > room && room >= CAP_MIN) phoneCaps[card.kind] = room;
           }
         }
@@ -4173,13 +4227,14 @@ export function ReaderInteractions({
     if (tops.comment !== undefined) setCommentCard(place<NonNullable<typeof commentCard>>("comment"));
     if (tops.link !== undefined) setLinkCard(place<LinkCard>("link"));
     if (tops.annotation !== undefined) setAnnotationCard(place<AnnotationCard>("annotation"));
+    if (tops.extract !== undefined) setExtractCard(place<NonNullable<typeof extractCard>>("extract"));
   }, []);
   const layoutNarrowCardsRef = useRef(layoutNarrowCards);
   layoutNarrowCardsRef.current = layoutNarrowCards;
   useLayoutEffect(() => {
     layoutNarrowCardsRef.current();
   });
-  const openCards = `${bubble !== null}${simplifyCard !== null}${assistantChat !== null}${commentCard !== null}${linkCard !== null}${annotationCard !== null}`;
+  const openCards = `${bubble !== null}${simplifyCard !== null}${assistantChat !== null}${commentCard !== null}${linkCard !== null}${annotationCard !== null}${extractCard !== null}`;
   // The room the column made for the cards goes back when the last one closes.
   const anyCardOpen = openCards.includes("true");
   const anyCardOpenRef = useRef(anyCardOpen);
@@ -5333,6 +5388,20 @@ export function ReaderInteractions({
     setAnnotationCard((c) => (c && !drawn(c.anchor) && !c.busy && c.draft === c.saved ? null : c));
     setLogCard(null);
   }, [collapseView]);
+  // Collapse on or off keeps the reader's place: the block at the reading
+  // line stays there, cut at the same share (lib/reading-position.ts), read
+  // just before the article changes view and put back once it has.
+  const collapsePlaceRef = useRef<ReturnType<typeof readReadingPosition> | null>(null);
+  function keepCollapsePlace() {
+    const container = containerRef.current;
+    collapsePlaceRef.current = container ? readReadingPosition(container, Date.now()) : null;
+  }
+  useLayoutEffect(() => {
+    const place = collapsePlaceRef.current;
+    const container = containerRef.current;
+    collapsePlaceRef.current = null;
+    if (place && container) applyReadingPosition(container, place, false);
+  }, [collapseView]);
   const collapseStoreKey = `unitos-collapse-${documentId}`;
   // Whether the cores the article opens with have been read (a jump waits
   // for them: coresComingRef).
@@ -5391,11 +5460,13 @@ export function ReaderInteractions({
     setSubmenu(null);
     if (!richTextRef.current) window.getSelection()?.removeAllRanges();
     if (collapseOn) {
+      keepCollapsePlace();
       setCollapseOn(false);
       rememberCollapse(false);
       return;
     }
     if (cores) {
+      keepCollapsePlace();
       setCollapseOn(true);
       rememberCollapse(true);
       return;
@@ -5404,31 +5475,35 @@ export function ReaderInteractions({
     const controller = new AbortController();
     collapseAbortRef.current = controller;
     try {
-      // An editor writes the cores the document lacks; a viewer reads what is stored.
-      const res = await fetch(`/api/documents/${documentId}/collapse`, {
-        method: canEdit ? "POST" : "GET",
-        signal: controller.signal,
-      });
+      // An editor writes the cores the document lacks; a viewer reads what
+      // is stored. A dropped connection or a server failure reads as the
+      // assistant's plain line, the technical text to the console (failure.ts).
+      const res = await modelFetch(
+        `/api/documents/${documentId}/collapse`,
+        { method: canEdit ? "POST" : "GET", signal: controller.signal },
+        t,
+      );
       const body = (await res.json().catch(() => null)) as
         | { cores?: Record<string, string>; complete?: boolean; error?: string }
         | null;
       if (!res.ok || !body?.cores) {
-        throw new Error(body?.error ?? t("common.requestFailedStatus", { status: res.status }));
+        throw new Error(body?.error ?? noReason(res, t));
       }
       if (Object.keys(body.cores).length === 0) {
         showToast(t("reader.collapseViewer"));
         return;
       }
+      keepCollapsePlace();
       setCores(body.cores);
       setCollapseOn(true);
       rememberCollapse(true);
       // Some blocks got no core — no model, or a failed call: they read
       // whole, and the toast says why.
-      if (body.error) showToast(t("reader.collapseFailed", { reason: body.error }));
+      if (body.error) showToast(body.error);
     } catch (err) {
       // Stopped, not failed: no toast.
       if (controller.signal.aborted) return;
-      showToast(t("reader.collapseFailed", { reason: err instanceof Error ? err.message : t("common.requestFailed") }));
+      showToast(failureLine(err, t));
     } finally {
       if (collapseAbortRef.current === controller) collapseAbortRef.current = null;
       setCollapseBusy(false);
@@ -5742,6 +5817,26 @@ export function ReaderInteractions({
       if (!extraction) return;
       const containerRect = container.getBoundingClientRect();
       const rect = element.getBoundingClientRect();
+      // The block reader: the card docks in the card column beside the words,
+      // or under the paragraph in a narrow reader, as the annotation card
+      // does — never over the words (SPEC.md §6). Its anchor is the span
+      // pressed: the origin or a passage in the pressed block.
+      if (!richTextRef.current) {
+        const blockId = element.closest<HTMLElement>("[data-block-id]")?.dataset.blockId;
+        const span = [extraction.origin, ...extraction.spans].find((x) => x.blockId === blockId) ?? extraction.origin;
+        const text = blocksRef.current.find((b) => b.id === span.blockId)?.text ?? "";
+        const anchor: Anchor = {
+          blockId: span.blockId,
+          startOffset: span.start,
+          endOffset: span.end,
+          quotedText: text.slice(span.start, span.end),
+          prefix: "",
+          suffix: "",
+        };
+        const top = rect.top - containerRect.top + container.scrollTop;
+        setExtractCard({ id: extractId, ...claimSideSlot("extract", top, anchor), anchor });
+        return;
+      }
       const width = 300;
       setExtractCard({
         id: extractId,
@@ -6012,7 +6107,17 @@ export function ReaderInteractions({
       .map((line) => (line ? `> ${line}` : ">"))
       .join("\n");
     const comment = (addFieldRef.current?.value() ?? addComment).trim();
-    return comment ? `${quote}\n\n${comment}` : quote;
+    // Define's answer for these words, not folded away: it goes under the
+    // word, so the note keeps the meaning (SPEC.md §6).
+    const meaning =
+      definition &&
+      definition.key === popoverAnchorKey &&
+      (submenu === "define" || submenu === "add") &&
+      !definition.streaming &&
+      !definition.error
+        ? definition.text.trim()
+        : "";
+    return [quote, meaning, comment].filter(Boolean).join("\n\n");
   }
 
   // After the quote landed: the toolbar closes and the page refreshes, so
@@ -6203,7 +6308,7 @@ export function ReaderInteractions({
         setDefinition((d) => (d && d.key === key ? (d.text.trim() ? { ...d, streaming: false } : null) : d));
         return;
       }
-      settle({ streaming: false, error: err instanceof Error ? err.message : t("reader.deriveFailed") });
+      settle({ streaming: false, error: failureLine(err, t) });
     } finally {
       if (defineAbortRef.current === controller) defineAbortRef.current = null;
     }
@@ -6401,7 +6506,7 @@ export function ReaderInteractions({
       if (replaceNoteId && noteId) await discardNote(replaceNoteId);
       router.refresh();
     } catch (err) {
-      const message = controller.signal.aborted ? null : err instanceof Error ? err.message : t("reader.deriveFailed");
+      const message = controller.signal.aborted ? null : failureLine(err, t);
       // Regenerate stopped or failed: the output that stands comes back.
       if (replacing) {
         setBubble((b) => (mine(b) ? { ...replacing, ...slotOf(b), run, runError: message } : b));
@@ -6495,7 +6600,7 @@ export function ReaderInteractions({
       if (replaceNoteId && noteId) await discardNote(replaceNoteId);
       router.refresh();
     } catch (err) {
-      const message = controller.signal.aborted ? null : err instanceof Error ? err.message : t("reader.simplifyFailed");
+      const message = controller.signal.aborted ? null : failureLine(err, t);
       // Regenerate stopped or failed: the output that stands comes back.
       if (replacing) {
         setSimplifyCard((c) => (mine(c) ? { ...replacing, ...slotOf(c), run, runError: message } : c));
@@ -6597,7 +6702,7 @@ export function ReaderInteractions({
       const stopped = controller.signal.aborted;
       // Regenerate stopped or failed: the picture that stands comes back.
       if (replacing) {
-        const why = stopped ? null : err instanceof Error ? err.message : t("reader.visualizeFailed");
+        const why = stopped ? null : failureLine(err, t);
         setBubble((b) => (mine(b) ? { ...replacing, ...slotOf(b), run, runError: why } : b));
         return;
       }
@@ -6606,7 +6711,7 @@ export function ReaderInteractions({
         setBubble((b) => (mine(b) ? null : b));
         return;
       }
-      const message = err instanceof Error ? err.message : t("reader.visualizeFailed");
+      const message = failureLine(err, t);
       setBubble((b) => (mine(b) ? { ...b, streaming: false, error: message } : b));
     } finally {
       toolRunsRef.current.delete(run);
@@ -6673,15 +6778,18 @@ export function ReaderInteractions({
   }
 
   // An annotation's trash (a highlight, a comment, an Explain, Analyze,
-  // Visualize, or Simplify card): the notes' Undo pill offers it back
-  // (lib/notes/undo-pill.ts); History keeps it after the pill goes.
-  async function deleteWithPill(noteId: string, message: string) {
-    try {
-      await deleteNoteWithUndo(noteId, message, () => router.refresh());
-      router.refresh();
-    } catch (err) {
-      showError(err instanceof Error ? err.message : t("reader.deleteFailed"));
-    }
+  // Visualize, or Simplify card): its marks go at once and the notes' Undo
+  // pill shows at the press; the DELETE waits for the pill to go (keepalive
+  // on page close), so Undo puts the marks back at once with nothing to
+  // restore. History keeps it after the pill goes (conversation-delete.ts).
+  function deleteWithPill(noteId: string, message: string) {
+    deleteConversationWithUndo({
+      noteId,
+      message,
+      gone: () => broadcastNoteRemoved(noteId),
+      back: () => broadcastNoteRestored(noteId),
+      failed: () => showError(t("common.notSaved")),
+    });
   }
 
   // The comment card edits in place too: same notes API, same refresh.
@@ -6823,7 +6931,7 @@ export function ReaderInteractions({
   const allExtractions = [
     ...extractions,
     ...localExtractions.filter((x) => !extractions.some((p) => p.id === x.id)),
-  ];
+  ].filter((x) => !goneExtractions.has(x.id));
   const allExtractionsRef = useRef(allExtractions);
   allExtractionsRef.current = allExtractions;
 
@@ -6905,6 +7013,8 @@ export function ReaderInteractions({
       };
       setLocalDistillations((prev) => [fresh, ...prev]);
       setDistillShownId(fresh.id);
+      // The question landed: its draft in the box goes (extract-draft.ts).
+      clearExtractDraft(`doc:${runDocumentId}`, q);
       // The route dropped the replaced extraction with the new one's arrival.
       if (replaceId) setGoneDistillations((prev) => new Set(prev).add(replaceId));
       // The page may be closed: the pill's progress bar stops, and the toast
@@ -6915,7 +7025,7 @@ export function ReaderInteractions({
       // A cancelled run is not a failure: the ask view keeps the question.
       if (controller.signal.aborted) return;
       if (documentIdRef.current !== runDocumentId) return;
-      const message = err instanceof Error ? err.message : t("reader.distillFailed");
+      const message = failureLine(err, t);
       setDistillError(message);
       reportError(message, runDocumentId);
       if (!distillOpenRef.current) showToast(message);
@@ -6925,28 +7035,37 @@ export function ReaderInteractions({
     }
   }
 
-  async function deleteDistillation(id: string) {
-    await deleteDistillations([id]);
+  function deleteDistillation(id: string) {
+    deleteDistillations([id]);
   }
 
-  // The selected extractions go in one call (SPEC.md §4).
-  async function deleteDistillations(ids: string[]) {
+  // The selected extractions go in one call (SPEC.md §4), with no ask: they
+  // leave the page at once, the pill offers Undo, and the PATCH waits for
+  // the pill to go (lib/deferred-delete.ts).
+  function deleteDistillations(ids: string[]) {
     if (ids.length === 0) return;
-    try {
-      await api(`/api/notebooks/${notebookId}/documents/${documentId}`, "PATCH", {
-        removeDistillationIds: ids,
-      });
-      setLocalDistillations((prev) => prev.filter((d) => !ids.includes(d.id)));
+    const setGone = (gone: boolean) =>
       setGoneDistillations((prev) => {
         const next = new Set(prev);
-        for (const id of ids) next.add(id);
+        for (const id of ids) {
+          if (gone) next.add(id);
+          else next.delete(id);
+        }
         return next;
       });
-      if (distillShownId && ids.includes(distillShownId)) setDistillShownId(null);
-      router.refresh();
-    } catch (err) {
-      showError(err instanceof Error ? err.message : t("reader.deleteFailed"));
-    }
+    deleteWithUndo({
+      url: `/api/notebooks/${notebookId}/documents/${documentId}`,
+      body: { removeDistillationIds: ids },
+      ids,
+      message:
+        ids.length === 1 ? t("reader.extractionDeleted") : t("reader.extractionsDeleted", { n: ids.length }),
+      gone: () => {
+        setGone(true);
+        if (distillShownId && ids.includes(distillShownId)) setDistillShownId(null);
+      },
+      back: () => setGone(false),
+      failed: () => showError(t("common.notSaved")),
+    });
   }
 
   // A distilled quote lands as a note: caption as content, quote as source,
@@ -6961,9 +7080,11 @@ export function ReaderInteractions({
       return false;
     }
     try {
+      // The quote shows in the note as Add to notes writes it, the caption
+      // under it.
       await api("/api/notes", "POST", {
         sectionId: section.id,
-        content: quote.caption,
+        content: `${quoteMarkdown(quote.quotedText)}\n\n${quote.caption}`,
         source: {
           documentId,
           blockId: quote.blockId,
@@ -7007,25 +7128,30 @@ export function ReaderInteractions({
     flashSpan(quote.blockId, quote.start, quote.end);
   }
 
-  // The stored match goes; the caller says whether the reader hears about it.
-  async function removeExtraction(id: string) {
-    try {
-      await api(`/api/notebooks/${notebookId}/documents/${documentId}`, "PATCH", {
-        removeExtractionId: id,
+  // The stored match goes with no ask: its spans and its card leave at once,
+  // the pill offers Undo, and the PATCH waits for the pill to go
+  // (lib/deferred-delete.ts). Match-it makes no new matches, so Undo is the
+  // only way back.
+  function deleteExtraction(id: string) {
+    const setGone = (gone: boolean) =>
+      setGoneExtractions((prev) => {
+        const next = new Set(prev);
+        if (gone) next.add(id);
+        else next.delete(id);
+        return next;
       });
-      setLocalExtractions((prev) => prev.filter((x) => x.id !== id));
-      return true;
-    } catch (err) {
-      showError(err instanceof Error ? err.message : t("reader.deleteFailed"));
-      return false;
-    }
-  }
-
-  async function deleteExtraction(id: string) {
-    if (!(await removeExtraction(id))) return;
-    setExtractCard(null);
-    router.refresh();
-    showToast(t("reader.extractionRemoved"));
+    deleteWithUndo({
+      url: `/api/notebooks/${notebookId}/documents/${documentId}`,
+      body: { removeExtractionId: id },
+      ids: [id],
+      message: t("reader.extractionRemoved"),
+      gone: () => {
+        setGone(true);
+        setExtractCard(null);
+      },
+      back: () => setGone(false),
+      failed: () => showError(t("common.notSaved")),
+    });
   }
 
   // Voice: stop whatever is reading — the audio element or the browser voice.
@@ -9723,7 +9849,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               void sendToolMessage(kind, undefined, e.currentTarget.value);
             }
           }}
-          placeholder={t(card.busy ? "assistant.queuePlaceholder" : "reader.continuePlaceholder")}
+          placeholder={t(card.busy ? "assistant.queuePlaceholder" : "assistant.messagePlaceholder")}
           aria-label={t("reader.messageAssistant")}
           className="field-sizing-content max-h-40 min-h-8 flex-1 resize-none rounded-xl bg-sand-100 px-3 py-1.5 text-[12.5px] outline-none placeholder:text-sand-500"
         />
@@ -9857,7 +9983,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             void sendChatMessage(undefined, e.currentTarget.value);
           }
         }}
-        placeholder={t(chat.busy ? "assistant.queuePlaceholder" : "reader.replyPlaceholder")}
+        placeholder={t(chat.busy ? "assistant.queuePlaceholder" : "assistant.messagePlaceholder")}
         aria-label={t("reader.messageAssistant")}
         data-chat-box=""
         className="field-sizing-content max-h-40 min-h-8 basis-full resize-none rounded-xl bg-sand-100 px-3 py-1.5 text-[12.5px] outline-none placeholder:text-sand-500"
@@ -9884,6 +10010,24 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       >
         {chat.busy ? (chat.input.trim() ? t("assistant.queue") : <StopIcon size={11} />) : t("reader.send")}
       </button>
+      {/* Delete, out of the head (card-more.tsx). */}
+      <CardMore
+        items={
+          chat.noteId
+            ? [
+                {
+                  label: t("common.delete"),
+                  tip: t("reader.deleteConversationTitle"),
+                  track: "assistant-card-delete",
+                  icon: <TrashIcon size={13} />,
+                  danger: true,
+                  onSelect: deleteAssistantConversation,
+                },
+              ]
+            : []
+        }
+        className={CARD_ACTION}
+      />
     </form>
     {chat.sendError && (
       <p data-send-error role="alert" className={`${chipsClassName} text-[12px] font-medium text-red-600`}>
@@ -9958,6 +10102,69 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       <ExpandIcon size={13} />
     </button>
   );
+  // A tool card's ⋯ (card-more.tsx): Regenerate and Delete, out of the head.
+  const bubbleMore = (card: ExplainBubble): CardMoreItem[] => [
+    ...(!card.streaming && !card.busy && card.anchor
+      ? [
+          {
+            label: t("common.regenerate"),
+            tip: t(
+              card.kind === "analyze"
+                ? "reader.regenerateAnalysisTitle"
+                : card.kind === "visualize"
+                  ? "reader.regenerateVisualizationTitle"
+                  : "reader.regenerateExplanationTitle",
+            ),
+            track: `${card.kind}-regenerate`,
+            icon: <RegenerateIcon size={13} />,
+            onSelect: () => void regenerateBubble(),
+          },
+        ]
+      : []),
+    ...(card.noteId && !card.streaming
+      ? [
+          {
+            label: t("common.delete"),
+            tip: t(
+              card.kind === "analyze"
+                ? "reader.deleteAnalysisTitle"
+                : card.kind === "visualize"
+                  ? "reader.deleteVisualizeTitle"
+                  : "reader.deleteExplainTitle",
+            ),
+            track: `${card.kind}-delete`,
+            icon: <TrashIcon size={13} />,
+            danger: true,
+            onSelect: deleteExplain,
+          },
+        ]
+      : []),
+  ];
+  const simplifyMore = (card: SimplifyCard): CardMoreItem[] => [
+    ...(!card.streaming && !card.busy
+      ? [
+          {
+            label: t("common.regenerate"),
+            tip: t("reader.regenerateSimplifyTitle"),
+            track: "simplify-regenerate",
+            icon: <RegenerateIcon size={13} />,
+            onSelect: () => void regenerateSimplify(),
+          },
+        ]
+      : []),
+    ...(card.noteId && !card.streaming
+      ? [
+          {
+            label: t("common.delete"),
+            tip: t("reader.deleteSimplifyTitle"),
+            track: "simplify-delete",
+            icon: <TrashIcon size={13} />,
+            danger: true,
+            onSelect: deleteSimplify,
+          },
+        ]
+      : []),
+  ];
 
   // A pending link's banner (SPEC.md §6). The block reader's band holds it
   // between Contents and the controls, where no word sits.
@@ -10073,7 +10280,11 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       }${collapseNew.isNew ? ` ${NEW_GLOW_CLASS}` : ""}`}
     >
       {collapseBusy ? <SpinnerIcon size={13} className="motion-safe:animate-spin" /> : <CollapseIcon size={13} />}
-      {t(collapseBusy ? "reader.collapsing" : collapseOn ? "reader.collapsed" : "reader.collapse")}
+      {/* On a narrow screen the running button is the spinner and Stop, so
+          it keeps its place in the row beside Extract. */}
+      <span className={collapseBusy ? "max-sm:sr-only" : undefined}>
+        {t(collapseBusy ? "reader.collapsing" : collapseOn ? "reader.collapsed" : "reader.collapse")}
+      </span>
       {collapseBusy && <StopPill />}
       {collapseNew.isNew && <NewPill />}
     </button>
@@ -10162,7 +10373,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           >
             <input
               type="checkbox"
-              className="mt-0.5 accent-clay"
+              className="mt-0.5 shrink-0 accent-clay pointer-coarse:size-5"
               checked={planChecked.has(i)}
               onChange={() =>
                 setPlanChecked((prev) => {
@@ -10814,8 +11025,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             <div
               data-selection-popover
               data-extract-card
+              data-side-card={richText ? undefined : "extract"}
               className={`pop-in absolute ${TOOL_LAYER} w-[300px] rounded-2xl bg-card p-3 shadow-float${underView}`}
-              style={{ top: extractCard.top, left: extractCard.left }}
+              style={{ top: extractCard.top, left: extractCard.left, width: extractCard.width }}
             >
               <div className="mb-2 flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
@@ -10827,7 +11039,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   data-track="extract-card-close"
                   aria-label={t("common.close")}
                   data-tip={t("common.close")}
-                  className="rounded-full px-1.5 text-sand-500 hover:text-clay-800"
+                  className={`flex ${cardIcon} items-center justify-center rounded-full text-xs text-sand-500 hover:text-clay-800`}
                 >
                   ✕
                 </button>
@@ -10866,9 +11078,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 {canEdit && (
                   <span className="flex items-center gap-3">
                     <button
-                      onClick={() => void deleteExtraction(extraction.id)}
+                      onClick={() => deleteExtraction(extraction.id)}
                       data-track="extract-card-delete"
-                      className="text-xs font-semibold text-red-500 hover:text-red-700"
+                      className="rounded-full px-1 text-xs font-semibold text-red-500 hover:text-red-700 pointer-coarse:px-2.5 pointer-coarse:py-2.5"
                       data-tip={t("reader.deleteExtractionTitle")}
                     >
                       {t("common.delete")}
@@ -11511,40 +11723,6 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   shows Expand once it holds a conversation. */}
               {(bubble.kind === "visualize" ? bubble.conversation.length > 0 : bubble.text || bubble.conversation.length > 0) &&
                 expandButton("explain")}
-              {!bubble.streaming && !bubble.busy && bubble.anchor && (
-                <button
-                  onClick={() => void regenerateBubble()}
-                  data-track={`${bubble.kind}-regenerate`}
-                  className={CARD_ACTION}
-                  aria-label={t("common.regenerate")}
-                  data-tip={t(
-                    bubble.kind === "analyze"
-                      ? "reader.regenerateAnalysisTitle"
-                      : bubble.kind === "visualize"
-                        ? "reader.regenerateVisualizationTitle"
-                        : "reader.regenerateExplanationTitle",
-                  )}
-                >
-                  <RegenerateIcon size={13} />
-                </button>
-              )}
-              {bubble.noteId && !bubble.streaming && (
-                <button
-                  onClick={() => void deleteExplain()}
-                  data-track={`${bubble.kind}-delete`}
-                  className={CARD_ACTION}
-                  aria-label={t("common.delete")}
-                  data-tip={t(
-                    bubble.kind === "analyze"
-                      ? "reader.deleteAnalysisTitle"
-                      : bubble.kind === "visualize"
-                        ? "reader.deleteVisualizeTitle"
-                        : "reader.deleteExplainTitle",
-                  )}
-                >
-                  <TrashIcon size={13} />
-                </button>
-              )}
               <button
                 onClick={closeExplain}
                 data-track={`${bubble.kind}-close`}
@@ -11556,8 +11734,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               </button>
             </span>
           </div>
-          {bubble.error ? (
-            <p className="text-sm text-red-600">{bubble.error}</p>
+          {/* A failure keeps the words that had arrived, the line under them. */}
+          {bubble.error && !bubble.text.trim() ? (
+            <p className="text-sm break-words text-red-600">{bubble.error}</p>
           ) : bubble.declined !== null ? (
             <div className="min-h-0 flex-1 overflow-y-auto text-sm text-sand-700">
               <p className="font-semibold">{t("reader.visualizeDeclined")}</p>
@@ -11567,6 +11746,11 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           ) : bubble.text ? (
             <div ref={explainBodyRef} className="min-h-0 flex-1 overflow-y-auto text-sm">
               <Markdown>{bubble.text}</Markdown>
+              {bubble.error && (
+                <p role="alert" className="mt-2 text-[12px] font-medium break-words text-red-600">
+                  {bubble.error}
+                </p>
+              )}
               {bubble.runError && (
                 <p data-run-error role="alert" className="mt-2 text-[12px] font-medium text-red-600">
                   {bubble.runError}
@@ -11603,6 +11787,14 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 />
               )}
               {continuePill("explain", bubble, bubble.kind, bubble.kind === "visualize" ? "ml-auto" : "")}
+              <CardMore items={bubbleMore(bubble)} className={CARD_ACTION} />
+            </div>
+          )}
+          {/* No foot row (a failed or declined run): the ⋯ alone, so
+              Regenerate stays in reach. */}
+          {!(bubble.noteId && !bubble.streaming && !bubble.error && bubble.declined === null) && !bubble.streaming && (
+            <div className="mt-2 flex shrink-0 justify-end empty:hidden">
+              <CardMore items={bubbleMore(bubble)} className={CARD_ACTION} />
             </div>
           )}
           {bubble.declined === null && toolChatFoot("explain", bubble, bubble.kind)}
@@ -11660,28 +11852,6 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 </button>
               )}
               {simplifyCard.conversation.length > 0 && expandButton("simplify")}
-              {!simplifyCard.streaming && !simplifyCard.busy && (
-                <button
-                  onClick={() => void regenerateSimplify()}
-                  data-track="simplify-regenerate"
-                  className={CARD_ACTION}
-                  aria-label={t("common.regenerate")}
-                  data-tip={t("reader.regenerateSimplifyTitle")}
-                >
-                  <RegenerateIcon size={13} />
-                </button>
-              )}
-              {simplifyCard.noteId && !simplifyCard.streaming && (
-                <button
-                  onClick={() => void deleteSimplify()}
-                  data-track="simplify-delete"
-                  className={CARD_ACTION}
-                  aria-label={t("common.delete")}
-                  data-tip={t("reader.deleteSimplifyTitle")}
-                >
-                  <TrashIcon size={13} />
-                </button>
-              )}
               <button
                 onClick={closeSimplify}
                 data-track="simplify-close"
@@ -11693,8 +11863,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               </button>
             </span>
           </div>
-          {simplifyCard.error ? (
-            <p className="text-sm text-red-600">{simplifyCard.error}</p>
+          {/* A failure keeps the words that had arrived, the line under them. */}
+          {simplifyCard.error && !simplifyCard.text.trim() ? (
+            <p className="text-sm break-words text-red-600">{simplifyCard.error}</p>
           ) : (
           <div ref={simplifyBodyRef} className="min-h-0 flex-1 overflow-y-auto">
           {simplifyCard.sentences ? (
@@ -11730,6 +11901,11 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               )}
             </p>
           )}
+          {simplifyCard.error && (
+            <p role="alert" className="mt-2 text-[12px] font-medium break-words text-red-600">
+              {simplifyCard.error}
+            </p>
+          )}
           {simplifyCard.runError && (
             <p data-run-error role="alert" className="mt-2 text-[12px] font-medium text-red-600">
               {simplifyCard.runError}
@@ -11760,6 +11936,13 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 className="ml-auto"
               />
               {continuePill("simplify", simplifyCard, "simplify")}
+              <CardMore items={simplifyMore(simplifyCard)} className={CARD_ACTION} />
+            </div>
+          )}
+          {/* No foot row (a failed run): the ⋯ alone, so Regenerate stays in reach. */}
+          {!(simplifyCard.noteId && !simplifyCard.streaming && !simplifyCard.error) && !simplifyCard.streaming && (
+            <div className="mt-2 flex shrink-0 justify-end empty:hidden">
+              <CardMore items={simplifyMore(simplifyCard)} className={CARD_ACTION} />
             </div>
           )}
           {toolChatFoot("simplify", simplifyCard, "simplify")}
@@ -12090,17 +12273,6 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             </span>
             <span className="flex shrink-0 items-center gap-0.5">
               {assistantChat.messages.length > 0 && expandButton("assistant")}
-              {assistantChat.noteId && (
-                <button
-                  onClick={deleteAssistantConversation}
-                  data-track="assistant-card-delete"
-                  className={CARD_ACTION}
-                  aria-label={t("common.delete")}
-                  data-tip={t("reader.deleteConversationTitle")}
-                >
-                  <TrashIcon size={13} />
-                </button>
-              )}
               <button
                 onClick={closeAssistantChat}
                 data-track="assistant-card-close"
@@ -12215,6 +12387,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       <Presence show={distillOpen} exit="fade">
       {distillOpen && (
         <DistillPage
+          documentId={documentId}
           distillations={allDistillations}
           shownId={distillShownId}
           running={distillRun}
@@ -12233,8 +12406,8 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           }}
           onAsk={() => setDistillShownId(null)}
           onClose={closeDistillPage}
-          onDelete={(id) => void deleteDistillation(id)}
-          onDeleteMany={(ids) => void deleteDistillations(ids)}
+          onDelete={(id) => deleteDistillation(id)}
+          onDeleteMany={(ids) => deleteDistillations(ids)}
           onJump={jumpToQuote}
           onAddNote={addQuoteNote}
           onAddSelection={(text, quote) => addSelectionNote(text, quote)}
