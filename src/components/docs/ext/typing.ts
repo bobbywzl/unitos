@@ -250,6 +250,21 @@ const DocsTyping = Extension.create({
             closeEdit(view);
             return false;
           },
+          // Viewing: a press on words already selected starts a new
+          // selection there. A drag of the words would have nowhere to land.
+          mousedown(view, event) {
+            if (view.editable || event.button !== 0 || event.shiftKey || event.detail > 1) return false;
+            const doc = view.dom.ownerDocument;
+            const sel = doc.getSelection();
+            if (!sel || sel.isCollapsed || sel.rangeCount === 0) return false;
+            const { clientX: x, clientY: y } = event;
+            const rects = Array.from(sel.getRangeAt(0).getClientRects());
+            if (!rects.some((r) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom)) return false;
+            const at = doc.caretRangeFromPoint?.(x, y);
+            if (at) sel.collapse(at.startContainer, at.startOffset);
+            else sel.collapseToStart();
+            return false;
+          },
           // A double-click selects the word the Docs way: the word only, no
           // trailing space; don't and well-known are one word.
           dblclick(view) {
