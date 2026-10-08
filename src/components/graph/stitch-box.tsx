@@ -679,32 +679,36 @@ function ResultLine({
   const newlySeen = ids.filter((id) => recommendedLinkIds.has(id) && !seen.has(id));
   if (newlySeen.length > 0) setSeen(new Set([...seen, ...newlySeen]));
   const waiting = ids.length === 0 ? result.linkCount : ids.filter((id) => recommendedLinkIds.has(id) || !seen.has(id)).length;
+  // A link the answer proposed again that still waits under Recommended
+  // links: the reply says so, and Review opens the list (WALK6-04).
+  const waitingAgain = (result.record?.links ?? []).filter((l) => l.status === "existing" && recommendedLinkIds.has(l.id)).length;
+  const review = onShowRecommended && (waiting > 0 || waitingAgain > 0) && (
+    <button
+      onClick={onShowRecommended}
+      data-track="stitch-review-links"
+      data-tip={t("stitch.stitchReviewLinksTitle")}
+      className="shrink-0 rounded-full border border-line px-3 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+    >
+      {t("stitch.stitchReviewLinks")}
+    </button>
+  );
   return (
     <div className="flex flex-col gap-1 text-xs text-sand-600">
       {!ran && <p className="text-red-500">{t("stitch.stitchNotEnoughRead")}</p>}
       {ran && result.linkCount === 0 && !result.document && (
-        <p className="text-sand-500">{t("stitch.stitchNothingStored")}</p>
-      )}
-      {result.linkCount > 0 && waiting === 0 && (
-        <p data-stitch-links-reviewed>
-          {t(result.linkCount === 1 ? "stitch.stitchLinksReviewed1" : "stitch.stitchLinksReviewedN", { n: result.linkCount })}
+        <p className="flex items-center gap-2 text-sand-500">
+          <span>{t("stitch.stitchNothingStored")}</span>
+          {review}
         </p>
       )}
-      {result.linkCount > 0 && waiting > 0 && (
-        <p className="flex items-center gap-2">
+      {result.linkCount > 0 && (
+        <p className="flex items-center gap-2" data-stitch-links-reviewed={waiting === 0 ? "" : undefined}>
           <span>
-            {t(waiting === 1 ? "stitch.stitchLinksMade1" : "stitch.stitchLinksMadeN", { n: waiting })}
+            {waiting === 0
+              ? t(result.linkCount === 1 ? "stitch.stitchLinksReviewed1" : "stitch.stitchLinksReviewedN", { n: result.linkCount })
+              : t(waiting === 1 ? "stitch.stitchLinksMade1" : "stitch.stitchLinksMadeN", { n: waiting })}
           </span>
-          {onShowRecommended && (
-            <button
-              onClick={onShowRecommended}
-              data-track="stitch-review-links"
-              data-tip={t("stitch.stitchReviewLinksTitle")}
-              className="shrink-0 rounded-full border border-line px-3 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-            >
-              {t("stitch.stitchReviewLinks")}
-            </button>
-          )}
+          {review}
         </p>
       )}
       {result.document && (
@@ -718,6 +722,7 @@ function ResultLine({
           >
             {t("stitch.stitchOpenDocument")}
           </button>
+          {result.linkCount === 0 && review}
         </p>
       )}
       <DocumentsRead documents={result.documents} readCount={readCount} />
