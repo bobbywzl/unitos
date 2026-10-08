@@ -1,8 +1,8 @@
 {
  "total": {
-  "f1": 0.938,
+  "f1": 0.939,
   "precision": 0.891,
-  "recall": 0.991
+  "recall": 0.992
  },
  "pages": {
   "100noticias.com-millones.html": {
@@ -486,9 +486,9 @@
    "fn": 0
   },
   "seelenradio.de.leo.html": {
-   "tp": 2,
+   "tp": 3,
    "fp": 0,
-   "fn": 1
+   "fn": 0
   },
   "shingon-reiki.de.schamanismus.html": {
    "tp": 3,
