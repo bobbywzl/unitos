@@ -9,7 +9,7 @@ import { useModalFocus } from "@/lib/escape-layers";
 // The ask before a repeat add (SPEC.md §15): the account already has a
 // document with this file or this source. Every add is its own document, so
 // Add again makes a second one, parsed again; Open the one I have opens the
-// first match; Cancel adds nothing. One ask for every add path: the upload
+// first match; Cancel (the dialog's ✕) adds nothing. One ask for every add path: the upload
 // box shows it in place of its progress, the document bar, the share page,
 // and the offline queue (QueueSync) show it as a dialog.
 
@@ -51,10 +51,23 @@ export function DuplicateAsk({
       : t("panes.duplicateWhere", { title: first.title, project });
   return (
     <div className="flex flex-col gap-3" data-duplicate-ask>
+      {/* As a dialog, ✕ at the top right is Cancel, as the box's ✕ is
+          (NAV13-15); Escape and a click outside are Cancel too. */}
       {!inBox && (
-        <h2 id="duplicate-ask-title" className="font-display text-[17px] text-sand-900">
-          {t("panes.duplicateTitle")}
-        </h2>
+        <div className="flex items-start gap-2">
+          <h2 id="duplicate-ask-title" className="font-display text-[17px] text-sand-900">
+            {t("panes.duplicateTitle")}
+          </h2>
+          <button
+            onClick={() => onChoose("cancel")}
+            aria-label={t("common.cancel")}
+            data-tip={t("common.cancel")}
+            data-track="duplicate-cancel"
+            className="-mt-1 -mr-1.5 ml-auto flex size-8 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
+          >
+            ✕
+          </button>
+        </div>
       )}
       <p className="text-[13px] leading-relaxed text-sand-700">
         {where} {t("panes.duplicateAsk")}
@@ -74,15 +87,6 @@ export function DuplicateAsk({
         >
           {t("panes.duplicateOpen")}
         </button>
-        {!inBox && (
-          <button
-            onClick={() => onChoose("cancel")}
-            data-track="duplicate-cancel"
-            className="ml-auto rounded-full px-3.5 py-1.5 text-xs text-sand-600 hover:bg-clay-100 hover:text-clay-800"
-          >
-            {t("common.cancel")}
-          </button>
-        )}
       </div>
     </div>
   );
