@@ -63,7 +63,7 @@ async function goneEvent(noteId: string, tx: Prisma.TransactionClient, lock: boo
 }
 
 /** Where a note kept whole in a removal event stood. */
-function keptHome(event: EventRow, kept: KeptNote, sectionTitle: string | null, keptAs: string | null): GoneHome {
+function keptHome(event: EventRow, kept: Omit<KeptNote, "sideChats">, sectionTitle: string | null, keptAs: string | null): GoneHome {
   return {
     eventId: event.id,
     notebookId: event.notebookId,
