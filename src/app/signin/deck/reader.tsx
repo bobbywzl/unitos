@@ -346,7 +346,7 @@ export function ReaderFrame() {
                       animation: "si-r-ph 18s linear infinite",
                     }}
                   >
-                    Tell the assistant what to do with this selection…
+                    Tell the assistant what to do with the selected words…
                   </span>
                   <span
                     style={{

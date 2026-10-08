@@ -68,3 +68,33 @@ export function failureLine(err: unknown, t: TFunc): string {
   }
   return err instanceof Error && err.message ? err.message : t("assistant.failedServer");
 }
+
+/** A call that is not a model call failed (the conversations list, a
+    conversation, an attachment, a comment): a reason the route worded for
+    the reader (any status but 500) keeps its words; a failure (500), an
+    answer with no words, or a page from a proxy reads as `plain`, the app's
+    own line ("Not saved. Try again.", "Not loaded. Try again."), and the
+    status and the server's text go to the console. */
+export function callFailure(res: Response, body: unknown, plain: string): Error {
+  const said =
+    body !== null && typeof body === "object" && "error" in body && typeof body.error === "string" && body.error
+      ? body.error
+      : null;
+  if (said && res.status !== 500) return new Error(said);
+  console.error("assistant request", res.url, res.status, said ?? "");
+  return new Error(plain);
+}
+
+// A status line a helper outside the assistant throws (lib/images.ts).
+const STATUS_WORDS = /^request failed \(\d+\)$/i;
+
+/** The line for a failure caught around such a call: a dropped connection
+    or a bare status line reads as `plain` (the technical text to the
+    console); any other reason keeps its words. */
+export function callLine(err: unknown, plain: string): string {
+  if (err instanceof Error && err.message && !(err instanceof TypeError) && !NETWORK_WORDS.test(err.message) && !STATUS_WORDS.test(err.message)) {
+    return err.message;
+  }
+  console.error("assistant request", err);
+  return plain;
+}

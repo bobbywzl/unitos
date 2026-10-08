@@ -68,7 +68,7 @@ import { RatingButtons } from "@/components/rating-buttons";
 import { LoadingDots, ThinkingIndicator } from "@/components/thinking";
 import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 import { deleteConversationWithUndo } from "@/components/assistant/conversation-delete";
-import { failureLine, modelFetch, noReason } from "@/components/assistant/failure";
+import { callFailure, callLine, failureLine, modelFetch, noReason } from "@/components/assistant/failure";
 import { SEND_CLASS } from "@/components/assistant/decision-classes";
 import { KeptTextarea } from "@/components/kept-field";
 import { AnswerMarkdown } from "@/components/assistant/answer-markdown";
@@ -313,9 +313,7 @@ async function attachToText(file: File, t: TFunc): Promise<string> {
     body: file,
   });
   const json = (await res.json().catch(() => null)) as { text?: string; error?: string } | null;
-  if (!res.ok || typeof json?.text !== "string") {
-    throw new Error(json?.error ?? t("assistant.requestFailedStatus", { status: res.status }));
-  }
+  if (!res.ok || typeof json?.text !== "string") throw callFailure(res, json, t("common.notLoaded"));
   return json.text;
 }
 
@@ -331,10 +329,7 @@ async function attachMediaToText(file: File, t: TFunc): Promise<string> {
       method: "POST",
       body: file.slice(sent, sent + UPLOAD_CHUNK_BYTES),
     });
-    if (!res.ok) {
-      const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-      throw new Error(detail?.error ?? t("assistant.requestFailedStatus", { status: res.status }));
-    }
+    if (!res.ok) throw callFailure(res, await res.json().catch(() => null), t("common.notLoaded"));
   }
   const res = await fetch("/api/assistant/attach-media", {
     method: "POST",
@@ -342,9 +337,7 @@ async function attachMediaToText(file: File, t: TFunc): Promise<string> {
     body: JSON.stringify({ uploadId, name: capFileName(file.name), mimeType: file.type || undefined }),
   });
   const json = (await res.json().catch(() => null)) as { text?: string; error?: string } | null;
-  if (!res.ok || typeof json?.text !== "string") {
-    throw new Error(json?.error ?? t("assistant.requestFailedStatus", { status: res.status }));
-  }
+  if (!res.ok || typeof json?.text !== "string") throw callFailure(res, json, t("common.notLoaded"));
   return json.text;
 }
 
@@ -362,9 +355,7 @@ async function attachDriveFile(file: DrivePickedFile, token: string, t: TFunc): 
     body: JSON.stringify({ fileId: file.id, name: file.name, mimeType: file.mimeType }),
   });
   const json = (await res.json().catch(() => null)) as (DriveAttached & { error?: string }) | null;
-  if (!res.ok || !json || (json.kind !== "file" && json.kind !== "image")) {
-    throw new Error(json?.error ?? t("assistant.requestFailedStatus", { status: res.status }));
-  }
+  if (!res.ok || !json || (json.kind !== "file" && json.kind !== "image")) throw callFailure(res, json, t("common.notLoaded"));
   return json;
 }
 
@@ -649,10 +640,10 @@ export function AssistantPanel({
     try {
       const res = await fetch(`/api/assistant/conversation?notebookId=${encodeURIComponent(notebookId)}&list=1`);
       const json = (await res.json().catch(() => null)) as { conversations?: ConversationEntry[]; error?: string } | null;
-      if (!res.ok || !json) throw new Error(json?.error ?? t("assistant.requestFailedStatus", { status: res.status }));
+      if (!res.ok || !json) throw callFailure(res, json, t("common.notLoaded"));
       setConversations(json.conversations ?? []);
     } catch (err) {
-      setListError(err instanceof Error ? err.message : t("common.requestFailed"));
+      setListError(callLine(err, t("common.notLoaded")));
     }
   }
   function openList() {
@@ -673,16 +664,14 @@ export function AssistantPanel({
         `/api/assistant/conversation?notebookId=${encodeURIComponent(notebookId)}&conversationNoteId=${encodeURIComponent(id)}`,
       );
       const json = (await res.json().catch(() => null)) as (StoredConversation & { error?: string }) | null;
-      if (!res.ok || !json?.conversationNoteId) {
-        throw new Error(json?.error ?? t("assistant.requestFailedStatus", { status: res.status }));
-      }
+      if (!res.ok || !json?.conversationNoteId) throw callFailure(res, json, t("common.notLoaded"));
       showConversation({
         noteId: json.conversationNoteId,
         turns: toTurns(json.turns ?? []),
         sideChats: toSideChats(json.sideChats ?? []),
       });
     } catch (err) {
-      setListError(err instanceof Error ? err.message : t("common.requestFailed"));
+      setListError(callLine(err, t("common.notLoaded")));
     }
   }
 
@@ -814,7 +803,7 @@ export function AssistantPanel({
         }),
       });
       const json = (await res.json().catch(() => null)) as (AnswerComment & { error?: string }) | null;
-      if (!res.ok || !json?.id) throw new Error(json?.error ?? t("assistant.commentFailed"));
+      if (!res.ok || !json?.id) throw callFailure(res, json, t("common.notSaved"));
       setComments((list) => [...list, json]);
       writeCommentDraft(draftKey, "");
       setCommentQuote(null);
@@ -822,7 +811,7 @@ export function AssistantPanel({
       // The Annotations tab lists the comment under the conversation.
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("assistant.commentFailed"));
+      setError(callLine(err, t("common.notSaved")));
     } finally {
       setCommentBusy(false);
     }
@@ -904,7 +893,7 @@ export function AssistantPanel({
       }, t);
       if (!res.ok || !res.body) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(detail?.error ?? t("assistant.requestFailedStatus", { status: res.status }));
+        throw new Error(detail?.error ?? noReason(res, t));
       }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -931,7 +920,7 @@ export function AssistantPanel({
       });
       // Stopped, not failed: the card goes back to the stored summary, if any.
       if (controller.signal.aborted) return;
-      setRecError(err instanceof Error ? err.message : t("common.requestFailed"));
+      setRecError(failureLine(err, t));
     } finally {
       if (recAbortRef.current === controller) recAbortRef.current = null;
       setRecBusy(null);
@@ -1019,7 +1008,7 @@ export function AssistantPanel({
       setAttachments((list) => list.map((a) => (a.key === key ? done : a)));
     } catch (err) {
       setAttachments((list) => list.filter((a) => a.key !== key));
-      setError(err instanceof Error ? err.message : t("common.requestFailed"));
+      setError(callLine(err, t("common.notLoaded")));
     }
   }
 
@@ -1074,7 +1063,7 @@ export function AssistantPanel({
           setAttachments((list) => list.map((a) => (a.key === key ? chip : a)));
         } catch (err) {
           setAttachments((list) => list.filter((a) => a.key !== key));
-          setError(err instanceof Error ? err.message : t("common.requestFailed"));
+          setError(callLine(err, t("common.notLoaded")));
         }
       })();
     }
