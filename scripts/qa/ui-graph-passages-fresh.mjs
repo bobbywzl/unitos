@@ -48,6 +48,13 @@ try {
   await page.locator(".react-flow__node").first().waitFor({ timeout: 60000 });
   await page.locator('[data-track="graph-documents"]').first().click();
   await page.locator("[data-graph-documents-list]").waitFor({ timeout: 10000 });
+  // [chrome6] VIEW6-04: a row is one line until opened; open the row that holds the link.
+  await page.locator("[data-graph-documents-row]").first().waitFor({ timeout: 10000 });
+  for (const head of await page.locator("[data-graph-documents-row]:not([data-open]) [data-row-head]").all()) {
+    if ((await page.locator('[data-graph-documents-link="rev3-l1"]').count()) > 0) break;
+    await head.click();
+    await page.waitForTimeout(300);
+  }
   await page.locator('[data-graph-documents-link="rev3-l1"]').first().click();
   const passages = page.locator("[data-link-passages]");
   await passages.waitFor({ timeout: 10000 });
