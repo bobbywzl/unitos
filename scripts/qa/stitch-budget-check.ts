@@ -839,7 +839,12 @@ check("replyLanguage command: a mixed or short command keeps the UI's", replyLan
   // ANS6-07: a block and its word-for-word copy.
   const para = "The more a man suffers, the more he knows of the world; suffering is the condition of knowledge.";
   check("copyPair: equal texts, folded, are a copy", copyPair(para, `  ${para.toUpperCase()} `));
-  check("copyPair: a block that holds the other whole is a copy", copyPair(para, `${para} And so on to the next sentence.`));
+  check("copyPair: a generated block that holds the other whole is a copy", copyPair(para, `${para} And so on to the next sentence.`, true));
+  check("copyPair: a block that holds the other whole at 0.8 of its length is a copy", copyPair(para, `${para} And so on.`));
+  // REV7-05: a commentary that quotes a passage whole is a link, not a copy.
+  const quoted = "God is dead. God remains dead. And we have killed him.";
+  const commentary = `Nietzsche's madman says: "${quoted}" The line is not a celebration; Heidegger reads it as the end of the suprasensory world, and the madman's audience laughs because it has not understood.`;
+  check("copyPair: a commentary that quotes a passage whole is not a copy (REV7-05)", !copyPair(quoted, commentary) && copyPair(quoted, commentary, true));
   check("copyPair: a short heading inside a passage is not", !copyPair("On Suffering", "On Suffering of the World, and much more besides that."));
   check("copyPair: two different passages are not", !copyPair(para, "Pity is the practice of nihilism, and it multiplies suffering."));
   const blk = (id: string, alias: string, documentId: string, text: string) => ({ id, alias, type: "PARAGRAPH", text, documentId });

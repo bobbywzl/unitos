@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AnnotationItem, LinkIn, LinkOut, SectionView } from "@/lib/types";
 import { api } from "@/lib/api";
 import { linkPath } from "@/lib/link-scope";
@@ -232,6 +232,7 @@ export function AnnotationsPanel({
   // Remove hides the link and keeps its row (WALK5-01): Link removed · Undo
   // shows for 10 seconds, and History's Restore does the same later.
   const [removed, setRemoved] = useState<string | null>(null);
+  const removeEdit = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!removed) return;
     const timer = setTimeout(() => setRemoved(null), 10_000);
@@ -246,14 +247,17 @@ export function AnnotationsPanel({
     await mutate(id, async () => {
       // Offline the removal waits in the queue: Undo comes only once the
       // server has hidden the link.
-      const result = await api<{ queued?: true }>(linkPath(id, notebookId), "DELETE");
+      const result = await api<{ queued?: true; editId?: string }>(linkPath(id, notebookId), "DELETE");
+      removeEdit.current = result.editId;
       done = !result.queued;
     });
     if (done) setRemoved(id);
   }
   async function undoRemove(id: string) {
     await mutate(id, async () => {
-      await api(`/api/links/${encodeURIComponent(id)}/hidden?notebookId=${encodeURIComponent(notebookId)}`, "DELETE");
+      // Undo names its Remove: another editor's later removal stays (REV7-06).
+      const edit = removeEdit.current ? `&edit=${encodeURIComponent(removeEdit.current)}` : "";
+      await api(`/api/links/${encodeURIComponent(id)}/hidden?notebookId=${encodeURIComponent(notebookId)}${edit}`, "DELETE");
       setRemoved(null);
     });
   }

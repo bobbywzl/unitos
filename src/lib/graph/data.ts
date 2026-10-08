@@ -6,6 +6,7 @@ import { documentsGraph, listGenerated } from "@/lib/graph/view";
 import { SKELETON_VERSION } from "@/lib/graph/skeleton";
 import type { Person } from "@/lib/person";
 import type { GeneratedDocumentView, GraphEdge, GraphEdgeLink } from "@/lib/types";
+import { ATTACH_ORDER } from "@/lib/document-order";
 
 // The graph's data, loaded when the graph opens (GET /api/notebooks/<id>/
 // graph, SPEC.md §13): the workspace page no longer carries it, so a page
@@ -65,7 +66,7 @@ export async function graphData(
 ): Promise<GraphData> {
   const attached = await db.notebookDocument.findMany({
     where: { notebookId },
-    orderBy: { document: { createdAt: "asc" } },
+    orderBy: ATTACH_ORDER,
     select: { document: { select: { id: true, title: true, generatedCommand: true, video: { select: { id: true } } } } },
   });
   // A generated document's kind tells its provenance links apart (SPEC.md

@@ -59,6 +59,7 @@ import { estTokens } from "@/lib/tokens";
 import type { StitchCommandKind, StitchDocument, StitchRecord, StitchResult } from "@/lib/types";
 import { transcriptIsStale } from "@/lib/video/types";
 import { COMMAND_CHAIN } from "@/lib/graph/generated-label";
+import { ATTACH_ORDER } from "@/lib/document-order";
 
 // Stitch (SPEC.md §22): one command over the project's documents, from the
 // graph — the documents the reader selected in the graph, or every attached
@@ -426,7 +427,7 @@ export async function loadDocuments(
     },
     // The id breaks a tie of two documents added in one millisecond, so
     // the letters, the aliases, and the cached prefix stay the same.
-    orderBy: [{ document: { createdAt: "asc" } }, { documentId: "asc" }],
+    orderBy: ATTACH_ORDER,
     include: {
       document: {
         select: {
@@ -2052,6 +2053,7 @@ export async function stitch(input: {
   const existingLinkIds = new Set<string>();
   const recordLinks: StitchRecord["links"] = [];
   const titleOf = new Map(rendered.map((r) => [r.doc.id, r.doc.title]));
+  const generatedIds = new Set(rendered.filter((r) => r.doc.generatedCommand).map((r) => r.doc.id));
   // A link between a passage and its word-for-word copy is not stored, and
   // an end on a copy moves to the original (ANS6-07).
   const originals = result.data.links.length > 0 ? copyOriginals(rendered) : new Map<string, DocBlock>();
@@ -2066,7 +2068,11 @@ export async function stitch(input: {
     const named = [resolveQuote(blockByRef, link.fromBlockId, link.fromQuote), resolveQuote(blockByRef, link.toBlockId, link.toQuote)];
     const copied =
       named[0] !== null && named[1] !== null &&
-      copyPair(blockByRef.get(named[0].blockId)?.text ?? "", blockByRef.get(named[1].blockId)?.text ?? "");
+      copyPair(
+        blockByRef.get(named[0].blockId)?.text ?? "",
+        blockByRef.get(named[1].blockId)?.text ?? "",
+        generatedIds.has(named[0].documentId) || generatedIds.has(named[1].documentId),
+      );
     const from = original(named[0]);
     const to = original(named[1]);
     const sides = { from: from ? (titleOf.get(from.documentId) ?? "") : "", to: to ? (titleOf.get(to.documentId) ?? "") : "" };
@@ -2192,17 +2198,22 @@ export async function stitch(input: {
 // Folded chars a block needs before one that holds it whole counts as its
 // copy (copyPair): a short heading inside a long passage is not a copy.
 const COPY_MIN = 40;
+// Outside a generated document, the share of the longer block the shorter
+// must fill for containment to count as a copy (REV7-05): a commentary that
+// quotes a passage whole is a link, not a copy.
+const COPY_SHARE = 0.8;
 
 /** True when one block is a word-for-word copy of the other (ANS6-07): the
-    folded texts are equal, or the longer holds the shorter whole and the
-    shorter has COPY_MIN folded chars or more. */
-export function copyPair(a: string, b: string): boolean {
+    folded texts are equal, or the longer holds the shorter whole, the
+    shorter has COPY_MIN folded chars or more, and either an end lies in a
+    generated document or the shorter is COPY_SHARE of the longer. */
+export function copyPair(a: string, b: string, generated = false): boolean {
   const x = foldQuote(a);
   const y = foldQuote(b);
   if (!x || !y) return false;
   if (x === y) return true;
   const [short, long] = x.length <= y.length ? [x, y] : [y, x];
-  return short.length >= COPY_MIN && long.includes(short);
+  return short.length >= COPY_MIN && (generated || short.length >= COPY_SHARE * long.length) && long.includes(short);
 }
 
 /** The original of every copied block of the documents read (ANS6-07), by

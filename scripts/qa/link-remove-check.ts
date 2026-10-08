@@ -2,7 +2,8 @@
 // bring it back (WALK5-01, WALK5-08); an older tab's Remove of a link that
 // must stay for another account answers 409 Reload and hides nothing
 // (REV5-01); Remove hides in the project it was pressed in (REV6-01); a
-// Dismiss that hides is recorded and restores (REV6-02). Runs on a COPY of the database seeded with the round 3, 4 and 5
+// Dismiss that hides is recorded and restores (REV6-02); Undo names its
+// Remove and leaves another editor's later removal (REV7-06). Runs on a COPY of the database seeded with the round 3, 4 and 5
 // review seeds (.qa-tmp/stitch/r3/rev/seed.sql, seed2.sql, r4/rev/seed4.sql,
 // r5/audit/rev/seed5.sql, r6/audit/rev/seed6.sql): A (rev3-sa) owns P (rev3-p) and Q, B (rev3-sb)
 // owns Z (rev5-z) holding rev4-d3/d4 too, C (rev3-sc) edits P and Z, V
@@ -196,6 +197,21 @@ async function main() {
   const rec2 = await link({ by: U.A, notebookId: P, ...d78, recommended: true });
   const r7c = await call("A", "DELETE", `/api/links/${rec2}?notebookId=${P}`);
   check("a Dismiss nobody replied on still deletes and records nothing", r7c.status === 200 && !(await db.docLink.findUnique({ where: { id: rec2 } })) && !(await removeEdit(rec2)));
+
+  // ── 8. Undo names its Remove (REV7-06) ─────────────────────────────────
+  console.log("== Undo after another editor's later removal");
+  const raced = await link({ by: U.A, notebookId: P, ...d34 });
+  const r8 = await call("A", "DELETE", `/api/links/${raced}?notebookId=${P}`);
+  const edit8 = (JSON.parse(r8.text) as { editId?: string }).editId ?? "";
+  check("A removes: 200 with an editId", r8.status === 200 && edit8 !== "", r8.text.slice(0, 160));
+  const c8 = await call("C", "DELETE", `/api/links/${raced}/hidden?notebookId=${P}`);
+  const c8b = await call("C", "DELETE", `/api/links/${raced}?notebookId=${P}`);
+  check("C restores from History, then removes it: 200, 200, hidden by C", c8.status === 200 && c8b.status === 200 && (await db.docLinkHidden.findFirst({ where: { docLinkId: raced } }))?.userId === U.C, `${c8.status} ${c8b.status}`);
+  const u8 = await call("A", "DELETE", `/api/links/${raced}/hidden?notebookId=${P}&edit=${edit8}`);
+  check("A's Undo with A's editId: 409, C's removal stays", u8.status === 409 && JSON.stringify(await hiddenIn(raced)) === JSON.stringify([P]) && !(await graphLinks("A", P)).includes(raced), `${u8.status} ${u8.text.slice(0, 160)}`);
+  const edit8c = (await removeEdit(raced))?.id ?? "";
+  const u8c = await call("C", "DELETE", `/api/links/${raced}/hidden?notebookId=${P}&edit=${edit8c}`);
+  check("C's Undo with C's editId: 200, the link draws again", u8c.status === 200 && (await hiddenIn(raced)).length === 0 && (await graphLinks("A", P)).includes(raced), String(u8c.status));
 
   // ── Every reply this run did not make is untouched ───────────────────────
   check("Reply rows: only this run's 3 were added", (await db.reply.count()) === replies0 + 3);

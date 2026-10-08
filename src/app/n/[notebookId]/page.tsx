@@ -75,7 +75,7 @@ import { isTextStyle, type TextStyle } from "@/lib/text-style";
 import { coreBlocks } from "@/lib/anchors/layer";
 import { READING_LINE_PX, type BlockPosition } from "@/lib/reading-position";
 import { storedPdfPages } from "@/lib/pdf-pages";
-import { documentEditedAt, type DocumentKind } from "@/lib/document-order";
+import { ATTACH_ORDER, documentEditedAt, type DocumentKind } from "@/lib/document-order";
 
 export const dynamic = "force-dynamic";
 
@@ -110,7 +110,7 @@ export default async function NotebookPage(props: {
       documents: {
         // Attach order. Without it the rows come back in scan order, and the
         // first row picks the document a bare project URL opens.
-        orderBy: { document: { createdAt: "asc" } },
+        orderBy: ATTACH_ORDER,
         include: {
           document: {
             select: {

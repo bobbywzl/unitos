@@ -7,7 +7,7 @@ import { sourceInputSchema } from "@/lib/anchors/input";
 import { MAX_SEGMENTS, passageSources, resolvePassage } from "@/lib/anchors/passage";
 import { layerBlocks } from "@/lib/anchors/layer";
 import { MAX_NOTE_QUOTES, noteQuoteSchema, resolveNoteQuotes, resolveNoteQuotesKeeping } from "@/lib/anchors/note-quotes";
-import { QUOTES_KEPT_HEADER, REPLAY_HEADER, REPLAY_MAX_AGE_MS } from "@/lib/constants";
+import { QUOTES_KEPT_HEADER, REPLAY_HEADER, REPLAY_SKEW_MS } from "@/lib/constants";
 import type { ResolvedAnchor } from "@/lib/anchors/resolve";
 import { serverT } from "@/lib/i18n/server";
 import { normalizeNoteOrders } from "@/lib/order";
@@ -243,9 +243,12 @@ export async function POST(req: Request) {
   // as plain quoted text with no source, the note saves, and the answer says
   // how many were kept so (QUOTES_KEPT_HEADER). Online the reader still gets
   // the error and fixes the quote. The header carries the time the record
-  // was queued: only a time in the last 30 days takes this path, and a
-  // note this account saved in the section since then with the same words
-  // is that record's earlier send, answered as saved (REV6-06).
+  // was queued: any whole number of ms takes this path, however old or
+  // however fast the clock that wrote it (REV7-02: a window only dropped
+  // real records; a forged header saves only the caller's own words), and
+  // a note this account saved in the section since then (a minute earlier
+  // for a fast clock) with the same words is that record's earlier send,
+  // answered as saved (REV6-06).
   let quotesKept = 0;
   const replayedAt = replayTime(req.headers.get(REPLAY_HEADER));
   if (data.quotes && replayedAt !== null) {
@@ -336,13 +339,11 @@ export async function POST(req: Request) {
 }
 
 // The time a replayed record was queued, from REPLAY_HEADER: null unless
-// it is a whole number of ms in the last REPLAY_MAX_AGE_MS (a minute of
-// clock skew allowed).
+// it is a whole number of ms. The duplicate lookup starts there, or a
+// minute before now when the queuing clock ran ahead (REPLAY_SKEW_MS).
 function replayTime(header: string | null): Date | null {
   if (!header || !/^\d{1,15}$/.test(header)) return null;
-  const at = Number(header);
-  const now = Date.now();
-  return at <= now + 60_000 && at >= now - REPLAY_MAX_AGE_MS ? new Date(at) : null;
+  return new Date(Math.min(Number(header), Date.now() - REPLAY_SKEW_MS));
 }
 
 // A quote as the note's text shows it: blockquote lines, the boxed

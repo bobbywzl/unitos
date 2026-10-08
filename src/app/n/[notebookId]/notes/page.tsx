@@ -16,6 +16,7 @@ import { NotesPageFrame } from "@/components/outline/annotation-side";
 import { Outline } from "@/components/outline/outline";
 import { billingLinks } from "@/lib/billing/switch";
 import { accountTier } from "@/lib/tiers";
+import { ATTACH_ORDER } from "@/lib/document-order";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,7 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
       collaborators: true,
       // Attach order: the columns of the By document view (SPEC.md §6).
       documents: {
-        orderBy: { document: { createdAt: "asc" } },
+        orderBy: ATTACH_ORDER,
         include: { document: { select: { id: true, title: true } } },
       },
       sections: {

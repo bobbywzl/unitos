@@ -26,11 +26,11 @@ export const ACCOUNT_HEADER = "x-dissect-account";
 // The offline queue marks the writes it replays (lib/offline/queue.ts) with
 // the time the record was queued (ms). A gathered note replayed with a quote
 // that no longer resolves saves with that quote kept as text, and answers
-// how many in QUOTES_KEPT_HEADER (REV5-06); the server takes the mark only
-// from a time in the last REPLAY_MAX_AGE_MS, and a note the same record
-// already saved answers as saved (REV6-06).
+// how many in QUOTES_KEPT_HEADER (REV5-06); the server takes any whole
+// number as the mark (REV7-02), and a note the same record already saved,
+// since the mark or REPLAY_SKEW_MS before now, answers as saved (REV6-06).
 export const REPLAY_HEADER = "x-unitos-replay";
-export const REPLAY_MAX_AGE_MS = 30 * 24 * 3600_000;
+export const REPLAY_SKEW_MS = 60_000;
 export const QUOTES_KEPT_HEADER = "x-unitos-quotes-kept";
 // The visitor id (the onboarding funnel, lib/funnel.ts): a random id the
 // middleware sets on the first page a browser opens, httpOnly, one year. It
