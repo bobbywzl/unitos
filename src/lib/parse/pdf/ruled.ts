@@ -1079,6 +1079,13 @@ function tableOfRegion(region: TableRegion, page: number): Segment {
   headGroups.forEach((group, k) => rows.push(headerRow(group, bounds, built, partial, filledBelow(headGroups.slice(k + 1), bounds), body, drawn)));
   const headerRows = rows.length;
   spanHeadColumns(rows, headerRows);
+  // A head row keeps its pitch to the head row under it, as a body row
+  // does (parse bench finding: synth-paper-html's Table I sets its two
+  // head rows 15.75 pt apart, as its body rows, and the import drew them
+  // 10.9 pt apart). The last head row's step to the body crosses the rule
+  // under the head, whose room the import draws with its own border.
+  const headStarts = headGroups.map((_, k) => headGroups.slice(0, k).reduce((n, g) => n + g.length, 0));
+  keepRowPitch(rows.slice(0, headerRows), headGroups.flat(), headStarts);
   if (body.length > 0) {
     built.push(...body);
     fractionCells(body, separators, region.drawing.rules);
