@@ -10117,9 +10117,12 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       {/* The article's band (SPEC.md §6): Contents at the left and Collapse
           and Extract at the right stand on it, and the text scrolls under
           it, so they never sit on a word. It takes no room: the article
-          starts where it did, its first line just under the band. */}
+          starts where it did, its first line just under the band. On a
+          coarse pointer the buttons are taller (34 px): the band reaches
+          8 px under them and takes those 10 px of room, so no line, at the
+          top or opened mid-article, touches them. */}
       {!split && !transcript && !embedded && !richText && (
-        <div aria-hidden data-article-band className="pointer-events-none sticky top-0 z-[9] -mb-12 h-12 bg-paper print:hidden" />
+        <div aria-hidden data-article-band className="pointer-events-none sticky top-0 z-[9] -mb-12 h-12 bg-paper pointer-coarse:h-[58px] print:hidden" />
       )}
 
       {/* Not in a split pane: the card would sit over the title. Not on a
