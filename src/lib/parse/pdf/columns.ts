@@ -117,15 +117,17 @@ function markSpaces(items: Item[], text: Item[]) {
 // own, it stood after the description under its line (parse loop
 // finding: a LaTeX package's manual sets each option so; a line in a
 // typewriter face set smaller than its default broke away, and its
-// default read after its description). A run that starts where other
-// lines start, past the page's flush-right runs, is a column's line.
+// default read after its description). A run that opens with a label
+// and a colon may run to eight words: a length's default, "Default: .1667em
+// plus .0333em minus .0117em". A run that starts where other lines start,
+// past the page's flush-right runs, is a column's line.
 function joinRightRuns(lines: Line[], page: number): Line[] {
   // The right margin: the farthest line end that two other lines share.
   const ends = lines.map((l) => l.xEnd).filter((x, k, all) => all.filter((o, j) => j !== k && Math.abs(o - x) <= 1).length >= 2);
   if (ends.length === 0) return lines;
   const right = Math.max(...ends);
   const words = (l: Line) => l.text.trim().split(/\s+/).length;
-  const flush = (l: Line) => Math.abs(l.xEnd - right) <= l.size * 0.5 && words(l) <= 4;
+  const flush = (l: Line) => Math.abs(l.xEnd - right) <= l.size * 0.5 && words(l) <= (/^\p{L}+:\s/u.test(l.text.trim()) ? 8 : 4);
   const out = [...lines];
   for (const run of lines) {
     if (!flush(run) || run.cells.length !== 1) continue;
