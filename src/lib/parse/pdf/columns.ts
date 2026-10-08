@@ -120,7 +120,11 @@ function markSpaces(items: Item[], text: Item[]) {
 // default read after its description). A run that opens with a label
 // and a colon may run to eight words: a length's default, "Default: .1667em
 // plus .0333em minus .0117em". A run that starts where other lines start,
-// past the page's flush-right runs, is a column's line.
+// past the page's flush-right runs, is a column's line, and so is one that
+// starts an em or so right of where two of them start: a paragraph's first
+// line set in (parse loop finding: The MagPi's "“Our fortunes turned", set
+// in at its column's edge beside a pull quote, read as the quote's line's
+// end).
 function joinRightRuns(lines: Line[], page: number): Line[] {
   // The right margin: the farthest line end that two other lines share.
   const ends = lines.map((l) => l.xEnd).filter((x, k, all) => all.filter((o, j) => j !== k && Math.abs(o - x) <= 1).length >= 2);
@@ -132,6 +136,7 @@ function joinRightRuns(lines: Line[], page: number): Line[] {
   for (const run of lines) {
     if (!flush(run) || run.cells.length !== 1) continue;
     if (lines.some((l) => l !== run && !flush(l) && Math.abs(l.x - run.x) <= 1)) continue;
+    if (lines.filter((l) => l !== run && !flush(l) && l.x < run.x - 1 && run.x - l.x <= run.size * 1.5).length >= 2) continue;
     const row = out.filter((l) => l !== run && Math.abs(l.y - run.y) <= Math.min(l.size, run.size) * 0.2);
     const owner = row.filter((l) => l.xEnd < run.x - run.size * 2).sort((a, b) => b.xEnd - a.xEnd)[0];
     if (!owner || row.some((l) => l !== owner && l.x < run.x && l.xEnd > owner.xEnd)) continue;
