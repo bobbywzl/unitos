@@ -1409,6 +1409,9 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
   // A scan's row of marks under the text (the paper's edge read as letters), and a formula's row of letters.
   ", I , i I I I I I i ........".split(" ").forEach((t, k) => at(8, 770, 72 + 30 * k, t));
   "a b c d e".split(" ").forEach((t, k) => at(9, 770, 72 + 30 * k, t));
+  // A loose-leaf sheet's page labels, left or right as the page faces, and a section's number at a page's head.
+  for (const [p, left, top, text] of [[5, 60, 20, "2.1.30-2"], [6, 480, 28, "2.1.30-3"], [7, 70, 16, "2.1. 30-4"]] as const) at(p, top, left, text);
+  for (const [p, text] of [[8, "11.4.2"], [9, "11.5.3"], [10, "11.6.2"]] as const) at(p, 75, 72, text);
   const found = new Set(furnitureOf(lines, new Map(Array.from({ length: 10 }, (_, k) => [k + 1, { width: 612, height: 792 }]))).map((l) => `${l.page} ${l.text}`));
   const has = (key: string) => found.has(key);
   check(
@@ -1425,6 +1428,11 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     "free: a scan's row of marks at a page's foot is furniture; a formula's row of letters is none",
     has("8 i") && has("8 ........") && !has("9 c"),
     [...found].filter((k) => /^[89] /.test(k)).join(" | "),
+  );
+  check(
+    "free: a loose-leaf sheet's page labels are furniture; a section's number is none",
+    has("5 2.1.30-2") && has("6 2.1.30-3") && has("7 2.1. 30-4") && !has("9 11.5.3"),
+    [...found].filter((k) => /\d\.\d/.test(k)).join(" | "),
   );
   check(
     "free: a bulleted item at one height on every slide is a list's item, not furniture",

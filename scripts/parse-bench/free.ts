@@ -735,6 +735,21 @@ export function furnitureOf(lines: Line[], sizes: Sizes): Line[] {
   const sized = (a: Unit, b: Unit) => Math.abs(a.height - b.height) <= 0.3 * Math.max(a.height, b.height);
   for (const u of units) if (repeats.has(u) || nearby(u).some((r) => repeats.has(r) && sized(r, u) && same(r, u))) for (const l of u.lines) furniture.add(l);
   for (const l of lastRows.flat()) if (CONTINUED_RE.test(l.text.trim())) furniture.add(l);
+  // A loose-leaf sheet's page label: the sheet's number and, after a dash,
+  // the page within the sheet ("1.1.30-6"), alone on a line in a page's
+  // first or last two rows, as on a page within two of it with the same
+  // sheet's number and the page counting with the pages (parse loop
+  // finding: DTIC's Datcom sets one atop each page but a sheet's first,
+  // left or right as the page faces, 10 pt up or down as the scan sits;
+  // no repeat matched them, and the count asked the parse for 70 words
+  // "1", "30", and "20" the page sets as its running label).
+  const sheets = candidates.flatMap((l) => {
+    const m = /^(\d+(?:\s*\.\s*\d+)+)\s*-\s*(\d+)$/.exec(l.text.trim());
+    return m ? [{ line: l, sheet: m[1].replace(/\s/g, ""), n: Number(m[2]) }] : [];
+  });
+  for (const a of sheets) {
+    if (sheets.some((b) => b !== a && b.sheet === a.sheet && b.line.page !== a.line.page && Math.abs(b.line.page - a.line.page) <= 2 && b.n - a.n === b.line.page - a.line.page)) furniture.add(a.line);
+  }
   // A row of marks at a page's head or foot is a scan's speck, no words:
   // five marks or more, each Latin letters and dots, commas, quotes, or
   // dashes, one of them no letter, no word of three letters, three in four
