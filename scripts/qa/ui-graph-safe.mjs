@@ -104,6 +104,8 @@ const list = () => page.locator('[data-track-surface="graph-links"]');
 // place in the curve's list.
 const panel = (id) => page.locator(`[data-graph-link-panel="${id}"]`);
 const thread = (id) => panel(id).locator(`[data-graph-link-thread="${id}"]`);
+// [panel6] WALK6-05: Reply sits in the panel's action row, above the thread.
+const replyButton = (id) => panel(id).locator('[data-graph-link-actions] [data-track="reply"], [data-graph-link-thread] [data-track="reply"]');
 /** Open one link of the pinned list in the side panel. */
 async function expand(id) {
   const rows = list().locator('[data-track="graph-link-expand"]');
@@ -125,7 +127,7 @@ const replyBox = (id) => thread(id).locator("textarea");
 const DRAFT = `SAFE draft reply ${Date.now()}`;
 await openGraph();
 await openLink(LINK_AB);
-await thread(LINK_AB).locator('[data-track="reply"]').click();
+await replyButton(LINK_AB).first().click();
 await replyBox(LINK_AB).fill(DRAFT);
 await shot(page, "REV2-06-typed");
 await page.click('[data-track="graph-close"]');
@@ -191,7 +193,7 @@ if (after) {
   const x = thread(LINK_X);
   const xRow = x.locator("div.flex.items-start", { hasText: "SAFE reply by the other account" });
   const mineRow = x.locator("div.flex.items-start", { hasText: "SAFE reply by the owner of QA Graph Notes" });
-  check((await x.locator('[data-track="reply"]').count()) === 0, "no Reply on another account's link");
+  check((await replyButton(LINK_X).count()) === 0, "no Reply on another account's link");
   check((await xRow.locator('[data-track="reply-delete"]').count()) === 0, "no × on the other account's reply");
   check((await xRow.locator('[data-track="reply-resolve"]').count()) === 0, "no Resolve on the other account's reply");
   check((await mineRow.locator('[data-track="reply-resolve"]').count()) === 1, "Resolve on my own reply");

@@ -159,7 +159,8 @@ for (const lang of ["en", "zh"]) {
     if (SESSION && lang === "en" && width === 1440) {
       // Send a reply on the graph, then resolve it.
       const REPLY = `graph reply ${Date.now()}`;
-      await panelOf(page, LINK_AB).locator(`[data-graph-link-thread="${LINK_AB}"] [data-track="reply"]`).click();
+      // [panel6] WALK6-05: Reply sits in the panel's action row, above the thread.
+      await panelOf(page, LINK_AB).locator('[data-graph-link-actions] [data-track="reply"]').first().click();
       await panelOf(page, LINK_AB).locator(`[data-graph-link-thread="${LINK_AB}"] textarea`).fill(REPLY);
       await panelOf(page, LINK_AB).locator(`[data-graph-link-thread="${LINK_AB}"] [data-track="reply-send"]`).click();
       // The reply shows once the refresh lands (the first call compiles the route in dev).
