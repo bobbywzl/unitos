@@ -2048,6 +2048,25 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     over[0] === 'PARAGRAPH <p class="kicker"> Delta desk' && under.includes("HEADING <h1> Key points"),
     `${over.join(" / ")}; ${under.join(" / ")}`,
   );
+  // The opening heading the page names as its headline is the title: the <title> holds it while the title was read
+  // from the logo's h1, or it is the page's h1 in other words than og:title. An h1 that shares no word with the title
+  // stays a heading.
+  const named = async (head: string, body: string) => {
+    const parsed = await parseHtmlContent(
+      `<!doctype html><html><head>${head}</head><body>${body}<p>${prose(2)}</p></article></body></html>`,
+      "https://www.riversweekly.example/2019/notes",
+    );
+    return { title: parsed.title, headings: parsed.blocks.filter((b) => b.type === "HEADING").map((b) => b.text) };
+  };
+  const logo = await named("<title>Rivers Weekly » Blog Archive » Notes on river flow in the delta</title>", `<header><h1>Rivers Weekly</h1></header><article><h2>Notes on river flow in the delta</h2><p>${prose(1)}</p>`);
+  const reworded = await named('<meta property="og:title" content="Delta flow: what the river notes show"><title>Delta flow</title>', `<article><h1>Notes on river flow in the delta</h1><p>${prose(1)}</p>`);
+  const unrelated = await named('<meta property="og:title" content="Notes on river flow"><title>Notes on river flow</title>', `<article><h1>Field reports today</h1><p>${prose(1)}</p>`);
+  check(
+    "url: an opening heading the <title> names as its headline, or the page's h1 that shares a word with the title, is the title",
+    logo.title === "Notes on river flow in the delta" && logo.headings.length === 0 && reworded.title === "Notes on river flow in the delta" && reworded.headings.length === 0,
+    JSON.stringify({ logo, reworded }),
+  );
+  check("url: an h1 that shares no word with the title stays a heading", unrelated.title === "Notes on river flow" && unrelated.headings.join() === "Field reports today", JSON.stringify(unrelated));
   check(
     "url: a first section's question and a short first heading stay headings",
     question.includes("HEADING What does a gauge measur") && short.includes("HEADING Channels and banks"),
