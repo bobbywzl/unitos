@@ -227,12 +227,14 @@ export function Workspace({
   const phone = useSyncExternalStore(subscribeNarrow, readNarrow, () => false);
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
-  // Add to notes on a phone keeps the sheet closed: the bar's Notes button
-  // blooms once instead (notesBloom counts the adds, so each one replays it).
-  const quietAdd = useRef({ phone, sheetOpen: mobileTray });
+  // Add to notes keeps a closed tray closed, by the tray's state, not the
+  // width: a phone's closed sheet, or a folded tray on md+ (EDGE13-08). The
+  // Notes button blooms once instead (notesBloom counts the adds, so each
+  // one replays it).
+  const quietAdd = useRef({ phone, sheetOpen: mobileTray, folded: collapsed });
   useEffect(() => {
-    quietAdd.current = { phone, sheetOpen: mobileTray };
-  }, [phone, mobileTray]);
+    quietAdd.current = { phone, sheetOpen: mobileTray, folded: collapsed };
+  }, [phone, mobileTray, collapsed]);
   const [notesBloom, setNotesBloom] = useState(0);
   // A jump opens the sheet below md, as the bottom bar does. On md+ the flag
   // stays as it is: the rail reads it to tell a second press on the open tab.
@@ -487,7 +489,8 @@ export function Workspace({
     };
     const onShowNote = (e: Event) => {
       const { noteId, quiet } = (e as CustomEvent<{ noteId: string; quiet?: boolean }>).detail;
-      if (quiet === true && quietAdd.current.phone && !quietAdd.current.sheetOpen) {
+      const closed = quietAdd.current.phone ? !quietAdd.current.sheetOpen : quietAdd.current.folded;
+      if (quiet === true && closed) {
         setNotesBloom((n) => n + 1);
         return;
       }
