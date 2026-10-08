@@ -778,8 +778,9 @@ check("replyLanguage command: a mixed or short command keeps the UI's", replyLan
     { id: "l4", from: "A1", to: "B2", state: "accepted" as const },
   ];
   const y1 = "Link 1 joins BOOK TWO §225 [block E2] [block D32]. Link 3 joins the notes [block G9] [block E21].\nAlso [block A1] and [block B2]。另 [block D32]";
-  check("existingNamed: tags pair only inside one sentence (ANS6-06)", existingNamed(y1, ex6, null, false).sort().join(",") === "l1,l3,l4", existingNamed(y1, ex6, null, false).join(","));
-  check("existingNamed: one sentence that compares the two ends pairs them", existingNamed("Mencken says 1895 [block D32]; the notes say 1889 [block G9].", ex6, null, false).join(",") === "l2" && existingNamed("门肯说 1895 [block D32]。笔记说 1889 [block G9]。", ex6, null, false).length === 0);
+  check("existingNamed: tags of two sentences with two tags each do not pair (ANS6-06)", existingNamed(y1, ex6, null, false).sort().join(",") === "l1,l3,l4", existingNamed(y1, ex6, null, false).join(","));
+  check("existingNamed: one sentence that compares the two ends pairs them", existingNamed("Mencken says 1895 [block D32]; the notes say 1889 [block G9].", ex6, null, false).join(",") === "l2" && existingNamed("门肯说 1895 [block D32] [block E2]。笔记说 1889 [block G9] [block E21]。", ex6, null, false).sort().join(",") === "l1,l3");
+  check("existingNamed: two sentences of one paragraph pair when one cites a single block", existingNamed("Mencken says 1895 [block D32]. Your notes agree [block G9].", ex6, null, false).join(",") === "l2" && existingNamed("Mencken says 1895 [block D32].\nYour notes agree [block G9].", ex6, null, false).length === 0);
 
   // ANS6-07: a block and its word-for-word copy.
   const para = "The more a man suffers, the more he knows of the world; suffering is the condition of knowledge.";

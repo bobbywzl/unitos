@@ -1889,8 +1889,11 @@ export async function stitch(input: {
   const names = reading.tokens > STITCH_WHOLE_THRESHOLD ? nameHits(input.command, read.flatMap((r) => r.blocks), read.map((r) => r.doc.title)) : undefined;
   if (reading.tokens > STITCH_WHOLE_THRESHOLD) {
     // A command about the last answers reads the blocks they cited and
-    // stored, with no select pass (ANS6-03).
-    selected = backSelection(input.command, history, blockByRef, names ?? [], kind);
+    // stored, with no select pass (ANS6-03). Only when the last answer came
+    // back with its record: without it the history names no stored link or
+    // page block (F4n, F5n: the block asked about was missing).
+    const lastAnswer = [...input.history].reverse().find((t) => t.role === "assistant");
+    if (lastAnswer?.record) selected = backSelection(input.command, history, blockByRef, names ?? [], kind);
   }
   if (reading.tokens > STITCH_WHOLE_THRESHOLD && !selected) {
     selected = await pickBlocks({
@@ -2202,16 +2205,18 @@ const EXISTING_NOTE = {
   removed: "stitchLinksRemoved",
 } as const satisfies Record<ExistingState, string>;
 
-// The end of a sentence of a reply (existingNamed): a line break, a CJK
-// full stop, or a Latin one before a capital, a quote mark, or a tag.
-const SENTENCE_END = /\n|(?<=[。！？])|(?<=[.!?])\s+(?=["“'(\[\p{Lu}])/u;
+// The end of a sentence of a reply (existingNamed): a CJK full stop, or a
+// Latin one before a capital, a quote mark, or a tag.
+const SENTENCE_END = /(?<=[。！？])|(?<=[.!?])\s+(?=["“'(\[\p{Lu}])/u;
 
 /** The links already in the project a reply is about (ANS5-05), as ids:
     with `all` (a links command), every one the answer pass was told of —
     both blocks shown (existingPairs) — the reply's "these are already in
     the graph"; else the ones whose two blocks the reply cites one after
     the other in one sentence, [block G6] – [block B20], [block G6] [block
-    B20], or "Mencken says … [block A8]; the notes say … [block G7].". A removed
+    B20], or "Mencken says … [block A8]; the notes say … [block G7].", or
+    in two sentences of one paragraph when one of them cites only that
+    block. A removed
     link is never lit: it is not drawn. reply: the model's, with aliases. */
 export function existingNamed(
   reply: string,
@@ -2223,11 +2228,20 @@ export function existingNamed(
   const visible = links.filter((l) => l.state !== "removed");
   if (all) return visible.filter((l) => shown(l.from) && shown(l.to)).map((l) => l.id);
   const pairs = new Set<string>();
-  // Two tags pair only inside one sentence (ANS6-06): "§225 [block E2]
-  // [block D32]. Link 3 joins … [block G9]" names E2–D32, not D32–G9.
-  for (const sentence of reply.split(SENTENCE_END)) {
-    const tags = [...sentence.matchAll(/\[block ([A-Za-z]+\d+)\]/g)].map((m) => m[1].toUpperCase());
-    for (let i = 1; i < tags.length; i++) pairs.add([tags[i - 1], tags[i]].sort().join("|"));
+  // Two tags one after the other pair inside one sentence, and across a
+  // sentence end of one paragraph only when one of the two is its
+  // sentence's only tag (ANS6-06): "§225 [block E2] [block D32]. Link 3
+  // joins … [block G9] [block E21]" names E2–D32 and G9–E21, not D32–G9;
+  // "… [block B30]. Your notes agree: … [block G6]." names B30–G6.
+  for (const line of reply.split("\n")) {
+    let last: string[] = [];
+    for (const sentence of line.split(SENTENCE_END)) {
+      const tags = [...sentence.matchAll(/\[block ([A-Za-z]+\d+)\]/g)].map((m) => m[1].toUpperCase());
+      if (tags.length === 0) continue;
+      if (last.length > 0 && (last.length === 1 || tags.length === 1)) pairs.add([last[last.length - 1], tags[0]].sort().join("|"));
+      for (let i = 1; i < tags.length; i++) pairs.add([tags[i - 1], tags[i]].sort().join("|"));
+      last = tags;
+    }
   }
   return visible.filter((l) => pairs.has([l.from, l.to].sort().join("|"))).map((l) => l.id);
 }
