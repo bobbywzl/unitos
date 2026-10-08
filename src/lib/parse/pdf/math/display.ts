@@ -700,6 +700,11 @@ function joinRows(host: Line, rows: Line[], ctx: PageContext, orphans: Glyph[]):
   };
 }
 
+/** TeX's extension font (cmex): the top pieces of a tall delimiter built of
+    pieces (parentheses, brackets, braces), and their feet. */
+const DELIMITER_TOPS = new Set([0x30, 0x31, 0x32, 0x33, 0x38, 0x39]);
+const DELIMITER_FEET = new Set([0x34, 0x35, 0x3a, 0x3b, 0x40, 0x41]);
+
 // The page's tall delimiters: the extension font's delimiter glyphs, their
 // pieces stacked in one column joined, taller than a line. Read from the
 // drawing: a text item may hold a piece and the digits after it, and the
@@ -707,22 +712,41 @@ function joinRows(host: Line, rows: Line[], ctx: PageContext, orphans: Glyph[]):
 // correlations, arXiv 2302.12627 p. 23). KaTeX draws its tallest ones as
 // pictures: a narrow path as tall (a matrix of three rows lost its top
 // row, synth-math-html). Only on a page KaTeX set: a figure's strokes are
-// no delimiters (arXiv 2411.19946 p. 1).
+// no delimiters (arXiv 2411.19946 p. 1). A top piece opens a delimiter and
+// a foot ends it: two delimiters stacked a few points apart are two fences
+// (parse loop finding: a quantum mechanics book's (6.5a), (6.5b), and
+// (6.5c), three cases displays one under the next, read their braces as
+// one fence, and each display's first row, by its brace's top, went to the
+// display over it).
 function fencesOf(ctx: PageContext): Box[] {
   const katex = ctx.drawing.glyphs.some((g) => g.base.startsWith("KaTeX_"));
   const drawn = katex ? ctx.drawing.paths.filter((p) => !p.clip && p.y2 - p.y1 > ctx.bodySize * 1.5 && p.x2 - p.x1 < Math.min(ctx.bodySize, (p.y2 - p.y1) * 0.35)) : [];
   const columns: Box[] = [];
+  // Each column's top piece's top and foot's bottom, once it holds them.
+  const ends = new Map<Box, { head?: number; foot?: number }>();
   for (const g of ctx.drawing.glyphs) {
     const entry = g.family === "omx" ? mathGlyph("omx", g.code) : null;
     if (!entry || (entry.cls !== "open" && entry.cls !== "close" && !entry.piece)) continue;
     const [height, depth] = g.box ?? entry.box;
     const top = g.y + height * g.size;
     const bottom = g.y - depth * g.size;
-    const found = columns.find((c) => Math.abs(c.x1 - g.x) < 1 && top >= c.y1 - g.size && bottom <= c.y2 + g.size);
+    const head = DELIMITER_TOPS.has(g.code) && entry.piece !== undefined;
+    const foot = DELIMITER_FEET.has(g.code) && entry.piece !== undefined;
+    const found = columns.find((c) => {
+      if (Math.abs(c.x1 - g.x) >= 1 || top < c.y1 - g.size || bottom > c.y2 + g.size) return false;
+      const end = ends.get(c);
+      if ((head && c.y2 > top + 0.5) || (foot && c.y1 < bottom - 0.5)) return false;
+      return !(end?.head !== undefined && bottom >= end.head - 0.5) && !(end?.foot !== undefined && top <= end.foot + 0.5);
+    });
+    const column = found ?? { x1: g.x, x2: g.x + g.w, y1: bottom, y2: top };
     if (found) {
       found.y1 = Math.min(found.y1, bottom);
       found.y2 = Math.max(found.y2, top);
-    } else columns.push({ x1: g.x, x2: g.x + g.w, y1: bottom, y2: top });
+    } else columns.push(column);
+    const end = ends.get(column) ?? {};
+    if (head) end.head = top;
+    if (foot) end.foot = bottom;
+    ends.set(column, end);
   }
   return [...columns.filter((c) => c.y2 - c.y1 > ctx.bodySize * 1.5), ...drawn.map(({ x1, y1, x2, y2 }) => ({ x1, y1, x2, y2 }))];
 }
@@ -1278,8 +1302,16 @@ export function displayLines(page: Line[], ctx: PageContext): Line[] {
             f.x >= next.x - f.size &&
             f.xEnd <= next.xEnd + f.size &&
             f.y - next.y <= next.size * 1.6;
+          // A line of the delimiter's own pieces (a brace's top piece, read
+          // as a line of its own) is the delimiter's, none of the band's.
+          const pieceOf = (l: Line, g: Box) => {
+            const ink = l.items.flatMap((i) => i.glyphs ?? []).filter((c) => c.unicode.trim() !== "" || c.family !== null);
+            return ink.length > 0 && ink.every((c) => c.family === "omx" && mathGlyph("omx", c.code)?.piece !== undefined && c.x >= g.x1 - 1 && c.x <= g.x2 + 1);
+          };
           const fencedNext = fences.some(
-            (g) => [f, next].every((l) => l.y >= g.y1 && l.y <= g.y2 && l.x < g.x2 + l.size * 3 && l.xEnd > g.x1 - l.size * 3) && !band.some((l) => l !== f && l.y >= g.y1 && l.y <= g.y2),
+            (g) =>
+              [f, next].every((l) => l.y >= g.y1 && l.y <= g.y2 && l.x < g.x2 + l.size * 3 && l.xEnd > g.x1 - l.size * 3) &&
+              !band.some((l) => l !== f && l.y >= g.y1 && l.y <= g.y2 && !pieceOf(l, g)),
           );
           if (!script && !fencedNext && !arrows && (!rules.some((r) => bar(r) && r.y1 < f.y && r.y1 > next.y) || rules.some((r) => bar(r) && r.y1 > f.y))) break;
           band.pop();
@@ -1819,11 +1851,6 @@ function equationOf(line: Line, orphans: Glyph[], ctx: PageContext, lines: Line[
     return null;
   }
 }
-
-/** TeX's extension font (cmex): the top pieces of a tall delimiter built of
-    pieces (parentheses, brackets, braces), and their feet. */
-const DELIMITER_TOPS = new Set([0x30, 0x31, 0x32, 0x33, 0x38, 0x39]);
-const DELIMITER_FEET = new Set([0x34, 0x35, 0x3a, 0x3b, 0x40, 0x41]);
 
 /** The lowest baseline of a tall delimiter whose top piece is a glyph of
     the line: from the top down, its extensions and middle, one under the
