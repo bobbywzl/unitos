@@ -43,6 +43,7 @@ import { jevRouteParts, jevSelectLines } from "@/lib/graph/stitch-jev";
 import { jevEnabled, mapLimit } from "@/lib/jev";
 import { rank, tokenize } from "@/lib/graph/rank";
 import {
+  asksMore,
   refersBack,
   stitchExpandPrompt,
   stitchPrompt,
@@ -811,6 +812,9 @@ export function answerMessages(input: {
   command: string;
   // The command's rare names (nameHits), counted against the blocks shown.
   names?: { term: string; aliases: string[] }[];
+  // True when selected is the blocks the earlier answers cited
+  // (backSelection): no read ran for this command.
+  back?: boolean;
   links?: { from: string; to: string; state?: ExistingState }[];
   // The history's tokens past which it comes before the blocks
   // (STITCH_HISTORY_FIRST_MIN).
@@ -827,6 +831,7 @@ export function answerMessages(input: {
     command: input.command,
     continued: input.history.length > 0,
     selected: selected !== null,
+    back: selected !== null && input.back === true,
     names: selected
       ? (input.names ?? []).map((n) => ({ term: n.term, total: n.aliases.length, shown: n.aliases.filter((a) => selected.has(a)).length }))
       : undefined,
@@ -1870,20 +1875,31 @@ export function namePicks(names: { aliases: string[] }[]): string[] {
     the records under the replies), cut to the kind's budget, so no select
     pass runs; that pass returned these same blocks. null — run the select
     pass — when the command is not a follow-up that refers back
-    (refersBack), when nothing was cited, when it names a rare name whose
-    blocks were not cited, or when the blocks cited cost more than
-    BACK_BUDGET tokens. */
+    (refersBack), when it asks for more than the blocks cited (asksMore,
+    ANS7-01), when nothing was cited, when it names a rare name whose
+    blocks were not cited, when it holds a word of a document's title and
+    no document whose title holds that word has a block cited (ANS7-01:
+    "What does Schopenhauer say about those points?" after an answer from
+    The Antichrist alone; nameHits drops a title's words), or when the
+    blocks cited cost more than BACK_BUDGET tokens. docs: the documents
+    read. */
 export function backSelection(
   command: string,
   history: ModelMessage[],
   blockByRef: Map<string, DocBlock>,
   names: { term: string; aliases: string[] }[],
   kind: StitchCommandKind,
+  docs: { doc: { id: string; title: string } }[] = [],
 ): Set<string> | null {
-  if (history.length === 0 || !refersBack(command)) return null;
+  if (history.length === 0 || !refersBack(command) || asksMore(command)) return null;
   const cited = citedAliases(history, blockByRef);
   if (cited.length === 0) return null;
   if (names.some((n) => !n.aliases.some((a) => cited.includes(a)))) return null;
+  const citedDocs = new Set(cited.map((a) => blockByRef.get(a)?.documentId));
+  for (const word of new Set(tokenize(command))) {
+    const titled = titleMatches(docs, word);
+    if (titled.length > 0 && !titled.some((d) => citedDocs.has(d.doc.id))) return null;
+  }
   // The answer pass reads on the answer model, uncached: past BACK_BUDGET
   // the select pass's few blocks cost less than every block cited.
   const cost = cited.reduce((sum, a) => sum + blockCost(blockByRef.get(a)?.text ?? ""), 0);
@@ -1953,8 +1969,9 @@ export async function stitch(input: {
     // back with its record: without it the history names no stored link or
     // page block (F4n, F5n: the block asked about was missing).
     const lastAnswer = [...input.history].reverse().find((t) => t.role === "assistant");
-    if (lastAnswer?.record) selected = backSelection(input.command, history, blockByRef, names ?? [], kind);
+    if (lastAnswer?.record) selected = backSelection(input.command, history, blockByRef, names ?? [], kind, read);
   }
+  const back = selected !== null;
   if (reading.tokens > STITCH_WHOLE_THRESHOLD && !selected) {
     selected = await pickBlocks({
       reading,
@@ -1989,11 +2006,16 @@ export async function stitch(input: {
       toBlockId: true,
       toStartOffset: true,
       toEndOffset: true,
+      fromOrphaned: true,
+      toOrphaned: true,
     },
   });
   // Each link's state in this project (WALK5-03): accepted, waiting under
-  // Recommended links, or removed.
-  const existing = existingRows.map((l) => ({ ...l, state: existingState(l) }));
+  // Recommended links, or removed. A link whose quote an edit removed
+  // (fromOrphaned, toOrphaned) is left out (ANS7-02): it is not "already in
+  // the graph" for the new text, it is never lit, and a link on the new
+  // text is stored. The row is not touched and is drawn as before.
+  const existing = liveLinks(existingRows).map((l) => ({ ...l, state: existingState(l) }));
   const aliasOf = (id: string | null) => (id ? blockByRef.get(id)?.alias : undefined);
   const existingAliases = existing.flatMap((l) => {
     const from = aliasOf(l.fromBlockId);
@@ -2016,6 +2038,7 @@ export async function stitch(input: {
       history,
       command: input.command,
       names: selected ? names : undefined,
+      back,
       links: existingAliases,
       historyFirstMin: input.historyFirstMin,
       notPicked,
@@ -2255,6 +2278,13 @@ export function duplicateOf(link: LinkEnds, kept: LinkEnds[]): number {
 
 /** A link's state in the project the command runs in (WALK5-03). */
 export type ExistingState = "accepted" | "waiting" | "removed";
+/** The links whose two quotes are still in their blocks (ANS7-02): an
+    edit that removed a link's quote marks that end orphaned
+    (lib/docs/sync.ts). */
+export function liveLinks<T extends { fromOrphaned: boolean; toOrphaned: boolean }>(rows: T[]): T[] {
+  return rows.filter((l) => !l.fromOrphaned && !l.toOrphaned);
+}
+
 function existingState(l: { recommended: boolean; hiddenIn: unknown[] }): ExistingState {
   return l.hiddenIn.length > 0 ? "removed" : l.recommended ? "waiting" : "accepted";
 }
@@ -2378,6 +2408,16 @@ export function assignSources<S extends { quotedText: string }>(blocks: { type: 
   return out;
 }
 
+/** A quote part's blocks (ANS7-05): the passage as it is, one paragraph in
+    italic over its whole text, so the documents' words read apart from the
+    page's own writing and "157. The thought of suicide…" stays the
+    paragraph it is, not a list item. A quote of any other block (a list,
+    a table, a transcript line) parses as markdown, as before. */
+export function quoteBlocks(text: string, sourceType: string | undefined): ParsedBlock[] {
+  if (sourceType !== "PARAGRAPH" && sourceType !== "HEADING") return parseMarkdown(text);
+  return [{ type: "PARAGRAPH", text, styles: [{ start: 0, end: text.length, style: "italic", quotedText: text }] }];
+}
+
 // The generated document: parts become markdown, the markdown becomes blocks
 // (lib/parse/markdown.ts), and every part links back to the document block it
 // came from — a quote part to the passage it copied, a text part to each of
@@ -2434,7 +2474,7 @@ async function materializeGenerated(input: {
     sources: Resolved[];
   })[] = [];
   for (const chunk of chunks) {
-    const blocks = parseMarkdown(chunk.markdown);
+    const blocks = chunk.kind === "quote" ? quoteBlocks(chunk.markdown, input.blockById.get(chunk.sources[0].blockId)?.type) : parseMarkdown(chunk.markdown);
     // Each block of a text part of several paragraphs or list items gets
     // its own sources (ANS4-03); a quote part is one block.
     const sources = assignSources(blocks, chunk.sources);

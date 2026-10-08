@@ -47,6 +47,8 @@ const LINE_MAX = 4_000; // a line of a 4,000-word block: one word in ten, cut pa
 const SUMMARY_MAX = 800;
 const GIST_MAX = 400;
 const FALLBACK_LINE = 200; // chars of a block's own text that stand in for a missing line
+const CHANGED_LINE = 600; // chars of an edited or new block's own text that stand in for its line, beside a stored skeleton (ANS7-02)
+const CHANGED_LINES_MAX = 8_000; // chars, about 2k tokens, of such lines per document; past it a changed block gets FALLBACK_LINE
 
 export type SkeletonLine = { blockId: string; hash: string; text: string };
 export type SkeletonPart = { blockId: string; title: string; summary: string };
@@ -194,27 +196,36 @@ export function skeletonStale(skeleton: Skeleton | null, blocks: SkeletonBlock[]
 // A block's own first words, cut at a sentence end when one falls in the
 // first FALLBACK_LINE characters, else at a word: the line for a block the
 // skeleton has no current line for.
-function fallbackLine(text: string): string {
+function fallbackLine(text: string, max = FALLBACK_LINE): string {
   const t = text.replace(/\s+/g, " ").trim();
-  if (t.length <= FALLBACK_LINE) return t;
-  const head = t.slice(0, FALLBACK_LINE);
+  if (t.length <= max) return t;
+  const head = t.slice(0, max);
   const sentence = Math.max(head.lastIndexOf(". "), head.lastIndexOf("。"), head.lastIndexOf("! "), head.lastIndexOf("? "));
-  if (sentence > FALLBACK_LINE / 2) return head.slice(0, sentence + 1);
+  if (sentence > max / 2) return head.slice(0, sentence + 1);
   const word = head.lastIndexOf(" ");
-  return word > FALLBACK_LINE / 2 ? head.slice(0, word) : head;
+  return word > max / 2 ? head.slice(0, word) : head;
 }
 
 /** The skeleton as Stitch reads it now: one line per current readable
     block, in the document's order — the stored line where the block is
     unchanged, the block's own first words where it is new or changed or
-    the skeleton is missing — and the parts whose block still exists. */
+    the skeleton is missing — and the parts whose block still exists.
+    Beside a stored skeleton, a new or changed block's words run to
+    CHANGED_LINE characters, up to CHANGED_LINES_MAX per document (ANS7-02):
+    an edit late in a long paragraph stays in its line until the skeleton is
+    rebuilt. */
 export function currentSkeleton(skeleton: Skeleton | null, blocks: SkeletonBlock[]): Skeleton {
   const readable = skeletonBlocks(blocks);
   const stored = new Map(skeleton?.lines.map((l) => [l.blockId, l]) ?? []);
+  let changedChars = 0;
   const lines: SkeletonLine[] = readable.map((b) => {
     const hash = blockHash(b.text);
     const line = stored.get(b.id);
-    return line && line.hash === hash ? line : { blockId: b.id, hash, text: fallbackLine(b.text) };
+    if (line && line.hash === hash) return line;
+    const long = skeleton ? fallbackLine(b.text, CHANGED_LINE) : "";
+    const text = long && changedChars + long.length <= CHANGED_LINES_MAX ? long : fallbackLine(b.text);
+    if (text === long) changedChars += long.length;
+    return { blockId: b.id, hash, text };
   });
   const ids = new Set(readable.map((b) => b.id));
   return {
