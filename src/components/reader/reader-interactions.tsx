@@ -11983,7 +11983,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               onClick={() => void runBar(bar)}
               data-track="assistant-run"
               data-tip={t("reader.sendTitle")}
-              className="rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+              className="rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40 pointer-coarse:py-2"
             >
               {t("reader.send")}
             </button>
@@ -11997,7 +11997,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   onClick={() => void runBar({ ...bar, input: t(chip.command) })}
                   data-track={`assistant-figure:${chip.label.slice("reader.figure".length)}`}
                   data-tip={t("reader.figureChipTitle")}
-                  className="rounded-full bg-sand-100 px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                  className="rounded-full bg-sand-100 px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:py-1.5"
                 >
                   {t(chip.label)}
                 </button>
@@ -12014,7 +12014,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   onClick={() => void runBar(bar, c)}
                   data-track={`assistant-command:${c.name}`}
                   data-tip={t("reader.commandTitle")}
-                  className="rounded-full bg-sand-100 px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                  className="rounded-full bg-sand-100 px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:py-1.5"
                 >
                   {t(c.key)}
                 </button>
