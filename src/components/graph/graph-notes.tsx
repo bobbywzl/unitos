@@ -396,7 +396,7 @@ export function GraphNoteRow({ note: g, hereId }: { note: GraphNote; hereId: str
         onClick={() => ctx.showNote(g.note.id)}
         data-track="graph-note-show"
         data-tip={t("graphNotes.showNote")}
-        className="flex items-start gap-1.5 text-left pointer-coarse:min-h-10"
+        className="flex items-start gap-1.5 text-left pointer-coarse:min-h-6"
       >
         <span className="min-w-0 flex-1 text-[12.5px] leading-snug font-semibold text-ink">{noteLine(g.note)}</span>
         {g.note.status === "PENDING" && (

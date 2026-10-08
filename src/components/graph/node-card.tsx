@@ -223,8 +223,8 @@ export function NodeCardPanel({
         sheet
           ? "inset-x-0 bottom-0 h-[60%] rounded-t-[20px] border-b-0 pb-16"
           : // [panel6] The card is as tall as what it holds (WALK6-08), at most the
-            // canvas less the Feedback button's room.
-            "top-3 right-3 max-h-[calc(100%-108px)] w-[400px] max-w-[calc(100vw-24px)] rounded-[20px] max-[999px]:max-h-[calc(100%-76px)]"
+            // canvas less its margins (Feedback hides while the graph is open).
+            "top-3 right-3 max-h-[calc(100%-24px)] w-[400px] max-w-[calc(100vw-24px)] rounded-[20px] max-[999px]:max-h-[calc(100%-76px)]"
       }`}
     >
       <div className="flex items-start gap-2">
