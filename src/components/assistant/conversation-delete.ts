@@ -1,27 +1,14 @@
 "use client";
 
 // Delete a conversation with no ask (SPEC.md §7): the notes' Undo pill takes
-// it ("dissect:undo-pill", the notes' own pill: the same 12 s, the same ✕,
-// Ctrl+Z presses Undo). The delete waits for the pill to go without Undo,
-// then runs through DELETE /api/notes/:id, which keeps the conversation, its
-// side chats, and the comments on its answers for History's Restore. A page
-// with no pill on it deletes at once.
+// it (postUndoPill, lib/notes/undo-pill.ts: the same 12 s, the same ✕,
+// Ctrl+Z presses Undo; the words are outline.conversationDeleted). The
+// delete waits for the pill to go without Undo, then runs through
+// DELETE /api/notes/:id, which keeps the conversation, its side chats, and
+// the comments on its answers for History's Restore. A page with no pill on
+// it deletes at once.
 
-export type UndoPillPost = {
-  message: string;
-  undo: () => void | Promise<void>;
-  commit?: () => void | Promise<void>;
-};
-
-const UNDO_PILL_EVENT = "dissect:undo-pill";
-
-/** Post to the notes' Undo pill; false (and commit run now) when no pill
-    took it. */
-export function postUndoPill(post: UndoPillPost): boolean {
-  const taken = !window.dispatchEvent(new CustomEvent(UNDO_PILL_EVENT, { detail: post, cancelable: true }));
-  if (!taken) void post.commit?.();
-  return taken;
-}
+import { postUndoPill } from "@/lib/notes/undo-pill";
 
 /** Delete the conversation note `noteId` once the pill goes without Undo.
     gone: the conversation leaves the screen now; back: Undo puts it back;

@@ -38,7 +38,6 @@ const en = {
   conversationOpenTitle: "Open this conversation",
   conversationCurrent: "open",
   conversationDelete: "Delete this conversation",
-  conversationDeleted: "Conversation deleted",
   conversationDeleteFailed: "Not deleted. The conversation is back; try again.",
   attach: "Attach an image or a file",
   attachTitle:
@@ -196,7 +195,6 @@ const zh: Record<keyof typeof en, string> = {
   conversationOpenTitle: "打开这段对话",
   conversationCurrent: "当前",
   conversationDelete: "删除这段对话",
-  conversationDeleted: "对话已删除",
   conversationDeleteFailed: "没有删除。对话已恢复，请重试。",
   attach: "附上图片或文件",
   attachTitle: "给消息附上图片（png、jpg、gif、webp、bmp）、PDF、视频、音频或文本文件。视频和音频会被转写。也可以粘贴或拖入。",

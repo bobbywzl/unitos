@@ -170,7 +170,7 @@ import type { SuggestCommand } from "@/lib/prompts/suggest";
 import { readNdjson } from "@/lib/ndjson";
 import { conflictLabels, saveNoteText } from "@/lib/notes/save-text";
 import { reconcileNoteText } from "@/lib/notes/conflict";
-import { deleteNoteWithUndo } from "@/lib/notes/undo-pill";
+import { deletedKey, deleteNoteWithUndo } from "@/lib/notes/undo-pill";
 import {
   cardCommentKey,
   caretToEnd,
@@ -2347,21 +2347,6 @@ export function ReaderInteractions({
   function stopExplain() {
     abortToolRun(bubble?.run);
   }
-  // Deleting is optimistic: the card leaves and the mark fades at once; the
-  // server's refresh confirms, and a failure puts the mark back with a toast.
-  async function deleteNote(noteId: string, removedMessage: string) {
-    broadcastNoteRemoved(noteId);
-    try {
-      await api(`/api/notes/${noteId}`, "DELETE");
-      router.refresh();
-      showToast(removedMessage);
-      return true;
-    } catch (err) {
-      broadcastNoteRestored(noteId);
-      showError(err instanceof Error ? err.message : t("reader.deleteFailed"));
-      return false;
-    }
-  }
   // Regenerate replaces (SPEC.md §4): the annotation a run replaced goes once
   // the new one is stored, so one selection never carries two of the same
   // tool's marks. No toast — the new output is the notice.
@@ -2377,16 +2362,7 @@ export function ReaderInteractions({
     const card = bubble;
     if (!card?.noteId || card.streaming || card.busy) return;
     setBubble(null);
-    await deleteNote(
-      card.noteId,
-      t(
-        card.kind === "analyze"
-          ? "reader.analysisRemoved"
-          : card.kind === "visualize"
-            ? "reader.visualizationRemoved"
-            : "reader.explanationRemoved",
-      ),
-    );
+    await deleteWithPill(card.noteId, t(deletedKey(card.kind)));
   }
   function closeSimplify() {
     abortToolRun(simplifyCard?.run);
@@ -2400,7 +2376,7 @@ export function ReaderInteractions({
     const card = simplifyCard;
     if (!card?.noteId || card.streaming || card.busy) return;
     setSimplifyCard(null);
-    await deleteNote(card.noteId, t("reader.simplifiedRemoved"));
+    await deleteWithPill(card.noteId, t(deletedKey("simplify")));
   }
   // Regenerate: the tool runs again on the same selection, in the same card,
   // and the new output replaces the old (SPEC.md §4). Visualize regenerates
@@ -2440,7 +2416,7 @@ export function ReaderInteractions({
     setAssistantChat(null);
     deleteConversationWithUndo({
       noteId,
-      message: t("assistant.conversationDeleted"),
+      message: t("outline.conversationDeleted"),
       gone: () => broadcastNoteRemoved(noteId),
       back: () => broadcastNoteRestored(noteId),
       failed: () => showError(t("assistant.conversationDeleteFailed")),
@@ -6590,7 +6566,8 @@ export function ReaderInteractions({
     await deleteWithPill(card.noteId, t(card.kind === "highlight" ? "outline.highlightDeleted" : "outline.commentDeleted"));
   }
 
-  // A highlight's or a comment's trash: the notes' Undo pill offers it back
+  // An annotation's trash (a highlight, a comment, an Explain, Analyze,
+  // Visualize, or Simplify card): the notes' Undo pill offers it back
   // (lib/notes/undo-pill.ts); History keeps it after the pill goes.
   async function deleteWithPill(noteId: string, message: string) {
     try {

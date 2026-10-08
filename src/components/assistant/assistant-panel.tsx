@@ -699,7 +699,7 @@ export function AssistantPanel({
       : null;
     deleteConversationWithUndo({
       noteId: id,
-      message: t("assistant.conversationDeleted"),
+      message: t("outline.conversationDeleted"),
       gone: () => {
         setConversations((all) => (all ? all.filter((c) => c.id !== id) : all));
         if (wasOpen) {
