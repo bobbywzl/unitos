@@ -107,6 +107,18 @@ const CAPTION_OPENING_RE = new RegExp(
   `^\\s*(?:(?:figure|table|photo|visualization|image|map|chart|plate|box|exhibit|scheme|abbildung|tabelle)\\s*(?:${NUMBER}\\s*[.:—–]|\\.)(?!\\d)|(?:fig|tab|abb)\\.\\s*${NUMBER}\\s*[.:—–](?!\\d)|(?:図表?|表)\\s*[\\dⅠ-Ⅻ]+(?:[.\\-–][\\dⅠ-Ⅻ]+)*)`,
   "iu",
 );
+/** A paragraph that opens as a caption does. A label with no number is a
+    word in its own case ("Figure."), never an acronym in capitals (parse
+    bench finding: the MML book's margin note "𝔼[y∗ | 𝒳,𝒴, x∗] = …
+    θMAP.", p. 314, reads "MAP." in the import's flat view, its formulas
+    apart, and counted as a caption "Map." apart from its figure). */
+function opensCaption(text: string): boolean {
+  const m = CAPTION_OPENING_RE.exec(text);
+  if (!m) return false;
+  const label = /^\s*(\p{L}+)/u.exec(m[0])?.[1] ?? "";
+  return /[\dIVXLivxlⅠ-Ⅻ]/.test(m[0].trim().slice(label.length)) || label.length < 2 || label !== label.toUpperCase();
+}
+
 /** A figure's or a table's caption opening with its label and number,
     with or without a stop after them ("Figure 2.6 Not all subsets …", the
     MML book's style): the candidate set it as a caption already. */
@@ -146,7 +158,7 @@ export function captionScores(cand: Flat, pdf?: PdfText, placed?: number[][]): C
       const caption = block.caption?.map((s) => s.text).join("") ?? "";
       if (CAPTION_OPENING_RE.test(caption) || LABELED_RE.test(caption)) kept++;
     }
-    if (block.kind === "paragraph" && CAPTION_OPENING_RE.test(text(b)) && !entry(b)) found.push({ text: text(b).slice(0, 100) });
+    if (block.kind === "paragraph" && opensCaption(text(b)) && !entry(b)) found.push({ text: text(b).slice(0, 100) });
     if (block.kind === "figure" && pdf && placed && cand.blocks[b + 1]?.kind === "paragraph" && /^\s*\p{Ll}/u.test(text(b + 1))) {
       const caption = cand.unitsOf[b][0];
       const tail = cand.unitsOf[b + 1][0];

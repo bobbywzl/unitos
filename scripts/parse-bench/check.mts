@@ -1651,10 +1651,11 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     { kind: "paragraph", spans: [{ text: "Figure 6.1 shows the dam after the flood." }] },
     { kind: "figure", at: { page: 1, region: region(72, 150, 300, 250) } },
     { kind: "figure", caption: [{ text: "Figure 2.6 Not all subsets are subspaces." }] },
+    { kind: "paragraph", spans: [{ text: "MAP." }] },
   ];
   const flatFloats = flatten({ blocks: floats });
   const captions = captionScores(flatFloats);
-  check("floats: a paragraph that opens as a caption is a caption apart; a sentence that names a figure (\"Figure 6.1 shows\") is none; a figure's caption with no stop after its number is kept", captions.alone === 1 && captions.captions === 3, JSON.stringify(captions));
+  check("floats: a paragraph that opens as a caption is a caption apart; a sentence that names a figure (\"Figure 6.1 shows\") is none; a figure's caption with no stop after its number is kept; an acronym in capitals (\"MAP.\") is no label", captions.alone === 1 && captions.captions === 3, JSON.stringify(captions));
   // A caption cut in two: its tail opens in lower case on the page's next line; a paragraph after the float's gap is none.
   const cut = flatten({ blocks: [{ kind: "figure", caption: [{ text: "Figure 2: A plot of the flow" }], at: { page: 1, region: region(72, 100, 300, 300) } }, para("is clearly linear.")] });
   const cutPdf = (gap: number) => pdfOf([line(300, 72, 400, "Figure 2: A plot of the flow"), line(300 + gap, 72, 160, "is clearly linear.")]);
