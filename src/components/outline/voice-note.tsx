@@ -245,7 +245,7 @@ export function VoiceNoteButton({
           data-track="voice-note-send-again"
           aria-label={t("outline.sendCommandAgain")}
           data-tip={t("outline.sendCommandAgainTitle")}
-          className={`${base} inline-flex items-center gap-1`}
+          className={`${base} inline-flex items-center gap-1 pointer-coarse:min-h-9`}
         >
           <CommandIcon />
           {t("outline.sendCommandAgain")}
@@ -259,7 +259,7 @@ export function VoiceNoteButton({
           data-track="voice-note-discard"
           aria-label={t("outline.discardCommand")}
           data-tip={t("outline.discardCommand")}
-          className="text-[11px] text-sand-500 hover:text-clay-700"
+          className="inline-flex items-center justify-center px-1 text-[11px] text-sand-500 hover:text-clay-700 pointer-coarse:size-9 pointer-coarse:px-0"
         >
           ✕
         </button>
@@ -273,7 +273,7 @@ export function VoiceNoteButton({
       data-track="voice-note"
       aria-label={t("outline.speakNote")}
       data-tip={compact ? `${t("outline.speakNote")}\n${t("outline.speakNoteTitle")}` : t("outline.speakNoteTitle")}
-      className={`${base} inline-flex items-center gap-1`}
+      className={`${base} inline-flex items-center gap-1 pointer-coarse:min-h-9`}
     >
       <CommandIcon size={compact ? 13 : 11} />
       {!compact && t("outline.speakNote")}

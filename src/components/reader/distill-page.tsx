@@ -143,7 +143,7 @@ export function DistillPage({
                 onClick={() => onRun(shown.question, shown.id)}
                 data-track="distill-page-regenerate"
                 disabled={(shown.regenerations ?? 0) >= DISTILL_REGENERATE_MAX}
-                className="text-xs font-semibold text-sand-600 hover:text-clay-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-sand-600"
+                className="text-xs font-semibold text-sand-600 pointer-coarse:py-2.5 hover:text-clay-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-sand-600"
                 data-tip={
                   (shown.regenerations ?? 0) >= DISTILL_REGENERATE_MAX
                     ? t("panes.distillAgainLimit", { n: DISTILL_REGENERATE_MAX })
@@ -159,7 +159,7 @@ export function DistillPage({
               <button
                 onClick={() => onDelete(shown.id)}
                 data-track="distill-page-delete"
-                className="text-xs font-semibold text-red-500 hover:text-red-700"
+                className="text-xs font-semibold text-red-500 hover:text-red-700 pointer-coarse:py-2.5"
                 data-tip={t("panes.deleteDistillation")}
               >
                 {t("common.delete")}
@@ -170,7 +170,7 @@ export function DistillPage({
               data-track="distill-page-close"
               aria-label={t("common.close")}
               data-tip={t("common.close")}
-              className="flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
+              className="flex size-8 pointer-coarse:size-9 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
             >
               ✕
             </button>

@@ -515,6 +515,8 @@ function Link({ node, href, children: linkChildren, ...props }: Override<"a">) {
     if (styleTags.includes("u")) painted = <u>{painted}</u>;
     return painted;
   }
+  // The ✎ and ¶ chips keep their 18 px inside the line; on a touch screen a
+  // transparent 9 px band around each makes a 36 px target (SPEC.md §6).
   const noteId = href?.startsWith("#dissect-note-") ? href.slice("#dissect-note-".length) : null;
   if (noteId) {
     return (
@@ -522,7 +524,7 @@ function Link({ node, href, children: linkChildren, ...props }: Override<"a">) {
         type="button"
         onClick={() => void showCitedNote(noteId, (href) => router.push(href))}
         data-tip={t("panels.showCitedNote")}
-        className="mx-0.5 inline-flex size-[18px] items-center justify-center rounded-full bg-sage-100 align-text-bottom text-[10px] font-semibold text-sage-800 no-underline hover:bg-sage-200"
+        className="mx-0.5 inline-flex size-[18px] items-center justify-center rounded-full pointer-coarse:relative pointer-coarse:after:absolute pointer-coarse:after:-inset-[9px] pointer-coarse:after:content-[''] bg-sage-100 align-text-bottom text-[10px] font-semibold text-sage-800 no-underline hover:bg-sage-200"
       >
         ✎
       </button>
@@ -535,7 +537,7 @@ function Link({ node, href, children: linkChildren, ...props }: Override<"a">) {
         type="button"
         onClick={() => window.dispatchEvent(new CustomEvent("dissect:flash-block", { detail: { blockId } }))}
         data-tip={t("panels.jumpToBlock")}
-        className="mx-0.5 inline-flex size-[18px] items-center justify-center rounded-full bg-clay-100 align-text-bottom text-[11px] font-semibold text-clay-800 no-underline hover:bg-clay-200"
+        className="mx-0.5 inline-flex size-[18px] items-center justify-center rounded-full pointer-coarse:relative pointer-coarse:after:absolute pointer-coarse:after:-inset-[9px] pointer-coarse:after:content-[''] bg-clay-100 align-text-bottom text-[11px] font-semibold text-clay-800 no-underline hover:bg-clay-200"
       >
         ¶
       </button>

@@ -190,7 +190,6 @@ const en = {
   deleteConversationTitle: "Delete this conversation and its mark",
   sentenceTitle: "Press to see what this restates in the original",
   thinking: "Thinking",
-  replyPlaceholder: "Reply…",
   messageAssistant: "Message the assistant",
   send: "Send",
   loading: "Loading",
@@ -198,7 +197,6 @@ const en = {
   continueConversation: "Continue in a conversation",
   continueConversationTitle:
     "Ask the assistant about this output to expand it and go deeper. The conversation saves with the output, under Annotations.",
-  continuePlaceholder: "Ask about this…",
   // The full conversation view (SPEC.md §21)
   expandConversation: "Expand the conversation",
   expandConversationTitle: "Read the whole conversation over the article, with the box at the foot.",
@@ -489,14 +487,12 @@ const zh: Record<keyof typeof en, string> = {
   deleteConversationTitle: "删除此对话及其标记",
   sentenceTitle: "点击查看这句对应的原文",
   thinking: "思考中",
-  replyPlaceholder: "回复…",
   messageAssistant: "给助手发消息",
   send: "发送",
   loading: "加载中",
   // A tool's output continued into a conversation (SPEC.md §21)
   continueConversation: "继续对话",
   continueConversationTitle: "就这段输出向助手提问，扩展并深入理解。对话随输出一起保存在批注下。",
-  continuePlaceholder: "就此提问…",
   // The full conversation view (SPEC.md §21)
   expandConversation: "展开对话",
   expandConversationTitle: "在文章上方通读整段对话，输入框固定在底部。",

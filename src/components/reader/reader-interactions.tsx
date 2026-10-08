@@ -1749,10 +1749,16 @@ export function ReaderInteractions({
   // under each block while the reader has it on.
   const [translations, setTranslations] = useState<Record<string, string> | null>(null);
   // The card an extract span or its chip opens: the origin phrase, every
-  // passage, and Delete. Each row jumps to its text.
-  const [extractCard, setExtractCard] = useState<{ id: string; top: number; left: number } | null>(
-    null,
-  );
+  // passage, and Delete. Each row jumps to its text. The block reader docks
+  // it in the card column, like the annotation card (SPEC.md §6).
+  const [extractCard, setExtractCard] = useState<{
+    id: string;
+    top: number;
+    left: number;
+    width?: number;
+    side?: "right" | "left";
+    anchor?: Anchor | null;
+  } | null>(null);
   // Voice: the bubble under the toolbar reads the highlighted text aloud.
   // The Edge voice through /api/speech — free neural voices, Chinese and
   // English alike; when the route fails, the most natural browser voice reads
@@ -2283,7 +2289,7 @@ export function ReaderInteractions({
   const CARD_ESTIMATE = 360;
   const CARD_GAP = 14;
   function claimSideSlot(
-    kind: "explain" | "simplify" | "assistant" | "comment" | "link" | "log" | "annotation",
+    kind: "explain" | "simplify" | "assistant" | "comment" | "link" | "log" | "annotation" | "extract",
     preferredTop: number,
     // The words the card is about: under them when there is no room beside.
     anchor?: Anchor | null,
@@ -2850,6 +2856,7 @@ export function ReaderInteractions({
     comment: commentCard?.anchor?.blockId,
     link: linkCard?.anchor?.blockId,
     annotation: annotationCard?.anchor?.blockId,
+    extract: extractCard?.anchor?.blockId,
   };
   for (const [layer, key] of Object.entries(layerKeys)) {
     const shown = key !== null;
@@ -3733,6 +3740,7 @@ export function ReaderInteractions({
     link: linkCard?.anchor,
     log: logCard?.anchor,
     annotation: annotationCard?.anchor,
+    extract: extractCard?.anchor,
   };
   const measureConnectors = useCallback(() => {
     const container = containerRef.current;
@@ -3783,7 +3791,7 @@ export function ReaderInteractions({
   useEffect(() => {
     const raf = requestAnimationFrame(measureConnectors);
     return () => cancelAnimationFrame(raf);
-  }, [bubble, simplifyCard, assistantChat, commentCard, linkCard, logCard, measureConnectors]);
+  }, [bubble, simplifyCard, assistantChat, commentCard, linkCard, logCard, extractCard, measureConnectors]);
   // The line follows its ends while they move: a scroll box inside the pane
   // (the transcript's) scrolls the text under a card, and a card pushed down
   // by a growing neighbor slides to its new place (globals.css
@@ -3931,6 +3939,7 @@ export function ReaderInteractions({
     if (moved.comment !== undefined) setCommentCard(lift<NonNullable<typeof commentCard>>("comment"));
     if (moved.link !== undefined) setLinkCard(lift<LinkCard>("link"));
     if (moved.annotation !== undefined) setAnnotationCard(lift<AnnotationCard>("annotation"));
+    if (moved.extract !== undefined) setExtractCard(lift<NonNullable<typeof extractCard>>("extract"));
   }, []);
   // A card grows with its content up to the pane's height, then its body
   // scrolls (SPEC.md §6). A card anchored low in the pane still grows past the
@@ -3989,6 +3998,7 @@ export function ReaderInteractions({
     else if (grown === "comment") setCommentCard(move<NonNullable<typeof commentCard>>);
     else if (grown === "link") setLinkCard(move<LinkCard>);
     else if (grown === "annotation") setAnnotationCard(move<AnnotationCard>);
+    else if (grown === "extract") setExtractCard(move<NonNullable<typeof extractCard>>);
   }, []);
   // The narrow reader (SPEC.md §6): no room beside the words, so each card
   // opens under the paragraph that ends its passage, and that paragraph's
@@ -4101,13 +4111,14 @@ export function ReaderInteractions({
     if (tops.comment !== undefined) setCommentCard(place<NonNullable<typeof commentCard>>("comment"));
     if (tops.link !== undefined) setLinkCard(place<LinkCard>("link"));
     if (tops.annotation !== undefined) setAnnotationCard(place<AnnotationCard>("annotation"));
+    if (tops.extract !== undefined) setExtractCard(place<NonNullable<typeof extractCard>>("extract"));
   }, []);
   const layoutNarrowCardsRef = useRef(layoutNarrowCards);
   layoutNarrowCardsRef.current = layoutNarrowCards;
   useLayoutEffect(() => {
     layoutNarrowCardsRef.current();
   });
-  const openCards = `${bubble !== null}${simplifyCard !== null}${assistantChat !== null}${commentCard !== null}${linkCard !== null}${annotationCard !== null}`;
+  const openCards = `${bubble !== null}${simplifyCard !== null}${assistantChat !== null}${commentCard !== null}${linkCard !== null}${annotationCard !== null}${extractCard !== null}`;
   // The room the column made for the cards goes back when the last one closes.
   const anyCardOpen = openCards.includes("true");
   const anyCardOpenRef = useRef(anyCardOpen);
@@ -5690,6 +5701,26 @@ export function ReaderInteractions({
       if (!extraction) return;
       const containerRect = container.getBoundingClientRect();
       const rect = element.getBoundingClientRect();
+      // The block reader: the card docks in the card column beside the words,
+      // or under the paragraph in a narrow reader, as the annotation card
+      // does — never over the words (SPEC.md §6). Its anchor is the span
+      // pressed: the origin or a passage in the pressed block.
+      if (!richTextRef.current) {
+        const blockId = element.closest<HTMLElement>("[data-block-id]")?.dataset.blockId;
+        const span = [extraction.origin, ...extraction.spans].find((x) => x.blockId === blockId) ?? extraction.origin;
+        const text = blocksRef.current.find((b) => b.id === span.blockId)?.text ?? "";
+        const anchor: Anchor = {
+          blockId: span.blockId,
+          startOffset: span.start,
+          endOffset: span.end,
+          quotedText: text.slice(span.start, span.end),
+          prefix: "",
+          suffix: "",
+        };
+        const top = rect.top - containerRect.top + container.scrollTop;
+        setExtractCard({ id: extractId, ...claimSideSlot("extract", top, anchor), anchor });
+        return;
+      }
       const width = 300;
       setExtractCard({
         id: extractId,
@@ -9701,7 +9732,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               void sendToolMessage(kind, undefined, e.currentTarget.value);
             }
           }}
-          placeholder={t(card.busy ? "assistant.queuePlaceholder" : "reader.continuePlaceholder")}
+          placeholder={t(card.busy ? "assistant.queuePlaceholder" : "assistant.messagePlaceholder")}
           aria-label={t("reader.messageAssistant")}
           className="field-sizing-content max-h-40 min-h-8 flex-1 resize-none rounded-xl bg-sand-100 px-3 py-1.5 text-[12.5px] outline-none placeholder:text-sand-500"
         />
@@ -9835,7 +9866,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             void sendChatMessage(undefined, e.currentTarget.value);
           }
         }}
-        placeholder={t(chat.busy ? "assistant.queuePlaceholder" : "reader.replyPlaceholder")}
+        placeholder={t(chat.busy ? "assistant.queuePlaceholder" : "assistant.messagePlaceholder")}
         aria-label={t("reader.messageAssistant")}
         data-chat-box=""
         className="field-sizing-content max-h-40 min-h-8 basis-full resize-none rounded-xl bg-sand-100 px-3 py-1.5 text-[12.5px] outline-none placeholder:text-sand-500"
@@ -10225,7 +10256,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           >
             <input
               type="checkbox"
-              className="mt-0.5 accent-clay"
+              className="mt-0.5 shrink-0 accent-clay pointer-coarse:size-5"
               checked={planChecked.has(i)}
               onChange={() =>
                 setPlanChecked((prev) => {
@@ -10868,8 +10899,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             <div
               data-selection-popover
               data-extract-card
+              data-side-card={richText ? undefined : "extract"}
               className={`pop-in absolute ${TOOL_LAYER} w-[300px] rounded-2xl bg-card p-3 shadow-float${underView}`}
-              style={{ top: extractCard.top, left: extractCard.left }}
+              style={{ top: extractCard.top, left: extractCard.left, width: extractCard.width }}
             >
               <div className="mb-2 flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase">
@@ -10881,7 +10913,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   data-track="extract-card-close"
                   aria-label={t("common.close")}
                   data-tip={t("common.close")}
-                  className="rounded-full px-1.5 text-sand-500 hover:text-clay-800"
+                  className={`flex ${cardIcon} items-center justify-center rounded-full text-xs text-sand-500 hover:text-clay-800`}
                 >
                   ✕
                 </button>
@@ -10922,7 +10954,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                     <button
                       onClick={() => deleteExtraction(extraction.id)}
                       data-track="extract-card-delete"
-                      className="text-xs font-semibold text-red-500 hover:text-red-700"
+                      className="rounded-full px-1 text-xs font-semibold text-red-500 hover:text-red-700 pointer-coarse:px-2.5 pointer-coarse:py-2.5"
                       data-tip={t("reader.deleteExtractionTitle")}
                     >
                       {t("common.delete")}

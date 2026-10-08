@@ -54,6 +54,8 @@ const en = {
   queue: "Queue",
   queueTitle: "Send this message after the answer lands. Queued messages go out in order.",
   queuePlaceholder: "Queue a message",
+  // The one placeholder of a card's box that talks to the assistant.
+  messagePlaceholder: "Message the assistant…",
   queued: "{n} queued",
   removeQueued: "Remove from the queue",
   // Highlighting an answer (SPEC.md §7): side chat, ask, comment
@@ -206,6 +208,7 @@ const zh: Record<keyof typeof en, string> = {
   queue: "排队",
   queueTitle: "等当前回答完成后再发送这条消息。排队的消息按顺序发出。",
   queuePlaceholder: "排队一条消息",
+  messagePlaceholder: "给助手发消息…",
   queued: "{n} 条排队中",
   removeQueued: "从队列中移除",
   startSideChat: "开启支线对话",
