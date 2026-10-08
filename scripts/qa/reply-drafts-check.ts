@@ -82,6 +82,25 @@ async function main() {
   d.writeReplyDraft("ua", "note:old", "");
   check(store.getItem("unitos-reply-draft:ua:note:old") === null, "a send (empty draft written) clears the reply draft");
 
+  // 6. A queued reply or Note on this link the server refused on replay
+  // goes back into its box's draft (REV8-01), after words typed since.
+  d.keepDroppedWords("ua", "/api/replies", { docLinkId: "l19", notebookId: "p", content: "typed on the train" });
+  check(d.readReplyDraft("ua", "link:l19") === "typed on the train", "a dropped reply on a link opens its box on the words");
+  d.writeReplyDraft("ua", "note:n9", "typed since");
+  d.keepDroppedWords("ua", "/api/replies", { noteId: "n9", content: "dropped words" });
+  check(d.readReplyDraft("ua", "note:n9") === "typed since\n\ndropped words", "a dropped reply lands after the words typed since");
+  d.keepDroppedWords("ua", "/api/replies", { noteId: "n9", content: "dropped words" });
+  check(d.readReplyDraft("ua", "note:n9") === "typed since\n\ndropped words", "a second drop of the same words adds nothing");
+  d.keepDroppedWords("ua", "/api/notes", { sectionId: "s1", fromLinkId: "l19", content: "note words" });
+  const dropped = d.readLinkNoteDraft("ua", "l19");
+  check(dropped?.content === "note words" && dropped.sectionId === "s1", "a dropped Note on this link opens its composer on the words and the section");
+  d.keepDroppedWords(null, "/api/replies", { docLinkId: "l19", content: "sign-in off" });
+  check(d.readReplyDraft("", "link:l19") === "sign-in off" && d.readReplyDraft("ua", "link:l19") === "typed on the train", "with no account the words go to the local draft, not another account's");
+  const before = store.keys().length;
+  d.keepDroppedWords("ua", "/api/notes", { sectionId: "s1", content: "a plain note" });
+  d.keepDroppedWords("ua", "/api/sections", { content: "x" });
+  check(store.keys().length === before, "other writes are not put back");
+
   console.log(failed === 0 ? "\nall checks pass" : `\n${failed} check(s) failed`);
   process.exit(failed === 0 ? 0 : 1);
 }

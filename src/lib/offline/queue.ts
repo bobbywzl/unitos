@@ -1,6 +1,7 @@
 "use client";
 
 import { ACCOUNT_HEADER, QUOTES_KEPT_HEADER, REPLAY_HEADER } from "@/lib/constants";
+import { keepDroppedWords } from "@/lib/note-drafts";
 import { openDb, tx, UPLOADS, WRITES } from "@/lib/offline/db";
 import { tabAccount } from "@/lib/tab-account";
 import { MEDIA_EXTENSIONS, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
@@ -189,7 +190,9 @@ async function sendWrite(record: QueuedWrite): Promise<Sent> {
     });
     const kept = Number(res.headers.get(QUOTES_KEPT_HEADER) ?? 0);
     if (res.ok && kept > 0) quotesKept += kept;
-    return outcome(res, record, record.path);
+    const sent = outcome(res, record, record.path);
+    if (sent === "done" && !res.ok && record.method === "POST") keepDroppedWords(record.account, record.path, record.body);
+    return sent;
   } catch {
     return "wait";
   }

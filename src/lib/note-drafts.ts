@@ -180,6 +180,28 @@ export function writeLinkNoteDraft(account: string, linkId: string, content: str
   else remove(linkNoteKey(account, linkId));
 }
 
+/** A queued reply or Note on this link that the server refused on replay
+    (a 4xx: the note, the edit, or the link left the project, or the role
+    changed): its words go back into the box's draft, after any words typed
+    there since, so the box opens on them (REV8-01, rule zero 6). Other
+    writes are not put back: their box is gone with the 4xx. */
+export function keepDroppedWords(account: string | null, path: string, body: unknown) {
+  if (!body || typeof body !== "object") return;
+  const b = body as Record<string, unknown>;
+  const words = typeof b.content === "string" ? b.content.trim() : "";
+  if (!words) return;
+  const id = account ?? "";
+  const join = (kept?: string) => (!kept?.trim() ? words : kept.includes(words) ? kept : `${kept.trimEnd()}\n\n${words}`);
+  if (path === "/api/replies") {
+    const target =
+      typeof b.noteId === "string" ? `note:${b.noteId}` : typeof b.blockEditId === "string" ? `edit:${b.blockEditId}` : typeof b.docLinkId === "string" ? `link:${b.docLinkId}` : null;
+    if (target) writeReplyDraft(id, target, join(readReplyDraft(id, target) ?? undefined));
+  } else if (path === "/api/notes" && typeof b.fromLinkId === "string") {
+    const kept = readLinkNoteDraft(id, b.fromLinkId);
+    writeLinkNoteDraft(id, b.fromLinkId, join(kept?.content), kept?.sectionId ?? (typeof b.sectionId === "string" ? b.sectionId : null));
+  }
+}
+
 // [ui5] WALK5-13: whether this browser holds unsent words on a link for the
 // account: a reply draft or a Note on this link draft (legacy keys too).
 // Read only: nothing is claimed or moved.

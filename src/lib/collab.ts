@@ -121,11 +121,13 @@ type LinkForAccess = {
     sit in that project; asked from no project (an older tab), to the best
     role over its from-document. A link whose project was deleted is not
     found, and neither is a link removed from the project it is asked from
-    (DocLinkHidden). */
+    (DocLinkHidden), unless `removed` lets it: a reply replayed from the
+    offline queue saves on the kept row (REV8-01). */
 export async function linkAccess(
   link: LinkForAccess,
   min: NotebookRole,
   scope?: string | null,
+  { removed = false }: { removed?: boolean } = {},
 ): Promise<NotebookAccess | NextResponse> {
   const notFound = async () => {
     const t = await serverT();
@@ -141,6 +143,7 @@ export async function linkAccess(
       // documents, as the same change asked from that project would.
       const editable = await editableHolders(link, access.user);
       const hidden =
+        !removed &&
         editable.length > 0 &&
         (await db.docLinkHidden.count({ where: { docLinkId: link.id, notebookId: { in: editable } } })) > 0;
       return hidden ? notFound() : access;
@@ -150,11 +153,11 @@ export async function linkAccess(
     if (!authEnabled()) return access;
     const ends = [...new Set([link.fromDocumentId, link.toDocumentId])];
     const held = await db.notebookDocument.count({ where: { notebookId: scope, documentId: { in: ends } } });
-    if (held !== ends.length || (await hiddenIn(link.id, scope))) return notFound();
+    if (held !== ends.length || (!removed && (await hiddenIn(link.id, scope)))) return notFound();
     return access;
   }
   if (scope && scope !== link.notebookId) return notFound();
-  if (await hiddenIn(link.id, link.notebookId)) return notFound();
+  if (!removed && (await hiddenIn(link.id, link.notebookId))) return notFound();
   const access = await notebookAccess(link.notebookId, min);
   if (access instanceof NextResponse && access.status === 404) return notFound();
   return access;
