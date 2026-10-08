@@ -1922,6 +1922,14 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     pulled.filter((b) => b.includes('class="display"')).length === 2 && !pulled.some((b) => b.includes("Paragraph") && b.includes("display")),
     pulled.join(" / "),
   );
+  // A figure whose media the parse cannot keep reads as its figcaption: a caption still.
+  const orphan = (
+    await parseHtmlContent(
+      `<!doctype html><html><head><title>Notes on river flow</title></head><body><article><p>${prose(1)}</p><figure><iframe src="https://player.example.net/embed/42"></iframe><figcaption>The gauge at the delta, filmed at dawn</figcaption></figure><p>${prose(2)}</p></article></body></html>`,
+      "https://example.org/rivers",
+    )
+  ).blocks.map((b) => `${b.type} ${b.html ?? ""} ${b.text.slice(0, 12)}`);
+  check("url: a figure's caption whose media is refused is a caption", orphan.includes('PARAGRAPH <p class="caption"> The gauge at'), orphan.join(" / "));
 }
 
 {
