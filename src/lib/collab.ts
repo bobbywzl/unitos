@@ -139,7 +139,7 @@ export async function linkAccess(
       // An older tab names no project: a change answers 404 when the link
       // was removed from any project the caller edits that holds both its
       // documents, as the same change asked from that project would.
-      const editable = await editableHolders(link, access.user, null);
+      const editable = await editableHolders(link, access.user);
       const hidden =
         editable.length > 0 &&
         (await db.docLinkHidden.count({ where: { docLinkId: link.id, notebookId: { in: editable } } })) > 0;
@@ -236,12 +236,11 @@ export async function crossAccountLink(link: LinkForRule, user: User): Promise<C
 }
 
 /** The projects that hold both documents of a link and that the caller
-    edits: of `owner` only when one is named, else of every account. */
-async function editableHolders(link: LinkForAccess, user: User, owner: string | null): Promise<string[]> {
+    edits, of every account. */
+async function editableHolders(link: LinkForAccess, user: User): Promise<string[]> {
   const ends = [...new Set([link.fromDocumentId, link.toDocumentId])];
   const holders = await db.notebook.findMany({
     where: {
-      ...(authEnabled() && owner ? { userId: owner } : {}),
       AND: ends.map((documentId) => ({ documents: { some: { documentId } } })),
     },
     select: { id: true, userId: true, collaborators: { select: { email: true, role: true } } },
@@ -257,26 +256,24 @@ async function editableHolders(link: LinkForAccess, user: User, owner: string | 
 
 /** Where a removal hides a link whose row has to stay (another account
     replied on it, or another account's project shows it; SPEC.md §13): a
-    link of a project, in that project; a link with no project, in every
-    project of the asking project's owner that holds both documents and
-    that the caller edits, so it leaves the same projects a delete took it
-    from and stays in every other account's project. Asked from no project
-    (an older tab), in every project that holds both documents and that the
-    caller edits: the DELETE route asks so only for a link no other account
-    replied on and no other account's project shows, so those are one
-    account's projects; a link that must stay for another account answers
-    409 Reload instead (REV5-01). An empty answer means the link can't be
-    hidden anywhere: the caller refuses the removal. */
+    link of a project, in that project; a link with no project, in the
+    project it was removed from (linkAccess has checked that the caller
+    edits it and that it holds both documents), so every other project
+    keeps it (REV6-01). Asked from no project (an older tab), in every
+    project that holds both documents and that the caller edits: the DELETE
+    route asks so only for a link no other account replied on and no other
+    account's project shows, so those are one account's projects; a link
+    that must stay for another account answers 409 Reload instead
+    (REV5-01). An empty answer means the link can't be hidden anywhere: the
+    caller refuses the removal. */
 export async function linkHideProjects(
   link: LinkForAccess,
   user: User,
   scope: string | null,
 ): Promise<string[]> {
   if (link.notebookId) return [link.notebookId];
-  if (!scope) return editableHolders(link, user, null);
-  const owner = (await db.notebook.findUnique({ where: { id: scope }, select: { userId: true } }))?.userId ?? user.id;
-  const ids = await editableHolders(link, user, owner);
-  return ids.includes(scope) ? ids : [...ids, scope];
+  if (scope) return [scope];
+  return editableHolders(link, user);
 }
 
 /** The answer when the cross-account rule refuses a change. */
@@ -293,9 +290,9 @@ export async function legacyLinkSharedAcrossAccounts(link: LinkForRule, user: Us
 }
 
 /** A document's edit history read from one project, without the LINK_ADD and
-    LINK_REMOVE edits of another project's links: meta.notebookId names the
-    link's project (edits since links carried one), else a removal's
-    meta.hiddenIn names the projects it left; an older LINK_ADD whose
+    LINK_REMOVE edits of another project's links: a removal's meta.hiddenIn
+    names the projects it left, read first; else meta.notebookId names the
+    link's project (edits since links carried one); an older LINK_ADD whose
     link still exists answers by the link's project. An older edit that
     tells neither keeps showing, as before. */
 export async function withoutOtherProjectLinkEdits<T extends { kind: string; meta: Prisma.JsonValue }>(
@@ -326,8 +323,9 @@ export async function withoutOtherProjectLinkEdits<T extends { kind: string; met
   return edits.filter((e) => {
     if (!isLinkEdit(e)) return true;
     const m = metaOf(e);
-    if (typeof m.notebookId !== "string" && Array.isArray(m.hiddenIn) && m.hiddenIn.length > 0) {
-      // A removal from an older tab names the projects it was hidden in.
+    if (Array.isArray(m.hiddenIn) && m.hiddenIn.length > 0) {
+      // A removal names the projects it was hidden in: it lists, with its
+      // Restore, in each of them (REV6-01).
       return m.hiddenIn.includes(notebookId);
     }
     const project =

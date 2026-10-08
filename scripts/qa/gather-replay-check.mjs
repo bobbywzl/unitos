@@ -5,8 +5,11 @@
 // server must run on the same copy.
 //
 // 1. API: the online POST still answers 400 for a quote that does not
-//    resolve; the replayed POST (the queue's x-unitos-replay header) answers
-//    201, keeps the quote's words as text with no source, and says how many.
+//    resolve; the replayed POST (the queue's x-unitos-replay header, the
+//    time the record was queued) answers 201, keeps the quote's words as
+//    text with no source, and says how many; a header that is not a recent
+//    time answers 400 as online, and a second replay of the same record
+//    answers with the saved note and saves no second one (REV6-06).
 // 2. Browser: the gather dock opens on a draft, Save note runs offline and
 //    queues, a collaborator's edit removes the quoted words, the browser
 //    comes back online, the queue replays: the note lands with the words,
@@ -52,7 +55,14 @@ const post = (headers) =>
 // ── 1. API ────────────────────────────────────────────────────────────────
 const online = await post({});
 check("online: a quote that does not resolve still answers 400", online.status === 400, String(online.status));
-const replay = await post({ "x-unitos-replay": "1" });
+// REV6-06: the header carries the time the record was queued; any other
+// value, or a time out of range, takes the online path.
+const queuedAt = Date.now() - 5000;
+for (const [what, value] of [["a bare 1", "1"], ["a time 40 days old", String(Date.now() - 40 * 864e5)], ["a time an hour ahead", String(Date.now() + 3600e3)], ["not a number", "yes"]]) {
+  const r = await post({ "x-unitos-replay": value });
+  check(`replay header ${what}: 400 as online, no note`, r.status === 400, String(r.status));
+}
+const replay = await post({ "x-unitos-replay": String(queuedAt) });
 const note = replay.status === 201 ? await replay.json() : null;
 check("replay: 201", replay.status === 201, `${replay.status} ${note ? "" : await replay.text().catch(() => "")}`);
 check("replay: the answer says 1 quote was kept as text", replay.headers.get("x-unitos-quotes-kept") === "1", String(replay.headers.get("x-unitos-quotes-kept")));
@@ -61,10 +71,17 @@ check(
   !!note && note.content.includes("my own thoughts, typed offline") && note.content.includes("> Suffering is the ground of compassion.") && note.content.includes("> words a collaborator removed"),
   note?.content,
 );
+const again = await post({ "x-unitos-replay": String(queuedAt) });
+const againNote = again.status === 201 ? await again.json() : null;
+check(
+  "the same record replayed again (at-least-once): 201 with the saved note, no second note",
+  again.status === 201 && againNote?.id === note?.id && sql(`SELECT count(*) FROM "Note" WHERE content LIKE '${TAG} api: my own%'`) === "1",
+  `${again.status} ${againNote?.id} ${note?.id}`,
+);
 check("replay: one source, for the quote that resolves", note?.sources?.length === 1 && note.sources[0].blockId === "rev4-b3", JSON.stringify(note?.sources?.map((s) => s.blockId)));
 const outside = await fetch(`${BASE}/api/notes`, {
   method: "POST",
-  headers: { "Content-Type": "application/json", Cookie: "dissect-session=rev3-sc", "x-unitos-replay": "1" },
+  headers: { "Content-Type": "application/json", Cookie: "dissect-session=rev3-sc", "x-unitos-replay": String(Date.now()) },
   body: JSON.stringify({ sectionId: "rev5-s-p", content: `${TAG} api: a document that left the project`, quotes: [{ documentId: "rev5-d5", quotedText: "B private" }] }),
 });
 const outsideNote = outside.status === 201 ? await outside.json() : null;

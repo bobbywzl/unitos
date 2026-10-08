@@ -135,7 +135,13 @@ export function HistoryControl({ notebookId, history }: { notebookId: string; hi
                 {person?.name ?? (authOn ? "?" : t("panes.historyYou"))}
               </span>{" "}
               <span className="text-sand-600">
-                {t(entry.restored ? "panes.historyLinkRestore" : KIND_KEY[entry.kind])}
+                {t(
+                  entry.restored
+                    ? "panes.historyLinkRestore"
+                    : entry.dismissed
+                      ? "panes.historyLinkDismiss"
+                      : KIND_KEY[entry.kind],
+                )}
               </span>
             </span>
             {entry.restoreLinkId && canEdit && (

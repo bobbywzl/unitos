@@ -50,6 +50,7 @@ import type { ConversionInfo } from "@/components/reader/conversion-strip";
 import { GlossaryLanguage } from "@/components/reader/glossary-language";
 import type { PageMark } from "@/components/reader/page-block";
 import { ReaderInteractions } from "@/components/reader/reader-interactions";
+import { compactDocument } from "@/lib/attached-document";
 import { ensureBlockIds, isOlderBlankDocument, richTextFromBlocks } from "@/lib/docs/blocks";
 import { readPageSetup, type RichNode } from "@/lib/docs/schema";
 import { figureMedia, importShared } from "@/lib/docs/server";
@@ -203,7 +204,10 @@ export default async function NotebookPage(props: {
       }
     }
   }
-  const attached = notebook.documents.map((nd) => ({
+  // One list per page (COST6-08): every prop below that lists the documents
+  // gets this one array, rows with their default fields left out
+  // (lib/attached-document.ts), so the payload carries it once.
+  const attached = notebook.documents.map((nd) => compactDocument({
     id: nd.document.id,
     title: nd.document.title,
     sourceUrl: nd.document.sourceUrl,
@@ -1111,7 +1115,7 @@ export default async function NotebookPage(props: {
     id: notebook.id,
     title: notebook.title,
     sections: top,
-    documents: attached.map((d) => ({ id: d.id, title: d.title })),
+    documents: attached,
   };
   // [cover4] The notes on each link of the open documents (WALK4-05).
   for (const pane of new Set([paneOne, paneTwo])) {
@@ -1247,7 +1251,7 @@ export default async function NotebookPage(props: {
   // A removed link still hidden in this project: its newest LINK_REMOVE
   // entry gets Restore, for an editor or the owner (WALK5-01, WALK5-08).
   const linkMeta = (meta: unknown) =>
-    (meta && typeof meta === "object" && !Array.isArray(meta) ? meta : {}) as { linkId?: unknown; restored?: unknown };
+    (meta && typeof meta === "object" && !Array.isArray(meta) ? meta : {}) as { linkId?: unknown; restored?: unknown; dismissed?: unknown };
   const removedLinkIds = [
     ...new Set(
       allEdits.flatMap((e) => {
@@ -1310,6 +1314,7 @@ export default async function NotebookPage(props: {
         trivial: trivial.get(e.id) ?? false,
         ...(restoreLinkId ? { restoreLinkId } : {}),
         ...(e.kind === "LINK_ADD" && linkMeta(e.meta).restored === true ? { restored: true } : {}),
+        ...(e.kind === "LINK_REMOVE" && linkMeta(e.meta).dismissed === true ? { dismissed: true } : {}),
       };
     }),
   ]
@@ -1409,7 +1414,7 @@ export default async function NotebookPage(props: {
         pane={role}
         paneOneId={paneOne?.document.id ?? pane.document.id}
         paneTwoId={paneTwo?.document.id ?? null}
-        documents={attached.map((d) => ({ id: d.id, title: d.title }))}
+        documents={attached}
       />
     ) : null;
     const articlePane = role === "one" ? articleOne : articleTwo;
@@ -1559,7 +1564,7 @@ export default async function NotebookPage(props: {
             view={readerView}
             paneOneId={paneOne.document.id}
             paneTwoId={paneTwo?.document.id ?? null}
-            documents={attached.map((d) => ({ id: d.id, title: d.title }))}
+            documents={attached}
             paneOne={paneNode(paneOne, `one:${paneOne.document.id}`, "one")}
             paneTwo={paneTwo ? paneNode(paneTwo, `two:${paneTwo.document.id}`, "two") : null}
           />

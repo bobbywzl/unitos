@@ -25,6 +25,7 @@ import { CollabProvider, useCollab } from "@/components/collab/collab-context";
 import { GraphOverlay } from "@/components/graph/graph-overlay";
 import { bumpGraphGeneration } from "@/components/graph/graph-generation";
 import { useProvenanceWanted } from "@/components/graph/provenance-want";
+import { usePruneLinkSeen } from "@/components/graph/link-replies";
 
 /** The last answer per project: its data, when it landed or was confirmed
     (a 304), its ETag, and whether it holds the provenance links. */
@@ -148,6 +149,9 @@ export function GraphOverlayLoader({
         : [];
     });
   }, [data, edges]);
+  // The new-replies marks of links the answer no longer holds go (REV6-05).
+  const linkIds = useMemo(() => (data ? data.edges.flatMap((e) => e.links.map((l) => l.id)) : null), [data]);
+  usePruneLinkSeen(notebookId, linkIds, data?.provenance ?? false);
   // The people who made the graph's links and replied on them, for their badges.
   const scoped = useMemo(
     () => (data ? { ...collab, people: { ...data.people, ...collab.people } } : collab),

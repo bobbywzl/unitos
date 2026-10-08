@@ -71,8 +71,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ linkId: strin
 }
 
 // Remove a link. Recorded as a LINK_REMOVE edit so the Edits panel and
-// History show it; dismissing a still-recommended link records nothing — it
-// never was history. An accepted link is never deleted: it is hidden in the
+// History show it; dismissing a still-recommended link that is deleted
+// records nothing — it never was history; one that is hidden is recorded
+// with meta.dismissed (REV6-02). An accepted link is never deleted: it is hidden in the
 // remover's projects (DocLinkHidden), its row, reason, replies, and notes on
 // it are kept, and Undo, or Restore in History, removes the hide row
 // (DELETE /api/links/:id/hidden; WALK5-01, rule zero item 1). A recommended
@@ -115,7 +116,11 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ linkId: stri
         skipDuplicates: true,
       });
     }
-    if (link.recommended) return null;
+    // A dismiss that deletes the proposal records nothing: it never was
+    // history. One that hides it (another account replied, or another
+    // account's project shows it) records the hide, so History's Restore
+    // brings it back under Recommended links (REV6-02).
+    if (deleteRow) return null;
     return tx.blockEdit.create({
       data: {
         documentId: link.fromDocumentId,
@@ -127,6 +132,7 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ linkId: stri
           linkId: link.id,
           ...(project ? { notebookId: project } : {}),
           hiddenIn: hideIn,
+          ...(link.recommended ? { dismissed: true } : {}),
           toDocumentId: link.toDocumentId,
           toTitle: link.toDocument.title,
           quotedText: link.quotedText,
