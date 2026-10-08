@@ -511,7 +511,9 @@ export function PageCanvas({
   // the margin beside the column is thinner than the button: there the
   // button would stand over the first letters of the lines (EDGE12-13).
   const outlineRoom = canvasWidth === 0 || (canvasWidth - pageVisual) / 2 >= outlineLeft + OUTLINE_BUTTON;
-  useEffect(() => {
+  // Before paint: the toolbar's Contents button and this one never show
+  // together for a frame (a split switch back to Normal).
+  useLayoutEffect(() => {
     if (store.get().outlineRoom !== outlineRoom) store.set({ outlineRoom });
   }, [store, outlineRoom]);
   const centered = (canvasWidth - pageVisual) / 2 >= side;

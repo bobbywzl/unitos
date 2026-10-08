@@ -1545,7 +1545,7 @@ export function ReaderInteractions({
     container.style.overflowAnchor = "none";
     const article = container.querySelector("article") ?? container;
     let held = true;
-    // The reader took over (a scroll, a touch, the timer): saves resume.
+    // The reader took over (a scroll, a touch, a key, the timer): saves resume.
     const release = () => {
       if (!held) return;
       held = false;
@@ -1557,6 +1557,7 @@ export function ReaderInteractions({
       container.removeEventListener("wheel", release);
       container.removeEventListener("touchmove", release);
       container.removeEventListener("pointerdown", release);
+      window.removeEventListener("keydown", release, true);
       clearTimeout(timer);
     };
     // The effect ends (a document switch, or a development re-run): the
@@ -1604,6 +1605,9 @@ export function ReaderInteractions({
     container.addEventListener("wheel", release, { passive: true });
     container.addEventListener("touchmove", release, { passive: true });
     container.addEventListener("pointerdown", release);
+    // A key is the reader acting too (Ctrl+F and its jump, Page Down), as in
+    // the page editor's own hold (docs/page/keep-place.ts).
+    window.addEventListener("keydown", release, true);
     let timer = setTimeout(release, placed ? POSITION_HOLD_MS : PAGE_WAIT_MS);
     return cleanup;
   }, [positionStoreKey, embedded, isTranscript, accountAtOpen]);
