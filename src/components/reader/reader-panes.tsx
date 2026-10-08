@@ -72,10 +72,12 @@ export function viewHref(
   return `/n/${notebookId}?${params.toString()}`;
 }
 
-// The pane header of a split view: one row at the top of the pane, above
-// its scroller, never over the text. The reader renders it — for a video
-// document too, through the video pane — and adds its article menu and
-// Extract to the row for an article. It follows the strip's cut like the
+// The pane header of a split view: one row at the top of the pane. The
+// reader renders it — for a video document too, through the video pane —
+// and adds its article menu and Extract to the row for an article; on an
+// article it stands over the scroller's top, in the place and height of
+// the page editor's title row or the block article's top padding, so a
+// view switch moves nothing up or down. It follows the strip's cut like the
 // column (globals.css .pane-header), so its controls stay in the visible
 // part of the pane.
 export const PANE_HEADER =

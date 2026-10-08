@@ -9897,19 +9897,20 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   // scrolls: a sticky block with no height, like the controls at the top
   // right, so the text runs under it, and only the controls take pointer
   // events. In a split view it sits in the pane header, always in reach,
-  // and its list drops below the header (SPEC.md §6). A transcript has the
+  // and its list drops below the header from the pane's left edge, inside
+  // the pane (SPEC.md §6). A transcript has the
   // video pane's own tools instead (SPEC.md §11).
   const articleMenu = (
       <div
         data-track-surface="article-menu"
         className={
-          split ? "relative flex shrink-0 items-center" : "pointer-events-none sticky top-4 z-30 h-0 print:hidden"
+          split ? "flex shrink-0 items-center" : "pointer-events-none sticky top-4 z-30 h-0 print:hidden"
         }
       >
         <div
           className={
             split
-              ? "flex w-max items-start gap-1.5 [&>nav]:absolute [&>nav]:top-full [&>nav]:left-0 [&>nav]:mt-2 [&>nav]:w-[min(400px,70vw)]"
+              ? "flex w-max items-start gap-1.5 [&_nav]:absolute [&_nav]:top-full [&_nav]:left-3 [&_nav]:mt-2 [&_nav]:w-[min(400px,calc(100%-24px))]"
               : "absolute top-0 left-4 flex w-[min(400px,calc(100%-32px))] flex-col items-start gap-1.5"
           }
         >
@@ -10220,26 +10221,10 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   const barFigure = bar?.figure === true;
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-      {/* A split view: the pane header — the pane's document, the article
-          menu, Extract — one row above the scroller, never over the text
-          (SPEC.md §6). On a transcript the header carries the document only. */}
-      {split && (
-        <div className={PANE_HEADER}>
-          {paneHeader}
-          {/* A blank document has no Contents. */}
-          {!transcript && !richText && articleMenu}
-          {!transcript && (
-            <div className="relative ml-auto flex shrink-0 items-center gap-2">
-              {collapseButton}
-              {distillButton}
-              {/* The article's errors: under the buttons, over the text. */}
-              <div className="absolute top-full right-0 mt-2">
-                <ArticleErrors documentId={documentId} />
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+      {/* A split view's pane header (SPEC.md §6). On a transcript it carries
+          the document only, one row above the scroller; on an article it
+          stands inside the scroller (below). */}
+      {split && transcript && <div className={PANE_HEADER}>{paneHeader}</div>}
     <div
       ref={containerRef}
       data-reader-root
@@ -10286,6 +10271,29 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       }
     >
       {!split && !transcript && !embedded && !richText && articleMenu}
+      {/* An article's pane header — the pane's document, the article menu,
+          Extract — stands over the scroller's top, in the place and height
+          of the page editor's title row (docs-editor.tsx) or of the block
+          article's top padding, so a view switch moves nothing (SPEC.md
+          §6). The page editor keeps Collapse in its toolbar, as in Normal. */}
+      {split && !transcript && (
+        <div
+          className={`${PANE_HEADER}${richText ? "" : " bg-paper"}`}
+          style={{ position: "sticky", top: 0, zIndex: 40, marginBottom: -44 }}
+        >
+          {paneHeader}
+          {/* A blank document has no Contents. */}
+          {!richText && articleMenu}
+          <div className="relative ml-auto flex shrink-0 items-center gap-2">
+            {!richText && collapseButton}
+            {distillButton}
+            {/* The article's errors: under the buttons, over the text. */}
+            <div className="absolute top-full right-0 mt-2">
+              <ArticleErrors documentId={documentId} />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* The drop line: where an image dropped on the text lands. */}
       {dropLine && (
@@ -10305,8 +10313,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           covers its words; the article's errors sit under the toast. */}
       <div
         className={`pointer-events-none sticky z-10 h-0 print:hidden ${
-          // A blank document's toolbar holds the top; the toasts sit under it.
-          richText ? "top-[112px]" : "top-4"
+          // A blank document's toolbar holds the top; the toasts sit under it,
+          // as under a split pane's header.
+          richText ? "top-[112px]" : split ? "top-[60px]" : "top-4"
         }`}
       >
       <div className="absolute top-0 right-4 left-4 flex flex-col items-end gap-2">
@@ -10430,7 +10439,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 canEdit,
                 // Collapse alone: the rail's Extract tab has Extract from
                 // the article (PAGE12-11).
-                aiControls: !split && !embedded ? <div className="flex items-center gap-2">{collapseButton}</div> : null,
+                aiControls: !embedded ? <div className="flex items-center gap-2">{collapseButton}</div> : null,
                 notebookId,
                 documents: attachedDocuments,
                 // An import's References section stands under its pages,

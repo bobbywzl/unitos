@@ -24,14 +24,16 @@ function Skeleton() {
 /** The page editor's frame (SPEC.md §29) until the editor stands: the title
     row, the toolbar's row, the ruler's row, and a page with gray lines where
     the words will stand. It keeps nothing of the editor's code, so the
-    reader draws it while that loads. A pane of a split view has no title
-    row, as the editor will have none (its pane header names the document). */
+    reader draws it while that loads. A pane of a split view keeps the title
+    row's slot empty, as the editor does: its pane header stands there. */
 export function DocsFrame({ title, pageSetup, split = false }: { title: string; pageSetup: PageSetup; split?: boolean }) {
   const page = pageSetup.pageless ? null : pageFrame(pageSetup);
   return (
     <div className="docs-shell" aria-busy="true">
       <div className="docs-header">
-        {!split && (
+        {split ? (
+          <div className="docs-title-row" data-pane-header-slot aria-hidden="true" />
+        ) : (
           <div className="docs-title-row">
             <DocIcon size={26} className="docs-title-icon" />
             <span className={`docs-title-input${UNTITLED.has(title) ? " docs-title-untitled" : ""}`}>{title}</span>
