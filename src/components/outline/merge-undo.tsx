@@ -16,7 +16,7 @@ export function onBody(node: React.ReactNode): React.ReactNode {
 export const BOTTOM_PILL =
   "fixed bottom-[calc(66px+env(safe-area-inset-bottom))] left-1/2 z-[55] flex max-w-[calc(100vw-32px)] -translate-x-1/2 items-center gap-3 rounded-full bg-card px-5 py-2.5 whitespace-nowrap shadow-float md:bottom-6";
 
-// The pill after a merge, a delete, a reject, or an editor's Cancel (SPEC.md §6): what
+// The pill after a merge, a delete (of notes or a section), a reject, or an editor's Cancel (SPEC.md §6): what
 // happened, and Undo, which puts the notes back as they were. It stays for a
 // while after each change, and the newest change takes it. A change that
 // did not reach the server says so here. Rendered by the workspace (the
@@ -42,31 +42,43 @@ export function MergeUndoBar({
     removed: unknown;
     rejected: unknown;
     canceled: unknown;
-    newest: "merge" | "delete" | "reject" | "cancel" | null;
-  }>({ merge: null, removed: null, rejected: null, canceled: null, newest: null });
+    section: unknown;
+    newest: "merge" | "delete" | "reject" | "cancel" | "section" | null;
+  }>({ merge: null, removed: null, rejected: null, canceled: null, section: null, newest: null });
   if (
     seen.merge !== actions.lastMerge ||
     seen.removed !== actions.lastDelete ||
     seen.rejected !== rejected ||
-    seen.canceled !== actions.lastCancel
+    seen.canceled !== actions.lastCancel ||
+    seen.section !== actions.lastSectionDelete
   ) {
     const newest =
       rejected !== null && rejected !== seen.rejected
         ? "reject"
         : actions.lastCancel !== null && actions.lastCancel !== seen.canceled
           ? "cancel"
-          : actions.lastDelete !== null && actions.lastDelete !== seen.removed
-            ? "delete"
-            : actions.lastMerge !== null && actions.lastMerge !== seen.merge
-              ? "merge"
-              : seen.newest;
-    setSeen({ merge: actions.lastMerge, removed: actions.lastDelete, rejected, canceled: actions.lastCancel, newest });
+          : actions.lastSectionDelete !== null && actions.lastSectionDelete !== seen.section
+            ? "section"
+            : actions.lastDelete !== null && actions.lastDelete !== seen.removed
+              ? "delete"
+              : actions.lastMerge !== null && actions.lastMerge !== seen.merge
+                ? "merge"
+                : seen.newest;
+    setSeen({
+      merge: actions.lastMerge,
+      removed: actions.lastDelete,
+      rejected,
+      canceled: actions.lastCancel,
+      section: actions.lastSectionDelete,
+      newest,
+    });
   }
-  const order = [seen.newest, "reject", "cancel", "delete", "merge"] as const;
+  const order = [seen.newest, "reject", "cancel", "section", "delete", "merge"] as const;
   const shown = order.find(
     (kind) =>
       (kind === "reject" && rejected !== null) ||
       (kind === "cancel" && actions.lastCancel !== null) ||
+      (kind === "section" && actions.lastSectionDelete !== null) ||
       (kind === "delete" && actions.lastDelete !== null) ||
       (kind === "merge" && actions.lastMerge !== null),
   );
@@ -74,6 +86,7 @@ export function MergeUndoBar({
   const removed = shown === "delete" ? actions.lastDelete : null;
   const reject = shown === "reject" ? rejected : null;
   const canceled = shown === "cancel" ? actions.lastCancel : null;
+  const section = shown === "section" ? actions.lastSectionDelete : null;
 
   useEffect(() => {
     if (!error) return;
@@ -81,7 +94,7 @@ export function MergeUndoBar({
     return () => clearTimeout(timer);
   }, [error]);
 
-  if (!merge && !removed && !reject && !canceled && !notice) return null;
+  if (!merge && !removed && !reject && !canceled && !section && !notice) return null;
   return onBody(
     <div role="status" data-undo-pill="" className={BOTTOM_PILL}>
       {reject ? (
@@ -111,6 +124,29 @@ export function MergeUndoBar({
           <button
             onClick={() => actions.dismissMerge()}
             data-track="dismiss-cancel"
+            aria-label={t("common.close")}
+            data-tip={t("common.close")}
+            className="text-sand-500 hover:text-clay-700"
+          >
+            ✕
+          </button>
+        </>
+      ) : section ? (
+        <>
+          {/* The section left with its notes; History keeps it whole, and
+              Undo is History's Restore. */}
+          <span className="text-[13px] text-sand-600">{t("outline.sectionDeleted")}</span>
+          <button
+            onClick={() => void actions.undoSectionDelete()}
+            data-track="undo-section-delete"
+            data-tip={t("outline.undoSectionDeleteTitle")}
+            className="rounded-full bg-clay px-3.5 py-1 text-xs font-semibold text-clay-fg hover:bg-clay-600"
+          >
+            {t("outline.undo")}
+          </button>
+          <button
+            onClick={() => actions.dismissMerge()}
+            data-track="dismiss-section-delete"
             aria-label={t("common.close")}
             data-tip={t("common.close")}
             className="text-sand-500 hover:text-clay-700"

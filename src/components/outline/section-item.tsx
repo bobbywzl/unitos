@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import type { SectionView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
-import { PencilIcon, PlusIcon } from "@/components/icons";
+import { PencilIcon, PlusIcon, TrashIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { DragHandle, SortableGroup, SortableItem, useDropHeader, type HandleProps } from "@/components/sortable";
 import { notesList, sectionsList } from "@/components/outline/board-lists";
@@ -15,6 +15,11 @@ import { useNoteCompose } from "@/components/outline/use-note-compose";
 import { VoiceNoteButton } from "@/components/outline/voice-note";
 import { filterSections, noteMatches, type OutlineActions } from "@/components/outline/use-outline";
 import { shownSectionTitle } from "@/lib/section-title";
+
+// The rename and delete buttons beside a section's title: 24px drawn, a
+// 36px hit area on a touch screen.
+const SECTION_HEAD_TOOL =
+  "flex size-6 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:size-9";
 
 export function SectionItem({
   section,
@@ -71,7 +76,7 @@ export function SectionItem({
       <div
         data-drop-header={notesList(section.id)}
         data-drop-first={notes[0]?.id ?? ""}
-        className={`-mx-2 flex flex-wrap items-baseline gap-x-2.5 gap-y-1 rounded-[22px] px-2 transition-colors ${
+        className={`group/head -mx-2 flex flex-wrap items-baseline gap-x-2.5 gap-y-1 rounded-[22px] px-2 transition-colors ${
           headerLit ? "bg-clay-100 ring-2 ring-clay-400" : ""
         }`}
       >
@@ -99,7 +104,9 @@ export function SectionItem({
         ) : (
           <>
             {/* The title opens the section's board (SPEC.md §6); the pencil
-                beside it renames the section. */}
+                beside it renames the section, and the bin deletes it, with
+                Undo. Both show on the header's hover and focus, and at rest
+                on a touch screen. */}
             <button
               onClick={() => onOpenBoard(section.id)}
               data-track="section-board"
@@ -110,15 +117,28 @@ export function SectionItem({
               {shownSectionTitle(section.title, t)}
             </button>
             {canEdit && (
-              <button
-                onClick={() => setEditing(true)}
-                data-track="section-rename"
-                aria-label={t("outline.renameSection")}
-                data-tip={t("outline.renameSection")}
-                className="flex size-6 shrink-0 items-center justify-center self-center rounded-full text-sand-500 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-clay-100 hover:text-clay-800 focus-visible:opacity-100"
-              >
-                <PencilIcon size={13} />
-              </button>
+              <span className="flex items-center gap-0.5 self-center opacity-0 transition-opacity group-hover/head:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
+                <button
+                  onClick={() => setEditing(true)}
+                  data-track="section-rename"
+                  aria-label={t("outline.renameSection")}
+                  data-tip={t("outline.renameSection")}
+                  className={SECTION_HEAD_TOOL}
+                >
+                  <PencilIcon size={13} />
+                </button>
+                {/* No confirm: the pill under the notes offers Undo, and
+                    History keeps the section whole with Restore. */}
+                <button
+                  onClick={() => void actions.deleteSection(section.id)}
+                  data-track="section-delete"
+                  aria-label={t("outline.deleteSectionTitle")}
+                  data-tip={t("outline.deleteSectionTitle")}
+                  className={`${SECTION_HEAD_TOOL} hover:!text-red-600`}
+                >
+                  <TrashIcon size={13} />
+                </button>
+              </span>
             )}
           </>
         )}
@@ -141,17 +161,6 @@ export function SectionItem({
         )}
         {canEdit && (
           <VoiceNoteButton sectionId={section.id} onError={setVoiceError} className={SECTION_ACTION} />
-        )}
-        {canEdit && (
-          <button
-            onClick={() => {
-              if (confirm(t("outline.confirmDeleteSection"))) void actions.deleteSection(section.id);
-            }}
-            data-tip={t("outline.deleteSectionTitle")}
-            className="text-xs text-red-500 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:text-red-700"
-          >
-            {t("common.delete")}
-          </button>
         )}
       </div>
 

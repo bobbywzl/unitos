@@ -72,6 +72,11 @@ const MERGE_UNDO_MS = 12_000;
 export type LastDelete = { ids: string[] };
 const DELETE_UNDO_MS = MERGE_UNDO_MS;
 
+/** The section deleted last (SPEC.md §6): the server deleted it at once and
+    kept it whole in its History event (lib/notes/removed.ts), so the pill's
+    Undo is History's Restore of that event. */
+export type LastSectionDelete = { eventId: string; title: string; count: number };
+
 /** The target of a merge took the other notes in: its card blooms
     (note-card.tsx listens). */
 export const NOTE_ABSORBED_EVENT = "dissect:note-absorbed";
@@ -128,6 +133,10 @@ export type OutlineActions = {
   removeNotes: (ids: string[], composed?: boolean) => void;
   lastDelete: LastDelete | null;
   undoDelete: () => void;
+  /** The section deleted last, while the pill offers Undo (SPEC.md §6). */
+  lastSectionDelete: LastSectionDelete | null;
+  /** Put the deleted section back with its notes: History's Restore. */
+  undoSectionDelete: () => Promise<void>;
   /** A line for the pill under the notes: a change that did not reach the
       server and was put back, or news (words kept as a new note, a quote
       without its source). Null when there is nothing to say. */
@@ -612,6 +621,12 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
   // and says so: a note is never gone from the screen while it is still
   // on the server, nor gone from the server while Undo is on the screen.
   const [lastDelete, setLastDelete] = useState<LastDelete | null>(null);
+  const [lastSectionDelete, setLastSectionDelete] = useState<LastSectionDelete | null>(null);
+  useEffect(() => {
+    if (!lastSectionDelete) return;
+    const timer = setTimeout(() => setLastSectionDelete(null), DELETE_UNDO_MS);
+    return () => clearTimeout(timer);
+  }, [lastSectionDelete]);
   // The words an editor's Cancel took out of a note, while Undo can put them back.
   const [lastCancel, setLastCancel] = useState<{ noteId: string; content: string } | null>(null);
   useEffect(() => {
@@ -960,7 +975,17 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
       refresh();
     },
     async deleteSection(id) {
-      await api(`/api/sections/${id}`, "DELETE");
+      const title = findSection(treeRef.current, id)?.title ?? "";
+      const answer = await api<{ eventId?: unknown; noteCount?: unknown }>(`/api/sections/${id}`, "DELETE");
+      if (typeof answer?.eventId === "string") {
+        setLastMerge(null);
+        setLastCancel(null);
+        setLastSectionDelete({
+          eventId: answer.eventId,
+          title,
+          count: typeof answer.noteCount === "number" ? answer.noteCount : 0,
+        });
+      }
       refresh();
     },
     reorderSection(parentId, id, toIndex) {
@@ -1152,6 +1177,19 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
     removeNotes,
     lastDelete,
     undoDelete,
+    lastSectionDelete,
+    async undoSectionDelete() {
+      const last = lastSectionDelete;
+      if (!last) return;
+      setLastSectionDelete(null);
+      try {
+        await api(`/api/notebooks/${notebook.id}/history/${last.eventId}`, "POST");
+      } catch (err) {
+        // History keeps the section: its row's Restore is the way back still.
+        setNotice(t("outline.sectionUndoFailed", { reason: err instanceof Error ? err.message : String(err) }), true);
+      }
+      refresh();
+    },
     notice: shownNotice?.text ?? null,
     noticeFailed: shownNotice?.failed ?? false,
     dismissNotice() {
@@ -1297,6 +1335,7 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
     dismissMerge() {
       setLastMerge(null);
       setLastCancel(null);
+      setLastSectionDelete(null);
       commitDelete();
     },
     editCanceled(noteId, typed) {

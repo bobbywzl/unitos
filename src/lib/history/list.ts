@@ -65,10 +65,12 @@ export async function historyPage(
   ]);
   // Small edits are marked (lib/history/trivial.ts) so the panel folds them.
   const trivial = await trivialEdits(edits);
-  // A removed note kept whole can be restored (lib/notes/removed.ts): read
+  // A removed note or section kept whole can be restored (lib/notes/removed.ts): read
   // as two flags, never the kept note itself. A removed document's row
   // reads its document's id, so the row can offer Add back.
-  const flagged = events.filter((e) => e.kind === "NOTE_REMOVE" || e.kind === "DOCUMENT_DETACH").map((e) => e.id);
+  const flagged = events
+    .filter((e) => e.kind === "NOTE_REMOVE" || e.kind === "SECTION_REMOVE" || e.kind === "DOCUMENT_DETACH")
+    .map((e) => e.id);
   const flags =
     flagged.length === 0
       ? []
@@ -103,7 +105,7 @@ export async function historyPage(
         kind: e.kind as HistoryEntry["kind"],
         content: e.content,
         documentTitle: null,
-        ...(e.kind === "NOTE_REMOVE" && flagsOf.get(e.id)?.kept
+        ...((e.kind === "NOTE_REMOVE" || e.kind === "SECTION_REMOVE") && flagsOf.get(e.id)?.kept
           ? { restorable: true, restored: flagsOf.get(e.id)!.restored }
           : {}),
         ...(e.kind === "DOCUMENT_DETACH" && addBackOf(e.id) ? { addBackDocumentId: addBackOf(e.id)! } : {}),
