@@ -1009,6 +1009,20 @@ function sideNote(band: Band, page: number): Side[] | null {
   // sets its 20 pt title beside a column of the report's number, date, and
   // authors, and each line of the column read between two of the title's).
   const parted = (k: number) => gaps[k] > Math.max(pitch, Math.min(lines[k].size, lines[k + 1].size) * 1.15) * 1.3;
+  // A paragraph also ends at the line before an indented first line, with
+  // no gap between them: the line, at the column's edge, ends a sentence
+  // (or an end mark), and the next line starts half an em to three ems in
+  // (parse loop finding: the MML book's "weak duality" note read inside
+  // the sentence after its paragraph, "…with respect to λ is weak
+  // duality", and the next one split display (7.28) between its rows). A
+  // list's items stand in from the edge, all of them: an item's end is no
+  // paragraph's. The edge is where most lines start: a head set out left of
+  // it is no edge (qm-madsen p. 91: "13.2 Quantum States" split "…their own
+  // measurement system?" | "In that case").
+  const at = (x: number) => lines.filter((l) => Math.abs(l.x - x) <= 1).length;
+  const left = lines.map((l) => l.x).reduce((a, x) => (at(x) > at(a) ? x : a));
+  const indented = (l: Line) => l.x - left >= l.size * 0.5 && l.x - left <= l.size * 3;
+  const ends = (k: number) => parted(k) || (/[.!?:♢◇□■∎]$/u.test(lines[k].text.trim()) && !indented(lines[k]) && indented(lines[k + 1]));
   // A group of the note: its lines at their own pitch (a stray mark on the
   // note's side, its page number, is a group of its own).
   const noteLines = buildLines(note.items, page);
@@ -1043,7 +1057,7 @@ function sideNote(band: Band, page: number): Side[] | null {
       if (start < 0) start = 0;
       cuts.push(start === 0 ? Infinity : lines[start].y + lines[start].size * 0.5);
     } else {
-      const end = lines.findIndex((l, k) => l.y <= top && (k === lines.length - 1 || parted(k)));
+      const end = lines.findIndex((l, k) => l.y <= top && (k === lines.length - 1 || ends(k)));
       if (end < 0) return null;
       cuts.push(lines[end].y - lines[end].size * 0.5);
     }
