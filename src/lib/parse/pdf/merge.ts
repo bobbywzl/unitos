@@ -154,15 +154,17 @@ function continuesOnPage(prev: Segment, next: Segment, setting: PageSetting): bo
   // basis of V", and "coordinate of x with respect to B").
   const beside = lone && next.box !== undefined && Math.abs(next.box.y2 - prev.box!.y2) <= lineSize * 0.5 && next.box.x1 > prev.box!.x2;
   if (beside && sizes && sizes[0] < sizes[1] * 0.95) return false;
-  // A note of a few words set smaller right of the paragraph, level with
-  // its lines, is a note in the margin too (parse loop finding: the MML
-  // book's "orthogonal complement", read after its paragraph at the page's
-  // foot, went on its sentence: "…x∈V can be orthogonal complement
-  // uniquely decomposed into").
+  // A note of a few words set smaller beside the paragraph, right or left
+  // of it, level with its lines, is a note in the margin too (parse loop
+  // finding: the MML book's "orthogonal complement", read after its
+  // paragraph at the page's foot, went on its sentence: "…x∈V can be
+  // orthogonal complement uniquely decomposed into"; on a left-hand page
+  // the note "primal problem" left of "…dual problem is given by" read
+  // "…is given by primal problem", p. 240).
   const noteRight =
     prev.box !== undefined &&
     next.box !== undefined &&
-    next.box.x1 > prev.box.x2 &&
+    (next.box.x1 > prev.box.x2 || next.box.x2 < prev.box.x1) &&
     next.box.y2 <= prev.box.y2 + lineSize &&
     next.box.y1 >= prev.box.y1 - lineSize &&
     next.text.length <= 40;
@@ -240,6 +242,13 @@ export function joinOnPage(input: Segment[]): Segment[] {
       shiftSpansInto(prev, segment, joinWrapped(prev, segment.text));
       joinLayout(prev, segment);
       endAs(prev, segment);
+      // Two parts of one column take one box: a note in the margin level
+      // with the later part's lines stands beside the paragraph (the MML
+      // book's "primal problem" beside the lines a display's row cut from
+      // the paragraph's first, p. 240). Parts in two columns keep the
+      // first's.
+      const [a, b] = [prev.box, segment.box];
+      if (a && b && Math.min(a.x2, b.x2) > Math.max(a.x1, b.x1)) prev.box = { x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1), x2: Math.max(a.x2, b.x2), y2: Math.max(a.y2, b.y2) };
       continue;
     }
     if (prev && itemGoesOn(prev, segment)) {
