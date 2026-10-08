@@ -785,7 +785,7 @@ check("replyLanguage command: a mixed or short command keeps the UI's", replyLan
   const cutB = skeletonSystem(views6, rd, new Set(["A2", "B1", "B4"]), prof6);
   const linesAt = cutA.indexOf("The skeleton lines read for this command:");
   check("skeletonSystem: a cut's headers and gists come first, byte-identical across cuts", linesAt > 0 && cutA.slice(0, linesAt) === cutB.slice(0, cutB.indexOf("The skeleton lines read for this command:")) && cutA.slice(0, linesAt).includes("gist: On pity.") && cutA.slice(0, linesAt).includes("gist: On the will."));
-  check("skeletonSystem: a cut's lines under [document X] N of M skeleton lines shown, the gap marked (…)", cutA.includes("[document A] 2 of 6 skeleton lines shown\n[block A1] line 1\n(…)\n[part at A3] \"Part two\": the second part\n[block A5] line 5") && !cutA.includes("not shown)"));
+  check("skeletonSystem: a cut's lines under [document X] \"title\": N of M skeleton lines shown, the gap marked (…)", cutA.includes("[document A] \"Pity\": 2 of 6 skeleton lines shown\n[block A1] line 1\n(…)\n[part at A3] \"Part two\": the second part\n[block A5] line 5") && !cutA.includes("not shown)"));
   const whole6 = skeletonSystem(views6, rd, null, prof6);
   check("skeletonSystem: every line shown keeps the header, gist and lines together, no gap mark", /\[document A\] "Pity" \([^)]*\)\ngist: On pity\.\n\[block A1\] line 1\n\[block A2\]/.test(whole6) && !whole6.includes("(…)") && !whole6.includes("lines read for this command"));
   check("select prompt: the partial note names the gap mark", stitchSelectPrompt({ documents: [], command: "x", continued: false, earlier: [], cited: [], maxBlocks: 10, partial: true }).includes("(…) marks lines not shown between two lines."));

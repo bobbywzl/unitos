@@ -937,7 +937,7 @@ function routeSystem(views: SkeletonView[], rendered: Rendered[], profile: Profi
     part's summary above its first shown line. Byte-identical from turn to
     turn when every line is shown. A cut puts every document's header and
     gist first, the same bytes every command, and the lines after them
-    under "[document X] N of M skeleton lines shown", so the headers cache
+    under '[document X] "<title>": N of M skeleton lines shown', so the headers cache
     (COST6-02). */
 export function skeletonSystem(views: SkeletonView[], rendered: Rendered[], shown: Set<string> | null, profile: Profile): string {
   const byLetter = new Map(views.map((v) => [v.r.letter, v]));
@@ -946,7 +946,7 @@ export function skeletonSystem(views: SkeletonView[], rendered: Rendered[], show
     const v = byLetter.get(r.letter);
     if (!v) return shown ? [] : [r.section];
     const lines = shown ? v.lines.filter((l) => shown.has(l.alias)) : v.lines;
-    const out: string[] = [shown ? `[document ${r.letter}] ${lines.length} of ${v.lines.length} skeleton lines shown` : head(r, v)];
+    const out: string[] = [shown ? `[document ${r.letter}] "${r.doc.title}": ${lines.length} of ${v.lines.length} skeleton lines shown` : head(r, v)];
     const partOf = new Map(v.parts.map((p) => [p.alias, p]));
     let lastIndex = -1;
     let lastPart: string | null = null;
@@ -979,7 +979,7 @@ export function skeletonSystem(views: SkeletonView[], rendered: Rendered[], show
   return systemOf(
     stitchSelectRules(),
     profile,
-    "Each document's title and gist follow, then the skeleton lines read for this command: one line per block, tagged [block <alias>], what the block says at a tenth of its length, under its document's letter.",
+    "Each document's title and gist follow, then the skeleton lines read for this command: one line per block, tagged [block <alias>], what the block says at a tenth of its length, under its document's letter and title.",
     `${heads.join("\n\n")}\n\nThe skeleton lines read for this command:\n\n${sections.join("\n\n")}`,
   );
 }
