@@ -515,7 +515,7 @@
   color: var(--docs-tb-muted);
 }
 
-/* ── The More bubble: the groups that did not fit, in one row under ⋮ ──── */
+/* ── The More bubble: the groups that did not fit, in one row under ⋯ ──── */
 .docs-menu.docs-tb-bubble {
   z-index: 58;
   min-height: 35px;

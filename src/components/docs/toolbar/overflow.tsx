@@ -1,13 +1,13 @@
 "use client";
 
 import { Fragment, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { MoreVertIcon } from "@/components/docs/icons";
+import { MoreHorizIcon } from "@/components/docs/icons";
 import { DropdownPanel, keepFocus } from "@/components/docs/menu";
 import { OPEN_MENU_EVENT, Sep, ToolbarEditor } from "@/components/docs/toolbar/controls";
 
 // The toolbar's row (SPEC.md §29). When the controls do not fit, the right
 // end's captions fold first — a Unitos tool to its symbol, then the mode's
-// name — then whole groups move into More (⋮), the least used first (each
+// name — then whole groups move into More (⋯), the least used first (each
 // group's `fold`), so Bold and the lists stay on the row while Zoom, Paint
 // format and voice typing fold. The row is one Tab stop: Left and Right move
 // between controls, Escape goes back to the page.
@@ -30,7 +30,7 @@ const CAPTION_OPEN = 122;
 const CAPTION_FOLDED = 26;
 const UNITOS_FOLDED = 30;
 const UNITOS_GAP = 8;
-/** More (⋮) with its margins. */
+/** More (⋯) with its margins. */
 const MORE = 32;
 
 function focusTarget(item: HTMLElement): HTMLElement | null {
@@ -241,7 +241,7 @@ export function ToolbarRow({
               onClick={() => setMoreOpen((o) => !o)}
               className="docs-tb-btn"
             >
-              <MoreVertIcon />
+              <MoreHorizIcon />
             </button>
             <DropdownPanel
               open={bubbleOpen}

@@ -4,7 +4,7 @@ import { useEditorState, type Editor } from "@tiptap/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/components/lang-provider";
-import { CloseIcon, ExpandLessIcon, ExpandMoreIcon, MoreVertIcon } from "@/components/docs/icons";
+import { CloseIcon, ExpandLessIcon, ExpandMoreIcon, MoreHorizIcon } from "@/components/docs/icons";
 import { keepFocus } from "@/components/docs/menu";
 import { DialogButton } from "@/components/docs/toolbar/dialog";
 import { installModalTrap, useEscapeLayer } from "@/lib/escape-layers";
@@ -110,7 +110,7 @@ export function FindBar({
   const buttons = [
     { label: t("docsTyping.previous"), icon: <ExpandLessIcon />, run: () => stepResult(view, -1), off: none },
     { label: t("docsTyping.next"), icon: <ExpandMoreIcon />, run: () => stepResult(view, 1), off: none },
-    { label: t("docsTyping.moreOptions"), icon: <MoreVertIcon />, run: onMore, off: false },
+    { label: t("docsTyping.moreOptions"), icon: <MoreHorizIcon />, run: onMore, off: false },
     { label: t("docs.close"), icon: <CloseIcon />, run: onClose, off: false },
   ];
   return createPortal(

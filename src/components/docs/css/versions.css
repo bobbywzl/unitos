@@ -151,7 +151,7 @@
 .docs-versions-tile-selected:hover {
   background: var(--docs-on-bg);
 }
-/* The whole tile picks the version; ⋮ sits over it. */
+/* The whole tile picks the version; ⋯ sits over it. */
 .docs-versions-pick {
   display: block;
   width: 100%;

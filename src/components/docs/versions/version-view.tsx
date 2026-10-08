@@ -6,7 +6,7 @@ import katex from "katex";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAuthor } from "@/components/collab/collab-context";
 import { useLang, useT } from "@/components/lang-provider";
-import { MoreVertIcon } from "@/components/docs/icons";
+import { MoreHorizIcon } from "@/components/docs/icons";
 import { importedOf, type FigureMediaView } from "@/components/docs/insert/figure";
 import { ArrowBackIcon } from "@/components/docs/insert/icons";
 import { flushDocument } from "@/components/docs/layer/flush";
@@ -98,7 +98,7 @@ export function VersionView({
   const [showChanges, setShowChanges] = useState(true);
   const [naming, setNaming] = useState<string | null>(null);
   const [menu, setMenu] = useState<string | null>(null);
-  // The version ⋮ › Restore this version picked: it restores once that
+  // The version ⋯ › Restore this version picked: it restores once that
   // version's text is in. Another pick clears the wish.
   const restoreWanted = useRef<string | null>(null);
   const menuAnchor = useRef<HTMLButtonElement | null>(null);
@@ -415,7 +415,7 @@ export function VersionView({
                         setMenu(menu === e.id ? null : e.id);
                       }}
                     >
-                      <MoreVertIcon size={20} />
+                      <MoreHorizIcon size={20} />
                     </button>
                   )}
                 </div>
