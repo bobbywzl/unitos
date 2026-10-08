@@ -30,7 +30,7 @@ import { DetailsDialog } from "@/components/docs/page/details-dialog";
 import { LineNumberColumn, LineNumbersDialog, useLineNumbers } from "@/components/docs/page/line-numbers";
 import { TranslateDialog } from "@/components/docs/page/translate-dialog";
 import { PageSetupDialog, readPageDefault } from "@/components/docs/page/setup-dialog";
-import { PAGE_EVENT, pageStore, usePageState, type EditHeaderDetail, type HeaderArea } from "@/components/docs/page/store";
+import { PAGE_EVENT, drawnPageless, pageStore, useDrawnSetup, usePageState, type EditHeaderDetail, type HeaderArea } from "@/components/docs/page/store";
 import { WatermarkMark } from "@/components/docs/page/watermark";
 import { WatermarkDialog } from "@/components/docs/page/watermark-dialog";
 import { DEFAULT_PAGE_SETUP } from "@/lib/docs/schema";
@@ -124,7 +124,8 @@ export function PageCanvas({
   children: ReactNode;
 }) {
   const store = pageStore(editor, documentId, pageSetup);
-  const setup = usePageState(store, (s) => s.setup);
+  // The page draws the drawn setup; the saves below read the saved one.
+  const setup = useDrawnSetup(store);
   const pages = usePageState(store, (s) => s.pages);
   const textWidth = usePageState(store, (s) => s.textWidth);
   const showRuler = usePageState(store, (s) => s.showRuler);
@@ -397,7 +398,7 @@ export function PageCanvas({
       }
     };
     const editAtCaret = (area: HeaderArea) => {
-      if (!editor.isEditable || store.get().setup.pageless) return;
+      if (!editor.isEditable || drawnPageless(store.get())) return;
       store.set({ editing: { area, page: Math.min(caretPage(), store.get().pages - 1) } });
     };
     const onEdit = (e: Event) => editAtCaret((e as CustomEvent<EditHeaderDetail>).detail.area);

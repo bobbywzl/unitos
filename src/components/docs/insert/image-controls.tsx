@@ -128,7 +128,7 @@ export function ImageControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
   const box = figure instanceof HTMLElement ? figure.querySelector(".docs-img-box")?.getBoundingClientRect() : null;
   const anchor = box ? { left: box.left, top: box.top, bottom: box.bottom } : null;
   const a = imageAttrs(hit.node);
-  const pageless = ctx.pageSetup.pageless;
+  const pageless = ctx.drawnPageless;
   const set = (attrs: Record<string, unknown>) => setImageAttrs(editor.view, hit.pos, attrs);
   const button = (label: TKey, icon: ReactNode, onClick: () => void) => (
     <button type="button" className="docs-tb-btn" aria-label={t(label)} data-tip={t(label)} onClick={onClick}>
@@ -348,7 +348,7 @@ function ImageOptionsPanel({ editor, ctx, section, onClose }: { editor: Editor; 
     }
     set({ width: Math.max(16, Math.round(width)), height: Math.max(16, Math.round(height)) });
   };
-  const pageless = ctx.pageSetup.pageless;
+  const pageless = ctx.drawnPageless;
 
   return (
     <SidePanel title={t("docsInsert.imageOptions")} icon={<ImageOptionsIcon />} onClose={onClose}>

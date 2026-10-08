@@ -12,7 +12,7 @@ import { ArrowBackIcon } from "@/components/docs/insert/icons";
 import { flushDocument } from "@/components/docs/layer/flush";
 import { DropdownPanel, MenuItem } from "@/components/docs/menu";
 import { pageFrame, pagelessWidth, scrollParent } from "@/components/docs/page/geometry";
-import { pageStore, usePageState } from "@/components/docs/page/store";
+import { pageStore, useDrawnSetup, usePageState } from "@/components/docs/page/store";
 import { DialogButton } from "@/components/docs/toolbar/dialog";
 import { namedStyleSheet } from "@/components/docs/toolbar/styles";
 import { markChanges } from "@/components/docs/versions/diff";
@@ -80,7 +80,8 @@ export function VersionView({
   const lang = useLang();
   const authorOf = useAuthor();
   const store = pageStore(editor, documentId, pageSetup);
-  const setup = usePageState(store, (s) => s.setup);
+  // A version draws as the page does.
+  const setup = useDrawnSetup(store);
   const textWidth = usePageState(store, (s) => s.textWidth);
   const rect = usePaneRect(editor);
   // The notes tray folds while the view is open, so the page has the room.

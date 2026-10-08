@@ -6,13 +6,16 @@ import { useT } from "@/components/lang-provider";
 import { PAGE_EVENT, pageStore, usePageState } from "@/components/docs/page/store";
 import type { PageSetup } from "@/lib/docs/schema";
 
-// A PDF import read pageless (SPEC.md §30). On a pane where Fit draws its
-// pages small (the notes tray beside a small window, a phone), its words are
-// hard to read; in Viewing the reader may read them wrapped to the pane, as
-// the Pageless format draws a page. It is a view of this browser, kept per
-// document: the document's page setup never changes, nothing is saved, and
-// Editing and Suggesting draw the pages again. A bar over the page offers
-// it; Search the menus has Read pageless and Show pages.
+// A document in pages read pageless (SPEC.md §29, §30). On a pane where Fit
+// draws a PDF import's pages small (the notes tray beside a small window),
+// its words are hard to read; in Viewing the reader may read them wrapped to
+// the pane, as the Pageless format draws a page, and Editing and Suggesting
+// draw the pages again. A pane too narrow for the page (a phone) reads every
+// document in pages pageless, in every mode. It is a view of this browser,
+// kept per document: the page store keeps it apart from the saved setup
+// (page/store.ts), so the document's page setup never changes and nothing is
+// saved. A bar over the page offers it; Search the menus has Read pageless
+// and Show pages.
 
 /** Fit under this scale offers to read pageless. */
 const OFFER_BELOW = 0.75;
@@ -42,6 +45,13 @@ function storeReflow(documentId: string, choice: Reflow): void {
 /** The reader's choice, kept per document, and the commands' event. */
 export function useReflow(editor: Editor | null, documentId: string, applies: boolean): [Reflow | null, (choice: Reflow) => void] {
   const [choice, setChoice] = useState<Reflow | null>(() => (applies ? storedReflow(documentId) : null));
+  // The pane's width is measured after the first draw: a phone's choice
+  // (Show pages) is read once the pane is known to be narrow.
+  const [appliedWas, setAppliedWas] = useState(applies);
+  if (applies !== appliedWas) {
+    setAppliedWas(applies);
+    if (applies) setChoice(storedReflow(documentId));
+  }
   const choose = (next: Reflow) => {
     setChoice(next);
     storeReflow(documentId, next);
