@@ -1,5 +1,6 @@
 "use client";
 
+import { ACCEPT_CLASS, REJECT_CLASS } from "@/components/assistant/decision-classes";
 import { useState, useSyncExternalStore } from "react";
 import type { ChatTurn } from "@/lib/conversation";
 import { annotationKindColor } from "@/lib/annotations/kind";
@@ -96,7 +97,7 @@ export function SuggestionRow({
       onClick={() => settle(false)}
       data-track="assistant-suggestions:reject-all"
       data-tip={t("assistant.suggestRejectAllTitle")}
-      className={button}
+      className={bar ? REJECT_CLASS : button}
     >
       {t(bar ? "common.reject" : "docsSuggest.rejectAll")}
     </button>
@@ -107,7 +108,7 @@ export function SuggestionRow({
       onClick={() => settle(true)}
       data-track="assistant-suggestions:accept-all"
       data-tip={t("assistant.suggestAcceptAllTitle")}
-      className={bar ? "rounded-full bg-clay px-3 py-0.5 font-semibold text-clay-fg hover:bg-clay-600 pointer-coarse:py-1.5" : button}
+      className={bar ? ACCEPT_CLASS : button}
     >
       {t(bar ? "common.accept" : "docsSuggest.acceptAll")}
     </button>
@@ -135,8 +136,10 @@ export function SuggestionRow({
             </span>
           )
         )}
+        {/* The summary keeps 10rem at least: on a narrow bar the count, the
+            ratings, Accept and Reject wrap to the line under it. */}
         {bar && !run.running && run.summary && (
-          <span className="min-w-0 flex-1 truncate text-sand-800" data-tip={run.summary}>
+          <span className="min-w-40 flex-1 truncate text-sand-800" data-tip={run.summary}>
             {run.summary}
           </span>
         )}

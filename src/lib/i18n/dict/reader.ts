@@ -53,7 +53,7 @@ const en = {
   anchorsFirstParagraph: "Equations and pages in the selection are left out",
   passageTooLong: "Select at most {n} paragraphs to use the tools.",
   run: "Run",
-  assistantPlaceholder: "Tell the assistant what to do with this selection…",
+  assistantPlaceholder: "Tell the assistant what to do with the selected words…",
   stopAssistant: "Stop the assistant. Your message stays; no reply lands.",
   commentPlaceholder: "Comment",
   addCommentPlaceholder: "Add a comment",
@@ -90,7 +90,7 @@ const en = {
   commandBulleted: "Turn into a bulleted list",
   commandFix: "Fix spelling and grammar",
   commandTitle: "The assistant writes this change into the text as suggestions. Accept or reject each one.",
-  barPlaceholder: "Tell the assistant how to change the selected words…",
+  barPlaceholder: "Tell the assistant what to do with the selected words…",
   // Words from a figure (SPEC.md §7): the bar on an image.
   figureBarPlaceholder: "Ask about the image, or say what to put under it…",
   figureText: "The text",
@@ -158,9 +158,9 @@ const en = {
   fontMono: "Mono",
   backToReading: "Back to reading (Esc)",
   editHint:
-    "Double-click any paragraph to edit it. Click the title to edit it. Hold and draw a small circle on a figure or a table for its tools.",
+    "Double-click any paragraph to edit it. Click the title to edit it. Click a figure, or hold and draw a small circle on a table, for its tools.",
   touchHint:
-    "Hold a word and drag the handles to select text. The tools open next to the selection. Double-tap any paragraph to edit it. Tap the title to edit it. Hold and draw a small circle on a figure or a table for its tools.",
+    "Hold a word and drag the handles to select text. The tools open next to the selection. Double-tap any paragraph to edit it. Tap the title to edit it. Tap a figure, or hold and draw a small circle on a table, for its tools.",
   documentTitle: "Document title",
   renameDocumentTitle: "Click to edit the title",
 
@@ -307,7 +307,7 @@ const en = {
   appliedActions: "Applied {n} action{s}.",
   proposedActions: "Proposed {n} action{s} — approve them in the plan card.",
   noActions: "The assistant proposed no actions.",
-  actionsApplied: "{n} action{s} applied",
+  actionsApplied: "{n} action{s} accepted",
   actionsUndone: "{n} action{s} undone",
   undo: "Undo",
   failedPrefix: "failed: {what}",
@@ -401,7 +401,7 @@ const zh: Record<keyof typeof en, string> = {
   commandBulleted: "转为项目符号列表",
   commandFix: "修正拼写和语法",
   commandTitle: "助手把这处修改以建议的形式写进文中。逐条接受或拒绝。",
-  barPlaceholder: "告诉助手怎样修改选中内容…",
+  barPlaceholder: "告诉助手要对选中内容做什么…",
   figureBarPlaceholder: "询问这张图片，或说明要在它下方放什么…",
   figureText: "文字",
   figureKeyPoints: "要点",
@@ -462,9 +462,9 @@ const zh: Record<keyof typeof en, string> = {
   fontMono: "等宽",
   backToReading: "返回阅读（Esc）",
   editHint:
-    "双击任意段落即可编辑。点击标题即可编辑。在插图或表格上按住并画一个小圈，可打开它的工具。",
+    "双击任意段落即可编辑。点击标题即可编辑。点击插图，或在表格上按住并画一个小圈，可打开它的工具。",
   touchHint:
-    "长按一个词并拖动选择柄以选中文本，工具出现在选中内容旁边。双击任意段落即可编辑。点击标题即可编辑。在插图或表格上按住并画一个小圈，可打开它的工具。",
+    "长按一个词并拖动选择柄以选中文本，工具出现在选中内容旁边。双击任意段落即可编辑。点击标题即可编辑。点击插图，或在表格上按住并画一个小圈，可打开它的工具。",
   documentTitle: "文档标题",
   renameDocumentTitle: "点击编辑标题",
 
@@ -608,7 +608,7 @@ const zh: Record<keyof typeof en, string> = {
   appliedActions: "已应用 {n} 个操作。",
   proposedActions: "已提议 {n} 个操作——请在计划卡片中批准。",
   noActions: "助手未提议任何操作。",
-  actionsApplied: "已应用 {n} 个操作",
+  actionsApplied: "已接受 {n} 个操作",
   actionsUndone: "已撤销 {n} 个操作",
   undo: "撤销",
   failedPrefix: "失败：{what}",

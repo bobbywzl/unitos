@@ -29,7 +29,8 @@ import {
   type DocumentEdits,
 } from "@/lib/assistant/plan";
 import { runRevise } from "@/lib/assistant/revise";
-import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
+import { callForJson } from "@/lib/derive/json-call";
+import { failureLine, wordedReason } from "@/app/api/assistant/failure-line";
 import { importShared } from "@/lib/docs/server";
 import { takesSuggestions } from "@/lib/docs/suggest-ops";
 import { HEARTBEAT_MS, streamTextTo } from "@/lib/derive/text-stream";
@@ -105,7 +106,7 @@ export async function POST(req: Request) {
   } catch (err) {
     console.error("[assistant] failed:", err);
     return NextResponse.json(
-      { error: t("api.assistantFailed", { reason: modelErrorMessage(err) }) },
+      { error: t("assistant.failedServer") },
       { status: 500 },
     );
   }
@@ -516,7 +517,7 @@ async function handle(req: Request, t: TFunc) {
           // Stopped by the reader: nobody is listening.
           if (req.signal.aborted) return;
           console.error("[assistant] stream error:", err);
-          send(`${STREAM_ERROR_TOKEN}${t("api.assistantFailed", { reason: modelErrorMessage(err) })}`);
+          send(`${STREAM_ERROR_TOKEN}${t("assistant.failedServer")}`);
         } finally {
           if (!cancelled) controller.close();
         }
@@ -539,7 +540,10 @@ async function handle(req: Request, t: TFunc) {
     abortSignal: req.signal,
   });
   if (!result.ok) {
-    return NextResponse.json({ error: t("api.taskFailed", { reason: result.error }) }, { status: 422 });
+    const error = wordedReason(t, result.error)
+      ? t("api.taskFailed", { reason: result.error })
+      : failureLine(t, result.error, `assistant:${data.task}`);
+    return NextResponse.json({ error }, { status: 422 });
   }
   // Keep only note ids that exist in this corpus.
   const validIds = new Set(
