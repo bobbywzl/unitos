@@ -501,7 +501,9 @@ export function CommentList({
                   data-track="assistant-comment-delete"
                   aria-label={t("assistant.commentDelete")}
                   data-tip={t("assistant.commentDelete")}
-                  className="ml-auto text-[11px] text-sand-500 hover:text-clay-800"
+                  // The other cards' ✕ target (24 px, 36 on a coarse
+                  // pointer), drawn the same: the row keeps its height.
+                  className="-my-1 -mr-2 ml-auto flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] text-sand-500 hover:text-clay-800 pointer-coarse:-my-2.5 pointer-coarse:-mr-3.5 pointer-coarse:size-9"
                 >
                   ✕
                 </button>
