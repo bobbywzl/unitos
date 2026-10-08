@@ -551,6 +551,11 @@
 .docs-side[data-pageless] .docs-outline {
   box-shadow: inset -1px 0 0 0 var(--docs-sep);
 }
+/* A narrow pane: the panel lies over the page, which keeps its width. */
+.docs-side .docs-outline[data-over] {
+  max-width: calc(100vw - 48px);
+  box-shadow: var(--elev-md);
+}
 @keyframes docs-outline-in {
   from {
     opacity: 0;

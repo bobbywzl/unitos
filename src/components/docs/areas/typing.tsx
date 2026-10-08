@@ -12,7 +12,7 @@ import { isMac } from "@/components/docs/keys";
 import { AutocorrectBubble } from "@/components/docs/typing/autocorrect-bubble";
 import { TYPING_EVENT, fireDocs } from "@/components/docs/typing/events";
 import { findState, searchFrom, setFind, stepResult } from "@/components/docs/typing/find";
-import { FindBar, FindReplaceDialog, type FindMode } from "@/components/docs/typing/find-ui";
+import { DOCKED_FIND_PX, FindBar, FindReplaceDialog, type FindMode } from "@/components/docs/typing/find-ui";
 import { setCase, toggleSmallCaps, type TextCase } from "@/components/docs/typing/format";
 import { listenNavigation, lookUpWord } from "@/components/docs/typing/navigate";
 import { listenImageDrop, type DropState } from "@/components/docs/typing/drop";
@@ -192,6 +192,15 @@ export function TypingLayer({ editor, documentId, canEdit, projectEditor, editin
   const t = useT();
   const { premium } = useCollab();
   const [findMode, setFindMode] = useState<FindMode>(null);
+  // A phone: Find and replace is the find bar docked under the toolbar.
+  const [phoneFind, setPhoneFind] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia(`(max-width: ${DOCKED_FIND_PX - 1}px)`);
+    const read = () => setPhoneFind(query.matches);
+    read();
+    query.addEventListener("change", read);
+    return () => query.removeEventListener("change", read);
+  }, []);
 
   // Images dropped on the page, and the images' tier rule (typing/paste.ts).
   const dropState = useRef<DropState>({ canEdit, projectEditor, editing, t });
@@ -308,12 +317,14 @@ export function TypingLayer({ editor, documentId, canEdit, projectEditor, editin
     <>
       <FindBar
         editor={editor}
-        open={findMode === "bar"}
+        open={findMode === "bar" || (phoneFind && findMode === "dialog")}
         focusToken={focusToken}
         onClose={closeFind}
         onMore={() => setFindMode("dialog")}
+        docked={phoneFind}
+        replacing={findMode === "dialog"}
       />
-      <FindReplaceDialog editor={editor} open={findMode === "dialog"} focusToken={focusToken} onClose={closeFind} />
+      <FindReplaceDialog editor={editor} open={!phoneFind && findMode === "dialog"} focusToken={focusToken} onClose={closeFind} />
       {prefsOpen && (
         <PreferencesDialog
           onClose={() => {

@@ -213,14 +213,17 @@ export function PageCanvas({
   // open, so the page never goes under it. Fit fills the rest.
   const vruler = showRuler && editing && !pageless && !compact && canvasWidth >= NARROW_PANE;
   const outlineLeft = vruler ? 16 : 0;
-  const side = outlineOpen ? outlineLeft + outlineWidth + 16 : FIT_GUTTER;
+  // A pane under 600 px (a phone): the outline lies over the page and closes
+  // after a jump, so the text keeps its width.
+  const outlineOver = canvasWidth > 0 && canvasWidth < NARROW_PANE;
+  const side = outlineOpen && !outlineOver ? outlineLeft + outlineWidth + 16 : FIT_GUTTER;
   const fitScale = canvasWidth > 0 ? (canvasWidth - FIT_GUTTER - side) / frame.width : 1;
   const scale = zoom === "fit" ? (pageless ? 1 : Math.max(0.25, Math.min(4, fitScale))) : zoom / 100;
   // A pageless column leaves the cards their room beside it, past the
   // canvas's left padding the page can move to.
   // The outline's room is not the column's: with the panel open the column
   // fits in what is left beside it, so no line goes under the notes tray.
-  const columnRoom = (canvasWidth || frame.width) - (outlineOpen ? side : 0);
+  const columnRoom = (canvasWidth || frame.width) - (outlineOpen && !outlineOver ? side : 0);
   const columnWidth = pageless ? pagelessWidth(columnRoom, scale, textWidth, FIT_GUTTER + CARD_REACH) : frame.width;
 
   useEffect(() => {
@@ -544,7 +547,7 @@ export function PageCanvas({
       >
         {vruler && <VerticalRuler editor={editor} store={store} editing={editing} top={view.top} height={view.height} />}
         {outlineOpen ? (
-          <OutlinePanel editor={editor} store={store} left={outlineLeft} height={view.height} viewTop={view.top} />
+          <OutlinePanel editor={editor} store={store} left={outlineLeft} height={view.height} viewTop={view.top} over={outlineOver} />
         ) : (
           // With no room beside the text column the button would stand
           // over the first letters of the lines: there it is in the
