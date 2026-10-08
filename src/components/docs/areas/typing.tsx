@@ -313,7 +313,7 @@ export function TypingLayer({ editor, documentId, canEdit, projectEditor, editin
         onClose={closeFind}
         onMore={() => setFindMode("dialog")}
       />
-      <FindReplaceDialog editor={editor} open={findMode === "dialog"} onClose={closeFind} />
+      <FindReplaceDialog editor={editor} open={findMode === "dialog"} focusToken={focusToken} onClose={closeFind} />
       {prefsOpen && (
         <PreferencesDialog
           onClose={() => {
