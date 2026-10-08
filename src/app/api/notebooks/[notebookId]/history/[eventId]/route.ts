@@ -3,17 +3,42 @@ import { Prisma } from "@prisma/client";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
-import { keptNoteOf, restoreNote } from "@/lib/notes/removed";
+import { keptNoteOf, keptSectionOf, restoreNote, restoreSection } from "@/lib/notes/removed";
+import { normalizeSectionOrders } from "@/lib/order";
 
 // Restore from History (SPEC.md §12): a removed note comes back whole, with
-// its sources, replies, edits, and side chats (lib/notes/removed.ts). The
+// its sources, replies, edits, and side chats (lib/notes/removed.ts); a
+// removed section comes back with every note it held. The
 // event stays in History, marked restored; a second Restore answers 409.
 export async function POST(_req: Request, ctx: { params: Promise<{ notebookId: string; eventId: string }> }) {
   const t = await serverT();
   const { notebookId, eventId } = await ctx.params;
   const access = await notebookAccess(notebookId, "editor");
   if (access instanceof NextResponse) return access;
-  const event = await db.notebookEvent.findFirst({ where: { id: eventId, notebookId, kind: "NOTE_REMOVE" } });
+  const event = await db.notebookEvent.findFirst({
+    where: { id: eventId, notebookId, kind: { in: ["NOTE_REMOVE", "SECTION_REMOVE"] } },
+  });
+  // A removed section comes back with its notes (lib/notes/removed.ts).
+  if (event?.kind === "SECTION_REMOVE") {
+    const section = keptSectionOf(event.meta);
+    if (!section) return NextResponse.json({ error: t("api.historyNotRestorable") }, { status: 404 });
+    const back = await restoreSection(section, notebookId);
+    if (!back.ok) {
+      return NextResponse.json(
+        { error: t(back.reason === "restored" ? "api.historySectionRestored" : "api.historyNotRestorable") },
+        { status: back.reason === "restored" ? 409 : 404 },
+      );
+    }
+    await normalizeSectionOrders(notebookId);
+    await db.notebookEvent.update({
+      where: { id: eventId },
+      data: {
+        meta: { ...(event.meta as Prisma.JsonObject), restoredAt: new Date().toISOString(), restoredById: access.user.id },
+      },
+    });
+    await bumpNotebook(notebookId);
+    return NextResponse.json({ ok: true, sectionId: back.sectionId });
+  }
   const kept = keptNoteOf(event?.meta);
   if (!event || !kept) return NextResponse.json({ error: t("api.historyNotRestorable") }, { status: 404 });
   const meta = (event.meta ?? {}) as { sectionTitle?: unknown; restoredAt?: unknown };

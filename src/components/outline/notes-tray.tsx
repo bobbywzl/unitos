@@ -1,5 +1,6 @@
 "use client";
 
+import { TOUCH_HIT } from "@/components/outline/touch-hit";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { dropCardOn, type CardDragEndDetail } from "@/lib/card-drag";
@@ -267,7 +268,7 @@ export function NotesTray({
                 }}
                 data-track="notes-accept-all"
                 data-tip={t("outline.acceptAllTitle")}
-                className="ml-auto text-[11.5px] font-semibold text-sage-700 hover:text-sage-800"
+                className={`ml-auto text-[11.5px] font-semibold text-sage-700 hover:text-sage-800 ${TOUCH_HIT}`}
               >
                 {t("outline.acceptAll")}
               </button>

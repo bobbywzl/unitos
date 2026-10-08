@@ -59,6 +59,8 @@ export function SectionBoard({
   actions,
   onChange,
   onClose,
+  rejected = null,
+  onUndoReject,
 }: {
   tree: SectionView[];
   sectionId: string;
@@ -66,6 +68,9 @@ export function SectionBoard({
   /** Another section's board takes this one's place. */
   onChange: (sectionId: string) => void;
   onClose: () => void;
+  /** The pending note rejected last, and its Undo: the board's pill takes it. */
+  rejected?: string | null;
+  onUndoReject?: () => void;
 }) {
   const t = useT();
   const { canEdit } = useCollab();
@@ -145,6 +150,28 @@ export function SectionBoard({
     : undefined;
   const sizedClass = tileSize ? " note-tiles-sized" : "";
 
+  // Focus moves into the board as it opens, so Tab walks the board and not
+  // the page behind it (inert while the board is open, outline.tsx), and goes
+  // back to what opened it — the section's title — as it closes.
+  // The page turns inert in the same frame, so the title is found again by
+  // the section, not remembered as the focused element.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const shownRef = useRef(sectionId);
+  useEffect(() => {
+    shownRef.current = sectionId;
+  });
+  useEffect(() => {
+    rootRef.current?.focus({ preventScroll: true });
+    return () => {
+      requestAnimationFrame(() => {
+        if (document.activeElement && document.activeElement !== document.body) return;
+        document
+          .querySelector<HTMLElement>(`[data-drop-header="${notesList(shownRef.current)}"] [data-track="section-board"]`)
+          ?.focus({ preventScroll: true });
+      });
+    };
+  }, []);
+
   // The section is gone (deleted elsewhere): the board closes.
   const gone = section === null;
   useEffect(() => {
@@ -183,7 +210,14 @@ export function SectionBoard({
     "inline-flex shrink-0 items-center gap-1 rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800";
 
   return (
-    <div className="content-in fixed inset-0 z-50 flex flex-col bg-paper">
+    <div
+      ref={rootRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label={shownSectionTitle(section.title, t)}
+      tabIndex={-1}
+      className="content-in fixed inset-0 z-50 flex flex-col bg-paper outline-none"
+    >
       <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-line px-5 py-3">
         {parent && (
           <button
@@ -230,7 +264,7 @@ export function SectionBoard({
               {t("outline.addNoteBtn")}
             </button>
           )}
-          {canEdit && <VoiceNoteButton sectionId={section.id} onError={setVoiceError} className={SECTION_ACTION} />}
+          {canEdit && <VoiceNoteButton sectionId={section.id} onError={setVoiceError} className={SECTION_ACTION} compact />}
           <button
             onClick={onClose}
             data-track="board-close"
@@ -325,7 +359,7 @@ export function SectionBoard({
       )}
 
       <SelectionBar tree={tree} actions={actions} />
-      <MergeUndoBar actions={actions} />
+      <MergeUndoBar actions={actions} rejected={rejected} onUndoReject={onUndoReject} />
     </div>
   );
 }

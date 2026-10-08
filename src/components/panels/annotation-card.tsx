@@ -165,7 +165,7 @@ export function AnnotationCard({
   const droppable = useCardDropOpen();
   const collapsed = view.isCollapsed(annotation.id);
   const gist = useGist(annotation.id, annotation.gist, summary, collapsed);
-  const collapseLabel = collapsed ? t("outline.expandNote") : t("outline.collapseNote");
+  const collapseLabel = collapsed ? t("outline.expandAnnotation") : t("outline.collapseAnnotation");
   const { sourceId } = annotation;
   const toggle = view.toggle;
   const color = annotationKindColor(annotation.kind, annotation.color);
@@ -221,7 +221,7 @@ export function AnnotationCard({
             {t(ANNOTATION_KIND_KEY[annotation.kind])}
           </span>
         )}
-        <NoteId id={annotation.id} />
+        <NoteId id={annotation.id} annotation />
         {collapsed && (
           <button
             onClick={() => {
@@ -232,7 +232,7 @@ export function AnnotationCard({
             }}
             data-track="annotation-collapse"
             title={
-              jumpNotebookId && canJumpTo(annotation, documentId) ? t("panels.openAndJumpTitle") : t("outline.expandNote")
+              jumpNotebookId && canJumpTo(annotation, documentId) ? t("panels.openAndJumpTitle") : t("outline.expandAnnotation")
             }
             className="min-w-0 flex-1 text-left text-[13px] leading-[18px] text-sand-800 hover:text-clay-800"
           >

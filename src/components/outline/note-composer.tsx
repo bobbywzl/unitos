@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { isImeKey } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
 import { NoteEditor } from "@/components/outline/note-editor";
@@ -28,6 +29,28 @@ export function NoteComposer({
 }) {
   const t = useT();
   const { parts, setTitle, setBody } = useNoteParts(compose.draft, compose.setDraft);
+  // The composer closes with the caret in it (Done, Escape, Cancel): the
+  // focus goes back to the section's + Note, not to the top of the page.
+  const formRef = useRef<HTMLFormElement>(null);
+  const focusedRef = useRef(false);
+  useEffect(() => {
+    const scopes: HTMLElement[] = [];
+    for (let el = formRef.current?.parentElement ?? null; el && scopes.length < 6; el = el.parentElement) scopes.push(el);
+    return () => {
+      if (!focusedRef.current) return;
+      requestAnimationFrame(() => {
+        if (document.activeElement && document.activeElement !== document.body) return;
+        for (const scope of scopes) {
+          if (!scope.isConnected) continue;
+          const add = scope.querySelector<HTMLElement>('[data-track="section-add-note"], [data-track="edited-add-note"]');
+          if (add) {
+            add.focus({ preventScroll: true });
+            return;
+          }
+        }
+      });
+    };
+  }, []);
   // Save on an empty composer is Cancel: there is nothing to keep.
   function save() {
     if (!compose.draft.trim()) {
@@ -43,7 +66,24 @@ export function NoteComposer({
   }
   return (
     <form
+      ref={formRef}
       data-note-composer=""
+      onFocus={() => {
+        focusedRef.current = true;
+      }}
+      onBlur={(e) => {
+        const to = e.relatedTarget as Node | null;
+        if (to) {
+          if (!e.currentTarget.contains(to)) focusedRef.current = false;
+          return;
+        }
+        // Focus to nowhere: the reader clicked away, or the composer is
+        // going (then the form is gone, and the flag stays for the close).
+        queueMicrotask(() => {
+          const form = formRef.current;
+          if (form?.isConnected && !form.contains(document.activeElement)) focusedRef.current = false;
+        });
+      }}
       onSubmit={(e) => {
         e.preventDefault();
         save();

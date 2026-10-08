@@ -64,8 +64,8 @@ export function VoiceNoteButton({
 }: {
   sectionId: string;
   className?: string;
-  /** The glyph alone, its name in the tooltip: the tray, where Command sits
-      beside the Note button on every section. */
+  /** The glyph alone, its name in the tooltip: every surface draws it so
+      (the tray, the notes full page, a board), beside the Note button. */
   compact?: boolean;
   /** Where the reason shows when recording or transcription fails. */
   onError?: (message: string | null) => void;

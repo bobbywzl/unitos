@@ -72,6 +72,11 @@ const MERGE_UNDO_MS = 12_000;
 export type LastDelete = { ids: string[] };
 const DELETE_UNDO_MS = MERGE_UNDO_MS;
 
+/** The section deleted last (SPEC.md §6): the server deleted it at once and
+    kept it whole in its History event (lib/notes/removed.ts), so the pill's
+    Undo is History's Restore of that event. */
+export type LastSectionDelete = { eventId: string; title: string; count: number };
+
 /** The target of a merge took the other notes in: its card blooms
     (note-card.tsx listens). */
 export const NOTE_ABSORBED_EVENT = "dissect:note-absorbed";
@@ -128,6 +133,10 @@ export type OutlineActions = {
   removeNotes: (ids: string[], composed?: boolean) => void;
   lastDelete: LastDelete | null;
   undoDelete: () => void;
+  /** The section deleted last, while the pill offers Undo (SPEC.md §6). */
+  lastSectionDelete: LastSectionDelete | null;
+  /** Put the deleted section back with its notes: History's Restore. */
+  undoSectionDelete: () => Promise<void>;
   /** A line for the pill under the notes: a change that did not reach the
       server and was put back, or news (words kept as a new note, a quote
       without its source). Null when there is nothing to say. */
@@ -140,6 +149,9 @@ export type OutlineActions = {
   expectComposed: (sectionId: string) => void;
   reorderNote: (sectionId: string, id: string, toIndex: number) => void;
   moveNoteToSection: (id: string, sectionId: string, toIndex?: number) => Promise<void>;
+  /** Alt+↑ and Alt+↓ on a note: one place up or down in its section, and
+      past the section's first or last place into the section above or below. */
+  nudgeNote: (id: string, delta: -1 | 1) => void;
   /** Merge notes into the target (SPEC.md §6). join, the default: the notes'
       text lands in the target as it is, in the order the notes stand in. ai:
       the model writes the one note that takes their place. An annotation
@@ -492,6 +504,57 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // A note save that failed is tried again while the page stays open: when
+  // the network comes back, when the tab is shown again, and every 20
+  // seconds — the same save the load's replay runs, for every local draft
+  // that holds words its note lacks. A note open in an editor is its
+  // editor's to save, and a draft younger than 5 seconds may still have its
+  // save on the way. The Not saved mark clears with the save.
+  useEffect(() => {
+    if (!canEdit) return;
+    let running = false;
+    const retry = () => {
+      if (running || isOffline() || document.visibilityState === "hidden") return;
+      const now = Date.now();
+      const due: { id: string; content: string; base: string }[] = [];
+      for (const { noteId, draft } of listNoteDrafts()) {
+        // The card may already draw the draft's words: the draft, cleared
+        // only when the server confirms its words, says what is unsaved.
+        const note = placeOf(treeRef.current, noteId)?.note;
+        if (!note || !draftHoldsWords(draft) || openDraftSave(noteId) !== null || now - draft.savedAt < 5000) continue;
+        due.push({ id: noteId, content: draft.content.trim(), base: noteDraftBase(draft, note.content) ?? note.content });
+      }
+      if (due.length === 0) return;
+      running = true;
+      void Promise.all(
+        due.map(async ({ id, content, base }) => {
+          try {
+            const saved = await saveNoteText(id, content, base);
+            confirmNoteDraft(id, content);
+            confirmNoteDraft(id, saved.content);
+            setLocalText(id, null);
+          } catch {
+            // Still not saved: the next try, or the next load.
+          }
+        }),
+      ).finally(() => {
+        running = false;
+        refresh();
+      });
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") retry();
+    };
+    window.addEventListener("online", retry);
+    document.addEventListener("visibilitychange", onVisible);
+    const timer = setInterval(retry, 20_000);
+    return () => {
+      window.removeEventListener("online", retry);
+      document.removeEventListener("visibilitychange", onVisible);
+      clearInterval(timer);
+    };
+  }, [canEdit, refresh, setLocalText]);
+
   // Words written to a note that went elsewhere were kept as a new note in
   // its place (lib/notes/gone.ts): the new note takes the old one's place
   // in the list, its local draft and its open editor follow it, and the
@@ -612,6 +675,12 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
   // and says so: a note is never gone from the screen while it is still
   // on the server, nor gone from the server while Undo is on the screen.
   const [lastDelete, setLastDelete] = useState<LastDelete | null>(null);
+  const [lastSectionDelete, setLastSectionDelete] = useState<LastSectionDelete | null>(null);
+  useEffect(() => {
+    if (!lastSectionDelete) return;
+    const timer = setTimeout(() => setLastSectionDelete(null), DELETE_UNDO_MS);
+    return () => clearTimeout(timer);
+  }, [lastSectionDelete]);
   // The words an editor's Cancel took out of a note, while Undo can put them back.
   const [lastCancel, setLastCancel] = useState<{ noteId: string; content: string } | null>(null);
   useEffect(() => {
@@ -960,7 +1029,17 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
       refresh();
     },
     async deleteSection(id) {
-      await api(`/api/sections/${id}`, "DELETE");
+      const title = findSection(treeRef.current, id)?.title ?? "";
+      const answer = await api<{ eventId?: unknown; noteCount?: unknown }>(`/api/sections/${id}`, "DELETE");
+      if (typeof answer?.eventId === "string") {
+        setLastMerge(null);
+        setLastCancel(null);
+        setLastSectionDelete({
+          eventId: answer.eventId,
+          title,
+          count: typeof answer.noteCount === "number" ? answer.noteCount : 0,
+        });
+      }
       refresh();
     },
     reorderSection(parentId, id, toIndex) {
@@ -1152,6 +1231,19 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
     removeNotes,
     lastDelete,
     undoDelete,
+    lastSectionDelete,
+    async undoSectionDelete() {
+      const last = lastSectionDelete;
+      if (!last) return;
+      setLastSectionDelete(null);
+      try {
+        await api(`/api/notebooks/${notebook.id}/history/${last.eventId}`, "POST");
+      } catch (err) {
+        // History keeps the section: its row's Restore is the way back still.
+        setNotice(t("outline.sectionUndoFailed", { reason: err instanceof Error ? err.message : String(err) }), true);
+      }
+      refresh();
+    },
     notice: shownNotice?.text ?? null,
     noticeFailed: shownNotice?.failed ?? false,
     dismissNotice() {
@@ -1189,6 +1281,22 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
       // The tray shows where the note went: a folded section unfolds on it,
       // and the note flashes.
       window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: id } }));
+    },
+    nudgeNote(id, delta) {
+      const place = placeOf(treeRef.current, id);
+      if (!place) return;
+      const section = findSection(treeRef.current, place.sectionId);
+      if (!section) return;
+      const index = place.index + delta;
+      if (index >= 0 && index < section.notes.length) {
+        actions.reorderNote(section.id, id, index);
+        return;
+      }
+      // The sections in page order: each root, then the sections nested in it.
+      const order = treeRef.current.flatMap((s) => [s, ...s.children]);
+      const next = order[order.findIndex((s) => s.id === section.id) + delta];
+      if (!next) return;
+      void actions.moveNoteToSection(id, next.id, delta < 0 ? next.notes.length : 0);
     },
     async mergeNotes(targetId, sourceIds, mode = "join") {
       const all = flattenNotes(tree);
@@ -1297,6 +1405,7 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
     dismissMerge() {
       setLastMerge(null);
       setLastCancel(null);
+      setLastSectionDelete(null);
       commitDelete();
     },
     editCanceled(noteId, typed) {

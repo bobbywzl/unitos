@@ -211,7 +211,10 @@ export function NotesViewMenu({
       if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !isImeKey(e)) setOpen(false);
+      if (e.key !== "Escape" || isImeKey(e)) return;
+      setOpen(false);
+      // Escape gives the focus back to the button that opened the menu.
+      if (rootRef.current?.contains(document.activeElement)) rootRef.current.querySelector<HTMLElement>("button")?.focus();
     };
     window.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("keydown", onKey);
@@ -220,6 +223,32 @@ export function NotesViewMenu({
       window.removeEventListener("keydown", onKey);
     };
   }, [open]);
+  // The menu takes the arrows (role="menu"): it opens on its checked row,
+  // ↑ ↓ move between the rows, Home and End go to the first and the last.
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const menu = menuRef.current;
+    const checked = menu?.querySelector<HTMLElement>('[aria-checked="true"]') ?? menu?.querySelector<HTMLElement>("[role^=menuitem]");
+    checked?.focus({ preventScroll: true });
+    // A row chosen closes the menu: the focus goes back to its button.
+    const button = rootRef.current?.querySelector<HTMLElement>("button");
+    return () => {
+      requestAnimationFrame(() => {
+        if (!document.activeElement || document.activeElement === document.body) button?.focus({ preventScroll: true });
+      });
+    };
+  }, [open]);
+  function onMenuKey(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
+    const items = [...e.currentTarget.querySelectorAll<HTMLElement>("[role^=menuitem]")];
+    if (items.length === 0) return;
+    e.preventDefault();
+    const at = items.indexOf(document.activeElement as HTMLElement);
+    const next =
+      e.key === "Home" ? 0 : e.key === "End" ? items.length - 1 : e.key === "ArrowDown" ? (at + 1) % items.length : (at - 1 + items.length) % items.length;
+    items[next].focus();
+  }
   const filtered = scope === "document";
   const now = [
     ...(scope ? [t(scope === "project" ? "outline.scopeProject" : "outline.scopeDocument")] : []),
@@ -253,7 +282,9 @@ export function NotesViewMenu({
       </button>
       {open && (
         <div
+          ref={menuRef}
           role="menu"
+          onKeyDown={onMenuKey}
           className="menu-in absolute top-full right-0 z-30 mt-1 w-56 rounded-2xl border border-line bg-card p-1.5 shadow-float"
         >
           {scope && onScope && (
@@ -438,7 +469,8 @@ function EditedNotes(props: ListProps) {
   const t = useT();
   const lang = useLang();
   const sorted = groupNotes(props.notes, "edited", [], lang, { project: "", untitled: "", weekOf: () => "" })[0]?.notes ?? [];
-  if (sorted.length === 0) return <p className="text-[13px] text-sand-600">{t("outline.byDocumentEmpty")}</p>;
+  // A search that found nothing says so in its own line (the tray, the notes full page): one empty line, not two.
+  if (sorted.length === 0) return props.search.trim() ? null : <p className="text-[13px] text-sand-600">{t("outline.byDocumentEmpty")}</p>;
   return <GroupList {...props} id="group:edited" notes={sorted} />;
 }
 
@@ -484,7 +516,7 @@ function SectionComposer({
             sectionId={section.id}
             onError={setVoiceError}
             className={SECTION_ACTION}
-            compact={variant === "tray"}
+            compact
           />
         </div>
       )}
@@ -525,7 +557,7 @@ function GroupedNotes(props: ListProps) {
       else next.add(key);
       return next;
     });
-  if (groups.length === 0) return <p className="text-[13px] text-sand-600">{t("outline.byDocumentEmpty")}</p>;
+  if (groups.length === 0) return props.search.trim() ? null : <p className="text-[13px] text-sand-600">{t("outline.byDocumentEmpty")}</p>;
   return (
     <div className="flex flex-col gap-3.5">
       {groups.map((group) => {

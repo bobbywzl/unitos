@@ -133,3 +133,118 @@ export function keptNoteOf(meta: unknown): KeptNote | null {
   const parsed = keptSchema.safeParse((meta as { kept?: unknown } | null)?.kept);
   return parsed.success ? (parsed.data as unknown as KeptNote) : null;
 }
+
+// A removed section, kept whole in its SECTION_REMOVE history event (SPEC.md
+// §12): the section's row, every note of it kept as a removed note is (its
+// sources, replies, edits, and side chats), and the sections nested in it,
+// which the delete lifted to the top. History's Restore and the 12-second
+// Undo after the delete put it all back as it was, with the same ids.
+
+const sectionRowSchema = z
+  .object({ id: z.string(), title: z.string(), order: z.number(), hidden: z.boolean(), parentId: z.string().nullable() })
+  .passthrough();
+const keptSectionSchema = z.object({
+  section: sectionRowSchema,
+  notes: z.array(keptSchema),
+  childIds: z.array(z.string()),
+});
+export type KeptSection = {
+  section: { id: string; title: string; order: number; hidden: boolean; parentId: string | null };
+  notes: KeptNote[];
+  childIds: string[];
+};
+
+/** The section as it is now, whole, for its history event; null when it is gone. */
+export async function keepSection(sectionId: string): Promise<KeptSection | null> {
+  const section = await db.section.findUnique({
+    where: { id: sectionId },
+    select: { id: true, title: true, order: true, hidden: true, parentId: true, children: { select: { id: true } } },
+  });
+  if (!section) return null;
+  const rows = await db.note.findMany({ where: { sectionId }, orderBy: { order: "asc" }, select: { id: true, sideChatOfId: true } });
+  const ids = new Set(rows.map((r) => r.id));
+  const notes: KeptNote[] = [];
+  for (const row of rows) {
+    // A side chat is kept with the note it belongs to.
+    if (row.sideChatOfId && ids.has(row.sideChatOfId)) continue;
+    const kept = await keepNote(row.id);
+    if (kept) notes.push(kept);
+  }
+  const { children, ...own } = section;
+  return { section: own, notes, childIds: children.map((c) => c.id) };
+}
+
+/** The kept section in a history event's meta, or null (a removal made
+    before removals kept the section). */
+export function keptSectionOf(meta: unknown): KeptSection | null {
+  const parsed = keptSectionSchema.safeParse((meta as { kept?: unknown } | null)?.kept);
+  return parsed.success ? (parsed.data as unknown as KeptSection) : null;
+}
+
+export type SectionRestoreResult =
+  | { ok: true; sectionId: string }
+  | { ok: false; reason: "restored" | "notKept" };
+
+/** Put a kept section back in its project: at its place among its
+    siblings (under its parent when the parent is still there), with its
+    notes in their order and the sections nested in it back under it. A note
+    that is back already (restored on its own) is left as it is. */
+export async function restoreSection(kept: KeptSection, notebookId: string): Promise<SectionRestoreResult> {
+  const { section } = kept;
+  if (await db.section.findUnique({ where: { id: section.id }, select: { id: true } })) {
+    return { ok: false, reason: "restored" };
+  }
+  const parent = section.parentId
+    ? await db.section.findFirst({ where: { id: section.parentId, notebookId }, select: { id: true } })
+    : null;
+  const parentId = parent?.id ?? null;
+  const siblings = await db.section.findMany({
+    where: { notebookId, parentId },
+    orderBy: { order: "asc" },
+    select: { id: true },
+  });
+  const at = Math.max(0, Math.min(section.order, siblings.length));
+  const docIds = kept.notes
+    .flatMap((n) => [n.documentId, ...n.sources.map((s) => s.documentId), ...n.sideChats.flatMap((c) => [c.documentId, ...c.sources.map((s) => s.documentId)])])
+    .filter((id): id is string => !!id);
+  const documents = new Set(
+    (await db.document.findMany({ where: { id: { in: [...new Set(docIds)] } }, select: { id: true } })).map((d) => d.id),
+  );
+  const back = new Set(
+    (
+      await db.note.findMany({
+        where: { id: { in: kept.notes.flatMap((n) => [n.id, ...n.sideChats.map((c) => c.id)]) } },
+        select: { id: true },
+      })
+    ).map((n) => n.id),
+  );
+  const notes = kept.notes.filter((n) => !back.has(n.id));
+  let order = 0;
+  const writes = notes.flatMap((note) => [
+    ...noteWrites(note, section.id, order++, documents),
+    ...note.sideChats.filter((c) => !back.has(c.id)).flatMap((chat) => noteWrites(chat, section.id, order++, documents)),
+  ]);
+  // The sections the delete lifted to the top go back under it, when they
+  // are still at the top of this project.
+  const children = kept.childIds.length
+    ? (
+        await db.section.findMany({
+          where: { id: { in: kept.childIds }, notebookId, parentId: null },
+          select: { id: true },
+        })
+      ).map((c) => c.id)
+    : [];
+  await db.$transaction([
+    db.section.create({
+      data: { id: section.id, notebookId, title: section.title, order: at, hidden: section.hidden, parentId },
+    }),
+    // The sections from its place on move down one row.
+    ...siblings.map((s, i) => db.section.update({ where: { id: s.id }, data: { order: i < at ? i : i + 1 } })),
+    ...writes,
+    ...(children.length > 0
+      ? [db.section.updateMany({ where: { id: { in: children } }, data: { parentId: section.id } })]
+      : []),
+  ]);
+  await normalizeNoteOrders(section.id);
+  return { ok: true, sectionId: section.id };
+}

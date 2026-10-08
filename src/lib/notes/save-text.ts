@@ -56,12 +56,14 @@ export function conflictLabels() {
 /** Save `content`, made from `base` (the note's text when the edit began).
     A null base saves over whatever the note holds, as a write always did.
     onlyIfGone: the save lands only when the note is gone and its words go
-    to a new note (lib/notes/gone.ts); a note that still exists refuses it. */
+    to a new note (lib/notes/gone.ts); a note that still exists refuses it.
+    keepSources: an open editor's save; the sources of the quotes it removed
+    stay until the editor closes (use-note-draft.ts). */
 export async function saveNoteText(
   noteId: string,
   content: string,
   base: string | null,
-  opts?: { onlyIfGone?: boolean },
+  opts?: { onlyIfGone?: boolean; keepSources?: boolean },
 ): Promise<SavedText> {
   let text = content.trim();
   let from = base === null ? null : base.trim();
@@ -75,6 +77,7 @@ export async function saveNoteText(
         // never leaves the reader's words unsaved.
         ...(tries >= MAX_TRIES ? { onConflict: "keep" } : {}),
         ...(opts?.onlyIfGone ? { onlyIfGone: true } : {}),
+        ...(opts?.keepSources ? { keepSources: true } : {}),
       });
       // The stored text as the route answers it; a queued save answers none.
       if (typeof saved?.content === "string") text = saved.content;

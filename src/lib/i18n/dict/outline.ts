@@ -7,8 +7,6 @@ const en = {
   export: "Export",
   exportMarkdown: "Markdown",
   exportWord: "Word",
-  pendingCount: "{n} pending",
-  pageKeyHint: "⏎ accept · ⌫ reject · e edit · g source",
 
   // Search and empty states
   searchNotes: "Search notes",
@@ -23,7 +21,6 @@ const en = {
   sectionTitle: "Section title",
   renameSection: "Rename section",
   reorderSection: "Drag to reorder section {title}",
-  confirmDeleteSection: "Delete this section and its notes?",
 
   // Note cards
   addNoteBtn: "Note",
@@ -42,8 +39,8 @@ const en = {
   conflictEnd: "End of the two versions. Keep one, then delete these marker lines.",
   // Hold to drag (SPEC.md §6): a hold anywhere on a note picks it up. One
   // short line: the tip sits on the cards around the one under the pointer.
-  holdToDrag: "Hold to move, merge, or float the note",
-  holdToDragPage: "Hold to move or merge the note",
+  holdToDrag: "Hold to move, merge, or float the note\nAlt+↑ or Alt+↓ moves it",
+  holdToDragPage: "Hold to move or merge the note\nAlt+↑ or Alt+↓ moves it",
   holdToMoveCard: "Hold to move this card. Drop it on the notes tray to put the note back.",
   holdToDragTile: "Click to open. Hold to move or merge the note",
   // A section's board (SPEC.md §6): the section's notes filling the screen as tiles.
@@ -54,7 +51,7 @@ const en = {
   pendingLabel: "Pending",
   acceptTitle: "Accept (Enter)",
   rejectTitle: "Reject (Backspace)",
-  editTitle: "Edit (e)",
+  editTitle: "Edit",
   noteText: "Note text",
   // The note's title and body (SPEC.md §6).
   titlePlaceholder: "Title",
@@ -74,6 +71,9 @@ const en = {
   noteDeleted: "Note deleted",
   notesDeleted: "{n} notes deleted",
   undoDeleteTitle: "Put the deleted notes back",
+  sectionDeleted: "Section deleted",
+  undoSectionDeleteTitle: "Put the section back with its notes",
+  sectionUndoFailed: "The section did not come back: {reason}. History keeps it: Restore is on its row.",
   editCanceled: "Edit canceled",
   undoCancelTitle: "Put back the words typed in this edit",
   deleteFailed: "The note was not deleted and is back in its place: {reason}",
@@ -145,7 +145,7 @@ const en = {
   // Pending queue
   pendingHeader: "Pending · {n}",
   acceptAll: "Accept all",
-  acceptAllTitle: "Accept every pending note shown here",
+  acceptAllTitle: "Accept every pending note shown here\nOn a pending note: ⏎ accept · ⌫ reject · e edit · g source",
   noteRejected: "Note rejected",
   undo: "Undo",
 
@@ -156,6 +156,12 @@ const en = {
   expandNote: "Expand note",
   collapseAll: "Collapse all",
   collapseAllTitle: "Fold every note to one line",
+  copyAnnotationId: "Copy annotation ID",
+  annotationIdTitle: "Annotation {id} · click to copy",
+  collapseAnnotation: "Collapse annotation",
+  expandAnnotation: "Expand annotation",
+  expandAllAnnotationsTitle: "Show every annotation whole",
+  collapseAllAnnotationsTitle: "Fold every annotation to one line",
   expandAll: "Expand all",
   expandAllTitle: "Show every note whole",
   compare: "Compare",
@@ -262,8 +268,6 @@ const zh: Record<keyof typeof en, string> = {
   export: "导出",
   exportMarkdown: "Markdown",
   exportWord: "Word",
-  pendingCount: "{n} 条待定",
-  pageKeyHint: "⏎ 接受 · ⌫ 拒绝 · e 编辑 · g 出处",
 
   searchNotes: "搜索笔记",
   noNotesMatch: "没有匹配“{query}”的笔记。",
@@ -276,7 +280,6 @@ const zh: Record<keyof typeof en, string> = {
   sectionTitle: "章节标题",
   renameSection: "重命名章节",
   reorderSection: "拖动以调整章节 {title} 的顺序",
-  confirmDeleteSection: "删除此章节及其笔记？",
 
   addNoteBtn: "笔记",
   writeNotePlaceholder: "写一条笔记（markdown）",
@@ -289,8 +292,8 @@ const zh: Record<keyof typeof en, string> = {
   conflictOther: "此处同时在两个地方被修改。另一个版本：",
   conflictYours: "你的版本：",
   conflictEnd: "两个版本到此结束。保留一个，再删除这几行标记。",
-  holdToDrag: "按住即可移动、合并或浮动笔记",
-  holdToDragPage: "按住即可移动或合并笔记",
+  holdToDrag: "按住即可移动、合并或浮动笔记\nAlt+↑ 或 Alt+↓ 移动它",
+  holdToDragPage: "按住即可移动或合并笔记\nAlt+↑ 或 Alt+↓ 移动它",
   holdToMoveCard: "按住即可移动此卡片。放到笔记栏上即把笔记放回。",
   holdToDragTile: "点击打开。按住即可移动或合并笔记",
   openBoardTitle: "以看板打开此章节：笔记并排铺满屏幕",
@@ -300,7 +303,7 @@ const zh: Record<keyof typeof en, string> = {
   pendingLabel: "待定",
   acceptTitle: "接受（Enter）",
   rejectTitle: "拒绝（Backspace）",
-  editTitle: "编辑（e）",
+  editTitle: "编辑",
   noteText: "笔记内容",
   titlePlaceholder: "标题",
   noteTitleLabel: "笔记标题",
@@ -318,6 +321,9 @@ const zh: Record<keyof typeof en, string> = {
   noteDeleted: "笔记已删除",
   notesDeleted: "已删除 {n} 条笔记",
   undoDeleteTitle: "把删除的笔记放回原处",
+  sectionDeleted: "章节已删除",
+  undoSectionDeleteTitle: "把章节连同笔记放回原处",
+  sectionUndoFailed: "章节没有恢复：{reason}。历史中保留着它：它那一行有恢复。",
   editCanceled: "已取消编辑",
   undoCancelTitle: "放回这次编辑里输入的文字",
   deleteFailed: "笔记没有删除，已放回原处：{reason}",
@@ -369,7 +375,7 @@ const zh: Record<keyof typeof en, string> = {
 
   pendingHeader: "待定 · {n}",
   acceptAll: "全部接受",
-  acceptAllTitle: "接受这里显示的每条待定笔记",
+  acceptAllTitle: "接受这里显示的每条待定笔记\n在待定笔记上：⏎ 接受 · ⌫ 拒绝 · e 编辑 · g 出处",
   noteRejected: "笔记已拒绝",
   undo: "撤销",
 
@@ -379,6 +385,12 @@ const zh: Record<keyof typeof en, string> = {
   expandNote: "展开笔记",
   collapseAll: "全部折叠",
   collapseAllTitle: "把每条笔记折叠成一行",
+  copyAnnotationId: "复制批注 ID",
+  annotationIdTitle: "批注 {id} · 点击复制",
+  collapseAnnotation: "折叠批注",
+  expandAnnotation: "展开批注",
+  expandAllAnnotationsTitle: "完整显示每条批注",
+  collapseAllAnnotationsTitle: "把每条批注折叠成一行",
   expandAll: "全部展开",
   expandAllTitle: "完整显示每条笔记",
   compare: "对比",
