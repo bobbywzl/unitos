@@ -548,8 +548,9 @@ function NewFolderRow({ parentId }: { parentId: string | null }) {
   );
 }
 
-// New document here, at the foot of a folder's list: the + bubble opens the add
-// dialog, and what it adds lands in this folder (SPEC.md §6).
+// New document here, at the foot of an empty folder's list: the + bubble
+// opens the add dialog, and what it adds lands in this folder (SPEC.md §6).
+// A folder with rows has New document inside in its ⋯ instead.
 function NewDocumentRow({ folderId }: { folderId: string }) {
   const { t, pending, addIn } = useTree();
   if (!addIn) return null;
@@ -729,6 +730,20 @@ function FolderRow({
       <Collapse open={menuOpen}>
         {menuOpen && (
           <div data-no-drag className="mx-2 mb-1.5 flex flex-col rounded-xl bg-sand-100 py-1">
+            {tree.addIn && (
+              <button
+                onClick={() => {
+                  tree.setMenu(null);
+                  tree.addIn?.(folder.id);
+                }}
+                data-track="folder-new-file-inside"
+                disabled={pending}
+                className={ROW_ACTION}
+                data-tip={t("panes.newFileHereTitle")}
+              >
+                {t("panes.newFileInside")}
+              </button>
+            )}
             <button
               onClick={() => {
                 tree.setMenu(null);
@@ -885,7 +900,10 @@ function Level({ parentId, depth }: { parentId: string | null; depth: number }) 
         </p>
       )}
       {canEdit && !empty && <div className="mx-3 my-1 border-t border-line" />}
-      {canEdit && parentId !== null && (
+      {/* New document here closes an empty folder's list, where it is
+          the only content; a folder with rows has New document inside in
+          its ⋯. */}
+      {canEdit && parentId !== null && empty && (
         <div className="tree-row-in" style={rowStyle(index++)}>
           <NewDocumentRow folderId={parentId} />
         </div>
