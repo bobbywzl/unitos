@@ -159,7 +159,8 @@ export function CoverageHead({ documentIds, links }: { documentIds: string[]; li
     >
       {t("graphCover.headUnopened", { n: unopened })}
     </span>,
-    accepted.length > 0 && (
+    // [lists7] WALK7-04: said only when a question waits.
+    noReply > 0 && (
       <span key="noreply" data-graph-coverage-noreply={`${noReply}/${accepted.length}`} data-tip={t("graphCover.noReplyTitle")}>
         {noReply === 1 ? t("graphCover.headNoReplyOne") : t("graphCover.headNoReply", { n: noReply })}
       </span>

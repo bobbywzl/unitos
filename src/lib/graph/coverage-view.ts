@@ -67,17 +67,13 @@ export function commentAsks(text: string): boolean {
   return /[?？]\s*$/.test(text);
 }
 
-/** [layer5] A link waiting for this account's reply (WALK5-07): no reply
-    at all, or its last open reply is another person's (a thread whose
-    replies are all resolved is closed). The Links list's No
-    reply and the head's count keep these; a reader alone never waits on
-    her own words. */
+/** [layer5] A link waiting for this account's reply. [lists7] WALK7-04: only
+    a link whose last open reply is another person's (waitingReply); a link
+    with no reply waits on no one, and a thread whose replies are all
+    resolved is closed. The Links list's Waiting on you and the Documents
+    head's count keep these; a reader alone never waits on her own words. */
 export function waitsForReply(link: { replies?: ReplyLike[] }, myId: string): boolean {
-  const all = link.replies ?? [];
-  const open = all.filter((r) => r.resolvedById === null);
-  if (open.length === 0) return all.length === 0;
-  const last = open.reduce((a, b) => (b.createdAt > a.createdAt ? b : a));
-  return myId !== "" && last.userId !== myId;
+  return waitingReply(link, myId) !== null;
 }
 
 /** [panel6] The reply a link waits on (WALK6-06): its last open reply when
