@@ -663,6 +663,17 @@ function sizesDiffer(a: Line, b: Line, ctx: PageContext): boolean {
   return Math.abs(a.size - b.size) > (ctx.ocr ? Math.max(a.size, b.size) * 0.2 : 0.6);
 }
 
+// The size of a line's words after its bold lead: a label set larger than
+// its words ("Exercise 32.2" in 10.9 pt before 10.2 pt words) is not the
+// size the paragraph's next line goes on at (parse loop finding: a Tufte
+// book's exercises split after their first line). A line with no bold lead
+// is its size.
+function wordSize(line: Line): number {
+  if (!startsWithBoldLead(line)) return line.size;
+  const words = line.items.filter((i) => !i.bold && i.str.trim() !== "");
+  return words.length > 0 ? Math.max(...words.map((i) => i.size)) : line.size;
+}
+
 // A display's number set left of it, in a cell of its own ("(33) ⇥ ⟨u, v⟩",
 // amsart's leqno).
 const EQ_NUMBER_RE = /^\(\d{1,3}[a-z]?\)$/;
@@ -916,7 +927,7 @@ export function readParagraph(lines: Line[], i: number, ctx: PageContext, runOf:
         !(gap <= next.size * ctx.leading * 1.3 && colEdge > 0 && fillsMargin(prev, next, colEdge) && !LEADERS_RE.test(prev.text))) ||
       // The paragraph gap: looser than the text leading by a third.
       (gap > next.size * ctx.leading * 1.3 && !pushedApart(prev, next)) ||
-      sizesDiffer(next, prev, ctx) ||
+      (sizesDiffer(next, prev, ctx) && !(group.length === 1 && !sizesDiffer(next, { ...prev, size: wordSize(prev) }, ctx))) ||
       (nextX > prevX + next.size * 1.1 && !hanging && !centered) ||
       (nextX < prevX - next.size * 1.1 && !(group.length === 1 && firstLineIndent) && !centered) ||
       // A line set larger than the body stands alone (no heading reader
