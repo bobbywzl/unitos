@@ -2100,6 +2100,21 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     proseHeadings.includes("PARAGRAPH The river drops its sand") && proseHeadings.includes("HEADING What does a gauge at the") && proseHeadings.includes("HEADING Gravel bars"),
     proseHeadings.join(" / "),
   );
+  // A comment box's heading in its other forms ("Top Rated Comments", "Отзывы") closes the article.
+  const commentTail = async (heading: string) =>
+    (
+      await parseHtmlContent(
+        `<!doctype html><html><head><title>Notes on river flow</title></head><body><article><h1>Notes on river flow</h1><p>${prose(1)}</p><p>${prose(2)}</p><p>${prose(3)}</p><h2>${heading}</h2><p>(View all)</p><p>[ Read All Comments ]</p></article></body></html>`,
+        "https://example.org/rivers",
+      )
+    ).blocks.map((b) => b.text.slice(0, 24));
+  const topRated = await commentTail("Top Rated Comments");
+  const reviews = await commentTail("Отзывы");
+  check(
+    "url: a comment box's heading in its other forms closes the article",
+    !topRated.some((t) => /Comments|View all/.test(t)) && !reviews.some((t) => /Отзывы|View all/.test(t)) && topRated.length === 3,
+    `${topRated.join(" / ")}; ${reviews.join(" / ")}`,
+  );
   check(
     "url: a first section's question and a short first heading stay headings",
     question.includes("HEADING What does a gauge measur") && short.includes("HEADING Channels and banks"),
