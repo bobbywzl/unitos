@@ -50,6 +50,12 @@ async function openGraph(page, nb) {
   await page.waitForTimeout(1500);
 }
 const list = (page) => page.locator("[data-graph-documents-list]");
+// [chrome6] VIEW6-04: rows are one line until opened; open the first row with a link.
+async function openRowWithLink(page) {
+  const row = page.locator("[data-graph-documents-row]").filter({ hasText: /\blinks?\b|条链接/ }).first();
+  if ((await row.getAttribute("data-open")) === null) await row.locator("[data-row-head]").click();
+  await page.waitForTimeout(200);
+}
 async function openList(page) {
   // The part titles load once per tab: wait for that answer when it is asked for.
   const titles = page.waitForResponse((r) => r.url().includes("parts=titles"), { timeout: 120000 }).catch(() => null);
@@ -72,7 +78,8 @@ if (want("scale")) {
   await openList(page);
   const rows = page.locator("[data-graph-documents-row]");
   const n = await rows.count();
-  check("36 rows, compact past 20", n >= 36 && (await list(page).getAttribute("data-compact")) !== null, `${n} rows`);
+  // [chrome6] VIEW6-04: one-line rows at every size; past 20 rows the reader's documents come first.
+  check("36 rows, one line each, the reader's documents first past 20", n >= 36 && (await list(page).getAttribute("data-compact")) !== null && (await list(page).getAttribute("data-mine-first")) !== null, `${n} rows`);
   const heights = await rows.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height));
   check("every row is one line (≤ 40px)", Math.max(...heights) <= 40, `tallest ${Math.max(...heights)}`);
   const scroll = await list(page).evaluate((el) => el.scrollHeight);
@@ -127,7 +134,8 @@ if (want("scale")) {
   await page.waitForTimeout(300);
   const filtered = await rows.count();
   check("the filter narrows the rows", filtered > 0 && filtered < n, `${filtered}`);
-  check("≤ 20 matches: full rows again", filtered > 20 || (await list(page).getAttribute("data-compact")) === null);
+  // [chrome6] VIEW6-04: rows stay one line; the graph's order comes back (no reorder for a small list).
+  check("≤ 20 matches: one line still, in the graph's order", filtered > 20 || ((await list(page).getAttribute("data-compact")) !== null && (await list(page).getAttribute("data-mine-first")) === null));
   check("the filter count is a live region", (await list(page).locator("[data-graph-documents-found][role=status]").count()) === 1);
   await page.screenshot({ path: `${SHOT}/VIEW4-04-after-filter.png` });
   await list(page).locator("[data-graph-documents-filter]").fill("");
@@ -166,7 +174,9 @@ if (want("generated")) {
     const { ctx, page } = await newPage(1440, 900, lang);
     await openGraph(page, LINDA);
     await openList(page);
-    const generatedNodes = await page.locator(".react-flow__node.graph-generated").count();
+    // [chrome6] VIEW6-03: generated documents are not drawn with the switch off; the Generated content pill counts them.
+    const generatedNodes = Number(await page.locator('[data-track="graph-generated"] span').last().textContent());
+    check(`${lang}: switch off, no generated document drawn`, generatedNodes > 0 && (await page.locator(".react-flow__node.graph-generated").count()) === 0, `${generatedNodes} counted`);
     const hidden = list(page).locator("[data-graph-documents-generated-hidden]");
     check(`${lang}: switch off, a line says the generated documents are not listed`,
       (await hidden.count()) === 1 && (await hidden.textContent()).includes(String(generatedNodes)), await hidden.textContent());
@@ -211,6 +221,7 @@ if (want("esc")) {
   check("Esc in an empty Find: focus on the graph's title", (await active(page)) === "data-graph-title", await active(page));
   // A link from the Documents list: one Esc back to the list, the next closes it.
   await openList(page);
+  await openRowWithLink(page);
   const linkRow = list(page).locator("[data-graph-documents-link]").first();
   const linkId = await linkRow.getAttribute("data-graph-documents-link");
   await linkRow.click();
@@ -231,6 +242,7 @@ if (want("esc")) {
   await page.goto("about:blank");
   await openGraph(page, LINDA);
   await openList(page);
+  await openRowWithLink(page);
   await list(page).locator("[data-graph-documents-link]").first().click();
   await page.locator("[data-graph-link-panel]").waitFor();
   const noteBtn = page.locator('[data-track="graph-link-note"]');
@@ -286,12 +298,18 @@ if (want("header")) {
     await openGraph(page, LINDA);
     const rec = page.locator('[data-track="graph-recommended-links"]');
     const gen = page.locator('[data-track="graph-generated"]');
-    const scan = page.locator('[data-track="graph-recommend-links"]');
-    const visibleText = (loc) => loc.evaluate((el) => el.innerText.replace(/\s+/g, " ").trim());
-    const r = await visibleText(rec), g = await visibleText(gen), sc = (await scan.count()) ? await visibleText(scan) : "";
-    const words = lang === "en" ? (w >= 1400 ? ["Recommended links", "Generated content", "Scan for links"] : ["Recommended", "Generated", "Scan"]) : w >= 1400 ? ["推荐链接", "生成内容", "扫描推荐链接"] : ["推荐", "生成", "扫描"];
-    check(`${w} ${lang}: every pill shows a name`, r.includes(words[0]) && g.includes(words[1]) && sc.includes(words[2]), `${r} | ${g} | ${sc}`);
-    check(`${w} ${lang}: the action no longer reads "Recommend links"`, !/Recommend links/.test(sc));
+    const visibleText = (loc) => loc.evaluate((el) => [...el.querySelectorAll("span")].filter((x) => !x.matches(".sr-only") && getComputedStyle(x).display !== "none" && x.getClientRects().length && x.getBoundingClientRect().width > 2 && !(getComputedStyle(x).clip || "").startsWith("rect(0")).map((x) => x.textContent).join(" ").replace(/\s+/g, " ").trim());
+    const named = (loc) => loc.evaluate((el) => el.textContent.replace(/\s+/g, " ").trim());
+    const r = await visibleText(rec), g = await visibleText(gen);
+    const words = lang === "en" ? (w >= 1400 ? ["Recommended links", "Generated content"] : ["Recommended", "Generated"]) : w >= 1400 ? ["推荐链接", "生成内容"] : ["推荐", "生成"];
+    // [chrome6] VIEW6-08: below 768px a pill is its mark and its count; its name stays for a screen reader.
+    if (w >= 768) check(`${w} ${lang}: every pill shows a name`, r.includes(words[0]) && g.includes(words[1]), `${r} | ${g}`);
+    else check(`${w} ${lang}: a pill is its mark and count, its name read aloud`, !/[A-Za-z\u4e00-\u9fff]/.test(r + g) && (await named(rec)).includes(lang === "en" ? "Recommended links" : "推荐链接") && (await named(gen)).includes(lang === "en" ? "Generated content" : "生成内容"), `${r} | ${g}`);
+    // [chrome6] VIEW6-02: Scan for links heads the Recommended links list, not the header.
+    check(`${w} ${lang}: no Scan for links in the header`, (await page.locator('.graph-overlay > div [data-track="graph-recommend-links"]').count()) === 0);
+    // [chrome6] WALK6-07: every pill in view, no sideways scroll of the pill row.
+    const pillsIn = await page.evaluate(() => [...document.querySelectorAll('.graph-pill-row > *')].every((el) => el.getBoundingClientRect().right <= window.innerWidth + 0.5));
+    check(`${w} ${lang}: every pill in view`, pillsIn);
     const fits = await page.evaluate(() => {
       const close = document.querySelector('[data-track="graph-close"]').getBoundingClientRect();
       return close.right <= window.innerWidth && document.documentElement.scrollWidth <= window.innerWidth;

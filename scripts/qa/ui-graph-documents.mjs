@@ -46,6 +46,12 @@ async function openGraph(page, nb) {
   await page.waitForTimeout(1800);
 }
 const list = (page) => page.locator("[data-graph-documents-list]");
+// [chrome6] VIEW6-04: a row is one line until opened; open them all to read their lines.
+async function openAllRows(page) {
+  const heads = page.locator("[data-graph-documents-row]:not([data-open]) [data-row-head]");
+  for (let i = (await heads.count()) - 1; i >= 0; i--) await heads.nth(i).click();
+  await page.waitForTimeout(300);
+}
 
 // ── 1440, en: the list ────────────────────────────────────────────────────
 {
@@ -69,8 +75,12 @@ const list = (page) => page.locator("[data-graph-documents-list]");
     JSON.stringify(opened.map((c) => `${c.method} ${c.path}`)),
   );
   void before;
+  // [chrome6] VIEW6-03: with the switch off, generated documents are not drawn.
   const generated = await page.locator(".react-flow__node.graph-generated").count();
   const nodeCount = await page.locator(".react-flow__node").count();
+  const oneLine = await page.locator("[data-graph-documents-row]").evaluateAll((els) => els.every((el) => el.getBoundingClientRect().height <= 40));
+  check("every row is one line until opened", oneLine && (await list(page).getAttribute("data-mine-first")) === null);
+  await openAllRows(page);
   const rows = await page.locator("[data-graph-documents-row]").evaluateAll((els) =>
     els.map((el) => ({
       id: el.getAttribute("data-graph-documents-row"),
@@ -80,7 +90,7 @@ const list = (page) => page.locator("[data-graph-documents-list]");
       parts: el.querySelectorAll("[data-graph-part]").length,
     })),
   );
-  check("one row per document (generated documents behind the switch)", rows.length === nodeCount - generated, `${rows.length} rows, ${nodeCount} nodes, ${generated} generated`);
+  check("one row per document (generated documents behind the switch)", generated === 0 && rows.length === nodeCount, `${rows.length} rows, ${nodeCount} nodes, ${generated} generated`);
   const lastLinked = rows.map((r) => r.links > 0).lastIndexOf(true); // links: accepted and recommended, as the layout groups them
   const firstBare = rows.findIndex((r) => r.links === 0);
   check("linked documents come first (the graph's order)", firstBare === -1 || lastLinked < firstBare, JSON.stringify(rows.map((r) => r.links)));
@@ -151,6 +161,7 @@ const list = (page) => page.locator("[data-graph-documents-list]");
   } else check("Skip to the open list is the second Tab stop", false, String(skip));
 
   // A part jumps to the reader; Back finds the list.
+  await openAllRows(page);
   const part = page.locator("[data-graph-documents-row] [data-graph-part]").first();
   if ((await part.count()) > 0) {
     const block = await part.getAttribute("data-graph-part");
