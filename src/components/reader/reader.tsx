@@ -32,6 +32,7 @@ import {
 import { FigurePlace, type FigureRenderInfo } from "@/components/reader/figure-capture";
 import { Reveal, inactiveReveal, useReveal, type RevealContext } from "@/components/reader/reveal";
 import { TranslationLine } from "@/components/reader/translation-bar";
+import { FigureSuggestionCard } from "@/components/reader/figure-suggestion";
 import { CoreBlock, CoreToggle } from "@/components/reader/core-block";
 import { coreKey } from "@/lib/anchors/core-key";
 import { useLang } from "@/components/lang-provider";
@@ -1727,6 +1728,7 @@ const BlockRow = memo(function BlockRow({
         ) : (
           <BlockView block={block} highlights={NO_HIGHLIGHTS} documentId={documentId} />
         )}
+        {documentId && block.type === "FIGURE" && <FigureSuggestionCard documentId={documentId} blockId={block.id} />}
         <div className="relative -my-1.5 h-3">
           <button
             onMouseDown={keepSelection}
@@ -1786,6 +1788,7 @@ const BlockRow = memo(function BlockRow({
         {documentId && <BlockBookmark documentId={documentId} blockId={block.id} text={block.text} />}
         {body}
         {translation ? <TranslationLine text={translation} lang={lang} /> : null}
+        {documentId && block.type === "FIGURE" && <FigureSuggestionCard documentId={documentId} blockId={block.id} />}
       </div>
     );
   }

@@ -19,6 +19,9 @@ export type AttachedDocument = {
   // The folder the document sits in within this project (SPEC.md §6); null
   // = the project itself.
   folderId: string | null;
+  // Its place in its list under Sort by Custom order (SPEC.md §6); null =
+  // never placed by a drag.
+  position: number | null;
   // An import edited since it was imported (SPEC.md §29): Re-parse asks
   // before it replaces the edits. Absent: the server's 409 "edited" asks.
   importEdited?: boolean;
@@ -45,6 +48,7 @@ const DEFAULTS = {
   figureRenderAt: null,
   figureRenderError: null,
   folderId: null,
+  position: null,
   importEdited: false,
 } satisfies Partial<AttachedDocument>;
 type Defaulted = keyof typeof DEFAULTS;
@@ -55,10 +59,13 @@ export type AttachedDocumentRow = Omit<AttachedDocument, Defaulted | "editedAt">
   Partial<Pick<AttachedDocument, Defaulted | "editedAt">>;
 
 export function compactDocument(d: AttachedDocument): AttachedDocumentRow {
-  const row: Record<string, unknown> = { id: d.id, title: d.title, kind: d.kind, addedAt: d.addedAt };
-  if (d.editedAt !== d.addedAt) row.editedAt = d.editedAt;
-  for (const key of Object.keys(DEFAULTS) as Defaulted[]) {
-    if (d[key] !== undefined && d[key] !== DEFAULTS[key]) row[key] = d[key];
+  // Every field goes, unless it sits at its default: a field added later
+  // travels without an entry here.
+  const row: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(d)) {
+    if (value === undefined) continue;
+    if (key === "editedAt" ? value === d.addedAt : key in DEFAULTS && value === DEFAULTS[key as Defaulted]) continue;
+    row[key] = value;
   }
   return row as AttachedDocumentRow;
 }

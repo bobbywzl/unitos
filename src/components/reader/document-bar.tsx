@@ -286,7 +286,11 @@ export function DocumentBar({
     setMoveChoice(null);
     setEditedAsk(null);
   }
+  // A row of the list is being dragged (document-folders.tsx): the list
+  // stays open while the pointer is outside it, until the drop.
+  const listDragging = useRef(false);
   function scheduleCloseList() {
+    if (listDragging.current) return;
     if (listCloseTimer.current) clearTimeout(listCloseTimer.current);
     listCloseTimer.current = setTimeout(closeList, 220);
   }
@@ -1026,7 +1030,7 @@ export function DocumentBar({
       </div>
       <Collapse open={pillMenu === d.id}>
       {pillMenu === d.id && (
-        <div className="mx-2 mb-1.5 flex flex-col rounded-xl bg-sand-100 py-1">
+        <div data-no-drag className="mx-2 mb-1.5 flex flex-col rounded-xl bg-sand-100 py-1">
           {/* Re-parse, on every document: a video or audio
               document transcribes again, a handwritten one
               re-makes its pages and converts again, a text one
@@ -1239,6 +1243,14 @@ export function DocumentBar({
                 onAddIn={(folderId) => {
                   closeList();
                   openAddDialog(folderId);
+                }}
+                onSort={setDocumentSort}
+                onDragging={(dragging) => {
+                  listDragging.current = dragging;
+                  if (dragging) {
+                    setPillMenu(null);
+                    openList();
+                  }
                 }}
               />
             </div>

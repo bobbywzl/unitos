@@ -20,6 +20,7 @@ const base: AttachedDocument = {
   figureRenderAt: null,
   figureRenderError: null,
   folderId: null,
+  position: null,
   importEdited: false,
   kind: "page",
   addedAt: "2026-10-01T00:00:00.000Z",
@@ -35,6 +36,7 @@ const off: Partial<AttachedDocument> = {
   figureRenderAt: "2026-10-02T00:00:00.000Z",
   figureRenderError: "timeout",
   folderId: "f1",
+  position: 3,
   importEdited: true,
   editedAt: "2026-10-05T00:00:00.000Z",
 };

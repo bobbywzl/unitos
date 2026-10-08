@@ -733,6 +733,10 @@ model NotebookDocument {
   // database's own fallback clears it.
   folderId      String?
   folder        DocumentFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  // The document's place in its list under Sort by Custom order (SPEC.md
+  // §6): 0 first. Null = never placed by a drag; such rows list first,
+  // newest edit first. A move into another folder clears it.
+  position      Int?
 
   @@id([notebookId, documentId])
   @@index([documentId])
@@ -753,6 +757,9 @@ model DocumentFolder {
   parent     DocumentFolder?    @relation("FolderNesting", fields: [parentId], references: [id], onDelete: Cascade)
   children   DocumentFolder[]   @relation("FolderNesting")
   documents  NotebookDocument[]
+  // The folder's place in its parent's list under Sort by Custom order
+  // (SPEC.md §6), the same as NotebookDocument.position.
+  position   Int?
   createdAt  DateTime           @default(now())
 
   @@index([notebookId])

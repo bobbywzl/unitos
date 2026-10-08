@@ -261,6 +261,10 @@ const BLOCK_ACTIONS: ReadonlySet<RawAction["type"]> = new Set(["edit_block", "in
 const fitsDocument = (type: RawAction["type"], edits: DocumentEdits): boolean =>
   type === "suggest" ? edits === "suggestions" : !BLOCK_ACTIONS.has(type) || edits === "blocks";
 
+/** insert_paragraph's line: the figure's words take it on a document with
+    rich text too (lib/prompts/act.ts). */
+export const insertParagraphLine = (): string => ACTION_LINES.insert_paragraph;
+
 /** The action types as the prompts list them, one line per type: on a
     document with rich text, suggest in place of the block actions; on a
     document that takes no edits, neither; the transcript's actions on a
@@ -303,6 +307,10 @@ export type PlanContext = {
   // The reader's message and the conversation: with the document, what new
   // words may draw on. Absent: no grounding check.
   sources?: string[];
+  // The figure the reader selected, whose picture the model read (SPEC.md
+  // §7, words from a figure): new blocks right after it hold words read
+  // from the picture, which the document's text cannot ground.
+  figureBlockId?: string | null;
   t: TFunc;
 };
 
@@ -321,6 +329,44 @@ function joinCommands(list: CommandAction[]): CommandAction {
     ...(list.some((a) => a.reorder) ? { reorder: true } : {}),
     description: clip(list.map((a) => a.description).join(" "), DESCRIPTION_MAX),
   };
+}
+
+export type FigureWords = Extract<RawAction, { type: "insert_paragraph" }>;
+
+/** Words read from the selected figure and put under it (SPEC.md §7): the
+    insert_paragraph actions right after the figure, apart from the rest. A
+    document with rich text takes them as one suggestion of new blocks
+    (figureWordsMarkdown); a document without it as the reader's suggestion
+    under the figure. */
+export function splitFigureWords(read: ReadActions, figureBlockId: string | null): { words: FigureWords[]; rest: ReadActions } {
+  if (!figureBlockId) return { words: [], rest: read };
+  const under = (a: RawAction): a is FigureWords => a.type === "insert_paragraph" && a.afterBlockId === figureBlockId;
+  return { words: read.actions.filter(under), rest: { ...read, actions: read.actions.filter((a) => !under(a)) } };
+}
+
+const LIST_MARKER = /^\s*(?:[-*+]|\d+[.)])\s+/;
+
+/** The words as markdown for the page editor's new blocks: a heading, a
+    bulleted or a numbered list, or a paragraph, in order. */
+export function figureWordsMarkdown(words: FigureWords[]): string {
+  return words
+    .map((w) => {
+      const lines = w.text.split("\n").map((l) => l.trim()).filter(Boolean);
+      switch (w.kind) {
+        case "h1":
+        case "h2":
+        case "h3":
+          return `${"#".repeat(Number(w.kind[1]))} ${lines.join(" ")}`;
+        case "list":
+          return lines.map((l) => `- ${l.replace(LIST_MARKER, "")}`).join("\n");
+        case "numbered":
+          return lines.map((l, i) => `${i + 1}. ${l.replace(LIST_MARKER, "")}`).join("\n");
+        default:
+          return lines.join("\n");
+      }
+    })
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 /** Validate and enrich every action against the real document, so the client
@@ -357,7 +403,8 @@ export function enrichActions(
   const grounding = ctx.sources ? groundingOf([...ctx.blocks.map((b) => b.text), ...ctx.sources]) : null;
   for (const action of raw) {
     const fresh = action.type === "edit_block" ? action.newText : action.type === "insert_paragraph" ? action.text : null;
-    const fact = grounding && fresh !== null ? ungrounded(fresh, grounding) : null;
+    const fromFigure = action.type === "insert_paragraph" && Boolean(ctx.figureBlockId) && action.afterBlockId === ctx.figureBlockId;
+    const fact = grounding && fresh !== null && !fromFigure ? ungrounded(fresh, grounding) : null;
     if (fact) {
       warnings.push(t("api.warnUnsupported", { fact, description: action.description }));
       continue;

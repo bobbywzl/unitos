@@ -4,12 +4,14 @@ import { useRouter } from "next/navigation";
 import {
   createContext,
   useContext,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
   type CSSProperties,
   type Dispatch,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type SetStateAction,
 } from "react";
@@ -18,7 +20,16 @@ import { api } from "@/lib/api";
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon, FolderIcon, MoreIcon, PlusIcon } from "@/components/icons";
 import { useLang, useT } from "@/components/lang-provider";
 import { CategoryRow, categoryLabels, useFoldedCategories } from "@/components/reader/document-organize";
-import { categorizeRows, sortByEdited, type DocumentKind, type DocumentSort, type SortRow } from "@/lib/document-order";
+import {
+  categorizeRows,
+  sortByEdited,
+  sortByPosition,
+  type DocumentKind,
+  type DocumentSort,
+  type RowCategory,
+  type SortRow,
+} from "@/lib/document-order";
+import { edgeScrollStep, pressToDrag, scrollBoxOf } from "@/components/reader/tree-drag";
 import { Collapse } from "@/components/presence";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import type { TFunc } from "@/lib/i18n/dictionaries";
@@ -31,14 +42,25 @@ import { clipWords } from "@/lib/markdown-preview";
 // narrow screen, a press opens the folder's list under the row. The rows of
 // the documents themselves are the document bar's: it renders each one
 // (renderDocument) and this file places them. A folder's list ends with New
-// file here, whose + adds a document straight into the folder. A document or
-// a folder drags onto a folder to move into it, or onto Move to the project
-// at the top of the list; held over a folder, the drag opens its list. The
-// rows of a list fall in one after another as it opens (tree-row-in).
+// file here, whose + adds a document straight into the folder. A hold picks a
+// document or a folder up (tree-drag.ts). Over the upper or lower part of a
+// row, a drop line says where it lands in that list: the drop puts the list
+// in Custom order. Over the middle of a folder's row, the row lights up and
+// the drop moves it into the folder; Move to the project, at the top of the
+// list, takes it out of every folder. Held over a folder, the drag opens its
+// list. The rows of a list fall in one after another as it opens
+// (tree-row-in).
 
 // One folder of a project (DocumentFolder). createdAt: when it was made, for
-// Sort by Week added and Month added.
-export type DocumentFolderView = { id: string; title: string; parentId: string | null; createdAt: string };
+// Sort by Week added and Month added. position: its place in its parent's
+// list under Custom order; null = never placed by a drag.
+export type DocumentFolderView = {
+  id: string;
+  title: string;
+  parentId: string | null;
+  position: number | null;
+  createdAt: string;
+};
 
 // Titles sort as a reader expects: "Chapter 2" before "Chapter 10", case
 // aside, in the reader's language.
@@ -302,6 +324,7 @@ function FolderNameInput({
 type TreeRow = {
   id: string;
   folderId: string | null;
+  position: number | null;
   title: string;
   kind: DocumentKind;
   addedAt: string;
@@ -312,10 +335,38 @@ type TreeError = { at: string; message: string } | null;
 // What is being dragged: a document from its folder, or a folder from its
 // parent (null = the project itself).
 type TreeDrag = { kind: "document" | "folder"; id: string; from: string | null };
+type TreeItem = { kind: "document" | "folder"; id: string };
+// Where a drop lands, read from the row under the pointer:
+// - line: in the list of `parentId` (null = the project itself), before or
+//   after the row `target` (null = the list's end); `at` is where the drop
+//   line draws.
+// - into: inside the folder `folderId` (null = the project itself, Move to
+//   the project).
+type TreeHint =
+  | {
+      kind: "line";
+      parentId: string | null;
+      target: TreeItem | null;
+      before: boolean;
+      at: { top: number; left: number; width: number };
+    }
+  | { kind: "into"; folderId: string | null };
 // The drop target under the pointer: a folder's id, or ROOT_TARGET.
 const ROOT_TARGET = "root";
 // How long a drag held over a folder waits before its list opens.
 const DRAG_OPEN_MS = 450;
+// The share of a folder's row, at its top and at its bottom, where a drop
+// lands beside the folder; the middle drops into it.
+const FOLDER_EDGE = 0.3;
+
+// One row of a level, folder or document, with what Sort by reads.
+type LevelEntry = SortRow & { position: number | null } & (
+    | { entry: "folder"; folder: DocumentFolderView }
+    | { entry: "document"; row: TreeRow }
+  );
+// A level as Sort by draws it: one run of rows, or rows in categories.
+type LevelLayout = { flat: LevelEntry[] } | { categories: RowCategory<LevelEntry>[] };
+const itemOf = (e: LevelEntry): TreeItem => ({ kind: e.entry, id: e.id });
 
 // A row's place in its level, for the falling-in delay (tree-row-in).
 const rowStyle = (index: number): CSSProperties => ({ ["--row" as string]: index }) as CSSProperties;
@@ -356,15 +407,18 @@ type Tree = {
   // The + of New file here: the document bar's add dialog, set to this
   // folder. null: the tree offers no New file here.
   addIn: ((folderId: string) => void) | null;
+  // A level's rows in the order Sort by draws them.
+  layout: (parentId: string | null) => LevelLayout;
   drag: TreeDrag | null;
+  // The row a hold picked up, before it moves.
+  held: string | null;
+  // The folder (or ROOT_TARGET) a drop would move the drag into.
   dragOver: string | null;
-  startDrag: (drag: TreeDrag) => void;
-  endDrag: () => void;
-  setDragOver: Dispatch<SetStateAction<string | null>>;
+  // A press on a row: a hold picks it up.
+  press: (e: ReactPointerEvent<HTMLElement>, drag: TreeDrag) => void;
   // The drag may land on this target (a folder id, or null = the project):
   // never where it sits now, and a folder never into itself.
   canDropOn: (target: string | null) => boolean;
-  dropOn: (target: string | null) => void;
 };
 const TreeContext = createContext<Tree | null>(null);
 function useTree(): Tree {
@@ -387,7 +441,8 @@ function NewFolderRow({ parentId }: { parentId: string | null }) {
   const { t, pending, creatingIn, setCreatingIn, setError, createFolder } = useTree();
   const key = `new:${parentId ?? ""}`;
   return (
-    <div className="flex flex-col">
+    // The foot of the level: a drag over it lands at the list's end.
+    <div className="flex flex-col" data-tree-end={parentId ?? ""}>
       {creatingIn === key ? (
         <FolderNameInput
           initial=""
@@ -447,16 +502,7 @@ function RootDropRow() {
   const over = tree.dragOver === ROOT_TARGET;
   return (
     <div
-      onDragOver={(e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "move";
-        if (!over) tree.setDragOver(ROOT_TARGET);
-      }}
-      onDragLeave={() => over && tree.setDragOver(null)}
-      onDrop={(e) => {
-        e.preventDefault();
-        tree.dropOn(null);
-      }}
+      data-tree-root
       className={`mx-2 my-1 rounded-lg border border-dashed px-3 py-2 text-[12.5px] ${
         over ? "border-clay bg-clay-100 text-clay-800" : "border-line text-sand-500"
       }`}
@@ -469,7 +515,15 @@ function RootDropRow() {
 // A folder's row: its name and count, the chevron that says how its list
 // opens, and its actions. The open list follows: beside the row on a wide
 // screen, under it on a narrow one.
-function FolderRow({ folder, depth }: { folder: DocumentFolderView; depth: number }) {
+function FolderRow({
+  folder,
+  depth,
+  parentId,
+}: {
+  folder: DocumentFolderView;
+  depth: number;
+  parentId: string | null;
+}) {
   const tree = useTree();
   const { t, flyout, canEdit, pending, folders, counts, activePath, openPath } = tree;
   const [rowEl, setRowEl] = useState<HTMLElement | null>(null);
@@ -481,45 +535,23 @@ function FolderRow({ folder, depth }: { folder: DocumentFolderView; depth: numbe
   // A name box open anywhere holds the fly-outs still: a hover that swapped
   // the list would take the box, and the typed name, with it.
   const typing = tree.creatingIn !== null || tree.renaming !== null;
-  // A drag held over the row opens its list, so a document can go deeper.
-  const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const clearOpenTimer = () => {
-    if (openTimer.current) clearTimeout(openTimer.current);
-    openTimer.current = null;
-  };
-  const droppable = tree.drag !== null && tree.canDropOn(folder.id);
-  const over = tree.dragOver === folder.id && droppable;
+  const over = tree.dragOver === folder.id && tree.drag !== null && tree.canDropOn(folder.id);
+  const dragged = tree.drag?.kind === "folder" && tree.drag.id === folder.id;
   return (
     <div ref={setRowEl} className="flex flex-col">
       <div
-        className={`flex items-center ${over ? "bg-clay-200 ring-1 ring-clay ring-inset" : ""}`}
-        onMouseEnter={flyout && !typing ? () => tree.openFolder(folder) : undefined}
-        draggable={canEdit && tree.renaming !== folder.id && !pending}
-        onDragStart={(e) => {
-          e.stopPropagation();
-          e.dataTransfer.setData("text/plain", folder.title);
-          e.dataTransfer.effectAllowed = "move";
-          tree.startDrag({ kind: "folder", id: folder.id, from: folder.parentId });
-        }}
-        onDragEnd={tree.endDrag}
-        onDragOver={(e) => {
-          if (!droppable) return;
-          e.preventDefault();
-          e.dataTransfer.dropEffect = "move";
-          if (tree.dragOver !== folder.id) tree.setDragOver(folder.id);
-          if (!openTimer.current && !open) openTimer.current = setTimeout(() => tree.openFolder(folder), DRAG_OPEN_MS);
-        }}
-        onDragLeave={(e) => {
-          if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
-          clearOpenTimer();
-          if (tree.dragOver === folder.id) tree.setDragOver(null);
-        }}
-        onDrop={(e) => {
-          clearOpenTimer();
-          if (!droppable) return;
-          e.preventDefault();
-          tree.dropOn(folder.id);
-        }}
+        data-tree-row="folder"
+        data-tree-id={folder.id}
+        data-tree-parent={parentId ?? ""}
+        className={`flex items-center transition-[transform,opacity,background-color] duration-150 [-webkit-touch-callout:none] ${
+          over ? "bg-clay-200 ring-1 ring-clay ring-inset" : ""
+        } ${dragged ? "opacity-40" : ""} ${tree.held === folder.id ? "scale-[0.98] bg-clay-100" : ""}`}
+        onMouseEnter={flyout && !typing && !dragged ? () => tree.openFolder(folder) : undefined}
+        onPointerDown={
+          canEdit && tree.renaming !== folder.id && !pending
+            ? (e) => tree.press(e, { kind: "folder", id: folder.id, from: parentId })
+            : undefined
+        }
       >
         {tree.renaming === folder.id ? (
           <div className="flex min-w-0 flex-1 flex-col">
@@ -579,7 +611,7 @@ function FolderRow({ folder, depth }: { folder: DocumentFolderView; depth: numbe
       </div>
       <Collapse open={menuOpen}>
         {menuOpen && (
-          <div className="mx-2 mb-1.5 flex flex-col rounded-xl bg-sand-100 py-1">
+          <div data-no-drag className="mx-2 mb-1.5 flex flex-col rounded-xl bg-sand-100 py-1">
             <button
               onClick={() => {
                 tree.setMenu(null);
@@ -647,90 +679,65 @@ function FolderRow({ folder, depth }: { folder: DocumentFolderView; depth: numbe
   );
 }
 
-// One level of the tree: its folders, then its documents, then New file
-// here (a folder's list) and New folder. Each row falls in after the one
-// above it (tree-row-in), and a document's row drags. Last edited lists the
-// folders among the documents, newest edit first: a folder's last edit is
-// the newest of the documents in it. A sort other than Last edited and
-// Added puts the folders and the documents in categories (SPEC.md §6): a
-// folder is a row like a document there, sorted by its own title and the
-// day it was made, and under Kind a kind of its own.
+// One level of the tree: its rows in the order Sort by draws them (layout),
+// then New file here (a folder's list) and New folder. Each row falls in
+// after the one above it (tree-row-in), and a hold picks a row up. Last
+// edited lists the folders among the documents, newest edit first: a
+// folder's last edit is the newest of the documents in it. Custom order
+// lists them in the order a drag left them. A sort other than Last edited,
+// Custom order, and Added puts the folders and the documents in categories
+// (SPEC.md §6): a folder is a row like a document there, sorted by its own
+// title and the day it was made, and under Kind a kind of its own.
 function Level({ parentId, depth }: { parentId: string | null; depth: number }) {
   const tree = useTree();
-  const { t, canEdit, folders, rows, pending, sort } = tree;
-  const subfolders = childFolders(folders, parentId);
-  const own = rows.filter((row) => row.folderId === parentId);
-  const empty = subfolders.length === 0 && own.length === 0;
+  const { t, canEdit, pending, sort } = tree;
+  const layout = tree.layout(parentId);
+  const entries = "flat" in layout ? layout.flat : layout.categories.flatMap((c) => c.rows);
+  const empty = entries.length === 0;
   let index = 0;
-  const folderNode = (folder: DocumentFolderView, i: number) => (
-    <div key={folder.id} className="tree-row-in" style={rowStyle(i)}>
-      <FolderRow folder={folder} depth={depth} />
-    </div>
-  );
-  const documentNode = (row: TreeRow, i: number) => (
-    <div
-      key={row.id}
-      className={`tree-row-in ${tree.drag?.id === row.id ? "opacity-50" : ""}`}
-      style={rowStyle(i)}
-      draggable={canEdit && !pending}
-      aria-roledescription={canEdit ? t("panes.dragDocumentTitle") : undefined}
-      onDragStart={(e) => {
-        e.dataTransfer.setData("text/plain", row.id);
-        e.dataTransfer.effectAllowed = "move";
-        tree.startDrag({ kind: "document", id: row.id, from: row.folderId });
-      }}
-      onDragEnd={tree.endDrag}
-    >
-      {row.node}
-    </div>
-  );
-  let list: ReactNode;
-  if (sort === "added") {
-    list = (
-      <>
-        {subfolders.map((folder) => folderNode(folder, index++))}
-        {own.map((row) => documentNode(row, index++))}
-      </>
+  const render = (entry: LevelEntry, i: number) =>
+    entry.entry === "folder" ? (
+      <div key={entry.id} className="tree-row-in" style={rowStyle(i)}>
+        <FolderRow folder={entry.folder} depth={depth} parentId={parentId} />
+      </div>
+    ) : (
+      <div
+        key={entry.id}
+        data-tree-row="document"
+        data-tree-id={entry.id}
+        data-tree-parent={parentId ?? ""}
+        className={`tree-row-in transition-[transform,opacity,background-color] duration-150 [-webkit-touch-callout:none] ${
+          // The row's fall-in animation holds its own opacity: the dim goes on
+          // what it holds.
+          tree.drag?.kind === "document" && tree.drag.id === entry.id ? "[&>*]:opacity-40" : ""
+        } ${tree.held === entry.id ? "scale-[0.98] bg-clay-100" : ""}`}
+        style={rowStyle(i)}
+        aria-roledescription={canEdit ? t("panes.dragDocumentTitle") : undefined}
+        onPointerDown={
+          canEdit && !pending ? (e) => tree.press(e, { kind: "document", id: entry.id, from: parentId }) : undefined
+        }
+      >
+        {entry.row.node}
+      </div>
     );
-  } else {
-    type LevelRow = SortRow & { render: (i: number) => ReactNode };
-    const levelRows: LevelRow[] = [
-      ...subfolders.map((folder) => ({
-        id: folder.id,
-        title: folder.title,
-        kind: "folder" as const,
-        addedAt: folder.createdAt,
-        editedAt: folderEditedAt(folder, folders, rows),
-        render: (i: number) => folderNode(folder, i),
-      })),
-      ...own.map((row) => ({
-        id: row.id,
-        title: row.title,
-        kind: row.kind,
-        addedAt: row.addedAt,
-        editedAt: row.editedAt,
-        render: (i: number) => documentNode(row, i),
-      })),
-    ];
-    list =
-      sort === "edited"
-        ? sortByEdited(levelRows).map((row) => row.render(index++))
-        : categorizeRows(levelRows, sort, tree.lang, categoryLabels(t)).map((category) => {
-      const key = `${sort}:${parentId ?? ""}:${category.key}`;
-      return (
-        <div key={key} className="tree-row-in" style={rowStyle(index++)}>
-          <CategoryRow
-            title={category.title}
-            count={category.rows.length}
-            open={!tree.folded.has(key)}
-            onToggle={() => tree.toggleFolded(key)}
-          >
-            {category.rows.map((row, i) => row.render(i))}
-          </CategoryRow>
-        </div>
-      );
-    });
-  }
+  const list =
+    "flat" in layout
+      ? layout.flat.map((entry) => render(entry, index++))
+      : layout.categories.map((category) => {
+          const key = `${sort}:${parentId ?? ""}:${category.key}`;
+          return (
+            <div key={key} className="tree-row-in" style={rowStyle(index++)}>
+              <CategoryRow
+                title={category.title}
+                count={category.rows.length}
+                open={!tree.folded.has(key)}
+                onToggle={() => tree.toggleFolded(key)}
+              >
+                {category.rows.map((entry, i) => render(entry, i))}
+              </CategoryRow>
+            </div>
+          );
+        });
   return (
     <>
       {parentId === null && <RootDropRow />}
@@ -756,15 +763,68 @@ function Level({ parentId, depth }: { parentId: string | null; depth: number }) 
   );
 }
 
+// A row's place in its list as a drag left it, before the server's copy
+// lands: `${kind}:${id}` → its list and its position.
+type Placement = { parentId: string | null; position: number | null };
+
+// The drop line, drawn over the picked-up row so the row never hides it.
+function DragOverlay({ line }: { line: { top: number; left: number; width: number } | null }) {
+  if (!line) return null;
+  return createPortal(
+    <div
+      aria-hidden
+      className="pointer-events-none fixed z-[70] flex items-center"
+      style={{ top: line.top - 4, left: line.left - 4, width: line.width + 4, height: 8 }}
+    >
+      <span className="size-2 shrink-0 rounded-full border-2 border-clay bg-card" />
+      <span className="h-0.5 flex-1 rounded-full bg-clay" />
+    </div>,
+    document.body,
+  );
+}
+
+// The picked-up row: a copy of the row that follows the pointer, lifted and
+// tilted like a held note card. Made by hand, outside React: it is a picture
+// of the row, never the row.
+function liftGhost(source: HTMLElement, at: { x: number; y: number }) {
+  const rect = source.getBoundingClientRect();
+  const offset = { x: Math.min(at.x - rect.left, 120), y: at.y - rect.top };
+  const ghost = document.createElement("div");
+  ghost.setAttribute("aria-hidden", "true");
+  ghost.className = "pointer-events-none fixed z-[60] overflow-hidden rounded-xl bg-card shadow-float";
+  // Narrower than the row and see-through, so the drop line and the folder
+  // it would land in stay in view around it.
+  ghost.style.cssText = `left:0;top:0;width:${Math.min(rect.width, 240)}px;opacity:0.85;transition:none;`;
+  const copy = source.cloneNode(true) as HTMLElement;
+  copy.classList.remove("opacity-40", "[&>*]:opacity-40", "tree-row-in");
+  // A row's open menu is not part of the picture.
+  copy.querySelectorAll("[data-no-drag]").forEach((el) => el.remove());
+  ghost.appendChild(copy);
+  document.body.appendChild(ghost);
+  const place = (p: { x: number; y: number }) => {
+    ghost.style.transform = `translate(${p.x - offset.x}px, ${p.y - offset.y}px) rotate(1.5deg) scale(1.02)`;
+  };
+  place(at);
+  return { place, remove: () => ghost.remove() };
+}
+
 // The project's folders and documents as one tree of rows. `documents` are
 // the document bar's rows in the order it keeps; this places each under its
 // folder, or in the project itself when it has none. `panelEl` is the root
 // list's element: the fly-outs open from its edge.
 export function DocumentTree<
-  T extends { id: string; folderId: string | null; title: string; kind: DocumentKind; addedAt: string; editedAt: string },
+  T extends {
+    id: string;
+    folderId: string | null;
+    position: number | null;
+    title: string;
+    kind: DocumentKind;
+    addedAt: string;
+    editedAt: string;
+  },
 >({
   notebookId,
-  folders,
+  folders: serverFolders,
   documents,
   sort,
   activeId,
@@ -772,6 +832,8 @@ export function DocumentTree<
   panelEl,
   renderDocument,
   onAddIn,
+  onSort,
+  onDragging,
 }: {
   notebookId: string;
   folders: DocumentFolderView[];
@@ -784,22 +846,49 @@ export function DocumentTree<
   renderDocument: (document: T) => ReactNode;
   /** New file here: open the add dialog set to this folder. */
   onAddIn?: (folderId: string) => void;
+  /** A drop line reorders a list: the sort becomes Custom order. */
+  onSort?: (sort: DocumentSort) => void;
+  /** A row is picked up (true) or let go (false): the list stays open. */
+  onDragging?: (dragging: boolean) => void;
 }) {
   const t = useT();
   const lang = useLang();
   const router = useRouter();
   const flyout = useSyncExternalStore(subscribeFlyout, readFlyout, () => false);
   const [folded, toggleFolded] = useFoldedCategories();
+
+  // A drop shows its new order at once: the placements it made stand over
+  // the server's rows until the server's rows change (the refresh after the
+  // drop, or another person's edit). Adjust-during-render, the same pattern
+  // as presence.tsx.
+  const basis = JSON.stringify([
+    serverFolders.map((f) => [f.id, f.parentId, f.position]),
+    documents.map((d) => [d.id, d.folderId, d.position]),
+  ]);
+  const [placed, setPlaced] = useState<{ basis: string; map: Map<string, Placement> } | null>(null);
+  if (placed && placed.basis !== basis) setPlaced(null);
+  const placement = (kind: "document" | "folder", id: string) =>
+    placed?.basis === basis ? placed.map.get(`${kind}:${id}`) : undefined;
+  const folders = serverFolders.map((f) => {
+    const p = placement("folder", f.id);
+    return p ? { ...f, parentId: p.parentId, position: p.position } : f;
+  });
+
   const known = new Set(folders.map((f) => f.id));
-  const rows: TreeRow[] = documents.map((d) => ({
-    id: d.id,
-    folderId: d.folderId && known.has(d.folderId) ? d.folderId : null,
-    title: d.title,
-    kind: d.kind,
-    addedAt: d.addedAt,
-    editedAt: d.editedAt,
-    node: renderDocument(d),
-  }));
+  const rows: TreeRow[] = documents.map((d) => {
+    const p = placement("document", d.id);
+    const folderId = p ? p.parentId : d.folderId;
+    return {
+      id: d.id,
+      folderId: folderId && known.has(folderId) ? folderId : null,
+      position: p ? p.position : d.position,
+      title: d.title,
+      kind: d.kind,
+      addedAt: d.addedAt,
+      editedAt: d.editedAt,
+      node: renderDocument(d),
+    };
+  });
   // The open folders, one per level, from the project itself down. A wide
   // screen opens on hover; a narrow one opens on the open document's path,
   // so the reader sees where they are.
@@ -824,7 +913,9 @@ export function DocumentTree<
   // level's New folder row.
   const [error, setError] = useState<TreeError>(null);
   const [drag, setDrag] = useState<TreeDrag | null>(null);
+  const [held, setHeld] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
+  const [line, setLine] = useState<{ top: number; left: number; width: number } | null>(null);
 
   // The screen crossed the width: the fly-outs close, or the open
   // document's path opens under its rows. Adjust-during-render, the same
@@ -835,7 +926,7 @@ export function DocumentTree<
     setOpenPath(flyout ? [] : activePath);
   }
 
-  async function run(at: string, call: () => Promise<unknown>, after?: () => void) {
+  async function run(at: string, call: () => Promise<unknown>, after?: () => void, failed?: () => void) {
     if (busy.current) return;
     busy.current = true;
     setPending(true);
@@ -845,12 +936,252 @@ export function DocumentTree<
       after?.();
       router.refresh();
     } catch (err) {
+      failed?.();
       setError({ at, message: err instanceof Error ? err.message : t("common.requestFailed") });
     } finally {
       busy.current = false;
       setPending(false);
     }
   }
+
+  // A level's rows in the order Sort by draws them.
+  const layout = (parentId: string | null): LevelLayout => {
+    const entries: LevelEntry[] = [
+      ...childFolders(folders, parentId).map((folder) => ({
+        entry: "folder" as const,
+        folder,
+        id: folder.id,
+        title: folder.title,
+        kind: "folder" as const,
+        position: folder.position,
+        addedAt: folder.createdAt,
+        editedAt: folderEditedAt(folder, folders, rows),
+      })),
+      ...rows
+        .filter((row) => row.folderId === parentId)
+        .map((row) => ({
+          entry: "document" as const,
+          row,
+          id: row.id,
+          title: row.title,
+          kind: row.kind,
+          position: row.position,
+          addedAt: row.addedAt,
+          editedAt: row.editedAt,
+        })),
+    ];
+    if (sort === "added") return { flat: entries };
+    if (sort === "edited") return { flat: sortByEdited(entries) };
+    if (sort === "custom") return { flat: sortByPosition(entries) };
+    return { categories: categorizeRows(entries, sort, lang, categoryLabels(t)) };
+  };
+  const levelOrder = (parentId: string | null): TreeItem[] => {
+    const l = layout(parentId);
+    return ("flat" in l ? l.flat : l.categories.flatMap((c) => c.rows)).map(itemOf);
+  };
+
+  const canDropOn = (target: string | null) => {
+    if (!drag) return false;
+    if (drag.from === target) return false;
+    if (drag.kind === "folder" && target !== null && folderSubtree(folders, drag.id).has(target)) return false;
+    return true;
+  };
+
+  // Where a drop at (x, y) lands, from the row under the pointer.
+  const hintAt = (moving: TreeDrag, x: number, y: number): TreeHint | null => {
+    const el = document.elementFromPoint(x, y);
+    if (!el) return null;
+    // A folder never moves into itself: no list inside it takes the drop.
+    const inside = moving.kind === "folder" ? folderSubtree(folders, moving.id) : new Set<string>();
+    const listOk = (parentId: string | null) => parentId === null || !inside.has(parentId);
+    if (el.closest("[data-tree-root]")) return moving.from === null ? null : { kind: "into", folderId: null };
+    const rowEl = el.closest<HTMLElement>("[data-tree-row]");
+    if (rowEl) {
+      const kind = rowEl.dataset.treeRow === "folder" ? "folder" : "document";
+      const id = rowEl.dataset.treeId ?? "";
+      const parentId = rowEl.dataset.treeParent || null;
+      if (kind === moving.kind && id === moving.id) return null;
+      if (!listOk(parentId)) return null;
+      const rect = rowEl.getBoundingClientRect();
+      const share = (y - rect.top) / Math.max(1, rect.height);
+      const lineAt = (top: number, indent = 0) => ({
+        top,
+        left: rect.left + 12 + indent,
+        width: Math.max(24, rect.width - 24 - indent),
+      });
+      if (kind === "folder") {
+        const intoOk = !inside.has(id);
+        if (share >= FOLDER_EDGE && share <= 1 - FOLDER_EDGE) {
+          return intoOk && moving.from !== id ? { kind: "into", folderId: id } : null;
+        }
+        // Under an open folder's row on a narrow screen its own list
+        // follows: the lower edge is that list's start.
+        if (share > 1 - FOLDER_EDGE && !flyout && openPath.includes(id)) {
+          if (!intoOk) return null;
+          const first = levelOrder(id).find((e) => !(e.kind === moving.kind && e.id === moving.id)) ?? null;
+          return { kind: "line", parentId: id, target: first, before: true, at: lineAt(rect.bottom, 16) };
+        }
+      }
+      const before = share < 0.5;
+      return {
+        kind: "line",
+        parentId,
+        target: { kind, id },
+        before,
+        at: lineAt(before ? rect.top : rect.bottom),
+      };
+    }
+    const endEl = el.closest<HTMLElement>("[data-tree-end]");
+    if (endEl) {
+      const parentId = endEl.dataset.treeEnd || null;
+      if (!listOk(parentId)) return null;
+      const rect = endEl.getBoundingClientRect();
+      return {
+        kind: "line",
+        parentId,
+        target: null,
+        before: false,
+        at: { top: rect.top, left: rect.left + 12, width: Math.max(24, rect.width - 24) },
+      };
+    }
+    return null;
+  };
+
+  // Reorder a list: the drag lands at the line, and the list's whole order
+  // is saved, so it stays as the reader sees it.
+  const reorder = (moving: TreeDrag, hint: Extract<TreeHint, { kind: "line" }>) => {
+    const before = levelOrder(hint.parentId);
+    const order = before.filter((e) => !(e.kind === moving.kind && e.id === moving.id));
+    let index = hint.target ? order.findIndex((e) => e.kind === hint.target!.kind && e.id === hint.target!.id) : -1;
+    index = index < 0 ? order.length : hint.before ? index : index + 1;
+    order.splice(index, 0, { kind: moving.kind, id: moving.id });
+    const unchanged =
+      moving.from === hint.parentId &&
+      sort === "custom" &&
+      order.length === before.length &&
+      order.every((e, i) => e.kind === before[i].kind && e.id === before[i].id);
+    if (unchanged) return;
+    setPlaced({
+      basis,
+      map: new Map(order.map((e, position) => [`${e.kind}:${e.id}`, { parentId: hint.parentId, position }])),
+    });
+    if (sort !== "custom") onSort?.("custom");
+    void run(
+      "drag",
+      () => api(`/api/notebooks/${notebookId}/order`, "PUT", { parentId: hint.parentId, items: order }),
+      undefined,
+      () => setPlaced(null),
+    );
+  };
+
+  // A document moves with the document route, a folder with the folder
+  // route (which refuses a folder into itself as well). Either lists first
+  // in its new list under Custom order.
+  const moveInto = (moving: TreeDrag, target: string | null) => {
+    if (moving.from === target) return;
+    if (moving.kind === "folder" && target !== null && folderSubtree(folders, moving.id).has(target)) return;
+    setPlaced({ basis, map: new Map([[`${moving.kind}:${moving.id}`, { parentId: target, position: null }]]) });
+    void run(
+      "drag",
+      () =>
+        moving.kind === "document"
+          ? api(`/api/notebooks/${notebookId}/documents/${moving.id}`, "PATCH", { folderId: target })
+          : api(`/api/notebooks/${notebookId}/folders/${moving.id}`, "PATCH", { parentId: target }),
+      undefined,
+      () => setPlaced(null),
+    );
+  };
+
+  // The drag's handlers read this render's tree: a drag outlives renders
+  // (a fly-out opens, a list scrolls), and its listeners were made at the
+  // press.
+  const live = useRef({ hintAt, reorder, moveInto, levelOrder });
+  useLayoutEffect(() => {
+    live.current = { hintAt, reorder, moveInto, levelOrder };
+  });
+  const hintRef = useRef<TreeHint | null>(null);
+  const openTimer = useRef<{ id: string; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const openFolderRef = useRef<(id: string) => void>(() => {});
+  useLayoutEffect(() => {
+    openFolderRef.current = (id) => {
+      const folder = folders.find((f) => f.id === id);
+      if (folder) setOpenPath([...folderPath(folders, folder.parentId), folder.id]);
+    };
+  });
+  const scrollFrame = useRef<number | null>(null);
+  const stopTimers = () => {
+    if (openTimer.current) clearTimeout(openTimer.current.timer);
+    openTimer.current = null;
+    if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current);
+    scrollFrame.current = null;
+  };
+  useEffect(() => stopTimers, []);
+
+  const showHint = (hint: TreeHint | null) => {
+    hintRef.current = hint;
+    setLine(hint?.kind === "line" ? hint.at : null);
+    setDragOver(hint?.kind === "into" ? (hint.folderId ?? ROOT_TARGET) : null);
+    // Held over a folder, the drag opens its list, so it can go deeper.
+    const over = hint?.kind === "into" ? hint.folderId : null;
+    if (openTimer.current?.id !== over) {
+      if (openTimer.current) clearTimeout(openTimer.current.timer);
+      openTimer.current = over
+        ? { id: over, timer: setTimeout(() => openFolderRef.current(over), DRAG_OPEN_MS) }
+        : null;
+    }
+  };
+
+  const press = (e: ReactPointerEvent<HTMLElement>, item: TreeDrag) => {
+    if (busy.current || drag) return;
+    const source = e.currentTarget;
+    let ghost: ReturnType<typeof liftGhost> | null = null;
+    let pointer = { x: e.clientX, y: e.clientY };
+    const end = () => {
+      stopTimers();
+      ghost?.remove();
+      ghost = null;
+      hintRef.current = null;
+      setLine(null);
+      setDragOver(null);
+      setDrag(null);
+      setHeld(null);
+      onDragging?.(false);
+    };
+    // Near a list's top or bottom edge, the list scrolls under the drag.
+    const scroll = () => {
+      const box = scrollBoxOf(document.elementFromPoint(pointer.x, pointer.y));
+      const step = box ? edgeScrollStep(box.getBoundingClientRect(), pointer.y) : 0;
+      if (box && step) {
+        box.scrollTop += step;
+        showHint(live.current.hintAt(item, pointer.x, pointer.y));
+      }
+      scrollFrame.current = requestAnimationFrame(scroll);
+    };
+    pressToDrag(e.nativeEvent, {
+      hold: () => setHeld(item.id),
+      start: (at) => {
+        setHeld(null);
+        setError(null);
+        setMenu(null);
+        setDrag(item);
+        onDragging?.(true);
+        ghost = liftGhost(source, at);
+        scrollFrame.current = requestAnimationFrame(scroll);
+      },
+      move: (at) => {
+        pointer = at;
+        ghost?.place(at);
+        showHint(live.current.hintAt(item, at.x, at.y));
+      },
+      drop: (at) => {
+        const hint = live.current.hintAt(item, at.x, at.y) ?? hintRef.current;
+        end();
+        if (hint?.kind === "line") live.current.reorder(item, hint);
+        else if (hint?.kind === "into") live.current.moveInto(item, hint.folderId);
+      },
+      cancel: end,
+    });
+  };
 
   const tree: Tree = {
     t,
@@ -904,42 +1235,12 @@ export function DocumentTree<
       );
     },
     addIn: canEdit && onAddIn ? onAddIn : null,
+    layout,
     drag,
+    held,
     dragOver,
-    startDrag: (next) => {
-      setError(null);
-      setMenu(null);
-      setDrag(next);
-    },
-    endDrag: () => {
-      setDrag(null);
-      setDragOver(null);
-    },
-    setDragOver,
-    canDropOn: (target) => {
-      if (!drag) return false;
-      if (drag.from === target) return false;
-      if (drag.kind === "folder" && target !== null && folderSubtree(folders, drag.id).has(target)) return false;
-      return true;
-    },
-    // A document moves with the document route, a folder with the folder
-    // route (which refuses a folder into itself as well).
-    dropOn: (target) => {
-      const moving = drag;
-      setDrag(null);
-      setDragOver(null);
-      if (!moving || moving.from === target) return;
-      if (moving.kind === "document") {
-        void run("drag", () =>
-          api(`/api/notebooks/${notebookId}/documents/${moving.id}`, "PATCH", { folderId: target }),
-        );
-      } else {
-        if (target !== null && folderSubtree(folders, moving.id).has(target)) return;
-        void run("drag", () =>
-          api(`/api/notebooks/${notebookId}/folders/${moving.id}`, "PATCH", { parentId: target }),
-        );
-      }
-    },
+    press,
+    canDropOn,
     // What the folder holds moves up one level; the route does it.
     deleteFolder: (folder) => {
       if (!confirm(t("panes.confirmDeleteFolder"))) return;
@@ -961,6 +1262,7 @@ export function DocumentTree<
       <PanelContext.Provider value={panelEl}>
         <Level parentId={null} depth={0} />
       </PanelContext.Provider>
+      <DragOverlay line={line} />
     </TreeContext.Provider>
   );
 }
