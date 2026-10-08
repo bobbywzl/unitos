@@ -155,6 +155,22 @@ function continuesOnPage(prev: Segment, next: Segment, setting: PageSetting): bo
     next.box.y1 >= prev.box.y1 - lineSize &&
     next.text.length <= 40;
   if (noteRight && sizes && sizes[1] < sizes[0] * 0.95) return false;
+  // A note of two lines or more set at the body's size in the margin right
+  // of the paragraph, narrow beside it, starts a line or more under the
+  // paragraph's top and ends within two lines of its foot: a column the
+  // paragraph went on in starts at the column's top, as wide as the
+  // paragraph (parse loop finding: a Tufte book's notes, "This notation is
+  // used in atomic physics contexts…", read on the sentence a display cut:
+  // "…following our model from Chapter 13, is This notation…").
+  const noteBeside =
+    prev.box !== undefined &&
+    next.box !== undefined &&
+    next.box.x1 > prev.box.x2 + lineSize &&
+    next.box.y2 <= prev.box.y2 - lineSize &&
+    next.box.y1 >= prev.box.y1 - lineSize * 2 &&
+    next.box.y2 - next.box.y1 > lineSize * 1.6 &&
+    next.box.x2 - next.box.x1 <= (prev.box.x2 - prev.box.x1) * 0.6;
+  if (noteBeside) return false;
   if ((/[a-z,;\-–—]$/.test(prev.text) || ABBREVIATION_END_RE.test(prev.text)) && goesOn(prev.text, next.text)) return true;
   const size = prev.lineSize ?? 10;
   const columnBreak = prev.box !== undefined && next.box !== undefined && next.box.y2 > prev.box.y1 && next.box.x1 > prev.box.x2 - size;
