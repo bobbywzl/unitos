@@ -96,12 +96,18 @@ type HoverState = { nodeId?: string; edgeId?: string } | null;
     frames the nodes in what is left. */
 export type GraphInsets = { top: number; right: number; bottom: number; left: number };
 const NO_INSETS: GraphInsets = { top: 0, right: 0, bottom: 0, left: 0 };
+const NO_IDS: Set<string> = new Set();
 
 // The node's box in flow units: the dot's row is NODE_H tall and NODE_W
 // wide; the label hangs under it, outside the measured box.
 const NODE_W = 144;
 const NODE_H = 32;
 const FIT_MAX_ZOOM = 1.1;
+// [chrome6] VIEW6-05: the fit's cap on a pane of WIDE_FIT px and more,
+// when it keeps a side list's room (SIDE_ROOM, the overlay's LIST_ROOM) free.
+const FIT_MAX_ZOOM_WIDE = 1.3;
+const WIDE_FIT = 1200;
+const SIDE_ROOM = 412;
 const FIT_MIN_ZOOM = 0.45;
 // A large project fits every node, however far out (REV2-09).
 const FIT_MIN_ZOOM_LARGE = 0.12;
@@ -123,8 +129,8 @@ const FAR_ZOOM = 0.7;
 
 /** A node's extent in flow units around its dot's center, label included,
     at a zoom: what the fit frames and what a pinned card keeps in view. */
-function nodeExtent(cx: number, cy: number, zoom: number, large: boolean, loop: boolean) {
-  const lod = large && zoom < LOD_ZOOM;
+function nodeExtent(cx: number, cy: number, zoom: number, lodZoom: number, loop: boolean) {
+  const lod = zoom < lodZoom;
   const s = lod ? 1 : labelScale(zoom);
   const halfLabel = (NODE_W / 2) * Math.min(s, LABEL_WIDTH_SCALE_MAX);
   // A kept label at a far zoom is 11px on screen, two lines at most.
@@ -214,6 +220,7 @@ type DocumentNodeData = {
   breathing: boolean;
   selected: boolean; // picked for Stitch (SPEC.md §22)
   keepLabel: boolean; // drawn at a far zoom too (lodKeep)
+  written: boolean; // [chrome6] a page Stitch wrote in this visit (VIEW6-03)
 };
 
 type LinkEdgeData = {
@@ -241,7 +248,7 @@ function DocumentNode({ id, data }: NodeProps<DocumentNodeData>) {
   const breatheDur = `${(3.2 + Math.abs(seeded(id, 9)) * 2).toFixed(2)}s`;
   const ring = data.selected
     ? "ring-[3px] ring-clay ring-offset-2 ring-offset-paper"
-    : cited
+    : cited || data.written
       ? "ring-[3px] ring-[var(--kind-assistant)] ring-offset-2 ring-offset-paper"
       : "";
   return (
@@ -279,7 +286,7 @@ function DocumentNode({ id, data }: NodeProps<DocumentNodeData>) {
           kept label draws (data-keep-label). */}
       <span
         data-graph-label
-        data-keep-label={data.keepLabel || data.selected || cited || data.active ? "" : undefined}
+        data-keep-label={data.keepLabel || data.selected || cited || data.written || data.active ? "" : undefined}
         className={`graph-node-label absolute top-[36px] left-1/2 line-clamp-2 -translate-x-1/2 text-center leading-snug font-semibold ${
           data.active ? "text-clay-700" : "text-ink"
         }`}
@@ -784,14 +791,34 @@ function NodeCard({
 
 // The key (GR-12): what each mark means and the gestures, behind the ?
 // button with the zoom controls, so it never sits under the Stitch box.
-function GraphKey({ onClose }: { onClose: () => void }) {
+/** [chrome6] VIEW6-10, WALK6-10: the key in three groups (documents,
+    links, notes and comments), two columns where the canvas has the room,
+    and only the marks the canvas draws now: generated documents, their
+    provenance, and the cited ring show when they are on the canvas. */
+function GraphKey({
+  onClose,
+  generated,
+  provenance,
+  cited,
+}: {
+  onClose: () => void;
+  generated: boolean;
+  provenance: boolean;
+  cited: boolean;
+}) {
   const t = useT();
   const { clickSelects } = useGraphContent(); // [view2]
   const row = (mark: ReactNode, key: Parameters<typeof t>[0]) => (
-    <li className="flex items-center gap-2.5">
+    <li className="flex items-center gap-2">
       <span className="flex w-7 shrink-0 items-center justify-center">{mark}</span>
-      <span>{t(key)}</span>
+      <span className="leading-snug">{t(key)}</span>
     </li>
+  );
+  const group = (title: string, rows: ReactNode) => (
+    <div className="mb-2.5 break-inside-avoid">
+      <p className="mb-1 text-[10.5px] font-bold tracking-[0.06em] text-sand-500 uppercase">{title}</p>
+      <ul className="flex flex-col gap-1">{rows}</ul>
+    </div>
   );
   const dot = (cls: string) => <span className={`block size-3.5 border-2 border-card ${cls}`} />;
   const line = (dashed: boolean, w: number) => (
@@ -803,7 +830,8 @@ function GraphKey({ onClose }: { onClose: () => void }) {
     <div
       role="dialog"
       aria-label={t("panes.graphKeyTitle")}
-      className="graph-float-in pointer-events-auto absolute top-3 left-14 z-30 max-h-[calc(100%-24px)] w-[300px] max-w-[calc(100%-72px)] overflow-y-auto overscroll-contain rounded-2xl border border-line bg-card/95 p-3.5 text-[12px] text-sand-700 shadow-float backdrop-blur-md"
+      data-graph-key
+      className="graph-float-in pointer-events-auto absolute top-3 left-14 z-30 max-h-[calc(100%-24px)] w-[540px] max-w-[calc(100%-72px)] overflow-y-auto overscroll-contain rounded-2xl border border-line bg-card/95 p-3.5 text-[12px] text-sand-700 shadow-float backdrop-blur-md"
     >
       <div className="mb-2 flex items-center">
         <p className="flex-1 text-[11px] font-bold tracking-[0.06em] text-sand-600 uppercase">{t("panes.graphKeyTitle")}</p>
@@ -811,74 +839,90 @@ function GraphKey({ onClose }: { onClose: () => void }) {
           ✕
         </button>
       </div>
-      <ul className="flex flex-col gap-1.5">
-        {row(dot("rounded-full bg-clay"), "panes.graphKeyOpen")}
-        {row(dot("rounded-full bg-sage-500"), "panes.graphKeyDocument")}
-        {row(dot("rounded-[4px] bg-sand-600 opacity-50"), "panes.graphKeyGenerated")}
-        {row(
-          <svg width="28" height="10" aria-hidden>
-            <path d="M2 5 Q14 1 26 5" fill="none" stroke="var(--sand-400)" strokeWidth={1.2} strokeDasharray="2 5" strokeLinecap="round" />
-          </svg>,
-          "panes.graphKeyProvenance",
+      <div className="gap-5 min-[560px]:columns-2">
+        {group(
+          t("panes.graphDocuments"),
+          <>
+            {row(dot("rounded-full bg-clay"), "panes.graphKeyOpen")}
+            {row(dot("rounded-full bg-sage-500"), "panes.graphKeyDocument")}
+            {generated && row(dot("rounded-[4px] bg-sand-600 opacity-50"), "panes.graphKeyGenerated")}
+            {cited && row(dot("rounded-full bg-sage-500 ring-2 ring-[var(--kind-assistant)] ring-offset-1 ring-offset-card"), "panes.graphKeyCited")}
+          </>,
         )}
-        {row(line(false, 3), "panes.graphKeyLinks")}
-        {row(line(true, 2), "panes.graphKeyRecommended")}
-        {row(
-          <svg width="24" height="20" aria-hidden>
-            <circle cx="12" cy="17" r="3" fill="var(--sage-500)" />
-            <path d="M12 15 C2 -3, 22 -3, 12 15" fill="none" stroke="var(--clay-600)" strokeWidth={2} />
-          </svg>,
-          "panes.graphKeyLoop",
+        {group(
+          t("panes.graphLinks"),
+          <>
+            {row(line(false, 3), "panes.graphKeyLinks")}
+            {row(line(true, 2), "panes.graphKeyRecommended")}
+            {row(
+              <svg width="24" height="20" aria-hidden>
+                <circle cx="12" cy="17" r="3" fill="var(--sage-500)" />
+                <path d="M12 15 C2 -3, 22 -3, 12 15" fill="none" stroke="var(--clay-600)" strokeWidth={2} />
+              </svg>,
+              "panes.graphKeyLoop",
+            )}
+            {/* The marks on a curve (WALK4-13): the link count, the open
+                replies, the notes that quote both documents. */}
+            {row(
+              <span className="flex h-[18px] items-center rounded-full border border-line bg-card px-1.5 text-[10px] font-semibold tabular-nums text-sand-700">3</span>,
+              "graphNotes.keyCurveCount",
+            )}
+            {row(
+              <span className="flex h-[18px] items-center gap-1 rounded-full border-[1.5px] border-[var(--kind-comment)] bg-card px-1.5 text-[10px] font-bold tabular-nums text-[var(--kind-comment)]">
+                <CommentIcon size={11} />2
+              </span>,
+              "graphNotes.keyCurveReplies",
+            )}
+            {provenance &&
+              row(
+                <svg width="28" height="10" aria-hidden>
+                  <path d="M2 5 Q14 1 26 5" fill="none" stroke="var(--sand-400)" strokeWidth={1.2} strokeDasharray="2 5" strokeLinecap="round" />
+                </svg>,
+                "panes.graphKeyProvenance",
+              )}
+          </>,
         )}
-        {row(dot("rounded-full bg-sage-500 ring-2 ring-[var(--kind-assistant)] ring-offset-1 ring-offset-card"), "panes.graphKeyCited")}
-        {/* [graph-notes] The note curve and the node's notes chip. */}
-        {row(
-          <svg width="28" height="10" aria-hidden>
-            <path d="M2 5 Q14 1 26 5" fill="none" stroke="var(--sage-500)" strokeWidth={2.2} strokeDasharray="1.5 6" strokeLinecap="round" />
-          </svg>,
-          "graphNotes.noteCurveHint",
+        {group(
+          t("graphNotes.keyNotesGroup"),
+          <>
+            {/* [graph-notes] The note curve and the node's notes chip. */}
+            {row(
+              <svg width="28" height="10" aria-hidden>
+                <path d="M2 5 Q14 1 26 5" fill="none" stroke="var(--sage-500)" strokeWidth={2.2} strokeDasharray="1.5 6" strokeLinecap="round" />
+              </svg>,
+              "graphNotes.noteCurveHint",
+            )}
+            {row(
+              <span className="flex items-center gap-1 rounded-full bg-sage-100 px-1.5 py-px text-[10px] font-semibold tabular-nums text-sage-800">
+                <NotesIcon size={10} />2
+              </span>,
+              "graphNotes.nodeNotesTitle",
+            )}
+            {row(
+              <span className="flex items-center gap-1 rounded-full bg-sage-100 px-1.5 py-px text-[10px] font-semibold tabular-nums text-sage-800">
+                <NotesIcon size={10} />2<span className="size-1.5 rounded-full bg-clay" />
+              </span>,
+              "graphNotes.keyPending",
+            )}
+            {row(
+              <span className="flex h-[18px] items-center gap-1 rounded-full border border-dashed border-sage-500 bg-sage-100 px-1.5 text-[10px] font-semibold tabular-nums text-sage-800">
+                <NotesIcon size={11} />2
+              </span>,
+              "graphNotes.keyCurveNotes",
+            )}
+            {/* [layer5] The node's comments chip (VIEW5-01 (c)). */}
+            {row(
+              <span className="flex items-center gap-0.5 rounded-full bg-[color-mix(in_srgb,var(--kind-comment)_12%,var(--card))] px-1.5 py-px text-[10px] font-semibold tabular-nums text-[var(--kind-comment)]">
+                <CommentIcon size={10} />2<span aria-hidden>?</span>
+              </span>,
+              "graphCover.keyComments",
+            )}
+          </>,
         )}
-        {row(
-          <span className="flex items-center gap-1 rounded-full bg-sage-100 px-1.5 py-px text-[10px] font-semibold tabular-nums text-sage-800">
-            <NotesIcon size={10} />2
-          </span>,
-          "graphNotes.nodeNotesTitle",
-        )}
-        {row(
-          <span className="flex items-center gap-1 rounded-full bg-sage-100 px-1.5 py-px text-[10px] font-semibold tabular-nums text-sage-800">
-            <NotesIcon size={10} />2<span className="size-1.5 rounded-full bg-clay" />
-          </span>,
-          "graphNotes.keyPending",
-        )}
-        {/* The marks on a curve (WALK4-13): the link count, the open
-            replies, the notes that quote both documents. */}
-        {row(
-          <span className="flex h-[18px] items-center rounded-full border border-line bg-card px-1.5 text-[10px] font-semibold tabular-nums text-sand-700">3</span>,
-          "graphNotes.keyCurveCount",
-        )}
-        {row(
-          <span className="flex h-[18px] items-center gap-1 rounded-full border-[1.5px] border-[var(--kind-comment)] bg-card px-1.5 text-[10px] font-bold tabular-nums text-[var(--kind-comment)]">
-            <CommentIcon size={11} />2
-          </span>,
-          "graphNotes.keyCurveReplies",
-        )}
-        {row(
-          <span className="flex h-[18px] items-center gap-1 rounded-full border border-dashed border-sage-500 bg-sage-100 px-1.5 text-[10px] font-semibold tabular-nums text-sage-800">
-            <NotesIcon size={11} />2
-          </span>,
-          "graphNotes.keyCurveNotes",
-        )}
-        {/* [layer5] The node's comments chip (VIEW5-01 (c)). */}
-        {row(
-          <span className="flex items-center gap-0.5 rounded-full bg-[color-mix(in_srgb,var(--kind-comment)_12%,var(--card))] px-1.5 py-px text-[10px] font-semibold tabular-nums text-[var(--kind-comment)]">
-            <CommentIcon size={10} />2<span aria-hidden>?</span>
-          </span>,
-          "graphCover.keyComments",
-        )}
-      </ul>
-      <p className="mt-2 text-[11.5px] leading-relaxed text-sand-600">{t("graphNotes.keyFar")}</p>
-      <p className="mt-2.5 border-t border-line pt-2 text-[11.5px] leading-relaxed text-sand-600">
+      </div>
+      <p className="border-t border-line pt-2 text-[11.5px] leading-relaxed text-sand-600">
         {t(clickSelects ? "graphView.gesturesSelect" : "graphView.gesturesOpen") /* [view2] */}
+        <span className="mt-1 block">{t("graphNotes.keyFar")}</span>
       </p>
     </div>
   );
@@ -946,12 +990,12 @@ function saveLayout(notebookId: string, aspect: number, layout: Map<string, Poin
 
 // The zoom drives the label scale and the label level of detail through CSS
 // variables and an attribute on the canvas, so a zoom re-renders no node.
-function LabelScale({ target, large }: { target: RefObject<HTMLDivElement | null>; large: boolean }) {
+function LabelScale({ target, lodZoom }: { target: RefObject<HTMLDivElement | null>; lodZoom: number }) {
   const zoom = useStore((s) => s.transform[2]);
   useEffect(() => {
     const el = target.current;
     if (!el) return;
-    const lod = large && zoom < LOD_ZOOM;
+    const lod = zoom < lodZoom;
     // At a far zoom a large project draws few labels: those keep 11px on
     // screen and their full width, however far out.
     const s = lod ? Math.max(1, 1 / zoom) : labelScale(zoom);
@@ -962,7 +1006,7 @@ function LabelScale({ target, large }: { target: RefObject<HTMLDivElement | null
     else el.removeAttribute("data-lod");
     if (zoom < FAR_ZOOM) el.setAttribute("data-far", "");
     else el.removeAttribute("data-far");
-  }, [zoom, target, large]);
+  }, [zoom, target, lodZoom]);
   return null;
 }
 
@@ -1087,6 +1131,7 @@ function GraphCanvas({
   onClearCited,
   expandedLinkId = null,
   onExpandLink,
+  writtenIds = NO_IDS,
 }: GraphViewProps) {
   const router = useRouter();
   const t = useT();
@@ -1235,6 +1280,12 @@ function GraphCanvas({
     [edges, showProvenance],
   );
   const large = nodes.length > LARGE_NODES || visibleEdges.length > LARGE_EDGES;
+  // [chrome6] WALK6-07: a phone frames every node, as a large project does:
+  // below the fit's least zoom it draws only the labels that matter (the
+  // kept ones, and a lit one), each 11px on screen. Nothing sits off screen.
+  const phoneFit = paneW > 0 && paneW < 640;
+  const lodZoom = large ? LOD_ZOOM : phoneFit ? FIT_MIN_ZOOM : 0;
+  const minFitZoom = large || phoneFit ? FIT_MIN_ZOOM_LARGE : FIT_MIN_ZOOM;
 
   const { adjacency, breathing, linkCounts, loops } = useMemo(() => {
     const adjacency = new Map<string, Set<string>>();
@@ -1272,7 +1323,7 @@ function GraphCanvas({
   const wordsNotes = useGraphNotes()?.view.byDocument;
   const wordsCoverage = useProjectCoverage();
   const keptLabels = useMemo(() => {
-    if (!large) return new Set<string>();
+    if (lodZoom === 0) return new Set<string>();
     const degree = (id: string) => (linkCounts.get(id)?.accepted ?? 0) + (linkCounts.get(id)?.recommended ?? 0);
     const words = (id: string) =>
       (wordsNotes?.get(id)?.notes.length ?? 0) + (wordsCoverage?.documents[id]?.comments ?? []).filter((c) => c.open).length;
@@ -1283,7 +1334,7 @@ function GraphCanvas({
         .slice(0, keep)
         .map((n) => n.id),
     );
-  }, [large, nodes, linkCounts, paneW, paneH, wordsNotes, wordsCoverage]);
+  }, [lodZoom, nodes, linkCounts, paneW, paneH, wordsNotes, wordsCoverage]);
 
   // The layout reads only which documents exist, which are generated, and
   // which pairs link (the reader's links), so a refresh that changes a title
@@ -1350,14 +1401,20 @@ function GraphCanvas({
   // FIT_MIN_ZOOM and FIT_MAX_ZOOM. When the nodes do not fit at the least
   // zoom, the view shows the top of the layout, where the linked groups are.
   // A large project fits every node (its far labels are few).
-  // [ui5] WALK5-11: on a phone, with the provenance switch off, generated
-  // documents are not drawn: the reader's documents get the canvas. The
-  // header counts them, and Generated content and the switch show them.
-  const foldGenerated = paneW > 0 && paneW < 640 && !showProvenance && generatedIds.size > 0 && generatedIds.size < nodes.length;
+  // [ui5] WALK5-11, [chrome6] VIEW6-03: at every width, with the provenance
+  // switch off, generated documents are not drawn: the reader's documents
+  // get the canvas. Generated content lists them, and the switch draws them.
+  // A page Stitch wrote in this visit (writtenIds) stays drawn, lit, until
+  // the graph closes.
+  const foldedIds = useMemo(
+    () => (writtenIds.size === 0 ? generatedIds : new Set([...generatedIds].filter((id) => !writtenIds.has(id)))),
+    [generatedIds, writtenIds],
+  );
+  const foldGenerated = paneW > 0 && !showProvenance && foldedIds.size > 0 && generatedIds.size < nodes.length;
   const foldRef = useRef<Set<string> | null>(null);
   useLayoutEffect(() => {
-    foldRef.current = foldGenerated ? generatedIds : null;
-  }, [foldGenerated, generatedIds]);
+    foldRef.current = foldGenerated ? foldedIds : null;
+  }, [foldGenerated, foldedIds]);
   // [/ui5]
   const insetsRef = useRef(insets);
   const loopsRef = useRef(loops);
@@ -1389,8 +1446,6 @@ function GraphCanvas({
       const ins = insetsRef.current;
       lastFit.current = { key: layoutKeyRef.current, w: paneW, h: paneH, ins, focus: focusOnRef.current };
       const pad = 28;
-      const freeL = ins.left + pad;
-      const freeR = paneW - ins.right - pad;
       let freeT = ins.top + pad;
       let freeB = paneH - ins.bottom - pad * 0.6;
       // A free area too short to hold anything: use the whole pane.
@@ -1398,24 +1453,40 @@ function GraphCanvas({
         freeT = pad;
         freeB = paneH - pad;
       }
-      const aw = Math.max(80, freeR - freeL);
       const ah = freeB - freeT;
-      const minZoom = large ? FIT_MIN_ZOOM_LARGE : FIT_MIN_ZOOM;
-      let zoom = 1;
-      let bounds = { x0: 0, x1: 0, y0: 0, y1: 0 };
-      for (let pass = 0; pass < 3; pass++) {
-        bounds = { x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity };
-        for (const p of positions) {
-          const b = nodeExtent(p.x + NODE_W / 2, p.y + NODE_H / 2, zoom, large, loopsRef.current.has(p.id));
-          bounds.x0 = Math.min(bounds.x0, b.x0);
-          bounds.x1 = Math.max(bounds.x1, b.x1);
-          bounds.y0 = Math.min(bounds.y0, b.y0);
-          bounds.y1 = Math.max(bounds.y1, b.y1);
+      const minZoom = minFitZoom;
+      const frame = (right: number, cap: number) => {
+        const freeL = ins.left + pad;
+        const aw = Math.max(80, paneW - right - pad - freeL);
+        let zoom = 1;
+        let bounds = { x0: 0, x1: 0, y0: 0, y1: 0 };
+        for (let pass = 0; pass < 3; pass++) {
+          bounds = { x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity };
+          for (const p of positions) {
+            const b = nodeExtent(p.x + NODE_W / 2, p.y + NODE_H / 2, zoom, lodZoom, loopsRef.current.has(p.id));
+            bounds.x0 = Math.min(bounds.x0, b.x0);
+            bounds.x1 = Math.max(bounds.x1, b.x1);
+            bounds.y0 = Math.min(bounds.y0, b.y0);
+            bounds.y1 = Math.max(bounds.y1, b.y1);
+          }
+          const bw = bounds.x1 - bounds.x0;
+          const bh = bounds.y1 - bounds.y0;
+          zoom = Math.min(cap, Math.max(minZoom, Math.min(aw / bw, ah / bh)));
         }
-        const bw = bounds.x1 - bounds.x0;
-        const bh = bounds.y1 - bounds.y0;
-        zoom = Math.min(FIT_MAX_ZOOM, Math.max(minZoom, Math.min(aw / bw, ah / bh)));
+        return { zoom, bounds, freeL, aw };
+      };
+      // [chrome6] VIEW6-05: on a wide pane, when the documents frame as
+      // large left of a side list's room as in the whole width, the fit
+      // keeps that room free and zooms up to FIT_MAX_ZOOM_WIDE: a list or a
+      // card opening there covers no node and moves none, so the node under
+      // the pointer stays between the first click and the second.
+      let f = frame(ins.right, FIT_MAX_ZOOM);
+      if (paneW >= WIDE_FIT && ins.right <= SIDE_ROOM) {
+        const free = ins.right > 0 ? frame(0, FIT_MAX_ZOOM) : f;
+        const kept = frame(SIDE_ROOM, FIT_MAX_ZOOM_WIDE);
+        if (kept.zoom >= free.zoom - 0.001) f = kept;
       }
+      const { zoom, bounds, freeL, aw } = f;
       const bw = (bounds.x1 - bounds.x0) * zoom;
       const bh = (bounds.y1 - bounds.y0) * zoom;
       const x = freeL + (aw - bw) / 2 - bounds.x0 * zoom;
@@ -1427,7 +1498,7 @@ function GraphCanvas({
         /* non-critical */
       }
     },
-    [paneW, paneH, large, freezeHover],
+    [paneW, paneH, minFitZoom, lodZoom, freezeHover],
   );
   // The fit frames where the nodes are going, not where a settle has them now.
   const fitNow = useCallback(
@@ -1473,8 +1544,8 @@ function GraphCanvas({
         position,
         // A generated document draws faded until the reader asks for the
         // provenance (WALK2-02).
-        className: generated ? "graph-generated" : undefined,
-        hidden: generated && foldGenerated, // [ui5] WALK5-11
+        className: generated ? (writtenIds.has(n.id) ? "graph-generated graph-written" : "graph-generated") : undefined,
+        hidden: generated && foldGenerated && foldedIds.has(n.id), // [ui5] WALK5-11, [chrome6] VIEW6-03
         ariaLabel: generated ? t("graphView.generatedNodeLabel", { label: named }) : named,
         data: {
           title: labelOf.get(n.id) ?? n.title,
@@ -1490,6 +1561,7 @@ function GraphCanvas({
           breathing: breathing.has(n.id),
           selected: selectedIds?.has(n.id) ?? false,
           keepLabel: keptLabels.has(n.id),
+          written: writtenIds.has(n.id), // [chrome6]
         },
       };
     };
@@ -1540,7 +1612,7 @@ function GraphCanvas({
       const size = new Map(prev.map((p) => [p.id, { width: p.width, height: p.height }]));
       return nodes.map((n) => ({ ...mk(n, target(n.id)), ...size.get(n.id) }));
     });
-  }, [nodes, linkCounts, breathing, target, activeDocumentId, selectedIds, keptLabels, setFlowNodes, paneW, paneH, fitTo, large, t, labelOf, foldGenerated]);
+  }, [nodes, linkCounts, breathing, target, activeDocumentId, selectedIds, keptLabels, setFlowNodes, paneW, paneH, fitTo, large, t, labelOf, foldGenerated, foldedIds, writtenIds]);
 
   // Refit when the free area changes — the Stitch box grows or folds, a
   // side list opens, the window resizes — or documents come and go, as long
@@ -1616,7 +1688,7 @@ function GraphCanvas({
       const extent = (list: typeof centers, zoom: number) => {
         const b = { x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity };
         for (const c of list) {
-          const e = nodeExtent(c.x, c.y, zoom, large, loopsRef.current.has(c.id));
+          const e = nodeExtent(c.x, c.y, zoom, lodZoom, loopsRef.current.has(c.id));
           b.x0 = Math.min(b.x0, e.x0);
           b.x1 = Math.max(b.x1, e.x1);
           b.y0 = Math.min(b.y0, e.y0);
@@ -1630,7 +1702,7 @@ function GraphCanvas({
       let keep = centers;
       let b = extent(keep, zoom);
       if (!fits(b, zoom)) {
-        const minZoom = large ? FIT_MIN_ZOOM_LARGE : FIT_MIN_ZOOM;
+        const minZoom = minFitZoom;
         const z = Math.max(minZoom, Math.min(zoom, (free.r - free.l) / (b.x1 - b.x0), (free.b - free.t) / (b.y1 - b.y0)));
         if (fits(extent(keep, z), z)) zoom = z;
         else keep = centers.slice(0, 1);
@@ -1655,7 +1727,7 @@ function GraphCanvas({
       }
     }, 80);
     return () => window.clearTimeout(timer);
-  }, [revealKey, insets, settling, paneW, paneH, large, freezeHover]);
+  }, [revealKey, insets, settling, paneW, paneH, minFitZoom, lodZoom, freezeHover]);
 
   const noteEdges = useNoteOnlyEdges(visibleEdges); // [graph-notes]
   const flowEdges = useMemo<FlowEdge<LinkEdgeData | NoteEdgeData | undefined>[]>(
@@ -2169,7 +2241,7 @@ function GraphCanvas({
         // A large project draws only what is in view (REV2-09).
         onlyRenderVisibleElements={large}
       >
-        <LabelScale target={wrapRef} large={large} />
+        <LabelScale target={wrapRef} lodZoom={lodZoom} />
         <LabelEdges target={wrapRef} />
         <Background gap={26} size={1.5} color="var(--sand-300)" />
         {/* Top left, clear of the Stitch box at the foot of the canvas. The
@@ -2227,7 +2299,14 @@ function GraphCanvas({
         />
       )}
       </SpotlightContext.Provider>
-      {keyOpen && <GraphKey onClose={() => setKeyOpen(false)} />}
+      {keyOpen && (
+        <GraphKey
+          onClose={() => setKeyOpen(false)}
+          generated={generatedIds.size > 0 && (showProvenance || writtenIds.size > 0 || !foldGenerated)}
+          provenance={showProvenance && generatedIds.size > 0}
+          cited={(citedIds?.size ?? 0) > 0}
+        />
+      )}
       {/* The floating layer: link lists and node cards, screen-sized. */}
       <div ref={setFloatHost} className="pointer-events-none absolute inset-0 z-30 overflow-hidden" />
     </div>
@@ -2259,6 +2338,9 @@ type GraphViewProps = {
   // (WALK2-05); expandedLinkId is the one open there.
   expandedLinkId?: string | null;
   onExpandLink?: (linkId: string) => void;
+  // [chrome6] VIEW6-03: generated documents that appeared while the graph
+  // was open (a page Stitch just wrote): drawn and lit with the switch off.
+  writtenIds?: Set<string>;
 };
 
 export default function GraphView(props: GraphViewProps) {

@@ -2109,6 +2109,10 @@ ellipse.anchor-flash {
 .corpus-graph:not([data-provenance]) .react-flow__node.graph-generated {
   opacity: 0.35;
 }
+/* [chrome6] VIEW6-03: a page Stitch wrote in this visit draws bright. */
+.corpus-graph:not([data-provenance]) .react-flow__node.graph-generated.graph-written {
+  opacity: 1;
+}
 /* The spotlight (graph-view.tsx useSpotlightAttributes): while anything is
    lit the canvas carries data-spot, and each lit node and curve data-lit.
    A large project does not dim the rest — repainting hundreds of faded

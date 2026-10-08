@@ -52,12 +52,12 @@ export function NotesListToggle({
       aria-expanded={open}
       aria-controls={controls}
       data-tip={t("graphNotes.notesToggleTitle")}
-      className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] whitespace-nowrap hover:bg-clay-100 hover:text-clay-800 ${
+      className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] whitespace-nowrap hover:bg-clay-100 max-md:gap-1 max-md:px-2 hover:text-clay-800 ${
         open ? "border-line bg-clay-100 text-clay-800" : ctx.sectionId ? "border-sage-400 text-sage-800" : "border-line text-sand-600"
       }`}
     >
       <NotesIcon size={13} />
-      {t("graphNotes.notes")}
+      <span className="max-md:sr-only">{t("graphNotes.notes")}</span>
       <span className="rounded-full bg-sand-200 px-1.5 text-[11px] font-semibold tabular-nums text-sand-700">
         {ctx.view.notes.length + ctx.view.projectNotes.length}
       </span>
@@ -273,19 +273,10 @@ export function GraphNotesList({
       aria-label={t("graphNotes.notes")}
       className="menu-in absolute top-3 right-3 bottom-3 z-10 flex w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 pb-24 shadow-float outline-none backdrop-blur-md max-[999px]:bottom-16 max-[999px]:pb-4"
     >
-      <div className="flex items-start gap-2">
-        <p className="flex-1 text-[11px] text-sand-500">{t("graphNotes.notesDesc")}</p>
-        <button
-          onClick={onClose}
-          data-track="graph-notes-close"
-          aria-label={t("common.close")}
-          data-tip={t("common.close")}
-          className="-mt-1 -mr-1 flex size-7 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
-        >
-          ✕
-        </button>
-      </div>
-      <label className="flex items-center gap-2 text-[12px] text-sand-600">
+      {/* [chrome6] VIEW6-06: one head row; the list's description is the
+          section field's tooltip. */}
+      <div className="flex items-center gap-2">
+      <label data-tip={t("graphNotes.notesDesc")} className="flex min-w-0 flex-1 items-center gap-2 text-[12px] text-sand-600">
         {t("graphNotes.notesSection")}
         <select
           value={ctx.sectionId ?? ""}
@@ -301,6 +292,16 @@ export function GraphNotesList({
           ))}
         </select>
       </label>
+        <button
+          onClick={onClose}
+          data-track="graph-notes-close"
+          aria-label={t("common.close")}
+          data-tip={t("common.close")}
+          className="-mr-1 flex size-7 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
+        >
+          ✕
+        </button>
+      </div>
       <div className="flex items-center gap-2">
         <p className="flex-1 text-[11px] font-bold tracking-[0.06em] text-sand-600 uppercase">{heading}</p>
         {shownNote && (
@@ -428,18 +429,29 @@ function NotesListRow({
       onMouseLeave={() => ctx.setRowLit(null)}
       onFocus={() => ctx.setRowLit(new Set(g.documentIds))}
       onBlur={() => ctx.setRowLit(null)}
-      className={`rounded-2xl border bg-card p-3 shadow-soft ${
+      className={`group/row rounded-2xl border bg-card p-3 shadow-soft ${
         note.status === "PENDING" ? "border-dashed border-clay-300" : "border-line"
       }`}
     >
-      <button
-        onClick={onToggle}
-        data-track="graph-notes-expand"
-        aria-expanded={open}
-        className="block w-full rounded-lg text-left hover:bg-clay-100/60"
-      >
-        <span className="text-[12.5px] leading-snug font-semibold text-ink">{noteLine(note)}</span>
-      </button>
+      {/* [chrome6] VIEW6-06: Open in notes sits on the title row and shows on
+          hover or focus (always on touch), so a row is two lines, not three. */}
+      <div className="flex items-start gap-1.5">
+        <button
+          onClick={onToggle}
+          data-track="graph-notes-expand"
+          aria-expanded={open}
+          className="block min-w-0 flex-1 rounded-lg text-left hover:bg-clay-100/60"
+        >
+          <span className="text-[12.5px] leading-snug font-semibold text-ink">{noteLine(note)}</span>
+        </button>
+        <button
+          onClick={() => ctx.showNote(note.id)}
+          data-track="graph-notes-open"
+          className={`shrink-0 rounded-full border border-line px-2 py-px text-[10.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 focus:opacity-100 group-hover/row:opacity-100 group-focus-within/row:opacity-100 [@media(pointer:coarse)]:opacity-100 ${open ? "" : "opacity-0"}`}
+        >
+          {t("graphNotes.notesOpenInNotes")}
+        </button>
+      </div>
       <div className="mt-1.5 flex flex-wrap items-center gap-1">
         {g.documentIds.map((id) => (
           <span
@@ -506,15 +518,8 @@ function NotesListRow({
           </div>
         </div>
       )}
+      {note.status === "PENDING" && canEdit && (
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        <button
-          onClick={() => ctx.showNote(note.id)}
-          data-track="graph-notes-open"
-          className="rounded-full border border-line px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-        >
-          {t("graphNotes.notesOpenInNotes")}
-        </button>
-        {note.status === "PENDING" && canEdit && (
           <span className="ml-auto flex items-center gap-1.5">
             <button
               onClick={() => onDecide(true)}
@@ -533,8 +538,8 @@ function NotesListRow({
               {t("common.reject")}
             </button>
           </span>
-        )}
       </div>
+      )}
       {error && <p className="mt-1.5 text-[11px] text-red-500">{error}</p>}
     </div>
   );

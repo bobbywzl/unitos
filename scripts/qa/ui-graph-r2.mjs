@@ -61,7 +61,8 @@ const active = (page) =>
   res.provenanceSwitch = await prov.count();
   if (res.provenanceSwitch) {
     const opacity = () => page.locator(".react-flow__node.graph-generated").first().evaluate((n) => getComputedStyle(n).opacity);
-    res.generatedOpacityOff = await opacity();
+    // [chrome6] VIEW6-03: with the switch off, generated documents are not drawn (was: drawn faded, 0.35).
+    res.generatedDrawnOff = await page.locator(".react-flow__node.graph-generated").count();
     await prov.click();
     await page.waitForTimeout(400);
     res.edgesWithProvenance = await page.locator(".react-flow__edge").count();
@@ -211,7 +212,8 @@ const active = (page) =>
   await page.waitForTimeout(3000);
   const after = await positions(page);
   const moved = Object.keys(before).filter((id) => after[id] && after[id] !== before[id]);
-  res.stitch = { nodesBefore, nodesAfter: Object.keys(after).length, oldNodesMoved: moved.length };
+  // [chrome6] VIEW6-03: the pages Stitch wrote in this visit are drawn and lit with the switch off.
+  res.stitch = { nodesBefore, nodesAfter: Object.keys(after).length, oldNodesMoved: moved.length, writtenDrawn: await page.locator(".react-flow__node.graph-written").count() };
   res.stitchLive = await page.locator('[role="log"][aria-live="polite"]').count();
   res.boxCap = await page.evaluate(() => {
     const pane = document.querySelector(".react-flow__pane").getBoundingClientRect();

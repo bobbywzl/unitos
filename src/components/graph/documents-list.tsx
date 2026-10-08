@@ -12,10 +12,11 @@
 // how many are not listed (VIEW4-07).
 //
 // Scale (VIEW4-04, WALK4-11): a filter matches the title, the gist, and the
-// part titles; past 20 rows each row is one line (the title and its counts)
-// that opens on a click, and [layer5] the documents holding the reader's
+// part titles. [chrome6] VIEW6-04: each row is one line (the title and its
+// counts) at every size, and a click opens it in place; the row's card is
+// one more click. Past 20 rows [layer5] the documents holding the reader's
 // own words (notes, open comments) come first, in the graph's order among
-// them (VIEW5-08).
+// them (VIEW5-08); below, the graph's order.
 //
 // Keyboard (WALK4-09): the list is a list, each title a heading. Each row
 // is one Tab stop (its title); the arrows move through the row's controls
@@ -48,8 +49,12 @@ const titlesKept = new Map<string, { titles: ProjectPartTitles; gen: number }>()
 // Where the list was scrolled, and its filter, per project, for Back from a document.
 const scrollKept = new Map<string, number>();
 const filterKept = new Map<string, string>();
+// [chrome6] The rows opened, per project: Back from a link or a document
+// finds them open, and the focus finds its row (VIEW6-04).
+const openKept = new Map<string, Set<string>>();
 
-/** Past this many rows, each row is one line until opened. */
+/** [chrome6] Past this many rows, the reader's documents come first (each
+    row is one line until opened at every size, VIEW6-04). */
 export const COMPACT_ROWS = 20;
 /** The parts and the links a row shows before "N more". */
 const PARTS_SHOWN = 8;
@@ -212,16 +217,18 @@ export function DocumentsList({
   );
   // [cover4] Gaps only keeps the rows with a gap.
   const kept = useMemo(() => matched.filter((n) => gaps.keepRow(n.id)), [matched, gaps]);
-  const compact = kept.length > COMPACT_ROWS;
-  // [layer5] At scale (the one-line rows), the reader's documents first:
-  // those with notes or open comments, in the graph's order (VIEW5-08).
+  // [chrome6] VIEW6-04: one-line rows at every size; past COMPACT_ROWS the
+  // reader's documents first: those with notes or open comments, in the
+  // graph's order (VIEW5-08). A small project keeps the graph's order.
+  const compact = true;
+  const mineFirst = kept.length > COMPACT_ROWS;
   const byDocument = notesCtx?.view.byDocument;
   const shown = useMemo(() => {
-    if (!compact) return kept;
+    if (!mineFirst) return kept;
     const mine = (id: string) =>
       (byDocument?.get(id)?.notes.length ?? 0) > 0 || openComments(projectCoverage?.documents[id]).length > 0;
     return [...kept.filter((n) => mine(n.id)), ...kept.filter((n) => !mine(n.id))];
-  }, [compact, kept, byDocument, projectCoverage]);
+  }, [mineFirst, kept, byDocument, projectCoverage]);
 
   const linkTotal = edges.reduce((sum, e) => sum + e.links.filter((l) => !l.recommended && !l.provenance).length, 0);
   const noteTotal = useMemo(() => {
@@ -267,7 +274,8 @@ export function DocumentsList({
       tabIndex={-1}
       data-graph-side-list="documents"
       data-graph-documents-list
-      data-compact={compact ? "" : undefined}
+      data-compact=""
+      data-mine-first={mineFirst ? "" : undefined}
       aria-label={t("panes.graphDocuments")}
       onScroll={(e) => scrollKept.set(notebookId, e.currentTarget.scrollTop)}
       className={`menu-in absolute z-10 flex flex-col gap-2.5 overflow-y-auto overscroll-contain border border-line bg-card/95 p-4 shadow-float outline-none backdrop-blur-md ${
@@ -290,7 +298,7 @@ export function DocumentsList({
               openTotal === 0
                 ? ""
                 : ` · ${openTotal === 1 ? t("graphCover.commentsOpenOne") : t("graphCover.commentsOpenMany", { n: openTotal })}`,
-            order: t(compact ? "panes.graphDocumentsOrderMine" : "panes.graphDocumentsOrder"),
+            order: t(mineFirst ? "panes.graphDocumentsOrderMine" : "panes.graphDocumentsOrder"),
           })}
         </p>
         <button
@@ -418,7 +426,16 @@ function DocumentRow({
 }) {
   const t = useT();
   const { select } = useGraphContent();
-  const [open, setOpen] = useState(false);
+  const [open, setOpenState] = useState(() => openKept.get(notebookId)?.has(n.id) ?? false);
+  const setOpen = (next: (v: boolean) => boolean) =>
+    setOpenState((v) => {
+      const value = next(v);
+      const kept = openKept.get(notebookId) ?? new Set<string>();
+      if (value) kept.add(n.id);
+      else kept.delete(n.id);
+      openKept.set(notebookId, kept);
+      return value;
+    });
   const [gistOpen, setGistOpen] = useState(false);
   const [allParts, setAllParts] = useState(false);
   const [allLinks, setAllLinks] = useState(false);
@@ -584,7 +601,7 @@ function DocumentRow({
       onFocus={() => onLight(n.id)}
       onBlur={() => onLight(null)}
       className={`flex flex-col rounded-2xl border border-line hover:border-clay-300 hover:bg-clay-100/40 focus-within:border-clay-300 ${
-        compact && !open ? "px-3 py-1.5" : "gap-1.5 p-3"
+        compact && !open ? "px-3 py-1.5 max-[639px]:py-1" : "gap-1.5 p-3"
       } ${generated ? "opacity-80" : ""}`}
     >
       <h3 style={HEADING_PLAIN} className="flex items-start gap-2 text-[13.5px] text-ink">
@@ -595,13 +612,14 @@ function DocumentRow({
             onClick={() => setOpen((v) => !v)}
             data-track="graph-documents-row-open"
             aria-expanded={open}
-            className="flex min-w-0 flex-1 items-baseline gap-2 text-left leading-snug font-semibold hover:text-clay-800"
+            className="flex min-w-0 flex-1 items-baseline gap-2 text-left leading-snug font-semibold hover:text-clay-800 max-[639px]:flex-wrap max-[639px]:gap-y-0"
           >
-            <span className={`min-w-0 ${open ? "" : "truncate"}`}>{n.title}</span>
+            <span className={`min-w-0 ${open ? "" : "truncate"} max-[639px]:basis-full`}>{n.title}</span>
+            {/* [chrome6] VIEW6-04: below 640 px the counts go under the title. */}
             {!open && counts.length > 0 && (
               <span
                 data-graph-gap-why={gapsOn ? n.id : undefined}
-                className={`ml-auto shrink-0 text-[11px] ${gapsOn ? "font-semibold text-clay-800" : "font-normal text-sand-500"}`}
+                className={`ml-auto shrink-0 text-[11px] max-[639px]:ml-0 max-[639px]:shrink max-[639px]:leading-tight ${gapsOn ? "font-semibold text-clay-800" : "font-normal text-sand-500"}`}
               >
                 {counts.join(" · ")}
               </span>
