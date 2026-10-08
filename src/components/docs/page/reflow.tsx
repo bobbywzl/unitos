@@ -110,7 +110,7 @@ export function ReflowBar({
   );
 }
 
-/** The bar's words start right of Show tabs & outlines (outline.tsx) when
+/** The bar's words start right of Show the outline (outline.tsx) when
     the button stands over the bar's left end: on a narrow pane the page,
     and the bar with it, reach the canvas's edge, where the button is. */
 function useClearOfOutline(ref: RefObject<HTMLDivElement | null>, shown: boolean, scale: number) {

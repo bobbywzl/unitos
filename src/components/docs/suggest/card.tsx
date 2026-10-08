@@ -10,6 +10,7 @@ import { focusSuggestion, readSuggestions, settleSuggestions, suggestionAt, type
 import { CheckIcon, CloseIcon } from "@/components/docs/icons";
 import { openLine } from "@/components/docs/layer/comment-card";
 import { whyOf } from "@/components/docs/suggest/assistant";
+import { useCardsUnderWords } from "@/components/docs/suggest/under-words";
 import { blockStyle } from "@/components/docs/toolbar/styles";
 import { STYLE_LABEL } from "@/components/docs/toolbar/styles-menu";
 import { useLang, useT } from "@/components/lang-provider";
@@ -183,7 +184,10 @@ function sameCard(a: Suggestion | null, b: Suggestion | null): boolean {
 
 /** One suggestion's card in the margin: the one the caret stands in shows
     whole, with Accept and Reject for an editor; the others show one line,
-    and a press opens them. The layer places it. A card reads its own
+    and a press opens them. With no card column (a narrow pane, a split
+    view) the open card draws as that one line too, with Accept and Reject
+    at its end: it stands under the caret's line and covers one line of the
+    words, not four. The layer places it. A card reads its own
     suggestion, and draws again only when what it shows changed. The
     assistant's card names who asked, in a shared project, and says why
     under the change while the page that landed it is open. */
@@ -209,6 +213,7 @@ export const SuggestionCard = memo(function SuggestionCard({
   const lang = useLang();
   const authorOf = useAuthor();
   const { shared } = useCollab();
+  const under = useCardsUnderWords();
   if (!suggestion) return null;
   const author = suggestionAuthor(id);
   const person = authorOf(author);
@@ -217,15 +222,18 @@ export const SuggestionCard = memo(function SuggestionCard({
   const lines = describe(suggestion, t);
   const settle = (accept: boolean) => settleSuggestions(editor, accept, id);
   const style = { borderColor: person?.color ?? personColor(author) };
-  if (!active) {
+  if (!active || under) {
+    const settleHere = active && canSettle;
     return (
       <div
         data-selection-popover
         data-suggestion-card={id}
-        role="button"
+        data-active={active || undefined}
+        role={active ? "group" : "button"}
         tabIndex={-1}
         aria-label={t("docsSuggest.suggestion")}
-        onMouseDown={(e) => openLine(e, () => focusSuggestion(editor, id))}
+        data-tip={active ? replyTime(new Date(suggestionTime(id)).toISOString(), lang) : undefined}
+        onMouseDown={(e) => (active ? e.preventDefault() : openLine(e, () => focusSuggestion(editor, id)))}
         className="docs-comment docs-suggest-card docs-card-line absolute z-30"
         style={style}
       >
@@ -233,6 +241,30 @@ export const SuggestionCard = memo(function SuggestionCard({
         <span className="docs-card-line-text">
           {person && <b className="docs-comment-name">{person.name}</b>} {lines.map((line, i) => <span key={i}>{line} </span>)}
         </span>
+        {settleHere && (
+          <div className="docs-comment-buttons">
+            <button
+              type="button"
+              onClick={() => settle(true)}
+              data-track="suggestion-accept"
+              aria-label={t("docsSuggest.acceptSuggestion")}
+              data-tip={t("docsSuggest.acceptSuggestion")}
+              className="docs-comment-button docs-comment-resolve"
+            >
+              <CheckIcon size={18} />
+            </button>
+            <button
+              type="button"
+              onClick={() => settle(false)}
+              data-track="suggestion-reject"
+              aria-label={t("docsSuggest.rejectSuggestion")}
+              data-tip={t("docsSuggest.rejectSuggestion")}
+              className="docs-comment-button docs-comment-resolve"
+            >
+              <CloseIcon size={18} />
+            </button>
+          </div>
+        )}
       </div>
     );
   }

@@ -13,7 +13,7 @@ import { flushDocument } from "@/components/docs/layer/flush";
 import { DropdownPanel, MenuItem } from "@/components/docs/menu";
 import { pageFrame, pagelessWidth, scrollParent } from "@/components/docs/page/geometry";
 import { pageStore, usePageState } from "@/components/docs/page/store";
-import { DialogButton, ToolbarDialog } from "@/components/docs/toolbar/dialog";
+import { DialogButton } from "@/components/docs/toolbar/dialog";
 import { namedStyleSheet } from "@/components/docs/toolbar/styles";
 import { markChanges } from "@/components/docs/versions/diff";
 import { api, ApiError } from "@/lib/api";
@@ -97,7 +97,9 @@ export function VersionView({
   const [showChanges, setShowChanges] = useState(true);
   const [naming, setNaming] = useState<string | null>(null);
   const [menu, setMenu] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState(false);
+  // The version ⋮ › Restore this version picked: it restores once that
+  // version's text is in. Another pick clears the wish.
+  const restoreWanted = useRef<string | null>(null);
   const menuAnchor = useRef<HTMLButtonElement | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const proseRef = useRef<HTMLDivElement>(null);
@@ -192,7 +194,8 @@ export function VersionView({
     const schema = editor.schema;
     try {
       const node = schema.nodeFromJSON(doc);
-      const shown = showChanges ? markChanges(schema, node, before && schema.nodeFromJSON(before), color) : node;
+      // The oldest version has nothing before it to show changes against.
+      const shown = showChanges && before ? markChanges(schema, node, schema.nodeFromJSON(before), color) : node;
       const html = DOMSerializer.fromSchema(schema).serializeFragment(shown.content);
       html.querySelectorAll("[data-block-id]").forEach((n) => n.removeAttribute("data-block-id"));
       html.querySelectorAll<HTMLElement>("[data-latex]").forEach((n) =>
@@ -240,14 +243,14 @@ export function VersionView({
     }
   };
 
-  // Restore this version: the text on screen is saved and kept as a
-  // version first, then the version's text becomes the document's, one
-  // change to undo. When the text cannot be kept (offline, a refused save),
+  // Restore this version, at once: the text on screen is saved and kept as
+  // a version first, then the version's text becomes the document's, one
+  // change to undo (Ctrl+Z), and the replaced text is the newest version in
+  // the list. When the text cannot be kept (offline, a refused save),
   // nothing is restored: the page keeps its text and the panel says why.
   const [restoring, setRestoring] = useState(false);
   const restore = async () => {
     if (!doc || restoring) return;
-    setConfirming(false);
     setRestoring(true);
     setError(null);
     try {
@@ -271,6 +274,20 @@ export function VersionView({
     editor.view.dispatch(tr);
     onClose();
     editor.commands.focus("start");
+  };
+  const restoreRef = useRef(restore);
+  useEffect(() => {
+    restoreRef.current = restore;
+  });
+  const shownId = entry?.id;
+  useEffect(() => {
+    if (!restoreWanted.current || !doc || shownId !== restoreWanted.current) return;
+    restoreWanted.current = null;
+    void restoreRef.current();
+  }, [shownId, doc]);
+  const pick = (id: string) => {
+    restoreWanted.current = null;
+    setSelected(id);
   };
 
   if (!rect) return null;
@@ -325,7 +342,7 @@ export function VersionView({
             </div>
           )}
           {restorable && (
-            <DialogButton primary disabled={restoring} onClick={() => setConfirming(true)}>
+            <DialogButton primary disabled={restoring} onClick={() => void restore()}>
               {t("docsVersions.restore")}
             </DialogButton>
           )}
@@ -373,7 +390,7 @@ export function VersionView({
                       }}
                     />
                   ) : (
-                    <button type="button" className="docs-versions-pick" onClick={() => setSelected(e.id)}>
+                    <button type="button" className="docs-versions-pick" onClick={() => pick(e.id)}>
                       {e.name ?? timeOf(e.savedAt)}
                     </button>
                   )}
@@ -416,7 +433,7 @@ export function VersionView({
             onSelect={() => {
               setSelected(menuEntry.id);
               setMenu(null);
-              setConfirming(true);
+              restoreWanted.current = menuEntry.id;
             }}
           >
             {t("docsVersions.restore")}
@@ -431,16 +448,6 @@ export function VersionView({
           {t("docsVersions.nameThis")}
         </MenuItem>
       </DropdownPanel>
-      {confirming && entry && (
-        <ToolbarDialog
-          title={t("docsVersions.restoreQuestion")}
-          onClose={() => setConfirming(false)}
-          closeButton={false}
-          submit={{ label: t("docsVersions.restoreButton"), disabled: !doc, run: () => void restore() }}
-        >
-          {t("docsVersions.restoreBody", { time: timeOf(entry.savedAt) })}
-        </ToolbarDialog>
-      )}
     </div>
   );
 }

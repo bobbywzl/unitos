@@ -1,12 +1,11 @@
 // UI strings of the page editor's page area (SPEC.md §29): the title row, the
-// pages, the rulers, the tabs & outlines panel, page setup, headers and
+// pages, the rulers, the outline panel, page setup, headers and
 // footers. The English follows Google Docs' own labels. zh glossary:
 // dict/common.ts — page 页面 · document 文档 · pages(分页格式) 分页 · pageless 无分页.
 
 const en = {
   // The title row
   untitled: "Untitled document",
-  savedCaption: "Saved to Unitos",
   documentStatus: "See document status",
   statusSaved: "Every change you make is saved in Unitos as you type.",
   statusSaving: "Your latest changes are being saved.",
@@ -22,10 +21,10 @@ const en = {
   // Commands (Search the menus)
   pageSetup: "Page setup",
   showRuler: "Show ruler",
-  showOutline: "Show tabs & outlines",
+  showOutline: "Show the outline",
   fullScreen: "Full screen",
-  fullScreenHint: "Full screen. Press Esc to show the menus.",
-  hideOutline: "Hide tabs & outlines",
+  fullScreenHint: "Full screen. Press Esc to bring the toolbar back.",
+  hideOutline: "Hide the outline",
   switchToPageless: "Switch to Pageless format",
   switchToPages: "Switch to Pages format",
   // A PDF import read pageless in Viewing (page/reflow.tsx).
@@ -148,11 +147,9 @@ const en = {
   addRightTabStop: "Add right tab-stop",
   collapseHeading: "Collapse heading",
   expandHeading: "Expand heading",
-  // The tabs & outlines panel
-  documentTabs: "Document tabs",
-  firstTab: "Tab 1",
+  // The outline panel
   outlineEmpty: "Headings you add to the document will appear here.",
-  tabsOutlines: "Tabs & outlines",
+  tabsOutlines: "Outline",
   resizePanel: "Drag to resize",
   // Headers, footers, page numbers
   firstPageHeader: "First page header",
@@ -180,7 +177,6 @@ const en = {
 
 const zh: Record<keyof typeof en, string> = {
   untitled: "无标题文档",
-  savedCaption: "已保存到 Unitos",
   documentStatus: "查看文档状态",
   statusSaved: "你所做的每项更改都会在输入时保存到 Unitos。",
   statusSaving: "正在保存你最新的更改。",
@@ -194,10 +190,10 @@ const zh: Record<keyof typeof en, string> = {
   importWordFile: "Word 文件",
   pageSetup: "页面设置",
   showRuler: "显示标尺",
-  showOutline: "显示标签页和大纲",
+  showOutline: "显示大纲",
   fullScreen: "全屏",
-  fullScreenHint: "全屏模式。按 Esc 显示菜单。",
-  hideOutline: "隐藏标签页和大纲",
+  fullScreenHint: "全屏模式。按 Esc 恢复工具栏。",
+  hideOutline: "隐藏大纲",
   switchToPageless: "切换到无分页格式",
   switchToPages: "切换到分页格式",
   readPageless: "无分页阅读",
@@ -310,10 +306,8 @@ const zh: Record<keyof typeof en, string> = {
   addRightTabStop: "添加右对齐制表位",
   collapseHeading: "收起标题",
   expandHeading: "展开标题",
-  documentTabs: "文档标签页",
-  firstTab: "标签页 1",
   outlineEmpty: "你添加到文档中的标题会显示在这里。",
-  tabsOutlines: "标签页和大纲",
+  tabsOutlines: "大纲",
   resizePanel: "拖动以调整大小",
   firstPageHeader: "首页页眉",
   firstPageFooter: "首页页脚",

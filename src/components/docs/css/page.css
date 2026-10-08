@@ -1,6 +1,6 @@
 /* The page editor: page (SPEC.md §29). Imported by docs.css.
    Google Docs' page area: the title's states and the status, the pages,
-   the spacers that paginate the text, the rulers, the tabs & outlines
+   the spacers that paginate the text, the rulers, the outline
    panel, the headers and footers, the page's dialogs, the caret, and print.
    The boxes the loading frame draws too are in frame.css. */
 
@@ -10,7 +10,6 @@
   --docs-tip-bg: var(--ink);
   --docs-tip-fg: var(--paper);
   --docs-outline-line: var(--line);
-  --docs-tab-fg: var(--clay-800);
   --docs-pill: var(--card);
 }
 
@@ -111,7 +110,7 @@
 }
 
 /* ── The canvas's sideways scrollbar, at the pane's foot (its own would sit
-   under the last page); under the tabs & outlines panel. */
+   under the last page); under the outline panel. */
 .docs-hscroll {
   position: sticky;
   bottom: 0;
@@ -513,7 +512,7 @@
   }
 }
 
-/* ── Tabs & outlines: the panel over the canvas's left side, and the button
+/* ── The outline panel: the panel over the canvas's left side, and the button
    that opens it. */
 .docs-outline-open {
   position: absolute;
@@ -584,29 +583,6 @@
   overflow-y: auto;
   padding-bottom: 50px;
 }
-.docs-outline-header {
-  margin-left: 16px;
-  padding: 16px 0 16px 12px;
-  color: var(--docs-icon);
-  font: 400 14px/20px var(--docs-ui-font);
-}
-.docs-outline-tab {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 36px;
-  margin: 0 8px 0 16px;
-  padding: 2px 4px 2px 8px;
-  border-radius: 9999px;
-  background: var(--docs-on-bg);
-  color: var(--docs-tab-fg);
-}
-.docs-outline-tab-name {
-  overflow: hidden;
-  font: 600 14px/16px var(--docs-ui-font);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
 .docs-outline-empty {
   padding: 8px 16px 16px 24px;
   color: var(--docs-icon);
@@ -615,6 +591,10 @@
 }
 .docs-outline-list {
   margin-top: 4px;
+}
+/* The headings start under the back arrow: the panel names no tabs. */
+.docs-outline-scroll > .docs-outline-list:first-child {
+  margin-top: 0;
 }
 /* An import's contents under the headings (SPEC.md §26): a note, and
    Generate contents. */

@@ -214,12 +214,15 @@ export function HistoryIcon(props: IconProps) {
   );
 }
 
-// Pencil over a baseline: History, in the header (SPEC.md §12).
+// A scroll of lines: History (SPEC.md §12). Not a clock, which is the page
+// editor's Version history, and not a pencil, which is its Editing mode.
 export function EditsIcon(props: IconProps) {
   return (
     <Icon {...props}>
-      <path d="M13 21h8" />
-      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+      <path d="M15 12h-5" />
+      <path d="M15 8h-5" />
+      <path d="M19 17V5a2 2 0 0 0-2-2H4" />
+      <path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3" />
     </Icon>
   );
 }

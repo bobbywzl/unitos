@@ -53,6 +53,7 @@ export function PreferencesDialog({ onClose }: { onClose: () => void }) {
       title={t("docsTyping.preferences")}
       onClose={onClose}
       className="docs-prefs"
+      closeButton={false}
       actions={
         <>
           <DialogButton onClick={onClose}>{t("docs.cancel")}</DialogButton>

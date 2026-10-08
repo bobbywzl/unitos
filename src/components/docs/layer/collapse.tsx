@@ -26,8 +26,9 @@ import type { RichNode } from "@/lib/docs/schema";
 // decoration) and the core stands before them (a widget), the block reader's
 // own core (core-block.tsx), so its marks, its selection, and its anchors are
 // the collapsed view's, as in the block reader. A click on a core reads the
-// unit whole; each unit has the block reader's button at its right: it reads
-// the unit whole, or folds it again.
+// unit whole; each unit has the block reader's button at its right, shown
+// under the pointer and on keyboard focus: it reads the unit whole, or folds
+// it again.
 // Viewing only: Editing, Suggesting, and Find need the words, so they turn
 // Collapse off. The pages lay a core out as one piece (page/paginate.ts).
 
@@ -348,7 +349,9 @@ function UnitSlot({
         highlights={highlightsByBlock[coreKey(unit.id)] ?? []}
         annotated={annotated}
       />
-      <CoreToggle showsCore onToggle={onToggle} />
+      {/* A click on the core reads it whole: the button shows only under
+          the pointer and on keyboard focus (css/collapse.css). */}
+      <CoreToggle showsCore quiet onToggle={onToggle} />
     </>
   );
 }

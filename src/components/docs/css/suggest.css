@@ -112,6 +112,19 @@
 .docs-suggest-what {
   overflow-wrap: anywhere;
 }
+/* The open card drawn as one line, where there is no card column: its words
+   take the room, and Accept and Reject stand at its end. */
+.docs-card-line[data-active] .docs-card-line-text {
+  flex: 1;
+  min-width: 0;
+}
+.docs-card-line[data-active] {
+  gap: 4px;
+  cursor: default;
+}
+.docs-card-line[data-active] .docs-comment-buttons {
+  flex: none;
+}
 
 /* Review suggested edits (suggest/review.tsx): a box at the top right,
    under the toolbar. */

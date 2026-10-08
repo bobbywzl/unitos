@@ -6,9 +6,11 @@ import { DropdownPanel, keepFocus } from "@/components/docs/menu";
 import { OPEN_MENU_EVENT, Sep, ToolbarEditor } from "@/components/docs/toolbar/controls";
 
 // The toolbar's row (SPEC.md §29). When the controls do not fit, the right
-// end's captions fold first — Extract to its symbol, then the mode's name —
-// then whole groups move, right to left, into More (⋮). The row is one Tab
-// stop: Left and Right move between controls, Escape goes back to the page.
+// end's captions fold first — a Unitos tool to its symbol, then the mode's
+// name — then whole groups move into More (⋮), the least used first (each
+// group's `fold`), so Bold and the lists stay on the row while Zoom, Paint
+// format and voice typing fold. The row is one Tab stop: Left and Right move
+// between controls, Escape goes back to the page.
 
 export type ToolbarGroup = {
   key: string;
@@ -17,10 +19,13 @@ export type ToolbarGroup = {
   content: ReactNode;
   /** The ids of the menus inside, for Search the menus. */
   menus?: string[];
+  /** How soon the group goes into More: the lowest number folds first.
+      Google's own order is the row's order; this is the reader's use. */
+  fold?: number;
 };
 
 /** The mode's name box, open and folded, and a Unitos tool folded to its
-    symbol (Collapse, Extract; 8 px apart) (css/toolbar.css). */
+    symbol (Collapse; 8 px apart) (css/toolbar.css). */
 const CAPTION_OPEN = 122;
 const CAPTION_FOLDED = 26;
 const UNITOS_FOLDED = 30;
@@ -41,7 +46,7 @@ export function ToolbarRow({
   onEscape,
 }: {
   groups: ToolbarGroup[];
-  /** The right end: the Unitos tools (in .docs-tb-unitos), the mode, and Hide the menus. */
+  /** The right end: the status, the Unitos tools (in .docs-tb-unitos), and the mode. */
   right: ReactNode;
   label: string;
   moreLabel: string;
@@ -54,16 +59,17 @@ export function ToolbarRow({
   const widths = useRef(new Map<string, number>());
   const unitosOpen = useRef(0);
   const moreRef = useRef<HTMLButtonElement>(null);
-  const [shown, setShown] = useState(groups.length);
-  const [folded, setFolded] = useState<"extract" | "mode" | null>(null);
+  // The keys of the groups in More, in the row's order, joined by a space.
+  const [hiddenKeys, setHiddenKeys] = useState("");
+  const [folded, setFolded] = useState<"tools" | "mode" | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
-  const count = groups.length;
   // The groups that just came back from the bubble fade in.
-  const [lastShown, setLastShown] = useState(shown);
-  const [enteredFrom, setEnteredFrom] = useState(shown);
-  if (lastShown !== shown) {
-    setLastShown(shown);
-    setEnteredFrom(lastShown);
+  const [lastHidden, setLastHidden] = useState(hiddenKeys);
+  const [entered, setEntered] = useState<string[]>([]);
+  if (lastHidden !== hiddenKeys) {
+    const now = new Set(hiddenKeys.split(" ").filter(Boolean));
+    setEntered(lastHidden.split(" ").filter((key) => key && !now.has(key)));
+    setLastHidden(hiddenKeys);
   }
 
   const fit = useCallback(() => {
@@ -82,25 +88,28 @@ export function ToolbarRow({
     const rightOpen = base + (caption ? CAPTION_OPEN : 0) + (unitos ? unitosOpen.current : 0);
     const tools = unitos?.querySelectorAll("button").length ?? 0;
     const unitosFolded = tools * UNITOS_FOLDED + Math.max(0, tools - 1) * UNITOS_GAP;
-    const rightExtract = base + (caption ? CAPTION_OPEN : 0) + unitosFolded;
+    const rightTools = base + (caption ? CAPTION_OPEN : 0) + unitosFolded;
     const rightFolded = base + (caption ? CAPTION_FOLDED : 0) + unitosFolded;
     const list = groups.map((g) => widths.current.get(g.key) ?? 0);
     const total = list.reduce((a, b) => a + b, 0);
-    const nextFolded = total <= inner - rightOpen ? null : total <= inner - rightExtract ? "extract" : "mode";
-    let nextShown = count;
+    const nextFolded = total <= inner - rightOpen ? null : total <= inner - rightTools ? "tools" : "mode";
     const room = inner - rightFolded;
+    const hide = new Set<number>();
     if (total > room) {
-      let used = 0;
-      nextShown = 0;
-      for (let i = 0; i < count; i++) {
-        if (used + list[i] + MORE > room) break;
-        used += list[i];
-        nextShown = i + 1;
+      // The least used group folds first; between two of the same use, the
+      // one further right.
+      const order = groups.map((g, i) => ({ i, fold: g.fold ?? 50 })).sort((a, b) => a.fold - b.fold || b.i - a.i);
+      let used = total;
+      for (const { i } of order) {
+        if (used + MORE <= room) break;
+        hide.add(i);
+        used -= list[i];
       }
     }
-    setShown((s) => (s === nextShown ? s : nextShown));
+    const nextHidden = groups.filter((_, i) => hide.has(i)).map((g) => g.key).join(" ");
+    setHiddenKeys((h) => (h === nextHidden ? h : nextHidden));
     setFolded((f) => (f === nextFolded ? f : nextFolded));
-  }, [groups, count]);
+  }, [groups]);
   const fitRef = useRef(fit);
 
   useLayoutEffect(() => {
@@ -125,15 +134,15 @@ export function ToolbarRow({
     const onOpen = (e: Event) => {
       const id = (e as CustomEvent<{ id: string; again?: boolean }>).detail?.id;
       if (!id || (e as CustomEvent<{ again?: boolean }>).detail?.again) return;
-      const index = groups.findIndex((g) => g.menus?.includes(id));
-      if (index >= shown && !moreOpen) {
+      const group = groups.find((g) => g.menus?.includes(id));
+      if (group && hiddenKeys.split(" ").includes(group.key) && !moreOpen) {
         setMoreOpen(true);
         window.setTimeout(() => dom.dispatchEvent(new CustomEvent(OPEN_MENU_EVENT, { detail: { id, again: true } })), 60);
       }
     };
     dom.addEventListener(OPEN_MENU_EVENT, onOpen);
     return () => dom.removeEventListener(OPEN_MENU_EVENT, onOpen);
-  }, [editor, groups, shown, moreOpen]);
+  }, [editor, groups, hiddenKeys, moreOpen]);
 
   // One Tab stop: the control last used keeps tabindex 0.
   useLayoutEffect(() => {
@@ -176,7 +185,9 @@ export function ToolbarRow({
     next.focus();
   };
 
-  const hidden = groups.slice(shown);
+  const inMore = new Set(hiddenKeys.split(" ").filter(Boolean));
+  const onRow = groups.filter((g) => !inMore.has(g.key));
+  const hidden = groups.filter((g) => inMore.has(g.key));
   const bubbleOpen = moreOpen && hidden.length > 0;
   return (
     <div
@@ -188,14 +199,14 @@ export function ToolbarRow({
       onKeyDown={onKeyDown}
     >
       <div className="docs-tb-left">
-        {groups.slice(0, shown).map((g, i) => (
+        {onRow.map((g, i) => (
           <div
             key={g.key}
             ref={(el) => {
               if (el) groupRefs.current.set(g.key, el);
               else groupRefs.current.delete(g.key);
             }}
-            className={`docs-tb-group${i >= enteredFrom ? " docs-tb-group-in" : ""}`}
+            className={`docs-tb-group${entered.includes(g.key) ? " docs-tb-group-in" : ""}`}
           >
             {i > 0 && g.sep && <Sep />}
             {g.content}

@@ -7,7 +7,7 @@ import type { GrammarIssue } from "@/lib/grammar";
 
 // The card a squiggle opens (SPEC.md §29, typing), in the page editor and
 // the note editor. A blue squiggle's card: the words that replace the
-// wrong ones, why, Accept and Ignore. A red squiggle's card: the word's
+// wrong ones (a press accepts them), why, and Ignore. A red squiggle's card: the word's
 // spelling suggestions, Add to dictionary, and Ignore all. The card never
 // takes the focus: the caret stays in the text. Nothing changes the text
 // until the reader presses a button.
@@ -61,33 +61,21 @@ export function ProofingCard({ box, content, onAccept, onIgnore, onAddToDictiona
   const card =
     content.kind === "grammar" ? (
       <>
-        <div className="flex flex-wrap items-baseline gap-x-1.5 text-[14px] leading-snug">
-          {content.issue.replacement ? (
-            <button
-              type="button"
-              data-track="grammar-accept-words"
-              onMouseDown={keep}
-              onClick={() => onAccept(content.issue.replacement)}
-              className="rounded-md px-1 font-semibold text-clay-700 hover:bg-clay-100"
-            >
-              {content.issue.replacement}
-            </button>
-          ) : (
-            <span className="px-1 font-semibold">{t("docsTyping.removeWords", { words: content.issue.wrong })}</span>
-          )}
-          {content.issue.replacement && <span className="text-sand-500 line-through">{content.issue.wrong}</span>}
-        </div>
-        <p className="mt-1 px-1 text-[13px] leading-snug text-sand-700">{content.issue.reason}</p>
-        <div className="mt-3 flex gap-2">
+        <div className="flex flex-wrap items-baseline gap-1.5">
+          {/* The words are the accept, as a spelling card's chips are. */}
           <button
             type="button"
-            data-track="grammar-accept"
+            data-track="grammar-accept-words"
             onMouseDown={keep}
             onClick={() => onAccept(content.issue.replacement)}
-            className={`${chip} bg-clay-500 text-white hover:bg-clay-600`}
+            className={`${chip} bg-clay-100 text-clay-800 hover:bg-clay-200`}
           >
-            {t("docsTyping.accept")}
+            {content.issue.replacement || t("docsTyping.removeWords", { words: content.issue.wrong })}
           </button>
+          {content.issue.replacement && <span className="text-[14px] text-sand-500 line-through">{content.issue.wrong}</span>}
+        </div>
+        <p className="mt-1.5 px-1 text-[13px] leading-snug text-sand-700">{content.issue.reason}</p>
+        <div className="mt-2 flex gap-2 border-t border-sand-200 pt-2">
           <button type="button" data-track="grammar-ignore" onMouseDown={keep} onClick={onIgnore} className={`${chip} bg-sand-100 text-sand-800 hover:bg-sand-200`}>
             {t("docsTyping.ignore")}
           </button>

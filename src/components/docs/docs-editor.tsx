@@ -7,8 +7,9 @@ import type { JSONContent } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import { useRouter } from "next/navigation";
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useT } from "@/components/lang-provider";
+import { usePageStatusCarries } from "@/components/save-indicator";
 import { REFRESH_EVENT } from "@/components/collab/use-sync";
 import { annotationMarksKey, openMarkAt, type MarksMeta } from "@/components/docs/annotation-marks";
 import { LinkBubble, LinkDialog } from "@/components/docs/link-dialog";
@@ -35,7 +36,7 @@ import { SuggestLayer } from "@/components/docs/suggest/layer";
 import { PageBanner, PageCanvas, PageRuler } from "@/components/docs/areas/page";
 import { StatusPopup } from "@/components/docs/page/status-popup";
 import { scrollParent } from "@/components/docs/page/geometry";
-import { PAGE_EVENT, useSaveState } from "@/components/docs/page/store";
+import { PAGE_EVENT, useOutlineRoom, useSaveState } from "@/components/docs/page/store";
 import { TypingLayer } from "@/components/docs/areas/typing";
 import { VersionHistory, VersionHistoryButton } from "@/components/docs/versions/version-history";
 import type { DocsAreaProps } from "@/components/docs/areas/types";
@@ -45,6 +46,7 @@ import { inlineText } from "@/lib/docs/blocks";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
 import { pageRangesLabel, type PageRange } from "@/lib/pdf-pages";
 import { POSITION_HOLD_MS, READING_LINE_PX } from "@/lib/reading-position";
+import { readSaveState, readSaveTouched, subscribeSaveState } from "@/lib/save-state";
 
 // The page editor (SPEC.md §29): a blank document is written here the way a
 // Google Doc is written — a title row, the toolbar, and white pages on a gray
@@ -56,6 +58,9 @@ import { POSITION_HOLD_MS, READING_LINE_PX } from "@/lib/reading-position";
 // in step by each save (use-docs-save.ts).
 
 const FONTS_LINK_ID = "unitos-docs-fonts";
+
+/** A pane narrower than this starts with the title row hidden. */
+const NARROW_PANE = 600;
 
 /** An import (SPEC.md §29): a document made from a PDF, a web page, a
     Markdown or text file, or a Word file, as the page sends it. origin: the
@@ -186,34 +191,32 @@ function useDocsFonts() {
   }, []);
 }
 
-/** The document's status beside the title, as Google Docs shows it: the
-    arrows and "Saving…" while a change waits or saves, then the cloud with a
-    check and "Saved to Unitos" for 3 s, then the cloud alone. A lost
-    connection or a failed save reads in words until it clears. */
-function SaveStatus({ state }: { state: SaveState }) {
+/** The document's status at the toolbar row's right end, as Google Docs
+    shows it: the arrows and "Saving…" while a change waits or saves, then
+    the cloud with a check and "Saved to Unitos" for 3 s, then the cloud
+    alone. A lost connection or a failed save reads in words until it
+    clears. It carries the app's failed writes too (notes, annotations), so
+    the app's own line in the top bar hides while this one is on screen: a
+    write that did not land always shows, in one place. The app's writes in
+    flight are not drawn here — a note's draft waiting for its save would
+    leave this cloud spinning over a document that is saved. */
+function SaveStatus({ state: textState }: { state: SaveState }) {
   const t = useT();
-  const [last, setLast] = useState(state);
-  // Each finished save shows the saved words for 3 s.
-  const [justSaved, setJustSaved] = useState(false);
-  if (last !== state) {
-    setLast(state);
-    setJustSaved(state === "saved");
-  }
-  useEffect(() => {
-    if (!justSaved) return;
-    const id = setTimeout(() => setJustSaved(false), 3000);
-    return () => clearTimeout(id);
-  }, [justSaved]);
-  const caption =
-    state === "saving" || state === "unsaved"
-      ? t("docs.saving")
-      : state === "offline"
-        ? t("docs.offlineSaving")
-        : state === "error"
-          ? t("docs.saveFailed")
-          : justSaved
-            ? t("docsPage.savedCaption")
-            : "";
+  usePageStatusCarries();
+  const appState = useSyncExternalStore(subscribeSaveState, readSaveState, () => "saved" as const);
+  const appTouched = useSyncExternalStore(subscribeSaveState, readSaveTouched, () => false);
+  const state: SaveState = textState === "saved" && appTouched && appState === "failed" ? "error" : textState;
+  // The words only while a save is in trouble: on the toolbar's row a
+  // caption that came and went with every save would move the controls
+  // beside it. The symbol says saving and saved, and a press tells the
+  // state in words.
+  const caption = state === "offline" ? t("docs.offlineSaving") : state === "error" ? t("docs.saveFailed") : "";
+  const spoken =
+    state === "saved"
+      ? t("docs.saved")
+      : state === "saving" || state === "unsaved"
+        ? t("docs.saving")
+        : caption;
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const Icon = state === "saved" ? CloudDoneIcon : state === "offline" || state === "error" ? CloudOffIcon : CloudSyncIcon;
@@ -224,7 +227,7 @@ function SaveStatus({ state }: { state: SaveState }) {
         type="button"
         className={`docs-status docs-status-${state}`}
         data-tip={open ? undefined : t("docsPage.documentStatus")}
-        aria-label={`${t("docsPage.documentStatus")}: ${state === "saved" ? t("docs.saved") : caption}`}
+        aria-label={`${t("docsPage.documentStatus")}: ${spoken}`}
         aria-expanded={open}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => setOpen((o) => !o)}
@@ -505,6 +508,18 @@ export function DocsEditor({
   const mode: DocsMode = locked ? "viewing" : chosenMode;
   const [zoom, setZoom] = useState<Zoom>(100);
   const [headerHidden, setHeaderHidden] = useState(false);
+  // A pane too narrow for the page (a phone, a narrow split) starts with the
+  // title row hidden: 44 px of the screen above the first line go to the
+  // words, and the title, the status and the version clock stay reachable
+  // (the title in the document pill and File > Rename, the status and the
+  // clock in the toolbar's row).
+  const shellRef = useRef<HTMLDivElement>(null);
+  const [narrow, setNarrow] = useState(false);
+  const [narrowWas, setNarrowWas] = useState(false);
+  if (narrow !== narrowWas) {
+    setNarrowWas(narrow);
+    setHeaderHidden(narrow);
+  }
   // View > Full screen: the title row, the toolbar, and the rulers hide,
   // as in Google Docs; Esc brings them back.
   const [fullScreen, setFullScreen] = useState(false);
@@ -555,6 +570,18 @@ export function DocsEditor({
     },
     [documentId],
   );
+
+  // The pane's width, measured once the shell stands (the shell is drawn
+  // after the editor is built, so this waits for it).
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+    const measure = () => setNarrow(shell.clientWidth > 0 && shell.clientWidth < NARROW_PANE);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(shell);
+    return () => observer.disconnect();
+  }, [editor]);
 
   // A document opens with the caret at the page's start, as in Google Docs,
   // unless something else already has the focus. A document that opens at
@@ -609,13 +636,17 @@ export function DocsEditor({
     if (chosenModeRef.current === "viewing") setMode(back);
   }, [collapseOn, setMode]);
 
-  // A PDF import in pages may be read pageless in Viewing (page/reflow.tsx):
+  // A document in pages may be read pageless in Viewing (page/reflow.tsx):
   // a view of this browser; the document's page setup stays as it is, and
-  // Editing and Suggesting draw the pages.
-  const pdfPages = imported?.kind === "pdf" && !pageSetup.pageless;
-  const [reflowChoice, chooseReflow] = useReflow(editor, documentId, pdfPages);
-  const reflowing = pdfPages && mode === "viewing";
-  const reflowed = reflowing && reflowChoice === "pageless";
+  // Editing and Suggesting draw the pages. A PDF import offers it with its
+  // bar; a pane too narrow for the page (a phone) reads pageless at once,
+  // with no bar — the pages there are drawn at 42%, where no one reads
+  // them — and Search the menus > View keeps Show pages.
+  const paged = !pageSetup.pageless;
+  const pdfPages = imported?.kind === "pdf" && paged;
+  const [reflowChoice, chooseReflow] = useReflow(editor, documentId, pdfPages || (paged && narrow));
+  const reflowing = (pdfPages || (paged && narrow)) && mode === "viewing";
+  const reflowed = reflowing && (reflowChoice === "pageless" || (narrow && reflowChoice === null));
   const shownSetup = useMemo(() => (reflowed ? { ...pageSetup, pageless: true } : pageSetup), [reflowed, pageSetup]);
   // Pages to pageless and back keep the block at the reading line in view.
   useKeepPlace(editor, shownSetup.pageless ? "pageless" : "pages");
@@ -635,6 +666,9 @@ export function DocsEditor({
   });
   // The header's and footer's saves show in the same status.
   const shownSaveState = useSaveState(editor, documentId, shownSetup, saveState);
+  // The outline button stands beside the text column when the margin has
+  // the room for it; else the toolbar's row carries it (areas/page.tsx).
+  const outlineRoom = useOutlineRoom(editor, documentId, shownSetup);
 
   useEffect(() => {
     const settle = async () => {
@@ -847,12 +881,19 @@ export function DocsEditor({
             aiControls={aiControls}
             headerHidden={headerHidden}
             onToggleHeader={() => setHeaderHidden((h) => !h)}
+            narrowPane={!outlineRoom}
+            status={
+              <>
+                {writable && <SaveStatus state={shownSaveState} />}
+                <VersionHistoryButton editor={area.editor} />
+              </>
+            }
             onInsertImage={insertImage}
           />
-          <PageRuler {...area} />
+          {!narrow && <PageRuler {...area} />}
         </ModeLock.Provider>
       ),
-    [area, hfEditor, mode, setMode, locked, canEdit, zoom, shownSetup.pageless, aiControls, headerHidden, insertImage],
+    [area, hfEditor, mode, setMode, locked, canEdit, zoom, shownSetup.pageless, aiControls, headerHidden, insertImage, writable, shownSaveState, outlineRoom, narrow],
   );
   const pages = useMemo(
     () =>
@@ -895,6 +936,7 @@ export function DocsEditor({
 
   return (
     <div
+      ref={shellRef}
       className="docs-shell"
       data-docs-editor
       data-docs-mode={mode}
@@ -917,8 +959,6 @@ export function DocsEditor({
               }}
             />
             {imported && <ImportLine imported={imported} />}
-            {writable && <SaveStatus state={shownSaveState} />}
-            <VersionHistoryButton editor={editor} />
           </div>
         )}
         {/* Hidden, not taken away, in full screen: the toolbar's keys still answer. */}
@@ -926,7 +966,7 @@ export function DocsEditor({
       </div>
       <PageBanner.Provider
         value={
-          reflowing ? (
+          reflowing && !narrow ? (
             <>
               <ReflowBar
                 editor={editor}

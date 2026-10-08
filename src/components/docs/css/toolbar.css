@@ -45,6 +45,19 @@
 .docs-tb-right {
   margin-right: 4px;
 }
+/* The document's status and the version clock at the row's right end (the
+   status itself: css/page.css). The caption folds away with the row's
+   captions, so a save never pushes the controls about. */
+.docs-tb-status {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 2px;
+  margin-right: 2px;
+}
+.docs-tb-right[data-folded] .docs-tb-status .docs-status-text {
+  display: none;
+}
 @keyframes docs-tb-fade {
   from {
     opacity: 0;
