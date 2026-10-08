@@ -133,7 +133,7 @@ import { NotePicker } from "@/components/reader/note-picker";
 import { PANE_HEADER } from "@/components/reader/reader-panes";
 import type { FigureRenderInfo } from "@/components/reader/figure-capture";
 import { Reader, type TranscriptVariant } from "@/components/reader/reader";
-import { setQuoteDragImage, writeQuoteDrag, type QuoteDrag } from "@/lib/quote-drag";
+import { quoteMarkdown, setQuoteDragImage, writeQuoteDrag, type QuoteDrag } from "@/lib/quote-drag";
 import { blockIdOfKey, coreKey, isCoreKey } from "@/lib/anchors/core-key";
 import { MAX_SEGMENTS } from "@/lib/anchors/passage-limit";
 import { collapseUnits } from "@/lib/collapse-units";
@@ -5929,7 +5929,17 @@ export function ReaderInteractions({
       .map((line) => (line ? `> ${line}` : ">"))
       .join("\n");
     const comment = (addFieldRef.current?.value() ?? addComment).trim();
-    return comment ? `${quote}\n\n${comment}` : quote;
+    // Define's answer for these words, not folded away: it goes under the
+    // word, so the note keeps the meaning (SPEC.md §6).
+    const meaning =
+      definition &&
+      definition.key === popoverAnchorKey &&
+      (submenu === "define" || submenu === "add") &&
+      !definition.streaming &&
+      !definition.error
+        ? definition.text.trim()
+        : "";
+    return [quote, meaning, comment].filter(Boolean).join("\n\n");
   }
 
   // After the quote landed: the toolbar closes and the page refreshes, so
@@ -6892,9 +6902,11 @@ export function ReaderInteractions({
       return false;
     }
     try {
+      // The quote shows in the note as Add to notes writes it, the caption
+      // under it.
       await api("/api/notes", "POST", {
         sectionId: section.id,
-        content: quote.caption,
+        content: `${quoteMarkdown(quote.quotedText)}\n\n${quote.caption}`,
         source: {
           documentId,
           blockId: quote.blockId,

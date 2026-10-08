@@ -203,7 +203,9 @@ export function CorpusDistillPage({
     try {
       await api("/api/notes", "POST", {
         sectionId: sectionChoices[0].id,
-        content: quote.caption,
+        // The quote shows in the note as Add to notes writes it, the
+        // caption under it.
+        content: `${quoteMarkdown(quote.quotedText)}\n\n${quote.caption}`,
         origin: "distill",
         source: {
           documentId: quote.documentId,
