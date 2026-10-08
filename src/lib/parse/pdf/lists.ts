@@ -665,10 +665,13 @@ function indentedBand(lines: Line[], i: number, ctx: PageContext, runOf: number[
   const segments: Segment[] = [];
   // At the top of a page, an unmarked first group before marked items is
   // the tail of the previous page's last item, not an item: emit it as a
-  // paragraph so the cross-page merge can finish that item. A drawn
-  // bullet marks an item as a typed one does.
+  // paragraph so the cross-page merge can finish that item. So is one
+  // under a display that opens lowercase, the tail of the sentence the
+  // display cut (the MML book's "i.e., the image is the span …" under
+  // (2.124), p. 65). A drawn bullet marks an item as a typed one does.
   const opens = (item: (typeof items)[number]) => BULLET_RE.test(item.text) || drawn[run.indexOf(item.lines[0])];
-  if (i === 0 && items.length >= 2 && !opens(items[0]) && opens(items[1])) {
+  const under = i > 0 && lines[i - 1].display && /^\p{Ll}/u.test(items[0].text);
+  if ((i === 0 || under) && items.length >= 2 && !opens(items[0]) && opens(items[1])) {
     const tail = items.shift()!;
     segments.push({ type: "PARAGRAPH", text: tail.text, page: line.page, runs: tail.runs, ...geom(tail.lines) });
   }
