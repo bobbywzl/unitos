@@ -701,7 +701,7 @@ Every write is labeled with its author: `Note.createdById` (manual notes, highli
 
 ### Live sync
 
-Every write bumps `Notebook.rev` (document writes bump every corpus the document is attached to). Open workspaces poll `GET /api/notebooks/[id]/sync` every 8 seconds (every 2 while another person has the same document open): the call stamps the caller's `NotebookPresence` row and answers `{rev, people}` — who else has the corpus open (25-second window). When the rev moves, the client refreshes the page — deferred while an input, textarea, or editable block has focus or a selection is open, so typing is never clobbered. Presence renders as badges in the workspace header.
+Every write bumps `Notebook.rev` (document writes bump every corpus the document is attached to). Open workspaces poll `GET /api/notebooks/[id]/sync` every 8 seconds (every 2 while another person has the same document open): the call stamps the caller's `NotebookPresence` row and answers `{rev, people}` — who else has the corpus open (25-second window). When the rev moves, the client refreshes the page — deferred while an input, textarea, or editable block has focus or a selection is open, so typing is never clobbered. When the poll answers 404 — the owner removed this collaborator, or the project was deleted — the page renders again and shows Page not found, held the same way while the reader types (the words stay in their drafts). Presence renders as badges in the workspace header.
 
 ### Replies
 
