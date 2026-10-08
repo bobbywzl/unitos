@@ -182,6 +182,8 @@ export async function POST(req: Request) {
           ],
     );
   }
+  let quotesKept = 0;
+  const replayedAt = replayTime(req.headers.get(REPLAY_HEADER));
   if (data.fromLinkId) {
     const link = await db.docLink.findUnique({
       where: { id: data.fromLinkId },
@@ -195,17 +197,28 @@ export async function POST(req: Request) {
           where: { notebookId: section.notebookId, documentId: { in: [link.fromDocumentId, link.toDocumentId] } },
         })
       : 0;
-    if (
-      !link ||
-      (link.notebookId !== null && link.notebookId !== section.notebookId) ||
-      (link.notebookId === null && link.formerNotebookId !== null) ||
-      link.hiddenIn.length > 0 ||
-      attachedEnds < new Set([link.fromDocumentId, link.toDocumentId]).size
-    ) {
+    const shown =
+      !!link &&
+      !(link.notebookId !== null && link.notebookId !== section.notebookId) &&
+      !(link.notebookId === null && link.formerNotebookId !== null) &&
+      attachedEnds >= new Set([link.fromDocumentId, link.toDocumentId]).size;
+    const removed = !!link && link.hiddenIn.length > 0;
+    if ((!shown || removed) && replayedAt === null) {
       return NextResponse.json({ error: t("api.linkNotFound") }, { status: 404 });
     }
+    // A note on a link replayed from the offline queue, where another
+    // editor removed the link meanwhile (REV8-01): a 4xx would drop the
+    // queued words. A removed link keeps its row, so the note keeps the
+    // link's two quotes as sources. A link of this project whose documents
+    // left it keeps its quotes as plain quoted text (as REV5-06); a link
+    // that is gone or of another project saves the words alone.
+    if (link && !shown && (link.notebookId === section.notebookId || removed)) {
+      const quotes = [link.quotedText, ...(link.toQuotedText !== null ? [link.toQuotedText] : [])];
+      quotesKept = quotes.length;
+      content = [content.trim(), ...quotes.map(quoteLines)].filter(Boolean).join("\n\n");
+    }
     const end = { layer: null, startTime: null, endTime: null };
-    copiedSources = [
+    copiedSources = !link || !shown ? [] : [
       {
         documentId: link.fromDocumentId,
         blockId: link.fromBlockId,
@@ -249,8 +262,6 @@ export async function POST(req: Request) {
   // a note this account saved in the section since then (a minute earlier
   // for a fast clock) with the same words is that record's earlier send,
   // answered as saved (REV6-06).
-  let quotesKept = 0;
-  const replayedAt = replayTime(req.headers.get(REPLAY_HEADER));
   if (data.quotes && replayedAt !== null) {
     const gathered = await resolveNoteQuotesKeeping(section.notebookId, data.quotes);
     quotesKept = gathered.kept;

@@ -92,6 +92,8 @@ export function priceFor(model: string): Price {
 }
 
 export type TokenCounts = {
+  // The input tokens billed at the full price: the cached ones are
+  // cacheReadTokens and cacheWriteTokens, never counted here too (COST8-02).
   inputTokens?: number;
   outputTokens?: number; // every output token billed, the reasoning included
   cacheReadTokens?: number;
@@ -111,19 +113,26 @@ export function computeCostUsd(model: string, t: TokenCounts): number {
   );
 }
 
-/** The AI SDK's usage shape → plain token counts. */
+/** The AI SDK's usage shape → plain token counts. The SDK's inputTokens is
+    every prompt token, the cached ones included (COST8-02): the row keeps
+    the uncached count, the provider's noCacheTokens, else the total less
+    the cache read and the cache write, so computeCostUsd prices each token
+    once. Rows written before this fix hold the total there and overstate
+    the cost of a cached call. */
 export function sdkTokens(usage: {
   inputTokens?: number;
   outputTokens?: number;
-  inputTokenDetails?: { cacheReadTokens?: number | null; cacheWriteTokens?: number | null };
+  inputTokenDetails?: { noCacheTokens?: number | null; cacheReadTokens?: number | null; cacheWriteTokens?: number | null };
   outputTokenDetails?: { reasoningTokens?: number | null };
 }): TokenCounts {
   const reasoning = usage.outputTokenDetails?.reasoningTokens;
+  const cacheRead = usage.inputTokenDetails?.cacheReadTokens ?? 0;
+  const cacheWrite = usage.inputTokenDetails?.cacheWriteTokens ?? 0;
   return {
-    inputTokens: usage.inputTokens ?? 0,
+    inputTokens: usage.inputTokenDetails?.noCacheTokens ?? Math.max(0, (usage.inputTokens ?? 0) - cacheRead - cacheWrite),
     outputTokens: usage.outputTokens ?? 0,
-    cacheReadTokens: usage.inputTokenDetails?.cacheReadTokens ?? 0,
-    cacheWriteTokens: usage.inputTokenDetails?.cacheWriteTokens ?? 0,
+    cacheReadTokens: cacheRead,
+    cacheWriteTokens: cacheWrite,
     ...(typeof reasoning === "number" ? { reasoningTokens: reasoning } : {}),
   };
 }

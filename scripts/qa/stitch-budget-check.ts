@@ -956,8 +956,8 @@ check("replyLanguage command: a mixed or short command keeps the UI's", replyLan
   const long7 = many7.lines.filter((l) => l.text.length > 200).length;
   const chars7 = many7.lines.filter((l) => l.text.length > 200).reduce((n, l) => n + l.text.length, 0);
   check("currentSkeleton: changed lines past 200 characters stop at about 2k tokens a document", long7 > 0 && chars7 <= 8_000 && many7.lines.length === 40, `${long7} long lines, ${chars7} chars`);
-  const rows7 = [{ id: "a", fromOrphaned: false, toOrphaned: false }, { id: "b", fromOrphaned: true, toOrphaned: false }, { id: "c", fromOrphaned: false, toOrphaned: true }];
-  check("liveLinks: a link whose quote an edit removed is not already in the graph (ANS7-02)", liveLinks(rows7).map((l) => l.id).join(",") === "a");
+  const rows7 = [{ id: "a", fromOrphaned: false, toOrphaned: false, hiddenIn: [] }, { id: "b", fromOrphaned: true, toOrphaned: false, hiddenIn: [] }, { id: "c", fromOrphaned: false, toOrphaned: true, hiddenIn: [] }, { id: "d", fromOrphaned: true, toOrphaned: false, hiddenIn: [{ notebookId: "p" }] }];
+  check("liveLinks: a link whose quote an edit removed is not already in the graph (ANS7-02); one the reader removed stays removed (REV8)", liveLinks(rows7).map((l) => l.id).join(",") === "a,d");
 
   // ANS7-05: a quote part stays the paragraph it is, in italic.
   const q157 = "157. The thought of suicide is a great consolation: by means of it one gets successfully through many a bad night.";

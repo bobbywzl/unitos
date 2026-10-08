@@ -2022,7 +2022,8 @@ export async function stitch(input: {
   // Recommended links, or removed. A link whose quote an edit removed
   // (fromOrphaned, toOrphaned) is left out (ANS7-02): it is not "already in
   // the graph" for the new text, it is never lit, and a link on the new
-  // text is stored. The row is not touched and is drawn as before.
+  // text is stored. The row is not touched and is drawn as before. A
+  // removed link stays in though its quote moved (REV8-02).
   const existing = liveLinks(existingRows).map((l) => ({ ...l, state: existingState(l) }));
   const aliasOf = (id: string | null) => (id ? blockByRef.get(id)?.alias : undefined);
   const existingAliases = existing.flatMap((l) => {
@@ -2308,8 +2309,10 @@ export type ExistingState = "accepted" | "waiting" | "removed";
 /** The links whose two quotes are still in their blocks (ANS7-02): an
     edit that removed a link's quote marks that end orphaned
     (lib/docs/sync.ts). */
-export function liveLinks<T extends { fromOrphaned: boolean; toOrphaned: boolean }>(rows: T[]): T[] {
-  return rows.filter((l) => !l.fromOrphaned && !l.toOrphaned);
+export function liveLinks<T extends { fromOrphaned: boolean; toOrphaned: boolean; hiddenIn: unknown[] }>(rows: T[]): T[] {
+  // REV8: a link the reader removed stays "removed" though its quote moved,
+  // so it is never proposed back.
+  return rows.filter((l) => l.hiddenIn.length > 0 || (!l.fromOrphaned && !l.toOrphaned));
 }
 
 function existingState(l: { recommended: boolean; hiddenIn: unknown[] }): ExistingState {
