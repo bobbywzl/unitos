@@ -237,7 +237,8 @@ for (const lang of ["en", "zh"]) {
     if (lang === "en" && width === 1440) {
       // Mid-curve, clear of either node's box (a click on a node pins its card).
       check(await pin(page, pair(A, C), 0.55), "pinned Heat pumps ⇄ Household");
-      await list.locator('[data-track="graph-link-expand"]').first().click();
+      // [lists7] WALK7-05: a one-link curve opens its panel at once; a curve with more links lists them.
+      if (await list.locator('[data-track="graph-link-expand"]').count()) await list.locator('[data-track="graph-link-expand"]').first().click();
       await page.waitForTimeout(300);
       await panelOf(page, LINK_AC).locator('[data-track="graph-link-note"]').click();
       await panelOf(page, LINK_AC).locator(`[data-graph-link-note-composer="${LINK_AC}"] textarea`).fill("running cost and savings agree");
@@ -245,7 +246,8 @@ for (const lang of ["en", "zh"]) {
       // Reload mid-typing: the draft comes back.
       await openGraph(page);
       await pin(page, pair(A, C), 0.55);
-      await list.locator('[data-track="graph-link-expand"]').first().click();
+      // [lists7] WALK7-05: a one-link curve opens its panel at once; a curve with more links lists them.
+      if (await list.locator('[data-track="graph-link-expand"]').count()) await list.locator('[data-track="graph-link-expand"]').first().click();
       await page.waitForTimeout(300);
       const restored = await panelOf(page, LINK_AC).locator(`[data-graph-link-note-composer="${LINK_AC}"] textarea`).inputValue().catch(() => "");
       check(restored === "running cost and savings agree", "the draft comes back after a reload", restored);
