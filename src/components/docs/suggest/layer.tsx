@@ -10,7 +10,7 @@ import { focusSuggestion, readSuggestions, setSuggesting, settleSuggestions, sug
 import { belowSlot, marginPlace, pageGeometry, paneReach, slotAt } from "@/components/docs/layer/margin";
 import { setCardsUnderWords } from "@/components/docs/suggest/under-words";
 import { applyAssistantOps, type Landing } from "@/components/docs/suggest/assistant";
-import { SuggestionCard } from "@/components/docs/suggest/card";
+import { SuggestionCard, focusSuggestionCard } from "@/components/docs/suggest/card";
 import { ReviewPanel } from "@/components/docs/suggest/review";
 import { DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
 import type { TKey } from "@/lib/i18n/dictionaries";
@@ -287,6 +287,10 @@ export function SuggestLayer({ editor, canEdit, editing, suggesting }: DocsAreaP
       setReview({ scope });
       const first = scope && readSuggestions(editor.state.doc).find((s) => scope.includes(s.id));
       if (first) focusSuggestion(editor, first.id);
+      // Every suggestion: the keys go to the card of the one at the caret,
+      // else the first, so one suggestion is accepted without a pointer.
+      const target = scope ? null : (suggestionAt(editor.state) ?? readSuggestions(editor.state.doc)[0]?.id ?? null);
+      if (target && editor.isEditable) focusSuggestionCard(editor, target);
     };
     dom.addEventListener(REVIEW_EVENT, open);
     return () => dom.removeEventListener(REVIEW_EVENT, open);
