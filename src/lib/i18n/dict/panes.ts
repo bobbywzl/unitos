@@ -187,7 +187,7 @@ const en = {
   folderRoot: "No folder",
   deleteFolder: "Delete folder",
   deleteFolderTitle: "Delete this folder; what it holds moves up one level",
-  confirmDeleteFolder: "Delete this folder? The documents and folders in it move up one level.",
+  folderDeleted: "Folder deleted",
   folderEmpty: "No documents in this folder yet.",
   // A document parsed by an older importer (SPEC.md §2). It is left as it
   // is until the reader asks: a re-parse is a full import on the import's
@@ -710,7 +710,7 @@ const zh: Record<keyof typeof en, string> = {
   folderRoot: "不放入文件夹",
   deleteFolder: "删除文件夹",
   deleteFolderTitle: "删除此文件夹；里面的内容上移一层",
-  confirmDeleteFolder: "删除此文件夹？里面的文档和文件夹会上移一层。",
+  folderDeleted: "文件夹已删除",
   folderEmpty: "此文件夹中还没有文档。",
   reparseStale: "旧版导入",
   reparseStaleTitle: "由旧版导入器导入。在该文档的操作中重新解析，即可更新。",
