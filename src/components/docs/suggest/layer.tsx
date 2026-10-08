@@ -32,9 +32,11 @@ const CARD_GAP = 8;
 const LINE_PX = 20;
 /** The column's comment and suggestion cards. */
 const COLUMN_CARD = "[data-suggestion-card], [data-comment-card]";
-/** What stands in the column and stays where it is: the toolbar and the
-    tools' cards. */
-const FIXED = "[data-layer-toolbar], [data-side-card], [data-annotation-card]";
+/** What stands in the column and stays where it is: the tools' cards. The
+    selection toolbox is not one: it lives for one action and stands over
+    the cards (TOOLBOX_LAYER), so a card never jumps away from its words
+    when the reader selects beside it. */
+const FIXED = "[data-side-card], [data-annotation-card]";
 
 const settleable = (editor: Editor) => editor.isEditable && readSuggestions(editor.state.doc).length > 0;
 

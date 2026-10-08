@@ -460,6 +460,17 @@ mark[data-held] {
     display: none;
   }
 }
+/* On a touch screen a chip is a 24px target; the dot keeps its look. The
+   page editor draws its chips the same (docs/css/layer.css positions them). */
+@media (pointer: coarse) {
+  [data-margin-chip].mark-chip::after,
+  .docs-prose button.mark-chip::after {
+    content: "";
+    position: absolute;
+    inset: -4.5px;
+    border-radius: 999px;
+  }
+}
 .tool-plus {
   gap: 1px;
 }
