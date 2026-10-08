@@ -225,24 +225,34 @@ async function holdQueuedNoteDrafts(): Promise<void> {
   }
 }
 
-/** True when a record with this path, method, account, and body waits. */
+/** What makes two queued writes the same: a note's text write by its text
+    (the base and the source flags only say how it merges; one that lands
+    leaves the note holding that text), anything else by its whole body. */
+function sameness(record: Pick<QueuedWrite, "path" | "method" | "body">): string {
+  const text = noteText(record);
+  return text && record.method === "PATCH" ? `text:${text.content.trim()}` : JSON.stringify(record.body);
+}
+
+/** True when the last record that waits for this path, method, and account
+    is the same write. Only the last: a write that brings back an earlier
+    text after a different one must queue again. */
 function waitsAlready(path: string, method: string, account: string | null, body: unknown): Promise<boolean> {
-  const same = JSON.stringify(body);
+  const same = sameness({ path, method: method as QueuedWrite["method"], body });
   return openDb().then(
     (db) =>
       new Promise((resolve, reject) => {
-        let found = false;
+        let last: string | null = null;
         const t = db.transaction(WRITES, "readonly");
         const req = t.objectStore(WRITES).openCursor();
         req.onsuccess = () => {
           const cursor = req.result;
           if (!cursor) {
-            resolve(found);
+            resolve(last === same);
             return;
           }
           const record = cursor.value as QueuedWrite;
           if (record.path === path && record.method === method && record.account === account) {
-            found ||= JSON.stringify(record.body) === same;
+            last = sameness(record);
           }
           cursor.continue();
         };
@@ -274,8 +284,9 @@ export async function queueWrite(
     queuedAt: Date.now(),
     ...(attempts > 0 ? { attempts } : {}),
   };
-  // A write the same as one that waits for its path is queued already: a
-  // retry of a save that never reached the server queues it once.
+  // A write the same as the last one that waits for its path is queued
+  // already: a retry of a save that never reached the server queues it
+  // once, and a note's text waits once however many saves carry it.
   if (!(await waitsAlready(path, method, record.account, body).catch(() => false))) {
     await tx(WRITES, "readwrite", (s) => s.add(record));
   }
