@@ -145,13 +145,14 @@ export async function queueUpload(file: File, notebookId: string): Promise<void>
   if (!isOffline()) void syncQueue();
 }
 
-function headers(account: string | null, json: boolean): Record<string, string> {
+function headers(account: string | null, json: boolean, queuedAt: number): Record<string, string> {
   return {
     ...(json ? { "Content-Type": "application/json" } : {}),
     ...(account ? { [ACCOUNT_HEADER]: account } : {}),
-    // A replayed write: a gathered note keeps a quote that no longer
-    // resolves as text instead of answering 400 (REV5-06).
-    [REPLAY_HEADER]: "1",
+    // A replayed write, with the time it was queued: a gathered note keeps
+    // a quote that no longer resolves as text instead of answering 400
+    // (REV5-06), and a second replay of it saves no second note (REV6-06).
+    [REPLAY_HEADER]: String(queuedAt),
   };
 }
 
@@ -183,7 +184,7 @@ async function sendWrite(record: QueuedWrite): Promise<Sent> {
   try {
     const res = await fetch(record.path, {
       method: record.method,
-      headers: headers(record.account, record.body !== undefined),
+      headers: headers(record.account, record.body !== undefined, record.queuedAt),
       body: record.body !== undefined ? JSON.stringify(record.body) : undefined,
     });
     const kept = Number(res.headers.get(QUOTES_KEPT_HEADER) ?? 0);
@@ -215,7 +216,7 @@ async function sendUpload(record: QueuedUpload): Promise<Sent> {
       form.set("notebookId", record.notebookId);
       const res = await fetch("/api/documents", {
         method: "POST",
-        headers: headers(record.account, false),
+        headers: headers(record.account, false, record.queuedAt),
         body: form,
       });
       return outcome(res, record, record.name);
@@ -226,14 +227,14 @@ async function sendUpload(record: QueuedUpload): Promise<Sent> {
       const chunk = bytes.slice(offset, offset + UPLOAD_CHUNK_BYTES);
       const res = await fetch(`/api/uploads?uploadId=${uploadId}&index=${index}`, {
         method: "POST",
-        headers: headers(record.account, false),
+        headers: headers(record.account, false, record.queuedAt),
         body: chunk,
       });
       if (!res.ok) return outcome(res, record, record.name);
     }
     const res = await fetch("/api/uploads/complete", {
       method: "POST",
-      headers: headers(record.account, true),
+      headers: headers(record.account, true, record.queuedAt),
       body: JSON.stringify({
         uploadId,
         filename: record.name,

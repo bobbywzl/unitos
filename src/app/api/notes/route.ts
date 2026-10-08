@@ -7,7 +7,7 @@ import { sourceInputSchema } from "@/lib/anchors/input";
 import { MAX_SEGMENTS, passageSources, resolvePassage } from "@/lib/anchors/passage";
 import { layerBlocks } from "@/lib/anchors/layer";
 import { MAX_NOTE_QUOTES, noteQuoteSchema, resolveNoteQuotes, resolveNoteQuotesKeeping } from "@/lib/anchors/note-quotes";
-import { QUOTES_KEPT_HEADER, REPLAY_HEADER } from "@/lib/constants";
+import { QUOTES_KEPT_HEADER, REPLAY_HEADER, REPLAY_MAX_AGE_MS } from "@/lib/constants";
 import type { ResolvedAnchor } from "@/lib/anchors/resolve";
 import { serverT } from "@/lib/i18n/server";
 import { normalizeNoteOrders } from "@/lib/order";
@@ -242,9 +242,13 @@ export async function POST(req: Request) {
   // the queued write with the reader's words. Such a quote keeps its words
   // as plain quoted text with no source, the note saves, and the answer says
   // how many were kept so (QUOTES_KEPT_HEADER). Online the reader still gets
-  // the error and fixes the quote.
+  // the error and fixes the quote. The header carries the time the record
+  // was queued: only a time in the last 30 days takes this path, and a
+  // note this account saved in the section since then with the same words
+  // is that record's earlier send, answered as saved (REV6-06).
   let quotesKept = 0;
-  if (data.quotes && req.headers.get(REPLAY_HEADER) === "1") {
+  const replayedAt = replayTime(req.headers.get(REPLAY_HEADER));
+  if (data.quotes && replayedAt !== null) {
     const gathered = await resolveNoteQuotesKeeping(section.notebookId, data.quotes);
     quotesKept = gathered.kept;
     sources = gathered.items.flatMap((item) => ("source" in item ? [item.source] : []));
@@ -254,6 +258,11 @@ export async function POST(req: Request) {
     ]
       .filter(Boolean)
       .join("\n\n");
+    const saved = await db.note.findFirst({
+      where: { sectionId: data.sectionId, createdById: access.user.id, content, createdAt: { gte: replayedAt } },
+      include: { sources: true },
+    });
+    if (saved) return NextResponse.json(saved, { status: 201 });
   } else if (data.quotes) {
     const gathered = await resolveNoteQuotes(section.notebookId, data.quotes);
     if ("notInProject" in gathered) return NextResponse.json({ error: t("api.quoteNotInProject") }, { status: 400 });
@@ -324,6 +333,16 @@ export async function POST(req: Request) {
     status: 201,
     ...(quotesKept > 0 ? { headers: { [QUOTES_KEPT_HEADER]: String(quotesKept) } } : {}),
   });
+}
+
+// The time a replayed record was queued, from REPLAY_HEADER: null unless
+// it is a whole number of ms in the last REPLAY_MAX_AGE_MS (a minute of
+// clock skew allowed).
+function replayTime(header: string | null): Date | null {
+  if (!header || !/^\d{1,15}$/.test(header)) return null;
+  const at = Number(header);
+  const now = Date.now();
+  return at <= now + 60_000 && at >= now - REPLAY_MAX_AGE_MS ? new Date(at) : null;
 }
 
 // A quote as the note's text shows it: blockquote lines, the boxed
