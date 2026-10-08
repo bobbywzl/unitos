@@ -6913,6 +6913,29 @@ export function ReaderInteractions({
     const editor = pageEditorIn(containerRef.current);
     editor?.commands.focus(editor.state.selection.to);
   }
+  // Escape in a toolbox field closes the field, and only it: the focus goes
+  // back to the selection, the toolbox still open — the page editor's text
+  // with its selection kept, or the block reader's selected words (their
+  // tint, selected again), where Tab goes to the toolbox's first row.
+  function focusSelectionAfterField() {
+    requestAnimationFrame(() => {
+      const container = containerRef.current;
+      const editor = richTextRef.current ? pageEditorIn(container) : null;
+      if (editor) {
+        editor.view.focus();
+        return;
+      }
+      const marks = container?.querySelectorAll(".selection-mark");
+      const sel = window.getSelection();
+      if (!marks?.length || !sel) return;
+      const last = marks[marks.length - 1];
+      const range = document.createRange();
+      range.setStart(marks[0], 0);
+      range.setEnd(last, last.childNodes.length);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    });
+  }
 
   // Manual annotation: highlight (color, content = quote) or comment (user text).
   // Lands ACCEPTED in the hidden Annotations section. The mark paints instantly
@@ -10837,6 +10860,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   if (e.key === "Escape") {
                     e.stopPropagation();
                     setSubmenu(null);
+                    focusSelectionAfterField();
                   }
                 }}
                 placeholder={t(popover.figure ? "reader.figureBarPlaceholder" : "reader.assistantPlaceholder")}
@@ -11013,7 +11037,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   if (e.key === "Escape") {
                     e.stopPropagation();
                     setSubmenu(null);
-                    focusPageAfterComment();
+                    focusSelectionAfterField();
                   }
                 }}
                 placeholder={t("reader.commentPlaceholder")}
