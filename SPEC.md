@@ -163,6 +163,10 @@ model NotebookDocument {
   position      Int?     // its place in its list under Custom order (§6); null = never placed by a drag
   @@id([notebookId, documentId])
 }
+// Attach order (every read that lists a project's documents oldest first:
+// the page, the graph, Stitch, the digest, notes, annotations, offline):
+// Document.createdAt, then documentId for a tie (`ATTACH_ORDER`,
+// lib/document-order.ts), so one order holds whatever plan the database picks.
 
 model DocumentFolder {
   id         String   @id @default(cuid())

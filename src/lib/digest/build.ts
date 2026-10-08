@@ -21,6 +21,7 @@ import type {
   DigestQuote,
   DigestSource,
 } from "@/lib/digest/types";
+import { ATTACH_ORDER } from "@/lib/document-order";
 
 const QUOTE_MAX = 240; // quotes re-read in full from the document text above them
 const EDIT_TEXT_MAX = 160;
@@ -125,7 +126,7 @@ export async function buildDigest(
         },
       },
       documents: {
-        orderBy: { document: { createdAt: "asc" } },
+        orderBy: ATTACH_ORDER,
         include: {
           document: {
             include: {

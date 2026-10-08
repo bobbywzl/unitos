@@ -59,6 +59,7 @@ import { estTokens } from "@/lib/tokens";
 import type { StitchCommandKind, StitchDocument, StitchRecord, StitchResult } from "@/lib/types";
 import { transcriptIsStale } from "@/lib/video/types";
 import { COMMAND_CHAIN } from "@/lib/graph/generated-label";
+import { ATTACH_ORDER } from "@/lib/document-order";
 
 // Stitch (SPEC.md §22): one command over the project's documents, from the
 // graph — the documents the reader selected in the graph, or every attached
@@ -426,7 +427,7 @@ export async function loadDocuments(
     },
     // The id breaks a tie of two documents added in one millisecond, so
     // the letters, the aliases, and the cached prefix stay the same.
-    orderBy: [{ document: { createdAt: "asc" } }, { documentId: "asc" }],
+    orderBy: ATTACH_ORDER,
     include: {
       document: {
         select: {

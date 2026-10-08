@@ -11,6 +11,7 @@ import { projectLinks } from "@/lib/link-scope";
 import type { Lang } from "@/lib/i18n/config";
 import { currentLang } from "@/lib/i18n/server";
 import { connectPrompt, connectVerifyPrompt } from "@/lib/prompts/connect";
+import { ATTACH_ORDER } from "@/lib/document-order";
 
 // Recommended links (SPEC.md §13): the connections between a project's
 // documents, stored as DocLink rows with recommended: true. The reader asks
@@ -376,7 +377,7 @@ export async function scanProject(
   // documents rather than whatever the database returned first.
   const attachments = await db.notebookDocument.findMany({
     where: { notebookId },
-    orderBy: { document: { createdAt: "asc" } },
+    orderBy: ATTACH_ORDER,
     select: { documentId: true },
   });
   if (attachments.length < 2) {

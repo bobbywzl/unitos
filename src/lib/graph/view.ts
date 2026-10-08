@@ -5,6 +5,7 @@ import { projectLinks } from "@/lib/link-scope";
 import { isProvenanceLink } from "@/lib/graph/provenance";
 import type { DocumentKind } from "@/lib/document-order";
 import type { GeneratedDocumentView, GraphEdge, GraphNode, RecommendedLinkView } from "@/lib/types";
+import { ATTACH_ORDER_NEWEST } from "@/lib/document-order";
 
 // The graph's data (SPEC.md §13, §22): the nodes, the edges, the recommended
 // links, and the generated documents Stitch wrote for the project.
@@ -14,7 +15,7 @@ import type { GeneratedDocumentView, GraphEdge, GraphNode, RecommendedLinkView }
 export async function listGenerated(notebookId: string): Promise<GeneratedDocumentView[]> {
   const rows = await db.notebookDocument.findMany({
     where: { notebookId, document: { generatedCommand: { not: null } } },
-    orderBy: { document: { createdAt: "desc" } },
+    orderBy: ATTACH_ORDER_NEWEST,
     select: {
       document: {
         select: {
