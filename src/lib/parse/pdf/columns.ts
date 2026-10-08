@@ -1077,12 +1077,17 @@ function sideNote(band: Band, page: number): Side[] | null {
 }
 
 // Blocks side by side, not a table's columns: two sides a wide gutter
-// apart (three ems or more) whose lines share a baseline once at most,
-// while a line of one side has no partner. A table's rows share their
-// baselines. The SF 298's foot, "NSN 7540-01-280-5500" beside "Standard
-// Form 298 (Rev. 2-89)" over "Prescribed by ANSI Std. 239-18", read as one
-// paragraph; the IRS W-9's three header boxes as one line. A stray mark is
-// no block (a slide's page number beside its last bullets).
+// apart (three ems or more) whose lines share a baseline once at most, or
+// in one line of five of the shorter side's (two texts set at two leadings
+// meet on a baseline now and then: The MagPi's maker box, 14 lines 8.5 pt
+// apart, beside the story's first column, its lines 11 pt apart, met it
+// twice, and the page's three columns read across, row by row, parse loop
+// finding), while a line of one side has no
+// partner. A table's rows share their baselines. The SF 298's foot, "NSN
+// 7540-01-280-5500" beside "Standard Form 298 (Rev. 2-89)" over
+// "Prescribed by ANSI Std. 239-18", read as one paragraph; the IRS W-9's
+// three header boxes as one line. A stray mark is no block (a slide's page
+// number beside its last bullets).
 function isBlocks(band: Band, page: number): boolean {
   const { left, right } = band;
   if (chars(left.items) < 10 || chars(right.items) < 10 || [...left.items, ...right.items].some((i) => i.math)) return false;
@@ -1103,7 +1108,7 @@ function isBlocks(band: Band, page: number): boolean {
   // apart from the titles).
   const rows = a.filter((l) => b.some((m) => Math.abs(m.y - l.y) <= Math.min(l.size, m.size) * 0.3)).length;
   if (rows >= 4 && rows >= Math.min(a.length, b.length) * 0.8) return false;
-  return paired <= 1 && Math.max(a.length, b.length) > paired;
+  return (paired <= 1 || paired * 5 <= Math.min(a.length, b.length)) && Math.max(a.length, b.length) > paired;
 }
 
 // A side of a split: a prose column, or columns of its own (a page of three
