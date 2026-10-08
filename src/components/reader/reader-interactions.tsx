@@ -141,7 +141,7 @@ import { deriveBlocks } from "@/lib/docs/blocks";
 import { coreHiding } from "@/components/docs/layer/core-slot";
 import { announceCollapseView } from "@/components/panels/layer-switch";
 import { startCardDrag } from "@/lib/card-drag";
-import { pointsAtText, skipsDrag, watchHold } from "@/lib/hold-drag";
+import { HOLD_MS, HOLD_TOLERANCE_PX, pointsAtText, skipsDrag, stopClickAfterDrag, watchHold } from "@/lib/hold-drag";
 import {
   ANNOTATION_PARAM,
   annotationReferenceHref,
@@ -1939,18 +1939,20 @@ export function ReaderInteractions({
       ...referenceContent(input.kind, input.content, input.quote, input.turns ?? 0),
     };
   };
+  // The page editor's comment card keeps the grip; the cards over the
+  // article lift from their head row (dragCard, data-hold-head).
   const annotationGrip = (reference: AnnotationReference | null) =>
     dropOpen && reference ? <AnnotationGrip reference={reference} className="-ml-1" /> : null;
-  // A hold on the card's blank space, off its controls and off the header
-  // that moves the card (data-no-drag), lifts the annotation. A press on the
-  // card's text — where the pointer shows the I-beam — selects the text and
-  // never lifts, hold or pull (pointsAtText). A pull from blank space never
-  // lifts either: only the hold does.
+  // A hold on the card's blank space or its head row, off its controls and
+  // off the header that moves the card (data-no-drag, dragCard), lifts the
+  // annotation. A press on the card's text — where the pointer shows the
+  // I-beam — selects the text and never lifts, hold or pull (pointsAtText).
+  // A pull from blank space never lifts either: only the hold does.
   const holdAnnotation = (reference: AnnotationReference | null) => (e: React.PointerEvent) => {
     if (!reference || !dropOpen || e.button !== 0) return;
     const target = e.target as Element;
     if (skipsDrag(target) || target.closest("button, a, [data-no-drag]")) return;
-    if (pointsAtText(e.clientX, e.clientY)) return;
+    if (pointsAtText(e.clientX, e.clientY) && !target.closest("[data-hold-head]")) return;
     watchHold(
       e,
       (at) => {
@@ -2459,9 +2461,13 @@ export function ReaderInteractions({
   }, []);
 
   // Cards are freely moveable: drag the header. Buttons and inputs still work.
+  // The card's head row is its handle (SPEC.md §6): a drag moves the card;
+  // a hold (HOLD_MS, the pointer still) lifts its annotation to carry onto a
+  // note, as a note's header row does in its editing mode.
   function dragCard(
     getPos: () => { left: number; top: number } | null,
     apply: (left: number, top: number) => void,
+    reference: AnnotationReference | null = null,
   ) {
     return (e: React.PointerEvent) => {
       if (e.button !== 0) return;
@@ -2471,6 +2477,22 @@ export function ReaderInteractions({
       e.preventDefault();
       const fromX = e.clientX;
       const fromY = e.clientY;
+      let hold =
+        reference && dropOpen
+          ? window.setTimeout(() => {
+              hold = 0;
+              onUp();
+              stopClickAfterDrag();
+              document.body.style.userSelect = "none";
+              startCardDrag(
+                { clientX: fromX, clientY: fromY },
+                { kind: "annotation", ids: [reference.annotationId], label: reference.words, reference },
+                () => {
+                  document.body.style.userSelect = "";
+                },
+              );
+            }, HOLD_MS)
+          : 0;
       const container = containerRef.current;
       // A dragged card follows the pointer at once: the slide a pushed card
       // makes (globals.css [data-side-card]) is off while the drag lasts.
@@ -2481,6 +2503,11 @@ export function ReaderInteractions({
       const kind = card?.dataset.sideCard;
       let moved = false;
       const onMove = (ev: PointerEvent) => {
+        if (hold) {
+          if (Math.hypot(ev.clientX - fromX, ev.clientY - fromY) <= HOLD_TOLERANCE_PX) return;
+          window.clearTimeout(hold);
+          hold = 0;
+        }
         if (!moved && kind) {
           moved = true;
           movedCardsRef.current.add(`${kind}:${layerSeenRef.current[kind] ?? ""}`);
@@ -2492,6 +2519,7 @@ export function ReaderInteractions({
         );
       };
       const onUp = () => {
+        window.clearTimeout(hold);
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
         card?.removeAttribute("data-dragging");
@@ -10366,12 +10394,17 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             borderColor: annotationKindColor(annotationCard.kind, annotationCard.color),
           }}
         >
-          <div className="mb-2 flex items-center justify-between">
+          {/* The head is the card's handle: a hold carries the annotation
+              onto a note (holdAnnotation). */}
+          <div
+            data-hold-head={annotationCardReference && dropOpen ? "" : undefined}
+            data-tip={annotationCardReference && dropOpen ? t("reader.holdToNote") : undefined}
+            className={`mb-2 flex items-center justify-between${annotationCardReference && dropOpen ? " cursor-grab select-none" : ""}`}
+          >
             <span
               className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] uppercase"
               style={{ color: annotationKindColor(annotationCard.kind, annotationCard.color) }}
             >
-              {annotationGrip(annotationCardReference)}
               {annotationCard.kind === "highlight" ? t("reader.highlight") : t("reader.comment")}
             </span>
             {/* One head for every card a mark opens (SPEC.md §6): the kind,
@@ -11148,17 +11181,17 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             onPointerDown={dragCard(
               () => (bubble ? { left: bubble.left, top: bubble.top } : null),
               (left, top) => setBubble((b) => (b ? { ...b, left, top } : b)),
+              bubbleReference,
             )}
             style={{ touchAction: "none" }}
             data-no-drag
-            data-tip={t("reader.dragToMove")}
+            data-tip={bubbleReference && dropOpen ? `${t("reader.dragToMove")}\n${t("reader.holdToNote")}` : t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between gap-2"
           >
             <span
               className="flex min-w-0 items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] uppercase"
               style={{ color: annotationKindColor(bubble.kind, null) }}
             >
-              {annotationGrip(bubbleReference)}
               <ToolSymbol tool={bubble.kind} plus={toolPlus(bubble)} size={12} />
               {toolPlus(bubble)
                 ? t(TOOL_PLUS_KEY[bubble.kind])
@@ -11308,17 +11341,17 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             onPointerDown={dragCard(
               () => (simplifyCard ? { left: simplifyCard.left, top: simplifyCard.top } : null),
               (left, top) => setSimplifyCard((c) => (c ? { ...c, left, top } : c)),
+              simplifyReference,
             )}
             style={{ touchAction: "none" }}
             data-no-drag
-            data-tip={t("reader.dragToMove")}
+            data-tip={simplifyReference && dropOpen ? `${t("reader.dragToMove")}\n${t("reader.holdToNote")}` : t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between gap-2"
           >
             <span
               className="flex min-w-0 items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] uppercase"
               style={{ color: annotationKindColor("simplify", null) }}
             >
-              {annotationGrip(simplifyReference)}
               <ToolSymbol tool="simplify" plus={toolPlus(simplifyCard)} size={12} />
               {toolPlus(simplifyCard)
                 ? t(TOOL_PLUS_KEY.simplify)
@@ -11541,17 +11574,17 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             onPointerDown={dragCard(
               () => (commentCard ? { left: commentCard.left, top: commentCard.top } : null),
               (left, top) => setCommentCard((c) => (c ? { ...c, left, top } : c)),
+              commentReference,
             )}
             style={{ touchAction: "none" }}
             data-no-drag
-            data-tip={t("reader.dragToMove")}
+            data-tip={commentReference && dropOpen ? `${t("reader.dragToMove")}\n${t("reader.holdToNote")}` : t("reader.dragToMove")}
             className="mb-2 flex cursor-move items-center justify-between"
           >
             <span
               className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] uppercase"
               style={{ color: annotationKindColor("comment", null) }}
             >
-              {annotationGrip(commentReference)}
               <CommentIcon size={12} />
               {t("reader.comment")}
             </span>
@@ -11750,17 +11783,17 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             onPointerDown={dragCard(
               () => (assistantChat ? { left: assistantChat.left, top: assistantChat.top } : null),
               (left, top) => setAssistantChat((c) => (c ? { ...c, left, top } : c)),
+              assistantReference,
             )}
             style={{ touchAction: "none" }}
             data-no-drag
-            data-tip={t("reader.dragToMove")}
+            data-tip={assistantReference && dropOpen ? `${t("reader.dragToMove")}\n${t("reader.holdToNote")}` : t("reader.dragToMove")}
             className="flex cursor-move items-center justify-between px-4 pt-3 pb-1"
           >
             <span
               className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] uppercase"
               style={{ color: annotationKindColor("assistant", null) }}
             >
-              {annotationGrip(assistantReference)}
               <SparkleIcon size={12} />
               {t("reader.assistant")}
             </span>
