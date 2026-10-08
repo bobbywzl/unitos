@@ -372,8 +372,24 @@ function liftFloatsOffParagraphBreaks(segments: Segment[], setting: PageSetting,
     if (!listBreak && (prev.type !== "PARAGRAPH" || isPageFloat(prev) || ended)) continue;
     let k = b;
     while (k < out.length && out[k].page === out[b].page && (isPageFloat(out[k]) || isLabel(out[k], prev))) k++;
-    if (k >= out.length || (k === b && a === b - 1) || !(footLine || out.slice(a + 1, k).some(isPageFloat))) continue;
     const tail = out[k];
+    // A note set smaller atop the next page, in the margin beside the
+    // paragraph's second half, stands between the halves as a float does
+    // (parse loop finding: the MML book's "classification" in the margin of
+    // p. 22 kept "…the fourth" | "pillar: classification." apart, and the
+    // notes atop p. 300 kept "Using (9.9) in the" | "negative log-likelihood
+    // (9.8)"). Its words fit its box: a paragraph that took a note's first
+    // words keeps the note's box and size, and is no note (p. 44: "outer
+    // product (which we usually do), we can use …").
+    const note = (s: Segment) =>
+      smaller(s) &&
+      isLabel(s, prev) &&
+      s.box !== undefined &&
+      tail?.box !== undefined &&
+      (s.box.x1 > tail.box.x2 || s.box.x2 < tail.box.x1) &&
+      s.text.length * (s.lineSize ?? 10) ** 2 * 0.3 <= (s.box.x2 - s.box.x1) * (s.box.y2 - s.box.y1);
+    const between = out.slice(a + 1, k);
+    if (k >= out.length || (k === b && a === b - 1) || !(footLine || between.some(isPageFloat) || between.some(note))) continue;
     // A part set smaller than the paragraph is a figure's label, no half of
     // it (parse loop finding: the MML book's "…linear mappings where" took
     // "Original", the label atop Figure 10.16, once its notes stood apart).
