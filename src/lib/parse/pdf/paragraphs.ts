@@ -1284,9 +1284,14 @@ export function measureSpacing(segments: Segment[], ctx: PageContext, lines: Lin
     // column stands right of a short line over it: the column of a's last
     // line holds its middle (parse loop finding: lualatex-stix-math's
     // "Some text, and an equation." over √(x²) = |x| measured no space,
-    // and the import set the default 7 pt where the page sets 14).
-    const middle = (b.box.x1 + b.box.x2) / 2;
-    const own = b.type === "EQUATION" ? lines.filter((l) => l.y >= a.box!.y1 - 1 && l.y <= a.box!.y2 + 1 && l.x < a.box!.x2 && l.xEnd > a.box!.x1).map(lineColumn) : [];
+    // and the import set the default 7 pt where the page sets 14). So does
+    // a short line under a display: the column of its line holds the
+    // display's middle (parse loop finding: the MML book's "where f: ℝD →
+    // ℝ." under (7.16) measured no space, and the import set its default
+    // 17 pt where the page sets 12).
+    const [formula, prose] = b.type === "EQUATION" ? [b.box, a.box] : a.type === "EQUATION" ? [a.box, b.box] : [undefined, undefined];
+    const middle = formula ? (formula.x1 + formula.x2) / 2 : 0;
+    const own = formula && prose ? lines.filter((l) => l.y >= prose.y1 - 1 && l.y <= prose.y2 + 1 && l.x < prose.x2 && l.xEnd > prose.x1).map(lineColumn) : [];
     const inColumn = own.some((c) => c !== undefined && middle > c[0] && middle < c[1]);
     if (b.box.y2 > a.box.y1 + size || ((b.box.x1 > a.box.x2 || b.box.x2 < a.box.x1) && !inColumn)) continue;
     // A line's box reaches 0.3 of its size under its baseline and 0.85
