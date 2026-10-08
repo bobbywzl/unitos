@@ -131,7 +131,7 @@ function defaultSources(): string[] {
         .sort()
         .map((f) => join("scripts/eval/fixtures", f))
     : [];
-  return [...fromList, ...markdown, "synthetic:pdf", "synthetic:url", "synthetic:markdown", "synthetic:html-h1", "synthetic:html-site"];
+  return [...fromList, ...markdown, "synthetic:pdf", "synthetic:url", "synthetic:markdown", "synthetic:html-h1", "synthetic:html-site", "synthetic:html-kicker"];
 }
 
 // ── Text helpers ────────────────────────────────────────────────────────────
@@ -1984,7 +1984,8 @@ Footnote here.[^1]
 // Two web pages whose og:title is not their h1's words, parsed as an add
 // parses them (lib/parse/url.ts pageTitle): one sets the site's name after
 // the headline and a hyphen where the h1 sets a dash; one sets the site's
-// name after the headline and has no h1.
+// name after the headline and has no h1; one sets a kicker in its h1, apart
+// from the headline by a colon only a screen reader reads.
 const ARTICLE_BODY = Array.from(
   { length: 6 },
   (_, k) => `<p>Paragraph ${k + 1} of the review says what the game does well and where it stops short, in enough words to read as prose.</p>`,
@@ -1999,6 +2000,11 @@ const SYNTHETIC_HTML: Record<string, { html: string; url: string; title: string 
     url: "https://9to5mac.example/2019/11/18/macbook-deals/",
     title: "MacBook sale at Amazon from $700, AirPods, more",
     html: `<html><head><title>MacBook sale at Amazon from $700, AirPods, more - 9to5Mac</title><meta property="og:title" content="MacBook sale at Amazon from $700, AirPods, more - 9to5Mac"></head><body><main><article>${ARTICLE_BODY}</article></main></body></html>`,
+  },
+  "synthetic:html-kicker": {
+    url: "https://www.zeit.example/mobilitaet/2021-11/zugverkehr-ice-frankfurt-barcelona",
+    title: "Zugverkehr: Im ICE von Frankfurt nach Barcelona",
+    html: `<html><head><title>Zugverkehr: Im ICE von Frankfurt nach Barcelona | ZEIT ONLINE</title><meta property="og:title" content="Zugverkehr: Im ICE von Frankfurt nach Barcelona"></head><body><main><article><h1><span class="kicker">Zugverkehr</span><span class="visually-hidden">: </span><span class="headline">Im ICE von Frankfurt nach Barcelona</span></h1>${ARTICLE_BODY}</article></main></body></html>`,
   },
 };
 
