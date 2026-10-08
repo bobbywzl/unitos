@@ -1742,8 +1742,11 @@ export function ReaderInteractions({
     const ids = resumeDeletes((u) => u === url);
     if (ids.length === 0) return;
     const hide = (prev: Set<string>) => new Set([...prev, ...ids]);
+    // The pending deletes live in sessionStorage, read once the page runs.
+    /* eslint-disable react-hooks/set-state-in-effect */
     setGoneDistillations(hide);
     setGoneExtractions(hide);
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [notebookId, documentId]);
   // The document's translation (SPEC.md §19), one text per block, shown
   // under each block while the reader has it on.
@@ -1856,6 +1859,7 @@ export function ReaderInteractions({
     window.addEventListener("dissect:note-restored", onRestored);
     // A reload while a delete's pill showed: its marks stay gone and the
     // DELETE goes again (lib/deferred-delete.ts).
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the pending deletes live in sessionStorage
     for (const id of resumeDeletes((u) => u.startsWith("/api/notes/"))) removeNoteMarks(id);
     return () => {
       window.removeEventListener("dissect:note-removed", onRemoved);
