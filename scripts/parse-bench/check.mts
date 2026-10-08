@@ -1406,6 +1406,9 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
   at(4, 58, 72, "I.");
   // A deck's template slides each end their list with the same bulleted item at one height.
   for (const p of [2, 3, 4, 5]) at(p, 700, 72, "• Ut labore et dolore magna aliqua");
+  // A scan's row of marks under the text (the paper's edge read as letters), and a formula's row of letters.
+  ", I , i I I I I I i ........".split(" ").forEach((t, k) => at(8, 770, 72 + 30 * k, t));
+  "a b c d e".split(" ").forEach((t, k) => at(9, 770, 72 + 30 * k, t));
   const found = new Set(furnitureOf(lines, new Map(Array.from({ length: 10 }, (_, k) => [k + 1, { width: 612, height: 792 }]))).map((l) => `${l.page} ${l.text}`));
   const has = (key: string) => found.has(key);
   check(
@@ -1417,6 +1420,11 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     "free: a chapter's heading on pages far apart, a label at other places, notes that do not count, and a chapter's I. are no furniture",
     !has("3 Introduction") && !has("5 Tip") && !has("6 Note 11.") && !has("4 I."),
     [...found].filter((k) => /Introduction|Tip|Note|I\./.test(k)).join(" | "),
+  );
+  check(
+    "free: a scan's row of marks at a page's foot is furniture; a formula's row of letters is none",
+    has("8 i") && has("8 ........") && !has("9 c"),
+    [...found].filter((k) => /^[89] /.test(k)).join(" | "),
   );
   check(
     "free: a bulleted item at one height on every slide is a list's item, not furniture",

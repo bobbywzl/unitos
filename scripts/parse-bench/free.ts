@@ -553,6 +553,7 @@ export function rowsOf(lines: Line[]): Line[][] {
       are furniture on every page (facing pages set a head at the other
       side), but a first page's title set larger is no running head;
     - "Continued on next page" in the last rows;
+    - a scan's row of marks at a page's head or foot;
     - a short line on a row half made of those: the head that names each
       page's section beside its page number, the Supreme Court's "(Slip
       Opinion)" beside its first page's head;
@@ -734,6 +735,27 @@ export function furnitureOf(lines: Line[], sizes: Sizes): Line[] {
   const sized = (a: Unit, b: Unit) => Math.abs(a.height - b.height) <= 0.3 * Math.max(a.height, b.height);
   for (const u of units) if (repeats.has(u) || nearby(u).some((r) => repeats.has(r) && sized(r, u) && same(r, u))) for (const l of u.lines) furniture.add(l);
   for (const l of lastRows.flat()) if (CONTINUED_RE.test(l.text.trim())) furniture.add(l);
+  // A row of marks at a page's head or foot is a scan's speck, no words:
+  // five marks or more, each Latin letters and dots, commas, quotes, or
+  // dashes, one of them no letter, no word of three letters, three in four
+  // of them a lone letter or none (parse loop finding: DTIC's Datcom scan reads the paper's edge
+  // under the text as ", I , i I I I I I I I i ........" on p. 14 and "' ,
+  // I i I I … Ni r'a" on p. 31; the count asked the parse for 27 words "i"
+  // the page never prints). A formula's row ("n n n", "a + da", "α h I i")
+  // holds other signs, or letters only.
+  const marks = (row: Line[]) => {
+    const tokens = row.flatMap((l) => l.text.split(/\s+/)).filter(Boolean);
+    if (tokens.length < 5 || !tokens.every((t) => /^[A-Za-z.,'"•_~:;-]+$/.test(t)) || tokens.some((t) => /[A-Za-z]{3}/.test(t)) || tokens.every((t) => /[A-Za-z]/.test(t))) return false;
+    return tokens.filter((t) => (t.match(/[A-Za-z]/g) ?? []).length <= 1).length * 4 >= tokens.length * 3;
+  };
+  for (let i = 0; i < allRows.length; ) {
+    let j = i;
+    while (j < allRows.length && allRows[j][0].page === allRows[i][0].page) j++;
+    const rows = allRows.slice(i, j);
+    while (rows.length > 0 && marks(rows[0])) for (const l of rows.shift()!) furniture.add(l);
+    while (rows.length > 0 && marks(rows[rows.length - 1])) for (const l of rows.pop()!) furniture.add(l);
+    i = j;
+  }
   // A row half furniture is furniture: a table's row at a page's top holds
   // one cell that repeats ("closed") among cells that do not.
   for (const row of edgeRows) {
