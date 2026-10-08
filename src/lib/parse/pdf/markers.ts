@@ -131,8 +131,11 @@ export function readMarker(line: { text: string; runs: Run[]; items?: Item[] }, 
   } else if ((m = CLOSED_RE.exec(text))) {
     const c = counter(m[1]);
     // "A." and "I." open initials as often as items ("A. Vaswani"); a
-    // capital letter needs the item before it, or to open its family.
-    if (c) found = make(m, c.family, `x${m[2]}`, c.value);
+    // capital letter needs the item before it, or to open its family. A
+    // "p." before a number is a page reference: a citation's "[Coh+08,"
+    // wrapped to "p. 51]. The amount …", and the paragraph's first line
+    // read as a list's band of its own (parse loop finding).
+    if (c && !/^p\.\s+\d/.test(text)) found = make(m, c.family, `x${m[2]}`, c.value);
   } else if ((m = BARE_RE.exec(text)) && setApart(line, lead, m[0].trimEnd().length, "bold")) {
     found = make(m, "arabic", m[1] ? "*x" : "x", Number(m[2]));
   }
