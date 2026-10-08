@@ -554,9 +554,11 @@ export function DocsEditor({
     const shell = shellRef.current;
     if (!shell) return;
     const pane = scrollParent(shell);
-    // A split view's pane header stands just before the reader's root.
-    const split = shell.closest("[data-reader-root]")?.previousElementSibling?.classList.contains("pane-header") === true;
     const measure = () => {
+      // A split view's pane header stands just before the reader's root;
+      // read on every resize, since a switch to Side by side keeps this
+      // editor and only narrows its pane.
+      const split = shell.closest("[data-reader-root]")?.previousElementSibling?.classList.contains("pane-header") === true;
       const isNarrow = shell.clientWidth > 0 && shell.clientWidth < NARROW_PANE;
       const short = pane !== null && pane.clientHeight > 0 && pane.clientHeight < SHORT_PANE;
       setNarrow(isNarrow);
