@@ -229,7 +229,9 @@ export function LinkBubble({ editor, canEdit }: { editor: Editor; canEdit: boole
       const { selection } = editor.state;
       const href = editor.getAttributes("link").href as string | undefined;
       const range = selection.empty ? getMarkRange(selection.$from, editor.schema.marks.link) : undefined;
-      setShown(editor.isFocused && href && range ? { href, ...range } : { href: "", from: 0, to: 0 });
+      const next = editor.isFocused && href && range ? { href, ...range } : { href: "", from: 0, to: 0 };
+      // Still no link at the caret: no render (each key moves the caret).
+      setShown((s) => (!s.href && !next.href ? s : next));
     };
     // A press on the bubble blurs the editor for a moment; the bubble
     // waits before it decides the caret has left.

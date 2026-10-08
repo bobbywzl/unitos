@@ -82,8 +82,8 @@ function caretInCell(editor: Editor, tablePos: number, row: number, col: number)
 }
 
 export function TableControlsHost({ editor, ctx }: { editor: Editor; ctx: InsertContext }) {
-  useEditorTick(editor);
   const [hover, setHover] = useState<Hover | null>(null);
+  useEditorTick(editor, () => hover === null && tableRectOf(editor.state) === null);
   const [panel, setPanel] = useState(false);
   const [split, setSplit] = useState(false);
   const hideTimer = useRef<number | null>(null);

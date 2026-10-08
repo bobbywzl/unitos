@@ -13,15 +13,29 @@ import { useLang, useT } from "@/components/lang-provider";
 // and its fields. A press inside either keeps the page's selection, except
 // in a field.
 
-/** Re-render on every change of the editor's state. */
-export function useEditorTick(editor: Editor): number {
+/** Re-render on every change of the editor's state. `idle`: whether the
+    host draws nothing for the state as it stands. A change that finds the
+    host idle, after a render that drew nothing either, would draw nothing
+    again and is skipped: typing in plain text renders no host. */
+export function useEditorTick(editor: Editor, idle?: () => boolean): number {
   const [tick, bump] = useReducer((n: number) => n + 1, 0);
+  const idleNow = idle?.() ?? false;
+  const idleRef = useRef(idle);
+  const wasIdle = useRef(idleNow);
+  useLayoutEffect(() => {
+    idleRef.current = idle;
+    wasIdle.current = idleNow;
+  });
   useEffect(() => {
-    editor.on("transaction", bump);
+    const onChange = () => {
+      if (wasIdle.current && idleRef.current?.()) return;
+      bump();
+    };
+    editor.on("transaction", onChange);
     editor.on("focus", bump);
     editor.on("blur", bump);
     return () => {
-      editor.off("transaction", bump);
+      editor.off("transaction", onChange);
       editor.off("focus", bump);
       editor.off("blur", bump);
     };

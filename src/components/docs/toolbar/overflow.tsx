@@ -133,6 +133,9 @@ export function ToolbarRow({
     if (!bar) return;
     const observer = new ResizeObserver(() => fitRef.current());
     observer.observe(bar);
+    // The right end changes on its own (the status's words, the Unitos
+    // tools), without a render of the row.
+    if (rightRef.current) observer.observe(rightRef.current);
     return () => observer.disconnect();
   }, []);
 

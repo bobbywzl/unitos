@@ -159,6 +159,44 @@ function useDocsFonts() {
   }, []);
 }
 
+/** A value the toolbar's row shows that changes apart from the row: the
+    save state, the Unitos tools. The row is built once for it; the value's
+    own small part redraws when it changes (a save, the reader's toolbox
+    opening above the page) — on a long row a rebuild costs more than a
+    frame. */
+type Live<T> = { get: () => T; set: (value: T) => void; subscribe: (onChange: () => void) => () => void };
+
+function useLive<T>(value: T): Live<T> {
+  const [live] = useState<Live<T>>(() => {
+    let current = value;
+    const listeners = new Set<() => void>();
+    return {
+      get: () => current,
+      set: (next) => {
+        if (Object.is(next, current)) return;
+        current = next;
+        for (const listener of listeners) listener();
+      },
+      subscribe: (onChange) => {
+        listeners.add(onChange);
+        return () => {
+          listeners.delete(onChange);
+        };
+      },
+    };
+  });
+  useLayoutEffect(() => live.set(value), [live, value]);
+  return live;
+}
+
+function useLiveValue<T>(live: Live<T>): T {
+  return useSyncExternalStore(live.subscribe, live.get, live.get);
+}
+
+function LiveSlot({ live }: { live: Live<ReactNode> }) {
+  return <>{useLiveValue(live)}</>;
+}
+
 /** The document's status at the toolbar row's right end, as Google Docs
     shows it: the arrows and "Saving…" while a change waits or saves, then
     the cloud with a check and "Saved to Unitos" for 3 s, then the cloud
@@ -168,8 +206,9 @@ function useDocsFonts() {
     write that did not land always shows, in one place. The app's writes in
     flight are not drawn here — a note's draft waiting for its save would
     leave this cloud spinning over a document that is saved. */
-function SaveStatus({ state: textState }: { state: SaveState }) {
+function SaveStatus({ live }: { live: Live<SaveState> }) {
   const t = useT();
+  const textState = useLiveValue(live);
   usePageStatusCarries();
   const appState = useSyncExternalStore(subscribeSaveState, readSaveState, () => "saved" as const);
   const appTouched = useSyncExternalStore(subscribeSaveState, readSaveTouched, () => false);
@@ -662,6 +701,12 @@ export function DocsEditor({
   });
   // The header's and footer's saves show in the same status.
   const shownSaveState = useSaveState(editor, documentId, pageSetup, saveState);
+  // The save state and the Unitos tools reach the toolbar's row on their
+  // own (useLive): a save, or a render of the reader around the page (its
+  // toolbox opening), redraws them, not the whole row.
+  const saveLive = useLive(shownSaveState);
+  const aiLive = useLive<ReactNode>(aiControls ?? null);
+  const hasAi = Boolean(aiControls);
   // The outline button stands beside the text column when the margin has
   // the room for it; else the toolbar's row carries it (areas/page.tsx).
   const outlineRoom = useOutlineRoom(editor, documentId, pageSetup);
@@ -857,9 +902,10 @@ export function DocsEditor({
     [editor, documentId, notebookId, writable, canEdit, editing, pageSetup, reflowed, documents],
   );
 
-  // Every save changes the save state, which redraws the title row alone:
-  // the toolbar and the pages are built again only when their own inputs
-  // change (on a long document one rebuild costs more than a frame).
+  // Every save changes the save state, which redraws the title row and the
+  // status alone: the toolbar and the pages are built again only when their
+  // own inputs change (on a long document one rebuild costs more than a
+  // frame).
   // The toolbar keeps the reader's own role: on a locked import it still
   // offers Add comment, and the mode menu says why the other modes are off.
   const chrome = useMemo(
@@ -875,13 +921,13 @@ export function DocsEditor({
             zoom={zoom}
             onZoom={setZoom}
             pageless={shownSetup.pageless}
-            aiControls={aiControls}
+            aiControls={hasAi ? <LiveSlot live={aiLive} /> : undefined}
             headerHidden={headerHidden}
             onToggleHeader={() => setHeaderHidden((h) => !h)}
             narrowPane={!outlineRoom}
             status={
               <>
-                {writable && <SaveStatus state={shownSaveState} />}
+                {writable && <SaveStatus live={saveLive} />}
                 <VersionHistoryButton editor={area.editor} />
               </>
             }
@@ -890,7 +936,7 @@ export function DocsEditor({
           {!narrow && <PageRuler {...area} />}
         </ModeLock.Provider>
       ),
-    [area, hfEditor, mode, setMode, locked, canEdit, zoom, shownSetup.pageless, aiControls, headerHidden, insertImage, writable, shownSaveState, outlineRoom, narrow],
+    [area, hfEditor, mode, setMode, locked, canEdit, zoom, shownSetup.pageless, hasAi, aiLive, headerHidden, insertImage, writable, saveLive, outlineRoom, narrow],
   );
   const pages = useMemo(
     () =>

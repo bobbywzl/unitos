@@ -100,7 +100,7 @@ type Section = "size" | "wrap" | "alt";
 
 export function ImageControlsHost({ editor, ctx }: { editor: Editor; ctx: InsertContext }) {
   const t = useT();
-  useEditorTick(editor);
+  useEditorTick(editor, () => selectedImage(editor.state) === null);
   const hit = selectedImage(editor.state);
   useViewportTick(hit !== null);
   const [panel, setPanel] = useState<Section | null>(null);
