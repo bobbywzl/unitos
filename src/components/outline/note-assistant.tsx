@@ -312,10 +312,9 @@ export function NoteAssistant({
           onClick={() => void send()}
           disabled={!canSend}
           data-track="note-assistant-send"
-          data-tip={t("assistant.noteAssistantSend")}
-          className={`mb-1 shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors ${
-            canSend ? "bg-[var(--kind-assistant)] text-white hover:opacity-90" : "bg-sand-100 text-sand-400"
-          }`}
+          data-tip={t("reader.sendTitle")}
+          // The card's Send (reader-interactions.tsx): one size and color.
+          className="mb-1 shrink-0 rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
         >
           {t("assistant.send")}
         </button>
