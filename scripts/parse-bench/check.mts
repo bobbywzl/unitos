@@ -1987,6 +1987,31 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     other.title === "Notes on river flow" && other.heading && dated.title === "Notes on river flow",
     JSON.stringify({ other, dated }),
   );
+  // A breadcrumb's short list before the h1, or a section's heading after the first prose, keeps the h1 the title.
+  const opened = async (before: string, after: string) => {
+    const parsed = await parseHtmlContent(
+      `<!doctype html><html><head><title>Notes on river flow: a field guide</title><meta property="og:title" content="Notes on river flow: a field guide"></head><body><article>${before}<h1>Notes on river flow</h1><p>${prose(1)}</p>${after}<p>${prose(2)}</p></article></body></html>`,
+      "https://example.org/rivers",
+    );
+    return { title: parsed.title, headings: parsed.blocks.filter((b) => b.type === "HEADING").map((b) => b.text) };
+  };
+  const crumbs = await opened("<ul><li>Rivers</li><li>Delta notes</li></ul>", "");
+  const section = await opened("", "<h2>Flow</h2>");
+  const crumbDek = await parseHtmlContent(
+    `<!doctype html><html><head><title>Notes on river flow</title></head><body><article><ul><li>Rivers</li><li>Delta notes</li></ul><h1>Notes on river flow</h1><h2>The banks of a delta move every year as the river drops its sand.</h2><p>${prose(1)}</p><h3>Gravel bars</h3><p>${prose(2)}</p></article></body></html>`,
+    "https://example.org/rivers",
+  );
+  const crumbDekBlocks = crumbDek.blocks.map((b) => `${b.type} ${b.text.slice(0, 24)}`);
+  check(
+    "url: a breadcrumb before the h1, or a section heading after the first prose, keeps the h1 the title",
+    crumbs.title === "Notes on river flow" && crumbs.headings.length === 0 && section.title === "Notes on river flow" && section.headings.join() === "Flow",
+    JSON.stringify({ crumbs, section }),
+  );
+  check(
+    "url: a dek under the h1 after a breadcrumb is a paragraph",
+    crumbDekBlocks.includes("PARAGRAPH The banks of a delta mov") && crumbDekBlocks.includes("HEADING Gravel bars"),
+    crumbDekBlocks.join(" / "),
+  );
   // A kicker before the headline in the h1 is a kicker line; the heading goes, the headline is the title.
   // The headline is the whole title or the title less the site's part; the title less another part cuts no kicker.
   const kickerPage = (title: string, h1: string) =>
