@@ -17,20 +17,17 @@ if (typeof window !== "undefined") {
 
 // A section's composer (SPEC.md §6): a new note being written — the title
 // field, then the body's editor, in one card above the section's notes. The
-// tray and the notes full page render the same form; the tray's editor
-// carries the core tools, the page's the whole bar.
+// tray and the notes full page render the same form, with the one editor
+// bar (note-editor.tsx).
 export function NoteComposer({
   compose,
   onRelease,
-  full,
   padding,
 }: {
   compose: ReturnType<typeof useNoteCompose>;
   /** Save or Escape is letting the note go: the list takes it as the
       composer closes (use-outline.ts expectComposed). */
   onRelease?: () => void;
-  /** The whole bar (the notes full page); false: the core tools (the tray). */
-  full: boolean;
   /** The card's padding: the tray's or the page's. */
   padding: string;
 }) {
@@ -113,7 +110,6 @@ export function NoteComposer({
             if (e.key === "Escape") escape();
           }}
           placeholder={t("outline.writeNotePlaceholder")}
-          full={full}
           autoFocus={false}
           onQuoteDrop={compose.attachQuote}
           title={

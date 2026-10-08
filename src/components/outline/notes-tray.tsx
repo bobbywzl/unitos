@@ -497,7 +497,6 @@ function TraySection({
             <NoteComposer
               compose={compose}
               onRelease={() => actions.expectComposed(section.id)}
-              full={false}
               padding="p-3"
             />
           )}

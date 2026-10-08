@@ -8,7 +8,7 @@ import type { Patch } from "@/lib/markdown-style";
 import { IMAGE_ACCEPT, imageMarkdown, refuseImage, uploadImage } from "@/lib/images";
 import { hasQuoteDrag, quoteMarkdown, readQuoteDrag, type QuoteDrag } from "@/lib/quote-drag";
 import { quoteLanded } from "@/components/use-note-drop";
-import { RedoIcon, UndoIcon } from "@/components/icons";
+import { CheckIcon, RedoIcon, UndoIcon } from "@/components/icons";
 import { useCollab } from "@/components/collab/collab-context";
 import { NoteProofing } from "@/components/proofing/note-proofing";
 import { useT } from "@/components/lang-provider";
@@ -22,12 +22,13 @@ import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 // reads large, a list line carries its bullet — the same prose classes as the
 // rendered note, so the two look alike.
 //
-// Two bars (SPEC.md §6): the tray's editor carries the core tools — the
-// lists, the checklist, the quote, the styles, one color button that opens
-// the four colors — and the notes full page's editor adds Heading 1 (the
-// title field is the note's level-one heading), the indent buttons (Tab and
-// Shift+Tab indent in both), and the image picker. Every typed shortcut works
-// in both, and every tool's tooltip names its key or its typed shortcut.
+// One bar on every note editor (SPEC.md §6) — the tray's, the floating
+// card's, the notes full page's, a board's — on one row: Undo, Redo | Line ▾
+// | B, I, U, Color | Voice typing. Line ▾ names the kind of the line under
+// the caret and holds the line tools: Text, the three headings, the four
+// lists, the quote, Indent and Outdent, and Add an image or GIF. Every typed
+// shortcut works as before, and every tool names its key or its typed
+// shortcut.
 
 type TextColor = "clay" | "sage" | "gold" | "plum";
 const TEXT_COLORS: { tag: TextColor; dot: string; nameKey: TKey }[] = [
@@ -48,6 +49,12 @@ function mapSelectedLines(
   const lineEndIdx = value.indexOf("\n", e);
   const lineEnd = lineEndIdx === -1 ? value.length : lineEndIdx;
   const mapped = map(value.slice(lineStart, lineEnd).split("\n")).join("\n");
+  // A caret stays a caret, at the same place in the line's words: the next
+  // key types on, never over the line.
+  if (s === e) {
+    const caret = Math.max(lineStart, lineStart + mapped.length - (lineEnd - s));
+    return { value: value.slice(0, lineStart) + mapped + value.slice(lineEnd), start: caret, end: caret };
+  }
   return {
     value: value.slice(0, lineStart) + mapped + value.slice(lineEnd),
     start: lineStart,
@@ -73,58 +80,72 @@ function setLinePrefix(lines: string[], prefix: (i: number) => string, active: R
   });
 }
 
-// track names the format in click telemetry (SPEC.md §7). full: the notes
-// full page only; the tray's bar leaves it out.
-// No Paragraph button: Backspace at the start of a marked line drops its
-// marker (lib/note-editable.ts), and that is the whole of that action.
-const FORMATS: { label: string; tipKey: TKey; track: string; full?: boolean; map: (lines: string[]) => string[] }[] = [
+// track names the format in click telemetry (SPEC.md §7); hint is the
+// markdown typed for it, shown at the row's end. Text drops the line's
+// marker, as Backspace at the start of a marked line does.
+const FORMATS: { label: string; tipKey: TKey; track: string; hint: string; test: RegExp; map: (lines: string[]) => string[] }[] = [
   {
     label: "H1",
     tipKey: "outline.tipHeading1",
     track: "h1",
-    full: true,
+    hint: "#",
+    test: /^\s*#\s/,
     map: (ls) => setLinePrefix(ls, () => "# ", /^\s*#\s/),
   },
   {
     label: "H2",
     tipKey: "outline.tipHeading2",
     track: "h2",
+    hint: "##",
+    test: /^\s*##\s/,
     map: (ls) => setLinePrefix(ls, () => "## ", /^\s*##\s/),
   },
   {
     label: "H3",
     tipKey: "outline.tipHeading3",
     track: "h3",
+    hint: "###",
+    test: /^\s*###\s/,
     map: (ls) => setLinePrefix(ls, () => "### ", /^\s*###\s/),
   },
   {
     label: "•",
     tipKey: "outline.tipBulletedList",
     track: "list",
+    hint: "-",
+    test: /^\s*[-*]\s(?!\[[ xX]\]\s)/,
     map: (ls) => setLinePrefix(ls, () => "- ", /^\s*[-*]\s(?!\[[ xX]\]\s)/),
   },
   {
     label: "–",
     tipKey: "outline.tipDashList",
     track: "dash",
+    hint: "+",
+    test: /^\s*\+\s(?!\[[ xX]\]\s)/,
     map: (ls) => setLinePrefix(ls, () => "+ ", /^\s*\+\s(?!\[[ xX]\]\s)/),
   },
   {
     label: "1.",
     tipKey: "outline.tipNumberedList",
     track: "numbered",
+    hint: "1.",
+    test: /^\s*\d{1,3}[.)]\s/,
     map: (ls) => setLinePrefix(ls, (i) => `${i + 1}. `, /^\s*\d{1,3}[.)]\s/),
   },
   {
     label: "☐",
     tipKey: "outline.tipChecklist",
     track: "checklist",
+    hint: "[ ]",
+    test: /^\s*[-*+]\s\[[ xX]\]\s/,
     map: (ls) => setLinePrefix(ls, () => "- [ ] ", /^\s*[-*+]\s\[[ xX]\]\s/),
   },
   {
     label: "❝",
     tipKey: "outline.tipQuote",
     track: "quote",
+    hint: ">",
+    test: /^\s*>/,
     map: (ls) => setLinePrefix(ls, () => "> ", /^\s*>/),
   },
 ];
@@ -140,6 +161,15 @@ const STYLES: { label: string; command: StyleCommand; tipKey: TKey; track: strin
   { label: "U", command: "underline", tipKey: "outline.tipUnderline", track: "underline", cls: "underline" },
 ];
 
+/** The kind of the line at `at`: the format whose marker it carries, else null (text). */
+function lineKindAt(text: string, at: number): (typeof FORMATS)[number] | null {
+  const start = text.lastIndexOf("\n", Math.max(0, at - 1)) + 1;
+  const end = text.indexOf("\n", at);
+  const line = text.slice(start, end === -1 ? text.length : end);
+  return FORMATS.find((f) => f.test.test(line)) ?? null;
+}
+
+const clearLines = (ls: string[]) => ls.map((l) => l.replace(LINE_MARKER, "$1"));
 const indentLines = (ls: string[]) => ls.map((l) => `  ${l}`);
 const outdentLines = (ls: string[]) => ls.map((l) => l.replace(/^ {1,2}/, ""));
 
@@ -172,13 +202,194 @@ const REFUSAL_KEY = {
   "too-large": "api.imageTooLarge",
 } as const satisfies Record<string, Parameters<TFunc>[0]>;
 
+/** Line ▾: the kind of the line under the caret, and the line tools in a
+    menu under it — Text, the headings, the lists, the quote, Indent,
+    Outdent, and Add an image or GIF. A press keeps the caret in the text;
+    from the keyboard the menu takes the arrows, Enter picks a row, and
+    Escape gives the caret back. */
+/** Put a fixed menu under its button, or over it when the room is above,
+    inside the window. A transformed ancestor moves a fixed box: the second
+    pass takes that shift back out. */
+function placeMenu(menu: HTMLElement, button: DOMRect) {
+  const GAP = 4;
+  const MARGIN = 8;
+  const below = window.innerHeight - button.bottom - GAP - MARGIN;
+  const above = button.top - GAP - MARGIN;
+  const full = menu.scrollHeight;
+  const up = full > below && above > below;
+  const room = Math.max(120, up ? above : below);
+  const height = Math.min(full, room);
+  const top = up ? button.top - GAP - height : button.bottom + GAP;
+  const left = Math.max(MARGIN, Math.min(button.left, window.innerWidth - menu.offsetWidth - MARGIN));
+  menu.style.maxHeight = `${room}px`;
+  menu.style.top = `${top}px`;
+  menu.style.left = `${left}px`;
+  // Measured still: the menu's own drop-in moves it too.
+  menu.style.animation = "none";
+  const at = menu.getBoundingClientRect();
+  menu.style.animation = "";
+  menu.style.top = `${2 * top - at.top}px`;
+  menu.style.left = `${2 * left - at.left}px`;
+}
+
+function LineMenu({
+  kind,
+  barButton,
+  onOpen,
+  onFormat,
+  onImage,
+  onClose,
+}: {
+  /** The label of the line's kind (H1, •, …); null for text. */
+  kind: string | null;
+  barButton: string;
+  /** The menu opens: the text's selection, which the rows act on. */
+  onOpen: () => { start: number; end: number } | null;
+  onFormat: (map: (lines: string[]) => string[], at: { start: number; end: number } | null) => void;
+  onImage: () => void;
+  onClose: (byKey: boolean) => void;
+}) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const at = useRef<{ start: number; end: number } | null>(null);
+  const byKey = useRef(false);
+  const close = (key: boolean) => {
+    setOpen(false);
+    onClose(key);
+  };
+  useEffect(() => {
+    if (!open) return;
+    if (byKey.current) menuRef.current?.querySelector<HTMLElement>("[role=menuitem]")?.focus({ preventScroll: true });
+    const onPointerDown = (e: PointerEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    // The menu stands where it opened: a scroll around it closes it.
+    const onScroll = (e: Event) => {
+      if (!menuRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [open]);
+  // The menu is fixed to the window, never cut by the tray's or a card's
+  // scroll box: under the button, or over it when the room is above.
+  useLayoutEffect(() => {
+    const button = rootRef.current?.querySelector("button");
+    const menu = menuRef.current;
+    if (!open || !button || !menu) return;
+    placeMenu(menu, button.getBoundingClientRect());
+  }, [open]);
+  const keep = (e: React.MouseEvent) => e.preventDefault();
+  const pick = (run: () => void) => {
+    run();
+    close(byKey.current);
+  };
+  const row =
+    "flex w-full items-center justify-between gap-3 rounded-xl px-2.5 py-1.5 text-left text-[13px] text-sand-800 hover:bg-clay-100 hover:text-clay-800 focus-visible:bg-clay-100 focus-visible:outline-none";
+  const name = (key: TKey) => t(key).split("\n")[0];
+  const hint = (text: string) => <span className="font-mono text-[11px] text-sand-500">{text}</span>;
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        data-track="note-line-menu"
+        onMouseDown={keep}
+        onClick={(e) => {
+          if (open) {
+            close(false);
+            return;
+          }
+          // A click from the keyboard has no pointer position.
+          byKey.current = e.detail === 0;
+          at.current = onOpen();
+          setOpen(true);
+        }}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={t("outline.tipLineMenu")}
+        data-tip={t("outline.tipLineMenu")}
+        className={`${barButton} min-w-11 justify-center gap-0.5`}
+      >
+        <span className="min-w-3.5 text-center">{kind ?? "¶"}</span>
+        <svg aria-hidden width={9} height={9} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+      {open && (
+        <div
+          ref={menuRef}
+          role="menu"
+          data-no-drag
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              // The menu is one layer: Escape closes it, never the editor or the board.
+              e.preventDefault();
+              e.stopPropagation();
+              close(true);
+              return;
+            }
+            if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
+            const items = [...e.currentTarget.querySelectorAll<HTMLElement>("[role=menuitem]")];
+            e.preventDefault();
+            const i = items.indexOf(document.activeElement as HTMLElement);
+            const next =
+              e.key === "Home" ? 0 : e.key === "End" ? items.length - 1 : e.key === "ArrowDown" ? (i + 1) % items.length : (i - 1 + items.length) % items.length;
+            items[next]?.focus();
+          }}
+          className="menu-in fixed z-50 w-56 overflow-y-auto rounded-2xl border border-line bg-card p-1.5 shadow-float"
+        >
+          <button type="button" role="menuitem" data-track="note-format:text" onMouseDown={keep} onClick={() => pick(() => onFormat(clearLines, at.current))} data-tip={t("outline.tipLineText")} className={row}>
+            {t("outline.lineText")}
+            {kind === null ? <CheckIcon size={12} /> : null}
+          </button>
+          {FORMATS.map((f) => (
+            <button
+              key={f.track}
+              type="button"
+              role="menuitem"
+              data-track={`note-format:${f.track}`}
+              onMouseDown={keep}
+              onClick={() => pick(() => onFormat(f.map, at.current))}
+              data-tip={t(f.tipKey)}
+              className={`${row} ${kind === f.label ? "font-semibold text-clay-800" : ""}`}
+            >
+              <span className="flex items-center gap-2">
+                <span aria-hidden className="w-5 text-center text-[12px] font-semibold">{f.label}</span>
+                {name(f.tipKey)}
+              </span>
+              {hint(f.hint)}
+            </button>
+          ))}
+          <div aria-hidden className="my-1 h-px bg-line" />
+          <button type="button" role="menuitem" data-track="note-indent" onMouseDown={keep} onClick={() => pick(() => onFormat(indentLines, at.current))} data-tip={t("outline.tipIndent")} className={row}>
+            <span className="flex items-center gap-2"><span aria-hidden className="w-5 text-center">⇥</span>{name("outline.tipIndent")}</span>
+            {hint("Tab")}
+          </button>
+          <button type="button" role="menuitem" data-track="note-outdent" onMouseDown={keep} onClick={() => pick(() => onFormat(outdentLines, at.current))} data-tip={t("outline.tipOutdent")} className={row}>
+            <span className="flex items-center gap-2"><span aria-hidden className="w-5 text-center">⇤</span>{name("outline.tipOutdent")}</span>
+            {hint("Shift+Tab")}
+          </button>
+          <div aria-hidden className="my-1 h-px bg-line" />
+          <button type="button" role="menuitem" data-track="note-image" onMouseDown={keep} onClick={() => pick(onImage)} data-tip={t("outline.tipImage")} className={row}>
+            <span className="flex items-center gap-2"><span aria-hidden className="flex w-5 justify-center"><ImageIcon /></span>{name("outline.tipImage")}</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function NoteEditor({
   value,
   onChange,
   onKeyDown,
   placeholder,
   className = "",
-  full = false,
   autoFocus = true,
   title,
   onQuoteDrop,
@@ -190,8 +401,6 @@ export function NoteEditor({
   /** Extra classes on the root: a flex column, the bar above the text. Give it
       a height (min-h-0 flex-1 under a capped parent) and the text scrolls. */
   className?: string;
-  /** The whole bar (the notes full page); false: the core tools (the tray). */
-  full?: boolean;
   /** The caret lands at the end of the text on mount. False: the title field
       takes the focus (note-title-field.tsx). */
   autoFocus?: boolean;
@@ -219,9 +428,33 @@ export function NoteEditor({
   // editable owns the history (lib/note-editable.ts) and Cmd+Z reaches it
   // there, so the buttons are the same two steps under a symbol.
   const [history, setHistory] = useState({ canUndo: false, canRedo: false });
+  // The text's selection when Line ▾ opened: its rows act on it.
+  const lineAt = useRef<{ start: number; end: number } | null>(null);
   // The four colors, shown in the color button's place while it is pressed.
   const [colorsOpen, setColorsOpen] = useState(false);
   const readHistory = () => setHistory(core.current?.history() ?? { canUndo: false, canRedo: false });
+  // The kind of the line under the caret, which Line ▾ names: read when the
+  // caret moves in the text and after every edit.
+  const [lineKind, setLineKind] = useState<string | null>(null);
+  const readLineKind = () => {
+    const editable = core.current;
+    if (!editable) return;
+    const kind = lineKindAt(editable.getText(), editable.getSelection().start)?.label ?? null;
+    setLineKind((prev) => (prev === kind ? prev : kind));
+  };
+  const readLineKindRef = useRef(readLineKind);
+  useEffect(() => {
+    readLineKindRef.current = readLineKind;
+  });
+  useEffect(() => {
+    const onSelection = () => {
+      const el = ref.current;
+      const at = window.getSelection()?.anchorNode;
+      if (el && at && el.contains(at)) readLineKindRef.current();
+    };
+    document.addEventListener("selectionchange", onSelection);
+    return () => document.removeEventListener("selectionchange", onSelection);
+  }, []);
 
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -262,6 +495,7 @@ export function NoteEditor({
       onChange: (text) => {
         onChangeRef.current(text);
         setHistory(editable.history());
+        readLineKindRef.current();
       },
       onImageFiles: (files) => void insertImagesRef.current(files),
     });
@@ -281,10 +515,10 @@ export function NoteEditor({
   }, [value]);
 
   /** A markdown command on the selection's lines. */
-  function apply(patch: (value: string, s: number, e: number) => Patch) {
+  function apply(patch: (value: string, s: number, e: number) => Patch, at?: { start: number; end: number } | null) {
     const editable = core.current;
     if (!editable) return;
-    const { start, end } = editable.getSelection();
+    const { start, end } = at ?? editable.getSelection();
     const next = patch(editable.getText(), start, end);
     editable.setText(next.value, { start: next.start, end: next.end });
     onChange(next.value);
@@ -418,7 +652,6 @@ export function NoteEditor({
   const keep = (e: React.MouseEvent) => e.preventDefault();
   const barButton =
     `inline-flex items-center rounded-full px-2 py-0.5 text-[11.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 ${TOUCH_HIT}`;
-  const formats = full ? FORMATS : FORMATS.filter((f) => !f.full);
 
   return (
     <div className={`flex min-h-0 flex-col gap-1.5 ${className}`}>
@@ -450,20 +683,32 @@ export function NoteEditor({
           <RedoIcon size={13} />
         </button>
         <span aria-hidden className="mx-1 h-4 w-px bg-line" />
-        {formats.map(({ label, tipKey, track, map }) => (
-          <button
-            key={label}
-            type="button"
-            data-track={`note-format:${track}`}
-            onMouseDown={keep}
-            onClick={() => apply((v, s, e) => mapSelectedLines(v, s, e, map))}
-            aria-label={t(tipKey)}
-            data-tip={t(tipKey)}
-            className={barButton}
-          >
-            {label}
-          </button>
-        ))}
+        <LineMenu
+          kind={lineKind}
+          barButton={barButton}
+          onOpen={() => (lineAt.current = core.current?.getSelection() ?? null)}
+          onFormat={(map, at) => apply((v, st, en) => mapSelectedLines(v, st, en, map), at)}
+          onImage={() => fileRef.current?.click()}
+          onClose={(byKey) => {
+            // From the keyboard the caret goes back where it was.
+            const editable = core.current;
+            if (!byKey || !editable || ref.current?.contains(document.activeElement)) return;
+            if (lineAt.current) editable.setText(editable.getText(), lineAt.current);
+            else editable.focusEnd();
+          }}
+        />
+        <input
+          ref={fileRef}
+          type="file"
+          accept={IMAGE_ACCEPT}
+          multiple
+          hidden
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            e.target.value = "";
+            if (files.length > 0) void insertImages(files);
+          }}
+        />
         <span aria-hidden className="mx-1 h-4 w-px bg-line" />
         {STYLES.map(({ label, command: name, tipKey, track, cls }) => (
           <button
@@ -479,7 +724,6 @@ export function NoteEditor({
             {label}
           </button>
         ))}
-        <span aria-hidden className="mx-1 h-4 w-px bg-line" />
         {/* One color button: a press shows the four colors in its place, a
             pick colors the text and folds them again. */}
         {colorsOpen ? (
@@ -515,61 +759,6 @@ export function NoteEditor({
               style={{ background: `conic-gradient(${TEXT_COLORS.map((c) => c.dot).join(", ")})` }}
             />
           </button>
-        )}
-        {full && (
-          <>
-            <span aria-hidden className="mx-1 h-4 w-px bg-line" />
-            <button
-              type="button"
-              onMouseDown={keep}
-              onClick={() => apply((v, s, e) => mapSelectedLines(v, s, e, outdentLines))}
-              data-track="note-outdent"
-              aria-label={t("outline.tipOutdent")}
-              data-tip={t("outline.tipOutdent")}
-              className={barButton}
-            >
-              ⇤
-            </button>
-            <button
-              type="button"
-              onMouseDown={keep}
-              onClick={() => apply((v, s, e) => mapSelectedLines(v, s, e, indentLines))}
-              data-track="note-indent"
-              aria-label={t("outline.tipIndent")}
-              data-tip={t("outline.tipIndent")}
-              className={barButton}
-            >
-              ⇥
-            </button>
-          </>
-        )}
-        {full && (
-          <>
-            <span aria-hidden className="mx-1 h-4 w-px bg-line" />
-            <button
-              type="button"
-              onMouseDown={keep}
-              onClick={() => fileRef.current?.click()}
-              data-track="note-image"
-              aria-label={t("outline.tipImage")}
-              data-tip={t("outline.tipImage")}
-              className={barButton}
-            >
-              <ImageIcon />
-            </button>
-            <input
-              ref={fileRef}
-              type="file"
-              accept={IMAGE_ACCEPT}
-              multiple
-              hidden
-              onChange={(e) => {
-                const files = Array.from(e.target.files ?? []);
-                e.target.value = "";
-                if (files.length > 0) void insertImages(files);
-              }}
-            />
-          </>
         )}
         <span aria-hidden className="mx-1 h-4 w-px bg-line" />
         {/* Voice typing (SPEC.md §29, typing): what is said goes in at the

@@ -717,7 +717,9 @@ export function FloatingNoteEditor({
           </span>
         </div>
       ) : editing ? (
-        <div className="mt-2 flex shrink-0 items-center gap-2">
+        // Done, Cancel, Back to the tray, and the note's assistant (SPEC.md
+        // §6) on one row; opened, the assistant's panel takes a row of its own.
+        <div className="mt-2 flex shrink-0 flex-wrap items-center gap-2">
           <button
             onClick={() => void done()}
             data-track="note-save"
@@ -740,6 +742,17 @@ export function FloatingNoteEditor({
           >
             {t("outline.dockBack")}
           </button>
+          {note && canEdit && (
+            <NoteAssistant
+              noteId={note.id}
+              draft={draft}
+              onApply={(next) => {
+                setDraft(next);
+                actions.floatingDraftChanged(next);
+              }}
+              className="[&.flex-col]:mt-0.5 [&.flex-col]:basis-full"
+            />
+          )}
         </div>
       ) : (
         <div className="mt-2 flex shrink-0 items-center gap-2">
@@ -766,19 +779,6 @@ export function FloatingNoteEditor({
             {t("outline.dockBack")}
           </button>
         </div>
-      )}
-      {/* The note's assistant (SPEC.md §6), docked at the bottom of the open
-          note: a change it proposes lands in the draft on Apply. */}
-      {editing && note && canEdit && (
-        <NoteAssistant
-          noteId={note.id}
-          draft={draft}
-          onApply={(next) => {
-            setDraft(next);
-            actions.floatingDraftChanged(next);
-          }}
-          className="mt-2.5"
-        />
       )}
     </div>
   );
