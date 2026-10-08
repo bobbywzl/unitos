@@ -1,5 +1,6 @@
 "use client";
 
+import { SECTION_HEAD } from "./graph-ui";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
@@ -358,7 +359,7 @@ export function NodeNotesRows({ documentId }: { documentId: string }) {
   const shown = notes.slice(0, CARD_ROWS);
   return (
     <div data-track-surface="graph-node-notes" data-graph-hover-notes className="-mx-1.5 mt-1 flex flex-col gap-0.5 border-t border-line pt-1.5">
-      <p className="px-2 pb-0.5 text-[11px] font-bold tracking-[0.06em] text-sage-700 uppercase">
+      <p className={`px-2 pb-0.5 ${SECTION_HEAD}`}>
         {notes.length === 1 ? t("graphNotes.nodeNotesOne") : t("graphNotes.nodeNotesMany", { n: notes.length })}
       </p>
       {shown.map((g) => (
@@ -396,7 +397,7 @@ export function GraphNoteRow({ note: g, hereId }: { note: GraphNote; hereId: str
         onClick={() => ctx.showNote(g.note.id)}
         data-track="graph-note-show"
         data-tip={t("graphNotes.showNote")}
-        className="flex items-start gap-1.5 text-left pointer-coarse:min-h-6"
+        className="flex min-h-6 items-start gap-1.5 text-left pointer-coarse:min-h-10"
       >
         <span className="min-w-0 flex-1 text-[12.5px] leading-snug font-semibold text-ink">{noteLine(g.note)}</span>
         {g.note.status === "PENDING" && (
@@ -444,7 +445,7 @@ export function LinkNotes({ link }: { link: GraphEdgeLink }) {
   if (!ctx || notes.length === 0) return null;
   return (
     <div data-graph-link-notes={link.id} className="-mx-1.5 flex flex-col gap-0.5 border-t border-line pt-2">
-      <p className="px-2 pb-0.5 text-[11px] font-bold tracking-[0.06em] text-sage-700 uppercase">
+      <p className={`px-2 pb-0.5 ${SECTION_HEAD}`}>
         {notes.length === 1 ? t("graphNotes.linkNotesOne") : t("graphNotes.linkNotesMany", { n: notes.length })}
       </p>
       {notes.map((g) => (
@@ -464,7 +465,7 @@ export function PairNotes({ pair }: { pair: string }) {
   if (!notes || notes.length === 0) return null;
   return (
     <div data-graph-pair-notes={pair} className="mt-1 border-t border-line pt-1">
-      <p className="px-2 pt-0.5 pb-0.5 text-[11px] font-bold tracking-[0.06em] text-sage-700 uppercase">
+      <p className={`px-2 pt-0.5 pb-0.5 ${SECTION_HEAD}`}>
         {t("graphNotes.pairNotes")}
       </p>
       <div className="max-h-56 overflow-y-auto">

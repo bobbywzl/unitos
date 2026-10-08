@@ -1,5 +1,6 @@
 "use client";
 
+import { CLOSE } from "./graph-ui";
 import { useState } from "react";
 import type { GraphEdge, GraphEdgeLink } from "@/lib/types";
 import { useT } from "@/components/lang-provider";
@@ -112,7 +113,7 @@ export function LinksList({
           data-track="graph-links-close"
           aria-label={t("common.close")}
           data-tip={t("common.close")}
-          className="-mr-1 flex size-7 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
+          className={`-mr-1 ${CLOSE}`}
         >
           ✕
         </button>

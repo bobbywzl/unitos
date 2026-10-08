@@ -1,5 +1,6 @@
 "use client";
 
+import { ACTION_DANGER, CLOSE } from "./graph-ui";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/api";
@@ -74,7 +75,7 @@ export function GeneratedList({
           data-track="graph-generated-close"
           aria-label={t("common.close")}
           data-tip={t("common.close")}
-          className="-mr-1 flex size-7 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
+          className={`-mr-1 ${CLOSE}`}
         >
           ✕
         </button>
@@ -85,7 +86,7 @@ export function GeneratedList({
           aria-checked={showProvenance}
           onClick={() => setShowProvenance(!showProvenance)}
           data-track="graph-provenance-switch"
-          className="-mt-1 flex min-w-0 items-center gap-2 self-start rounded-full px-1 py-0.5 text-[12.5px] text-sand-700 hover:text-clay-800"
+          className="-mt-1 flex min-h-6 min-w-0 items-center gap-2 self-start rounded-full px-1 py-0.5 text-[12.5px] text-sand-700 hover:text-clay-800 pointer-coarse:min-h-10"
         >
           <span
             aria-hidden
@@ -128,7 +129,7 @@ export function GeneratedList({
               data-track="generated-delete"
               disabled={busyId !== null}
               data-tip={t("stitch.deleteGeneratedTitle")}
-              className="shrink-0 rounded-full px-2.5 py-1 text-[11px] text-sand-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-40 dark:hover:bg-red-950"
+              className={ACTION_DANGER}
             >
               {t("stitch.deleteGenerated")}
             </button>

@@ -1,5 +1,6 @@
 "use client";
 
+import { ACTION, ACTION_ACCEPT, ACTION_NOTE, ACTION_NOTE_IN } from "./graph-ui";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
@@ -111,7 +112,7 @@ export function LinkNoteComposer({
         <button
           onClick={() => ctx.showSaved(savedId) /* [ui5] VIEW5-10 */}
           data-track="graph-link-note-show"
-          className="rounded-full bg-sage-100 px-2 py-0.5 font-semibold text-sage-800 hover:bg-sage-200"
+          className={ACTION_NOTE_IN}
         >
           {t("graphNotes.noteOnLinkShow")}
         </button>
@@ -130,7 +131,7 @@ export function LinkNoteComposer({
         }}
         data-track="graph-link-note"
         data-tip={t("graphNotes.noteOnLinkTitle")}
-        className="mt-2 flex items-center gap-1.5 rounded-full border border-line px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-sage-100 hover:text-sage-800"
+        className={`mt-2 ${ACTION_NOTE} self-start`}
       >
         <NotesIcon size={11} />
         {t("graphNotes.noteOnLink")}
@@ -236,7 +237,7 @@ export function LinkNoteComposer({
           }}
           data-track="graph-link-note-cancel"
           data-tip={t("graphNotes.noteOnLinkCancelTitle")}
-          className="rounded-full border border-line px-2.5 py-0.5 text-[11px] text-sand-700 hover:bg-clay-100 pointer-coarse:min-h-11 pointer-coarse:px-4"
+          className={ACTION}
         >
           {t("graphNotes.noteOnLinkCancel")}
         </button>
@@ -244,7 +245,7 @@ export function LinkNoteComposer({
           type="submit"
           data-track="graph-link-note-save"
           disabled={!content.trim() || !chosen || busy}
-          className="rounded-full bg-sage-600 px-3 py-0.5 text-[11px] font-semibold text-sage-fg hover:bg-sage-700 disabled:opacity-40 pointer-coarse:min-h-11 pointer-coarse:px-4"
+          className={ACTION_ACCEPT}
         >
           {busy ? t("graphNotes.noteOnLinkSaving") : t("graphNotes.noteOnLinkSave")}
         </button>

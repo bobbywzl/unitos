@@ -20,6 +20,7 @@
 // another person's). NodeComments, NodeCommentsLine, DocumentComments,
 // GapReasons, useWaitsForReply.
 
+import { ACTION, ACTION_ON } from "./graph-ui";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { GraphEdgeLink } from "@/lib/types";
@@ -129,7 +130,6 @@ export function useCoverageGaps() {
   }, [coverage, gapsOnly]);
 }
 
-const chip = "rounded-full border px-2 py-0.5 text-[11px] font-semibold tabular-nums";
 
 /** The Documents list's head: the parts noted, the documents not opened,
     the links waiting for a reply, and the Gaps only switch. */
@@ -182,7 +182,7 @@ export function CoverageHead({ documentIds, links }: { documentIds: string[]; li
         data-track="graph-documents-gaps"
         data-graph-gaps-only
         data-tip={t("graphCover.gapsOnlyTitle")}
-        className={`shrink-0 ${chip} ${gapsOnly ? "border-clay-400 bg-clay-100 text-clay-800" : "border-line text-sand-700 hover:bg-clay-100/60"} min-h-6 pointer-coarse:min-h-10 pointer-coarse:px-3`}
+        className={gapsOnly ? ACTION_ON : ACTION}
       >
         {t("graphCover.gapsOnly")}
       </button>
@@ -351,7 +351,7 @@ export function NoReplyToggle({ on, onChange }: { on: boolean; onChange: (on: bo
       data-track="graph-links-no-reply"
       data-graph-links-no-reply
       data-tip={t("graphCover.noReplyTitle")}
-      className={`shrink-0 ${chip} py-1.5 text-[12px] pointer-coarse:min-h-10 ${on ? "border-clay-400 bg-clay-100 text-clay-800" : "border-line text-sand-700 hover:bg-clay-100/60"}`}
+      className={on ? ACTION_ON : ACTION}
     >
       {t("graphCover.noReply")}
     </button>

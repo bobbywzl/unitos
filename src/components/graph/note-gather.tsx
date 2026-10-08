@@ -13,6 +13,7 @@
 // server, or the offline queue, has the note: closing the graph, a reload, or
 // a failed save never loses them. Discard drops them, after a confirm.
 
+import { ACTION, ACTION_ACCEPT, ACTION_NOTE, ACTION_NOTE_IN } from "./graph-ui";
 import { useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
@@ -194,11 +195,9 @@ export function AddToNote({ quote, className = "" }: { quote: GatherQuote; class
       data-track={inNote ? "graph-note-gather-remove" : "graph-note-gather-add"}
       data-graph-add-to-note={inNote ? "in" : "out"}
       data-tip={blocked ? t("graphCover.composerFull", { n: MAX_NOTE_QUOTES }) : t(inNote ? "graphCover.addedToNoteTitle" : "graphCover.addToNoteTitle")}
-      className={`inline-flex shrink-0 items-center gap-1 min-h-6 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold disabled:opacity-40 pointer-coarse:min-h-10 pointer-coarse:px-3 ${
-        inNote ? "border-sage-400 bg-sage-100 text-sage-800" : "border-line bg-card text-sand-700 hover:bg-sage-100 hover:text-sage-800"
-      } ${className}`}
+      className={`${inNote ? ACTION_NOTE_IN : ACTION_NOTE} ${className}`}
     >
-      <NotesIcon size={10} />
+      <NotesIcon size={11} />
       {t(inNote ? "graphCover.addedToNote" : "graphCover.addToNote")}
     </button>
   );
@@ -386,7 +385,7 @@ export function NoteGatherDock({
         <button
           onClick={() => ctx.showSaved(savedId) /* [ui5] VIEW5-10 */}
           data-track="graph-note-gather-show"
-          className="rounded-full bg-sage-100 px-2 py-0.5 text-[11px] font-semibold text-sage-800 hover:bg-sage-200"
+          className={ACTION_NOTE_IN}
         >
           {t("graphCover.composerShow")}
         </button>
@@ -537,7 +536,7 @@ export function NoteGatherDock({
                 setSaved(null);
               }}
               data-track="graph-note-gather-discard"
-              className="rounded-full border border-line px-2.5 py-0.5 text-[11px] text-sand-700 hover:bg-clay-100"
+              className={ACTION}
             >
               {t("graphCover.composerDiscard")}
             </button>
@@ -545,7 +544,7 @@ export function NoteGatherDock({
               type="submit"
               data-track="graph-note-gather-save"
               disabled={gather.quotes.length === 0 || !chosen || busy}
-              className="rounded-full bg-sage-600 px-3 py-0.5 text-[11px] font-semibold text-sage-fg hover:bg-sage-700 disabled:opacity-40"
+              className={ACTION_ACCEPT}
             >
               {busy ? t("graphCover.composerSaving") : t("graphCover.composerSave")}
             </button>

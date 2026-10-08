@@ -82,7 +82,7 @@ export function SaveAsNote({
               : window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: state.noteId } }))
           }
           data-track="assistant-saved-note-show"
-          className="rounded-full bg-sage-100 px-2 py-0.5 font-semibold text-sage-800 hover:bg-sage-200"
+          className="rounded-full bg-sage-100 px-2 py-0.5 font-semibold text-sage-800 hover:bg-sage-200 min-h-6 pointer-coarse:min-h-11 pointer-coarse:px-3.5"
         >
           {t("assistant.showSavedNote")}
         </button>
@@ -97,7 +97,7 @@ export function SaveAsNote({
         disabled={state.kind === "busy"}
         data-track={`assistant-save-note:${origin}`}
         data-tip={t("assistant.saveAsNoteTitle")}
-        className="flex items-center gap-1.5 rounded-full border border-line px-2.5 py-0.5 text-[11.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-60"
+        className="flex items-center gap-1.5 rounded-full border border-line px-2.5 py-0.5 text-[11.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-60 min-h-6 pointer-coarse:min-h-11 pointer-coarse:px-3.5"
       >
         {state.kind === "busy" ? <SpinnerIcon size={12} className="animate-spin" /> : <NotesIcon size={12} />}
         {state.kind === "busy" ? t("assistant.savingAsNote") : t("assistant.saveAsNote")}

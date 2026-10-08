@@ -26,6 +26,7 @@
 // part titles from GET .../outline?parts=titles, again after each rev move
 // (the offline copy keeps that call), the links and the notes are on the page already.
 
+import { ACTION, CLOSE, TEXT_HIT } from "./graph-ui";
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
 import type { GraphEdge, GraphEdgeLink, GraphNode } from "@/lib/types";
@@ -308,7 +309,7 @@ export function DocumentsList({
           data-track="graph-documents-close"
           aria-label={t("common.close")}
           data-tip={t("common.close")}
-          className="-mt-1 -mr-1 flex size-7 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
+          className={`-mt-1 -mr-1 ${CLOSE}`}
         >
           ✕
         </button>
@@ -375,7 +376,7 @@ export function DocumentsList({
           <button
             onClick={() => setShowProvenance(true)}
             data-track="graph-documents-show-generated"
-            className="font-semibold text-clay-700 underline decoration-dotted underline-offset-2 hover:text-clay-800"
+            className={`${TEXT_HIT} font-semibold text-clay-700 underline decoration-dotted underline-offset-2 hover:text-clay-800`}
           >
             {t("panes.graphDocumentsGeneratedShow")}
           </button>
@@ -572,7 +573,7 @@ function DocumentRow({
         onClick={() => setAllLinks((v) => !v)}
         data-graph-documents-links-more
         aria-expanded={allLinks}
-        className="self-start pl-2.5 text-[11.5px] font-semibold text-clay-700 hover:text-clay-800"
+        className={`${TEXT_HIT} self-start pl-2.5 text-[11.5px] font-semibold text-clay-700 hover:text-clay-800`}
       >
         {allLinks
           ? t("panes.graphDocumentsFewer")
@@ -589,7 +590,10 @@ function DocumentRow({
   ];
 
   const generatedMark = generated && (
-    <span data-graph-documents-generated className="shrink-0 rounded-full bg-sand-200 px-1.5 text-[10px] font-semibold text-sand-700">
+    <span
+      data-graph-documents-generated
+      className={`shrink-0 rounded-full bg-sand-200 px-1.5 text-[10px] font-semibold text-sand-700 ${compact && !open ? "mt-2 mr-3" : ""}`}
+    >
       {t("panes.documentKindGenerated")}
     </span>
   );
@@ -603,7 +607,8 @@ function DocumentRow({
       onFocus={() => onLight(n.id)}
       onBlur={() => onLight(null)}
       className={`flex flex-col rounded-2xl border border-line hover:border-clay-300 hover:bg-clay-100/40 focus-within:border-clay-300 ${
-        compact && !open ? "px-3 py-1.5 max-[639px]:py-1" : "gap-1.5 p-3"
+        /* [style7] VIEW7-07: a shut row's padding is its button's, so the whole row takes the click. */
+        compact && !open ? "" : "gap-1.5 p-3"
       } ${generated ? "opacity-80" : ""}`}
     >
       <h3 style={HEADING_PLAIN} className="flex items-start gap-2 text-[13.5px] text-ink">
@@ -614,7 +619,7 @@ function DocumentRow({
             onClick={() => setOpen((v) => !v)}
             data-track="graph-documents-row-open"
             aria-expanded={open}
-            className="flex min-w-0 flex-1 items-baseline gap-2 text-left leading-snug font-semibold hover:text-clay-800 max-[639px]:flex-wrap max-[639px]:gap-y-0"
+            className={`flex min-h-6 min-w-0 flex-1 items-baseline gap-2 text-left leading-snug font-semibold hover:text-clay-800 max-[639px]:flex-wrap max-[639px]:gap-y-0 ${open ? "" : "px-3 py-1.5 max-[639px]:py-1"}`}
           >
             <span className={`min-w-0 ${open ? "" : "truncate"} max-[639px]:basis-full`}>{n.title}</span>
             {/* [chrome6] VIEW6-04: below 640 px the counts go under the title. */}
@@ -644,7 +649,7 @@ function DocumentRow({
         <button
           onClick={() => select(n.id)}
           data-track="graph-documents-card"
-          className="self-start text-[11.5px] font-semibold text-clay-700 hover:text-clay-800"
+          className={`${ACTION} self-start`}
         >
           {t("graphView.cardNeighbourTitle")}
         </button>

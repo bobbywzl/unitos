@@ -1,5 +1,6 @@
 "use client";
 
+import { ACTION, ACTION_ACCEPT, CLOSE, SECTION_HEAD } from "./graph-ui";
 import { useParams, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type FocusEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
@@ -660,7 +661,7 @@ function EdgeLinkList({ edgeId, loop, anchor, links }: { edgeId: string; loop: b
                       data-track="link-accept"
                       disabled={busyIds.has(l.id)}
                       data-tip={t("panes.acceptLinkTitle")}
-                      className="rounded-full bg-sage-600 px-2.5 py-0.5 text-[11px] font-semibold text-sage-fg hover:bg-sage-700 disabled:opacity-40"
+                      className={ACTION_ACCEPT}
                     >
                       {t("panes.acceptLink")}
                     </button>
@@ -670,7 +671,7 @@ function EdgeLinkList({ edgeId, loop, anchor, links }: { edgeId: string; loop: b
                         data-track="link-dismiss"
                         disabled={busyIds.has(l.id)}
                         data-tip={t("panes.dismissLinkTitle")}
-                        className="rounded-full border border-line px-2 py-0.5 text-[11px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+                        className={ACTION}
                       >
                         {t("panes.dismissLink")}
                       </button>
@@ -813,7 +814,7 @@ function GraphKey({
   );
   const group = (title: string, rows: ReactNode) => (
     <div className="mb-2.5 break-inside-avoid">
-      <p className="mb-1 text-[10.5px] font-bold tracking-[0.06em] text-sand-500 uppercase">{title}</p>
+      <p className={`mb-1 ${SECTION_HEAD}`}>{title}</p>
       <ul className="flex flex-col gap-1">{rows}</ul>
     </div>
   );
@@ -832,7 +833,7 @@ function GraphKey({
     >
       <div className="mb-2 flex items-center">
         <p className="flex-1 text-[11px] font-bold tracking-[0.06em] text-sand-600 uppercase">{t("panes.graphKeyTitle")}</p>
-        <button onClick={onClose} aria-label={t("common.close")} className="flex size-6 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100">
+        <button onClick={onClose} aria-label={t("common.close")} data-tip={t("common.close")} className={CLOSE}>
           ✕
         </button>
       </div>
@@ -2267,10 +2268,10 @@ function GraphCanvas({
         {/* Top left, clear of the Stitch box at the foot of the canvas. The
             zoom buttons carry the UI language's names (WALK2-17). */}
         <Controls position="top-left" showInteractive={false} showFitView={false} showZoom={false}>
-          <ControlButton onClick={() => flowRef.current.zoomIn({ duration: 200 })} title={t("panes.graphZoomIn")} aria-label={t("panes.graphZoomIn")} data-track="graph-zoom-in">
+          <ControlButton onClick={() => flowRef.current.zoomIn({ duration: 200 })} data-tip={t("panes.graphZoomIn")} aria-label={t("panes.graphZoomIn")} data-track="graph-zoom-in">
             <PlusIcon size={14} className="graph-stroke-icon" />
           </ControlButton>
-          <ControlButton onClick={() => flowRef.current.zoomOut({ duration: 200 })} title={t("panes.graphZoomOut")} aria-label={t("panes.graphZoomOut")} data-track="graph-zoom-out">
+          <ControlButton onClick={() => flowRef.current.zoomOut({ duration: 200 })} data-tip={t("panes.graphZoomOut")} aria-label={t("panes.graphZoomOut")} data-track="graph-zoom-out">
             <MinusGlyph size={14} />
           </ControlButton>
           <ControlButton
@@ -2278,7 +2279,7 @@ function GraphCanvas({
               userMoved.current = false;
               fitNow(400);
             }}
-            title={t("panes.graphFit")}
+            data-tip={t("panes.graphFit")}
             aria-label={t("panes.graphFit")}
             data-track="graph-fit"
           >
@@ -2287,7 +2288,7 @@ function GraphCanvas({
           {generatedIds.size > 0 && (
             <ControlButton
               onClick={() => setShowProvenance(!showProvenance)}
-              title={t(showProvenance ? "panes.graphProvenanceHide" : "panes.graphProvenanceShow")}
+              data-tip={t(showProvenance ? "panes.graphProvenanceHide" : "panes.graphProvenanceShow")}
               aria-label={t("panes.graphProvenanceShow")}
               aria-pressed={showProvenance}
               data-track="graph-provenance"
@@ -2298,7 +2299,7 @@ function GraphCanvas({
           )}
           <ControlButton
             onClick={() => setKeyOpen((v) => !v)}
-            title={t("panes.graphKeyTitle")}
+            data-tip={t("panes.graphKeyTitle")}
             aria-label={t("panes.graphKeyTitle")}
             aria-expanded={keyOpen}
             data-track="graph-key"

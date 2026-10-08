@@ -1,5 +1,6 @@
 "use client";
 
+import { ACTION, ACTION_ACCEPT, CLOSE, SECTION_HEAD, TEXT_HIT } from "./graph-ui";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { GraphEdge } from "@/lib/types";
@@ -233,6 +234,8 @@ export function GraphNotesList({
         )
         .flatMap((e) => e.links.filter((l) => !l.provenance))
     : [];
+  // [style7] VIEW7-11: the first row drawn, in the list's order.
+  const firstId = (shown[0] ?? (singleOpen ? single[0] : undefined) ?? project[0])?.note.id ?? null;
   const row = (where: Where, g: GraphNote) =>
     rejectedIds.has(g.note.id) ? (
       <p
@@ -247,7 +250,7 @@ export function GraphNotesList({
           onClick={() => void undoReject(g)}
           disabled={busyIds.has(g.note.id)}
           data-track="graph-notes-undo-reject"
-          className="rounded-full bg-card px-2.5 py-0.5 text-[11px] font-semibold text-sand-800 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+          className={`${ACTION} bg-card`}
         >
           {t("outline.undo")}
         </button>
@@ -258,6 +261,7 @@ export function GraphNotesList({
         key={g.note.id}
         note={g}
         open={openId === g.note.id}
+        first={g.note.id === firstId}
         onToggle={() => setOpenId(openId === g.note.id ? null : g.note.id)}
         busy={busyIds.has(g.note.id)}
         error={errors[g.note.id] ?? null}
@@ -299,18 +303,18 @@ export function GraphNotesList({
           data-track="graph-notes-close"
           aria-label={t("common.close")}
           data-tip={t("common.close")}
-          className="-mr-1 flex size-7 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
+          className={`-mr-1 ${CLOSE}`}
         >
           ✕
         </button>
       </div>
       <div className="flex items-center gap-2">
-        <p className="flex-1 text-[11px] font-bold tracking-[0.06em] text-sand-600 uppercase">{heading}</p>
+        <p className={`flex-1 ${SECTION_HEAD}`}>{heading}</p>
         {shownNote && (
           <button
             onClick={onClearShown}
             data-track="graph-notes-shown-clear"
-            className="shrink-0 rounded-full border border-line px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+            className={ACTION}
           >
             {t("graphNotes.notesShownAll")}
           </button>
@@ -325,7 +329,7 @@ export function GraphNotesList({
       ))}
       {shownNote && shownLinks.length > 0 && (
         <div data-graph-notes-links="" className="flex flex-col gap-1">
-          <p className="text-[11px] font-bold tracking-[0.06em] text-sand-600 uppercase">
+          <p className={SECTION_HEAD}>
             {shownIds.size >= 2 ? t("graphNotes.notesLinksBetween") : t("graphNotes.notesLinksOf")}
           </p>
           {shownLinks.map((l) => (
@@ -365,7 +369,7 @@ export function GraphNotesList({
               onClick={() => setSingleOpen(!singleOpen)}
               aria-expanded={singleOpen}
               data-track="graph-notes-single"
-              className="font-semibold text-sand-700 underline-offset-2 hover:text-clay-800 hover:underline"
+              className={`${TEXT_HIT} font-semibold text-sand-700 underline-offset-2 hover:text-clay-800 hover:underline`}
             >
               {singleOpen ? t("graphNotes.notesOneDocumentHide") : t("graphNotes.notesOneDocumentShow")}
             </button>
@@ -373,7 +377,7 @@ export function GraphNotesList({
             <Link
               href={`/n/${ctx.notebookId}/notes`}
               data-track="graph-notes-full-page"
-              className="font-semibold text-sand-700 underline-offset-2 hover:text-clay-800 hover:underline"
+              className={`${TEXT_HIT} font-semibold text-sand-700 underline-offset-2 hover:text-clay-800 hover:underline`}
             >
               {t("graphNotes.notesFullPage")}
             </Link>
@@ -389,7 +393,7 @@ export function GraphNotesList({
       )}
       {project.length > 0 && (
         <div data-graph-notes-project="" className="flex flex-col gap-1.5">
-          <p className="text-[11px] font-bold tracking-[0.06em] text-sand-600 uppercase">{t("graphNotes.notesOnProject")}</p>
+          <p className={SECTION_HEAD}>{t("graphNotes.notesOnProject")}</p>
           {bySection(project).map((group) => (
             <div key={group.id} className="flex flex-col gap-1.5">
               <p className="text-[11.5px] font-semibold text-sage-700">{group.title}</p>
@@ -405,6 +409,7 @@ export function GraphNotesList({
 function NotesListRow({
   note: g,
   open,
+  first,
   onToggle,
   busy,
   error,
@@ -412,6 +417,8 @@ function NotesListRow({
 }: {
   note: GraphNote;
   open: boolean;
+  /** The list's first row: Open in notes shows at rest. */
+  first: boolean;
   onToggle: () => void;
   busy: boolean;
   error: string | null;
@@ -436,7 +443,9 @@ function NotesListRow({
       }`}
     >
       {/* [chrome6] VIEW6-06: Open in notes sits on the title row and shows on
-          hover or focus (always on touch), so a row is two lines, not three. */}
+          hover or focus (always on touch), so a row is two lines, not three.
+          [style7] VIEW7-11: the list's first row shows it at rest, so a mouse
+          reader sees once where a note opens. */}
       <div className="flex items-start gap-1.5">
         <button
           onClick={onToggle}
@@ -449,7 +458,7 @@ function NotesListRow({
         <button
           onClick={() => ctx.showNote(note.id)}
           data-track="graph-notes-open"
-          className={`shrink-0 rounded-full border border-line px-2 py-px text-[10.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 focus:opacity-100 group-hover/row:opacity-100 group-focus-within/row:opacity-100 [@media(pointer:coarse)]:opacity-100 ${open ? "" : "opacity-0"}`}
+          className={`${ACTION} focus:opacity-100 group-hover/row:opacity-100 group-focus-within/row:opacity-100 [@media(pointer:coarse)]:opacity-100 ${open || first ? "" : "opacity-0"}`}
         >
           {t("graphNotes.notesOpenInNotes")}
         </button>
@@ -491,7 +500,7 @@ function NotesListRow({
                     onClick={() => ctx.openSource(s.documentId, s.id)}
                     data-track="graph-notes-jump"
                     data-tip={t("graphNotes.notesJumpTitle")}
-                    className="shrink-0 rounded-full border border-line px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                    className={ACTION}
                   >
                     {t("graphNotes.notesJump")}
                   </button>
@@ -527,7 +536,7 @@ function NotesListRow({
               onClick={() => onDecide(true)}
               disabled={busy}
               data-track="graph-notes-accept"
-              className="rounded-full bg-sage-600 px-3 py-0.5 text-[11px] font-semibold text-sage-fg hover:bg-sage-700 disabled:opacity-40"
+              className={ACTION_ACCEPT}
             >
               {t("common.accept")}
             </button>
@@ -535,7 +544,7 @@ function NotesListRow({
               onClick={() => onDecide(false)}
               disabled={busy}
               data-track="graph-notes-reject"
-              className="rounded-full border border-line px-2.5 py-0.5 text-[11px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+              className={ACTION}
             >
               {t("common.reject")}
             </button>

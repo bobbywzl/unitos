@@ -1,5 +1,6 @@
 "use client";
 
+import { ACTION, ACTION_ACCEPT, CLOSE, DOC_CHIP } from "./graph-ui";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
@@ -660,8 +661,9 @@ export function GraphOverlay({
           aria-expanded={list === "documents"}
           aria-controls={sideListId("documents")}
           data-tip={t("panes.graphDocumentsToggleTitle")}
-          className={`shrink-0 rounded-full px-2.5 py-1 text-[13px] whitespace-nowrap text-sand-600 hover:bg-clay-100 hover:text-clay-800 disabled:pointer-events-none ${
-            list === "documents" ? "bg-clay-100 text-clay-800" : ""
+          className={`shrink-0 rounded-full border px-3.5 py-1.5 text-[13px] whitespace-nowrap hover:bg-clay-100 hover:text-clay-800 disabled:pointer-events-none max-md:px-2.5 ${
+            /* [style7] VIEW7-06: drawn as the pill it is, like Notes and Links beside it. */
+            list === "documents" ? "border-line bg-clay-100 text-clay-800" : "border-line text-sand-600"
           }`}
         >
           {t("panes.graphCounts", {
@@ -859,16 +861,16 @@ export function GraphOverlay({
                         : t("panes.recommendScanSpentTitle")
                   }
                   aria-label={main || scanning ? undefined : t("panes.recommendScan")}
-                  className="flex min-w-0 items-center gap-1.5 self-start rounded-full border border-line px-3 py-1 text-[12px] whitespace-nowrap text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+                  className={`${ACTION} min-w-0 self-start`}
                 >
-                  <SparkleIcon size={12} />
+                  <SparkleIcon size={11} />
                   {scanning ? t("panes.recommendScanRunning") : t(main ? "panes.recommendScan" : "panes.recommendScanShort")}
                   {/* The runs left this month: plain text, never a count chip,
                       so it does not read as a number of links (GR-07). */}
                   {scanning ? (
                     <StopPill />
                   ) : (
-                    <span className="text-[11px] tabular-nums text-sand-500">· {t("panes.recommendScanLeft", { left: scanLeft })}</span>
+                    <span className="font-normal tabular-nums text-sand-500">· {t("panes.recommendScanLeft", { left: scanLeft })}</span>
                   )}
                 </button>
               ) : undefined
@@ -1103,7 +1105,7 @@ export function RecommendedLinkList({
 
   // [chrome6] VIEW6-11: the two ends on one line, each at most 45%.
   const quoteChip =
-    "min-w-0 max-w-[45%] truncate rounded-full bg-sand-200 px-2.5 py-0.5 text-left text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800";
+    `${DOC_CHIP} max-w-[45%] text-left`;
 
   return (
     <aside
@@ -1126,7 +1128,7 @@ export function RecommendedLinkList({
             data-track="graph-recommended-close"
             aria-label={t("common.close")}
             data-tip={t("common.close")}
-            className="-mr-1 flex size-7 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
+            className={`-mr-1 ${CLOSE}`}
           >
             ✕
           </button>
@@ -1176,7 +1178,7 @@ export function RecommendedLinkList({
                   }
                   data-track="link-accept"
                   data-tip={t("panes.acceptLinkTitle")}
-                  className="rounded-full bg-sage-600 px-3 py-1 text-[11px] font-semibold text-sage-fg hover:bg-sage-700 disabled:opacity-40"
+                  className={ACTION_ACCEPT}
                 >
                   {t("panes.acceptLink")}
                 </button>
@@ -1188,7 +1190,7 @@ export function RecommendedLinkList({
                     }}
                     data-track="link-dismiss"
                     data-tip={t("panes.dismissLinkTitle")}
-                    className="rounded-full border border-line px-2.5 py-1 text-[11px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40"
+                    className={ACTION}
                   >
                     {t("panes.dismissLink")}
                   </button>

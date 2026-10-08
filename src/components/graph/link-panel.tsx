@@ -1,5 +1,6 @@
 "use client";
 
+import { ACTION, ACTION_ACCEPT, ACTION_DANGER, ACTION_NOTE, CLOSE, SECTION_HEAD } from "./graph-ui";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { GraphEdgeLink } from "@/lib/types";
@@ -32,8 +33,10 @@ import { LinkNotes } from "@/components/graph/graph-notes";
 // History's Restore brings it back later.
 
 // The action row's buttons: 24 px tall under a mouse, 44 under a finger (WALK6-09).
-const rowButton =
-  "flex min-h-6 items-center gap-1.5 rounded-full border border-line px-2.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40 pointer-coarse:min-h-11 pointer-coarse:px-3.5";
+// [style7] The shared row action (graph-ui.ts): one look for Reply, Note on
+// this link and Remove here and for Add to note, Open in reader, Dismiss
+// across the graph.
+const rowButton = ACTION;
 
 export function LinkPanel({
   link,
@@ -158,22 +161,23 @@ export function LinkPanel({
             data-track="graph-link-panel-back"
             aria-label={backLabel ?? t("panes.graphLinksBack")}
             data-tip={backLabel ?? t("panes.graphLinksBack")}
-            className="-mt-1 -ml-1 flex size-7 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
+            className={`-mt-1 -ml-1 ${CLOSE}`}
           >
             <ArrowLeftIcon size={15} />
           </button>
         )}
-        <p className="min-w-0 flex-1 text-[11px] font-bold tracking-[0.06em] text-sand-600 uppercase">
+        {/* [style7] VIEW7-04: the panel's title, as the node card's (same place, same size). */}
+        <h2 className="min-w-0 flex-1 text-[16px] leading-snug font-semibold text-ink">
           {loop
             ? t("panes.graphLinksLoopTitle", { title: link.fromTitle })
             : t("panes.graphLinksPairTitle", { a: link.fromTitle, b: link.toTitle })}
-        </p>
+        </h2>
         <button
           onClick={onClose}
           data-track="graph-link-panel-close"
           aria-label={t("common.close")}
           data-tip={t("common.close")}
-          className="-mt-1 -mr-1 flex size-7 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
+          className={`-mt-1 -mr-1 ${CLOSE}`}
         >
           ✕
         </button>
@@ -190,7 +194,7 @@ export function LinkPanel({
                 data-track="link-accept"
                 disabled={busy}
                 data-tip={t("panes.acceptLinkTitle")}
-                className="min-h-6 rounded-full bg-sage-600 px-3 py-0.5 text-[11px] font-semibold text-sage-fg hover:bg-sage-700 disabled:opacity-40 pointer-coarse:min-h-11 pointer-coarse:px-4"
+                className={ACTION_ACCEPT}
               >
                 {t("panes.acceptLink")}
               </button>
@@ -200,7 +204,7 @@ export function LinkPanel({
                   data-track="link-dismiss"
                   disabled={busy}
                   data-tip={t("panes.dismissLinkTitle")}
-                  className="min-h-6 rounded-full border border-line px-2.5 py-0.5 text-[11px] text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40 pointer-coarse:min-h-11 pointer-coarse:px-4"
+                  className={ACTION}
                 >
                   {t("panes.dismissLink")}
                 </button>
@@ -220,7 +224,7 @@ export function LinkPanel({
                 onClick={() => void undoRemove()}
                 disabled={busy}
                 data-track="graph-link-remove-undo"
-                className="font-semibold text-clay-700 underline-offset-2 hover:underline disabled:opacity-50 pointer-coarse:min-h-11"
+                className={`${ACTION} align-middle`}
               >
                 {t("panels.linkRemovedUndo")}
               </button>
@@ -230,7 +234,7 @@ export function LinkPanel({
       ) : (
         <>
           <div>
-            <p className="text-[10.5px] font-bold tracking-[0.06em] text-sand-500 uppercase">{t("panes.linkWhy")}</p>
+            <p className={SECTION_HEAD}>{t("panes.linkWhy")}</p>
             <p className="mt-0.5 text-[12.5px] leading-snug text-ink">{link.reason ?? t("panes.linkNoReason")}</p>
           </div>
           {(canReply || canEdit) && (
@@ -252,7 +256,7 @@ export function LinkPanel({
                   onClick={() => setNoteRequest((n) => n + 1)}
                   data-track="graph-link-note"
                   data-tip={t("graphNotes.noteOnLinkTitle")}
-                  className={`${rowButton} hover:bg-sage-100 hover:text-sage-800`}
+                  className={ACTION_NOTE}
                 >
                   <NotesIcon size={11} />
                   {t("graphNotes.noteOnLink")}
@@ -264,7 +268,7 @@ export function LinkPanel({
                   disabled={busy}
                   data-track="graph-link-remove"
                   data-tip={t("panels.removeLinkTitle")}
-                  className={`${rowButton} ml-auto text-red-600 hover:bg-red-50 hover:text-red-700`}
+                  className={`${ACTION_DANGER} ml-auto`}
                 >
                   {t("common.remove")}
                 </button>

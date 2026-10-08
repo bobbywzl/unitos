@@ -13,6 +13,7 @@
 // walk the links. Everything is read from what is stored (GET .../outline):
 // the card never calls a model.
 
+import { CLOSE, DOC_CHIP, HEAD_PLAIN, LEAD, LEAD_PRIMARY, SECTION_HEAD } from "./graph-ui";
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { GraphEdge, GraphEdgeLink, GraphNode } from "@/lib/types";
@@ -210,7 +211,8 @@ export function NodeCardPanel({
     linkLine(t, acceptedCount, recommendedCount),
     t("graphView.cardNotes", { n: notes.length, s: notes.length === 1 ? "" : "s" }),
   ].filter(Boolean);
-  const head = "mb-1.5 text-[11px] font-bold tracking-[0.06em] text-sand-600 uppercase";
+  // [style7] Figtree like every other panel head (an h3 takes Caprasimo by default).
+  const head = `mb-1.5 ${SECTION_HEAD}`;
 
   return (
     <aside
@@ -234,7 +236,7 @@ export function NodeCardPanel({
           onClick={onClose}
           aria-label={t("common.close")}
           data-tip={t("common.close")}
-          className="flex size-7 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
+          className={CLOSE}
         >
           ✕
         </button>
@@ -253,7 +255,7 @@ export function NodeCardPanel({
           onClick={() => go(`/n/${notebookId}?doc=${node.id}`)}
           data-track="graph-card-open"
           data-tip={t("graphView.cardOpenTitle")}
-          className="rounded-full bg-clay px-3.5 py-1.5 text-[12px] font-semibold text-clay-fg hover:bg-clay-600"
+          className={LEAD_PRIMARY}
         >
           {t("graphView.cardOpen")}
         </button>
@@ -262,7 +264,7 @@ export function NodeCardPanel({
             onClick={onPick}
             data-track="graph-card-pick"
             aria-pressed={picked}
-            className={`rounded-full border px-3 py-1.5 text-[12px] hover:bg-clay-100 hover:text-clay-800 ${
+            className={`${LEAD} hover:bg-clay-100 hover:text-clay-800 ${
               picked ? "border-clay bg-clay-100 text-clay-800" : "border-line text-sand-700"
             }`}
           >
@@ -286,7 +288,7 @@ export function NodeCardPanel({
           )}
           {outline.parts.length > 0 && (
             <section>
-              <h3 className={head}>{t("graphView.cardContents")}</h3>
+              <h3 style={HEAD_PLAIN} className={head}>{t("graphView.cardContents")}</h3>
               <ol className="flex flex-col gap-0.5">
                 {outline.parts.map((p) => (
                   <li key={p.blockId} className={`flex items-start gap-1 ${p.level === 2 ? "pl-3" : ""}`}>
@@ -318,7 +320,7 @@ export function NodeCardPanel({
 
       {groups.length > 0 && (
         <section>
-          <h3 className={head}>{t("graphView.cardLinks")}</h3>
+          <h3 style={HEAD_PLAIN} className={head}>{t("graphView.cardLinks")}</h3>
           <div className="flex flex-col gap-2">
             {groups.map((g) => {
               const loop = g.other === node.id;
@@ -338,7 +340,7 @@ export function NodeCardPanel({
                         }}
                         data-track="graph-card-neighbour"
                         data-tip={t("graphView.cardNeighbourTitle")}
-                        className="min-h-6 min-w-0 truncate rounded-full bg-sand-200 px-2.5 py-0.5 text-[12px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+                        className={DOC_CHIP}
                       >
                         {titleOf.get(g.other) ?? ""}
                       </button>
@@ -403,7 +405,7 @@ export function NodeCardPanel({
 
       {notes.length > 0 && (
         <section>
-          <h3 className={head}>{t("graphView.cardNotesHead")}</h3>
+          <h3 style={HEAD_PLAIN} className={head}>{t("graphView.cardNotesHead")}</h3>
           <div className="flex flex-col gap-0.5">
             {(showAllNotes ? notes : notes.slice(0, NOTE_ROWS)).map((n) => (
               <GraphNoteRow key={n.note.id} note={n} hereId={node.id} />
@@ -440,7 +442,7 @@ export function NodeCardExtras({ documentId, notes: withNotes = true }: { docume
       )}
       {withNotes && notes.length > 0 && (
         <div data-graph-hover-notes className="mt-1 flex flex-col gap-0.5 border-t border-line pt-1.5">
-          <p className="text-[10.5px] font-bold tracking-[0.06em] text-sage-700 uppercase">
+          <p className={SECTION_HEAD}>
             {notes.length === 1 ? t("graphNotes.nodeNotesOne") : t("graphNotes.nodeNotesMany", { n: notes.length })}
           </p>
           {notes.slice(0, 3).map((g) => (
