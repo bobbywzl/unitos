@@ -1816,6 +1816,27 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
   check("free: a Word file's table header repeated at a page's top is no word to cover", freeScores(repeated, wordTable, undefined, true).coverage.recall === 1 && (freeScores(repeated, wordTable, undefined, false).coverage.recall ?? 1) < 1);
 }
 
+// ── URL parse structure (web.mts structure audit) ───────────────────────────
+
+{
+  const { parseHtmlContent } = await import("@/lib/parse/url");
+  const shape = async (body: string) =>
+    (await parseHtmlContent(`<!doctype html><html><head><title>Notes on river flow</title></head><body><article>${body}</article></body></html>`, "https://example.org/rivers"))
+      .blocks.map((b) => `${b.type} ${b.text.slice(0, 24)}`);
+  const prose = (n: number) => `Paragraph ${n} says how a channel carries water from its source to its mouth, and how its banks and bed shape the flow.`;
+  // A container's loose words beside its headings and lists: each block keeps its shape.
+  const loose = await shape(
+    `<div>${prose(1)}<br><br>${prose(2)}<br><br><h2>Gravel bars</h2><br><br>${prose(3)}<br><ul><li>Sand settles behind every bar.</li><li>Silt settles further down.</li></ul><h2>Floods</h2>${prose(4)}<br><br>${prose(5)}</div>`,
+  );
+  check(
+    "url: a heading among a container's loose words is a heading",
+    loose.includes("HEADING Gravel bars") && loose.includes("HEADING Floods") && !loose.some((b) => b.startsWith("PARAGRAPH") && /Gravel bars|Floods/.test(b)),
+    loose.join(" / "),
+  );
+  check("url: a list among a container's loose words is a list", loose.some((b) => b.startsWith("LIST - Sand settles")), loose.join(" / "));
+  check("url: a container's loose words around its blocks stay paragraphs, one each", loose.filter((b) => b.startsWith("PARAGRAPH Paragraph")).length === 5, loose.join(" / "));
+}
+
 {
   // The repository is public: the committed corpus list names none of the owner's files (load.ts).
   const listed = JSON.parse(readFileSync(CORPUS_PATH, "utf8")) as { id: string; license?: string; pdf?: string; docx?: string }[];
