@@ -112,6 +112,8 @@ async function expand(id) {
   const n = await rows.count();
   for (let i = 0; i < n; i++) {
     if (await thread(id).count()) return true;
+    // [lists7] WALK7-05: a row that opens the panel closes the curve's list; pin the curve again for the next row.
+    if ((await rows.count()) === 0) await pinAB();
     await rows.nth(i).click();
     await page.waitForTimeout(500);
   }
