@@ -32,6 +32,8 @@ const UNITOS_FOLDED = 30;
 const UNITOS_GAP = 8;
 /** More (⋯) with its margins. */
 const MORE = 32;
+/** How long after the row mounts the mode's name starts to slide when it folds. */
+const SETTLE_MS = 1000;
 
 function focusTarget(item: HTMLElement): HTMLElement | null {
   if (item.matches("button, input")) return item;
@@ -122,21 +124,34 @@ export function ToolbarRow({
     setFolded((f) => (f === nextFolded ? f : nextFolded));
   }, [groups]);
   const fitRef = useRef(fit);
-
   useLayoutEffect(() => {
     fitRef.current = fit;
-    fit();
   });
 
-  useEffect(() => {
+  // The row fits when its groups change, and when the row, a group on it,
+  // or the right end changes size (the status's words, the Unitos tools, a
+  // style's name): a render alone measures nothing, so typing in a long
+  // document forces no layout here (EDGE15-12).
+  const groupKeys = groups.map((g) => g.key).join(" ");
+  useLayoutEffect(() => {
+    fitRef.current();
+  }, [groupKeys]);
+  useLayoutEffect(() => {
     const bar = barRef.current;
     if (!bar) return;
     const observer = new ResizeObserver(() => fitRef.current());
     observer.observe(bar);
-    // The right end changes on its own (the status's words, the Unitos
-    // tools), without a render of the row.
     if (rightRef.current) observer.observe(rightRef.current);
+    for (const el of groupRefs.current.values()) observer.observe(el);
     return () => observer.disconnect();
+  }, [groupKeys, hiddenKeys]);
+
+  // The mode's name folds and unfolds with a slide once the page has
+  // settled; the fold the first fit makes as the page loads draws at once.
+  const [settled, setSettled] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSettled(true), SETTLE_MS);
+    return () => window.clearTimeout(timer);
   }, []);
 
   // Search the menus opens a menu that sits in the bubble: the bubble
@@ -264,7 +279,7 @@ export function ToolbarRow({
           </>
         )}
       </div>
-      <div ref={rightRef} className="docs-tb-right" data-folded={folded ?? undefined}>
+      <div ref={rightRef} className="docs-tb-right" data-folded={folded ?? undefined} data-settled={settled || undefined}>
         {right}
       </div>
     </div>

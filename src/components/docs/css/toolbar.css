@@ -70,10 +70,11 @@
   .docs-tip {
     animation: docs-tb-fade 0.13s ease-in;
   }
-  .docs-mode-caption {
+  /* Only once the page has settled (overflow.tsx): the load's first fold draws at once. */
+  .docs-tb-right[data-settled] .docs-mode-caption {
     transition: width 218ms ease;
   }
-  .docs-mode-caption-text {
+  .docs-tb-right[data-settled] .docs-mode-caption-text {
     transition: opacity 218ms ease;
   }
 }
