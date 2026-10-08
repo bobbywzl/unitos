@@ -136,6 +136,15 @@
 :is(.docs-toolbar, .docs-menu, .docs-search-open) :focus-visible {
   outline: none;
 }
+/* One focus look for every control of the row (SPEC.md §29): the 2 px clay
+   ring the status draws, outside the control, and outside a New glow. */
+.docs-toolbar :is(button, [tabindex]):focus-visible {
+  outline: 2px solid var(--docs-blue);
+  outline-offset: 2px;
+}
+.docs-toolbar .new-glow:focus-visible {
+  outline-offset: 6px;
+}
 :is(.docs-toolbar, .docs-menu) :is(button, input) {
   transition: none;
 }
