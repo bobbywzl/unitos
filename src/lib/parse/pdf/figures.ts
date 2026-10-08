@@ -464,6 +464,16 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
         Math.max(r.box.y1 - box.y2, box.y1 - r.box.y2) <= textSize * 3 &&
         LABEL_START_RE.test(textOf(r)),
     );
+  // A float's label line beside a box, right or left of it, within three
+  // lines of its height: a side caption in the margin.
+  const sideLabel = (box: Box) =>
+    runs.some(
+      (r) =>
+        (r.box.x1 >= box.x2 || r.box.x2 <= box.x1) &&
+        Math.max(r.box.x1 - box.x2, box.x1 - r.box.x2) <= pageWidth * 0.15 &&
+        Math.max(r.box.y1 - box.y2, box.y1 - r.box.y2) <= textSize * 3 &&
+        LABEL_START_RE.test(textOf(r)),
+    );
   // A table or a figure whose words are outlines is shapes in rows, and the
   // gaps between its rows and cells cut it into clusters (IEEE Access
   // 3721067: Tables 2, 3, and 5 showed only their captions, Table 1 its top
@@ -627,8 +637,14 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     // figure: its labels "V(z)", "V0", "z", "−L/2" read as two equations
     // and two crops). A chart's panel with no label inside is no drawing
     // of its own: its boxes and whiskers are a third of its paths too.
+    // A drawing with a float's label beside it, its side caption, needs
+    // two shapes only (parse loop finding: a Tufte textbook's double well,
+    // two gray walls and a barrier in thirteen paths beside "Figure 29.1:
+    // Double well …" in the margin, was no figure; the caption took the
+    // margin's picture over it, its labels read as a table and a crop).
     const labeled = inside.length > 0 && ink < area(box) * 0.01;
-    const sparse = shapes >= 5 && shapes >= paths.length * (labeled ? 0.3 : 0.8) && sized && ink < area(box) * 0.05 && !inside.some(isPageText);
+    const side = sideLabel(box);
+    const sparse = shapes >= (side ? 2 : 5) && shapes >= paths.length * (side ? 0.15 : labeled ? 0.3 : 0.8) && sized && ink < area(box) * 0.05 && !inside.some(isPageText);
     // A drawing in the margin beside the text column: three paths or
     // more, a shape among them, a figure's width and a line tall at the
     // least, its box an em or more past the column's right edge, with no
@@ -1203,8 +1219,12 @@ export function attachFigureRegions(
     // does a part of a graphic that reaches into the column (Earth Observer
     // p32: a map's legend over the column's edge made a crop of the map's
     // edge for the caption beside it).
+    // An icon there, three ems at most (a margin note's mark), is no figure
+    // (parse loop finding: a Tufte textbook's "Uncertainty Evaluator" mark
+    // 185 pt over "Figure 17.3:" kept the caption from its drawing beside it).
     const inGraphic = (b: Box) => graphics.some((g) => shareInside(b, grow(g.box, 1)) >= 0.9);
-    if (drawingIn(drawing, at.y1 - reach, at.y2 + reach, x1, x2, (b) => Math.min(b.x2 - b.x1, b.y2 - b.y1) >= 1.5 && !inGraphic(b))) return undefined;
+    const shapes = drawingIn(drawing, at.y1 - reach, at.y2 + reach, x1, x2, (b) => Math.min(b.x2 - b.x1, b.y2 - b.y1) >= 1.5 && !inGraphic(b));
+    if (shapes && Math.max(shapes.x2 - shapes.x1, shapes.y2 - shapes.y1) > ctx.bodySize * 3) return undefined;
     const middle = (at.y1 + at.y2) / 2;
     const near = (gap: number) => gap >= -ctx.bodySize && gap <= pageWidth * 0.1;
     // A wider gap, up to a quarter of the page, with no line of the page
@@ -1573,9 +1593,21 @@ export function attachFigureRegions(
     // column, level with a graphic beside it that has no caption of its
     // own, is that graphic's (Earth Observer pp. 8–9: each side caption made
     // a crop of the blank margin over it, and its chart drew with none).
-    const side = swept.length === 0 ? sideGraphic(cap, x1, x2) : undefined;
+    // Words swept that are another graphic's labels, by it and far over the
+    // caption, keep no caption from a graphic level with it (parse loop
+    // finding: a Tufte textbook's "Figure 29.1:" in the margin swept the
+    // labels of the margin's picture far over it, "Material #3", and its
+    // double well beside it went uncaptioned).
+    const labelOf = (s: Segment) => s.box !== undefined && graphics.some((g) => shareInside(s.box!, grow(g.box, ctx.bodySize * 2)) >= 0.7 && g.box.y1 > cap.box!.y2 + rowGap * 3);
+    const side = swept.every(labelOf) ? sideGraphic(cap, x1, x2) : undefined;
     if (side) {
       sideCaptions.set(side, [...(sideCaptions.get(side) ?? []), { ...cap, ...withFollower(cap, next[0]) }]);
+      // The labels it swept are their graphic's: its crop takes them in.
+      for (const s of swept) {
+        const g = graphics.find((g) => shareInside(s.box!, grow(g.box, ctx.bodySize * 2)) >= 0.7);
+        if (g) Object.assign(g.box, unionBox(g.box, s.box!));
+        out.splice(out.indexOf(s), 1);
+      }
       continue;
     }
     if (swept.length > 0 || top - cap.box.y2 > rowGap * 3 || drawnAbove) {
