@@ -226,12 +226,20 @@ export function joinOnPage(input: Segment[]): Segment[] {
   const setting = pageSetting(segments);
   for (let b = 1; b < segments.length; b++) {
     const paragraph = segments[b - 1];
+    // A heading beside the paragraph, apart from its lines and from the
+    // part it goes on in, is another column's: the rows read across put it
+    // between the two (parse loop finding: The MagPi's photo callout "A
+    // 1080p camera feeds back a live" | "video stream to the surface" read
+    // around the "Quick FACTS" box's heading on its rows, p. 99).
+    const apart = (s: Segment, o: Segment) => !!s.box && !!o.box && (s.box.x1 >= o.box.x2 || s.box.x2 <= o.box.x1);
+    const beside = (s: Segment) => paragraph.type === "PARAGRAPH" && s.type === "HEADING" && apart(s, paragraph);
     const aside = (s: Segment) => paragraph.type === "PARAGRAPH" && otherText(s, paragraph);
-    const inRun = (s: Segment) => isFloat(s) || isLabel(s, paragraph) || aside(s);
+    const inRun = (s: Segment) => isFloat(s) || isLabel(s, paragraph) || aside(s) || beside(s);
     if (isFloat(paragraph) || !inRun(segments[b]) || segments[b].page !== paragraph.page) continue;
     let k = b;
     while (k < segments.length && segments[k].page === segments[b].page && inRun(segments[k])) k++;
-    if (!segments.slice(b, k).some((s) => isFloat(s) || aside(s))) continue;
+    if (!segments.slice(b, k).some((s) => isFloat(s) || aside(s) || beside(s))) continue;
+    if (segments.slice(b, k).some((s) => beside(s) && (k >= segments.length || !apart(s, segments[k])))) continue;
     if (k < segments.length && continuesOnPage(paragraph, segments[k], setting)) segments.splice(b, 0, ...segments.splice(k, 1));
   }
   const out: Segment[] = [];
