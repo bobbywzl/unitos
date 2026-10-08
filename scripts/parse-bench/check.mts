@@ -2115,6 +2115,21 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     !topRated.some((t) => /Comments|View all/.test(t)) && !reviews.some((t) => /Отзывы|View all/.test(t)) && topRated.length === 3,
     `${topRated.join(" / ")}; ${reviews.join(" / ")}`,
   );
+  // The site's logo set as an h1 (a link to the home page) is no title: the <title> is, less the logo's part and the parts after it.
+  const logoTitle = async (title: string) =>
+    (
+      await parseHtmlContent(
+        `<!doctype html><html><head><title>${title}</title></head><body><header><h1><a href="/">Rivers Weekly</a></h1></header><article><p>${prose(1)}</p><p>${prose(2)}</p><p>${prose(3)}</p></article></body></html>`,
+        "https://www.example.org/2019/notes",
+      )
+    ).title;
+  const logoDash = await logoTitle("Notes on river flow - Rivers Weekly");
+  const logoMotto = await logoTitle("Notes on river flow : Rivers Weekly | The paper of the delta");
+  check(
+    "url: the site's logo set as an h1 is no title",
+    logoDash === "Notes on river flow" && logoMotto === "Notes on river flow",
+    `${logoDash}; ${logoMotto}`,
+  );
   check(
     "url: a first section's question and a short first heading stay headings",
     question.includes("HEADING What does a gauge measur") && short.includes("HEADING Channels and banks"),
