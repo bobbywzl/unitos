@@ -40,7 +40,8 @@ const DOCS_GAP = 4;
 const isDocsTarget = (el: Element) => el.closest("[data-docs-editor], [data-docs-menu]") !== null;
 // A long press on touch: the finger stays within LONG_PRESS_SLOP_PX for
 // LONG_PRESS_MS. Only a control takes it; a field keeps its own long press
-// (paste, select), and so does a card being lifted.
+// (paste, select), and so does a card being lifted. A mark in the text is
+// words: its long press selects them.
 const LONG_PRESS_MS = 450;
 const LONG_PRESS_SLOP_PX = 10;
 const TOUCH_TIP_MS = 3000;
@@ -48,6 +49,7 @@ const LONG_PRESS_CONTROL =
   "button, a[href], summary, select, [role=button], [role=tab], [role=menuitem], [role=menuitemradio], [role=menuitemcheckbox], [role=option], [role=switch], [role=radio], [role=checkbox]";
 const isLongPressControl = (el: Element) =>
   el.matches(LONG_PRESS_CONTROL) &&
+  el.tagName !== "MARK" &&
   el.closest("input, textarea, [contenteditable=''], [contenteditable='true']") === null;
 // Keys that move the focus: a focus they cause shows the tip.
 const NAV_KEYS = new Set(["Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown"]);
