@@ -1964,6 +1964,29 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     dekStatement.includes("PARAGRAPH The banks of a delta mov") && dekAbove.includes("PARAGRAPH Why the banks of a delta") && dekStatement.includes("HEADING Gravel bars") && dekAbove.includes("HEADING Gravel bars"),
     `${dekStatement.join(" / ")}; ${dekAbove.join(" / ")}`,
   );
+  // The opening heading is the title when the title only adds a tail or a lead around it, or the heading adds its own tail.
+  const headline = async (title: string, h1: string) => {
+    const parsed = await parseHtmlContent(
+      `<!doctype html><html><head><title>${title}</title><meta property="og:title" content="${title}"></head><body><article><h1>${h1}</h1><p>${prose(1)}</p><p>${prose(2)}</p></article></body></html>`,
+      "https://example.org/rivers",
+    );
+    return { title: parsed.title, heading: parsed.blocks.some((b) => b.type === "HEADING") };
+  };
+  const shorter = await headline("Notes on river flow: a field guide", "Notes on river flow");
+  const lead = await headline("Field guide: Notes on river flow in the delta", "Notes on river flow in the delta");
+  const longer = await headline("Notes on river flow", "Notes on river flow in the delta");
+  const other = await headline("Notes on river flow", "Gravel bars of the delta");
+  const dated = await headline("Notes on river flow", "Notes on river flow • A field guide to the delta");
+  check(
+    "url: an opening heading the title starts or ends with, or that adds a tail to the title, is the title",
+    shorter.title === "Notes on river flow" && lead.title === "Notes on river flow in the delta" && longer.title === "Notes on river flow in the delta" && !shorter.heading && !lead.heading && !longer.heading,
+    JSON.stringify({ shorter, lead, longer }),
+  );
+  check(
+    "url: a heading that shares no edge with the title stays a heading; one that adds a tail set apart by a bullet is not the title",
+    other.title === "Notes on river flow" && other.heading && dated.title === "Notes on river flow",
+    JSON.stringify({ other, dated }),
+  );
   check(
     "url: a first section's question and a short first heading stay headings",
     question.includes("HEADING What does a gauge measur") && short.includes("HEADING Channels and banks"),
