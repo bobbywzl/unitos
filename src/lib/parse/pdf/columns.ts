@@ -755,6 +755,36 @@ function splitAt(items: Item[], graphics: Placed[], page: number, pageWidth: num
     ...crossingGraphics.map((p) => ({ y: (p.box.y1 + p.box.y2) / 2, size: 0, piece: { graphic: p } as Piece })),
     ...crossingRules.map((r) => ({ y: r.y1, size: 0, piece: null })),
   ].sort((a, b) => b.y - a.y);
+  // A row set large across the gutter with the columns' lines beside it on
+  // both sides is a pull quote the columns run around: it parts no band,
+  // and reads after the columns, at the next row across (parse loop
+  // finding: The MagPi sets a 16 pt quote over the gutter of its 7.5 pt
+  // columns, and the columns read row by row across it, a line of each
+  // between two of the quote's). A line beside it is the columns' when set
+  // at their size: two boxes' headings side by side, "Encode the ancient
+  // runes" and "Wield the staff", are no quote. The quote's words are set
+  // large, half its characters at least: a scan's text layer sets a speck
+  // 36 pt over the gutter between two 7 pt captions, and the captions read
+  // as no quote.
+  const columnSize = median(items.filter((i) => !spanning.has(i)).map((i) => i.size));
+  const wrapped = (s: { y: number; size: number; piece: Piece | null }) =>
+    s.piece !== null &&
+    "items" in s.piece &&
+    s.size >= columnSize * 1.5 &&
+    chars(s.piece.items.filter((i) => i.size >= columnSize * 1.5)) * 2 >= chars(s.piece.items) &&
+    [true, false].every((onLeft) => items.some((i) => !spanning.has(i) && i.size < columnSize * 1.2 && (onLeft ? i.x + i.w <= g : i.x >= g) && Math.abs(i.y - s.y) < s.size * 0.6));
+  // A quote's rows one under another read as one piece.
+  const floats = separators.filter(wrapped);
+  for (let k = 0; k < separators.length; k++) {
+    const float = separators[k];
+    if (!floats.includes(float)) continue;
+    let j = k + 1;
+    while (j < separators.length && floats.includes(separators[j])) j++;
+    const under = separators[j];
+    const run = separators.splice(k, j - k);
+    separators.splice(k, 0, { y: (under?.y ?? bottom - maxSize) + 0.001, size: 0, piece: { items: run.flatMap((s) => (s.piece && "items" in s.piece ? s.piece.items : [])) } as Piece });
+  }
+  separators.sort((a, b) => b.y - a.y);
   const bands: Band[] = separators.map((s) => ({ left: { items: [], graphics: [] }, right: { items: [], graphics: [] }, separator: s.piece }));
   bands.push({ left: { items: [], graphics: [] }, right: { items: [], graphics: [] }, separator: null });
   const bandOf = (y: number, size = Infinity) => {
