@@ -724,13 +724,13 @@ const SUGGEST_CHIPS: Chip[] = [
   { name: "bulleted", key: "reader.commandBulleted" },
   { name: "fix", key: "reader.commandFix" },
 ];
-// The bar on an image (SPEC.md §7, words from a figure): typed commands,
-// sent as the reader's message. The last two put the words under the image.
-const FIGURE_CHIPS: TKey[] = [
-  "reader.figureExtractText",
-  "reader.figureKeyPoints",
-  "reader.figureTextUnder",
-  "reader.figureKeyPointsUnder",
+// The chips on an image (SPEC.md §7, words from a figure): in the bar and in
+// the toolbox's Assistant box on a figure. Each sends its command as the
+// reader's message and puts the words under the image as a suggestion; a
+// typed question is answered in the chat.
+const FIGURE_CHIPS: { label: TKey; command: TKey }[] = [
+  { label: "reader.figureText", command: "reader.figureTextUnder" },
+  { label: "reader.figureKeyPoints", command: "reader.figureKeyPointsUnder" },
 ];
 
 // A tool's output continued into a conversation — Explain+, Simplify+,
@@ -2054,6 +2054,21 @@ export function ReaderInteractions({
   // window's foot. planNoteId is the conversation that proposed it.
   const [planFrom, setPlanFrom] = useState<"chat" | "tool" | "panel">("panel");
   const [planNoteId, setPlanNoteId] = useState<string | null>(null);
+  // The plans of the threads not on screen, by the thread's note id
+  // (TOOL13-03): a side chat's plan never takes the conversation's place,
+  // and Back shows the conversation's plan again.
+  type ParkedPlan = { plan: AssistantPlan; checked: Set<number>; from: "chat" | "tool" };
+  const parkedPlansRef = useRef(new Map<string, ParkedPlan>());
+  const planNowRef = useRef({ aiPlan, planChecked, planFrom, planNoteId });
+  useEffect(() => {
+    planNowRef.current = { aiPlan, planChecked, planFrom, planNoteId };
+  }, [aiPlan, planChecked, planFrom, planNoteId]);
+  // A new plan comes: the one on screen waits under its own thread.
+  const parkPlan = (nextNoteId: string | null) => {
+    const now = planNowRef.current;
+    if (!now.aiPlan || now.planFrom === "panel" || !now.planNoteId || now.planNoteId === nextNoteId) return;
+    parkedPlansRef.current.set(now.planNoteId, { plan: now.aiPlan, checked: now.planChecked, from: now.planFrom });
+  };
   // The sidebar assistant's plan (SPEC.md §7): the panel sends the actions
   // the server validated for this document; the plan card takes them. A
   // split reader has two of these; the document id picks the one.
@@ -2063,6 +2078,7 @@ export function ReaderInteractions({
       if (!detail || detail.documentId !== documentId) return;
       const actions = offerFigureSuggestionsRef.current(detail.actions);
       if (actions.length === 0) return;
+      parkPlan(null);
       setAiPlan({ reply: null, actions, warnings: detail.warnings, conversationNoteId: null });
       setPlanFrom("panel");
       setPlanNoteId(null);
@@ -3046,6 +3062,22 @@ export function ReaderInteractions({
             openFigureTools(mathId, event.clientX, event.clientY);
             // openFigureTools arms the gesture path's mouseup suppression; this
             // call already is the mouseup, so disarm it.
+            suppressNextMouseUp.current = false;
+            return;
+          }
+          // A click on a figure's picture in the block reader opens its tools,
+          // as a click on an image does in the page editor (TOOL13-04); the
+          // circle stays for the same. A picture under a mark or a link
+          // opens what that opens.
+          const picture = richTextRef.current ? null : targetEl?.closest("img, svg, canvas, picture");
+          const figureId = picture?.closest<HTMLElement>("[data-block-id]")?.dataset.blockId;
+          if (
+            picture &&
+            figureId &&
+            !picture.closest("a, [data-source-id]:not([data-source-id=''])") &&
+            blocksRef.current.find((b) => b.id === figureId)?.type === "FIGURE"
+          ) {
+            openFigureTools(figureId, event.clientX, event.clientY);
             suppressNextMouseUp.current = false;
             return;
           }
@@ -7109,12 +7141,23 @@ export function ReaderInteractions({
     target: Pick<Popover, "anchor" | "yTop"> & Partial<Pick<Popover, "y" | "side">>,
     figure = false,
   ): AssistantBar {
+    // In the page editor the toolbox stands in the card column, pulled up to
+    // fit the pane, so its place says nothing of the words': the words'
+    // bottom is the selection's last line (PAGE13-03).
+    const container = containerRef.current;
+    const editor = figure ? null : pageEditorIn(container);
+    let selectionBottom: number | null = null;
+    if (container && editor && !editor.isDestroyed && !editor.state.selection.empty) {
+      const bottom = editor.view.coordsAtPos(editor.state.selection.to, -1).bottom;
+      selectionBottom = bottom - container.getBoundingClientRect().top + container.scrollTop;
+    }
     const opened: AssistantBar = {
       key: queuedKey(),
       anchor: target.anchor,
       figure,
       yTop: target.yTop,
-      wordsBottom: target.y === undefined ? target.yTop : target.y - (target.side === "below" ? 14 : 6),
+      wordsBottom:
+        selectionBottom ?? (target.y === undefined ? target.yTop : target.y - (target.side === "below" ? 14 : 6)),
       noteId: null,
       messages: [],
       input: readToolbarDraft("assistant", documentId, target.anchor) ?? "",
@@ -7214,7 +7257,8 @@ export function ReaderInteractions({
     if (!barOpenKey) return;
     const raf = requestAnimationFrame(() => {
       const container = containerRef.current;
-      const el = container?.querySelector<HTMLElement>("[data-assistant-bar]");
+      // The bar stands at the pane's foot, beside the scroller, not in it.
+      const el = container?.parentElement?.querySelector<HTMLElement>("[data-assistant-bar]");
       const current = barRef.current;
       if (!container || !el || !current) return;
       const crect = container.getBoundingClientRect();
@@ -7293,10 +7337,13 @@ export function ReaderInteractions({
     if (actions.length > 0) {
       const n = actions.length;
       // Every plan waits for approval (SPEC.md §1: nothing applies unaccepted).
+      const planThread = toolNoteId ?? plan.conversationNoteId ?? conversationNoteId;
+      parkPlan(planThread);
+      parkedPlansRef.current.delete(planThread ?? "");
       setAiPlan({ ...plan, actions });
       setPlanChecked(new Set(actions.map((_, i) => i)));
       setPlanFrom(toolNoteId ? "tool" : "chat");
-      setPlanNoteId(toolNoteId ?? plan.conversationNoteId ?? conversationNoteId);
+      setPlanNoteId(planThread);
       // The plan under the answer and its Apply say the count; a plan with
       // no reply says it in the turn.
       if (!plan.reply) parts.push(t("assistant.proposedActions", { n, s: plural(n) }));
@@ -7561,6 +7608,19 @@ export function ReaderInteractions({
     ? ((assistantChat.sideChats ?? []).find((s) => s.key === assistantChat.openKey) ?? null)
     : null;
   const chatNoteId = chatOpenSide ? chatOpenSide.noteId : (assistantChat?.noteId ?? null);
+  // The thread on screen has a plan waiting: it comes back, and the plan it
+  // replaces waits under its own thread (TOOL13-03).
+  useEffect(() => {
+    if (!chatNoteId || (aiPlan && planNoteId === chatNoteId)) return;
+    const parked = parkedPlansRef.current.get(chatNoteId);
+    if (!parked) return;
+    parkedPlansRef.current.delete(chatNoteId);
+    parkPlan(chatNoteId);
+    setAiPlan(parked.plan);
+    setPlanChecked(parked.checked);
+    setPlanFrom(parked.from);
+    setPlanNoteId(chatNoteId);
+  }, [chatNoteId, aiPlan, planNoteId]);
   // A comment on an answer keeps its draft by the thread's note and the quote.
   const chatCommentKey = chatNoteId && chatCommentQuote ? cardCommentKey(chatNoteId, chatCommentQuote) : null;
   // The comment box closes with its card; its words wait in the draft for
@@ -9342,13 +9402,6 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       onDelete={(id) => void deleteChatComment(id)}
       className={chipsClassName}
     />
-    {/* How the assistant answers; a comment goes to people, not to it. */}
-    {!chatCommentQuote && (
-      <div className={`flex items-center gap-1.5 ${chipsClassName}`}>
-        <ThinkingChips small />
-        <WebChip small />
-      </div>
-    )}
     {/* A side chat's header already shows the quote it started on. */}
     {chat.quote && !(chat.openKey && chat.quote === chatOpenSide?.quote) && (
       <QuoteChip quote={chat.quote} onClear={dropChatQuote} className={chipsClassName} />
@@ -9373,8 +9426,11 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       />
     ) : (
     <>
+    {/* One composer foot (TOOL13-10): the field, then how the assistant
+        answers on the left and the mic and Send on the right, as in the
+        toolbar's box. */}
     <form
-      className={className}
+      className={`${className} flex-wrap`}
       onSubmit={(e) => {
         e.preventDefault();
         void sendChatMessage();
@@ -9395,9 +9451,13 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         placeholder={t(chat.busy ? "assistant.queuePlaceholder" : "reader.replyPlaceholder")}
         aria-label={t("reader.messageAssistant")}
         data-chat-box=""
-        className="field-sizing-content max-h-40 min-h-8 flex-1 resize-none rounded-xl bg-sand-100 px-3 py-1.5 text-[12.5px] outline-none placeholder:text-sand-500"
+        className="field-sizing-content max-h-40 min-h-8 basis-full resize-none rounded-xl bg-sand-100 px-3 py-1.5 text-[12.5px] outline-none placeholder:text-sand-500"
       />
-      <VoiceTypingButton track="assistant-card-voice-typing" className="size-8" size={14} />
+      <span className="flex items-center gap-1.5 self-center">
+        <ThinkingChips small />
+        <WebChip small />
+      </span>
+      <VoiceTypingButton track="assistant-card-voice-typing" className="ml-auto size-8" size={14} />
       {/* While an answer runs the button is Stop, or Queue once a message is
           composed (SPEC.md §7). */}
       <button
@@ -9692,19 +9752,34 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           data-tip={t("reader.discardPlanTitle")}
           className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
         >
-          {t("common.cancel")}
+          {t("common.reject")}
         </button>
       </div>
     </>
   ) : null;
   // The card that shows the plan; a plan whose card is closed waits for it.
-  // A side chat shows its own plan; the main thread's waits in the main thread.
+  // A side chat shows its own plan; the main thread's waits in the main
+  // thread, and a side chat with no answer yet shows none (TOOL13-03).
   const shownThreadNoteId = assistantChat?.openKey ? (chatOpenSide?.noteId ?? null) : (assistantChat?.noteId ?? null);
   const planInCard =
     aiPlan !== null &&
     planFrom === "chat" &&
     assistantChat !== null &&
-    (planNoteId === null || shownThreadNoteId === null || shownThreadNoteId === planNoteId);
+    (assistantChat.openKey
+      ? planNoteId !== null && shownThreadNoteId === planNoteId
+      : planNoteId === null || shownThreadNoteId === null || shownThreadNoteId === planNoteId);
+  // A plan lands under its answer: the turns show the answer from its start,
+  // the plan under it (TOOL13-02).
+  useEffect(() => {
+    if (!planInCard) return;
+    const raf = requestAnimationFrame(() => {
+      const el = chatScrollRef.current;
+      const answer = el ? [...el.querySelectorAll<HTMLElement>("[data-chat-answer]")].pop() : undefined;
+      if (!el || !answer) return;
+      el.scrollTop += answer.getBoundingClientRect().top - el.getBoundingClientRect().top - 8;
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [planInCard, chatMessageCount]);
   const planFloats = aiPlan !== null && planFrom === "panel";
   const barKey = bar ? barRunKey(bar) : null;
   // The bar on an image (SPEC.md §7): its chips read the image.
@@ -10443,10 +10518,26 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                     setSubmenu(null);
                   }
                 }}
-                placeholder={t("reader.assistantPlaceholder")}
+                placeholder={t(popover.figure ? "reader.figureBarPlaceholder" : "reader.assistantPlaceholder")}
                 rows={2}
                 className="w-full resize-none rounded-xl bg-sand-100 p-2 text-[12px] outline-none placeholder:text-sand-500"
               />
+              {popover.figure && !aiBusy && (
+                <div className="flex flex-wrap items-center gap-1">
+                  {FIGURE_CHIPS.map((chip) => (
+                    <button
+                      key={chip.label}
+                      type="button"
+                      onClick={() => void runAssistant(t(chip.command))}
+                      data-track={`assistant-figure:${chip.label.slice("reader.figure".length)}`}
+                      data-tip={t("reader.figureChipTitle")}
+                      className="rounded-full bg-sand-100 px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:py-1.5"
+                    >
+                      {t(chip.label)}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="flex flex-wrap items-center gap-1.5">
                 <ThinkingChips small />
                 <WebChip small />
@@ -10458,7 +10549,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   data-track="assistant-run"
                   data-tip={aiBusy ? t("reader.stopAssistant") : t("reader.sendTitle")}
                   aria-label={aiBusy ? t("reader.stopAssistant") : undefined}
-                  className="rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+                  className="rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
                 >
                   {aiBusy ? <StopIcon size={11} /> : t("reader.send")}
                 </button>
@@ -10944,6 +11035,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 notebookId={notebookId}
                 documentId={documentId}
                 noteId={bubble.noteId}
+                inRow
               />
               {/* Save as note (SPEC.md §7): the output organized into a note. */}
               {bubble.kind !== "visualize" && (
@@ -11104,6 +11196,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 notebookId={notebookId}
                 documentId={documentId}
                 noteId={simplifyCard.noteId}
+                inRow
               />
               <SaveAsNote
                 notebookId={notebookId}
@@ -11483,7 +11576,14 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   {message.content}
                 </p>
               ) : (
-                <div key={i} className="text-[13px]">
+                <div
+                  key={i}
+                  // An older answer shows its rating row on hover or focus; a
+                  // tap focuses the answer on a touch screen (TOOL13-12).
+                  tabIndex={-1}
+                  data-chat-answer
+                  className="group/answer text-[13px] outline-none"
+                >
                   {/* Highlighting the answer offers the side chat, the quoted
                       question, and the comment (SPEC.md §7). */}
                   <div {...{ [ANSWER_MARK]: "" }}>
@@ -11495,7 +11595,13 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   {message.suggestKey ? (
                     <SuggestionRow runKey={message.suggestKey} />
                   ) : !assistantChat.busy && (
-                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <div
+                      className={`mt-1 flex flex-wrap items-center gap-2${
+                        i < list.findLastIndex((m) => m.role === "assistant")
+                          ? " opacity-0 transition-opacity group-focus-within/answer:opacity-100 group-hover/answer:opacity-100"
+                          : ""
+                      }`}
+                    >
                       <RatingButtons
                         tool="act"
                         input={[assistantChat.anchor?.quotedText ?? "", list[i - 1]?.content ?? ""]
@@ -11505,6 +11611,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                         notebookId={notebookId}
                         documentId={documentId}
                         noteId={chatNoteId}
+                        inRow
                       />
                       <SaveAsNote
                         notebookId={notebookId}
@@ -11521,14 +11628,16 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               ),
             )}
             {assistantChat.busy && <ThinkingIndicator className="py-0.5 text-[12px]" />}
+            {/* The plan this conversation proposed, under its answer (SPEC.md
+                §7): it scrolls with the turns, so a short card still shows
+                the answer, and the box stays the card's last row. */}
+            {planInCard && (
+              <div data-plan-in-card className="flex shrink-0 flex-col rounded-2xl border border-line bg-sand-50 p-3">
+                {planBody}
+              </div>
+            )}
             <QueuedList items={chatQueueShown(assistantChat)} onRemove={removeQueuedChat} />
           </div>
-          {/* The plan this conversation proposed, under its answer (SPEC.md §7). */}
-          {planInCard && (
-            <div data-plan-in-card className="mx-3 mb-2 flex max-h-[45%] shrink-0 flex-col rounded-2xl border border-line bg-sand-50 p-3">
-              {planBody}
-            </div>
-          )}
           {assistantChatFoot(assistantChat, "flex items-end gap-1.5 px-3 pb-3", "px-3 pb-1.5")}
         </div>
       )}
@@ -11725,23 +11834,23 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               onClick={() => void runBar(bar)}
               data-track="assistant-run"
               data-tip={t("reader.sendTitle")}
-              className="rounded-full bg-clay px-3 py-1 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+              className="rounded-full bg-clay px-3 py-1.5 text-[11px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
             >
               {t("reader.send")}
             </button>
           </div>
           {!barKey && !bar.busy && barFigure && (
             <div className="flex flex-wrap items-center gap-1">
-              {FIGURE_CHIPS.map((key) => (
+              {FIGURE_CHIPS.map((chip) => (
                 <button
-                  key={key}
+                  key={chip.label}
                   type="button"
-                  onClick={() => void runBar({ ...bar, input: t(key) })}
-                  data-track={`assistant-figure:${key.slice("reader.figure".length)}`}
+                  onClick={() => void runBar({ ...bar, input: t(chip.command) })}
+                  data-track={`assistant-figure:${chip.label.slice("reader.figure".length)}`}
                   data-tip={t("reader.figureChipTitle")}
                   className="rounded-full bg-sand-100 px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
                 >
-                  {t(key)}
+                  {t(chip.label)}
                 </button>
               ))}
               <ThinkingChips small className="ml-auto" />

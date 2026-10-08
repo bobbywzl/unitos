@@ -306,7 +306,7 @@ export function QuoteChip({
         data-track="assistant-quote-remove"
         aria-label={clearLabel ?? t("assistant.quoteRemove")}
         data-tip={clearLabel ?? t("assistant.quoteRemove")}
-        className="text-sand-500 hover:text-clay-800"
+        className="-my-1 -mr-1.5 flex size-6 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800"
       >
         ✕
       </button>

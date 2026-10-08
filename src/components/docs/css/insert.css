@@ -1659,7 +1659,7 @@ body.docs-img-moving .docs-img-toolbar {
 }
 @media (prefers-reduced-motion: no-preference) {
   .docs-img-assistant svg {
-    animation: thinking-spark 2.4s ease-in-out infinite;
+    animation: thinking-spark 2.4s ease-in-out 2;
   }
   .docs-img-assistant::after {
     content: "";
@@ -1673,6 +1673,6 @@ body.docs-img-moving .docs-img-toolbar {
       color-mix(in srgb, var(--kind-assistant) 22%, transparent),
       transparent
     );
-    animation: img-assistant-sheen 3.2s ease-in-out infinite;
+    animation: img-assistant-sheen 3.2s ease-in-out 2 forwards;
   }
 }

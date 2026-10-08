@@ -106,13 +106,21 @@ export function VoiceTypingButton({
     if (el) typeHeardInto(el, phrase, english);
   });
   const { listening, status, interim } = speech;
-  const [rect, setRect] = useState<DOMRect | null>(null);
+  const [rect, setRect] = useState<{ left: number; width: number; top: number; bottom: number } | null>(null);
   const showCard = listening || status !== "";
 
   // The card sits over the button while it shows, and follows it on scroll.
+  // A box above the button (the toolbar's assistant box) keeps its words in
+  // view: the card sits over the box and the button both (TOOL13-13).
   useEffect(() => {
     if (!showCard) return;
-    const place = () => setRect(buttonRef.current?.getBoundingClientRect() ?? null);
+    const place = () => {
+      const button = buttonRef.current?.getBoundingClientRect();
+      if (!button) return setRect(null);
+      const box = targetRef.current?.isConnected ? targetRef.current.getBoundingClientRect() : null;
+      const top = box && box.bottom <= button.top + 4 && button.top - box.top < 240 ? box.top : button.top;
+      setRect({ left: button.left, width: button.width, top, bottom: button.bottom });
+    };
     place();
     window.addEventListener("scroll", place, true);
     window.addEventListener("resize", place);
@@ -130,10 +138,13 @@ export function VoiceTypingButton({
     return () => window.clearTimeout(timer);
   }, [listening, status, setStatus]);
 
-  // The words still being heard are typed before the box can close (NOTE12-11):
-  // a press outside the box and the button (Done, ✕, a click away) and Escape
-  // type them at the caret first. Escape waits a frame, for the box to take
-  // the words, then goes on to close what it closes.
+  // The words still being heard are typed before the box can close or send
+  // (NOTE12-11, TOOL13-01): a press outside the box and the button (Done, ✕, a
+  // click away), Escape, and Enter in the box type them at the caret first.
+  // Escape and Enter in a text field wait a frame, for the box to take the
+  // words, then go on to do what they do: Enter sends the whole box, or types
+  // its new line where Enter does not send. In a rich text box Enter goes on at
+  // once: the box reads its own text, with the words already in.
   const { flush } = speech;
   useEffect(() => {
     if (!listening) return;
@@ -161,15 +172,38 @@ export function VoiceTypingButton({
       document.addEventListener("pointerup", onUp, true);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || !e.isTrusted || !speech.interim.trim()) return;
+      if (!e.isTrusted || !speech.interim.trim()) return;
       const target = e.target;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        flush();
+        requestAnimationFrame(() => {
+          if (target instanceof Node && target.isConnected) {
+            target.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true, cancelable: true }));
+          }
+        });
+        return;
+      }
+      if (e.key !== "Enter" || e.shiftKey || e.isComposing || e.keyCode === 229) return;
+      const field = targetRef.current;
+      if (!field || !(target instanceof Node) || !field.contains(target)) return;
+      if (!isTextField(field)) {
+        flush();
+        return;
+      }
       e.preventDefault();
       e.stopImmediatePropagation();
       flush();
+      const { ctrlKey, metaKey, altKey } = e;
       requestAnimationFrame(() => {
-        if (target instanceof Node && target.isConnected) {
-          target.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true, cancelable: true }));
-        }
+        if (!field.isConnected) return;
+        const again = new KeyboardEvent("keydown", { key: "Enter", code: "Enter", ctrlKey, metaKey, altKey, bubbles: true, cancelable: true });
+        // No handler took the key: it does what a key press does there.
+        if (!field.dispatchEvent(again) || ctrlKey || metaKey || altKey) return;
+        if (document.activeElement !== field) field.focus();
+        if (field instanceof HTMLTextAreaElement) insert(field, "\n");
+        else field.form?.requestSubmit();
       });
     };
     document.addEventListener("pointerdown", onDown, true);
