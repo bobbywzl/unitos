@@ -22,10 +22,10 @@ const en = {
   // Commands (Search the menus)
   pageSetup: "Page setup",
   showRuler: "Show ruler",
-  showOutline: "Show the outline",
+  showOutline: "Show the contents",
   fullScreen: "Full screen",
   fullScreenHint: "Full screen. Press Esc to bring the toolbar back.",
-  hideOutline: "Hide the outline",
+  hideOutline: "Hide the contents",
   switchToPageless: "Switch to Pageless format",
   switchToPages: "Switch to Pages format",
   // A PDF import read pageless in Viewing (page/reflow.tsx).
@@ -149,7 +149,7 @@ const en = {
   collapseHeading: "Collapse heading",
   expandHeading: "Expand heading",
   // The outline panel
-  outlineEmpty: "Headings you add to the document will appear here.",
+  outlineEmpty: "No contents yet. Headings you add show here.",
   tabsOutlines: "Outline",
   resizePanel: "Drag to resize",
   // Headers, footers, page numbers
@@ -192,10 +192,10 @@ const zh: Record<keyof typeof en, string> = {
   importWordFile: "Word 文件",
   pageSetup: "页面设置",
   showRuler: "显示标尺",
-  showOutline: "显示大纲",
+  showOutline: "显示目录",
   fullScreen: "全屏",
   fullScreenHint: "全屏模式。按 Esc 恢复工具栏。",
-  hideOutline: "隐藏大纲",
+  hideOutline: "隐藏目录",
   switchToPageless: "切换到无分页格式",
   switchToPages: "切换到分页格式",
   readPageless: "无分页阅读",
@@ -308,7 +308,7 @@ const zh: Record<keyof typeof en, string> = {
   addRightTabStop: "添加右对齐制表位",
   collapseHeading: "收起标题",
   expandHeading: "展开标题",
-  outlineEmpty: "你添加到文档中的标题会显示在这里。",
+  outlineEmpty: "还没有目录。你添加的标题会显示在这里。",
   tabsOutlines: "大纲",
   resizePanel: "拖动以调整大小",
   firstPageHeader: "首页页眉",
