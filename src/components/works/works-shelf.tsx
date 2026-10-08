@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { api } from "@/lib/api";
 import {
   listSaved,
@@ -40,7 +40,11 @@ export function WorksShelf({
 }) {
   const router = useRouter();
   const t = useT();
-  const [busy, setBusy] = useState(false);
+  const [creating, setCreating] = useState(false);
+  // The new project's page is on its way: New project reads Working… and
+  // takes no press until the page replaces the dashboard.
+  const [opening, startOpening] = useTransition();
+  const busy = creating || opening;
   const [deleting, setDeleting] = useState<{ id: string; title: string } | null>(null);
   const [leaving, setLeaving] = useState<{ id: string; title: string } | null>(null);
 
@@ -109,14 +113,16 @@ export function WorksShelf({
   // first thing a new project asks for is a document.
   async function create() {
     if (busy) return;
-    setBusy(true);
+    setCreating(true);
     try {
       const work = await api<{ id: string }>("/api/notebooks", "POST", {
         title: t("works.untitledProject"),
       });
-      router.push(`/n/${work.id}?add=1`);
+      startOpening(() => router.push(`/n/${work.id}?add=1`));
+    } catch (err) {
+      setToast({ text: err instanceof Error ? err.message : t("common.notSaved"), plans: false });
     } finally {
-      setBusy(false);
+      setCreating(false);
     }
   }
 
@@ -273,26 +279,46 @@ function DeleteProjectConfirm({
   const cancelRef = useRef<HTMLButtonElement>(null);
   useEscapeLayer(true, onClose);
 
-  useEffect(() => {
-    cancelRef.current?.focus();
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await fetch(`/api/notebooks/${project.id}`);
-        const body = (await res.json()) as { onlyHere?: { id: string; title: string }[]; error?: string };
-        if (cancelled) return;
-        if (!res.ok || !body.onlyHere) setError(body.error ?? t("common.requestFailed"));
-        else setOnlyHere(body.onlyHere);
-      } catch {
-        if (!cancelled) setError(t("common.requestFailed"));
+  // The documents only this project holds. A failed read says "Not loaded.
+  // Try again." (a refusal the route words keeps its words), and a press on
+  // Delete project reads again.
+  const [readFailed, setReadFailed] = useState(false);
+  const live = useRef(true);
+  async function read() {
+    setReadFailed(false);
+    setError(null);
+    try {
+      const res = await fetch(`/api/notebooks/${project.id}`);
+      const body = (await res.json().catch(() => null)) as { onlyHere?: { id: string; title: string }[]; error?: string } | null;
+      if (!live.current) return;
+      if (res.ok && body?.onlyHere) {
+        setOnlyHere(body.onlyHere);
+        return;
       }
-    })();
+      console.warn("Not loaded: GET project", res.status, body?.error ?? "");
+      setError(res.status < 500 && body?.error ? body.error : t("common.notLoaded"));
+    } catch (err) {
+      if (!live.current) return;
+      console.warn("Not loaded: GET project", err);
+      setError(t("common.notLoaded"));
+    }
+    setReadFailed(true);
+  }
+  const readRef = useRef(read);
+  useEffect(() => {
+    readRef.current = read;
+  });
+  useEffect(() => {
+    live.current = true;
+    cancelRef.current?.focus();
+    void readRef.current();
     return () => {
-      cancelled = true;
+      live.current = false;
     };
-  }, [project.id, t]);
+  }, [project.id]);
 
   async function confirmDelete() {
+    if (readFailed) return read();
     if (working) return;
     setWorking(true);
     setError(null);
@@ -347,7 +373,7 @@ function DeleteProjectConfirm({
           </button>
           <button
             onClick={() => void confirmDelete()}
-            disabled={working || onlyHere === null}
+            disabled={working || (onlyHere === null && !readFailed)}
             data-track="project-delete-confirm"
             className="rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
           >

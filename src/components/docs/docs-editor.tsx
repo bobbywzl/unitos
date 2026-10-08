@@ -1006,6 +1006,10 @@ export function DocsEditor({
       data-full-screen={fullScreen || undefined}
     >
       <div className="docs-header" data-edit-control data-away={away || undefined}>
+        {/* A pane of a split view: the pane header (reader-interactions.tsx)
+            stands over this slot, in the title row's place and height, so a
+            view switch moves neither the pane nor the toolbar. */}
+        {split && <div className="docs-title-row" data-pane-header-slot aria-hidden="true" />}
         {!headerHidden && !fullScreen && (
           <div className="docs-title-row @container">
             <DocIcon size={26} className="docs-title-icon" />

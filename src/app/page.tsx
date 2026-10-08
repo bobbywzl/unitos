@@ -17,7 +17,7 @@ import { Companions } from "@/components/works/companions";
 import { FeedbackHeaderButton } from "@/components/feedback-button";
 import { Notifications } from "@/components/works/notifications";
 import { currentLang } from "@/lib/i18n/server";
-import { ensureReleaseNotifications } from "@/lib/releases-server";
+import { ensureReleaseNotifications, releaseKeyFilter } from "@/lib/releases-server";
 import { WelcomeFlow } from "@/components/works/welcome-flow";
 import { WorksShelf, type WorkItem } from "@/components/works/works-shelf";
 
@@ -73,10 +73,12 @@ export default async function Home() {
 
   // The releases that shipped since the account was made land as update
   // notifications on this open (SPEC.md §18, lib/releases.ts).
-  await ensureReleaseNotifications(user.id, user.createdAt, await currentLang());
-  // The account's open notifications from the admin (SPEC.md §18), newest first.
+  const lang = await currentLang();
+  await ensureReleaseNotifications(user.id, user.createdAt, lang);
+  // The account's open notifications from the admin (SPEC.md §18), newest
+  // first; a release's in this language only (one card per release).
   const notifications = await db.notificationRecipient.findMany({
-    where: { userId: user.id, dismissedAt: null },
+    where: { userId: user.id, dismissedAt: null, notification: releaseKeyFilter(lang) },
     orderBy: { notification: { createdAt: "desc" } },
     select: {
       notification: {

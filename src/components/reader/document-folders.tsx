@@ -18,6 +18,9 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { api } from "@/lib/api";
+import { ACCOUNT_HEADER } from "@/lib/constants";
+import { postUndoPill } from "@/lib/notes/undo-pill";
+import { tabAccount } from "@/lib/tab-account";
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon, FolderIcon, MoreIcon, PlusIcon } from "@/components/icons";
 import { useLang, useT } from "@/components/lang-provider";
 import { CategoryRow, categoryLabels, useFoldedCategories } from "@/components/reader/document-organize";
@@ -38,6 +41,7 @@ import { isImeKey, useImeGuard } from "@/lib/ime";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { clipWords } from "@/lib/markdown-preview";
 import { focusWhenDrawn, useEscapeLayer } from "@/lib/escape-layers";
+import { focusMenuIfKey, menuButtonKeys, menuKeys } from "@/lib/menu-keys";
 
 // Folders in the document list (SPEC.md §6). A folder is a named group of a
 // project's documents; a folder can hold folders. The list draws a folder as
@@ -545,8 +549,9 @@ function NewFolderRow({ parentId }: { parentId: string | null }) {
   );
 }
 
-// New document here, at the foot of a folder's list: the + bubble opens the add
-// dialog, and what it adds lands in this folder (SPEC.md §6).
+// New document here, at the foot of an empty folder's list: the + bubble
+// opens the add dialog, and what it adds lands in this folder (SPEC.md §6).
+// A folder with rows has New document inside in its ⋯ instead.
 function NewDocumentRow({ folderId }: { folderId: string }) {
   const { t, pending, addIn } = useTree();
   if (!addIn) return null;
@@ -611,7 +616,6 @@ function FolderRow({
   // with its id it takes no action.
   const placeholder = folder.id.startsWith(NEW_FOLDER_PREFIX);
   const canEdit = tree.canEdit && !placeholder;
-  const [deleteAsk, setDeleteAsk] = useState(false);
   const open = openPath[depth] === folder.id;
   const onActivePath = activePath[depth] === folder.id;
   const count = counts.get(folder.id) ?? 0;
@@ -667,7 +671,10 @@ function FolderRow({
           </div>
         ) : (
           <button
-            onClick={() => tree.toggleFolder(folder)}
+            // A fly-out opens on the pointer's hover: a click there opens
+            // it and never closes it (another row, Escape or ← close it).
+            // Under the row (a phone, a narrow panel) a click toggles.
+            onClick={() => (flyout ? tree.openFolder(folder) : tree.toggleFolder(folder))}
             // By keys, a fly-out is a submenu: Enter, Space or → opens the
             // folder's list and moves into it.
             onKeyDown={(e) => {
@@ -706,11 +713,13 @@ function FolderRow({
         )}
         {canEdit && tree.renaming !== folder.id && (
           <button
-            onClick={() => {
+            onClick={(e) => {
               tree.setError(null);
               tree.setMoving(null);
+              if (!menuOpen) focusMenuIfKey(e, `[data-folder-menu="${folder.id}"]`);
               tree.setMenu(menuOpen ? null : folder.id);
             }}
+            onKeyDown={(e) => menuButtonKeys(e, menuOpen, `[data-folder-menu="${folder.id}"]`)}
             data-track="folder-actions"
             aria-label={t("panes.folderActionsFor", { title: folder.title })}
             aria-expanded={menuOpen}
@@ -723,7 +732,26 @@ function FolderRow({
       </div>
       <Collapse open={menuOpen}>
         {menuOpen && (
-          <div data-no-drag className="mx-2 mb-1.5 flex flex-col rounded-xl bg-sand-100 py-1">
+          <div
+            data-no-drag
+            data-folder-menu={folder.id}
+            onKeyDown={menuKeys}
+            className="mx-2 mb-1.5 flex flex-col rounded-xl bg-sand-100 py-1"
+          >
+            {tree.addIn && (
+              <button
+                onClick={() => {
+                  tree.setMenu(null);
+                  tree.addIn?.(folder.id);
+                }}
+                data-track="folder-new-file-inside"
+                disabled={pending}
+                className={ROW_ACTION}
+                data-tip={t("panes.newFileHereTitle")}
+              >
+                {t("panes.newFileInside")}
+              </button>
+            )}
             <button
               onClick={() => {
                 tree.setMenu(null);
@@ -767,42 +795,18 @@ function FolderRow({
                 onPick={(parentId) => tree.moveFolder(folder, parentId)}
               />
             )}
+            {/* Delete folder asks nothing: the folder goes at once, what it
+                held moves up one level, and the notes' Undo pill offers
+                Undo; the server's delete waits for the pill. */}
             <button
-              onClick={() => setDeleteAsk(!deleteAsk)}
+              onClick={() => tree.deleteFolder(folder)}
               data-track="folder-delete"
               disabled={pending}
-              aria-expanded={deleteAsk}
               className="px-4 py-1.5 text-left text-[12.5px] text-red-600 hover:bg-red-50 disabled:opacity-40 dark:hover:bg-red-950"
               data-tip={t("panes.deleteFolderTitle")}
             >
               {t("panes.deleteFolder")}
             </button>
-            {/* The confirm under the row, in the app's own look, as for a
-                document: what the folder holds moves up one level. */}
-            {deleteAsk && (
-              <div className="mx-2 mb-1 flex flex-col gap-2 rounded-lg bg-card px-3 py-2">
-                <p className="text-[12px] leading-snug text-sand-700">{t("panes.confirmDeleteFolder")}</p>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      setDeleteAsk(false);
-                      tree.deleteFolder(folder);
-                    }}
-                    data-track="folder-delete-confirm"
-                    disabled={pending}
-                    className="rounded-full bg-red-600 px-3 py-1 text-[12px] font-semibold text-white hover:bg-red-700 disabled:opacity-50"
-                  >
-                    {t("panes.deleteFolder")}
-                  </button>
-                  <button
-                    onClick={() => setDeleteAsk(false)}
-                    className="rounded-full px-3 py-1 text-[12px] text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-                  >
-                    {t("common.cancel")}
-                  </button>
-                </div>
-              </div>
-            )}
             <ErrorLine at={`folder:${folder.id}`} />
           </div>
         )}
@@ -904,7 +908,10 @@ function Level({ parentId, depth }: { parentId: string | null; depth: number }) 
         </p>
       )}
       {canEdit && !empty && <div className="mx-3 my-1 border-t border-line" />}
-      {canEdit && parentId !== null && (
+      {/* New document here closes an empty folder's list, where it is
+          the only content; a folder with rows has New document inside in
+          its ⋯. */}
+      {canEdit && parentId !== null && empty && (
         <div className="tree-row-in" style={rowStyle(index++)}>
           <NewDocumentRow folderId={parentId} />
         </div>
@@ -1041,10 +1048,24 @@ export function DocumentTree<
     const left = newFolders.filter((f) => !storedFolders.some((g) => g.id === f.id));
     if (left.length !== newFolders.length) setNewFolders(left);
   }
-  const placedFolders = storedFolders.map((f) => {
-    const p = placement("folder", f.id);
-    return p ? { ...f, parentId: p.parentId, position: p.position } : f;
-  });
+  // Folders deleted while their Undo pill shows: gone from the tree, what
+  // they held one level up (folder id → the parent it goes to), until the
+  // pill commits and the server's rows drop them, or Undo brings them back.
+  const [gone, setGone] = useState<ReadonlyMap<string, string | null>>(new Map());
+  const lift = (id: string | null): string | null => {
+    let at = id;
+    for (let i = 0; at && gone.has(at) && i < 64; i++) at = gone.get(at) ?? null;
+    return at;
+  };
+  const placedFolders = storedFolders
+    .filter((f) => !gone.has(f.id))
+    .map((f) => {
+      const p = placement("folder", f.id);
+      const parentId = p ? p.parentId : f.parentId;
+      const lifted = lift(parentId);
+      if (lifted !== parentId) return { ...f, parentId: lifted, position: null };
+      return p ? { ...f, parentId: p.parentId, position: p.position } : f;
+    });
   const folders =
     newFolders.length === 0
       ? placedFolders
@@ -1053,11 +1074,12 @@ export function DocumentTree<
   const known = new Set(folders.map((f) => f.id));
   const rows: TreeRow[] = documents.map((d) => {
     const p = placement("document", d.id);
-    const folderId = p ? p.parentId : d.folderId;
+    const placedIn = p ? p.parentId : d.folderId;
+    const folderId = lift(placedIn);
     return {
       id: d.id,
       folderId: folderId && known.has(folderId) ? folderId : null,
-      position: p ? p.position : d.position,
+      position: folderId !== placedIn ? null : p ? p.position : d.position,
       title: d.title,
       kind: d.kind,
       addedAt: d.addedAt,
@@ -1509,18 +1531,47 @@ export function DocumentTree<
       focusWhenDrawn(item.kind === "document" ? `[data-doc-row="${item.id}"]` : `[data-folder-row="${item.id}"]`);
     },
     canDropOn,
-    // What the folder holds moves up one level; the route does it.
+    // What the folder holds moves up one level; the route does it. The
+    // folder goes from the tree at once and the notes' Undo pill offers
+    // Undo; the route runs once the pill goes without Undo (its 12 s, ✕,
+    // the next post, the page closing: keepalive). A refused delete puts
+    // the folder back, with the error under the list.
     deleteFolder: (folder) => {
-      void run(
-        `folder:${folder.id}`,
-        () => api(`/api/notebooks/${notebookId}/folders/${folder.id}`, "DELETE"),
-        () => {
-          setMenu(null);
-          setOpenPath((path) =>
-            path.includes(folder.id) ? path.slice(0, path.indexOf(folder.id)) : path,
-          );
+      setMenu(null);
+      setMoving(null);
+      setError(null);
+      setOpenPath((path) => (path.includes(folder.id) ? path.slice(0, path.indexOf(folder.id)) : path));
+      setGone((map) => new Map(map).set(folder.id, folder.parentId));
+      const back = () =>
+        setGone((map) => {
+          const next = new Map(map);
+          next.delete(folder.id);
+          return next;
+        });
+      postUndoPill({
+        message: t("panes.folderDeleted"),
+        undo: back,
+        commit: async () => {
+          const account = tabAccount();
+          try {
+            const res = await fetch(`/api/notebooks/${notebookId}/folders/${folder.id}`, {
+              method: "DELETE",
+              keepalive: true,
+              headers: account ? { [ACCOUNT_HEADER]: account } : undefined,
+            });
+            if (res.ok || res.status === 404) {
+              router.refresh();
+              return;
+            }
+            const json = (await res.json().catch(() => null)) as { error?: string } | null;
+            console.warn("Not saved: DELETE folder", res.status, json?.error ?? "");
+          } catch (err) {
+            console.warn("Not saved: DELETE folder", err);
+          }
+          back();
+          setError({ at: "drag", message: t("common.notSaved") });
         },
-      );
+      });
     },
   };
 

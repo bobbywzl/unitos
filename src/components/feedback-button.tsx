@@ -3,7 +3,8 @@
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { IMAGE_ACCEPT, MAX_IMAGE_BYTES } from "@/lib/images";
-import { useEscapeLayer } from "@/lib/escape-layers";
+import { captureOpener, returnFocus, useEscapeLayer } from "@/lib/escape-layers";
+import { readAccountCookie } from "@/lib/tab-account";
 import { isImeKey } from "@/lib/ime";
 import { useT } from "@/components/lang-provider";
 import { Presence } from "@/components/presence";
@@ -13,6 +14,50 @@ const MAX_PHOTOS = 6;
 const MAX_LINKS = 10;
 
 type Photo = { id: string; url: string; name: string };
+type Category = "bug" | "idea" | "other";
+
+// Typed words survive (CLAUDE.md rule zero 6): the form's words, photos and
+// links stay in the browser until the server confirms the send, one draft
+// per account. A failed send, a reload or a closed tab keeps them for the
+// next open.
+type FeedbackDraft = { category: Category; message: string; links: string[]; linkDraft: string; photos: Photo[] };
+
+const feedbackDraftKey = () => `unitos:draft:feedback:${readAccountCookie() ?? "reader"}`;
+
+function readFeedbackDraft(): FeedbackDraft | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(feedbackDraftKey()) ?? "null");
+    if (!parsed || typeof parsed !== "object") return null;
+    const d = parsed as Record<string, unknown>;
+    const strings = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+    const photos = Array.isArray(d.photos)
+      ? d.photos.filter(
+          (x): x is Photo =>
+            Boolean(x) && typeof x === "object" && ["id", "url", "name"].every((k) => typeof (x as Record<string, unknown>)[k] === "string"),
+        )
+      : [];
+    return {
+      category: d.category === "idea" || d.category === "other" ? d.category : "bug",
+      message: typeof d.message === "string" ? d.message : "",
+      links: strings(d.links),
+      linkDraft: typeof d.linkDraft === "string" ? d.linkDraft : "",
+      photos,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeFeedbackDraft(draft: FeedbackDraft) {
+  try {
+    const empty = !draft.message.trim() && !draft.linkDraft.trim() && draft.links.length === 0 && draft.photos.length === 0;
+    if (empty) localStorage.removeItem(feedbackDraftKey());
+    else localStorage.setItem(feedbackDraftKey(), JSON.stringify(draft));
+  } catch {
+    // Storage blocked or full: the words stay in the form for this visit.
+  }
+}
 
 /** A link as the user typed it, or null when it is not an absolute http(s) URL. */
 function parseLink(raw: string): string | null {
@@ -85,21 +130,44 @@ export function FeedbackButton() {
   // Settings on a phone: the pill lay on the plan's words; Feedback is a
   // button in its header.
   const onSettings = pathname === "/settings";
+  // The offline page: Feedback cannot send without a network, and the pill
+  // lay on a card's row.
+  const onOffline = pathname === "/offline";
   const [open, setOpen] = useState(false);
-  const [category, setCategory] = useState<"bug" | "idea" | "other">("bug");
-  const [message, setMessage] = useState("");
+  // The draft kept from an earlier visit. The form is not drawn on the
+  // server, so reading the browser's storage here changes no first paint.
+  const [kept] = useState(readFeedbackDraft);
+  const [category, setCategory] = useState<Category>(kept?.category ?? "bug");
+  const [message, setMessage] = useState(kept?.message ?? "");
   const [state, setState] = useState<"idle" | "busy" | "sent" | "error">("idle");
   // Photos already uploaded (POST /api/images), links added, the link being
   // typed, and the one note under the form about either.
-  const [photos, setPhotos] = useState<Photo[]>([]);
-  const [links, setLinks] = useState<string[]>([]);
-  const [linkDraft, setLinkDraft] = useState("");
+  const [photos, setPhotos] = useState<Photo[]>(kept?.photos ?? []);
+  const [links, setLinks] = useState<string[]>(kept?.links ?? []);
+  const [linkDraft, setLinkDraft] = useState(kept?.linkDraft ?? "");
   const [linkOpen, setLinkOpen] = useState(false);
   const [uploading, setUploading] = useState(0);
   const [note, setNote] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // Each change goes to the draft at once.
   useEffect(() => {
-    const onOpen = () => setOpen(true);
+    writeFeedbackDraft({ category, message, links, linkDraft, photos });
+  }, [category, message, links, linkDraft, photos]);
+  // The control that opened the form: Escape and ✕ give the focus back to
+  // it. The guide's Feedback goes with the guide; then ? (or More) takes it.
+  const opener = useRef<HTMLElement | null>(null);
+  const close = () => {
+    setOpen(false);
+    const back = opener.current?.isConnected
+      ? opener.current
+      : document.querySelector<HTMLElement>('[data-track="guide"], nav [data-track="more"]');
+    returnFocus(back);
+  };
+  useEffect(() => {
+    const onOpen = () => {
+      opener.current = captureOpener();
+      setOpen(true);
+    };
     window.addEventListener(FEEDBACK_OPEN_EVENT, onOpen);
     return () => window.removeEventListener(FEEDBACK_OPEN_EVENT, onOpen);
   }, []);
@@ -156,7 +224,7 @@ export function FeedbackButton() {
 
   // Escape closes the dialog as one layer (lib/escape-layers.ts): a card
   // under it stays open for the next Escape.
-  useEscapeLayer(open, () => setOpen(false));
+  useEscapeLayer(open, close);
 
   if (pathname.startsWith("/admin")) return null;
 
@@ -209,10 +277,14 @@ export function FeedbackButton() {
           below md (FEEDBACK_OPEN_EVENT). On a phone's dashboard, full
           pages, and Settings it is a button in the header. */}
       <button
-        onClick={() => setOpen(!open)}
+        onClick={(e) => {
+          if (open) return close();
+          opener.current = e.currentTarget;
+          setOpen(true);
+        }}
         data-feedback-button=""
         className={`fixed right-4 bottom-[calc(64px+env(safe-area-inset-bottom))] z-20 rounded-full bg-card px-4 py-2 text-sm text-sand-700 shadow-lift hover:bg-clay-100 hover:text-clay-800 md:bottom-[60px] print:hidden ${
-          inReader ? "hidden" : ""
+          inReader || onOffline ? "hidden" : ""
         } ${onDashboard || onFullPage || onSettings ? "max-sm:hidden" : ""}`}
       >
         {t("works.feedback")}
@@ -240,7 +312,7 @@ export function FeedbackButton() {
                   The typed words stay for the next open. */}
               <button
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={close}
                 aria-label={t("common.close")}
                 data-tip={t("common.close")}
                 data-track="feedback-close"
@@ -249,7 +321,10 @@ export function FeedbackButton() {
                 ✕
               </button>
             </div>
+            {/* The form opens with the caret in the message, by keys or by
+                a press, so the first letters typed land there. */}
             <textarea
+              autoFocus
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               // A pasted image goes in as a photo.

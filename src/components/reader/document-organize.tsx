@@ -5,6 +5,7 @@ import { CheckIcon, ChevronDownIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Collapse } from "@/components/presence";
 import { useEscapeLayer } from "@/lib/escape-layers";
+import { focusMenuIfKey, menuButtonKeys, menuKeys } from "@/lib/menu-keys";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { DOCUMENT_SORTS, type DocumentSort, type RowKind } from "@/lib/document-order";
 
@@ -127,7 +128,11 @@ export function DocumentsSort({ sort, onSort }: { sort: DocumentSort; onSort: (s
     <div className="flex flex-col">
       <div className="flex items-center px-3 pt-0.5 pb-1.5">
         <button
-          onClick={() => setPicking(!picking)}
+          onClick={(e) => {
+            if (!picking) focusMenuIfKey(e, "[data-sort-menu]");
+            setPicking(!picking);
+          }}
+          onKeyDown={(e) => menuButtonKeys(e, picking, "[data-sort-menu]")}
           data-track="documents-sort"
           aria-expanded={picking}
           data-tip={t("panes.documentsSortTip")}
@@ -146,7 +151,12 @@ export function DocumentsSort({ sort, onSort }: { sort: DocumentSort; onSort: (s
       </div>
       <Collapse open={picking}>
         {picking && (
-          <div className="flex flex-col border-y border-line bg-sand-50/60 py-1" role="listbox">
+          <div
+            className="flex flex-col border-y border-line bg-sand-50/60 py-1"
+            role="listbox"
+            data-sort-menu
+            onKeyDown={menuKeys}
+          >
             {DOCUMENT_SORTS.map((s) => (
               <button
                 key={s}

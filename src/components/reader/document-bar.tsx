@@ -71,6 +71,7 @@ import { throwIfDuplicate, useDuplicateAsk } from "@/components/reader/duplicate
 import { DuplicateDocumentError, type DuplicateMatch } from "@/lib/documents/duplicate-answer";
 import { isMarkdownFile, MARKDOWN_ACCEPT } from "@/lib/markdown-file";
 import { isSheetsFile, isSlidesFile, isWordFile, SHEETS_ACCEPT, SLIDES_ACCEPT, WORD_ACCEPT } from "@/lib/office-file";
+import { focusMenuIfKey, menuButtonKeys, menuKeys } from "@/lib/menu-keys";
 
 export type AttachedDocument = {
   id: string;
@@ -460,7 +461,11 @@ export function DocumentBar({
     }
     if (rows.length === 0) return;
     e.preventDefault();
-    const at = rows.indexOf(target);
+    // From a row's ⋯ (its menu closed), the rows go on from that row.
+    const from = rows.includes(target)
+      ? target
+      : target.closest<HTMLElement>("[data-tree-row]")?.querySelector<HTMLElement>(LIST_ROWS) ?? null;
+    const at = from ? rows.indexOf(from) : -1;
     const next = at < 0 ? (e.key === "ArrowDown" ? 0 : rows.length - 1) : at + (e.key === "ArrowDown" ? 1 : -1);
     rows[Math.max(0, Math.min(rows.length - 1, next))]?.focus();
   }
@@ -1316,11 +1321,13 @@ export function DocumentBar({
           )}
         </button>
         <button
-          onClick={() => {
+          onClick={(e) => {
             setMoveChoice(null);
             setDeleteAsk(null);
+            if (pillMenu !== d.id) focusMenuIfKey(e, `[data-row-menu="${d.id}"]`);
             setPillMenu(pillMenu === d.id ? null : d.id);
           }}
+          onKeyDown={(e) => menuButtonKeys(e, pillMenu === d.id, `[data-row-menu="${d.id}"]`)}
           data-track="document-actions"
           aria-label={t("panes.documentActionsFor", { title: d.title })}
           aria-expanded={pillMenu === d.id}
@@ -1332,7 +1339,13 @@ export function DocumentBar({
       </div>
       <Collapse open={pillMenu === d.id}>
       {pillMenu === d.id && (
-        <div ref={revealActions} data-no-drag className="mx-2 mb-1.5 flex flex-col rounded-xl bg-sand-100 py-1">
+        <div
+          ref={revealActions}
+          data-no-drag
+          data-row-menu={d.id}
+          onKeyDown={menuKeys}
+          className="mx-2 mb-1.5 flex flex-col rounded-xl bg-sand-100 py-1"
+        >
           {/* A row's actions list only what can run on this document. Re-parse:
               a video or audio document transcribes again, a handwritten one
               re-makes its pages and converts again, a text one parses its
