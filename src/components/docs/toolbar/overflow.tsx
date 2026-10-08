@@ -105,6 +105,16 @@ export function ToolbarRow({
         hide.add(i);
         used -= list[i];
       }
+      // A group the greedy fold took that fits in the room left comes back,
+      // the most used first (on a phone, Undo and Redo). The room here is
+      // the row's own, without the 2 px the fold keeps for rounding.
+      for (const { i } of [...order].reverse()) {
+        if (!hide.has(i)) continue;
+        const more = hide.size > 1 ? MORE : 0;
+        if (used + list[i] + more > room + 2) continue;
+        hide.delete(i);
+        used += list[i];
+      }
     }
     const nextHidden = groups.filter((_, i) => hide.has(i)).map((g) => g.key).join(" ");
     setHiddenKeys((h) => (h === nextHidden ? h : nextHidden));

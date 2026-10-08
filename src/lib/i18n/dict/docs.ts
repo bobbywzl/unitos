@@ -8,6 +8,8 @@ const en = {
   // The page editor
   toolbar: "Toolbar",
   more: "More",
+  /** The toolbar's More (⋮): the reader's bar has its own More. */
+  moreTools: "More tools",
   documentBody: "Document",
   typeAtToInsert: "Type @ to insert",
   renameTitle: "Rename",
@@ -256,6 +258,7 @@ const en = {
 const zh: Record<keyof typeof en, string> = {
   toolbar: "工具栏",
   more: "更多",
+  moreTools: "更多工具",
   documentBody: "文档",
   typeAtToInsert: "输入 @ 以插入",
   renameTitle: "重命名",
