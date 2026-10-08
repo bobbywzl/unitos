@@ -56,6 +56,7 @@ import { useNoteScope } from "@/components/outline/note-groups";
 import { Presence } from "@/components/presence";
 import { flattenNotes, useOutline } from "@/components/outline/use-outline";
 import { DocumentBar, type AttachedDocument } from "@/components/reader/document-bar";
+import { withDocumentDefaults, type AttachedDocumentRow } from "@/lib/attached-document";
 import type { DocumentFolderView } from "@/components/reader/document-folders";
 import type { ReaderViewKind } from "@/components/reader/reader-panes";
 import type { DriveConfig } from "@/lib/drive/config";
@@ -122,7 +123,7 @@ function clampTrayWidth(width: number): number {
 // notes and the assistant are always one click away.
 export function Workspace({
   notebook,
-  documents,
+  documents: documentRows,
   folders,
   readerView,
   activeDocumentId,
@@ -142,7 +143,8 @@ export function Workspace({
   corpusDistillations,
 }: {
   notebook: NotebookView;
-  documents: AttachedDocument[];
+  // The page's one document list, default fields left out (COST6-08).
+  documents: AttachedDocumentRow[];
   // The project's folders (SPEC.md §6): the document list draws them.
   folders: DocumentFolderView[];
   // The reader view (reader-panes.tsx): a split view puts the reader and the
@@ -167,6 +169,7 @@ export function Workspace({
   corpusDistillations: CorpusDistillationView[];
 }) {
   const t = useT();
+  const documents = useMemo<AttachedDocument[]>(() => documentRows.map(withDocumentDefaults), [documentRows]);
   const canEdit = collab.canEdit;
   // The tray's notes: every note of the project, or the open document's
   // alone, as the reader picked (note-groups.tsx, SPEC.md §6).
