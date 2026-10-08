@@ -657,9 +657,10 @@ export function VideoPane({
   const annotatedLineIds = useMemo(() => new Set(annotationByLine.keys()), [annotationByLine]);
 
   const lineAction =
-    "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800";
+    "inline-flex size-6 items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800";
   // The moment's tools on a transcript line: a line is an anchor like a
-  // circled spot — same tools, same time range, no drawn region.
+  // circled spot — same tools, same time range, no drawn region. Icons with
+  // their tips, so the row stands in the margin beside the line (reader.tsx).
   const lineTools = (line: TranscriptLine) => {
     const annotated = annotationByLine.get(line.id);
     return (
@@ -669,10 +670,10 @@ export function VideoPane({
             onClick={() => commentOnLine(line)}
             data-track="video-line-comment"
             className={lineAction}
+            aria-label={t("video.comment")}
             data-tip={t("video.commentOnLineTitle")}
           >
-            <CommentIcon size={11} />
-            {t("video.comment")}
+            <CommentIcon size={13} />
           </button>
         )}
         {canEdit && (
@@ -680,10 +681,10 @@ export function VideoPane({
             onClick={() => explainLine(line)}
             data-track="video-line-explain"
             className={lineAction}
+            aria-label={t("video.explain")}
             data-tip={t("video.explainThisMoment")}
           >
-            <QuestionIcon size={11} />
-            {t("video.explain")}
+            <QuestionIcon size={13} />
           </button>
         )}
         {annotated && (
@@ -691,10 +692,10 @@ export function VideoPane({
             onClick={() => openAnnotation(annotated)}
             data-track="video-line-open-note"
             className={lineAction}
+            aria-label={t("video.openNote")}
             data-tip={t("video.openNoteTitle")}
           >
-            <LocateIcon size={11} />
-            {t("video.openNote")}
+            <LocateIcon size={13} />
           </button>
         )}
       </>

@@ -23,7 +23,7 @@ import {
 import { announceKept, saveNoteText } from "@/lib/notes/save-text";
 import { joinNoteContents } from "@/lib/notes/join";
 import { isEditingNote } from "@/components/outline/editing-notes";
-import { NOTE_BACK_EVENT, usePostedUndo, type NoteBack, type UndoPillPost } from "@/lib/notes/undo-pill";
+import { NOTE_BACK_EVENT, postUndoPill, usePostedUndo, type NoteBack, type UndoPillPost } from "@/lib/notes/undo-pill";
 import type { QuoteDrag } from "@/lib/quote-drag";
 import { appendToBody } from "@/lib/note-title";
 import type { NotebookView, NoteView, SectionView } from "@/lib/types";
@@ -1269,6 +1269,9 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
       }
       refresh();
       window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: id } }));
+      // A note a drop made shows the Undo pill (SPEC.md §6): Undo deletes it
+      // the way a note's delete does.
+      postUndoPill({ message: t("reader.noteAdded"), undo: () => removeNotes([id]) });
     },
     async saveNote(id, content, base) {
       // The card shows the words at once; a failed save puts the old words

@@ -43,6 +43,7 @@ import type {
   DistillationView,
   ExtractionView,
   NoteView,
+  ReplyView,
   SectionView,
 } from "@/lib/types";
 import type { DocumentReference } from "@/lib/parse/types";
@@ -141,7 +142,8 @@ import { deriveBlocks } from "@/lib/docs/blocks";
 import { coreHiding } from "@/components/docs/layer/core-slot";
 import { announceCollapseView } from "@/components/panels/layer-switch";
 import { startCardDrag } from "@/lib/card-drag";
-import { HOLD_MS, HOLD_TOLERANCE_PX, pointsAtText, skipsDrag, stopClickAfterDrag, watchHold } from "@/lib/hold-drag";
+import { ReplyThread } from "@/components/collab/reply-thread";
+import { HOLD_TOLERANCE_PX, TOUCH_HOLD_MS, pointsAtText, skipsDrag, stopClickAfterDrag, watchHold } from "@/lib/hold-drag";
 import {
   ANNOTATION_PARAM,
   annotationReferenceHref,
@@ -249,17 +251,20 @@ function drawnBlock(container: HTMLElement, blockId: string): HTMLElement | null
 }
 
 /** Where a passage is drawn, in the container's coordinates: the top of its
-    first line, the bottom of its last line, and the bottom of the block that
-    holds its last line. Null when no segment's block is drawn. */
+    first line, the bottom of its last line, the left of its last line, and
+    the bottom and height of the block that holds its last line. Null when
+    no segment's block is drawn. */
 function passageBox(
   container: HTMLElement,
   anchor: Anchor,
-): { top: number; bottom: number; blockBottom: number; blockId: string } | null {
+): { top: number; bottom: number; left: number; blockBottom: number; blockHeight: number; blockId: string } | null {
   const crect = container.getBoundingClientRect();
   const toY = (y: number) => y - crect.top + container.scrollTop;
   let top = Infinity;
   let bottom = -Infinity;
+  let left = 0;
   let blockBottom = -Infinity;
+  let blockHeight = 0;
   let blockId = "";
   for (const segment of segmentsOf(anchor)) {
     const el = drawnBlock(container, segment.blockId);
@@ -268,6 +273,7 @@ function passageBox(
     // The words' own line boxes when the text is walkable; else the block's box.
     let first = b.top;
     let last = b.bottom;
+    let lastLeft = b.left;
     try {
       const pieces = anchorablePieces(el);
       const at = (offset: number, end: boolean) => {
@@ -286,6 +292,7 @@ function passageBox(
         if (rects.length > 0) {
           first = Math.min(...rects.map((r) => r.top));
           last = Math.max(...rects.map((r) => r.bottom));
+          lastLeft = Math.min(...rects.filter((r) => r.bottom >= last - 1).map((r) => r.left));
         }
       }
     } catch {
@@ -294,11 +301,29 @@ function passageBox(
     top = Math.min(top, toY(first));
     if (toY(last) >= bottom) {
       bottom = toY(last);
+      left = lastLeft - crect.left;
       blockBottom = toY(b.bottom);
+      blockHeight = b.height;
       blockId = segment.blockId;
     }
   }
-  return Number.isFinite(top) ? { top, bottom, blockBottom, blockId } : null;
+  return Number.isFinite(top) ? { top, bottom, left, blockBottom, blockHeight, blockId } : null;
+}
+
+/** A block taller than a third of the pane — a slide, a sheet, a long
+    table — holds a narrow reader's card under the marked line itself, over
+    the block, at a card's width: under the whole block it would stand far
+    from its words, or below the screen. */
+function overBlock(box: { blockHeight: number }, paneHeight: number): boolean {
+  return paneHeight > 0 && box.blockHeight > paneHeight / 3;
+}
+
+/** The narrow reader's card over a tall block: under its words' last line,
+    from their left, at a card's width, inside the pane. */
+function dockUnderWords(wordsLeft: number, cw: number) {
+  const width = Math.min(300, cw - 16);
+  const left = Math.max(8, Math.min(wordsLeft - 12, cw - width - 8));
+  return { left, width };
 }
 
 /** The passage's text: the segments' quotes, one paragraph each. */
@@ -489,6 +514,40 @@ const CIRCLED_TYPES = new Set(["FIGURE", "EQUATION"]);
 // figure included (lib/block-takes.ts): slides, sheets, a video's or an
 // audio's document.
 const NO_NEW_BLOCKS = new Set(["SLIDE", "SHEET", "VIDEO", "TRANSCRIPT"]);
+
+// The reader pane the last press on the page landed in, or null: a press
+// outside every pane. Ctrl/Cmd+A with no pane pressed or focused selects
+// the first pane's article (onSelectAll).
+let lastPressedPane: Element | null = null;
+
+/** The replies under an annotation (SPEC.md §6): the thread the page
+    editor's comment card and the Annotations tab show, so the card that
+    deletes the annotation shows what goes with it. Drawn once there is a
+    reply: a card with none keeps its shape. */
+function CardReplies({ noteId }: { noteId: string }) {
+  const [replies, setReplies] = useState<ReplyView[]>([]);
+  const [loads, setLoads] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/replies?noteId=${encodeURIComponent(noteId)}`)
+      .then((r) => (r.ok ? (r.json() as Promise<{ replies: ReplyView[] }>) : null))
+      .then((thread) => {
+        if (!cancelled && thread) setReplies(thread.replies);
+      })
+      .catch(() => {
+        // Offline: the card shows the annotation alone.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [noteId, loads]);
+  if (replies.length === 0) return null;
+  return (
+    <div className="mt-2 min-h-0 overflow-y-auto">
+      <ReplyThread target={{ noteId }} replies={replies} onChange={() => setLoads((n) => n + 1)} />
+    </div>
+  );
+}
 
 function contentKindOf(type: string | undefined): ContentKind {
   if (type === "FIGURE") return "figure";
@@ -1956,14 +2015,14 @@ export function ReaderInteractions({
     };
   };
   // The page editor's comment card keeps the grip; the cards over the
-  // article lift from their head row (dragCard, data-hold-head). On a touch
+  // article lift from their head row (dragCard). On a touch
   // screen the grip takes the 36 px target the head's buttons have.
   const annotationGrip = (reference: AnnotationReference | null) =>
     dropOpen && reference ? (
       <AnnotationGrip reference={reference} className="-ml-1 justify-center pointer-coarse:size-9" />
     ) : null;
-  // A hold on the card's blank space or its head row, off its controls and
-  // off the header that moves the card (data-no-drag, dragCard), lifts the
+  // A hold on the card's blank space, off its controls and off the head row
+  // that moves the card (data-no-drag, dragCard), lifts the
   // annotation. A press on the card's text — where the pointer shows the
   // I-beam — selects the text and never lifts, hold or pull (pointsAtText).
   // A pull from blank space never lifts either: only the hold does.
@@ -1971,7 +2030,7 @@ export function ReaderInteractions({
     if (!reference || !dropOpen || e.button !== 0) return;
     const target = e.target as Element;
     if (skipsDrag(target) || target.closest("button, a, [data-no-drag]")) return;
-    if (pointsAtText(e.clientX, e.clientY) && !target.closest("[data-hold-head]")) return;
+    if (pointsAtText(e.clientX, e.clientY)) return;
     watchHold(
       e,
       (at) => {
@@ -2297,6 +2356,9 @@ export function ReaderInteractions({
     const col = columnAtRest(measured, cardsRoomRef.current);
     const room = narrowRef.current ? null : cardRoom(col);
     if (!room) {
+      if (words && overBlock(words, containerRef.current?.clientHeight ?? 0)) {
+        return { ...dockUnderWords(words.left, cw), top: words.bottom + 8, side: "right" as const };
+      }
       return {
         ...dockBelowCard(col.articleLeft, col.articleRight, cw),
         top: words ? words.blockBottom + 8 : underWords,
@@ -2470,9 +2532,10 @@ export function ReaderInteractions({
   }, []);
 
   // Cards are freely moveable: drag the header. Buttons and inputs still work.
-  // The card's head row is its handle (SPEC.md §6): a drag moves the card;
-  // a hold (HOLD_MS, the pointer still) lifts its annotation to carry onto a
-  // note, as a note's header row does in its editing mode.
+  // The card's head row is its handle (SPEC.md §6): a press that moves
+  // before TOUCH_HOLD_MS moves the card; a still hold of TOUCH_HOLD_MS lifts
+  // its annotation to carry onto a note — one time for a mouse and a finger,
+  // long enough that a rest before the drag still moves the card.
   function dragCard(
     getPos: () => { left: number; top: number } | null,
     apply: (left: number, top: number) => void,
@@ -2500,7 +2563,7 @@ export function ReaderInteractions({
                   document.body.style.userSelect = "";
                 },
               );
-            }, HOLD_MS)
+            }, TOUCH_HOLD_MS)
           : 0;
       const container = containerRef.current;
       // A dragged card follows the pointer at once: the slide a pushed card
@@ -2551,6 +2614,9 @@ export function ReaderInteractions({
   const [editHint, setEditHint] = useState(false);
   // Where the hint shows: beside the article, or as a row under the pane.
   const [hintBeside, setHintBeside] = useState(true);
+  // Slides and sheets have no edit mode and no figure: the hint's words are
+  // not true there, so it waits for the next article.
+  const officeDocument = blocks.some((b) => b.type === "SLIDE" || b.type === "SHEET");
 
   // Offline, the tools that need a model are off (SPEC.md §17): their rows
   // are dimmed, their tooltip says why, and a press shows the plain message.
@@ -3235,10 +3301,10 @@ export function ReaderInteractions({
     const onDocumentMouseDown = (event: MouseEvent) => {
       pressStartedInside = event.target instanceof Node && container.contains(event.target);
       lastPressInside = event.target instanceof Element && event.target.closest("[data-reader-root]") === container;
+      lastPressedPane = event.target instanceof Element ? event.target.closest("[data-reader-root]") : null;
       pressTarget = event.target instanceof Element ? event.target : null;
     };
     const onMouseUp = (event: MouseEvent) => {
-      if (!canEditRef.current) return;
       const inside = event.target instanceof Node && container.contains(event.target);
       if (!inside && !pressStartedInside) return;
       const startedInside = pressStartedInside;
@@ -3263,6 +3329,12 @@ export function ReaderInteractions({
         // pane's edge.
         if (startedInside) clipSelectionToPane(event.clientX, event.clientY);
         const captured = captureSelection();
+        // A viewer's toolbox holds Define alone (SPEC.md §12): it persists
+        // nothing. Any other selection opens nothing.
+        if (!canEditRef.current) {
+          showTools(captured && offersDefine(captured) ? captured : null);
+          return;
+        }
         // The VIDEO block (the player's own block) refuses annotation: a
         // selection over it shows the refusal instead of tools. Transcript
         // lines take every text tool (SPEC.md §11).
@@ -3424,7 +3496,7 @@ export function ReaderInteractions({
     // opens the toolbar once Shift, Ctrl, or Cmd is let go, as the page
     // editor's does.
     const onReaderKeyUp = (e: KeyboardEvent) => {
-      if (richTextRef.current || !canEditRef.current) return;
+      if (richTextRef.current) return;
       if (e.key !== "Shift" && e.key !== "Control" && e.key !== "Meta") return;
       if (e.target instanceof HTMLElement && isTextEntry(e.target)) return;
       const selection = window.getSelection();
@@ -3432,32 +3504,43 @@ export function ReaderInteractions({
       if (!container.contains(selection.getRangeAt(0).commonAncestorContainer)) return;
       requestAnimationFrame(() => {
         const captured = captureSelection();
+        if (!canEditRef.current && !(captured && offersDefine(captured))) return;
         if (captured && JSON.stringify(popoverRef.current?.anchor) !== JSON.stringify(captured.anchor)) {
           showTools(captured);
         }
       });
     };
-    // Ctrl/Cmd+A in the block reader selects the article's blocks — not the
+    // Ctrl/Cmd+A outside a text field selects the article's words — not the
     // page around them, its header and the tray — and opens the toolbar on
-    // them, after a press in the pane or with the focus in it (a mark the
-    // keys reached). In edit mode and in a field, the browser's own Select
-    // all runs.
+    // them (SPEC.md §6), in the block reader and the page editor alike,
+    // wherever the focus is: in this pane, or, when no pane holds the focus
+    // or the last press, the first pane on the page. In edit mode and in a
+    // field (the page editor's text in Editing among them), the browser's
+    // or the editor's own Select all runs.
     const onSelectAll = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== "a") return;
-      const focusInside = document.activeElement !== null && container.contains(document.activeElement);
-      if (!(lastPressInside || focusInside) || richTextRef.current || editModeRef.current || !canEditRef.current) return;
       const active = document.activeElement;
+      const focusInside = active !== null && container.contains(active);
+      const anyPane = !active?.closest("[data-reader-root]") && !lastPressedPane?.isConnected;
+      const ours = lastPressInside || focusInside || (anyPane && document.querySelector("[data-reader-root]") === container);
+      if (!ours || editModeRef.current || !canEditRef.current) return;
       if (active instanceof HTMLElement && isTextEntry(active)) return;
-      const blocks = Array.from(container.querySelectorAll<HTMLElement>("[data-block-id]")).filter(
-        (el) => el.closest("[data-reader-root]") === container && el.getClientRects().length > 0,
-      );
-      const firstBlock = blocks[0];
-      const lastBlock = blocks[blocks.length - 1];
-      if (!firstBlock || !lastBlock) return;
-      e.preventDefault();
       const range = document.createRange();
-      range.setStart(firstBlock, 0);
-      range.setEnd(lastBlock, lastBlock.childNodes.length);
+      const page = richTextRef.current ? pageEditorIn(container) : null;
+      if (richTextRef.current) {
+        if (!page) return;
+        range.selectNodeContents(page.view.dom);
+      } else {
+        const blocks = Array.from(container.querySelectorAll<HTMLElement>("[data-block-id]")).filter(
+          (el) => el.closest("[data-reader-root]") === container && el.getClientRects().length > 0,
+        );
+        const firstBlock = blocks[0];
+        const lastBlock = blocks[blocks.length - 1];
+        if (!firstBlock || !lastBlock) return;
+        range.setStart(firstBlock, 0);
+        range.setEnd(lastBlock, lastBlock.childNodes.length);
+      }
+      e.preventDefault();
       const selection = window.getSelection();
       selection?.removeAllRanges();
       selection?.addRange(range);
@@ -3474,11 +3557,12 @@ export function ReaderInteractions({
     const coarse = window.matchMedia("(pointer: coarse)").matches;
     let selectionTimer: ReturnType<typeof setTimeout> | null = null;
     const onSelectionChange = () => {
-      if (!coarse || !canEditRef.current) return;
+      if (!coarse) return;
       if (selectionTimer) clearTimeout(selectionTimer);
       selectionTimer = setTimeout(() => {
         const captured = captureSelection();
         if (!captured) return;
+        if (!canEditRef.current && !offersDefine(captured)) return;
         // The same words again (the tint repaints and puts the selection
         // back over its marks): the open toolbox stays as it stands, with
         // the place fitToolbox gave it, above the words when the room under
@@ -3984,7 +4068,11 @@ export function ReaderInteractions({
     const container = containerRef.current;
     if (!container) return;
     const narrow = narrowRef.current && !richTextRef.current && !distillOpenRef.current && !conversationViewRef.current;
-    const hosts = new Map<HTMLElement, { kind: string; el: HTMLElement; anchorTop: number }[]>();
+    const hosts = new Map<
+      HTMLElement,
+      { kind: string; el: HTMLElement; anchorTop: number; over: { bottom: number; left: number } | null }[]
+    >();
+    const paneShown = container.clientHeight;
     if (narrow) {
       for (const el of container.querySelectorAll<HTMLElement>("[data-side-card]")) {
         if (el.closest(".presence-exit")) continue;
@@ -3996,13 +4084,15 @@ export function ReaderInteractions({
         const host = drawnBlock(container, box.blockId);
         if (!host) continue;
         const list = hosts.get(host) ?? [];
-        list.push({ kind, el, anchorTop: box.top });
+        // A tall block (a slide, a sheet) keeps its height: the card stands
+        // under its words, over the block (overBlock).
+        list.push({ kind, el, anchorTop: box.top, over: overBlock(box, paneShown) ? box : null });
         hosts.set(host, list);
       }
     }
     // Paragraphs that no longer hold a card give their room back.
     for (const el of container.querySelectorAll<HTMLElement>("[data-card-room]")) {
-      if (hosts.has(el)) continue;
+      if (hosts.get(el)?.some((c) => !c.over)) continue;
       el.style.marginBottom = el.dataset.cardRoom ?? "";
       delete el.dataset.cardRoom;
       delete el.dataset.cardRoomBase;
@@ -4014,6 +4104,7 @@ export function ReaderInteractions({
     const railTop = rail && getComputedStyle(rail).position === "fixed" ? rail.getBoundingClientRect().top : Infinity;
     const shownHeight = Math.min(crect.bottom, railTop) - crect.top;
     const tops: Record<string, number> = {};
+    const docks: Record<string, { left: number; width: number }> = {};
     const phoneCaps: Record<string, number> = {};
     const ordered = [...hosts.keys()].sort((a, b) =>
       a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
@@ -4022,18 +4113,29 @@ export function ReaderInteractions({
       const cards = hosts
         .get(host)!
         .sort((a, b) => (layerOpenedRef.current[a.kind] ?? 0) - (layerOpenedRef.current[b.kind] ?? 0));
-      // The paragraph's own margin, kept to give back when its cards close.
-      if (host.dataset.cardRoom === undefined) {
-        host.dataset.cardRoom = host.style.marginBottom;
-        host.dataset.cardRoomBase = String(parseFloat(getComputedStyle(host).marginBottom) || 0);
+      const under = cards.filter((c) => !c.over);
+      if (under.length > 0) {
+        // The paragraph's own margin, kept to give back when its cards close.
+        if (host.dataset.cardRoom === undefined) {
+          host.dataset.cardRoom = host.style.marginBottom;
+          host.dataset.cardRoomBase = String(parseFloat(getComputedStyle(host).marginBottom) || 0);
+        }
+        const base = parseFloat(host.dataset.cardRoomBase ?? "0") || 0;
+        const room = 8 + under.reduce((sum, c) => sum + c.el.offsetHeight + CARD_GAP, 0);
+        host.style.marginBottom = `${base + room}px`;
       }
-      const base = parseFloat(host.dataset.cardRoomBase ?? "0") || 0;
-      const room = 8 + cards.reduce((sum, c) => sum + c.el.offsetHeight + CARD_GAP, 0);
-      host.style.marginBottom = `${base + room}px`;
       let y = host.getBoundingClientRect().bottom - crect.top + container.scrollTop + 8;
+      let overY = -Infinity;
       for (const card of cards) {
-        tops[card.kind] = y;
-        y += card.el.offsetHeight + CARD_GAP;
+        if (card.over) {
+          overY = Math.max(overY, card.over.bottom + 8);
+          tops[card.kind] = overY;
+          docks[card.kind] = dockUnderWords(card.over.left, container.clientWidth);
+          overY += card.el.offsetHeight + CARD_GAP;
+        } else {
+          tops[card.kind] = y;
+          y += card.el.offsetHeight + CARD_GAP;
+        }
         // A card that just opened under the window comes into view, its foot
         // too (its buttons), as far as its words stay in view. A run that
         // lands is a new layer key: the card, grown, is checked again.
@@ -4059,8 +4161,12 @@ export function ReaderInteractions({
       }
     }
     if (Object.keys(phoneCaps).length > 0) setCardCaps((caps) => ({ ...caps, ...phoneCaps }));
-    const place = <T extends { top: number }>(kind: string) => (c: T | null): T | null =>
-      c && tops[kind] !== undefined && Math.abs(c.top - tops[kind]) > 1 ? { ...c, top: tops[kind] } : c;
+    const place = <T extends { top: number; left: number; width?: number }>(kind: string) => (c: T | null): T | null => {
+      if (!c || tops[kind] === undefined) return c;
+      const dock = docks[kind];
+      const moved = Math.abs(c.top - tops[kind]) > 1 || (dock && (Math.abs(c.left - dock.left) > 1 || c.width !== dock.width));
+      return moved ? { ...c, top: tops[kind], ...dock } : c;
+    };
     if (tops.explain !== undefined) setBubble(place<ExplainBubble>("explain"));
     if (tops.simplify !== undefined) setSimplifyCard(place<SimplifyCard>("simplify"));
     if (tops.assistant !== undefined) setAssistantChat(place<AssistantChat>("assistant"));
@@ -5402,7 +5508,7 @@ export function ReaderInteractions({
   // The field keeps its own words while the reader types (kept-field.tsx).
   const addFieldRef = useRef<KeptFieldHandle>(null);
   useEffect(() => {
-    if (!popover || !popoverAnchorKey || popover.term || popover.figure) return;
+    if (!popover || !popoverAnchorKey || popover.term || popover.figure || !canEdit) return;
     const text = popover.anchor.quotedText.trim();
     if (!text) return;
     const blockType = blocksRef.current.find((b) => b.id === popover.anchor.blockId)?.type;
@@ -9454,6 +9560,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   const passageTooLong = popover !== null && (popover.anchor.segments?.length ?? 1) > MAX_SEGMENTS;
   // Define shows on one word alone (offersDefine).
   const has = (tool: Tool) =>
+    (canEdit || tool === "define") &&
     TOOLBARS[popoverKind].includes(tool) &&
     !((inCore || pendingLink) && tool === "link") &&
     (tool !== "define" || (popover !== null && offersDefine(popover)));
@@ -10386,7 +10493,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           transcript: it has no edit mode. Under the toast, which may reach
           down over it. It yields while a toolbar is open: the stack beside
           the first lines would cut its words. */}
-      {editHint && hintBeside && !editMode && !split && !transcript && !embedded && !richText && (
+      {editHint && hintBeside && !editMode && !split && !transcript && !embedded && !richText && !officeDocument && (
         <div
           onAnimationEnd={hintPlayed}
           className={`hint-fade pointer-events-none absolute top-16 right-5 z-[9] rounded-2xl bg-card px-4 py-2.5 leading-relaxed text-sand-700 shadow-lift print:hidden ${
@@ -10442,6 +10549,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         }
         transcript={transcript}
         embedded={embedded}
+        band={!split && !transcript && !embedded && !richText}
         banner={
           <TranslationBar
             documentId={documentId}
@@ -10555,12 +10663,19 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             borderColor: annotationKindColor(annotationCard.kind, annotationCard.color),
           }}
         >
-          {/* The head is the card's handle: a hold carries the annotation
-              onto a note (holdAnnotation). */}
+          {/* The head is the card's handle, as on every tool card: a drag
+              moves the card, a hold carries the annotation onto a note
+              (dragCard). */}
           <div
-            data-hold-head={annotationCardReference && dropOpen ? "" : undefined}
-            data-tip={annotationCardReference && dropOpen ? t("reader.holdToNote") : undefined}
-            className={`mb-2 flex items-center justify-between${annotationCardReference && dropOpen ? " cursor-grab select-none" : ""}`}
+            onPointerDown={dragCard(
+              () => (annotationCard ? { left: annotationCard.left, top: annotationCard.top } : null),
+              (left, top) => setAnnotationCard((c) => (c ? { ...c, left, top } : c)),
+              annotationCardReference,
+            )}
+            style={{ touchAction: "none" }}
+            data-no-drag
+            data-tip={annotationCardReference && dropOpen ? `${t("reader.dragToMove")}\n${t("reader.holdToNote")}` : t("reader.dragToMove")}
+            className="mb-2 flex cursor-move items-center justify-between select-none"
           >
             <span
               className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.08em] uppercase"
@@ -10685,6 +10800,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               </button>
             </span>
           </div>
+          <CardReplies noteId={annotationCard.noteId} />
         </div>
       )}
       </Presence>
@@ -11063,6 +11179,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           )}
 
 
+          {has("assistant") && (
           <button
             onClick={() => (barOffered ? openBar(popover) : setSubmenu(submenu === "ai" ? null : "ai"))}
             data-track="assistant"
@@ -11078,6 +11195,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             <SparkleIcon size={coarse ? 14 : 12} />
             {t(barOffered ? "reader.editWithAssistant" : "reader.assistant")}
           </button>
+          )}
           <Collapse open={submenu === "ai"}>
           {submenu === "ai" && (
             <div className="flex flex-col gap-1.5 p-1">
@@ -11839,6 +11957,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   </button>
                 </span>
               </div>
+              <CardReplies noteId={commentCard.noteId} />
             </>
           ) : (
             <>
@@ -12128,7 +12247,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           phone, a narrow window): a row under the pane, which takes its
           height from the pane's foot, so it covers no word and the lines
           the reader reads stay where they are. */}
-      {editHint && !hintBeside && !editMode && !split && !transcript && !embedded && !richText && (
+      {editHint && !hintBeside && !editMode && !split && !transcript && !embedded && !richText && !officeDocument && (
         <div
           data-edit-hint
           onAnimationEnd={hintPlayed}
