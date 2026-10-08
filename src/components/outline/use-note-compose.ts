@@ -112,6 +112,12 @@ function sessionFor(sectionId: string, actions: OutlineActions, canEdit: boolean
   return s;
 }
 
+/** The surface drawn last lends the session its actions and edit right. */
+function lend(s: Session, actions: OutlineActions, canEdit: boolean) {
+  s.actions = actions;
+  s.canEdit = canEdit;
+}
+
 function set(s: Session, patch: Partial<Snapshot>) {
   s.snap = { ...s.snap, ...patch };
   for (const listener of s.listeners) listener();
@@ -434,15 +440,14 @@ export function useNoteCompose({
 
   // The surface drawn last lends the session its actions.
   useEffect(() => {
-    s.actions = actions;
-    s.canEdit = canEdit;
+    lend(s, actions, canEdit);
   });
 
   // On mount: the composer reopens on the local draft, unless the section's
   // composer is open already (on another surface, or before this one
   // remounted), which this surface then draws as it is.
   useEffect(() => {
-    s.canEdit = canEdit;
+    lend(s, actions, canEdit);
     if (canEdit) restore(s, notes);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s]);
