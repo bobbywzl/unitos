@@ -275,47 +275,14 @@ export function NodeCardPanel({
 
       {outline === null ? (
         <p className="text-[12.5px] text-sand-500">{t("graphView.cardLoading")}</p>
+      ) : outline.gist ? (
+        <p data-graph-gist className="rounded-xl bg-sand-100 px-3 py-2 text-[13px] leading-relaxed text-ink">
+          {outline.gist}
+        </p>
       ) : (
-        <>
-          {outline.gist ? (
-            <p data-graph-gist className="rounded-xl bg-sand-100 px-3 py-2 text-[13px] leading-relaxed text-ink">
-              {outline.gist}
-            </p>
-          ) : (
-            <p data-graph-no-summary className="text-[12px] leading-snug text-sand-500">
-              {t("graphView.cardNoSummary")}
-            </p>
-          )}
-          {outline.parts.length > 0 && (
-            <section>
-              <h3 style={HEAD_PLAIN} className={head}>{t("graphView.cardContents")}</h3>
-              <ol className="flex flex-col gap-0.5">
-                {outline.parts.map((p) => (
-                  <li key={p.blockId} className={`flex items-start gap-1 ${p.level === 2 ? "pl-3" : ""}`}>
-                    <button
-                      onClick={() => go(`/n/${notebookId}?doc=${node.id}&block=${p.blockId}`)}
-                      data-track="graph-card-part"
-                      data-graph-part={p.blockId}
-                      data-tip={t("graphView.cardPartTitle")}
-                      className="block min-w-0 flex-1 rounded-lg px-1.5 py-1 text-left hover:bg-clay-100/60"
-                    >
-                      <span className="block text-[12.5px] leading-snug font-semibold text-ink">
-                        <PartDot documentId={node.id} blockId={p.blockId} /* [cover4] */ />
-                        {p.title}
-                      </span>
-                      {p.summary && <span className="mt-0.5 block text-[12px] leading-snug text-sand-600">{p.summary}</span>}
-                    </button>
-                    {/* [cover4] The part's opening words as a quote (VIEW4-03). */}
-                    <AddToNote quote={{ documentId: node.id, blockId: p.blockId, text: p.title, whole: true }} className="mt-1" />
-                  </li>
-                ))}
-              </ol>
-            </section>
-          )}
-          {(outline.gist || outline.parts.some((p) => p.summary)) && (
-            <p className="-mt-1.5 text-[11px] text-sand-500">{t("graphView.cardAiLine")}</p>
-          )}
-        </>
+        <p data-graph-no-summary className="text-[12px] leading-snug text-sand-500">
+          {t("graphView.cardNoSummary")}
+        </p>
       )}
 
       {groups.length > 0 && (
@@ -417,6 +384,41 @@ export function NodeCardPanel({
             </button>
           )}
         </section>
+      )}
+      {/* [lists8] WALK8-06: the contents after the links and the notes, so a
+          card answers "what does this say about the others" first. */}
+      {outline !== null && (
+        <>
+          {outline.parts.length > 0 && (
+            <section>
+              <h3 style={HEAD_PLAIN} className={head}>{t("graphView.cardContents")}</h3>
+              <ol className="flex flex-col gap-0.5">
+                {outline.parts.map((p) => (
+                  <li key={p.blockId} className={`flex items-start gap-1 ${p.level === 2 ? "pl-3" : ""}`}>
+                    <button
+                      onClick={() => go(`/n/${notebookId}?doc=${node.id}&block=${p.blockId}`)}
+                      data-track="graph-card-part"
+                      data-graph-part={p.blockId}
+                      data-tip={t("graphView.cardPartTitle")}
+                      className="block min-w-0 flex-1 rounded-lg px-1.5 py-1 text-left hover:bg-clay-100/60"
+                    >
+                      <span className="block text-[12.5px] leading-snug font-semibold text-ink">
+                        <PartDot documentId={node.id} blockId={p.blockId} /* [cover4] */ />
+                        {p.title}
+                      </span>
+                      {p.summary && <span className="mt-0.5 block text-[12px] leading-snug text-sand-600">{p.summary}</span>}
+                    </button>
+                    {/* [cover4] The part's opening words as a quote (VIEW4-03). */}
+                    <AddToNote quote={{ documentId: node.id, blockId: p.blockId, text: p.title, whole: true }} className="mt-1" />
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
+          {(outline.gist || outline.parts.some((p) => p.summary)) && (
+            <p className="-mt-1.5 text-[11px] text-sand-500">{t("graphView.cardAiLine")}</p>
+          )}
+        </>
       )}
       <p role="status" data-graph-card-walk className="text-[12px] text-clay-800 empty:hidden">
         {walkNote}

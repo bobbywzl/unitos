@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import { db } from "@/lib/db";
 import { projectCoverage } from "@/lib/graph/coverage";
-import { gapReasons, openComments, waitsForReply, commentAsks, type DocumentCoverage } from "@/lib/graph/coverage-view";
+import { gapReasons, openComments, waitsForReply, commentWaits, type DocumentCoverage } from "@/lib/graph/coverage-view";
 import { nodeRoom } from "@/lib/graph/curve-place";
 
 let pass = 0;
@@ -35,7 +35,11 @@ async function main() {
   const userId = process.env.USER_ID ?? "user-1";
 
   // Pure rules.
-  ok(commentAsks("Is it?") && commentAsks("是吗？ ") && !commentAsks("No? Yes."), "a comment asks when its words end with ? or ？");
+  // [lists8] WALK8-01: a comment waits on me when its last open words are another person's.
+  ok(commentWaits({ open: true, lastById: "mara" }, "me"), "another person's comment, no reply: waits on me");
+  ok(!commentWaits({ open: true, lastById: "me" }, "me"), "my own last words do not wait on me");
+  ok(!commentWaits({ open: false, lastById: "mara" }, "me"), "a resolved comment waits on no one");
+  ok(!commentWaits({ open: true, lastById: null }, "me") && !commentWaits({ open: true, lastById: "mara" }, ""), "no author, or no account: waits on no one");
   const r = (userId: string, at: string, resolved = false) => ({ userId, createdAt: at, resolvedById: resolved ? "x" : null });
   ok(!waitsForReply({ replies: [] }, "me"), "a link with no reply waits on no one (WALK7-04)");
   ok(!waitsForReply({ replies: [r("me", "2026-01-01")] }, "me"), "my own last reply does not wait on me");
@@ -57,13 +61,18 @@ async function main() {
     const docs = Object.values(cov.documents);
     const comments = docs.flatMap((d) => d.comments ?? []);
     const open = docs.flatMap((d) => openComments(d));
-    console.log(`Linda: ${docs.length} documents, ${comments.length} comments (${open.length} open, ${open.filter((c) => c.asks).length} ask), median ${median.toFixed(1)} ms (max ${max.toFixed(1)})`);
+    console.log(`Linda: ${docs.length} documents, ${comments.length} comments (${open.length} open, ${open.filter((c) => commentWaits(c, userId)).length} wait on ${userId}), median ${median.toFixed(1)} ms (max ${max.toFixed(1)})`);
     ok(docs.length === 7, "Linda: 7 documents");
     ok(docs.every((d) => d.parts.length > 0), "Linda: every document has at least one part (WALK5-06)");
     ok(docs.filter((d) => d.parts.length === 1 && d.parts[0].whole).length >= 2, "Linda: Schopenhauer as Educator and BOOK TWO are one whole-document part each");
     if (comments.length > 0) {
       ok(comments.length === 10 && open.length === 9, "Linda: 10 comments, 9 open");
-      ok(open.filter((c) => c.asks).length === 5, "Linda: 5 open comments end with a question mark");
+      // [lists8] lastById is the last open reply's author, else the comment's.
+      const last = await db.$queryRaw<{ id: string; by: string | null }[]>`
+        SELECT n.id, COALESCE((SELECT r."userId" FROM "Reply" r WHERE r."noteId" = n.id AND r."resolvedById" IS NULL ORDER BY r."createdAt" DESC LIMIT 1), n."createdById") AS by
+        FROM "Note" n WHERE n.id = ANY(${comments.map((c) => c.id)})`;
+      const byId = new Map(last.map((x) => [x.id, x.by]));
+      ok(comments.every((c) => c.lastById === (byId.get(c.id) ?? null)), "Linda: each comment's last open words are its last open reply's, else its own (WALK8-01)");
       const ids = comments.map((c) => c.id);
       const rows = await db.note.findMany({ where: { id: { in: ids } }, select: { section: { select: { notebookId: true, hidden: true } }, color: true, derivationType: true } });
       ok(rows.every((n) => n.section.notebookId === LINDA && n.section.hidden && n.color === null && n.derivationType === null), "Linda: every comment is this project's, in its Annotations section, no color, no tool");

@@ -26,7 +26,7 @@
 // part titles from GET .../outline?parts=titles, again after each rev move
 // (the offline copy keeps that call), the links and the notes are on the page already.
 
-import { ACTION, CLOSE, TEXT_HIT } from "./graph-ui";
+import { ACTION, CLOSE, LIST_HEAD, TEXT_HIT } from "./graph-ui";
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
 import type { GraphEdge, GraphEdgeLink, GraphNode } from "@/lib/types";
@@ -43,6 +43,8 @@ import { useGraphGeneration } from "@/components/graph/graph-generation";
 import { CoverageHead, DocumentCoverageLine, PartDot, useCoverageGaps, useDocumentCoverage } from "@/components/graph/coverage"; // [cover4]
 // [layer5] The reader's layer: comments, gap reasons, the reader's documents first.
 import { DocumentComments, GapReasons, gapReasonLines, useProjectCoverage } from "@/components/graph/coverage";
+import { AllComments, useCommentWaits } from "@/components/graph/coverage"; // [lists8]
+import { ListName } from "@/components/graph/list-name";
 import { openComments } from "@/lib/graph/coverage-view";
 
 /** Each project's part titles with the graph generation they were read at. */
@@ -238,7 +240,8 @@ export function DocumentsList({
     return ids.size;
   }, [ordered, notesCtx]);
   const setRowLit = notesCtx?.setRowLit;
-  const openTotal = ordered.reduce((sum, n) => sum + openComments(projectCoverage?.documents[n.id]).length, 0); // [layer5]
+  // [lists8] WALK8-02: the head's open comments, pressed, list every one in place of the rows.
+  const [allComments, setAllComments] = useState(false);
 
   const ref = useRef<HTMLElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -287,50 +290,56 @@ export function DocumentsList({
           : "top-3 right-3 max-h-[calc(100%-24px)] w-[400px] max-w-[calc(100vw-24px)] rounded-[20px] max-[999px]:max-h-[calc(100%-76px)]"
       }`}
     >
-      <div className="flex items-start gap-2">
-        <p className="flex-1 text-[11.5px] text-sand-600">
-          {t("panes.graphDocumentsHead", {
+      {/* [lists8] WALK8-02: one head row, as Links': the name (its tip the
+          counts and the order), the filter, ✕. The counts line under it. */}
+      <div className={LIST_HEAD}>
+        <ListName
+          grow={ordered.length <= 1}
+          tip={t("panes.graphDocumentsHead", {
             docs: ordered.length,
             ds: s(ordered.length),
             links: linkTotal,
             ls: s(linkTotal),
             notes: noteTotal,
             ns: s(noteTotal),
-            // [layer5] the open comments, and the reader's documents first at scale
-            comments:
-              openTotal === 0
-                ? ""
-                : ` · ${openTotal === 1 ? t("graphCover.commentsOpenOne") : t("graphCover.commentsOpenMany", { n: openTotal })}`,
             order: t(mineFirst ? "panes.graphDocumentsOrderMine" : "panes.graphDocumentsOrder"),
           })}
-        </p>
+        >
+          {t("panes.graphDocuments")}
+        </ListName>
+        {ordered.length > 1 && (
+          <input
+            type="search"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder={t("panes.graphDocumentsFilter")}
+            aria-label={t("panes.graphDocumentsFilter")}
+            data-track="graph-documents-filter"
+            data-graph-documents-filter
+            maxLength={100}
+            className="min-w-0 flex-1 rounded-full border border-line bg-card px-3 py-1.5 text-[12.5px] text-ink placeholder:text-sand-500 focus:border-clay-400"
+          />
+        )}
         <button
           onClick={onClose}
           data-track="graph-documents-close"
           aria-label={t("common.close")}
           data-tip={t("common.close")}
-          className={`-mt-1 -mr-1 ${CLOSE}`}
+          className={`-mr-1 ${CLOSE}`}
         >
           ✕
         </button>
       </div>
-      {ordered.length > 1 && (
-        <input
-          type="search"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          placeholder={t("panes.graphDocumentsFilter")}
-          aria-label={t("panes.graphDocumentsFilter")}
-          data-track="graph-documents-filter"
-          data-graph-documents-filter
-          maxLength={100}
-          className="shrink-0 rounded-full border border-line bg-card px-3 py-1.5 text-[12.5px] text-ink placeholder:text-sand-500 focus:border-clay-400"
-        />
-      )}
       {/* [cover4] What the notes cover, and Gaps only (VIEW4-01). */}
-      <CoverageHead documentIds={ordered.map((n) => n.id)} links={edges.flatMap((e) => e.links)} />
+      <CoverageHead
+        documentIds={ordered.map((n) => n.id)}
+        links={edges.flatMap((e) => e.links)}
+        commentsOn={allComments}
+        onToggleComments={() => setAllComments((v) => !v)}
+      />
+      {allComments && <AllComments notebookId={notebookId} documents={matched} onOpenDocument={onOpenDocument} />}
       {ordered.length === 0 && <p className="text-[13px] text-sand-600">{t("panes.graphDocumentsEmpty")}</p>}
-      {gaps.on && matched.length > 0 && shown.length === 0 && <p className="text-[13px] text-sand-600">{t("graphCover.gapsNone")}</p>}
+      {!allComments && gaps.on && matched.length > 0 && shown.length === 0 && <p className="text-[13px] text-sand-600">{t("graphCover.gapsNone")}</p>}
       {ordered.length > 0 && matched.length === 0 && (
         <p className="text-[13px] text-sand-600">{t("panes.graphDocumentsFilterNone")}</p>
       )}
@@ -341,6 +350,7 @@ export function DocumentsList({
       )}
       <ul
         ref={listRef}
+        hidden={allComments}
         role="list"
         aria-label={t("panes.graphDocuments")}
         onKeyDown={onRowKeys}
@@ -442,7 +452,6 @@ function DocumentRow({
   const [gistOpen, setGistOpen] = useState(false);
   const [allParts, setAllParts] = useState(false);
   const [allLinks, setAllLinks] = useState(false);
-  const [commentsOpen, setCommentsOpen] = useState(false); // [layer5]
   const links = groups.flatMap((g) => g.links.map((l) => ({ other: g.other, link: l })));
   const s = (k: number) => (k === 1 ? "" : "s");
   const shownParts = allParts ? parts : parts.slice(0, PARTS_SHOWN);
@@ -457,6 +466,7 @@ function DocumentRow({
   // only, why it is listed (WALK5-06).
   const whole = coverage?.parts.length === 1 && coverage.parts[0].whole;
   const openList = openComments(coverage);
+  const waits = useCommentWaits(); // [lists8] WALK8-01
   const counts = (
     gapsOn
       ? gapReasonLines(t, coverage)
@@ -467,12 +477,11 @@ function DocumentRow({
               ? t("panes.graphDocumentsParts", { n: parts.length, s: s(parts.length) })
               : null,
           coverage && !coverage.opened ? t("graphCover.notOpened") : null,
-          // [layer5] the open comments, with a "?" when one asks
+          // [layer5] the open comments, with a "?" when one waits on you
           openList.length === 0
             ? null
-            : `${openList.length === 1 ? t("graphCover.commentsOpenOne") : t("graphCover.commentsOpenMany", { n: openList.length })}${openList.some((c) => c.asks) ? " ?" : ""}`,
-          links.length > 0 ? t("panes.graphDocumentsLinks", { n: links.length, s: s(links.length) }) : null,
-          notes.length > 0 ? t("panes.graphDocumentsNotes", { n: notes.length, s: s(notes.length) }) : null,
+            : `${openList.length === 1 ? t("graphCover.commentsOpenOne") : t("graphCover.commentsOpenMany", { n: openList.length })}${openList.some(waits) ? " ?" : ""}`,
+          // [lists8] WALK8-03: the links and notes counts went to the opened row, which lists both.
         ]
   ).filter((c): c is string => c !== null);
 
@@ -481,15 +490,10 @@ function DocumentRow({
     gapsOn ? (
       <GapReasons key="gap-why" documentId={n.id} />
     ) : (
-      <DocumentCoverageLine
-        key="coverage"
-        documentId={n.id} /* [cover4] */
-        commentsOpen={commentsOpen}
-        onToggleComments={() => setCommentsOpen((v) => !v)}
-      />
+      <DocumentCoverageLine key="coverage" documentId={n.id} /* [cover4] */ />
     ),
-    // [layer5] A press on the open comments' count lists them here (VIEW5-02).
-    commentsOpen ? <DocumentComments key="comments" notebookId={notebookId} documentId={n.id} onOpenDocument={onLeave} /> : null,
+    // [layer5] The open comments (VIEW5-02); [lists8] WALK8-02: listed as the row opens.
+    <DocumentComments key="comments" notebookId={notebookId} documentId={n.id} onOpenDocument={onLeave} />,
     gist ? (
       <button
         key="gist"
@@ -621,12 +625,14 @@ function DocumentRow({
             aria-expanded={open}
             className={`flex min-h-6 min-w-0 flex-1 items-baseline gap-2 text-left leading-snug font-semibold hover:text-clay-800 max-[639px]:flex-wrap max-[639px]:gap-y-0 ${open ? "" : "px-3 py-1.5 max-[639px]:py-1"}`}
           >
-            <span className={`min-w-0 ${open ? "" : "truncate"} max-[639px]:basis-full`}>{n.title}</span>
+            {/* [lists8] WALK8-03: the title keeps its words (up to three quarters of the row); the counts give way, whole in their tooltip. */}
+            <span className={`min-w-0 ${open ? "" : "max-w-[75%] shrink-0 truncate"} max-[639px]:max-w-full max-[639px]:basis-full`}>{n.title}</span>
             {/* [chrome6] VIEW6-04: below 640 px the counts go under the title. */}
             {!open && counts.length > 0 && (
               <span
                 data-graph-gap-why={gapsOn ? n.id : undefined}
-                className={`ml-auto shrink-0 text-[11px] max-[639px]:ml-0 max-[639px]:shrink max-[639px]:leading-tight ${gapsOn ? "font-semibold text-clay-800" : "font-normal text-sand-500"}`}
+                data-tip={counts.join(" · ")}
+                className={`ml-auto min-w-0 truncate text-[11px] max-[639px]:ml-0 max-[639px]:whitespace-normal max-[639px]:leading-tight ${gapsOn ? "font-semibold text-clay-800" : "font-normal text-sand-500"}`}
               >
                 {counts.join(" · ")}
               </span>

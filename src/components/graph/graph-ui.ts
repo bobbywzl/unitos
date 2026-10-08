@@ -35,6 +35,11 @@ export const LEAD_PRIMARY = `${LEAD} border-clay bg-clay text-clay-fg hover:bg-c
 export const DOC_CHIP =
   "inline-block min-w-0 truncate rounded-full bg-sand-200 px-2.5 text-[11px] leading-6 font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:leading-8";
 
+/** [lists8] WALK8-09: a side list's head row (its name, filter, switches,
+    ✕) stays at the top while the list scrolls. The list's p-4 is the row's own
+    (a sticky row stops at the padding: -top-4 puts it at the edge). */
+export const LIST_HEAD = "sticky -top-4 z-[1] -mx-4 -mt-4 flex items-center gap-2 bg-card px-4 pt-4";
+
 /** ✕ on a panel or a list. */
 export const CLOSE =
   "flex size-7 shrink-0 items-center justify-center rounded-full text-[16px] text-sand-500 hover:bg-clay-100 hover:text-clay-700 pointer-coarse:size-10";

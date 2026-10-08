@@ -1,6 +1,6 @@
 "use client";
 
-import { ACTION, ACTION_ACCEPT, CLOSE, DOC_CHIP } from "./graph-ui";
+import { ACTION, ACTION_ACCEPT, CLOSE, DOC_CHIP, LIST_HEAD } from "./graph-ui";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
@@ -245,7 +245,12 @@ export function GraphOverlay({
   const togglePill = (name: Exclude<SideList, null>, e: { currentTarget: HTMLElement }) => {
     opener.current = e.currentTarget;
     focusList.current = name;
-    if (name === "links") setLinksFilter(list === "document" && focusNode ? focusNode.title : "");
+    // [lists8] WALK8-04: only when the document has a link the list holds
+    // (an accepted one); else the whole list, never an empty one.
+    const card = list === "document" ? focusNode : null;
+    const cardLinked =
+      card !== null && edges.some((e) => (e.a === card.id || e.b === card.id) && e.links.some((l) => !l.recommended && !l.provenance));
+    if (name === "links") setLinksFilter(card && cardLinked ? card.title : "");
     // A link opened from the Links list counts as that list: its pill closes
     // it. A link opened elsewhere (a curve, a card) gives way to the list.
     setList((v) => (v === name || (name === "links" && v === "link" && linkFrom === "links") ? null : name));
@@ -284,6 +289,13 @@ export function GraphOverlay({
     list === "link" && openLinkId
       ? (linkById.get(openLinkId) ?? (removedLink?.id === openLinkId ? removedLink : null))
       : null;
+  // [lists8] WALK8-05: the open link's curve's links, as the curve's list holds them.
+  const openCurveLinks = useMemo(() => {
+    if (!openLinkView) return undefined;
+    const { fromDocumentId: a, toDocumentId: b } = openLinkView;
+    const edge = edges.find((e) => (e.a === a && e.b === b) || (e.a === b && e.b === a));
+    return edge?.links.filter((l) => showProvenance || !l.provenance);
+  }, [openLinkView, edges, showProvenance]);
   const titleOf = useMemo(() => new Map(nodes.map((n) => [n.id, n.title])), [nodes]);
   const listOpen = list === "recommended";
   // [view2] The node card ("document") and the Find list ("find") are side lists too.
@@ -926,6 +938,14 @@ export function GraphOverlay({
             onClose={() => setList(null)}
             onOpenDocument={leave}
             onRemoved={setRemovedLink}
+            curveLinks={openCurveLinks /* [lists8] WALK8-05 */}
+            onStep={(next) => {
+              const was = document.activeElement instanceof HTMLElement ? document.activeElement.dataset.track : undefined;
+              openLink(next.id, linkFrom);
+              // The step button keeps the focus as the panel redraws for the next link.
+              if (was === "graph-link-next" || was === "graph-link-prev")
+                requestAnimationFrame(() => requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>(`[data-track="${was}"]`)?.focus()));
+            }}
           />
         )}
         </Presence>
@@ -981,6 +1001,7 @@ export function GraphOverlay({
         <NoteGatherDock
           notebookId={notebookId}
           onOpenDocument={leave}
+          findWords={view2.find.query /* [lists8] WALK7-13 */}
           onWritePage={
             canEdit
               ? (ids, command) => {
@@ -1119,7 +1140,7 @@ export function RecommendedLinkList({
       {/* [chrome6] VIEW6-02, VIEW6-11: one head row. [lists7] WALK7-01/02:
           the list's name, then Scan for links and ✕ at the right end. The
           list's intro is the pill's tooltip (WALK6-08). */}
-      <div className="flex items-center gap-2">
+      <div className={LIST_HEAD /* [lists8] */}>
         <ListName grow>{t("panes.recommendedLinks")}</ListName>
         {shown.length > 0 && scan?.(false)}
         {onClose && (

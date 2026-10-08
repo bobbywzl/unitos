@@ -1,6 +1,6 @@
 "use client";
 
-import { ACTION, ACTION_ACCEPT, CLOSE, SECTION_HEAD, TEXT_HIT } from "./graph-ui";
+import { ACTION, ACTION_ACCEPT, CLOSE, LIST_HEAD, SECTION_HEAD, TEXT_HIT } from "./graph-ui";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { GraphEdge } from "@/lib/types";
@@ -280,7 +280,7 @@ export function GraphNotesList({
     >
       {/* [chrome6] VIEW6-06: one head row; the list's description is the
           section field's tooltip. */}
-      <div className="flex items-center gap-2">
+      <div className={LIST_HEAD /* [lists8] */}>
       <ListName>{t("graphNotes.notes")}</ListName>
       <label data-tip={t("graphNotes.notesDesc")} className="flex min-w-0 flex-1 items-center gap-2 text-[12px] text-sand-600">
         {t("graphNotes.notesSection")}

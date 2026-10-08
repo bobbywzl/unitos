@@ -57,7 +57,7 @@ import { LinkReplyCount } from "@/components/graph/link-replies";
 // [view2] The node card, Find's counts, and the last Stitch answer's links.
 import { useGraphContent } from "@/components/graph/graph-content";
 import { NodeCardExtras, linkLine } from "@/components/graph/node-card";
-import { CoverageRing } from "@/components/graph/coverage"; // [cover4]
+import { CoverageRing, useDocumentCoverage } from "@/components/graph/coverage"; // [cover4]
 // [layer5] The reader's comments on a node, and the reader's documents first at a far zoom.
 import { NodeComments, nodeCommentsWidth, useProjectCoverage } from "@/components/graph/coverage";
 import { ownCommand } from "@/lib/graph/generated-label"; // [cover4]
@@ -247,6 +247,9 @@ function DocumentNode({ id, data }: NodeProps<DocumentNodeData>) {
   const breathing = data.breathing && !plain;
   const breatheDelay = `${(Math.abs(seeded(id, 5)) * 3).toFixed(2)}s`;
   const breatheDur = `${(3.2 + Math.abs(seeded(id, 9)) * 2).toFixed(2)}s`;
+  // [lists8] WALK8-07: a document the account never opened draws a hollow dot.
+  const coverage = useDocumentCoverage(id);
+  const unopened = coverage !== null && !coverage.opened && !data.generated && !data.active;
   const ring = data.selected
     ? "ring-[3px] ring-clay ring-offset-2 ring-offset-paper"
     : cited || data.written
@@ -262,14 +265,17 @@ function DocumentNode({ id, data }: NodeProps<DocumentNodeData>) {
       >
         <span
           data-graph-dot
-          className={`flex items-center justify-center border-2 border-card ${
+          data-graph-node-unopened={unopened ? "" : undefined}
+          className={`flex items-center justify-center ${unopened ? "border-[3px] border-sage-500" : "border-2 border-card"} ${
             data.generated ? "rounded-[7px]" : "rounded-full"
           } ${
             data.active
               ? "bg-clay shadow-[0_0_20px_color-mix(in_srgb,var(--clay)_55%,transparent)]"
               : data.generated
                 ? "bg-sand-600 shadow-[0_0_12px_color-mix(in_srgb,var(--sand-600)_35%,transparent)]"
-                : "bg-sage-500 shadow-[0_0_12px_color-mix(in_srgb,var(--sage)_40%,transparent)]"
+                : unopened
+                  ? "bg-card"
+                  : "bg-sage-500 shadow-[0_0_12px_color-mix(in_srgb,var(--sage)_40%,transparent)]"
           } ${ring}`}
           style={{ width: size, height: size }}
         >
@@ -842,7 +848,15 @@ function GraphKey({
           t("panes.graphDocuments"),
           <>
             {row(dot("rounded-full bg-clay"), "panes.graphKeyOpen")}
-            {row(dot("rounded-full bg-sage-500"), "panes.graphKeyDocument")}
+            {/* [lists8] WALK8-07: the document row explains the ring and the hollow (not opened) dot too, in one row. */}
+            {row(
+              <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden className="-rotate-90">
+                <circle cx="11" cy="11" r="9.5" fill="none" stroke="var(--sand-300)" strokeWidth={1.5} />
+                <circle cx="11" cy="11" r="9.5" fill="none" stroke="var(--sage-600)" strokeWidth={1.5} strokeLinecap="round" pathLength={100} strokeDasharray="40 100" />
+                <circle cx="11" cy="11" r="5.5" fill="var(--sage-500)" />
+              </svg>,
+              "panes.graphKeyDocument",
+            )}
             {generated && row(dot("rounded-[4px] bg-sand-600 opacity-50"), "panes.graphKeyGenerated")}
             {cited && row(dot("rounded-full bg-sage-500 ring-2 ring-[var(--kind-assistant)] ring-offset-1 ring-offset-card"), "panes.graphKeyCited")}
           </>,
@@ -1161,7 +1175,9 @@ function GraphCanvas({
   const [hover, setHover] = useState<HoverState>(null);
   // A finger on the canvas: a tap opens no hover card, which would stay up
   // over the next node (WALK3-11); the tap pins the card or picks.
-  const touchInput = useRef(false);
+  // [lists8] WALK8-10: a phone starts as touch, before its first tap on
+  // the canvas (a tap on a list must not let a hover card open).
+  const touchInput = useRef(typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches === true);
   const onPointerDownCapture = useCallback(
     (e: ReactPointerEvent) => {
       touchInput.current = e.pointerType === "touch";
@@ -1229,13 +1245,16 @@ function GraphCanvas({
       if (onExpandLink) {
         setPinnedEdgeId(null);
         setHover(null);
+        // [lists8] WALK8-05: the list goes from under a pointer that did not
+        // move; no other curve's list opens there until it moves.
+        freezeHover();
         onExpandLink(link.id);
         return;
       }
       router.push(`/n/${notebookId}?doc=${link.fromDocumentId}&link=${link.id}`);
       onOpenDocument();
     },
-    [onExpandLink, router, notebookId, onOpenDocument],
+    [onExpandLink, router, notebookId, onOpenDocument, freezeHover],
   );
   useSyncPinnedPair(pinnedEdgeId); // [graph-notes]
   const notesLit = useNotesLit(); // [graph-notes]
@@ -1782,6 +1801,7 @@ function GraphCanvas({
   // nodes' rooms and off each other, at the label scale of the zoom.
   const notesView = useGraphNotes()?.view;
   const markCoverage = useProjectCoverage(); // [layer5] the comments chips are rooms too
+  const markMyId = useCollab().myId; // [lists8] the chip's "?" is commentWaits
   const markScale = useStore((s) => Math.round(labelScale(s.transform[2]) * 10) / 10);
   const markPlaces = useMemo(() => {
     const at = new Map(flowNodes.map((n) => [n.id, n.position]));
@@ -1790,7 +1810,7 @@ function GraphCanvas({
       return p ? { x: p.x + NODE_W / 2, y: p.y + 16 } : null;
     };
     const rooms = flowNodes.flatMap((n) =>
-      nodeRoom(n.position.x, n.position.y, markScale, n.data.title, nodeCommentsWidth(markCoverage?.documents[n.id])),
+      nodeRoom(n.position.x, n.position.y, markScale, n.data.title, nodeCommentsWidth(markCoverage?.documents[n.id], markMyId)),
     );
     const curves: MarkCurve[] = [];
     for (const f of flowEdges) {
@@ -1816,7 +1836,7 @@ function GraphCanvas({
     // The widest marks first: they have the fewest free places.
     curves.sort((a, b) => b.w - a.w || a.id.localeCompare(b.id));
     return placeMarks(curves, rooms);
-  }, [flowNodes, flowEdges, notesView, markScale, showProvenance, markCoverage]);
+  }, [flowNodes, flowEdges, notesView, markScale, showProvenance, markCoverage, markMyId]);
 
   // The curves the spotlight lights: a hovered node's, a hovered or pinned
   // curve, or the curves between a hovered note's documents.
@@ -2050,13 +2070,18 @@ function GraphCanvas({
       } else if (onCurve && curveOrigin.current) {
         setHover(null);
         focusNode(curveOrigin.current.nodeId);
+      } else if (hover?.nodeId && hover.nodeId === focusedId) {
+        // [lists8] WALK8-04: the hover of the node whose card is pinned
+        // draws nothing; this Escape is the card's (the overlay closes it).
+        setHover(null);
+        return;
       } else if (hover) setHover(null);
       else return;
       e.preventDefault();
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [keyOpen, pinnedEdgeId, hover, floatHost, edgeEl, focusNode]);
+  }, [keyOpen, pinnedEdgeId, hover, floatHost, edgeEl, focusNode, focusedId]);
 
   // Enter on a node opens it (⇧-Enter picks it), Space picks it; arrows move
   // to the nearest document that way; ] and [ go to the node's next and
