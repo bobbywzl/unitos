@@ -949,7 +949,14 @@ function isNoteBand(band: Band, page: number, margin = false): boolean {
   const lines = buildLines(wide.items, page);
   const gaps = lines.slice(1).map((l, k) => lines[k].y - l.y);
   const close = gaps.filter((g) => g <= size * 1.6).length;
-  const dense = isDense(lines) || (smaller && close * 3 >= gaps.length);
+  // So is a prose column beside a note in the margin, an em or more past
+  // every line's end, however far apart its displays stand (parse loop
+  // finding: a quantum mechanics book's page of displays beside its
+  // "Active Reading" notes read in one pass, and a note's words ran on in
+  // the sentence beside it: "…(33.11c) and (33.12) as Active Reading
+  // 33.4: Show this explicitly.").
+  const beyond = note === band.right && note.items.every((i) => i.x >= Math.max(...lines.map((l) => l.xEnd)) + size);
+  const dense = isDense(lines) || (smaller && close * 3 >= gaps.length) || beyond;
   return gutter >= size * (smaller ? (margin ? 0.5 : 0.75) : 1) && isColumn(wide.items, page) && dense;
 }
 
