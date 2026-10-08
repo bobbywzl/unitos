@@ -1344,6 +1344,9 @@ body.docs-img-moving .docs-img-toolbar {
   flex-direction: column;
   transform: translateY(-50%);
 }
+.docs-table-pill-col {
+  transform: translate(-50%, -50%);
+}
 .docs-pill-btn {
   display: inline-flex;
   align-items: center;
