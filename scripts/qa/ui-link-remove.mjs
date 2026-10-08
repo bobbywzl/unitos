@@ -88,7 +88,9 @@ try {
     for (let i = 0; i < 40 && (await page.locator(`[data-annotation-link-id="${LINK}"]`).count()) > 0; i++) await page.waitForTimeout(250);
     check("…the card goes and the Undo line shows", (await page.locator(`[data-annotation-link-id="${LINK}"]`).count()) === 0 && (await page.locator("[data-link-removed]").isVisible()));
     await shot(page, "WALK5-01-after-removed");
+    const undoUrl = page.waitForRequest((r) => r.method() === "DELETE" && r.url().includes("/hidden?"));
     await press(page.locator("[data-link-removed]").getByRole("button", { name: L.undo }));
+    check("Undo names its Remove's edit (REV7-06)", /[?&]edit=[^&]+/.test((await undoUrl).url()), (await undoUrl).url());
     await card(page).waitFor({ timeout: 20000 });
     check("Undo: the card is back and the hide row gone", hidden() === "0");
     await context.close();

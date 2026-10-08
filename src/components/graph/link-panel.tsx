@@ -73,6 +73,7 @@ export function LinkPanel({
   const canRemove = canEdit && accepted && !link.provenance && linkRemovable(link.crossAccount);
   // Remove (WALK6-03): "removed" while Undo is offered, "gone" after.
   const [removed, setRemoved] = useState<"undo" | "gone" | null>(null);
+  const removeEdit = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (removed !== "undo") return;
     const timer = setTimeout(() => setRemoved("gone"), 10_000);
@@ -90,7 +91,8 @@ export function LinkPanel({
     setError(null);
     try {
       // Offline the removal waits in the queue: Undo comes once the server has hidden the link.
-      const result = await api<{ queued?: true }>(linkPath(link.id, notebookId), "DELETE");
+      const result = await api<{ queued?: true; editId?: string }>(linkPath(link.id, notebookId), "DELETE");
+      removeEdit.current = result.editId;
       setRemoved(result.queued ? "gone" : "undo");
       onRemoved?.(link);
       router.refresh();
@@ -105,7 +107,9 @@ export function LinkPanel({
     setBusy(true);
     setError(null);
     try {
-      await api(`/api/links/${encodeURIComponent(link.id)}/hidden?notebookId=${encodeURIComponent(notebookId)}`, "DELETE");
+      // Undo names its Remove: another editor's later removal stays (REV7-06).
+      const edit = removeEdit.current ? `&edit=${encodeURIComponent(removeEdit.current)}` : "";
+      await api(`/api/links/${encodeURIComponent(link.id)}/hidden?notebookId=${encodeURIComponent(notebookId)}${edit}`, "DELETE");
       setRemoved(null);
       onRemoved?.(null);
       router.refresh();
