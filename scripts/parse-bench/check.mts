@@ -1999,6 +1999,16 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     shorter.title === "Notes on river flow" && lead.title === "Notes on river flow in the delta" && longer.title === "Notes on river flow in the delta" && !shorter.heading && !lead.heading && !longer.heading,
     JSON.stringify({ shorter, lead, longer }),
   );
+  // A title that adds words of the headline's own to the h1, with no colon, bar, dash, or bullet among them and no word of the site's name, keeps them.
+  const own = await headline("Notes on river flow (delta edition)", "Notes on river flow");
+  const ownLead = await headline("Field notes on river flow in the delta", "Notes on river flow in the delta");
+  const ownSite = await headline("Notes on river flow (Example Weekly)", "Notes on river flow");
+  const ownKicker = await headline("Field guide: Notes on river flow - Example Online", "Notes on river flow");
+  check(
+    "url: a title that adds its own words to the opening heading keeps them; the heading goes",
+    own.title === "Notes on river flow (delta edition)" && !own.heading && ownLead.title === "Field notes on river flow in the delta" && !ownLead.heading && ownSite.title === "Notes on river flow" && ownKicker.title === "Notes on river flow",
+    JSON.stringify({ own, ownLead, ownSite, ownKicker }),
+  );
   check(
     "url: a heading that shares no edge with the title stays a heading; one that adds a tail set apart by a bullet is not the title",
     other.title === "Notes on river flow" && other.heading && dated.title === "Notes on river flow",
@@ -2064,6 +2074,102 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     "url: a short label heading over the h1 is a kicker line; one under the h1 stays a heading",
     over[0] === 'PARAGRAPH <p class="kicker"> Delta desk' && under.includes("HEADING <h1> Key points"),
     `${over.join(" / ")}; ${under.join(" / ")}`,
+  );
+  // The opening heading the page names as its headline is the title: the <title> holds it while the title was read
+  // from the logo's h1, or it is the page's h1 in other words than og:title. An h1 that shares no word with the title
+  // stays a heading.
+  const named = async (head: string, body: string) => {
+    const parsed = await parseHtmlContent(
+      `<!doctype html><html><head>${head}</head><body>${body}<p>${prose(2)}</p></article></body></html>`,
+      "https://www.riversweekly.example/2019/notes",
+    );
+    return { title: parsed.title, headings: parsed.blocks.filter((b) => b.type === "HEADING").map((b) => b.text) };
+  };
+  const logo = await named("<title>Rivers Weekly » Blog Archive » Notes on river flow in the delta</title>", `<header><h1>Rivers Weekly</h1></header><article><h2>Notes on river flow in the delta</h2><p>${prose(1)}</p>`);
+  const reworded = await named('<meta property="og:title" content="Delta flow: what the river notes show"><title>Delta flow</title>', `<article><h1>Notes on river flow in the delta</h1><p>${prose(1)}</p>`);
+  const unrelated = await named('<meta property="og:title" content="Notes on river flow"><title>Notes on river flow</title>', `<article><h1>Field reports today</h1><p>${prose(1)}</p>`);
+  check(
+    "url: an opening heading the <title> names as its headline, or the page's h1 that shares a word with the title, is the title",
+    logo.title === "Notes on river flow in the delta" && logo.headings.length === 0 && reworded.title === "Notes on river flow in the delta" && reworded.headings.length === 0,
+    JSON.stringify({ logo, reworded }),
+  );
+  check("url: an h1 that shares no word with the title stays a heading", unrelated.title === "Notes on river flow" && unrelated.headings.join() === "Field reports today", JSON.stringify(unrelated));
+  // A heading that names the contents list in another language ("Inhalt") is the list's label line, no part.
+  const labeled = await parseHtmlContent(
+    `<!doctype html><html><head><title>Notes on river flow</title></head><body><article><h1>Notes on river flow</h1><p>${prose(1)}</p><h2>Inhalt</h2><ul class="toc"><li><a href="#bars">Gravel bars</a></li><li><a href="#floods">Floods</a></li></ul><p>${prose(2)}</p><h2 id="bars">Gravel bars</h2><p>${prose(3)}</p><h2 id="floods">Floods</h2><p>${prose(4)}</p></article></body></html>`,
+    "https://example.org/rivers",
+  );
+  const labeledHeadings = labeled.blocks.filter((b) => b.type === "HEADING").map((b) => b.text);
+  check(
+    "url: a heading that names the contents list in another language is its label line",
+    labeledHeadings.join() === "Gravel bars,Floods" && labeled.blocks.some((b) => b.type === "PARAGRAPH" && b.text === "Inhalt"),
+    labeled.blocks.map((b) => `${b.type} ${b.text.slice(0, 20)}`).join(" / "),
+  );
+  // A paragraph set as a heading (two sentences or more, twenty words or more) reads as a paragraph; a long question stays a heading.
+  const proseHeadings = (
+    await parseHtmlContent(
+      `<!doctype html><html><head><title>Notes on river flow</title></head><body><article><h1>Notes on river flow</h1><p>${prose(1)}</p><h2>Gravel bars</h2><p>${prose(2)}</p><h3>The river drops its sand where the current slows. Bars grow there, year after year, until a flood moves them again downstream.</h3><h3>What does a gauge at the mouth of the delta measure, and why do the readings move from one week to the next week?</h3><p>${prose(3)}</p><h2>Floods</h2><p>${prose(4)}</p></article></body></html>`,
+      "https://example.org/rivers",
+    )
+  ).blocks.map((b) => `${b.type} ${b.text.slice(0, 24)}`);
+  check(
+    "url: a heading of two sentences or more is a paragraph; a long question stays a heading",
+    proseHeadings.includes("PARAGRAPH The river drops its sand") && proseHeadings.includes("HEADING What does a gauge at the") && proseHeadings.includes("HEADING Gravel bars"),
+    proseHeadings.join(" / "),
+  );
+  // A comment box's heading in its other forms ("Top Rated Comments", "Отзывы") closes the article.
+  const commentTail = async (heading: string) =>
+    (
+      await parseHtmlContent(
+        `<!doctype html><html><head><title>Notes on river flow</title></head><body><article><h1>Notes on river flow</h1><p>${prose(1)}</p><p>${prose(2)}</p><p>${prose(3)}</p><h2>${heading}</h2><p>(View all)</p><p>[ Read All Comments ]</p></article></body></html>`,
+        "https://example.org/rivers",
+      )
+    ).blocks.map((b) => b.text.slice(0, 24));
+  const topRated = await commentTail("Top Rated Comments");
+  const reviews = await commentTail("Отзывы");
+  check(
+    "url: a comment box's heading in its other forms closes the article",
+    !topRated.some((t) => /Comments|View all/.test(t)) && !reviews.some((t) => /Отзывы|View all/.test(t)) && topRated.length === 3,
+    `${topRated.join(" / ")}; ${reviews.join(" / ")}`,
+  );
+  // A heading left closing the article once the comment box under it is cut is an empty section, and goes.
+  const closing = (
+    await parseHtmlContent(
+      `<!doctype html><html><head><title>Notes on river flow</title></head><body><article><h1>Notes on river flow</h1><p>${prose(1)}</p><p>${prose(2)}</p><p>${prose(3)}</p><h2>Watch more river videos</h2><h3>Comments</h3><p>(View all)</p></article></body></html>`,
+      "https://example.org/rivers",
+    )
+  ).blocks.map((b) => `${b.type} ${b.text.slice(0, 24)}`);
+  check(
+    "url: a heading left closing the article after the comment cut goes",
+    closing.length === 3 && closing.every((t) => t.startsWith("PARAGRAPH Paragraph")),
+    closing.join(" / "),
+  );
+  // A paywall's heading ("Sie möchten gerne weiterlesen?") closes the article; the sign-up form under it goes.
+  const paywall = (
+    await parseHtmlContent(
+      `<!doctype html><html><head><title>Notes on river flow</title></head><body><article><h1>Notes on river flow</h1><p>${prose(1)}</p><p>${prose(2)}</p><p>${prose(3)}</p><p>${prose(4)}</p><p>${prose(5)}</p><p>${prose(6)}</p><h2>Sie möchten gerne weiterlesen?</h2><h3>Registrieren Sie sich jetzt kostenlos:</h3><p>Mit der Registrierung akzeptiere ich die Nutzungsbedingungen.</p><p>Hier anmelden</p></article></body></html>`,
+      "https://example.org/rivers",
+    )
+  ).blocks.map((b) => `${b.type} ${b.text.slice(0, 24)}`);
+  check(
+    "url: a paywall's heading closes the article",
+    paywall.length === 6 && paywall.every((t) => t.startsWith("PARAGRAPH Paragraph")),
+    paywall.join(" / "),
+  );
+  // The site's logo set as an h1 (a link to the home page) is no title: the <title> is, less the logo's part and the parts after it.
+  const logoTitle = async (title: string) =>
+    (
+      await parseHtmlContent(
+        `<!doctype html><html><head><title>${title}</title></head><body><header><h1><a href="/">Rivers Weekly</a></h1></header><article><p>${prose(1)}</p><p>${prose(2)}</p><p>${prose(3)}</p></article></body></html>`,
+        "https://www.example.org/2019/notes",
+      )
+    ).title;
+  const logoDash = await logoTitle("Notes on river flow - Rivers Weekly");
+  const logoMotto = await logoTitle("Notes on river flow : Rivers Weekly | The paper of the delta");
+  check(
+    "url: the site's logo set as an h1 is no title",
+    logoDash === "Notes on river flow" && logoMotto === "Notes on river flow",
+    `${logoDash}; ${logoMotto}`,
   );
   check(
     "url: a first section's question and a short first heading stay headings",
