@@ -76,6 +76,32 @@ export function removeTextNodes(el: Element) {
   }
 }
 
+/** A test of whether an element or one of its ancestors passes `own`,
+    each element's answer kept: a pass over the elements of one tree asks
+    each ancestor once, where el.closest asks every element's whole chain
+    again. The tree must not change while the test is in use. */
+export function ancestorTest(own: (el: Element) => boolean): (el: Element) => boolean {
+  const known = new Map<Element, boolean>();
+  return (el: Element) => {
+    const chain: Element[] = [];
+    let answer = false;
+    for (let node: Element | null = el; node; node = node.parentElement) {
+      const seen = known.get(node);
+      if (seen !== undefined) {
+        answer = seen;
+        break;
+      }
+      chain.push(node);
+      if (own(node)) {
+        answer = true;
+        break;
+      }
+    }
+    for (const node of chain) known.set(node, answer);
+    return answer;
+  };
+}
+
 export function hasDirectText(el: Element): boolean {
   for (const node of el.childNodes) {
     if (node.nodeType === 3 && (node.textContent ?? "").trim()) return true;

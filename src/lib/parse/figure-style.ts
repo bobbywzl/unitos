@@ -1,5 +1,6 @@
 import { JSDOM, VirtualConsole } from "jsdom";
 import { outboundFetch } from "@/lib/outbound-fetch";
+import { ancestorTest } from "@/lib/parse/dom-text";
 import { isFigureCaption } from "@/lib/parse/figure-audit";
 
 // The page-style bake (SPEC.md §2). The stored html never sees the page's
@@ -1559,11 +1560,17 @@ function markStyles(document: Document, rules: Rule[], page: Page) {
 
 /** The page's prose: paragraphs, and the blocks pages set prose in without
     <p> (a div or span per paragraph). A bounded sample, visible only. */
+const SAMPLE_SKIP_TAGS = new Set(["svg", "nav", "header", "footer"]);
+
 function proseSample(document: Document): Element[] {
   const out: Element[] = [];
+  // isHidden(el) and el.closest("svg, nav, header, footer"), each ancestor
+  // asked once.
+  const hidden = ancestorTest((el) => el.hasAttribute("data-unitos-hidden"));
+  const chrome = ancestorTest((el) => SAMPLE_SKIP_TAGS.has(el.localName));
   for (const el of document.body.querySelectorAll("p, div, span, li")) {
     if (out.length >= SAMPLE_LIMIT) break;
-    if (isHidden(el) || el.closest("svg, nav, header, footer")) continue;
+    if (hidden(el) || chrome(el)) continue;
     if (el.tagName.toLowerCase() === "p") {
       if (textLength(el) >= PROSE_MIN_CHARS) out.push(el);
       continue;
