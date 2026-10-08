@@ -153,7 +153,7 @@ export type Highlight = {
   // Its note was just deleted: the mark fades out (globals.css .mark-out) and
   // takes no clicks; it unpaints once the fade ends. Kind "anchor" only.
   leaving?: boolean;
-  // kind "link": what the link is about, typed after Close link.
+  // kind "link": what the link is about, typed after Link here.
   linkReason?: string | null;
 };
 

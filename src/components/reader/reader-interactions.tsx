@@ -1284,7 +1284,7 @@ export function ReaderInteractions({
       end: number;
       href: string;
       title: string;
-      reason: string | null; // what the link is about, typed after Close link
+      reason: string | null; // what the link is about, typed after Link here
     }[]
   >;
   editedByBlock: Record<string, { start: number; end: number }[]>;
@@ -3121,7 +3121,7 @@ export function ReaderInteractions({
       }
       selection.setBaseAndExtent(anchorNode, selection.anchorOffset, node, offset);
     };
-    // The toolbar on a selection. With a link pending, Close link is its
+    // The toolbar on a selection. With a link pending, Link here is its
     // first row, and pressing it closes the link there — an accidental
     // selection creates nothing.
     const showTools = (captured: Popover | null) => {
@@ -6921,7 +6921,7 @@ export function ReaderInteractions({
         busy: false,
       });
       router.refresh();
-      showToast(t("reader.linkCreated"));
+      // No toast: the link card that opens says the link is made.
       return true;
     } catch (err) {
       showError(err instanceof Error ? err.message : t("reader.linkFailed"));
@@ -8971,7 +8971,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   // assistant's command box or the comment box takes focus; the mark stays
   // until the toolbar closes. Every block of the passage keeps it, so the
   // tint is the selection, whole, from the moment the pointer lifts. The
-  // Close link chip's highlight keeps it the same way. The page editor keeps
+  // Link here chip's highlight keeps it the same way. The page editor keeps
   // its own selection drawn, blue or gray (SPEC.md §29): no tint, so opening
   // the toolbar never repaints the page, and a repaint cannot put back a
   // selection the keys have just moved. A core's words (SPEC.md §28) are
@@ -9087,7 +9087,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
     popover ? blocks.find((b) => b.id === popover.anchor.blockId)?.type : undefined,
   );
   // A selection in a core (SPEC.md §28) takes every tool but Link: a link
-  // joins the texts themselves. With a link pending, Close link takes Link's
+  // joins the texts themselves. With a link pending, Link here takes Link's
   // place.
   const inCore = popover ? isCoreKey(popover.anchor.blockId) : false;
   // The passage spans more blocks than a save takes (lib/anchors/passage.ts).
@@ -10319,7 +10319,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               {t("reader.keyTerm")}
             </p>
           )}
-          {/* With a link pending, Close link is the toolbox's first row: the
+          {/* With a link pending, Link here is the toolbox's first row: the
               selection is the link's other end once it is pressed. */}
           {pendingLink && !inCore && (
             <button
@@ -11325,8 +11325,8 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       </Presence>
 
       {/* The card a closed link opens: both ends, and a box for what the
-          link is about. Save stores it as the link's reason; Skip leaves the
-          link as it is. */}
+          link is about. Save stores it as the link's reason; ✕ or Escape
+          leaves the link as it is. */}
       <Presence show={linkCard !== null} exit="bubble">
       {linkCard && (
         <div
@@ -11388,15 +11388,8 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               className="field-sizing-content mt-2.5 min-h-0 w-full resize-none rounded-xl bg-sand-100 px-2.5 py-2 text-[13px] outline-none placeholder:text-sand-500"
             />
           </div>
-          <div className="mt-2 flex items-center justify-between">
-            <button
-              onClick={closeLinkCard}
-              data-track="link-card-skip"
-              data-tip={t("reader.linkSkipTitle")}
-              className="text-xs text-sand-500 hover:text-clay-700"
-            >
-              {t("reader.linkSkip")}
-            </button>
+          {/* ✕ and Escape keep the link as it is: no Skip beside them. */}
+          <div className="mt-2 flex items-center justify-end">
             <span className="flex items-center gap-1.5">
               <VoiceTypingButton track="link-card-voice-typing" />
               <button

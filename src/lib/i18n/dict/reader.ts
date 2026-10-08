@@ -43,7 +43,7 @@ const en = {
   addToExistingNoteTitle: "Put the quote and the comment at the end of a note you pick",
   addPickNote: "Which note?",
   linkAcrossTexts: "Link across texts",
-  closeLink: "Close link",
+  closeLink: "Link here",
   recommended: "Recommended",
   keyTerm: "Key term",
   figureTools: "Figure tools",
@@ -260,14 +260,13 @@ const en = {
   detailSplitLine: "“{before}” / “{after}”",
 
   // Pending link banner
-  linkingBanner: "Linking “{quote}” from {source} — select the other end, then press Close link",
+  linkingBanner: "Linking “{quote}” from {source} — select the other end, then press Link here",
   thisDocument: "this document",
   anotherDocument: "another document",
   cancelLink: "Cancel the link (Esc)",
 
   // Toasts and errors
   completeLinkToast: "Select the other end — in this or another document — then press Close link.",
-  linkCreated: "Link created",
   linkFailed: "Link failed",
   samePassage: "Select a different passage for the other end.",
   explanationRemoved: "Explanation removed",
@@ -324,8 +323,6 @@ const en = {
   linkCard: "Link",
   linkAboutPlaceholder: "What is this link about?",
   linkAboutSaveTitle: "Save what this link is about. It shows on the link and in the Annotations tab.",
-  linkSkip: "Skip",
-  linkSkipTitle: "Keep the link without a description",
   // The font picker's sans option (reader-interactions.tsx)
   fontSans: "Sans",
   // A tool's run lands while another run holds its card (SPEC.md §6).
@@ -364,7 +361,7 @@ const zh: Record<keyof typeof en, string> = {
   addToExistingNoteTitle: "把引文和评论放到你选的笔记末尾",
   addPickNote: "加入哪条笔记？",
   linkAcrossTexts: "跨文本链接",
-  closeLink: "闭合链接",
+  closeLink: "链接到这里",
   recommended: "推荐",
   keyTerm: "关键术语",
   figureTools: "插图工具",
@@ -565,14 +562,13 @@ const zh: Record<keyof typeof en, string> = {
   detailSplitLine: "“{before}” / “{after}”",
 
   // Pending link banner
-  linkingBanner: "正在链接来自{source}的“{quote}”——选中另一端，再按“闭合链接”",
+  linkingBanner: "正在链接来自{source}的“{quote}”——选中另一端，再按“链接到这里”",
   thisDocument: "本文档",
   anotherDocument: "另一文档",
   cancelLink: "取消链接（Esc）",
 
   // Toasts and errors
   completeLinkToast: "在本文档或其他文档中选中另一端，再按“闭合链接”。",
-  linkCreated: "链接已创建",
   linkFailed: "链接失败",
   samePassage: "另一端请选择不同的片段。",
   explanationRemoved: "解释已移除",
@@ -628,8 +624,6 @@ const zh: Record<keyof typeof en, string> = {
   linkCard: "链接",
   linkAboutPlaceholder: "这个链接是关于什么的？",
   linkAboutSaveTitle: "保存链接说明。说明显示在链接上和批注页签中。",
-  linkSkip: "跳过",
-  linkSkipTitle: "保留链接，不加说明",
   fontSans: "无衬线",
   explanationReady: "解释已完成",
   analysisReady: "分析已完成",
