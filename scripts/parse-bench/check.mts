@@ -2008,6 +2008,21 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     !uncutBlocks.some((b) => b === "PARAGRAPH Short") && uncut.title !== "Notes on river flow in the delta",
     `${uncut.title}; ${uncutBlocks.join(" / ")}`,
   );
+  // A short label heading over the h1 is a kicker line; a label under the h1 stays a heading.
+  const labelPage = async (body: string) =>
+    (
+      await parseHtmlContent(
+        `<!doctype html><html><head><title>Notes on river flow</title></head><body><article>${body}</article></body></html>`,
+        "https://example.org/rivers",
+      )
+    ).blocks.map((b) => `${b.type} ${b.html ?? ""} ${b.text.slice(0, 24)}`);
+  const over = await labelPage(`<h3>Delta desk</h3><h1>Notes on river flow</h1><p>${prose(1)}</p><p>${prose(2)}</p>${sections}`);
+  const under = await labelPage(`<h1>Notes on river flow</h1><h3>Key points</h3><ul><li>Sand settles behind every bar.</li><li>Silt settles further down.</li></ul><p>${prose(1)}</p><p>${prose(2)}</p>`);
+  check(
+    "url: a short label heading over the h1 is a kicker line; one under the h1 stays a heading",
+    over[0] === 'PARAGRAPH <p class="kicker"> Delta desk' && under.includes("HEADING <h1> Key points"),
+    `${over.join(" / ")}; ${under.join(" / ")}`,
+  );
   check(
     "url: a first section's question and a short first heading stay headings",
     question.includes("HEADING What does a gauge measur") && short.includes("HEADING Channels and banks"),
