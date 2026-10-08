@@ -146,6 +146,10 @@ await page.locator('[data-track="graph-documents"]').click();
 await page.locator("[data-graph-documents-list]").waitFor({ timeout: 10000 }).catch(() => {});
 await page.waitForTimeout(1000);
 const docRows = await page.locator("[data-graph-documents-row]").count();
+// [chrome6] VIEW6-04: a row is one line until opened; open every row to read its parts.
+const rowHeads = page.locator("[data-graph-documents-row]:not([data-open]) [data-row-head]");
+for (let i = (await rowHeads.count()) - 1; i >= 0; i--) await rowHeads.nth(i).click();
+await page.waitForTimeout(500);
 const docParts = await page.locator("[data-graph-documents-row] [data-graph-part]").count();
 check("offline: the Documents list lists every document with its parts", docRows === seed.docs.length && docParts > 0, `${docRows} rows, ${docParts} parts`);
 // What the notes cover, from the copy (COVER4's route is in the offline copy).
