@@ -15,7 +15,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, useSortable, type SortingStrategy } from "@dnd-kit/sortable";
 import { getEventCoordinates } from "@dnd-kit/utilities";
-import { HoldSensor } from "@/components/hold-sensor";
+import { HoldSensor, restoreLiftScroll } from "@/components/hold-sensor";
 
 // One drag across many lists (SPEC.md §6). Every list is a SortableGroup
 // inside a SortableBoard, and the board owns the one DndContext, so a drag
@@ -521,10 +521,14 @@ export function SortableBoard({
       // Off every list, over the article: the note leaves the list.
       if (onDropOutside && at && overReader(at.x, at.y)) {
         onDropOutside(itemId, { x: at.x, y: at.y, grab: grab ? { dx: grab.dx, dy: grab.dy } : { dx: 0, dy: 0 } });
-      }
+      } else restoreLiftScroll();
       return;
     }
-    if (landing.listId === from[0] && landing.beforeId === itemId) return;
+    // Let go where it was: nothing moved, and the lists scroll back.
+    if (landing.listId === from[0] && landing.beforeId === itemId) {
+      restoreLiftScroll();
+      return;
+    }
     onDrop?.(from[0], landing.listId, itemId, landing.beforeId);
   }
 

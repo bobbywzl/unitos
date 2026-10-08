@@ -11,6 +11,17 @@
 
 /** How long the pointer holds still before the card lifts. */
 export const HOLD_MS = 150;
+/** How long a finger holds still before anything held to drag lifts — a
+    note, a board's tile, the floating card, an annotation carried to a
+    note, a row of the document list: long enough that a finger resting a
+    moment before a swipe scrolls the list. A release before it, without
+    a move, is a tap. */
+export const TOUCH_HOLD_MS = 300;
+
+/** The hold for this pointer: a finger's, else a mouse's or a pen's. */
+export function holdMs(pointerType: string): number {
+  return pointerType === "touch" ? TOUCH_HOLD_MS : HOLD_MS;
+}
 /** How long a mouse holds still on words before their quote can lift (a
     mark in the text, SPEC.md §6): long enough that a slow click, or a pause
     before a drag that selects, stays what it is. */
@@ -151,7 +162,7 @@ export function watchHold(
         ready = true;
         armed?.(true);
       }, WORDS_HOLD_MS)
-    : setTimeout(() => lift(start), HOLD_MS);
+    : setTimeout(() => lift(start), holdMs(e.pointerType));
   window.addEventListener("pointermove", onMove);
   window.addEventListener("pointerup", stop);
   window.addEventListener("pointercancel", stop);
