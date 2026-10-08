@@ -152,6 +152,9 @@ export type OutlineActions = {
   /** The composer of this section is letting its note go (Save, Escape):
       the note joins the section's list the moment the server has it. */
   expectComposed: (sectionId: string) => void;
+  /** Done or Escape closed the composer: its note shows at the top of its
+      section at once, with the words typed, while their save is on its way. */
+  placeComposed: (sectionId: string, id: string, content: string) => void;
   reorderNote: (sectionId: string, id: string, toIndex: number) => void;
   moveNoteToSection: (id: string, sectionId: string, toIndex?: number) => Promise<void>;
   /** Alt+↑ and Alt+↓ on a note: one place up or down in its section, and
@@ -1182,6 +1185,10 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
     },
     expectComposed(sectionId) {
       composedSection.current = sectionId;
+    },
+    placeComposed(sectionId, id, content) {
+      setLocalText(id, { content, unsaved: false });
+      setTree((prev) => putBack(prev, { note: localNote(id, content, documentId), sectionId, index: 0 }));
     },
     async attachSource(id, drag) {
       const answer = await api<{ addedSourceIds?: unknown; sourceDropped?: unknown }>(`/api/notes/${id}`, "PATCH", {

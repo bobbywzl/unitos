@@ -5,7 +5,7 @@ import { ACCOUNT_HEADER } from "@/lib/constants";
 import { clearComposeDraft, readComposeDraft, writeComposeDraft } from "@/lib/note-drafts";
 import { newNoteId } from "@/lib/notes/client-id";
 import { saveNoteText } from "@/lib/notes/save-text";
-import { isOffline } from "@/lib/offline/queue";
+import { isOffline, NOTE_KEPT_EVENT } from "@/lib/offline/queue";
 import { beginWrite, clearDirty, endWrite, markDirty } from "@/lib/save-state";
 import { tabAccount } from "@/lib/tab-account";
 import type { QuoteDrag } from "@/lib/quote-drag";
@@ -36,6 +36,12 @@ import type { OutlineActions } from "@/components/outline/use-outline";
 // its way reopens the composer on the note it made, and a create sent again
 // answers with that note, never a second copy. Every later save names the
 // text it was made from (lib/notes/save-text.ts).
+//
+// Done and Escape close the composer at once (release): the session that
+// wrote the note is let go with its words, its note, and its saves on the
+// way, and a fresh session takes the section. The let-go session saves the
+// words after the composer is gone; its local draft stays until the server
+// has them. A save that fails puts the words back in the section's composer.
 
 type Snapshot = {
   composing: boolean;
@@ -77,12 +83,35 @@ type Session = {
   unload: (() => void) | null;
   /** Offline: the create waits for the network. */
   online: (() => void) | null;
+  /** Done or Escape let this session go: it saves its words, and a fresh
+      session draws the section's composer. */
+  released: boolean;
 };
 
 const EMPTY: Snapshot = { composing: false, draft: "", noteId: null, confirmed: "", failed: null };
 
 // One session per section, for the life of the tab.
 const sessions = new Map<string, Session>();
+// The ids of the notes let-go sessions are saving: their local drafts are
+// theirs until the server has the words, never a composer's to reopen.
+const releasing = new Set<string>();
+// Every session that may own a note: the sections' and the let-go ones.
+const owners = new Set<Session>();
+
+// Words written to a note that is gone were kept as a new note
+// (lib/notes/gone.ts): the composer that owns it owns the new note now.
+if (typeof window !== "undefined") {
+  window.addEventListener(NOTE_KEPT_EVENT, (e) => {
+    const detail = (e as CustomEvent<{ from?: unknown; to?: unknown; content?: unknown }>).detail;
+    if (typeof detail?.from !== "string" || typeof detail.to !== "string") return;
+    for (const s of owners) {
+      if (s.snap.noteId !== detail.from) continue;
+      if (typeof detail.content === "string") s.base = detail.content.trim();
+      set(s, { noteId: detail.to });
+      if (!s.released) persist(s);
+    }
+  });
+}
 
 function sessionFor(sectionId: string, actions: OutlineActions, canEdit: boolean): Session {
   const found = sessions.get(sectionId);
@@ -107,8 +136,10 @@ function sessionFor(sectionId: string, actions: OutlineActions, canEdit: boolean
     canEdit,
     unload: null,
     online: null,
+    released: false,
   };
   sessions.set(sectionId, s);
+  owners.add(s);
   return s;
 }
 
@@ -135,7 +166,7 @@ function stopTimer(s: Session) {
 
 /** The local draft, with the keystroke. */
 function persist(s: Session) {
-  if (!s.snap.composing) return;
+  if (!s.snap.composing || s.released) return;
   if (!s.snap.draft.trim() && !s.snap.noteId) {
     clearComposeDraft(s.sectionId);
     return;
@@ -161,6 +192,8 @@ function restore(s: Session, notes: NoteView[]) {
   // The note it created: by the id the server answered with, else by the
   // id the create carried (the reload came before the answer).
   const ownedId = stored.noteId ?? stored.createId ?? null;
+  // A let-go session is saving these words: they are not this composer's.
+  if (ownedId && releasing.has(ownedId)) return;
   const owned = ownedId ? (notes.find((n) => n.id === ownedId) ?? null) : null;
   if (!stored.content.trim() && !owned) {
     clearComposeDraft(s.sectionId);
@@ -192,7 +225,7 @@ function patch(s: Session, id: string, trimmed: string): Promise<void> {
     const saved = await saveNoteText(id, trimmed, s.base);
     s.base = saved.content;
     // The note changed elsewhere: the composer shows the text as saved.
-    if (saved.changed && s.snap.draft.trim() === trimmed) {
+    if (saved.changed && !s.released && s.snap.draft.trim() === trimmed) {
       s.lastSaved = saved.content;
       set(s, { draft: saved.content });
     }
@@ -207,7 +240,7 @@ function create(s: Session, trimmed: string): Promise<void> {
   const account = tabAccount();
   const id = createId(s);
   // The id is in the local draft before the create leaves.
-  writeComposeDraft(s.sectionId, s.snap.draft, null, id);
+  if (!s.released) writeComposeDraft(s.sectionId, s.snap.draft, null, id);
   // A plain fetch, not api(): a create that queues offline returns no id,
   // and the composer must never own a note it cannot name. It counts in
   // the save indicator like every write.
@@ -243,11 +276,12 @@ function create(s: Session, trimmed: string): Promise<void> {
       s.lastSaved = stored;
       s.base = stored;
       set(s, { noteId: note.id, confirmed: stored });
-      writeComposeDraft(s.sectionId, s.snap.draft, note.id);
+      if (!s.released) writeComposeDraft(s.sectionId, s.snap.draft, note.id);
       await flushQuotes(s, note.id);
-      // Words typed since the create left save to the note.
+      // Words typed since the create left save to the note; a let-go
+      // session's release saves them itself.
       const typed = s.snap.draft.trim();
-      if (typed && typed !== stored) {
+      if (!s.released && typed && typed !== stored) {
         s.lastSaved = typed;
         await patch(s, note.id, typed).catch(() => set(s, { failed: typed }));
       }
@@ -336,8 +370,8 @@ function flushOnUnload(s: Session) {
   }).catch(() => {});
 }
 
-function reset(s: Session) {
-  stopTimer(s);
+/** The window listeners of a composing session go. */
+function unhook(s: Session) {
   if (s.unload) {
     window.removeEventListener("pagehide", s.unload);
     window.removeEventListener("beforeunload", s.unload);
@@ -347,6 +381,11 @@ function reset(s: Session) {
     window.removeEventListener("online", s.online);
     s.online = null;
   }
+}
+
+function reset(s: Session) {
+  stopTimer(s);
+  unhook(s);
   s.pendingQuotes = [];
   clearComposeDraft(s.sectionId);
   s.createId = null;
@@ -379,24 +418,66 @@ async function attachQuote(s: Session, drag: QuoteDrag) {
   else s.pendingQuotes.push(drag);
 }
 
-/** Save: the note is written whole and released to the section's list. */
-async function save(s: Session) {
+/** Done and Escape: the composer closes at once, and the note is written
+    whole after it closes and released to the section's list. The session is
+    let go with its words; a fresh session takes the section, so a + Note
+    pressed while the save is on its way opens an empty composer. The local
+    draft keeps the words until the server has them: a reload before that
+    reopens the composer on them. */
+function save(s: Session) {
   const trimmed = s.snap.draft.trim();
   if (!trimmed) return;
   stopTimer(s);
-  if (s.creating) await s.creating;
-  // Not created yet: create it here (its quotes attach), then the save
-  // that lists it. Offline the create queues instead, with its id.
-  if (!s.snap.noteId && !isOffline()) await create(s, trimmed);
-  const id = s.snap.noteId;
-  if (id) {
-    s.lastSaved = trimmed;
-    await s.chain;
-    await s.actions.saveNote(id, trimmed, s.base);
-  } else {
-    await s.actions.addNote(s.sectionId, trimmed, createId(s));
+  unhook(s);
+  const id = s.snap.noteId ?? createId(s);
+  writeComposeDraft(s.sectionId, s.snap.draft, s.snap.noteId, s.snap.noteId ? undefined : id);
+  releasing.add(id);
+  s.released = true;
+  sessions.delete(s.sectionId);
+  // The note shows in the list with the words at once (offline, a note not
+  // created yet shows from the queue instead).
+  if (s.snap.noteId || !isOffline()) s.actions.placeComposed(s.sectionId, id, trimmed);
+  // The surfaces drawing the composer move to the fresh session: it closes.
+  set(s, { composing: false });
+  void finishRelease(s, trimmed, id);
+}
+
+async function finishRelease(s: Session, trimmed: string, id: string) {
+  try {
+    if (s.creating) await s.creating;
+    // Not created yet: create it here (its quotes attach), then the save
+    // that lists it. Offline the create queues instead, with its id.
+    if (!s.snap.noteId && !isOffline()) await create(s, trimmed);
+    const owned = s.snap.noteId;
+    if (owned) {
+      s.lastSaved = trimmed;
+      await s.chain;
+      await s.actions.saveNote(owned, trimmed, s.base);
+    } else {
+      await s.actions.addNote(s.sectionId, trimmed, id);
+    }
+    // The server has the words: the local draft goes, unless a composer
+    // of the section wrote its own over it since.
+    const stored = readComposeDraft(s.sectionId);
+    const storedId = stored ? (stored.noteId ?? stored.createId ?? null) : null;
+    if (stored && (storedId === id || storedId === s.snap.noteId)) clearComposeDraft(s.sectionId);
+    releasing.delete(id);
+    owners.delete(s);
+  } catch {
+    // Not saved: the words go back to the section's composer, marked Not
+    // saved, with the note they belong to; its saves try again.
+    releasing.delete(id);
+    owners.delete(s);
+    const fresh = sessionFor(s.sectionId, s.actions, s.canEdit);
+    if (!fresh.snap.composing) {
+      writeComposeDraft(s.sectionId, s.snap.draft, s.snap.noteId, s.snap.noteId ? undefined : id);
+      restore(fresh, []);
+      set(fresh, { failed: trimmed });
+    } else {
+      // A new note is being written there: the words join it, kept.
+      setDraft(fresh, `${fresh.snap.draft.trimEnd()}\n\n${s.snap.draft.trim()}`);
+    }
   }
-  reset(s);
 }
 
 /** Cancel: the draft is dropped, and the note the composer created is
