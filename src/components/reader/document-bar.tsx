@@ -318,7 +318,11 @@ export function DocumentBar({
     if (!pillMenu) return;
     const id = pillMenu;
     const timer = setTimeout(() => setReachWaited(id), REACH_WAIT_MS);
-    return () => clearTimeout(timer);
+    // A later open of the same row waits again.
+    return () => {
+      clearTimeout(timer);
+      setReachWaited(null);
+    };
   }, [pillMenu]);
   const menuRowsReady = !canEdit || !menuReachLoading || reachWaited === pillMenu;
   // The ask before Replace the edits names the quotes it costs.
@@ -829,6 +833,29 @@ export function DocumentBar({
   const [assistantOpened, setAssistantOpened] = useState<string | null>(null);
   // What the last failed add handed back to Add a document.
   const [returned, setReturned] = useState<{ items: UploadItem[]; seq: number } | null>(null);
+  // The links of an add stay in the browser until the add lands, so a
+  // reload while it runs or after it failed puts them back in Add a
+  // document's field (CLAUDE.md rule zero 6). Files cannot be kept.
+  const linksKey = `unitos:add-links:${notebookId}`;
+  const keepLinks = (items: UploadItem[]) => {
+    const links = items.filter((i) => i.kind === "url" || i.kind === "video-url").map((i) => ({ kind: i.kind, url: i.url }));
+    try {
+      if (links.length > 0) localStorage.setItem(linksKey, JSON.stringify({ at: Date.now(), links }));
+      else localStorage.removeItem(linksKey);
+    } catch {
+      // Storage off: the links live as long as the page.
+    }
+  };
+  useEffect(() => {
+    try {
+      const kept = JSON.parse(localStorage.getItem(linksKey) ?? "null") as { at: number; links: UploadItem[] } | null;
+      if (!kept || Date.now() - kept.at > 86_400_000) return;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setReturned({ items: kept.links, seq: 1 });
+    } catch {
+      // Nothing kept, or storage off.
+    }
+  }, [linksKey]);
   const assistantSubject = !assistant
     ? ""
     : assistant.kind === "files" || assistant.kind === "drive"
@@ -838,6 +865,7 @@ export function DocumentBar({
         : assistant.url;
 
   function startAssistant(request: UploadRequest) {
+    keepLinks(request.kind === "batch" ? request.items : request.kind === "url" || request.kind === "video-url" ? [request] : []);
     setAssistant(request);
     setAssistantRun((n) => n + 1);
     setAssistantHidden(false);
@@ -1671,6 +1699,7 @@ export function DocumentBar({
             const opened = assistantOpened;
             // What failed goes back into Add a document (rule zero 6);
             // Edit the link opens it there with the error under the field.
+            keepLinks(back ? back.items : []);
             if (back) {
               setReturned((was) => ({ items: back.items, seq: (was?.seq ?? 0) + 1 }));
               if (back.edit) {
