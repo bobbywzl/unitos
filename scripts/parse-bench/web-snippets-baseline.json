@@ -2622,7 +2622,7 @@
   },
   "bmjv.de.konsum.html": {
    "tp": 3,
-   "fp": 2,
+   "fp": 1,
    "fn": 0
   },
   "bmwi.de-neubau.html": {
@@ -4707,7 +4707,7 @@
   },
   "unendlich-viel-energie-strompreisbremse.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "unocero.com.marcas.html": {
