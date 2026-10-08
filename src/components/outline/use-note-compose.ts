@@ -83,6 +83,8 @@ type Session = {
   unload: (() => void) | null;
   /** Offline: the create waits for the network. */
   online: (() => void) | null;
+  /** A save that failed tries again by itself (retryFailed): this stops it. */
+  retry: (() => void) | null;
   /** Done or Escape let this session go: it saves its words, and a fresh
       session draws the section's composer. */
   released: boolean;
@@ -136,6 +138,7 @@ function sessionFor(sectionId: string, actions: OutlineActions, canEdit: boolean
     canEdit,
     unload: null,
     online: null,
+    retry: null,
     released: false,
   };
   sessions.set(sectionId, s);
@@ -381,6 +384,56 @@ function unhook(s: Session) {
     window.removeEventListener("online", s.online);
     s.online = null;
   }
+  stopRetry(s);
+}
+
+/** How often words whose save failed are tried again: as a note's draft. */
+const RETRY_MS = 20_000;
+
+function stopRetry(s: Session) {
+  s.retry?.();
+  s.retry = null;
+}
+
+/** The words of a Done or Escape whose save failed are back in the
+    composer, marked Not saved: they are tried again by themselves — when
+    the network comes back and every 20 seconds — while the composer shows
+    them as they failed (a keystroke saves on its own). Once the server has
+    them, the composer closes as the reader's Done or Escape asked, and the
+    note joins the section's list. */
+function retryFailed(s: Session) {
+  if (s.retry || typeof window === "undefined") return;
+  let running = false;
+  const again = async () => {
+    const trimmed = s.snap.draft.trim();
+    if (!s.snap.composing || s.released || !trimmed || s.snap.failed !== trimmed) {
+      stopRetry(s);
+      return;
+    }
+    if (running || isOffline()) return;
+    running = true;
+    try {
+      const id = s.snap.noteId;
+      if (id) {
+        s.lastSaved = trimmed;
+        await patch(s, id, trimmed).catch(() => set(s, { failed: trimmed }));
+      } else {
+        await create(s, trimmed);
+      }
+    } finally {
+      running = false;
+    }
+    if (s.snap.confirmed !== trimmed || s.snap.draft.trim() !== trimmed) return;
+    stopRetry(s);
+    save(s);
+  };
+  const timer = setInterval(() => void again(), RETRY_MS);
+  const onOnline = () => void again();
+  window.addEventListener("online", onOnline);
+  s.retry = () => {
+    clearInterval(timer);
+    window.removeEventListener("online", onOnline);
+  };
 }
 
 function reset(s: Session) {
@@ -473,6 +526,7 @@ async function finishRelease(s: Session, trimmed: string, id: string) {
       writeComposeDraft(s.sectionId, s.snap.draft, s.snap.noteId, s.snap.noteId ? undefined : id);
       restore(fresh, []);
       set(fresh, { failed: trimmed });
+      retryFailed(fresh);
     } else {
       // A new note is being written there: the words join it, kept.
       setDraft(fresh, `${fresh.snap.draft.trimEnd()}\n\n${s.snap.draft.trim()}`);
