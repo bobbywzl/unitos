@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState, useSyncExternalStore, type ReactNode } 
 import { CheckIcon, ChevronDownIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Collapse } from "@/components/presence";
+import { useEscapeLayer } from "@/lib/escape-layers";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { DOCUMENT_SORTS, type DocumentSort, type RowKind } from "@/lib/document-order";
 
@@ -117,6 +118,8 @@ export function categoryLabels(t: TFunc) {
 export function DocumentsSort({ sort, onSort }: { sort: DocumentSort; onSort: (s: DocumentSort) => void }) {
   const t = useT();
   const [picking, setPicking] = useState(false);
+  // The sorts are a layer of their own: Escape closes them, not the list.
+  useEscapeLayer(picking, () => setPicking(false));
   return (
     <div className="flex flex-col">
       <div className="flex items-center px-3 pt-0.5 pb-1.5">
@@ -125,7 +128,8 @@ export function DocumentsSort({ sort, onSort }: { sort: DocumentSort; onSort: (s
           data-track="documents-sort"
           aria-expanded={picking}
           data-tip={t("panes.documentsSortTip")}
-          className={`flex min-w-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[11.5px] ${
+          // A finger gets a 36 px target (NAV13-12).
+          className={`flex min-w-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[11.5px] pointer-coarse:py-2.5 ${
             picking ? "border-clay bg-clay-100 text-clay-800" : "border-line text-sand-600 hover:bg-clay-100 hover:text-clay-800"
           }`}
         >

@@ -17,6 +17,51 @@ export type DocumentReach = {
   openProjects?: string[];
 };
 
+// A read started early (the pointer on a row's ⋮, or the focus on it) is
+// kept for a short while, so the menu that opens next draws its rows once,
+// with Remove from this project already known. Kept briefly: a remove or an
+// add elsewhere changes the answer.
+const REACH_KEEP_MS = 20_000;
+const reachReads = new Map<string, { at: number; read: Promise<DocumentReach | null>; reach?: DocumentReach | null }>();
+
+// fresh: a read already answered is read again (its answer still shows
+// meanwhile); one in flight is shared.
+function readReach(documentId: string, fresh = false): Promise<DocumentReach | null> {
+  const kept = reachReads.get(documentId);
+  if (kept && Date.now() - kept.at < REACH_KEEP_MS && !(fresh && kept.reach !== undefined)) return kept.read;
+  const entry: { at: number; read: Promise<DocumentReach | null>; reach?: DocumentReach | null } = {
+    at: Date.now(),
+    read: Promise.resolve(null),
+  };
+  entry.read = (async () => {
+    let reach: DocumentReach | null = null;
+    try {
+      const res = await fetch(`/api/documents/${documentId}/footprint`);
+      if (res.ok) reach = (await res.json()) as DocumentReach;
+    } catch {
+      // Offline: the plain message stands.
+    }
+    // A failed read is not kept: the next open asks again.
+    if (reach) entry.reach = reach;
+    else reachReads.delete(documentId);
+    return reach;
+  })();
+  reachReads.set(documentId, entry);
+  return entry.read;
+}
+
+/** Start reading a document's footprint before its menu opens. */
+export function prefetchDocumentReach(documentId: string): void {
+  void readReach(documentId);
+}
+
+/** The answer already in, if a read finished within REACH_KEEP_MS. */
+function keptReach(documentId: string | null): DocumentReach | undefined {
+  if (!documentId) return undefined;
+  const kept = reachReads.get(documentId);
+  return kept && Date.now() - kept.at < REACH_KEEP_MS && kept.reach ? kept.reach : undefined;
+}
+
 /** The footprint of one document, read when `documentId` is set (a menu or a
     confirm opens) and again for each new id. null while it loads, or when
     the read failed (offline): the confirm then says the plain message. */
@@ -26,21 +71,19 @@ export function useDocumentReach(documentId: string | null): { reach: DocumentRe
     reach: null,
     loading: false,
   });
-  // A new id starts a new read: adjust during render, then fetch.
-  if (state.id !== documentId) setState({ id: documentId, reach: null, loading: documentId !== null });
+  // A new id starts a new read: adjust during render, then fetch. An answer
+  // a prefetch already holds is there at once.
+  if (state.id !== documentId) {
+    const kept = keptReach(documentId);
+    setState({ id: documentId, reach: kept ?? null, loading: documentId !== null && !kept });
+  }
   useEffect(() => {
     if (!documentId) return;
     let cancelled = false;
-    void (async () => {
-      let reach: DocumentReach | null = null;
-      try {
-        const res = await fetch(`/api/documents/${documentId}/footprint`);
-        if (res.ok) reach = (await res.json()) as DocumentReach;
-      } catch {
-        // Offline: the plain message stands.
-      }
+    // The counts a confirm names are read again when it opens.
+    void readReach(documentId, true).then((reach) => {
       if (!cancelled) setState((s) => (s.id === documentId ? { ...s, reach, loading: false } : s));
-    })();
+    });
     return () => {
       cancelled = true;
     };

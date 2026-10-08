@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import {
   createContext,
   useContext,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -31,6 +32,7 @@ import { Collapse } from "@/components/presence";
 import { isImeKey, useImeGuard } from "@/lib/ime";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { clipWords } from "@/lib/markdown-preview";
+import { focusWhenDrawn, useEscapeLayer } from "@/lib/escape-layers";
 
 // Folders in the document list (SPEC.md §6). A folder is a named group of a
 // project's documents; a folder can hold folders. The list draws a folder as
@@ -199,11 +201,27 @@ const FLYOUT_MAX_HEIGHT = 480;
 // touches the panel, so the pointer never leaves the list on its way over.
 const FLYOUT_EDGE = 6;
 
+// The rows the keys move between, in a list or a fly-out.
+export const LIST_ROWS = '[data-track="document-open"], [data-track="folder-open"]';
+
+
 // A folder's list beside its row: a fixed panel in a portal (the root list
 // scrolls and would clip it), placed off the row's top and the panel's right
 // edge, or its left edge when the right has no room. It follows the panel's
 // scroll and the window's size.
-function Flyout({ rowEl, children }: { rowEl: HTMLElement; children: ReactNode }) {
+// By keys: ← or Escape in a fly-out closes it and puts the focus back on
+// its folder's row, one level at a time.
+function Flyout({
+  rowEl,
+  folderId,
+  onBack,
+  children,
+}: {
+  rowEl: HTMLElement;
+  folderId: string;
+  onBack: () => void;
+  children: ReactNode;
+}) {
   const panelEl = useContext(PanelContext);
   const [place, setPlace] = useState<{ wrapper: CSSProperties; maxHeight: number } | null>(null);
   useLayoutEffect(() => {
@@ -242,7 +260,22 @@ function Flyout({ rowEl, children }: { rowEl: HTMLElement; children: ReactNode }
   const [card, setCard] = useState<HTMLElement | null>(null);
   if (!place) return null;
   return createPortal(
-    <div data-document-flyout className="fixed z-40 flex" style={place.wrapper}>
+    <div
+      data-document-flyout
+      data-flyout-for={folderId}
+      className="fixed z-40 flex"
+      style={place.wrapper}
+      onKeyDown={(e) => {
+        if (e.key !== "Escape" && e.key !== "ArrowLeft") return;
+        // Only from a row: a folder's open actions take their own Escape.
+        if (!(e.target instanceof Element) || !e.target.matches(LIST_ROWS)) return;
+        // The innermost fly-out takes it; the list and the fly-outs under
+        // it stay.
+        e.preventDefault();
+        e.stopPropagation();
+        onBack();
+      }}
+    >
       <div
         ref={setCard}
         className="menu-in flex w-80 max-w-[calc(100vw-96px)] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-card py-1.5 shadow-float"
@@ -362,6 +395,8 @@ type Tree = {
   error: TreeError;
   openFolder: (folder: DocumentFolderView) => void;
   toggleFolder: (folder: DocumentFolderView) => void;
+  // Close a folder's list and the lists under it.
+  closeFolder: (folder: DocumentFolderView) => void;
   setMenu: Dispatch<SetStateAction<string | null>>;
   setRenaming: Dispatch<SetStateAction<string | null>>;
   setMoving: Dispatch<SetStateAction<string | null>>;
@@ -532,6 +567,10 @@ function FolderRow({ folder, depth }: { folder: DocumentFolderView; depth: numbe
   };
   const droppable = tree.drag !== null && tree.canDropOn(folder.id);
   const over = tree.dragOver === folder.id && droppable;
+  // The folder's actions are a layer of their own: Escape closes them, not
+  // the list, and the focus goes back to ⋮.
+  useEscapeLayer(menuOpen, () => tree.setMenu(null));
+  const focusFlyout = () => focusWhenDrawn(`[data-flyout-for="${folder.id}"] :is(${LIST_ROWS})`);
   return (
     <div ref={setRowEl} className="flex flex-col">
       <div
@@ -579,7 +618,17 @@ function FolderRow({ folder, depth }: { folder: DocumentFolderView; depth: numbe
         ) : (
           <button
             onClick={() => tree.toggleFolder(folder)}
+            // By keys, a fly-out is a submenu: Enter, Space or → opens the
+            // folder's list and moves into it.
+            onKeyDown={(e) => {
+              if (!flyout || (e.key !== "Enter" && e.key !== " " && e.key !== "ArrowRight")) return;
+              e.preventDefault();
+              e.stopPropagation();
+              if (!open) tree.openFolder(folder);
+              focusFlyout();
+            }}
             data-track="folder-open"
+            data-folder-row={folder.id}
             aria-expanded={open}
             className={`flex min-w-0 flex-1 items-center gap-2 overflow-hidden px-4 py-2 text-left text-[13px] whitespace-nowrap ${
               onActivePath ? "font-semibold text-ink" : "text-sand-700"
@@ -616,9 +665,9 @@ function FolderRow({ folder, depth }: { folder: DocumentFolderView; depth: numbe
             aria-label={t("panes.folderActionsFor", { title: folder.title })}
             aria-expanded={menuOpen}
             data-tip={t("panes.folderActions")}
-            className="mr-2 flex size-6 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800"
+            className="mr-2 flex size-6 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:size-9"
           >
-            <MoreIcon size={13} className="rotate-90" />
+            <MoreIcon size={13} />
           </button>
         )}
       </div>
@@ -709,7 +758,19 @@ function FolderRow({ folder, depth }: { folder: DocumentFolderView; depth: numbe
         )}
       </Collapse>
       {flyout ? (
-        open && rowEl && <Flyout rowEl={rowEl}>{level}</Flyout>
+        open &&
+        rowEl && (
+          <Flyout
+            rowEl={rowEl}
+            folderId={folder.id}
+            onBack={() => {
+              tree.closeFolder(folder);
+              rowEl.querySelector<HTMLElement>(`[data-folder-row="${folder.id}"]`)?.focus();
+            }}
+          >
+            {level}
+          </Flyout>
+        )
       ) : (
         <Collapse open={open}>
           {open && <div className="ml-4 border-l border-line pl-1">{level}</div>}
@@ -847,6 +908,7 @@ export function DocumentTree<
   renderDocument,
   onAddIn,
   header,
+  revealRef,
 }: {
   notebookId: string;
   folders: DocumentFolderView[];
@@ -862,6 +924,9 @@ export function DocumentTree<
   /** The row over the root list (Sort by): it stays at the top as the list
       scrolls, and a drag draws the move-out drop zone over it. */
   header?: ReactNode;
+  /** Set to a call that opens a document's folders and focuses its row
+      (the list's type-ahead finds a document in a folder). */
+  revealRef?: { current: ((id: string) => void) | null };
 }) {
   const t = useT();
   const lang = useLang();
@@ -936,6 +1001,19 @@ export function DocumentTree<
   const [drag, setDrag] = useState<TreeDrag | null>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
 
+  // Type-ahead found a document in a folder: the folder's path opens (a
+  // fly-out per level, or the rows under each other) and its row takes the
+  // focus once drawn.
+  useEffect(() => {
+    if (!revealRef) return;
+    revealRef.current = (id) => {
+      const row = rows.find((r) => r.id === id);
+      if (!row) return;
+      setOpenPath(folderPath(folders, row.folderId));
+      focusWhenDrawn(`[data-doc-row="${id}"]`);
+    };
+  });
+
   // The screen crossed the width: the fly-outs close, or the open
   // document's path opens under its rows. Adjust-during-render, the same
   // pattern as presence.tsx.
@@ -988,6 +1066,7 @@ export function DocumentTree<
     error,
     // Open a folder's list: the path down to it, nothing deeper.
     openFolder: (folder) => setOpenPath([...folderPath(folders, folder.parentId), folder.id]),
+    closeFolder: (folder) => setOpenPath(folderPath(folders, folder.parentId)),
     toggleFolder: (folder) => {
       const depth = folderPath(folders, folder.parentId).length;
       if (openPath[depth] === folder.id) setOpenPath(openPath.slice(0, depth));

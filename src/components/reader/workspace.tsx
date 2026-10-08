@@ -52,7 +52,7 @@ import {
   type SaveProgress,
 } from "@/lib/offline/saved";
 import { TierMark } from "@/components/tier-mark";
-import { useEscapeLayer } from "@/lib/escape-layers";
+import { focusWhenDrawn, useEscapeLayer } from "@/lib/escape-layers";
 import { FloatingNoteEditor } from "@/components/outline/floating-note-editor";
 import { readTrayFold, subscribeTrayFold } from "@/lib/assistant/side-chat-open";
 import { NotesTray } from "@/components/outline/notes-tray";
@@ -227,12 +227,14 @@ export function Workspace({
   const phone = useSyncExternalStore(subscribeNarrow, readNarrow, () => false);
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
-  // Add to notes on a phone keeps the sheet closed: the bar's Notes button
-  // blooms once instead (notesBloom counts the adds, so each one replays it).
-  const quietAdd = useRef({ phone, sheetOpen: mobileTray });
+  // Add to notes keeps a closed tray closed, by the tray's state, not the
+  // width: a phone's closed sheet, or a folded tray on md+ (EDGE13-08). The
+  // Notes button blooms once instead (notesBloom counts the adds, so each
+  // one replays it).
+  const quietAdd = useRef({ phone, sheetOpen: mobileTray, folded: collapsed });
   useEffect(() => {
-    quietAdd.current = { phone, sheetOpen: mobileTray };
-  }, [phone, mobileTray]);
+    quietAdd.current = { phone, sheetOpen: mobileTray, folded: collapsed };
+  }, [phone, mobileTray, collapsed]);
   const [notesBloom, setNotesBloom] = useState(0);
   // A jump opens the sheet below md, as the bottom bar does. On md+ the flag
   // stays as it is: the rail reads it to tell a second press on the open tab.
@@ -487,7 +489,8 @@ export function Workspace({
     };
     const onShowNote = (e: Event) => {
       const { noteId, quiet } = (e as CustomEvent<{ noteId: string; quiet?: boolean }>).detail;
-      if (quiet === true && quietAdd.current.phone && !quietAdd.current.sheetOpen) {
+      const closed = quietAdd.current.phone ? !quietAdd.current.sheetOpen : quietAdd.current.folded;
+      if (quiet === true && closed) {
         setNotesBloom((n) => n + 1);
         return;
       }
@@ -618,14 +621,29 @@ export function Workspace({
   const isOpen = (which: Tab) => tab === which && (phone ? mobileTray : !collapsed);
   // The header's History: opens the tray on History; a second press, History
   // open, folds the tray as the rail's chevron does.
-  function toggleHistory() {
+  // Opened from the header, History is a layer: Escape folds it (closes
+  // the sheet on a phone) and the focus goes back to History. Opened by a
+  // key, the focus moves into the panel.
+  const [historyLayer, setHistoryLayer] = useState(false);
+  function toggleHistory(e: React.MouseEvent) {
     if (!phone && isOpen("history")) {
       setCollapsed(true);
       rememberTray({ collapsed: true, tab });
       return;
     }
     show("history");
+    setHistoryLayer(true);
+    if (e.detail === 0) focusWhenDrawn("[data-history-panel] :is(button, a[href], [tabindex='0'])");
   }
+  useEscapeLayer(historyLayer && isOpen("history"), () => {
+    setHistoryLayer(false);
+    // The sheet's flag too: show() reads it as open and would close it.
+    setMobileTray(false);
+    if (!phone) {
+      setCollapsed(true);
+      rememberTray({ collapsed: true, tab });
+    }
+  });
   // The Notes button with notes waiting for Accept: the tray opens on notes
   // with the first pending note in view and flashed, as the header's
   // pending count did; with the notes open, a press is the tab's own.
@@ -1091,7 +1109,15 @@ export function Workspace({
                 <GraphIcon size={15} />
                 {t("panes.graph")}
               </button>
-              <button data-more-row onClick={() => show("history")} data-track="more:history" className={MORE_ROW}>
+              <button
+                data-more-row
+                onClick={() => {
+                  show("history");
+                  setHistoryLayer(true);
+                }}
+                data-track="more:history"
+                className={MORE_ROW}
+              >
                 <EditsIcon size={15} />
                 {t("panes.history")}
               </button>

@@ -13,14 +13,15 @@ import { StopPill } from "@/components/thinking";
 // Contents (SPEC.md §26): the button at the top left of the article, in the
 // article menu's place, and the list it opens — the article's parts, each a
 // jump to the block it starts at. Two clicks make the contents: Contents
-// opens the list, and with none stored the list asks whether to generate
+// opens the list, and with none stored it shows the article's own headings
+// first and Generate contents as one row at the foot (what AI does and the
+// disclaimer in its tooltip); with no headings it asks whether to generate
 // them — one line on what AI writes, the Generate contents button, and the
-// disclaimer that AI-written parts may be off — and Generate contents runs
+// disclaimer that AI-written parts may be off. Generate contents runs
 // the one model call (POST /api/documents/[documentId]/contents
 // {generate: true}) and stores the parts. While it runs the button reads
 // Stop: a press ends the request and the model call, and nothing is
-// stored. Until then the list shows the article's own headings, when it
-// has any. Stored parts show at once, under
+// stored. Stored parts show at once, under
 // the disclaimer. A click on a part scrolls the reader to its block and
 // flashes it (dissect:flash-block). The button stays at the top left of the
 // pane as the article scrolls (reader-interactions.tsx articleMenu). The
@@ -218,41 +219,67 @@ export function ContentsMenu({
               </>
             )}
 
-            {/* Nothing stored: ask, the Generate contents button, the
-                disclaimer; the headings below, when the article has any. */}
-            {state && !state.generated && (
+            {/* Nothing stored, the article has headings: the headings
+                first, for the reader who came to jump, then Generate
+                contents as one row at the foot, what AI does and the
+                disclaimer in its tooltip (NAV13-07). */}
+            {state && !state.generated && state.parts.length > 0 && (
               <>
-                {canEdit ? (
-                  <>
-                    <p className={note}>{t("reader.contentsAsk")}</p>
-                    <div className="px-4">
-                      <button
-                        onClick={() => void generate()}
-                        data-track={generating ? "contents-stop" : "contents-generate"}
-                        data-tip={t(generating ? "reader.contentsStopTitle" : "reader.contentsGenerateTitle")}
-                        className="flex items-center gap-1.5 rounded-full bg-clay px-3.5 py-1.5 text-[12px] font-semibold text-clay-fg hover:bg-clay-600"
-                      >
-                        {generating ? <SpinnerIcon size={13} className="animate-spin" /> : <SparkleIcon size={13} />}
-                        {t(generating ? "reader.contentsBuilding" : "reader.contentsGenerate")}
-                        {generating && <StopPill />}
-                      </button>
-                    </div>
-                    {generateError && (
-                      <p className={`${note} text-red-600`}>{t("reader.contentsFailed", { reason: generateError })}</p>
-                    )}
-                    <p className={disclaimer}>{t("reader.contentsDisclaimer")}</p>
-                  </>
-                ) : (
-                  <p className={note}>{t("reader.contentsViewer")}</p>
-                )}
-                {state.parts.length > 0 && (
-                  <>
-                    <p className={`${disclaimer} mt-1 border-t border-line pt-2`}>{t("reader.contentsHeadingsNote")}</p>
-                    {list(state.parts)}
-                  </>
-                )}
+                {list(state.parts)}
+                <div className="border-t border-line px-2 pt-2">
+                  {canEdit ? (
+                    <button
+                      onClick={() => void generate()}
+                      data-track={generating ? "contents-stop" : "contents-generate"}
+                      data-tip={
+                        generating
+                          ? t("reader.contentsStopTitle")
+                          : `${t("reader.contentsGenerateTitle")} ${t("reader.contentsDisclaimer")}`
+                      }
+                      className="flex w-full items-center gap-1.5 rounded-full px-2 py-1.5 text-left text-[12px] font-semibold text-clay-800 hover:bg-clay-100/70"
+                    >
+                      {generating ? <SpinnerIcon size={13} className="animate-spin" /> : <SparkleIcon size={13} />}
+                      {t(generating ? "reader.contentsBuilding" : "reader.contentsGenerate")}
+                      {generating && <StopPill />}
+                    </button>
+                  ) : (
+                    <p className="px-2 text-[11px] leading-snug text-sand-500">{t("reader.contentsViewer")}</p>
+                  )}
+                  {generateError && (
+                    <p className="px-2 pt-1 text-[12px] leading-snug text-red-600">
+                      {t("reader.contentsFailed", { reason: generateError })}
+                    </p>
+                  )}
+                </div>
               </>
             )}
+
+            {/* Nothing stored, no headings: the ask, the Generate contents
+                button, the disclaimer. */}
+            {state && !state.generated && state.parts.length === 0 &&
+              (canEdit ? (
+                <>
+                  <p className={note}>{t("reader.contentsAsk")}</p>
+                  <div className="px-4">
+                    <button
+                      onClick={() => void generate()}
+                      data-track={generating ? "contents-stop" : "contents-generate"}
+                      data-tip={t(generating ? "reader.contentsStopTitle" : "reader.contentsGenerateTitle")}
+                      className="flex items-center gap-1.5 rounded-full bg-clay px-3.5 py-1.5 text-[12px] font-semibold text-clay-fg hover:bg-clay-600"
+                    >
+                      {generating ? <SpinnerIcon size={13} className="animate-spin" /> : <SparkleIcon size={13} />}
+                      {t(generating ? "reader.contentsBuilding" : "reader.contentsGenerate")}
+                      {generating && <StopPill />}
+                    </button>
+                  </div>
+                  {generateError && (
+                    <p className={`${note} text-red-600`}>{t("reader.contentsFailed", { reason: generateError })}</p>
+                  )}
+                  <p className={disclaimer}>{t("reader.contentsDisclaimer")}</p>
+                </>
+              ) : (
+                <p className={note}>{t("reader.contentsViewer")}</p>
+              ))}
           </nav>
         )}
       </Presence>

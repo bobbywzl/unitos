@@ -6,9 +6,10 @@ import type { EditItem, HistoryEntry } from "@/lib/types";
 // detachments, merges) merged with every attached document's edits, newest
 // first. One page is HISTORY_PAGE rows; Show older reads the page under the
 // last row shown, so every row, a removed note kept whole among them, is
-// reachable. History's This document reads one document's edits alone
-// (`editsOnly`), the rows the rail's Edits tab listed. Read-only: nothing
-// here writes a row.
+// reachable. History's This document reads one document's rows
+// (`documentId`): its edits, the notes and annotations removed that quoted
+// it or were made on it, and its removal from the project. Read-only:
+// nothing here writes a row.
 
 export const HISTORY_PAGE = 100;
 
@@ -27,6 +28,26 @@ function olderThan(cursor: HistoryCursor | null) {
     : {};
 }
 
+/** The ids of the project's events about one document: a removed note made
+    on it or quoting it, and its removal from the project. */
+async function eventsOfDocument(notebookId: string, documentId: string): Promise<string[]> {
+  const rows = await db.$queryRaw<{ id: string }[]>`
+    SELECT "id" FROM "NotebookEvent"
+    WHERE "notebookId" = ${notebookId} AND (
+      ("kind" = 'DOCUMENT_DETACH' AND "meta" ->> 'documentId' = ${documentId})
+      OR ("kind" = 'NOTE_REMOVE' AND (
+        "meta" -> 'kept' ->> 'documentId' = ${documentId}
+        OR EXISTS (
+          SELECT 1 FROM jsonb_array_elements(
+            CASE WHEN jsonb_typeof("meta" -> 'kept' -> 'sources') = 'array' THEN "meta" -> 'kept' -> 'sources' ELSE '[]'::jsonb END
+          ) AS s
+          WHERE s ->> 'documentId' = ${documentId}
+        )
+      ))
+    )`;
+  return rows.map((r) => r.id);
+}
+
 const newestFirst = (a: HistoryEntry, b: HistoryEntry) =>
   b.createdAt.localeCompare(a.createdAt) || (b.id < a.id ? -1 : b.id > a.id ? 1 : 0);
 
@@ -35,17 +56,20 @@ export async function historyPage(
   attachedIds: string[],
   cursor: HistoryCursor | null = null,
   limit = HISTORY_PAGE,
-  { editsOnly = false }: { editsOnly?: boolean } = {},
+  { documentId }: { documentId?: string } = {},
 ): Promise<{ entries: HistoryEntry[]; more: boolean }> {
+  // This document: the project's events that name it. A removed note names
+  // it by its own document or by a quote's; a detach by its documentId.
+  const eventIds = documentId === undefined ? null : await eventsOfDocument(notebookId, documentId);
   // The newest `limit` rows of the union are among the newest `limit` of
   // each table; one more of each says whether older rows remain.
   const [events, edits] = await Promise.all([
     // meta is left out: a detach keeps the project's work on the document
     // there (lib/documents/detach.ts), and the panel reads none of it.
-    editsOnly
+    eventIds !== null && eventIds.length === 0
       ? []
       : db.notebookEvent.findMany({
-          where: { notebookId, ...olderThan(cursor) },
+          where: { notebookId, ...(eventIds ? { id: { in: eventIds } } : {}), ...olderThan(cursor) },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take: limit + 1,
           select: { id: true, userId: true, kind: true, content: true, createdAt: true },

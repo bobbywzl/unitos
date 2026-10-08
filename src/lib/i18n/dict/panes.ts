@@ -345,6 +345,8 @@ const en = {
   uploadPageFailed: "{title} — {reason}",
   uploadAddedCount: "Added {n} documents.",
   uploadNothingAdded: "Nothing was added.",
+  uploadEditLink: "Edit the link",
+  uploadEditQueue: "Edit the queue",
 
   distillAgainTitle: "Ask this question again. The new extraction replaces this one. {left} left: an extraction runs again at most twice.",
   distillAgainLimit: "This extraction ran again {n} times, the most an extraction runs again. Ask the question as a new extraction instead.",
@@ -394,8 +396,8 @@ const en = {
   historyScopeProject: "All",
   historyScopeProjectTitle: "Every edit and deletion in this project",
   historyScopeDocument: "This document",
-  historyScopeDocumentTitle: "Every edit to the open document",
-  historyDocumentEmpty: "No edits to this document yet.",
+  historyScopeDocumentTitle: "Every edit and deletion in the open document",
+  historyDocumentEmpty: "No edits or deletions in this document yet.",
   // Below md: the bottom bar's last button, a menu of the reader views, the
   // graph, History, Save for offline, the guide, and Feedback.
   more: "More",
@@ -845,6 +847,8 @@ const zh: Record<keyof typeof en, string> = {
   uploadPageFailed: "{title} —— {reason}",
   uploadAddedCount: "已添加 {n} 个文档。",
   uploadNothingAdded: "没有添加任何文档。",
+  uploadEditLink: "修改链接",
+  uploadEditQueue: "修改队列",
 
   distillAgainTitle: "重新提出这个问题。新的提取会替换当前这条。还剩 {left} 次：一条提取最多重新生成两次。",
   distillAgainLimit: "这条提取已重新生成 {n} 次，达到上限。请把问题作为新的提取再提一次。",
@@ -888,8 +892,8 @@ const zh: Record<keyof typeof en, string> = {
   historyScopeProject: "全部",
   historyScopeProjectTitle: "此项目中的所有编辑与删除",
   historyScopeDocument: "此文档",
-  historyScopeDocumentTitle: "对当前文档的每次编辑",
-  historyDocumentEmpty: "此文档还没有编辑。",
+  historyScopeDocumentTitle: "当前文档中的所有编辑与删除",
+  historyDocumentEmpty: "此文档还没有编辑与删除。",
   more: "更多",
   historyEmpty: "还没有编辑或删除。",
   historySmallEdits: "{n} 处小改动",

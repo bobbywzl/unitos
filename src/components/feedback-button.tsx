@@ -25,13 +25,14 @@ function parseLink(raw: string): string | null {
   }
 }
 
-/** Opens the feedback form from elsewhere: on a phone the reader has no
-    floating Feedback pill, and its Reader view menu carries a Feedback row
-    (reader-panes.tsx). */
+/** Opens the feedback form from elsewhere: the reader has no floating
+    Feedback pill; the Reader view menu (reader-panes.tsx) and the phone's
+    More menu (workspace.tsx) carry a Feedback row. */
 export const FEEDBACK_OPEN_EVENT = "unitos:feedback-open";
 
-/** Feedback in the dashboard's header, on a phone only: there the floating
-    pill would lie on the first project card's ⋯ (FeedbackButton hides it). */
+/** Feedback in the header of the dashboard and of the notes and annotations
+    full pages, on a phone only: there the floating pill would lie on a
+    card's ⋯ or a row's controls (FeedbackButton hides it). */
 export function FeedbackHeaderButton() {
   const t = useT();
   return (
@@ -76,6 +77,10 @@ export function FeedbackButton() {
   // The dashboard on a phone: the pill would lie on the first card's ⋯;
   // Feedback is a button in the header there (FeedbackHeaderButton).
   const onDashboard = pathname === "/";
+  // The notes and annotations full pages on a phone: the pill lay on a
+  // pending note's Accept and the rows' pencils (EDGE13-02); there Feedback
+  // is a button in the page's header (FeedbackHeaderButton).
+  const onFullPage = /^\/n\/[^/]+\/(notes|annotations)\/?$/.test(pathname ?? "");
   const [open, setOpen] = useState(false);
   const [category, setCategory] = useState<"bug" | "idea" | "other">("bug");
   const [message, setMessage] = useState("");
@@ -193,30 +198,28 @@ export function FeedbackButton() {
   return (
     <>
       {/* Above the mobile bottom bar; on md+ above the rail's More button,
-          which sits in the bottom-right corner. In the reader the pill
-          would lie on the tray's last row (its select circle, the ⋯ that
-          reopens a resolved comment): there, on md+, it is a round button
-          at the foot of the rail, where no control sits. On a phone's
-          reader it would lie on the article's last lines: there it is a row
-          of the Reader view menu instead (FEEDBACK_OPEN_EVENT). On a
-          phone's dashboard it is a button in the header. */}
+          which sits in the bottom-right corner. The reader has no floating
+          Feedback: it lay on the tray's last row, on the article's last
+          lines, and on a short screen on the rail's Extract. There it is a
+          row of the Reader view menu at md and up and of the bar's More
+          menu below md (FEEDBACK_OPEN_EVENT). On a phone's dashboard and
+          full pages it is a button in the header. */}
       <button
         onClick={() => setOpen(!open)}
         aria-label={t("works.sendFeedback")}
         data-tip={t("works.sendFeedback")}
         data-feedback-button=""
         className={`fixed right-4 bottom-[calc(64px+env(safe-area-inset-bottom))] z-20 rounded-full bg-card px-4 py-2 text-sm text-sand-700 shadow-lift hover:bg-clay-100 hover:text-clay-800 md:bottom-[60px] print:hidden ${
-          inReader ? "max-md:hidden md:right-2 md:bottom-4 md:flex md:size-9 md:items-center md:justify-center md:p-0" : ""
-        } ${onDashboard ? "max-sm:hidden" : ""}`}
+          inReader ? "hidden" : ""
+        } ${onDashboard || onFullPage ? "max-sm:hidden" : ""}`}
       >
-        <span className={inReader ? "md:hidden" : undefined}>{t("works.feedback")}</span>
-        {inReader && <FeedbackIcon className="hidden md:block" />}
+        {t("works.feedback")}
       </button>
       <Presence show={open} exit="pop">
       {open && (
         <div className="pop-in fixed right-4 bottom-16 z-30 w-80 rounded-[28px] bg-card p-5 shadow-float print:hidden">
           <form onSubmit={submit} className="space-y-2">
-            <div className="flex gap-1">
+            <div className="flex items-center gap-1">
               {(["bug", "idea", "other"] as const).map((c) => (
                 <button
                   key={c}
@@ -231,6 +234,18 @@ export function FeedbackButton() {
                   {categoryLabel[c]}
                 </button>
               ))}
+              {/* ✕ is the panel's one close, as every box's (NAV13-15).
+                  The typed words stay for the next open. */}
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                aria-label={t("common.close")}
+                data-tip={t("common.close")}
+                data-track="feedback-close"
+                className="-mr-1.5 ml-auto flex size-7 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
+              >
+                ✕
+              </button>
             </div>
             <textarea
               value={message}
@@ -342,9 +357,6 @@ export function FeedbackButton() {
               <p className="text-xs text-red-600">{t("works.feedbackFailed")}</p>
             )}
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setOpen(false)} className="rounded-full px-3 py-1 text-xs text-sand-600 hover:text-clay-700">
-                {t("common.close")}
-              </button>
               <button
                 type="submit"
                 disabled={state === "busy" || uploading > 0 || !message.trim()}

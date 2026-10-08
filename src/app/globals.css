@@ -933,6 +933,19 @@ mark[data-held] {
     animation: tip-in 0.12s ease-out both;
   }
 }
+/* A long press on a control shows its tip on touch: the browser's own
+   long-press menu and word selection would take the press. */
+@media (pointer: coarse) {
+  button[data-tip],
+  a[data-tip],
+  [role="button"][data-tip],
+  [role="tab"][data-tip],
+  [role^="menuitem"][data-tip] {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
 
 /* Source chip click: flash the anchor (SPEC.md §6). */
 @keyframes anchor-flash {
@@ -1508,13 +1521,13 @@ ellipse.anchor-flash {
 
 /* Instruments fan out from behind a work's cover on hover (design 2a). They rest
    tucked below the cover and spring to their own --fan position; the per-instrument
-   transition-delay staggers the five into an arc. Driven by CSS, not React state,
-   so the fan also runs on keyboard focus. */
+   transition-delay staggers the five into an arc. Driven by CSS, not React state. */
 .instrument {
   transform: translate(0px, 95px) rotate(0deg);
 }
-.work:hover .instrument,
-.work:focus-within .instrument {
+/* Hover only: a Tab through the cards, or a card's open menu, would fan
+   the instruments over the card above (NAV13-14). */
+.work:hover:not(:has([aria-expanded="true"])) .instrument {
   transform: var(--fan);
 }
 @media (prefers-reduced-motion: no-preference) {

@@ -42,6 +42,7 @@ export function WorksShelf({
   const t = useT();
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState<{ id: string; title: string } | null>(null);
+  const [leaving, setLeaving] = useState<{ id: string; title: string } | null>(null);
 
   // Offline copies (SPEC.md §17): which projects this browser holds, which one
   // is saving now, and the one-line toast a press answers with.
@@ -126,17 +127,17 @@ export function WorksShelf({
     if (work) setDeleting({ id, title: work.title });
   }
 
-  async function rename(id: string, current: string) {
-    const next = prompt(t("works.corpusTitle"), current)?.trim();
-    if (!next || next === current) return;
-    await api(`/api/notebooks/${id}`, "PATCH", { title: next });
+  // Rename: the card's title turns into a field (work-card.tsx); this keeps
+  // the words it hands over.
+  async function rename(id: string, title: string) {
+    await api(`/api/notebooks/${id}`, "PATCH", { title });
     router.refresh();
   }
 
-  async function leave(id: string) {
-    if (!confirm(t("panes.leaveConfirm"))) return;
-    await api(`/api/notebooks/${id}/collaborators`, "DELETE", { email: myEmail });
-    router.refresh();
+  // Leave opens the same in-app confirm Delete project uses.
+  function leave(id: string) {
+    const work = sharedWorks.find((w) => w.id === id);
+    if (work) setLeaving({ id, title: work.title });
   }
 
   return (
@@ -214,6 +215,18 @@ export function WorksShelf({
           onClose={() => setDeleting(null)}
           onDeleted={() => {
             setDeleting(null);
+            router.refresh();
+          }}
+        />
+      )}
+
+      {leaving && (
+        <LeaveProjectConfirm
+          project={leaving}
+          myEmail={myEmail}
+          onClose={() => setLeaving(null)}
+          onLeft={() => {
+            setLeaving(null);
             router.refresh();
           }}
         />
@@ -339,6 +352,80 @@ function DeleteProjectConfirm({
             className="rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
           >
             {working ? t("common.working") : t("works.deleteProject")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The confirm Leave opens over the dashboard, in the shape of Delete
+    project's: what leaving costs, Cancel and Leave. */
+function LeaveProjectConfirm({
+  project,
+  myEmail,
+  onClose,
+  onLeft,
+}: {
+  project: { id: string; title: string };
+  myEmail: string;
+  onClose: () => void;
+  onLeft: () => void;
+}) {
+  const t = useT();
+  const [working, setWorking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  useEscapeLayer(true, onClose);
+
+  useEffect(() => {
+    cancelRef.current?.focus();
+  }, []);
+
+  async function confirmLeave() {
+    if (working) return;
+    setWorking(true);
+    setError(null);
+    try {
+      await api(`/api/notebooks/${project.id}/collaborators`, "DELETE", { email: myEmail });
+      onLeft();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("common.requestFailed"));
+      setWorking(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 px-4"
+      onPointerDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("panes.leave")}
+        className="pop-in flex w-full max-w-md flex-col gap-3 rounded-[28px] bg-card p-6 shadow-float"
+      >
+        <p className="text-[17px] font-semibold text-sand-800">{project.title}</p>
+        <p className="text-sm text-sand-700">{t("panes.leaveConfirm")}</p>
+        {error && <p className="text-xs text-red-600">{error}</p>}
+        <div className="mt-1 flex items-center justify-end gap-2">
+          <button
+            ref={cancelRef}
+            onClick={onClose}
+            className="rounded-full px-4 py-2 text-sm text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+          >
+            {t("common.cancel")}
+          </button>
+          <button
+            onClick={() => void confirmLeave()}
+            disabled={working}
+            data-track="project-leave-confirm"
+            className="rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+          >
+            {working ? t("common.working") : t("panes.leave")}
           </button>
         </div>
       </div>
