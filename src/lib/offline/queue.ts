@@ -2,8 +2,10 @@
 
 import { ACCOUNT_HEADER } from "@/lib/constants";
 import { duplicateOf, type DuplicateMatch } from "@/lib/documents/duplicate-answer";
+import { confirmNoteDraft, holdNoteDraft, setHeldNoteDrafts } from "@/lib/note-drafts";
 import { openDb, tx, UPLOADS, WRITES } from "@/lib/offline/db";
-import { tabAccount } from "@/lib/tab-account";
+import { settleQueuedWrites } from "@/lib/save-state";
+import { readAccountCookie, tabAccount } from "@/lib/tab-account";
 import { MEDIA_EXTENSIONS, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 
 // Offline work (SPEC.md §17, Unitos Premium): writes and uploads made while
@@ -12,10 +14,15 @@ import { MEDIA_EXTENSIONS, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 // note, section, annotation, and reply routes) and uploads (the file bytes,
 // replayed through the same single-request or chunked path an online upload
 // takes). Syncing is at-least-once: a record leaves the queue when the server
-// answers, drops with a warning on a 4xx other than 401 (stale by then), and
+// takes it, and drops with a warning only when the server says it is stale
+// (a 4xx refusal: the note, the section, or the right to write is gone). It
 // stays for the next attempt on a network failure, a 401 (signed out: it
-// waits for the sign-in), or a 5xx — a 5xx drops only on its MAX_ATTEMPTS-th
-// try, so one bad record cannot hold the queue forever. One tab drains at a
+// waits for the sign-in), a 409 that says another account signed in (it
+// waits for its own account), or a 5xx, a 408, or a 429 (the server is down
+// or busy: it is tried again after a growing wait, for as long as it takes).
+// Each record names the account that queued it and is sent only while that
+// account is signed in; records of other accounts wait, uncounted and not
+// drawn. One tab drains at a
 // time (a Web Lock), so two open tabs never send a record twice. A note write
 // is never refused for a part of it: a quote whose anchor no longer resolves
 // lands its words without the source (replayBody), and words written to a
@@ -30,7 +37,6 @@ import { MEDIA_EXTENSIONS, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 
 const PREMIUM_KEY = "unitos-premium";
 const SINGLE_REQUEST_BYTES = 4 * 1024 * 1024;
-const MAX_ATTEMPTS = 5;
 const SYNC_LOCK = "unitos-offline-sync";
 /** Fired on window when a drain sent at least one record. */
 export const QUEUE_SYNCED_EVENT = "unitos:queue-synced";
@@ -44,9 +50,9 @@ export const SOURCE_LOST_EVENT = "unitos:source-lost";
 export const NOTE_KEPT_EVENT = "unitos:note-kept";
 // While records wait and the browser says online, the drain runs again
 // after a growing wait: a write that failed with the browser online (a
-// Wi-Fi handover, a proxy reset) sends no online event. Only a write that
-// did not reach the server runs again this way; a 5xx counts against its
-// MAX_ATTEMPTS, so a timer never spends those tries.
+// Wi-Fi handover, a proxy reset) sends no online event, and a server that
+// answered 5xx (a deploy) is tried again the same way. Tries count time,
+// not page loads.
 const RETRY_MS = [2_000, 4_000, 8_000, 15_000, 30_000];
 
 export type QueuedWrite = {
@@ -55,7 +61,7 @@ export type QueuedWrite = {
   body?: unknown;
   account: string | null;
   queuedAt: number;
-  // Tries that met a 5xx.
+  // Tries the server answered with an error (5xx, 408, 429).
   attempts?: number;
   // A repeat add waiting for the reader's word: the documents the 409 named.
   held?: DuplicateMatch[];
@@ -138,9 +144,23 @@ function notify() {
   for (const l of listeners) l();
 }
 
+/** The account signed in to the browser now; null with sign-in off, or
+    signed out (the server then answers 401 and the record waits). */
+function signedInAccount(): string | null {
+  return readAccountCookie();
+}
+
+/** True when the record belongs to the account signed in now: it is sent,
+    counted, and drawn. A record of another account waits for that account. */
+export function queuedForThisAccount(record: { account: string | null }): boolean {
+  const account = signedInAccount();
+  return record.account === null || account === null || record.account === account;
+}
+
 // The records in a store that wait for the sync: a held repeat add waits for
-// the reader's word instead (heldAdds), so it is not counted. It stays in
-// the queue all the same.
+// the reader's word instead (heldAdds), so it is not counted, and a record
+// of another account waits for that account. Both stay in the queue all the
+// same.
 function waitingIn(store: typeof WRITES | typeof UPLOADS): Promise<number> {
   return openDb().then(
     (db) =>
@@ -155,7 +175,7 @@ function waitingIn(store: typeof WRITES | typeof UPLOADS): Promise<number> {
             return;
           }
           const record = cursor.value as QueuedWrite | QueuedUpload;
-          if (!(record.held && record.held.length > 0)) n++;
+          if (!(record.held && record.held.length > 0) && queuedForThisAccount(record)) n++;
           cursor.continue();
         };
         req.onerror = () => reject(req.error);
@@ -175,9 +195,104 @@ export async function queuedCount(): Promise<number> {
   }
 }
 
-export async function queueWrite(path: string, method: QueuedWrite["method"], body?: unknown): Promise<void> {
-  const record: QueuedWrite = { path, method, body, account: tabAccount(), queuedAt: Date.now() };
-  await tx(WRITES, "readwrite", (s) => s.add(record));
+const NOTE_TEXT_WRITE = /^\/api\/notes\/([^/]+)$/;
+
+/** The note and the text a queued note write carries, if it carries one. */
+function noteText(record: Pick<QueuedWrite, "path" | "method" | "body">): { noteId: string; content: string } | null {
+  const body = record.body as { id?: unknown; content?: unknown } | undefined;
+  if (typeof body?.content !== "string") return null;
+  if (record.method === "PATCH") {
+    const noteId = NOTE_TEXT_WRITE.exec(record.path)?.[1];
+    return noteId ? { noteId, content: body.content } : null;
+  }
+  if (record.method === "POST" && record.path === "/api/notes" && typeof body.id === "string") {
+    return { noteId: body.id, content: body.content };
+  }
+  return null;
+}
+
+/** The note drafts the queue holds: set again from the queue's note writes. */
+async function holdQueuedNoteDrafts(): Promise<void> {
+  try {
+    const readAt = Date.now();
+    const all = await tx<QueuedWrite[]>(WRITES, "readonly", (s) => s.getAll() as IDBRequest<QueuedWrite[]>);
+    setHeldNoteDrafts(
+      all.flatMap((r) => noteText(r) ?? []),
+      readAt,
+    );
+  } catch {
+    // IndexedDB unreadable: the holds stay as they are.
+  }
+}
+
+/** What makes two queued writes the same: a note's text write by its text
+    (the base and the source flags only say how it merges; one that lands
+    leaves the note holding that text), anything else by its whole body. */
+function sameness(record: Pick<QueuedWrite, "path" | "method" | "body">): string {
+  const text = noteText(record);
+  return text && record.method === "PATCH" ? `text:${text.content.trim()}` : JSON.stringify(record.body);
+}
+
+/** True when the last record that waits for this path, method, and account
+    is the same write. Only the last: a write that brings back an earlier
+    text after a different one must queue again. */
+function waitsAlready(path: string, method: string, account: string | null, body: unknown): Promise<boolean> {
+  const same = sameness({ path, method: method as QueuedWrite["method"], body });
+  return openDb().then(
+    (db) =>
+      new Promise((resolve, reject) => {
+        let last: string | null = null;
+        const t = db.transaction(WRITES, "readonly");
+        const req = t.objectStore(WRITES).openCursor();
+        req.onsuccess = () => {
+          const cursor = req.result;
+          if (!cursor) {
+            resolve(last === same);
+            return;
+          }
+          const record = cursor.value as QueuedWrite;
+          if (record.path === path && record.method === method && record.account === account) {
+            last = sameness(record);
+          }
+          cursor.continue();
+        };
+        req.onerror = () => reject(req.error);
+        t.oncomplete = () => db.close();
+      }),
+  );
+}
+
+/** A status that says the server is down or busy, not that the write is
+    wrong: the write is tried again. */
+export function isServerError(status: number): boolean {
+  return status >= 500 || status === 408 || status === 429;
+}
+
+/** Queue a write. attempts: 1 when the server already answered it with an
+    error (lib/api.ts): the notes mark it Not saved from the start. */
+export async function queueWrite(
+  path: string,
+  method: QueuedWrite["method"],
+  body?: unknown,
+  attempts = 0,
+): Promise<void> {
+  const record: QueuedWrite = {
+    path,
+    method,
+    body,
+    account: tabAccount() ?? signedInAccount(),
+    queuedAt: Date.now(),
+    ...(attempts > 0 ? { attempts } : {}),
+  };
+  // A write the same as the last one that waits for its path is queued
+  // already: a retry of a save that never reached the server queues it
+  // once, and a note's text waits once however many saves carry it.
+  if (!(await waitsAlready(path, method, record.account, body).catch(() => false))) {
+    await tx(WRITES, "readwrite", (s) => s.add(record));
+  }
+  // The note's local draft keeps the words until the server takes them.
+  const text = noteText(record);
+  if (text) holdNoteDraft(text.noteId, text.content);
   queuedSinceSync = true;
   notify();
   // Queued with the browser online: the server was out of reach for a
@@ -207,11 +322,13 @@ function headers(account: string | null, json: boolean): Record<string, string> 
   };
 }
 
-// One drained record's outcome: "done" leaves the queue (sent, or stale on a
-// 4xx), "wait" stops the drain and keeps it (no network, or a 401), "retry"
-// stops the drain and counts a 5xx against it, `held` keeps it for the
-// reader's word on a repeat add and the drain goes on.
-type Sent = "done" | "wait" | "retry" | { held: DuplicateMatch[] };
+// One drained record's outcome: "done" leaves the queue (sent), "stale"
+// leaves it with a warning (the server refused it for good), "wait" stops
+// the drain and keeps it (no network, a 401, another account signed in),
+// "retry" stops the drain and keeps it for the next try (the server is down
+// or busy), `held` keeps it for the reader's word on a repeat add and the
+// drain goes on.
+type Sent = "done" | "stale" | "wait" | "retry" | { held: DuplicateMatch[] };
 
 /** A 409 that names a repeat add: the documents it names. */
 async function heldBy(res: Response): Promise<DuplicateMatch[] | null> {
@@ -219,15 +336,26 @@ async function heldBy(res: Response): Promise<DuplicateMatch[] | null> {
   return duplicateOf(await res.clone().json().catch(() => null));
 }
 
-function outcome(res: Response, record: QueuedWrite | QueuedUpload, label: string): Sent {
+/** A 409 from the middleware: the browser signed into another account. */
+async function accountChanged(res: Response): Promise<boolean> {
+  if (res.status !== 409) return false;
+  const body = (await res.clone().json().catch(() => null)) as { code?: unknown } | null;
+  return body?.code === "accountChanged";
+}
+
+async function outcome(res: Response, label: string): Promise<Sent> {
   if (res.ok) return "done";
-  if (res.status === 401) return "wait";
-  if (res.status >= 500 && (record.attempts ?? 0) + 1 < MAX_ATTEMPTS) return "retry";
-  console.warn("Offline sync dropped a write:", label, res.status);
-  return "done";
+  if (res.status === 401 || (await accountChanged(res))) return "wait";
+  if (isServerError(res.status)) return "retry";
+  console.warn("Offline sync dropped a stale write:", label, res.status);
+  return "stale";
 }
 
 const NOTE_WRITE = /^\/api\/notes(?:\/([^/]+))?$/;
+
+// Note texts the server answered for records sent in this drain: their
+// drafts are confirmed once the records left the queue.
+const landed: { noteId: string; content: string }[] = [];
 
 /** The body a record replays with. A note write with a quote's source keeps
     its words when the anchor no longer resolves (onSourceLost "keep"): the
@@ -254,6 +382,11 @@ async function announce(record: QueuedWrite, res: Response): Promise<void> {
   if (!answer) return;
   const from = NOTE_WRITE.exec(record.path)?.[1];
   const id = typeof answer.id === "string" ? answer.id : from;
+  // The server has the note's text now: a local draft holding the same text
+  // is done, once the record left the queue (syncQueue). The text the server
+  // answered, not the one sent: a write put together with a newer text keeps
+  // the draft until that text matches.
+  if (id && typeof answer.content === "string") landed.push({ noteId: id, content: answer.content });
   if (answer.sourceDropped === true && id) {
     window.dispatchEvent(new CustomEvent(SOURCE_LOST_EVENT, { detail: { noteId: id } }));
   }
@@ -271,10 +404,11 @@ async function sendWrite(record: QueuedWrite): Promise<Sent> {
       headers: headers(record.account, body !== undefined),
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
-    if (res.ok) await announce(record, res);
     const held = await heldBy(res);
     if (held) return { held };
-    return outcome(res, record, record.path);
+    const result = await outcome(res, record.path);
+    if (res.ok) await announce(record, res);
+    return result;
   } catch {
     return "wait";
   }
@@ -307,7 +441,7 @@ async function sendUpload(record: QueuedUpload): Promise<Sent> {
       });
       const held = await heldBy(res);
       if (held) return { held };
-      return outcome(res, record, record.name);
+      return outcome(res, record.name);
     }
     // The chunked path, same as an online upload of a big file (SPEC.md §11).
     const uploadId = crypto.randomUUID();
@@ -318,7 +452,7 @@ async function sendUpload(record: QueuedUpload): Promise<Sent> {
         headers: headers(record.account, false),
         body: chunk,
       });
-      if (!res.ok) return outcome(res, record, record.name);
+      if (!res.ok) return outcome(res, record.name);
     }
     const res = await fetch("/api/uploads/complete", {
       method: "POST",
@@ -333,15 +467,17 @@ async function sendUpload(record: QueuedUpload): Promise<Sent> {
     });
     const held = await heldBy(res);
     if (held) return { held };
-    return outcome(res, record, record.name);
+    return outcome(res, record.name);
   } catch {
     return "wait";
   }
 }
 
-// The oldest record in a store that is not held for the reader's word,
-// with its key — the next one to sync.
-function firstRecord<T extends { held?: unknown }>(store: string): Promise<{ key: IDBValidKey; record: T } | null> {
+// The oldest record in a store that is not held for the reader's word and
+// belongs to the account signed in now, with its key — the next one to sync.
+function firstRecord<T extends { held?: unknown; account: string | null }>(
+  store: string,
+): Promise<{ key: IDBValidKey; record: T } | null> {
   return openDb().then(
     (db) =>
       new Promise((resolve, reject) => {
@@ -349,7 +485,7 @@ function firstRecord<T extends { held?: unknown }>(store: string): Promise<{ key
         const req = t.objectStore(store).openCursor();
         req.onsuccess = () => {
           const cursor = req.result;
-          if (cursor && (cursor.value as T).held) {
+          if (cursor && ((cursor.value as T).held || !queuedForThisAccount(cursor.value as T))) {
             cursor.continue();
             return;
           }
@@ -380,6 +516,8 @@ function retryLater() {
 // on app start, and after new records land while online. One tab at a time:
 // a tab waits out another tab's drain, then finds the records it sent gone.
 export async function syncQueue(): Promise<void> {
+  // The drafts of note writes queued in an earlier page are held too.
+  await holdQueuedNoteDrafts();
   if (syncing || isOffline()) return;
   syncing = true;
   notify();
@@ -405,10 +543,18 @@ export async function syncQueue(): Promise<void> {
           if (result === "retry") {
             const attempts = (head.record.attempts ?? 0) + 1;
             await tx(store, "readwrite", (s) => s.put({ ...head.record, attempts }, head.key));
+            notify();
             return "retry" as const;
           }
           await tx(store, "readwrite", (s) => s.delete(head.key));
           sent++;
+          // The record left the queue: its text no longer holds the draft.
+          // Sent, the server's text confirms the draft; stale, the draft
+          // keeps the words and the notes try them again (use-outline.ts).
+          if (store === WRITES) {
+            await holdQueuedNoteDrafts();
+            for (const t of landed.splice(0)) confirmNoteDraft(t.noteId, t.content);
+          }
           notify();
         }
       }
@@ -421,7 +567,10 @@ export async function syncQueue(): Promise<void> {
     if (ended === "drained") {
       queuedSinceSync = false;
       retries = 0;
-    } else if (ended === "wait") retryLater();
+      // Every write that failed and queued has landed: the save line
+      // stops reading Not saved.
+      settleQueuedWrites();
+    } else retryLater();
   } finally {
     syncing = false;
     notify();
@@ -458,7 +607,7 @@ function heldIn(store: typeof WRITES | typeof UPLOADS): Promise<HeldAdd[]> {
             return;
           }
           const record = cursor.value as QueuedWrite | QueuedUpload;
-          if (record.held && record.held.length > 0) {
+          if (record.held && record.held.length > 0 && queuedForThisAccount(record)) {
             const notebookId =
               "notebookId" in record
                 ? record.notebookId

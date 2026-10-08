@@ -122,7 +122,10 @@ const en = {
   tierTrial: "Unitos Premium · trial until {date}",
   tierExpired: "Unitos Premium · trial ended {date}",
   // Offline work (SPEC.md §17, Unitos Premium)
-  offline: "Offline. This change did not save.",
+  // The one failure line of a write (SPEC.md §17, lib/api.ts): "Not saved"
+  // and what the reader can do. A write that retries by itself shows no line.
+  notSaved: "Not saved. Try again.",
+  offline: "Not saved. Try again when you are online.",
   offlineQueued: "Offline · AI is off · {n} saved for sync · Unitos Premium",
   offlinePremium: "Offline · AI is off · notes and edits save and sync later · Unitos Premium",
   offlineReadOnly: "Offline · AI is off · changes do not save. Unitos Premium saves offline work.",
@@ -130,8 +133,8 @@ const en = {
   // service worker's answer (public/sw.js)
   offlineAi:
     "AI is off while offline. Notes, highlights, comments, and edits save on this device and sync when you are back online.",
-  offlineSyncingOne: "Syncing 1 offline change…",
-  offlineSyncing: "Syncing {n} offline changes…",
+  offlineSyncingOne: "Syncing 1 change…",
+  offlineSyncing: "Syncing {n} changes…",
   offlineShort: "Offline",
   offlineShortQueued: "Offline · {n} to sync",
   // The offline page (SPEC.md §17, Unitos Ultra): what loads without a network
@@ -217,15 +220,16 @@ const zh: Record<keyof typeof en, string> = {
   tierTrial: "Unitos Premium · 试用至 {date}",
   tierExpired: "Unitos Premium · 试用已于 {date} 结束",
   // Offline work (SPEC.md §17, Unitos Premium)
-  offline: "已离线。此更改未保存。",
+  notSaved: "未保存。请重试。",
+  offline: "未保存。恢复联网后请重试。",
   offlineQueued: "离线 · AI 不可用 · 已保存 {n} 项待同步 · Unitos Premium",
   offlinePremium: "离线 · AI 不可用 · 笔记和编辑会保存并稍后同步 · Unitos Premium",
   offlineReadOnly: "离线 · AI 不可用 · 更改不会保存。Unitos Premium 可保存离线工作。",
   // A call that needs a model, offline (SPEC.md §17): the same words as the
   // service worker's answer (public/sw.js)
   offlineAi: "离线时 AI 不可用。笔记、高亮、评论和编辑会保存在此设备上，联网后同步。",
-  offlineSyncingOne: "正在同步 1 项离线更改…",
-  offlineSyncing: "正在同步 {n} 项离线更改…",
+  offlineSyncingOne: "正在同步 1 项更改…",
+  offlineSyncing: "正在同步 {n} 项更改…",
   offlineShort: "离线",
   offlineShortQueued: "离线 · {n} 项待同步",
   // The offline page (SPEC.md §17, Unitos Ultra): what loads without a network

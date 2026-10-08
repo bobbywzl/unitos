@@ -149,7 +149,7 @@ const en = {
   collapseHeading: "Collapse heading",
   expandHeading: "Expand heading",
   // The contents panel (code keeps `outline`)
-  outlineEmpty: "Headings you add to the document will appear here.",
+  outlineEmpty: "No contents yet. Headings you add show here.",
   tabsOutlines: "Contents",
   resizePanel: "Drag to resize",
   // Headers, footers, page numbers
@@ -308,7 +308,7 @@ const zh: Record<keyof typeof en, string> = {
   addRightTabStop: "添加右对齐制表位",
   collapseHeading: "收起标题",
   expandHeading: "展开标题",
-  outlineEmpty: "你添加到文档中的标题会显示在这里。",
+  outlineEmpty: "还没有目录。你添加的标题会显示在这里。",
   tabsOutlines: "目录",
   resizePanel: "拖动以调整大小",
   firstPageHeader: "首页页眉",

@@ -58,7 +58,7 @@ const en = {
   addAsPendingNote: "Add as a pending note in {section}",
   adding: "Adding…",
   addToNotes: "Add to notes",
-  saveFailed: "Save failed",
+  saveFailed: "Not saved. Try again.",
 
   // Composer and annotation cards
   newAnnotation: "New annotation",
@@ -243,7 +243,7 @@ const zh: Record<keyof typeof en, string> = {
   addAsPendingNote: "添加为 {section} 中的待定笔记",
   adding: "添加中…",
   addToNotes: "添加到笔记",
-  saveFailed: "保存失败",
+  saveFailed: "未保存。请重试。",
 
   // Composer and annotation cards
   newAnnotation: "新批注",

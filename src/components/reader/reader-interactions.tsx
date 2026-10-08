@@ -60,7 +60,7 @@ import { isImeKey, useImeGuard } from "@/lib/ime";
 import { imageFigureHtml, isImageFile } from "@/lib/images";
 import { markdownStyleKey } from "@/lib/markdown-style";
 import { reportError } from "@/lib/error-log";
-import { isOffline, offlinePremium, queueWrite, refreshWhenOnline } from "@/lib/offline/queue";
+import { isOffline, refreshWhenOnline } from "@/lib/offline/queue";
 import { addEscapeSource, nextLayerSeq } from "@/lib/escape-layers";
 import { rememberCollapsedDocument } from "@/lib/collapse-memory";
 import { parseYouTubeId, youtubeWatchUrl } from "@/lib/video/youtube";
@@ -7050,23 +7050,24 @@ export function ReaderInteractions({
       color: input.color,
       comment: input.comment,
     };
-    // False until the server answered: a fetch that throws before then is a
-    // dropped connection, which queues as offline does.
-    let answered = false;
     try {
-      const res = await fetch("/api/annotations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      answered = true;
-      if (!res.ok) {
-        const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(detail?.error ?? t("reader.annotationFailedStatus", { status: res.status }));
+      // Offline, a dropped connection, or a server that answered with an
+      // error (SPEC.md §17, Unitos Premium): the write helper queues it and
+      // it is tried again; the optimistic paint stays (lib/api.ts).
+      const note = await api<{ sources?: { id: string; blockId: string }[]; queued?: boolean; serverError?: boolean } | null>(
+        "/api/annotations",
+        "POST",
+        body,
+        { queue: true },
+      );
+      if (note?.queued) {
+        if (input.comment) clearToolbarDraft("comment", documentId, anchor);
+        // A server error reads Not saved in the header until the queue lands it.
+        if (!note.serverError) showToast(t("reader.annotationQueuedOffline"));
+        return;
       }
       // Each mark learns its stored source (one per segment, in the passage's
       // order), and one whose stored copy is already in goes.
-      const note = (await res.json().catch(() => null)) as { sources?: { id: string; blockId: string }[] } | null;
       if (input.comment) madeCommentRef.current = (note?.sources ?? []).map((s) => s.id);
       if (input.comment) clearToolbarDraft("comment", documentId, anchor);
       const sources = [...(note?.sources ?? [])];
@@ -7089,16 +7090,6 @@ export function ReaderInteractions({
       });
       router.refresh();
     } catch (err) {
-      // Offline or a dropped connection (SPEC.md §17, Unitos Premium): a
-      // highlight or comment is a non-AI annotation — queue it, keep the
-      // optimistic paint, sync later, as a note's write does (lib/api.ts).
-      if (offlinePremium() && (isOffline() || (!answered && err instanceof TypeError))) {
-        await queueWrite("/api/annotations", "POST", body);
-        if (input.comment) clearToolbarDraft("comment", documentId, anchor);
-        showToast(t("reader.annotationQueuedOffline"));
-        setBusy(false);
-        return;
-      }
       setLocalAnchors((prev) => {
         let next = prev;
         for (const { blockId, mark } of optimistic) {

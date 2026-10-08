@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isOffline } from "@/lib/offline/queue";
 import { clearDirty, markDirty } from "@/lib/save-state";
 import { ACCOUNT_HEADER } from "@/lib/constants";
 import { clearNoteDraft, confirmNoteDraft, noteDraftBase, readNoteDraft, writeNoteDraft } from "@/lib/note-drafts";
@@ -16,7 +17,9 @@ import type { SaveState } from "@/components/outline/save-state";
 // keystroke (lib/note-drafts.ts): the PATCH and the flush are network calls,
 // and the local draft is what survives a crash, a power loss, or a lost
 // connection between them. It is cleared when the server confirms the same
-// content, and replayed on the next load when it is not (use-outline.ts).
+// content, and replayed on the next load when it is not (use-outline.ts). A
+// save that waits in the offline queue is not confirmed: the draft keeps the
+// words, made from the text the server has, until the queue's write lands.
 // Cancel restores the content from before this edit: the flush sees the
 // reverted draft and writes it back over the auto-saved state. The tray card
 // and the floating card share this hook; the draft moves between them as
@@ -125,6 +128,11 @@ export function useNoteDraft({
   // The text of the last save that waits in the offline queue: the save
   // state reads Waiting to sync, not Saved, until the queue syncs.
   const [queued, setQueued] = useState<string | null>(null);
+  const queuedRef = useRef<string | null>(null);
+  // The note's text as the server last confirmed it: what the local draft is
+  // made from. A queued save moves the next save's base (baseRef), never
+  // this, so a draft replayed after a reload is made from the server's text.
+  const confirmedRef = useRef(original.trim());
   // Words a local draft kept that the server never confirmed, put into the
   // editor as it opens: until the editor shows them, no keystroke writes
   // the local draft, so the kept words are never written over.
@@ -135,6 +143,8 @@ export function useNoteDraft({
     lastSavedRef.current = original;
     originalRef.current = original;
     baseRef.current = original.trim();
+    confirmedRef.current = original.trim();
+    queuedRef.current = null;
     openedRef.current = original.trim();
     adoptingRef.current = null;
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -164,6 +174,7 @@ export function useNoteDraft({
       const base = (noteDraftBase(kept, stored) ?? stored).trim();
       lastSavedRef.current = base;
       baseRef.current = base;
+      confirmedRef.current = base;
       openedRef.current = base;
       originalRef.current = kept.content;
       setConfirmed(base);
@@ -178,17 +189,33 @@ export function useNoteDraft({
   /** Save `trimmed` after the saves before it; the editor takes the saved text. */
   const save = useCallback(
     (trimmed: string): Promise<SavedText> => {
-      const run = chainRef.current.then(async () => {
+      const run = chainRef.current.then(async (): Promise<SavedText> => {
+        // The same text as the save before, which waits in the offline
+        // queue: it is queued already. One queued write per text (Done after
+        // the auto-save), never a second one made from the first.
+        if (queuedRef.current === trimmed && baseRef.current === trimmed) {
+          return { content: trimmed, changed: false, conflict: false, queued: true };
+        }
         sendingRef.current = trimmed;
         try {
           const saved = await saveNoteText(noteId, trimmed, baseRef.current, { keepSources: true });
           baseRef.current = saved.content;
+          queuedRef.current = saved.queued ? saved.content : null;
           setQueued(saved.queued ? saved.content : null);
-          confirmNoteDraft(noteId, trimmed);
-          confirmNoteDraft(noteId, saved.content);
-          // Words typed since stay in the local draft, made from this save now.
           const local = readNoteDraft(noteId);
-          if (local) writeNoteDraft(noteId, local.content, saved.content);
+          if (saved.queued) {
+            // Not on the server yet: the local draft keeps the words, made
+            // from the server's text, and names the queued text, so a reload
+            // finds the words whether or not the queue landed meanwhile.
+            writeNoteDraft(noteId, local?.content ?? trimmed, confirmedRef.current, saved.content);
+          } else {
+            confirmedRef.current = saved.content;
+            confirmNoteDraft(noteId, trimmed);
+            confirmNoteDraft(noteId, saved.content);
+            // Words typed since stay in the local draft, made from this save now.
+            const left = readNoteDraft(noteId);
+            if (left) writeNoteDraft(noteId, left.content, saved.content);
+          }
           if (saved.changed) {
             // The note changed elsewhere: the editor shows the text as saved,
             // with what the reader typed since put on top of it.
@@ -199,7 +226,13 @@ export function useNoteDraft({
             draftRef.current = next;
             setDraft(next);
           }
-          setConfirmed(saved.content);
+          // Queued with the browser online: the server did not take the
+          // words (an error, a dropped connection). The queue tries again;
+          // until it lands the editor reads Not saved, not Waiting to sync.
+          if (saved.queued && !isOffline()) {
+            setQueued(null);
+            setFailed(saved.content);
+          } else setConfirmed(saved.content);
           setBoth(saved.conflict ? saved.content : null);
           return saved;
         } finally {
@@ -221,8 +254,10 @@ export function useNoteDraft({
     }
     const trimmed = draft.trim();
     if (!trimmed || trimmed === lastSavedRef.current) return;
-    // The local draft first: synchronous, so it is there whatever happens next.
-    writeNoteDraft(noteId, draft, baseRef.current, sendingRef.current);
+    // The local draft first: synchronous, so it is there whatever happens
+    // next. Made from the server's text; a save on its way or in the offline
+    // queue is named, so a reload knows which text the server holds.
+    writeNoteDraft(noteId, draft, confirmedRef.current, sendingRef.current ?? queuedRef.current);
     // The save indicator reads Saving… from the keystroke; the save itself
     // counts from the moment it starts.
     markDirty(noteId);
@@ -263,6 +298,8 @@ export function useNoteDraft({
         draftRef.current = content;
         lastSavedRef.current = content.trim();
         baseRef.current = content.trim();
+        confirmedRef.current = content.trim();
+        queuedRef.current = null;
         setDraft(content);
         confirmNoteDraft(noteId, content.trim());
         setConfirmed(content.trim());
