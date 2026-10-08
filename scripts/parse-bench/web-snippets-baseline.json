@@ -1,6 +1,6 @@
 {
  "total": {
-  "f1": 0.939,
+  "f1": 0.94,
   "precision": 0.893,
   "recall": 0.992
  },
@@ -312,7 +312,7 @@
   },
   "bibliothek2null.de.mai.html": {
    "tp": 3,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "buero-hoppe.de.baumgutachten.html": {
@@ -422,7 +422,7 @@
   },
   "jovelstefan.de.gefallt.html": {
    "tp": 2,
-   "fp": 1,
+   "fp": 0,
    "fn": 0
   },
   "klaenge-des-verschweigens.de.geschichte.html": {
