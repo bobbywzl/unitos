@@ -2202,14 +2202,16 @@ const EXISTING_NOTE = {
   removed: "stitchLinksRemoved",
 } as const satisfies Record<ExistingState, string>;
 
-// What may lie between two block tags that name one link (existingNamed).
-const PAIR_GAP = /^\s*(?:[-–—↔]|and|和|与)?\s*$/i;
+// The end of a sentence of a reply (existingNamed): a line break, a CJK
+// full stop, or a Latin one before a capital, a quote mark, or a tag.
+const SENTENCE_END = /\n|(?<=[。！？])|(?<=[.!?])\s+(?=["“'(\[\p{Lu}])/u;
 
 /** The links already in the project a reply is about (ANS5-05), as ids:
     with `all` (a links command), every one the answer pass was told of —
     both blocks shown (existingPairs) — the reply's "these are already in
-    the graph"; else the ones whose two blocks the reply cites side by
-    side, [block G6] – [block B20] or [block G6] [block B20]. A removed
+    the graph"; else the ones whose two blocks the reply cites one after
+    the other in one sentence, [block G6] – [block B20], [block G6] [block
+    B20], or "Mencken says … [block A8]; the notes say … [block G7].". A removed
     link is never lit: it is not drawn. reply: the model's, with aliases. */
 export function existingNamed(
   reply: string,
@@ -2221,16 +2223,11 @@ export function existingNamed(
   const visible = links.filter((l) => l.state !== "removed");
   if (all) return visible.filter((l) => shown(l.from) && shown(l.to)).map((l) => l.id);
   const pairs = new Set<string>();
-  for (const line of reply.split("\n")) {
-    const tags = [...line.matchAll(/\[block ([A-Za-z]+\d+)\]/g)];
-    for (let i = 1; i < tags.length; i++) {
-      // Two tags pair only when nothing but a dash or "and" lies between
-      // them (ANS6-06): "§225 [block E2] [block D32]. Link 3 joins … [block
-      // G9]" names E2–D32, not D32–G9.
-      const between = line.slice(tags[i - 1].index + tags[i - 1][0].length, tags[i].index);
-      if (!PAIR_GAP.test(between)) continue;
-      pairs.add([tags[i - 1][1].toUpperCase(), tags[i][1].toUpperCase()].sort().join("|"));
-    }
+  // Two tags pair only inside one sentence (ANS6-06): "§225 [block E2]
+  // [block D32]. Link 3 joins … [block G9]" names E2–D32, not D32–G9.
+  for (const sentence of reply.split(SENTENCE_END)) {
+    const tags = [...sentence.matchAll(/\[block ([A-Za-z]+\d+)\]/g)].map((m) => m[1].toUpperCase());
+    for (let i = 1; i < tags.length; i++) pairs.add([tags[i - 1], tags[i]].sort().join("|"));
   }
   return visible.filter((l) => pairs.has([l.from, l.to].sort().join("|"))).map((l) => l.id);
 }
