@@ -10434,6 +10434,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                 // An import's References section stands under its pages,
                 // under the page editor's header.
                 footer: <Bibliography references={references} />,
+                split,
               }
             : null
         }
