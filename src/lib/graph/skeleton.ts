@@ -536,44 +536,45 @@ async function waitForBuild(documentId: string, userId: string | null, signal?: 
     "read" it when under a tenth of the document changed; "defer" when more
     changed but it was built under SKELETON_QUIET_MS ago — the document is
     being written, and a rebuild every command would read it again and
-    again, so the command reads the stored skeleton and the rebuild waits
-    for the quiet period's end; "build" it now when stale past the quiet
-    period, missing, or of a skeleton that does not say when it was built. */
+    again, so the command reads the stored skeleton and the next command or
+    graph open past the quiet period rebuilds; "build" it now when stale
+    past the quiet period, missing, or of a skeleton that does not say when
+    it was built. */
 export function skeletonAction(stored: Skeleton | null, blocks: SkeletonBlock[], now = Date.now()): "read" | "defer" | "build" {
   if (!skeletonStale(stored, blocks)) return "read";
   if (stored?.built !== undefined && now - stored.built < SKELETON_QUIET_MS) return "defer";
   return "build";
 }
 
-// The refreshes a deferred command queued, one per document: each runs
-// refreshSkeleton once the quiet period ends, under the same lock and the
-// same tenth rule as an edit's. One queued earlier for a later time (the
-// skeleton was rebuilt since) gives way to the earlier one. A process that
-// ends first loses the timer; the next command past the quiet period
-// builds then, as before.
-const deferred = new Map<string, { at: number; timer: ReturnType<typeof setTimeout> }>();
-const DEFER_MARGIN_MS = 1_000;
-
-function refreshAfterQuiet(documentId: string, userId: string | null, built: number): void {
-  const at = built + SKELETON_QUIET_MS + DEFER_MARGIN_MS;
-  const queued = deferred.get(documentId);
-  if (queued && queued.at <= at) return;
-  if (queued) clearTimeout(queued.timer);
-  const timer = setTimeout(() => {
-    deferred.delete(documentId);
-    refreshSkeleton(documentId, userId).catch(() => {});
-  }, Math.max(0, at - Date.now()));
-  timer.unref?.();
-  deferred.set(documentId, { at, timer });
+/** A build of the document already running — in this process, or under
+    another process's fresh lock — waited for up to SKELETON_WAIT_MS
+    (REV6-03): it reads the edit the command is about. Null when none runs
+    or it does not end in time; the waiter does not keep it running. */
+async function runningBuild(documentId: string, userId: string | null, signal?: AbortSignal): Promise<Skeleton | null> {
+  const own = running.get(documentId);
+  if (own) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), SKELETON_WAIT_MS);
+    });
+    try {
+      return await untilAborted(Promise.race([own.build.catch(() => null), late]), signal);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  const row = await db.document.findUnique({ where: { id: documentId }, select: { skeletonStartedAt: true } });
+  if (!row?.skeletonStartedAt || Date.now() - row.skeletonStartedAt.getTime() >= SKELETON_STALE_MS) return null;
+  return waitForBuild(documentId, userId, signal);
 }
 
 /** The skeleton Stitch reads for a document it has loaded: the stored one
     when under a tenth of the document changed, with the changed blocks as
     their own first words; the stored one too, the same way, while it is
-    under SKELETON_QUIET_MS old, its rebuild queued for the quiet period's
-    end (skeletonAction); built now when stale past that or missing. A
-    failed build answers the current lines — every block as its own first
-    words — so a command still runs. */
+    under SKELETON_QUIET_MS old (skeletonAction), unless a build of it is
+    running, which is waited for up to SKELETON_WAIT_MS; built now when
+    stale past that or missing. A failed build answers the current lines —
+    every block as its own first words — so a command still runs. */
 export async function ensureSkeleton(
   document: { id: string; skeleton: unknown; blocks: SkeletonBlock[] },
   userId: string | null,
@@ -582,11 +583,11 @@ export async function ensureSkeleton(
   const stored = readSkeleton(document.skeleton);
   const action = skeletonAction(stored, document.blocks);
   if (action === "read") return currentSkeleton(stored, document.blocks);
-  if (action === "defer" && stored?.built !== undefined) {
-    refreshAfterQuiet(document.id, userId, stored.built);
-    return currentSkeleton(stored, document.blocks);
-  }
   try {
+    if (action === "defer") {
+      const built = await runningBuild(document.id, userId, signal);
+      return currentSkeleton(built ?? stored, document.blocks);
+    }
     // A build already running (the graph's warm, an edit's refresh) is
     // waited for, not run twice.
     const locked = await buildLocked(document.id, userId, signal);
@@ -639,8 +640,9 @@ function readsSkeletons(r: { chars: bigint | null; cjk: bigint | null }): boolea
     leaves it alone otherwise. It builds only when a project of the
     document reads skeletons (skeletonNeeded), and while the document is
     being written at most once per SKELETON_QUIET_MS (a stored skeleton
-    built under that ago waits). force: the caller knows the skeleton is
-    read (the graph opened): build now. A
+    built under that ago waits, at the graph's warm too). needed: the
+    caller checked that the project reads skeletons (warmSkeletons). force:
+    build now whatever the quiet period (a check that starts a build). A
     skeleton not built here is built at once when Stitch or the assistant
     needs it (ensureSkeleton). One build at a time per document
     (buildLocked): a build running in this process, or holding the lock
@@ -651,7 +653,7 @@ function readsSkeletons(r: { chars: bigint | null; cjk: bigint | null }): boolea
 export async function refreshSkeleton(
   documentId: string,
   userId: string | null,
-  options: { force?: boolean; sqlStale?: boolean } = {},
+  options: { force?: boolean; needed?: boolean; sqlStale?: boolean } = {},
 ): Promise<void> {
   if (!(await featureConfigured("skeleton"))) return;
   if (running.has(documentId)) return;
@@ -676,7 +678,7 @@ export async function refreshSkeleton(
   });
   if (!document) return;
   if (!skeletonStale(readSkeleton(document.skeleton), document.blocks)) return;
-  if (!options.force && !(await skeletonNeeded({ documentId }))) return;
+  if (!options.force && !options.needed && !(await skeletonNeeded({ documentId }))) return;
   try {
     await buildLocked(documentId, userId);
   } catch (err) {
@@ -752,7 +754,9 @@ const warmed = new Map<string, { key: string; at: number }>();
 
 /** The graph opened: every document of a project that reads skeletons gets
     its missing or stale skeleton built now, so the first command does not
-    wait for them. Under the threshold nothing is built. Only the documents
+    wait for them; one built under SKELETON_QUIET_MS ago waits, as at an
+    edit (COST6-06): an open no longer rebuilds a document being written.
+    Under the threshold nothing is built. Only the documents
     the SQL finds stale are loaded (staleSkeletonDocuments); a build
     already running is not started again (buildLocked). */
 export async function warmSkeletons(notebookId: string, userId: string | null): Promise<void> {
@@ -768,5 +772,5 @@ export async function warmSkeletons(notebookId: string, userId: string | null): 
   if (warmed.size > 500) warmed.clear();
   warmed.set(notebookId, { key, at: Date.now() });
   const stale = await staleSkeletonDocuments(notebookId);
-  await mapLimit(stale, SKELETON_BUILD_CONCURRENCY, (id) => refreshSkeleton(id, userId, { force: true, sqlStale: true }).catch(() => {}));
+  await mapLimit(stale, SKELETON_BUILD_CONCURRENCY, (id) => refreshSkeleton(id, userId, { needed: true, sqlStale: true }).catch(() => {}));
 }

@@ -152,7 +152,7 @@ export function stitchSelectPrompt(ctx: StitchSelectCtx): string {
   return [
     ...unreadLines(ctx.documents),
     ...(ctx.partial
-      ? ["The skeletons above are cut to the lines a first read found for this command; a gap between two lines is declared."]
+      ? ["The skeletons above are cut to the lines a first read found for this command; (…) marks lines not shown between two lines."]
       : []),
     ...(ctx.names ?? []).map((n) => `Blocks whose full text names "${n.term}", though their skeleton line may not: ${n.aliases.join(", ")}.`),
     ...commandLines(ctx),

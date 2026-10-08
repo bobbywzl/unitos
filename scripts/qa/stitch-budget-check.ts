@@ -38,6 +38,9 @@ import {
   replyLanguage,
   replyWithIds,
   skeletonGroups,
+  skeletonSystem,
+  namePicks,
+  trimmedHistory,
   titleMatches,
   type SkeletonView,
 } from "../../src/lib/graph/stitch";
@@ -762,6 +765,57 @@ check("replyLanguage command: a mixed or short command keeps the UI's", replyLan
 
   // ANS5-11: Stitch cannot remove, accept, or edit.
   check("answer rules: Stitch cannot remove, accept, or edit, and says where the reader does", rules.includes("You cannot remove, accept, or edit a link, a note, or a document: say so in one sentence") && rules.includes("a recommended link under Recommended links"));
+}
+
+// ── Round 6 (COST6) ──
+{
+  const prof6 = null as unknown as Parameters<typeof answerMessages>[0]["profile"];
+  const mk6 = (id: string, title: string, n: number) => ({
+    id, title, generatedCommand: null, skeleton: null, handwritten: false, importRev: null, pageLabels: null, conversionStatus: "NONE", conversionError: null, video: null,
+    blocks: Array.from({ length: n }, (_, i) => ({ id: `${id}${i + 1}`, type: "PARAGRAPH", text: `paragraph ${i + 1} of ${title}`, startTime: null, endTime: null, cell: null, page: null })),
+  });
+  const r6 = readingOf([mk6("p", "Pity", 6), mk6("q", "Will", 4)] as unknown as Parameters<typeof readingOf>[0]);
+  const skel = (id: string, n: number, gist: string) =>
+    ({ v: 1, gist, chars: 0, built: 0, parts: [{ blockId: `${id}3`, title: "Part two", summary: "the second part" }], lines: Array.from({ length: n }, (_, i) => ({ blockId: `${id}${i + 1}`, hash: "", text: `line ${i + 1}` })) }) as unknown as Parameters<typeof skeletonView>[1];
+  const views6 = [skeletonView(r6.read[0], skel("p", 6, "On pity.")), skeletonView(r6.read[1], skel("q", 4, "On the will."))];
+  const rd = r6.rendered.filter((r) => r.letter === "A" || r.letter === "B");
+
+  // COST6-02: a cut's headers and gists first, the same bytes every command; gaps marked (…).
+  const cutA = skeletonSystem(views6, rd, new Set(["A1", "A5", "B2"]), prof6);
+  const cutB = skeletonSystem(views6, rd, new Set(["A2", "B1", "B4"]), prof6);
+  const linesAt = cutA.indexOf("The skeleton lines read for this command:");
+  check("skeletonSystem: a cut's headers and gists come first, byte-identical across cuts", linesAt > 0 && cutA.slice(0, linesAt) === cutB.slice(0, cutB.indexOf("The skeleton lines read for this command:")) && cutA.slice(0, linesAt).includes("gist: On pity.") && cutA.slice(0, linesAt).includes("gist: On the will."));
+  check("skeletonSystem: a cut's lines under [document X] \"title\": N of M skeleton lines shown, the gap marked (…)", cutA.includes("[document A] \"Pity\": 2 of 6 skeleton lines shown\n[block A1] line 1\n(…)\n[part at A3] \"Part two\": the second part\n[block A5] line 5") && !cutA.includes("not shown)"));
+  const whole6 = skeletonSystem(views6, rd, null, prof6);
+  check("skeletonSystem: every line shown keeps the header, gist and lines together, no gap mark", /\[document A\] "Pity" \([^)]*\)\ngist: On pity\.\n\[block A1\] line 1\n\[block A2\]/.test(whole6) && !whole6.includes("(…)") && !whole6.includes("lines read for this command"));
+  check("select prompt: the partial note names the gap mark", stitchSelectPrompt({ documents: [], command: "x", continued: false, earlier: [], cited: [], maxBlocks: 10, partial: true }).includes("(…) marks lines not shown between two lines."));
+
+  // COST6-04: nothing picked: the name-hit blocks, two per name, once each; none when no name hits.
+  check("namePicks: two blocks per name, once each", namePicks([{ aliases: ["G45", "G50", "G60"] }, { aliases: ["X38", "G45", "X39"] }]).join(",") === "G45,G50,X38");
+  check("namePicks: no name hits → none (every document's opening, as before)", namePicks([]).length === 0);
+
+  // COST6-05: answers older than the last two keep their first paragraph (and the next when it is short), the
+  // block tags of the cut text, and their record; commands stay whole; the whole read keeps the history whole.
+  const long6 = "Nietzsche holds that pity weakens the one who feels it and multiplies suffering, works against the law of natural selection, and preserves what is ripe for destruction, in The Antichrist [block A1].";
+  const turns6 = [
+    { role: "user" as const, content: "What does Nietzsche say pity does?" },
+    { role: "assistant" as const, content: `${long6}\n\n- It wastes strength [block A2].\n- Beyond Good and Evil hears self-contempt [block B1] [block A1].\n\n(Stored by this answer, in the order it proposed them:\n- link 1: [block A2] – [block B3])` },
+    { role: "user" as const, content: "When was it printed?" },
+    { role: "assistant" as const, content: "两份文档的说法不一致。\n\n门肯说 1895 年 [block A4]。\n\n笔记说 1889 年 [block B2]。" },
+    { role: "user" as const, content: "Which is right?" },
+    { role: "assistant" as const, content: "Neither says.\n\nMore [block B4]." },
+    { role: "user" as const, content: "And Schopenhauer?" },
+    { role: "assistant" as const, content: "He grounds morals in compassion [block B1].\n\nMore [block B2]." },
+  ];
+  const t6 = trimmedHistory(turns6);
+  check("trimmedHistory: an old answer keeps its first paragraph, the cut text's tags, and its record", t6[1].content === `${long6}\n\n(This answer also cited [block A2] [block B1].)\n\n(Stored by this answer, in the order it proposed them:\n- link 1: [block A2] – [block B3])`, String(t6[1].content));
+  check("trimmedHistory: a first paragraph under 40 tokens keeps the next", t6[3].content === "两份文档的说法不一致。\n\n门肯说 1895 年 [block A4]。\n\n(This answer also cited [block B2].)", String(t6[3].content));
+  check("trimmedHistory: the last two answers and every command stay whole", t6[5] === turns6[5] && t6[7] === turns6[7] && [0, 2, 4, 6].every((i) => t6[i] === turns6[i]));
+  check("trimmedHistory: two answers or fewer: unchanged", trimmedHistory(turns6.slice(4)).every((m, i) => m === turns6[4 + i]));
+  const pick6 = answerMessages({ reading: r6, selected: new Set(["A1"]), lang: "en", profile: prof6, history: turns6, command: "x" });
+  const whole6a = answerMessages({ reading: r6, selected: null, lang: "en", profile: prof6, history: turns6, command: "x" });
+  check("answerMessages: a pick reads the trimmed history; the whole read (cached) reads it whole", pick6[2].content === t6[1].content && whole6a[2].content === turns6[1].content);
+  check("citedAliases reads every answer whole (the reading passes)", citedAliases(turns6, r6.blockByRef).includes("B3"));
 }
 
 // ── Round 3 (ANS3-03): a cut where no line shares a word with the query ──

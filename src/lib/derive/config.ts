@@ -324,10 +324,11 @@ export const SKELETON_WAIT_MS = 5_000;
 // A skeleton builds only when it can be read: a project of the document past
 // STITCH_WHOLE_THRESHOLD tokens or ASSISTANT_WHOLE_THRESHOLD chars. While a
 // document is being written it rebuilds at most once per SKELETON_QUIET_MS:
-// an edit under that since the last build waits for the next edit or the
-// graph opening (warmSkeletons); a Stitch command under it reads the stored
-// skeleton, changed blocks as their first words, and queues the rebuild for
-// the quiet period's end (COST5-08); past it the command builds at once.
+// an edit or a graph opening (warmSkeletons) under that since the last build
+// builds nothing (COST6-06); a Stitch command under it reads the stored
+// skeleton, changed blocks as their first words, or waits up to
+// SKELETON_WAIT_MS for a build already running (COST5-08, REV6-03); past it
+// the next edit, graph opening, or command builds.
 export const SKELETON_QUIET_MS = 10 * 60_000;
 export const SKELETON_BUILD_CONCURRENCY = 12; // documents ensureSkeleton builds at once
 // Windows in flight (COST4-08): a document's windows go out SKELETON_WINDOW_CONCURRENCY
