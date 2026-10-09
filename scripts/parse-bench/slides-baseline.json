@@ -477,8 +477,8 @@
    "lost": 0
   },
   "pp-cht-category-access": {
-   "composite": 0.98,
-   "words": 0.941,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": null,
    "tables": null,

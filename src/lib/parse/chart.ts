@@ -79,7 +79,17 @@ function cacheValues(container: Element | null, palette?: ChartPalette): { text:
   const numbers: (number | null)[] = [];
   let formatCode: string | null = null;
   if (!container) return { text, numbers, formatCode };
-  const cache = descendants(container, "numCache")[0] ?? descendants(container, "strCache")[0] ?? descendants(container, "numLit")[0] ?? descendants(container, "strLit")[0];
+  const found =
+    descendants(container, "numCache")[0] ??
+    descendants(container, "strCache")[0] ??
+    descendants(container, "numLit")[0] ??
+    descendants(container, "strLit")[0] ??
+    descendants(container, "multiLvlStrCache")[0];
+  // Categories on several levels (multiLvlStrRef): the first level is each
+  // point's own label, the next ones group them. Slides benchmark finding:
+  // a chart over two-level categories lost every category name.
+  const multi = found?.localName === "multiLvlStrCache";
+  const cache = multi ? (children(found, "lvl")[0] ?? found) : found;
   if (!cache) {
     const formula = descendants(container, "f")[0]?.textContent?.trim();
     const cells = formula && palette?.resolveRef ? palette.resolveRef(formula) : null;
@@ -92,7 +102,7 @@ function cacheValues(container: Element | null, palette?: ChartPalette): { text:
     return { text, numbers, formatCode };
   }
   formatCode = child(cache, "formatCode")?.textContent?.trim() || null;
-  const count = intAttr(child(cache, "ptCount"), "val") ?? 0;
+  const count = intAttr(child(multi ? found : cache, "ptCount"), "val") ?? 0;
   const byIdx = new Map<number, string>();
   for (const pt of children(cache, "pt")) {
     const idx = intAttr(pt, "idx");
