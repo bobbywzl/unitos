@@ -222,7 +222,8 @@ export function ReplyThread({
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
             <span className="truncate text-[11px] font-semibold text-sand-700">
-              {person?.name ?? "?"}
+              {/* [lists9] WALK9-09: an author with no account (deleted) is named, never "?", the waiting glyph. */}
+              {person?.name ?? t("common.formerCollaborator")}
             </span>
             <span suppressHydrationWarning className="text-[10px] text-sand-500">
               {replyTime(reply.createdAt, lang)}

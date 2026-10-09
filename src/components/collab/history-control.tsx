@@ -132,7 +132,8 @@ export function HistoryControl({ notebookId, history }: { notebookId: string; hi
             <span className="truncate text-[12px]">
               {/* Without sign-in every entry is the local reader's. */}
               <span className="font-semibold">
-                {person?.name ?? (authOn ? "?" : t("panes.historyYou"))}
+                {/* [lists9] WALK9-09: an author with no account is named, never "?". */}
+                {person?.name ?? (authOn ? t("common.formerCollaborator") : t("panes.historyYou"))}
               </span>{" "}
               <span className="text-sand-600">
                 {t(
@@ -250,7 +251,7 @@ export function HistoryControl({ notebookId, history }: { notebookId: string; hi
                         <div className="flex items-baseline gap-2">
                           <span className="truncate text-[12px]">
                             <span className="font-semibold">
-                              {person?.name ?? (authOn ? "?" : t("panes.historyYou"))}
+                              {person?.name ?? (authOn ? t("common.formerCollaborator") : t("panes.historyYou"))}
                             </span>{" "}
                             <span className="text-sand-600">{t("panes.historySmallEdits", { n: item.entries.length })}</span>
                           </span>

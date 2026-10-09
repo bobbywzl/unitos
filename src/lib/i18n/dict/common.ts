@@ -17,7 +17,8 @@
 //   salient 要点 · link 链接 · edit 编辑 · reader 阅读器 · glossary 术语表 ·
 //   sign in 登录 · sign out 退出登录 · settings 设置 · admin 管理 ·
 //   feedback 反馈 · depths: layman 通俗 / intermediate 进阶 /
-//   professional 专业 · share 共享 · collaborator 协作者 · role 角色 ·
+//   professional 专业 · share 共享 · collaborator 协作者 ·
+//   former collaborator(账户已删除或已移出项目的作者) 前协作者 · role 角色 ·
 //   owner 所有者 · editor 编辑者 · viewer 查看者 · profile 个人资料 ·
 //   symbol 符号 · background 背景 · reply 回复 · resolve 解决 ·
 //   recommended link 推荐链接 · graph 图谱 · history 历史 ·
@@ -166,6 +167,8 @@ const en = {
   replyTitle: "Start a reply",
   resolvedCountOne: "1 resolved",
   resolvedCountMany: "{n} resolved",
+  // [lists9] WALK9-09: the author of a reply or an edit whose account is gone.
+  formerCollaborator: "Former collaborator",
   // Notifications (SPEC.md §18): the kind chip, on the admin pages and the
   // dashboard. "Feedback" marks a reply to feedback the account sent.
   notificationUpdate: "Update",
@@ -254,6 +257,7 @@ const zh: Record<keyof typeof en, string> = {
   replyTitle: "开始回复",
   resolvedCountOne: "1 条已解决",
   resolvedCountMany: "{n} 条已解决",
+  formerCollaborator: "前协作者",
   // Notifications (SPEC.md §18): the kind chip, on the admin page and the dashboard.
   notificationUpdate: "更新",
   newFeature: "新功能",

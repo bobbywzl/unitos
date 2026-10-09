@@ -17,8 +17,8 @@ export const COVERAGE_COUNTS_COMMENTS = true;
 
 /** [layer5] One comment on a document, for the graph (VIEW5-01): its words
     (the first 280 characters), where it sits, whether it is open (not
-    resolved), its replies, [lists8] who wrote it and who wrote its last
-    open words (WALK8-01). */
+    resolved), its replies, [lists8] who wrote it and whose words its thread
+    waits on (WALK8-01), [lists9] its newest reply (WALK9-01, WALK9-04). */
 export type GraphComment = {
   id: string;
   sourceId: string;
@@ -29,9 +29,24 @@ export type GraphComment = {
   /** [lists8] The account that wrote the comment; null for a row from
       before authors were kept. */
   authorId: string | null;
-  /** [lists8] Who wrote the thread's last open words: its last open reply's
-      author, else the comment's (WALK8-01). commentWaits reads it. */
+  /** [lists8] Whose words the thread waits on others to answer (WALK8-01;
+      [lists9] WALK9-01, WALK9-09): the newest reply's author when that
+      reply is not resolved, the comment's author when it has no reply;
+      null when the newest reply is resolved, or when those words are by an
+      account that is neither the owner nor a collaborator. commentWaits
+      reads it. */
   lastById: string | null;
+  /** [lists9] The newest reply of the thread, resolved or not (WALK9-01,
+      WALK9-04): its author, its first 140 characters, when it was written,
+      whether it is resolved. null when the comment has no reply; absent in
+      an answer from before the field existed. */
+  newest?: { userId: string | null; text: string; createdAt: string; resolved: boolean } | null;
+  /** [lists9] Open replies (not resolved), so a row says open and resolved
+      apart (WALK9-04). Absent in an answer from before the field existed. */
+  openReplies?: number;
+  /** [lists9] When the comment was written (WALK9-06). Absent in an answer
+      from before the field existed. */
+  createdAt?: string;
 };
 
 /** blockId: the part's start block. whole: the document has no parts, and
@@ -48,7 +63,13 @@ export type DocumentCoverage = {
       order. Absent in an answer from before the field existed. */
   comments?: GraphComment[];
 };
-export type ProjectCoverage = { documents: Record<string, DocumentCoverage> };
+export type ProjectCoverage = {
+  documents: Record<string, DocumentCoverage>;
+  /** [lists9] The accounts a thread can wait on: the owner and the
+      collaborators that have an account (WALK9-09). Absent in an answer
+      from before the field existed: then every author counts. */
+  members?: string[];
+};
 
 /** A reply as waitsForReply reads it. */
 type ReplyLike = { userId: string; resolvedById: string | null; createdAt: string };
@@ -67,31 +88,45 @@ export function openComments(c: DocumentCoverage | null | undefined): GraphComme
   return (c?.comments ?? []).filter((x) => x.open);
 }
 
-/** [lists8] WALK8-01: a comment waits on this account when it is open and
-    its last open words (its last open reply, else the comment) are another
-    person's: the rule waitingReply keeps for a link. The node's chip, the
-    row and the card draw a "?" on these; the Documents head counts them. */
-export function commentWaits(c: Pick<GraphComment, "open" | "lastById">, myId: string): boolean {
-  return c.open && myId !== "" && c.lastById !== null && c.lastById !== myId;
+/** [lists8] WALK8-01, [lists9] WALK9-01/02/09: one waiting rule for comments
+    and links. The thread's newest reply decides, resolved or not: resolved,
+    nobody waits; else the thread waits on everyone but its author. A comment
+    with no reply waits on everyone but its author. Nobody waits on words by
+    an account outside the project (members, when the answer carries them),
+    and nothing waits on an account that cannot reply (the hooks in
+    coverage.tsx answer false for a viewer). Reads `newest` when the answer
+    carries it, else `lastById`. The node's chip, the row and the card draw
+    a "?" on these; the Documents head counts them. */
+export function commentWaits(
+  c: Pick<GraphComment, "open" | "lastById"> & Partial<Pick<GraphComment, "authorId" | "newest">>,
+  myId: string,
+  members?: ReadonlySet<string>,
+): boolean {
+  if (!c.open || myId === "") return false;
+  const by =
+    c.newest === undefined ? c.lastById : c.newest === null ? (c.authorId ?? null) : c.newest.resolved ? null : c.newest.userId;
+  return by !== null && by !== myId && (members === undefined || members.has(by));
 }
 
-/** [layer5] A link waiting for this account's reply. [lists7] WALK7-04: only
-    a link whose last open reply is another person's (waitingReply); a link
-    with no reply waits on no one, and a thread whose replies are all
-    resolved is closed. The Links list's Waiting on you and the Documents
-    head's count keep these; a reader alone never waits on her own words. */
-export function waitsForReply(link: { replies?: ReplyLike[] }, myId: string): boolean {
-  return waitingReply(link, myId) !== null;
+/** [layer5] A link waiting for this account's reply (waitingReply). The
+    Links list's Waiting on you and the Documents head's count keep these; a
+    reader alone never waits on her own words. */
+export function waitsForReply(link: { replies?: ReplyLike[] }, myId: string, members?: ReadonlySet<string>): boolean {
+  return waitingReply(link, myId, members) !== null;
 }
 
-/** [panel6] The reply a link waits on (WALK6-06): its last open reply when
-    another person wrote it; null when the link waits on no one's question
-    (no reply, or the last open one is this account's). */
-export function waitingReply<R extends ReplyLike>(link: { replies?: R[] }, myId: string): R | null {
-  const open = (link.replies ?? []).filter((r) => r.resolvedById === null);
-  if (open.length === 0 || myId === "") return null;
-  const last = open.reduce((a, b) => (b.createdAt > a.createdAt ? b : a));
-  return last.userId !== myId ? last : null;
+/** [panel6] The reply a link waits on (WALK6-06; [lists9] WALK9-01/09: the
+    newest reply decides, resolved or not, the rule commentWaits keeps for a
+    comment): the newest reply when it is not resolved and another person's
+    (one of the project's, when members are known); null when the link waits
+    on no one (no reply; the newest reply resolved, this account's, or by an
+    account outside the project). */
+export function waitingReply<R extends ReplyLike>(link: { replies?: R[] }, myId: string, members?: ReadonlySet<string>): R | null {
+  const replies = link.replies ?? [];
+  if (replies.length === 0 || myId === "") return null;
+  const newest = replies.reduce((a, b) => (b.createdAt > a.createdAt ? b : a));
+  if (newest.resolvedById !== null || newest.userId === myId) return null;
+  return members === undefined || members.has(newest.userId) ? newest : null;
 }
 
 /** [layer5] Why Gaps only keeps a document (WALK5-06), in this order: Not
