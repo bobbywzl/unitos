@@ -1349,6 +1349,53 @@
    "covers": [
     "chart"
    ]
+  },
+  {
+   "id": "lo-forum-mso-de-138303",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/forum-mso-de-138303.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "chartex",
+    "ole",
+    "altcontent"
+   ]
+  },
+  {
+   "id": "ox-Of16-01",
+   "url": "https://raw.githubusercontent.com/dotnet/Open-XML-SDK/431ab05cf160248cc3885a4a766026d4f8243792/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestFiles/Of16-01.pptx",
+   "source": "Open XML SDK test files",
+   "license": "MIT",
+   "covers": [
+    "chartex"
+   ]
+  },
+  {
+   "id": "ox-Of16-02",
+   "url": "https://raw.githubusercontent.com/dotnet/Open-XML-SDK/431ab05cf160248cc3885a4a766026d4f8243792/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestFiles/Of16-02.pptx",
+   "source": "Open XML SDK test files",
+   "license": "MIT",
+   "covers": [
+    "chartex"
+   ]
+  },
+  {
+   "id": "ox-Of16-03",
+   "url": "https://raw.githubusercontent.com/dotnet/Open-XML-SDK/431ab05cf160248cc3885a4a766026d4f8243792/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestFiles/Of16-03.pptx",
+   "source": "Open XML SDK test files",
+   "license": "MIT",
+   "covers": [
+    "chartex"
+   ]
+  },
+  {
+   "id": "lo-tdf131553",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/tdf131553.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "smartart"
+   ]
   }
  ]
 }

@@ -1,16 +1,16 @@
 {
  "total": {
-  "composite": 0.999,
-  "words": 0.997,
+  "composite": 0.976,
+  "words": 0.962,
   "order": 1,
   "bullets": 1,
   "tables": 1,
   "notes": 1,
-  "chartValues": 1,
+  "chartValues": 0.862,
   "replica": 1,
-  "lost": 0,
-  "files": 128,
-  "slides": 701,
+  "lost": 6,
+  "files": 133,
+  "slides": 706,
   "errors": 0
  },
  "files": {
@@ -1421,6 +1421,61 @@
    "chartValues": null,
    "replica": 1,
    "lost": 0
+  },
+  "lo-forum-mso-de-138303": {
+   "composite": 0.333,
+   "words": 0,
+   "order": null,
+   "bullets": null,
+   "tables": null,
+   "notes": null,
+   "chartValues": 0,
+   "replica": 1,
+   "lost": 1
+  },
+  "ox-Of16-01": {
+   "composite": 0.333,
+   "words": 0,
+   "order": null,
+   "bullets": null,
+   "tables": null,
+   "notes": null,
+   "chartValues": 0,
+   "replica": 1,
+   "lost": 1
+  },
+  "ox-Of16-02": {
+   "composite": 0.333,
+   "words": 0,
+   "order": null,
+   "bullets": null,
+   "tables": null,
+   "notes": null,
+   "chartValues": 0,
+   "replica": 1,
+   "lost": 1
+  },
+  "ox-Of16-03": {
+   "composite": 0.333,
+   "words": 0,
+   "order": null,
+   "bullets": null,
+   "tables": null,
+   "notes": null,
+   "chartValues": 0,
+   "replica": 1,
+   "lost": 1
+  },
+  "lo-tdf131553": {
+   "composite": 0.611,
+   "words": 0.222,
+   "order": null,
+   "bullets": null,
+   "tables": null,
+   "notes": null,
+   "chartValues": null,
+   "replica": 1,
+   "lost": 2
   }
  }
 }

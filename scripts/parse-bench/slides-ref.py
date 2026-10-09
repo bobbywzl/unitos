@@ -403,10 +403,71 @@ def cache_pts(container):
     return ([v[0].text or ""] if v else []), None
 
 
+def lvl_pts(lvl):
+    """A chartex level's points by index, as text."""
+    count = iattr(lvl, "ptCount", 0) or 0
+    pts = kids(lvl, "pt")
+    vals = [""] * max(count, len(pts))
+    for i, pt in enumerate(pts):
+        idx = iattr(pt, "idx", i)
+        if idx is not None and idx < len(vals):
+            vals[idx] = pt.text or ""
+    return vals
+
+
+def chartex_ref(doc):
+    """An Office 2016 chart (cx:chartSpace: waterfall, box and whisker,
+    sunburst, treemap, histogram, funnel). Its data sits in cx:chartData, one
+    cx:data per series: string dimensions (the categories, a level per
+    column, the first level innermost) and number dimensions (the values).
+    PowerPoint shows "Chart Title" for a title element without words, one
+    series or several (the files' own thumbnails)."""
+    root = doc.getroot() if hasattr(doc, "getroot") else doc
+    data = {d.get("id"): d for d in desc(root, "data")}
+    chart = kid(root, "chart")
+    title_el = kid(chart, "title")
+    title = ""
+    if title_el is not None:
+        rich = desc(title_el, "rich")
+        if rich:
+            title = "\n".join(para_text(p) for p in kids(rich[0], "p")).strip()
+        else:
+            title = " ".join((v.text or "") for v in desc(title_el, "v")).strip()
+        if not title:
+            title = "Chart Title"
+    words, values, shown = [], [], []
+    have_cats = False
+    for ser in desc(chart, "series"):
+        if ser.get("hidden") == "1":
+            continue
+        name = desc(kid(ser, "tx"), "v") if kid(ser, "tx") is not None else []
+        words.extend((v.text or "") for v in name if v.text)
+        did = kid(ser, "dataId")
+        d = data.get(did.get("val")) if did is not None else None
+        if d is None:
+            continue
+        for dim in kids(d, "strDim"):
+            if have_cats:
+                break
+            for lvl in kids(dim, "lvl"):
+                words.extend(v for v in lvl_pts(lvl) if v)
+            have_cats = True
+        for dim in kids(d, "numDim"):
+            for lvl in kids(dim, "lvl")[:1]:
+                code = lvl.get("formatCode")
+                for v in lvl_pts(lvl):
+                    if v and re.match(r"^-?[\d.eE+-]+$", v):
+                        values.append(float(v))
+                        shown.append(fmt_number(v, code))
+    return {"titleText": title, "words": words, "values": values, "shown": shown}
+
+
 def chart_ref(pkg, path):
     doc = pkg.xml(path)
     if doc is None:
         return None
+    if desc(doc, "chartData"):
+        return chartex_ref(doc)
     chart = desc(doc, "chart")
     chart = chart[0] if chart else None
     title_el = kid(chart, "title")
