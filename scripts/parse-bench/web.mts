@@ -43,6 +43,7 @@ globalThis.fetch = (async () => {
 }) as typeof fetch;
 
 const { parseHtmlContent } = await import("@/lib/parse/url");
+const { decodePage } = await import("@/lib/parse/charset");
 
 const ROOT = join(import.meta.dirname, "..", "..");
 const AEB = join(ROOT, ".bench", "web", "aeb");
@@ -78,7 +79,16 @@ if (limit) hashes = hashes.slice(0, limit);
 
 // ── The score (evaluate.py, word 4-gram shingles) ───────────────────────────
 
-const tokenize = (text: string) => text.match(/[\p{L}\p{N}_]+/gu) ?? [];
+// A soft hyphen (U+00AD) is drawn as nothing but at a line's end: "Pa­tien­ten"
+// reads "Patienten", one word, as the reader sees it on the page.
+// Japanese and Chinese set no spaces between words, so each Han or kana
+// character is a token of its own. Before, a whole Japanese sentence was one
+// token, and a space the marked body adds around an inline link ("管理ソフト
+// KeePass の起動…", where the page has "管理ソフト<a>KeePass</a>の起動…")
+// split that token: every 4-gram over the sentence missed on both sides
+// although the parse kept the page's words as they are.
+const tokenize = (text: string) =>
+  text.replace(/­/g, "").match(/[\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}]|(?:(?![\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}])[\p{L}\p{N}_])+/gu) ?? [];
 function shingles(text: string, n = 4): Map<string, number> {
   const tokens = tokenize(text);
   const out = new Map<string, number>();
@@ -134,7 +144,7 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 
 for (const hash of hashes) {
   const { url, articleBody } = truth[hash];
-  const html = gunzipSync(readFileSync(join(AEB, "html", `${hash}.html.gz`))).toString("utf8");
+  const html = decodePage(gunzipSync(readFileSync(join(AEB, "html", `${hash}.html.gz`))));
   const start = performance.now();
   let body = "";
   let error: string | undefined;

@@ -418,11 +418,11 @@ export function ommlLatex(oMath: Element): string {
 
 // ── Readable characters ─────────────────────────────────────────────────────
 
-const SUPERSCRIPTS: Record<string, string> = {
+export const SUPERSCRIPTS: Record<string, string> = {
   "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹",
   "+": "⁺", "-": "⁻", "−": "⁻", "=": "⁼", "(": "⁽", ")": "⁾", n: "ⁿ", i: "ⁱ",
 };
-const SUBSCRIPTS: Record<string, string> = {
+export const SUBSCRIPTS: Record<string, string> = {
   "0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄", "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉",
   "+": "₊", "-": "₋", "−": "₋", "=": "₌", "(": "₍", ")": "₎", a: "ₐ", e: "ₑ", o: "ₒ", x: "ₓ", h: "ₕ", k: "ₖ",
   l: "ₗ", m: "ₘ", n: "ₙ", p: "ₚ", s: "ₛ", t: "ₜ", i: "ᵢ", j: "ⱼ",
@@ -431,14 +431,14 @@ const SUBSCRIPTS: Record<string, string> = {
 /** A script's characters raised or lowered, as Unicode writes them when it
     has every one; else "^" or "_" and the script, in parentheses past one
     character. */
-function scripted(text: string, table: Record<string, string>, mark: string): string {
+export function scripted(text: string, table: Record<string, string>, mark: string): string {
   const chars = [...text];
   if (chars.length > 0 && chars.every((c) => table[c])) return chars.map((c) => table[c]).join("");
   return chars.length === 1 ? `${mark}${text}` : `${mark}(${text})`;
 }
 
 /** A part in parentheses when it is more than one character. */
-function grouped(text: string): string {
+export function grouped(text: string): string {
   return [...text].length <= 1 || /^\(.*\)$/.test(text) ? text : `(${text})`;
 }
 

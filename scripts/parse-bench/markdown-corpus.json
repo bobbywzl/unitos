@@ -1,0 +1,1044 @@
+{
+ "about": "The Markdown and text file benchmark's corpus (scripts/parse-bench/markdown.mts). Each file is fetched from the pinned URL into .bench/markdown/files/ and never committed. kind md: a Markdown file, scored against its reading by markdown-it (scripts/parse-bench/markdown-ref.py). kind txt: a plain text file, scored against its own words in the encoding named here, and, where a twin is named, against the twin's structure (Project Gutenberg's HTML edition of the same book). derive: a file made from another corpus file by a stated byte transform (a Windows editor's encoding or line ends), the words unchanged. spec: the CommonMark and GFM spec examples, each scored against the spec's expected HTML.",
+ "spec": [
+  {
+   "id": "commonmark",
+   "url": "https://raw.githubusercontent.com/commonmark/commonmark-spec/9103e341a973013013bb1a80e13567007c5cef6f/spec.txt",
+   "license": "CC-BY-SA-4.0",
+   "exercises": "CommonMark 0.31.2: every core construct, 652 examples with expected HTML"
+  },
+  {
+   "id": "gfm",
+   "url": "https://raw.githubusercontent.com/github/cmark-gfm/27d942c8b0a62d192f616e5bf3578f4b6a89e180/test/spec.txt",
+   "license": "CC-BY-SA-4.0",
+   "exercises": "GFM extension examples only: tables, task list items, strikethrough, extended autolinks, disallowed raw HTML"
+  }
+ ],
+ "files": [
+  {
+   "id": "react-readme",
+   "kind": "md",
+   "name": "README.md",
+   "url": "https://raw.githubusercontent.com/facebook/react/b618bbb4422693bbb8d387180687b3f510300f42/README.md",
+   "license": "MIT",
+   "exercises": "README: badges, links, lists, code"
+  },
+  {
+   "id": "vscode-readme",
+   "kind": "md",
+   "name": "README.md",
+   "url": "https://raw.githubusercontent.com/microsoft/vscode/ec6ac57be30d0ae72a2c3d08c0e7e666178ecd7e/README.md",
+   "license": "MIT",
+   "exercises": "README: raw HTML images with attributes, badges, headings"
+  },
+  {
+   "id": "rust-readme",
+   "kind": "md",
+   "name": "README.md",
+   "url": "https://raw.githubusercontent.com/rust-lang/rust/a30aa9064df6a504b6a323c6884a2f4cfbfff666/README.md",
+   "license": "MIT OR Apache-2.0",
+   "exercises": "README: picture element in raw HTML, reference links"
+  },
+  {
+   "id": "kubernetes-readme",
+   "kind": "md",
+   "name": "README.md",
+   "url": "https://raw.githubusercontent.com/kubernetes/kubernetes/f322464da4623fd6d87a02ca31fab5b6c39cd49f/README.md",
+   "license": "Apache-2.0",
+   "exercises": "README: raw HTML img, badges, shell code"
+  },
+  {
+   "id": "tensorflow-readme",
+   "kind": "md",
+   "name": "README.md",
+   "url": "https://raw.githubusercontent.com/tensorflow/tensorflow/883f7a09bab310ae90a74eaee83707321741203e/README.md",
+   "license": "Apache-2.0",
+   "exercises": "README: div align center, tables of badges, nested lists"
+  },
+  {
+   "id": "ohmyzsh-readme",
+   "kind": "md",
+   "name": "README.md",
+   "url": "https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/9f9b28a13df35af968f0117cb142f0eba9cc6c41/README.md",
+   "license": "MIT",
+   "exercises": "long README: tables, HTML comments, a contents list of fragment links, many code fences"
+  },
+  {
+   "id": "awesome-readme",
+   "kind": "md",
+   "name": "readme.md",
+   "url": "https://raw.githubusercontent.com/sindresorhus/awesome/bc98e517ddca672f55f9857d714fc3ea3c3540b2/readme.md",
+   "license": "CC0-1.0",
+   "exercises": "long nested link lists, raw HTML header with picture and sponsor blocks"
+  },
+  {
+   "id": "public-apis-readme",
+   "kind": "md",
+   "name": "README.md",
+   "url": "https://raw.githubusercontent.com/public-apis/public-apis/874e5879d20843f7c2a5822cef4c0752127b3775/README.md",
+   "license": "MIT",
+   "exercises": "very long: hundreds of GFM tables with links in cells"
+  },
+  {
+   "id": "vue-changelog",
+   "kind": "md",
+   "name": "CHANGELOG.md",
+   "url": "https://raw.githubusercontent.com/vuejs/core/4ab865a848a1da3d10fb674f857e5fff13094644/CHANGELOG.md",
+   "license": "MIT",
+   "exercises": "very long changelog: headings with links, bullet lists with bold scopes and commit links"
+  },
+  {
+   "id": "node-fs-doc",
+   "kind": "md",
+   "name": "fs.md",
+   "url": "https://raw.githubusercontent.com/nodejs/node/dd9777b284b05a0c4864ae9543e0b4d2020721db/doc/api/fs.md",
+   "license": "MIT",
+   "exercises": "very long API doc: HTML comments with YAML, nested lists, tables, many code fences"
+  },
+  {
+   "id": "mermaid-flowchart",
+   "kind": "md",
+   "name": "flowchart.md",
+   "url": "https://raw.githubusercontent.com/mermaid-js/mermaid/86414301de566aba6f836f886b98b114a1343092/docs/syntax/flowchart.md",
+   "license": "MIT",
+   "exercises": "mermaid and mermaid-example fences, warning blockquotes, raw HTML"
+  },
+  {
+   "id": "github-math",
+   "kind": "md",
+   "name": "writing-mathematical-expressions.md",
+   "url": "https://raw.githubusercontent.com/github/docs/9f651797567230e844373870fce8b14427ad47ad/content/get-started/writing-on-github/working-with-advanced-formatting/writing-mathematical-expressions.md",
+   "license": "CC-BY-4.0",
+   "exercises": "front matter, Liquid tags, inline $ math, $$ display math, math fences, escaped dollars"
+  },
+  {
+   "id": "github-formatting",
+   "kind": "md",
+   "name": "basic-writing-and-formatting-syntax.md",
+   "url": "https://raw.githubusercontent.com/github/docs/9f651797567230e844373870fce8b14427ad47ad/content/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax.md",
+   "license": "CC-BY-4.0",
+   "exercises": "front matter, footnotes, alerts, task lists, nested lists, tables of syntax"
+  },
+  {
+   "id": "katex-supported",
+   "kind": "md",
+   "name": "supported.md",
+   "url": "https://raw.githubusercontent.com/KaTeX/KaTeX/6ea2dc97188f0cc282e05a9690418ae7fe5457ba/docs/supported.md",
+   "license": "MIT",
+   "exercises": "math everywhere: $ inside table cells, raw HTML tables, front matter"
+  },
+  {
+   "id": "d2l-linear-regression",
+   "kind": "md",
+   "name": "linear-regression.md",
+   "url": "https://raw.githubusercontent.com/d2l-ai/d2l-en/23d7a5aecceee57d1292c56e90cce307f183bb0a/chapter_linear-regression/linear-regression.md",
+   "license": "CC-BY-SA-4.0",
+   "exercises": "textbook chapter: $$ display math with labels, inline math, roles, tab fences"
+  },
+  {
+   "id": "jekyll-front-matter",
+   "kind": "md",
+   "name": "front-matter.md",
+   "url": "https://raw.githubusercontent.com/jekyll/jekyll/541d8b2ee75c8907de4744d4b87a7a6f1f997cae/docs/_docs/front-matter.md",
+   "license": "MIT",
+   "exercises": "front matter with a title, Liquid raw tags, HTML tables, notes in divs"
+  },
+  {
+   "id": "mdn-js-intro",
+   "kind": "md",
+   "name": "index.md",
+   "url": "https://raw.githubusercontent.com/mdn/content/fd0b11ad5b5014a9333578adcc4bc98fb9024da3/files/en-us/web/javascript/guide/introduction/index.md",
+   "license": "CC-BY-SA-2.5",
+   "exercises": "front matter, KumaScript macros in braces, notes, definition-like lists"
+  },
+  {
+   "id": "rust-book-ownership",
+   "kind": "md",
+   "name": "ch04-01-what-is-ownership.md",
+   "url": "https://raw.githubusercontent.com/rust-lang/book/1500248d8f230566e4ec9f27fcbb8fe9e2898ab1/src/ch04-01-what-is-ownership.md",
+   "license": "MIT OR Apache-2.0",
+   "exercises": "book chapter: include directives in fences, images with relative paths, sidebars"
+  },
+  {
+   "id": "pandoc-manual",
+   "kind": "md",
+   "name": "MANUAL.txt",
+   "url": "https://raw.githubusercontent.com/jgm/pandoc/e51c9c6054c8f4ec5c3209d5abe10939dfe2963e/MANUAL.txt",
+   "license": "GPL-2.0-or-later",
+   "exercises": "very long Markdown saved as .txt: front matter, definition lists, nested code, tables of options"
+  },
+  {
+   "id": "javaguide-readme",
+   "kind": "md",
+   "name": "README.md",
+   "url": "https://raw.githubusercontent.com/Snailclimb/JavaGuide/9eab7aaf1a538dc139e6886cb2237b6c61e9a000/README.md",
+   "license": "Apache-2.0",
+   "exercises": "Chinese README: CJK prose, long link lists, raw HTML"
+  },
+  {
+   "id": "es6-let",
+   "kind": "md",
+   "name": "let.md",
+   "url": "https://raw.githubusercontent.com/ruanyf/es6tutorial/d27a751258f25cb4d27de70161d3bcd7fe19251e/docs/let.md",
+   "license": "CC-BY-NC-4.0",
+   "exercises": "Chinese book chapter: CJK prose with inline code, many code fences"
+  },
+  {
+   "id": "vue-docs-ja",
+   "kind": "md",
+   "name": "introduction.md",
+   "url": "https://raw.githubusercontent.com/vuejs-translations/docs-ja/edc1273e61d3f46668bd78b29d18ef04adcf5138/src/guide/introduction.md",
+   "license": "MIT",
+   "exercises": "Japanese docs: custom containers, Vue components in raw HTML, heading anchors"
+  },
+  {
+   "id": "react-ko-learn",
+   "kind": "md",
+   "name": "index.md",
+   "url": "https://raw.githubusercontent.com/reactjs/ko.react.dev/89f79e9e971e9ad424ea5ebabdf8d5fa66c87375/src/content/learn/index.md",
+   "license": "CC-BY-4.0",
+   "exercises": "Korean docs: MDX components, front matter, code fences with meta"
+  },
+  {
+   "id": "node-pr-template",
+   "kind": "md",
+   "name": "PULL_REQUEST_TEMPLATE.md",
+   "url": "https://raw.githubusercontent.com/nodejs/node/dd9777b284b05a0c4864ae9543e0b4d2020721db/.github/PULL_REQUEST_TEMPLATE.md",
+   "license": "MIT",
+   "exercises": "HTML comment block and short template text"
+  },
+  {
+   "id": "redis-readme",
+   "kind": "md",
+   "name": "README.md",
+   "url": "https://raw.githubusercontent.com/redis/redis/940a4d72fc7caaed6f853b65b39920ff3fb9ac1f/README.md",
+   "license": "RSALv2 OR SSPLv1 OR AGPLv3",
+   "exercises": "long README: details and summary blocks, tables, nested lists, code"
+  },
+  {
+   "id": "ollama-api",
+   "kind": "md",
+   "name": "api.md",
+   "url": "https://raw.githubusercontent.com/ollama/ollama/c2b7368d4156656ddb9a23b43f721a841b9c23e0/docs/api.md",
+   "license": "MIT",
+   "exercises": "API doc: many JSON and shell fences, parameter lists, nested lists"
+  },
+  {
+   "id": "whisper-readme",
+   "kind": "md",
+   "name": "README.md",
+   "url": "https://raw.githubusercontent.com/openai/whisper/86098128c0b4f24f0e2aa2994de830614b474227/README.md",
+   "license": "MIT",
+   "exercises": "README: tables with numbers, images, code"
+  },
+  {
+   "id": "excalidraw-readme",
+   "kind": "md",
+   "name": "README.md",
+   "url": "https://raw.githubusercontent.com/excalidraw/excalidraw/4c00f31ddcc20086bac1020428819fe0b9a30bce/README.md",
+   "license": "MIT",
+   "exercises": "heavy raw HTML header: links, images, paragraphs inside HTML"
+  },
+  {
+   "id": "llamacpp-readme",
+   "kind": "md",
+   "name": "README.md",
+   "url": "https://raw.githubusercontent.com/ggerganov/llama.cpp/de7fa0a3c6a2e1b4cd9f22eb8d6bf5b12dbdb63b/README.md",
+   "license": "MIT",
+   "exercises": "long README: details blocks, task-like lists, tables, many links"
+  },
+  {
+   "id": "markdown-test-file",
+   "kind": "md",
+   "name": "TEST.md",
+   "url": "https://raw.githubusercontent.com/mxstbr/markdown-test-file/803abba5c49b484c52ee46c78bde60db4dbfd403/TEST.md",
+   "license": "MIT",
+   "exercises": "every Markdown construct once: setext headings, indented code, nested quotes, reference links"
+  },
+  {
+   "id": "markdown-syntax",
+   "kind": "md",
+   "name": "markdown_documentation_syntax.md",
+   "url": "https://raw.githubusercontent.com/markedjs/marked/7e8754d60b3c37be30aa17106ada623d1f0cf9db/test/specs/original/markdown_documentation_syntax.md",
+   "license": "BSD-3-Clause (Markdown.pl test suite)",
+   "exercises": "Gruber's Markdown syntax page: setext headings, indented code with HTML in it, backslash escapes"
+  },
+  {
+   "id": "markdown-basics",
+   "kind": "md",
+   "name": "markdown_documentation_basics.md",
+   "url": "https://raw.githubusercontent.com/markedjs/marked/7e8754d60b3c37be30aa17106ada623d1f0cf9db/test/specs/original/markdown_documentation_basics.md",
+   "license": "BSD-3-Clause (Markdown.pl test suite)",
+   "exercises": "Gruber's Markdown basics page: indented code, lists, quotes"
+  },
+  {
+   "id": "react-readme-crlf-bom",
+   "kind": "md",
+   "name": "README.md",
+   "derive": {
+    "from": "react-readme",
+    "as": "crlf-utf-8-bom"
+   },
+   "license": "MIT",
+   "exercises": "a Markdown file saved on Windows: CRLF line ends and a UTF-8 byte order mark"
+  },
+  {
+   "id": "whisper-readme-utf16",
+   "kind": "md",
+   "name": "README.md",
+   "derive": {
+    "from": "whisper-readme",
+    "as": "utf-16le-bom"
+   },
+   "license": "MIT",
+   "exercises": "a Markdown file saved as UTF-16 with a byte order mark (Notepad's Unicode)"
+  },
+  {
+   "id": "pride-and-prejudice",
+   "kind": "txt",
+   "name": "1342.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/GITenberg/Pride-and-Prejudice_1342/81db45c9c48c592f0b77f01fc59e677ad0a5634e/1342.txt",
+   "twin": "https://raw.githubusercontent.com/GITenberg/Pride-and-Prejudice_1342/81db45c9c48c592f0b77f01fc59e677ad0a5634e/1342-h/1342-h.htm",
+   "license": "Public domain (Project Gutenberg)",
+   "exercises": "novel: hard-wrapped CRLF prose, chapter headings, _italics_, the Gutenberg header and license"
+  },
+  {
+   "id": "alice",
+   "kind": "txt",
+   "name": "11.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/GITenberg/Alice-s-Adventures-in-Wonderland_11/7f18748e114b994d5d9454d5793581bc0b9cf9d7/11.txt",
+   "twin": "https://raw.githubusercontent.com/GITenberg/Alice-s-Adventures-in-Wonderland_11/7f18748e114b994d5d9454d5793581bc0b9cf9d7/11-h/11-h.htm",
+   "license": "Public domain (Project Gutenberg)",
+   "exercises": "novel: hard-wrapped prose, indented verse, * * * breaks, CHAPTER headings"
+  },
+  {
+   "id": "frankenstein",
+   "kind": "txt",
+   "name": "84.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/GITenberg/Frankenstein_84/c98a483bd1f34e7366126b81bcedd1a6faee636e/84.txt",
+   "twin": "https://raw.githubusercontent.com/GITenberg/Frankenstein_84/c98a483bd1f34e7366126b81bcedd1a6faee636e/84-h/84-h.htm",
+   "license": "Public domain (Project Gutenberg)",
+   "exercises": "novel in letters: dated lines, signatures, Letter and Chapter headings"
+  },
+  {
+   "id": "leaves-of-grass",
+   "kind": "txt",
+   "name": "1322.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/GITenberg/Leaves-of-Grass_1322/4965dbd935f2f05f3ccf0fb274a432cfd77f053f/1322.txt",
+   "twin": "https://raw.githubusercontent.com/GITenberg/Leaves-of-Grass_1322/4965dbd935f2f05f3ccf0fb274a432cfd77f053f/1322-h/1322-h.htm",
+   "license": "Public domain (Project Gutenberg)",
+   "exercises": "long verse: each line a line, numbered stanzas, BOOK headings"
+  },
+  {
+   "id": "nursery-rhymes",
+   "kind": "txt",
+   "name": "61009-8.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/GITenberg/Our-Old-Nursery-Rhymes_61009/71e059a02a6b04c567e3e93b38f0e47812c09de5/61009-8.txt",
+   "twin": "https://raw.githubusercontent.com/GITenberg/Our-Old-Nursery-Rhymes_61009/71e059a02a6b04c567e3e93b38f0e47812c09de5/61009-h/61009-h.htm",
+   "license": "Public domain (Project Gutenberg)",
+   "exercises": "verse and song titles"
+  },
+  {
+   "id": "theatrical-makeup",
+   "kind": "txt",
+   "name": "56617-8.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/GITenberg/The-Art-of-Theatrical-Make-up_56617/e6755a2122cdf892707b5d0db28b54cf1ee59b31/56617-8.txt",
+   "twin": "https://raw.githubusercontent.com/GITenberg/The-Art-of-Theatrical-Make-up_56617/e6755a2122cdf892707b5d0db28b54cf1ee59b31/56617-h/56617-h.htm",
+   "license": "Public domain (Project Gutenberg)",
+   "exercises": "non-fiction: contents list, illustration notes, sections"
+  },
+  {
+   "id": "diner-interrompu",
+   "kind": "txt",
+   "name": "13070-8.txt",
+   "encoding": "iso-8859-1",
+   "url": "https://raw.githubusercontent.com/GITenberg/Le-d-ner-interrompu_13070/3fe5890e065675542e96b318f4a9661d2d4cd87b/13070-8.txt",
+   "twin": "https://raw.githubusercontent.com/GITenberg/Le-d-ner-interrompu_13070/3fe5890e065675542e96b318f4a9661d2d4cd87b/13070-h/13070-h.htm",
+   "license": "Public domain (Project Gutenberg)",
+   "exercises": "French in Latin-1, the edition of its HTML twin (the ASCII 13070.txt drops the accents the twin has, so no unit of the twin matched): a play's speaker lines"
+  },
+  {
+   "id": "blanc-et-noir",
+   "kind": "txt",
+   "name": "4771.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/GITenberg/Le-Blanc-et-le-Noir_4771/09c13e33ab6eff45209238e0cf44458b43b44cdc/4771.txt",
+   "license": "Public domain (Project Gutenberg)",
+   "exercises": "French in ASCII (the mirror's copy): Voltaire's tale, hard-wrapped prose"
+  },
+  {
+   "id": "afrique-aux-noirs",
+   "kind": "txt",
+   "name": "58828-0.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/GITenberg/L-Afrique-aux-Noirs_58828/5736ace0cb959b413b30299a703f912944e6ae62/58828-0.txt",
+   "twin": "https://raw.githubusercontent.com/GITenberg/L-Afrique-aux-Noirs_58828/5736ace0cb959b413b30299a703f912944e6ae62/58828-h/58828-h.htm",
+   "license": "Public domain (Project Gutenberg)",
+   "exercises": "French in UTF-8 with a byte order mark: curly quotes, guillemets"
+  },
+  {
+   "id": "alice-utf16le",
+   "kind": "txt",
+   "name": "alice.txt",
+   "derive": {
+    "from": "alice",
+    "as": "utf-16le-bom"
+   },
+   "license": "Public domain (Project Gutenberg)",
+   "exercises": "a text file saved as UTF-16 LE with a byte order mark"
+  },
+  {
+   "id": "frankenstein-utf16be",
+   "kind": "txt",
+   "name": "frankenstein.txt",
+   "derive": {
+    "from": "frankenstein",
+    "as": "utf-16be-bom"
+   },
+   "license": "Public domain (Project Gutenberg)",
+   "exercises": "a text file saved as UTF-16 BE with a byte order mark"
+  },
+  {
+   "id": "afrique-cp1252",
+   "kind": "txt",
+   "name": "afrique.txt",
+   "derive": {
+    "from": "afrique-aux-noirs",
+    "as": "windows-1252"
+   },
+   "license": "Public domain (Project Gutenberg)",
+   "exercises": "a text file saved in Windows-1252: curly quotes, the oe ligature, the euro sign range"
+  },
+  {
+   "id": "rfc2616",
+   "kind": "txt",
+   "name": "rfc2616.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/scateu/communication-standard-collection/4595ecfcd666836b2cfc4cc3a04d291b4ef01d50/RFC/rfc2616.txt",
+   "license": "IETF Trust (RFC text)",
+   "exercises": "RFC: form feeds, page headers and footers, numbered section headings, ABNF, contents with dot leaders"
+  },
+  {
+   "id": "rfc1149",
+   "kind": "txt",
+   "name": "rfc1149.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/scateu/communication-standard-collection/4595ecfcd666836b2cfc4cc3a04d291b4ef01d50/RFC/rfc1149.txt",
+   "license": "IETF Trust (RFC text)",
+   "exercises": "short RFC: header block in two columns, form feed"
+  },
+  {
+   "id": "rfc3819",
+   "kind": "txt",
+   "name": "rfc3819.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/tass-belgium/picotcp/46120abecc9fb79f7dfb2cc8192341a42e40fc8b/RFC/rfc3819.txt",
+   "license": "IETF Trust (RFC text)",
+   "exercises": "long RFC: nested numbered sections, references"
+  },
+  {
+   "id": "rfc2460",
+   "kind": "txt",
+   "name": "rfc2460.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/tass-belgium/picotcp/46120abecc9fb79f7dfb2cc8192341a42e40fc8b/RFC/rfc2460.txt",
+   "license": "IETF Trust (RFC text)",
+   "exercises": "RFC: ASCII art packet diagrams with + and | characters"
+  },
+  {
+   "id": "rfc1122",
+   "kind": "txt",
+   "name": "rfc1122.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/tass-belgium/picotcp/46120abecc9fb79f7dfb2cc8192341a42e40fc8b/RFC/rfc1122.txt",
+   "license": "IETF Trust (RFC text)",
+   "exercises": "very long RFC: tables in text, requirement summaries, deep sections"
+  },
+  {
+   "id": "cjk-shift-jis",
+   "kind": "txt",
+   "name": "shift_jis.txt",
+   "encoding": "shift_jis",
+   "url": "https://raw.githubusercontent.com/python/cpython/bc12b7285f87f3ca9118cb4b61c28a84e7984ba3/Lib/test/cjkencodings/shift_jis.txt",
+   "license": "PSF-2.0",
+   "exercises": "Japanese in Shift-JIS"
+  },
+  {
+   "id": "cjk-euc-jp",
+   "kind": "txt",
+   "name": "euc_jp.txt",
+   "encoding": "euc_jp",
+   "url": "https://raw.githubusercontent.com/python/cpython/bc12b7285f87f3ca9118cb4b61c28a84e7984ba3/Lib/test/cjkencodings/euc_jp.txt",
+   "license": "PSF-2.0",
+   "exercises": "Japanese in EUC-JP"
+  },
+  {
+   "id": "cjk-gb2312",
+   "kind": "txt",
+   "name": "gb2312.txt",
+   "encoding": "gb2312",
+   "url": "https://raw.githubusercontent.com/python/cpython/bc12b7285f87f3ca9118cb4b61c28a84e7984ba3/Lib/test/cjkencodings/gb2312.txt",
+   "license": "PSF-2.0",
+   "exercises": "Chinese in GB2312"
+  },
+  {
+   "id": "cjk-gb18030",
+   "kind": "txt",
+   "name": "gb18030.txt",
+   "encoding": "gb18030",
+   "url": "https://raw.githubusercontent.com/python/cpython/bc12b7285f87f3ca9118cb4b61c28a84e7984ba3/Lib/test/cjkencodings/gb18030.txt",
+   "license": "PSF-2.0",
+   "exercises": "Chinese in GB18030"
+  },
+  {
+   "id": "cjk-big5",
+   "kind": "txt",
+   "name": "big5.txt",
+   "encoding": "big5",
+   "url": "https://raw.githubusercontent.com/python/cpython/bc12b7285f87f3ca9118cb4b61c28a84e7984ba3/Lib/test/cjkencodings/big5.txt",
+   "license": "PSF-2.0",
+   "exercises": "Traditional Chinese in Big5"
+  },
+  {
+   "id": "cjk-euc-kr",
+   "kind": "txt",
+   "name": "euc_kr.txt",
+   "encoding": "euc_kr",
+   "url": "https://raw.githubusercontent.com/python/cpython/bc12b7285f87f3ca9118cb4b61c28a84e7984ba3/Lib/test/cjkencodings/euc_kr.txt",
+   "license": "PSF-2.0",
+   "exercises": "Korean in EUC-KR"
+  },
+  {
+   "id": "log-apache",
+   "kind": "txt",
+   "name": "apache.txt",
+   "encoding": "utf-8",
+   "lines": true,
+   "url": "https://raw.githubusercontent.com/logpai/loghub/dd61d0952749ee7963bde24220d1be5ede023033/Apache/Apache_2k.log",
+   "license": "loghub (research use)",
+   "exercises": "a log: 2,000 lines, each its own line, [bracketed] fields"
+  },
+  {
+   "id": "log-hdfs",
+   "kind": "txt",
+   "name": "hdfs.txt",
+   "encoding": "utf-8",
+   "lines": true,
+   "url": "https://raw.githubusercontent.com/logpai/loghub/dd61d0952749ee7963bde24220d1be5ede023033/HDFS/HDFS_2k.log",
+   "license": "loghub (research use)",
+   "exercises": "a log: numbers, paths, block ids"
+  },
+  {
+   "id": "log-linux",
+   "kind": "txt",
+   "name": "linux.txt",
+   "encoding": "utf-8",
+   "lines": true,
+   "url": "https://raw.githubusercontent.com/logpai/loghub/dd61d0952749ee7963bde24220d1be5ede023033/Linux/Linux_2k.log",
+   "license": "loghub (research use)",
+   "exercises": "a syslog: double spaces, colons, user names in parentheses"
+  },
+  {
+   "id": "log-android",
+   "kind": "txt",
+   "name": "android.txt",
+   "encoding": "utf-8",
+   "lines": true,
+   "url": "https://raw.githubusercontent.com/logpai/loghub/dd61d0952749ee7963bde24220d1be5ede023033/Android/Android_2k.log",
+   "license": "loghub (research use)",
+   "exercises": "a logcat: angle brackets, star markers, stack-like text"
+  },
+  {
+   "id": "log-openssh",
+   "kind": "txt",
+   "name": "openssh.txt",
+   "encoding": "utf-8",
+   "lines": true,
+   "url": "https://raw.githubusercontent.com/logpai/loghub/dd61d0952749ee7963bde24220d1be5ede023033/OpenSSH/OpenSSH_2k.log",
+   "license": "loghub (research use)",
+   "exercises": "an sshd log: brackets, IP addresses"
+  },
+  {
+   "id": "gpl-2",
+   "kind": "txt",
+   "name": "GPL-2.0.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/torvalds/linux/6c377d19d4a5116d9bec5203aa3c6c11523e7898/LICENSES/preferred/GPL-2.0",
+   "license": "GPL-2.0 text (verbatim copying permitted)",
+   "exercises": "legal text: SPDX header lines, centered title, numbered clauses, indented block"
+  },
+  {
+   "id": "python-license",
+   "kind": "txt",
+   "name": "LICENSE.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/python/cpython/bc12b7285f87f3ca9118cb4b61c28a84e7984ba3/LICENSE",
+   "license": "PSF-2.0",
+   "exercises": "license text: underlined headings, a table of releases, numbered clauses"
+  },
+  {
+   "id": "linux-maintainers",
+   "kind": "txt",
+   "name": "MAINTAINERS.txt",
+   "encoding": "utf-8",
+   "lines": true,
+   "url": "https://raw.githubusercontent.com/torvalds/linux/6c377d19d4a5116d9bec5203aa3c6c11523e7898/MAINTAINERS",
+   "license": "GPL-2.0",
+   "exercises": "very long field list: 'M:' lines with <email>, tab-separated fields"
+  },
+  {
+   "id": "vim-intro",
+   "kind": "txt",
+   "name": "intro.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/vim/vim/b2b47bdf9401c865780dd4c47b1dbafb0463c75a/runtime/doc/intro.txt",
+   "license": "Vim license",
+   "exercises": "vim help: *tags*, |links|, <keys>, ===== rules, right-aligned tags"
+  },
+  {
+   "id": "vim-usr01",
+   "kind": "txt",
+   "name": "usr_01.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/vim/vim/b2b47bdf9401c865780dd4c47b1dbafb0463c75a/runtime/doc/usr_01.txt",
+   "license": "Vim license",
+   "exercises": "vim user manual: hard-wrapped prose, <keys>, indented commands"
+  },
+  {
+   "id": "transformers-requirements",
+   "kind": "txt",
+   "name": "requirements.txt",
+   "encoding": "utf-8",
+   "lines": true,
+   "url": "https://raw.githubusercontent.com/huggingface/transformers/4cc2aa84301c9aa210b5513dab9fefae03981f6e/examples/pytorch/text-classification/requirements.txt",
+   "license": "Apache-2.0",
+   "exercises": "requirements: one package per line, version operators"
+  },
+  {
+   "id": "json-cmakelists",
+   "kind": "txt",
+   "name": "CMakeLists.txt",
+   "encoding": "utf-8",
+   "lines": true,
+   "url": "https://raw.githubusercontent.com/nlohmann/json/d33068da730aa1ffa3f1acb332e36653681efa2c/CMakeLists.txt",
+   "license": "MIT",
+   "exercises": "build script: # comment lines, ${variables}, indented blocks"
+  },
+  {
+   "id": "linux-readme",
+   "kind": "txt",
+   "name": "README.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/torvalds/linux/6c377d19d4a5116d9bec5203aa3c6c11523e7898/README",
+   "license": "GPL-2.0",
+   "exercises": "short plain README with a list of paths"
+  },
+  {
+   "id": "vim-tutor-fr",
+   "kind": "txt",
+   "name": "tutor-fr.txt",
+   "encoding": "iso-8859-1",
+   "url": "https://raw.githubusercontent.com/vim/vim/v9.0.0000/runtime/tutor/tutor.fr",
+   "license": "Vim license",
+   "exercises": "the Vim tutor in French, iso-8859-1: hard-wrapped lessons, indented commands, ~~~ rules"
+  },
+  {
+   "id": "vim-tutor-de",
+   "kind": "txt",
+   "name": "tutor-de.txt",
+   "encoding": "iso-8859-1",
+   "url": "https://raw.githubusercontent.com/vim/vim/v9.0.0000/runtime/tutor/tutor.de",
+   "license": "Vim license",
+   "exercises": "the Vim tutor in German, iso-8859-1: hard-wrapped lessons, indented commands, ~~~ rules"
+  },
+  {
+   "id": "vim-tutor-ja-sjis",
+   "kind": "txt",
+   "name": "tutor-ja-sjis.txt",
+   "encoding": "cp932",
+   "url": "https://raw.githubusercontent.com/vim/vim/v9.0.0000/runtime/tutor/tutor.ja.sjis",
+   "license": "Vim license",
+   "exercises": "the Vim tutor in Japanese, cp932: hard-wrapped lessons, indented commands, ~~~ rules"
+  },
+  {
+   "id": "vim-tutor-ja-euc",
+   "kind": "txt",
+   "name": "tutor-ja-euc.txt",
+   "encoding": "euc_jp",
+   "url": "https://raw.githubusercontent.com/vim/vim/v9.0.0000/runtime/tutor/tutor.ja.euc",
+   "license": "Vim license",
+   "exercises": "the Vim tutor in Japanese, euc_jp: hard-wrapped lessons, indented commands, ~~~ rules"
+  },
+  {
+   "id": "vim-tutor-ko-euc",
+   "kind": "txt",
+   "name": "tutor-ko-euc.txt",
+   "encoding": "euc_kr",
+   "url": "https://raw.githubusercontent.com/vim/vim/v9.0.0000/runtime/tutor/tutor.ko.euc",
+   "license": "Vim license",
+   "exercises": "the Vim tutor in Korean, euc_kr: hard-wrapped lessons, indented commands, ~~~ rules"
+  },
+  {
+   "id": "vim-tutor-zh-euc",
+   "kind": "txt",
+   "name": "tutor-zh-euc.txt",
+   "encoding": "gb2312",
+   "url": "https://raw.githubusercontent.com/vim/vim/v9.0.0000/runtime/tutor/tutor.zh.euc",
+   "license": "Vim license",
+   "exercises": "the Vim tutor in Simplified Chinese, gb2312: hard-wrapped lessons, indented commands, ~~~ rules"
+  },
+  {
+   "id": "vim-tutor-pl",
+   "kind": "txt",
+   "name": "tutor-pl.txt",
+   "encoding": "iso-8859-2",
+   "url": "https://raw.githubusercontent.com/vim/vim/v9.0.0000/runtime/tutor/tutor.pl",
+   "license": "Vim license",
+   "exercises": "the Vim tutor in Polish, iso-8859-2: hard-wrapped lessons, indented commands, ~~~ rules"
+  },
+  {
+   "id": "vim-tutor-ru",
+   "kind": "txt",
+   "name": "tutor-ru.txt",
+   "encoding": "koi8-r",
+   "url": "https://raw.githubusercontent.com/vim/vim/v9.0.0000/runtime/tutor/tutor.ru",
+   "license": "Vim license",
+   "exercises": "the Vim tutor in Russian, koi8-r: hard-wrapped lessons, indented commands, ~~~ rules"
+  },
+  {
+   "id": "vim-tutor-ru-cp1251",
+   "kind": "txt",
+   "name": "tutor-ru-cp1251.txt",
+   "encoding": "cp1251",
+   "url": "https://raw.githubusercontent.com/vim/vim/v9.0.0000/runtime/tutor/tutor.ru.cp1251",
+   "license": "Vim license",
+   "exercises": "the Vim tutor in Russian, cp1251: hard-wrapped lessons, indented commands, ~~~ rules"
+  },
+  {
+   "id": "vim-tutor-el",
+   "kind": "txt",
+   "name": "tutor-el.txt",
+   "encoding": "iso-8859-7",
+   "url": "https://raw.githubusercontent.com/vim/vim/v9.0.0000/runtime/tutor/tutor.el",
+   "license": "Vim license",
+   "exercises": "the Vim tutor in Greek, iso-8859-7: hard-wrapped lessons, indented commands, ~~~ rules"
+  },
+  {
+   "id": "vim-tutor-cs",
+   "kind": "txt",
+   "name": "tutor-cs.txt",
+   "encoding": "iso-8859-2",
+   "url": "https://raw.githubusercontent.com/vim/vim/v9.0.0000/runtime/tutor/tutor.cs",
+   "license": "Vim license",
+   "exercises": "the Vim tutor in Czech, iso-8859-2: hard-wrapped lessons, indented commands, ~~~ rules"
+  },
+  {
+   "id": "vim-tutor",
+   "kind": "txt",
+   "name": "tutor.txt",
+   "encoding": "iso-8859-1",
+   "url": "https://raw.githubusercontent.com/vim/vim/v9.0.0000/runtime/tutor/tutor",
+   "license": "Vim license",
+   "exercises": "the Vim tutor in English, iso-8859-1: hard-wrapped lessons, indented commands, ~~~ rules"
+  },
+  {
+   "id": "react-learn-state",
+   "kind": "md",
+   "name": "choosing-the-state-structure.md",
+   "url": "https://raw.githubusercontent.com/reactjs/react.dev/046f17d04295ba047bb5739026b4ac3110f17028/src/content/learn/choosing-the-state-structure.md",
+   "license": "CC-BY-4.0",
+   "exercises": "MDX-like doc: <Intro>, <YouWillLearn>, <Sandpack>, <Recipes>, <DeepDive> components around Markdown, code inside components"
+  },
+  {
+   "id": "docusaurus-admonitions",
+   "kind": "md",
+   "name": "markdown-features-admonitions.md",
+   "url": "https://raw.githubusercontent.com/facebook/docusaurus/26d988c76b1d2b2005dfde4063be807491d601d8/website/docs/guides/markdown-features/markdown-features-admonitions.mdx",
+   "license": "CC-BY-4.0",
+   "exercises": "an .mdx file saved as .md: ::: admonitions, import lines, JSX components and {/* comments */}"
+  },
+  {
+   "id": "docusaurus-tabs",
+   "kind": "md",
+   "name": "markdown-features-tabs.md",
+   "url": "https://raw.githubusercontent.com/facebook/docusaurus/26d988c76b1d2b2005dfde4063be807491d601d8/website/docs/guides/markdown-features/markdown-features-tabs.mdx",
+   "license": "CC-BY-4.0",
+   "exercises": "an .mdx file saved as .md: <Tabs>/<TabItem> markup with Markdown inside, mdx-code-block fences"
+  },
+  {
+   "id": "astro-markdown-content",
+   "kind": "md",
+   "name": "markdown-content.md",
+   "url": "https://raw.githubusercontent.com/withastro/docs/52e538d93d0c430f4bc2dc5901ff999c3cfcd5e0/src/content/docs/en/guides/markdown-content.mdx",
+   "license": "MIT",
+   "exercises": "an .mdx file saved as .md: front matter, imports, <Since>, <ReadMore>, <PackageManagerTabs> components, fenced code with titles"
+  },
+  {
+   "id": "mkdocs-admonitions",
+   "kind": "md",
+   "name": "admonitions.md",
+   "url": "https://raw.githubusercontent.com/squidfunk/mkdocs-material/6d3dc570d51064a3f55d189bd22c2390b07d46fe/docs/reference/admonitions.md",
+   "license": "MIT",
+   "exercises": "MkDocs: !!! note blocks with indented bodies, === tabs, attribute lists, a 1,700-character line"
+  },
+  {
+   "id": "hugo-shortcodes",
+   "kind": "md",
+   "name": "shortcodes.md",
+   "url": "https://raw.githubusercontent.com/gohugoio/hugoDocs/1f726742233a52ce1eda252c6a6985149e5ae914/content/en/content-management/shortcodes.md",
+   "license": "Apache-2.0",
+   "exercises": "Hugo: {{< shortcode >}} and {{% shortcode %}} calls, front matter, nested lists"
+  },
+  {
+   "id": "art-of-command-line",
+   "kind": "md",
+   "name": "README.md",
+   "url": "https://raw.githubusercontent.com/jlevy/the-art-of-command-line/6b50745d2e788add2e8f1ed29010e72659a9a074/README.md",
+   "license": "CC-BY-SA-4.0",
+   "exercises": "a long nested list: items with several paragraphs and code blocks inside them, inline code everywhere"
+  },
+  {
+   "id": "jupyter-book-math",
+   "kind": "md",
+   "name": "math.md",
+   "url": "https://raw.githubusercontent.com/jupyter-book/jupyter-book/11acb1bbdd51c23ae14663daf0b7d4a0fd1c9d0e/docs/authoring/math.md",
+   "license": "BSD-3-Clause",
+   "exercises": "MyST: {math} roles and directives, labeled $$ equations, ::: fences, front matter"
+  },
+  {
+   "id": "mystnb-text-notebooks",
+   "kind": "md",
+   "name": "text-notebooks.md",
+   "url": "https://raw.githubusercontent.com/executablebooks/MyST-NB/23b1747ff9b7e408244c62dd3981238ea193b25a/docs/authoring/text-notebooks.md",
+   "license": "BSD-3-Clause",
+   "exercises": "a Jupyter text notebook (MyST): jupytext front matter, {code-cell} fences, +++ cell breaks"
+  },
+  {
+   "id": "mystnb-glue",
+   "kind": "md",
+   "name": "glue.md",
+   "url": "https://raw.githubusercontent.com/executablebooks/MyST-NB/23b1747ff9b7e408244c62dd3981238ea193b25a/docs/render/glue.md",
+   "license": "BSD-3-Clause",
+   "exercises": "a Jupyter text notebook (MyST): {code-cell} with options, {glue} roles, tables of roles"
+  },
+  {
+   "id": "obsidian-tasks-dates",
+   "kind": "md",
+   "name": "Dates.md",
+   "url": "https://raw.githubusercontent.com/obsidian-tasks-group/obsidian-tasks/cc2afa8d77767858fb6014cae1cf03c4b6d0b44c/docs/Getting%20Started/Dates.md",
+   "license": "MIT",
+   "exercises": "an Obsidian note: [[wiki links]] with headings and aliases, > [!tip] callouts, emoji fields, properties"
+  },
+  {
+   "id": "obsidian-tasks-recurring",
+   "kind": "md",
+   "name": "Recurring Tasks.md",
+   "url": "https://raw.githubusercontent.com/obsidian-tasks-group/obsidian-tasks/cc2afa8d77767858fb6014cae1cf03c4b6d0b44c/docs/Getting%20Started/Recurring%20Tasks.md",
+   "license": "MIT",
+   "exercises": "an Obsidian note: [[#heading]] links, callouts, task lines in code, one sentence per line"
+  },
+  {
+   "id": "fastcore-readme",
+   "kind": "md",
+   "name": "README.md",
+   "url": "https://raw.githubusercontent.com/AnswerDotAI/fastcore/9d2e1395ca4c304189a62a54701ef6107d5988dd/README.md",
+   "license": "Apache-2.0",
+   "exercises": "a README exported from a Jupyter notebook (nbdev): a GitHub > [!NOTE] alert with a heading inside, a 2,200-character line, ``` python fences"
+  },
+  {
+   "id": "nbdev-readme",
+   "kind": "md",
+   "name": "README.md",
+   "url": "https://raw.githubusercontent.com/fastai/nbdev/6292486965fc63a0e03e659b17435cce2c71c754/README.md",
+   "license": "Apache-2.0",
+   "exercises": "a README exported from a Jupyter notebook (nbdev): autogenerated comment, cell outputs, images"
+  },
+  {
+   "id": "jupytext-calysto",
+   "kind": "md",
+   "name": "Reference Guide for Calysto Scheme.md",
+   "url": "https://raw.githubusercontent.com/mwouts/jupytext/510ddde9abecd7893f7ea4dcc62a6aadb110df53/tests/data/notebooks/outputs/ipynb_to_md/Reference%20Guide%20for%20Calysto%20Scheme.md",
+   "license": "MIT",
+   "exercises": "a Jupyter notebook exported to Markdown (jupytext): YAML header with kernel metadata, code cells, HTML in cells"
+  },
+  {
+   "id": "asciidoctor-readme-adoc",
+   "kind": "txt",
+   "name": "README.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/asciidoctor/asciidoctor/30fb8cd5f7145c57274b04524ceaa99812f830e0/README.adoc",
+   "license": "MIT",
+   "exercises": "AsciiDoc saved as .txt: = and == headings, :attributes:, ---- listing blocks, link:url[text], * lists"
+  },
+  {
+   "id": "doom-getting-started-org",
+   "kind": "txt",
+   "name": "getting_started.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/doomemacs/doomemacs/59cdaa32ae933469bb6a1fb3cadee8a988c15968/docs/getting_started.org",
+   "license": "MIT",
+   "exercises": "org-mode saved as .txt: * headings, #+begin_src blocks, #+TITLE lines, [[links][text]], - lists"
+  },
+  {
+   "id": "emacs-news-29",
+   "kind": "txt",
+   "name": "emacs-news-29.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/emacs-mirror/emacs/4685782c211ecc74f3d48da928f646280c4ba017/etc/NEWS.29",
+   "license": "GPL-3.0-or-later",
+   "exercises": "an outline-mode NEWS file: * and ** and *** headings, +++ and --- markers, indented code, 4,400 lines"
+  },
+  {
+   "id": "pep8-rst",
+   "kind": "txt",
+   "name": "pep-0008.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/python/peps/aa5a2dfcd413f12be654b5a803be6c48102525f3/peps/pep-0008.rst",
+   "license": "Public domain",
+   "exercises": "reStructuredText saved as .txt: underlined headings, :: literal blocks indented, field list header"
+  },
+  {
+   "id": "hamlet",
+   "kind": "txt",
+   "name": "1524-0.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/GITenberg/Hamlet-Prince-of-Denmark_1524/a22cf334eff1f3d8920cd11a0979a649a38a02d1/1524-0.txt",
+   "twin": "https://raw.githubusercontent.com/GITenberg/Hamlet-Prince-of-Denmark_1524/a22cf334eff1f3d8920cd11a0979a649a38a02d1/1524-h/1524-h.htm",
+   "license": "Public domain (Project Gutenberg)",
+   "exercises": "a play (the edition its HTML twin is made from): SPEAKER. lines, verse rewrapped as prose, stage directions set in a space, act and scene headings"
+  },
+  {
+   "id": "the-raven",
+   "kind": "txt",
+   "name": "1065.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/GITenberg/The-Raven_1065/e3b93e001f4ac967e56caa735adfee82700af92d/1065.txt",
+   "twin": "https://raw.githubusercontent.com/GITenberg/The-Raven_1065/e3b93e001f4ac967e56caa735adfee82700af92d/1065-h/1065-h.htm",
+   "license": "Public domain (Project Gutenberg)",
+   "exercises": "a poem: indented stanzas, a deeper-indented refrain line, a title page of short centered lines"
+  },
+  {
+   "id": "ancient-mariner",
+   "kind": "txt",
+   "name": "151.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/GITenberg/The-Rime-of-the-Ancient-Mariner_151/49003c49191bb6288f8ad9da676bdd7bd1626b71/151.txt",
+   "twin": "https://raw.githubusercontent.com/GITenberg/The-Rime-of-the-Ancient-Mariner_151/49003c49191bb6288f8ad9da676bdd7bd1626b71/151-h/151-h.htm",
+   "license": "Public domain (Project Gutenberg)",
+   "exercises": "a long poem: indented verse, numbered parts, glosses"
+  },
+  {
+   "id": "christmas-carol",
+   "kind": "txt",
+   "name": "46-0.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/GITenberg/A-Christmas-Carol_46/b173bd3787848ecbded8d036ed9f5326c738da19/46-0.txt",
+   "twin": "https://raw.githubusercontent.com/GITenberg/A-Christmas-Carol_46/b173bd3787848ecbded8d036ed9f5326c738da19/46-h/46-h.htm",
+   "license": "Public domain (Project Gutenberg)",
+   "exercises": "a novella in UTF-8 with a BOM: title page, contents, STAVE headings, curly quotes"
+  },
+  {
+   "id": "elephants-dream-captions",
+   "kind": "txt",
+   "name": "captions.en.txt",
+   "encoding": "utf-8",
+   "lines": true,
+   "url": "https://raw.githubusercontent.com/videojs/video.js/6fe68e5dad6853d8f0eaf45534873607c1b32277/docs/examples/elephantsdream/captions.en.vtt",
+   "license": "Apache-2.0 (Video.js); the film's words CC-BY-2.5 (Blender Foundation)",
+   "exercises": "subtitles saved as .txt (WebVTT): cue numbers, timing lines, one or two text lines per cue"
+  },
+  {
+   "id": "elephants-dream-descriptions",
+   "kind": "txt",
+   "name": "descriptions.en.txt",
+   "encoding": "utf-8",
+   "lines": true,
+   "url": "https://raw.githubusercontent.com/videojs/video.js/6fe68e5dad6853d8f0eaf45534873607c1b32277/docs/examples/elephantsdream/descriptions.en.vtt",
+   "license": "Apache-2.0 (Video.js); the film's words CC-BY-2.5 (Blender Foundation)",
+   "exercises": "subtitles saved as .txt (WebVTT, CRLF): long description cues"
+  },
+  {
+   "id": "country-codes-csv",
+   "kind": "txt",
+   "name": "country-codes.txt",
+   "encoding": "utf-8",
+   "lines": true,
+   "url": "https://raw.githubusercontent.com/datasets/country-codes/2e9d6498a0456f4afc2f6cf367d1e12a9ed4afe1/data/country-codes.csv",
+   "license": "ODC-PDDL-1.0",
+   "exercises": "CSV saved as .txt: 56 columns, quoted fields with commas, names in many scripts, 1,480-character rows"
+  },
+  {
+   "id": "comma-survey-csv",
+   "kind": "txt",
+   "name": "comma-survey.txt",
+   "encoding": "utf-8",
+   "lines": true,
+   "url": "https://raw.githubusercontent.com/fivethirtyeight/data/4c1ff5e3aef1816ae04af63218015066e186c147/comma-survey/comma-survey.csv",
+   "license": "CC-BY-4.0",
+   "exercises": "CSV saved as .txt: survey answers in quoted sentences, 1,129 rows"
+  },
+  {
+   "id": "jquery-min",
+   "kind": "txt",
+   "name": "jquery.min.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/jquery/jquery-dist/cfd8e3a885dca7b406791c1eed472af9dd717e8e/dist/jquery.min.js",
+   "license": "MIT",
+   "exercises": "a very long single line: 78 KB of minified code on one line"
+  },
+  {
+   "id": "utf8-demo",
+   "kind": "txt",
+   "name": "UTF-8-demo.txt",
+   "encoding": "utf-8",
+   "lines": true,
+   "url": "https://raw.githubusercontent.com/tmux/tmux/82abcd175cca43c671af3690cd0af74c4c75621c/tools/UTF-8-demo.txt",
+   "license": "CC-BY (Markus Kuhn); ISC (tmux)",
+   "exercises": "mixed scripts: Greek, Cyrillic, Georgian, Thai, Amharic, runes, Braille, math, box drawing set in columns"
+  },
+  {
+   "id": "emacs-tutorial-th",
+   "kind": "txt",
+   "name": "TUTORIAL.th.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/emacs-mirror/emacs/4685782c211ecc74f3d48da928f646280c4ba017/etc/tutorials/TUTORIAL.th",
+   "license": "GPL-3.0-or-later",
+   "exercises": "Thai (no spaces between words) mixed with Latin key names, indented commands"
+  },
+  {
+   "id": "emacs-tutorial-he",
+   "kind": "txt",
+   "name": "TUTORIAL.he.txt",
+   "encoding": "utf-8",
+   "url": "https://raw.githubusercontent.com/emacs-mirror/emacs/4685782c211ecc74f3d48da928f646280c4ba017/etc/tutorials/TUTORIAL.he",
+   "license": "GPL-3.0-or-later",
+   "exercises": "Hebrew (right to left) mixed with Latin key names, indented commands"
+  },
+  {
+   "id": "emacs-tutorial-ja-iso2022",
+   "kind": "txt",
+   "name": "TUTORIAL.ja.txt",
+   "encoding": "iso2022_jp",
+   "url": "https://raw.githubusercontent.com/emacs-mirror/emacs/4685782c211ecc74f3d48da928f646280c4ba017/etc/tutorials/TUTORIAL.ja",
+   "license": "GPL-3.0-or-later",
+   "exercises": "Japanese in ISO-2022-JP (7-bit, escape sequences switch the character set), mixed with Latin key names"
+  },
+  {
+   "id": "pride-paragraph-lines",
+   "kind": "txt",
+   "name": "pride.txt",
+   "derive": {
+    "from": "pride-and-prejudice",
+    "as": "paragraph-lines"
+   },
+   "license": "Public domain (Project Gutenberg)",
+   "exercises": "a novel with each paragraph on one line (an editor that wraps on screen): lines of 1,000 characters and more"
+  }
+ ]
+}

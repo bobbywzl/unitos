@@ -1,5 +1,6 @@
 import { JSDOM, VirtualConsole } from "jsdom";
 import { outboundFetch } from "@/lib/outbound-fetch";
+import { ancestorTest } from "@/lib/parse/dom-text";
 import { isFigureCaption } from "@/lib/parse/figure-audit";
 
 // The page-style bake (SPEC.md §2). The stored html never sees the page's
@@ -213,7 +214,11 @@ type Page = {
   rows: Map<Element, boolean>;
   budget: { styles: number; matches: number };
   columnPx: number;
+  // The class names, ids, and tag names the document holds, lowercased,
+  // read once at the first query (pageTokens).
+  tokens?: PageTokens;
 };
+type PageTokens = { classes: Set<string>; ids: Set<string>; tags: Set<string> };
 
 // ── The page's stylesheets ──────────────────────────────────────────────────
 
@@ -755,13 +760,66 @@ function candidateEntries(el: Element, index: RuleIndex): Entry[] {
   return out;
 }
 
+/** Every class name, id, and tag name of the document, lowercased. Read
+    after the stylesheets are inlined; the passes after add no element, no
+    class, and no id, so the sets stay a superset of what the page holds. */
+function pageTokens(document: Document, page: Page): PageTokens {
+  if (page.tokens) return page.tokens;
+  const tokens: PageTokens = { classes: new Set(), ids: new Set(), tags: new Set() };
+  // A static list: jsdom reads each index of a live collection through a
+  // proxy, many times slower over a whole page.
+  for (const el of document.querySelectorAll("*")) {
+    tokens.tags.add(el.localName.toLowerCase());
+    const id = el.getAttribute("id");
+    if (id) tokens.ids.add(id.toLowerCase());
+    const cls = el.getAttribute("class");
+    if (cls) for (const c of cls.split(/[\t\n\f\r ]+/)) if (c) tokens.classes.add(c.toLowerCase());
+  }
+  page.tokens = tokens;
+  return tokens;
+}
+
+/** A selector with a compound that needs a class, an id, or a tag no
+    element of the page carries matches nothing: the engine's query is
+    skipped. Read lowercased, as a quirks-mode page matches classes and ids,
+    so the test never rules out a selector the engine would match. A
+    selector with an escape, a namespace, or a quoted value is left to the
+    engine. Parse loop finding: most of a page's selectors name classes the
+    page never uses, and each query walked the whole document; on the web
+    benchmark's pages 25,000 queries matched nothing, and 3 in 4 of them
+    are now skipped. */
+function cannotMatch(document: Document, selector: string, page: Page): boolean {
+  if (/[\\|"']/.test(selector)) return false;
+  const tokens = pageTokens(document, page);
+  // Every compound outside parentheses and brackets must find an element:
+  // the last one is the matched element, each other one an ancestor or a
+  // sibling of it.
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i <= selector.length; i++) {
+    const ch = selector[i];
+    if (ch === "(" || ch === "[") depth++;
+    else if (ch === ")" || ch === "]") {
+      if (--depth < 0) return false;
+    } else if (i === selector.length || (depth === 0 && /[\s>+~]/.test(ch))) {
+      const compound = lastCompound(selector.slice(start, i));
+      start = i + 1;
+      if (!compound) continue;
+      if (compound.tag && !tokens.tags.has(compound.tag)) return true;
+      if (compound.id && !tokens.ids.has(compound.id.toLowerCase())) return true;
+      if (compound.classes.some((c) => !tokens.classes.has(c.toLowerCase()))) return true;
+    }
+  }
+  return false;
+}
+
 /** The elements one selector matches, queried once per page. A selector
     the engine does not know matches nothing. */
 function matchedSet(document: Document, selector: string, page: Page): Set<Element> {
   const cached = page.matched.get(selector);
   if (cached) return cached;
   let set: Set<Element>;
-  if (neverMatches(selector) || page.budget.matches <= 0) set = new Set();
+  if (neverMatches(selector) || page.budget.matches <= 0 || cannotMatch(document, selector, page)) set = new Set();
   else {
     try {
       const matched = document.querySelectorAll(selector);
@@ -1333,6 +1391,17 @@ function mayHide(value: string): boolean {
   return value === "none" || value === "hidden" || value === "collapse" || value.includes("var(");
 }
 
+// The attributes a lazy-loading script reads the picture's source from.
+const LAZY_SOURCE_SELECTOR = "[data-src], [data-srcset], [data-original], [data-lazy-src], [data-lazy-srcset]";
+
+/** A picture a script loads: it, or the img inside it, carries the source
+    in a data attribute or a lazy class. */
+export function isLazyPicture(el: Element): boolean {
+  const img = el.tagName.toLowerCase() === "img" ? el : el.querySelector("img");
+  if (!img) return false;
+  return img.matches(LAZY_SOURCE_SELECTOR) || el.matches(LAZY_SOURCE_SELECTOR) || /(?:^|\s|-|_)lazy/i.test(img.getAttribute("class") ?? "");
+}
+
 /** Mark what a desktop browser hides: display none, or visibility hidden on
     a short element. Hidden subtrees stay out of every later pass. */
 function markHidden(document: Document, rules: Rule[], page: Page) {
@@ -1341,8 +1410,24 @@ function markHidden(document: Document, rules: Rule[], page: Page) {
   for (const el of candidates) {
     const tag = el.tagName.toLowerCase();
     if (SKIP_TAGS.has(tag) || el.closest("svg")) continue;
+    // A lazy picture is hidden only until its script swaps the real source
+    // in (".lazyload { visibility: hidden }", "picture.lazysize img
+    // { opacity: 0 }"): the browser shows it, and so does the parse (web
+    // benchmark finding: a news story's figures each hidden this way, their
+    // captions read as paragraphs).
+    if ((tag === "img" || tag === "picture") && isLazyPicture(el)) continue;
     const style = styleOf(el, page);
-    if (!style) return;
+    if (!style) {
+      // Past the style budget: the element's own declarations still say
+      // display none, read without its ancestors' (no var() to resolve).
+      // The loop stopped here before, and every element after it showed:
+      // a page whose 12,500 hidden menu items came first read its hidden
+      // consent dialog as the article. Web benchmark finding: no page of
+      // either set reaches the budget here (every page's marks unchanged).
+      const own = declsOf(el, page).get("display")?.value.toLowerCase();
+      if (own === "none") el.setAttribute("data-unitos-hidden", "1");
+      continue;
+    }
     const display = ownValue(style, "display");
     if (display === "none") {
       el.setAttribute("data-unitos-hidden", "1");
@@ -1357,16 +1442,23 @@ function markHidden(document: Document, rules: Rule[], page: Page) {
 }
 
 /** Text alignment inherits: every block under a centered element is
-    centered until a nearer declaration says otherwise. */
+    centered until a nearer declaration says otherwise. A table's align
+    attribute places the table's box, not its text. A page with no doctype
+    renders in quirks mode, where a table starts its text at the start edge
+    whatever the alignment around it (HTML's rendering rules). Web
+    benchmark finding: a story set in a table's cell inside <div
+    align="center">, on a page with no doctype, read with every paragraph
+    centered. */
 function markAlignment(document: Document, rules: Rule[], page: Page) {
   const aligned = matchAll(document, selectorsDeclaring(rules, ["text-align"]), page);
   for (const el of document.querySelectorAll('[style*="text-align"], [align], center')) aligned.add(el);
   const ownAlign = new Map<Element, string | null>();
+  const quirksTable = (el: Element) => document.compatMode === "BackCompat" && el.tagName.toLowerCase() === "table";
   const alignOf = (el: Element): string | null => {
     const style = styleOf(el, page);
     let value = style ? ownValue(style, "text-align") : null;
     if (value === null) {
-      const attr = (el.getAttribute("align") ?? "").toLowerCase();
+      const attr = el.tagName.toLowerCase() === "table" ? "" : (el.getAttribute("align") ?? "").toLowerCase();
       if (attr) value = attr;
       else if (el.tagName.toLowerCase() === "center") value = "center";
     }
@@ -1387,6 +1479,7 @@ function markAlignment(document: Document, rules: Rule[], page: Page) {
         if (own === "center" || own === "right") mark(child, own);
         continue;
       }
+      if (quirksTable(child)) continue;
       mark(child, align);
     }
   };
@@ -1399,6 +1492,7 @@ function markAlignment(document: Document, rules: Rule[], page: Page) {
     for (let node = el.parentElement; node && outer === undefined; node = node.parentElement) {
       const own = ownAlign.get(node);
       if (own !== undefined && own !== null) outer = own;
+      else if (quirksTable(node)) outer = null;
     }
     if (outer === align) continue;
     mark(el, align);
@@ -1475,11 +1569,17 @@ function markStyles(document: Document, rules: Rule[], page: Page) {
 
 /** The page's prose: paragraphs, and the blocks pages set prose in without
     <p> (a div or span per paragraph). A bounded sample, visible only. */
+const SAMPLE_SKIP_TAGS = new Set(["svg", "nav", "header", "footer"]);
+
 function proseSample(document: Document): Element[] {
   const out: Element[] = [];
+  // isHidden(el) and el.closest("svg, nav, header, footer"), each ancestor
+  // asked once.
+  const hidden = ancestorTest((el) => el.hasAttribute("data-unitos-hidden"));
+  const chrome = ancestorTest((el) => SAMPLE_SKIP_TAGS.has(el.localName));
   for (const el of document.body.querySelectorAll("p, div, span, li")) {
     if (out.length >= SAMPLE_LIMIT) break;
-    if (isHidden(el) || el.closest("svg, nav, header, footer")) continue;
+    if (hidden(el) || chrome(el)) continue;
     if (el.tagName.toLowerCase() === "p") {
       if (textLength(el) >= PROSE_MIN_CHARS) out.push(el);
       continue;
@@ -2200,13 +2300,20 @@ function columnWidth(prose: Element[], page: Page): number {
     here fails — a figure without its look is the old behavior, never a
     missing figure. */
 export async function bakeFigureStyles(rawHtml: string, url: string): Promise<string> {
-  if (!/<(?:svg|img|link|style)[\s>]/i.test(rawHtml)) return rawHtml;
+  return (await bakeFigureDocument(rawHtml, url)).html;
+}
+
+/** The bake, with its document: the html it returns, and the jsdom it
+    built and baked, or null when it built none or gave up. A caller that
+    walks the page reads that document instead of parsing the html again. */
+export async function bakeFigureDocument(rawHtml: string, url: string): Promise<{ html: string; dom: JSDOM | null }> {
+  if (!/<(?:svg|img|link|style)[\s>]/i.test(rawHtml)) return { html: rawHtml, dom: null };
   try {
     // A fresh console with no listener: the page's stylesheets may hold
     // syntax jsdom's parser does not know, and that is not worth a log line.
     const dom = new JSDOM(rawHtml, { url, virtualConsole: new VirtualConsole() });
     const { document } = dom.window;
-    if (!document.body) return rawHtml;
+    if (!document.body) return { html: rawHtml, dom: null };
     await inlineStylesheets(document, url);
     const rules = collectRules(document);
     const page: Page = {
@@ -2242,8 +2349,8 @@ export async function bakeFigureStyles(rawHtml: string, url: string): Promise<st
     );
     for (const svg of [...svgs.filter((s) => !isHidden(s)), ...svgs.filter(isHidden)]) bakeSvg(svg, page, budget);
     for (const img of [...document.querySelectorAll("img")]) bakeImage(img, page);
-    return dom.serialize();
+    return { html: dom.serialize(), dom };
   } catch {
-    return rawHtml;
+    return { html: rawHtml, dom: null };
   }
 }

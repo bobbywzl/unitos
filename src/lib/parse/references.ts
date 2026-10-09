@@ -315,16 +315,20 @@ function withoutHash(url: URL): string {
     tokens, and remove the reference list from the DOM. Returns the references
     in document order — reference-list entries first (formalCount of them),
     then entries created from hyperlinks in the text. Blocks lift their
-    citation spans later via takeCitations. */
+    citation spans later via takeCitations. With keepLists (a file: a
+    Markdown or text file), no list is taken out: a file's reference list
+    is its blocks, as the author set them, and only its links are
+    citations. */
 export function prepareCitations(
   document: Document,
   root: Element,
   pageUrl: string,
+  opts: { keepLists?: boolean } = {},
 ): { references: DocumentReference[]; formalCount: number } {
   const captured = new Set<Element>();
-  const groups = [...hintedLists(root, captured), ...headedLists(root, captured)];
+  const groups = opts.keepLists ? [] : [...hintedLists(root, captured), ...headedLists(root, captured)];
   // Explicit containers can sit outside the content root (a sibling of <article>).
-  if (groups.length === 0 && root !== document.body) {
+  if (groups.length === 0 && root !== document.body && !opts.keepLists) {
     groups.push(...hintedLists(document.body, captured));
   }
 

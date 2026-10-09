@@ -14,7 +14,7 @@ import { splitTag } from "./math";
 import { wordsOf } from "./text";
 import { columnEdge } from "./layout";
 import type { InkBand, Rect } from "./paint";
-import type { Flat } from "./metrics";
+import type { Flat, MathItem } from "./metrics";
 
 // What the page editor draws around an import's words, read from its own
 // stylesheets (components/docs, KaTeX's) and the import's attributes, set
@@ -289,12 +289,36 @@ export function displayGaps(rich: RichNode, parse: Doc, pdf: PdfText, bandsOf: (
     const column = pdf.lines.filter((l) => l.page === at.page && Math.min(l.right, x2) > Math.max(l.left, x1) && l.bottom > y1 - 60 && l.top < y2 + 60);
     const left = Math.max(0, Math.min(x1, ...column.map((l) => l.left)) - 2);
     const width = Math.min(size.width, Math.max(x2, ...column.map((l) => l.right)) + 2);
-    const bands = bandsOf(at.page, { x1: left, x2: width, y1: Math.max(0, y1 - 45), y2: Math.min(size.height, y2 + 45) });
-    const own = bands.filter((b) => b.bottom > y1 && b.top < y2);
+    const [top, bottom] = [Math.max(0, y1 - 45), Math.min(size.height, y2 + 45)];
+    const bands = bandsOf(at.page, { x1: left, x2: width, y1: top, y2: bottom });
+    let own = bands.filter((b) => b.bottom > y1 && b.top < y2);
     if (own.length === 0) return;
+    let [higher, lower] = [bands, bands];
+    // Ink that runs on past the display's region joins it to a neighbor: the
+    // line over it where the display stands beside that line's foot (a
+    // quantum mechanics book's "with normalization" and the display under
+    // it read as one band, and the space over the display as 28 pt where it
+    // is 4), or a frame's side down to the frame's rule (a listing's output:
+    // chemformula p. 5 read 14 pt under the display where the line stands
+    // 25 pt under it). The display's ink is then read in its own width, and
+    // each neighbor in its own: the text line next over and under that ink.
+    if (own[0].top < y1 - 3 || own[own.length - 1].bottom > y2 + 3) {
+      own = bandsOf(at.page, { x1: Math.max(0, x1 - 1), x2: Math.min(size.width, x2 + 1), y1: top, y2: bottom }).filter((b) => b.bottom > y1 && b.top < y2);
+      if (own.length === 0) return;
+      const [a, b] = [own[0].top, own[own.length - 1].bottom];
+      const near = pdf.lines.filter((l) => l.page === at.page && l.right > left && l.left < width && !(l.right > x1 && l.left < x2 && l.bottom > y1 && l.top < y2));
+      const up = near.filter((l) => (l.top + l.bottom) / 2 < a && l.bottom > top).sort((m, n) => n.bottom - m.bottom)[0];
+      const down = near.filter((l) => (l.top + l.bottom) / 2 > b && l.top < bottom).sort((m, n) => m.top - n.top)[0];
+      const inLine = (l: (typeof near)[number], from: number, to: number) => bandsOf(at.page, { x1: l.left - 0.5, x2: l.right + 0.5, y1: Math.max(from, l.top - 1), y2: Math.min(to, l.bottom + 1) });
+      higher = up ? inLine(up, top, a - 0.5) : [];
+      lower = down ? inLine(down, b + 0.5, bottom) : [];
+    }
     const [inkTop, inkBottom] = [own[0].top, own[own.length - 1].bottom];
-    const above = bands.filter((b) => b.bottom <= inkTop - 0.5).at(-1);
-    const below = bands.find((b) => b.top >= inkBottom + 0.5);
+    // A band under 1.5 pt tall, or under a point of ink across, is a rule or
+    // a frame's side, no line.
+    const line = (b: InkBand) => b.bottom - b.top >= 1.5 && (b.ink ?? Infinity) >= 1;
+    const above = higher.filter((b) => b.bottom <= inkTop - 0.5 && line(b)).at(-1);
+    const below = lower.find((b) => b.top >= inkBottom + 0.5 && line(b));
     const judge = (page: number | null, drawnPt: number | null, what: string) => {
       if (page === null || drawnPt === null || page > 36) return;
       edges++;
@@ -359,6 +383,9 @@ export function displayDrawn(rich: RichNode, index: number): { above: number | n
 
 // ── A table row's height ────────────────────────────────────────────────────
 
+/** TeX that stands taller than its line: a fraction, a binomial, a root, a big operator, an array. */
+const STACKED_TEX_RE = /\\(?:[dt]?frac|[dt]?binom|sqrt|sum|prod|coprod|int|oint|iint|bigcup|bigcap|bigoplus|bigotimes|begin|overset|underset|stackrel|substack|over)\b/;
+
 export type RowHeights = { tables: number; right: number; score: number | null; misses: string[] };
 
 /** The height the page editor draws a table row of one line in: the cell
@@ -418,8 +445,15 @@ export function rowHeights(cand: Flat, placed: number[][], pdf: PdfText): RowHei
         return n > 0;
       });
     };
+    // A row with a stacked formula in a cell (a fraction, a binomial, a root, a big operator, an array) is not
+    // measured: the page editor draws the row as tall as the formula, near twice the line for a fraction, and
+    // so does the page, where this measure knows the line's height alone (parse loop finding: ICML's Table 1
+    // sets 1/2 and 3/2 in its cells; its rows stand 17 pt apart on the page, and the measure drew them at the
+    // line's 12 pt). A formula's cell has no words of its own, so it is not among the row's placed units.
+    const stacked = (m: MathItem) => STACKED_TEX_RE.test(m.latex ?? "") || m.mathml !== undefined;
+    const formulaRows = new Set(cand.math.filter((m) => !m.display && m.block === b && stacked(m)).map((m) => cand.units[m.unit].row));
     for (const [row, units] of [...rows].sort((a, c) => a[0] - c[0])) {
-      if (!units.every(oneLine)) continue;
+      if (!units.every(oneLine) || formulaRows.has(row)) continue;
       const lines = units.map((u) => pdf.lines[placed[u][0]]);
       // parse loop finding: a grid of small numbers ("0", "1.0") places a cell on another row's line that
       // holds the same words (tracemonkey's Figure 13 measured its 10 pt rows 20 pt apart): the row stands
@@ -433,7 +467,12 @@ export function rowHeights(cand: Flat, placed: number[][], pdf: PdfText): RowHei
     const pairs = tops.slice(1).flatMap((t, k) => (t.row === tops[k].row + 1 && t.page === tops[k].page && t.top > tops[k].top ? [{ page: t.top - tops[k].top, drawn: Math.max(line, least[tops[k].row] ?? 0) }] : []));
     if (pairs.length < 2) return;
     const median = (values: number[]) => values.sort((a, c) => a - c)[Math.floor(values.length / 2)];
-    const page = median(pairs.map((p) => p.page));
+    // The page's step is the lower middle of an even count: a step across a rule (booktabs's rule under the
+    // header) stands taller than the rows' own step, never shorter, so of a table of three rows the lower of
+    // the two steps is the rows' own (parse loop finding: Language Science Press's Table 3, a header and two
+    // rows, steps 18.8 pt over its rule and 13.5 pt between the rows; the measure took 18.8 pt, where Table 4,
+    // the same header over four rows, took 13.5 pt).
+    const page = pairs.map((p) => p.page).sort((a, c) => a - c)[Math.floor((pairs.length - 1) / 2)];
     const drawnPt = median(pairs.map((p) => p.drawn));
     tables++;
     if (Math.abs(drawnPt - page) <= 0.2 * page) right++;

@@ -47,6 +47,8 @@ export type FurnitureDrop = { page: number; line: Line; why: "repeat" | "page nu
 // A period may close the number: the 10-K prints "53." at each foot, and
 // its 97 page numbers stayed in the text.
 const LONE_NUMBER_RE = /^[-–—\s]*(?:(?:page|p\.)\s*)?(\d{1,4}|[ivxlc]{1,7})\.?(?:\s*(?:of|\/)\s*\d{1,4})?[-–—\s]*$/i;
+// A page's number named as one: "Page 2", "Page 2 of 6".
+const PAGE_LABEL_RE = /^page\s+(\d{1,4})(?:\s+of\s+\d{1,4})?$/i;
 // The notice a book or a thesis prints on a page it leaves empty: the only
 // words of their page on six pages of the NPS thesis.
 const BLANK_PAGE_RE = /^\(?(?:this page (?:is |has been )?(?:intentionally|deliberately) left blank|(?:page )?intentionally left blank)\.?\)?$/i;
@@ -65,15 +67,49 @@ export function findFurniture(pages: Line[][], pageHeights: number[], pageNumber
   // letter or digit (the OCR read the paper's edge or a smudge as "—" or
   // "'") stood over the running head or under the page number, and they
   // were no first or last row of their page (NASA SP-4408).
+  // So does a row of three letters or fewer and no digit that stands in the
+  // margin, clear of every other line of its page, or spells a word no
+  // other line of the document holds: the OCR read the dark edge of a
+  // scanned report's binding as "V", "C.", "rI", and "SEI" under the text
+  // (DTIC's Helicopter Design Datcom).
   const specks: Row[] = [];
+  const said = new Map<string, number>();
+  for (const row of rows.flat()) for (const w of new Set(wordsOf(row.text))) said.set(w, (said.get(w) ?? 0) + 1);
   rows.forEach((pageRows, p) => {
     if (!scans?.[p]) return;
     const bare = (r: Row | undefined) => r !== undefined && r.text.length <= 8 && !/[\p{L}\p{N}]/u.test(r.text);
-    while (bare(pageRows[0])) specks.push(pageRows.shift()!);
-    while (bare(pageRows[pageRows.length - 1])) specks.push(pageRows.pop()!);
+    // A speck stands clear of the page's lines, never of the other specks
+    // beside it: DTIC's p. 9 sets "I", "ji", and "mi" one above another
+    // in the binding's margin, each in line with the next.
+    const short = (r: Row) => r.text.replace(/\s/g, "").length <= 3 && !/\p{N}/u.test(r.text);
+    const mark = (r: Row | undefined) => {
+      if (r === undefined || !short(r)) return false;
+      const others = pageRows.filter((o) => o !== r && !short(o)).flatMap((o) => o.lines);
+      if (others.length === 0) return false;
+      const [x, xEnd] = [Math.min(...r.lines.map((l) => l.x)), Math.max(...r.lines.map((l) => l.xEnd))];
+      const margin = xEnd < Math.min(...others.map((l) => l.x)) - r.size * 0.5 || x > Math.max(...others.map((l) => l.xEnd)) + r.size * 0.5;
+      const words = wordsOf(r.text);
+      return margin || (words.length > 0 && words.every((w) => said.get(w) === 1));
+    };
+    // So is a row of marks: three or more, no digit, no word of three
+    // letters, and three in four of them a lone letter or none (parse loop
+    // finding: the OCR read the paper's edge under DTIC's text as ", I, i I
+    // I I I I I I i ........" on p. 14, and the dashes of a ruler as ",•
+    // ----. - -- --- -" on p. 17; each read as a paragraph mid-page).
+    const marks = (r: Row | undefined) => {
+      if (r === undefined || /\p{N}|\p{L}{3}/u.test(r.text)) return false;
+      const tokens = r.text.split(" ");
+      return tokens.length >= 3 && tokens.filter((t) => (t.match(/\p{L}/gu) ?? []).length <= 1).length * 4 >= tokens.length * 3;
+    };
+    const speck = (r: Row | undefined) => bare(r) || mark(r) || marks(r);
+    while (speck(pageRows[0])) specks.push(pageRows.shift()!);
+    while (speck(pageRows[pageRows.length - 1])) specks.push(pageRows.pop()!);
   });
   const { lead, bodySize } = measures(pages, rows);
-  const candidates = rows.flatMap((pageRows) => candidatesOf(pageRows, lead));
+  // A ruled table stands in the flow as one line without words (placeTables):
+  // its own lines' baselines say how far it is from a row beside it.
+  const tables = pages.map((lines) => lines.flatMap((l) => (l.table && l.table.lines.length > 0 ? [{ top: Math.max(...l.table.lines.map((t) => t.y)), bottom: Math.min(...l.table.lines.map((t) => t.y)) }] : [])));
+  const candidates = rows.flatMap((pageRows, p) => candidatesOf(pageRows, lead, tables[p]));
   const strong = candidates.filter((c) => c.strong);
   const strongRows = new Set(strong.map((c) => c.row));
   const pageCount = pages.length;
@@ -156,16 +192,33 @@ export function findFurniture(pages: Line[][], pageHeights: number[], pageNumber
   // the CS 229 refresher sets its 10 pt head and foot over 8 pt text, and
   // both stayed in the text of its two pages).
   const parted = (r: Row) => r.lines.reduce((n, l) => n + Math.max(1, l.cells.length), 0) >= 2 && Math.min(r.top, r.bottom) < (r.top + r.bottom) * 0.08;
+  // A row set larger than that is a head still when it repeats on pages
+  // that are seldom next to each other (a quarter of them at most): a
+  // magazine sets its section's head on every left-hand page over 7.5 pt
+  // text, where a deck repeats a title on the slides that run on, one
+  // after another (parse loop finding: The MagPi's 12 pt "Project
+  // showcase" stayed in the text as a heading on each left-hand page).
   const repeated = (c: Candidate): boolean => {
-    if (c.row.size > bodySize * (parted(c.row) ? 1.3 : 1.15) || (c.row.key.match(/\p{L}/gu)?.length ?? 0) < 3) return false;
+    if ((c.row.key.match(/\p{L}/gu)?.length ?? 0) < 3) return false;
+    const large = c.row.size > bodySize * (parted(c.row) ? 1.3 : 1.15);
     const on = new Set<number>([c.row.page]);
     for (const s of strong) {
       if (s.side !== c.side || on.has(s.row.page)) continue;
       if (same(c.row, s.row) && closeSize(c.row, s.row)) on.add(s.row.page);
-      if (on.size >= needed) return true;
+      if (!large && on.size >= needed) return true;
     }
-    return false;
+    if (!large || on.size < needed) return false;
+    const beside = [...on].filter((p) => on.has(p - 1) || on.has(p + 1)).length;
+    return beside * 4 <= on.size;
   };
+
+  // A cell that says it is the page's number, "Page 2" or "Page 2 of 6",
+  // with the page's own number in the PDF, needs no other page: a form of
+  // two pages sets it in its second page's head beside the form's name, and
+  // its first page carries no number to repeat (parse bench finding: IRS
+  // Form 1040's "Form 1040 (2024)   Page 2" stayed in the text).
+  const namesPage = (row: Row): boolean =>
+    row.lines.some((l) => l.cells.some((cell) => Number(PAGE_LABEL_RE.exec(cell.text.trim())?.[1]) === row.page + 1));
 
   // 0. The notice of a page left blank, its page's only words but its number.
   for (const pageRows of rows) {
@@ -177,10 +230,14 @@ export function findFurniture(pages: Line[][], pageHeights: number[], pageNumber
   for (const c of strong) {
     if (dropped.has(c.row) || !outside(c)) continue;
     if (c.row.lone) dropped.set(c.row, "page number");
-    else if (tracks(c.row) >= needed) dropped.set(c.row, "page number");
+    else if (tracks(c.row) >= needed || namesPage(c.row)) dropped.set(c.row, "page number");
     else if (repeated(c)) dropped.set(c.row, "repeat");
     else if (c.side === "foot" && CONTINUED_RE.test(c.row.text)) dropped.set(c.row, "continued");
   }
+  // A first or last row with a cell that names its own page needs no gap
+  // either: the 1040 sets "Form 1040 (2024)   Page 2" right over the rules
+  // of its second page's table.
+  for (const c of candidates) if (!c.strong && !dropped.has(c.row) && namesPage(c.row) && outside(c)) dropped.set(c.row, "page number");
 
   // 2. Candidates at the place of the furniture of other pages: the same
   // distance from the edge, size, and weight. A strong one is short and no
@@ -244,16 +301,49 @@ export function findFurniture(pages: Line[][], pageHeights: number[], pageNumber
     if (mark && outside(c)) dropped.set(c.row, "mark");
   }
 
+  // 5. A long table's "Continued on next page" as its page's last line of
+  // text, over the foot the steps above dropped: the other pages' text
+  // reaches lower, so it stood inside them (parse loop finding: NIST AI
+  // 100-1 sets it under each page of a table, over "Page 22", and it
+  // stayed in the text seven times).
+  for (const pageRows of rows) {
+    const last = [...pageRows].reverse().find((r) => !dropped.has(r));
+    if (last && CONTINUED_RE.test(last.text)) dropped.set(last, "continued");
+  }
+
+  // A table's head repeats on each page the table runs over, under the
+  // page's number: it is no running head. Its cells stand over the cells of
+  // the row under it, each at its column's start or set in from it by a few
+  // ems (parse loop finding: the DTIC Datcom's "DESCRIPTION LIMITATIONS AND
+  // MAIN EFFECTS ON DATA" tops seven pages of Table III, and six dropped).
+  for (const pageRows of rows) {
+    pageRows.forEach((row, k) => {
+      const why = dropped.get(row);
+      if ((why === "repeat" || why === "place" || why === "cell") && headsTable(row, pageRows[k + 1])) dropped.delete(row);
+    });
+  }
+
   const drops: FurnitureDrop[] = [];
   for (const row of specks) dropped.set(row, "mark");
   for (const [row, why] of dropped) for (const line of row.lines) drops.push({ page: row.page, line, why });
 
-  // 5. A line of one to four digits in the top or bottom 8% of its page.
+  // 6. A line of one to four digits in the top or bottom 8% of its page.
+  // One between two of TeX's sized delimiters of a line just over or under
+  // it is their lower or upper row (parse loop finding: the probability
+  // cheatsheet's binomial (n 2) at a page's foot lost its "2", and the
+  // formula was a crop).
   const gone = new Set(drops.map((d) => d.line));
+  const delimiters = (l: Line) => l.items.flatMap((i) => i.glyphs ?? []).filter((g) => g.family === "omx" && g.code < 0x30);
+  const fenced = (line: Line, lines: Line[]) =>
+    lines.some((o) => {
+      if (o === line || Math.abs(o.y - line.y) > line.size * 1.5) return false;
+      const ds = delimiters(o);
+      return ds.some((g) => g.x + g.w <= line.x + line.size * 0.2 && line.x - g.x < line.size * 2) && ds.some((g) => g.x >= line.xEnd - line.size * 0.2 && g.x - line.xEnd < line.size * 2);
+    });
   for (const [p, lines] of pages.entries()) {
     const h = pageHeights[p];
     for (const line of lines) {
-      if (gone.has(line) || !/^\d{1,4}\.?$/.test(line.text) || (line.y >= h * 0.08 && line.y <= h * 0.92)) continue;
+      if (gone.has(line) || !/^\d{1,4}\.?$/.test(line.text) || (line.y >= h * 0.08 && line.y <= h * 0.92) || fenced(line, lines)) continue;
       drops.push({ page: pageNumbers?.[p] ?? p, line, why: "band" });
     }
   }
@@ -389,15 +479,46 @@ function measures(pages: Line[][], rows: Row[][]): { lead: number; bodySize: num
 
 // A page's first and last rows. Up to two rows each: the Supreme Court sets
 // its head in two ("2 TRUMP v. ANDERSON", then "Per Curiam").
-function candidatesOf(rows: Row[], lead: number): Candidate[] {
+// A row of two cells or more over a row of as many cells: the first cells
+// start within two ems of each other, each later cell of the head within
+// an em left and six ems right of the cell under it.
+function headsTable(row: Row, next: Row | undefined): boolean {
+  if (next === undefined) return false;
+  const cellsOf = (r: Row) => r.lines.flatMap((l) => l.cells).sort((a, b) => a.x - b.x);
+  const [head, under] = [cellsOf(row), cellsOf(next)];
+  if (head.length < 2 || head.length !== under.length) return false;
+  const em = row.size;
+  return head.every((cell, k) => {
+    const dx = cell.x - under[k].x;
+    return k === 0 ? Math.abs(dx) <= em * 2 : dx >= -em && dx <= em * 6;
+  });
+}
+
+// tables: the page's ruled tables, by their top and bottom baselines. A
+// table between a page's last row and the row over it is the text the row
+// stands under: the row is set apart only by its own gap to the table's
+// last line (parse loop finding: IRS Form 1040's income lines read as a
+// table, and its first page's foot, 14 pt under them, read as set apart
+// from the filing status 440 pt up, and dropped).
+function candidatesOf(rows: Row[], lead: number, tables: { top: number; bottom: number }[] = []): Candidate[] {
   const n = rows.length;
   if (n === 0) return [];
-  if (n === 1) return [{ row: rows[0], side: "head", strong: true }, { row: rows[0], side: "foot", strong: true }];
   const out: Candidate[] = [];
   const apart = (a: Row, b: Row) => Math.abs(a.y - b.y) > 1.4 * lead;
   const close = (a: Row, b: Row) => Math.abs(a.y - b.y) <= 1.2 * lead;
   for (const side of ["head", "foot"] as const) {
     const [r0, r1, r2] = side === "head" ? [rows[0], rows[1], rows[2]] : [rows[n - 1], rows[n - 2], rows[n - 3]];
+    // The table's line next to the row, between it and the next row.
+    const next = side === "head" ? tables.filter((t) => t.top < r0.y && (!r1 || t.top > r1.y)).map((t) => t.top) : tables.filter((t) => t.bottom > r0.y && (!r1 || t.bottom < r1.y)).map((t) => t.bottom);
+    if (next.length > 0) {
+      const edge = side === "head" ? Math.max(...next) : Math.min(...next);
+      out.push({ row: r0, side, strong: Math.abs(r0.y - edge) > 1.4 * lead });
+      continue;
+    }
+    if (n === 1) {
+      out.push({ row: r0, side, strong: true });
+      continue;
+    }
     if (apart(r0, r1)) {
       out.push({ row: r0, side, strong: true });
       if (r2) out.push({ row: r1, side, strong: apart(r1, r2) });

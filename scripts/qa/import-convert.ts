@@ -80,6 +80,8 @@ type Fixture = {
   titleFont?: TextFont;
   titleAlign?: "center" | "right";
   titlePage?: number;
+  /** A synthetic page's headline: the Title's words, once. */
+  expectTitle?: string;
   parseMs: number;
 };
 type Converted = Awaited<ReturnType<typeof richTextFromImport>>;
@@ -129,7 +131,7 @@ function defaultSources(): string[] {
         .sort()
         .map((f) => join("scripts/eval/fixtures", f))
     : [];
-  return [...fromList, ...markdown, "synthetic:pdf", "synthetic:url", "synthetic:markdown"];
+  return [...fromList, ...markdown, "synthetic:pdf", "synthetic:url", "synthetic:markdown", "synthetic:html-h1", "synthetic:html-site", "synthetic:html-kicker", "synthetic:html-roofline"];
 }
 
 // ── Text helpers ────────────────────────────────────────────────────────────
@@ -154,22 +156,38 @@ const clip = (s: string, n = 70) => {
 const unescapeHtml = (s: string) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
 const INLINE_MATH_HTML = /<span data-type="inline-math" data-latex="([^"]*)">([^<]*)<\/span>/g;
 /** A table's inline formulas over its text, from its html (whose DOM text
-    is its text, SPEC.md §5): the converter makes a cell's formulas, and its
+    is its text, SPEC.md §5; a web page's or a Markdown file's table sets its
+    cells apart in its text with a tab and its rows with a newline, which its
+    html does not hold): the converter makes a cell's formulas, and its
     caption's, inline equations (lib/docs/import-table.ts). */
 function tableMath(b: ParsedBlock): { start: number; end: number; words: string }[] {
-  const out: { start: number; end: number; words: string }[] = [];
-  let at = 0;
+  const found: { start: number; end: number; words: string }[] = [];
+  let html = "";
   for (const m of (b.html ?? "").matchAll(/<span data-type="inline-math" data-latex="([^"]*)">([^<]*)<\/span>|<[^>]+>|[^<]+/g)) {
     if (m[1] === undefined) {
-      if (!m[0].startsWith("<")) at += unescapeHtml(m[0]).length;
+      if (!m[0].startsWith("<")) html += unescapeHtml(m[0]);
       continue;
     }
     const tex = unescapeHtml(m[1]).trim();
-    const end = at + unescapeHtml(m[2]).length;
-    if (tex && tex.length <= 2000) out.push({ start: at, end, words: mathWords(tex) });
-    at = end;
+    const start = html.length;
+    html += unescapeHtml(m[2]);
+    if (tex && tex.length <= 2000) found.push({ start, end: html.length, words: mathWords(tex) });
   }
-  return out;
+  // The html's offsets onto the text: a character the two share moves both;
+  // white space only one of them holds moves that one.
+  const at = new Array<number>(html.length + 1);
+  let j = 0;
+  for (let i = 0; i < html.length; i++) {
+    while (j < b.text.length && b.text[j] !== html[i] && /\s/.test(b.text[j])) j++;
+    at[i] = j;
+    if (b.text[j] === html[i]) j++;
+  }
+  at[html.length] = j;
+  return found.flatMap((m) => {
+    const start = at[m.start];
+    const end = at[m.end - 1] + 1;
+    return b.text.slice(start, end) === html.slice(m.start, m.end) ? [{ start, end, words: m.words }] : [];
+  });
 }
 /** Where a table's caption line ends in its text (-1 with no caption line):
     a PDF's or a Word file's table opens its text with its caption's line; a
@@ -1218,6 +1236,19 @@ async function checkFixture(f: Fixture): Promise<Report> {
       "one Title",
       `${titles.length} Title paragraph(s)${title ? ` "${clip(inlineText(title), 50)}" at ${at}${titleAt >= 0 ? ` (the parse's heading ${titleAt}, promoted where it stands)` : ""}` : ""}`,
     );
+    // A page whose og:title sets its site's name, or another dash than its
+    // h1 (lib/parse/url.ts pageTitle): the Title is the headline, once. No
+    // heading is the headline, and no line is a kicker and the headline.
+    if (f.expectTitle !== undefined) {
+      const letters = (t: string) => t.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+      const headline = letters(f.expectTitle);
+      const repeats = top.filter((n) => n !== title && (n.type === "heading" ? letters(inlineText(n)) === headline : letters(inlineText(n)).endsWith(headline)));
+      check(
+        title !== undefined && norm(inlineText(title)) === norm(f.expectTitle) && repeats.length === 0,
+        "the Title is the page's headline, once, without the site's name",
+        `"${clip(title ? inlineText(title) : "", 60)}"${repeats.length ? `; ${repeats.length} line(s) repeat it` : ""}`,
+      );
+    }
     if (at > kickers) note("the Title is not first on the page", `${at} paragraph(s) above it, the first "${clip(inlineText(top[0]), 60)}"`);
     const nextHeading = top.slice(at + 1).find((n) => n.type === "heading" || n.attrs?.docStyle === "title");
     const firstText = top.slice(at + 1).find((n) => norm(inlineText(n)));
@@ -1565,7 +1596,22 @@ async function checkFixture(f: Fixture): Promise<Report> {
     );
   }
   // Citations: the mark, derived into Block.citations.
-  const citeWant = f.blocks.filter((b) => b.type !== "FIGURE").flatMap((b) => (b.citations ?? []).map((c) => `${c.refId} ${norm(c.quotedText)}`));
+  // An inline equation takes no mark (lib/docs/import.ts inline): a citation
+  // over an inline formula quotes its words around the formula.
+  const citedWords = (b: ParsedBlock, c: { start: number; end: number; quotedText: string }) => {
+    if (b.text.slice(c.start, c.end) !== c.quotedText) return c.quotedText;
+    let out = "";
+    let at = c.start;
+    for (const m of keptMath(b)) {
+      if (m.end <= c.start || m.start >= c.end) continue;
+      out += `${b.text.slice(at, Math.max(at, m.start))} `;
+      at = Math.max(at, Math.min(c.end, m.end));
+    }
+    return out + b.text.slice(at, c.end);
+  };
+  const citeWant = f.blocks
+    .filter((b) => b.type !== "FIGURE")
+    .flatMap((b) => (b.citations ?? []).map((c) => `${c.refId} ${norm(citedWords(b, c))}`));
   const citeHave = rows.flatMap((r) => (r.citations ?? []).map((c) => `${c.refId} ${norm(c.quotedText)}`));
   let citationMarks = 0;
   const refs = new Set(f.references.map((r) => r.id));
@@ -1914,6 +1960,9 @@ Intro paragraph with **bold**, *italic*, \`code\`, a [link](https://example.com/
 |------|-------|
 | a    | 1     |
 | b    | 2     |
+| $\\sigma$ | costs $3 |
+
+The square $x^2$ grows, and \\(a_i\\) is an item; it costs $5 and $10, and an escaped \\$ stays a dollar.
 
 \`\`\`js
 console.log("hi");
@@ -1934,10 +1983,49 @@ Footnote here.[^1]
 [^1]: The footnote text.
 `;
 
+// Web pages whose og:title is not their h1's words, parsed as an add
+// parses them (lib/parse/url.ts pageTitle): one sets the site's name after
+// the headline and a hyphen where the h1 sets a dash; one sets the site's
+// name after the headline and has no h1; one sets a kicker in its h1, apart
+// from the headline by a colon only a screen reader reads; one sets a
+// roofline span before the headline in its h1.
+const ARTICLE_BODY = Array.from(
+  { length: 6 },
+  (_, k) => `<p>Paragraph ${k + 1} of the review says what the game does well and where it stops short, in enough words to read as prose.</p>`,
+).join("");
+const SYNTHETIC_HTML: Record<string, { html: string; url: string; title: string }> = {
+  "synthetic:html-h1": {
+    url: "https://www.vg247.example/2019/11/20/fallen-order-review/",
+    title: "Fallen Order review – shoots for the moon, lands among the stars",
+    html: `<html><head><title>Fallen Order review - shoots for the moon, lands among the stars - VG247</title><meta property="og:title" content="Fallen Order review - shoots for the moon, lands among the stars - VG247"><meta property="og:site_name" content="VG247"></head><body><main><article><h1>Fallen Order review – shoots for the moon, lands among the stars</h1>${ARTICLE_BODY}</article></main></body></html>`,
+  },
+  "synthetic:html-site": {
+    url: "https://9to5mac.example/2019/11/18/macbook-deals/",
+    title: "MacBook sale at Amazon from $700, AirPods, more",
+    html: `<html><head><title>MacBook sale at Amazon from $700, AirPods, more - 9to5Mac</title><meta property="og:title" content="MacBook sale at Amazon from $700, AirPods, more - 9to5Mac"></head><body><main><article>${ARTICLE_BODY}</article></main></body></html>`,
+  },
+  "synthetic:html-kicker": {
+    url: "https://www.zeit.example/mobilitaet/2021-11/zugverkehr-ice-frankfurt-barcelona",
+    title: "Zugverkehr: Im ICE von Frankfurt nach Barcelona",
+    html: `<html><head><title>Zugverkehr: Im ICE von Frankfurt nach Barcelona | ZEIT ONLINE</title><meta property="og:title" content="Zugverkehr: Im ICE von Frankfurt nach Barcelona"></head><body><main><article><h1><span class="kicker">Zugverkehr</span><span class="visually-hidden">: </span><span class="headline">Im ICE von Frankfurt nach Barcelona</span></h1>${ARTICLE_BODY}</article></main></body></html>`,
+  },
+  "synthetic:html-roofline": {
+    url: "https://www.ministry.example/news/food-programme",
+    title: "Schulze: Germany stands with the food programme against hunger",
+    html: `<html><head><title>Schulze: Germany stands with the food programme against hunger | Ministry</title><meta property="og:title" content="Schulze: Germany stands with the food programme against hunger | Ministry"></head><body><main><article><h1><span class="roofline">Securing food</span> Schulze: Germany stands with the food programme against hunger</h1>${ARTICLE_BODY}</article></main></body></html>`,
+  },
+};
+
+async function syntheticHtml(source: string): Promise<Fixture> {
+  const page = SYNTHETIC_HTML[source];
+  return { ...(await htmlFixture(source, page.html, page.url, "url")), expectTitle: page.title };
+}
+
 async function synthetic(source: string): Promise<Fixture> {
   if (source === "synthetic:pdf") return syntheticPdf();
   if (source === "synthetic:url") return syntheticUrl();
   if (source === "synthetic:markdown") return markdownFixture("synthetic.md", SYNTHETIC_MARKDOWN);
+  if (source in SYNTHETIC_HTML) return syntheticHtml(source);
   throw new Error(`unknown fixture ${source}`);
 }
 

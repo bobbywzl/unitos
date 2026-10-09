@@ -7,11 +7,11 @@ import { runConversion } from "@/lib/handwritten/convert";
 import { renderPageImages } from "@/lib/handwritten/page-images";
 import { renderUploadedSlidePictures } from "@/lib/handwritten/slide-pictures";
 import { IMAGE_EXTENSIONS, sniffImage } from "@/lib/handwritten/image";
-import { imageToPdf } from "@/lib/handwritten/image-pdf";
+import { ImageTooLargeError, imageToPdf } from "@/lib/handwritten/image-pdf";
 import { parseDriveFileId } from "@/lib/drive/types";
 import { serverT } from "@/lib/i18n/server";
 import { progressResponse } from "@/lib/ingest-response";
-import { attachDocument } from "@/lib/parse/attach";
+import { addedResult, attachDocument } from "@/lib/parse/attach";
 import { refreshSkeleton } from "@/lib/graph/skeleton";
 import { describeIngestError } from "@/lib/parse/ingest-error";
 import { ingestMediaUrl } from "@/lib/video/ingest-media-url";
@@ -174,7 +174,11 @@ export async function POST(req: Request) {
         bytes = await imageToPdf(bytes);
       } catch (err) {
         console.error("Image wrap failed:", err);
-        return NextResponse.json({ error: t("api.imageUnreadable") }, { status: 400 });
+        const error =
+          err instanceof ImageTooLargeError
+            ? t("api.imagePixelsTooMany", { width: err.width, height: err.height })
+            : t("api.imageUnreadable");
+        return NextResponse.json({ error }, { status: 400 });
       }
       filename = filename.replace(IMAGE_EXTENSIONS, "");
       pages = true;
@@ -187,7 +191,7 @@ export async function POST(req: Request) {
           await bumpNotebook(fields.data.notebookId);
           // The skeleton builds after the response (SPEC.md §22).
           if (!deduped) after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
-          return { id: document.id, title: document.title, deduped };
+          return await addedResult(fields.data.notebookId, document, deduped);
         } catch (err) {
           console.error("Word ingest failed:", err);
           throw new Error(describeIngestError(err, t, "file"));
@@ -212,7 +216,7 @@ export async function POST(req: Request) {
             const deck = bytes;
             after(() => renderUploadedSlidePictures(document.id, deck).catch((err) => console.warn("[slides] pictures failed:", err)));
           }
-          return { id: document.id, title: document.title, deduped };
+          return await addedResult(fields.data.notebookId, document, deduped);
         } catch (err) {
           console.error("Slides/sheets ingest failed:", err);
           throw new Error(describeIngestError(err, t, "file"));
@@ -227,7 +231,7 @@ export async function POST(req: Request) {
           await bumpNotebook(fields.data.notebookId);
           // The skeleton builds after the response (SPEC.md §22).
           if (!deduped) after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
-          return { id: document.id, title: document.title, deduped };
+          return await addedResult(fields.data.notebookId, document, deduped);
         } catch (err) {
           console.error("Markdown ingest failed:", err);
           throw new Error(describeIngestError(err, t, "file"));
@@ -268,7 +272,7 @@ export async function POST(req: Request) {
           // not to convert; nothing starts.
           after(() => runConversion(document.id, user?.id ?? null).catch(() => {}));
         }
-        return { id: document.id, title: document.title, deduped };
+        return await addedResult(fields.data.notebookId, document, deduped);
       } catch (err) {
         console.error("PDF ingest failed:", err);
         throw new Error(describeIngestError(err, t, "pdf"));
@@ -360,10 +364,10 @@ export async function POST(req: Request) {
       await bumpNotebook(data.notebookId);
       // The skeletons build after the response (SPEC.md §22).
       for (const doc of documents) after(() => refreshSkeleton(doc.id, user?.id ?? null).catch(() => {}));
+      // An edited import of the same address in this project: the add made
+      // a new copy, and the reader is told (SPEC.md §30).
       return {
-        id: document.id,
-        title: document.title,
-        deduped,
+        ...(await addedResult(data.notebookId, document, deduped)),
         ...(documents.length > 1
           ? { documents: documents.map((d) => ({ id: d.id, title: d.title })) }
           : {}),

@@ -226,6 +226,16 @@ export function lineAsPart(line: Line): { text: string; runs: Run[] } {
   return (place && withTabs(line, place)) ?? { text: line.text.replace(/\t/g, " "), runs: line.runs };
 }
 
+/** Where the pull quote a line is set beside stands (Item.around): "right"
+    when the line's measure ends at it, "left" when the line's measure
+    starts past it, null when the line stands beside none. */
+export function quoteSide(line: Line): "left" | "right" | null {
+  const box = line.items.find((i) => i.around)?.around;
+  if (!box) return null;
+  if (box.x1 >= line.xEnd - 1) return "right";
+  return box.x2 <= line.x + 1 ? "left" : null;
+}
+
 // Would the next line's first word have fit on this line? If yes, the break
 // was intentional — keep it as a line break instead of a joining space.
 export function fillsMargin(line: Line, next: Line, rightEdge: number): boolean {
@@ -273,15 +283,27 @@ export function joinGroup(lines: Line[], proseJoin = false, columnEdge = 0): { t
     const prevText = lines[i - 1].text.trim();
     const nextText = lines[i].text;
     const wrapped = fillsMargin(lines[i - 1], lines[i], rightEdge);
-    const roomy = lines[i - 1].xEnd + lines[i - 1].size * 1.28 + lines[i].firstWordWidth < rightEdge;
+    // A line set beside a pull quote right of it ends at the quote: no room.
+    const quoted = quoteSide(lines[i - 1]) === "right";
+    const roomy = !quoted && lines[i - 1].xEnd + lines[i - 1].size * 1.28 + lines[i].firstWordWidth < rightEdge;
     const typed =
+      !quoted &&
       columnEdge > 0 &&
       !/[\p{L}\p{N}][-‐]$/u.test(prevText) &&
       lines[i - 1].xEnd + lines[i - 1].size * 3 + lines[i].firstWordWidth < Math.max(rightEdge, columnEdge);
+    // A formula opening the next line, under a line that ends in a
+    // lowercase word, goes on the sentence as a lowercase word does (parse
+    // loop finding: the MML book's "… it holds that" | "θMAP = mN." in a
+    // margin note, p. 313). A label's line ("Bemerkung 13") and a formula's
+    // step ("… ⊆ U" | "⇒ …") end in no such word.
+    const opensFormula =
+      /\p{Ll}$/u.test(prevText) &&
+      (lines[i].items.find((it) => it.str.trim() !== "")?.math ?? false) &&
+      !(lines[i - 1].items.findLast((it) => it.str.trim() !== "")?.math ?? true);
     const midSentence =
       proseJoin &&
       !/[.!?:…。！？：]["'”]?$/.test(prevText) &&
-      ((/^[a-z0-9($€£"'“]/.test(nextText) && !typed) || CJK_CHAR_RE.test(nextText[0] ?? "") || !roomy);
+      (((/^[a-z0-9($€£"'“]/.test(nextText) || opensFormula) && !typed) || CJK_CHAR_RE.test(nextText[0] ?? "") || !roomy);
     let sep: " " | "\n" | "" = fieldList ? "\n" : wrapped || midSentence ? " " : "\n";
     if (sep === " ") {
       const lastChar = prevText[prevText.length - 1] ?? "";
@@ -511,7 +533,13 @@ function withTabs(line: Line, place: TabPlace): { text: string; runs: Run[] } | 
   const gaps = words.slice(1).flatMap((w, k) => (text.slice(words[k].end, w.start).trim() === "" && w.start > words[k].end ? [w.x1 - words[k].x2] : []));
   const middle = gaps.length >= 3 ? median(gaps) : 0;
   const wide = (gap: number) => gap >= size * TAB_EM && (middle < size * STRETCHED_EM || gap >= middle * TAB_SPACES);
-  const centered = right !== null && line.x - origin >= size * 2 && Math.abs(line.x - origin - (right - line.xEnd)) <= size;
+  // A row of three phrases or more, each a word space within and three
+  // ems or more apart, is labels set under figures side by side, centered
+  // or not (parse loop finding: "(a) Overfitting", "(b) Underfitting.",
+  // "(c) Fitting well." under a figure centered in its column read as one
+  // phrase).
+  const labels = gaps.filter((g) => g >= size * 3).length >= 2 && gaps.every((g) => g < size * 0.6 || g >= size * 3);
+  const centered = right !== null && line.x - origin >= size * 2 && Math.abs(line.x - origin - (right - line.xEnd)) <= size && !labels;
   const full = right !== null && line.xEnd >= right - size;
   const width = right === null ? line.xEnd - origin : right - origin;
   const fills = [...place.fills].sort((a, b) => a.x1 - b.x1);
@@ -687,16 +715,37 @@ export function boldShare(runs: Run[], length: number): number {
   return bold / length;
 }
 
+const RTL_SCRIPT_RE = /[\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}\p{M}]/gu;
+
 // Monospace line: a listing's line (import compare loop finding: a python
 // listing shattered into lists, paragraphs and joined lines).
 export function isMonoLine(line: Line): boolean {
-  const chars = line.text.replace(/\s/g, "").length;
+  let chars = line.text.replace(/\s/g, "").length;
   if (chars === 0) return false;
   let mono = 0;
   for (const r of line.runs) {
     if (r.mono) mono += line.text.slice(r.start, r.end).replace(/\s/g, "").length;
   }
-  return mono / chars >= 0.85;
+  // A listing's line number: digits at the line's start in a face that is
+  // no typewriter face, set smaller than the code after it, count for
+  // neither side (parse loop finding: a LaTeX package's manual numbers
+  // each listing line in 5 pt beside 8 pt code; a line "2 {" counted its
+  // number as half its characters, read as no code, and every listing
+  // broke into code and paragraphs at its braces).
+  const [first, ...rest] = line.items;
+  const code = rest.filter((it) => it.mono && it.str.trim());
+  if (first && !first.mono && /^\s*\d{1,4}\s*$/.test(first.str) && code.length > 0 && first.size < Math.min(...code.map((it) => it.size)) * 0.85) {
+    chars -= first.str.trim().length;
+  }
+  // A string in a right-to-left script, in a line that opens in the
+  // typewriter face, is set in another face (the typewriter face has no
+  // Arabic letters): its letters count for neither side (parse loop
+  // finding: an Arabic book's listing lines "printf 'تقرير تجريبي\n' > …"
+  // read as paragraphs between its code).
+  if (first?.mono) {
+    for (const r of line.runs) if (!r.mono) chars -= (line.text.slice(r.start, r.end).match(RTL_SCRIPT_RE) ?? []).length;
+  }
+  return chars > 0 && mono / chars >= 0.85;
 }
 
 // ── Style and link spans out of runs ────────────────────────────────────────

@@ -10,7 +10,7 @@ import { syncRichText } from "@/lib/docs/sync";
 import { keepNamedVersion } from "@/lib/docs/versions";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { serverT } from "@/lib/i18n/server";
-import { classifyPdf, textLayerEmpty } from "@/lib/handwritten/classify";
+import { classifyPdf, pdfShape, textLayerEmpty } from "@/lib/handwritten/classify";
 import { CONVERT_MAX_PAGES, transcribePages } from "@/lib/handwritten/convert";
 import { featureConfigured } from "@/lib/feature-models";
 import { storePageSizes } from "@/lib/handwritten/page-images";
@@ -45,7 +45,7 @@ import {
   type ParsedBlock,
   type ParsedDocument,
 } from "@/lib/parse/types";
-import { parseMarkdownDocument } from "@/lib/parse/markdown-document";
+import { markdownFileText, parseMarkdownDocument } from "@/lib/parse/markdown-document";
 import { parseDocx } from "@/lib/parse/docx";
 import { sniffOfficeFile } from "@/lib/parse/office";
 // The routes load this module per request (see /api/documents), so the
@@ -53,7 +53,7 @@ import { sniffOfficeFile } from "@/lib/parse/office";
 // with a route module.
 export { isZipBytes, sniffOfficeFile } from "@/lib/parse/office";
 import { parseSlides, type SlideImageStore } from "@/lib/parse/slides";
-import { parseDelimited, parseSheets, type Delimiter } from "@/lib/parse/sheets";
+import { parseSheetsFile } from "@/lib/parse/sheets";
 import {
   restoreSlidePictures,
   slidePicturesByPage,
@@ -644,9 +644,10 @@ export async function ingestPdf(
   onProgress?.("parse");
   const parsed = await parsePdf(bytes, { pages: pdfPages ? rangePages(pdfPages.ranges) : undefined });
   const pages = documentPages(pdfPages, pdfPages?.count ?? (await pdfPageCount(bytes)));
+  // An article whose parse holds no text adds as its pages (pdfShape).
   const kind = opts.pages
     ? "handwritten"
-    : await classifyPdf(bytes, parsed.blocks, pages, userId);
+    : pdfShape(await classifyPdf(bytes, parsed.blocks, pages, userId, parsed.layerChars), parsed.blocks);
   // A scan of print reads off its page images into text, and goes on as an
   // article (SPEC.md §16). A read that fails leaves the PDF as its pages,
   // the reason on the strip under them and in the box.
@@ -729,7 +730,7 @@ export async function ingestMarkdown(
   if (existing) return { document: existing, deduped: true };
 
   onProgress?.("parse");
-  const parsed = await parseMarkdownDocument(new TextDecoder("utf-8").decode(bytes), filename);
+  const parsed = await parseMarkdownDocument(markdownFileText(bytes), filename);
   const title = parsed.title ?? filename;
   const blocks = parsed.blocks;
   // A text file is an import while the switch is on: pageless.
@@ -874,15 +875,16 @@ export async function ingestSlides(
   return { document, deduped: false };
 }
 
-/** The delimiter a sheets file name promises: tabs for a .tsv; otherwise
-    the text decides (lib/parse/sheets.ts sniffDelimiter). */
-function delimiterOf(filename: string): Delimiter | undefined {
-  return /\.tsv$/i.test(filename) ? "\t" : undefined;
+async function parseSheetsBytes(bytes: Uint8Array, filename: string, userId: string | null, storedGrid?: string): Promise<ParsedDocument> {
+  return parseSheetsFile(bytes, filename, { storeImage: slideImageStore(userId), storedGrid });
 }
 
-async function parseSheetsBytes(bytes: Uint8Array, filename: string, userId: string | null): Promise<ParsedDocument> {
-  if (sniffOfficeFile(bytes) === "xlsx") return parseSheets(bytes, filename, { storeImage: slideImageStore(userId) });
-  return parseDelimited(new TextDecoder("utf-8").decode(bytes), filename, delimiterOf(filename));
+/** A sheets document's first SHEET block's text: a re-parse of a delimited
+    file reads it with the delimiter that gives this grid back (a .tsv
+    keeps its tabs though its title has no extension). */
+async function storedGrid(documentId: string): Promise<string | undefined> {
+  const block = await db.block.findFirst({ where: { documentId, type: "SHEET" }, orderBy: { order: "asc" }, select: { text: true } });
+  return block?.text;
 }
 
 // Sheets upload path (SPEC.md §27): a .xlsx, a Google Sheets file Drive
@@ -1122,7 +1124,7 @@ export async function reparseDocument(
     const parsed =
       document.format === "slides"
         ? await parseSlides(bytes, document.title, { storeImage: slideImageStore(userId), picture: pictures.size > 0 })
-        : await parseSheetsBytes(bytes, document.title, userId);
+        : await parseSheetsBytes(bytes, document.title, userId, await storedGrid(documentId));
     onProgress?.("save", await saveDetail(parsed.blocks));
     // The stored contents carry onto the new blocks by their text
     // (lib/contents.ts): the old blocks are read before they go.
@@ -1238,7 +1240,7 @@ export async function reparseDocument(
       look = pageLook(parsed);
     } else {
       // A Markdown file: the same walk as on the add (lib/parse/markdown-document.ts).
-      const parsed = await parseMarkdownDocument(new TextDecoder("utf-8").decode(bytes), document.title);
+      const parsed = await parseMarkdownDocument(markdownFileText(bytes), document.title);
       blocks = parsed.blocks;
       references = parsed.references;
       mediaCheck = parsed.mediaCheck;

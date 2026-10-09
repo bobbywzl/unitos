@@ -1,5 +1,7 @@
+import * as ssf from "ssf";
 import type { ParsedBlock, ParsedDocument } from "@/lib/parse/types";
 import { renderChart as drawChart } from "@/lib/parse/chart";
+import { ommlText } from "@/lib/parse/docx-math";
 import { fontListAttr } from "@/lib/office-fonts";
 import {
   attr,
@@ -17,8 +19,10 @@ import {
   num,
   officeDocumentPath,
   parseTheme,
+  parseXml,
   parseXmlPart,
   partRels,
+  partText,
   relsOfType,
   resolveDrawingColor,
   rgbCss,
@@ -247,8 +251,16 @@ function presentationTitle(zip: OfficeZip): string | null {
   return title ? cleanText(title) : null;
 }
 
+// A custom shape's connection sites (a:cxnLst) are where connectors
+// attach: nothing draws or reads them, and in a deck of drawn shapes they
+// are a third of the elements. The part's text drops them before the DOM
+// is built, the slow step of a large deck's parse.
+const CONNECTION_SITES = /<a:cxnLst\b[^>]*\/>|<a:cxnLst\b[^>]*>[\s\S]*?<\/a:cxnLst>/g;
+
 function loadPart(zip: OfficeZip, path: string): Part | null {
-  const doc = parseXmlPart(zip, path);
+  const text = partText(zip, path);
+  if (text === null) return null;
+  const doc = parseXml(text.includes("<a:cxnLst") ? text.replace(CONNECTION_SITES, "") : text);
   if (!doc) return null;
   return { path, doc, rels: partRels(zip, path) };
 }
@@ -712,30 +724,39 @@ function themeFont(name: string | undefined, s: TextSettings): string | null {
 function renderTextBody(txBody: Element | null, s: TextSettings): RenderedText {
   if (!txBody) return { html: "", text: "" };
   const paragraphs = children(txBody, "p");
-  const counters = new Map<number, number>();
+  const counters = new Map<number, { n: number; scheme: string; startAt: number }>();
   const rows: RenderedText[] = [];
   for (const p of paragraphs) {
     const pPr = child(p, "pPr");
     const own = parseParagraphProps(pPr);
     const level = Math.max(0, Math.min(8, intAttr(pPr, "lvl") ?? 0));
-    // A numbered paragraph counts on from the last at its level; a paragraph
-    // at a shallower level restarts the deeper counters.
+    // Numbering as PowerPoint counts it: a numbered paragraph counts on
+    // from the last of its level while the scheme and the start stay the
+    // same; a paragraph of its level with words and no number, a new
+    // scheme, or a new start begins again at the start; a shallower
+    // paragraph ends the deeper counts. Slides benchmark finding (the
+    // numbers LibreOffice's testTdf173712 records from PowerPoint): lists
+    // counted on through a bulleted line, a new start, or a new scheme.
     for (const key of [...counters.keys()]) if (key > level) counters.delete(key);
     const runs = renderRuns(p, own, level, s);
     const bullet = levelProp(s.chain, level, "bullet", own);
     const hasWords = runs.text.trim().length > 0;
     let bulletHtml = "";
     let bulletText = "";
+    if (hasWords && bullet?.kind !== "auto") counters.delete(level);
     if (bullet && bullet.kind !== "none" && hasWords) {
-      const label =
-        bullet.kind === "char"
-          ? bullet.char
-          : autoNumberLabel(bullet.scheme, (counters.get(level) ?? bullet.startAt - 1) + 1);
-      if (bullet.kind === "auto") counters.set(level, (counters.get(level) ?? bullet.startAt - 1) + 1);
+      const glyph = bullet.kind === "char" ? bulletGlyph(bullet.char, bullet.font) : null;
+      let label = glyph?.char ?? "";
+      if (bullet.kind === "auto") {
+        const last = counters.get(level);
+        const n = last && last.scheme === bullet.scheme && last.startAt === bullet.startAt ? last.n + 1 : bullet.startAt;
+        counters.set(level, { n, scheme: bullet.scheme, startAt: bullet.startAt });
+        label = autoNumberLabel(bullet.scheme, n);
+      }
       bulletText = `${label} `;
       const size = runs.firstSize * (bullet.sizePct ?? 1);
       const color = (bullet.color ? colorCss(bullet.color, s.palette) : null) ?? runs.firstColor;
-      const bulletFont = bullet.kind === "char" && bullet.font && !bullet.font.startsWith("+") ? bullet.font : null;
+      const bulletFont = bullet.kind === "char" && !glyph?.symbol && bullet.font && !bullet.font.startsWith("+") ? bullet.font : null;
       if (bulletFont) s.fonts.add(bulletFont);
       const font = bulletFont ? fontFamilyCss(bulletFont) : "";
       bulletHtml = `<span class="sb" style="font-size:${cqw(size, s.slideW)}${color ? `;color:${color}` : ""}${font ? `;font-family:${font}` : ""}">${escapeHtml(bulletText)}</span>`;
@@ -784,20 +805,23 @@ function renderRuns(
   let text = "";
   let firstSize: number | null = null;
   let firstColor: string | null = null;
-  const inherited = (rPr: Element | null): { size: number; color: string | null; css: string } => {
+  const inherited = (rPr: Element | null): { size: number; color: string | null; css: string; symbolFont: string | null } => {
     const runProps = rPr ? parseRunProps(rPr) : {};
     const sz = runProps.sz ?? levelProp(s.chain, level, "sz", own) ?? DEFAULT_FONT_PT * 100;
     const size = (sz / 100) * EMU_PER_PT * s.fontScale;
     const bold = runProps.bold ?? levelProp(s.chain, level, "bold", own) ?? false;
     const italic = runProps.italic ?? levelProp(s.chain, level, "italic", own) ?? false;
     const font = themeFont(runProps.font ?? levelProp(s.chain, level, "font", own) ?? s.defaultFont ?? undefined, s);
+    // Text set in Symbol or Wingdings carries the glyphs the font draws
+    // (symbolText), so it needs no symbol font to read.
+    const symbolFont = font && /^(?:symbol|wingdings)$/i.test(font) ? font : null;
     const runColor = runProps.color ? colorCss(runProps.color, s.palette) : null;
     const levelColor = levelProp(s.chain, level, "color", own);
     const color = s.forceColor ?? runColor ?? (levelColor ? colorCss(levelColor, s.palette) : null) ?? s.defaultColor;
     const styles = [`font-size:${cqw(size, s.slideW)}`];
     if (bold) styles.push("font-weight:700");
     if (italic) styles.push("font-style:italic");
-    if (font) {
+    if (font && !symbolFont) {
       styles.push(`font-family:${fontFamilyCss(font)}`);
       s.fonts.add(font);
     }
@@ -811,14 +835,38 @@ function renderRuns(
     else if (baseline && baseline < 0) styles.push("vertical-align:sub;font-size:0.65em");
     const highlight = rPr ? colorCss(colorElementIn(child(rPr, "highlight")), s.palette) : null;
     if (highlight) styles.push(`background-color:${highlight}`);
-    return { size, color, css: styles.join(";") };
+    return { size, color, css: styles.join(";"), symbolFont };
   };
-  for (const node of Array.from(p.children)) {
-    if (node.localName === "r" || node.localName === "fld") {
-      const rPr = child(node, "rPr");
-      const t = cleanText(child(node, "t")?.textContent ?? "");
+  // The paragraph's runs, an mc:AlternateContent read through its Choice.
+  const nodes: Element[] = [];
+  const gather = (list: Element[]) => {
+    for (const n of list) {
+      if (n.localName === "AlternateContent") gather(Array.from((child(n, "Choice") ?? child(n, "Fallback"))?.children ?? []));
+      else nodes.push(n);
+    }
+  };
+  gather(Array.from(p.children));
+  for (const node of nodes) {
+    if (node.localName === "m") {
+      // An equation (a14:m, OMML) reads as its readable characters
+      // (lib/parse/docx-math.ts), set in its first run's look. Slides
+      // benchmark finding: equations were dropped whole.
+      const t = cleanText(descendants(node, "oMath").map(ommlText).filter(Boolean).join(" "));
       if (t.length === 0) continue;
+      const run = inherited(descendants(node, "rPr")[0] ?? null);
+      if (firstSize === null) {
+        firstSize = run.size;
+        firstColor = run.color;
+      }
+      parts.push(`<span style="${run.css}">${escapeHtml(t)}</span>`);
+      text += t;
+    } else if (node.localName === "r" || node.localName === "fld") {
+      const rPr = child(node, "rPr");
+      const raw = cleanText(child(node, "t")?.textContent ?? "");
+      if (raw.length === 0) continue;
       const run = inherited(rPr);
+      const sym = attr(child(rPr, "sym"), "typeface");
+      const t = run.symbolFont ? symbolText(raw, run.symbolFont, true) : sym ? symbolText(raw, sym, false) : raw;
       if (firstSize === null) {
         firstSize = run.size;
         firstColor = run.color;
@@ -842,6 +890,80 @@ function renderRuns(
     firstColor = end.color;
   }
   return { html: parts.join(""), text, firstSize, firstColor };
+}
+
+// A bullet set in a symbol font is a letter the font draws as a glyph:
+// Wingdings "l" is a round bullet, "§" a small square, "Ø" an arrowhead.
+// The words carry the glyph itself, so the text reads "■ Item" where the
+// slide shows ■, never "n Item". Slides benchmark finding: 6 files read
+// their bullets as stray letters (q, v, l, §, Ø, n).
+const WINGDINGS_BULLETS = new Map<number, string>([
+  [0x6c, "●"], [0x6d, "❍"], [0x6e, "■"], [0x6f, "□"], [0x70, "◻"], [0x71, "❑"], [0x72, "❒"], [0x73, "⬧"], [0x74, "⧫"], [0x75, "◆"],
+  [0x76, "❖"], [0x77, "⬥"], [0x9e, "·"], [0x9f, "•"], [0xa1, "○"], [0xa7, "▪"], [0xa8, "◻"], [0xd8, "➢"], [0xe0, "➔"], [0xe8, "➔"],
+  [0xf0, "⇨"], [0xfb, "✗"], [0xfc, "✓"], [0xfd, "☒"], [0xfe, "☑"],
+]);
+const SYMBOL_BULLETS = new Map<number, string>([
+  [0xb7, "•"], [0xa7, "♣"], [0xa8, "♦"], [0xa9, "♥"], [0xaa, "♠"], [0xae, "→"], [0xde, "⇒"], [0xe0, "◊"], [0x2d, "−"], [0x2a, "∗"],
+]);
+const SYMBOL_FONT = /^(?:symbol|wingdings|webdings|marlett|zapf ?dingbats|monotype sorts)/i;
+
+/** The glyph a bullet character draws in its bullet font, and whether the
+    font is a symbol font (its glyph then needs no font of its own). A
+    symbol-font letter with no known glyph, or a private-use code with no
+    font to draw it, shows as "•". */
+function bulletGlyph(char: string, font: string | null): { char: string; symbol: boolean } {
+  let code = char.codePointAt(0) ?? 0;
+  const privateUse = code >= 0xf000 && code <= 0xf0ff;
+  if (privateUse) code -= 0xf000;
+  if (!font || !SYMBOL_FONT.test(font)) return privateUse ? { char: "•", symbol: true } : { char, symbol: false };
+  const name = font.toLowerCase();
+  const table = name === "wingdings" ? WINGDINGS_BULLETS : name === "symbol" ? SYMBOL_BULLETS : null;
+  return { char: table?.get(code) ?? "•", symbol: true };
+}
+
+// What a symbol font draws for each code 0x20-0xFF: a letter typed in the
+// font, or the private-use code U+F020-U+F0FF PowerPoint writes for a symbol
+// inserted from it (a:sym names the font). Symbol is the Adobe encoding
+// (Greek, math); Wingdings is as Unicode maps it, with the common glyph of
+// the same shape where the bullets use one. "\0" = no glyph known. Slides
+// benchmark finding: 59 runs in 14 files read as private-use codes, a box
+// where the slide shows ☺, ➔ or ⇒.
+const SYMBOL_GLYPHS = Array.from(
+  " !∀#∃%&∋()∗+,−./0123456789:;<=>?" +
+    "≅ΑΒΧΔΕΦΓΗΙϑΚΛΜΝΟΠΘΡΣΤΥςΩΞΨΖ[∴]⊥_" +
+    "‾αβχδεφγηιϕκλμνοπθρστυϖωξψζ{|}∼\0" +
+    "\0".repeat(32) +
+    "€ϒ′≤⁄∞ƒ♣♦♥♠↔←↑→↓°±″≥×∝∂•÷≠≡≈…⏐⎯↵" +
+    "ℵℑℜ℘⊗⊕∅∩∪⊃⊇⊄⊂⊆∈∉∠∇®©™∏√⋅¬∧∨⇔⇐⇑⇒⇓" +
+    "◊〈®©™∑⎛⎜⎝⎡⎢⎣⎧⎨⎩⎪\0〉∫⌠⎮⌡⎞⎟⎠⎤⎥⎦⎫⎬⎭\0",
+);
+const WINGDINGS_GLYPHS = Array.from(
+  " ✏✂✁👓🕭🕮🕯🕿✆🖂🖃📪📫📬📭📁📂📄🗏🗐🗄⌛🖮🖰🖲🖳🖴🖫🖬✇✍" +
+    "🖎✌👌👍👎☜☞☝☟🖐☺😐☹💣☠🏳🏱✈☼💧❄🕆✞🕈✠✡☪☯ॐ☸♈♉" +
+    "♊♋♌♍♎♏♐♑♒♓🙰🙵●🔾■□🞐❑❒⬧⧫◆❖⬥⌧⮹⌘🏵🏶🙶🙷\0" +
+    "⓪①②③④⑤⑥⑦⑧⑨⑩⓿❶❷❸❹❺❻❼❽❾❿🙢🙠🙡🙣🙞🙜🙝🙟·•" +
+    "▪⚪🞆🞈◉◎🔿▪◻🟂✦★✶✴✹✵⯐⌖⟡⌑⯑✪✰🕐🕑🕒🕓🕔🕕🕖🕗🕘" +
+    "🕙🕚🕛⮰⮱⮲⮳⮴⮵⮶⮷🙪🙫🙕🙔🙗🙖🙐🙑🙒🙓⌫⌦⮘⮚⮙⮛⮈⮊⮉⮋🡨" +
+    "🡪🡩🡫🡬🡭🡯🡮🡸🡺🡹🡻🡼🡽🡿🡾⇦⇨⇧⇩⬄⇳⬀⬁⬃⬂▭▫✗✓☒☑\0",
+);
+for (const [code, glyph] of [[0x6d, "❍"], [0x70, "◻"], [0xa1, "○"], [0xa8, "◻"], [0xd8, "➢"], [0xe0, "➔"], [0xe8, "➔"]] as const) {
+  WINGDINGS_GLYPHS[code - 0x20] = glyph;
+}
+
+/** A run's text as a symbol font draws it: every character when the run is
+    set in the font (whole), else only the private-use codes U+F020-U+F0FF. */
+function symbolText(text: string, font: string, whole: boolean): string {
+  const name = font.toLowerCase();
+  const table = name === "symbol" ? SYMBOL_GLYPHS : name === "wingdings" ? WINGDINGS_GLYPHS : null;
+  if (!table) return text;
+  let out = "";
+  for (const ch of text) {
+    const c = ch.codePointAt(0) ?? 0;
+    const code = c >= 0xf020 && c <= 0xf0ff ? c - 0xf000 : whole && c >= 0x20 && c <= 0xff ? c : null;
+    const glyph = code !== null ? table[code - 0x20] : "\0";
+    out += glyph === "\0" ? ch : glyph;
+  }
+  return out;
 }
 
 function hyperlinkOf(rPr: Element | null, s: TextSettings): string | null {
@@ -871,6 +993,13 @@ function autoNumberLabel(scheme: string, n: number): string {
     }
     return out;
   };
+  // The East Asian schemes (ECMA-376 Part 1, 20.1.10.61): ideographic
+  // numbers (Chinese, Japanese, Korean), full-width digits, circled
+  // numbers; "Db" is a double-byte period. Slides benchmark finding: an
+  // ea1JpnKorPeriod list read "1." where PowerPoint draws "一.".
+  if (scheme.startsWith("ea1")) return hanNumber(n) + (scheme.endsWith("DbPeriod") ? "．" : scheme.endsWith("Period") ? "." : "");
+  if (scheme.startsWith("arabicDb")) return String(n).replace(/\d/g, (d) => String.fromCharCode(0xff10 + Number(d))) + (scheme.endsWith("Period") ? "．" : "");
+  if (scheme.startsWith("circleNum")) return circledNumber(n, scheme === "circleNumWdBlackPlain");
   let core: string;
   if (scheme.startsWith("alphaLc")) core = alpha(n);
   else if (scheme.startsWith("alphaUc")) core = alpha(n).toUpperCase();
@@ -881,6 +1010,39 @@ function autoNumberLabel(scheme: string, n: number): string {
   if (scheme.endsWith("ParenR")) return `${core})`;
   if (scheme.endsWith("Period")) return `${core}.`;
   return core;
+}
+
+/** A count in ideographs: 一, 十, 十一, 二十, 一百零五, up to 9999. */
+function hanNumber(n: number): string {
+  const digits = "零一二三四五六七八九";
+  if (n <= 0 || n >= 10000) return String(n);
+  let out = "";
+  let left = n;
+  let zero = false;
+  for (const [unit, sym] of [[1000, "千"], [100, "百"], [10, "十"], [1, ""]] as const) {
+    const d = Math.floor(left / unit);
+    left %= unit;
+    if (d === 0) {
+      zero = out.length > 0;
+      continue;
+    }
+    if (zero) {
+      out += "零";
+      zero = false;
+    }
+    out += (unit === 10 && d === 1 && !out ? "" : digits[d]) + sym;
+  }
+  return out;
+}
+
+/** A circled number: ① to ㊿, or ❶ to ⓴ in the black set; past those, the
+    digits. */
+function circledNumber(n: number, black: boolean): string {
+  if (black) return n >= 1 && n <= 10 ? String.fromCodePoint(0x2776 + n - 1) : n >= 11 && n <= 20 ? String.fromCodePoint(0x24eb + n - 11) : String(n);
+  if (n >= 1 && n <= 20) return String.fromCodePoint(0x2460 + n - 1);
+  if (n >= 21 && n <= 35) return String.fromCodePoint(0x3251 + n - 21);
+  if (n >= 36 && n <= 50) return String.fromCodePoint(0x32b1 + n - 36);
+  return String(n);
 }
 
 /** The body's insets and vertical anchor as CSS on the text layer. */
@@ -924,6 +1086,7 @@ type SlideScope = {
 async function collectShapes(scope: SlideScope, tree: Element | null, transform: Transform, out: Placed[]): Promise<void> {
   if (!tree) return;
   for (const node of Array.from(tree.children)) {
+    if (hiddenShape(node)) continue;
     switch (node.localName) {
       case "sp":
         await placeShape(scope, node, transform, out);
@@ -947,6 +1110,15 @@ async function collectShapes(scope: SlideScope, tree: Element | null, transform:
       }
     }
   }
+}
+
+/** A shape the file hides (cNvPr hidden="1", the selection pane's eye
+    closed): PowerPoint neither draws it nor shows its words. Slides
+    benchmark finding: a hidden chart's 13 category labels read as the
+    slide's words. */
+function hiddenShape(node: Element): boolean {
+  const nv = Array.from(node.children).find((c) => c.localName.startsWith("nv"));
+  return boolAttr(child(nv, "cNvPr"), "hidden");
 }
 
 function placeholderOf(sp: Element): { type: string; idx: string | null; raw: string | null } | null {
@@ -974,6 +1146,14 @@ function inheritanceOf(scope: SlideScope, ph: { type: string; idx: string | null
   return chain;
 }
 
+// A shape with no xfrm, on it or on the placeholders it inherits from, has
+// no place of its own; its words still show. It takes the slide's frame, so
+// they start at the top left. Slides benchmark finding: such a shape or
+// table frame was dropped with its words.
+function slideFrame(ctx: Ctx): Box {
+  return { x: 0, y: 0, w: ctx.slideW, h: ctx.slideH, rot: 0, flipH: false, flipV: false };
+}
+
 function shapeBox(sp: Element, inherited: Element[], transform: Transform): Box | null {
   const candidates = [sp, ...inherited];
   for (const el of candidates) {
@@ -990,8 +1170,7 @@ async function placeShape(scope: SlideScope, sp: Element, transform: Transform, 
   // not a shape the slide shows.
   if (ph && scope.decoration) return;
   const inherited = inheritanceOf(scope, ph);
-  const box = shapeBox(sp, inherited, transform);
-  if (!box) return;
+  const box = shapeBox(sp, inherited, transform) ?? slideFrame(ctx);
   const spPr = child(sp, "spPr");
   const style = child(sp, "style");
   const stylePalette = { ...palette };
@@ -1062,8 +1241,16 @@ async function placeShape(scope: SlideScope, sp: Element, transform: Transform, 
   const rendered = renderTextBody(txBody, settings);
   const furniture = ph !== null && FURNITURE_PH.has(ph.raw ?? "");
   const decoration = scope.decoration || furniture;
+  // A SmartArt drawing's shape sets its words in a box of their own
+  // (dsp:txXfrm): the text layer takes that box, in shares of the shape's.
+  const txBox = parseXfrm(child(sp, "txXfrm"));
+  let txPlace = "";
+  if (txBox && box.w > 0 && box.h > 0) {
+    const t = applyTransform(txBox, transform);
+    txPlace = `left:${pct(t.x - box.x, box.w)};top:${pct(t.y - box.y, box.h)};width:${pct(t.w, box.w)};height:${pct(t.h, box.h)};right:auto;bottom:auto;`;
+  }
   const textLayer = rendered.html
-    ? `<div class="st" style="${bodyStyle(bodyPr, ctx.slideW, false)}"${decoration ? " data-anchor-skip" : ""}>${rendered.html}</div>`
+    ? `<div class="st" style="${txPlace}${bodyStyle(bodyPr, ctx.slideW, false)}"${decoration ? " data-anchor-skip" : ""}>${rendered.html}</div>`
     : "";
   if (!fillLayer && !textLayer) return;
   out.push({
@@ -1244,8 +1431,7 @@ async function placePicture(scope: SlideScope, pic: Element, transform: Transfor
 
 async function placeGraphicFrame(scope: SlideScope, frame: Element, transform: Transform, out: Placed[]): Promise<void> {
   const box = parseXfrm(child(frame, "xfrm"));
-  if (!box) return;
-  const placed = applyTransform(box, transform);
+  const placed = box ? applyTransform(box, transform) : slideFrame(scope.ctx);
   const data = child(frame, "graphic", "graphicData");
   const tbl = child(data, "tbl");
   if (tbl) {
@@ -1275,8 +1461,16 @@ async function placeGraphicFrame(scope: SlideScope, frame: Element, transform: T
     }
     return;
   }
-  // Another embedded object (a diagram, an OLE object): its picture, when
-  // the frame carries one as a fallback.
+  const relIds = child(data, "relIds");
+  if (relIds) {
+    const diagram = await renderDiagram(scope, relIds, placed, transform, out.length + scope.zBase);
+    if (diagram) {
+      out.push({ html: diagram.html, text: scope.decoration || !diagram.text ? null : diagram.text, box: placed, z: out.length + scope.zBase, title: false });
+      return;
+    }
+  }
+  // Another embedded object (an OLE object): its picture, when the frame
+  // carries one as a fallback.
   const fallbackBlip = descendants(frame, "blipFill")[0];
   if (fallbackBlip) {
     const url = await blipUrl(fallbackBlip, scope.ctx, scope.part.rels);
@@ -1290,6 +1484,95 @@ async function placeGraphicFrame(scope: SlideScope, frame: Element, transform: T
       });
     }
   }
+}
+
+// ── SmartArt ─────────────────────────────────────────────────────────────────
+
+/** A SmartArt diagram (dgm:relIds). PowerPoint saves the drawing it laid
+    out beside the diagram's data (the data part's dsp:dataModelExt names it
+    among the slide's relationships): its shapes draw like the slide's own,
+    their place measured from the frame, in a layer as large as the slide
+    that keeps their stacking among themselves, and their words read in
+    reading order. A file with no drawing, or a drawing without words (a
+    file another program wrote), shows the data's words in the frame, one
+    paragraph per node in the diagram's outline order, deeper nodes
+    indented. Slides benchmark finding: every SmartArt node's words were
+    lost before (419 of the 421 pieces lost on 127 files). */
+async function renderDiagram(scope: SlideScope, relIds: Element, box: Box, transform: Transform, z: number): Promise<RenderedText | null> {
+  const { ctx } = scope;
+  const dataRel = scope.part.rels.get(attr(relIds, "dm") ?? "");
+  const data = dataRel && !dataRel.external ? parseXmlPart(ctx.zip, dataRel.target) : null;
+  const ext = data ? descendants(data, "dataModelExt")[0] : null;
+  const drawingRel = ext ? scope.part.rels.get(attr(ext, "relId") ?? "") : undefined;
+  const drawing = drawingRel && !drawingRel.external ? loadPart(ctx.zip, drawingRel.target) : null;
+  if (drawing) {
+    const inner: Placed[] = [];
+    const at: Transform = { ox: box.x, oy: box.y, sx: transform.sx, sy: transform.sy, cx: 0, cy: 0 };
+    await collectShapes({ ...scope, part: drawing, zBase: z }, descendants(drawing.doc, "spTree")[0] ?? null, at, inner);
+    if (inner.some((p) => p.text)) {
+      // pointer-events: the layer covers the slide, its shapes take the
+      // pointer as the slide's own do.
+      const shapes = readingOrder(inner, ctx).map((p) => ({ ...p, html: p.html.replace(/^<div class="([^"]*)" style="/, '<div class="$1" style="pointer-events:auto;') }));
+      const joined = joinPlaced(shapes);
+      return { html: `<div class="sh sd" style="left:0;top:0;width:100%;height:100%;pointer-events:none">${joined.html}</div>`, text: joined.text };
+    }
+  }
+  return data ? diagramOutline(scope, data, box) : null;
+}
+
+/** The diagram's words in its outline order (the parent-of connections,
+    each child by its source order), deeper nodes indented; nodes the
+    outline does not reach follow in the data's order. */
+function diagramOutline(scope: SlideScope, data: XMLDocument, box: Box): RenderedText | null {
+  const points = descendants(data, "pt");
+  const byId = new Map(points.map((pt) => [attr(pt, "modelId") ?? "", pt]));
+  const kids = new Map<string, { id: string; ord: number }[]>();
+  for (const cxn of descendants(data, "cxn")) {
+    const type = attr(cxn, "type");
+    if (type && type !== "parOf") continue;
+    const src = attr(cxn, "srcId") ?? "";
+    const list = kids.get(src) ?? [];
+    list.push({ id: attr(cxn, "destId") ?? "", ord: intAttr(cxn, "srcOrd") ?? 0 });
+    kids.set(src, list);
+  }
+  const order: { pt: Element; depth: number }[] = [];
+  const seen = new Set<string>();
+  const visit = (id: string, depth: number) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    const pt = byId.get(id);
+    if (pt && (attr(pt, "type") ?? "node") === "node") order.push({ pt, depth });
+    for (const k of (kids.get(id) ?? []).sort((a, b) => a.ord - b.ord)) visit(k.id, pt && attr(pt, "type") === "doc" ? depth : depth + 1);
+  };
+  for (const pt of points) if (attr(pt, "type") === "doc") visit(attr(pt, "modelId") ?? "", 0);
+  for (const pt of points) if ((attr(pt, "type") ?? "node") === "node" && !seen.has(attr(pt, "modelId") ?? "")) order.push({ pt, depth: 0 });
+
+  const settings: TextSettings = {
+    palette: scope.palette,
+    chain: [scope.master.otherStyle],
+    fontScale: 1,
+    lnSpcReduction: 0,
+    defaultColor: defaultTextColor(scope.palette),
+    defaultFont: "+mn-lt",
+    major: scope.master.theme.major,
+    minor: scope.master.theme.minor,
+    slideW: scope.ctx.slideW,
+    rels: scope.part.rels,
+    fonts: scope.ctx.fonts,
+  };
+  const rows: RenderedText[] = [];
+  for (const { pt, depth } of order) {
+    const rendered = renderTextBody(child(pt, "t"), settings);
+    if (!rendered.text) continue;
+    const indent = depth > 0 ? `margin-left:${cqw(342900 * depth, scope.ctx.slideW)};` : "";
+    rows.push({ html: indent ? rendered.html.replace(/<p class="([^"]*)" style="/g, `<p class="$1" style="${indent}`) : rendered.html, text: rendered.text });
+  }
+  if (rows.length === 0) return null;
+  const html = rows.map((r) => r.html).join(textGap("\n"));
+  return {
+    html: `<div class="sh sd" style="${boxStyle(box, scope.ctx)}"><div class="st" style="${bodyStyle(null, scope.ctx.slideW, false)};justify-content:center">${html}</div></div>`,
+    text: rows.map((r) => r.text).join("\n"),
+  };
 }
 
 // ── Tables ───────────────────────────────────────────────────────────────────
@@ -1394,6 +1677,7 @@ function boldStyle(): ListStyle {
 function renderChart(scope: SlideScope, chartPath: string, box: Box): RenderedText | null {
   const doc = parseXmlPart(scope.ctx.zip, chartPath);
   if (!doc) return null;
+  if (child(doc.documentElement, "chartData")) return renderChartExTable(doc);
   const drawn = drawChart(doc, { width: box.w, height: box.h }, {
     accents: themeAccents(scope.master.theme.colors),
     resolveColor: (el) => colorCss(el, scope.palette),
@@ -1432,25 +1716,121 @@ function renderChartTable(doc: XMLDocument): RenderedText | null {
   const series: { name: string; cats: string[]; vals: string[] }[] = [];
   for (const ser of descendants(chart, "ser")) {
     const name = cleanText(descendants(child(ser, "tx"), "v")[0]?.textContent ?? descendants(child(ser, "tx"), "t").map((t) => t.textContent ?? "").join("")).trim();
-    const cats = descendants(child(ser, "cat"), "pt").map((pt) => cleanText(child(pt, "v")?.textContent ?? ""));
-    const vals = descendants(child(ser, "val"), "pt").map((pt) => cleanText(child(pt, "v")?.textContent ?? ""));
+    // Number categories show in their format code too (m/d/yy: 1/5/02).
+    const catNumbers = descendants(child(ser, "cat"), "numCache")[0] ?? descendants(child(ser, "cat"), "numLit")[0];
+    const catCode = catNumbers ? descendants(catNumbers, "formatCode")[0]?.textContent?.trim() || "General" : null;
+    const cats = descendants(child(ser, "cat"), "pt").map((pt) => {
+      const v = cleanText(child(pt, "v")?.textContent ?? "");
+      return catCode ? shownNumber(v, catCode) : v;
+    });
+    // A value shows in its number format, General when it names none, as
+    // the chart's own labels show it: the cache's 8.200000000000001 reads
+    // 8.2. Slides benchmark finding (a radar chart's data table).
+    const code = descendants(child(ser, "val"), "formatCode")[0]?.textContent?.trim() || "General";
+    const vals = descendants(child(ser, "val"), "pt").map((pt) => shownNumber(cleanText(child(pt, "v")?.textContent ?? ""), code));
     series.push({ name, cats, vals });
   }
+  // A title element without words is the automatic title, as the drawn
+  // chart takes it: the one series' name, else "Chart Title".
+  // Slides benchmark finding: PowerPoint's thumbnail of poi radar-chart
+  // draws "Sales" over the chart; the table had no title.
+  const autoTitleDeleted = attr(child(chart, "autoTitleDeleted"), "val") === "1";
+  const autoTitle = !titleText && child(chart, "title") && !autoTitleDeleted && series.length > 0 ? (series.length === 1 && series[0].name) || "Chart Title" : "";
+  const shownTitle = titleText || autoTitle;
   const rows: string[][] = [];
   const categories = series.find((s) => s.cats.length > 0)?.cats ?? [];
   if (categories.length > 0) {
-    rows.push(["", ...series.map((s) => s.name)]);
+    if (series.some((s) => s.name)) rows.push(["", ...series.map((s) => s.name)]);
     categories.forEach((cat, i) => rows.push([cat, ...series.map((s) => s.vals[i] ?? "")]));
   } else if (series.length > 0) {
-    rows.push(series.map((s) => s.name));
+    if (series.some((s) => s.name)) rows.push(series.map((s) => s.name));
     const longest = Math.max(...series.map((s) => s.vals.length));
     for (let i = 0; i < longest; i++) rows.push(series.map((s) => s.vals[i] ?? ""));
   }
+  const pieces: RenderedText[] = [];
+  if (shownTitle) pieces.push({ html: `<div class="sct">${escapeHtml(shownTitle)}</div>`, text: shownTitle });
+  if (rows.length > 0) pieces.push(dataTable(rows));
+  if (pieces.length === 0) return null;
+  return { html: pieces.map((p) => p.html).join(textGap("\n")), text: pieces.map((p) => p.text).join("\n") };
+}
+
+/** An Office 2016 chart (cx:chartSpace: a waterfall, a box and whisker, a
+    sunburst, a treemap, a histogram, a funnel) as a small visible table
+    with its title. Its data sits in cx:chartData, one cx:data per series:
+    string dimensions hold the categories, a level per column with the first
+    level innermost, and number dimensions hold the values. The table reads
+    as the sheet does: the category columns outermost first, then one value
+    column per series. A title element without words shows "Chart Title",
+    as PowerPoint draws it. Slides benchmark finding: such a chart lost
+    every word and number (four files at 0.333). */
+function renderChartExTable(doc: XMLDocument): RenderedText | null {
+  const root = doc.documentElement;
+  const data = new Map<string, Element>();
+  for (const d of descendants(child(root, "chartData"), "data")) data.set(attr(d, "id") ?? "", d);
+  const chart = child(root, "chart");
+  const titleEl = child(chart, "title");
+  let titleText = "";
+  if (titleEl) {
+    const rich = descendants(titleEl, "rich")[0];
+    titleText = cleanText(
+      rich
+        ? descendants(rich, "p").map((p) => descendants(p, "t").map((t) => t.textContent ?? "").join("")).join("\n")
+        : descendants(titleEl, "v").map((v) => v.textContent ?? "").join(" "),
+    ).trim();
+    if (!titleText) titleText = "Chart Title";
+  }
+  const points = (lvl: Element | null): string[] => {
+    const pts = children(lvl, "pt");
+    const out: string[] = new Array(Math.max(intAttr(lvl, "ptCount") ?? 0, pts.length)).fill("");
+    pts.forEach((pt, i) => {
+      const idx = intAttr(pt, "idx") ?? i;
+      if (idx >= 0 && idx < out.length) out[idx] = cleanText(pt.textContent ?? "");
+    });
+    return out;
+  };
+  let categories: string[][] = [];
+  const series: { name: string; vals: string[] }[] = [];
+  for (const ser of descendants(chart, "series")) {
+    if (attr(ser, "hidden") === "1") continue;
+    const name = cleanText(descendants(child(ser, "tx"), "v")[0]?.textContent ?? "").trim();
+    const d = data.get(attr(child(ser, "dataId"), "val") ?? "");
+    if (!d) continue;
+    if (categories.length === 0) {
+      const dim = children(d, "strDim")[0];
+      if (dim) categories = children(dim, "lvl").map(points).reverse();
+    }
+    const lvls = children(d, "numDim").map((dim) => children(dim, "lvl")[0]).filter((l): l is Element => !!l);
+    for (const lvl of lvls) {
+      const code = attr(lvl, "formatCode")?.trim() || "General";
+      series.push({ name, vals: points(lvl).map((v) => shownNumber(v, code)) });
+    }
+  }
+  const rows: string[][] = [];
+  const count = Math.max(0, ...categories.map((c) => c.length), ...series.map((s) => s.vals.length));
+  if (series.some((s) => s.name)) rows.push([...categories.map(() => ""), ...series.map((s) => s.name)]);
+  for (let i = 0; i < count; i++) rows.push([...categories.map((c) => c[i] ?? ""), ...series.map((s) => s.vals[i] ?? "")]);
   const pieces: RenderedText[] = [];
   if (titleText) pieces.push({ html: `<div class="sct">${escapeHtml(titleText)}</div>`, text: titleText });
   if (rows.length > 0) pieces.push(dataTable(rows));
   if (pieces.length === 0) return null;
   return { html: pieces.map((p) => p.html).join(textGap("\n")), text: pieces.map((p) => p.text).join("\n") };
+}
+
+/** A cached chart value as its number format shows it; anything that is
+    not a number, or a format ssf cannot read, stays as the cache has it. */
+function shownNumber(value: string, code: string): string {
+  const n = Number(value);
+  if (value.trim() === "" || !Number.isFinite(n)) return value;
+  // A code of letters alone that is no date or time ("Standard", the German
+  // file's name for General) is General in the file's language; ssf reads
+  // it as nothing and wrote -5 as "". Slides benchmark finding.
+  const general = /^\p{L}+$/u.test(code) && !/^[dmyhsDMYHS]+$/.test(code) ? "General" : code;
+  try {
+    const shown = cleanText(ssf.format(general, n));
+    return shown === "" ? value : shown;
+  } catch {
+    return value;
+  }
 }
 
 // ── The slide ────────────────────────────────────────────────────────────────
@@ -1529,26 +1909,10 @@ async function parseSlide(ctx: Ctx, slide: Part, n: number, picture: boolean): P
   // then the rest top to bottom, left to right. The z-index keeps the
   // slide's own stacking whatever the order.
   const decoration = placed.slice(0, decorationCount);
-  const own = placed.slice(decorationCount);
-  const band = ctx.slideH * 0.04;
-  const ordered = [...own].sort((a, b) => {
-    if (a.title !== b.title) return a.title ? -1 : 1;
-    const ay = Math.round(a.box.y / band);
-    const by = Math.round(b.box.y / band);
-    if (ay !== by) return ay - by;
-    return a.box.x - b.box.x;
-  });
-
-  const pieces: string[] = [];
-  const htmlParts: string[] = [];
-  for (const shape of [...decoration, ...ordered]) {
-    const withZ = shape.html.replace(/^<div class="([^"]*)" style="/, `<div class="$1" style="z-index:${shape.z};`);
-    if (shape.text !== null && shape.text.length > 0) {
-      if (pieces.length > 0) htmlParts.push(textGap("\n"));
-      pieces.push(shape.text);
-    }
-    htmlParts.push(withZ);
-  }
+  const ordered = readingOrder(placed.slice(decorationCount), ctx);
+  const joined = joinPlaced([...decoration, ...ordered]);
+  const pieces = joined.text ? [joined.text] : [];
+  const htmlParts = [joined.html];
 
   // Speaker notes: the notes slide's body placeholder.
   const notesRel = relsOfType(slide.rels, "notesSlide")[0];
@@ -1568,6 +1932,93 @@ async function parseSlide(ctx: Ctx, slide: Part, n: number, picture: boolean): P
     html: slideShell(ctx, n, htmlParts.join(""), notesHtml, picture, background),
     page: n,
   };
+}
+
+/** Shapes in reading order: the title first; a shape wholly above another
+    before it; of two shapes side by side in one row (each covering half
+    the shorter one's height), the left one first; the rest top to bottom,
+    left to right (a 4% band decides "same row"). A rotated shape counts
+    by the box it covers. Slides benchmark finding: the band alone split a
+    row whose tops differ by a few points (two charts side by side read
+    right then left) and read a left column's boxes in turn with the tall
+    box beside them (Level 1, the text of all levels, Level 2, ...). */
+function readingOrder(shapes: Placed[], ctx: Ctx): Placed[] {
+  // Shapes without words (pictures, lines, empty boxes) have no place in
+  // the reading; their z-index keeps their stacking. They follow the
+  // words, so they never tie the order of the shapes that have them.
+  // Slides benchmark finding: a picture right of a box and above a label
+  // left of the box closed a loop (box, picture, label, box) and the
+  // slide read its columns interleaved.
+  const worded = shapes.filter((p) => p.text);
+  if (worded.length < shapes.length) return [...readingOrderOf(worded, ctx), ...shapes.filter((p) => !p.text)];
+  return readingOrderOf(shapes, ctx);
+}
+
+function readingOrderOf(shapes: Placed[], ctx: Ctx): Placed[] {
+  const band = ctx.slideH * 0.04;
+  const key = (a: Placed, b: Placed) => {
+    if (a.title !== b.title) return a.title ? -1 : 1;
+    const ay = Math.round(a.box.y / band);
+    const by = Math.round(b.box.y / band);
+    if (ay !== by) return ay - by;
+    return a.box.x - b.box.x;
+  };
+  const sorted = [...shapes].sort(key);
+  const n = sorted.length;
+  if (n < 2) return sorted;
+  const boxes = sorted.map((p) => coveredBox(p.box));
+  // before[i]: the shapes that must come before shape i.
+  const before = sorted.map(() => new Set<number>());
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      if (i === j || sorted[i].title || sorted[j].title) continue;
+      const a = boxes[i];
+      const b = boxes[j];
+      const overlap = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+      const above = a.y + a.h <= b.y;
+      const leftInRow = overlap > 0.5 * Math.min(a.h, b.h) && a.x + a.w <= b.x;
+      if (above || leftInRow) before[j].add(i);
+    }
+  }
+  // The first shape by the band order whose every predecessor is placed;
+  // when none is free (a staircase of rows), the first by the band order.
+  const out: Placed[] = [];
+  const done = new Set<number>();
+  while (out.length < n) {
+    let pick = -1;
+    for (let i = 0; i < n && pick < 0; i++) {
+      if (!done.has(i) && [...before[i]].every((k) => done.has(k))) pick = i;
+    }
+    if (pick < 0) for (let i = 0; i < n && pick < 0; i++) if (!done.has(i)) pick = i;
+    done.add(pick);
+    out.push(sorted[pick]);
+  }
+  return out;
+}
+
+/** The box a shape covers on the slide: its own, turned by its rotation. */
+function coveredBox(box: Box): { x: number; y: number; w: number; h: number } {
+  if (!box.rot) return box;
+  const r = (box.rot * Math.PI) / 180;
+  const w = Math.abs(box.w * Math.cos(r)) + Math.abs(box.h * Math.sin(r));
+  const h = Math.abs(box.w * Math.sin(r)) + Math.abs(box.h * Math.cos(r));
+  return { x: box.x + (box.w - w) / 2, y: box.y + (box.h - h) / 2, w, h };
+}
+
+/** Shapes' markup in the order given, each with its z-index, and their
+    words joined by newlines: a gap between every two shapes with words. */
+function joinPlaced(shapes: Placed[]): RenderedText {
+  const pieces: string[] = [];
+  const htmlParts: string[] = [];
+  for (const shape of shapes) {
+    const withZ = shape.html.replace(/^<div class="([^"]*)" style="/, `<div class="$1" style="z-index:${shape.z};`);
+    if (shape.text !== null && shape.text.length > 0) {
+      if (pieces.length > 0) htmlParts.push(textGap("\n"));
+      pieces.push(shape.text);
+    }
+    htmlParts.push(withZ);
+  }
+  return { html: htmlParts.join(""), text: pieces.join("\n") };
 }
 
 function notesText(ctx: Ctx, path: string, master: MasterCtx, palette: Palette): RenderedText | null {

@@ -34,7 +34,7 @@ import { parsePdf } from "@/lib/parse/pdf";
 import type { ParsedBlock, ParsedDocument } from "@/lib/parse/types";
 import { resolveContentsLinks } from "@/lib/parse/url";
 import { fromImport, fromParse, printedNotes, type Doc } from "./adapt";
-import { blindText, forgetText, freeScores, laterTitle, lookScores, pdfText, wordBorders, type FreeScores, type PageSetup, type PdfText } from "./free";
+import { blindText, forgetText, freeScores, ligatureWords, laterTitle, lookScores, markWords, mathSymbolWords, pdfText, wordBorders, type FreeScores, type PageSetup, type PdfText } from "./free";
 import { forgetGlyphs, glyphScores, pdfGlyphs, placeCrops, placeEquations, type GlyphScores } from "./glyphs";
 import { bodyFace, labelScores, layoutScores, linesOfUnits, type PageInk } from "./layout";
 import { loadCorpus, loadRef, refPath, REF_DIRS, ROOT, type CorpusEntry } from "./load";
@@ -43,6 +43,7 @@ import { flatten, formulasByPage, lostFormulas, score, type Scores } from "./met
 import { forgetPaint, inkBands, inkRight, pdfPaint, type PagePaint } from "./paint";
 import type { RefBlock, RefDoc, Span } from "./model";
 import { detailReport } from "./report";
+import { wordsOf } from "./text";
 
 // ── Flags ───────────────────────────────────────────────────────────────────
 
@@ -297,13 +298,34 @@ async function runEntry(entry: CorpusEntry): Promise<Result> {
   // What the pages paint beyond pdftotext's lines (paint.ts): the text it cannot read, the images.
   const paint: PagePaint[] = await quietly(() => pdfPaint(pdfPath));
   const text = pdfTextOf(pdfPath, pages);
-  result.pdf = { ...text, blind: blindText(text, paint) };
+  // A word read out of a right-to-left mark's glyph counts as the page draws it, its ligatures with it.
+  const marked = markWords(text, paint);
+  // A ligature word whose pieces a mark word took is that word's: each piece
+  // once, anywhere on its page (a mark glyph's letters may stand on the line
+  // over its word's).
+  const pool = new Map<number, string[]>();
+  for (const m of marked) pool.set(m.page, [...(pool.get(m.page) ?? []), ...wordsOf(m.word).map((w) => w.w)]);
+  const ligatures = ligatureWords(text, paint).filter((l) => {
+    const left = pool.get(l.page) ?? [];
+    const need = wordsOf(l.word).map((w) => w.w);
+    const rest = [...left];
+    for (const w of need) {
+      const k = rest.indexOf(w);
+      if (k < 0) return true;
+      rest.splice(k, 1);
+    }
+    pool.set(l.page, rest);
+    return false;
+  });
+  result.pdf = { ...text, blind: blindText(text, paint), symbols: [...text.symbols, ...marked, ...ligatures] };
   // The text layer and its furniture are the reference-free checks' (a 500-page scan's took most of the time
   // the line charged to the glyph checks).
   t0 = since("free", t0);
   const glyphs = /\.pdf$/i.test(file) ? await quietly(() => pdfGlyphs(pdfPath)) : null;
   if (parsed.richText) placeEquations(docs.parse, docs.import);
   if (glyphs) {
+    // The words the text layer reads out of TeX's math fonts by their codes count as the page draws them.
+    result.pdf.symbols = [...result.pdf.symbols, ...mathSymbolWords(result.pdf, glyphs)];
     result.glyphs = { parse: glyphScores(glyphs, docs.parse, pages), import: parsed.richText ? glyphScores(glyphs, docs.import, pages) : undefined };
   }
   t0 = since("glyphs", t0);
@@ -311,7 +333,8 @@ async function runEntry(entry: CorpusEntry): Promise<Result> {
   // The checks against the page's lines and fonts (layout.ts): the body's face and the page labels are the
   // document's, the rest each candidate's.
   const face = bodyFace(pdfPath, pages);
-  const labels = labelScores(parsed.pageLabels, result.pdf.sizes.size, pages);
+  const deck = result.pdf.sizes.size >= 2 && [...result.pdf.sizes.values()].every((z) => z.width > z.height);
+  const labels = labelScores(parsed.pageLabels, result.pdf.sizes.size, pages, deck);
   // A Word file's pictures are its own images, not crops of its rendering's pages: no picture to find.
   const pictures = word ? [] : contentImages(result.pdf, paint);
   const ink: PageInk = { bands: (page, box) => inkBands(pdfPath, page, box), right: (page, box) => inkRight(pdfPath, page, box) };

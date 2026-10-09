@@ -17,10 +17,43 @@ function tocEntryPart(line: Line): { text: string; runs: Run[] } {
   return { text, runs: part.runs.map((r) => ({ ...r, end: Math.min(r.end, text.length) })).filter((r) => r.end > r.start) };
 }
 
-// An entry: a numbered title ("4.2 Soil samples …"), or a title with its
-// page number in a cell of its own ("Glossary  88").
+// Leader dots run to the page number: a contents entry's own tail, numbered
+// or not (Word's "Introduction ........ 1").
+const LEADER_TAIL_RE = /\S\s*(?:\.\s*){4,}\d{1,4}\s*$/;
+
+// An entry: a numbered title ("4.2 Soil samples …"), a title with its
+// page number in a cell of its own ("Glossary  88"), or a title with
+// leader dots to its page number.
 export function isContentsEntry(line: Line): boolean {
-  return (line.cells.length <= 2 || TOC_TAIL_RE.test(line.text)) && (TOC_ENTRY_RE.test(line.text) || (line.cells.length === 2 && /^\d{1,4}$/.test(line.cells[1].text.trim())));
+  return (
+    LEADER_TAIL_RE.test(line.text) ||
+    ((line.cells.length <= 2 || TOC_TAIL_RE.test(line.text)) && (TOC_ENTRY_RE.test(line.text) || (line.cells.length === 2 && /^\d{1,4}$/.test(line.cells[1].text.trim()))))
+  );
+}
+
+// A title too long for its line, its wrap under it set in and ending in the
+// leader dots: one entry of two lines ("Table 1. … of Veterans" over
+// "Affairs (VA) Benefits ........ 3").
+function wrapsToLeaders(lines: Line[], j: number, leading: number): boolean {
+  const [entry, wrap] = [lines[j], lines[j + 1]];
+  return (
+    wrap !== undefined &&
+    entry.cells.length > 0 &&
+    !TOC_TAIL_RE.test(entry.text) &&
+    LEADER_TAIL_RE.test(wrap.text) &&
+    wrap.x > entry.x &&
+    wrap.y < entry.y &&
+    entry.y - wrap.y <= wrap.size * Math.max(1.6, leading * 1.2)
+  );
+}
+
+/** A Word contents list with no label over it: a line with leader dots to
+    its page number opens one, or a line whose wrap under it ends in them
+    (parse loop finding: a CRS report's lists of figures and tables, under
+    "Figures" and "Tables", read as paragraphs, each entry's "Table 1." a
+    caption apart from its table). */
+export function opensLeaderList(lines: Line[], i: number, leading: number): boolean {
+  return LEADER_TAIL_RE.test(lines[i].text) || wrapsToLeaders(lines, i, leading);
 }
 
 // A contents list reads as one in the reader and the import (the converter
@@ -42,6 +75,7 @@ function entryDepth(text: string): number {
 export function readContentsEntries(lines: Line[], i: number, leading: number): Step {
   const builder = new TextBuilder();
   const entries: { start: number; end: number; num: number }[] = [];
+  const insets = new Set<number>();
   let j = i;
   while (j < lines.length) {
     const entry = lines[j];
@@ -69,8 +103,13 @@ export function readContentsEntries(lines: Line[], i: number, leading: number): 
     // list (parse loop finding: The Art of Linear Algebra's contents took
     // the 14 pt "1 Viewing a Matrix – 4 Ways" under it, and its first
     // paragraph as that entry's wrap).
-    if (!isContentsEntry(entry) || (j > i && entry.size > lines[i].size * 1.14)) break;
-    const indent = "  ".repeat(entryDepth(entry.text));
+    if (!(isContentsEntry(entry) || wrapsToLeaders(lines, j, leading)) || (j > i && entry.size > lines[i].size * 1.14)) break;
+    // An unnumbered entry's depth is its indent's: Word sets each level of
+    // its contents further in (a CRS report's 90, 107, and 125 pt).
+    const numbered = TOC_ENTRY_RE.test(entry.text);
+    if (!numbered) insets.add(Math.round(entry.x));
+    const depth = numbered ? entryDepth(entry.text) : [...insets].filter((x) => x < Math.round(entry.x) - 3).length;
+    const indent = "  ".repeat(depth);
     const part = tocEntryPart(entry);
     const start = (builder.text.length === 0 ? 0 : builder.text.length + 1) + indent.length;
     builder.append({ text: indent + part.text, runs: part.runs.map((r) => ({ ...r, start: r.start + indent.length, end: r.end + indent.length })) }, "\n");

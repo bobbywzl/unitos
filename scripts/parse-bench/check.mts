@@ -7,9 +7,9 @@ import type { ParsedBlock } from "@/lib/parse/types";
 import type { Glyph } from "@/lib/parse/pdf/drawing";
 import { fromImport, fromParse, printedNotes, type Doc, type DocBlock } from "./adapt";
 import { brokenNumbers, checklistWraps, displayDrawn, displayGaps, displaySpace, markerStart, rowHeight, rowHeights } from "./drawn";
-import { blindText, borderScore, formulaScaleOf, freeScores, furnitureOf, mathPart, ocrSame, type PdfText } from "./free";
+import { blindText, borderScore, formulaScaleOf, freeScores, furnitureOf, mathPart, mathSymbolWords, ocrSame, type PdfText } from "./free";
 import { captionScores, captionSides, contentImages, cropOverlaps, pictureScores } from "./floats";
-import type { PagePaint } from "./paint";
+import type { InkBand, PagePaint } from "./paint";
 import { glyphScores, placeCrops, placeEquations, type PageGlyphs } from "./glyphs";
 import { columnScores, cropScores, faceShape, farSpace, figureScores, gridProse, indentScores, labelScores, linesOfUnits, proofBoxes, runInIndents, tableScores, titleMarks, type PageInk } from "./layout";
 import { mathTokens, sequenceSimilarity } from "./math";
@@ -615,6 +615,25 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   const symbolic = freeScores(symbolPdf, flatten({ blocks: [para("◆ The yard grew α wide.")] })).coverage;
   check("free: a symbol font's character counts as the page draws it, not as the text layer's letter", near(symbolic.recall, 1) && near(symbolic.precision, 1), `recall ${symbolic.recall}, precision ${symbolic.precision}`);
   check("free: a line that is a page number and a period counts as a page-number line", numbered.numberLines.count === 1, `count ${numbered.numberLines.count}`);
+  // TeX's math glyphs the text layer reads by their codes: cmex's ∫ read "Z", cmsy's ⟩ read "i" after "xyz"; cmsy's
+  // "|" (code 106, "j") in a word read right ("|ψj") stays as the text layer reads it.
+  const mathLine = { page: 1, top: 100, bottom: 110, left: 100, right: 300, text: "Z |xyzi |ψj", words: [{ left: 100, right: 110, text: "Z" }, { left: 120, right: 160, text: "|xyzi" }, { left: 170, right: 200, text: "|ψj" }] };
+  const mathPage: PageGlyphs = {
+    width: 600,
+    height: 800,
+    shapes: [],
+    glyphs: [
+      { family: "omx", code: 90, unicode: "∫", x: 101, y: 692, w: 8, size: 10 },
+      { family: "oms", code: 105, unicode: "⟩", x: 152, y: 692, w: 6, size: 10 },
+      { family: "oms", code: 106, unicode: "|", x: 170, y: 692, w: 3, size: 10 },
+    ],
+  };
+  const mathWords = mathSymbolWords({ lines: [mathLine] }, [mathPage]);
+  check(
+    "free: a TeX math glyph the text layer reads by its code counts as the page draws it",
+    mathWords.length === 2 && mathWords[0].reads === "" && mathWords[1].reads === "|xyz",
+    JSON.stringify(mathWords.map((w) => [w.word, w.reads])),
+  );
 }
 {
   const ROLE_REF: RefBlock[] = [
@@ -855,6 +874,7 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
     width: 600,
     height: 800,
     glyphs: [g("oml", 0x78, "x", 100, 400), g("ot1", 0x32, "2", 106, 403.6, 7), g("oms", 0x36, "6", 200, 400), g("ot1", 0x3d, "=", 200, 400), g("oms", 0x46, "F", 300, 400)],
+    shapes: [],
   };
   const whole = { kind: "path" as const, points: [[0, 0], [100, 0], [100, 100], [0, 100]] as [number, number][] };
   const around = (x1: number, x2: number) => ({ kind: "path" as const, points: [[x1, 45], [x2, 45], [x2, 55], [x1, 55]] as [number, number][] });
@@ -874,7 +894,12 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   check("glyphs: \\not over = passes as \\neq", justNeq.passed === 1, JSON.stringify(justNeq.fails));
   const picture = glyphScores([page], doc("", [{ kind: "figure", at: { page: 1, region: whole } }]), undefined);
   check("glyphs: a figure over TeX math glyphs is an equation shown as a picture", picture.mathImages === 1);
-  const blackboard: PageGlyphs = { width: 600, height: 800, glyphs: [g("msb", 0x52, "R", 100, 400)] };
+  // A region that draws a shape (a chart's curve, a diagram's box) is a drawn diagram, whatever fonts its labels are set in.
+  const diagram = glyphScores([{ ...page, shapes: [{ x1: 90, y1: 380, x2: 320, y2: 420 }] }], doc("", [{ kind: "figure", at: { page: 1, region: whole } }]), undefined);
+  check("glyphs: a figure whose region draws a shape is a diagram, not an equation shown as a picture", diagram.mathImages === 0);
+  const ground = glyphScores([{ ...page, shapes: [{ x1: 0, y1: 0, x2: 600, y2: 700 }] }], doc("", [{ kind: "figure", at: { page: 1, region: around(16, 52) } }]), undefined);
+  check("glyphs: a shape that reaches past the region is the page's, and the figure stays an equation shown as a picture", ground.mathImages === 1);
+  const blackboard: PageGlyphs = { width: 600, height: 800, glyphs: [g("msb", 0x52, "R", 100, 400)], shapes: [] };
   const reals = glyphScores([blackboard], doc("", [{ kind: "equation", latex: "x \\in \\mathbb{R}" }]), undefined);
   check("glyphs: \\mathbb{R} in an equation prints ℝ", reals.hazards === 1 && reals.garbles === 0, JSON.stringify(reals.missing));
   const parsed: Doc = { blocks: [eq("x^{2}"), { kind: "equation", latex: "a \\neq b", at: { page: 1, region: around(32, 35) } }] };
@@ -892,15 +917,15 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   check("glyphs: a crop's symbols count as printed, captioned or not", cropped(undefined).garbles === 0 && cropped("6= F").garbles === 0, `${JSON.stringify(cropped(undefined).missing)} ${JSON.stringify(cropped("6= F").missing)}`);
   // A cmex brace hangs below its origin, which stands at its top: a crop whose region starts just under the top
   // holds it whole.
-  const braced: PageGlyphs = { width: 600, height: 800, glyphs: [g("omx", 40, "(", 390, 444), g("oml", 0x78, "x", 400, 400)] };
+  const braced: PageGlyphs = { width: 600, height: 800, glyphs: [g("omx", 40, "(", 390, 444), g("oml", 0x78, "x", 400, 400)], shapes: [] };
   const brace = glyphScores([braced], doc("", [{ kind: "figure", at: { page: 1, region: around(60, 70) } }]), undefined);
   check("glyphs: a crop holds the cmex brace that hangs into it", brace.hazards === 1 && brace.garbles === 0, JSON.stringify(brace.missing));
   // A cmex ∑ set at a script's size (an exponent's) is at the script's level; a norm's bars are one symbol
   // however KaTeX draws them (‖ or ∥).
-  const exponent: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x78, "x", 100, 400), g("omx", 0x50, "∑", 106, 404, 7), g("oml", 0x64, "d", 112, 404, 7)] };
+  const exponent: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x78, "x", 100, 400), g("omx", 0x50, "∑", 106, 404, 7), g("oml", 0x64, "d", 112, 404, 7)], shapes: [] };
   const scriptSum = glyphScores([exponent], doc("", [{ kind: "equation", latex: "x^{\\sum d}", at: { page: 1, region: around(15, 20) } }]), undefined);
   check("glyphs: a cmex glyph set at a script's size takes the script's level", scriptSum.checked === 1 && scriptSum.passed === 1, JSON.stringify(scriptSum.fails));
-  const bars: PageGlyphs = { width: 600, height: 800, glyphs: [g("oms", 0x6b, "k", 100, 400), g("oml", 0x78, "x", 106, 400), g("oms", 0x6b, "k", 112, 400)] };
+  const bars: PageGlyphs = { width: 600, height: 800, glyphs: [g("oms", 0x6b, "k", 100, 400), g("oml", 0x78, "x", 106, 400), g("oms", 0x6b, "k", 112, 400)], shapes: [] };
   // A candidate's LaTeX may hold ‖ itself, which KaTeX draws with a warning about its metrics: kept out of the output.
   const warn = console.warn;
   console.warn = () => {};
@@ -908,24 +933,24 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   console.warn = warn;
   check("glyphs: a norm's bars drawn as ‖ or ∥ are one symbol", norm.checked === 1 && norm.passed === 1, JSON.stringify(norm.fails));
   // ⟺ drawn as ⇐ and ⇒ overlapping by 3 mu (TeX's \Longleftrightarrow), which also opens ⟸ with "=".
-  const iff: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x61, "a", 90, 400), { ...g("oms", 0x28, "⇐", 100, 400), w: 10 }, { ...g("oms", 0x29, "⇒", 108.3, 400), w: 10 }, g("oml", 0x62, "b", 120, 400)] };
+  const iff: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x61, "a", 90, 400), { ...g("oms", 0x28, "⇐", 100, 400), w: 10 }, { ...g("oms", 0x29, "⇒", 108.3, 400), w: 10 }, g("oml", 0x62, "b", 120, 400)], shapes: [] };
   const joined = glyphScores([iff], doc("", [{ kind: "equation", latex: "a \\Longleftrightarrow b", at: { page: 1, region: around(14, 22) } }]), undefined);
   check("glyphs: ⇐ and ⇒ joined by TeX's overlap are ⟺", joined.checked === 1 && joined.passed === 1, JSON.stringify(joined.fails));
   // A display's printed number "(3)" in its region, set an em and more apart in a text font: the formula is
   // read without it, whether the candidate kept the label or not.
-  const numbered: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x78, "x", 100, 400), g("ot1", 0x28, "(", 500, 400), g("ot1", 0x33, "3", 504, 400), g("ot1", 0x29, ")", 509, 400)] };
+  const numbered: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x78, "x", 100, 400), g("ot1", 0x28, "(", 500, 400), g("ot1", 0x33, "3", 504, 400), g("ot1", 0x29, ")", 509, 400)], shapes: [] };
   const unlabelled = glyphScores([numbered], doc("", [{ kind: "equation", latex: "x", at: { page: 1, region: around(15, 90) } }]), undefined);
   const labelled = glyphScores([numbered], doc("", [{ kind: "equation", latex: "x", label: "(3)", at: { page: 1, region: around(15, 90) } }]), undefined);
   check("glyphs: a display's printed number is no symbol of its formula", unlabelled.passed === 1 && labelled.passed === 1, `${JSON.stringify(unlabelled.fails)} ${JSON.stringify(labelled.fails)}`);
   // A tall paren KaTeX draws as a picture stands for the cmex paren the page draws; a stacked brace counts once.
-  const tall: PageGlyphs = { width: 600, height: 800, glyphs: [g("omx", 0x10, "(", 100, 420), g("omx", 0x5f, "⋁", 110, 420), g("oml", 0x78, "x", 125, 400), g("omx", 0x11, ")", 135, 420)] };
+  const tall: PageGlyphs = { width: 600, height: 800, glyphs: [g("omx", 0x10, "(", 100, 420), g("omx", 0x5f, "⋁", 110, 420), g("oml", 0x78, "x", 125, 400), g("omx", 0x11, ")", 135, 420)], shapes: [] };
   const pictured = glyphScores([tall], doc("", [{ kind: "equation", latex: "\\left(\\bigvee_{q\\in Q} x\\right)", at: { page: 1, region: around(15, 25) } }]), undefined);
   check("glyphs: a delimiter KaTeX draws as a picture stands for the page's", pictured.fails.every((f) => !f.extra.some((x) => x.startsWith("(delimiter)"))) && pictured.fails.every((f) => !f.missing.some((x) => x.startsWith("(@") || x.startsWith(")@"))), JSON.stringify(pictured.fails));
-  const stacked: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x78, "x", 90, 400), g("ot1", 0x3d, "=", 96, 400), g("omx", 0x38, "", 106, 414), g("omx", 0x3c, "", 106, 404), g("omx", 0x3a, "", 106, 394), g("ot1", 0x30, "0", 116, 410), g("ot1", 0x31, "1", 116, 392)] };
+  const stacked: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x78, "x", 90, 400), g("ot1", 0x3d, "=", 96, 400), g("omx", 0x38, "", 106, 414), g("omx", 0x3c, "", 106, 404), g("omx", 0x3a, "", 106, 394), g("ot1", 0x30, "0", 116, 410), g("ot1", 0x31, "1", 116, 392)], shapes: [] };
   const cases = glyphScores([stacked], doc("", [{ kind: "equation", latex: "x = \\begin{cases} 0 \\\\ 1 \\end{cases}", at: { page: 1, region: around(14, 22) } }]), undefined);
   check("glyphs: a brace stacked from pieces is one brace on both sides", cases.fails.every((f) => !f.extra.some((x) => /^[⎧⎨⎩]/.test(x)) && !f.missing.some((x) => x.startsWith("{@"))), JSON.stringify(cases.fails));
   // An arrow KaTeX draws as a picture (\xrightarrow) stands for the arrow the page draws.
-  const arrowed: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x61, "a", 90, 400), { ...g("oms", 0x21, "→", 100, 400), w: 10 }, g("oml", 0x62, "b", 114, 400)] };
+  const arrowed: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x61, "a", 90, 400), { ...g("oms", 0x21, "→", 100, 400), w: 10 }, g("oml", 0x62, "b", 114, 400)], shapes: [] };
   const xarrow = glyphScores([arrowed], doc("", [{ kind: "equation", latex: "a \\xrightarrow{} b", at: { page: 1, region: around(14, 22) } }]), undefined);
   check("glyphs: an arrow KaTeX draws as a picture stands for the page's", xarrow.checked === 1 && xarrow.passed === 1, JSON.stringify(xarrow.fails));
   // TeX's \vdots and \ddots: three periods of the text font, in a column and stepping right.
@@ -933,11 +958,12 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
     width: 600,
     height: 800,
     glyphs: [g("ot1", 0x2e, ".", 100, 410), g("ot1", 0x2e, ".", 100, 406), g("ot1", 0x2e, ".", 100, 402), g("ot1", 0x2e, ".", 110, 407), g("ot1", 0x2e, ".", 114, 404), g("ot1", 0x2e, ".", 118, 401)],
+    shapes: [],
   };
   const stackedDots = glyphScores([dots], doc("", [{ kind: "equation", latex: "\\vdots \\ddots", at: { page: 1, region: around(14, 22) } }]), undefined);
   check("glyphs: three periods in a column are ⋮, stepping down right ⋱", stackedDots.checked === 1 && stackedDots.passed === 1, JSON.stringify(stackedDots.fails));
   // A diagram read with its own labels as its caption (no "Figure N"): its ℱ counts once, from its region.
-  const labelled2: PageGlyphs = { width: 600, height: 800, glyphs: [g("oms", 0x46, "F", 300, 400), g("oms", 0x46, "F", 300, 300)] };
+  const labelled2: PageGlyphs = { width: 600, height: 800, glyphs: [g("oms", 0x46, "F", 300, 400), g("oms", 0x46, "F", 300, 300)], shapes: [] };
   const once = glyphScores([labelled2], { blocks: [{ kind: "figure", caption: [{ text: "ℱ loss" }], at: { page: 1, region: around(45, 55) } }, { kind: "paragraph", spans: [{ text: "the ℱ of" }] }] }, undefined);
   check("glyphs: a figure whose caption is its picture's labels counts its symbols once", once.garbles === 0 && once.hazards === 2, JSON.stringify(once.missing));
   // The import's crop of a display has no caption: it is an equation picture where the parse's is one.
@@ -950,7 +976,7 @@ const near = (a: number | null, b: number) => a !== null && Math.abs(a - b) < 1e
   );
   // The page sets a, b, and c on one line; LaTeX that stacks them in rows draws another formula, with every
   // symbol there at its level.
-  const line: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x61, "a", 100, 400), g("oml", 0x62, "b", 110, 400), g("oml", 0x63, "c", 120, 400)] };
+  const line: PageGlyphs = { width: 600, height: 800, glyphs: [g("oml", 0x61, "a", 100, 400), g("oml", 0x62, "b", 110, 400), g("oml", 0x63, "c", 120, 400)], shapes: [] };
   const inRows = glyphScores([line], doc("", [{ kind: "equation", latex: "\\begin{gathered} a \\\\ b \\\\ c \\end{gathered}", at: { page: 1, region: around(15, 22) } }]), undefined);
   const onLine = glyphScores([line], doc("", [{ kind: "equation", latex: "abc", at: { page: 1, region: around(15, 22) } }]), undefined);
   check("glyphs: LaTeX that stacks in rows what the page sets on one line fails the rows check", inRows.rowsWrong === 1 && inRows.passed === 0 && onLine.rowsWrong === 0 && onLine.passed === 1, `${JSON.stringify(inRows.fails)} ${onLine.rowsWrong}`);
@@ -1378,6 +1404,14 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
   for (const [p, left] of [[4, 80], [5, 100], [6, 120]]) at(p, 60, left, "Tip");
   for (const [p, n] of [[5, 2], [6, 11], [8, 13]]) at(p, 45, 72, `Note ${n}.`);
   at(4, 58, 72, "I.");
+  // A deck's template slides each end their list with the same bulleted item at one height.
+  for (const p of [2, 3, 4, 5]) at(p, 700, 72, "• Ut labore et dolore magna aliqua");
+  // A scan's row of marks under the text (the paper's edge read as letters), and a formula's row of letters.
+  ", I , i I I I I I i ........".split(" ").forEach((t, k) => at(8, 770, 72 + 30 * k, t));
+  "a b c d e".split(" ").forEach((t, k) => at(9, 770, 72 + 30 * k, t));
+  // A loose-leaf sheet's page labels, left or right as the page faces, and a section's number at a page's head.
+  for (const [p, left, top, text] of [[5, 60, 20, "2.1.30-2"], [6, 480, 28, "2.1.30-3"], [7, 70, 16, "2.1. 30-4"]] as const) at(p, top, left, text);
+  for (const [p, text] of [[8, "11.4.2"], [9, "11.5.3"], [10, "11.6.2"]] as const) at(p, 75, 72, text);
   const found = new Set(furnitureOf(lines, new Map(Array.from({ length: 10 }, (_, k) => [k + 1, { width: 612, height: 792 }]))).map((l) => `${l.page} ${l.text}`));
   const has = (key: string) => found.has(key);
   check(
@@ -1389,6 +1423,21 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     "free: a chapter's heading on pages far apart, a label at other places, notes that do not count, and a chapter's I. are no furniture",
     !has("3 Introduction") && !has("5 Tip") && !has("6 Note 11.") && !has("4 I."),
     [...found].filter((k) => /Introduction|Tip|Note|I\./.test(k)).join(" | "),
+  );
+  check(
+    "free: a scan's row of marks at a page's foot is furniture; a formula's row of letters is none",
+    has("8 i") && has("8 ........") && !has("9 c"),
+    [...found].filter((k) => /^[89] /.test(k)).join(" | "),
+  );
+  check(
+    "free: a loose-leaf sheet's page labels are furniture; a section's number is none",
+    has("5 2.1.30-2") && has("6 2.1.30-3") && has("7 2.1. 30-4") && !has("9 11.5.3"),
+    [...found].filter((k) => /\d\.\d/.test(k)).join(" | "),
+  );
+  check(
+    "free: a bulleted item at one height on every slide is a list's item, not furniture",
+    !has("3 • Ut labore et dolore magna aliqua"),
+    [...found].filter((k) => /labore/.test(k)).join(" | "),
   );
   // A page number next to a heading's own words is no leak; one alone is.
   const pageNumber = { page: 2, top: 740, bottom: 750, left: 300, right: 306, text: "2" };
@@ -1439,6 +1488,15 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
   // A display read as words holds a line "12": no page-number line.
   const display = freeScores({ ...numberPdf, furniture: [] }, flatten({ blocks: [para("MSE = 1\n12\nI=0")] }));
   check("free: a number on a line inside a block is no page-number line", display.numberLines.count === 0, `count ${display.numberLines.count}`);
+  // A listing's row "2 {": its line number and its brace, two lines of the text layer, read the page number's words.
+  const listingRow = [
+    { page: 1, top: 200, bottom: 206, left: 100, right: 103, text: "2" },
+    { page: 1, top: 199, bottom: 207, left: 118, right: 123, text: "{" },
+  ];
+  const listingPdf: PdfText = { ...numberPdf, lines: [...numberPdf.lines, ...listingRow] };
+  const listing: DocBlock = { kind: "code", text: "1 \\draw\n2 {\n3 }" };
+  const numbered2 = freeScores(listingPdf, flatten({ blocks: [heading, para("The telescope saw the source."), listing] })).furniture;
+  check("free: a listing's row that reads a page number's words is the page's own", numbered2.leaked === 0, `leaked ${numbered2.leaked}`);
 }
 
 // ── The page's own lines: columns, indents, tables, figures, crops, faces, labels ──
@@ -1470,6 +1528,11 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
   const falseSet = indentScores(flushPdf, indented, linesOfUnits(flushPdf, indented));
   const trueSet = indentScores(setInPdf, indented, linesOfUnits(setInPdf, indented));
   check("layout: a block indent the page does not set is false; one it sets is right", falseSet.wrong === 1 && trueSet.judged === 1 && trueSet.wrong === 0, `${JSON.stringify(falseSet.found)} ${JSON.stringify(trueSet.found)}`);
+  // A page that sets every block 20 pt in under heads at the column's edge: the heads show the edge.
+  const heads = [0, 1].map((i) => ({ page: 1, top: 80 + 200 * i, bottom: 90 + 200 * i, left: 72, right: 150, text: `Bemerkung ${i + 17}` }));
+  const blocksPdf: PdfText = { ...flushPdf, lines: [...own.map((l) => ({ ...l, left: 92 })), ...other.map((l) => ({ ...l, left: 92 })), ...heads] };
+  const underHeads = indentScores(blocksPdf, indented, linesOfUnits(blocksPdf, indented));
+  check("layout: a block set in under heads at the column's edge is set in", underHeads.judged === 1 && underHeads.wrong === 0, JSON.stringify(underHeads));
   // A drawing read as a display's crop over the captioned rest of its figure: one figure in two pieces.
   const region = (y1: number, y2: number) => ({ kind: "path" as const, points: [[20, y1], [80, y1], [80, y2], [20, y2]] as [number, number][] });
   const top: DocBlock = { kind: "figure", mathImage: "", at: { page: 1, region: region(10, 20) } };
@@ -1479,6 +1542,16 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
   check(
     "layout: a figure's top read apart from its captioned rest is a figure in two pieces; with words between them, two figures",
     figureScores(pdf, flatten({ blocks: [top, rest] })).split === 2 && figureScores(gapPdf, flatten({ blocks: [top, apart] })).split === 0,
+  );
+  // A margin caption read as a figure of its own: its region holds no ink but its caption's line.
+  const marginLine = { page: 1, top: 300, bottom: 310, left: 450, right: 520, text: "Figure 1. The dam." };
+  const marginPdf: PdfText = { ...pdf, lines: [...pdf.lines, marginLine] };
+  const margin: DocBlock = { kind: "figure", caption: [{ text: "Figure 1. The dam." }], at: { page: 1, region: { kind: "path", points: [[74, 30], [88, 30], [88, 45], [74, 45]] } } };
+  const inkOf = (bands: InkBand[]): PageInk => ({ bands: () => bands, right: () => null });
+  check(
+    "layout: a captioned figure that draws nothing but its caption is a piece; one that draws a picture is none",
+    figureScores(marginPdf, flatten({ blocks: [margin] }), inkOf([{ top: 300, bottom: 310, baseline: 308 }]), [[pdf.lines.length]]).split === 1 &&
+      figureScores(marginPdf, flatten({ blocks: [margin] }), inkOf([{ top: 250, bottom: 290, baseline: 290 }, { top: 300, bottom: 310, baseline: 308 }]), [[pdf.lines.length]]).split === 0,
   );
   // A display's crop that holds a line of the paragraph (it starts at the column's edge, words of prose) holds prose.
   const cropPdf = (text: string, left: number): PdfText => ({ ...pdf, lines: [...lines, { page: 1, top: 400, bottom: 410, left, right: left + 200, text }] });
@@ -1532,6 +1605,8 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     drawn !== null && drawn.above !== null && drawn.above > 4 && asPage.right === 2 && asPage.edges === 2 && offPage.right === 0,
     `${JSON.stringify(drawn)} ${JSON.stringify(asPage)} ${JSON.stringify(offPage)}`,
   );
+  const ruled = displayGaps(doc(4), parse, pdf, () => [...ink(drawn?.above ?? 0, drawn?.below ?? 0)().slice(0, 2), { top: 322, bottom: 322.5, baseline: 322.5 }, ...ink(drawn?.above ?? 0, drawn?.below ?? 0)().slice(2)]);
+  check("look: a rule between a display and the line under it is no line: the space under reads to the line", ruled.right === 2 && ruled.edges === 2, JSON.stringify(ruled));
   check("look: a display's space is the paragraph's space after plus the math block's own", near((displayDrawn(doc(8), 1)?.above ?? 0) - (drawn?.above ?? 0), 4) && space.top >= 0);
   // A table of one-line rows the page sets at the page editor's row height, and at twice it.
   const row = rowHeight(10, 1);
@@ -1592,10 +1667,16 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     { kind: "paragraph", spans: [{ text: "Figure 6.1 shows the dam after the flood." }] },
     { kind: "figure", at: { page: 1, region: region(72, 150, 300, 250) } },
     { kind: "figure", caption: [{ text: "Figure 2.6 Not all subsets are subspaces." }] },
+    { kind: "paragraph", spans: [{ text: "MAP." }] },
   ];
   const flatFloats = flatten({ blocks: floats });
   const captions = captionScores(flatFloats);
-  check("floats: a paragraph that opens as a caption is a caption apart; a sentence that names a figure (\"Figure 6.1 shows\") is none; a figure's caption with no stop after its number is kept", captions.alone === 1 && captions.captions === 3, JSON.stringify(captions));
+  check("floats: a paragraph that opens as a caption is a caption apart; a sentence that names a figure (\"Figure 6.1 shows\") is none; a figure's caption with no stop after its number is kept; an acronym in capitals (\"MAP.\") is no label", captions.alone === 1 && captions.captions === 3, JSON.stringify(captions));
+  // A caption cut in two: its tail opens in lower case on the page's next line; a paragraph after the float's gap is none.
+  const cut = flatten({ blocks: [{ kind: "figure", caption: [{ text: "Figure 2: A plot of the flow" }], at: { page: 1, region: region(72, 100, 300, 300) } }, para("is clearly linear.")] });
+  const cutPdf = (gap: number) => pdfOf([line(300, 72, 400, "Figure 2: A plot of the flow"), line(300 + gap, 72, 160, "is clearly linear.")]);
+  const tailOf = (gap: number) => captionScores(cut, cutPdf(gap), [[0], [1]]).alone;
+  check("floats: a caption's tail on the page's next line is a caption apart; a paragraph a float's gap under it is none", tailOf(12) === 1 && tailOf(30) === 0, `${tailOf(12)} ${tailOf(30)}`);
   const overlaps = cropOverlaps(pdfOf([]), flatFloats);
   check("floats: two crops that share half their area overlap", overlaps.overlapping === 2 && overlaps.figures === 2, JSON.stringify(overlaps));
 
@@ -1612,6 +1693,26 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
     return captionSides(tablePage, f, linesOfUnits(tablePage, f));
   };
   check("floats: a caption the page sets under its table is wrong over it", sideOf("above").wrong === 1 && sideOf("below").wrong === 0 && sideOf("below").tables === 1, `${JSON.stringify(sideOf("above"))}`);
+  // A caption of two lines whose last words stand in the prose half a page under the table: placed on its own lines, the cells on theirs.
+  const twoLines: DocBlock = {
+    kind: "table",
+    caption: [{ text: "TABLE III HUFFMAN COMPRESSION RATIOS ON PRODUCTION CONVERSATION ARCHIVES" }],
+    captionSide: "above",
+    rows: [{ cells: [{ spans: [{ text: "Session" }] }, { spans: [{ text: "Ratio" }] }] }, { cells: [{ spans: [{ text: "c45775-a" }] }, { spans: [{ text: "65.3%" }] }] }],
+  };
+  const twoLinesPage = pdfOf([
+    line(100, 72, 300, "TABLE III"),
+    line(112, 72, 300, "H UFFMAN COMPRESSION RATIOS ON PRODUCTION CONVERSATION"),
+    line(124, 72, 300, "ARCHIVES"),
+    line(140, 72, 300, "Session Ratio"),
+    line(152, 72, 300, "c45775-a 65.3%"),
+    line(400, 72, 300, "Session names appear in the prose too, as do these"),
+    line(412, 72, 300, "production conversation archives."),
+  ]);
+  const twoLinesFlat = flatten({ blocks: [twoLines] });
+  const twoLinesPlaced = linesOfUnits(twoLinesPage, twoLinesFlat);
+  const twoLinesSide = captionSides(twoLinesPage, twoLinesFlat, twoLinesPlaced);
+  check("layout: a caption's last words in the prose under the table do not place the caption there; its table reads over its cells", twoLinesPlaced[0].every((l) => twoLinesPage.lines[l].top < 130) && twoLinesSide.tables === 1 && twoLinesSide.wrong === 0, `${JSON.stringify(twoLinesPlaced)} ${JSON.stringify(twoLinesSide)}`);
 
   // A note mark on the Title the page's title line does not print.
   const titled = (text: string) => {
@@ -1732,6 +1833,349 @@ check("math: LaTeXML MathML equals KaTeX's", near(sequenceSimilarity(mathTokens(
   };
   const wordTable = flatten({ blocks: [{ kind: "table", rows: [["Area", "Grade"], ["Lines", "B"], ["Storage", "C"]].map((row) => ({ cells: row.map((text) => ({ spans: [{ text }] })) })) }] });
   check("free: a Word file's table header repeated at a page's top is no word to cover", freeScores(repeated, wordTable, undefined, true).coverage.recall === 1 && (freeScores(repeated, wordTable, undefined, false).coverage.recall ?? 1) < 1);
+}
+
+// ── URL parse structure (web.mts structure audit) ───────────────────────────
+
+{
+  const { parseHtmlContent } = await import("@/lib/parse/url");
+  const shape = async (body: string) =>
+    (await parseHtmlContent(`<!doctype html><html><head><title>Notes on river flow</title></head><body><article>${body}</article></body></html>`, "https://example.org/rivers"))
+      .blocks.map((b) => `${b.type} ${b.text.slice(0, 24)}`);
+  const prose = (n: number) => `Paragraph ${n} says how a channel carries water from its source to its mouth, and how its banks and bed shape the flow.`;
+  // A container's loose words beside its headings and lists: each block keeps its shape.
+  const loose = await shape(
+    `<div>${prose(1)}<br><br>${prose(2)}<br><br><h2>Gravel bars</h2><br><br>${prose(3)}<br><ul><li>Sand settles behind every bar.</li><li>Silt settles further down.</li></ul><h2>Floods</h2>${prose(4)}<br><br>${prose(5)}</div>`,
+  );
+  check(
+    "url: a heading among a container's loose words is a heading",
+    loose.includes("HEADING Gravel bars") && loose.includes("HEADING Floods") && !loose.some((b) => b.startsWith("PARAGRAPH") && /Gravel bars|Floods/.test(b)),
+    loose.join(" / "),
+  );
+  check("url: a list among a container's loose words is a list", loose.some((b) => b.startsWith("LIST - Sand settles")), loose.join(" / "));
+  check("url: a container's loose words around its blocks stay paragraphs, one each", loose.filter((b) => b.startsWith("PARAGRAPH Paragraph")).length === 5, loose.join(" / "));
+  // A bold line right under a crosshead of its size is the section's first line; a bold line between paragraphs is a heading.
+  const crosshead = (
+    await parseHtmlContent(
+      `<!doctype html><html><head><title>Notes on river flow</title><style>p, h2 { font-size: 16px }</style></head><body><article><p>${prose(1)}</p><p>${prose(2)}</p><h2>Floods in the delta</h2><p><strong>Jane Doe, river correspondent</strong></p><p>${prose(3)}</p><p>${prose(4)}</p><p><strong>Gravel bars</strong></p><p>${prose(5)}</p></article></body></html>`,
+      "https://example.org/rivers",
+    )
+  ).blocks.map((b) => `${b.type} ${b.text.slice(0, 24)}`);
+  check(
+    "url: a bold line under a crosshead leaves the crosshead a heading and stays a paragraph",
+    crosshead.includes("HEADING Floods in the delta") && crosshead.includes("PARAGRAPH Jane Doe, river correspo") && crosshead.includes("HEADING Gravel bars"),
+    crosshead.join(" / "),
+  );
+  // Bold subheads in markup alone (no stylesheet): two or more over prose are headings; a lone one, a label, a bracketed source, and bold lines side by side stay paragraphs.
+  const subheads = await shape(
+    `<p>${prose(1)}</p><p><strong>Gravel bars</strong></p><p>${prose(2)}</p><p><b>Floods in the delta</b></p><p>${prose(3)}</p><p><strong>[River Times]</strong></p><p>${prose(4)}</p><p><strong>Gauge: the delta survey</strong></p><p>${prose(5)}</p><p><strong>Delta 14 11 — 25</strong></p><p><strong>Banks 10 8 — 18</strong></p><p>${prose(6)}</p>`,
+  );
+  check(
+    "url: bold subheads set in markup alone are headings",
+    subheads.includes("HEADING Gravel bars") && subheads.includes("HEADING Floods in the delta"),
+    subheads.join(" / "),
+  );
+  check(
+    "url: a bracketed source, a label, and bold lines side by side stay paragraphs",
+    ["PARAGRAPH [River Times]", "PARAGRAPH Gauge: the delta survey", "PARAGRAPH Delta 14 11 — 25", "PARAGRAPH Banks 10 8 — 18"].every((b) => subheads.includes(b)),
+    subheads.join(" / "),
+  );
+  const byline = await shape(`<p>${prose(1)}</p><p><strong>Jane Doe, river correspondent</strong></p><p>${prose(2)}</p><p>${prose(3)}</p>`);
+  check("url: one bold line over prose stays a paragraph", byline.includes("PARAGRAPH Jane Doe, river correspo"), byline.join(" / "));
+  // A row of short heading labels beside short values is one paragraph; a heading over a sentence keeps its shape.
+  const labels = (
+    await parseHtmlContent(
+      `<!doctype html><html><head><title>Notes on river flow</title></head><body><article><p>${prose(1)}</p><div><h5>Depth:</h5>4.2 m<br><h5>Width:</h5>36 m</div><p>${prose(2)}</p><div><h5>kcal</h5>4512</div><p>${prose(3)}</p><div><h2>Gravel bars</h2>Sand settles behind every bar, and silt settles further down the bend.</div><p>${prose(4)}</p></article></body></html>`,
+      "https://example.org/rivers",
+    )
+  ).blocks.map((b) => `${b.type} ${b.text}`);
+  check(
+    "url: a row of heading labels beside their values is one paragraph",
+    labels.some((b) => b.startsWith("PARAGRAPH Depth: 4.2 m")) && labels.includes("PARAGRAPH kcal 4512") && !labels.some((b) => /^HEADING (Depth|Width|kcal)/.test(b)),
+    labels.join(" / "),
+  );
+  check("url: a heading beside a sentence stays a heading", labels.includes("HEADING Gravel bars"), labels.join(" / "));
+  // Screen-reader text under the frameworks' own class names is not on the page.
+  const hidden = (
+    await parseHtmlContent(
+      `<!doctype html><html><head><title>Notes on river flow</title></head><body><article><p>${prose(1)}</p><figure><img src="https://example.org/delta.jpg" width="800" height="600" alt="The delta"><figcaption><span class="show-for-sr">Photo:</span>The delta at dawn</figcaption></figure><p>${prose(2)}<span class="visuallyhidden"> Opens in a new window</span></p><p>${prose(3)}</p></article></body></html>`,
+      "https://example.org/rivers",
+    )
+  ).blocks.map((b) => `${b.type} ${b.text}`);
+  check(
+    "url: screen-reader text (show-for-sr, visuallyhidden) is not read",
+    !hidden.some((b) => /Photo:|Opens in a new window/.test(b)) && hidden.some((b) => b.includes("The delta at dawn")),
+    hidden.join(" / "),
+  );
+  // Alignment: in quirks mode (no doctype) a table starts its text at the start edge whatever is centered around it; a table's align places its box.
+  const aligned = async (doctype: string, body: string) =>
+    (
+      await parseHtmlContent(
+        `${doctype}<html><head><title>Notes on river flow</title><style>p { font-size: 16px }</style></head><body>${body}</body></html>`,
+        "https://example.org/rivers",
+      )
+    ).blocks
+      .filter((b) => b.type === "PARAGRAPH")
+      .map((b) => b.html ?? "<p>");
+  const cell = `<table><tr><td><p>${prose(1)}</p><p>${prose(2)}</p><p>${prose(3)}</p></td></tr></table>`;
+  const quirks = await aligned("", `<div align="center">${cell}</div>`);
+  const standards = await aligned("<!doctype html>", `<div align="center">${cell}</div>`);
+  const boxed = await aligned("<!doctype html>", `<table align="center"><tr><td><p>${prose(1)}</p><p>${prose(2)}</p><p>${prose(3)}</p></td></tr></table>`);
+  check(
+    "url: centered words around a table do not center its cells in quirks mode",
+    quirks.length === 3 && quirks.every((h) => !h.includes("center")) && standards.every((h) => h.includes("center")),
+    `quirks ${quirks.join(" ")}; standards ${standards.join(" ")}`,
+  );
+  check("url: a table's align centers its box, not its text", boxed.length === 3 && boxed.every((h) => !h.includes("center")), boxed.join(" "));
+  // A box the page names a pull quote is a display line, whatever its tag.
+  const pulled = (
+    await parseHtmlContent(
+      `<!doctype html><html><head><title>Notes on river flow</title></head><body><article><p>${prose(1)}</p><table align="right"><tr><td class="pullquote">“Every bar moves a little with each flood,” the surveyor said.</td></tr></table><p>${prose(2)}</p><div class="pull-quote pull-quote--left"><span class="pull-quote__text">“Silt settles where the current slows.”</span></div><p>${prose(3)}</p></article></body></html>`,
+      "https://example.org/rivers",
+    )
+  ).blocks.map((b) => `${b.type} ${b.html ?? ""} ${b.text.slice(0, 12)}`);
+  check(
+    "url: a pull quote in a table's cell or a div is a display line",
+    pulled.filter((b) => b.includes('class="display"')).length === 2 && !pulled.some((b) => b.includes("Paragraph") && b.includes("display")),
+    pulled.join(" / "),
+  );
+  // A figure whose media the parse cannot keep reads as its figcaption: a caption still.
+  const orphan = (
+    await parseHtmlContent(
+      `<!doctype html><html><head><title>Notes on river flow</title></head><body><article><p>${prose(1)}</p><figure><iframe src="https://player.example.net/embed/42"></iframe><figcaption>The gauge at the delta, filmed at dawn</figcaption></figure><p>${prose(2)}</p></article></body></html>`,
+      "https://example.org/rivers",
+    )
+  ).blocks.map((b) => `${b.type} ${b.html ?? ""} ${b.text.slice(0, 12)}`);
+  check("url: a figure's caption whose media is refused is a caption", orphan.includes('PARAGRAPH <p class="caption"> The gauge at'), orphan.join(" / "));
+  // A heading of the bare word "Autor" over the author's box at the story's end cuts the box; at the top, over prose, it stays.
+  const boxed2 = async (body: string) =>
+    (
+      await parseHtmlContent(
+        `<!doctype html><html><head><title>Notes on river flow</title></head><body><article>${body}</article></body></html>`,
+        "https://example.org/rivers",
+      )
+    ).blocks.map((b) => b.text);
+  const story = [1, 2, 3, 4, 5, 6].map((n) => `<p>${prose(n)}</p>`).join("");
+  const authorEnd = await boxed2(`${story}<h2>Autor</h2><h3>Jil Wanner</h3><p>Alle Artikel</p><p>Kontakt</p>`);
+  const authorTop = await boxed2(`<h3>Autor</h3><p>Jil Wanner</p>${story}`);
+  check(
+    "url: a bare Autor heading over the author's box at the end is cut",
+    !authorEnd.some((t) => t === "Autor" || t === "Jil Wanner") && authorEnd.some((t) => t.startsWith("Paragraph 6")) && authorTop.includes("Autor"),
+    `end ${authorEnd.join(" / ")}; top ${authorTop.join(" / ")}`,
+  );
+  // The dek set as a heading under the h1 is a paragraph; a first section's question and a short first heading stay headings.
+  const dekPage = async (body: string) =>
+    (
+      await parseHtmlContent(
+        `<!doctype html><html><head><title>Notes on river flow</title></head><body><article><h1>Notes on river flow</h1>${body}</article></body></html>`,
+        "https://example.org/rivers",
+      )
+    ).blocks.map((b) => `${b.type} ${b.text.slice(0, 24)}`);
+  const sections = `<h2>Gravel bars</h2><p>${prose(3)}</p><h2>Floods</h2><p>${prose(4)}</p>`;
+  const dekStatement = await dekPage(`<h2>The banks of a delta move a little with each flood, and the gauges show how far.</h2><p>${prose(1)}</p><p>${prose(2)}</p>${sections}`);
+  const dekAbove = await dekPage(`<h2>Why the banks of a delta move with each flood and the gauges follow them</h2><p>${prose(1)}</p><h3>Gravel bars</h3><p>${prose(3)}</p><h3>Floods</h3><p>${prose(4)}</p>`);
+  const question = await dekPage(`<h2>What does a gauge measure at the mouth of a river delta?</h2><p>${prose(1)}</p>${sections}`);
+  const short = await dekPage(`<h2>Channels and banks</h2><p>${prose(1)}</p>${sections}`);
+  check(
+    "url: a dek set as a heading under the h1 is a paragraph",
+    dekStatement.includes("PARAGRAPH The banks of a delta mov") && dekAbove.includes("PARAGRAPH Why the banks of a delta") && dekStatement.includes("HEADING Gravel bars") && dekAbove.includes("HEADING Gravel bars"),
+    `${dekStatement.join(" / ")}; ${dekAbove.join(" / ")}`,
+  );
+  // The opening heading is the title when the title only adds a tail or a lead around it, or the heading adds its own tail.
+  const headline = async (title: string, h1: string) => {
+    const parsed = await parseHtmlContent(
+      `<!doctype html><html><head><title>${title}</title><meta property="og:title" content="${title}"></head><body><article><h1>${h1}</h1><p>${prose(1)}</p><p>${prose(2)}</p></article></body></html>`,
+      "https://example.org/rivers",
+    );
+    return { title: parsed.title, heading: parsed.blocks.some((b) => b.type === "HEADING") };
+  };
+  const shorter = await headline("Notes on river flow: a field guide", "Notes on river flow");
+  const lead = await headline("Field guide: Notes on river flow in the delta", "Notes on river flow in the delta");
+  const longer = await headline("Notes on river flow", "Notes on river flow in the delta");
+  const other = await headline("Notes on river flow", "Gravel bars of the delta");
+  const dated = await headline("Notes on river flow", "Notes on river flow • A field guide to the delta");
+  check(
+    "url: an opening heading the title starts or ends with, or that adds a tail to the title, is the title",
+    shorter.title === "Notes on river flow" && lead.title === "Notes on river flow in the delta" && longer.title === "Notes on river flow in the delta" && !shorter.heading && !lead.heading && !longer.heading,
+    JSON.stringify({ shorter, lead, longer }),
+  );
+  // A title that adds words of the headline's own to the h1, with no colon, bar, dash, or bullet among them and no word of the site's name, keeps them.
+  const own = await headline("Notes on river flow (delta edition)", "Notes on river flow");
+  const ownLead = await headline("Field notes on river flow in the delta", "Notes on river flow in the delta");
+  const ownSite = await headline("Notes on river flow (Example Weekly)", "Notes on river flow");
+  const ownKicker = await headline("Field guide: Notes on river flow - Example Online", "Notes on river flow");
+  check(
+    "url: a title that adds its own words to the opening heading keeps them; the heading goes",
+    own.title === "Notes on river flow (delta edition)" && !own.heading && ownLead.title === "Field notes on river flow in the delta" && !ownLead.heading && ownSite.title === "Notes on river flow" && ownKicker.title === "Notes on river flow",
+    JSON.stringify({ own, ownLead, ownSite, ownKicker }),
+  );
+  check(
+    "url: a heading that shares no edge with the title stays a heading; one that adds a tail set apart by a bullet is not the title",
+    other.title === "Notes on river flow" && other.heading && dated.title === "Notes on river flow",
+    JSON.stringify({ other, dated }),
+  );
+  // A breadcrumb's short list before the h1, or a section's heading after the first prose, keeps the h1 the title.
+  const opened = async (before: string, after: string) => {
+    const parsed = await parseHtmlContent(
+      `<!doctype html><html><head><title>Notes on river flow: a field guide</title><meta property="og:title" content="Notes on river flow: a field guide"></head><body><article>${before}<h1>Notes on river flow</h1><p>${prose(1)}</p>${after}<p>${prose(2)}</p></article></body></html>`,
+      "https://example.org/rivers",
+    );
+    return { title: parsed.title, headings: parsed.blocks.filter((b) => b.type === "HEADING").map((b) => b.text) };
+  };
+  const crumbs = await opened("<ul><li>Rivers</li><li>Delta notes</li></ul>", "");
+  const section = await opened("", "<h2>Flow</h2>");
+  const crumbDek = await parseHtmlContent(
+    `<!doctype html><html><head><title>Notes on river flow</title></head><body><article><ul><li>Rivers</li><li>Delta notes</li></ul><h1>Notes on river flow</h1><h2>The banks of a delta move every year as the river drops its sand.</h2><p>${prose(1)}</p><h3>Gravel bars</h3><p>${prose(2)}</p></article></body></html>`,
+    "https://example.org/rivers",
+  );
+  const crumbDekBlocks = crumbDek.blocks.map((b) => `${b.type} ${b.text.slice(0, 24)}`);
+  check(
+    "url: a breadcrumb before the h1, or a section heading after the first prose, keeps the h1 the title",
+    crumbs.title === "Notes on river flow" && crumbs.headings.length === 0 && section.title === "Notes on river flow" && section.headings.join() === "Flow",
+    JSON.stringify({ crumbs, section }),
+  );
+  check(
+    "url: a dek under the h1 after a breadcrumb is a paragraph",
+    crumbDekBlocks.includes("PARAGRAPH The banks of a delta mov") && crumbDekBlocks.includes("HEADING Gravel bars"),
+    crumbDekBlocks.join(" / "),
+  );
+  // A kicker before the headline in the h1 is a kicker line; the heading goes, the headline is the title.
+  // The headline is the whole title or the title less the site's part; the title less another part cuts no kicker.
+  const kickerPage = (title: string, h1: string) =>
+    parseHtmlContent(
+      `<!doctype html><html><head><title>${title}</title><meta property="og:title" content="${title}"></head><body><article><h1>${h1}</h1><p>${prose(1)}</p><p>${prose(2)}</p></article></body></html>`,
+      "https://www.rivers.example/notes",
+    );
+  const kicked = await kickerPage("Notes on river flow in the delta | Rivers", `<span class="roofline">Field notes</span> Notes on river flow in the delta`);
+  const kickedBlocks = kicked.blocks.map((b) => `${b.type} ${b.html ?? ""} ${b.text.slice(0, 24)}`);
+  check(
+    "url: a kicker before the headline in the h1 is a kicker line, the headline the title",
+    kicked.title === "Notes on river flow in the delta" && kickedBlocks[0] === 'PARAGRAPH <p class="kicker"> Field notes' && !kickedBlocks.some((b) => b.startsWith("HEADING")),
+    `${kicked.title}; ${kickedBlocks.join(" / ")}`,
+  );
+  const uncut = await kickerPage("Notes on river flow in the delta - Guide", "Short notes on river flow in the delta");
+  const uncutBlocks = uncut.blocks.map((b) => `${b.type} ${b.text.slice(0, 24)}`);
+  check(
+    "url: a heading that ends with the title less a part that names no site keeps its words in one line",
+    !uncutBlocks.some((b) => b === "PARAGRAPH Short") && uncut.title !== "Notes on river flow in the delta",
+    `${uncut.title}; ${uncutBlocks.join(" / ")}`,
+  );
+  // A short label heading over the h1 is a kicker line; a label under the h1 stays a heading.
+  const labelPage = async (body: string) =>
+    (
+      await parseHtmlContent(
+        `<!doctype html><html><head><title>Notes on river flow</title></head><body><article>${body}</article></body></html>`,
+        "https://example.org/rivers",
+      )
+    ).blocks.map((b) => `${b.type} ${b.html ?? ""} ${b.text.slice(0, 24)}`);
+  const over = await labelPage(`<h3>Delta desk</h3><h1>Notes on river flow</h1><p>${prose(1)}</p><p>${prose(2)}</p>${sections}`);
+  const under = await labelPage(`<h1>Notes on river flow</h1><h3>Key points</h3><ul><li>Sand settles behind every bar.</li><li>Silt settles further down.</li></ul><p>${prose(1)}</p><p>${prose(2)}</p>`);
+  check(
+    "url: a short label heading over the h1 is a kicker line; one under the h1 stays a heading",
+    over[0] === 'PARAGRAPH <p class="kicker"> Delta desk' && under.includes("HEADING <h1> Key points"),
+    `${over.join(" / ")}; ${under.join(" / ")}`,
+  );
+  // The opening heading the page names as its headline is the title: the <title> holds it while the title was read
+  // from the logo's h1, or it is the page's h1 in other words than og:title. An h1 that shares no word with the title
+  // stays a heading.
+  const named = async (head: string, body: string) => {
+    const parsed = await parseHtmlContent(
+      `<!doctype html><html><head>${head}</head><body>${body}<p>${prose(2)}</p></article></body></html>`,
+      "https://www.riversweekly.example/2019/notes",
+    );
+    return { title: parsed.title, headings: parsed.blocks.filter((b) => b.type === "HEADING").map((b) => b.text) };
+  };
+  const logo = await named("<title>Rivers Weekly » Blog Archive » Notes on river flow in the delta</title>", `<header><h1>Rivers Weekly</h1></header><article><h2>Notes on river flow in the delta</h2><p>${prose(1)}</p>`);
+  const reworded = await named('<meta property="og:title" content="Delta flow: what the river notes show"><title>Delta flow</title>', `<article><h1>Notes on river flow in the delta</h1><p>${prose(1)}</p>`);
+  const unrelated = await named('<meta property="og:title" content="Notes on river flow"><title>Notes on river flow</title>', `<article><h1>Field reports today</h1><p>${prose(1)}</p>`);
+  check(
+    "url: an opening heading the <title> names as its headline, or the page's h1 that shares a word with the title, is the title",
+    logo.title === "Notes on river flow in the delta" && logo.headings.length === 0 && reworded.title === "Notes on river flow in the delta" && reworded.headings.length === 0,
+    JSON.stringify({ logo, reworded }),
+  );
+  check("url: an h1 that shares no word with the title stays a heading", unrelated.title === "Notes on river flow" && unrelated.headings.join() === "Field reports today", JSON.stringify(unrelated));
+  // A heading that names the contents list in another language ("Inhalt") is the list's label line, no part.
+  const labeled = await parseHtmlContent(
+    `<!doctype html><html><head><title>Notes on river flow</title></head><body><article><h1>Notes on river flow</h1><p>${prose(1)}</p><h2>Inhalt</h2><ul class="toc"><li><a href="#bars">Gravel bars</a></li><li><a href="#floods">Floods</a></li></ul><p>${prose(2)}</p><h2 id="bars">Gravel bars</h2><p>${prose(3)}</p><h2 id="floods">Floods</h2><p>${prose(4)}</p></article></body></html>`,
+    "https://example.org/rivers",
+  );
+  const labeledHeadings = labeled.blocks.filter((b) => b.type === "HEADING").map((b) => b.text);
+  check(
+    "url: a heading that names the contents list in another language is its label line",
+    labeledHeadings.join() === "Gravel bars,Floods" && labeled.blocks.some((b) => b.type === "PARAGRAPH" && b.text === "Inhalt"),
+    labeled.blocks.map((b) => `${b.type} ${b.text.slice(0, 20)}`).join(" / "),
+  );
+  // A paragraph set as a heading (two sentences or more, twenty words or more) reads as a paragraph; a long question stays a heading.
+  const proseHeadings = (
+    await parseHtmlContent(
+      `<!doctype html><html><head><title>Notes on river flow</title></head><body><article><h1>Notes on river flow</h1><p>${prose(1)}</p><h2>Gravel bars</h2><p>${prose(2)}</p><h3>The river drops its sand where the current slows. Bars grow there, year after year, until a flood moves them again downstream.</h3><h3>What does a gauge at the mouth of the delta measure, and why do the readings move from one week to the next week?</h3><p>${prose(3)}</p><h2>Floods</h2><p>${prose(4)}</p></article></body></html>`,
+      "https://example.org/rivers",
+    )
+  ).blocks.map((b) => `${b.type} ${b.text.slice(0, 24)}`);
+  check(
+    "url: a heading of two sentences or more is a paragraph; a long question stays a heading",
+    proseHeadings.includes("PARAGRAPH The river drops its sand") && proseHeadings.includes("HEADING What does a gauge at the") && proseHeadings.includes("HEADING Gravel bars"),
+    proseHeadings.join(" / "),
+  );
+  // A comment box's heading in its other forms ("Top Rated Comments", "Отзывы") closes the article.
+  const commentTail = async (heading: string) =>
+    (
+      await parseHtmlContent(
+        `<!doctype html><html><head><title>Notes on river flow</title></head><body><article><h1>Notes on river flow</h1><p>${prose(1)}</p><p>${prose(2)}</p><p>${prose(3)}</p><h2>${heading}</h2><p>(View all)</p><p>[ Read All Comments ]</p></article></body></html>`,
+        "https://example.org/rivers",
+      )
+    ).blocks.map((b) => b.text.slice(0, 24));
+  const topRated = await commentTail("Top Rated Comments");
+  const reviews = await commentTail("Отзывы");
+  check(
+    "url: a comment box's heading in its other forms closes the article",
+    !topRated.some((t) => /Comments|View all/.test(t)) && !reviews.some((t) => /Отзывы|View all/.test(t)) && topRated.length === 3,
+    `${topRated.join(" / ")}; ${reviews.join(" / ")}`,
+  );
+  // A heading left closing the article once the comment box under it is cut is an empty section, and goes.
+  const closing = (
+    await parseHtmlContent(
+      `<!doctype html><html><head><title>Notes on river flow</title></head><body><article><h1>Notes on river flow</h1><p>${prose(1)}</p><p>${prose(2)}</p><p>${prose(3)}</p><h2>Watch more river videos</h2><h3>Comments</h3><p>(View all)</p></article></body></html>`,
+      "https://example.org/rivers",
+    )
+  ).blocks.map((b) => `${b.type} ${b.text.slice(0, 24)}`);
+  check(
+    "url: a heading left closing the article after the comment cut goes",
+    closing.length === 3 && closing.every((t) => t.startsWith("PARAGRAPH Paragraph")),
+    closing.join(" / "),
+  );
+  // A paywall's heading ("Sie möchten gerne weiterlesen?") closes the article; the sign-up form under it goes.
+  const paywall = (
+    await parseHtmlContent(
+      `<!doctype html><html><head><title>Notes on river flow</title></head><body><article><h1>Notes on river flow</h1><p>${prose(1)}</p><p>${prose(2)}</p><p>${prose(3)}</p><p>${prose(4)}</p><p>${prose(5)}</p><p>${prose(6)}</p><h2>Sie möchten gerne weiterlesen?</h2><h3>Registrieren Sie sich jetzt kostenlos:</h3><p>Mit der Registrierung akzeptiere ich die Nutzungsbedingungen.</p><p>Hier anmelden</p></article></body></html>`,
+      "https://example.org/rivers",
+    )
+  ).blocks.map((b) => `${b.type} ${b.text.slice(0, 24)}`);
+  check(
+    "url: a paywall's heading closes the article",
+    paywall.length === 6 && paywall.every((t) => t.startsWith("PARAGRAPH Paragraph")),
+    paywall.join(" / "),
+  );
+  // The site's logo set as an h1 (a link to the home page) is no title: the <title> is, less the logo's part and the parts after it.
+  const logoTitle = async (title: string) =>
+    (
+      await parseHtmlContent(
+        `<!doctype html><html><head><title>${title}</title></head><body><header><h1><a href="/">Rivers Weekly</a></h1></header><article><p>${prose(1)}</p><p>${prose(2)}</p><p>${prose(3)}</p></article></body></html>`,
+        "https://www.example.org/2019/notes",
+      )
+    ).title;
+  const logoDash = await logoTitle("Notes on river flow - Rivers Weekly");
+  const logoMotto = await logoTitle("Notes on river flow : Rivers Weekly | The paper of the delta");
+  check(
+    "url: the site's logo set as an h1 is no title",
+    logoDash === "Notes on river flow" && logoMotto === "Notes on river flow",
+    `${logoDash}; ${logoMotto}`,
+  );
+  check(
+    "url: a first section's question and a short first heading stay headings",
+    question.includes("HEADING What does a gauge measur") && short.includes("HEADING Channels and banks"),
+    `${question.join(" / ")}; ${short.join(" / ")}`,
+  );
 }
 
 {

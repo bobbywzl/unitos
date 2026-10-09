@@ -573,7 +573,8 @@ export function importWords(block: ParsedBlock): string {
 // A list line's marker, after its indent, as the parse keeps it printed: a
 // bullet ("-", "•", "◦", "▪", "–", "➢", "✓"), a checklist box ("☐", and "☑"
 // or "☒" checked), or a counter and the words around it: "1." "1)" "(1)"
-// "a)." "(iv)" "I." "A-1." "[12]", a number alone (an exercise's "15" or
+// "a)." "(iv)" "I." "A-1." "[12]", a number and a dash ("1-", Word's "%1-"
+// in Persian and Arabic files), a number alone (an exercise's "15" or
 // "*15"), or a legal number ("2.3.1": the numbers above its own before it).
 // Any other line start is words. A counter draws as the page prints it: the
 // outermost list's level at the line's depth takes the counter's glyph
@@ -589,6 +590,7 @@ const LIST_PAREN = /^\(([a-zA-Z]{1,5}|\d{1,3})\)(?:[ \t]+|$)/;
 const LIST_CITE = /^\[(\d{1,3})\](?:[ \t]+|$)/;
 const LIST_CLOSED = /^((?:[A-Z]{1,2}-)?)([a-zA-Z]{1,5}|\d{1,3})(\)\.?|\.\)?)(?:[ \t]+|$)/;
 const LIST_NUMBER = /^(\*?)(\d{1,3})(?:[ \t]+|$)/;
+const LIST_DASHED = /^(\d{1,3})-[ \t]+/;
 // A task line's box after its bullet (lib/parse/markdown-document.ts).
 const TASK_BOX = /^([☐☑☒])[ \t]/;
 const ROMAN_NUMERAL = /^(x{0,3})(ix|iv|v?i{0,3})$/;
@@ -655,6 +657,7 @@ function counterAt(text: string): { length: number; token: string; before: strin
   if ((m = LIST_CITE.exec(text))) return { length: m[0].length, token: m[1], before: "[", after: "]" };
   // A prefix ("A-1.", an exhibit's items) comes before a number only.
   if ((m = LIST_CLOSED.exec(text)) && (!m[1] || /^\d+$/.test(m[2]))) return { length: m[0].length, token: m[2], before: m[1], after: m[3] };
+  if ((m = LIST_DASHED.exec(text))) return { length: m[0].length, token: m[1], before: "", after: "-" };
   if ((m = LIST_NUMBER.exec(text))) return { length: m[0].length, token: m[2], before: m[1], after: "" };
   return null;
 }
@@ -905,7 +908,11 @@ class Converter {
   private readonly looks: Partial<Record<DocStyle, NamedStyle>>;
   /** The page's most common space after a paragraph, for a paragraph whose
       own it did not measure (a page's last); null where it measured none
-      (a web page, a text file). */
+      (a web page, a text file), or where no two paragraphs share one: a
+      space that stands once is that paragraph's own, no page's (parse loop
+      finding: a slide deck measured two paragraphs, a title slide's 150 pt
+      and a slide's 59 pt, and every slide's last block took 59 pt after
+      it). */
   private readonly spacing: number | null;
   /** The blocks right over a display equation: their space after is the
       space over the display. And the block right under each display. */
@@ -933,7 +940,10 @@ class Converter {
       above = block;
     });
     // A space over a display is to its glyphs: no paragraph's space.
-    this.spacing = mostCommon(input.blocks.filter((b) => b.type === "PARAGRAPH" && !this.overDisplay.has(b)).map((b) => b.spaceAfter));
+    this.spacing = mostCommon(
+      input.blocks.filter((b) => b.type === "PARAGRAPH" && !this.overDisplay.has(b)).map((b) => b.spaceAfter),
+      2,
+    );
     this.displaySpacing = {
       over: mostCommon([...this.overDisplay].map((b) => b.spaceAfter)),
       under: mostCommon(input.blocks.filter((b) => b.type === "EQUATION").map((b) => b.spaceAfter)),
@@ -1024,8 +1034,12 @@ class Converter {
     // A heading among the first blocks that repeats the title is the Title,
     // where it stands; else the Title opens its page (titleOn), after the
     // kicker: a scan's archive notice or a deck's first slide stands before it.
+    // A Word file's title is a line of its own that the parse lifted out of
+    // the blocks: a heading that repeats it is a second line the page
+    // prints, and stands (Word benchmark finding: pandoc-metadata_after_normal
+    // lost its first title).
     const first = this.titleOn;
-    const repeat = title
+    const repeat = title && this.input.kind !== "docx"
       ? blocks
           .slice(0, TITLE_REACH)
           .findIndex((b) => b.type === "HEADING" && sameWords(b.text, title) && (!this.paged || (b.page ?? first) <= first))
@@ -1718,11 +1732,12 @@ class Converter {
 }
 
 /** The value most blocks take (the smaller of two as common), or null when
-    none has one. */
-function mostCommon(values: (number | undefined)[]): number | null {
+    none has one, or none is taken `least` times. */
+function mostCommon(values: (number | undefined)[], least = 1): number | null {
   const counts = new Map<number, number>();
   for (const v of values) if (v !== undefined) counts.set(v, (counts.get(v) ?? 0) + 1);
-  return [...counts].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? null;
+  const [top] = [...counts].sort((a, b) => b[1] - a[1] || a[0] - b[0]);
+  return top && top[1] >= least ? top[0] : null;
 }
 
 /** A table's text size in points, when every word of it carries one (the

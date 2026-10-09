@@ -9,7 +9,7 @@ import { buildLines } from "@/lib/parse/pdf/lines";
 import { resolveZones } from "@/lib/parse/pdf/math/zones";
 import { cellParagraphs } from "@/lib/parse/pdf/ruled";
 import { tableSegment, type TableRow } from "@/lib/parse/pdf/tables";
-import { joinGroup } from "@/lib/parse/pdf/text";
+import { joinGroup, joinWrapped } from "@/lib/parse/pdf/text";
 import type { Box, Item, Line, PageContext, Run, Segment } from "@/lib/parse/pdf/types";
 
 // ── Figure regions ──────────────────────────────────────────────────────────
@@ -26,29 +26,43 @@ import type { Box, Item, Line, PageContext, Run, Segment } from "@/lib/parse/pdf
 // "Visualization", "Map", …) or a table's. Earth Observer labels its photos
 // "Photo 1." and "Photo.": 15 captions read as paragraphs, and two ran into
 // the next page's text.
-const LABEL = String.raw`fig\.?|figure|table|tab\.|photo|visualization|image|map|chart|plate|box|abbildung|abb\.|tabelle`;
+// A scan's OCR misreads "FIGURE" as "FLGURE", "F IGURE", "j'IGURE", and
+// "\FIGURE" (parse loop finding: NACA Report 515's captions read as
+// paragraphs and headings): those spellings are the label too. No
+// typeset page spells them.
+const LABEL = String.raw`fig\.?|figure|\\?f ?[il1!|]gure|j['’]igure|table|tab\.|photo|visualization|image|map|chart|plate|box|abbildung|abb\.|tabelle`;
 // A caption's label and its stop: "Figure 2:", "Fig. 3a.", PLOS's "Fig 1.",
 // "Table A1 |", "Photo 3.", and the roman numbers of REVTeX and IEEE ("TABLE
 // II. Fitting parameters …", arXiv 2502.02648, read as a paragraph with no
 // caption). A label with no number takes a full stop ("Photo. Dr. …"): a
 // colon after it names a role ("Visualization: …", PLOS's contributions). A
 // Chinese or Japanese label takes a space for its stop ("図表Ⅰ-2-1-1 避難所デ
-// ータ…"), and a caption there holds no full stop: "图 3 示意了…。" opens a
-// paragraph (arXiv 2111.04880 p10). German labels its floats "Abbildung",
+// ータ…"), or a stop and a space ("図 9. コミットおよびそのツリー": the
+// Japanese Pro Git's 20 captions read as paragraphs), and a caption there
+// holds no full stop: "图 3 示意了…。" opens a paragraph (arXiv 2111.04880
+// p10). German labels its floats "Abbildung",
 // "Abb.", and "Tabelle" (parse loop finding: GeoTopo's "Abbildung 1.4:
 // Wenn X₁, X₂ hausdorffsch sind, …" was a paragraph, and its figure's
 // labels a table). A number with parts ("1.8a", "2-1") takes its stop
 // after its last part: "Abbildung 1.8a veranschaulicht …" opens a
 // sentence.
 export const CAPTION_RE = new RegExp(
-  String.raw`^(?:(?:${LABEL})\s*(?:\d+(?:[.‐–-]\d+)*[a-z]?|[A-Z]\d+[a-z]?|[IVXL]+\b)\s*[.:|–—-](?!\d)\s*|(?:figure|photo|visualization|image|map|chart|plate|abbildung)\.\s+\S|(?:図表|図|图|圖|表)\s*[0-9Ⅰ-Ⅻ]+(?:[-‐–.][0-9Ⅰ-Ⅻ]+)*\s(?![^]*。))`,
+  String.raw`^(?:(?:${LABEL})\s*(?:\d+(?:[.‐–-]\d+)*[a-z]?|[A-Z][‐–-]?\d+[a-z]?|[IVXL]+\b)\s*[.:|–—-](?!\d)\s*|(?:figure|photo|visualization|image|map|chart|plate|abbildung)\.\s+\S|(?:図表|図|图|圖|表)\s*[0-9Ⅰ-Ⅻ]+(?:[-‐–.][0-9Ⅰ-Ⅻ]+)*[.:．：]?\s(?![^]*。))`,
   "i",
 );
-// "Table 3", "Table A1", IEEE's "TABLE IV", and "表 2".
-const TABLE_CAPTION_RE = /^(?:(?:table|tab\.|tabelle)\s*(?:\d+|[A-Z]\d+|[IVXL]+\b)|表\s*[0-9Ⅰ-Ⅻ])/i;
+// On an OCR page a figure's number reads as the letters and marks its digits
+// look like ("FIGUREIS.-" for 15, "\FIGURE!i.-" for 17, "FIGURE H.-" for
+// 11), its stop the period and dash a scan's caption sets (parse loop
+// finding: NACA Report 515 p. 10, Figures 15 and 17's captions read as a
+// heading). Read so on OCR pages only: a typeset page spells its numbers.
+export const OCR_CAPTION_RE = new RegExp(String.raw`^(?:${LABEL})\s?[\dIlSsOoHi!|]{1,3}\s?\.\s?[-–—]`, "i");
+export const isOcrCaption = (text: string, ctx: PageContext) => ctx.ocr && OCR_CAPTION_RE.test(text.trim());
+// "Table 3", "Table A1", an appendix's "Table A-1", IEEE's "TABLE IV", and
+// "表 2".
+const TABLE_CAPTION_RE = /^(?:(?:table|tab\.|tabelle)\s*(?:\d+|[A-Z][‐–-]?\d+|[IVXL]+\b)|表\s*[0-9Ⅰ-Ⅻ])/i;
 // A float's label at a line's start, with a stop after it or none.
 const LABEL_START_RE = new RegExp(String.raw`^(?:(?:${LABEL})\s*(?:\d+|[A-Z]\d+|[IVXL]+\b)|(?:図表|図|图|圖|表)\s*[0-9Ⅰ-Ⅻ])`, "i");
-const LABEL_RE = new RegExp(String.raw`^(${LABEL})\s*(\d+|[A-Z]\d+)[a-z]?(?=\s)`, "i");
+const LABEL_RE = new RegExp(String.raw`^(${LABEL})\s*(\d+(?:[.‐–-]\d+)*|[A-Z]\d+)[a-z]?(?= )`, "i");
 
 /** A figure's or a table's caption: its label and a stop ("Figure 2:",
     "Fig. 3.", "Table 1 |"), or a label set bold or in small caps with no
@@ -75,6 +89,8 @@ export function isCaption(text: string, runs: Run[] | undefined): boolean {
 // the panel's label, which the figure's caption names; a symbol and its
 // script is a caption ("(c) Ω₃", GeoTopo's Abbildung 1.12: it was lost).
 const PANEL_RE = /^(?:\(\p{L}\)|\p{L}[.)])\s+(?=[^]*\p{L})[^]{2,}/u;
+// An equation's number: "(2.17)", "(4b)".
+const EQUATION_NUMBER_RE = /^\(\d{1,3}(?:\.\d{1,3})*[a-z]?\)$/;
 const NOTE_RE = /^(?:(?:notes?|sources?)\s*[:.]\s+\S|[（(](?:出典|注|資料|来源|來源)[）)]|(?:出典|注|来源|來源)[:：])/i;
 // Panel letters alone ("(c) (d)") are a chart's labels, no caption.
 const LETTERS_RE = /^(?:\s*(?:\(\p{L}\)|\p{L}[.)]))+\s*$/u;
@@ -106,6 +122,27 @@ function withPanels(figure: Segment, panels: CaptionPart[]) {
   figure.captionBox = parts.map((p) => p.box).reduce((a, b) => unionBox(a, b));
 }
 
+// The most words in a row a line holds: runs of three letters or more with a
+// vowel, apart by spaces or commas alone. A chart's labels and an OCR's
+// specks ("I N I (J Curve") hold one at a time; a sentence holds several.
+// A cell's gap ends a run, and a word counts once in it: the same label
+// over panels side by side ("Horizontal\tHorizontal", "Rotor axis Rotor
+// axis") is no sentence (parse loop finding: NACA Report 515 p. 9, three
+// vector sheaves; the walk up from their captions stopped at the labels,
+// and the upper panels' words stood as text).
+function wordRun(line: string): number {
+  let best = 0;
+  for (const cell of line.split("\t")) {
+    let run: string[] = [];
+    for (const token of cell.split(/[\s,;]+/)) {
+      const word = /^\p{L}{3,}[.:]?$/u.test(token) && /[aeiouy]/i.test(token);
+      run = word ? [...run, token.replace(/[.:]$/, "").toLowerCase()] : [];
+      best = Math.max(best, new Set(run).size);
+    }
+  }
+  return best;
+}
+
 // Chart text, equation glyphs, ticks: what a figure leaves in the text layer.
 // A panel's letter alone ("(b)") is its figure's label whatever it read as:
 // set bold, it read as a heading, and every label over it stayed text
@@ -119,6 +156,23 @@ function isFigureDebris(s: Segment, ctx: PageContext): boolean {
   if ((s.lineSize ?? ctx.bodySize) < ctx.bodySize * 0.92) return true;
   const text = s.text.trim();
   if (text.length <= 12) return true;
+  // An OCR layer sizes each mark from the scan: a chart's ticks and the
+  // specks read beside them come out at any size. On an OCR page a line of
+  // more marks and digits than letters is a figure's at any size (parse
+  // loop finding: NACA Report 515 p. 7, "24 .6 ~ W D ~ D '. 6" read at 15
+  // pt over a 10.3 pt body, and the chart's labels over it stayed text).
+  // So is a longer part, of one line or several: the OCR reads a chart's
+  // gridlines as runs of marks ("a 00!-1-.1..1-1-!.2~.L.....3-:!-…", 85
+  // marks over Figure 5's caption, p. 7, kept the caption a paragraph).
+  const letters = text.replace(/[^\p{L}]/gu, "").length;
+  if (ctx.ocr && letters * 2 < text.replace(/\s/g, "").length) return true;
+  // A line of a chart's lone letters (its curves' labels, a speck read as
+  // "I") holds no word: no run of three letters with a vowel in it. On an
+  // OCR page it is the chart's at any size (parse loop finding: NACA
+  // Report 515 p. 8, "CI, ~ /V L V L" read at 13 pt over Figures 8 and
+  // 10's captions, and the six lines of the charts' ticks over it stayed
+  // text).
+  if (ctx.ocr && !s.text.includes("\n") && text.length <= 60 && !(text.match(/\p{L}{3,}/gu) ?? []).some((w) => /[aeiouy]/i.test(w))) return true;
   // A panel title or axis label at body size: short, no sentence end. A
   // Chinese or Japanese sentence ends with "。" (MIC white paper p9: a
   // paragraph's last line over a caption read as its figure's).
@@ -175,6 +229,9 @@ type Drawn = { images: Box[]; paths: PathBox[] };
 // pictures: the images a graphic is made of (none for a vector drawing),
 // each of which a caption set beside it may take (attachFigureRegions).
 export type Graphic = Placed & { labels: Item[]; caption: Item[]; pictures: Box[] };
+
+// A glyph's fill as light as white.
+const WHITE_RE = /^#(?:f[0-9a-f]){3}$/i;
 
 // A run of text: the items on one baseline that follow each other with no
 // wider gap than a word's.
@@ -260,7 +317,13 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
   }
   // Page text: a run set large, or a line's worth of words. A label is short:
   // a tick, a name in a diagram, a legend entry.
-  const isPageText = (r: TextRun) => r.size >= textSize * 1.3 || r.chars >= 40;
+  // Words filled in white over a picture show only on it: they are its
+  // label, never the page's text (parse loop finding: a PowerPoint deck
+  // sets "Iris Versicolor" in white 24 pt bold over its photo; read as the
+  // page's text, it made the photo a background and the label a heading).
+  const white = (r: TextRun) => r.items.every((i) => i.glyphs !== undefined && i.glyphs.length > 0 && i.glyphs.every((g) => g.color !== undefined && WHITE_RE.test(g.color)));
+  const onPicture = (r: TextRun) => drawing.images.some((img) => shareInside(r.box, img) >= 0.7);
+  const isPageText = (r: TextRun) => (r.size >= textSize * 1.3 || r.chars >= 40) && !(white(r) && onPicture(r));
   const runsIn = (box: Box) => runs.filter((r) => shareInside(r.box, box) >= 0.7);
   const textOf = (r: TextRun) => r.items.map((i) => i.str).join(" ");
   // A number alone on its line at the page's head or foot is the page's
@@ -286,8 +349,34 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
   // A picture the size of the page is a scan or a background; one that
   // leaves the page a margin or a title is the page's own (AGU slides p. 15:
   // a screenshot under the slide's title, 87% of the slide).
+  // A picture that runs into the page's top or bottom 7% may carry the
+  // running head or foot over it, a short line wholly in that band: the
+  // page's, never the picture's. The picture starts under the head, or
+  // ends over the foot (parse loop finding: the Raspberry Pi handbook sets
+  // "Project showcase" over the photos atop its pages, set large: the photo
+  // on p. 48 read as a background, and two others showed the head in their
+  // crops).
+  // A head or a foot is one line: a label of two lines reaches into the
+  // band too (a deck's "Iris" over "Versicolor" atop its photo, the
+  // license's second line under its first).
+  const alone = (r: TextRun, below: boolean) =>
+    !runs.some((o) => {
+      if (o === r || Math.abs(o.size - r.size) > 1 || o.box.x1 >= r.box.x2 || o.box.x2 <= r.box.x1) return false;
+      const gap = below ? r.box.y1 - o.box.y2 : o.box.y1 - r.box.y2;
+      return gap > -r.size * 0.5 && gap < r.size * 0.8;
+    });
+  const edgeLines = (box: Box) => {
+    const over = runs.filter((r) => r.chars <= 60 && r.box.x1 < box.x2 && r.box.x2 > box.x1 && r.box.y1 < box.y2 && r.box.y2 > box.y1);
+    const heads = box.y2 > pageHeight * 0.93 ? over.filter((r) => r.box.y1 >= pageHeight * 0.93 && alone(r, true)) : [];
+    const feet = box.y1 < pageHeight * 0.07 ? over.filter((r) => r.box.y2 <= pageHeight * 0.07 && alone(r, false)) : [];
+    const y2 = heads.length > 0 ? Math.min(...heads.map((r) => r.box.y1)) - 1 : box.y2;
+    const y1 = feet.length > 0 ? Math.max(...feet.map((r) => r.box.y2)) + 1 : box.y1;
+    return y2 - y1 >= (box.y2 - box.y1) * 0.5 ? { ...box, y1, y2 } : box;
+  };
   for (const raw of drawing.images) {
-    const box = onPage(raw);
+    const whole = onPage(raw);
+    if (area(whole) > pageArea * 0.97) continue;
+    const box = edgeLines(whole);
     if (area(box) < pageArea * 0.0005 || area(box) > pageArea * 0.97) continue;
     if (holdsText(box)) continue;
     parts.push({ box, image: true, thin: false });
@@ -330,12 +419,28 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
       }
     }
   });
+  // A rule beside a picture, its end near the picture's edge, is the
+  // page's (a slide's line under its title, ending 3 pt short of the
+  // picture beside it, joined the picture, and the bullets under the line
+  // read as the picture's labels: a PowerPoint deck's p. 9 lost its
+  // bullets). A rule pairs with a picture when half of it lies over the
+  // picture.
+  const apart = (p: Part, q: Part) => {
+    const [rule, picture] = p.thin && q.image ? [p.box, q.box] : q.thin && p.image ? [q.box, p.box] : [null, null];
+    if (!rule || !picture) return false;
+    const across = rule.x2 - rule.x1 >= rule.y2 - rule.y1;
+    const [a1, a2, b1, b2] = across ? [rule.x1, rule.x2, picture.x1, picture.x2] : [rule.y1, rule.y2, picture.y1, picture.y2];
+    const at = across ? (rule.y1 + rule.y2) / 2 : (rule.x1 + rule.x2) / 2;
+    const within = across ? at >= picture.y1 && at <= picture.y2 : at >= picture.x1 && at <= picture.x2;
+    const over = within ? Math.max(0, Math.min(a2, b2) - Math.max(a1, b1)) : 0;
+    return over < (a2 - a1) * 0.5;
+  };
   for (const cell of cells.values()) {
     for (let a = 0; a < cell.length; a++) {
       const p = parts[cell[a]].box;
       for (let b = a + 1; b < cell.length; b++) {
         const q = parts[cell[b]].box;
-        if (cell.length > 200 || (q.x1 <= p.x2 + 6 && p.x1 <= q.x2 + 6 && q.y1 <= p.y2 + 6 && p.y1 <= q.y2 + 6)) {
+        if (cell.length > 200 || (q.x1 <= p.x2 + 6 && p.x1 <= q.x2 + 6 && q.y1 <= p.y2 + 6 && p.y1 <= q.y2 + 6 && !apart(parts[cell[a]], parts[cell[b]]))) {
           parent[find(cell[a])] = find(cell[b]);
         }
       }
@@ -356,6 +461,16 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
       (r) =>
         r.box.x1 < box.x2 &&
         r.box.x2 > box.x1 &&
+        Math.max(r.box.y1 - box.y2, box.y1 - r.box.y2) <= textSize * 3 &&
+        LABEL_START_RE.test(textOf(r)),
+    );
+  // A float's label line beside a box, right or left of it, within three
+  // lines of its height: a side caption in the margin.
+  const sideLabel = (box: Box) =>
+    runs.some(
+      (r) =>
+        (r.box.x1 >= box.x2 || r.box.x2 <= box.x1) &&
+        Math.max(r.box.x1 - box.x2, box.x1 - r.box.x2) <= pageWidth * 0.15 &&
         Math.max(r.box.y1 - box.y2, box.y1 - r.box.y2) <= textSize * 3 &&
         LABEL_START_RE.test(textOf(r)),
     );
@@ -405,10 +520,33 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
   // is the page's (arXiv 2609.29669 p9: a chart's 40-character title kept
   // the chart from being a figure, and its caption lost its figure).
   const isBodyLine = (r: TextRun) => r.chars >= 60;
+  // The right edge of the page's text column: where its rightmost line
+  // of page text ends, when four lines or more end within an em and a
+  // half of it (a column set ragged right ends most lines a word short
+  // of the edge). null on any other page.
+  const textEdge = (() => {
+    const ends = runs.filter(isPageText).map((r) => r.box.x2);
+    const edge = Math.max(...ends);
+    return ends.filter((e) => edge - e <= textSize * 1.5).length >= 4 ? edge : null;
+  })();
   // A chart's ticks: three numbers or more in a row, or right-aligned in a
-  // column, on the box or within a line of it.
+  // column, on the box or within a line of it. A minus may stand a space
+  // before its digits (parse loop finding: a Tufte textbook's plot of ψ(x)
+  // reads its ticks "− 4", "− 2", "2", "4", and was no figure). A tick
+  // drawn a glyph at a time reads as its glyphs put together (parse loop
+  // finding: the MML book p. 334, matplotlib's "2", ".", "5" made "2 . 5",
+  // no number, and Figure 10.8's two plots were no figure).
   const ticked = (box: Box) => {
-    const numbers = runs.filter((r) => shareInside(r.box, grow(box, textSize)) >= 0.7 && /^[-−–+]?\d[\d.,]*%?$/.test(textOf(r).trim()));
+    const numbers = runs.filter(
+      (r) =>
+        shareInside(r.box, grow(box, textSize)) >= 0.7 &&
+        /^[-−–+]?\s?\d[\d.,]*%?$/.test(
+          r.items
+            .map((i) => i.str)
+            .join("")
+            .trim(),
+        ),
+    );
     const lined = (at: (r: TextRun) => number, by: number) => numbers.some((a) => numbers.filter((b) => Math.abs(at(a) - at(b)) <= by).length >= 3);
     return lined((r) => r.box.y1, 1) || lined((r) => r.box.x2, 2);
   };
@@ -495,12 +633,53 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     // two line charts read as their ticks and their legends' words). A
     // drawing with no text over it at all, ten shapes or more, just under or
     // over a float's label, is that float's whatever its size (IEEE Access
-    // 3721067: Table 5, its words outlines between double rules).
+    // 3721067: Table 5, its words outlines between double rules). A chart
+    // with its ticks needs a figure's size only (parse loop finding: the
+    // MML book p. 334, two plots side by side, each 2.9% of the page: their
+    // ticks read into the margin caption's lines beside them).
     const ink = inside.reduce((n, r) => n + r.items.reduce((m, i) => m + i.w * i.size, 0), 0);
     const shapes = paths.filter((m) => !m.thin).length;
     const sized = area(box) >= pageArea * 0.03 || (w >= pageWidth * 0.5 && h >= textSize * 2);
+    // A drawing of a few shapes (a region, two circles, a box: five or
+    // more, nearly all of its paths), over 3% of the page, with no line of
+    // the page's text and next to no ink inside it, is a drawing too
+    // (parse loop finding: GeoTopo p. 17's uncaptioned picture of a
+    // compact set, eight shapes, was no figure: its labels read as an
+    // equation and two crops). With labels inside it, under a hundredth of
+    // its area in ink, a third of its paths may be shapes, the rest its
+    // axes and arrows (parse loop finding: a Tufte textbook's potential
+    // well, two gray walls, a bump, and an axis in fifteen paths, was no
+    // figure: its labels "V(z)", "V0", "z", "−L/2" read as two equations
+    // and two crops). A chart's panel with no label inside is no drawing
+    // of its own: its boxes and whiskers are a third of its paths too.
+    // A drawing with a float's label beside it, its side caption, needs
+    // two shapes only (parse loop finding: a Tufte textbook's double well,
+    // two gray walls and a barrier in thirteen paths beside "Figure 29.1:
+    // Double well …" in the margin, was no figure; the caption took the
+    // margin's picture over it, its labels read as a table and a crop).
+    const labeled = inside.length > 0 && ink < area(box) * 0.01;
+    const side = sideLabel(box);
+    const sparse = shapes >= (side ? 2 : 5) && shapes >= paths.length * (side ? 0.15 : labeled ? 0.3 : 0.8) && sized && ink < area(box) * 0.05 && !inside.some(isPageText);
+    // A drawing in the margin beside the text column: three paths or
+    // more, a shape among them, a figure's width and a line tall at the
+    // least, its box an em or more past the column's right edge, with no
+    // page text inside it (parse loop finding: a Tufte textbook's margin
+    // figures, an axis and a potential step in six paths, were no figure;
+    // their labels read as a table's cells beside the paragraph and as
+    // math crops).
+    const margin =
+      textEdge !== null &&
+      paths.length >= 3 &&
+      shapes >= 1 &&
+      box.x1 >= textEdge + textSize &&
+      w >= pageWidth * 0.12 &&
+      h >= textSize &&
+      ink < area(box) * 0.12 &&
+      !inside.some(isPageText);
     const drawn =
-      (paths.length >= 10 && (shapes > paths.length * 0.5 || (shapes >= 2 && ticked(box))) && sized && ink < area(box) * 0.12) ||
+      (paths.length >= 10 && (shapes > paths.length * 0.5 || (shapes >= 2 && ticked(box))) && (sized || (figureSized(box) && ticked(box))) && ink < area(box) * 0.12) ||
+      sparse ||
+      margin ||
       (shapes >= 10 && images.length === 0 && !meetsText(box) && nearLabel(box));
     if (image && !inside.some(isPageText)) found.push({ box, drawn: false, pictures: images.map((m) => m.box) });
     else if (image) found.push(...picturesOf(images.map((m) => m.box)));
@@ -520,22 +699,45 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     (r.box.x1 >= graphic.x1 - r.size && r.box.x2 <= graphic.x2 + r.size) ||
     Math.min(r.box.x2, graphic.x2) - Math.max(r.box.x1, graphic.x1) >= (r.box.x2 - r.box.x1) * 0.6;
   const captionOf = (graphic: Box): TextRun[] => {
-    const under = runs
-      .filter((r) => !taken.has(r) && within(r, graphic) && r.box.y2 <= graphic.y1 + r.size * 0.5)
-      .sort((a, b) => b.box.y2 - a.box.y2);
+    // A caption's next lines start where its first does, though a short
+    // last line starts left of the graphic (parse loop finding: the MML
+    // book p. 298, "(c) Maximum likelihood esti-" took its panel and
+    // "mate." stood apart as a paragraph). Set smaller than the text, a
+    // caption runs to eight lines and 400 characters (p. 295: "(b)
+    // Regression solution: …" lost its fourth line, "the function value at
+    // the corresponding in-"; p. 319's "(b) The orange dots …" holds seven).
+    const under = runs.filter((r) => !taken.has(r) && r.box.y2 <= graphic.y1 + r.size * 0.5).sort((a, b) => b.box.y2 - a.box.y2);
+    const small = (r: TextRun) => r.size < textSize * 0.95;
     const out: TextRun[] = [];
     let bottom = graphic.y1;
+    // A step's number, set larger, beside the first line under the graphic:
+    // the lines are the step's text, no caption (parse loop finding: The
+    // MagPi's step boxes set "01" beside "If you want to make your own
+    // pinball machine," under the step's photo, and the line read as the
+    // photo's caption, the step's other lines as an item of their own).
+    // The number may stand on the first line's baseline or on the second's.
+    const besideNumber = (first: TextRun, r: TextRun) =>
+      r.items.some(
+        (i) => i.size >= textSize * 1.3 && /^\d{1,2}$/.test(i.str.trim()) && i.x + i.w <= first.box.x1 + i.size * 0.5 && i.y + i.size * 0.7 > first.box.y1 && i.y < first.box.y2,
+      );
     for (const r of under) {
+      if (!within(r, graphic) && !(out.length > 0 && Math.abs(r.box.x1 - out[0].box.x1) < 1)) continue;
+      if (out.length > 0 && besideNumber(out[0], r)) return [];
       if (bottom - r.box.y2 > r.size * (out.length === 0 ? 1.2 : 0.8)) break;
-      if (out.length >= 3 || r.size >= textSize * 1.3 || LABEL_START_RE.test(textOf(r))) break;
+      if (out.length >= (small(r) && out.every(small) ? 8 : 3) || r.size >= textSize * 1.3 || LABEL_START_RE.test(textOf(r))) break;
       out.push(r);
       bottom = r.box.y1;
     }
     const chars = out.reduce((n, r) => n + r.chars, 0);
-    if (out.length === 0 || chars > 200) return [];
+    if (out.length === 0 || chars > (out.every(small) ? 400 : 200)) return [];
     // A caption is words: a row of numbers under a chart is its axis.
     const letters = out.reduce((n, r) => n + r.items.reduce((m, i) => m + (i.str.match(/\p{L}/gu)?.length ?? 0), 0), 0);
-    if (letters < 4 || letters < chars * 0.5) return [];
+    // A panel's caption is words whatever its letters ("(a) M = 0", its
+    // formula set in letters of its own: parse loop finding, the MML book
+    // p. 305, six panels' "(a) M = 0" … "(f) M = 9" read as their charts'
+    // labels and went into the crops).
+    const panel = isSubCaption(out.map(textOf).join(" "));
+    if (!panel && (letters < 4 || letters < chars * 0.5)) return [];
     const size = Math.max(...out.map((r) => r.size));
     const italic = out.reduce((n, r) => n + r.italic, 0) >= chars * 0.6;
     // Centered: each line as far in from both edges, give or take a fifth
@@ -610,16 +812,43 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     } else merged.push({ box: { ...box }, drawn, pictures, caption, panel });
   }
 
+  // The page's first or last line of text that holds words is its running
+  // head or foot: its page number is no tick of a drawing under or over it
+  // (parse loop finding: the MML book's p. 25 took "19", right of "2.1
+  // Systems of Linear Equations" and 13 pt over Figure 2.2's mind map, for
+  // the map's label; the crop then showed the running head).
+  const inEdgeLine = (r: TextRun) => {
+    const row = runs.filter((o) => Math.abs(o.box.y1 - r.box.y1) < r.size * 0.5);
+    if (!row.some((o) => o !== r && o.chars > 12 && /\p{L}{4}/u.test(textOf(o)))) return false;
+    const rest = runs.filter((o) => !row.includes(o));
+    return !rest.some((o) => o.box.y1 > r.box.y2) || !rest.some((o) => o.box.y2 < r.box.y1);
+  };
+
   // A chart's axis labels sit just outside its plot: the ticks under it and
   // beside it, a short word or number each, the first and the last centered
-  // on the axis's ends, no farther off than a line (arXiv 2609.29669 p7: a
-  // bar chart's years read as its caption and as a paragraph; Grinstead–Snell
-  // p8: the last tick, "10000", stayed text and cut Figure 1.5's crop).
+  // on the axis's ends, no farther off than a line and a half (arXiv
+  // 2609.29669 p7: a bar chart's years read as its caption and as a
+  // paragraph; Grinstead–Snell p8: the last tick, "10000", stayed text and
+  // cut Figure 1.5's crop; R sets its ticks a line and a half under the
+  // axis, and a statistics book's "−2 −1 0 1 2" stayed text).
   const axisOf = (plot: Box): TextRun[] =>
     runs.filter((r) => {
-      if (taken.has(r) || r.chars > 12 || shareInside(r.box, plot) >= 0.7 || LABEL_START_RE.test(textOf(r))) return false;
+      if (taken.has(r) || r.chars > 12 || shareInside(r.box, plot) >= 0.7 || LABEL_START_RE.test(textOf(r)) || isSubCaption(textOf(r))) return false;
       if (/[.!?;:,]$/.test(r.items.map((i) => i.str).join("").trim())) return false;
-      const reach = Math.max(r.size, textSize) * 1.2;
+      // An equation's number at the column's edge is no tick of a drawing
+      // in the margin beside it (parse loop finding: the MML book's p. 23
+      // took "(2.17)" for the y-axis label of Figure 2.5's colored
+      // matrices; the drawing's box then crossed the notes' gutter, and
+      // the notes read into the lines beside them).
+      if (EQUATION_NUMBER_RE.test(textOf(r).trim())) return false;
+      if (inEdgeLine(r)) return false;
+      // A line of a block of text is no tick: a run right over or under it,
+      // a line's step off, starts where it starts and is longer than a tick
+      // (parse loop finding: the MML book p. 179, the margin caption's lines
+      // "probability", "variables and" beside the mind map read as its
+      // y-axis's ticks, and the crop took the caption's lines).
+      if (runs.some((o) => o !== r && o.chars > 12 && Math.abs(o.box.x1 - r.box.x1) < 1 && Math.abs(o.size - r.size) < 0.5 && Math.max(o.box.y1 - r.box.y2, r.box.y1 - o.box.y2) < r.size * 0.6)) return false;
+      const reach = Math.max(r.size, textSize) * 1.7;
       const cx = (r.box.x1 + r.box.x2) / 2;
       const cy = (r.box.y1 + r.box.y2) / 2;
       const across = cx > plot.x1 - r.size && cx < plot.x2 + r.size;
@@ -631,6 +860,66 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
         (along && r.box.x1 >= plot.x2 - r.size && r.box.x1 <= plot.x2 + reach)
       );
     });
+  // A chart's title over its plot and its axis titles under it: a run
+  // centered on the plot (its middle within an em of the plot's), inside
+  // its width, set in the face of the plot's ticks, a face no line of the
+  // page's text is set in, within three lines of the plot or of its ticks,
+  // and short of a sentence (parse loop finding: a statistics book's R
+  // plots: "Histogram of residuals(cars.lm)" over a chart and
+  // "residuals(cars.lm)" under its ticks read as headings, and each
+  // caption stood apart from its figure, with the chart's words between).
+  // A run's face: the face most of its characters are set in (a body
+  // line that opens with a formula's glyph is the body's face).
+  const faceOf = (r: TextRun): string | undefined => {
+    const chars = new Map<string, number>();
+    for (const i of r.items) if (i.look) chars.set(i.look.face, (chars.get(i.look.face) ?? 0) + i.str.trim().length);
+    return [...chars].sort((a, b) => b[1] - a[1])[0]?.[0];
+  };
+  // The body's faces: a face two long lines or more are set in. One long
+  // line alone is no body: a chart's title can run past 40 characters
+  // (parse loop finding: a statistics book's "95% confidence and
+  // prediction intervals for cars.lm" over its plot made its own face the
+  // body's, and read as a heading).
+  const faceLines = new Map<string, number>();
+  for (const r of runs) {
+    const face = faceOf(r);
+    if (face !== undefined && r.chars >= 40 && !r.items.every((i) => i.mono)) faceLines.set(face, (faceLines.get(face) ?? 0) + 1);
+  }
+  const bodyFaces = new Set([...faceLines].filter(([, n]) => n >= 2).map(([face]) => face));
+  const titlesOf = (plot: Box, axis: TextRun[]): TextRun[] => {
+    const faces = new Set([...axis, ...runsIn(plot).filter((r) => !isPageText(r))].map(faceOf));
+    const mid = (plot.x1 + plot.x2) / 2;
+    // A chart's title is centered on its plot, or on the chart's whole
+    // device: the plot, its axis labels, its sideways axis title (a glyph
+    // drawn with no advance along the page, level with the plot, within
+    // four lines of its edge), and the shape level with it (its legend,
+    // drawn in a frame of its own beside the plot). R centers a title on
+    // the device, not the plot (parse loop finding: a statistics book's
+    // title over a plot with its legend read as a heading, its middle off
+    // the plot's by four ems).
+    const sideways = drawing.glyphs
+      .filter((g) => !g.hidden && g.w === 0 && /\p{L}/u.test(g.unicode) && g.y > plot.y1 && g.y < plot.y2 && g.x > plot.x1 - textSize * 4 && g.x < plot.x2 + textSize * 4)
+      .map((g): Box => ({ x1: g.x - g.size * 0.85, y1: g.y, x2: g.x + g.size * 0.3, y2: g.y }));
+    const row = parts
+      .filter(({ box: m, thin }) => !thin && m.x2 - m.x1 >= textSize && m.y2 - m.y1 >= textSize && shareInside(m, plot) < 0.5)
+      .map(({ box: m }) => m)
+      .filter((m) => Math.min(m.y2, plot.y2) - Math.max(m.y1, plot.y1) > Math.min(m.y2 - m.y1, plot.y2 - plot.y1) * 0.5 && Math.max(m.x1 - plot.x2, plot.x1 - m.x2) < pageWidth * 0.1);
+    const wide = [...axis.map((r) => r.box), ...sideways, ...row].reduce((b, m) => unionBox(b, m), plot);
+    const wideMid = (wide.x1 + wide.x2) / 2;
+    const under = Math.min(plot.y1, ...axis.filter((r) => r.box.y2 <= plot.y1 + r.size).map((r) => r.box.y1));
+    const over = Math.max(plot.y2, ...axis.filter((r) => r.box.y1 >= plot.y2 - r.size).map((r) => r.box.y2));
+    return runs.filter((r) => {
+      if (taken.has(r) || axis.includes(r) || r.chars > 60 || LABEL_START_RE.test(textOf(r)) || isSubCaption(textOf(r))) return false;
+      const face = faceOf(r);
+      if (face === undefined || !faces.has(face) || bodyFaces.has(face)) return false;
+      if (/[.!?;:,]$/.test(textOf(r).trim())) return false;
+      const reach = Math.max(r.size, textSize) * 3;
+      const cx = (r.box.x1 + r.box.x2) / 2;
+      const centered = (Math.abs(cx - mid) <= r.size && r.box.x1 >= plot.x1 - r.size && r.box.x2 <= plot.x2 + r.size) || (Math.abs(cx - wideMid) <= r.size && r.box.x1 >= wide.x1 - r.size && r.box.x2 <= wide.x2 + r.size);
+      if (!centered) return false;
+      return (r.box.y2 <= under + r.size * 0.5 && r.box.y2 >= under - reach) || (r.box.y1 >= over - r.size * 0.5 && r.box.y1 <= over + reach);
+    });
+  };
 
   return merged.map(({ box: plot, drawn, pictures, caption: corner, panel }) => {
     // A caption set on a bar across the drawing, or started across its
@@ -646,9 +935,62 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
       return { row, box: row.reduce((b, r) => unionBox(b, r.box), h.box) };
     });
     const onBar = (r: TextRun) => bars.some((bar) => bar.row.includes(r));
-    const axis = drawn && !panel ? axisOf(plot).filter((r) => !onBar(r)) : [];
-    for (const r of axis) taken.add(r);
-    let box = axis.reduce((b, r) => unionBox(b, r.box), plot);
+    // A panel takes its axis labels and titles too: R's lattice and grid
+    // graphics frame the plot and set its ticks and axis titles outside the
+    // frame (parse loop finding: a statistics book's quantile-quantile plot
+    // left its ticks "−2 −1 0 1 2" out of the crop, read its axis title "t
+    // Quantiles" as a heading, and its caption, under the heading, stood
+    // apart as a paragraph).
+    const axis = drawn ? axisOf(plot).filter((r) => !onBar(r)) : [];
+    const titles = drawn ? titlesOf(plot, axis).filter((r) => !onBar(r)) : [];
+    for (const r of [...axis, ...titles]) taken.add(r);
+    let box = [...axis, ...titles].reduce((b, r) => unionBox(b, r.box), plot);
+    // Arrows drawn by the drawing's labels are the drawing's, and so are
+    // the short labels by those arrows: an arrow is a line with a small
+    // head at one end, a cluster of its own a line or two off the drawing,
+    // touched by a label the drawing holds (parse loop finding: a quantum
+    // mechanics book's margin figure of a potential step set its currents
+    // J_inc, J_trans, and J_ref by arrows 28 pt under its axis; the crop
+    // stopped at J_inc, cut the arrows, and J_ref read as a paragraph).
+    if (drawn) {
+      const arrows = groups
+        .filter((g) => {
+          if (g.length > 4 || g.some((m) => m.image)) return false;
+          const b = boxOf(g);
+          if (b.y2 - b.y1 > textSize || shareInside(b, box) >= 0.5 || merged.some((m) => m.box !== plot && shareInside(b, m.box) >= 0.5)) return false;
+          const line = g.find((m) => m.thin && m.box.x2 - m.box.x1 >= textSize * 1.5);
+          return (
+            line !== undefined &&
+            g.some(
+              (m) =>
+                !m.thin &&
+                m.box.x2 - m.box.x1 <= textSize * 0.6 &&
+                m.box.y2 - m.box.y1 <= textSize * 0.6 &&
+                (Math.abs(m.box.x1 - line.box.x1) < textSize * 0.3 || Math.abs(m.box.x2 - line.box.x2) < textSize * 0.3),
+            )
+          );
+        })
+        .map(boxOf);
+      const by = (r: Box, m: Box) => r.x1 < m.x2 && r.x2 > m.x1 && Math.max(r.y1 - m.y2, m.y1 - r.y2) <= textSize * 0.5;
+      const words = [...axis, ...titles, ...runsIn(box).filter((r) => !isPageText(r) && !taken.has(r))];
+      const held = new Set<Box>();
+      for (let grew = arrows.length > 0; grew; ) {
+        grew = false;
+        for (const m of arrows) {
+          if (held.has(m) || !words.some((r) => by(r.box, m))) continue;
+          held.add(m);
+          box = unionBox(box, m);
+          grew = true;
+        }
+        for (const r of runs) {
+          if (held.size === 0 || taken.has(r) || words.includes(r) || isPageText(r) || r.chars > 12 || LABEL_START_RE.test(textOf(r))) continue;
+          if (![...held].some((m) => by(r.box, m))) continue;
+          words.push(r);
+          box = unionBox(box, r.box);
+          grew = true;
+        }
+      }
+    }
     for (const { box: bar } of bars) {
       if (bar.x1 >= box.x2 || bar.x2 <= box.x1 || bar.y1 >= box.y2 || bar.y2 <= box.y1) continue;
       if ((bar.y1 + bar.y2) / 2 > (box.y1 + box.y2) / 2) box = { ...box, y2: Math.min(box.y2, bar.y1) };
@@ -656,7 +998,7 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     }
     const caption = corner ?? captionOf(box);
     for (const r of caption) taken.add(r);
-    const labels = [...axis, ...runsIn(box).filter((r) => !(drawn ? isBodyLine(r) : isPageText(r) || isPageNumber(r)) && !taken.has(r) && !onBar(r))];
+    const labels = [...axis, ...titles, ...runsIn(box).filter((r) => !(drawn ? isBodyLine(r) : isPageText(r) || isPageNumber(r)) && !taken.has(r) && !onBar(r))];
     // Page text that reaches over one side of the graphic (a slide's
     // quotation over the dark half of its photo) leaves that side out of
     // the crop, when at least half the graphic is left.
@@ -676,7 +1018,11 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     if (over.length > 0 && over.every((r) => (r.box.x1 + r.box.x2) / 2 < middle)) cut.x1 = Math.max(...over.map((r) => r.box.x2)) + 2;
     if (over.length > 0 && over.every((r) => (r.box.x1 + r.box.x2) / 2 > middle)) cut.x2 = Math.min(...over.map((r) => r.box.x1)) - 2;
     const kept = !panel && cut.x2 - cut.x1 >= (box.x2 - box.x1) * 0.5 ? cut : box;
-    return { box: kept, labels: labels.flatMap((r) => r.items), caption: caption.flatMap((r) => r.items), pictures };
+    // A photo's crop stops at the running head or foot over it (edgeLines),
+    // and the head is no label of it.
+    const edged = pictures.length > 0 ? edgeLines(kept) : kept;
+    const shown = edged === kept ? labels : labels.filter((r) => shareInside(r.box, edged) >= 0.7);
+    return { box: edged, labels: shown.flatMap((r) => r.items), caption: caption.flatMap((r) => r.items), pictures };
   });
 }
 
@@ -705,12 +1051,16 @@ function drawingIn(drawing: Drawn, y1: number, y2: number, x1: number, x2: numbe
 // whole model." went into Fig. 1's crop and left the text). A drawing
 // around the caption as well is a frame or the page's white ground, no
 // figure over the caption (MIC white paper p2: a white box under the whole
-// text took the paragraph over a caption into its figure).
-function overlapsDrawing(box: Box, drawing: Drawn, cap: Box): boolean {
+// text took the paragraph over a caption into its figure). With `framed`,
+// a drawing around the box whole is the box's own ground: a code listing
+// on its shaded box is no label inside a figure (parse loop finding: the
+// Japanese Pro Git p. 72, a listing over Figure 20 went into its crop).
+function overlapsDrawing(box: Box, drawing: Drawn, cap: Box, framed = false): boolean {
   return [...drawing.paths, ...drawing.images].some(
     (b) =>
       !("clip" in b && b.clip) &&
       !(b.x1 <= cap.x1 && b.x2 >= cap.x2 && b.y1 <= cap.y1 && b.y2 >= cap.y2) &&
+      !(framed && b.x1 <= box.x1 + 1 && b.x2 >= box.x2 - 1 && b.y1 <= box.y1 + 1 && b.y2 >= box.y2 - 1) &&
       b.x1 < box.x2 && b.x2 > box.x1 && b.y1 < box.y2 && b.y2 > box.y1 && (b.x2 - b.x1 > 2 || b.y2 - b.y1 > 2),
   );
 }
@@ -759,6 +1109,17 @@ function captionPart(lines: Line[]): CaptionPart {
     .map((l) => ({ x1: l.x, x2: l.xEnd, y1: l.yMin - l.size * 0.3, y2: l.yMax + l.size * 0.85 }))
     .reduce((a, b) => unionBox(a, b));
   return { text: text.replace(/\n/g, " "), runs, box };
+}
+
+// A paragraph that opens with a bold numbered label of its own ("Active
+// Reading 3.1:", "Exercise 22.1") starts a new element: it is no caption's
+// words (parse loop finding: a Tufte book's margin caption "Figure 3.1:"
+// took the margin note under it, "Active Reading 3.1: Make sure you work
+// through these!", for its words).
+const NUMBERED_LABEL_RE = /^\p{Lu}[\p{L} ]*\s\d+(\.\d+)*[:.]?\s*$/u;
+export function numberedLabel(s: Segment): boolean {
+  const first = s.runs?.[0];
+  return first !== undefined && first.start === 0 && first.bold && NUMBERED_LABEL_RE.test(s.text.slice(0, first.end));
 }
 
 export function attachFigureRegions(
@@ -810,10 +1171,16 @@ export function attachFigureRegions(
   // takes one in.
   const inText = new Set(lines);
   const dropped = allLines.filter((l) => !inText.has(l)).map((l) => ({ x1: l.x, x2: l.xEnd, y1: l.yMin - l.size * 0.3, y2: l.yMax + l.size * 0.85 }));
-  // Each graphic's caption, as a line of text.
+  // Each graphic's caption, as a line of text. Its formulas read as the
+  // page's lines' are: its items never were the page's lines, whose
+  // formulas resolveZones reads (parse loop finding: the MML book p. 136,
+  // the panel captions "(b) A1, σ1 ≈ 228, 052." under Figure 4.11's
+  // pictures, inline formulas as a paragraph, lost them as their row's
+  // caption).
   const captions = new Map(
     graphics.map((g) => {
       const lines = buildLines(g.caption, page);
+      resolveZones(lines, ctx.drawing);
       return [g, lines.length > 0 ? { ...captionPart(lines), size: lines[0].size } : null] as const;
     }),
   );
@@ -891,12 +1258,29 @@ export function attachFigureRegions(
     // does a part of a graphic that reaches into the column (Earth Observer
     // p32: a map's legend over the column's edge made a crop of the map's
     // edge for the caption beside it).
+    // An icon there, three ems at most (a margin note's mark), is no figure
+    // (parse loop finding: a Tufte textbook's "Uncertainty Evaluator" mark
+    // 185 pt over "Figure 17.3:" kept the caption from its drawing beside it).
     const inGraphic = (b: Box) => graphics.some((g) => shareInside(b, grow(g.box, 1)) >= 0.9);
-    if (drawingIn(drawing, at.y1 - reach, at.y2 + reach, x1, x2, (b) => Math.min(b.x2 - b.x1, b.y2 - b.y1) >= 1.5 && !inGraphic(b))) return undefined;
+    const shapes = drawingIn(drawing, at.y1 - reach, at.y2 + reach, x1, x2, (b) => Math.min(b.x2 - b.x1, b.y2 - b.y1) >= 1.5 && !inGraphic(b));
+    if (shapes && Math.max(shapes.x2 - shapes.x1, shapes.y2 - shapes.y1) > ctx.bodySize * 3) return undefined;
     const middle = (at.y1 + at.y2) / 2;
     const near = (gap: number) => gap >= -ctx.bodySize && gap <= pageWidth * 0.1;
+    // A wider gap, up to a quarter of the page, with no line of the page
+    // between the graphic and the caption's column at the graphic's rows:
+    // a margin caption beside a figure centered in the text column (parse
+    // loop finding: a Tufte textbook's "Figure 24.1:" stood 97 pt from
+    // its circle, and read as a figure of its own with nothing in it).
+    const clear = (g: Graphic) => {
+      const [a, b] = x1 > g.box.x2 ? [g.box.x2, x1] : [x2, g.box.x1];
+      return !lines.some((l) => l.y >= g.box.y1 && l.y <= g.box.y2 && l.x < b && l.xEnd > a);
+    };
     return graphics.find((g) => {
-      if (g.caption.length > 0) return false;
+      // A panel's caption under the graphic is no caption of the float's:
+      // the caption beside it holds the panels (parse loop finding: the
+      // MML book p. 136, "(d) A3, σ3 ≈ 26, 125. …" under the second row
+      // of Figure 4.11 kept the caption in the margin from its pictures).
+      if (g.caption.length > 0 && !isSubCaption(captions.get(g)?.text ?? "")) return false;
       // Beside the caption's column, level with the graphic; or, where the
       // graphic reaches into the column, beside the caption itself and its
       // middle within the graphic's height (a caption under a picture's
@@ -904,7 +1288,7 @@ export function attachFigureRegions(
       const gap = Math.max(x1 - g.box.x2, g.box.x1 - x2);
       const own = Math.max(at.x1 - g.box.x2, g.box.x1 - at.x2);
       const beside =
-        (near(gap) && middle >= g.box.y1 - rowGap && middle <= g.box.y2 + rowGap) ||
+        ((near(gap) || (gap <= pageWidth * 0.25 && clear(g))) && middle >= g.box.y1 - rowGap && middle <= g.box.y2 + rowGap) ||
         (gap < -ctx.bodySize && near(own) && middle >= g.box.y1 && middle <= g.box.y2);
       if (!beside) return false;
       const others = sideCaptions.get(g);
@@ -947,9 +1331,20 @@ export function attachFigureRegions(
   // continues it only where its lines stand: from the caption's left edge,
   // or centered under it. The text's next paragraph starts at its own
   // indent (parse loop finding: GeoTopo's "Die Umkehrabbildung g ist nicht
-  // stetig, …" under its centered caption read into it).
+  // stetig, …" under its centered caption read into it). The follower's
+  // size may be the caption's last run's, not its line's: a caption set
+  // smaller than its label (parse loop finding: a statistics book sets
+  // "Figure 11.2:" in 10 pt and its words in 9 pt; the caption's line
+  // reads 10 pt, so its second line, "is approximately linear.", read as
+  // a paragraph of its own). A line hung under the caption's words, past
+  // its label, continues it when the caption ends mid-sentence and the
+  // line opens in lower case (parse loop finding: GeoTopo's "Abbildung
+  // 1.10: … die be-" hangs "schränkte äußeres genannt." under "Die", 80 pt
+  // in, which read as a paragraph of its own).
   const withFollower = (cap: Segment, follow: Segment | undefined): { text: string; runs: Run[] | undefined; box: Box } => {
     const box = cap.box!;
+    const tail = [...(cap.runs ?? [])].reverse().find((r) => r.look)?.look?.size;
+    const hung = (f: Segment, fb: Box) => fb.x1 > box.x1 && fb.x1 < (box.x1 + box.x2) / 2 && !/[.!?:;]\s*$/.test(cap.text) && /^\s*\p{Ll}/u.test(f.text);
     const aligned = (f: Box, size: number) => Math.abs(f.x1 - box.x1) < size || Math.abs((f.x1 + f.x2) / 2 - (box.x1 + box.x2) / 2) < size;
     if (
       !follow ||
@@ -958,18 +1353,27 @@ export function attachFigureRegions(
       follow.page !== cap.page ||
       follow.lineSize === undefined ||
       cap.lineSize === undefined ||
-      Math.abs(follow.lineSize - cap.lineSize) >= 0.6 ||
+      // A paragraph wholly beside the caption, sharing no column with it,
+      // is the text's (parse loop finding: a Tufte book's margin caption
+      // "Figure 29.4:", its words left out, took the paragraph left of it,
+      // "where z is measured in picometers…", for its words).
+      follow.box.x2 <= box.x1 ||
+      follow.box.x1 >= box.x2 ||
+      numberedLabel(follow) ||
+      (Math.abs(follow.lineSize - cap.lineSize) >= 0.6 && !(tail !== undefined && Math.abs(follow.lineSize - tail) < 0.6)) ||
       box.y1 - follow.box.y2 > cap.lineSize * ctx.leading * 0.9 ||
       (cap.lineSize >= ctx.bodySize * 0.98 && follow.text.length >= 240 && box.y1 - follow.box.y2 > cap.lineSize * 0.35) ||
-      (cap.lineSize >= ctx.bodySize * 0.98 && !aligned(follow.box, cap.lineSize))
+      (cap.lineSize >= ctx.bodySize * 0.98 && !aligned(follow.box, cap.lineSize) && !hung(follow, follow.box))
     ) {
       return { text: cap.text, runs: cap.runs, box };
     }
     consumed.add(follow);
-    const offset = cap.text.length + 1;
+    // A word the line's end breaks loses the typesetter's hyphen ("be-" | "schränkte").
+    const joined: { text: string; runs?: Run[] } = { text: cap.text, runs: cap.runs };
+    const offset = joinWrapped(joined, follow.text);
     return {
-      text: `${cap.text} ${follow.text}`,
-      runs: [...(cap.runs ?? []), ...(follow.runs ?? []).map((r) => ({ ...r, start: r.start + offset, end: r.end + offset }))],
+      text: joined.text,
+      runs: [...(joined.runs ?? []), ...(follow.runs ?? []).map((r) => ({ ...r, start: r.start + offset, end: r.end + offset }))],
       box: unionBox(box, follow.box),
     };
   };
@@ -1071,6 +1475,45 @@ export function attachFigureRegions(
     const table = tableSegment(tableRows, 0, rows[0].page, { box, lineSize: size, mathShare: 0 }, { size, columns: [px1 - x1, x2 - px2] });
     return { table, rows };
   };
+  // A caption's lines, or a panel's caption's, that words level with them
+  // (another panel's caption, a drawing's labels) cut into pieces go on
+  // with it: a piece set at its left edge, in its size, a line's step under
+  // it, with only words outside its width read between them (parse loop
+  // finding: the MML book p. 334, the captions under two plots side by side
+  // read a line of each in turn, "(a) Distances … for some x̃ = z1b ∈",
+  // "(b) The vector x̃ that minimizes the distance", "U = span[b]; see panel
+  // (b) …", each a paragraph of its own).
+  for (let c = 0; c < withMath.length; c++) {
+    const cap = withMath[c];
+    if (consumed.has(cap) || cap.type !== "PARAGRAPH" || !cap.box || cap.lineSize === undefined) continue;
+    if (!(isCaption(cap.text, cap.runs) || isOcrCaption(cap.text, ctx) || isSubCaption(cap.text))) continue;
+    let between = 0;
+    for (let k = c + 1; k < withMath.length && between <= 12; k++) {
+      const s = withMath[k];
+      const capBox = cap.box;
+      if (consumed.has(s) || s.page !== cap.page || !s.box) continue;
+      if (s.box.x2 <= capBox.x1 || s.box.x1 >= capBox.x2) {
+        between++;
+        continue;
+      }
+      if (
+        between === 0 ||
+        s.type !== "PARAGRAPH" ||
+        s.lineSize === undefined ||
+        Math.abs(s.box.x1 - capBox.x1) > 1 ||
+        Math.abs(s.lineSize - cap.lineSize) >= 0.3 ||
+        capBox.y1 - s.box.y2 < -1 ||
+        capBox.y1 - s.box.y2 > cap.lineSize * ctx.leading * 0.9
+      )
+        break;
+      consumed.add(s);
+      const joined: { text: string; runs?: Run[] } = { text: cap.text, runs: cap.runs };
+      const offset = joinWrapped(joined, s.text);
+      cap.text = joined.text;
+      cap.runs = [...(joined.runs ?? []), ...(s.runs ?? []).map((r) => ({ ...r, start: r.start + offset, end: r.end + offset }))];
+      cap.box = unionBox(capBox, s.box);
+    }
+  }
   for (let c = 0; c < withMath.length; c++) {
     const cap = withMath[c];
     if (consumed.has(cap)) continue;
@@ -1088,7 +1531,7 @@ export function attachFigureRegions(
     if (
       cap.type !== "PARAGRAPH" ||
       !cap.box ||
-      !isCaption(cap.text, cap.runs) ||
+      !(isCaption(cap.text, cap.runs) || isOcrCaption(cap.text, ctx)) ||
       TABLE_CAPTION_RE.test(cap.text)
     ) {
       out.push(cap);
@@ -1097,8 +1540,37 @@ export function attachFigureRegions(
     // The caption's neighbors are in its column: on a page read as columns,
     // the segment before it may end the other column (a synthetic paper's
     // caption took the left column's last line for the figure's top).
-    const [x1, x2] = columnOf(cap.box);
+    // Captions set level, side by side, each caption its own figure's,
+    // part the column halfway between them, and the words of their panels
+    // read as one line across the row are the row's (parse loop finding:
+    // NACA Report 515 p. 9, three vector sheaves with "Rotor axis" under
+    // each read as one line over the three captions; each caption's walk
+    // up to its panel stopped there, and the captions stood as paragraphs
+    // under the panels' words).
+    const capBox0 = cap.box;
+    const level = withMath.filter(
+      (s) =>
+        s !== cap &&
+        s.type === "PARAGRAPH" &&
+        s.page === cap.page &&
+        s.box !== undefined &&
+        (s.box.x1 >= capBox0.x2 || s.box.x2 <= capBox0.x1) &&
+        Math.min(s.box.y2, capBox0.y2) > Math.max(s.box.y1, capBox0.y1) &&
+        (isCaption(s.text, s.runs) || isOcrCaption(s.text, ctx)) &&
+        !TABLE_CAPTION_RE.test(s.text),
+    );
+    const [c1, c2] = columnOf(cap.box);
+    const x1 = Math.max(c1, ...level.filter((s) => s.box!.x2 <= capBox0.x1).map((s) => (s.box!.x2 + capBox0.x1) / 2));
+    const x2 = Math.min(c2, ...level.filter((s) => s.box!.x1 >= capBox0.x2).map((s) => (s.box!.x1 + capBox0.x2) / 2));
+    const [rowX1, rowX2] = level.reduce<[number, number]>(([a, b], s) => [Math.min(a, s.box!.x1), Math.max(b, s.box!.x2)], [c1, c2]);
     const inColumn = (s: Segment) => s.box !== undefined && s.box.x1 < x2 && s.box.x2 > x1;
+    // A caption in a margin: a narrow column with the text's lines beside it
+    // (three lines of prose or more on the page).
+    const marginal =
+      !ctx.ocr &&
+      level.length === 0 &&
+      x2 - x1 < pageWidth * 0.3 &&
+      lines.filter((l) => (l.xEnd < x1 || l.x > x2) && l.text.length >= 40).length >= 3;
     // Above the caption: debris up to the previous body segment. A table
     // under its own "Table N" caption is data, not debris.
     const column = out.filter(inColumn);
@@ -1123,7 +1595,7 @@ export function attachFigureRegions(
         !(prev.type === "FIGURE" && prev.region) &&
         (prev.type !== "EQUATION" || label) &&
         (prev.text.length < 80 || oneLine || isTicks(prev.text)) &&
-        overlapsDrawing(label ? grow(prev.box, ctx.bodySize) : prev.box, drawing, cap.box);
+        overlapsDrawing(label ? grow(prev.box, ctx.bodySize) : prev.box, drawing, cap.box, prev.type === "CODE");
       // A display's crop inside a diagram (over its boxes, arrows, and
       // pictures, or over a chart's lines) is a part of it: TeX's fonts in
       // its labels read as an equation, and the figure drew in two pieces
@@ -1176,10 +1648,43 @@ export function attachFigureRegions(
         !graphics.some((g) => g.box.x1 < x2 && g.box.x2 > x1 && g.box.y1 >= cap.box!.y2 - 1 && g.box.y2 <= prev.box!.y1 + 1) &&
         !graphics.some((g) => g.box.x1 < x2 && g.box.x2 > x1 && g.box.y2 <= cap.box!.y1 + 1 && cap.box!.y1 - g.box.y2 < rowGap * 2);
       if (!isFigureDebris(prev, ctx) && !inDrawing && !byGraphic && !underGraphic && !diagramPart && !step && !mathFigure) break;
+      // In a margin beside the text, a caption's figure is what is drawn:
+      // the margin's notes are set as small as its words and are no debris
+      // (parse loop finding: the MML book's margin captions swept the
+      // margin's notes over them, "The determinant is the signed volume …",
+      // into their crops).
+      if (marginal && !inDrawing && !byGraphic && !underGraphic && !diagramPart) break;
       // What reaches well past the column (a table across both columns) is
-      // no debris of a figure in it.
-      if (prev.box && (prev.box.x1 < x1 - ctx.bodySize * 2 || prev.box.x2 > x2 + ctx.bodySize * 2)) break;
+      // no debris of a figure in it. Past the columns of the captions set
+      // level with this one, it is: their panels' labels read as one line
+      // across the row (NACA Report 515 p. 9, above).
+      if (prev.box && (prev.box.x1 < rowX1 - ctx.bodySize * 2 || prev.box.x2 > rowX2 + ctx.bodySize * 2)) break;
       if (prev.type === "TABLE" && column.length >= 2 && TABLE_CAPTION_RE.test(column[column.length - 2].text)) break;
+      // On an OCR page a table whose first line holds a sentence's words
+      // (three words of letters in a row) is the text's: a caption's last
+      // line the OCR read on one row with the chart's ticks under it (NACA
+      // Report 515 p. 8: Figure 7's "N=150 r. p. m., protuberances faired
+      // and exposed." beside the next chart's "36 .9"). Swept, the caption
+      // lost its words to the crop under it.
+      if (ctx.ocr && prev.type === "TABLE" && wordRun(prev.text.split("\n")[0]) >= 3) break;
+      // On a typeset page a table that holds a sentence's words, four in a
+      // row, is the text's: the text's lines read on rows with a chart's
+      // labels beside them (parse loop finding: the MML book's p. 361,
+      // "which is a normalized probability vector" read in a table with
+      // the ticks of the chart beside it, and its caption's walk up swept
+      // it into the crop). Over the drawing it is the drawing's labels
+      // (a Caltech thesis's p. 83: "free energy difference between inducer
+      // dissociation constants" among a diagram's boxes).
+      if (!ctx.ocr && prev.type === "TABLE" && wordRun(prev.text) >= 4 && !(prev.box && overlapsDrawing(prev.box, drawing, cap.box))) break;
+      // Over a margin caption, words over a blank band, three rows or more
+      // with nothing drawn in it, are no figure's: a figure's words stand
+      // on or by its drawing (parse loop finding: the MML book sets
+      // "Figure 2.5" in the margin over its picture, and the walk up from
+      // it swept the margin's notes 130 pt over it, "Hadamard product" and
+      // a note of five lines, into its crop). A scan draws no paths: its
+      // charts' labels stand over blank bands (the DTIC Datcom's figures).
+      const floor = Math.max(cap.box.y2, ...swept.map((s) => s.box?.y2 ?? -Infinity));
+      if (marginal && prev.box && prev.box.y1 - floor > rowGap * 3 && !drawingIn(drawing, floor, prev.box.y1, x1, x2) && !graphics.some((g) => g.box.x1 < x2 && g.box.x2 > x1 && g.box.y2 > floor && g.box.y1 < prev.box!.y1)) break;
       swept.unshift(column.pop()!);
     }
     const above = column[column.length - 1];
@@ -1189,7 +1694,11 @@ export function attachFigureRegions(
     // of the page at most.
     const capBox = cap.box;
     const centeredIn = (b: Box, y1: number, y2: number) => b.x1 < x2 && b.x2 > x1 && (b.y1 + b.y2) / 2 >= y1 && (b.y1 + b.y2) / 2 <= y2;
-    const roof = Math.min(Infinity, ...dropped.filter((b) => b.y1 >= capBox.y2 && b.x1 < x2 && b.x2 > x1).map((b) => b.y1));
+    // A dropped line that touches the caption's top, within a point, is
+    // over it (parse loop finding: the MML book p. 334, the running head
+    // 0.1 pt into the box of "Figure 10.8" right under it made no roof, and
+    // the blank band over the caption cropped the running head).
+    const roof = Math.min(Infinity, ...dropped.filter((b) => b.y1 >= capBox.y2 - 1 && b.x1 < x2 && b.x2 > x1).map((b) => b.y1));
     const top = above?.box
       ? Math.min(above.box.y1, above.captionBox?.y1 ?? Infinity) - ctx.bodySize * 0.6
       : Math.min(pageTop, roof - ctx.bodySize * 0.6);
@@ -1201,12 +1710,28 @@ export function attachFigureRegions(
     // column, level with a graphic beside it that has no caption of its
     // own, is that graphic's (Earth Observer pp. 8–9: each side caption made
     // a crop of the blank margin over it, and its chart drew with none).
-    const side = swept.length === 0 ? sideGraphic(cap, x1, x2) : undefined;
+    // Words swept that are another graphic's labels, by it and far over the
+    // caption, keep no caption from a graphic level with it (parse loop
+    // finding: a Tufte textbook's "Figure 29.1:" in the margin swept the
+    // labels of the margin's picture far over it, "Material #3", and its
+    // double well beside it went uncaptioned).
+    const labelOf = (s: Segment) => s.box !== undefined && graphics.some((g) => shareInside(s.box!, grow(g.box, ctx.bodySize * 2)) >= 0.7 && g.box.y1 > cap.box!.y2 + rowGap * 3);
+    const side = swept.every(labelOf) ? sideGraphic(cap, x1, x2) : undefined;
     if (side) {
       sideCaptions.set(side, [...(sideCaptions.get(side) ?? []), { ...cap, ...withFollower(cap, next[0]) }]);
+      // The labels it swept are their graphic's: its crop takes them in.
+      for (const s of swept) {
+        const g = graphics.find((g) => shareInside(s.box!, grow(g.box, ctx.bodySize * 2)) >= 0.7);
+        if (g) Object.assign(g.box, unionBox(g.box, s.box!));
+        out.splice(out.indexOf(s), 1);
+      }
       continue;
     }
-    if (swept.length > 0 || top - cap.box.y2 > rowGap * 3 || drawnAbove) {
+    // A blank band in a margin is no figure's: the margin over a caption
+    // set beside its figure is empty (parse loop finding: the MML book's
+    // "Figure 2.3" in the margin at the page's top made a crop of the
+    // blank margin over it).
+    if (swept.length > 0 || (!marginal && top - cap.box.y2 > rowGap * 3) || drawnAbove) {
       for (const s of swept) out.splice(out.indexOf(s), 1);
       taken.push(...swept);
       box = { x1, x2, y1: cap.box.y2 + ctx.bodySize * 0.2, y2: top };
@@ -1224,7 +1749,8 @@ export function attachFigureRegions(
         const ceiling = Math.min(above?.box ? top : Infinity, Number.isFinite(roof) ? roof : pageTop);
         if (tops.length > 0) box.y2 = Math.min(ceiling, Math.max(...tops) + ctx.bodySize * 0.2);
       }
-      for (const s of swept) if (s.box) box = unionBox(box, s.box);
+      // A line across a row of captions is the row's: it widens no panel's crop.
+      for (const s of swept) if (s.box) box = unionBox(box, { ...s.box, x1: Math.max(s.box.x1, level.length > 0 ? x1 : -Infinity), x2: Math.min(s.box.x2, level.length > 0 ? x2 : Infinity) });
       // The drawing sets the width: a chart wider than the text column keeps
       // its axis labels.
       if (drawnAbove) box = unionBox(box, { ...drawnAbove, y1: Math.max(drawnAbove.y1, box.y1), y2: Math.min(drawnAbove.y2, box.y2) });
@@ -1255,9 +1781,19 @@ export function attachFigureRegions(
       let end: number | undefined;
       // The note is the caption's words, and the band stops over it.
       let note: Segment | undefined;
+      const labelUnder = (b: Box) => {
+        const own = drawingIn(drawing, b.y1, cap.box!.y1, x1, x2);
+        return own !== null && b.y2 >= own.y1 - ctx.bodySize * 0.5;
+      };
       while (m < next.length && isFigureDebris(next[m], ctx)) {
         const s = next[m];
         if (onDrawing && s.box && floor - s.box.y2 > rowGap * 1.5) break;
+        // A label set right under its drawing, within half an em of the
+        // drawing between it and the caption, is the drawing's (parse loop
+        // finding: the MML book p. 77, "c ≤ a + b" under the triangle of
+        // Figure 3.2 stopped the walk, and the crop was a sliver of the
+        // triangle's top).
+        if (marginal && s.box && !overlapsDrawing(s.box, drawing, cap.box) && !labelUnder(s.box)) break;
         m++;
         if (s.box && s.box.y1 < floor) {
           floor = s.box.y1;
@@ -1307,14 +1843,16 @@ export function attachFigureRegions(
         bottom = next[0]?.box ? next[0].box.y2 + ctx.bodySize * 0.6 : foot;
         open = !next[0]?.box;
       }
-      if (m > 0 || cap.box.y1 - bottom > rowGap * 3 || drawnBelow) {
+      if (m > 0 || (!marginal && cap.box.y1 - bottom > rowGap * 3) || drawnBelow) {
         box = { x1, x2, y1: bottom, y2: cap.box.y1 - ctx.bodySize * 0.2 };
         // With nothing of the text under it, a figure's foot is its own: the
         // foot of its drawing, of its graphics with their words, and of the
         // words it took. It never reaches the line the page dropped under it
         // (with none, 6% of the page). arXiv 2506.08209 p. 12: the band ran
         // to 6% of the page, and the crop showed half the page number.
-        if (open) {
+        // In a margin the next words may stand far under it (a margin note):
+        // the figure's foot is its own there too.
+        if (open || marginal) {
           const capFoot = cap.box.y1;
           const own = [drawnBelow, ...graphics.filter((g) => centeredIn(g.box, bottom, capFoot)).map(graphicExtent), ...next.slice(0, m).map((s) => s.box)];
           const feet = own.flatMap((b) => (b ? [b.y1] : []));
@@ -1353,7 +1891,22 @@ export function attachFigureRegions(
         }
       }
     }
-    let { text, runs, box: captionBox } = withFollower(cap, next.find((s) => !consumed.has(s)));
+    // On an OCR page a speck under the caption (a lone "(", no letter or
+    // digit) stands between it and its last line: the caption reads past it,
+    // and drops it once it takes the line (parse loop finding: NACA Report
+    // 515 p. 10, Figure 15's "rotor, μ=0.44, …" under a speck read as a
+    // paragraph of its own).
+    const specks: Segment[] = [];
+    const follower = next.find((s) => {
+      if (consumed.has(s)) return false;
+      if (ctx.ocr && s.type === "PARAGRAPH" && !/[\p{L}\p{N}]/u.test(s.text)) {
+        specks.push(s);
+        return false;
+      }
+      return true;
+    });
+    let { text, runs, box: captionBox } = withFollower(cap, follower);
+    if (follower && consumed.has(follower)) for (const s of specks) consumed.add(s);
     // A figure's own link printed under its caption (PLOS prints each
     // figure's DOI there) ends the caption: a paragraph of its own, it ran
     // into the next page's first words ("….g007 durations are …").
@@ -1422,6 +1975,37 @@ export function attachFigureRegions(
       placed.find((s) => s.type === "FIGURE" && s.box && inside(s.box, box));
     // A caption set beside the graphic takes the place of one under it.
     const sides = sideCaptions.get(graphic) ?? [];
+    // A drawing with no caption of its own right under a captioned drawn
+    // figure, as wide as it (within a fifth), two lines or less under it
+    // with no figure between, is the figure's lower part (parse loop
+    // finding: a quantum mechanics book's Figure 30.1, a grid of four plots
+    // in two rows with its caption beside the top row, read as two crops,
+    // the lower one with no caption). Two drawings with no caption stand
+    // apart: each sits by its own lines (the same book's p. 47, the
+    // expected and the actual result). A line level with the drawing that
+    // opens with a figure's label is its caption in the margin (the MML
+    // book's Figures 8.5 and 8.6, stacked, each with its caption beside it).
+    const meets = (s: Segment) => s.box !== undefined && s.page === page && Math.min(s.box.x2, box.x2) - Math.max(s.box.x1, box.x1) >= Math.max(s.box.x2 - s.box.x1, box.x2 - box.x1) * 0.8;
+    const labeled = placed.some((s) => s.page === page && s.box !== undefined && s.box.y1 < box.y2 && s.box.y2 > box.y1 && LABEL_START_RE.test(s.text));
+    const over =
+      !host && !caption && sides.length === 0 && graphic.pictures.length === 0 && !labeled
+        ? placed.find(
+            (s) =>
+              s.type === "FIGURE" &&
+              !s.mathCrop &&
+              (s.captionBox !== undefined || LABEL_START_RE.test(s.text)) &&
+              meets(s) &&
+              !ctx.drawing.images.some((m) => m.x1 < s.box!.x2 && m.x2 > s.box!.x1 && m.y1 < s.box!.y2 && m.y2 > s.box!.y1) &&
+              s.box!.y1 >= box.y2 - 1 &&
+              s.box!.y1 - box.y2 <= ctx.bodySize * 2.5 &&
+              !placed.some((t) => t !== s && meets(t) && t.box!.y2 <= s.box!.y1 + 1 && t.box!.y1 >= box.y2 - 1),
+          )
+        : undefined;
+    if (over?.box) {
+      over.box = unionBox(over.box, box);
+      over.region = toRegion(over.box);
+      continue;
+    }
     if (host?.box) {
       if (!inside(box, host.box)) {
         host.box = unionBox(host.box, box);
@@ -1454,6 +2038,7 @@ export function attachFigureRegions(
         mathShare: 0,
       };
       if (side?.box || caption) figure.captionBox = side?.box ?? caption?.box;
+      if (side && caption && isSubCaption(caption.text)) addPanel(figure, caption);
       own.add(figure);
       placed = [...placed];
       placed.splice(placeOf(placed, graphic, own), 0, figure);
@@ -1509,6 +2094,34 @@ export function attachFigureRegions(
       figure.box = { ...at, y1: rowTop + ctx.bodySize * 0.2 };
       figure.region = toRegion(figure.box);
     }
+  }
+  // Figures in a row, their captions level, read left to right: a scan's
+  // tilt sets the right one's caption a few points higher (parse loop
+  // finding: NACA Report 515 p. 9, Figures 11, 12, 13 side by side read
+  // 13, 12, 11).
+  const levelCaption = (a: Segment, b: Segment) =>
+    a.type === "FIGURE" &&
+    b.type === "FIGURE" &&
+    a.page === b.page &&
+    a.captionBox !== undefined &&
+    b.captionBox !== undefined &&
+    Math.min(a.captionBox.y2, b.captionBox.y2) - Math.max(a.captionBox.y1, b.captionBox.y1) >
+      Math.min(a.captionBox.y2 - a.captionBox.y1, b.captionBox.y2 - b.captionBox.y1) * 0.5;
+  for (let i = 0; i < kept.length; i++) {
+    let j = i;
+    while (j + 1 < kept.length && levelCaption(kept[i], kept[j + 1])) j++;
+    if (j > i) kept.splice(i, j - i + 1, ...kept.slice(i, j + 1).sort((a, b) => a.captionBox!.x1 - b.captionBox!.x1));
+    i = j;
+  }
+  // Two figures one over the other in a column read from the top: a
+  // caption beside the lower one, set from the top of the margin, placed
+  // it first (parse loop finding: the MML book p. 136, Figure 4.11's
+  // second row of pictures read before its first).
+  for (let i = 0; i + 1 < kept.length; i++) {
+    const [a, b] = [kept[i].box, kept[i + 1].box];
+    if (kept[i].type !== "FIGURE" || kept[i + 1].type !== "FIGURE" || kept[i].page !== kept[i + 1].page || !a || !b) continue;
+    const across = Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1);
+    if (across >= Math.min(a.x2 - a.x1, b.x2 - b.x1) * 0.8 && a.y2 <= b.y1) kept.splice(i, 2, kept[i + 1], kept[i]);
   }
   return kept;
 }

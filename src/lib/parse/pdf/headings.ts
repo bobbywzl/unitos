@@ -3,11 +3,11 @@
 
 import { lineColumn } from "@/lib/parse/pdf/columns";
 import { TOC_TAIL_RE } from "@/lib/parse/pdf/contents";
-import { CAPTION_RE } from "@/lib/parse/pdf/figures";
+import { CAPTION_RE, isOcrCaption } from "@/lib/parse/pdf/figures";
 import { geom, lineMathShare } from "@/lib/parse/pdf/geometry";
 import { charCount } from "@/lib/parse/pdf/glyphs";
 import { BULLET_RE, isGlyphMarker, readMarker } from "@/lib/parse/pdf/markers";
-import { isCentered, leftEdge, lineAlign, readParagraph } from "@/lib/parse/pdf/paragraphs";
+import { columnEdges, isCentered, leftEdge, lineAlign, readParagraph } from "@/lib/parse/pdf/paragraphs";
 import { TextBuilder, boldShare, escapeHtml, fillsMargin, joinGroup, lineAsPart, startsWithBoldLead } from "@/lib/parse/pdf/text";
 import type { Item, Line, PageContext, Run, Segment, Step } from "@/lib/parse/pdf/types";
 
@@ -105,7 +105,11 @@ export function readHeading(lines: Line[], i: number, ctx: PageContext, runOf: n
     boldHeading(lines, i, ctx, runOf) ??
     italicHeading(lines, i, ctx) ??
     partHeading(lines, i, ctx);
-  if (step?.segments.some((s) => s.type === "HEADING" && (wordless(s.text) || SIGNATURE_RE.test(s.text) || (ctx.ocr && !/\p{L}{2}/u.test(s.text))))) return null;
+  if (step?.segments.some((s) => s.type === "HEADING" && (wordless(s.text) || SIGNATURE_RE.test(s.text) || (ctx.ocr && scanDebris(s.text)) || isOcrCaption(s.text, ctx)))) return null;
+  // On a scan, a line in capitals with no number, the line under it a
+  // figure's caption, is the figure's axis label: DTIC's p. 31 read "MACH
+  // NUMBER, M" over "Figure 7. Drag divergence Mach number" as a heading.
+  if (step && ctx.ocr && capsShare(lines[i].text) >= 0.9 && !HEADING_NUMBER_RE.test(lines[i].text) && figureCaption(lines[step.next]?.text.trim() ?? "")) return null;
   // A heading of its own lines keeps where it stands: centered or flush
   // right in its column (a run-in lead's is its paragraph's).
   const [heading] = step?.segments ?? [];
@@ -115,6 +119,8 @@ export function readHeading(lines: Line[], i: number, ctx: PageContext, runOf: n
   }
   return step;
 }
+
+const figureCaption = (text: string) => CAPTION_RE.test(text) && !/^(?:table|tab\.|tabelle)/i.test(text);
 
 // A line that opens with a dash signs a piece or names a quotation's
 // source: no heading (the Earth Observer's "—Alan Ward [Executive Editor,
@@ -128,9 +134,21 @@ const SIGNATURE_RE = /^\s*[—–―]/;
 // carries no parenthesis or period and stays one (partHeading). On a scan's
 // text layer a word has two letters: its page numbers and specks read "4O4",
 // "I !", "N H".
-const PANEL_LETTERS_RE = /^(?:\s*(?:\(\p{L}\)|\p{L}[.)]))+\s*$/u;
+// Panel letters stand apart: "H.V.", letters set close, are initials.
+const PANEL_LETTERS_RE = /^\s*(?:\(\p{L}\)|\p{L}[.)])(?:\s+(?:\(\p{L}\)|\p{L}[.)]))*\s*$/u;
 function wordless(text: string): boolean {
   return PANEL_LETTERS_RE.test(text) || !/\p{L}/u.test(text);
+}
+
+// A heading on a scan's text layer holds a word of three letters, and
+// letters make half its marks: the OCR reads a chart's ticks and a speck
+// as "12.31-+--I-~4.-+-+-+-l-f-+-+", "of!", "ji", "rn............-." (parse
+// loop finding: NACA Report 515 and the DTIC Datcom read these as
+// headings).
+function scanDebris(text: string): boolean {
+  const marks = text.replace(/\s/g, "");
+  const letters = marks.replace(/[^\p{L}]/gu, "");
+  return !/\p{L}{3}/u.test(text) || letters.length * 2 < marks.length;
 }
 
 // A part's numeral or letter alone on a centered line, set apart above and
@@ -190,8 +208,13 @@ function largeHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[
     // is that edge: a title slide's widest line makes the column
     // (real-gslides-oer-5rs p2: "OER, the 5Rs, and" over "Creative
     // Commons" read as two headings).
+    // The middle is the first line's or the line's above (parse loop
+    // finding: a MagPi pull quote's three centered lines are 16 pt; the
+    // third's middle stands 14 pt off the first's and 7 pt off the
+    // second's, and the third, "LCD screens", read as a heading).
+    const middle = (l: Line) => (l.x + l.xEnd) / 2;
     const centered =
-      Math.abs((next.x + next.xEnd) / 2 - (line.x + line.xEnd) / 2) <= 12 &&
+      Math.min(Math.abs(middle(next) - middle(line)), Math.abs(middle(next) - middle(run[run.length - 1]))) <= 12 &&
       (next.x > ctx.columnLeft + 12 || (!ocr && Math.abs(next.size - line.size) < 0.1));
     const hung = hang !== undefined && run.length === 1 && Math.abs(next.x - hang) <= 2;
     if (
@@ -488,7 +511,11 @@ function capsHeading(lines: Line[], i: number, ctx: PageContext): Step | null {
     const text = line.text.trim();
     const letters = text.replace(/[^\p{L}]/gu, "").length;
     if (line.cells.length !== 1 || letters < 3 || [...text].length > 60 || capsShare(text) < 0.9) return false;
-    if (line.size < ctx.bodySize * 0.85 || line.size > ctx.bodySize * (ctx.ocr ? 1.3 : 1.14)) return false;
+    // A scan's text layer sizes a line by its box: a line of capitals has no
+    // descenders, and its box reads a sixth smaller than the text's (parse
+    // loop finding: NACA Report 515's SUMMARY and INTRODUCTION read 8.5 pt
+    // over 10.3 pt text, and were paragraphs).
+    if (line.size < ctx.bodySize * (ctx.ocr ? 0.78 : 0.85) || line.size > ctx.bodySize * (ctx.ocr ? 1.3 : 1.14)) return false;
     return !(/[,;:]$/.test(text) || INITIAL_RE.test(text) || LABEL_RE.test(text) || CAPTION_RE.test(text));
   };
   const line = lines[i];
@@ -542,17 +569,24 @@ function numberedHeading(lines: Line[], i: number, ctx: PageContext, runOf: numb
   // over its paragraph, it is a heading ("3.2. Proofs of Propositions 3.2
   // and 3.3.", its number set plain and its title bold).
   const closed = /\.$/.test(line.text.trim()) && styledShare(line) > 0.8;
+  // A scan's text layer sizes each word by its own box, and a typewriter
+  // leaves the column's right edge ragged: a section's title in capitals,
+  // centered by eye over its section, reads small and off the column's
+  // middle (parse loop finding: a DTIC scan's "2. ANGLE-OF-ATTACK" read
+  // 10.8 pt over lines of 14.9 pt, 17 pt off the middle, as a paragraph).
+  const scanTitle = ctx.ocr === true && capsShare(line.text) >= 0.9 && scanMiddle(lines, i, ctx);
   if (
     !(
       line.cells.length === 1 &&
       (HEADING_NUM_STRICT_RE.test(line.text) || (lineBold && LETTER_HEADING_RE.test(line.text))) &&
-      !(BULLET_RE.test(line.text) && !styled && !centered) &&
+      !(BULLET_RE.test(line.text) && !styled && !centered && !scanTitle) &&
       !TOC_TAIL_RE.test(line.text) &&
       [...line.text].length < 120 &&
       (!/[.,;:]$/.test(line.text) || closed) &&
-      line.size >= ctx.bodySize * 0.98 &&
+      line.size >= ctx.bodySize * (scanTitle ? 0.7 : 0.98) &&
       (styled ||
         centered ||
+        scanTitle ||
         line.size >= ctx.bodySize * 1.05 ||
         !ctx.hasBold ||
         /^(\d{1,2}|[A-Z])(\.\d{1,2})+/.test(line.text))
@@ -607,6 +641,15 @@ function numberedHeading(lines: Line[], i: number, ctx: PageContext, runOf: numb
   // of imaginary zj's. If n = 1 then", its number set upright).
   if (/[?!]$/.test(text.trim()) || SENTENCE_END_RE.test(text)) return null;
   return { segments: [headingOf(run, text, runs)], next: j };
+}
+
+// Line k is set in from both edges of its column by four ems or more, and
+// its middle stands within three ems of the column's middle.
+function scanMiddle(lines: Line[], k: number, ctx: PageContext): boolean {
+  const line = lines[k];
+  const { left, right } = columnEdges(lines, k, ctx);
+  if (right <= 0 || line.x - left < line.size * 4 || right - line.xEnd < line.size * 4) return false;
+  return Math.abs((line.x + line.xEnd) / 2 - (left + right) / 2) <= line.size * 3;
 }
 
 // The line's last words are set bold or in small caps. A bold lead with a
@@ -676,7 +719,13 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
     l.y - n.y > 0 &&
     l.y - n.y <= l.size * ctx.leading * 1.3;
   const title = titleLike(line) || (colonOn(line, lines[i + 1]) && isCentered(lines, i, ctx) && isCentered(lines, i + 1, ctx));
-  if (!title && !labelled) return null;
+  // A short label in bold capitals closed by a period, alone on its line,
+  // heads the paragraph under it as a title does: a Frontiers case report
+  // sets each case's initials, "H.V." and "G.A.", in bold italic over it,
+  // and they read as paragraphs (parse loop finding).
+  const capsLabel =
+    styledShare(line) > 0.9 && endsStyled(line) && capsShare(text) >= 0.9 && /^\p{L}[\p{L}.\s]{1,10}\.$/u.test(text) && !CAPTION_RE.test(text);
+  if (!title && !labelled && !capsLabel) return null;
   // A contents entry ends in leader dots and a page number; a title may end
   // in a number of its own ("Risk-neutral pricing 1").
   if (/(?:\s*\.){3,}\s*\d{1,4}\s*$/.test(text)) return null;
@@ -710,6 +759,11 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
   const last = run[run.length - 1];
   const above = lines[i - 1];
   const below = lines[j];
+  // A label's line over a display, its words cut mid-sentence, opens the
+  // sentence the display ends: no heading (parse loop finding: a worked
+  // example's "Solution: The overlap integral is" over its display read as
+  // a heading, where "Model: We are modeling…" read as its paragraph).
+  if (labelled && !title && below !== undefined && (below.display || lineMathShare(below) >= 0.4) && !/[.!?]$/.test(text)) return null;
   const gapAbove = apartAbove(above, line, ctx);
   const gapBelow = !below || apartBelow(last, below, ctx);
   // Stacked headings: a title-like line of another size right above (itself
@@ -739,7 +793,7 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
   // under it is regular type at its size.
   const edge = lineColumn(last)?.[1];
   const flushBelow =
-    title &&
+    (title || capsLabel) &&
     run.length === 1 &&
     bodyBelow &&
     Math.abs(below.x - last.x) <= last.size * 0.5 &&
@@ -748,7 +802,12 @@ function boldHeading(lines: Line[], i: number, ctx: PageContext, runOf: number[]
     edge - last.xEnd > last.size * 4 &&
     below.xEnd - below.x > (edge - below.x) * 0.6;
   const small = line.size < ctx.bodySize * 0.98;
-  if (small && !(headingAbove && bodyBelow) && !(gapAbove && (headingBelow || opensBelow))) return null;
+  // A title in capitals set a size under the body, apart above, over a
+  // paragraph flush with it, is a subhead: a Frontiers article sets "CASE
+  // REPORTS" and "PROCEDURES" in 8.5 pt bold capitals over its 9.5 pt body,
+  // and they read as paragraphs (parse loop finding).
+  const capsOver = (title || capsLabel) && run.length === 1 && capsShare(text) >= 0.9 && bodyBelow && Math.abs(below.x - last.x) <= last.size * 0.5;
+  if (small && !(headingAbove && bodyBelow) && !(gapAbove && (headingBelow || opensBelow || capsOver))) return null;
   // A centered title set apart above needs no gap under it: a statement's
   // title sits 12.8 pt over its units line ("CONDENSED CONSOLIDATED
   // STATEMENTS OF OPERATIONS (Unaudited)" read as a paragraph).
@@ -773,8 +832,18 @@ function italicHeading(lines: Line[], i: number, ctx: PageContext): Step | null 
   if (Math.abs(line.size - ctx.bodySize) > ctx.bodySize * 0.1) return null;
   const above = lines[i - 1];
   const below = lines[i + 1];
-  if (!above || !below || !apartAbove(above, line, ctx) || !apartBelow(line, below, ctx)) return null;
-  if (Math.abs(below.x - line.x) > line.size * 2 || textShare(below, (item) => item.italic) > 0.5 || below.size < line.size * 0.9) return null;
+  if (!below || !apartBelow(line, below, ctx)) return null;
+  // A centered label over a centered title lines up with it by their
+  // middles (parse loop finding: the Official Journal's "Article 6" over
+  // "Classification rules for high-risk AI systems" read as a paragraph,
+  // where "Article 1" over the shorter "Subject matter" read as a heading).
+  const middles = (isCentered(lines, i, ctx) || symmetric(line)) && (isCentered(lines, i + 1, ctx) || symmetric(below)) && Math.abs(below.x + below.xEnd - line.x - line.xEnd) <= line.size * 2;
+  // The page's first line has no line above it to stand apart from: a
+  // centered label over its centered title is a heading there as well
+  // (parse loop finding: the Official Journal's "Article 4" at the top of
+  // its page read as a paragraph).
+  if (above ? !apartAbove(above, line, ctx) : !middles) return null;
+  if ((Math.abs(below.x - line.x) > line.size * 2 && !middles) || textShare(below, (item) => item.italic) > 0.5 || below.size < line.size * 0.9) return null;
   return { segments: [headingOf([line], text, line.runs)], next: i + 1 };
 }
 

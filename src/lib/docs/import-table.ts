@@ -188,9 +188,21 @@ function collapsed(line: Inline[]): Piece[] {
 const MAX_LATEX = 2000;
 const HEX = /^#[0-9a-f]{6}$/;
 
+/** The name a style attribute is read under. jsdom parses every style
+    attribute into a CSS declaration as it builds an element, a large
+    Word table's most expensive step (Word benchmark finding: 6 s of an
+    18 MB file's 16 s import); the look is read from the attribute's
+    words alone, so tableFromHtml renames the attribute in the start tags
+    before jsdom reads them. */
+const LOOK = "data-unitos-look";
+const lookAttribute = (el: Element) => el.getAttribute(LOOK) ?? el.getAttribute("style");
+/** A start tag's style attribute name: the tag and its attributes before
+    it, each name with its value whole, so words inside a value never match. */
+const STYLE_NAME = /(<[a-zA-Z][\w:-]*(?:\s+[\w:.-]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'<>=`]+))?)*\s+)style=/g;
+
 /** One property of an element's style attribute, lower case. */
 function styleOf(el: Element, name: string): string | null {
-  for (const part of (el.getAttribute("style") ?? "").split(";")) {
+  for (const part of (lookAttribute(el) ?? "").split(";")) {
     const at = part.indexOf(":");
     if (at > 0 && part.slice(0, at).trim().toLowerCase() === name) return part.slice(at + 1).trim().toLowerCase();
   }
@@ -199,7 +211,7 @@ function styleOf(el: Element, name: string): string | null {
 
 /** A span's face: a plain font name (letters, digits, spaces, hyphens). */
 function faceOf(el: Element): string | null {
-  const raw = (el.getAttribute("style") ?? "").split(";").find((part) => part.split(":")[0]?.trim().toLowerCase() === "font-family");
+  const raw = (lookAttribute(el) ?? "").split(";").find((part) => part.split(":")[0]?.trim().toLowerCase() === "font-family");
   const value = raw?.slice(raw.indexOf(":") + 1).trim() ?? "";
   return /^[A-Za-z0-9][A-Za-z0-9 -]{0,39}$/.test(value) ? value : null;
 }
@@ -389,10 +401,11 @@ function cellBlocks(cell: Element, gapped: boolean): RichNode[] {
   // table whose cells end in their gaps (gapped: a PDF's, a Word file's)
   // has its text as its DOM text already: a raised "4" after a bold "g"
   // reads "g4", never "g 4".
-  const clone = cell.cloneNode(true) as Element;
-  if (!gapped) separateBlocks(clone);
+  // The reader changes nothing: only the spaces go into a copy.
+  const source = gapped ? cell : (cell.cloneNode(true) as Element);
+  if (!gapped) separateBlocks(source);
   const reader = new CellReader(paragraphAttrs(cell));
-  reader.read(clone, []);
+  reader.read(source, []);
   reader.flush();
   return reader.blocks.length > 0 ? reader.blocks : [paragraphNode([])];
 }
@@ -735,7 +748,7 @@ function placeNotes(table: Element, notes: CellNotes) {
     null when it holds no row. */
 export function tableFromHtml(html: string, room: number, notes?: CellNotes): ImportTable | null {
   const host = scratchDocument().createElement("div");
-  host.innerHTML = html;
+  host.innerHTML = html.replace(STYLE_NAME, `$1${LOOK}=`);
   const table = host.querySelector("table");
   if (!table) return null;
   if (notes && notes.refs.length > 0) placeNotes(table, notes);
@@ -791,9 +804,9 @@ export function tableFromHtml(html: string, room: number, notes?: CellNotes): Im
   const captionEl = [...table.children].find((c) => c.tagName.toLowerCase() === "caption");
   const reader = new CellReader();
   if (captionEl) {
-    const clone = captionEl.cloneNode(true) as Element;
-    if (!gapped) separateBlocks(clone);
-    reader.read(clone, []);
+    const source = gapped ? captionEl : (captionEl.cloneNode(true) as Element);
+    if (!gapped) separateBlocks(source);
+    reader.read(source, []);
     reader.flush();
   }
   const caption = reader.blocks.filter((b) => b.type === "paragraph").flatMap((b, k) => [...(k > 0 ? [{ type: "text", text: " " }] : []), ...(b.content ?? [])]);

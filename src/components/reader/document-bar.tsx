@@ -35,6 +35,7 @@ import {
 } from "@/components/reader/document-folders";
 import { DocumentsSort, useDocumentSort } from "@/components/reader/document-organize";
 import type { DocumentKind } from "@/lib/document-order";
+import type { SameFileIn } from "@/lib/parse/attach";
 import {
   IngestProgress,
   advanceIngestSteps,
@@ -52,6 +53,7 @@ import { setRevealFlag } from "@/components/reader/reveal";
 import {
   blockDocumentLine,
   keptBlockDocument,
+  SameFileLine,
   UploadAssistant,
   uploadItemTitle,
   type UploadRequest,
@@ -94,7 +96,7 @@ type IngestPhase = { fileLabel: string; steps: IngestStep[] };
 // reason "edited": a re-parse would replace an import's edits (SPEC.md §29).
 type IngestEvent =
   | { stage: string; detail?: string }
-  | { id: string; title: string; deduped: boolean }
+  | { id: string; title: string; deduped: boolean; sameFileIn?: SameFileIn }
   | { error: string; reason?: string };
 
 // The re-parse route's answer when a re-parse would replace an import's
@@ -464,6 +466,15 @@ export function DocumentBar({
     setTimeout(() => setNotice(null), ms);
   }
 
+  // An add from the bar made a new copy beside an edited import of the same
+  // file or page (SPEC.md §30): a passing notice whose title opens the import.
+  const [sameFile, setSameFile] = useState<SameFileIn | null>(null);
+  function showSameFile(same: SameFileIn | undefined) {
+    if (!same) return;
+    setSameFile(same);
+    setTimeout(() => setSameFile((shown) => (shown === same ? null : shown)), 10000);
+  }
+
   // The question comes back where Re-parse is: the document's actions open
   // with it, when the server answers that the import was edited.
   function askEdited(doc: AttachedDocument, as?: "article" | "handwritten") {
@@ -620,7 +631,13 @@ export function DocumentBar({
     fileLabel: string,
     kind: "pdf" | "url" | "video" | "youtube" | "media" | "drive",
     send: (emit: (stage: string, detail?: string) => void) => Promise<Response>,
-  ): Promise<{ id: string; title: string; deduped: boolean; blockDocument: ReturnType<typeof blockDocumentLine> | null }> {
+  ): Promise<{
+    id: string;
+    title: string;
+    deduped: boolean;
+    sameFileIn?: SameFileIn;
+    blockDocument: ReturnType<typeof blockDocumentLine> | null;
+  }> {
     setPhase({ fileLabel, steps: initialIngestSteps(kind) });
     const emit = (stage: string, detail?: string) =>
       setPhase((p) => (p ? { ...p, steps: advanceIngestSteps(p.steps, stage, detail) } : p));
@@ -763,6 +780,7 @@ export function DocumentBar({
       setDialog(false);
       openAdded(result.id);
       if (result.blockDocument) showNotice(t(result.blockDocument), 8000);
+      showSameFile(result.sameFileIn);
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : t("panes.uploadFailed"));
@@ -908,6 +926,7 @@ export function DocumentBar({
       setDialog(false);
       openAdded(result.id);
       if (result.blockDocument) showNotice(t(result.blockDocument), 8000);
+      showSameFile(result.sameFileIn);
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : t("panes.ingestFailed"));
@@ -1379,6 +1398,17 @@ export function DocumentBar({
           {notice}
         </span>
       )}
+      {sameFile && (
+        <span className="shrink-0 rounded-full bg-sage-200 px-3 py-1 text-xs text-sage-800">
+          <SameFileLine
+            same={sameFile}
+            onOpen={(id) => {
+              setSameFile(null);
+              open(id);
+            }}
+          />
+        </span>
+      )}
       {capture?.status === "running" && (
         <span
           role="status"
@@ -1414,7 +1444,12 @@ export function DocumentBar({
               setAssistant(null);
               setAssistantHidden(false);
             }
-            if (target && target.id !== opened) openAdded(target.id);
+            // The edited import an add made a new copy of opens plainly; the
+            // refresh brings the new copy into the list.
+            if (target?.kind === "existing") {
+              open(target.id);
+              router.refresh();
+            } else if (target && target.id !== opened) openAdded(target.id);
             // Opened early: the glossary and links the finishing step wrote
             // arrive with a refresh.
             else if (target) router.refresh();

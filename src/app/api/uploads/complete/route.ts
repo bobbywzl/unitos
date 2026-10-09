@@ -8,12 +8,12 @@ import { runConversion } from "@/lib/handwritten/convert";
 import { renderPageImages } from "@/lib/handwritten/page-images";
 import { renderUploadedSlidePictures } from "@/lib/handwritten/slide-pictures";
 import { IMAGE_EXTENSIONS, sniffImage } from "@/lib/handwritten/image";
-import { imageToPdf } from "@/lib/handwritten/image-pdf";
+import { ImageTooLargeError, imageToPdf } from "@/lib/handwritten/image-pdf";
 import { serverT } from "@/lib/i18n/server";
 import type { TFunc } from "@/lib/i18n/dictionaries";
 import { progressResponse } from "@/lib/ingest-response";
 import { describeIngestError } from "@/lib/parse/ingest-error";
-import { attachDocument } from "@/lib/parse/attach";
+import { addedResult, attachDocument } from "@/lib/parse/attach";
 import { sniffMedia } from "@/lib/video/storage";
 import { runTranscription } from "@/lib/video/transcription-job";
 import { MAX_VIDEO_BYTES, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
@@ -117,7 +117,11 @@ export async function POST(req: Request) {
       bytes = await imageToPdf(bytes);
     } catch (err) {
       console.error("Image wrap failed:", err);
-      return NextResponse.json({ error: t("api.imageUnreadable") }, { status: 400 });
+      const error =
+        err instanceof ImageTooLargeError
+          ? t("api.imagePixelsTooMany", { width: err.width, height: err.height })
+          : t("api.imageUnreadable");
+      return NextResponse.json({ error }, { status: 400 });
     }
     filename = filename.replace(IMAGE_EXTENSIONS, "");
     pages = true;
@@ -129,7 +133,7 @@ export async function POST(req: Request) {
         await attachDocument(data.notebookId, document.id, data.folderId);
         await bumpNotebook(data.notebookId);
         if (!deduped) after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
-        return { id: document.id, title: document.title, deduped };
+        return await addedResult(data.notebookId, document, deduped);
       } catch (err) {
         console.error("Word ingest failed:", err);
         throw new Error(describeIngestError(err, t, "file"));
@@ -153,7 +157,7 @@ export async function POST(req: Request) {
           const deck = bytes;
           after(() => renderUploadedSlidePictures(document.id, deck).catch((err) => console.warn("[slides] pictures failed:", err)));
         }
-        return { id: document.id, title: document.title, deduped };
+        return await addedResult(data.notebookId, document, deduped);
       } catch (err) {
         console.error("Slides/sheets ingest failed:", err);
         throw new Error(describeIngestError(err, t, "file"));
@@ -166,7 +170,7 @@ export async function POST(req: Request) {
         const { document, deduped } = await parse.ingestMarkdown(bytes, filename, onProgress, {}, user?.id ?? null);
         await attachDocument(data.notebookId, document.id, data.folderId);
         await bumpNotebook(data.notebookId);
-        return { id: document.id, title: document.title, deduped };
+        return await addedResult(data.notebookId, document, deduped);
       } catch (err) {
         console.error("Markdown ingest failed:", err);
         throw new Error(describeIngestError(err, t, "file"));
@@ -205,7 +209,7 @@ export async function POST(req: Request) {
         // to convert; nothing starts.
         after(() => runConversion(document.id, user?.id ?? null).catch(() => {}));
       }
-      return { id: document.id, title: document.title, deduped };
+      return await addedResult(data.notebookId, document, deduped);
     } catch (err) {
       console.error("PDF ingest failed:", err);
       throw new Error(describeIngestError(err, t, "pdf"));

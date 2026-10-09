@@ -7,9 +7,15 @@ import { OPERATOR_GLYPH_RE, SPACING_ACCENTS, charCount, isUnicodeMathFont, sameF
 import { hangingBox } from "@/lib/parse/pdf/math/layout";
 import { mathGlyph } from "@/lib/parse/pdf/math-fonts";
 import { splitZones } from "@/lib/parse/pdf/math/zones";
+import type { Glyph } from "@/lib/parse/pdf/drawing";
 import type { Cell, Item, Line, Run } from "@/lib/parse/pdf/types";
 
 export const ATTACH_PUNCT_RE = /^[.,;:!?)\]…%]/;
+// A decimal fraction set a space after the word before it opens a number
+// of its own, never punctuation that attaches left (parse loop finding: a
+// NACA report's OCR'd tables set ".597" after "18.8", a space apart, and
+// read the two numbers as "18.8.597").
+export const attachesLeft = (str: string, gap: number, size: number) => ATTACH_PUNCT_RE.test(str) && !/^[.,]\d/.test(str) && gap < size * 0.7;
 const CJK_START_RE = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
 const NUMERIC_TOKEN_RE = /^[\d.,%$€£+−–-]+$/;
 
@@ -47,7 +53,11 @@ function mergeSpacedItems(items: Item[]): Item[] {
       (gap < letterGap + item.size * 0.25 || item.math || last.math) &&
       sameFlags(last, item)
     ) {
-      last.str += item.str;
+      // Right-to-left letters, one per item, read from the right: the
+      // later item's letter comes first (parse loop finding: an Arabic
+      // book's heading drew "عقد" as three items, "د", "ق", "ع", left to
+      // right, and read "دقع").
+      last.str = RTL_RE.test(item.str) && RTL_RE.test(last.str) ? item.str + last.str : last.str + item.str;
       last.w = item.x + item.w - last.x;
       if (last.glyphs && item.glyphs) last.glyphs = [...last.glyphs, ...item.glyphs];
     } else {
@@ -144,8 +154,12 @@ function dropCaps(items: Item[]): { items: Item[]; starts: { item: Item; x: numb
     itself sets none). The layer's stock font is no face of the page: a
     scan set in Courier is no listing (a 1922 report read as code, its words
     run together at the font's character widths). */
-export function fitOcrItems(items: Item[]) {
+export function fitOcrItems(items: Item[], glyphs: Glyph[] = []) {
   for (const item of items) item.mono = false;
+  // A layer that draws a space glyph after its words says where its words
+  // end; one that draws none keeps the text layer's spaces.
+  const spaces = glyphs.filter((g) => g.unicode === " ");
+  if (spaces.length * 20 >= glyphs.length) for (const item of items) unspaceOcrItem(item, spaces);
   const text = median(items.map((i) => i.size));
   for (let k = items.length - 1; k >= 0; k--) if (charCount(items[k].str) <= 2 && items[k].size > text * 4) items.splice(k, 1);
   const words = items.filter((i) => i.str.trim()).sort((a, b) => b.y - a.y || a.x - b.x);
@@ -164,9 +178,50 @@ export function fitOcrItems(items: Item[]) {
   words.forEach((a, k) => {
     const b = next(k);
     if (!b) return;
-    if (Math.abs(scale - 1) >= 0.1 && b.x - a.x < (a.w + a.size * 0.25) * 2.5) a.w = Math.max(a.w, Math.min(a.w * scale, b.x - a.x - a.size * 0.2));
+    // The scale stretches the item's last word: an item of several words
+    // is fragments the drawing joined, each set where the scan shows it,
+    // and only the last one's end is short (parse loop finding: NACA
+    // Report 515 p. 10, a left column's line read as one item 248 pt wide
+    // took a tenth more, up to the right column's first word: 14 lines on
+    // pp. 10 and 12 read across the gutter).
+    const chars = Array.from(a.str.trimEnd());
+    const tail = a.w * (chars.length - chars.lastIndexOf(" ") - 1) / Math.max(1, chars.length);
+    if (Math.abs(scale - 1) >= 0.1 && b.x - a.x < (a.w + a.size * 0.25) * 2.5) a.w = Math.max(a.w, Math.min(a.w + tail * (scale - 1), b.x - a.x - a.size * 0.2));
     if (a.x + a.w > b.x - a.size * 0.15 && b.x - a.x > a.size * 0.5 && /[\p{L}\p{N}]$/u.test(a.str) && /^[\p{L}\p{N}]/u.test(b.str)) a.w = b.x - a.x - a.size * 0.2;
   });
+}
+
+/** An OCR item's word spaces where the layer sets them. An OCR layer
+    draws a space glyph after each word, and sets a word the scan breaks
+    in fragments, each where the scan shows it: the text layer reads a
+    space between two fragments a tenth of an em apart (parse loop finding:
+    NACA Report 515, "th e ro tor", "r educe", "ca uses" on every page;
+    pdftotext reads "the rotor"). Between two of the item's glyphs, a space
+    stays where a space glyph stands between them on their baseline, or
+    where they stand a third of an em apart or more. */
+function unspaceOcrItem(item: Item, spaces: Glyph[]) {
+  const glyphs = item.glyphs;
+  const chars = Array.from(item.str);
+  if (!glyphs || glyphs.length < 2 || !/\S\s+\S/u.test(item.str)) return;
+  if (chars.filter((c) => !/\s/u.test(c)).length !== glyphs.length) return;
+  let k = 0;
+  let out = "";
+  let pending = "";
+  for (const c of chars) {
+    if (/\s/u.test(c)) {
+      pending += c;
+      continue;
+    }
+    if (pending && k > 0) {
+      const [a, b] = [glyphs[k - 1], glyphs[k]];
+      const set = spaces.some((s) => Math.abs(s.y - a.y) <= a.size * 0.3 && s.x >= a.x && s.x <= b.x);
+      if (set || b.x - (a.x + a.w) >= a.size * 0.33) out += pending;
+    } else out += pending;
+    pending = "";
+    out += c;
+    k++;
+  }
+  item.str = out + pending;
 }
 
 // ── Line building ───────────────────────────────────────────────────────────
@@ -179,6 +234,190 @@ function withAccent(letter: string, mark: string): string {
   return (base + mark).normalize("NFC");
 }
 
+// A letter of a script set right to left.
+const RTL_RE = /[\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}]/u;
+
+/** A right-to-left font's marks, drawn with no advance, read after the
+    letter they stand on. Typst draws a mark right before its letter, the
+    letter in an item of its own, and maps the mark's glyph to the first
+    cluster it drew, a mark and some letters: the fathatan over "ق" reads
+    "ًك" (parse loop finding: an Arabic book's "صندوقًا" read "صندو ًكقا",
+    and 47 marks stood alone between words). A letter's glyph may map to a
+    letter and a mark too: the text layer gives its item no width, and the
+    item reads the letter alone ("لساٍٍ" for "لسانٍ"). Where the text layer
+    set the letter's advance as a space item right after it, that space
+    goes ("ال ّف صل" for "الفصل"). A page's items, in place. */
+export function placeMarks(items: Item[]) {
+  readLigatures(items);
+  const zero = (i: Item) => i.w <= i.size * 0.02 && /\p{M}/u.test(i.str) && RTL_RE.test(i.str);
+  const advance = (i: Item) => (i.glyphs ?? []).reduce((n, g) => n + g.w, 0);
+  // A mark's glyph inside a letter's item: the text layer put the two in
+  // one item, which reads the mark's letters too (parse loop finding: the
+  // Arabic book's "خيارًا" read "خيارًكا", its "ر" and the fathatan's glyph
+  // one item "رًك"). The mark's glyph becomes an item of its own, before
+  // its letter's, as Typst draws it.
+  for (let j = 0; j < items.length; j++) {
+    const item = items[j];
+    const glyphs = item.glyphs;
+    if (!glyphs || glyphs.length < 2 || !RTL_RE.test(item.str)) continue;
+    const marks = glyphs.filter((g) => g.w <= item.size * 0.02 && /\p{M}/u.test(g.unicode) && /\p{L}/u.test(g.unicode));
+    if (marks.length !== 1) continue;
+    // The text layer may have turned the glyph's letters ("كً" read "ًك").
+    const read = [marks[0].unicode, Array.from(marks[0].unicode).reverse().join("")].find((t) => item.str.includes(t)) ?? "";
+    const at = read === "" ? -1 : item.str.indexOf(read);
+    const rest = at < 0 ? "" : item.str.slice(0, at) + item.str.slice(at + read.length);
+    if (!/\p{L}/u.test(rest)) continue;
+    items.splice(j, 1, { ...item, str: marks[0].unicode, x: marks[0].x, w: 0, glyphs: [marks[0]] }, { ...item, str: rest, glyphs: glyphs.filter((g) => g !== marks[0]) });
+    j++;
+  }
+  // A letter read so: its glyph draws an advance. The text layer may set
+  // the advances of two such letters side by side as one space item (the
+  // Arabic book's heading "مصفوفة" drew "و" and "ف" so, under one space
+  // 11.8 pt wide, and read "مص فوفة"): the space goes when the letters'
+  // advances from its left end fill it.
+  const lettered = (i: Item) => zero(i) && advance(i) >= i.size * 0.1 && i.str.replace(/[\p{M}\s]/gu, "") !== "";
+  const run = items.filter(lettered).map((i) => ({ x: i.x, y: i.y, w: advance(i) }));
+  const filled = (from: Item, y: number, tol: number) => {
+    let at = from.x;
+    for (let step = run.find((r) => Math.abs(r.x - at) <= tol && Math.abs(r.y - y) <= tol); step; step = run.find((r) => Math.abs(r.x - at) <= tol && Math.abs(r.y - y) <= tol)) {
+      at += step.w;
+      if (Math.abs(at - (from.x + from.w)) <= from.size * 0.1) return true;
+    }
+    return false;
+  };
+  for (let j = 0; j < items.length; j++) {
+    const glyph = items[j];
+    const drawn = advance(glyph);
+    const letters = glyph.str.replace(/[\p{M}\s]/gu, "");
+    if (!zero(glyph) || drawn < glyph.size * 0.1 || letters === "") continue;
+    items[j] = { ...glyph, str: letters, w: drawn };
+    const tol = glyph.size * 0.05;
+    const k = items.findIndex(
+      (i) =>
+        i.str.trim() === "" &&
+        Math.abs(i.y - glyph.y) <= tol &&
+        Math.abs(i.x - glyph.x) <= tol &&
+        (Math.abs(i.w - drawn) <= glyph.size * 0.1 || filled(i, glyph.y, tol)),
+    );
+    if (k >= 0) {
+      items.splice(k, 1);
+      if (k < j) j--;
+    }
+  }
+  // A mark: its letter is the next item drawn with a letter, near it; the
+  // letters its own item reads go.
+  for (let j = 0; j < items.length; j++) {
+    const mark = items[j];
+    if (!zero(mark)) continue;
+    let k = j + 1;
+    while (k < items.length && items[k].str.trim() === "") k++;
+    const target = items[k];
+    const near = (i: Item) => Math.abs(i.y - mark.y) <= mark.size && mark.x >= i.x - i.size * 0.5 && mark.x <= i.x + i.w + i.size * 0.5;
+    if (!target || !/\p{L}/u.test(target.str) || !near(target)) continue;
+    // The letter drawn first is the item's left end: the last it reads.
+    // Over a glyph of two letters or more (a ligature), the mark stands
+    // where its letter starts (markedLetter).
+    const chars = Array.from(target.str);
+    const marked = markedLetter(target, mark.x);
+    let end = marked !== null ? marked + 1 : chars.length;
+    while (end > 0 && !/\p{L}/u.test(chars[end - 1])) end--;
+    while (end < chars.length && /\p{M}/u.test(chars[end])) end++;
+    const signs = mark.str.match(/\p{M}/gu)?.join("") ?? "";
+    items[k] = { ...target, str: [...chars.slice(0, end), signs, ...chars.slice(end)].join("") };
+    items.splice(j--, 1);
+  }
+}
+
+/** The index in an item's text of the letter a mark drawn at x stands
+    on: each glyph's letters from the right, a like share of its advance
+    each, and the mark at its letter's start, at most a tenth of an em left
+    of it, or inside it (parse loop finding: the Arabic book's "تميّز" drew
+    "يز" as one glyph, the shadda over its right half, and read "تميزّ").
+    Null where the glyphs' letters are not the item's. */
+function markedLetter(target: Item, x: number): number | null {
+  const glyphs = target.glyphs;
+  if (!glyphs || glyphs.length === 0) return null;
+  const parts: { x1: number; x2: number }[] = [];
+  for (const g of [...glyphs].sort((a, b) => b.x - a.x)) {
+    const n = Array.from(g.unicode).filter((c) => /\p{L}/u.test(c)).length;
+    for (let k = 0; k < n; k++) parts.push({ x1: g.x + g.w - ((k + 1) * g.w) / n, x2: g.x + g.w - (k * g.w) / n });
+  }
+  const letters = Array.from(target.str).flatMap((c, i) => (/\p{L}/u.test(c) ? [i] : []));
+  if (letters.length !== parts.length) return null;
+  const em = target.size * 0.1;
+  const at = parts.findIndex((q) => x >= q.x1 - em && x < q.x2 - em);
+  return at < 0 ? null : letters[at];
+}
+
+/** A right-to-left item's ligatures read in their own order. A font maps
+    a ligature's glyph to its letters in reading order ("في", "تي", "لا"),
+    and the text layer, turning the item's letters from the page's order to
+    reading order, turns each ligature's letters too: the Arabic book read
+    "يف" for "في", "اليت" for "التي", and "مدخالت" for "مدخلات" (parse
+    loop finding). Where the item's text holds as many characters as its
+    glyphs' maps, each ligature's letters, turned at its glyph's place, turn
+    back. A page's items, in place. */
+function readLigatures(items: Item[]) {
+  for (const [k, item] of items.entries()) {
+    const glyphs = item.glyphs;
+    if (!glyphs || glyphs.length === 0 || !RTL_RE.test(item.str)) continue;
+    // The glyphs in reading order, from the right, and where each one's
+    // letters stand in the item's text: the text layer turned them all.
+    // Spaces aside: the text layer sets a word gap the font draws no glyph for.
+    const read = [...glyphs].sort((a, b) => b.x - a.x).map((g) => Array.from(g.unicode.replace(/\s/gu, "")));
+    const chars = Array.from(item.str);
+    const places = chars.flatMap((c, n) => (/\s/u.test(c) ? [] : [n]));
+    if (read.reduce((n, letters) => n + letters.length, 0) !== places.length) continue;
+    let at = 0;
+    let turned = false;
+    for (const letters of read) {
+      const own = places.slice(at, at + letters.length);
+      const text = letters.join("");
+      const back = [...letters].reverse().join("");
+      if (letters.length >= 2 && LIGATURE_RE.test(text) && back !== text && own.map((n) => chars[n]).join("") === back) {
+        own.forEach((n, j) => (chars[n] = letters[j]));
+        turned = true;
+      }
+      at += letters.length;
+    }
+    if (turned) items[k] = { ...item, str: chars.join("") };
+  }
+}
+
+/** Items in reading order, each combining mark joined to the glyph it is
+    set over, the mark after it, as one item over both: a mark item drawn
+    wider than its base starts left of it, and the sort by x read it first.
+    Parse loop finding: a LaTeX package's manual draws its circled charge as
+    "⃝" (U+20DD) over "+", and "\fplus ⊕" read "\fplus ⃝+", the circle
+    alone. */
+function marksAfterBases(items: Item[]): Item[] {
+  const out: Item[] = [];
+  for (let k = 0; k < items.length; k++) {
+    const [mark, base] = [items[k], items[k + 1]];
+    const middle = base ? base.x + base.w / 2 : NaN;
+    if (
+      base &&
+      /^\p{M}+$/u.test(mark.str) &&
+      Array.from(base.str).length === 1 &&
+      !/\p{M}/u.test(base.str) &&
+      middle > mark.x &&
+      middle < mark.x + mark.w &&
+      Math.abs(base.y - mark.y) < mark.size * 0.5
+    ) {
+      const x = Math.min(mark.x, base.x);
+      const w = Math.max(mark.x + mark.w, base.x + base.w) - x;
+      out.push({ ...base, str: base.str + mark.str, x, w, glyphs: base.glyphs && mark.glyphs ? [...base.glyphs, ...mark.glyphs] : base.glyphs });
+      k++;
+      continue;
+    }
+    out.push(mark);
+  }
+  return out;
+}
+
+// A ligature's letters: two or more of a right-to-left script, no marks.
+const LIGATURE_RE = /^[\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}]+$/u;
+
 function composeAccents(items: Item[]): Item[] {
   const out: Item[] = [];
   for (let k = 0; k < items.length; k++) {
@@ -187,9 +426,12 @@ function composeAccents(items: Item[]): Item[] {
     // then "e"): composed across the split (import compare loop finding).
     const trailing = item.str.length > 1 ? SPACING_ACCENTS[item.str[item.str.length - 1]] : undefined;
     const after = items[k + 1];
-    if (trailing && after && /^\p{L}/u.test(after.str) && after.x <= item.x + item.w + item.size * 0.3) {
-      // The accent's glyph, the item's last, goes with it.
-      const accent = item.glyphs?.at(-1);
+    // The accent's glyph, the item's last, goes with it. A backtick (a
+    // grave accent the next item starts past) stays a character: glyphs.ts
+    // backtickOf.
+    const accent = item.glyphs?.at(-1);
+    const backtick = item.str.endsWith("`") && accent !== undefined && after !== undefined && after.x >= accent.x + accent.w * 0.9;
+    if (trailing && after && !backtick && /^\p{L}/u.test(after.str) && after.x <= item.x + item.w + item.size * 0.3) {
       const [letter, ...rest] = Array.from(after.str);
       out.push({ ...item, str: item.str.slice(0, -1), glyphs: accent ? item.glyphs!.slice(0, -1) : item.glyphs });
       items[k + 1] = {
@@ -211,7 +453,13 @@ function composeAccents(items: Item[]): Item[] {
         const chars = it ? Array.from(it.str) : [];
         if (it === undefined || chars.length === 0 || it.w <= 0) return -1;
         const advance = it.w / chars.length;
-        const idx = Math.floor((cx - it.x + advance * 0.15) / advance);
+        const at = Math.floor((cx - it.x + advance * 0.15) / advance);
+        // TeX sets an accent over an italic letter shifted right by the
+        // letter's skew: an accent whose center falls up to 0.4 of an advance
+        // past the item's end is its last letter's (parse loop finding: a
+        // statistics book's β̂₀ in txfonts set the hat's center 0.2 em right
+        // of the β's, and the text read "βˆ0", the hat apart).
+        const idx = at === chars.length && cx - (it.x + it.w) < advance * 0.4 ? chars.length - 1 : at;
         return idx >= 0 && idx < chars.length && /\p{L}/u.test(chars[idx]) ? idx : -1;
       };
       const composedAt = (base: Item, idx: number): Item => {
@@ -241,7 +489,8 @@ function composeAccents(items: Item[]): Item[] {
   return out;
 }
 
-const QED_RE = /^[□■∎]$/;
+// An end mark: a proof's (□, ∎), or a remark's or an example's (♢, ◇).
+const QED_RE = /^[□■∎▢♢◇]$/;
 
 /** The least gap between two items of a line, in points, that reads as a
     space: 0.12 of the line's size, or 0.2 after a script (an item set at
@@ -275,8 +524,16 @@ function opensCell(prev: Item, item: Item, size: number, next?: Item): boolean {
   const gap = item.x - (prev.x + prev.w);
   const words = next !== undefined && CJK_START_RE.test(next.str.trimStart()) && next.x - (item.x + item.w) < size * 0.5;
   const numeric = NUMERIC_TOKEN_RE.test(prev.str.trim()) && NUMERIC_TOKEN_RE.test(item.str.trim()) && !words;
-  return gap > Math.max(8, size * 1.6) || (numeric && gap > size * 1.0);
+  // An equation's label at the line's end, half an em or more past a
+  // glyph of a math font, opens a cell of its own (parse loop finding:
+  // ICML's (10) sets its label 0.6 em after the formula's comma in a
+  // column filled to its edge; read into the formula's cell, the line held
+  // no label, read as text with "Bernoulli" among its words, and the
+  // display was a crop).
+  const label = next === undefined && prev.math && !item.math && EQUATION_LABEL_RE.test(item.str.trim()) && gap > size * 0.5;
+  return gap > Math.max(8, size * 1.6) || (numeric && gap > size * 1.0) || label;
 }
+const EQUATION_LABEL_RE = /^\(\d{1,3}(?:\.\d{1,3}){0,2}[a-z]?\)$/;
 
 // A glyph set smaller than its cell's text and raised or lowered off the
 // text's baseline is a superscript or a subscript. Footnote references sit
@@ -291,8 +548,24 @@ function markShifts(items: Item[]) {
     const key = Math.round(i.size * 10) / 10;
     chars.set(key, (chars.get(key) ?? 0) + i.str.length);
   }
-  const textSize = [...chars].sort((a, b) => b[1] - a[1])[0][0];
-  const baseline = median(items.filter((i) => Math.abs(i.size - textSize) <= textSize * 0.05).map((i) => i.y));
+  let textSize = [...chars].sort((a, b) => b[1] - a[1])[0][0];
+  let baseline = median(items.filter((i) => Math.abs(i.size - textSize) <= textSize * 0.05).map((i) => i.y));
+  // A cell that opens with a letter its words' script follows, set at 0.55
+  // to 0.85 of its size and off its baseline by 0.1 to 0.4 of it, sets its
+  // text at that letter's size, however long the script (parse loop
+  // finding: a quantum mechanics book's "J_trans =" counted five letters of
+  // "trans" against one J, took the script's size for the text's, read
+  // "trans" as a word of prose, and the display (25.18b) read as three
+  // paragraphs). Small capitals stand on the letter's baseline; a drop cap
+  // is twice its words' size or more.
+  const lead = items.find((i) => i.str.trim() !== "");
+  if (lead && !lead.math && /^\p{L}$/u.test(lead.str.trim()) && textSize >= lead.size * 0.55 && textSize <= lead.size * 0.85) {
+    const shift = Math.abs(baseline - lead.y);
+    if (shift >= lead.size * 0.1 && shift <= lead.size * 0.4) {
+      textSize = lead.size;
+      baseline = lead.y;
+    }
+  }
   for (const item of items) {
     const small = !item.math && item.size <= textSize * 0.9;
     item.sup = small && item.y - baseline >= textSize * 0.15;
@@ -300,12 +573,184 @@ function markShifts(items: Item[]) {
   }
 }
 
-function buildLine(rawItems: Item[], page: number): Line {
+// ── Right-to-left lines ─────────────────────────────────────────────────────
+
+const RTL_LETTER_RE = /[\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}]/gu;
+const LETTER_RE = /\p{L}/gu;
+// A run that keeps its own left-to-right order inside a right-to-left
+// line: Latin words, digits, and the marks between them.
+const LTR_RE = /[\p{L}\p{N}]/u;
+
+/** Items whose letters are most of them of a right-to-left script. */
+function rightToLeft(items: Item[]): boolean {
+  let rtl = 0;
+  let all = 0;
+  for (const i of items) {
+    if (i.math) continue;
+    rtl += i.str.match(RTL_LETTER_RE)?.length ?? 0;
+    all += i.str.match(LETTER_RE)?.length ?? 0;
+  }
+  return rtl > 0 && rtl * 2 > all;
+}
+
+// A line of code among right-to-left text: its leftmost item set in a
+// monospace face, and its characters other than right-to-left letters, three
+// or more, all in that face.
+function codeLine(items: Item[]): boolean {
+  const first = items.find((i) => i.str.trim() !== "");
+  if (!first?.mono) return false;
+  let mono = 0;
+  let other = 0;
+  for (const i of items) {
+    const n = i.str.replace(RTL_LETTER_RE, "").replace(/[\s\p{M}]/gu, "").length;
+    if (i.mono) mono += n;
+    else other += n;
+  }
+  return mono >= 3 && other === 0;
+}
+
+/** A right-to-left line's items in reading order, cell by cell: the cells
+    and the items run from the right, and a run of left-to-right items
+    (a Latin word, a number, the spaces and marks between them) keeps its
+    own order. Each item's gap is the space the page leaves between it and
+    the item read before it; opens: the items that open a cell. The page
+    draws the items in visual order, left to right, and pdf.js gives each
+    its letters in reading order (parse loop finding: an Arabic book's
+    every line read its words backwards, "مرتين طلبتها التي المهمة" for
+    "المهمة التي طلبتها مرتين"). */
+function readingOrder(items: Item[], size: number): { order: Item[]; gaps: Map<Item, number>; opens: Set<Item> } {
+  const cells: Item[][] = [];
+  items.forEach((item, k) => {
+    if (k === 0 || opensCell(items[k - 1], item, size, items[k + 1])) cells.push([item]);
+    else cells[cells.length - 1].push(item);
+  });
+  const order: Item[] = [];
+  const gaps = new Map<Item, number>();
+  const opens = new Set<Item>();
+  for (const cell of cells.reverse()) {
+    // The cell's units, left to right: an item with a right-to-left letter
+    // stands alone; left-to-right items and the neutral items between two
+    // of them make one unit.
+    const ltr = cell.map((i) => !RTL_RE.test(i.str) && LTR_RE.test(i.str));
+    const units: Item[][] = [];
+    let k = 0;
+    while (k < cell.length) {
+      if (!ltr[k]) {
+        units.push([cell[k++]]);
+        continue;
+      }
+      let end = k;
+      for (let j = k + 1; j < cell.length && !RTL_RE.test(cell[j].str); j++) if (ltr[j]) end = j;
+      units.push(cell.slice(k, end + 1));
+      k = end + 1;
+    }
+    let prev: Item[] | null = null;
+    for (const unit of units.reverse()) {
+      unit.forEach((item, n) => {
+        if (n > 0) gaps.set(item, item.x - (unit[n - 1].x + unit[n - 1].w));
+        else if (prev) gaps.set(item, prev[0].x - Math.max(...unit.map((i) => i.x + i.w)));
+        else gaps.set(item, 0);
+        order.push(item);
+      });
+      prev = unit;
+    }
+    if (order.length > cell.length) opens.add(order[order.length - cell.length]);
+  }
+  return { order, gaps, opens };
+}
+
+/** A left-to-right line's items, or a table cell's, with each run of
+    right-to-left words read from the right, as one item: items of
+    right-to-left letters side by side, in one style, a word space apart at
+    most (a code font's space is 0.6 em), and the marks between them.
+    Parse loop finding: an Arabic book's code listing "printf '%s\\n'
+    \"مرحبًا $name\"" drew "مرحبًا" as three items, "مرح", "بً", and "ا", and
+    read "ابًمرح"; its comment "# مرحبًا غازي" read its two words backwards.
+    A number after the words and the marks between, up to the string's
+    closing quote, are the run's too: the page sets them left of the words
+    (a number after Arabic letters reads right to left with them), and they
+    read after the words, each mark and number in its own order reversed
+    (parse loop finding: the book's 'echo "رفضت إعادة الضبط: مسار غير متوقع"
+    >&2' is drawn 'echo "2&> "متوقع غير مسار :الضبط إعادة رفضت', and read
+    'echo "2&> "مسار غير متوقع :رفضت إعادة الضبط': the colon split the run,
+    and ">&2" stood before the string). */
+export function rightToLeftRuns(items: Item[], size: number): Item[] {
+  const rtlOnly = (i: Item) => RTL_RE.test(i.str) && !/[\p{Script=Latin}\p{N}]/u.test(i.str) && !i.math;
+  if (!items.some(rtlOnly)) return items;
+  const neutral = (i: Item) => !i.math && !/[\p{L}\p{N}]/u.test(i.str);
+  // A bar parts two cells of a table typed as text: it never joins a run.
+  const joins = (i: Item) => neutral(i) && !i.str.includes("|");
+  const number = (i: Item) => !i.math && /\p{N}/u.test(i.str) && !/\p{L}/u.test(i.str);
+  const close = (a: Item, b: Item) => b.x - (a.x + a.w) < size * 0.75;
+  // A mark's or a number's characters in reading order: its digits keep
+  // theirs, the rest reverse.
+  const reversed = (str: string) => (str.match(/\p{N}+(?:[.,]\p{N}+)*|[^]/gu) ?? []).reverse().join("");
+  const out: Item[] = [];
+  let run: Item[] = [];
+  // Marks after the run's last word, waiting for its next.
+  let between: Item[] = [];
+  const flush = () => {
+    if (run.length > 1) {
+      let str = "";
+      for (let k = run.length - 1; k >= 0; k--) {
+        const gap = k + 1 < run.length ? run[k + 1].x - (run[k].x + run[k].w) : 0;
+        const space = (gap > size * 0.15 || run[k].str.trim() === "") && str !== "" && !str.endsWith(" ");
+        str += (space ? " " : "") + (rtlOnly(run[k]) ? run[k].str.trim() : reversed(run[k].str.trim()));
+      }
+      const x = run[0].x;
+      // The run takes its words' style, its leftmost item's drawn space,
+      // and the typewriter face of its marks: a listing's string stays code.
+      const word = run.find(rtlOnly) ?? run[0];
+      const mono = word.mono || run.some((i) => !rtlOnly(i) && i.str.trim() !== "" && i.mono);
+      out.push({ ...word, str, x, w: Math.max(...run.map((i) => i.x + i.w)) - x, glyphs: run.flatMap((i) => i.glyphs ?? []), spaced: run[0].spaced, mono });
+    } else out.push(...run);
+    out.push(...between);
+    run = [];
+    between = [];
+  };
+  // The number and marks a run opens with, taken back from the items read
+  // before it: from the closing quote just left of its first word back to
+  // the nearest number, every item close to the next.
+  const opening = (word: Item): Item[] => {
+    const quote = out.at(-1);
+    if (!quote || !neutral(quote) || !/["'”’]/.test(quote.str) || !close(quote, word)) return [];
+    let k = out.length - 1;
+    let first = -1;
+    while (k > 0 && (neutral(out[k - 1]) || number(out[k - 1])) && close(out[k - 1], out[k])) {
+      k--;
+      if (number(out[k])) first = k;
+    }
+    return first < 0 ? [] : out.splice(first);
+  };
+  for (const item of items) {
+    const word = run.at(-1);
+    const last = between.at(-1) ?? word;
+    if (rtlOnly(item)) {
+      if (word && last && close(last, item) && (between.length > 0 || sameFlags(word, item))) {
+        run.push(...between, item);
+        between = [];
+        continue;
+      }
+      flush();
+      run = [...opening(item), item];
+    } else if (last && joins(item) && close(last, item)) between.push(item);
+    else {
+      flush();
+      out.push(item);
+    }
+  }
+  flush();
+  return out;
+}
+
+function buildLine(rawItems: Item[], page: number, rtlText = false): Line {
   const merged = mergeSpacedItems(
     composeAccents(
-      rawItems
-        .map((i) => ({ ...i, str: i.mono ? i.str : collapseSpacedStr(i.str) }))
-        .sort((a, b) => a.x - b.x),
+      marksAfterBases(
+        rawItems
+          .map((i) => ({ ...i, str: i.mono ? i.str : collapseSpacedStr(i.str) }))
+          .sort((a, b) => a.x - b.x),
+      ),
     ),
   );
   // A line's size is its text's: KaTeX sets a formula 1.21 times its prose,
@@ -329,28 +774,52 @@ function buildLine(rawItems: Item[], page: number): Line {
     from = k;
   }
   // Inline formulas cut out of the items, cell by cell (math/zones.ts).
-  const items = splitZones(merged, cellStarts);
+  const zoned = splitZones(merged, cellStarts);
+  // A right-to-left line reads from the right (readingOrder); its items
+  // stay in the page's order for the line's place and its cells' columns.
+  // Among lines set right to left, a line with a right-to-left letter
+  // reads so, however many Latin letters it holds: "تعريف · عقد الأتمتة
+  // (Automation contract)".
+  // A line that opens at its left in a monospace face, every character of
+  // it that is no right-to-left letter set in that face, is code, which
+  // reads left to right whatever its strings hold (parse loop finding: an
+  // Arabic book's listing line "printf 'تقرير تجريبي\n' >
+  // "$lab/inbox/report-2026-01.txt"" read from the right, its words
+  // backwards and the file name run into the Arabic, and its lines fell
+  // out of the listing as paragraphs). A line of prose sets its stops and
+  // commas in its own face.
+  const code = codeLine(zoned);
+  const rtl = !code && (rightToLeft(zoned) || (rtlText && zoned.some((i) => RTL_RE.test(i.str)))) ? readingOrder(zoned, size) : null;
+  // A left-to-right line keeps its runs of right-to-left words as items read from the right: a table's
+  // cells split the line's items again (cellsBySeparators).
+  const items = rtl ? zoned : rightToLeftRuns(zoned, size);
+  const read = rtl?.order ?? items;
   const cells: Cell[] = [];
   let prevEnd: number | null = null;
   let prevItem: Item | null = null;
-  for (const [n, item] of items.entries()) {
-    const gap = prevEnd === null ? 0 : item.x - prevEnd;
-    // An end-of-proof mark set flush right closes the line's text, not a cell
-    // of its own (read by its code, □ turned "as claimed." and a running
-    // head into a table).
+  for (const [n, item] of read.entries()) {
+    const gap = rtl ? (rtl.gaps.get(item) ?? 0) : prevEnd === null ? 0 : item.x - prevEnd;
+    // An end mark set flush right closes the line's text, not a cell of its
+    // own (read by its code, □ turned "as claimed." and a running head into
+    // a table). Parse loop finding: the MML book closes a remark with ♢ at
+    // the column's edge; read as a cell, the line told no paragraph's end,
+    // and "…in more detail in (7.27). ♢" ran into the indented "Recall
+    // that …" under it.
     const proofEnd = item === items[items.length - 1] && QED_RE.test(item.str.trim());
-    const wide = prevItem !== null && !proofEnd && opensCell(prevItem, item, size, items[n + 1]);
+    const wide = rtl ? rtl.opens.has(item) : prevItem !== null && !proofEnd && opensCell(prevItem, item, size, items[n + 1]);
     const least = prevItem !== null ? spaceGap(prevItem, item, size) : size * 0.12;
-    const crossed = prevItem !== null && crossesBack(prevItem, item);
+    const crossed = !rtl && prevItem !== null && crossesBack(prevItem, item);
+    // A space the page draws stands at an item's left (markSpaces): read
+    // right to left, it comes after the item, before the next one read.
+    const drawnSpace = rtl ? prevItem?.spaced === true : item.spaced === true;
     prevItem = item;
     let cell = cells[cells.length - 1];
     if (!cell || wide) {
       cell = { x: item.x, text: "", runs: [] };
       cells.push(cell);
-    } else if ((gap > least || crossed) && !cell.text.endsWith(" ")) {
+    } else if ((gap > least || crossed || (drawnSpace && gap >= 0)) && !cell.text.endsWith(" ")) {
       // Punctuation that attaches left ("PRESS" chip then ".") takes no space.
-      const attach = ATTACH_PUNCT_RE.test(item.str) && gap < size * 0.7;
-      if (!attach) cell.text += " ";
+      if (!attachesLeft(item.str, gap, size)) cell.text += " ";
     }
     const start = cell.text.length;
     cell.text += item.str;
@@ -432,7 +901,68 @@ function baselineOf(items: Item[], hangs: (i: Item) => boolean): number {
   return median(pool.filter((i) => i.size >= size * 0.75).map((i) => i.y));
 }
 
+// The lines built from each list of items while a page's reading holds the
+// memo open (withLineMemo): the column finder tests one list many times (a
+// side as a column, as a note, as prose), and building is most of its time.
+// A list is the same list when it holds the same items in the same order.
+// The lines are the builder's copies, so a caller's change to an item
+// after the build is in no cached line: whoever changes an item clears
+// the memo (forgetLines).
+// Each line is kept too: the lists the column finder tests share most of
+// their lines (a side and the page it stands in), and a line is the same
+// line when it holds the same items in the same order. A cached line is
+// shared, so no one changes it: linesOf copies a line it moves.
+let memo: Map<string, Line[]> | null = null;
+let lineMemo: Map<string, Line> | null = null;
+const itemIds = new WeakMap<Item, number>();
+let nextItemId = 0;
+
+function keyOf(head: string, items: Item[]): string {
+  let key = head;
+  for (const item of items) {
+    let id = itemIds.get(item);
+    if (id === undefined) itemIds.set(item, (id = nextItemId++));
+    key += `,${id}`;
+  }
+  return key;
+}
+
+export function withLineMemo<T>(work: () => T): T {
+  const outer = memo;
+  const outerLines = lineMemo;
+  memo = new Map();
+  lineMemo = new Map();
+  try {
+    return work();
+  } finally {
+    memo = outer;
+    lineMemo = outerLines;
+  }
+}
+
+export function forgetLines() {
+  memo?.clear();
+  lineMemo?.clear();
+}
+
+function lineOf(items: Item[], page: number, rtlText: boolean): Line {
+  if (!lineMemo) return buildLine(items, page, rtlText);
+  const key = keyOf(`${page}${rtlText ? "r" : ""}`, items);
+  let line = lineMemo.get(key);
+  if (!line) lineMemo.set(key, (line = buildLine(items, page, rtlText)));
+  return line;
+}
+
 export function buildLines(items: Item[], page: number): Line[] {
+  if (!memo) return linesOf(items, page);
+  const key = keyOf(String(page), items);
+  let lines = memo.get(key);
+  if (!lines) memo.set(key, (lines = linesOf(items, page)));
+  return [...lines];
+}
+
+const LIST_MARK_RE = /^\s*[•▪◦‣●○■□◆❖➢➤►✓✔*·∙–—-]\s*$/;
+function linesOf(items: Item[], page: number): Line[] {
   const { items: sorted, starts } = dropCaps(items.filter((i) => i.str.trim().length > 0));
   sorted.sort((a, b) => b.y - a.y || a.x - b.x);
   // A line is the items near one baseline. The anchor is the line's largest
@@ -502,8 +1032,14 @@ export function buildLines(items: Item[], page: number): Line[] {
   // the neighboring prose in (import compare loop finding). A lone operator
   // glyph (a radical, an integral sign) inside prose joins the prose line the
   // same way; beside an equation it stays, and the equation's region takes it.
+  // A list's mark set larger than its item's words is not the line's size:
+  // PowerPoint draws a dash at 19.56 pt before 12.96 pt words, and the
+  // word alone on the line above the item ("grid" ending "measured on a
+  // spatial") read as a script of the item's line and joined its middle
+  // (parse loop finding: a PowerPoint deck's dash lists).
   const stats = grouped.map((g) => {
-    const size = Math.max(...g.map((i) => i.size));
+    const words = g.filter((i) => !LIST_MARK_RE.test(i.str));
+    const size = Math.max(...(words.length > 0 && words.length < g.length ? words : g).map((i) => i.size));
     const large = g.filter((i) => i.size >= size * 0.75);
     const chars = g.reduce((n, i) => n + charCount(i.str), 0);
     const mathChars = g.reduce((n, i) => n + (i.math ? charCount(i.str) : 0), 0);
@@ -654,6 +1190,20 @@ export function buildLines(items: Item[], page: number): Line[] {
       kept[k] = kept[k].filter((i) => i !== item);
     }
   }
+  // A script of a script stays in its group only for its base there: once
+  // every glyph of the group's size left, the glyphs set under them follow
+  // to the line their bases joined (parse loop finding: an algorithm's
+  // "{…}^{T_roll−1}", its 5 pt "roll" left alone between two lines once
+  // the 7 pt "T" and "−1" joined the line under it).
+  for (let k = 0; k < grouped.length; k++) {
+    if (kept[k].length === 0 || kept[k].length === grouped[k].length || kept[k].some((i) => i.size >= stats[k].size * 0.75)) continue;
+    const bases = grouped[k].filter((i) => i.size >= stats[k].size * 0.75);
+    if (!kept[k].every((item) => bases.some((base) => touches(base, item)))) continue;
+    const target = moved.findIndex((m, n) => n !== k && m.some((i) => bases.includes(i)));
+    if (target < 0) continue;
+    moved[target].push(...kept[k]);
+    kept[k] = [];
+  }
   // A group whose every glyph left is no line: what moved into it follows
   // its glyphs (a macron over a letter landed in the emptied group of the
   // subscripts beside it — import compare loop finding).
@@ -728,13 +1278,14 @@ export function buildLines(items: Item[], page: number): Line[] {
   for (const op of pending) standalone.push([op, ...(inlineLimits.get(op) ?? [])]);
   const regrouped = [...kept.map((g, k) => [...g, ...moved[k]]), ...standalone].filter((g) => g.length > 0);
   regrouped.sort((a, b) => baselineOf(b, (i) => boxes.has(i)) - baselineOf(a, (i) => boxes.has(i)));
-  const lines = regrouped.map((g) => buildLine(g, page)).filter((l) => l.text.length > 0);
+  const rtlText = rightToLeft(items);
+  const lines = regrouped.map((g) => lineOf(g, page, rtlText)).filter((l) => l.text.length > 0);
   // The lines beside a drop cap start where its paragraph's lines do.
   for (const { item, x } of starts) {
-    const line = lines.find((l) => l.x === item.x && Math.abs(l.y - item.y) < item.size * 0.3);
-    if (line) {
-      line.x = x;
-      line.cells[0].x = x;
+    const k = lines.findIndex((l) => l.x === item.x && Math.abs(l.y - item.y) < item.size * 0.3);
+    if (k >= 0) {
+      const line = lines[k];
+      lines[k] = { ...line, x, cells: [{ ...line.cells[0], x }, ...line.cells.slice(1)] };
     }
   }
   return lines;

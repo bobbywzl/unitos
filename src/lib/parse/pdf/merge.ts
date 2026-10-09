@@ -1,11 +1,11 @@
 // Blocks cut by a page break: a paragraph, a list, or a table joins its other
 // half on the next page, and the block keeps where each later page begins.
 
-import { CAPTION_RE } from "@/lib/parse/pdf/figures";
-import { BULLET_RE, follows, readMarker } from "@/lib/parse/pdf/markers";
-import { endAs, endsFull } from "@/lib/parse/pdf/paragraphs";
+import { CAPTION_RE, numberedLabel } from "@/lib/parse/pdf/figures";
+import { BULLET_RE, follows, opensSequence, readMarker } from "@/lib/parse/pdf/markers";
+import { endAs, endsFull, wrapsAt } from "@/lib/parse/pdf/paragraphs";
 import { joinWrapped } from "@/lib/parse/pdf/text";
-import type { PageBreak, Segment } from "@/lib/parse/pdf/types";
+import type { Box, PageBreak, Segment } from "@/lib/parse/pdf/types";
 
 // ── Joins on one page ───────────────────────────────────────────────────────
 
@@ -43,14 +43,32 @@ function pullQuotes(segments: Segment[]): Set<Segment> {
 // A figure's labels the figure did not take, read as lines or as a
 // display's crop, are set smaller than the paragraph around them: next to a
 // float, they are the float's ("ac-" | labels, a figure | "cessible": arXiv
-// 2411.19946).
+// 2411.19946). A listing is no figure's label: set smaller than the text,
+// it carried the output read beside it to the next page's paragraph.
 const isLabel = (s: Segment, paragraph: Segment) =>
-  s.type !== "HEADING" && paragraph.lineSize !== undefined && s.lineSize !== undefined && s.lineSize < paragraph.lineSize * 0.9;
+  s.type !== "HEADING" && s.type !== "CODE" && paragraph.lineSize !== undefined && s.lineSize !== undefined && s.lineSize < paragraph.lineSize * 0.9;
+
+// A part set in another face and another size than a paragraph is another
+// text: a callout set beside the column, a sidebar's item, a link set in
+// the margin. Between a paragraph's halves it stands as a float does (The
+// MagPi p. 42: the callout "Each tower has DMX-controlled lights…" read
+// inside "…that fuse technology" | "and fashion."). A line of math is no
+// other text: its symbols' faces and sizes outweigh its words' (the dropout
+// paper p. 4: "with ϕ′, ϕ′′, ϕ′′′ ∈ L2(𝒩 (0, q̄∗)), and that q̄∗ and gρ have").
+const MATH_TEXT_RE = /[Ͱ-Ͽ′-‴∀-⋿\u{1d400}-\u{1d7ff}]/u;
+function otherText(s: Segment, paragraph: Segment): boolean {
+  if (s.lineSize === undefined || paragraph.lineSize === undefined || s.type !== "PARAGRAPH") return false;
+  if (MATH_TEXT_RE.test(s.text) || MATH_TEXT_RE.test(paragraph.text)) return false;
+  return !sameFace(s, paragraph) && Math.abs(s.lineSize - paragraph.lineSize) > Math.min(s.lineSize, paragraph.lineSize) * 0.03;
+}
 
 // A Chinese or Japanese character that ends a text or opens one (a stop, a
 // closing bracket, and the full-width punctuation aside).
 const CJK_END_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}ー、]$/u;
 const CJK_START_RE = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
+
+// An end mark: a remark's, an example's, or a proof's. It ends its block.
+const END_MARK_RE = /[♢◇◆♦□■∎▢◁▷⊣]$/u;
 
 // A part that ends in an abbreviation ends no sentence when the next opens
 // with a number or a lowercase word ("(Zhuravlev et al. 2010; Erban et
@@ -58,13 +76,19 @@ const CJK_START_RE = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
 const ABBREVIATION_END_RE = /(?:\bet al|\be\.g|\bi\.e|\bcf|\bvs|\bFigs?|\bEqs?|\bRefs?|\bSecs?|\bNo|\bpp?)\.$/;
 
 // The next part goes on the first's sentence: it opens lowercase or with a
-// parenthesis, or with a number that closes a parenthesis the first left
-// open ("(Federico," | "2016). This leads…") or follows a word that takes
-// one ("40 CFR part" | "178. To ensure…"). A number after any other word
-// opens something of its own: an algorithm's line ("8: end for"), a
-// section's heading ("3.2.3 Interim Conclusion.").
+// parenthesis, or with a bracket only a formula opens (an angle, a
+// ceiling, a floor, a norm) where the formula ends the sentence in a line
+// (the MML book's note "…is denoted by a⊤b or" | "⟨a,b⟩.", its formula's
+// line read apart, parse loop finding; a display read as words, a long
+// line with no sentence's end, stays a block of its own), or with a
+// number that closes a parenthesis the first left open ("(Federico," |
+// "2016). This leads…") or follows a word that takes one ("40 CFR part" |
+// "178. To ensure…"). A number after any other word opens something of its
+// own: an algorithm's line ("8: end for"), a section's heading ("3.2.3
+// Interim Conclusion.").
 function goesOn(prev: string, next: string): boolean {
   if (/^[a-z(]/.test(next)) return true;
+  if (/^[⟨⌈⌊‖]/.test(next)) return next.length <= 60 && /[.!?]$/.test(next.trim());
   if (!/^\d/.test(next)) return false;
   const open = (prev.match(/\(/g) ?? []).length - (prev.match(/\)/g) ?? []).length;
   if (open > 0 && /^\d[\d.,–-]*[a-z]?\)/.test(next)) return true;
@@ -95,8 +119,19 @@ function continuesOnPage(prev: Segment, next: Segment, setting: PageSetting): bo
   // 7), and a pull quote is no part of the text it quotes (the Earth
   // Observer p. 10).
   if (/^\([a-h]\)\s+\p{Lu}/u.test(next.text) || /\bquote\b/.test(next.html ?? "")) return false;
+  // A part that opens with a bold numbered label of its own ("Active
+  // Reading 22.1:", "Exercise 3.1") starts a new element: no sentence goes
+  // on in it (parse loop finding: a Tufte book's "…by a phase factor eiα
+  // which", cut at the page's foot, went on in the margin note "Active
+  // Reading 22.1: The 68% property is a good one…" above it).
+  if (numberedLabel(next)) return false;
   const sizes = prev.lineSize !== undefined && next.lineSize !== undefined ? [prev.lineSize, next.lineSize] : undefined;
   if (sizes && !/^[a-z]/.test(next.text) && Math.abs(sizes[0] - sizes[1]) > Math.min(...sizes) * 0.5) return false;
+  // A part set in another face and another size is another text: a
+  // sidebar's last item, "> …and means 'pole star' in German" in a sans at
+  // 7 pt, is no part of the column's "script was enough…" in a serif at 7.5
+  // pt (parse loop finding: The MagPi p. 61).
+  if (otherText(prev, next)) return false;
   // A part set smaller under the first, a line's size or more below it, is
   // a note at the page's foot: the correspondence line's "e-mail: …" went
   // on the right column's last paragraph (Nature p. 1).
@@ -113,10 +148,57 @@ function continuesOnPage(prev: Segment, next: Segment, setting: PageSetting): bo
   const lineSize = prev.lineSize ?? 10;
   const lone = prev.box !== undefined && prev.box.y2 - prev.box.y1 <= lineSize * 1.6 && prev.text.length <= 30;
   if (lone && next.box !== undefined && next.box.y2 < prev.box!.y1 - lineSize * 2) return false;
+  // A short line alone set smaller than the next part, level with its top
+  // and left of it, is a note beside it in the margin (parse loop finding:
+  // the MML book read "ordered basis and call this n-tuple an ordered
+  // basis of V", and "coordinate of x with respect to B").
+  const beside = lone && next.box !== undefined && Math.abs(next.box.y2 - prev.box!.y2) <= lineSize * 0.5 && next.box.x1 > prev.box!.x2;
+  if (beside && sizes && sizes[0] < sizes[1] * 0.95) return false;
+  // A note of a few words set smaller beside the paragraph, right or left
+  // of it, level with its lines, is a note in the margin too (parse loop
+  // finding: the MML book's "orthogonal complement", read after its
+  // paragraph at the page's foot, went on its sentence: "…x∈V can be
+  // orthogonal complement uniquely decomposed into"; on a left-hand page
+  // the note "primal problem" left of "…dual problem is given by" read
+  // "…is given by primal problem", p. 240).
+  const noteRight =
+    prev.box !== undefined &&
+    next.box !== undefined &&
+    (next.box.x1 > prev.box.x2 || next.box.x2 < prev.box.x1) &&
+    next.box.y2 <= prev.box.y2 + lineSize &&
+    next.box.y1 >= prev.box.y1 - lineSize &&
+    next.text.length <= 40;
+  if (noteRight && sizes && sizes[1] < sizes[0] * 0.95) return false;
+  // A note of two lines or more set at the body's size in the margin right
+  // of the paragraph, narrow beside it, starts a line or more under the
+  // paragraph's top and ends within two lines of its foot: a column the
+  // paragraph went on in starts at the column's top, as wide as the
+  // paragraph (parse loop finding: a Tufte book's notes, "This notation is
+  // used in atomic physics contexts…", read on the sentence a display cut:
+  // "…following our model from Chapter 13, is This notation…").
+  const noteBeside =
+    prev.box !== undefined &&
+    next.box !== undefined &&
+    next.box.x1 > prev.box.x2 + lineSize &&
+    next.box.y2 <= prev.box.y2 - lineSize &&
+    next.box.y1 >= prev.box.y1 - lineSize * 2 &&
+    next.box.y2 - next.box.y1 > lineSize * 1.6 &&
+    next.box.x2 - next.box.x1 <= (prev.box.x2 - prev.box.x1) * 0.6;
+  if (noteBeside) return false;
   if ((/[a-z,;\-–—]$/.test(prev.text) || ABBREVIATION_END_RE.test(prev.text)) && goesOn(prev.text, next.text)) return true;
   const size = prev.lineSize ?? 10;
   const columnBreak = prev.box !== undefined && next.box !== undefined && next.box.y2 > prev.box.y1 && next.box.x1 > prev.box.x2 - size;
   const alike = !sizes || Math.max(...sizes) <= Math.min(...sizes) * 1.2;
+  // A part that ends in a relation or an operator ends no sentence: its
+  // formula goes on in the next part (parse loop finding: ICML p. 6's "to
+  // leading order uniform dropout yields ξ_eff ∼" | "h̄^{−1/2} while the
+  // step schedule gives", cut by a column break, read as two paragraphs).
+  // A sign set raised is a charge or an exponent's, no operator: a
+  // listing's output "SO₄²⁻ NH₄⁺ Na⁺" went on into the paragraph under the
+  // listing (parse loop finding).
+  const end = prev.text.trimEnd().length - 1;
+  const raised = prev.runs?.some((r) => r.sup && r.start <= end && r.end > end) ?? false;
+  if (alike && !raised && /[=∼≈≃≤≥<>+−×·∝≡→↦]$/.test(prev.text.trimEnd())) return true;
   // A column's last line that ran to its edge goes on as a page's does
   // (wrapsOver).
   if (columnBreak && alike && wrapsOver(prev, next, setting)) return true;
@@ -144,11 +226,20 @@ export function joinOnPage(input: Segment[]): Segment[] {
   const setting = pageSetting(segments);
   for (let b = 1; b < segments.length; b++) {
     const paragraph = segments[b - 1];
-    const inRun = (s: Segment) => isFloat(s) || isLabel(s, paragraph);
+    // A heading beside the paragraph, apart from its lines and from the
+    // part it goes on in, is another column's: the rows read across put it
+    // between the two (parse loop finding: The MagPi's photo callout "A
+    // 1080p camera feeds back a live" | "video stream to the surface" read
+    // around the "Quick FACTS" box's heading on its rows, p. 99).
+    const apart = (s: Segment, o: Segment) => !!s.box && !!o.box && (s.box.x1 >= o.box.x2 || s.box.x2 <= o.box.x1);
+    const beside = (s: Segment) => paragraph.type === "PARAGRAPH" && s.type === "HEADING" && apart(s, paragraph);
+    const aside = (s: Segment) => paragraph.type === "PARAGRAPH" && otherText(s, paragraph);
+    const inRun = (s: Segment) => isFloat(s) || isLabel(s, paragraph) || aside(s) || beside(s);
     if (isFloat(paragraph) || !inRun(segments[b]) || segments[b].page !== paragraph.page) continue;
     let k = b;
     while (k < segments.length && segments[k].page === segments[b].page && inRun(segments[k])) k++;
-    if (!segments.slice(b, k).some(isFloat)) continue;
+    if (!segments.slice(b, k).some((s) => isFloat(s) || aside(s) || beside(s))) continue;
+    if (segments.slice(b, k).some((s) => beside(s) && (k >= segments.length || !apart(s, segments[k])))) continue;
     if (k < segments.length && continuesOnPage(paragraph, segments[k], setting)) segments.splice(b, 0, ...segments.splice(k, 1));
   }
   const out: Segment[] = [];
@@ -159,6 +250,13 @@ export function joinOnPage(input: Segment[]): Segment[] {
       shiftSpansInto(prev, segment, joinWrapped(prev, segment.text));
       joinLayout(prev, segment);
       endAs(prev, segment);
+      // Two parts of one column take one box: a note in the margin level
+      // with the later part's lines stands beside the paragraph (the MML
+      // book's "primal problem" beside the lines a display's row cut from
+      // the paragraph's first, p. 240). Parts in two columns keep the
+      // first's.
+      const [a, b] = [prev.box, segment.box];
+      if (a && b && Math.min(a.x2, b.x2) > Math.max(a.x1, b.x1)) prev.box = { x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1), x2: Math.max(a.x2, b.x2), y2: Math.max(a.y2, b.y2) };
       continue;
     }
     if (prev && itemGoesOn(prev, segment)) {
@@ -171,13 +269,44 @@ export function joinOnPage(input: Segment[]): Segment[] {
   return out;
 }
 
+// A note in the margin, set smaller than the text beside it, that the
+// reading order puts between a block of text and the displays right under
+// it, moves after those displays: the sentence runs on into its display,
+// and the space over the display is the text's (parse loop finding: the
+// MML book sets "primal problem" and "Lagrangian dual problem" beside "…
+// The associated Lagrangian dual problem is given by" over (7.22) on p.
+// 240; the notes stood between them, and the import drew the space over
+// the display after the note, 9 pt where the page sets 13).
+export function notesAfterDisplays(input: Segment[]): Segment[] {
+  const out = [...input];
+  const apart = (a: Box, b: Box) => a.x2 <= b.x1 || b.x2 <= a.x1;
+  for (let k = 0; k + 2 < out.length; k++) {
+    const a = out[k];
+    const box = a.box;
+    if (!["PARAGRAPH", "LIST"].includes(a.type) || !box) continue;
+    const size = a.lineSize ?? 10;
+    const note = (s: Segment) => s.type === "PARAGRAPH" && s.page === a.page && !!s.box && (s.lineSize ?? size) < size * 0.9 && apart(s.box, box) && s.box.y2 <= box.y2 + 1;
+    let j = k + 1;
+    while (j < out.length && note(out[j])) j++;
+    if (j === k + 1 || out[j]?.type !== "EQUATION" || out[j].page !== a.page) continue;
+    let end = j;
+    while (end + 1 < out.length && out[end + 1].type === "EQUATION" && out[end + 1].page === a.page) end++;
+    const displays = out.slice(j, end + 1);
+    const notes = out.slice(k + 1, j);
+    if (!notes.every((n) => displays.every((d) => d.box !== undefined && apart(n.box!, d.box)))) continue;
+    out.splice(k + 1, end - k, ...displays, ...notes);
+    k = end;
+  }
+  return out;
+}
+
 // A list's last item that a column break cuts goes on in the next column:
 // the item stops mid-sentence and the part opens lowercase, higher on the
 // page and right of it ("• We propose RONA, a novel prompting strategy" |
 // "that leverages Coherence Relations …": arXiv 2503.10997 p. 2).
 function itemGoesOn(list: Segment, next: Segment): boolean {
   if (list.type !== "LIST" || list.tocEntries || next.type !== "PARAGRAPH" || next.listItem || list.page !== next.page) return false;
-  if (/[.!?:…"”)]$/.test(list.text.trim()) || !/^\p{Ll}/u.test(next.text) || !list.box || !next.box) return false;
+  if (/[.!?:…"”)]$/.test(list.text.trim()) || END_MARK_RE.test(list.text.trim()) || !/^\p{Ll}/u.test(next.text) || !list.box || !next.box) return false;
   const size = list.lineSize ?? 10;
   return next.box.y2 > list.box.y1 && next.box.x1 > list.box.x2 - size;
 }
@@ -314,25 +443,64 @@ function liftFloatsOffParagraphBreaks(segments: Segment[], setting: PageSetting,
     // A list cut by the page break continues under the floats too (import
     // compare loop finding: a rubric list split in two by a figure).
     const listBreak = prev.type === "LIST" && !prev.tocEntries;
-    const ended = /[.!?:…"”)]$/.test(prev.text.trim()) && !ABBREVIATION_END_RE.test(prev.text.trim()) && !endsAtEdge(prev, setting);
+    const ended =
+      END_MARK_RE.test(prev.text.trim()) || (/[.!?:…"”)]$/.test(prev.text.trim()) && !ABBREVIATION_END_RE.test(prev.text.trim()) && !endsAtEdge(prev, setting));
     if (!listBreak && (prev.type !== "PARAGRAPH" || isPageFloat(prev) || ended)) continue;
     let k = b;
     while (k < out.length && out[k].page === out[b].page && (isPageFloat(out[k]) || isLabel(out[k], prev))) k++;
-    if (k >= out.length || (k === b && a === b - 1) || !(footLine || out.slice(a + 1, k).some(isPageFloat))) continue;
     const tail = out[k];
-    if (tail.page !== out[b].page) continue;
+    // A note set smaller atop the next page, in the margin beside the
+    // paragraph's second half, stands between the halves as a float does
+    // (parse loop finding: the MML book's "classification" in the margin of
+    // p. 22 kept "…the fourth" | "pillar: classification." apart, and the
+    // notes atop p. 300 kept "Using (9.9) in the" | "negative log-likelihood
+    // (9.8)"). Its words fit its box: a paragraph that took a note's first
+    // words keeps the note's box and size, and is no note (p. 44: "outer
+    // product (which we usually do), we can use …").
+    const note = (s: Segment) =>
+      smaller(s) &&
+      isLabel(s, prev) &&
+      s.box !== undefined &&
+      tail?.box !== undefined &&
+      (s.box.x1 > tail.box.x2 || s.box.x2 < tail.box.x1) &&
+      s.text.length * (s.lineSize ?? 10) ** 2 * 0.3 <= (s.box.x2 - s.box.x1) * (s.box.y2 - s.box.y1);
+    const between = out.slice(a + 1, k);
+    if (k >= out.length || (k === b && a === b - 1) || !(footLine || between.some(isPageFloat) || between.some(note))) continue;
+    // A part set smaller than the paragraph is a figure's label, no half of
+    // it (parse loop finding: the MML book's "…linear mappings where" took
+    // "Original", the label atop Figure 10.16, once its notes stood apart).
+    if (tail.page !== out[b].page || debris(tail.text) || (smaller(tail) && !smaller(prev))) continue;
     // A references entry's end at the page's top goes with the list after it.
     const lift = listBreak && hangingTail(tail, out[k + 1]) ? 2 : 1;
     const opens = /^[a-z($€£0-9"'“]/.test(tail.text) && !(/[.!?:…"”)]$/.test(prev.text.trim()) && !ABBREVIATION_END_RE.test(prev.text.trim()));
     if (lift === 1 && (listBreak ? tail.type !== "LIST" || Boolean(tail.tocEntries) : tail.type !== "PARAGRAPH" || !(opens || wrapsOver(prev, tail, setting)))) continue;
     if (out.slice(a + 1, b).some((s) => following.has(s))) continue;
     for (const s of out.slice(b, k)) following.add(s);
+    // The space measured under the block over the lifted part ran down to
+    // it (measureSpacing): with the part gone, that blank stands between
+    // the float and whatever follows it, which the page never set there
+    // (parse loop finding: the MML book's p. 317 set an 86 pt blank under
+    // Figure 9.11's last panel caption, over the paragraph's end that
+    // joins p. 316; the import drew it over the figure's side caption).
+    const over = out[k - 1];
+    if (k > b && over.box && tail.box && over.page === tail.page && tail.box.y2 <= over.box.y1 + 1 && tail.box.x1 < over.box.x2 && tail.box.x2 > over.box.x1) delete over.spaceAfter;
     const joined = out.splice(k, lift);
     const floats = out.splice(a + 1, b - a - 1);
     out.splice(a, 0, ...floats);
     out.splice(a + floats.length + 1, 0, ...joined);
   }
   return out;
+}
+
+// A scan's debris: a part of twenty marks or more, letters less than half
+// of them. No paragraph goes on into it over a page break (parse loop
+// finding: the DTIC Datcom's "…to correctly" went on into p. 63's
+// "wr0ý4-i0r.i 6141-4ý40 4J444.w4r", the OCR's reading of a table set
+// sideways, and the lift set "interpret the results." before the
+// paragraph it ends).
+function debris(text: string): boolean {
+  const marks = text.replace(/\s/g, "");
+  return marks.length >= 20 && marks.replace(/[^\p{L}]/gu, "").length * 2 < marks.length;
 }
 
 // The end of a list's entry that a page break cut: a paragraph set at the
@@ -389,6 +557,24 @@ function setAlike(a: Segment, b: Segment, body: Map<number, number>): boolean {
   return Math.max(ra, rb) <= Math.min(ra, rb) * 1.2;
 }
 
+// The face most of a part's characters are set in, as the page editor
+// names it; none when its runs carry no look.
+function faceOf(s: Segment): string | undefined {
+  const chars = new Map<string, number>();
+  for (const r of s.runs ?? []) if (r.look) chars.set(r.look.face, (chars.get(r.look.face) ?? 0) + r.end - r.start);
+  return [...chars].sort((a, b) => b[1] - a[1])[0]?.[0];
+}
+
+// Two parts set in two faces are two texts: a magazine's sidebar set in a
+// sans face is no part of the next page's paragraph set in a serif one
+// (parse loop finding: The MagPi's last Quick Facts item, "…all seasons
+// bar winter", took the next page's "a rainforest degradation monitoring
+// project…", which goes on from the page before the photo page).
+function sameFace(a: Segment, b: Segment): boolean {
+  const [fa, fb] = [faceOf(a), faceOf(b)];
+  return fa === undefined || fb === undefined || fa === fb;
+}
+
 // How the pages set their paragraphs: the pages whose paragraphs open set
 // in (a first-line indent), and each page's justified paragraphs.
 type PageSetting = { indenting: Set<number>; justified: Segment[] };
@@ -422,6 +608,26 @@ function wrapsOver(prev: Segment, next: Segment, setting: PageSetting): boolean 
   );
 }
 
+// A paragraph's last line at a page's foot wrapped, and the paragraph at the
+// next page's top opens where the column's lines start: the page break cut
+// the paragraph after a sentence, on a page whose paragraphs open flush as
+// well as on one that sets them in (wrapsOver). A ragged page wrapped the
+// line because the next page's first word would not fit on it; a page set
+// justified ran it to the edge (wrapsAt). A paragraph that ends short of
+// that stays apart from the next page's, and so does one the next page sets
+// in (reader audit finding: "…the screen group scored fifty." | "The gap of
+// twenty points is the effect this section is about." imported as two
+// paragraphs, the page break between them).
+function wrapsAcross(prev: Segment, next: Segment): boolean {
+  return (
+    next.type === "PARAGRAPH" &&
+    !prev.listItem &&
+    !/\b(?:center|right|caption|quote|footnote)\b/.test(prev.html ?? "") &&
+    !/\b(?:indent-first|indent-hanging|indent-block|center|right|caption|quote|footnote)\b/.test(next.html ?? "") &&
+    wrapsAt(prev, next)
+  );
+}
+
 export function mergeAcrossPages(input: Segment[]): Segment[] {
   const setting = pageSetting(input);
   const body = bodySizes(input);
@@ -446,9 +652,17 @@ export function mergeAcrossPages(input: Segment[]): Segment[] {
       segment.type === "PARAGRAPH" &&
       prev.type === "PARAGRAPH" &&
       segment.page > lastPageOf(prev) &&
+      !debris(segment.text) &&
       (!prev.listItem || /^\p{Ll}/u.test(segment.text) || wrapsOver(prev, segment, setting)) &&
       !isCaptionText(prev) &&
+      // An end mark set flush right (a remark's ♢, a proof's ∎) ends its
+      // block at the line's edge: the MML book's "…b = X⊤y. ♢" is no part
+      // of the next page's "Example 9.2 (Fitting Lines)", nor "…subspace
+      // U: λ. ♢" of "Example 3.10 (Projection onto a Line)" on a page that
+      // sets its paragraphs in.
+      !END_MARK_RE.test(prev.text.trim()) &&
       setAlike(prev, segment, body) &&
+      sameFace(prev, segment) &&
       // A numbered heading read as a paragraph starts its own block: with
       // the running head gone from between them, "6. Relations and arrows"
       // joined the display above it (the synthetic formula sheet).
@@ -459,7 +673,8 @@ export function mergeAcrossPages(input: Segment[]): Segment[] {
           // "… the" | "AAR only stages": a paragraph that ends without a stop
           // is unfinished, whatever the case of the next page's first word.
           (/\s[\p{L}\p{M}]+$/u.test(prev.text) && prev.text.length > 60))) ||
-        wrapsOver(prev, segment, setting))
+        wrapsOver(prev, segment, setting) ||
+        wrapsAcross(prev, segment))
     ) {
       const offset = joinWrapped(prev, segment.text);
       prev.breaks = joinBreaks(prev, segment, offset);
@@ -531,8 +746,17 @@ export function mergeAcrossPages(input: Segment[]): Segment[] {
       continue;
     }
 
-    // A lone item cut off at the page end joins the LIST that follows.
-    if (segment.type === "LIST" && prev.type === "PARAGRAPH" && prev.listItem && !segment.tocEntries && itemOfList(prev, segment, true)) {
+    // A lone item cut off at the page end joins the LIST that follows. So
+    // does a paragraph at the page's end that opens with a first marker
+    // ("(a)", "1.") the list's first item follows: a one-line item at the
+    // column's edge reads as a paragraph alone (parse loop finding: the
+    // Official Journal's point "(a) harmonised rules …;" at the foot of a
+    // page stood apart from points (b) to (g) on the next).
+    const opensList = (s: Segment) => {
+      const marker = readMarker({ text: s.text, runs: s.runs ?? [] });
+      return marker !== null && opensSequence(marker) && !s.text.includes("\n") && segment.page > lastPageOf(s);
+    };
+    if (segment.type === "LIST" && prev.type === "PARAGRAPH" && (prev.listItem || opensList(prev)) && !segment.tocEntries && itemOfList(prev, segment, true)) {
       const marker = BULLET_RE.test(prev.text) ? "" : "• ";
       const offset = marker.length;
       // The list now starts with the item's words, on the item's page; its
