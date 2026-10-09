@@ -10,8 +10,7 @@
   "import.mark.bold": 10,
   "mark.bold": 8,
   "list.kind": 4,
-  "import.list.depth": 2,
-  "mark.italic": 1
+  "import.list.depth": 2
  },
  "files": {
   "d2p-240-DOP-1013A_Lay_Down_Tubulars.docx": {},
@@ -283,9 +282,7 @@
   "poi-stress005.docx": {},
   "poi-stress006.docx": {},
   "poi-stress007.docx": {},
-  "poi-stress008.docx": {
-   "mark.italic": 1
-  },
+  "poi-stress008.docx": {},
   "poi-stress009.docx": {},
   "poi-stress010.docx": {
    "words": 86,

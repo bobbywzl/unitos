@@ -618,9 +618,20 @@ function readParse(title: string | null, blocks: ParsedBlock[], titleFont?: Text
       const t = htmlTable(b.html ?? "");
       r.tables.push({ ...t, text: compact(b.text), caption: /<caption>/.test(b.html ?? "") });
     }
+    // A mark's words without the note labels inside it, as the words above.
+    const unlabeled = (start: number, end: number) => {
+      let out = "";
+      let at = start;
+      for (const f of [...(b.footnoteRefs ?? [])].sort((x, y) => x.start - y.start)) {
+        if (f.end <= at || f.start >= end) continue;
+        out += b.text.slice(at, Math.max(at, f.start));
+        at = Math.max(at, f.end);
+      }
+      return out + b.text.slice(at, Math.max(at, end));
+    };
     for (const s of b.styles ?? []) {
       const k = (MARK_KINDS as string[]).includes(s.style) ? (s.style as MarkKind) : null;
-      if (k) r.marks[k] += ` ${s.quotedText}`;
+      if (k) r.marks[k] += ` ${b.footnoteRefs?.length ? unlabeled(s.start, s.end) : s.quotedText}`;
     }
     if (b.font?.bold) r.marks.bold += ` ${b.text}`;
     if (b.font?.italic) r.marks.italic += ` ${b.text}`;
