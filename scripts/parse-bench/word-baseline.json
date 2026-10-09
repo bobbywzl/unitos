@@ -11,7 +11,7 @@
   "mark.bold": 8,
   "list.kind": 4,
   "import.list.depth": 2,
-  "list.missing": 3,
+  "list.missing": 2,
   "mark.italic": 1
  },
  "files": {
@@ -305,7 +305,7 @@
   "poi-stress016.docx": {},
   "poi-stress017.docx": {},
   "poi-stress018.docx": {
-   "list.missing": 2
+   "list.missing": 1
   },
   "poi-stress019.docx": {},
   "poi-stress023.docx": {},

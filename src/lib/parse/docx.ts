@@ -1949,7 +1949,7 @@ class DocxReader {
         case "t": {
           if (!shown) break;
           const at = line.text.length;
-          line.add(this.symbolText(cleanText(node.textContent ?? ""), look), look, target);
+          line.add(this.symbolText(cleanText(node.textContent ?? "").replace(LINE_SEPARATORS, "\n"), look), look, target);
           this.claimCustomMark(line, at);
           break;
         }
@@ -2486,6 +2486,12 @@ function coreTitle(zip: OfficeZip): string | null {
   const title = core ? descendants(core, "title")[0]?.textContent?.trim() : "";
   return title ? cleanText(title) : null;
 }
+
+/** Unicode's line and paragraph separators (U+2028, U+2029) typed in a
+    run's text: a line break, as w:br is (Word benchmark finding:
+    poi-stress018's "escalas" and "territoriales" stood joined by one, and
+    the list line it was in read as no line). */
+const LINE_SEPARATORS = new RegExp("[\\u2028\\u2029]", "g");
 
 /** A text box inside one of these is read with it, or not at all. */
 const BOX_HOSTS = new Set(["txbxContent", "Fallback"]);

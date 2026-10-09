@@ -177,6 +177,14 @@ function importLists(blocks: ParsedBlock[]): string[] {
   check("a heading that repeats a Word file's title stands where it is", lines === "title:Annual Report|p:Written for the board.|h:Annual Report|p:The year in short.", JSON.stringify(lines));
 }
 
+// ── A line separator typed in a run is a line break ─────────────────────────
+
+{
+  const sep = String.fromCharCode(0x2028);
+  const block = (await parse(docx(para(`four scales${sep}of land`))))[0];
+  check("a U+2028 in a run's text is a line break, as w:br is", block?.text === "four scales\nof land", JSON.stringify(block?.text));
+}
+
 // ── A picture straight in the body is a figure ───────────────────────────────
 
 {
