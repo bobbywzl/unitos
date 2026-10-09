@@ -1,13 +1,13 @@
 {
  "total": {
-  "score": 0.951,
+  "score": 0.958,
   "sheets": 0.981,
-  "text": 0.937,
-  "cells": 0.927,
+  "text": 0.948,
+  "cells": 0.938,
   "formats": 0.907,
   "merges": 1,
   "frozen": 1,
-  "lost": 78169,
+  "lost": 77989,
   "dom": 1,
   "errors": 1
  },
@@ -1123,33 +1123,33 @@
    "dom": 0
   },
   "csvkit-test-latin1": {
-   "score": 0.926,
-   "text": 0.889,
-   "cells": 0.889,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
    "formats": null,
    "merges": null,
    "frozen": null,
-   "lost": 1,
+   "lost": 0,
    "dom": 0
   },
   "csvkit-test-utf16-big": {
-   "score": 0.852,
-   "text": 0.778,
-   "cells": 0.778,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
    "formats": null,
    "merges": null,
    "frozen": null,
-   "lost": 2,
+   "lost": 0,
    "dom": 0
   },
   "csvkit-test-utf16-little": {
-   "score": 0.852,
-   "text": 0.778,
-   "cells": 0.778,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
    "formats": null,
    "merges": null,
    "frozen": null,
-   "lost": 2,
+   "lost": 0,
    "dom": 0
   },
   "csvkit-test-utf8-bom": {
@@ -1263,33 +1263,33 @@
    "dom": 0
   },
   "pd-sauron-shift-jis": {
-   "score": 0.679,
-   "text": 0.5,
-   "cells": 0.536,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
    "formats": null,
    "merges": null,
    "frozen": null,
-   "lost": 13,
+   "lost": 0,
    "dom": 0
   },
   "pd-utf16-ex": {
-   "score": 0.921,
-   "text": 0.901,
-   "cells": 0.862,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
    "formats": null,
    "merges": null,
    "frozen": null,
-   "lost": 63,
+   "lost": 0,
    "dom": 0
   },
   "pd-unicode-series": {
-   "score": 0.971,
-   "text": 0.968,
-   "cells": 0.944,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
    "formats": null,
    "merges": null,
    "frozen": null,
-   "lost": 2,
+   "lost": 0,
    "dom": 0
   },
   "pd-salaries": {
@@ -1483,13 +1483,13 @@
    "dom": 0
   },
   "derived-imdb-excel-de": {
-   "score": 0.996,
-   "text": 0.994,
-   "cells": 0.994,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
    "formats": null,
    "merges": null,
    "frozen": null,
-   "lost": 28,
+   "lost": 0,
    "dom": 0
   },
   "derived-imdb-excel-fr-utf8": {
@@ -1503,33 +1503,33 @@
    "dom": 0
   },
   "derived-sauron-gb18030": {
-   "score": 0.679,
-   "text": 0.5,
-   "cells": 0.536,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
    "formats": null,
    "merges": null,
    "frozen": null,
-   "lost": 13,
+   "lost": 0,
    "dom": 0
   },
   "derived-titanic-utf16le-tsv": {
-   "score": 0.995,
-   "text": 0.99,
-   "cells": 0.995,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
    "formats": null,
    "merges": null,
    "frozen": null,
-   "lost": 54,
+   "lost": 0,
    "dom": 0
   },
   "derived-unicode-series-cp1252-tsv": {
-   "score": 0.971,
-   "text": 0.968,
-   "cells": 0.944,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
    "formats": null,
    "merges": null,
    "frozen": null,
-   "lost": 2,
+   "lost": 0,
    "dom": 0
   },
   "synth-long": {

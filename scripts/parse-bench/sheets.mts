@@ -580,15 +580,6 @@ const rowOf = (r: FileResult): Row => ({
   lost: r.lost,
   dom: r.dom,
 });
-if (flag("--save-baseline") && !detail) {
-  const prior: Baseline = existsSync(BASELINE) ? JSON.parse(readFileSync(BASELINE, "utf8")) : { total, files: {} };
-  for (const r of scored) prior.files[r.id] = rowOf(r);
-  if (!only && !kind && !skip) {
-    prior.total = Object.fromEntries(Object.entries(total).map(([k, v]) => [k, round(v)])) as typeof total;
-  }
-  writeFileSync(BASELINE, JSON.stringify(prior, null, 1) + "\n");
-  console.log(`Saved ${scored.length} files to ${BASELINE}`);
-}
 if (flag("--baseline") && existsSync(BASELINE)) {
   const base: Baseline = JSON.parse(readFileSync(BASELINE, "utf8"));
   const drops = scored.filter((r) => base.files[r.id] && r.score < base.files[r.id].score - 0.01);
@@ -597,4 +588,13 @@ if (flag("--baseline") && existsSync(BASELINE)) {
   for (const r of rises) console.log(`  rose ${r.id}  ${fmt(base.files[r.id].score)} → ${fmt(r.score)}`);
   for (const r of drops) console.log(`  dropped ${r.id}  ${fmt(base.files[r.id].score)} → ${fmt(r.score)}`);
   if (drops.length > 0) process.exitCode = 1;
+}
+if (flag("--save-baseline") && !detail) {
+  const prior: Baseline = existsSync(BASELINE) ? JSON.parse(readFileSync(BASELINE, "utf8")) : { total, files: {} };
+  for (const r of scored) prior.files[r.id] = rowOf(r);
+  if (!only && !kind && !skip) {
+    prior.total = Object.fromEntries(Object.entries(total).map(([k, v]) => [k, round(v)])) as typeof total;
+  }
+  writeFileSync(BASELINE, JSON.stringify(prior, null, 1) + "\n");
+  console.log(`Saved ${scored.length} files to ${BASELINE}`);
 }

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import * as ssf from "ssf";
 import type { ParsedBlock, ParsedDocument } from "@/lib/parse/types";
+import { decodeText } from "@/lib/parse/charset";
 import { renderChart } from "@/lib/parse/chart";
 import { fontListAttr } from "@/lib/office-fonts";
 import { JEV_MODEL, jevEnabled, systemOne, type JevQuestion } from "@/lib/jev";
@@ -140,7 +141,7 @@ export type SheetsParseOptions = {
     and the delimiter sniffed otherwise. */
 export async function parseSheetsFile(bytes: Uint8Array, filename: string, opts: SheetsParseOptions = {}): Promise<ParsedDocument> {
   if (sniffOfficeFile(bytes) === "xlsx") return parseSheets(bytes, filename, opts);
-  return parseDelimited(new TextDecoder("utf-8").decode(bytes), filename, /\.tsv$/i.test(filename) ? "\t" : undefined);
+  return parseDelimited(decodeText(bytes), filename, /\.tsv$/i.test(filename) ? "\t" : undefined);
 }
 
 // ── Entry: .xlsx ─────────────────────────────────────────────────────────────
