@@ -1,13 +1,13 @@
 {
  "total": {
-  "score": 0.98,
-  "sheets": 0.987,
-  "text": 0.977,
-  "cells": 0.976,
-  "formats": 0.907,
+  "score": 0.991,
+  "sheets": 1,
+  "text": 0.987,
+  "cells": 0.986,
+  "formats": 0.938,
   "merges": 1,
   "frozen": 1,
-  "lost": 26990,
+  "lost": 13006,
   "dom": 0,
   "errors": 0
  },
@@ -743,23 +743,23 @@
    "dom": 0
   },
   "lo-tdf76115": {
-   "score": 0,
-   "text": 0,
-   "cells": 0,
-   "formats": 0,
+   "score": 0.687,
+   "text": 0.611,
+   "cells": 0.509,
+   "formats": 0.317,
    "merges": null,
-   "frozen": null,
-   "lost": 7579,
+   "frozen": 1,
+   "lost": 2959,
    "dom": 0
   },
   "lo-tdf131575": {
-   "score": 0,
-   "text": 0,
-   "cells": 0,
-   "formats": 0,
-   "merges": null,
-   "frozen": null,
-   "lost": 9364,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": 1,
+   "frozen": 1,
+   "lost": 0,
    "dom": 0
   },
   "lo-tdf129985": {

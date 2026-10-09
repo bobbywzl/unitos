@@ -13,6 +13,40 @@ export type OfficeKind = "pptx" | "xlsx" | "docx";
 /** A zip's entries by path, every entry decompressed. */
 export type OfficeZip = Map<string, Uint8Array>;
 
+/** A zip entry's name as a part path: some writers store the Windows
+    separator ("xl\\workbook.xml"). */
+function partName(name: string): string {
+  return name.replace(/\\/g, "/");
+}
+
+/** The parts by path, found whatever the case of the name: part names
+    compare case-insensitively (ECMA-376 Part 2, §9.1.1.1), and some writers
+    store "xl/sharedstrings.xml" for the "sharedStrings.xml" the
+    relationships name. An exact name wins. Sheets benchmark finding: two
+    LibreOffice test workbooks of 7,579 and 9,364 cells, stored with these
+    names, read as nothing. */
+class OfficeParts extends Map<string, Uint8Array> {
+  private readonly folded = new Map<string, string>();
+
+  override set(name: string, data: Uint8Array): this {
+    super.set(name, data);
+    const key = name.toLowerCase();
+    if (!this.folded.has(key)) this.folded.set(key, name);
+    return this;
+  }
+
+  override get(name: string): Uint8Array | undefined {
+    const exact = super.get(name);
+    if (exact !== undefined) return exact;
+    const folded = this.folded.get(name.toLowerCase());
+    return folded === undefined ? undefined : super.get(folded);
+  }
+
+  override has(name: string): boolean {
+    return this.get(name) !== undefined;
+  }
+}
+
 const ZIP_MAGIC = [0x50, 0x4b, 0x03, 0x04];
 
 /** Do the bytes start a zip file. */
@@ -31,7 +65,7 @@ export function sniffOfficeFile(bytes: Uint8Array): OfficeKind | null {
   try {
     unzipSync(bytes, {
       filter: (file) => {
-        names.add(file.name);
+        names.add(partName(file.name).toLowerCase());
         return false;
       },
     });
@@ -47,8 +81,9 @@ export function sniffOfficeFile(bytes: Uint8Array): OfficeKind | null {
 /** Every entry of the zip, decompressed. Throws on a broken zip. */
 export function unzipOffice(bytes: Uint8Array): OfficeZip {
   const entries = unzipSync(bytes);
-  const zip: OfficeZip = new Map();
-  for (const [name, data] of Object.entries(entries)) {
+  const zip: OfficeZip = new OfficeParts();
+  for (const [stored, data] of Object.entries(entries)) {
+    const name = partName(stored);
     // Directory entries carry no bytes.
     if (name.endsWith("/")) continue;
     zip.set(name, data);
