@@ -7,7 +7,7 @@ import { useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
 import { useGraphNotes } from "@/components/graph/graph-notes";
 import { LinkReplyCount } from "@/components/graph/link-replies";
-import { waitingReply } from "@/lib/graph/coverage-view";
+import { useWaitingReply } from "@/components/graph/coverage"; // [lists9]
 import { useCollab } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { LinkDraftTag } from "@/components/graph/link-draft-tag"; // [ui5]
@@ -48,8 +48,9 @@ export function LinksList({
   const setRowLit = useGraphNotes()?.setRowLit;
   const [filter, setFilter] = useState(initialFilter);
   // The asker's badge from the people map, as a reply thread draws it: none for an unknown author.
-  const { myId, people } = useCollab();
-  const asks = (l: GraphEdgeLink) => waitingReply(l, myId);
+  const { people } = useCollab();
+  // [lists9] The reply a link waits on, by the one rule (useWaitingReply: never for a viewer, never a removed collaborator's).
+  const asks = useWaitingReply();
   const words = filter.trim().toLowerCase();
   const all = edges
     .map((e) => ({ edge: e, links: e.links.filter((l) => !l.recommended && !l.provenance) }))

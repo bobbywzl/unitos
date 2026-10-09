@@ -43,7 +43,7 @@ import { useCollab } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { useT } from "@/components/lang-provider";
 import { useGraphNotes } from "@/components/graph/graph-notes";
-import { useNewComments } from "@/components/graph/link-replies"; // [lists9] WALK9-06
+import { useMarkCommentSeen, useNewComment, useNewComments, useNewCount } from "@/components/graph/link-replies"; // [lists9] WALK9-06
 
 type CoverageValue = {
   coverage: ProjectCoverage | null;
@@ -121,6 +121,16 @@ export function useWaitsForReply(): (link: GraphEdgeLink) => boolean {
   return useCallback((link: GraphEdgeLink) => canEdit && waitsForReply(link, myId, members), [myId, canEdit, members]);
 }
 
+/** [lists9] The reply a link waits on for the account signed in (waitingReply,
+    WALK6-06), by the same two rules as useWaitsForReply: null for a viewer,
+    and never a reply by an account outside the project (WALK9-02, WALK9-09).
+    The Links list's row and the waiting list quote it with its badge. */
+export function useWaitingReply(): (link: GraphEdgeLink) => ReplyView | null {
+  const { myId, canEdit } = useCollab();
+  const members = useMembers();
+  return useCallback((link: GraphEdgeLink) => (canEdit ? waitingReply(link, myId, members) : null), [myId, canEdit, members]);
+}
+
 /** [lists8] commentWaits for the account signed in (WALK8-01); [lists9] the
     same two rules as useWaitsForReply (WALK9-02, WALK9-09). */
 export function useCommentWaits(): (c: GraphComment) => boolean {
@@ -179,6 +189,7 @@ export function CoverageHead({
   const { coverage, gapsOnly, setGapsOnly } = useContext(CoverageContext);
   const waits = useWaitsForReply();
   const commentWaitsOn = useCommentWaits();
+  const fresh = useNewCount(links, coverage); // [lists9] WALK9-06: new since this account's last visit
   const docs = documentIds.flatMap((id) => (coverage?.documents[id] ? [coverage.documents[id]] : []));
   const accepted = links.filter((l) => !l.recommended && !l.provenance);
   const linksWaiting = accepted.filter(waits).length;
@@ -240,6 +251,13 @@ export function CoverageHead({
       >
         {noReply === 1 ? t("graphCover.headNoReplyOne") : t("graphCover.headNoReply", { n: noReply })}
       </button>
+    ),
+    // [lists9] WALK9-06: the links, comments, and replies another person made
+    // since this account's last visit (the dot on the curve and on the chip).
+    fresh > 0 && (
+      <span key="new" data-graph-coverage-new={fresh} data-tip={t("graphCover.newSinceVisitTitle", { n: fresh })} className="text-[var(--kind-comment)]">
+        {fresh === 1 ? t("graphCover.newSinceVisitOne") : t("graphCover.newSinceVisitMany", { n: fresh })}
+      </span>
     ),
   ].filter(Boolean);
   return (
@@ -465,11 +483,13 @@ export function NodeComments({ documentId }: { documentId: string }) {
 }
 
 /** How wide the node's comments chip runs, in flow units (curve-place.ts
-    keeps a curve's marks off it). 0: no chip. */
-export function nodeCommentsWidth(c: DocumentCoverage | null | undefined, myId: string): number {
+    keeps a curve's marks off it). 0: no chip. `waits`: useCommentWaits, so
+    the "?" counts only where the chip draws it ([lists9] WALK9-02, WALK9-09:
+    not for a viewer, not on a removed collaborator's words). */
+export function nodeCommentsWidth(c: DocumentCoverage | null | undefined, waits: (x: GraphComment) => boolean): number {
   const open = openComments(c);
   if (open.length === 0) return 0;
-  return 13 + String(open.length).length * 6 + (open.some((x) => commentWaits(x, myId)) ? 5 : 0);
+  return 13 + String(open.length).length * 6 + (open.some(waits) ? 5 : 0);
 }
 
 /** One comment as a row: [lists8] its author's badge (WALK8-02), its words
@@ -484,6 +504,9 @@ function CommentRow({ notebookId, documentId, comment: c, onOpenDocument }: { no
   const router = useRouter();
   const { myId, people } = useCollab();
   const commentWaitsOn = useCommentWaits();
+  // [lists9] WALK9-06: new since this account's last visit (the chip's dot); the press marks it looked at.
+  const fresh = useNewComment(c);
+  const markSeen = useMarkCommentSeen();
   // The badge only when the project has another person: a reader alone wrote every comment.
   const author = c.authorId && Object.keys(people).some((id) => id !== myId) ? people[c.authorId] : undefined;
   const waiting = commentWaitsOn(c);
@@ -501,6 +524,7 @@ function CommentRow({ notebookId, documentId, comment: c, onOpenDocument }: { no
       data-graph-comment={c.id}
       data-track="graph-comment-open"
       onClick={() => {
+        markSeen(c); // [lists9] WALK9-06
         router.push(annotationReferenceHref(notebookId, { annotationId: c.id, documentId, sourceId: c.sourceId, kind: "comment" }));
         onOpenDocument();
       }}
@@ -527,6 +551,8 @@ function CommentRow({ notebookId, documentId, comment: c, onOpenDocument }: { no
           </span>
         )}
       </span>
+      {/* [lists9] WALK9-06: the same 6 px dot as the node's chip. */}
+      {fresh && <span data-graph-comment-new aria-label={t("graphCover.newCommentTitle")} className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[var(--kind-comment)]" />}
       {waiting && (
         <span className={`shrink-0 rounded-full bg-[color-mix(in_srgb,var(--kind-comment)_12%,transparent)] px-1.5 ${TEXT_META} text-[var(--kind-comment)]`}>
           <WaitsMark />
@@ -658,9 +684,13 @@ export function NodeCommentsLine({
   );
 }
 
-/** A Documents row's open comments, once their count is pressed: every one, in reading order. */
+/** A Documents row's open comments, once their count is pressed: every one,
+    [lists9] the new ones first (WALK9-06), then in reading order. */
 export function DocumentComments({ notebookId, documentId, onOpenDocument }: { notebookId: string; documentId: string; onOpenDocument: () => void }) {
-  const open = useDocumentComments(documentId).filter((c) => c.open);
+  const isNew = useNewComments(); // [lists9] WALK9-06
+  const open = useDocumentComments(documentId)
+    .filter((c) => c.open)
+    .sort((a, b) => Number(isNew(b)) - Number(isNew(a)));
   if (open.length === 0) return null;
   return (
     <div data-graph-documents-comments={open.length} className="flex flex-col gap-0.5">
@@ -708,16 +738,17 @@ export function AllComments({
 }) {
   const t = useT();
   const coverage = useProjectCoverage();
-  const { myId } = useCollab();
   const commentWaitsOn = useCommentWaits();
   const waits = useWaitsForReply();
+  const waitingReplyOf = useWaitingReply(); // [lists9] the one rule: no viewer, no account outside the project
+  const isNew = useNewComments(); // [lists9] WALK9-06: new rows first
   const listed = new Set(documents.map((d) => d.id));
   const linksOf = new Map<string, ListingRow[]>();
   if (waitingOnly && onOpenLink) {
     for (const e of edges) {
       for (const l of e.links) {
         if (l.recommended || l.provenance || !waits(l)) continue;
-        const reply = waitingReply(l, myId);
+        const reply = waitingReplyOf(l);
         const under = listed.has(l.fromDocumentId) ? l.fromDocumentId : listed.has(l.toDocumentId) ? l.toDocumentId : null;
         if (!reply || !under) continue;
         linksOf.set(under, [...(linksOf.get(under) ?? []), { key: `link:${l.id}`, at: reply.createdAt, link: l, reply }]);
@@ -732,6 +763,8 @@ export function AllComments({
     ];
     if (rows.length === 0) return [];
     if (waitingOnly) rows.sort((x, y) => (y.at ?? "").localeCompare(x.at ?? ""));
+    // [lists9] WALK9-06: in the comments listing the new rows come first, then the reading order.
+    else rows.sort((x, y) => Number(y.comment !== undefined && isNew(y.comment)) - Number(x.comment !== undefined && isNew(x.comment)));
     return [{ ...d, rows, newest: rows.reduce((m, r) => (r.at !== null && r.at > m ? r.at : m), "") }];
   });
   if (waitingOnly) groups.sort((x, y) => y.newest.localeCompare(x.newest));

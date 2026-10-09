@@ -59,7 +59,7 @@ import { useGraphContent } from "@/components/graph/graph-content";
 import { NodeCardExtras, linkLine } from "@/components/graph/node-card";
 import { CoverageRing, useDocumentCoverage, useWaitsForReply } from "@/components/graph/coverage"; // [cover4]
 // [layer5] The reader's comments on a node, and the reader's documents first at a far zoom.
-import { NodeComments, nodeCommentsWidth, useProjectCoverage } from "@/components/graph/coverage";
+import { NodeComments, nodeCommentsWidth, useCommentWaits, useProjectCoverage } from "@/components/graph/coverage";
 import { ownCommand } from "@/lib/graph/generated-label"; // [cover4]
 
 // The corpus graph (SPEC.md §13; the release-edu canvas patterns): documents
@@ -1812,7 +1812,7 @@ function GraphCanvas({
   // nodes' rooms and off each other, at the label scale of the zoom.
   const notesView = useGraphNotes()?.view;
   const markCoverage = useProjectCoverage(); // [layer5] the comments chips are rooms too
-  const markMyId = useCollab().myId; // [lists8] the chip's "?" is commentWaits
+  const markWaits = useCommentWaits(); // [lists8] the chip's "?" is commentWaits; [lists9] by the hook's two rules
   const markScale = useStore((s) => Math.round(labelScale(s.transform[2]) * 10) / 10);
   const markPlaces = useMemo(() => {
     const at = new Map(flowNodes.map((n) => [n.id, n.position]));
@@ -1821,7 +1821,7 @@ function GraphCanvas({
       return p ? { x: p.x + NODE_W / 2, y: p.y + 16 } : null;
     };
     const rooms = flowNodes.flatMap((n) =>
-      nodeRoom(n.position.x, n.position.y, markScale, n.data.title, nodeCommentsWidth(markCoverage?.documents[n.id], markMyId)),
+      nodeRoom(n.position.x, n.position.y, markScale, n.data.title, nodeCommentsWidth(markCoverage?.documents[n.id], markWaits)),
     );
     const curves: MarkCurve[] = [];
     for (const f of flowEdges) {
@@ -1847,7 +1847,7 @@ function GraphCanvas({
     // The widest marks first: they have the fewest free places.
     curves.sort((a, b) => b.w - a.w || a.id.localeCompare(b.id));
     return placeMarks(curves, rooms);
-  }, [flowNodes, flowEdges, notesView, markScale, showProvenance, markCoverage, markMyId]);
+  }, [flowNodes, flowEdges, notesView, markScale, showProvenance, markCoverage, markWaits]);
 
   // The curves the spotlight lights: a hovered node's, a hovered or pinned
   // curve, or the curves between a hovered note's documents.
