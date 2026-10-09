@@ -523,9 +523,20 @@ function keepTextLines(root: Root, source: string) {
   }
 }
 
+/** A heading written with "#" (or an HTML heading): Markdown's own. An
+    underlined heading (a line of "=" or "-" under it) is a text file's as
+    often: a MAINTAINERS file's, an RST manual's. */
+function hasHashHeading(node: Root | RootContent, lines: string[]): boolean {
+  if (node.type === "heading") return /^ {0,3}#/.test(lines[(node.position?.start.line ?? 1) - 1] ?? "#");
+  if (node.type === "html") return /<h[1-6][\s>]/i.test(node.value);
+  return "children" in node && (node.children as RootContent[]).some((n) => hasHashHeading(n, lines));
+}
+
 function shapeTextOutline(root: Root, source: string) {
+  // The lines rule runs in a file with no "#" heading: an underlined
+  // heading does not make a text file Markdown.
+  if (!hasHashHeading(root, source.split("\n"))) keepTextLines(root, source);
   if (hasHeading(root)) return;
-  keepTextLines(root, source);
   const nodes = root.children;
   const words = (text: string) => text.split(/\s+/).filter(Boolean).length;
   nodes.forEach((node, i) => {
