@@ -65,17 +65,33 @@ export function pageCharsets(bytes: Uint8Array, contentType?: string | null): st
   return out;
 }
 
+// Windows-1252's characters at 0x80–0x9F (a hole reads as its C1 code point,
+// as the WHATWG decoder reads it). Node's TextDecoder("windows-1252") reads
+// these bytes as Latin-1's C1 controls (Node 22): a curly apostrophe, a
+// dash, an euro sign read as nothing. A page that declares iso-8859-1 or
+// windows-1252 decodes through it too: before, its dashes and curly quotes
+// read as controls (web benchmark finding: 9 of 1,217 pages, "Ich bin Du –
+// und Du schaust zu" read "Ich bin Du  und Du schaust zu").
+const WINDOWS_1252_HIGH =
+  "€\u0081‚ƒ„…†‡ˆ‰Š‹Œ\u008DŽ\u008F\u0090‘’“”•–—˜™š›œ\u009DžŸ";
+
+function decodeIn(label: string, bytes: Uint8Array, fatal = false): string {
+  const text = new TextDecoder(label, { fatal }).decode(bytes);
+  if (label !== "windows-1252") return text;
+  return text.replace(/[\u0080-\u009f]/g, (c) => WINDOWS_1252_HIGH[c.charCodeAt(0) - 0x80]);
+}
+
 /** The page's text from its bytes. */
 export function decodePage(bytes: Uint8Array, contentType?: string | null): string {
   const charsets = pageCharsets(bytes, contentType);
   for (const charset of charsets) {
     try {
-      return new TextDecoder(charset, { fatal: true }).decode(bytes);
+      return decodeIn(charset, bytes, true);
     } catch {
       // The bytes are not in this charset: the next declared one may read them.
     }
   }
-  return new TextDecoder(charsets[0]).decode(bytes);
+  return decodeIn(charsets[0], bytes);
 }
 
 // ── A text file's charset ───────────────────────────────────────────────────
@@ -202,18 +218,6 @@ function readingScore(text: string): number {
     prevHigh = true;
   }
   return score;
-}
-
-// Windows-1252's characters at 0x80–0x9F (a hole reads as its C1 code point,
-// as the WHATWG decoder reads it). Node's TextDecoder("windows-1252") reads
-// these bytes as Latin-1's C1 controls (Node 22): a curly apostrophe, a
-// dash, an euro sign read as nothing.
-const WINDOWS_1252_HIGH =
-  "€\u0081‚ƒ„…†‡ˆ‰Š‹Œ\u008DŽ\u008F\u0090‘’“”•–—˜™š›œ\u009DžŸ";
-
-function decodeIn(label: string, bytes: Uint8Array): string {
-  if (label !== "windows-1252") return new TextDecoder(label).decode(bytes);
-  return new TextDecoder("windows-1252").decode(bytes).replace(/[\u0080-\u009f]/g, (c) => WINDOWS_1252_HIGH[c.charCodeAt(0) - 0x80]);
 }
 
 /** UTF-16 with no byte order mark: a NUL beside most characters of the
