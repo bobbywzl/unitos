@@ -163,15 +163,16 @@ if (stale.length > 0) {
 
 // ── Text measures ───────────────────────────────────────────────────────────
 
-// A list label at a line's start — a bullet glyph, "1.", "(a)", "iv)" — is
-// the list's drawing, not a word: dropped on both sides alike. Text is
+// A list label at a line's start — a bullet glyph, "1.", "(a)", "iv)",
+// an East Asian number ("一.", "１．", "①") — is the list's drawing, not a
+// word: dropped on both sides alike. Text is
 // compared in its compatibility form (NFKC): an equation's math italic 𝑎 is
 // the letter a, a full-width Ａ is A. A math letter (U+1D400–U+1D7FF) is
 // one variable, a token of its own: "𝜋𝑟²" is π, r, 2 on both sides, however
 // an equation's parts are spaced. An underscore joins the words of a name
 // (snake_case is one token) but is no word alone: a linear equation's
 // subscript mark ("𝑥_𝐾") is notation, as "^" is.
-const LABEL = /^\s*(?:[^\p{L}\p{N}\s]{1,2}|\(?(?:\d{1,3}|[a-zA-Z]|[ivxlcdmIVXLCDM]{1,6})[.)])\s+/u;
+const LABEL = /^\s*(?:[^\p{L}\p{N}\s]{1,2}|\(?(?:\d{1,3}|[a-zA-Z]|[ivxlcdmIVXLCDM]{1,6})[.)]|\p{sc=Han}{1,5}[.．]|[０-９]{1,3}．?|[\u2460-\u2473\u2776-\u277F\u24EB-\u24F4\u3251-\u325F\u32B1-\u32BF])\s+/u;
 function tokens(text: string): string[] {
   const lines = text.split("\n").map((l) => l.replace(LABEL, ""));
   return (
