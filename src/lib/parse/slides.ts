@@ -109,6 +109,7 @@ type LevelProps = {
   color?: Element; // the color element, resolved against the palette at render
   font?: string;
   algn?: string;
+  rtl?: boolean; // a right-to-left paragraph: its margin and bullet on the right
   marL?: number;
   indent?: number;
   bullet?: Bullet;
@@ -373,6 +374,8 @@ function parseParagraphProps(pPr: Element | null): LevelProps {
   if (!pPr) return props;
   const algn = attr(pPr, "algn");
   if (algn) props.algn = algn;
+  const rtl = attr(pPr, "rtl");
+  if (rtl !== null) props.rtl = rtl === "1" || rtl === "true";
   const marL = intAttr(pPr, "marL");
   if (marL !== null) props.marL = marL;
   const indent = intAttr(pPr, "indent");
@@ -776,8 +779,12 @@ function renderTextBody(txBody: Element | null, s: TextSettings): RenderedText {
     const spcBef = levelProp(s.chain, level, "spcBef", own);
     const spcAft = levelProp(s.chain, level, "spcAft", own);
     const styles: string[] = [];
+    // A right-to-left paragraph (Hebrew, Arabic) sets its words from the
+    // right: its margin and its bullet on the right side.
+    const rtl = levelProp(s.chain, level, "rtl", own) === true;
+    if (rtl) styles.push("direction:rtl");
     if (algn) styles.push(`text-align:${ALIGN[algn] ?? "left"}`);
-    if (marL) styles.push(`padding-left:${cqw(marL, s.slideW)}`);
+    if (marL) styles.push(`padding-${rtl ? "right" : "left"}:${cqw(marL, s.slideW)}`);
     if (indent) styles.push(`text-indent:${cqw(indent, s.slideW)}`);
     if (lnPts !== undefined) styles.push(`line-height:${cqw(lnPts * EMU_PER_PT, s.slideW)}`);
     else {
@@ -1669,7 +1676,10 @@ async function renderTable(scope: SlideScope, tbl: Element, box: Box): Promise<R
   }
   const text = rowText.join("\n");
   if (text.trim().length === 0) return { html: "", text: "" };
-  return { html: `<table class="stbl">${colgroup}<tbody>${rowHtml.join("")}</tbody></table>`, text };
+  // A right-to-left table (Hebrew, Arabic) draws its first column on the
+  // right; its words keep the file's order.
+  const dir = boolAttr(tblPr, "rtl") ? ' style="direction:rtl"' : "";
+  return { html: `<table class="stbl"${dir}>${colgroup}<tbody>${rowHtml.join("")}</tbody></table>`, text };
 }
 
 /** A list style that makes every level bold: a styled table's header row. */
