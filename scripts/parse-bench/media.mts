@@ -447,12 +447,22 @@ function shownWords(states: [number, string][]): [number, string][] {
   const words: [number, string][] = [];
   let before: string[] = [];
   for (const [t, text] of states) {
-    const now = tokens(text);
-    const map = align(now.map(norm), before.map(norm));
+    const lines = text.split("\n").filter((line) => line.trim() !== "");
+    // A line the state before showed, word for word, adds no words; the
+    // other lines align against the lines left over (a line that grew).
+    const left = [...before];
+    const fresh: string[] = [];
+    for (const line of lines) {
+      const i = left.indexOf(line);
+      if (i >= 0) left.splice(i, 1);
+      else fresh.push(line);
+    }
+    const now = fresh.flatMap((line) => tokens(line));
+    const map = align(now.map(norm), left.flatMap((line) => tokens(line)).map(norm));
     now.forEach((w, i) => {
       if (map[i] < 0) words.push([t, w]);
     });
-    before = now;
+    before = lines;
   }
   return words;
 }
