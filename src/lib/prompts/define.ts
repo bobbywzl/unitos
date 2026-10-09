@@ -1,3 +1,4 @@
+import { defineWord } from "@/lib/define";
 import { answerLanguage, profileLines, type PromptCtx } from "@/lib/prompts/types";
 
 // DEFINE: the Define tool, the first row of the text toolbar when the
@@ -17,8 +18,10 @@ export function definePrompt(ctx: PromptCtx): string {
     "Context before the selection:",
     ctx.contextBefore || "(start of document)",
     "",
+    // The bare word: the punctuation around a selection is not part of it
+    // ("earned;" asks about "earned").
     "Selected word:",
-    ctx.anchoredText,
+    defineWord(ctx.anchoredText),
     "",
     "Context after the selection:",
     ctx.contextAfter || "(end of document)",

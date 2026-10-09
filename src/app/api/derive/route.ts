@@ -1,5 +1,6 @@
 import { isStepCount, streamText, type ModelMessage } from "ai";
 import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { coreBlocks, layerSchema } from "@/lib/anchors/layer";
 import { passageSources, resolvePassage, segmentsSchema } from "@/lib/anchors/passage";
@@ -38,7 +39,8 @@ import {
   resolveSpan,
   salienceOutputSchema,
 } from "@/lib/derive/json";
-import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
+import { callForJson } from "@/lib/derive/json-call";
+import { failureLine } from "@/app/api/assistant/failure-line";
 import { streamTextTo } from "@/lib/derive/text-stream";
 import {
   renderVisual,
@@ -149,6 +151,10 @@ const deriveSchema = z
   // stored, and the new one counts the runs; at DISTILL_REGENERATE_MAX the
   // run is refused (SPEC.md §4).
   replaceId: z.string().min(1).optional(),
+  // EXPLAIN, SIMPLIFY, ANALYZE, VISUALIZE: Regenerate on an annotation with a
+  // tool conversation (SPEC.md §4, §21). The annotation this run replaces:
+  // its turns go on under the new output, copied onto the new annotation.
+  conversationOf: z.string().min(1).optional(),
   format: z.enum(FORMALIZE_FORMATS).optional(), // FORMALIZE only
   sectionId: z.string().min(1).optional(), // FORMALIZE notes, COMPARE: where the notes land
   // EXPLAIN on a video moment (SPEC.md §11): the time range, the drawn region,
@@ -205,11 +211,15 @@ const ANCHOR_REQUIRED = new Set(["EXPLAIN", "SIMPLIFY", "ANALYZE", "VISUALIZE", 
 // A model call that holds one connection for minutes dies at idle proxies, so
 // the response streams a heartbeat space while the model works and ends with
 // the payload JSON or STREAM_ERROR_TOKEN + the reason — the DISTILL pattern.
-// Cancel aborts the request: a cancelled run persists nothing.
+// The reason is a line for the reader: a ReaderLine's own words, a reason
+// worded for the reader, or the plain line, the raw text to the log
+// (failure-line.ts). Cancel aborts the request: a cancelled run persists
+// nothing.
 function heartbeatResponse(
   req: Request,
+  t: TFunc,
   run: () => Promise<{ ok: true } & Record<string, unknown>>,
-  failure: (reason: string) => string,
+  label: string,
 ): Response {
   const encoder = new TextEncoder();
   let cancelled = false;
@@ -226,8 +236,13 @@ function heartbeatResponse(
         send(JSON.stringify(payload));
       } catch (err) {
         if (!cancelled && !req.signal.aborted) {
-          console.error("[derive] run failed:", err);
-          send(`${STREAM_ERROR_TOKEN}${failure(modelErrorMessage(err))}`);
+          send(
+            `${STREAM_ERROR_TOKEN}${
+              err instanceof ReaderLine
+                ? err.message
+                : failureLine(t, err instanceof DeriveFailure ? err.message : err, label)
+            }`,
+          );
         }
       } finally {
         if (heartbeat) clearInterval(heartbeat);
@@ -244,6 +259,8 @@ function heartbeatResponse(
 
 // A failed JSON call throws with the reason; heartbeatResponse reports it.
 class DeriveFailure extends Error {}
+// A run that ends with words for the reader (no points found): sent as they are.
+class ReaderLine extends Error {}
 
 // Any unexpected throw still answers with the reason, never a bare 500 (the
 // assistant route's pattern): the reader's card shows it, and the log keeps it.
@@ -252,11 +269,8 @@ export async function POST(req: Request) {
   try {
     return await handle(req, t);
   } catch (err) {
-    console.error("[derive] failed:", err);
-    return NextResponse.json(
-      { error: t("api.deriveFailed", { reason: modelErrorMessage(err) }) },
-      { status: 500 },
-    );
+    // The reader's line is the plain one; the reason goes to the log.
+    return NextResponse.json({ error: failureLine(t, err, "derive") }, { status: 500 });
   }
 }
 
@@ -434,7 +448,7 @@ async function handle(req: Request, t: TFunc) {
           });
           if (corpusCancelled || req.signal.aborted) return;
           if (!result.ok) {
-            fail(t("api.distillFailed", { reason: result.error }));
+            fail(failureLine(t, result.error, "derive DISTILL"));
             return;
           }
           const quotes = result.data.quotes
@@ -497,7 +511,7 @@ async function handle(req: Request, t: TFunc) {
         } catch (err) {
           if (!corpusCancelled && !req.signal.aborted) {
             console.error("[derive] DISTILL:corpus failed:", err);
-            fail(t("api.distillFailed", { reason: modelErrorMessage(err) }));
+            fail(failureLine(t, err, "derive DISTILL"));
           }
         } finally {
           if (corpusHeartbeat) clearInterval(corpusHeartbeat);
@@ -597,6 +611,7 @@ async function handle(req: Request, t: TFunc) {
     ]);
     return heartbeatResponse(
       req,
+      t,
       async () => {
         const compareCall = await featureCall("compare", DERIVATION_EFFORT.COMPARE);
         const result = await callForJson({
@@ -634,7 +649,7 @@ async function handle(req: Request, t: TFunc) {
           comparison.disagreements.length +
           comparison.onlyFirst.length +
           comparison.onlySecond.length;
-        if (total === 0) throw new DeriveFailure(t("api.compareNoPoints"));
+        if (total === 0) throw new ReaderLine(t("api.compareNoPoints"));
         const content = comparisonMarkdown(comparison, { first: first.title, second: second.title }, t);
         // One source per distinct span, the first document's first, capped so
         // the card stays readable.
@@ -676,7 +691,7 @@ async function handle(req: Request, t: TFunc) {
         await bumpNotebook(data.notebookId);
         return { ok: true, noteId: note.id, sectionTitle: section.title, pointCount: total };
       },
-      (reason) => t("api.compareFailed", { reason }),
+      "derive COMPARE",
     );
   }
 
@@ -745,10 +760,13 @@ async function handle(req: Request, t: TFunc) {
     return NextResponse.json({ error: t("api.defineNeedsWord") }, { status: 400 });
   }
 
-  const [profile, skeleton] = await Promise.all([
+  const [profile, skeleton, carried] = await Promise.all([
     loadProfile(data.notebookId),
     sectionSkeleton(data.notebookId),
+    data.conversationOf ? carriedConversation(data.conversationOf, data.notebookId, documentId) : null,
   ]);
+  // The new annotation takes the replaced one's turns (Regenerate, SPEC.md §4).
+  const keptTurns = carried === null ? {} : { conversation: carried };
 
   const depth = data.depth ?? "layman";
   const ctx: PromptCtx = {
@@ -1025,6 +1043,7 @@ async function handle(req: Request, t: TFunc) {
   if (data.type === "VISUALIZE" && anchor) {
     return heartbeatResponse(
       req,
+      t,
       async () => {
         const visualCall = await featureCall("visualize", VISUALIZE_EFFORT);
         const visualModel = visualCall.model;
@@ -1046,7 +1065,7 @@ async function handle(req: Request, t: TFunc) {
         }
         const first = await renderVisual(drawn);
         if ("error" in first) {
-          throw new DeriveFailure(t("api.visualizeNotRendered", { reason: first.error }));
+          throw new DeriveFailure(`picture not drawn: ${first.error}`);
         }
         let visual = drawn;
         let rendered = first;
@@ -1119,12 +1138,13 @@ async function handle(req: Request, t: TFunc) {
             createdById: user.id,
             order: count,
             sources: { create: passageSources(documentId, passage, layer) },
+            ...keptTurns,
           },
         });
         await bumpNotebook(data.notebookId);
         return { ok: true, noteId: note.id, kind: visual.kind, caption: visual.caption.trim(), content };
       },
-      (reason) => t("api.visualizeFailed", { reason }),
+      "derive VISUALIZE",
     );
   }
 
@@ -1235,7 +1255,8 @@ async function handle(req: Request, t: TFunc) {
           // Stopped by the reader: nobody is listening, and nothing persists.
           if (req.signal.aborted) return;
           try {
-            send(`${STREAM_ERROR_TOKEN}${modelErrorMessage(err)}`);
+            // The plain line for the reader; the reason goes to the log.
+            send(`${STREAM_ERROR_TOKEN}${failureLine(t, err, "derive stream")}`);
             controller.close();
           } catch {
             // The reader left before the reason could be sent.
@@ -1262,6 +1283,7 @@ async function handle(req: Request, t: TFunc) {
                   order: count,
                   // One source per segment: the marks cover the whole passage.
                   sources: { create: passageSources(documentId, passage, layer) },
+                  ...keptTurns,
                 },
               });
               await bumpNotebook(data.notebookId);
@@ -1468,7 +1490,7 @@ async function handle(req: Request, t: TFunc) {
             });
             if (formalizeCancelled || req.signal.aborted) return;
             if (!result.ok) {
-              fail(t("api.formalizeFailed", { reason: result.error }));
+              fail(failureLine(t, result.error, "derive FORMALIZE"));
               return;
             }
             const article: FormalizedArticle = {
@@ -1515,7 +1537,7 @@ async function handle(req: Request, t: TFunc) {
           });
           if (formalizeCancelled || req.signal.aborted) return;
           if (!result.ok) {
-            fail(t("api.formalizeFailed", { reason: result.error }));
+            fail(failureLine(t, result.error, "derive FORMALIZE"));
             return;
           }
           // Where the notes land: the requested section, else the first
@@ -1581,7 +1603,7 @@ async function handle(req: Request, t: TFunc) {
         } catch (err) {
           if (!formalizeCancelled && !req.signal.aborted) {
             console.error("[derive] FORMALIZE failed:", err);
-            fail(t("api.formalizeFailed", { reason: modelErrorMessage(err) }));
+            fail(failureLine(t, err, "derive FORMALIZE"));
           }
         } finally {
           if (formalizeHeartbeat) clearInterval(formalizeHeartbeat);
@@ -1644,7 +1666,7 @@ async function handle(req: Request, t: TFunc) {
           if (cancelled || req.signal.aborted) return;
           if (!result.ok) {
             if (best) break;
-            fail(t("api.distillFailed", { reason: result.error }));
+            fail(failureLine(t, result.error, "derive DISTILL"));
             return;
           }
           const resolved: ResolvedQuote[] = result.data.quotes
@@ -1730,7 +1752,7 @@ async function handle(req: Request, t: TFunc) {
       } catch (err) {
         if (!cancelled && !req.signal.aborted) {
           console.error("[derive] DISTILL failed:", err);
-          fail(t("api.distillFailed", { reason: modelErrorMessage(err) }));
+          fail(failureLine(t, err, "derive DISTILL"));
         }
       } finally {
         if (heartbeat) clearInterval(heartbeat);
@@ -1745,4 +1767,27 @@ async function handle(req: Request, t: TFunc) {
   return new Response(stream, {
     headers: { "Content-Type": "text/plain; charset=utf-8" },
   });
+}
+
+// The turns of the annotation a Regenerate replaces (SPEC.md §4, §21): read
+// only from an annotation of this project on this document, so a run never
+// reaches another project's notes. The replaced annotation itself is left as
+// it is; the reader deletes it once the new one is stored, and History keeps
+// it.
+async function carriedConversation(
+  noteId: string,
+  notebookId: string,
+  documentId: string,
+): Promise<Prisma.InputJsonValue | null> {
+  const note = await db.note.findUnique({
+    where: { id: noteId },
+    select: {
+      conversation: true,
+      section: { select: { notebookId: true } },
+      sources: { where: { documentId }, select: { id: true }, take: 1 },
+    },
+  });
+  if (!note || note.section.notebookId !== notebookId || note.sources.length === 0) return null;
+  if (!Array.isArray(note.conversation) || note.conversation.length === 0) return null;
+  return note.conversation as Prisma.InputJsonValue;
 }

@@ -14,13 +14,20 @@ import { Presence } from "@/components/presence";
 import { StopPill } from "@/components/thinking";
 import { GeneratedList } from "@/components/graph/generated-list";
 import { LinkDetail } from "@/components/graph/link-detail";
-import { StitchBox } from "@/components/graph/stitch-box";
+import { readStitchPick, StitchBox, writeStitchPick } from "@/components/graph/stitch-box";
+import type { TFunc } from "@/lib/i18n/dictionaries";
+import { isImeKey } from "@/lib/ime";
+import { enterGraphHistory, graphNavigate, leaveGraphHistory } from "@/components/graph/graph-history";
 
 // reactflow loads only when the graph opens — the workspace bundle stays lean.
 const GraphView = dynamic(() => import("@/components/graph/graph-view"), {
   ssr: false,
   loading: () => null,
 });
+
+// "1 document", "7 documents"; "1 link", "3 links".
+const countDocs = (t: TFunc, n: number) => (n === 1 ? t("panes.graphDocsOne") : t("panes.graphDocs", { n }));
+const countLinks = (t: TFunc, n: number) => (n === 1 ? t("panes.graphLinksOne") : t("panes.graphLinks", { n }));
 
 // Full-screen overlay over the workspace: the corpus as a connected whole.
 // Recommended links live here too (SPEC.md §13): a folded list beside the
@@ -59,17 +66,32 @@ export function GraphOverlay({
   // The documents picked for Stitch (SPEC.md §22): a ⇧-click on a node, or
   // any click while picking. Empty = every document. A node that leaves
   // the graph leaves the pick: the pick the canvas and the box read is the
-  // stored one cut to the nodes.
-  const [pickedIds, setPickedIds] = useState<Set<string>>(() => new Set());
+  // stored one cut to the nodes. The pick is kept per project for the
+  // browser tab, with the typed command (stitch-box.tsx): closing the graph
+  // and opening it again keeps both.
+  const [pickedIds, setPickedIdsState] = useState<Set<string>>(() => readStitchPick(notebookId));
+  const setPickedIds = useCallback(
+    (update: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+      setPickedIdsState((prev) => {
+        const next = typeof update === "function" ? update(prev) : update;
+        writeStitchPick(notebookId, next);
+        return next;
+      });
+    },
+    [notebookId],
+  );
   const [picking, setPicking] = useState(false);
-  const toggleSelect = useCallback((documentId: string) => {
-    setPickedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(documentId)) next.delete(documentId);
-      else next.add(documentId);
-      return next;
-    });
-  }, []);
+  const toggleSelect = useCallback(
+    (documentId: string) => {
+      setPickedIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(documentId)) next.delete(documentId);
+        else next.add(documentId);
+        return next;
+      });
+    },
+    [setPickedIds],
+  );
   const selectedIds = useMemo(() => {
     const ids = new Set(nodes.map((n) => n.id));
     return new Set([...pickedIds].filter((id) => ids.has(id)));
@@ -107,8 +129,11 @@ export function GraphOverlay({
         result.linkCount === 0
           ? t("panes.recommendScanNone")
           : result.documentsLeft > 0
-            ? t("panes.recommendScanPartial", { n: result.linkCount, left: result.documentsLeft })
-            : t("panes.recommendScanDone", { n: result.linkCount }),
+            ? t("panes.recommendScanPartial", {
+                links: countLinks(t, result.linkCount),
+                docs: countDocs(t, result.documentsLeft),
+              })
+            : t("panes.recommendScanDone", { links: countLinks(t, result.linkCount) }),
       );
       if (result.linkCount > 0) {
         setList("recommended");
@@ -129,15 +154,34 @@ export function GraphOverlay({
     }
   }
 
+  // Back closes the graph as it would a page (graph-history.ts).
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+  useEffect(() => enterGraphHistory(() => onCloseRef.current()), []);
+
+  // Escape takes one layer at a time: in a text box (the Stitch box, a
+  // reply) it leaves the box, the typed words kept; then an open list beside
+  // the canvas closes; then the graph. An IME's Escape is the IME's.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
+      if (e.key !== "Escape" || isImeKey(e)) return;
       e.stopPropagation();
-      onClose();
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active.closest("textarea, input, [contenteditable=true]")) {
+        active.blur();
+        return;
+      }
+      if (list !== null) {
+        setList(null);
+        return;
+      }
+      leaveGraphHistory(onClose);
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [onClose]);
+  }, [onClose, list]);
 
   return (
     <div data-track-surface="sidebar" className="graph-overlay-in fixed inset-0 z-50 flex flex-col bg-paper">
@@ -147,8 +191,8 @@ export function GraphOverlay({
         <span className="font-display text-[18px]">{t("panes.graph")}</span>
         <span className="mr-auto text-[13px] text-sand-600">
           {t("panes.graphCounts", {
-            docs: nodes.length,
-            links: edges.reduce((sum, e) => sum + e.accepted + e.recommended, 0),
+            docs: countDocs(t, nodes.length),
+            links: countLinks(t, edges.reduce((sum, e) => sum + e.accepted + e.recommended, 0)),
           })}
         </span>
         {/* On md+ the pills stand in the row itself (contents); below md
@@ -216,7 +260,7 @@ export function GraphOverlay({
           </button>
         </div>
         <button
-          onClick={onClose}
+          onClick={() => leaveGraphHistory(onClose)}
           data-track="graph-close"
           aria-label={t("common.close")}
           data-tip={t("common.close")}
@@ -308,7 +352,7 @@ export function RecommendedLinkList({
   }
 
   function openDocument(documentId: string, linkId: string) {
-    router.push(`/n/${notebookId}?doc=${documentId}&link=${linkId}`);
+    graphNavigate(router, `/n/${notebookId}?doc=${documentId}&link=${linkId}`);
     onOpenDocument();
   }
 

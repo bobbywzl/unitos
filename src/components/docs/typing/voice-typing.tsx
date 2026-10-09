@@ -1,7 +1,7 @@
 "use client";
 
 import type { Editor } from "@tiptap/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/components/lang-provider";
 import { useSpeech } from "@/components/voice/use-speech";
@@ -11,8 +11,9 @@ import { keepFocus } from "@/components/docs/menu";
 import { DragIcon } from "@/components/docs/insert/icons";
 
 // Voice typing (Ctrl+Shift+S), as Google Docs does it (SPEC.md §29, typing):
-// a microphone box at the left of the page; a click starts or stops
-// listening. What the browser's speech service hears goes in at the caret;
+// the toolbar's microphone starts listening at once, as every other
+// surface's microphone does, and opens the box at the left of the page as
+// its listening card; the toolbar's microphone again, or the box's, stops. What the browser's speech service hears goes in at the caret;
 // "period", "comma", "new line", and the like type what they name. The
 // listening and the words are shared with every surface's microphone
 // button (lib/voice-typing.ts, components/voice/use-speech.ts).
@@ -37,8 +38,13 @@ export function VoiceTyping({ editor, open, onClose }: { editor: Editor; open: b
   const start = () => {
     if (speech.start()) editor.commands.focus();
   };
+  const startRef = useRef(start);
+  useEffect(() => {
+    startRef.current = start;
+  });
 
-  // The box opens at the left of the page, near its top.
+  // The box opens at the left of the page, near its top, and listening
+  // starts with it: the press that opened it is the press that starts.
   useEffect(() => {
     if (!open) return;
     const frame = requestAnimationFrame(() => {
@@ -46,6 +52,7 @@ export function VoiceTyping({ editor, open, onClose }: { editor: Editor; open: b
       const rect = page?.getBoundingClientRect();
       setPos({ left: Math.max(12, (rect?.left ?? 80) - 150), top: Math.max(80, (rect?.top ?? 120) + 24) });
       if (!recognitionCtor()) setStatus("unsupported");
+      else startRef.current();
     });
     return () => {
       cancelAnimationFrame(frame);

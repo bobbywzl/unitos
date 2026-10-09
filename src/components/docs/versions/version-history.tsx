@@ -80,7 +80,11 @@ export function VersionHistory({ editor, documentId, pageSetup, canEdit }: DocsA
           documentId={documentId}
           pageSetup={pageSetup}
           canEdit={canEdit}
-          onClose={() => setOpen(false)}
+          onClose={() => {
+            setOpen(false);
+            // Back gives the page the keys at its caret, where the reader left it.
+            if (!editor.isDestroyed && editor.isEditable) editor.commands.focus(undefined, { scrollIntoView: false });
+          }}
         />
       )}
       {naming && <NameDialog editor={editor} documentId={documentId} onClose={() => setNaming(false)} />}
@@ -95,7 +99,7 @@ function NameDialog({ editor, documentId, onClose }: { editor: Editor; documentI
   const save = async () => {
     if (!name.trim()) return;
     try {
-      await flushDocument(documentId);
+      if (!(await flushDocument(documentId))) throw new Error(t("docsVersions.notSaved"));
       await api(`/api/documents/${documentId}/versions`, "POST", { name });
       onClose();
     } catch (err) {

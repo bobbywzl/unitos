@@ -9,6 +9,7 @@ import type { DocsAreaProps } from "@/components/docs/areas/types";
 import type { Zoom } from "@/components/docs/toolbar/zoom";
 import { hostPagination, paginateNow, repaginate } from "@/components/docs/ext/page";
 import { stepZoom } from "@/components/docs/page/commands";
+import { CARD_REACH } from "@/components/docs/layer/margin";
 import { PAGE_PITCH_EXTRA, PAGELESS_TOP, pageAt, pageFrame, pagelessWidth, scrollParent } from "@/components/docs/page/geometry";
 import {
   HeaderFooterLayer,
@@ -19,6 +20,7 @@ import {
   slotFor,
 } from "@/components/docs/page/header-footer";
 import { PageIndicator } from "@/components/docs/page/indicator";
+import { followMarginDrag, followTextDrag, nearestPos, selectRange } from "@/components/docs/page/margin-select";
 import { OutlineButton, OutlinePanel } from "@/components/docs/page/outline";
 import type { PaginationConfig } from "@/components/docs/page/paginate";
 import { HorizontalRuler, VerticalRuler } from "@/components/docs/page/ruler";
@@ -28,7 +30,7 @@ import { DetailsDialog } from "@/components/docs/page/details-dialog";
 import { LineNumberColumn, LineNumbersDialog, useLineNumbers } from "@/components/docs/page/line-numbers";
 import { TranslateDialog } from "@/components/docs/page/translate-dialog";
 import { PageSetupDialog, readPageDefault } from "@/components/docs/page/setup-dialog";
-import { PAGE_EVENT, pageStore, usePageState, type EditHeaderDetail, type HeaderArea } from "@/components/docs/page/store";
+import { PAGE_EVENT, drawnPageless, pageStore, useDrawnSetup, usePageState, type EditHeaderDetail, type HeaderArea } from "@/components/docs/page/store";
 import { WatermarkMark } from "@/components/docs/page/watermark";
 import { WatermarkDialog } from "@/components/docs/page/watermark-dialog";
 import { DEFAULT_PAGE_SETUP } from "@/lib/docs/schema";
@@ -43,8 +45,16 @@ import { translatorFor } from "@/lib/i18n/dictionaries";
 const PAGELESS_RUNOUT = 300;
 /** Fit: the canvas's side padding on each side. */
 const FIT_GUTTER = 24;
+/** A pane narrower than this (a phone) draws no vertical ruler. */
+const NARROW_PANE = 600;
+/** The outline button's width and the gap it keeps from the text column. */
+const OUTLINE_BUTTON = 44;
 /** The canvas's padding above the first page. */
 const CANVAS_TOP = 11;
+/** A pane shorter than this (a phone held sideways) reads pageless
+    (docs-editor.tsx); there the room above the text column is this. */
+const SHORT_PANE = 500;
+const PAGELESS_TOP_SHORT = 24;
 
 /** What stands over the first page, as wide as the page: the Translate bar
     (SPEC.md §19). A context, so a new bar redraws the bar alone, never the
@@ -60,11 +70,13 @@ function Banner({ width }: { width: number }) {
   ) : null;
 }
 
-/** The ruler row under the toolbar. */
+/** The ruler row under the toolbar: in Editing and Suggesting only (in
+    Viewing no indent can be dragged), and not on a pane too narrow for the
+    page (a phone), where every pixel above the first line counts. */
 export function PageRuler({ editor, documentId, pageSetup, editing }: DocsAreaProps) {
   const store = pageStore(editor, documentId, pageSetup);
   const showRuler = usePageState(store, (s) => s.showRuler);
-  return showRuler ? <HorizontalRuler editor={editor} store={store} editing={editing} /> : null;
+  return showRuler && editing ? <HorizontalRuler editor={editor} store={store} editing={editing} /> : null;
 }
 
 /** The header's height and the room under it: the side's rulers and panel
@@ -116,7 +128,8 @@ export function PageCanvas({
   children: ReactNode;
 }) {
   const store = pageStore(editor, documentId, pageSetup);
-  const setup = usePageState(store, (s) => s.setup);
+  // The page draws the drawn setup; the saves below read the saved one.
+  const setup = useDrawnSetup(store);
   const pages = usePageState(store, (s) => s.pages);
   const textWidth = usePageState(store, (s) => s.textWidth);
   const showRuler = usePageState(store, (s) => s.showRuler);
@@ -129,6 +142,7 @@ export function PageCanvas({
   const pageRef = useRef<HTMLElement>(null);
   const view = useView(canvasRef);
   const [canvasWidth, setCanvasWidth] = useState(0);
+  const [shortPane, setShortPane] = useState(false);
 
   // A newer stored setup that arrives with the page (another person's
   // change) replaces the one on screen — unless a change made here waits to
@@ -174,10 +188,15 @@ export function PageCanvas({
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const measure = () => setCanvasWidth(canvas.clientWidth);
+    const pane = scrollParent(canvas);
+    const measure = () => {
+      setCanvasWidth(canvas.clientWidth);
+      setShortPane(pane !== null && pane.clientHeight > 0 && pane.clientHeight < SHORT_PANE);
+    };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(canvas);
+    if (pane) observer.observe(pane);
     return () => observer.disconnect();
   }, []);
 
@@ -192,22 +211,31 @@ export function PageCanvas({
   }, [setup, compact]);
   // The canvas's left edge for the page: past the outline while it is
   // open, so the page never goes under it. Fit fills the rest.
-  const vruler = showRuler && !pageless && !compact;
+  const vruler = showRuler && editing && !pageless && !compact && canvasWidth >= NARROW_PANE;
   const outlineLeft = vruler ? 16 : 0;
-  const side = outlineOpen ? outlineLeft + outlineWidth + 16 : FIT_GUTTER;
+  // A pane under 600 px (a phone): the outline lies over the page and closes
+  // after a jump, so the text keeps its width.
+  const outlineOver = canvasWidth > 0 && canvasWidth < NARROW_PANE;
+  const side = outlineOpen && !outlineOver ? outlineLeft + outlineWidth + 16 : FIT_GUTTER;
   const fitScale = canvasWidth > 0 ? (canvasWidth - FIT_GUTTER - side) / frame.width : 1;
   const scale = zoom === "fit" ? (pageless ? 1 : Math.max(0.25, Math.min(4, fitScale))) : zoom / 100;
-  const columnWidth = pageless ? pagelessWidth(canvasWidth || frame.width, scale, textWidth) : frame.width;
+  // A pageless column leaves the cards their room beside it, past the
+  // canvas's left padding the page can move to.
+  // The outline's room is not the column's: with the panel open the column
+  // fits in what is left beside it, so no line goes under the notes tray.
+  const columnRoom = (canvasWidth || frame.width) - (outlineOpen && !outlineOver ? side : 0);
+  const columnWidth = pageless ? pagelessWidth(columnRoom, scale, textWidth, FIT_GUTTER + CARD_REACH) : frame.width;
 
   useEffect(() => {
     if (store.get().scale !== scale) store.set({ scale });
   }, [store, scale]);
 
   // A pane narrower than the page (the notes tray open, a phone) opens the
-  // page at Fit, so no line runs past the pane's edge.
+  // page at Fit, so no line runs past the pane's edge; so do pages that come
+  // after the document opened pageless (a PDF import read pageless).
   const fittedRef = useRef(false);
   useEffect(() => {
-    if (fittedRef.current || canvasWidth === 0) return;
+    if (fittedRef.current || canvasWidth === 0 || pageless) return;
     fittedRef.current = true;
     if (zoom === 100 && !pageless && frame.width + 2 * FIT_GUTTER > canvasWidth) store.zoomTo("fit");
   }, [canvasWidth, zoom, pageless, frame.width, store]);
@@ -383,7 +411,7 @@ export function PageCanvas({
       }
     };
     const editAtCaret = (area: HeaderArea) => {
-      if (!editor.isEditable || store.get().setup.pageless) return;
+      if (!editor.isEditable || drawnPageless(store.get())) return;
       store.set({ editing: { area, page: Math.min(caretPage(), store.get().pages - 1) } });
     };
     const onEdit = (e: Event) => editAtCaret((e as CustomEvent<EditHeaderDetail>).detail.area);
@@ -416,21 +444,33 @@ export function PageCanvas({
 
   // A press in a page's margins puts the caret on the nearest line, as it
   // does in Google Docs; a press in the text leaves a header or footer.
+  // A press in a page's margin, or on the canvas beside the page, starts a
+  // selection at the nearest words, and a drag grows it
+  // (page/margin-select.ts). Shift grows the open selection instead.
   const onMarginDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
     const target = e.target as Element;
-    if (target.closest("[data-docs-hf], [data-edit-control]")) return;
+    if (target.closest("[data-docs-hf], [data-edit-control], button, a, input, textarea, select")) return;
     if (store.get().editing) store.set({ editing: null });
-    if (editor.view.dom.contains(target) || !editor.isEditable) return;
-    const text = editor.view.dom.getBoundingClientRect();
-    const x = Math.min(Math.max(e.clientX, text.left + 2), text.right - 2);
-    const y = Math.min(Math.max(e.clientY, text.top + 2), text.bottom - 2);
-    const hit = editor.view.posAtCoords({ left: x, top: y });
-    if (!hit) return;
+    // A press on the words selects as the browser does; the pane's scroll
+    // near its edges is margin-select.ts's.
+    if (editor.view.dom.contains(target)) {
+      followTextDrag(editor, e.nativeEvent);
+      return;
+    }
+    // The canvas's own scrollbars keep their press.
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const r = canvas.getBoundingClientRect();
+      if (e.clientX > r.left + canvas.clientWidth || e.clientY > r.top + canvas.clientHeight) return;
+    }
+    const hit = nearestPos(editor, e.clientX, e.clientY);
+    if (hit === null) return;
     e.preventDefault();
-    const { from } = editor.state.selection;
-    if (e.shiftKey) editor.chain().focus().setTextSelection({ from, to: hit.pos }).run();
-    else editor.chain().focus().setTextSelection(hit.pos).run();
+    const anchor = e.shiftKey ? editor.state.selection.anchor : hit;
+    if (editor.isEditable) editor.commands.focus(undefined, { scrollIntoView: false });
+    selectRange(editor, anchor, hit);
+    followMarginDrag(editor, anchor, e.nativeEvent);
   };
   // A double-click in a page's top or bottom margin edits its header or
   // footer.
@@ -449,7 +489,7 @@ export function PageCanvas({
   const pageStyle: React.CSSProperties & Record<`--${string}`, string> = pageless
     ? {
         width: columnWidth,
-        padding: `${PAGELESS_TOP - CANVAS_TOP}px 0 ${PAGELESS_RUNOUT}px`,
+        padding: `${(shortPane ? PAGELESS_TOP_SHORT : PAGELESS_TOP) - CANVAS_TOP}px 0 ${PAGELESS_RUNOUT}px`,
         zoom: scale === 1 ? undefined : scale,
       }
     : {
@@ -467,6 +507,15 @@ export function PageCanvas({
   // scrolls sideways when the page runs past the pane: no text sits under
   // the outline, as in Google Docs.
   const pageVisual = columnWidth * scale;
+  // The outline button beside the text column, or in the toolbar's row when
+  // the margin beside the column is thinner than the button: there the
+  // button would stand over the first letters of the lines (EDGE12-13).
+  const outlineRoom = canvasWidth === 0 || (canvasWidth - pageVisual) / 2 >= outlineLeft + OUTLINE_BUTTON;
+  // Before paint: the toolbar's Contents button and this one never show
+  // together for a frame (a split switch back to Normal).
+  useLayoutEffect(() => {
+    if (store.get().outlineRoom !== outlineRoom) store.set({ outlineRoom });
+  }, [store, outlineRoom]);
   const centered = (canvasWidth - pageVisual) / 2 >= side;
   const padRight = centered ? side : FIT_GUTTER;
   // A page wider than the pane scrolls sideways with the bar at the pane's
@@ -500,9 +549,12 @@ export function PageCanvas({
       >
         {vruler && <VerticalRuler editor={editor} store={store} editing={editing} top={view.top} height={view.height} />}
         {outlineOpen ? (
-          <OutlinePanel editor={editor} store={store} left={outlineLeft} height={view.height} viewTop={view.top} />
+          <OutlinePanel editor={editor} store={store} left={outlineLeft} height={view.height} viewTop={view.top} over={outlineOver} />
         ) : (
-          <OutlineButton editor={editor} store={store} ruler={vruler} />
+          // With no room beside the text column the button would stand
+          // over the first letters of the lines: there it is in the
+          // toolbar's row instead (toolbar.tsx).
+          outlineRoom && <OutlineButton editor={editor} store={store} ruler={vruler} />
         )}
       </div>
       <div
@@ -513,17 +565,22 @@ export function PageCanvas({
         onScroll={(e) => {
           if (barRef.current) barRef.current.scrollLeft = e.currentTarget.scrollLeft;
         }}
+        onMouseDown={onMarginDown}
       >
         <Banner width={pageVisual} />
         <article
           ref={pageRef}
           className={`docs-page${compact ? " docs-page-compact" : ""}`}
           style={pageStyle}
-          onMouseDown={onMarginDown}
           onClick={onPageClick}
           onDoubleClick={onPageDoubleClick}
           data-docs-page
           data-pageless={pageless || undefined}
+          // A pageless column under 600 px (a phone, a pane beside the
+          // notes tray): a table fitted to 600 px scrolls sideways in it
+          // (css/insert.css), and a page start's label stands at the line's
+          // end (css/import.css).
+          data-narrow={(pageless && columnWidth < 600) || undefined}
           data-white={white || undefined}
         >
           {!pageless && (

@@ -3,14 +3,15 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { api } from "@/lib/api";
+import { dropEarlyKeys, earlyKeysFor, keepEarlyKeys } from "@/lib/docs/early-keys";
 import type { DriveConfig } from "@/lib/drive/config";
 import { pickDriveFiles } from "@/lib/drive/picker-client";
 import { parseDriveFileId, type DrivePickedFile } from "@/lib/drive/types";
 import { IMAGE_ACCEPT, isImageFile } from "@/lib/handwritten/image";
-import { isImeKey } from "@/lib/ime";
+import { useEscapeLayer } from "@/lib/escape-layers";
 import { useCollab } from "@/components/collab/collab-context";
 import { reportError } from "@/lib/error-log";
-import { ChevronDownIcon, SpinnerIcon } from "@/components/icons";
+import { ChevronDownIcon, MoreIcon, SpinnerIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
 import { Logo } from "@/components/logo";
@@ -31,15 +32,23 @@ import {
   DocumentTree,
   FolderPicker,
   folderPath,
+  LIST_ROWS,
+  tipWhenCut,
   type DocumentFolderView,
 } from "@/components/reader/document-folders";
 import { DocumentsSort, useDocumentSort } from "@/components/reader/document-organize";
+import {
+  DocumentDeleteConfirm,
+  useDocumentReach,
+} from "@/components/reader/document-delete";
+import { ReparseLossList, useReparseLosses } from "@/components/reader/reparse-losses";
 import type { DocumentKind } from "@/lib/document-order";
 import {
   IngestProgress,
   advanceIngestSteps,
   completeIngestSteps,
   initialIngestSteps,
+  type IngestKind,
   type IngestStep,
 } from "@/components/reader/ingest-progress";
 import {
@@ -54,10 +63,15 @@ import {
   keptBlockDocument,
   UploadAssistant,
   uploadItemTitle,
+  type OpenTarget,
+  type UploadItem,
   type UploadRequest,
 } from "@/components/reader/upload-assistant";
+import { throwIfDuplicate, useDuplicateAsk } from "@/components/reader/duplicate-ask";
+import { DuplicateDocumentError, type DuplicateMatch } from "@/lib/documents/duplicate-answer";
 import { isMarkdownFile, MARKDOWN_ACCEPT } from "@/lib/markdown-file";
 import { isSheetsFile, isSlidesFile, isWordFile, SHEETS_ACCEPT, SLIDES_ACCEPT, WORD_ACCEPT } from "@/lib/office-file";
+import { focusMenuIfKey, menuButtonKeys, menuKeys } from "@/lib/menu-keys";
 
 export type AttachedDocument = {
   id: string;
@@ -95,7 +109,7 @@ type IngestPhase = { fileLabel: string; steps: IngestStep[] };
 type IngestEvent =
   | { stage: string; detail?: string }
   | { id: string; title: string; deduped: boolean }
-  | { error: string; reason?: string };
+  | { error: string; reason?: string; duplicate?: unknown };
 
 // The re-parse route's answer when a re-parse would replace an import's
 // edits: the document menu shows it as its question, never as an error.
@@ -110,6 +124,8 @@ function sleep(ms: number) {
 // reload while one runs, or after one failed, must not start another; the
 // document's actions in the list still re-parse on demand.
 const REPARSE_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+// How long the pointer rests on the document pill before the list opens.
+const LIST_HOVER_MS = 300;
 function reparseKey(documentId: string): string {
   return `unitos:reparse:${documentId}:${PARSER_VERSION}`;
 }
@@ -244,10 +260,10 @@ export function DocumentBar({
   const t = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
-  // The list's Sort by (SPEC.md §6): one choice per browser. It orders every
-  // list, folders among the documents, and every sort but Added puts them
-  // in categories.
-  const [documentSort, setDocumentSort] = useDocumentSort();
+  // The list's Sort by (SPEC.md §6): one choice per project in this browser.
+  // It orders every list, folders among the documents, and every sort but
+  // Added puts them in categories.
+  const [documentSort, setDocumentSort] = useDocumentSort(notebookId);
   const [phase, setPhase] = useState<IngestPhase | null>(null);
   const [dialog, setDialog] = useState(false);
   // The folder the add-document dialog adds to (SPEC.md §6): the + of a
@@ -271,11 +287,15 @@ export function DocumentBar({
     setListEl(el);
     if (!el) return;
     const left = (el.offsetParent?.getBoundingClientRect().left ?? 0) + el.offsetLeft;
-    const over = left + el.offsetWidth - (window.innerWidth - 8);
+    // The page's own width, not innerWidth: a phone's browser widens the
+    // window to the list's overflow before this runs.
+    const over = left + el.offsetWidth - (document.documentElement.clientWidth - 8);
     if (over > 0) el.style.left = `${el.offsetLeft - Math.min(over, left - 8)}px`;
   }, []);
   const listCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [listOpen, setListOpen] = useState(false);
+  // The tree opens a document's folders and focuses its row (type-ahead).
+  const revealRef = useRef<((id: string) => void) | null>(null);
   // Per-document actions, expanded inline under the document's row; Move to
   // folder opens its picker under them.
   const [pillMenu, setPillMenu] = useState<string | null>(null);
@@ -285,6 +305,18 @@ export function DocumentBar({
   // picked.
   const [editedAsk, setEditedAsk] = useState<{ id: string; as?: "article" | "handwritten" } | null>(null);
   const [moveError, setMoveError] = useState<string | null>(null);
+  // Delete document opens its confirm under the row (document-delete.tsx).
+  // Where the document is — this project, its other projects — is read when
+  // the row's actions open, so the confirm knows it, and offers Remove from
+  // this project beside Delete document when another project holds it. The
+  // actions themselves never depend on it: they draw at the press.
+  const [deleteAsk, setDeleteAsk] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const { reach: menuReach, loading: menuReachLoading } = useDocumentReach(canEdit ? pillMenu : null);
+  // The ask before Replace the edits names the quotes it costs.
+  const { losing: reparseLosing, loading: reparseLosingLoading } = useReparseLosses(
+    canEdit ? (editedAsk?.id ?? null) : null,
+  );
   const [library, setLibrary] = useState<LibraryDocument[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Every error the bar shows also lands in the error log, on the open
@@ -296,35 +328,150 @@ export function DocumentBar({
   // Opening a document is a server round trip; the pill shows it is on its way.
   const [opening, startOpening] = useTransition();
 
-  // Hover keeps the list open across the gap between pill and list; leaving
-  // both closes it after a grace period.
+  // A press on the pill opens the list and a second press closes it. A
+  // pointer that rests on the pill opens it too, once it has stood still for
+  // a beat (LIST_HOVER_MS), so a pointer passing over on its way to + opens
+  // nothing. Hover keeps the list open across the gap between pill and list;
+  // leaving both closes it after a grace period.
+  const listOpenTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // When a hover opened the list: a press that lands right after is the same
+  // intent to open, not a second press that closes.
+  const hoverOpenedAt = useRef(0);
+  function clearListTimers() {
+    if (listCloseTimer.current) clearTimeout(listCloseTimer.current);
+    if (listOpenTimer.current) clearTimeout(listOpenTimer.current);
+    listCloseTimer.current = null;
+    listOpenTimer.current = null;
+  }
+  // How the list opened: a list the reader pressed open (the pill, or a
+  // press inside a list the hover opened) closes on a press outside or
+  // Escape only; a list the hover opened closes when the pointer leaves.
+  const listPressed = useRef(false);
   function openList() {
+    clearListTimers();
+    listPressed.current = true;
+    setListOpen(true);
+  }
+  function hoverList() {
     if (listCloseTimer.current) {
       clearTimeout(listCloseTimer.current);
       listCloseTimer.current = null;
     }
-    setListOpen(true);
+    if (listOpen) return;
+    // The pointer still moves: the beat starts over, so the list opens only
+    // where the pointer comes to rest.
+    if (listOpenTimer.current) clearTimeout(listOpenTimer.current);
+    listOpenTimer.current = setTimeout(() => {
+      listOpenTimer.current = null;
+      hoverOpenedAt.current = Date.now();
+      listPressed.current = false;
+      setListOpen(true);
+    }, LIST_HOVER_MS);
+  }
+  function pressList() {
+    if (listOpen && Date.now() - hoverOpenedAt.current > LIST_HOVER_MS * 2) closeList();
+    else openList();
   }
   function closeList() {
-    if (listCloseTimer.current) {
-      clearTimeout(listCloseTimer.current);
-      listCloseTimer.current = null;
+    clearListTimers();
+    // Focus inside the list goes back to the pill, not to the page.
+    if (listRef.current?.contains(document.activeElement) || document.activeElement?.closest("[data-document-flyout]")) {
+      listRef.current?.querySelector<HTMLElement>('[data-track="document-list"]')?.focus();
     }
     setListOpen(false);
     setPillMenu(null);
     setMoveChoice(null);
     setEditedAsk(null);
+    setDeleteAsk(null);
   }
   // A row of the list is being dragged (document-folders.tsx): the list
   // stays open while the pointer is outside it, until the drop.
   const listDragging = useRef(false);
   function scheduleCloseList() {
+    if (listOpenTimer.current) {
+      clearTimeout(listOpenTimer.current);
+      listOpenTimer.current = null;
+    }
+    if (!listOpen || listPressed.current) return;
     if (listDragging.current) return;
     if (listCloseTimer.current) clearTimeout(listCloseTimer.current);
     listCloseTimer.current = setTimeout(closeList, 220);
   }
+  // Type-ahead in the open list: the letters typed within a moment of each
+  // other, and when they started.
+  const typeAhead = useRef({ text: "", at: 0 });
+  // ArrowDown and ArrowUp move between the rows of the list the focus is
+  // in (the root list, or a folder's fly-out: document-folders.tsx takes
+  // Enter, →, ← and Escape there); from the pill, ArrowDown opens the list
+  // and goes to the first row. Typed letters go to the first row whose
+  // title starts with them, as a listbox does: a big project's document
+  // without scrolling. A document in a folder is found too: its folder's
+  // list opens and the focus goes to its row. A space while letters are
+  // being typed is part of the title, not a press of the row.
+  function moveInList(e: React.KeyboardEvent<HTMLDivElement>) {
+    const target = e.target as HTMLElement;
+    if (target.closest("input, textarea, select, [contenteditable]")) return;
+    const panel = target.closest<HTMLElement>("[data-document-flyout]") ?? listRef.current;
+    const rows = [...(panel?.querySelectorAll<HTMLElement>(LIST_ROWS) ?? [])].filter((el) => el.getClientRects().length > 0);
+    const now = Date.now();
+    const typing = now - typeAhead.current.at < 800 && typeAhead.current.text !== "";
+    if (
+      listOpen &&
+      e.key.length === 1 &&
+      !e.ctrlKey &&
+      !e.metaKey &&
+      !e.altKey &&
+      (e.key.trim() !== "" || (e.key === " " && typing))
+    ) {
+      const text = (typing ? typeAhead.current.text : "") + e.key.toLocaleLowerCase();
+      typeAhead.current = { text, at: now };
+      if (e.key === " ") e.preventDefault();
+      const starts = (title: string) => title.trim().toLocaleLowerCase().startsWith(text);
+      // The rows in view first, then every document of the project.
+      const shown = [
+        ...(listRef.current?.querySelectorAll<HTMLElement>(LIST_ROWS) ?? []),
+        ...document.querySelectorAll<HTMLElement>(`[data-document-flyout] :is(${LIST_ROWS})`),
+      ].filter((el) => el.getClientRects().length > 0);
+      const hit = shown.find((row) => starts(row.textContent ?? ""));
+      if (hit) {
+        e.preventDefault();
+        hit.focus();
+        hit.scrollIntoView({ block: "nearest" });
+        return;
+      }
+      const doc = documents.find((d) => starts(d.title));
+      if (doc) {
+        e.preventDefault();
+        revealRef.current?.(doc.id);
+      }
+      return;
+    }
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    const onPill = target.getAttribute("data-track") === "document-list";
+    if (onPill && !listOpen) {
+      if (e.key !== "ArrowDown") return;
+      e.preventDefault();
+      openList();
+      setTimeout(() => {
+        listRef.current
+          ?.querySelector<HTMLElement>('[data-track="document-open"], [data-track="folder-open"]')
+          ?.focus();
+      }, 0);
+      return;
+    }
+    if (rows.length === 0) return;
+    e.preventDefault();
+    // From a row's ⋯ (its menu closed), the rows go on from that row.
+    const from = rows.includes(target)
+      ? target
+      : target.closest<HTMLElement>("[data-tree-row]")?.querySelector<HTMLElement>(LIST_ROWS) ?? null;
+    const at = from ? rows.indexOf(from) : -1;
+    const next = at < 0 ? (e.key === "ArrowDown" ? 0 : rows.length - 1) : at + (e.key === "ArrowDown" ? 1 : -1);
+    rows[Math.max(0, Math.min(rows.length - 1, next))]?.focus();
+  }
   useEffect(() => () => {
     if (listCloseTimer.current) clearTimeout(listCloseTimer.current);
+    if (listOpenTimer.current) clearTimeout(listOpenTimer.current);
   }, []);
 
   useEffect(() => {
@@ -335,16 +482,18 @@ export function DocumentBar({
       // a press in one is a press in the list.
       if (!listRef.current?.contains(target) && !target?.closest("[data-document-flyout]")) closeList();
     };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !isImeKey(e)) closeList();
-    };
     window.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("keydown", onKeyDown);
-    };
+    return () => window.removeEventListener("pointerdown", onPointerDown);
   }, [listOpen]);
+  // Escape closes the list as one layer (lib/escape-layers.ts), and a row's
+  // open actions as one more, first.
+  useEscapeLayer(listOpen, closeList);
+  useEscapeLayer(listOpen && pillMenu !== null, () => {
+    setPillMenu(null);
+    setMoveChoice(null);
+    setEditedAsk(null);
+    setDeleteAsk(null);
+  });
 
   // The open document's row is the visible one when the list opens.
   useEffect(() => {
@@ -374,18 +523,22 @@ export function DocumentBar({
       return;
     }
     setError(null);
+    // The keys typed until the new page takes the caret go into it.
+    keepEarlyKeys();
     try {
       const created = await api<{ id: string; title: string }>("/api/documents/blank", "POST", {
         notebookId,
         title: t("panes.untitledDocument"),
         ...(addFolder ? { folderId: addFolder } : {}),
       });
+      earlyKeysFor(created.id);
       setDialog(false);
       const params = new URLSearchParams();
       params.set("doc", created.id);
       startOpening(() => router.push(`/n/${notebookId}?${params.toString()}`));
       router.refresh();
     } catch (err) {
+      dropEarlyKeys();
       setError(err instanceof Error ? err.message : t("common.requestFailed"));
     }
   }
@@ -406,6 +559,12 @@ export function DocumentBar({
   // request of theirs.
   const reparseAttempted = useRef(new Set<string>());
   const active = documents.find((d) => d.id === activeId) ?? null;
+  // While the next document loads after a removal, the pill names it
+  // (leaveDocument).
+  const [leftFor, setLeftFor] = useState<string | null>(null);
+  if (leftFor !== null && !opening) setLeftFor(null);
+  // An empty leftFor: the last document left, and the pill reads Documents.
+  const pillDoc = opening && leftFor !== null ? (documents.find((d) => d.id === leftFor) ?? null) : active;
   const isStale = (d: AttachedDocument) =>
     !d.hasVideo && !d.handwritten && (d.sourceUrl !== null || d.hasFile) && d.parserVersion < PARSER_VERSION;
   // The open document's figures a browser render can bring over: captions
@@ -486,7 +645,8 @@ export function DocumentBar({
     if (figures) setFigureCapture({ documentId: doc.id, status: "running", error: null });
     try {
       const body = { ...(as ? { as } : {}), ...(replaceEdits ? { replaceEdits } : {}) };
-      const result = await runIngest(doc.title, doc.sourceUrl ? "url" : "pdf", () =>
+      // A stored file uploads nothing: the card starts at Parsing.
+      const result = await runIngest(doc.title, doc.sourceUrl ? "url" : "reparse", () =>
         fetch(`/api/documents/${doc.id}/reparse`, {
           method: "POST",
           ...(as || replaceEdits
@@ -618,7 +778,7 @@ export function DocumentBar({
   // (SPEC.md §29): its line, which the bar shows once the document opens.
   async function runIngest(
     fileLabel: string,
-    kind: "pdf" | "url" | "video" | "youtube" | "media" | "drive",
+    kind: IngestKind,
     send: (emit: (stage: string, detail?: string) => void) => Promise<Response>,
   ): Promise<{ id: string; title: string; deduped: boolean; blockDocument: ReturnType<typeof blockDocumentLine> | null }> {
     setPhase({ fileLabel, steps: initialIngestSteps(kind) });
@@ -628,6 +788,7 @@ export function DocumentBar({
     if (!res.ok) {
       const detail = await readJson<{ error?: string; reason?: string }>(res);
       if (detail?.reason === "edited") throw new EditedImportAnswer(detail.error);
+      throwIfDuplicate(detail, t("panes.duplicateTitle"));
       throw new Error(detail?.error ?? statusMessage(t, res.status));
     }
     let result: IngestEvent | null = null;
@@ -641,6 +802,7 @@ export function DocumentBar({
       }
     }
     if (result && "error" in result && result.reason === "edited") throw new EditedImportAnswer(result.error);
+    if (result && "error" in result) throwIfDuplicate(result, t("panes.duplicateTitle"));
     if (!result || "error" in result) {
       throw new Error(result && "error" in result ? result.error : t("panes.uploadCutOff"));
     }
@@ -654,10 +816,13 @@ export function DocumentBar({
   // itself. Google Drive picks open it too — the server fetches those files
   // at import time, so only the sandbox review has nothing to read.
   const [assistant, setAssistant] = useState<UploadRequest | null>(null);
+  // The ask before a repeat add from a pasted link (SPEC.md §15); the upload
+  // box asks in place.
+  const { ask: askDuplicate, dialog: duplicateDialog } = useDuplicateAsk();
   // One box at a time: an add that arrives while one runs waits here and
   // starts when the running one closes, so neither replaces the other. The
   // run counter keys the box, so each request mounts a fresh one.
-  const [pending, setPending] = useState<UploadRequest[]>([]);
+  const pendingRef = useRef<UploadRequest[]>([]);
   const [assistantRun, setAssistantRun] = useState(0);
   // The box hidden while its add runs on (SPEC.md §15): the header shows the
   // running pill instead, and clicking the pill brings the box back.
@@ -666,6 +831,42 @@ export function DocumentBar({
   // §15): the pill says the add is finishing, and the close that ends the
   // add refreshes the open document instead of opening it again.
   const [assistantOpened, setAssistantOpened] = useState<string | null>(null);
+  // What the last failed add handed back to Add a document.
+  const [returned, setReturned] = useState<{ items: UploadItem[]; seq: number } | null>(null);
+  // The links of an add stay in the browser until the add lands, so a
+  // reload while it runs, while it waits its turn, or after it failed puts
+  // them back in Add a document's field (CLAUDE.md rule zero 6). Files
+  // cannot be kept. The store holds the links that failed, the running
+  // add's, and every waiting add's.
+  const linksKey = `unitos:add-links:${notebookId}`;
+  const linksRef = useRef<{ back: UploadItem[]; running: UploadItem[] }>({ back: [], running: [] });
+  const requestItems = (request: UploadRequest): UploadItem[] =>
+    request.kind === "batch" ? request.items : request.kind === "url" || request.kind === "video-url" ? [request] : [];
+  const keepLinks = () => {
+    const items = [
+      ...linksRef.current.back,
+      ...linksRef.current.running,
+      ...pendingRef.current.flatMap(requestItems),
+    ];
+    const links = items.filter((i) => i.kind === "url" || i.kind === "video-url").map((i) => ({ kind: i.kind, url: i.url }));
+    try {
+      if (links.length > 0) localStorage.setItem(linksKey, JSON.stringify({ at: Date.now(), links }));
+      else localStorage.removeItem(linksKey);
+    } catch {
+      // Storage off: the links live as long as the page.
+    }
+  };
+  useEffect(() => {
+    try {
+      const kept = JSON.parse(localStorage.getItem(linksKey) ?? "null") as { at: number; links: UploadItem[] } | null;
+      if (!kept || Date.now() - kept.at > 86_400_000) return;
+      linksRef.current.back = kept.links;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setReturned({ items: kept.links, seq: 1 });
+    } catch {
+      // Nothing kept, or storage off.
+    }
+  }, [linksKey]);
   const assistantSubject = !assistant
     ? ""
     : assistant.kind === "files" || assistant.kind === "drive"
@@ -675,6 +876,8 @@ export function DocumentBar({
         : assistant.url;
 
   function startAssistant(request: UploadRequest) {
+    linksRef.current.running = requestItems(request);
+    keepLinks();
     setAssistant(request);
     setAssistantRun((n) => n + 1);
     setAssistantHidden(false);
@@ -706,7 +909,9 @@ export function DocumentBar({
           : request.kind === "batch"
             ? request.items
             : [request];
-      const queued = Promise.all(
+      // The offline pill counts the queued add; no second notice. A queue
+      // that cannot store the add says so.
+      void Promise.all(
         items.map((item) =>
           item.kind === "file"
             ? queueUpload(item.file, notebookId)
@@ -714,18 +919,15 @@ export function DocumentBar({
               ? Promise.resolve()
               : queueWrite("/api/documents", "POST", { url: item.url, notebookId, ...(request.folderId ? { folderId: request.folderId } : {}) }),
         ),
-      ).then(() => items.length);
-      void queued.then((n) => {
-        setNotice(t("panes.uploadQueuedOffline", { n }));
-        setTimeout(() => setNotice(null), 4000);
-      });
+      ).catch(() => setError(t("common.offline")));
       setDialog(false);
       return;
     }
     setDialog(false);
     if (assistant) {
       // A box is running: this add waits its turn (one box at a time).
-      setPending((queue) => [...queue, request]);
+      pendingRef.current = [...pendingRef.current, request];
+      keepLinks();
       setNotice(t("panes.uploadQueuedBehind"));
       setTimeout(() => setNotice(null), 4000);
       return;
@@ -750,14 +952,22 @@ export function DocumentBar({
   // facts from Drive metadata. An all-files grant reaches any file the
   // account can read; a picked-files grant reaches picked files only, and the
   // server says so.
-  async function importDriveLink(fileId: string): Promise<boolean> {
+  // A file the account already has asks first (SPEC.md §15): Add again
+  // imports it once more with confirmDuplicate.
+  async function importDriveLink(fileId: string, confirmDuplicate = false): Promise<boolean> {
     setError(null);
+    let repeat: DuplicateMatch[] | null = null;
     try {
       const result = await runIngest(t("panes.addFromDrive"), "drive", () =>
         fetch("/api/drive/import", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ notebookId, fileId, ...(addFolder ? { folderId: addFolder } : {}) }),
+          body: JSON.stringify({
+            notebookId,
+            fileId,
+            ...(addFolder ? { folderId: addFolder } : {}),
+            ...(confirmDuplicate ? { confirmDuplicate } : {}),
+          }),
         }),
       );
       setDialog(false);
@@ -765,11 +975,28 @@ export function DocumentBar({
       if (result.blockDocument) showNotice(t(result.blockDocument), 8000);
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("panes.uploadFailed"));
-      return false;
+      if (err instanceof DuplicateDocumentError) repeat = err.documents;
+      else {
+        setError(err instanceof Error ? err.message : t("panes.uploadFailed"));
+        return false;
+      }
     } finally {
       setPhase(null);
     }
+    if (!repeat) return false;
+    return answerDuplicate(repeat, () => importDriveLink(fileId, true));
+  }
+
+  // The reader's word on a repeat add (SPEC.md §15): Add again runs the add
+  // once more, confirmed; Open the one I have opens the first match; Cancel
+  // adds nothing and leaves the dialog as it was. True: something opened.
+  async function answerDuplicate(documents: DuplicateMatch[], again: () => Promise<boolean>): Promise<boolean> {
+    const choice = await askDuplicate(documents);
+    if (choice === "again") return again();
+    if (choice === "cancel") return false;
+    setDialog(false);
+    openTarget({ kind: "document", id: documents[0].id, notebookId: documents[0].notebookId });
+    return true;
   }
 
   // Google Drive upload (SPEC.md §14): get a token and open the picker
@@ -892,17 +1119,24 @@ export function DocumentBar({
   // direct media file links to video documents, everything else to the
   // article parse; this only picks the matching progress steps. Returns
   // whether the document was added and opened.
-  async function ingestFromUrl(raw: string): Promise<boolean> {
+  // A link the account already has asks first (SPEC.md §15).
+  async function ingestFromUrl(raw: string, confirmDuplicate = false): Promise<boolean> {
     const trimmed = raw.trim();
     if (!trimmed) return false;
     setError(null);
+    let repeat: DuplicateMatch[] | null = null;
     try {
       const kind = parseYouTubeId(trimmed) ? "youtube" : isMediaUrl(trimmed) ? "media" : "url";
       const result = await runIngest(trimmed, kind, () =>
         fetch("/api/documents", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: trimmed, notebookId, ...(addFolder ? { folderId: addFolder } : {}) }),
+          body: JSON.stringify({
+            url: trimmed,
+            notebookId,
+            ...(addFolder ? { folderId: addFolder } : {}),
+            ...(confirmDuplicate ? { confirmDuplicate } : {}),
+          }),
         }),
       );
       setDialog(false);
@@ -910,11 +1144,16 @@ export function DocumentBar({
       if (result.blockDocument) showNotice(t(result.blockDocument), 8000);
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("panes.ingestFailed"));
-      return false;
+      if (err instanceof DuplicateDocumentError) repeat = err.documents;
+      else {
+        setError(err instanceof Error ? err.message : t("panes.ingestFailed"));
+        return false;
+      }
     } finally {
       setPhase(null);
     }
+    if (!repeat) return false;
+    return answerDuplicate(repeat, () => ingestFromUrl(raw, true));
   }
 
   // The reader's media-figure toast sends its player link here: same ingest
@@ -945,37 +1184,74 @@ export function DocumentBar({
     router.refresh();
   }
 
-  // Delete document: the document leaves the project and the library
-  // (DELETE /api/documents/[documentId]; its annotations go with it, and
-  // notes that quote it keep their quotes).
-  async function deleteDocument(documentId: string) {
-    closeList();
-    if (!confirm(await deleteMessage(documentId))) return;
-    setError(null);
-    try {
-      await api(`/api/documents/${documentId}`, "DELETE");
-      if (documentId === activeId) router.push(`/n/${notebookId}`);
+  // A document a repeat add's Open the one I have named (SPEC.md §15): in
+  // this project it opens here; in another project, there; in no project
+  // (the Library), it attaches here the way a Library pick does, and opens.
+  function openTarget(target: OpenTarget) {
+    if (target.notebookId === undefined || target.notebookId === notebookId) {
+      open(target.id);
       router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("panes.deleteFailed"));
+    } else if (target.notebookId !== null) {
+      startOpening(() => router.push(`/n/${target.notebookId}?doc=${encodeURIComponent(target.id)}`));
+    } else {
+      attach(target.id).catch((err: unknown) => setError(err instanceof Error ? err.message : t("common.requestFailed")));
     }
   }
 
-  // The delete's confirm names what it reaches: how many annotations go and
-  // how many notes stay, or that a shared document only leaves the reader's
-  // projects. Offline, or when the count fails, the plain message stands.
-  async function deleteMessage(
-    documentId: string,
-    fallback: "panes.confirmDeleteDocument" | "panes.confirmDeleteFromLibrary" = "panes.confirmDeleteDocument",
-  ): Promise<string> {
+  // Delete document, after its confirm under the row: the document leaves
+  // the library and every project that holds it (DELETE
+  // /api/documents/[documentId]; its annotations go with it, and notes that
+  // quote it keep their quotes). The confirm named every project first.
+  async function deleteDocument(documentId: string) {
+    setError(null);
+    setDeleting(true);
     try {
-      const res = await fetch(`/api/documents/${documentId}/footprint`);
-      if (!res.ok) return t(fallback);
-      const reach = (await res.json()) as { annotations: number; notes: number; shared: boolean };
-      if (reach.shared) return t("panes.confirmDeleteDocumentShared");
-      return t("panes.confirmDeleteDocumentCounts", { annotations: reach.annotations, notes: reach.notes });
-    } catch {
-      return t(fallback);
+      await api(`/api/documents/${documentId}`, "DELETE");
+      closeList();
+      leaveDocument(documentId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("panes.deleteFailed"));
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  // The open document left the project (deleted or removed): the next one
+  // in the list opens at once, in place of a round trip to the project's
+  // page, which then picked one (NAV13-18); the pill reads the next title
+  // while it loads. The last one leaves the empty project. Another row:
+  // the list refreshes.
+  function leaveDocument(documentId: string) {
+    if (documentId !== activeId) {
+      router.refresh();
+      return;
+    }
+    const at = documents.findIndex((d) => d.id === documentId);
+    const next = documents[at + 1] ?? documents[at - 1] ?? null;
+    if (next) {
+      setLeftFor(next.id);
+      open(next.id);
+    } else {
+      setLeftFor("");
+      startOpening(() => router.push(`/n/${notebookId}`));
+    }
+  }
+
+  // Remove from this project: only this project's attachment goes. The
+  // document stays in the library and its other projects, every annotation
+  // with it, and Library adds it back.
+  async function removeFromProject(documentId: string) {
+    setError(null);
+    setDeleting(true);
+    try {
+      await api(`/api/documents/${documentId}?scope=project&notebookId=${notebookId}`, "DELETE");
+      closeList();
+      showNotice(t("panes.removeFromProjectDone"));
+      leaveDocument(documentId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("panes.deleteFailed"));
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -992,8 +1268,9 @@ export function DocumentBar({
     }
   }
 
+  // The library's delete: the dialog's own confirm under the row named the
+  // projects it leaves.
   async function removeFromLibrary(documentId: string) {
-    if (!confirm(await deleteMessage(documentId, "panes.confirmDeleteFromLibrary"))) return;
     setError(null);
     try {
       await api(`/api/documents/${documentId}`, "DELETE");
@@ -1007,6 +1284,13 @@ export function DocumentBar({
   const rowAction =
     "px-4 py-1.5 text-left text-[12.5px] text-sand-600 hover:bg-clay-100 hover:text-clay-800";
 
+  // A row's actions open under the row, at the foot of a list that may
+  // scroll: once they have unfolded, they scroll into view.
+  const revealActions = useCallback((el: HTMLDivElement | null) => {
+    if (!el) return;
+    window.setTimeout(() => el.scrollIntoView({ block: "nearest", behavior: "smooth" }), 220);
+  }, []);
+
   // One document's row and its actions. The tree (document-folders.tsx)
   // places it under its folder.
   const renderDocumentRow = (d: AttachedDocument) => (
@@ -1018,13 +1302,16 @@ export function DocumentBar({
             open(d.id);
           }}
           data-track="document-open"
+          data-doc-row={d.id}
           data-active-row={d.id === activeId || undefined}
           className={`min-w-0 flex-1 overflow-hidden px-4 py-2 text-left text-[13px] whitespace-nowrap ${
             d.id === activeId
               ? "font-semibold text-ink"
               : "text-sand-700 hover:bg-clay-100 hover:text-clay-800"
           }`}
+          // The title as a tooltip only when the row cuts it (tipWhenCut).
           data-tip={isStale(d) ? t("panes.reparseStaleTitle") : d.title}
+          onPointerEnter={isStale(d) ? undefined : (e) => tipWhenCut(e.currentTarget, d.title, 44)}
         >
           {clipWords(d.title, 44)}
           {isStale(d) && (
@@ -1034,39 +1321,38 @@ export function DocumentBar({
           )}
         </button>
         <button
-          onClick={() => {
+          onClick={(e) => {
             setMoveChoice(null);
+            setDeleteAsk(null);
+            if (pillMenu !== d.id) focusMenuIfKey(e, `[data-row-menu="${d.id}"]`);
             setPillMenu(pillMenu === d.id ? null : d.id);
           }}
+          onKeyDown={(e) => menuButtonKeys(e, pillMenu === d.id, `[data-row-menu="${d.id}"]`)}
           data-track="document-actions"
           aria-label={t("panes.documentActionsFor", { title: d.title })}
           aria-expanded={pillMenu === d.id}
           data-tip={t("panes.documentActions")}
-          className="mr-2 flex size-6 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800"
+          className="mr-2 flex size-6 shrink-0 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:size-9"
         >
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            aria-hidden
-          >
-            <circle cx="12" cy="5" r="2" />
-            <circle cx="12" cy="12" r="2" />
-            <circle cx="12" cy="19" r="2" />
-          </svg>
+          <MoreIcon size={13} />
         </button>
       </div>
       <Collapse open={pillMenu === d.id}>
       {pillMenu === d.id && (
-        <div data-no-drag className="mx-2 mb-1.5 flex flex-col rounded-xl bg-sand-100 py-1">
-          {/* Re-parse, on every document: a video or audio
-              document transcribes again, a handwritten one
-              re-makes its pages and converts again, a text one
-              parses its file or URL again. A document with no
-              source (pasted text, a generated document) has
-              nothing to parse again; the row says so. */}
-          {canEdit && (
+        <div
+          ref={revealActions}
+          data-no-drag
+          data-row-menu={d.id}
+          onKeyDown={menuKeys}
+          className="mx-2 mb-1.5 flex flex-col rounded-xl bg-sand-100 py-1"
+        >
+          {/* A row's actions list only what can run on this document. Re-parse:
+              a video or audio document transcribes again, a handwritten one
+              re-makes its pages and converts again, a text one parses its
+              file or URL again; a document with no source (a blank
+              document, pasted text, a generated document) has nothing to
+              parse again, and the row is not there. */}
+          {canEdit && canReparse(d) && (
             <button
               onClick={() => {
                 // A PDF asks which shape first: the row opens
@@ -1085,18 +1371,12 @@ export function DocumentBar({
                 void (d.hasVideo ? transcribeAgain(d) : reparse(d));
               }}
               data-track="document-reparse"
-              disabled={phase !== null || transcribing !== null || !canReparse(d)}
+              disabled={phase !== null || transcribing !== null}
               aria-expanded={
                 d.pdf && !d.hasVideo ? reparseChoice === d.id : d.importEdited ? editedAsk?.id === d.id : undefined
               }
               className={`${rowAction} disabled:opacity-40`}
-              data-tip={
-                d.hasVideo
-                  ? t("panes.reparseVideoTitle")
-                  : canReparse(d)
-                    ? t("panes.reparseDocumentTitle")
-                    : t("panes.reparseNoSource")
-              }
+              data-tip={d.hasVideo ? t("panes.reparseVideoTitle") : t("panes.reparseDocumentTitle")}
             >
               {t("panes.reparseDocument")}
             </button>
@@ -1142,6 +1422,7 @@ export function DocumentBar({
           {canEdit && editedAsk?.id === d.id && (
             <div role="group" className="flex flex-col gap-1.5 border-y border-line bg-sand-50/60 px-4 py-2">
               <p className="text-[11.5px] leading-snug text-sand-600">{t("panes.reparseEditedAsk")}</p>
+              {reparseLosing && reparseLosing.length > 0 && <ReparseLossList losing={reparseLosing} />}
               <div className="flex flex-wrap gap-1.5">
                 <button
                   onClick={() => {
@@ -1151,7 +1432,8 @@ export function DocumentBar({
                     void reparse(d, shape, true);
                   }}
                   data-track="document-reparse-replace"
-                  disabled={phase !== null || transcribing !== null}
+                  // Not before the ask can say what the replace costs.
+                  disabled={phase !== null || transcribing !== null || reparseLosingLoading}
                   className="rounded-full bg-clay px-3 py-1 text-[12px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
                 >
                   {t("panes.reparseReplaceEdits")}
@@ -1190,31 +1472,44 @@ export function DocumentBar({
               {moveError && <p className="px-4 py-1 text-[11.5px] text-red-600">{moveError}</p>}
             </>
           )}
-          <button
-            onClick={() => {
-              closeList();
-              window.print();
-            }}
-            data-track="document-print"
-            disabled={d.id !== activeId}
-            className={`${rowAction} disabled:opacity-40`}
-            data-tip={
-              d.id === activeId
-                ? t("panes.printDocumentTitle")
-                : t("panes.printDocumentOpenFirst")
-            }
-          >
-            {t("panes.printDocument")}
-          </button>
+          {/* Print: the open document (the page editor's toolbar prints it
+              too). */}
+          {d.id === activeId && (
+            <button
+              onClick={() => {
+                closeList();
+                window.print();
+              }}
+              data-track="document-print"
+              className={rowAction}
+              data-tip={t("panes.printDocumentTitle")}
+            >
+              {t("panes.printDocument")}
+            </button>
+          )}
+          {/* Remove from this project is in Delete document's confirm,
+              beside Delete document, while another project holds it. */}
           {canEdit && (
             <button
-              onClick={() => void deleteDocument(d.id)}
+              onClick={() => setDeleteAsk(deleteAsk === d.id ? null : d.id)}
               data-track="document-delete"
+              aria-expanded={deleteAsk === d.id}
               className="px-4 py-1.5 text-left text-[12.5px] text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
               data-tip={t("panes.deleteDocumentTitle")}
             >
               {t("panes.deleteDocument")}
             </button>
+          )}
+          {canEdit && deleteAsk === d.id && (
+            <DocumentDeleteConfirm
+              reach={menuReach}
+              loading={menuReachLoading}
+              notebookId={notebookId}
+              busy={deleting}
+              onDelete={() => void deleteDocument(d.id)}
+              onRemove={() => void removeFromProject(d.id)}
+              onCancel={() => setDeleteAsk(null)}
+            />
           )}
         </div>
       )}
@@ -1227,19 +1522,28 @@ export function DocumentBar({
       {documents.length > 0 && (
         <div
           ref={listRef}
-          className="relative min-w-0"
-          onMouseEnter={openList}
+          // A flex box, so the pill shrinks with it: a narrow header (a
+          // phone) truncates the title instead of laying the pill over the +.
+          className="relative flex min-w-0"
+          onMouseEnter={hoverList}
+          onMouseMove={listOpen ? undefined : hoverList}
           onMouseLeave={scheduleCloseList}
+          onPointerDown={() => {
+            // A press in the list keeps it open while the pointer moves away.
+            if (listOpen) listPressed.current = true;
+          }}
+          onKeyDown={moveInList}
         >
           <button
-            onClick={openList}
+            onClick={pressList}
             data-track="document-list"
             aria-expanded={listOpen}
             aria-label={t("panes.documentList")}
             data-tip={active?.title ?? t("panes.documentList")}
-            className="flex max-w-[min(50vw,32rem)] min-w-0 items-center gap-1.5 rounded-full bg-ink py-[7px] pr-3 pl-[15px] text-[13px] font-semibold text-paper"
+            // Below sm the pill takes the project title's room (workspace.tsx).
+            className="flex max-w-[min(68vw,32rem)] min-w-0 items-center gap-1.5 rounded-full bg-ink py-[7px] pr-3 pl-[15px] text-[13px] font-semibold text-paper sm:max-w-[min(50vw,32rem)]"
           >
-            <span className="overflow-hidden whitespace-nowrap">{active ? clipWords(active.title, 56) : t("panes.documentList")}</span>
+            <span className="overflow-hidden whitespace-nowrap">{pillDoc ? clipWords(pillDoc.title, 56) : t("panes.documentList")}</span>
             <span className="shrink-0 rounded-full bg-paper/20 px-1.5 text-[11px] tabular-nums">
               {opening ? <LoadingDots /> : documents.length}
             </span>
@@ -1256,10 +1560,10 @@ export function DocumentBar({
           {listOpen && (
             <div
               ref={placeList}
-              className="menu-in absolute top-full left-0 z-40 mt-2 flex max-h-[min(60vh,480px)] w-80 max-w-[calc(100vw-96px)] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-card py-1.5 shadow-float"
+              className="menu-in absolute top-full left-0 z-40 mt-2 flex max-h-[calc(100dvh-160px)] w-80 md:max-h-[calc(100dvh-96px)] max-w-[calc(100vw-96px)] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-card py-1.5 shadow-float"
             >
-              <DocumentsSort sort={documentSort} onSort={setDocumentSort} />
               <DocumentTree
+                header={<DocumentsSort sort={documentSort} onSort={setDocumentSort} />}
                 notebookId={notebookId}
                 folders={folders}
                 documents={documents}
@@ -1272,6 +1576,7 @@ export function DocumentBar({
                   closeList();
                   openAddDialog(folderId);
                 }}
+                revealRef={revealRef}
                 onSort={setDocumentSort}
                 onDragging={(dragging) => {
                   listDragging.current = dragging;
@@ -1323,7 +1628,12 @@ export function DocumentBar({
         phase={phase}
         error={error}
         onError={setError}
-        onSubmit={(request) => openAssistant({ ...request, folderId: addFolder })}
+        onSubmit={(request) => {
+          // The field's links are in this add now: what failed before is
+          // sent again with it, or the reader took it out.
+          linksRef.current.back = [];
+          openAssistant({ ...request, folderId: addFolder, confirmed: true });
+        }}
         onCreateBlank={() => void createBlank()}
         fileAccept={UPLOAD_FILE_ACCEPT}
         projectTitle={
@@ -1351,6 +1661,7 @@ export function DocumentBar({
         onAttach={(id) => void attach(id)}
         folderPath={addFolder ? folderPath(folders, addFolder).map((id) => folders.find((f) => f.id === id)?.title ?? "") : null}
         onRemoveFromLibrary={(id) => void removeFromLibrary(id)}
+        returned={returned}
       />
 
       {/* The add running on behind a hidden box (SPEC.md §15). */}
@@ -1375,7 +1686,7 @@ export function DocumentBar({
         </span>
       )}
       {notice && capture?.status !== "running" && (
-        <span className="shrink-0 rounded-full bg-sage-200 px-3 py-1 text-xs font-semibold text-sage-800">
+        <span data-tip={notice} className="min-w-0 truncate rounded-full bg-sage-200 px-3 py-1 text-xs font-semibold text-sage-800">
           {notice}
         </span>
       )}
@@ -1403,24 +1714,39 @@ export function DocumentBar({
             setAssistantHidden(true);
             openAdded(docId);
           }}
-          onClose={(target) => {
+          onClose={(target, back) => {
             const opened = assistantOpened;
+            // What failed goes back into Add a document (rule zero 6);
+            // Edit the link opens it there with the error under the field.
+            linksRef.current.back = back ? [...linksRef.current.back, ...back.items] : linksRef.current.back;
+            linksRef.current.running = [];
+            keepLinks();
+            if (back) {
+              setReturned((was) => ({ items: back.items, seq: (was?.seq ?? 0) + 1 }));
+              if (back.edit) {
+                setError(back.error);
+                setDialog(true);
+              }
+            }
             setAssistantOpened(null);
             // The next add waiting its turn starts now; none: the box goes.
-            const [next, ...rest] = pending;
-            setPending(rest);
+            const [next, ...rest] = pendingRef.current;
+            pendingRef.current = rest;
             if (next) startAssistant(next);
             else {
               setAssistant(null);
               setAssistantHidden(false);
             }
-            if (target && target.id !== opened) openAdded(target.id);
+            if (target && target.notebookId !== undefined) openTarget(target);
+            else if (target && target.id !== opened) openAdded(target.id);
             // Opened early: the glossary and links the finishing step wrote
             // arrive with a refresh.
             else if (target) router.refresh();
           }}
         />
       )}
+
+      {duplicateDialog}
 
       {/* No backdrop blur: a blur over the whole page re-draws on every
           drag frame, and the drag stutters. A tint is enough. */}

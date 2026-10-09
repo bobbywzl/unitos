@@ -5,35 +5,29 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { setCommentResolved } from "@/lib/annotations/resolve";
 import { isImeKey } from "@/lib/ime";
-import { clipWords, markdownPreview } from "@/lib/markdown-preview";
-import { noteTitle } from "@/lib/note-title";
 import type { AnnotationItem, NoteView, SectionView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { ChevronLeftIcon, MoreIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { shortNoteId } from "@/components/outline/note-id";
+import { NOTE_ABSORBED_EVENT } from "@/components/outline/use-outline";
+import { referenceMarkdownForDrop } from "@/components/outline/reference-drop";
+import { ANNOTATION_KIND_KEY } from "@/lib/annotations/kind";
+import { postUndoPill } from "@/lib/notes/undo-pill";
+import { refreshWhenOnline } from "@/lib/offline/queue";
+import { flatSections, menuRowClass as item, NotePicker } from "@/components/reader/note-picker";
+import { annotationReferenceOf, annotationSummary, jumpToAnnotation } from "@/components/panels/annotation-card";
 
 // The menu on every annotation card (SPEC.md §6): the three dots at the
 // right of the header open it, collapsed or not. It puts the annotation into
 // notes without a drag — New note makes a note of it, in a section the
-// reader picks; Add to a note joins its text into a note the reader picks —
+// reader picks; Add to a note lands in a note the reader picks what a hold
+// of the card dropped on it lands, with the Undo pill —
 // and carries Jump, Delete, and a resolved comment's Reopen, so a collapsed
 // card has every action in reach. Either way the annotation stays where it
 // is, still painted in the article: a note gets its own copy of the text
-// and the anchors.
-
-/** Every section as a flat list, a child under its parent's name. */
-function flatSections(sections: SectionView[]): { id: string; label: string; notes: NoteView[] }[] {
-  return sections.flatMap((s) => [
-    { id: s.id, label: s.title, notes: s.notes },
-    ...s.children.map((c) => ({ id: c.id, label: `${s.title} / ${c.title}`, notes: c.notes })),
-  ]);
-}
-
-/** The line a note shows in the picker: its title, else its first words. */
-function noteLine(note: NoteView): string {
-  return noteTitle(note.content) || clipWords(markdownPreview(note.content), 48);
-}
+// and the anchors. The notes list is the NotePicker (reader/note-picker.tsx),
+// the same list the reader's Add to notes draws.
 
 type Mode = "menu" | "sections" | "notes";
 
@@ -57,7 +51,6 @@ export function AnnotationMenu({
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>("menu");
-  const [query, setQuery] = useState("");
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // What the last action did, shown under the header for a moment.
@@ -69,7 +62,6 @@ export function AnnotationMenu({
   function close() {
     setOpen(false);
     setMode("menu");
-    setQuery("");
     setError(null);
   }
 
@@ -102,8 +94,9 @@ export function AnnotationMenu({
     try {
       const message = await action();
       close();
-      setDone(message);
-      router.refresh();
+      if (message) setDone(message);
+      // Offline the write is queued: a refresh would load the page anew.
+      refreshWhenOnline(router);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("common.requestFailed"));
     } finally {
@@ -119,11 +112,53 @@ export function AnnotationMenu({
     });
   }
 
-  /** Add to a note: the annotation's text joins the note, its anchors become the note's. */
+  /** Add to a note: what a hold of the card dropped on the note lands
+      (SPEC.md §6) — the quote, the annotation reference row, and the text
+      under it, with copies of its anchors as the note's sources — and the
+      Undo pill takes it back out. */
   function addTo(note: NoteView) {
     void run(async () => {
-      await api("/api/notes/merge", "POST", { targetId: note.id, sourceIds: [annotation.id], mode: "join" });
-      return t("panels.annotationNoteAdded", { id: shortNoteId(note.id) });
+      const message = t("panels.annotationNoteAdded", { id: shortNoteId(note.id) });
+      if (!documentId) {
+        // Anchored in no document: no reference can point to it; its text joins.
+        await api("/api/notes/merge", "POST", { targetId: note.id, sourceIds: [annotation.id], mode: "join" });
+        return message;
+      }
+      const reference = annotationReferenceOf(
+        annotation,
+        documentId,
+        t(ANNOTATION_KIND_KEY[annotation.kind]),
+        annotation.gist ?? annotationSummary(annotation),
+      );
+      const markdown = await referenceMarkdownForDrop(notebookId, reference, t);
+      const answer = await api<{ content?: unknown; addedSourceIds?: unknown } | null>(`/api/notes/${note.id}`, "PATCH", {
+        append: markdown,
+        ...(reference.quote ? { copySourcesFrom: annotation.id } : {}),
+      });
+      window.dispatchEvent(new CustomEvent(NOTE_ABSORBED_EVENT, { detail: { noteId: note.id } }));
+      const after = typeof answer?.content === "string" ? answer.content : null;
+      const before = after?.endsWith(markdown) ? after.slice(0, -markdown.length).replace(/\n+$/, "") : null;
+      const added = Array.isArray(answer?.addedSourceIds)
+        ? answer.addedSourceIds.filter((id): id is string => typeof id === "string")
+        : [];
+      // Undo takes the words and the copied sources back out, while the
+      // note still reads as the add left it: newer words are never undone.
+      const taken =
+        after !== null && before
+          ? postUndoPill({
+              message,
+              undo: async () => {
+                await api(`/api/notes/${note.id}`, "PATCH", {
+                  content: before,
+                  baseContent: after,
+                  ...(added.length > 0 ? { removeSources: added } : {}),
+                });
+                refreshWhenOnline(router);
+              },
+            })
+          : false;
+      // No pill on this page: the line under the menu says it.
+      return taken ? "" : message;
     });
   }
 
@@ -138,25 +173,8 @@ export function AnnotationMenu({
 
   function jump() {
     close();
-    router.push(`/n/${notebookId}?doc=${documentId}&src=${annotation.sourceId}`);
-    window.dispatchEvent(new CustomEvent("dissect:flash-source", { detail: { sourceId: annotation.sourceId } }));
+    if (annotation.sourceId && documentId) jumpToAnnotation(router, notebookId, documentId, annotation.sourceId);
   }
-
-  const item =
-    "flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-left text-[12.5px] text-sand-800 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40";
-  const needle = query.trim().toLowerCase();
-  const accepted = flat
-    .map((s) => ({
-      ...s,
-      notes: s.notes.filter(
-        (n) =>
-          n.status === "ACCEPTED" &&
-          (!needle ||
-            n.content.toLowerCase().includes(needle) ||
-            n.id.toLowerCase().includes(needle.replace(/^#/, ""))),
-      ),
-    }))
-    .filter((s) => s.notes.length > 0);
 
   return (
     <div ref={rootRef} className="relative shrink-0">
@@ -169,7 +187,7 @@ export function AnnotationMenu({
         aria-expanded={open}
         aria-label={t("panels.annotationMenu")}
         data-tip={t("panels.annotationMenuTitle")}
-        className="flex size-[22px] items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800"
+        className="flex size-[22px] items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:-m-[7px] pointer-coarse:size-9"
       >
         <MoreIcon size={14} />
       </button>
@@ -186,10 +204,7 @@ export function AnnotationMenu({
           {mode !== "menu" && (
             <button
               type="button"
-              onClick={() => {
-                setMode("menu");
-                setQuery("");
-              }}
+              onClick={() => setMode("menu")}
               className={`${item} text-[11px] font-bold tracking-[0.08em] text-sand-600 uppercase`}
             >
               <ChevronLeftIcon size={12} />
@@ -287,43 +302,13 @@ export function AnnotationMenu({
           )}
 
           {mode === "notes" && (
-            <div className="flex flex-col gap-1">
-              <input
-                autoFocus
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={t("outline.searchNotes")}
-                aria-label={t("outline.searchNotes")}
-                className="w-full rounded-full bg-sand-100 px-3 py-1.5 text-[12.5px] outline-none placeholder:text-sand-500"
-              />
-              <div className="max-h-64 overflow-y-auto">
-                {accepted.length === 0 && (
-                  <p className="px-2.5 py-2 text-[12px] text-sand-600">{t("panels.annotationNoNotes")}</p>
-                )}
-                {accepted.map((s) => (
-                  <div key={s.id} className="py-1">
-                    <span className="block px-2.5 py-0.5 text-[10.5px] font-bold tracking-[0.08em] text-sand-500 uppercase">
-                      {s.label}
-                    </span>
-                    {s.notes.map((note) => (
-                      <button
-                        key={note.id}
-                        type="button"
-                        role="menuitem"
-                        disabled={working}
-                        onClick={() => addTo(note)}
-                        data-track="annotation-add-to-note-pick"
-                        className={item}
-                      >
-                        <span className="shrink-0 font-mono text-[10.5px] text-sand-500">#{shortNoteId(note.id)}</span>
-                        <span className="min-w-0 flex-1 truncate">{noteLine(note)}</span>
-                      </button>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            </div>
+            <NotePicker
+              sections={sections}
+              onPick={addTo}
+              onEscape={() => setMode("menu")}
+              disabled={working}
+              track="annotation-add-to-note-pick"
+            />
           )}
         </div>
       )}

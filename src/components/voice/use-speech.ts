@@ -34,7 +34,12 @@ export function useSpeech(onFinal: (phrase: string, english: boolean) => void) {
   );
   const [listening, setListening] = useState(false);
   const [status, setStatus] = useState<SpeechStatus>("");
-  const [interim, setInterim] = useState("");
+  const [interim, setInterimState] = useState("");
+  const interimRef = useRef("");
+  const setInterim = useCallback((heard: string) => {
+    interimRef.current = heard;
+    setInterimState(heard);
+  }, []);
   const recRef = useRef<Recognition | null>(null);
   const wantRef = useRef(false);
   const onFinalRef = useRef(onFinal);
@@ -47,7 +52,19 @@ export function useSpeech(onFinal: (phrase: string, english: boolean) => void) {
     recRef.current?.stop();
     setListening(false);
     setInterim("");
-  }, []);
+  }, [setInterim]);
+
+  // The words still being heard go to `onFinal` now, as a final phrase: the
+  // reader is about to close the box (a press elsewhere, Escape) and the
+  // service would finalize them too late. The service then starts afresh, so
+  // it never sends the same words a second time.
+  const flush = useCallback(() => {
+    const heard = interimRef.current.trim();
+    if (!heard) return;
+    setInterim("");
+    onFinalRef.current(heard, language.startsWith("en"));
+    if (wantRef.current) recRef.current?.abort();
+  }, [language, setInterim]);
 
   const start = useCallback((): boolean => {
     const Ctor = recognitionCtor();
@@ -105,7 +122,7 @@ export function useSpeech(onFinal: (phrase: string, english: boolean) => void) {
       setStatus("trouble");
       return false;
     }
-  }, [language]);
+  }, [language, setInterim]);
 
   const setLanguage = useCallback(
     (code: string) => {
@@ -126,5 +143,5 @@ export function useSpeech(onFinal: (phrase: string, english: boolean) => void) {
     [],
   );
 
-  return { listening, status, setStatus, interim, language, setLanguage, start, stop };
+  return { listening, status, setStatus, interim, language, setLanguage, start, stop, flush };
 }

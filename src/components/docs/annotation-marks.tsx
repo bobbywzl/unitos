@@ -7,7 +7,7 @@ import { Mapping, StepMap } from "@tiptap/pm/transform";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import { Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { CommentIcon, LinkIcon, UnlinkIcon } from "@/components/icons";
+import { CommentIcon, LinkIcon } from "@/components/icons";
 import {
   CHAIN_BUTTON,
   EXTRACT_CHIP,
@@ -18,6 +18,7 @@ import {
   anchorClass,
   type Highlight,
 } from "@/components/reader/block-view";
+import { keys } from "@/components/docs/keys";
 import { aroundPageStarts, FIGURE, findIndexed, posInBlock } from "@/components/docs/layer/anchor";
 import { PAGE_FLASH_EVENT } from "@/components/docs/layer/events";
 import { annotationKindColor, LINK_KIND_VAR } from "@/lib/annotations/kind";
@@ -30,12 +31,14 @@ import { MARK_SWEPT_EVENT, type MarkSweptDetail } from "@/lib/mark-sweep";
 // (block-view.tsx markedText). The text never changes: a mark's chips are
 // data-anchor-skip widgets, and a press opens what it opens in the reader.
 
-/** `add`: paint these over the painted marks instead of in their place. */
-export type MarksMeta = { highlights: Record<string, Highlight[]>; t: TFunc; add?: boolean };
+/** `add`: paint these over the painted marks instead of in their place.
+    `editing`: the page is in Editing or Suggesting, where a click on marked
+    words places the caret and Ctrl+click (⌘ on a Mac) opens the mark. */
+export type MarksMeta = { highlights: Record<string, Highlight[]>; t: TFunc; add?: boolean; editing?: boolean };
 
 export const annotationMarksKey = new PluginKey<DecorationSet>("docsAnnotationMarks");
 
-type Chip = { kind: "tool" | "comment" | "link-start" | "link-end" | "extract"; highlight: Highlight };
+type Chip = { kind: "tool" | "comment" | "highlight" | "link-end" | "extract"; highlight: Highlight };
 
 function chipWidget({ kind, highlight: h }: Chip, t: TFunc) {
   return () => {
@@ -65,15 +68,19 @@ function chipWidget({ kind, highlight: h }: Chip, t: TFunc) {
       look(CHAIN_BUTTON, h.linkTitle ? t("panes.linkedTo", { title: h.linkTitle }) : t("panes.linked"), "link");
       button.dataset.href = h.href ?? "";
       symbol = <LinkIcon size={10} />;
-    } else if (kind === "link-start") {
-      look(CHAIN_BUTTON, t("panes.linkToOtherTexts"), "start-link", "link-chip");
-      symbol = <UnlinkIcon size={10} />;
+    } else if (kind === "highlight") {
+      // A highlight's chip opens its card, also while the reader writes,
+      // where a click on the words places the caret. Its dot is the hue.
+      look(MARK_CHIP, t("panes.viewAnnotation"), "annotation", "highlight-chip");
+      symbol = (
+        <span aria-hidden className="block size-[7px] rounded-full" style={{ background: annotationKindColor("highlight", h.color ?? null) }} />
+      );
     } else {
       look(EXTRACT_CHIP, t("panes.extractOpenCard", { label: h.extractLabel ?? "" }), "extract", "extract-chip");
       button.textContent = h.extractLabel ?? "";
       button.dataset.extractId = h.extractId ?? "";
     }
-    if (kind === "tool" || kind === "comment" || kind === "link-start") button.dataset.sourceId = h.sourceId ?? "";
+    if (kind === "tool" || kind === "comment" || kind === "highlight") button.dataset.sourceId = h.sourceId ?? "";
     if (symbol) {
       const root = createRoot(button);
       root.render(symbol);
@@ -86,13 +93,31 @@ function chipWidget({ kind, highlight: h }: Chip, t: TFunc) {
 /** The kinds the layer paints; formatting, terms, and web links are the editor's. */
 export const PAINTED = new Set<Highlight["kind"]>(["anchor", "pending-link", "salience", "simplify", "extract", "link"]);
 
+/** The smaller of two anchors; of two alike, an annotation's before a plain
+    note's, then the lower source id, so the pick never turns on row order. */
+function smaller(a: Highlight, b: Highlight): Highlight {
+  const size = a.end - a.start - (b.end - b.start);
+  if (size !== 0) return size < 0 ? a : b;
+  if (Boolean(a.annotation) !== Boolean(b.annotation)) return a.annotation ? a : b;
+  return (a.sourceId ?? "") <= (b.sourceId ?? "") ? a : b;
+}
+
 /** One stretch of words under the same highlights, drawn as block-view.tsx
-    markedText draws it: a link wins, else the smallest anchor names the mark. */
-function segmentAttrs(covering: Highlight[], blockId: string, t: TFunc): Record<string, string> {
+    markedText draws it: a link wins, else the smallest anchor names the mark.
+    An annotation's color paints over a plain note's clay. Words under two
+    annotations or notes or more carry every one's source (data-stack-sources):
+    a click opens the reader's chooser of them (SPEC.md §6). */
+function segmentAttrs(covering: Highlight[], blockId: string, t: TFunc, editing: boolean): Record<string, string> {
   const link = covering.find((h) => h.kind === "link");
   const anchors = covering.filter((h) => h.kind === "anchor");
-  const anchor =
-    anchors.length > 1 ? anchors.reduce((n, h) => (h.end - h.start < n.end - n.start ? h : n)) : anchors[0];
+  const anchor = anchors.length > 1 ? anchors.reduce(smaller) : anchors[0];
+  const annotations = anchors.filter((h) => h.annotation && !h.leaving);
+  const painted = anchor && !anchor.annotation && annotations.length > 0 ? annotations.reduce(smaller) : anchor;
+  const stacked = [
+    ...new Set(
+      anchors.filter((h) => h.sourceId && !h.leaving && (h.annotation || h.noteId)).map((h) => h.sourceId as string),
+    ),
+  ];
   const salience = covering.find((h) => h.kind === "salience");
   const simplify = covering.find((h) => h.kind === "simplify");
   const extract = covering.find((h) => h.kind === "extract");
@@ -109,18 +134,21 @@ function segmentAttrs(covering: Highlight[], blockId: string, t: TFunc): Record<
     return " mark-sweep";
   };
   if (anchor?.sourceId) attrs["data-source-id"] = anchor.sourceId;
+  if (stacked.length > 1) attrs["data-stack-sources"] = stacked.join(" ");
   const leaving = Boolean(anchor?.leaving);
   const focusable = Boolean(anchor?.annotation && anchor.sourceId && !leaving);
   const noteMark = !anchor?.annotation && anchor?.noteId && !leaving ? anchor.noteId : null;
   const extractMark = extract && !focusable && !noteMark ? extract : null;
-  // A click on the words opens what the mark names.
+  // A click on the words opens what the mark names; while the reader
+  // writes, a Ctrl+click (⌘ on a Mac) does, and a click places the caret.
+  const mod = editing ? keys("Mod") : "";
   if (focusable) {
     attrs["data-docs-open"] = "annotation";
-    attrs["data-tip"] = t("panes.viewAnnotation");
+    attrs["data-tip"] = editing ? t("docsLayer.modClickAnnotation", { keys: mod }) : t("panes.viewAnnotation");
   } else if (noteMark) {
     attrs["data-docs-open"] = "note";
     attrs["data-note-id"] = noteMark;
-    attrs["data-tip"] = t("panes.viewNote");
+    attrs["data-tip"] = editing ? t("docsLayer.modClickNote", { keys: mod }) : t("panes.viewNote");
   } else if (extractMark) {
     attrs["data-docs-open"] = "extract";
     attrs["data-extract-id"] = extractMark.extractId ?? "";
@@ -139,8 +167,8 @@ function segmentAttrs(covering: Highlight[], blockId: string, t: TFunc): Record<
   }
   const markClass = simplify
     ? "simplify-mark"
-    : anchor
-      ? anchorClass(anchor)
+    : painted
+      ? anchorClass(painted)
       : extract
         ? extract.extractOrigin
           ? "extract-origin-mark"
@@ -157,8 +185,10 @@ function chipsOf(h: Highlight): Chip[] {
   const chips: Chip[] = [];
   const live = h.kind === "anchor" && h.sourceId && !h.leaving;
   if (live && h.tool && !h.chipless) chips.push({ kind: "tool", highlight: h });
+  // A highlight carries the comment's chip when it holds a comment, else a
+  // chip in its hue; a link across texts starts from its card.
   if (live && h.comment) chips.push({ kind: "comment", highlight: h });
-  if (live && h.color) chips.push({ kind: "link-start", highlight: h });
+  else if (live && h.color) chips.push({ kind: "highlight", highlight: h });
   if (h.kind === "extract" && h.extractLabel) chips.push({ kind: "extract", highlight: h });
   if (h.kind === "link" && h.href) chips.push({ kind: "link-end", highlight: h });
   return chips;
@@ -355,8 +385,27 @@ function objectMarks(node: PMNode, pos: number, highlights: Highlight[], t: TFun
   return decorations;
 }
 
-function build(doc: PMNode, highlights: Record<string, Highlight[]>, t: TFunc): DecorationSet {
+/** Where each note's marks end last in the page: a passage across blocks
+    (over a page start, a paragraph the PDF split) is one passage, and its
+    chips stand once, at its end, as a passage in one paragraph has them. */
+function passageEnds(doc: PMNode, highlights: Record<string, Highlight[]>): Map<string, number> {
+  const ends = new Map<string, number>();
+  doc.descendants((node, pos) => {
+    if (!node.isTextblock) return !WHOLE.has(node.type.name);
+    const id = node.attrs.blockId as string | null;
+    for (const h of id ? (highlights[id] ?? []) : []) {
+      if (h.kind !== "anchor" || !h.noteId || h.end <= h.start) continue;
+      const at = posInBlock(node, pos, h.end, true);
+      if (at > (ends.get(h.noteId) ?? -1)) ends.set(h.noteId, at);
+    }
+    return false;
+  });
+  return ends;
+}
+
+function build(doc: PMNode, highlights: Record<string, Highlight[]>, t: TFunc, editing: boolean): DecorationSet {
   const decorations: Decoration[] = [];
+  const ends = passageEnds(doc, highlights);
   doc.descendants((node, pos) => {
     if (WHOLE.has(node.type.name)) {
       const id = node.attrs.blockId as string | null;
@@ -376,16 +425,19 @@ function build(doc: PMNode, highlights: Record<string, Highlight[]>, t: TFunc): 
       const to = posInBlock(node, pos, end, true);
       if (to <= from) continue;
       // A mark paints the words on both sides of a page start, never the page start.
-      const attrs = segmentAttrs(covering, id, t);
+      const attrs = segmentAttrs(covering, id, t, editing);
       for (const [a, b] of aroundPageStarts(doc, from, to)) {
         decorations.push(Decoration.inline(a, b, attrs, { inclusiveStart: false, inclusiveEnd: false }));
       }
     }
-    // The chips at each mark's end.
+    // The chips at each mark's end; a note's passage across blocks carries
+    // them once, at its last block's end (its tool's symbol too).
     let side = 1;
     for (const h of painted) {
       const at = posInBlock(node, pos, h.end, true);
-      for (const chip of chipsOf(h)) {
+      const passage = h.kind === "anchor" && h.noteId ? ends.get(h.noteId) : undefined;
+      if (passage !== undefined && passage !== at) continue;
+      for (const chip of chipsOf(passage !== undefined ? { ...h, chipless: false } : h)) {
         decorations.push(
           Decoration.widget(at, chipWidget(chip, t), {
             side: side++,
@@ -579,8 +631,8 @@ export const AnnotationMarks = Extension.create({
           init: () => DecorationSet.empty,
           apply(tr, set) {
             const meta = tr.getMeta(annotationMarksKey) as MarksMeta | undefined;
-            if (meta?.add) return set.add(tr.doc, build(tr.doc, meta.highlights, meta.t).find());
-            if (meta) return build(tr.doc, meta.highlights, meta.t);
+            if (meta?.add) return set.add(tr.doc, build(tr.doc, meta.highlights, meta.t, meta.editing ?? false).find());
+            if (meta) return build(tr.doc, meta.highlights, meta.t, meta.editing ?? false);
             return tr.docChanged ? keepMoved(tr, set, set.map(tr.mapping, tr.doc)) : set;
           },
         },
@@ -589,14 +641,31 @@ export const AnnotationMarks = Extension.create({
             return annotationMarksKey.getState(state);
           },
           handleDOMEvents: {
-            // A click on a mark opens what it opens; the browser's selection
-            // tells a click from the end of a drag (the editor's is stale).
-            // A chip is the page's own click handler's.
-            click(_view, event) {
+            // While the reader writes (Editing, Suggesting), a click on
+            // marked words places the caret, and a Ctrl+click (⌘ on a Mac)
+            // opens what the mark opens, before the browser or the page
+            // takes the press for a selection. A chip opens it on a click.
+            mousedown(view, event) {
+              if (!view.editable || event.button !== 0 || !(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) {
+                return false;
+              }
+              const target = event.target instanceof Element ? event.target : null;
+              if (!target?.closest("[data-docs-open]") || target.closest("[data-anchor-skip]")) return false;
+              event.preventDefault();
+              openMarkAt(target, { x: event.clientX, y: event.clientY });
+              return true;
+            },
+            // In Viewing a click on a mark opens what it opens; the
+            // browser's selection tells a click from the end of a drag (the
+            // editor's is stale). A chip is the page's own click handler's.
+            // On a touch screen, which has no Ctrl+click, a tap on a mark
+            // opens it in Editing too (tapMark).
+            click(view, event) {
+              if (view.editable) return tapMark(view, event);
               const target = event.target instanceof Element ? event.target : null;
               if (!target?.closest("[data-docs-open]") || target.closest("[data-anchor-skip]")) return false;
               if (!(window.getSelection()?.isCollapsed ?? true)) return false;
-              if (openMarkAt(target)) event.stopPropagation();
+              if (openMarkAt(target, { x: event.clientX, y: event.clientY })) event.stopPropagation();
               return false;
             },
           },
@@ -608,13 +677,70 @@ export const AnnotationMarks = Extension.create({
   },
 });
 
+/** The mark the last tap in Editing opened: a second tap on it places the caret. */
+let tappedMark: string | null = null;
+/** How far a tap may land from a chip and still be the chip's: a chip is a
+    24px target, however small the page draws it (a phone's page is zoomed out). */
+const CHIP_REACH = 12;
+
+/** A tap in Editing on a touch screen (SPEC.md §29): a tap on a mark opens
+    what the mark opens, as a click in Viewing does; a second tap on the same
+    mark, or a tap off the marks, places the caret. Inside a suggestion the
+    first tap is the suggestion's. A tap next to a chip is
+    the chip's. Returns true when the tap opened something. */
+function tapMark(view: EditorView, event: MouseEvent): boolean {
+  if (!window.matchMedia("(pointer: coarse)").matches) return false;
+  if (!(window.getSelection()?.isCollapsed ?? true)) return false;
+  const target = event.target instanceof Element ? event.target : null;
+  if (target?.closest("[data-anchor-skip]")) return false;
+  const mark = target?.closest<HTMLElement>("[data-docs-open]");
+  if (!mark) {
+    tappedMark = null;
+    for (const chip of view.dom.querySelectorAll<HTMLElement>("button[data-docs-open]")) {
+      const r = chip.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const reach = Math.max(CHIP_REACH, r.width / 2, r.height / 2);
+      if (Math.abs(event.clientX - cx) <= reach && Math.abs(event.clientY - cy) <= reach) {
+        chip.click();
+        return true;
+      }
+    }
+    return false;
+  }
+  const id = mark.dataset.sourceId ?? mark.dataset.noteId ?? mark.dataset.extractId ?? mark.dataset.linkId ?? "";
+  if (id && tappedMark === id) {
+    tappedMark = null;
+    return false;
+  }
+  // A first tap inside a suggestion opens the suggestion's card alone, so
+  // its ✓ is not under the mark's chooser; a second tap opens the mark.
+  if (id && target?.closest("[data-suggestion]") && tappedMark !== `suggestion:${id}`) {
+    tappedMark = `suggestion:${id}`;
+    return false;
+  }
+  tappedMark = id || null;
+  return openMarkAt(mark, { x: event.clientX, y: event.clientY });
+}
+
 /** A press on a mark or a chip: what it opens in the reader, it opens here —
     an annotation's card, a note in the tray, an extraction's match card, a
-    link's other end. Returns true when the press was a mark's. */
-export function openMarkAt(target: EventTarget | null): boolean {
+    link's other end; on words under two annotations or notes or more, the
+    reader's chooser of them at the press (`at`). Returns true when the press
+    was a mark's. */
+export function openMarkAt(target: EventTarget | null, at?: { x: number; y: number }): boolean {
   const el = target instanceof Element ? target.closest<HTMLElement>("[data-docs-open]") : null;
   if (!el) return false;
   const kind = el.dataset.docsOpen;
+  const stacked = el.dataset.stackSources?.split(" ").filter(Boolean) ?? [];
+  if ((kind === "annotation" || kind === "note") && el.dataset.sourceId && stacked.length > 1 && at) {
+    window.dispatchEvent(
+      new CustomEvent("dissect:open-annotation", {
+        detail: { sourceId: el.dataset.sourceId, sources: stacked, x: at.x, y: at.y },
+      }),
+    );
+    return true;
+  }
   // An object's label chip names its annotation by data-hover-source alone.
   const sourceId = el.dataset.sourceId ?? el.dataset.hoverSource;
   if (kind === "annotation" && sourceId) {
@@ -628,12 +754,6 @@ export function openMarkAt(target: EventTarget | null): boolean {
   if (kind === "extract" && el.dataset.extractId) {
     window.dispatchEvent(
       new CustomEvent("dissect:extract-chip", { detail: { extractId: el.dataset.extractId, element: el } }),
-    );
-    return true;
-  }
-  if (kind === "start-link" && el.dataset.sourceId) {
-    window.dispatchEvent(
-      new CustomEvent("dissect:start-link", { detail: { sourceId: el.dataset.sourceId, origin: el } }),
     );
     return true;
   }

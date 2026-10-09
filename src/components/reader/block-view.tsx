@@ -10,13 +10,19 @@ import {
   QuestionIcon,
   SparkleIcon,
   SummaryIcon,
-  UnlinkIcon,
   VisualizeIcon,
 } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Equation } from "@/components/reader/equation";
 import { MediaHtml } from "@/components/reader/figure-media";
-import { bindTableMarkClicks, marksSignature, paintTableMarks } from "@/components/reader/table-marks";
+import {
+  bindTableMarkClicks,
+  clickEndsDrag,
+  markStack,
+  marksSignature,
+  paintTableMarks,
+  pressMark,
+} from "@/components/reader/table-marks";
 import { pageImageUrl } from "@/lib/handwritten/page-url";
 import { endSweep } from "@/lib/mark-sweep";
 import { OFFICE_CSS } from "@/lib/office-css";
@@ -26,11 +32,12 @@ import { colorClass, customCss, isColorStyle, isHighlightStyle, parsedStyleClass
 
 export const CHAIN_BUTTON =
   "link-chain mx-0.5 inline-flex size-[16px] items-center justify-center rounded-full bg-clay-100 align-text-top text-clay-700 hover:bg-clay-200 hover:text-clay-800";
-// The symbol at the end of a highlighted text — the tool that made the
-// annotation, or the comment bubble. A small round chip on the highlight's
-// bottom edge, right after its last character (globals.css .mark-chip);
-// clicking it opens the card. SVG only, so the block's DOM text stays exactly
-// the stored text (SPEC.md §5).
+// The symbol of a mark — the tool that made the annotation, or the comment
+// bubble (globals.css .mark-chip); clicking it opens the card. SVG only, so
+// the block's DOM text stays exactly the stored text (SPEC.md §5). In the
+// block reader a chip takes no room in the line: it stands right of the text
+// column, level with the line its mark ends on (data-margin-chip,
+// layMarginChips), as the page editor's chips do.
 export const MARK_CHIP =
   "mark-chip inline-flex items-center justify-center rounded-full bg-clay-100 text-clay-700 hover:bg-clay-200 hover:text-clay-800";
 // The extraction's label at the end of its quote; a click opens its card.
@@ -39,6 +46,41 @@ export const EXTRACT_CHIP =
 // A glossary key term (SPEC.md §8 Phase 7): a dotted underline. The pointer
 // on it shows its definition; a press opens the selection toolbar on it.
 export const TERM_MARK = "glossary-term cursor-pointer border-b-2 border-dotted border-clay-400 hover:border-clay-600";
+
+let chipFrame = 0;
+let chipResize: ResizeObserver | null = null;
+/** The chips in the margin (data-margin-chip, globals.css): the chips on one
+    line stand side by side, and where the margin has no room for the next one
+    it stands under the one before. A block's width changing (the tray opens,
+    the window narrows) lays them again. */
+export function layMarginChips(): void {
+  if (chipFrame || typeof window === "undefined") return;
+  chipFrame = requestAnimationFrame(() => {
+    chipFrame = 0;
+    chipResize ??= new ResizeObserver(() => layMarginChips());
+    let row = { parent: null as Element | null, top: NaN, x: 0, y: 0 };
+    for (const chip of document.querySelectorAll<HTMLElement>("[data-margin-chip]")) {
+      const parent = chip.offsetParent;
+      if (!(parent instanceof HTMLElement)) continue;
+      chipResize.observe(parent);
+      const right = parent.getBoundingClientRect().right;
+      const room = (chip.closest("[data-reader-root]")?.getBoundingClientRect().right ?? window.innerWidth) - right - 8;
+      // The block's Collapse button stands at its first line's right.
+      const first = chip.offsetTop < 26 && parent.querySelector(":scope > [data-track^='collapse-']") !== null;
+      const start = first ? 28 : 0;
+      if (parent !== row.parent || Math.abs(chip.offsetTop - row.top) >= 4) {
+        row = { parent, top: chip.offsetTop, x: start, y: 0 };
+      }
+      const width = chip.offsetWidth + 4;
+      if (row.x > start && row.x + width > room) row = { ...row, x: start, y: row.y + 19 };
+      const at = `${row.x}px`;
+      const down = `${row.y}px`;
+      if (chip.style.getPropertyValue("--chip-at") !== at) chip.style.setProperty("--chip-at", at);
+      if (chip.style.getPropertyValue("--chip-down") !== down) chip.style.setProperty("--chip-down", down);
+      row.x += width;
+    }
+  });
+}
 
 /** A key term's hover: its definition in the reader's language, when the
     glossary has one, then how to open its tools. */
@@ -111,7 +153,7 @@ export type Highlight = {
   // Its note was just deleted: the mark fades out (globals.css .mark-out) and
   // takes no clicks; it unpaints once the fade ends. Kind "anchor" only.
   leaving?: boolean;
-  // kind "link": what the link is about, typed after Close link.
+  // kind "link": what the link is about, typed after Link here.
   linkReason?: string | null;
 };
 
@@ -251,6 +293,44 @@ export function layoutClass(tokens: Set<LayoutToken>, base: string): string {
 
 // Split block text into plain and <mark> segments. Declarative painting: highlights are part
 // of the React tree, never DOM mutation after render (anchor offsets stay stable).
+/** The caret under a point: where a selection may start or end. */
+function caretAt(x: number, y: number): { node: Node; offset: number } | null {
+  const doc = document as Document & {
+    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+    caretRangeFromPoint?: (x: number, y: number) => Range | null;
+  };
+  if (doc.caretPositionFromPoint) {
+    const p = doc.caretPositionFromPoint(x, y);
+    return p ? { node: p.offsetNode, offset: p.offset } : null;
+  }
+  const r = doc.caretRangeFromPoint?.(x, y);
+  return r ? { node: r.startContainer, offset: r.startOffset } : null;
+}
+
+/** A press on a link mark. The browser starts no selection on a link, so a
+    drag that starts there selects its words here: the selection follows the
+    pointer until it lifts, and the selection toolbar opens on the words as
+    for any drag (SPEC.md §6). A plain click still follows the link. */
+function pressLink(e: React.MouseEvent<HTMLAnchorElement>): void {
+  pressMark(e);
+  if (e.button !== 0 || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
+  const start = caretAt(e.clientX, e.clientY);
+  const selection = window.getSelection();
+  if (!start || !selection) return;
+  e.preventDefault();
+  selection.collapse(start.node, start.offset);
+  const onMove = (ev: MouseEvent) => {
+    const at = caretAt(ev.clientX, ev.clientY);
+    if (at) selection.extend(at.node, at.offset);
+  };
+  const onUp = () => {
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp, true);
+  };
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp, true);
+}
+
 export function markedText(blockId: string, text: string, highlights: Highlight[], t: TFunc) {
   const bounds = new Set<number>([0, text.length]);
   for (const h of highlights) {
@@ -286,11 +366,9 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
     // A wheel color or a highlight is inline CSS on the words themselves.
     const custom = customCss(colored, highlighted);
     const inner = custom ? <span style={custom}>{segment}</span> : segment;
-    const anchors = covering.filter((h) => h.kind === "anchor");
-    const anchor =
-      anchors.length > 1
-        ? anchors.reduce((n, h) => (h.end - h.start < n.end - n.start ? h : n))
-        : anchors[0];
+    // The notes and annotations on these words: the one the mark paints, and
+    // every one a click can open (table-marks.ts markStack).
+    const { anchors, anchor, stack } = markStack(covering);
     const salience = covering.find((h) => h.kind === "salience");
     const simplify = covering.find((h) => h.kind === "simplify");
     const term = covering.find((h) => h.kind === "term");
@@ -317,6 +395,16 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
           data-link-id={link.linkId}
           data-source-id={anchor?.sourceId ?? undefined}
           data-tip={linkTip || undefined}
+          // A drag that starts on a link selects its words, as a drag inside
+          // any mark does (SPEC.md §6): the link is not dragged away, and the
+          // click that ends a drag follows no link.
+          draggable={false}
+          onMouseDown={pressLink}
+          onClick={(e) => {
+            if (!clickEndsDrag(e)) return;
+            e.preventDefault();
+            e.stopPropagation();
+          }}
           className={`link-mark rounded-[4px]${link.fresh ? " mark-sweep" : ""}${selectionClass}${editedClass}`}
           onAnimationEnd={
             link.fresh
@@ -338,6 +426,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
             key={`chain-${from}`}
             href={link.href}
             data-anchor-skip
+            data-margin-chip
             aria-label={link.linkTitle ? t("panes.linkedTo", { title: link.linkTitle }) : t("panes.linked")}
             data-tip={link.linkTitle ? t("panes.linkedTo", { title: link.linkTitle }) : t("panes.linked")}
             className={CHAIN_BUTTON}
@@ -407,10 +496,11 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
     } else if (anchor || salience || simplify || extract || selection) {
       // A leaving mark (its note just deleted) fades and takes no clicks.
       const leaving = Boolean(anchor?.leaving);
-      const focusable = anchor?.annotation && anchor.sourceId && !leaving;
+      const stacked = stack.length > 1;
+      const focusable = (anchor?.annotation && anchor.sourceId && !leaving) || (stacked && !leaving);
       // A regular note's mark: click jumps to the note in the tray — the
       // link between quote and note works both ways.
-      const noteMark = !anchor?.annotation && anchor?.noteId && !leaving ? anchor.noteId : null;
+      const noteMark = !focusable && !anchor?.annotation && anchor?.noteId && !leaving ? anchor.noteId : null;
       // A comment's icon sits right after its span; SVG only, so the block's
       // DOM text stays exactly the stored text (SPEC.md §5).
       const commentEnding = covering.find(
@@ -437,31 +527,82 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
       // An extract span opens the match card: the whole highlight is
       // pressable, not only its label chip.
       const extractMark = extract && !focusable && !noteMark ? extract : null;
+      // What a click on the mark opens: its card, or on stacked words the
+      // chooser of them at (x, y) (SPEC.md §6).
+      const openMark = (x: number, y: number) =>
+        window.dispatchEvent(
+          new CustomEvent("dissect:open-annotation", {
+            detail: {
+              sourceId: anchor?.sourceId ?? stack[0]?.sourceId,
+              ...(stacked ? { sources: stack.map((h) => h.sourceId as string), x, y } : {}),
+            },
+          }),
+        );
+      // The keyboard (SPEC.md §6): a mark's first words take the focus, named
+      // by its tip, and Enter opens what a click opens. Space stays the
+      // page's scroll key. A press of the pointer leaves the focus on the
+      // page, not on the mark, so the keys after a click read on. The chips
+      // after the words stay for the pointer and leave the Tab order.
+      const markTab = focusable && (anchor?.start === from || stack.some((h) => h.start === from));
+      const markTip =
+        focusable && (anchor?.annotation || stack.some((h) => h.annotation))
+          ? t("panes.viewAnnotation")
+          : focusable || noteMark
+            ? t("panes.viewNote")
+            : extractMark
+              ? t("panes.extractOpenCard", { label: extractMark.extractLabel ?? "" })
+              : undefined;
       parts.push(
         <mark
           key={from}
+          tabIndex={markTab ? 0 : undefined}
+          role={markTab ? "button" : undefined}
+          aria-label={markTab ? markTip : undefined}
+          onKeyDown={
+            markTab
+              ? (e) => {
+                  if (e.key !== "Enter") return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const r = e.currentTarget.getBoundingClientRect();
+                  openMark(r.left, r.bottom - 12);
+                }
+              : undefined
+          }
           data-source-id={anchor?.sourceId ?? undefined}
-          data-tip={
-            focusable
-              ? t("panes.viewAnnotation")
-              : noteMark
-                ? t("panes.viewNote")
-                : extractMark
-                  ? t("panes.extractOpenCard", { label: extractMark.extractLabel ?? "" })
-                  : undefined
+          // Stacked words: every source on them, so an annotation or a note
+          // whose words another mark paints is still found by its id.
+          data-source-ids={stacked ? stack.map((h) => h.sourceId).join(" ") : undefined}
+          data-tip={markTip}
+          // A drag inside the mark selects words: the selection toolbar
+          // takes it, and only a plain click opens what the mark opens.
+          onMouseDown={
+            markTab
+              ? (e) => {
+                  pressMark(e);
+                  // The press focuses the mark after this handler: the focus
+                  // goes back to the page once it has.
+                  const mark = e.currentTarget;
+                  window.setTimeout(() => {
+                    if (document.activeElement === mark) mark.blur();
+                  }, 0);
+                }
+              : focusable || noteMark || extractMark
+                ? pressMark
+                : undefined
           }
           onClick={
             focusable
               ? (e) => {
+                  if (clickEndsDrag(e)) return;
                   e.stopPropagation();
-                  window.dispatchEvent(
-                    new CustomEvent("dissect:open-annotation", {
-                      detail: { sourceId: anchor.sourceId },
-                    }),
-                  );
+                  // Stacked words: the reader picks which annotation or
+                  // note opens (SPEC.md §6), in a chooser at the click.
+                  openMark(e.clientX, e.clientY);
                 }
               : noteMark
                 ? (e) => {
+                    if (clickEndsDrag(e)) return;
                     e.stopPropagation();
                     window.dispatchEvent(
                       new CustomEvent("dissect:show-note", { detail: { noteId: noteMark } }),
@@ -469,6 +610,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
                   }
                 : extractMark
                   ? (e) => {
+                      if (clickEndsDrag(e)) return;
                       e.stopPropagation();
                       window.dispatchEvent(
                         new CustomEvent("dissect:extract-chip", {
@@ -511,6 +653,7 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
             key={`extract-${from}`}
             type="button"
             data-anchor-skip
+            data-margin-chip
             data-track="extract-chip"
             aria-label={t("panes.extractOpenCard", { label: extractEnding.extractLabel ?? "" })}
             data-tip={t("panes.extractOpenCard", { label: extractEnding.extractLabel ?? "" })}
@@ -543,6 +686,8 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
             key={`tool-${from}`}
             type="button"
             data-anchor-skip
+            data-margin-chip
+            tabIndex={-1}
             data-track="tool-chip"
             data-hover-source={toolEnding.sourceId ?? undefined}
             aria-label={tip}
@@ -567,6 +712,8 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
             key={`comment-${from}`}
             type="button"
             data-anchor-skip
+            data-margin-chip
+            tabIndex={-1}
             data-track="comment-icon"
             aria-label={t("panes.openComment")}
             data-tip={t("panes.openComment")}
@@ -581,34 +728,6 @@ export function markedText(blockId: string, text: string, highlights: Highlight[
             className={`comment-dot ${MARK_CHIP} mark-chip-comment`}
           >
             <CommentIcon size={10} />
-          </button>,
-        );
-      }
-      // A highlight's broken chain starts a link from it: the next text the
-      // reader highlights — this article or another — completes the link.
-      const linkStart = covering.find(
-        (h) => h.kind === "anchor" && h.color && h.sourceId && h.end === to,
-      );
-      if (linkStart) {
-        parts.push(
-          <button
-            key={`link-start-${from}`}
-            type="button"
-            data-anchor-skip
-            data-track="link-chip"
-            aria-label={t("panes.linkToOtherTexts")}
-            data-tip={t("panes.linkToOtherTexts")}
-            onClick={(e) => {
-              e.stopPropagation();
-              window.dispatchEvent(
-                new CustomEvent("dissect:start-link", {
-                  detail: { sourceId: linkStart.sourceId, origin: e.currentTarget },
-                }),
-              );
-            }}
-            className={CHAIN_BUTTON}
-          >
-            <UnlinkIcon size={10} />
           </button>,
         );
       }
@@ -657,8 +776,8 @@ const LABEL_DOT: Record<string, string> = {
   plum: "#a78bfa",
 };
 
-// A highlighted figure, table, or equation gets a side label instead of text
-// marks: it sits to the right of the block and jumps to the annotation. The
+// A highlighted figure or equation gets a side label instead of text marks
+// (a table is text: its marks paint on its cells, table-marks.ts): it sits to the right of the block and jumps to the annotation. The
 // label shows the block's annotation ids ("A1"), matching the chips on the
 // annotation cards, behind the symbol of the tool that made the annotation
 // (a color dot for a plain highlight). Outside the block element, so the
@@ -667,6 +786,10 @@ function HighlightLabel({ anchors }: { anchors: Highlight[] }) {
   const t = useT();
   const focusable = anchors.find((h) => h.annotation && h.sourceId);
   const noteMark = anchors.find((h) => !h.annotation && h.noteId);
+  // Notes and annotations on the same figure: the chooser lists them all,
+  // as on stacked words (SPEC.md §6). The block carries the first one's id.
+  const { stack } = markStack(anchors);
+  const blockSourceId = anchors.find((h) => h.sourceId)?.sourceId;
   const color = anchors.find((h) => h.color)?.color ?? "clay";
   const toolAnchor = anchors.find((h) => h.tool);
   const tool = toolAnchor?.tool;
@@ -677,7 +800,19 @@ function HighlightLabel({ anchors }: { anchors: Highlight[] }) {
       data-track="figure-label"
       data-hover-source={focusable?.sourceId ?? undefined}
       onClick={
-        focusable?.sourceId
+        stack.length > 1 && blockSourceId
+          ? (e) =>
+              window.dispatchEvent(
+                new CustomEvent("dissect:open-annotation", {
+                  detail: {
+                    sourceId: blockSourceId,
+                    sources: stack.map((h) => h.sourceId as string),
+                    x: e.clientX,
+                    y: e.clientY,
+                  },
+                }),
+              )
+          : focusable?.sourceId
           ? () =>
               window.dispatchEvent(
                 new CustomEvent("dissect:open-annotation", {
@@ -850,12 +985,15 @@ export function BlockView({
 }) {
   const t = useT();
   const shared = "reader-block";
+  // The chips in the margin find their places once the words are drawn.
+  useLayoutEffect(layMarginChips);
 
   const content = highlights.length > 0 ? markedText(block.id, block.text, highlights, t) : block.text;
   const anchorIds = highlights.filter((h) => h.kind === "anchor" && h.sourceId && !h.leaving);
   const figureAnchors = highlights.filter((h) => h.kind === "anchor" && !h.leaving);
-  // A whole figure, table, or equation under the toolbar rings like an
-  // annotated one: its text is not selectable, so the ring is the tint.
+  // A whole figure or equation under the toolbar rings like an annotated
+  // one: its text is not selectable, so the ring is the tint. A table, a
+  // slide, or a sheet rings only when its marks cannot paint (MarkedHtml).
   const selected = highlights.some((h) => h.kind === "selection");
   const htmlHighlighted = anchorIds.length > 0 || selected ? "rounded-lg ring-2 ring-clay-300" : "";
   const firstSourceId = anchorIds[0]?.sourceId ?? undefined;

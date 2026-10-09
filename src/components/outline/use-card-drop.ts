@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { createContext, useEffect, useState, useSyncExternalStore } from "react";
 import {
   CARD_DRAG_END,
   CARD_DRAG_OVER,
@@ -9,6 +9,34 @@ import {
   type CardDragEndDetail,
   type CardDragOverDetail,
 } from "@/lib/card-drag";
+
+/** Whether a notes list is on screen: false while the reader cannot see it
+    (the tray behind another tab, folded, or a phone's closed sheet). Its
+    cards then count for nothing in useCardDropOpen, so no grip shows and no
+    card head lifts while no note is on screen. A store, not a value: the
+    list's cards read it when they count, and a switch of the rail's tabs
+    draws no card again. */
+export type ShownStore = { get: () => boolean; subscribe: (onChange: () => void) => () => void };
+
+/** A store that says whether a notes list is on screen; `set` changes it. */
+export function shownStore(initial: boolean): ShownStore & { set: (shown: boolean) => void } {
+  let shown = initial;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => shown,
+    subscribe(onChange) {
+      listeners.add(onChange);
+      return () => void listeners.delete(onChange);
+    },
+    set(next) {
+      if (next === shown) return;
+      shown = next;
+      for (const listener of listeners) listener();
+    },
+  };
+}
+
+export const CardDropShown = createContext<ShownStore | null>(null);
 
 /** A drop target for the card drag (lib/card-drag.ts). The element that
     renders `data-note-drop-target={id}` takes the drop; this says whether a
@@ -20,6 +48,9 @@ export function useCardDropTarget(
   /** False while this card cannot take a drop — a viewer's card, a note that
       is not accepted yet. It then counts for nothing in useCardDropOpen. */
   enabled = true,
+  /** Whether the card's list is on screen (CardDropShown); a card off
+      screen counts for nothing either. */
+  shown: ShownStore | null = null,
 ): { drag: CardDrag | null; over: boolean } {
   const [drag, setDrag] = useState<CardDrag | null>(null);
   const [over, setOver] = useState(false);
@@ -28,13 +59,23 @@ export function useCardDropTarget(
   // on screen: the grips show while there is at least one.
   useEffect(() => {
     if (!enabled) return;
-    openTargets += 1;
-    announceTargets();
+    let counted = false;
+    const sync = () => {
+      const now = shown ? shown.get() : true;
+      if (now === counted) return;
+      counted = now;
+      openTargets += now ? 1 : -1;
+      announceTargets();
+    };
+    sync();
+    const off = shown?.subscribe(sync);
     return () => {
+      off?.();
+      if (!counted) return;
       openTargets -= 1;
       announceTargets();
     };
-  }, [enabled]);
+  }, [enabled, shown]);
 
   useEffect(() => {
     const onStart = (e: Event) => {

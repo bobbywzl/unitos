@@ -3,9 +3,7 @@
 import type { Editor } from "@tiptap/core";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useT } from "@/components/lang-provider";
-import { MoreVertIcon } from "@/components/docs/icons";
-import { SparkleIcon } from "@/components/icons";
-import { FIGURE_ASSISTANT_EVENT } from "@/components/reader/figure-suggestion";
+import { MoreHorizIcon } from "@/components/docs/icons";
 import { MenuItem } from "@/components/docs/menu";
 import { PX_PER_PT } from "@/components/docs/page/geometry";
 import { DropBtn, Sep } from "@/components/docs/toolbar/controls";
@@ -59,6 +57,9 @@ const MODES: [Wrap, TKey, (p: { size?: number }) => ReactNode][] = [
   ["front", "docsInsert.inFrontOfText", InFrontIcon],
 ];
 
+/** Under this window width the image toolbar folds (ImageControlsHost). */
+const COMPACT_BELOW = 620;
+
 /** Mask image's shapes, the image's own rectangle first. */
 const MASK_LABELS: Record<Mask | "none", TKey> = {
   none: "docsInsert.maskNone",
@@ -97,7 +98,7 @@ type Section = "size" | "wrap" | "alt";
 
 export function ImageControlsHost({ editor, ctx }: { editor: Editor; ctx: InsertContext }) {
   const t = useT();
-  useEditorTick(editor);
+  useEditorTick(editor, () => selectedImage(editor.state) === null);
   const hit = selectedImage(editor.state);
   useViewportTick(hit !== null);
   const [panel, setPanel] = useState<Section | null>(null);
@@ -128,7 +129,15 @@ export function ImageControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
   const box = figure instanceof HTMLElement ? figure.querySelector(".docs-img-box")?.getBoundingClientRect() : null;
   const anchor = box ? { left: box.left, top: box.top, bottom: box.bottom } : null;
   const a = imageAttrs(hit.node);
-  const pageless = ctx.pageSetup.pageless;
+  const pageless = ctx.drawnPageless;
+  // A window too narrow for the whole row (a phone; the row is about 600 px):
+  // the five wrap modes fold into one Text wrapping menu that shows the
+  // current mode, and Replace image and Reset image go into More, so the
+  // row fits the screen and every control stays one press away. The
+  // image's Assistant is in the figure tools a click on the image opens.
+  const compact = window.innerWidth < COMPACT_BELOW;
+  const shownWrap = pageless ? "inline" : a.wrap;
+  const ShownWrapIcon = MODES.find(([wrap]) => wrap === shownWrap)?.[2] ?? InLineIcon;
   const set = (attrs: Record<string, unknown>) => setImageAttrs(editor.view, hit.pos, attrs);
   const button = (label: TKey, icon: ReactNode, onClick: () => void) => (
     <button type="button" className="docs-tb-btn" aria-label={t(label)} data-tip={t(label)} onClick={onClick}>
@@ -140,32 +149,26 @@ export function ImageControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
     <>
       {anchor && (
         <FloatingBox anchor={anchor} gap={12} className="docs-img-toolbar" role="toolbar" label={t("docsInsert.imageOptions")}>
-          {typeof hit.node.attrs.blockId === "string" && hit.node.attrs.blockId && (
-            <>
-              <button
-                type="button"
-                className="docs-img-assistant"
-                aria-label={t("docsInsert.imageAssistant")}
-                data-tip={t("docsInsert.imageAssistantTitle")}
-                data-track="image-assistant"
-                onClick={() => {
-                  window.dispatchEvent(
-                    new CustomEvent(FIGURE_ASSISTANT_EVENT, {
-                      detail: { blockId: hit.node.attrs.blockId as string, top: anchor.bottom, from: editor.view.dom },
-                    }),
-                  );
-                  // The caret goes after the image, so this toolbar does not
-                  // cover the words the assistant puts under it.
-                  editor.commands.setTextSelection(hit.pos + hit.node.nodeSize);
-                }}
-              >
-                <SparkleIcon size={14} />
-                <span>{t("reader.assistant")}</span>
-              </button>
-              <Sep />
-            </>
-          )}
-          {MODES.map(([wrap, label, Icon]) => (
+          {compact ? (
+            <DropBtn label={t("docsInsert.textWrapping")} track="image-wrap" face={<ShownWrapIcon />}>
+              {(close) =>
+                MODES.map(([wrap, label, Icon]) => (
+                  <MenuItem
+                    key={wrap}
+                    checked={shownWrap === wrap}
+                    icon={<Icon />}
+                    disabled={pageless && wrap !== "inline"}
+                    onSelect={() => {
+                      close();
+                      set({ wrap });
+                    }}
+                  >
+                    {t(label)}
+                  </MenuItem>
+                ))
+              }
+            </DropBtn>
+          ) : MODES.map(([wrap, label, Icon]) => (
             <button
               key={wrap}
               type="button"
@@ -241,29 +244,53 @@ export function ImageControlsHost({ editor, ctx }: { editor: Editor; ctx: Insert
             }
             onNone={() => set({ borderColor: null, borderWidth: 0 })}
           />
-          {button("docsInsert.replaceImage", <ResetIcon />, () => setReplacing((r) => !r))}
-          {button("docsInsert.resetImage", <RefreshIcon />, () => resetImage(editor, hit.pos))}
+          {!compact && button("docsInsert.replaceImage", <ResetIcon />, () => setReplacing((r) => !r))}
+          {!compact && button("docsInsert.resetImage", <RefreshIcon />, () => resetImage(editor, hit.pos))}
           <Sep />
-          <DropBtn label={t("docs.more")} track="image-more" arrow={false} face={<MoreVertIcon />}>
-            {(close) =>
-              (
-                [
-                  ["size", "docsInsert.sizeRotation"],
-                  ["alt", "docsInsert.altText"],
-                  ["wrap", "docsInsert.allImageOptions"],
-                ] as const
-              ).map(([section, label]) => (
-                <MenuItem
-                  key={section}
-                  onSelect={() => {
-                    close();
-                    setPanel(section);
-                  }}
-                >
-                  {t(label)}
-                </MenuItem>
-              ))
-            }
+          <DropBtn label={t("docs.more")} track="image-more" arrow={false} face={<MoreHorizIcon />}>
+            {(close) => (
+              <>
+                {compact && (
+                  <>
+                    <MenuItem
+                      icon={<ResetIcon />}
+                      onSelect={() => {
+                        close();
+                        setReplacing(true);
+                      }}
+                    >
+                      {t("docsInsert.replaceImage")}
+                    </MenuItem>
+                    <MenuItem
+                      icon={<RefreshIcon />}
+                      onSelect={() => {
+                        close();
+                        resetImage(editor, hit.pos);
+                      }}
+                    >
+                      {t("docsInsert.resetImage")}
+                    </MenuItem>
+                  </>
+                )}
+                {(
+                  [
+                    ["size", "docsInsert.sizeRotation"],
+                    ["alt", "docsInsert.altText"],
+                    ["wrap", "docsInsert.allImageOptions"],
+                  ] as const
+                ).map(([section, label]) => (
+                  <MenuItem
+                    key={section}
+                    onSelect={() => {
+                      close();
+                      setPanel(section);
+                    }}
+                  >
+                    {t(label)}
+                  </MenuItem>
+                ))}
+              </>
+            )}
           </DropBtn>
         </FloatingBox>
       )}
@@ -348,7 +375,7 @@ function ImageOptionsPanel({ editor, ctx, section, onClose }: { editor: Editor; 
     }
     set({ width: Math.max(16, Math.round(width)), height: Math.max(16, Math.round(height)) });
   };
-  const pageless = ctx.pageSetup.pageless;
+  const pageless = ctx.drawnPageless;
 
   return (
     <SidePanel title={t("docsInsert.imageOptions")} icon={<ImageOptionsIcon />} onClose={onClose}>

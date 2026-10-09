@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { isImeKey } from "@/lib/ime";
 import { skipsDrag, watchHold } from "@/lib/hold-drag";
@@ -18,9 +18,9 @@ import { NoteEditor } from "@/components/outline/note-editor";
 import { NoteId } from "@/components/outline/note-id";
 import { NoteTitleField, focusBodyEditor, useNoteParts } from "@/components/outline/note-title-field";
 import { SaveStateLabel } from "@/components/outline/save-state";
-import { useNoteDrop } from "@/components/use-note-drop";
+import { quoteLanded, useNoteDrop } from "@/components/use-note-drop";
 import { referenceMarkdownForDrop } from "@/components/outline/reference-drop";
-import { quoteMarkdown } from "@/lib/quote-drag";
+import { quoteMarkdown, type QuoteDrag } from "@/lib/quote-drag";
 import { useCardDropTarget } from "@/components/outline/use-card-drop";
 import { useNoteDraft } from "@/components/outline/use-note-draft";
 import { NoteAssistant } from "@/components/outline/note-assistant";
@@ -69,6 +69,9 @@ const KEEP = 96;
 // Less room than this beside the card and the text skips below it instead.
 const MIN_BESIDE = 200;
 const WRAP_STORE = "unitos-note-wrap";
+// How long a card that just landed follows the text under it while the
+// tray folds and the article settles.
+const FOLLOW_MS = 1200;
 
 type Pos = { left: number; top: number };
 
@@ -280,6 +283,24 @@ export function FloatingNoteEditor({
     await actions.saveNote(edit.id, shown.title ? `# ${shown.title}\n\n${body}` : body);
   }
 
+  // Sources a quote dropped into the open editor attached in this sitting:
+  // Cancel takes the quote's words back out, so it gives them up too.
+  const sitting = useRef<string[]>([]);
+
+  // A quote dropped on the card: into the draft while editing, its source
+  // attached at once; else its words and its source in one write. The
+  // selection and its toolbar go as the quote lands, as on a tray card.
+  async function addQuote(drag: QuoteDrag) {
+    quoteLanded();
+    if (editing || !note) {
+      await addToNote(quoteMarkdown(drag.text));
+      if (note) sitting.current.push(...(await actions.attachSource(note.id, drag)));
+      return;
+    }
+    setDropError(null);
+    await actions.appendQuote(note.id, quoteMarkdown(drag.text), drag);
+  }
+
   // A note dropped on the card joins its text into the note (SPEC.md §6).
   // The card's own words are saved first, so the merge reads what is on
   // screen; while editing, the merged text then takes the draft's place,
@@ -296,13 +317,18 @@ export function FloatingNoteEditor({
       const { quote, reference } = end.drag;
       try {
         if (end.drag.kind === "quote" && quote) {
-          await addToNote(quoteMarkdown(quote.text));
-          if (note) await actions.attachSource(note.id, quote);
+          await addQuote(quote);
         } else if (reference) {
-          await addToNote(await referenceMarkdownForDrop(actions.notebookId, reference, t));
+          const markdown = await referenceMarkdownForDrop(actions.notebookId, reference, t);
           // The quote it landed points back to the reader: the annotation's
-          // anchors become sources of the note.
-          if (note && reference.quote) await actions.attachAnnotationSources(note.id, reference.annotationId);
+          // anchors become sources of the note, in the same write as the
+          // reference when the note is not open.
+          if (note && reference.quote && !editing) {
+            await actions.appendAnnotation(note.id, markdown, reference.annotationId);
+          } else {
+            await addToNote(markdown);
+            if (note && reference.quote) await actions.attachAnnotationSources(note.id, reference.annotationId);
+          }
         }
       } catch (err) {
         setMergeError(err instanceof Error ? err.message : t("common.requestFailed"));
@@ -342,8 +368,10 @@ export function FloatingNoteEditor({
     actions.dockNote(editing);
   }
 
+  // Back to the tray, from the editing row: the words typed stay, as Done
+  // keeps them.
   function close() {
-    cancel();
+    void done();
     actions.dockNote(false);
   }
 
@@ -355,8 +383,14 @@ export function FloatingNoteEditor({
 
   // Cancel: the draft goes back; the card returns to its draggable mode.
   function cancelEdit() {
-    cancel();
+    // The pill offers the typed words back (SPEC.md §6).
+    const typed = draft.trim();
+    const back = cancel();
+    if (note && typed && typed !== back.trim()) actions.editCanceled(note.id, typed, back);
     setEditing(false);
+    const ids = sitting.current;
+    sitting.current = [];
+    if (note && ids.length > 0) void actions.dropSources(note.id, ids).catch(() => {});
   }
 
   // Done: the content is already saved by then; the card returns to its
@@ -369,8 +403,15 @@ export function FloatingNoteEditor({
     }
     markSaved(trimmed);
     setEditing(false);
-    await actions.saveNote(edit.id, trimmed);
-    confirmSaved(trimmed);
+    sitting.current = [];
+    try {
+      await actions.saveNote(edit.id, trimmed);
+      confirmSaved(trimmed);
+    } catch (err) {
+      // The words stay on the card, marked Not saved (use-outline.ts), and
+      // the local draft keeps them for the next load.
+      setDropError(err instanceof Error ? err.message : t("common.requestFailed"));
+    }
   }
 
   const dockRef = useRef(dock);
@@ -411,6 +452,43 @@ export function FloatingNoteEditor({
       window.removeEventListener("pointercancel", onUp);
     };
   }, [grab, width, pane]);
+
+  // The tray folds as the card lands (workspace.tsx), and the article's text
+  // moves under it. For a moment after the landing the card follows the
+  // block of text it was let go over, so it stays over the words the reader
+  // aimed it at. A hold on the card ends it.
+  useLayoutEffect(() => {
+    if (pane) return;
+    const card = cardRef.current?.getBoundingClientRect();
+    if (!card) return;
+    const block = document
+      .elementsFromPoint(card.left + 24, card.top + 12)
+      .map((el) => el.closest<HTMLElement>("[data-reader-root] [data-block-id]"))
+      .find((el): el is HTMLElement => el !== null && !cardRef.current?.contains(el));
+    if (!block) return;
+    let last = block.getBoundingClientRect();
+    let frame = 0;
+    const until = performance.now() + FOLLOW_MS;
+    const follow = () => {
+      if (performance.now() > until || !block.isConnected) return;
+      const now = block.getBoundingClientRect();
+      // The column widens as the tray folds: the block moves across, and
+      // its lines rewrap, so it moves up or down too.
+      if (now.left !== last.left || now.top !== last.top) {
+        const dx = now.left - last.left;
+        const dy = now.top - last.top;
+        last = now;
+        setPos((p) => clampPos({ left: p.left + dx, top: p.top + dy }, cardRef.current?.offsetWidth ?? width));
+      }
+      frame = requestAnimationFrame(follow);
+    };
+    frame = requestAnimationFrame(follow);
+    const stop = () => cancelAnimationFrame(frame);
+    cardRef.current?.addEventListener("pointerdown", stop, { once: true });
+    return stop;
+    // Once, as the card lands.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // The window shrinks: a card over the article stays on screen.
   useEffect(() => {
@@ -462,10 +540,7 @@ export function FloatingNoteEditor({
     onError: setDropError,
     onImages: (images) => addToNote(images.map((i) => imageMarkdown(i.id, i.name)).join("\n\n")),
     onLinks: (links) => addToNote(links.map(linkMarkdown).join("\n\n")),
-    onQuote: async (drag) => {
-      await addToNote(quoteMarkdown(drag.text));
-      if (note) await actions.attachSource(note.id, drag);
-    },
+    onQuote: (drag) => addQuote(drag),
   });
 
   // Hold to drag (lib/hold-drag.ts): in the draggable mode a hold anywhere
@@ -593,10 +668,16 @@ export function FloatingNoteEditor({
             onKeyDown={(e) => {
               if (isImeKey(e)) return;
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void done();
-              if (e.key === "Escape") cancelEdit();
+              // Escape closes the editor keeping the words, as Done does.
+              if (e.key === "Escape") void done();
             }}
-            moreHref={`/n/${actions.notebookId}/notes`}
-            onQuoteDrop={(drag) => (note ? actions.attachSource(note.id, drag) : undefined)}
+            onQuoteDrop={(drag) =>
+              note
+                ? actions.attachSource(note.id, drag).then((ids) => {
+                    sitting.current.push(...ids);
+                  })
+                : undefined
+            }
             title={
               <NoteTitleField
                 value={parts.title}
@@ -604,7 +685,7 @@ export function FloatingNoteEditor({
                   setTitle(title);
                 }}
                 onEnter={() => focusBodyEditor(cardRef.current)}
-                onEscape={cancelEdit}
+                onEscape={() => void done()}
                 className="shrink-0"
               />
             }
@@ -636,7 +717,9 @@ export function FloatingNoteEditor({
           </span>
         </div>
       ) : editing ? (
-        <div className="mt-2 flex shrink-0 items-center gap-2">
+        // Done, Cancel, Back to the tray, and the note's assistant (SPEC.md
+        // §6) on one row; opened, the assistant's panel takes a row of its own.
+        <div className="mt-2 flex shrink-0 flex-wrap items-center gap-2">
           <button
             onClick={() => void done()}
             data-track="note-save"
@@ -659,6 +742,18 @@ export function FloatingNoteEditor({
           >
             {t("outline.dockBack")}
           </button>
+          {note && canEdit && (
+            <NoteAssistant
+              notebookId={actions.notebookId}
+              noteId={note.id}
+              draft={draft}
+              onApply={(next) => {
+                setDraft(next);
+                actions.floatingDraftChanged(next);
+              }}
+              className="[&.flex-col]:mt-0.5 [&.flex-col]:basis-full"
+            />
+          )}
         </div>
       ) : (
         <div className="mt-2 flex shrink-0 items-center gap-2">
@@ -685,20 +780,6 @@ export function FloatingNoteEditor({
             {t("outline.dockBack")}
           </button>
         </div>
-      )}
-      {/* The note's assistant (SPEC.md §6), docked at the bottom of the open
-          note: a change it proposes lands in the draft on Apply. */}
-      {editing && note && canEdit && (
-        <NoteAssistant
-          notebookId={actions.notebookId}
-          noteId={note.id}
-          draft={draft}
-          onApply={(next) => {
-            setDraft(next);
-            actions.floatingDraftChanged(next);
-          }}
-          className="mt-2.5"
-        />
       )}
     </div>
   );

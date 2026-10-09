@@ -1298,6 +1298,11 @@ body.docs-img-moving .docs-img-toolbar {
   overflow-x: clip;
   overflow-y: visible;
 }
+/* A pageless column narrower than a table (a phone): the table scrolls
+   sideways in its place, and no cell is cut off. */
+.docs-shell .docs-page[data-narrow] .docs-prose .tableWrapper {
+  overflow-x: auto;
+}
 .docs-shell .docs-prose .tableWrapper[data-align="center"] table {
   margin-left: auto;
   margin-right: auto;
@@ -1338,6 +1343,9 @@ body.docs-img-moving .docs-img-toolbar {
 .docs-table-pill-row {
   flex-direction: column;
   transform: translateY(-50%);
+}
+.docs-table-pill-col {
+  transform: translate(-50%, -50%);
 }
 .docs-pill-btn {
   display: inline-flex;
@@ -1428,11 +1436,23 @@ body.docs-img-moving .docs-img-toolbar {
   right: 24px;
   z-index: 59;
   width: min(560px, calc(100vw - 32px));
+  max-height: calc(100dvh - 136px);
   padding: 20px 24px;
+}
+/* A short screen (a phone held sideways): the dialog stands at the top and
+   its body scrolls, so no part of it is off the screen. */
+@media (max-height: 560px) {
+  .docs-chars-dialog {
+    top: 8px;
+    max-height: calc(100dvh - 16px);
+  }
 }
 .docs-chars-body {
   display: flex;
   gap: 16px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
 }
 .docs-chars-body > :first-child {
   flex: 1;
@@ -1610,64 +1630,5 @@ body.docs-img-moving .docs-img-toolbar {
   .docs-toc-pill,
   .docs-img-chrome {
     display: none !important;
-  }
-}
-
-/* The image's Assistant (SPEC.md §7, words from a figure): the first control
-   of the image toolbar, in the assistant's kind color, its spark breathing
-   and a sheen crossing the pill, as the assistant's own controls do. */
-.docs-img-assistant {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 32px;
-  padding: 0 12px 0 10px;
-  margin-right: 2px;
-  overflow: hidden;
-  border-radius: 999px;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--kind-assistant);
-  background: color-mix(in srgb, var(--kind-assistant) 12%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--kind-assistant) 35%, transparent);
-  transition:
-    background-color 0.15s ease,
-    box-shadow 0.15s ease;
-}
-.docs-img-assistant:hover {
-  background: color-mix(in srgb, var(--kind-assistant) 20%, transparent);
-  box-shadow: inset 0 0 0 1px var(--kind-assistant);
-}
-.docs-img-assistant:focus-visible {
-  outline: 2px solid var(--kind-assistant);
-  outline-offset: 2px;
-}
-@keyframes img-assistant-sheen {
-  0%,
-  55% {
-    transform: translateX(-120%);
-  }
-  100% {
-    transform: translateX(220%);
-  }
-}
-@media (prefers-reduced-motion: no-preference) {
-  .docs-img-assistant svg {
-    animation: thinking-spark 2.4s ease-in-out infinite;
-  }
-  .docs-img-assistant::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    width: 45%;
-    pointer-events: none;
-    background: linear-gradient(
-      100deg,
-      transparent,
-      color-mix(in srgb, var(--kind-assistant) 22%, transparent),
-      transparent
-    );
-    animation: img-assistant-sheen 3.2s ease-in-out infinite;
   }
 }

@@ -3,7 +3,8 @@ import { z } from "zod";
 // What a merge took apart, kept so it can be put back (SPEC.md §6): the
 // target's text before the merge, and every note the merge consumed with the
 // anchors and replies it owned. The merge route writes it as the meta of a
-// NOTE_MERGE history event; the undo route reads it back. Validated on the
+// NOTE_MERGE history event; the undo route reads it back, and History's
+// Restore reads it once the Undo is gone. Validated on the
 // way back in, as every stored JSON the app acts on is.
 
 export const NOTE_MERGE_KIND = "NOTE_MERGE";
@@ -26,6 +27,12 @@ const mergedNoteSchema = z.object({
   sourceIds: z.array(z.string()),
   /** The Reply rows under the note; the merge moved them to the target. */
   replyIds: z.array(z.string()),
+  /** The document the note was written in (merges before this field: absent). */
+  documentId: z.string().nullable().optional(),
+  /** The note kept whole as a removal keeps it (lib/notes/removed.ts): its
+      sources, replies, edits, and side chats, so History's Restore brings it
+      all back after the Undo is gone. Merges before this field: absent. */
+  kept: z.unknown().optional(),
 });
 
 export const mergeSnapshotSchema = z.object({
@@ -40,6 +47,9 @@ export const mergeSnapshotSchema = z.object({
   copiedSourceIds: z.array(z.string()),
   /** Set once the merge was undone: a merge is undone once. */
   undoneAt: z.string().optional(),
+  /** Set once History's Restore put the merged notes back (lib/notes/merge-restore.ts). */
+  restoredAt: z.string().optional(),
+  restoredById: z.string().nullable().optional(),
 });
 
 export type MergeSnapshot = z.infer<typeof mergeSnapshotSchema>;

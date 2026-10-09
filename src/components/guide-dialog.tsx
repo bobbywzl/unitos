@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { useModalFocus } from "@/lib/escape-layers";
+import { FEEDBACK_OPEN_EVENT } from "@/components/feedback-button";
 import { useT } from "@/components/lang-provider";
 import { Presence } from "@/components/presence";
 import type { TKey } from "@/lib/i18n/dictionaries";
 
-// The reader's guide: Extract, Circle & ask, every selection tool, and every
-// side panel tab, in one place. Opened from the ? button in the header. Each
+// The reader's guide: Extract, Circle & ask, every selection tool, every
+// side panel tab, and the keys, in one place. Opened from the ? button in the header. Each
 // tool and each tab is one card: its name, then what it does.
 
 // The selection tools, in the toolbox's order: name key, body key.
@@ -25,14 +27,41 @@ const TOOLS: [TKey, TKey][] = [
 // The side panel's tabs, in the rail's order: name key, body key.
 const PANELS: [TKey, TKey][] = [
   ["works.guideAssistant", "works.guidePanelAssistantBody"],
-  ["works.guidePanelSummary", "works.guidePanelSummaryBody"],
+  ["panes.graph", "works.guidePanelGraphBody"],
   ["works.notes", "works.guidePanelNotesBody"],
   ["works.guidePanelAnnotations", "works.guidePanelAnnotationsBody"],
   ["works.guideDistill", "works.guidePanelDistillBody"],
+  ["panes.readerView", "works.guidePanelReaderViewBody"],
   ["works.guidePanelEdits", "works.guidePanelEditsBody"],
 ];
+// Every key the reader answers to (grep the key handlers before adding one):
+// the keys as pressed, then what they do. ⌘ on a Mac, Ctrl elsewhere.
+const KEYS: [string, TKey][] = [
+  ["Esc", "works.guideKeyEscape"],
+  ["⌘/Ctrl + Z", "works.guideKeyUndo"],
+  ["⇧ + ⌘/Ctrl + Z", "works.guideKeyRedo"],
+  ["⌘/Ctrl + A", "works.guideKeySelectAll"],
+  ["⇧ + ← → ↑ ↓", "works.guideKeyExtend"],
+  ["⌘/Ctrl + C", "works.guideKeyCopy"],
+  ["Enter", "works.guideKeyEnter"],
+  ["⌘/Ctrl + Enter", "works.guideKeySaveNote"],
+  ["Tab · ⇧ + Tab", "works.guideKeyIndent"],
+  ["⇧ + click", "works.guideKeyPick"],
+  ["↑ ↓ · → ← · a–z · Alt + ↑ ↓", "works.guideKeyList"],
+  ["Enter · ⌫", "works.guideKeyQueueDecide"],
+  ["J · K", "works.guideKeyQueueMove"],
+  ["E", "works.guideKeyQueueEdit"],
+  ["G", "works.guideKeyQueueJump"],
+  ["Space · K", "works.guideKeyPlay"],
+  ["← · →", "works.guideKeySeek"],
+  ["F", "works.guideKeyFullscreen"],
+];
+
 export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const t = useT();
+  // The focus goes into the guide on open and back to ? on close.
+  const boxRef = useRef<HTMLDivElement>(null);
+  useModalFocus(boxRef, open);
 
   useEffect(() => {
     if (!open) return;
@@ -67,17 +96,32 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
       aria-label={t("works.guideLabel")}
     >
       <div
+        ref={boxRef}
         onClick={(e) => e.stopPropagation()}
         className="flex max-h-[85vh] w-[560px] max-w-full flex-col gap-4 overflow-y-auto rounded-[24px] bg-card p-6 shadow-float"
       >
         <div className="flex items-center">
           <span className="font-display text-[20px]">{t("works.guideTitle")}</span>
+          {/* Feedback: where a reader with a question goes (on a phone's
+              reader, More has it too). */}
+          <button
+            onClick={() => {
+              onClose();
+              window.dispatchEvent(new Event(FEEDBACK_OPEN_EVENT));
+            }}
+            data-track="feedback-open"
+            className="ml-auto rounded-full px-3 py-1.5 text-[12px] font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+          >
+            {t("works.feedback")}
+          </button>
           <button
             onClick={onClose}
+            // The focus opens on ✕, as before Feedback stood beside it.
+            data-autofocus
             data-track="guide-close"
             aria-label={t("common.close")}
             data-tip={t("common.close")}
-            className="ml-auto flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
+            className="flex size-8 items-center justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
           >
             ✕
           </button>
@@ -124,6 +168,22 @@ export function GuideDialog({ open, onClose }: { open: boolean; onClose: () => v
         <section className="flex flex-col gap-2">
           <span className={h}>{t("works.guidePanelHeader")}</span>
           {PANELS.map(card)}
+        </section>
+
+        <section className="flex flex-col gap-2 rounded-2xl bg-clay-100/70 p-4">
+          <span className={h}>{t("works.guideKeysHeader")}</span>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-[13px] leading-snug text-sand-800">
+            {KEYS.map(([keys, body]) => (
+              <div key={body} className="contents">
+                <dt>
+                  <kbd className="rounded-md border border-line bg-card px-1.5 py-0.5 font-sans text-[12px] whitespace-nowrap text-sand-800">
+                    {keys}
+                  </kbd>
+                </dt>
+                <dd>{t(body)}</dd>
+              </div>
+            ))}
+          </dl>
         </section>
       </div>
     </div>

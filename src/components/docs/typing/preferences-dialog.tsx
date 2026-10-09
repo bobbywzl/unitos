@@ -8,7 +8,8 @@ import { setTypingPrefs, typingPrefs, type Substitution, type TypingPrefs } from
 import type { TKey } from "@/lib/i18n/dictionaries";
 
 // Tools > Preferences, Google Docs' dialog (SPEC.md §29, typing): the General
-// tab's switches and the Substitutions tab's list — the master switch, a
+// tab's switches (with Show spelling suggestions and Show grammar
+// suggestions, the squiggles of typing/proofing.ts) and the Substitutions tab's list — the master switch, a
 // Replace / With row that adds a pair, each pair with its switch and a
 // remove button. OK keeps the changes (in this browser); Cancel drops them.
 
@@ -22,6 +23,8 @@ const SWITCHES: { key: keyof TypingPrefs; label: TKey }[] = [
   { key: "markdown", label: "docsTyping.enableMarkdown" },
   { key: "correctSpelling", label: "docsTyping.correctSpelling" },
   { key: "colonEmoji", label: "docsTyping.colonEmoji" },
+  { key: "showSpelling", label: "docsTyping.showSpelling" },
+  { key: "showGrammar", label: "docsTyping.showGrammar" },
 ];
 
 export function PreferencesDialog({ onClose }: { onClose: () => void }) {
@@ -50,6 +53,7 @@ export function PreferencesDialog({ onClose }: { onClose: () => void }) {
       title={t("docsTyping.preferences")}
       onClose={onClose}
       className="docs-prefs"
+      closeButton={false}
       actions={
         <>
           <DialogButton onClick={onClose}>{t("docs.cancel")}</DialogButton>

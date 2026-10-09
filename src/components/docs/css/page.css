@@ -1,6 +1,6 @@
 /* The page editor: page (SPEC.md §29). Imported by docs.css.
    Google Docs' page area: the title's states and the status, the pages,
-   the spacers that paginate the text, the rulers, the tabs & outlines
+   the spacers that paginate the text, the rulers, the outline
    panel, the headers and footers, the page's dialogs, the caret, and print.
    The boxes the loading frame draws too are in frame.css. */
 
@@ -10,7 +10,6 @@
   --docs-tip-bg: var(--ink);
   --docs-tip-fg: var(--paper);
   --docs-outline-line: var(--line);
-  --docs-tab-fg: var(--clay-800);
   --docs-pill: var(--card);
 }
 
@@ -111,7 +110,7 @@
 }
 
 /* ── The canvas's sideways scrollbar, at the pane's foot (its own would sit
-   under the last page); under the tabs & outlines panel. */
+   under the last page); under the outline panel. */
 .docs-hscroll {
   position: sticky;
   bottom: 0;
@@ -123,6 +122,34 @@
 }
 .docs-hscroll > div {
   height: 1px;
+}
+
+/* The text before the first pagination pass (ext/page.ts): unseen but
+   still focusable, so the first words drawn stand at the reading position. */
+.ProseMirror[data-docs-paging] {
+  opacity: 0;
+}
+/* Meanwhile the frame's gray lines (frame.tsx) stand in the view where the
+   words will show, so the load is one waiting state, never an empty page.
+   Sticky, and taking no room: the text keeps its place. */
+:has(> .ProseMirror[data-docs-paging])::before {
+  content: "";
+  display: block;
+  position: sticky;
+  top: 150px;
+  height: 226px;
+  margin-bottom: -226px;
+  pointer-events: none;
+  --line: linear-gradient(var(--docs-page-border), var(--docs-page-border));
+  background-image: var(--line), var(--line), var(--line), var(--line), var(--line), var(--line), var(--line), var(--line), var(--line);
+  background-repeat: no-repeat;
+  background-size: 96% 10px, 100% 10px, 92% 10px, 100% 10px, 64% 10px, 100% 10px, 88% 10px, 100% 10px, 72% 10px;
+  background-position: 0 0, 0 24px, 0 48px, 0 72px, 0 96px, 0 144px, 0 168px, 0 192px, 0 216px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  :has(> .ProseMirror[data-docs-paging])::before {
+    animation: docs-frame-pulse 1.4s ease-in-out infinite;
+  }
 }
 
 /* The sheets behind the flow of text (each sheet: frame.css). */
@@ -513,7 +540,7 @@
   }
 }
 
-/* ── Tabs & outlines: the panel over the canvas's left side, and the button
+/* ── The outline panel: the panel over the canvas's left side, and the button
    that opens it. */
 .docs-outline-open {
   position: absolute;
@@ -552,6 +579,11 @@
 .docs-side[data-pageless] .docs-outline {
   box-shadow: inset -1px 0 0 0 var(--docs-sep);
 }
+/* A narrow pane: the panel lies over the page, which keeps its width. */
+.docs-side .docs-outline[data-over] {
+  max-width: calc(100vw - 48px);
+  box-shadow: var(--elev-md);
+}
 @keyframes docs-outline-in {
   from {
     opacity: 0;
@@ -584,29 +616,6 @@
   overflow-y: auto;
   padding-bottom: 50px;
 }
-.docs-outline-header {
-  margin-left: 16px;
-  padding: 16px 0 16px 12px;
-  color: var(--docs-icon);
-  font: 400 14px/20px var(--docs-ui-font);
-}
-.docs-outline-tab {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 36px;
-  margin: 0 8px 0 16px;
-  padding: 2px 4px 2px 8px;
-  border-radius: 9999px;
-  background: var(--docs-on-bg);
-  color: var(--docs-tab-fg);
-}
-.docs-outline-tab-name {
-  overflow: hidden;
-  font: 600 14px/16px var(--docs-ui-font);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
 .docs-outline-empty {
   padding: 8px 16px 16px 24px;
   color: var(--docs-icon);
@@ -616,8 +625,22 @@
 .docs-outline-list {
   margin-top: 4px;
 }
+/* The headings start under the back arrow: the panel names no tabs. */
+.docs-outline-scroll > .docs-outline-list:first-child {
+  margin-top: 0;
+}
 /* An import's contents under the headings (SPEC.md §26): a note, and
    Generate contents. */
+.docs-outline-parts {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--docs-sep);
+}
+.docs-outline-scroll > .docs-outline-parts:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
 .docs-outline-note {
   padding: 0 16px 8px 24px;
   color: var(--docs-muted);

@@ -8,6 +8,7 @@ import { MAX_SEGMENTS, passageSources, resolvePassage } from "@/lib/anchors/pass
 import { layerBlocks } from "@/lib/anchors/layer";
 import type { ResolvedAnchor } from "@/lib/anchors/resolve";
 import { serverT } from "@/lib/i18n/server";
+import { sectionAfterRemoval } from "@/lib/notes/gone";
 import { normalizeNoteOrders } from "@/lib/order";
 import { videoAnchorFor } from "@/lib/video/anchor";
 import { timeRangeSchema } from "@/lib/video/types";
@@ -16,6 +17,14 @@ import { parseBody } from "@/lib/validate";
 const createSchema = z
   .object({
     sectionId: z.string().min(1),
+    // The note's id, chosen by the client before the create leaves
+    // (lib/notes/client-id.ts): a create sent again — a reload while the
+    // first one was on its way, the offline queue replaying — answers with
+    // the note the first one made instead of a second copy.
+    id: z
+      .string()
+      .regex(/^c[a-z0-9]{20,40}$/)
+      .optional(),
     content: z.string().min(1).max(50_000).optional(),
     // A note made of an annotation (SPEC.md §6): the annotation's text and
     // anchors are copied into the new note, and the annotation stays where
@@ -48,6 +57,11 @@ const createSchema = z
     // sent by the tray's composer. A note with a source, a video range, or
     // an annotation takes that document; the notes full page sends none.
     documentId: z.string().min(1).optional(),
+    // "keep": a source whose anchor no longer resolves leaves the note
+    // without it, and the answer carries sourceDropped: the words land (the
+    // offline queue replaying Add to notes, a quote dropped on a section).
+    // Unset, the create is refused whole.
+    onSourceLost: z.enum(["refuse", "keep"]).optional(),
   })
   .refine((d) => !(d.source && d.video), { message: "Provide source or video, not both" })
   .refine((d) => Boolean(d.content) !== Boolean(d.fromAnnotationId), {
@@ -60,16 +74,28 @@ export async function POST(req: Request) {
   const { data, error } = await parseBody(req, createSchema);
   if (error) return error;
 
-  const section = await db.section.findUnique({ where: { id: data.sectionId } });
+  // A section deleted elsewhere while its composer was writing (lib/notes/gone.ts):
+  // the note goes to the section that takes the deleted one's notes' words.
+  const section =
+    (await db.section.findUnique({ where: { id: data.sectionId } })) ?? (await sectionAfterRemoval(data.sectionId));
   if (!section) return NextResponse.json({ error: t("api.sectionNotFound") }, { status: 404 });
-  const access = await sectionAccess(data.sectionId, "editor");
+  const sectionId = section.id;
+  const access = await sectionAccess(sectionId, "editor");
   if (access instanceof NextResponse) return access;
+
+  // The same create again: the note it made, as it is now.
+  if (data.id) {
+    const made = await madeBefore(data.id, section.notebookId, access.user.id);
+    if (made === "taken") return NextResponse.json({ error: t("api.noteIdTaken") }, { status: 409 });
+    if (made) return NextResponse.json(made, { status: 200 });
+  }
 
   // The source resolves through the ladder (SPEC.md §5): block id and offsets,
   // then the quote inside the block, then the quote across the document — a
   // re-parse gives every block a new id while an open reader still sends the
   // old ones.
   let sources: (ResolvedAnchor & { documentId: string; layer: string | null })[] = [];
+  let sourceDropped = false;
   if (data.source) {
     if (data.source.endOffset <= data.source.startOffset) {
       return NextResponse.json({ error: t("api.anchorOffsetsInvalid") }, { status: 400 });
@@ -77,10 +103,11 @@ export async function POST(req: Request) {
     // A core anchor (SPEC.md §28) resolves against the cores.
     const layer = data.source.layer ?? null;
     const passage = resolvePassage(await layerBlocks(data.source.documentId, layer), data.source, data.segments);
-    if (passage.length === 0) {
-      return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
+    if (passage.length > 0) sources = passageSources(data.source.documentId, passage, layer);
+    else if (data.onSourceLost === "keep") sourceDropped = true;
+    else {
+      return NextResponse.json({ error: t("api.anchorNotResolvedInDocument"), code: "sourceLost" }, { status: 400 });
     }
-    sources = passageSources(data.source.documentId, passage, layer);
   }
 
   let videoSource: {
@@ -171,7 +198,12 @@ export async function POST(req: Request) {
   // the annotation's first anchor's, else the one the composer named — when
   // it is attached to this project; a document that is not is nobody's.
   let documentId: string | null =
-    sources[0]?.documentId ?? videoSource?.documentId ?? copiedSources[0]?.documentId ?? data.documentId ?? null;
+    sources[0]?.documentId ??
+    videoSource?.documentId ??
+    copiedSources[0]?.documentId ??
+    (sourceDropped ? data.source?.documentId : undefined) ??
+    data.documentId ??
+    null;
   if (documentId) {
     const attached = await db.notebookDocument.findUnique({
       where: { notebookId_documentId: { notebookId: section.notebookId, documentId } },
@@ -180,10 +212,11 @@ export async function POST(req: Request) {
     if (!attached) documentId = null;
   }
 
-  const count = await db.note.count({ where: { sectionId: data.sectionId } });
+  const count = await db.note.count({ where: { sectionId } });
   const note = await db.note.create({
     data: {
-      sectionId: data.sectionId,
+      ...(data.id ? { id: data.id } : {}),
+      sectionId,
       content,
       // Find, distill, ask, and voice output is AI output: it lands PENDING, no exceptions (SPEC.md §1).
       status: data.pending || alwaysPending ? "PENDING" : "ACCEPTED",
@@ -213,8 +246,25 @@ export async function POST(req: Request) {
         : {}),
     },
     include: { sources: true },
+  }).catch(async (err: unknown) => {
+    // Two copies of one create at once: the other one made the note.
+    if (data.id && err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      const made = await madeBefore(data.id, section.notebookId, access.user.id);
+      if (made && made !== "taken") return made;
+    }
+    throw err;
   });
-  if (data.top) await normalizeNoteOrders(data.sectionId);
+  if (data.top) await normalizeNoteOrders(sectionId);
   await bumpNotebook(section.notebookId);
-  return NextResponse.json(note, { status: 201 });
+  return NextResponse.json(sourceDropped ? { ...note, sourceDropped: true } : note, { status: 201 });
+}
+
+/** The note an earlier copy of this create made: null when there is none,
+    "taken" when the id is another person's note or in another project. */
+async function madeBefore(id: string, notebookId: string, userId: string) {
+  const note = await db.note.findUnique({ where: { id }, include: { sources: true } });
+  if (!note) return null;
+  const section = await db.section.findUnique({ where: { id: note.sectionId }, select: { notebookId: true } });
+  if (section?.notebookId !== notebookId || note.createdById !== userId) return "taken" as const;
+  return note;
 }

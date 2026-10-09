@@ -1,0 +1,269 @@
+import type { Prisma } from "@prisma/client";
+import { z } from "zod";
+import { db } from "@/lib/db";
+import { recordNoteEdit } from "@/lib/notes/edits";
+import { NOTE_MERGE_KIND } from "@/lib/notes/merge-snapshot";
+import { sourcesLeftByQuotes } from "@/lib/notes/quote-sources";
+import { keptNoteOf, keptSectionOf, type KeptNote } from "@/lib/notes/removed";
+import { normalizeNoteOrders } from "@/lib/order";
+import { shiftNoteOrders } from "@/lib/notes/order-writes";
+
+// Words written to a note that is gone (SPEC.md §6): another tab, a
+// collaborator, or a merge took the note away while this tab typed in it, or
+// while the edit waited in the offline queue; or its whole section was
+// deleted. The words are never dropped: the first such write makes a new
+// note of them in the gone note's section (else the section of the same
+// title, else the project's first), at its place, and its history event
+// remembers the new note (`keptAs` in the event's meta; a section's event
+// keeps one per note, `keptAsByNote`). Every later write to the gone note
+// goes to that note.
+
+export type GoneHome = {
+  eventId: string;
+  notebookId: string;
+  sectionId: string;
+  sectionTitle: string | null;
+  order: number;
+  documentId: string | null;
+  /** The note's text when it went. */
+  content: string;
+  /** Its anchors, copied onto the new note when its text still quotes them. */
+  sources: Prisma.SourceCreateManyInput[];
+  /** The note that took the words of an earlier write, when there is one. */
+  keptAs: string | null;
+};
+
+const mergedSchema = z.object({
+  notes: z.array(z.object({ id: z.string(), sectionId: z.string(), order: z.number(), content: z.string() }).passthrough()),
+});
+
+type EventRow = { id: string; notebookId: string; kind: string; meta: unknown };
+
+/** The history event that says where the gone note stood: its removal, the
+    removal of its section, or the merge that took it. Locked when `tx` runs in a transaction. */
+async function goneEvent(noteId: string, tx: Prisma.TransactionClient, lock: boolean): Promise<EventRow | null> {
+  const rows = lock
+    ? await tx.$queryRaw<EventRow[]>`
+        SELECT "id", "notebookId", "kind", "meta" FROM "NotebookEvent"
+        WHERE ("kind" = 'NOTE_REMOVE' AND "meta"->'kept'->>'id' = ${noteId})
+           OR ("kind" = ${NOTE_MERGE_KIND} AND "meta"->'notes' @> jsonb_build_array(jsonb_build_object('id', ${noteId}::text)))
+           OR ("kind" = 'SECTION_REMOVE' AND (
+                "meta"->'kept'->'notes' @> jsonb_build_array(jsonb_build_object('id', ${noteId}::text))
+             OR "meta"->'kept'->'notes' @> jsonb_build_array(jsonb_build_object('sideChats', jsonb_build_array(jsonb_build_object('id', ${noteId}::text))))))
+        ORDER BY "createdAt" DESC LIMIT 1 FOR UPDATE`
+    : await tx.$queryRaw<EventRow[]>`
+        SELECT "id", "notebookId", "kind", "meta" FROM "NotebookEvent"
+        WHERE ("kind" = 'NOTE_REMOVE' AND "meta"->'kept'->>'id' = ${noteId})
+           OR ("kind" = ${NOTE_MERGE_KIND} AND "meta"->'notes' @> jsonb_build_array(jsonb_build_object('id', ${noteId}::text)))
+           OR ("kind" = 'SECTION_REMOVE' AND (
+                "meta"->'kept'->'notes' @> jsonb_build_array(jsonb_build_object('id', ${noteId}::text))
+             OR "meta"->'kept'->'notes' @> jsonb_build_array(jsonb_build_object('sideChats', jsonb_build_array(jsonb_build_object('id', ${noteId}::text))))))
+        ORDER BY "createdAt" DESC LIMIT 1`;
+  return rows[0] ?? null;
+}
+
+/** Where a note kept whole in a removal event stood. */
+function keptHome(event: EventRow, kept: Omit<KeptNote, "sideChats">, sectionTitle: string | null, keptAs: string | null): GoneHome {
+  return {
+    eventId: event.id,
+    notebookId: event.notebookId,
+    sectionId: kept.sectionId,
+    sectionTitle,
+    order: kept.order,
+    documentId: kept.documentId,
+    content: kept.content,
+    sources: kept.sources.map((s) => ({
+      documentId: s.documentId,
+      blockId: s.blockId,
+      startOffset: s.startOffset,
+      endOffset: s.endOffset,
+      quotedText: s.quotedText,
+      prefix: s.prefix,
+      suffix: s.suffix,
+      orphaned: s.orphaned,
+      layer: s.layer,
+      startTime: s.startTime,
+      endTime: s.endTime,
+      ...(s.region === null || s.region === undefined ? {} : { region: s.region as Prisma.InputJsonValue }),
+      noteId: "",
+    })),
+    keptAs,
+  };
+}
+
+/** The new note an earlier write made of a section's gone note, by note. */
+function keptAsByNote(meta: Record<string, unknown>): Record<string, string> {
+  const by = meta.keptAsByNote;
+  if (!by || typeof by !== "object") return {};
+  return Object.fromEntries(Object.entries(by).filter((e): e is [string, string] => typeof e[1] === "string"));
+}
+
+function homeOf(noteId: string, event: EventRow): GoneHome | null {
+  const meta = (event.meta ?? {}) as Record<string, unknown>;
+  const sectionTitle = typeof meta.sectionTitle === "string" ? meta.sectionTitle : null;
+  if (event.kind === "SECTION_REMOVE") {
+    const section = keptSectionOf(meta);
+    const kept = section?.notes.flatMap((n) => [n, ...n.sideChats]).find((n) => n.id === noteId);
+    if (!section || !kept) return null;
+    return keptHome(event, kept, section.section.title, keptAsByNote(meta)[noteId] ?? null);
+  }
+  const keptAs = typeof meta.keptAs === "string" ? meta.keptAs : null;
+  if (event.kind === "NOTE_REMOVE") {
+    const kept = keptNoteOf(meta);
+    if (!kept) return null;
+    return keptHome(event, kept, sectionTitle, keptAs);
+  }
+  const merged = mergedSchema.safeParse(meta);
+  const note = merged.success ? merged.data.notes.find((n) => n.id === noteId) : undefined;
+  if (!note) return null;
+  // A merged note's anchors moved to the merge's target; the target keeps them.
+  return {
+    eventId: event.id,
+    notebookId: event.notebookId,
+    sectionId: note.sectionId,
+    sectionTitle: null,
+    order: note.order,
+    documentId: null,
+    content: note.content,
+    sources: [],
+    keptAs,
+  };
+}
+
+/** Where a gone note stood, or null when no history event kept it. */
+export async function goneHome(noteId: string): Promise<GoneHome | null> {
+  const event = await goneEvent(noteId, db, false);
+  return event ? homeOf(noteId, event) : null;
+}
+
+/** Make the new note that keeps words written to a gone note: in its
+    section (else the section of the same title, else the project's first),
+    at its place. `content` is the note's whole text after the write.
+    `sources`: anchors the write itself adds. Returns the new note's id, or
+    the id of the note an earlier write already made. */
+export async function keepGoneWords(
+  noteId: string,
+  content: string,
+  userId: string | null,
+  sources: Prisma.SourceCreateManyInput[],
+  fromWholeText: boolean,
+): Promise<string | null> {
+  const made = await db.$transaction(
+    async (tx) => {
+      const event = await goneEvent(noteId, tx, true);
+      const home = event ? homeOf(noteId, event) : null;
+      if (!event || !home) return null;
+      // A section deleted with the note: a write that adds no words to what
+      // its event kept (an editor's closing flush) has nothing to keep; the
+      // section's Undo or Restore brings the note back as it was.
+      if (event.kind === "SECTION_REMOVE" && fromWholeText && !home.keptAs && content.trim() === home.content.trim()) {
+        return null;
+      }
+      if (home.keptAs && (await tx.note.findUnique({ where: { id: home.keptAs }, select: { id: true } }))) {
+        return { id: home.keptAs, sectionId: null as string | null, fresh: false };
+      }
+      const sections = await tx.section.findMany({
+        where: { notebookId: home.notebookId, hidden: false },
+        select: { id: true, title: true },
+        orderBy: [{ parentId: { sort: "asc", nulls: "first" } }, { order: "asc" }],
+      });
+      const section =
+        sections.find((s) => s.id === home.sectionId) ??
+        (home.sectionTitle ? sections.find((s) => s.title === home.sectionTitle) : undefined) ??
+        sections[0] ??
+        // The project has no section left (its last one was deleted): the
+        // words get a section of the gone one's title, so they have a home.
+        (home.sectionTitle
+          ? await tx.section.create({
+              data: { notebookId: home.notebookId, title: home.sectionTitle, order: 0 },
+              select: { id: true, title: true },
+            })
+          : undefined);
+      if (!section) return null;
+      const attached = home.documentId
+        ? await tx.notebookDocument.findUnique({
+            where: { notebookId_documentId: { notebookId: home.notebookId, documentId: home.documentId } },
+            select: { documentId: true },
+          })
+        : null;
+      // The gone note's own anchors come along when the text still quotes them
+      // (a whole text saved from the editor); an append carries only its own.
+      const docs = new Set(
+        (
+          await tx.document.findMany({
+            where: { id: { in: home.sources.map((s) => s.documentId).filter((d): d is string => !!d) } },
+            select: { id: true },
+          })
+        ).map((d) => d.id),
+      );
+      const own = fromWholeText
+        ? home.sources.filter((s) => s.documentId && docs.has(s.documentId))
+        : [];
+      const dropped = new Set(
+        sourcesLeftByQuotes(
+          home.content,
+          content,
+          own.map((s, i) => ({ id: String(i), quotedText: s.quotedText })),
+        ),
+      );
+      const kept = own.filter((_, i) => !dropped.has(String(i)));
+      // Its place: the notes at and after it move down one.
+      await shiftNoteOrders(section.id, home.order, tx);
+      const note = await tx.note.create({
+        data: {
+          sectionId: section.id,
+          content,
+          status: "ACCEPTED",
+          createdById: userId,
+          documentId: attached?.documentId ?? null,
+          order: Math.max(0, home.order),
+        },
+        select: { id: true },
+      });
+      const rows = [...kept, ...sources].map((s) => ({ ...s, noteId: note.id }));
+      if (rows.length > 0) await tx.source.createMany({ data: rows });
+      await recordNoteEdit(note.id, userId, content, tx);
+      // The event remembers the new note (one key added to its meta), so
+      // every later write to the gone note lands there. A section's event
+      // holds many notes: it remembers one new note per gone note.
+      const meta = (event.meta ?? {}) as Record<string, unknown>;
+      const remembered =
+        event.kind === "SECTION_REMOVE"
+          ? { ...meta, keptAsByNote: { ...keptAsByNote(meta), [noteId]: note.id } }
+          : { ...meta, keptAs: note.id };
+      await tx.notebookEvent.update({
+        where: { id: event.id },
+        data: { meta: remembered as Prisma.InputJsonValue },
+      });
+      return { id: note.id, sectionId: section.id as string | null, fresh: true };
+    },
+    { timeout: 20_000, maxWait: 20_000 },
+  );
+  if (!made) return null;
+  if (made.sectionId) await normalizeNoteOrders(made.sectionId);
+  return made.id;
+}
+
+/** The section that takes a new note sent to a section deleted since (its
+    composer was writing when another tab or a collaborator deleted it):
+    the section of the same title, else the project's first, else a new
+    section of that title. Null when no history event says the section was
+    deleted. */
+export async function sectionAfterRemoval(sectionId: string) {
+  const rows = await db.$queryRaw<{ notebookId: string; content: string | null }[]>`
+    SELECT "notebookId", "content" FROM "NotebookEvent"
+    WHERE "kind" = 'SECTION_REMOVE' AND "meta"->'kept'->'section'->>'id' = ${sectionId}
+    ORDER BY "createdAt" DESC LIMIT 1`;
+  const event = rows[0];
+  if (!event) return null;
+  const sections = await db.section.findMany({
+    where: { notebookId: event.notebookId, hidden: false },
+    orderBy: [{ parentId: { sort: "asc", nulls: "first" } }, { order: "asc" }],
+  });
+  const title = event.content ?? "";
+  return (
+    (title ? sections.find((s) => s.title === title) : undefined) ??
+    sections[0] ??
+    (title ? await db.section.create({ data: { notebookId: event.notebookId, title, order: 0 } }) : null)
+  );
+}

@@ -1,8 +1,10 @@
 // Google Docs' character classes (SPEC.md §29, typing): what word jumps, word
 // delete, double-click, automatic capitalization, substitutions, and the
-// word count treat as a word. Four classes: whitespace, punctuation,
-// transparent (never splits a word: don't, well-known, a—b), and word
-// (everything else: letters, digits, "_", CJK, "…").
+// word count treat as a word. Four classes: whitespace, punctuation (the
+// full-width forms too: ，。「」), transparent (never splits a word: don't,
+// well-known, a—b), and word (everything else: letters, digits, "_", CJK,
+// "…"). Chinese and Japanese put no space between words, so a run of word
+// characters that holds them splits by Intl.Segmenter's words (阅读|时).
 
 type CharClass = "s" | "p" | "t" | "w";
 
@@ -12,7 +14,7 @@ export const LINE_BREAK = "\v";
 export const OBJECT_CHAR = "\uFFFC";
 
 const WHITESPACE = new Set([" ", "\t", "\n", "\v", "\f", "\uE906"]);
-const PUNCTUATION = new Set([..."!@#$%^&*()+=\\|{}[];:\"/?.,<>~`“”¿¡"]);
+const PUNCTUATION = new Set([..."!@#$%^&*()+=\\|{}[];:\"/?.,<>~`“”¿¡", ..."，。、：；！？「」『』《》〈〉（）【】〔〕〖〗"]);
 const TRANSPARENT = new Set(["'", "‘", "’", "-", "–", "—"]);
 
 export function charClass(ch: string): CharClass {
@@ -72,6 +74,33 @@ export function firstGraphemeLength(text: string): number {
   return code >= 0xd800 && code <= 0xdbff && text.length > 1 ? 2 : 1;
 }
 
+const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
+let segmenter: Intl.Segmenter | null | undefined;
+
+/** The word inside a run of word characters [from, to) that holds `at`: the
+    whole run, or for Chinese and Japanese the segmenter's word. */
+function wordInRun(text: string, from: number, to: number, at: number): { from: number; to: number } {
+  const run = text.slice(from, to);
+  if (!CJK.test(run)) return { from, to };
+  if (segmenter === undefined) {
+    const Segmenter = (Intl as { Segmenter?: typeof Intl.Segmenter }).Segmenter;
+    segmenter = Segmenter ? new Segmenter("zh", { granularity: "word" }) : null;
+  }
+  if (!segmenter) return { from, to };
+  for (const part of segmenter.segment(run)) {
+    const start = from + part.index;
+    const end = start + part.segment.length;
+    if (at >= start && at < end) return { from: start, to: end };
+  }
+  return { from, to };
+}
+
+const inRun = (ch: string | undefined) => {
+  if (ch === undefined) return false;
+  const c = charClass(ch);
+  return c === "w" || c === "t";
+};
+
 /** Where a word delete backward from `offset` stops: over the whitespace
     before the caret, then over one run of word characters (transparent
     characters inside a word count as word) or of punctuation. */
@@ -84,12 +113,11 @@ export function wordStartBefore(text: string, offset: number): number {
     while (i > 0 && charClass(text[i - 1]) === "p") i--;
     return i;
   }
-  while (i > 0) {
-    const c = charClass(text[i - 1]);
-    if (c === "w" || c === "t") i--;
-    else break;
-  }
-  return i;
+  const end = i;
+  while (i > 0 && inRun(text[i - 1])) i--;
+  let runEnd = end;
+  while (runEnd < text.length && inRun(text[runEnd])) runEnd++;
+  return wordInRun(text, i, runEnd, end - 1).from;
 }
 
 /** Where a word delete forward from `offset` stops. Windows and ChromeOS
@@ -105,11 +133,11 @@ export function wordEndAfter(text: string, offset: number, mac: boolean): number
       return;
     }
     if (cls === "s") return;
-    while (i < text.length) {
-      const c = charClass(text[i]);
-      if (c === "w" || c === "t") i++;
-      else break;
-    }
+    const at = i;
+    let runStart = i;
+    while (runStart > 0 && inRun(text[runStart - 1])) runStart--;
+    while (i < text.length && inRun(text[i])) i++;
+    i = wordInRun(text, runStart, i, at).to;
   };
   if (mac) {
     while (i < text.length && charClass(text[i]) === "s") i++;
@@ -141,5 +169,7 @@ export function wordAt(text: string, offset: number): { from: number; to: number
   // A transparent character at either end is punctuation, not the word.
   while (from < to && charClass(text[from]) === "t") from++;
   while (to > from && charClass(text[to - 1]) === "t") to--;
-  return from < to ? { from, to } : null;
+  if (from >= to) return null;
+  if (at < from || at >= to) return { from, to };
+  return wordInRun(text, from, to, at);
 }

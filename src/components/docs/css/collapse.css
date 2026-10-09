@@ -13,6 +13,11 @@
 .docs-prose .docs-core-slot > .reader-core {
   margin: 0;
 }
+/* A core's button shows while the pointer is on the core (a click on the
+   core does the same). */
+.docs-prose .docs-core-slot:hover > button {
+  opacity: 1;
+}
 /* A unit read whole keeps only its button, at its top right; the button
    shows while the pointer is on the unit. */
 .docs-prose .docs-core-slot[data-docs-core="words"] {

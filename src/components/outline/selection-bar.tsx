@@ -2,12 +2,14 @@
 
 import type { SectionView } from "@/lib/types";
 import { useT } from "@/components/lang-provider";
+import { BOTTOM_PILL, onBody } from "@/components/outline/merge-undo";
 import { flattenNotes, type OutlineActions } from "@/components/outline/use-outline";
 
 // The bulk action bar for the ticker selection: delete, merge, and pin the
 // selected notes; with onCompare (the notes full page), compare them too.
 // Rendered by the tray and the notes full page; shows only while notes are
-// selected. Esc clears the selection.
+// selected. Esc clears the selection. Delete asks nothing: the notes leave
+// at once and the Undo pill offers them back (SPEC.md §6).
 export function SelectionBar({
   tree,
   actions,
@@ -27,14 +29,13 @@ export function SelectionBar({
     for (const note of selected) await actions.setPinned(note.id, !allPinned);
   }
 
-  async function deleteAll() {
-    if (!confirm(t("outline.confirmDeleteSelected", { n: selected.length }))) return;
-    for (const note of selected) await actions.deleteNote(note.id);
+  function deleteAll() {
+    actions.removeNotes(selected.map((n) => n.id));
     actions.clearSelection();
   }
 
-  return (
-    <div className="fixed bottom-[calc(66px+env(safe-area-inset-bottom))] left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full bg-card px-5 py-2.5 shadow-float md:bottom-6">
+  return onBody(
+    <div data-selection-bar="" className={BOTTOM_PILL}>
       <span className="text-[13px] text-sand-600">
         {t("outline.selectedCount", { n: selected.length })}
       </span>
@@ -79,7 +80,7 @@ export function SelectionBar({
         {allPinned ? t("outline.unpin") : t("outline.pin")}
       </button>
       <button
-        onClick={() => void deleteAll()}
+        onClick={deleteAll}
         data-track="notes-delete"
         data-tip={t("outline.deleteSelectedTitle")}
         className="rounded-full border border-line px-3 py-1 text-xs text-red-500 hover:bg-red-50 hover:text-red-700"
@@ -95,6 +96,6 @@ export function SelectionBar({
       >
         ✕
       </button>
-    </div>
+    </div>,
   );
 }

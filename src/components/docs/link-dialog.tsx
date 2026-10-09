@@ -10,7 +10,7 @@ import { ArrowBackIcon, BookmarkIcon, ChevronRightIcon, CopyIcon, LinkOffIcon, T
 import { openLinkHref, placeOf, placePos, projectDocOf } from "@/components/docs/insert/links";
 import { tocEntries } from "@/components/docs/insert/toc";
 import { anchorAt, FloatingBox, focusSoon, useViewportTick, type Anchor } from "@/components/docs/insert/ui";
-import { DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
+import { CLOSE_TOOLBAR_EVENT, DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
 
 // Links in the page editor (SPEC.md §29), as Google Docs does them: Insert
 // link (Ctrl+K) opens a box under the selection: the link field (and the
@@ -90,6 +90,8 @@ export function LinkDialog({ editor }: { editor: Editor }) {
       setShowText(!selected || Boolean(current));
       setPlaces(false);
       setRange({ from, to });
+      // The link box takes the selection toolbar's place.
+      dom.dispatchEvent(new CustomEvent(CLOSE_TOOLBAR_EVENT, { bubbles: true }));
     };
     const dom = editor.view.dom;
     dom.addEventListener(DOCS_EVENT.link, onOpen);
@@ -227,7 +229,9 @@ export function LinkBubble({ editor, canEdit }: { editor: Editor; canEdit: boole
       const { selection } = editor.state;
       const href = editor.getAttributes("link").href as string | undefined;
       const range = selection.empty ? getMarkRange(selection.$from, editor.schema.marks.link) : undefined;
-      setShown(editor.isFocused && href && range ? { href, ...range } : { href: "", from: 0, to: 0 });
+      const next = editor.isFocused && href && range ? { href, ...range } : { href: "", from: 0, to: 0 };
+      // Still no link at the caret: no render (each key moves the caret).
+      setShown((s) => (!s.href && !next.href ? s : next));
     };
     // A press on the bubble blurs the editor for a moment; the bubble
     // waits before it decides the caret has left.

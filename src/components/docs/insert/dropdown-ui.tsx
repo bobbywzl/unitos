@@ -168,6 +168,7 @@ export function DropdownDialog({
       title={t("docsInsert.dropdownOptions")}
       onClose={onClose}
       className="docs-dd-dialog"
+      closeButton={false}
       actions={
         <>
           <DialogButton onClick={onClose}>{t("common.cancel")}</DialogButton>

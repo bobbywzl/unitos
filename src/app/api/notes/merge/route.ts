@@ -8,6 +8,7 @@ import { recordNoteEdit } from "@/lib/notes/edits";
 import { joinNoteContents } from "@/lib/notes/join";
 import { mergeNoteText } from "@/lib/notes/merge";
 import { NOTE_MERGE_KIND, type MergeSnapshot } from "@/lib/notes/merge-snapshot";
+import { keepNote } from "@/lib/notes/removed";
 import { normalizeNoteOrders } from "@/lib/order";
 import { parseBody } from "@/lib/validate";
 
@@ -136,6 +137,12 @@ export async function POST(req: Request) {
   // What the merge takes apart, before it does: the consumed notes' anchors
   // and replies by note, and the target's own anchors, so the copies the
   // merge adds can be told apart afterwards.
+  // Each consumed note is also kept whole, as a removal keeps it (its
+  // edits and side chats too, which go with the note): History's Restore
+  // brings it back after the Undo is gone (lib/notes/merge-restore.ts).
+  const keptWhole = new Map(
+    (await Promise.all(consumed.map((id) => keepNote(id)))).filter((k) => k !== null).map((k) => [k.id, k]),
+  );
   const [ownedAnchors, ownedReplies, targetAnchorsBefore, copiedSources] = await Promise.all([
     consumed.length > 0
       ? db.source.findMany({ where: { noteId: { in: consumed } }, select: { id: true, noteId: true } })
@@ -147,40 +154,49 @@ export async function POST(req: Request) {
     copied.length > 0 ? db.source.findMany({ where: { noteId: { in: copied } } }) : Promise.resolve([]),
   ]);
 
-  await db.$transaction([
-    // A merged note says something new: its gist is written again (SPEC.md §6).
-    db.note.update({ where: { id: target.id }, data: { content, gist: null } }),
-    ...(consumed.length > 0
-      ? [
-          db.source.updateMany({ where: { noteId: { in: consumed } }, data: { noteId: target.id } }),
-          db.reply.updateMany({ where: { noteId: { in: consumed } }, data: { noteId: target.id } }),
-          db.note.deleteMany({ where: { id: { in: consumed } } }),
-        ]
-      : []),
-    ...(copiedSources.length > 0
-      ? [
-          // The annotation keeps its own anchors; the note gets its own copies,
-          // so both stay anchored to the same words (SPEC.md §5).
-          db.source.createMany({
-            data: copiedSources.map((source) => ({
-              noteId: target.id,
-              documentId: source.documentId,
-              blockId: source.blockId,
-              startOffset: source.startOffset,
-              endOffset: source.endOffset,
-              quotedText: source.quotedText,
-              prefix: source.prefix,
-              suffix: source.suffix,
-              orphaned: source.orphaned,
-              layer: source.layer,
-              startTime: source.startTime,
-              endTime: source.endTime,
-              ...(source.region === null ? {} : { region: source.region as Prisma.InputJsonValue }),
-            })),
-          }),
-        ]
-      : []),
-  ]);
+  // The notes are locked and read again before the merge writes (SPEC.md
+  // §6): a note changed since the merge read it — a quote dropped, words
+  // saved from another tab — is not merged over or deleted with words the
+  // merge never saw. The merge is refused and the reader merges again.
+  const changed = await db.$transaction(
+    async (tx) => {
+      const rows = await tx.$queryRaw<{ id: string; content: string }[]>`
+        SELECT "id", "content" FROM "Note" WHERE "id" IN (${Prisma.join([target.id, ...consumed])}) FOR UPDATE`;
+      const now = new Map(rows.map((r) => [r.id, r.content]));
+      if ([target, ...consumedNotes].some((n) => now.get(n.id) !== n.content)) return true;
+      // A merged note says something new: its gist is written again (SPEC.md §6).
+      await tx.note.update({ where: { id: target.id }, data: { content, gist: null } });
+      if (consumed.length > 0) {
+        await tx.source.updateMany({ where: { noteId: { in: consumed } }, data: { noteId: target.id } });
+        await tx.reply.updateMany({ where: { noteId: { in: consumed } }, data: { noteId: target.id } });
+        await tx.note.deleteMany({ where: { id: { in: consumed } } });
+      }
+      if (copiedSources.length > 0) {
+        // The annotation keeps its own anchors; the note gets its own copies,
+        // so both stay anchored to the same words (SPEC.md §5).
+        await tx.source.createMany({
+          data: copiedSources.map((source) => ({
+            noteId: target.id,
+            documentId: source.documentId,
+            blockId: source.blockId,
+            startOffset: source.startOffset,
+            endOffset: source.endOffset,
+            quotedText: source.quotedText,
+            prefix: source.prefix,
+            suffix: source.suffix,
+            orphaned: source.orphaned,
+            layer: source.layer,
+            startTime: source.startTime,
+            endTime: source.endTime,
+            ...(source.region === null ? {} : { region: source.region as Prisma.InputJsonValue }),
+          })),
+        });
+      }
+      return false;
+    },
+    { timeout: 20_000, maxWait: 20_000 },
+  );
+  if (changed) return NextResponse.json({ error: t("api.noteChanged") }, { status: 409 });
 
   // The copies the merge added: the target's anchors now that were neither
   // its own before nor moved in from a consumed note.
@@ -209,6 +225,8 @@ export async function POST(req: Request) {
       ...(n.log === null ? {} : { log: n.log }),
       sourceIds: ownedAnchors.filter((s) => s.noteId === n.id).map((s) => s.id),
       replyIds: ownedReplies.filter((r) => r.noteId === n.id).map((r) => r.id),
+      documentId: n.documentId,
+      ...(keptWhole.has(n.id) ? { kept: keptWhole.get(n.id) } : {}),
     })),
     copiedSourceIds,
   };

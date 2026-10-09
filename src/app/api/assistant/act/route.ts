@@ -9,6 +9,7 @@ import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import {
   type ChatTurn,
   parseStoredConversation,
+  parseTranscript,
   renderTranscript,
   TOOL_NAME,
   TOOL_OUTPUT_NAME,
@@ -39,6 +40,7 @@ import {
 } from "@/lib/derive/context";
 import { figureContent, figureVisual, type FigureImage } from "@/lib/derive/figure";
 import { callForJson, modelErrorMessage } from "@/lib/derive/json-call";
+import { failureLine, wordedReason } from "@/app/api/assistant/failure-line";
 import { currentLang, serverT } from "@/lib/i18n/server";
 import { WEB_SEARCH_MAX_USES, WEB_SEARCH_TOOL, webSearchTool, webSearchUsd } from "@/lib/kimi";
 import type { TFunc } from "@/lib/i18n/dictionaries";
@@ -158,6 +160,22 @@ const planSchema = z.object({
 
 // Any unexpected throw still answers with the reason, never a bare 500 —
 // the client toast shows this message.
+/** One exchange put after the turns a conversation note holds, with the row
+    locked (SPEC.md §21): the card sends only its last turns as history, and
+    another tab may have added turns since, so the note is never written from
+    the card's copy. False: no such note in this project (deleted). */
+async function appendExchange(noteId: string, notebookId: string, exchange: ChatTurn[]): Promise<boolean> {
+  return db.$transaction(async (tx) => {
+    const [row] = await tx.$queryRaw<{ content: string }[]>`
+      SELECT n."content" FROM "Note" n JOIN "Section" s ON s."id" = n."sectionId"
+      WHERE n."id" = ${noteId} AND s."notebookId" = ${notebookId} FOR UPDATE OF n`;
+    if (!row) return false;
+    const content = renderTranscript([...parseTranscript(row.content), ...exchange]);
+    await tx.note.update({ where: { id: noteId }, data: { content } });
+    return true;
+  });
+}
+
 export async function POST(req: Request) {
   const t = await serverT();
   try {
@@ -165,7 +183,7 @@ export async function POST(req: Request) {
   } catch (err) {
     console.error("[assistant:act] failed:", err);
     return NextResponse.json(
-      { error: t("api.assistantFailed", { reason: modelErrorMessage(err) }) },
+      { error: t("assistant.failedServer") },
       { status: 500 },
     );
   }
@@ -476,7 +494,10 @@ async function handle(req: Request, t: TFunc) {
           : {}),
       });
   if (!result.ok) {
-    return NextResponse.json({ error: t("api.planFailed", { reason: result.error }) }, { status: 422 });
+    const error = wordedReason(t, result.error)
+      ? t("api.planFailed", { reason: result.error })
+      : failureLine(t, result.error, "assistant:act");
+    return NextResponse.json({ error }, { status: 422 });
   }
 
   // Validate and enrich every action against the real document
@@ -606,7 +627,7 @@ async function handle(req: Request, t: TFunc) {
         const moves = pass.order ? orderSuggestOps(units, pass.scope, { ...pass.order, removed: [] }, doc.rows, pass.why, first) : [];
         suggestions = { ops: [...pass.ops, ...moves], warnings: pass.warnings, summary: pass.summary };
       } catch (err) {
-        return NextResponse.json({ error: modelErrorMessage(err) }, { status: 422 });
+        return NextResponse.json({ error: failureLine(t, err, "assistant:act") }, { status: 422 });
       }
     } else {
       // A command that moves blocks: the order pass runs beside the window,
@@ -662,7 +683,7 @@ async function handle(req: Request, t: TFunc) {
           };
         }
       } catch (err) {
-        return NextResponse.json({ error: modelErrorMessage(err) }, { status: 422 });
+        return NextResponse.json({ error: failureLine(t, err, "assistant:act") }, { status: 422 });
       }
     }
   }
@@ -704,10 +725,9 @@ async function handle(req: Request, t: TFunc) {
     // knows its parent. The parent's mark still opens the parent.
     const transcript = renderTranscript(turns);
     if (conversationNoteId) {
-      try {
-        await db.note.update({ where: { id: conversationNoteId }, data: { content: transcript } });
+      if (await appendExchange(conversationNoteId, data.notebookId, turns.slice(-2))) {
         await bumpNotebook(data.notebookId);
-      } catch {
+      } else {
         conversationNoteId = null; // the note was deleted; a new one starts below
       }
     }
@@ -742,10 +762,9 @@ async function handle(req: Request, t: TFunc) {
   } else if (anchor) {
     const transcript = renderTranscript(turns);
     if (conversationNoteId) {
-      try {
-        await db.note.update({ where: { id: conversationNoteId }, data: { content: transcript } });
+      if (await appendExchange(conversationNoteId, data.notebookId, turns.slice(-2))) {
         await bumpNotebook(data.notebookId);
-      } catch {
+      } else {
         conversationNoteId = null; // the note was deleted; a new one starts below
       }
     }

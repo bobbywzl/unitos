@@ -36,6 +36,14 @@ const REFUSAL_KEY: Record<ImageRefusal, Parameters<TFunc>[0]> = {
   "too-large": "api.imageTooLarge",
 };
 
+/** A quote from the reader landed in a note: the reader lets the selection
+    it came from go, with its toolbar and its tint (reader-interactions.tsx
+    listens). */
+export const QUOTE_LANDED_EVENT = "dissect:quote-landed";
+export function quoteLanded() {
+  window.dispatchEvent(new CustomEvent(QUOTE_LANDED_EVENT));
+}
+
 /** A stored image (id and url), or an image from another page the browser
     could not read: no id, its own address. */
 export type DroppedImage = { id: string; url: string; name: string };

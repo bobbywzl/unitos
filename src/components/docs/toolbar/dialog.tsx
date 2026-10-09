@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/components/lang-provider";
 import { CloseIcon } from "@/components/docs/icons";
@@ -8,7 +8,18 @@ import { CloseIcon } from "@/components/docs/icons";
 // The toolbar's dialogs (SPEC.md §29) in Google Docs' Material 3 look: a
 // white card over a dimmed page (or an undimmed one, as the custom color
 // picker has), a title, the body, and the buttons at the bottom right.
-// Escape or the close button cancels; a press on the backdrop cancels.
+// Escape cancels, and so does a press on the backdrop. The close button
+// (✕) shows only on a dialog with no Cancel: one way to close per dialog.
+// The buttons stay in view while a tall body scrolls (a phone held
+// sideways). A dialog the pointer opened draws no focus ring on the button
+// that takes the focus, until a key is pressed in it.
+
+// The last input before a dialog opens: a key, or a press.
+let lastInput: "key" | "pointer" = "pointer";
+if (typeof window !== "undefined") {
+  window.addEventListener("keydown", () => (lastInput = "key"), true);
+  window.addEventListener("pointerdown", () => (lastInput = "pointer"), true);
+}
 
 export function ToolbarDialog({
   title,
@@ -34,11 +45,16 @@ export function ToolbarDialog({
   className?: string;
   /** False: the page behind stays undimmed. */
   dim?: boolean;
+  /** The ✕; never beside the Cancel that `submit` brings. A dialog with
+      its own Cancel in `actions` passes false. */
   closeButton?: boolean;
 }) {
   const t = useT();
+  const showClose = closeButton && !submit;
   const cardRef = useRef<HTMLDivElement>(null);
+  const [quiet, setQuiet] = useState(() => lastInput === "pointer");
   const closeRef = useRef(onClose);
+  const hasForm = useRef(submit !== undefined);
   useEffect(() => {
     closeRef.current = onClose;
   });
@@ -51,10 +67,14 @@ export function ToolbarDialog({
       closeRef.current();
     };
     document.addEventListener("keydown", onKey, true);
-    // The first field takes the focus, else the dialog.
+    // The first field takes the focus, else the dialog. A dialog with no
+    // form and nothing to type in (Word count, Details: a checkbox at most)
+    // gives it to its last footer button, so Enter closes it.
     const card = cardRef.current;
+    const typed = card?.querySelector<HTMLElement>("input:not([type=checkbox]):not([type=radio]), select, textarea, [data-autofocus]");
+    const footer = hasForm.current || typed ? null : [...(card?.querySelectorAll<HTMLElement>(".docs-tb-dialog-actions button:not(:disabled)") ?? [])].at(-1);
     const first = card?.querySelector<HTMLElement>("input, select, textarea, [data-autofocus]");
-    (first ?? card)?.focus();
+    (footer ?? first ?? card)?.focus();
     return () => document.removeEventListener("keydown", onKey, true);
   }, []);
   if (typeof document === "undefined") return null;
@@ -73,7 +93,9 @@ export function ToolbarDialog({
         aria-label={title ?? label}
         tabIndex={-1}
         className={`docs-tb-dialog ${className}`}
+        data-quiet={quiet || undefined}
         onKeyDown={(e) => {
+          if (quiet) setQuiet(false);
           // Tab stays in the dialog: past the last control it comes back to the first.
           if (e.key !== "Tab") return;
           const controls = [...e.currentTarget.querySelectorAll<HTMLElement>("a[href], button, input, select, textarea, [tabindex]")].filter(
@@ -85,10 +107,10 @@ export function ToolbarDialog({
           (e.shiftKey ? controls.at(-1) : controls[0])?.focus();
         }}
       >
-        {(title || closeButton) && (
+        {(title || showClose) && (
           <div className="docs-tb-dialog-head">
             {title && <h2>{title}</h2>}
-            {closeButton && (
+            {showClose && (
               <button
                 type="button"
                 aria-label={t("docs.close")}
@@ -103,14 +125,14 @@ export function ToolbarDialog({
         )}
         {submit ? (
           <form
-            className="docs-tb-dialog-body"
+            className="docs-tb-dialog-form"
             noValidate
             onSubmit={(e) => {
               e.preventDefault();
               submit.run();
             }}
           >
-            {children}
+            <div className="docs-tb-dialog-body">{children}</div>
             <div className="docs-tb-dialog-actions">
               <DialogButton onClick={() => closeRef.current()}>{t("docs.cancel")}</DialogButton>
               <DialogButton primary type="submit" disabled={submit.disabled}>

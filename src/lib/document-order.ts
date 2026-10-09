@@ -1,8 +1,9 @@
 // Sort by in the document list (SPEC.md §6). One choice orders every list —
 // the project itself and each folder's own list. Last edited, the default,
 // lists the rows newest edit first; Added is the list as it was before
-// sorts existed. Every other sort puts the list's rows in categories: a letter for Title, a kind for
-// Kind, a week or a month for Week added and Month added. A folder is a row
+// sorts existed, and a list added over more than one week draws a category
+// per week. Title and Kind put the list's rows in categories: a letter for
+// Title, a kind for Kind. A folder is a row
 // like a document: its own title and the day it was made sort it, not what
 // it holds; under Kind, folders are a kind of their own. Custom order is the
 // order a drag left each list in (NotebookDocument.position,
@@ -46,10 +47,14 @@ export const ROW_KINDS: RowKind[] = [
 // categories; the default. custom: the order a drag left each list in (the
 // rows a drag never placed first, newest edit first), with no categories; a
 // drag that reorders a list picks it. added: the list as it was before sorts
-// existed — folders by title, then documents oldest first — with no
-// categories.
-export type DocumentSort = "edited" | "custom" | "added" | "title" | "kind" | "week" | "month";
-export const DOCUMENT_SORTS: DocumentSort[] = ["edited", "custom", "added", "title", "kind", "week", "month"];
+// existed — folders by title, then documents oldest first — and, over more
+// than one week, every row oldest first in a category per week (Week added
+// and Month added were two more sorts until 2026-10-07; a browser that kept
+// either lists by Added).
+export type DocumentSort = "edited" | "custom" | "added" | "title" | "kind";
+export const DOCUMENT_SORTS: DocumentSort[] = ["edited", "custom", "added", "title", "kind"];
+// The categories a list can draw: Title's, Kind's, and Added's weeks.
+export type CategorySort = "title" | "kind" | "week";
 
 // One row of a list: a folder or a document. addedAt: when the folder was
 // made or the document added (DocumentFolder.createdAt, Document.createdAt).
@@ -97,6 +102,13 @@ export function sortByEdited<T extends SortRow>(rows: T[]): T[] {
     .map(({ row }) => row);
 }
 
+/** Whether a list's rows were added over more than one week: Added then
+    draws its weeks. */
+export function spansWeeks(rows: SortRow[]): boolean {
+  const weeks = new Set(rows.map((row) => weekStart(time(row.addedAt)).getTime()));
+  return weeks.size > 1;
+}
+
 /** A list's rows in Custom order: the rows a drag never placed (null
     position) first, newest edit first, so a document added since shows at
     the top; then the placed rows by position. Ties keep the list's own
@@ -111,18 +123,18 @@ export function sortByPosition<T extends SortRow & { position: number | null }>(
   return [...unplaced, ...placed];
 }
 
-/** A list's rows in categories, for every sort but Last edited and Added.
+/** A list's rows in categories, for Title, Kind, and Added over weeks.
     `rows` come in the list's own order (folders by title, then documents in the order they
     were added); ties keep it.
     - Title: rows A to Z, in a category per first letter or digit; # for
       any other first mark, No title last.
     - Kind: Folder first, then each kind of document; a category keeps the
       list's own order.
-    - Week added, Month added: newest first, the rows in a category newest
-      first. */
+    - Week: oldest first, the rows in a category oldest first, as Added
+      lists them. */
 export function categorizeRows<T extends SortRow>(
   rows: T[],
-  sort: Exclude<DocumentSort, "edited" | "custom" | "added">,
+  sort: CategorySort,
   lang: string,
   labels: { kind: (kind: RowKind) => string; untitled: string; weekOf: (date: string) => string },
 ): RowCategory<T>[] {
@@ -150,23 +162,14 @@ export function categorizeRows<T extends SortRow>(
     }
     return [...byKey.values()].sort((a, b) => (a.key === "" ? 1 : b.key === "" ? -1 : collator.compare(a.key, b.key)));
   }
-  indexed.sort((a, b) => time(b.row.addedAt) - time(a.row.addedAt) || a.index - b.index);
+  indexed.sort((a, b) => time(a.row.addedAt) - time(b.row.addedAt) || a.index - b.index);
   for (const { row } of indexed) {
-    const d = new Date(time(row.addedAt));
-    if (sort === "week") {
-      const start = weekStart(d.getTime());
-      add(
-        start.toISOString(),
-        labels.weekOf(start.toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric" })),
-        row,
-      );
-    } else {
-      add(
-        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
-        d.toLocaleDateString(locale, { year: "numeric", month: "long" }),
-        row,
-      );
-    }
+    const start = weekStart(time(row.addedAt));
+    add(
+      start.toISOString(),
+      labels.weekOf(start.toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric" })),
+      row,
+    );
   }
-  return [...byKey.values()].sort((a, b) => b.key.localeCompare(a.key));
+  return [...byKey.values()].sort((a, b) => a.key.localeCompare(b.key));
 }

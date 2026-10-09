@@ -11,6 +11,7 @@ import { runHeartbeat } from "@/lib/derive/heartbeat-client";
 import { useImeGuard } from "@/lib/ime";
 import type { GraphNode, StitchDocument, StitchResult } from "@/lib/types";
 import { transcriptErrorKey } from "@/lib/video/types";
+import { graphNavigate } from "@/components/graph/graph-history";
 import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 import { ClearConversation } from "@/components/assistant/clear-conversation";
 import { useChatDraft, useKeptChat, writeChatDraft, type KeptTurn } from "@/lib/kept-chat";
@@ -32,6 +33,36 @@ import { useChatDraft, useKeptChat, writeChatDraft, type KeptTurn } from "@/lib/
 // so the canvas is clear.
 
 type Turn = KeptTurn & { data?: { result?: StitchResult } };
+
+// The pick, per project for the browser tab: Escape, a closed graph, or a
+// reload never throws away the documents picked for a command (the command
+// itself is a chat draft, lib/kept-chat.ts). Session storage, with the memory
+// as the fallback when the store is blocked.
+const picks = new Map<string, string[]>();
+const pickKey = (notebookId: string) => `unitos-stitch-pick-${notebookId}`;
+
+export function readStitchPick(notebookId: string): Set<string> {
+  try {
+    const stored = sessionStorage.getItem(pickKey(notebookId));
+    if (stored !== null) {
+      const ids: unknown = JSON.parse(stored);
+      if (Array.isArray(ids)) return new Set(ids.filter((id): id is string => typeof id === "string"));
+    }
+  } catch {
+    // Blocked store or a bad value: the memory's copy.
+  }
+  return new Set(picks.get(notebookId) ?? []);
+}
+
+export function writeStitchPick(notebookId: string, ids: Set<string>) {
+  picks.set(notebookId, [...ids]);
+  try {
+    if (ids.size > 0) sessionStorage.setItem(pickKey(notebookId), JSON.stringify([...ids]));
+    else sessionStorage.removeItem(pickKey(notebookId));
+  } catch {
+    // Blocked store: the memory keeps it for this tab.
+  }
+}
 
 const SUGGESTIONS = [
   "stitch.stitchSuggestGather",
@@ -129,7 +160,7 @@ export function StitchBox({
   }
 
   function openDocument(documentId: string) {
-    router.push(`/n/${notebookId}?doc=${documentId}`);
+    graphNavigate(router, `/n/${notebookId}?doc=${documentId}`);
     onOpenDocument();
   }
 
@@ -162,8 +193,7 @@ export function StitchBox({
     >
       <div className="flex items-center gap-2 px-4 pt-3">
         <SparkleIcon size={15} className="shrink-0 text-clay" />
-        <span className="font-display text-[16px]">{t("stitch.stitch")}</span>
-        <span className="min-w-0 flex-1 truncate text-xs text-sand-500">{t("stitch.stitchHint")}</span>
+        <span className="mr-auto font-display text-[16px]">{t("stitch.stitch")}</span>
         {turns.length > 0 && !running && <ClearConversation onClear={kept.clear} track="stitch-clear" />}
         <button
           onClick={() => {
@@ -179,13 +209,21 @@ export function StitchBox({
         </button>
       </div>
 
+      {/* What Stitch does, whole, until the first command: a line cut with
+          an ellipsis hid most of it. */}
+      {turns.length === 0 && (
+        <p className="px-4 pt-1 text-xs leading-snug text-sand-600">{t("stitch.stitchHint")}</p>
+      )}
+
       {/* The scope: which documents the command reads. */}
       {canEdit && (
         <div className="flex flex-wrap items-center gap-1.5 px-4 pt-2 text-[11px] text-sand-600">
           <span className="font-semibold text-sand-700">
-            {picked.length > 0
-              ? t("stitch.stitchScopePicked", { n: picked.length })
-              : t("stitch.stitchScopeAll", { n: nodes.length })}
+            {picked.length === 0
+              ? t("stitch.stitchScopeAll", { n: nodes.length })
+              : picked.length === 1
+                ? t("stitch.stitchScopePickedOne")
+                : t("stitch.stitchScopePicked", { n: picked.length })}
           </span>
           {picked.map((n) => (
             <button

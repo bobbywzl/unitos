@@ -1,18 +1,16 @@
-import { distanceBetween, HOLD_DISTANCE_PX, HOLD_MS, HOLD_TOLERANCE_PX, skipsDrag } from "@/lib/hold-drag";
+import { distanceBetween, HOLD_DISTANCE_PX, HOLD_MS, HOLD_TOLERANCE_PX, skipsDrag, TOUCH_HOLD_MS } from "@/lib/hold-drag";
 
 // Hold to drag a row of the document list (SPEC.md §6). The numbers are the
 // note card's (lib/hold-drag.ts), so a hold feels the same everywhere:
 // - A mouse lifts the row by moving HOLD_DISTANCE_PX at once, or by holding
 //   still for HOLD_MS and then moving. A press that never moves is a click.
-// - A finger holds still for TOUCH_HOLD_MS, then the row lifts and follows
-//   it. A finger that moves first is a scroll; a hold let go without a move
-//   is a tap. The list scrolls under the finger, so the touch hold is longer
+// - A finger holds still for TOUCH_HOLD_MS (300 ms, the same as a note's,
+//   a tile's, and an annotation's), then the row lifts and follows it. A
+//   finger that moves first is a scroll; a hold let go without a move is a
+//   tap. The list scrolls under the finger, so the touch hold is longer
 //   than the mouse's: a flick or a tap never picks a row up.
 // Once the row lifts, the page neither scrolls nor selects text, and the
 // click the release would fire is stopped. Escape cancels.
-
-/** How long a finger holds still before the row lifts. */
-export const TOUCH_HOLD_MS = 300;
 
 type Point = { x: number; y: number };
 

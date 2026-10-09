@@ -25,20 +25,23 @@
   --sand-200: #eee7db;
   --sand-300: #dcd3c4;
   --sand-400: #c0b6a5;
-  --sand-500: #a19786;
-  --sand-600: #82796a;
+  /* Small labels read at 4.5:1 or more on --sand-100 (WCAG AA): the two
+     faint text tones sit at the lightest shade that does. */
+  --sand-500: #796f5e;
+  --sand-600: #6d6559;
   --sand-700: #645c50;
   --sand-800: #474238;
   --sand-900: #2e2b25;
 
-  --clay: #c67139;
+  /* White words on a clay button read at 4.5:1. */
+  --clay: #ae6332;
   --clay-fg: #ffffff;
   --clay-100: #fff2eb;
   --clay-200: #ffe1d0;
   --clay-300: #ffc6a5;
   --clay-400: #f6a06b;
   --clay-500: #d67f48;
-  --clay-600: #b2622d;
+  --clay-600: #a05828;
   --clay-700: #8c491a;
   --clay-800: #643312;
   --clay-900: #402310;
@@ -50,7 +53,7 @@
   --sage-300: #ccdbb2;
   --sage-400: #aebf92;
   --sage-500: #8fa073;
-  --sage-600: #728157;
+  --sage-600: #6d7c54;
   --sage-700: #56633f;
   --sage-800: #3d472b;
   --sage-900: #272e1b;
@@ -90,7 +93,8 @@
   --sand-200: #2c2721;
   --sand-300: #3d372e;
   --sand-400: #565044;
-  --sand-500: #7c7263;
+  /* 4.5:1 on --card. */
+  --sand-500: #8f8473;
   --sand-600: #a2988a;
   --sand-700: #c2b8a8;
   --sand-800: #ddd3c3;
@@ -394,6 +398,16 @@ mark,
 .annotation-mark:hover {
   background-color: color-mix(in srgb, var(--mark-bg) 78%, var(--ink));
 }
+/* A mouse held still on a mark (WORDS_HOLD_MS, lib/hold-drag.ts): the
+   quote is ready to carry, and the next move lifts it. The mark rises off
+   the page with a shadow, line by line, and takes the grab cursor. */
+mark[data-held] {
+  cursor: grab;
+  background-color: color-mix(in srgb, var(--mark-bg) 70%, var(--ink));
+  box-shadow: var(--elev-md);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
 /* A mark whose note was just deleted (block-view.tsx leaving): the tint and
    the underline fade, then the mark unpaints. The sweep's background-image
    goes at once so a mark deleted right after it was made fades too. */
@@ -408,10 +422,10 @@ mark,
   pointer-events: none;
   animation: mark-out 0.3s ease-out forwards;
 }
-/* The symbol at the end of a highlighted text (block-view.tsx): the tool that
-   made the annotation, or the comment bubble. A 15px chip that sits on the
-   highlight's bottom edge right after its last character — low in the line,
-   not at its top — with a paper ring so it reads as a badge on the mark. */
+/* The symbol of a mark (block-view.tsx): the tool that made the annotation,
+   or the comment bubble. A 15px chip with a paper ring, so it reads as a
+   badge; it stands in the margin beside the line its mark ends on
+   ([data-margin-chip] below, docs/css/layer.css in the page editor). */
 .mark-chip {
   width: 15px;
   height: 15px;
@@ -426,6 +440,36 @@ mark,
 .mark-chip-plus {
   width: auto;
   padding: 0 3px 0 2px;
+}
+/* In the block reader a mark's chip takes no room in the line (block-view.tsx
+   data-margin-chip): it stands right of the text column, level with the line
+   its mark ends on, as the page editor's chips do (docs/css/layer.css), so a
+   mark never pushes the words apart or splits a word. The chips on one line
+   stand side by side (--chip-at), and under each other where the margin is
+   narrow (--chip-down, layMarginChips). */
+[data-margin-chip] {
+  position: absolute;
+  left: calc(100% + 6px);
+  z-index: 1;
+  margin: 0.3em 0 0 !important;
+  vertical-align: baseline;
+  transform: translate(var(--chip-at, 0px), var(--chip-down, 0px));
+}
+@media print {
+  [data-margin-chip] {
+    display: none;
+  }
+}
+/* On a touch screen a chip is a 24px target; the dot keeps its look. The
+   page editor draws its chips the same (docs/css/layer.css positions them). */
+@media (pointer: coarse) {
+  [data-margin-chip].mark-chip::after,
+  .docs-prose button.mark-chip::after {
+    content: "";
+    position: absolute;
+    inset: -4.5px;
+    border-radius: 999px;
+  }
 }
 .tool-plus {
   gap: 1px;
@@ -900,6 +944,19 @@ mark,
     animation: tip-in 0.12s ease-out both;
   }
 }
+/* A long press on a control shows its tip on touch: the browser's own
+   long-press menu and word selection would take the press. */
+@media (pointer: coarse) {
+  button[data-tip],
+  a[data-tip],
+  [role="button"][data-tip],
+  [role="tab"][data-tip],
+  [role^="menuitem"][data-tip] {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
 
 /* Source chip click: flash the anchor (SPEC.md §6). */
 @keyframes anchor-flash {
@@ -1083,7 +1140,7 @@ ellipse.anchor-flash {
    or its one div, lib/parse/figure-style.ts) was painted for dark words: in
    dark mode its captions and links keep the light theme's colors. */
 .dark .reader-figure :is(figure, div)[style*="background"] {
-  --sand-600: #82796a;
+  --sand-600: #6d6559;
   --weblink: #1d4ed8;
 }
 .reader-figure .center {
@@ -1229,6 +1286,15 @@ ellipse.anchor-flash {
     calc(var(--reader-cut, 0px) / 2 + 50% - var(--reader-column-w) / 2)
   );
   margin-right: 0;
+}
+/* A side card covers no word (SPEC.md §6): while one is open on a pane whose
+   margin is too narrow for it, the column moves left by --cards-room
+   (reader-interactions.tsx), and slides back when the last card closes. */
+[data-cards-room] .reader-column {
+  margin-left: max(
+    var(--reader-cut, 0px),
+    calc(var(--reader-cut, 0px) / 2 + 50% - var(--reader-column-w) / 2 - var(--cards-room, 0px))
+  );
 }
 [data-note-floating] .reader-column {
   margin-left: min(0.5rem, max(0px, calc(50% - var(--reader-column-w) / 2)));
@@ -1466,13 +1532,13 @@ ellipse.anchor-flash {
 
 /* Instruments fan out from behind a work's cover on hover (design 2a). They rest
    tucked below the cover and spring to their own --fan position; the per-instrument
-   transition-delay staggers the five into an arc. Driven by CSS, not React state,
-   so the fan also runs on keyboard focus. */
+   transition-delay staggers the five into an arc. Driven by CSS, not React state. */
 .instrument {
   transform: translate(0px, 95px) rotate(0deg);
 }
-.work:hover .instrument,
-.work:focus-within .instrument {
+/* Hover only: a Tab through the cards, or a card's open menu, would fan
+   the instruments over the card above (NAV13-14). */
+.work:hover:not(:has([aria-expanded="true"])) .instrument {
   transform: var(--fan);
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -2079,8 +2145,12 @@ ellipse.anchor-flash {
   .content-in {
     animation: fade-in 0.28s ease-out both;
   }
+  /* The tray's tab rises in, then lets the transform go: filling for good
+     kept the scroll box transformed, so every fixed control drawn inside it
+     (the Undo pill, the selection bar, a conversation over the page)
+     scrolled with the tray and sat off screen once it was scrolled. */
   .panel-in {
-    animation: rise-in-short 0.22s ease-out both;
+    animation: rise-in-short 0.22s ease-out backwards;
   }
   /* Below md only: on md+ the same aside sits in the side column. */
   @media (max-width: 767.98px) {
@@ -2271,6 +2341,17 @@ ellipse.anchor-flash {
 }
 .note-box:hover {
   border-color: var(--sage-600);
+}
+/* A finger's band around a box that ticks: 33 px tall, the box drawn 15. */
+@media (pointer: coarse) {
+  button.note-box {
+    position: relative;
+  }
+  button.note-box::after {
+    content: "";
+    position: absolute;
+    inset: -9px -6px;
+  }
 }
 .note-box[data-checked],
 li[data-checked] > .note-box {
@@ -2537,6 +2618,26 @@ li[data-checked] > .note-box::before {
 .drop-line-end {
   top: auto;
   bottom: -5px;
+}
+/* The knob at the line's start: the document list's drop line has the same
+   (document-folders.tsx), so one drag reads the same everywhere. */
+.drop-line::before,
+.drop-line-grid::before {
+  content: "";
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--clay);
+  border-radius: 9999px;
+  background: var(--card);
+}
+.drop-line::before {
+  left: -4px;
+  top: -3px;
+}
+.drop-line-grid::before {
+  top: -4px;
+  left: -3px;
 }
 
 /* The dragged card under the pointer. It carries the card's own look, lifted
@@ -3498,7 +3599,8 @@ li[data-checked] > .note-box::before {
   margin-left: 4px;
   padding: 0 6px;
   border-radius: 999px;
-  background: var(--sage-500);
+  /* --sage-700: the 9.5px label reads at 4.5:1 or more in both themes. */
+  background: var(--sage-700);
   color: var(--sage-fg);
   font-size: 9.5px;
   font-weight: 700;

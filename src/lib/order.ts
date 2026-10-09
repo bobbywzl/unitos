@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { writeNoteOrders } from "@/lib/notes/order-writes";
 
 // Rewrite section orders sequentially per parent group. Run inside or after any section mutation.
 export async function normalizeSectionOrders(notebookId: string) {
@@ -23,16 +24,15 @@ export async function normalizeSectionOrders(notebookId: string) {
   await db.$transaction(updates);
 }
 
-// Rewrite note orders sequentially within a section.
+// Rewrite note orders sequentially within a section. A note's time stays
+// as it was (lib/notes/order-writes.ts).
 export async function normalizeNoteOrders(sectionId: string) {
   const notes = await db.note.findMany({
     where: { sectionId },
     orderBy: { order: "asc" },
     select: { id: true },
   });
-  await db.$transaction(
-    notes.map((n, i) => db.note.update({ where: { id: n.id }, data: { order: i } })),
-  );
+  await writeNoteOrders(notes.map((n) => n.id));
 }
 
 // Move an item to a target index by rewriting sibling orders. `ids` is the current ordered id list.

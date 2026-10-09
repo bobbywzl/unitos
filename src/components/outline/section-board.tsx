@@ -1,23 +1,24 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { startTransition, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { isImeKey } from "@/lib/ime";
 import type { SectionView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
-import { ChevronLeftIcon, PlusIcon } from "@/components/icons";
+import { PlusIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { SortableBoard, SortableGroup, SortableItem } from "@/components/sortable";
-import { AnnotationSideHost, useAnnotationSide } from "@/components/outline/annotation-side";
+import { AnnotationSideHost } from "@/components/outline/annotation-side";
 import { dropIndex, notesList, parseListId } from "@/components/outline/board-lists";
 import { MergeUndoBar } from "@/components/outline/merge-undo";
 import { NoteCard } from "@/components/outline/note-card";
-import { NoteComposer } from "@/components/outline/note-composer";
+import { NoteComposer, focusComposer } from "@/components/outline/note-composer";
 import { NoteTile } from "@/components/outline/note-tile";
 import { SECTION_ACTION, SECTION_ADD_NOTE } from "@/components/outline/section-action";
 import { SelectionBar } from "@/components/outline/selection-bar";
 import { useNoteCompose } from "@/components/outline/use-note-compose";
 import { VoiceNoteButton } from "@/components/outline/voice-note";
 import { findSection, type OutlineActions } from "@/components/outline/use-outline";
+import { shownSectionTitle } from "@/lib/section-title";
 
 // A section's board (SPEC.md §6): the section's notes filling the screen as
 // tiles side by side, one grid, opened from the notes full page by a click on
@@ -35,6 +36,11 @@ import { findSection, type OutlineActions } from "@/components/outline/use-outli
 // narrowest tile, and the widest.
 const TILE_GAP = 14;
 const TILE_MIN_WIDTH = 220;
+// A board narrower than this (a phone) takes two columns of smaller tiles,
+// still 3:4 at the least: one tile per screen made the reader scroll a
+// screen per note.
+const NARROW_BOARD = 500;
+const NARROW_TILE_MIN_WIDTH = 150;
 const TILE_MAX_WIDTH = 480;
 
 /** The grid's columns, and the height limits of a tile in px: never under
@@ -47,12 +53,17 @@ function parentOf(tree: SectionView[], id: string): SectionView | null {
   return null;
 }
 
+/** How many tiles a board draws as it opens; each step after doubles it. */
+const FIRST_TILES = 12;
+
 export function SectionBoard({
   tree,
   sectionId,
   actions,
   onChange,
   onClose,
+  rejected = null,
+  onUndoReject,
 }: {
   tree: SectionView[];
   sectionId: string;
@@ -60,6 +71,9 @@ export function SectionBoard({
   /** Another section's board takes this one's place. */
   onChange: (sectionId: string) => void;
   onClose: () => void;
+  /** The pending note rejected last, and its Undo: the board's pill takes it. */
+  rejected?: string | null;
+  onUndoReject?: () => void;
 }) {
   const t = useT();
   const { canEdit } = useCollab();
@@ -77,9 +91,6 @@ export function SectionBoard({
   const notes = compose.visibleNotes;
   const notesById = new Map(notes.map((n) => [n.id, n]));
   const opened = open ? (notesById.get(open) ?? null) : null;
-  // An annotation reference clicked in the open note opens the annotation
-  // beside its card (annotation-side.tsx): the overlay widens for the two.
-  const sideOpen = Boolean(useAnnotationSide()?.side);
 
   // The tiles' grid and height limits (SPEC.md §6). Columns: as many
   // 220px tiles as the board's width holds, and no more than the notes, so
@@ -105,7 +116,12 @@ export function SectionBoard({
       const gridWidth = grid.clientWidth;
       const columns = Math.max(
         1,
-        Math.min(noteCount, Math.floor((gridWidth + TILE_GAP) / (TILE_MIN_WIDTH + TILE_GAP))),
+        Math.min(
+          noteCount,
+          Math.floor(
+            (gridWidth + TILE_GAP) / ((gridWidth < NARROW_BOARD ? NARROW_TILE_MIN_WIDTH : TILE_MIN_WIDTH) + TILE_GAP),
+          ),
+        ),
       );
       const rows = Math.ceil(noteCount / columns);
       const width = Math.min(TILE_MAX_WIDTH, (gridWidth - TILE_GAP * (columns - 1)) / columns);
@@ -125,6 +141,19 @@ export function SectionBoard({
     observer.observe(el);
     return () => observer.disconnect();
   }, [noteCount, composing]);
+  // The tiles in view first: the board opens with the first tiles drawn,
+  // and the rest follow (a board of 50 notes took 0.3 to 0.4 s to open in
+  // one long task). Every step draws the tiles drawn before it again (the
+  // drag's list grows), so each step doubles what is drawn: a board of 200
+  // notes takes five steps, not seventeen. The steps are transitions, so a
+  // wheel or a press between them goes first.
+  const [drawn, setDrawn] = useState(FIRST_TILES);
+  useEffect(() => {
+    if (drawn >= noteCount) return;
+    const frame = requestAnimationFrame(() => startTransition(() => setDrawn((n) => n * 2)));
+    return () => cancelAnimationFrame(frame);
+  }, [drawn, noteCount]);
+  const shownNotes = drawn >= noteCount ? notes : notes.slice(0, drawn);
   const tileVars = tileSize
     ? ({
         "--tile-cols": tileSize.columns,
@@ -133,6 +162,28 @@ export function SectionBoard({
       } as React.CSSProperties)
     : undefined;
   const sizedClass = tileSize ? " note-tiles-sized" : "";
+
+  // Focus moves into the board as it opens, so Tab walks the board and not
+  // the page behind it (inert while the board is open, outline.tsx), and goes
+  // back to what opened it — the section's title — as it closes.
+  // The page turns inert in the same frame, so the title is found again by
+  // the section, not remembered as the focused element.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const shownRef = useRef(sectionId);
+  useEffect(() => {
+    shownRef.current = sectionId;
+  });
+  useEffect(() => {
+    rootRef.current?.focus({ preventScroll: true });
+    return () => {
+      requestAnimationFrame(() => {
+        if (document.activeElement && document.activeElement !== document.body) return;
+        document
+          .querySelector<HTMLElement>(`[data-drop-header="${notesList(shownRef.current)}"] [data-track="section-board"]`)
+          ?.focus({ preventScroll: true });
+      });
+    };
+  }, []);
 
   // The section is gone (deleted elsewhere): the board closes.
   const gone = section === null;
@@ -172,16 +223,15 @@ export function SectionBoard({
     "inline-flex shrink-0 items-center gap-1 rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800";
 
   return (
-    <div className="content-in fixed inset-0 z-50 flex flex-col bg-paper">
+    <div
+      ref={rootRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label={shownSectionTitle(section.title, t)}
+      tabIndex={-1}
+      className="content-in fixed inset-0 z-50 flex flex-col bg-paper outline-none"
+    >
       <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-line px-5 py-3">
-        <button
-          onClick={onClose}
-          data-track="board-close"
-          className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold text-sand-600 hover:bg-clay-100 hover:text-clay-800"
-        >
-          <ChevronLeftIcon size={14} />
-          {t("outline.notesLabel")}
-        </button>
         {parent && (
           <button
             onClick={() => onChange(parent.id)}
@@ -189,12 +239,13 @@ export function SectionBoard({
             data-tip={t("outline.openBoardTitle")}
             className={chip}
           >
-            {parent.title}
+            {shownSectionTitle(parent.title, t)}
             <span className="text-sand-400">/</span>
           </button>
         )}
-        <span className="font-display text-[22px]">{section.title}</span>
-        <span className="text-[13px] text-sand-600">{notes.length || ""}</span>
+        <span className="font-display text-[22px]">{shownSectionTitle(section.title, t)}</span>
+        {/* One count rule on every surface: the accepted notes. */}
+        <span className="text-[13px] text-sand-600">{notes.filter((n) => n.status !== "PENDING").length || ""}</span>
         {section.children.length > 0 && (
           <span className="flex flex-wrap items-center gap-1.5">
             <span className="text-[11px] font-bold tracking-[0.08em] text-sand-500 uppercase">
@@ -208,8 +259,8 @@ export function SectionBoard({
                 data-tip={t("outline.openBoardTitle")}
                 className={chip}
               >
-                {child.title}
-                <span className="text-sand-500">{child.notes.length || ""}</span>
+                {shownSectionTitle(child.title, t)}
+                <span className="text-sand-500">{child.notes.filter((n) => n.status !== "PENDING").length || ""}</span>
               </button>
             ))}
           </span>
@@ -217,7 +268,17 @@ export function SectionBoard({
         <div className="ml-auto flex items-center gap-2">
           {canEdit && (
             <button
-              onClick={compose.open}
+              onClick={(e) => {
+                // A second press while the composer is open puts the caret
+                // back in it, as the tray's and the full page's + Note do.
+                if (!compose.composing) {
+                  compose.open();
+                  return;
+                }
+                let root: HTMLElement | null = e.currentTarget;
+                while (root && !root.querySelector("[data-note-composer]")) root = root.parentElement;
+                focusComposer(root);
+              }}
               data-track="section-add-note"
               data-tip={t("outline.addNoteTitle")}
               className={SECTION_ADD_NOTE}
@@ -226,7 +287,7 @@ export function SectionBoard({
               {t("outline.addNoteBtn")}
             </button>
           )}
-          {canEdit && <VoiceNoteButton sectionId={section.id} onError={setVoiceError} className={SECTION_ACTION} />}
+          {canEdit && <VoiceNoteButton sectionId={section.id} onError={setVoiceError} className={SECTION_ACTION} compact />}
           <button
             onClick={onClose}
             data-track="board-close"
@@ -245,7 +306,7 @@ export function SectionBoard({
             the section (SPEC.md §6). */}
         {compose.composing && (
           <div className="mb-5 max-w-[760px]">
-            <NoteComposer compose={compose} full padding="p-4" />
+            <NoteComposer compose={compose} onRelease={() => actions.expectComposed(section.id)} padding="p-4" />
           </div>
         )}
 
@@ -265,20 +326,20 @@ export function SectionBoard({
             // height limits, so the dragged tile keeps its size.
             return note ? (
               <div className={`h-full${sizedClass}`} style={tileVars}>
-                <NoteTile note={note} actions={actions} onOpen={() => {}} />
+                <NoteTile note={note} actions={actions} onOpen={() => {}} lifted />
               </div>
             ) : null;
           }}
         >
           <SortableGroup
             id={notesList(section.id)}
-            ids={notes.map((n) => n.id)}
+            ids={shownNotes.map((n) => n.id)}
             layout="grid"
             className={`note-board${sizedClass}`}
             style={tileVars}
           >
-            {notes.map((note) => (
-              <SortableItem key={note.id} id={note.id}>
+            {shownNotes.map((note) => (
+              <SortableItem key={actions.noteKey(note.id)} id={note.id}>
                 {(handle) => <NoteTile note={note} actions={actions} handle={canEdit ? handle : undefined} onOpen={setOpen} />}
               </SortableItem>
             ))}
@@ -301,9 +362,12 @@ export function SectionBoard({
             tabIndex={-1}
           />
           <div
-            className={`content-in relative flex w-full flex-col items-start gap-6 lg:flex-row ${sideOpen ? "max-w-[1160px]" : "max-w-[760px]"}`}
+            className="content-in relative w-full max-w-[760px]"
           >
-            <div className="relative w-full min-w-0 max-w-[760px] flex-1">
+            {/* An annotation reference clicked in the open note opens the
+                annotation beside its card (annotation-side.tsx), in the
+                free room on its right: the card stays where it is. */}
+            <div className="relative w-full min-w-0">
               <button
                 onClick={() => setOpen(null)}
                 data-track="board-note-close"
@@ -313,7 +377,7 @@ export function SectionBoard({
               >
                 ✕
               </button>
-              <NoteCard note={opened} actions={actions} variant="page" />
+              <NoteCard note={opened} actions={actions} variant="page" opened />
             </div>
             <AnnotationSideHost />
           </div>
@@ -321,7 +385,7 @@ export function SectionBoard({
       )}
 
       <SelectionBar tree={tree} actions={actions} />
-      <MergeUndoBar actions={actions} />
+      <MergeUndoBar actions={actions} rejected={rejected} onUndoReject={onUndoReject} />
     </div>
   );
 }

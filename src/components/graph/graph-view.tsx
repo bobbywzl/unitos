@@ -24,6 +24,7 @@ import { FilmIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { clipWords } from "@/lib/markdown-preview";
 import { LinkDetail } from "@/components/graph/link-detail";
+import { graphNavigate } from "@/components/graph/graph-history";
 
 // The corpus graph (SPEC.md §13; the release-edu canvas patterns): documents
 // as nodes on a pan/zoom canvas, links between them as swept curves. The more
@@ -98,7 +99,9 @@ function DocumentNode({ id, data }: NodeProps<DocumentNodeData>) {
   return (
     <div
       className="flex w-36 flex-col items-center gap-1 transition-opacity duration-300"
-      style={{ opacity: spotlight === "dim" ? 0.15 : 1 }}
+      // A picked node stays lit while another is spotlighted: the pick is
+      // what the next Stitch command reads.
+      style={{ opacity: spotlight === "dim" && !data.selected ? 0.15 : 1 }}
     >
       <Handle type="source" position={Position.Top} className="!pointer-events-none !h-1 !w-1 !opacity-0" style={{ top: 16 }} />
       <Handle type="target" position={Position.Top} className="!pointer-events-none !h-1 !w-1 !opacity-0" style={{ top: 16 }} />
@@ -435,7 +438,7 @@ function GraphCanvas({
   useEffect(() => cancelClear, [cancelClear]);
   const openLink = useCallback(
     (link: GraphEdgeLink, documentId: string) => {
-      router.push(`/n/${notebookId}?doc=${documentId}&link=${link.id}`);
+      graphNavigate(router, `/n/${notebookId}?doc=${documentId}&link=${link.id}`);
       onOpenDocument();
     },
     [router, notebookId, onOpenDocument],
@@ -576,7 +579,7 @@ function GraphCanvas({
             onToggleSelect(node.id);
             return;
           }
-          router.push(docHref ? docHref(node.id) : `/n/${notebookId}?doc=${node.id}`);
+          graphNavigate(router, docHref ? docHref(node.id) : `/n/${notebookId}?doc=${node.id}`);
           onOpenDocument();
         }}
         onNodeMouseEnter={(_, node) => hoverNode(node.id)}
@@ -620,7 +623,8 @@ function GraphCanvas({
         <Controls showInteractive={false} fitViewOptions={{ padding: 0.3, maxZoom: 1.1, duration: 400 }} />
       </ReactFlow>
       </SpotlightContext.Provider>
-      <p className="pointer-events-none absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full border border-line bg-card/95 px-4 py-1.5 text-[11px] text-sand-600 shadow-soft">
+      {/* The legend at the top left: the foot of the canvas is the Stitch box's. */}
+      <p className="pointer-events-none absolute top-3 left-3 z-10 max-w-[min(520px,calc(100%-24px))] rounded-2xl border border-line bg-card/95 px-4 py-1.5 text-[11px] leading-snug text-sand-600 shadow-soft">
         {t(picking ? "panes.graphPickHint" : "panes.graphHint")}
       </p>
     </div>

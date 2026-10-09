@@ -1,17 +1,17 @@
 // UI strings of the page editor's page area (SPEC.md §29): the title row, the
-// pages, the rulers, the tabs & outlines panel, page setup, headers and
+// pages, the rulers, the contents panel, page setup, headers and
 // footers. The English follows Google Docs' own labels. zh glossary:
 // dict/common.ts — page 页面 · document 文档 · pages(分页格式) 分页 · pageless 无分页.
 
 const en = {
   // The title row
   untitled: "Untitled document",
-  savedCaption: "Saved to Unitos",
   documentStatus: "See document status",
   statusSaved: "Every change you make is saved in Unitos as you type.",
   statusSaving: "Your latest changes are being saved.",
   statusOffline: "Your changes stay here and save once the connection is back.",
-  statusFailed: "Your latest changes are not saved yet. Unitos tries again with your next change.",
+  statusFailed: "Your latest changes are not saved yet. Unitos tries again on its own; until then they stay in this browser.",
+  statusAppFailed: "The document is saved. A note or an annotation is not saved yet. Unitos tries again on its own; until then its words stay in this browser.",
   // The import line: where an import came from
   importedFrom: "Imported from {site}",
   importPdf: "PDF · {n} page{s}",
@@ -22,12 +22,18 @@ const en = {
   // Commands (Search the menus)
   pageSetup: "Page setup",
   showRuler: "Show ruler",
-  showOutline: "Show tabs & outlines",
+  showOutline: "Show the contents",
   fullScreen: "Full screen",
-  fullScreenHint: "Full screen. Press Esc to show the menus.",
-  hideOutline: "Hide tabs & outlines",
+  fullScreenHint: "Full screen. Press Esc to bring the toolbar back.",
+  hideOutline: "Hide the contents",
   switchToPageless: "Switch to Pageless format",
   switchToPages: "Switch to Pages format",
+  // A PDF import read pageless in Viewing (page/reflow.tsx).
+  readPageless: "Read pageless",
+  showPages: "Show pages",
+  keepPages: "Keep pages",
+  reflowAsk: "The pages are drawn at {n}% to fit this pane.",
+  reflowOn: "Read pageless: the words wrap to the pane. Editing shows the pages.",
   textWidthNarrow: "Text width: Narrow",
   textWidthMedium: "Text width: Medium",
   textWidthWide: "Text width: Wide",
@@ -64,7 +70,7 @@ const en = {
   compare: "Compare",
   comparing: "Comparing…",
   comparisonOf: "Comparison of {a} and {b}",
-  copySuggestions: "Copy comments and suggestions",
+  copySuggestions: "Copy suggestions",
   // File > Details (page/details-dialog.tsx).
   details: "Details",
   documentDetails: "Document details",
@@ -142,11 +148,9 @@ const en = {
   addRightTabStop: "Add right tab-stop",
   collapseHeading: "Collapse heading",
   expandHeading: "Expand heading",
-  // The tabs & outlines panel
-  documentTabs: "Document tabs",
-  firstTab: "Tab 1",
-  outlineEmpty: "Headings you add to the document will appear here.",
-  tabsOutlines: "Tabs & outlines",
+  // The contents panel (code keeps `outline`)
+  outlineEmpty: "No contents yet. Headings you add show here.",
+  tabsOutlines: "Contents",
   resizePanel: "Drag to resize",
   // Headers, footers, page numbers
   firstPageHeader: "First page header",
@@ -174,12 +178,12 @@ const en = {
 
 const zh: Record<keyof typeof en, string> = {
   untitled: "无标题文档",
-  savedCaption: "已保存到 Unitos",
   documentStatus: "查看文档状态",
   statusSaved: "你所做的每项更改都会在输入时保存到 Unitos。",
   statusSaving: "正在保存你最新的更改。",
   statusOffline: "你的更改会先留在这里，连接恢复后再保存。",
-  statusFailed: "你最新的更改尚未保存。Unitos 会在你下次更改时再次尝试。",
+  statusFailed: "你最新的更改尚未保存。Unitos 会自动重试；在此之前，它们保留在此浏览器中。",
+  statusAppFailed: "文档已保存。一条笔记或批注尚未保存。Unitos 会自动重试；在此之前，其文字保留在此浏览器中。",
   importedFrom: "导入自 {site}",
   importPdf: "PDF · {n} 页",
   importPdfPage: "PDF · 第 {pages} 页，共 {n} 页",
@@ -188,12 +192,17 @@ const zh: Record<keyof typeof en, string> = {
   importWordFile: "Word 文件",
   pageSetup: "页面设置",
   showRuler: "显示标尺",
-  showOutline: "显示标签页和大纲",
+  showOutline: "显示目录",
   fullScreen: "全屏",
-  fullScreenHint: "全屏模式。按 Esc 显示菜单。",
-  hideOutline: "隐藏标签页和大纲",
+  fullScreenHint: "全屏模式。按 Esc 恢复工具栏。",
+  hideOutline: "隐藏目录",
   switchToPageless: "切换到无分页格式",
   switchToPages: "切换到分页格式",
+  readPageless: "无分页阅读",
+  showPages: "显示分页",
+  keepPages: "保留分页",
+  reflowAsk: "页面缩小到 {n}% 才能放进此窗格。",
+  reflowOn: "无分页阅读：文字随窗格换行。编辑时显示分页。",
   textWidthNarrow: "文本宽度：窄",
   textWidthMedium: "文本宽度：中",
   textWidthWide: "文本宽度：宽",
@@ -228,7 +237,7 @@ const zh: Record<keyof typeof en, string> = {
   compare: "比较",
   comparing: "正在比较…",
   comparisonOf: "{a} 与 {b} 的比较",
-  copySuggestions: "复制评论和建议",
+  copySuggestions: "复制建议",
   details: "详细信息",
   documentDetails: "文档详细信息",
   detailsLocation: "位置",
@@ -299,10 +308,8 @@ const zh: Record<keyof typeof en, string> = {
   addRightTabStop: "添加右对齐制表位",
   collapseHeading: "收起标题",
   expandHeading: "展开标题",
-  documentTabs: "文档标签页",
-  firstTab: "标签页 1",
-  outlineEmpty: "你添加到文档中的标题会显示在这里。",
-  tabsOutlines: "标签页和大纲",
+  outlineEmpty: "还没有目录。你添加的标题会显示在这里。",
+  tabsOutlines: "目录",
   resizePanel: "拖动以调整大小",
   firstPageHeader: "首页页眉",
   firstPageFooter: "首页页脚",

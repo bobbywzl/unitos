@@ -4,7 +4,7 @@ import { useEditorState, type Editor } from "@tiptap/react";
 import { useEffect, useReducer, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/components/lang-provider";
-import { MoreVertIcon, UndoIcon } from "@/components/docs/icons";
+import { MoreHorizIcon, UndoIcon } from "@/components/docs/icons";
 import { DropdownPanel, keepFocus, MenuItem } from "@/components/docs/menu";
 import { TYPING_EVENT, fireDocs } from "@/components/docs/typing/events";
 import { traceAtCaret, undoCorrection } from "@/components/docs/typing/trace";
@@ -62,7 +62,7 @@ export function AutocorrectBubble({ editor }: { editor: Editor }) {
         data-tip={menu ? undefined : t("docsTyping.moreOptions")}
         onClick={() => setMenu((m) => !m)}
       >
-        <MoreVertIcon size={18} />
+        <MoreHorizIcon size={18} />
       </button>
       <DropdownPanel open={menu} anchorRef={moreRef} onClose={() => setMenu(false)} className="docs-menu-plain">
         <MenuItem onSelect={undo}>{t("docsTyping.stopCorrecting", { word: trace.original })}</MenuItem>

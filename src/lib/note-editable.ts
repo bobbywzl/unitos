@@ -39,6 +39,30 @@ import {
 } from "@/lib/note-doc";
 
 export type TextSelection = { start: number; end: number };
+
+/** Where an offset of `before` stands in `after`: the same place when the
+    text before it, or after it, did not change; else after the same words
+    before it, found nearest its old place. */
+export function keptOffset(before: string, after: string, at: number): number {
+  if (before === after) return at;
+  let head = 0;
+  while (head < before.length && head < after.length && before[head] === after[head]) head++;
+  if (at <= head) return at;
+  let tail = 0;
+  while (tail < before.length - head && tail < after.length - head && before[before.length - 1 - tail] === after[after.length - 1 - tail]) tail++;
+  if (at > before.length - tail) return at + after.length - before.length;
+  for (const n of [40, 20, 10, 4, 2, 1]) {
+    const words = before.slice(Math.max(0, at - n), at);
+    if (!words) break;
+    let best = -1;
+    for (let i = after.indexOf(words); i >= 0; i = after.indexOf(words, i + 1)) {
+      const end = i + words.length;
+      if (best < 0 || Math.abs(end - at) < Math.abs(best - at)) best = end;
+    }
+    if (best >= 0) return best;
+  }
+  return Math.min(at, after.length);
+}
 // Bold, italic, underline, and the four text colors: a selection is styled
 // or unstyled; a bare caret styles what is typed next. One color at a time:
 // the color chosen replaces the one the text had.
@@ -196,6 +220,40 @@ function setSelection(el: HTMLElement, lines: NoteLine[], start: number, end: nu
   sel.addRange(range);
 }
 
+// The browser keeps the caret in view only for its own edits; the editor
+// paints every key itself, so after each one the caret's line is brought
+// into view in each box that scrolls it, the editor's own and the window
+// included, by no more than it takes.
+function revealCaret(el: HTMLElement) {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return;
+  const range = sel.getRangeAt(0);
+  let rect = range.getBoundingClientRect();
+  if (rect.height === 0) {
+    const node = range.startContainer;
+    const box = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
+    if (!box) return;
+    rect = box.getBoundingClientRect();
+  }
+  const pad = 8;
+  let top = rect.top;
+  let bottom = rect.bottom;
+  const shiftFor = (low: number, high: number) =>
+    bottom + pad > high ? Math.min(bottom + pad - high, top - low) : top - pad < low ? top - pad - low : 0;
+  for (let box: HTMLElement | null = el; box; box = box.parentElement) {
+    if (box.scrollHeight <= box.clientHeight || !/auto|scroll/.test(getComputedStyle(box).overflowY)) continue;
+    const frame = box.getBoundingClientRect();
+    const shift = shiftFor(frame.top, frame.bottom);
+    if (shift === 0) continue;
+    const was = box.scrollTop;
+    box.scrollTop += shift;
+    top -= box.scrollTop - was;
+    bottom -= box.scrollTop - was;
+  }
+  const shift = shiftFor(0, window.innerHeight);
+  if (shift !== 0) window.scrollBy(0, shift);
+}
+
 // Painting normalizes: the document reads back in the serializer's own form
 // ("1)" as "1.", a stray indent dropped), and the text follows the document,
 // so offsets read from the document always fit the text.
@@ -244,9 +302,32 @@ function readSelection(el: HTMLElement): { text: string; selection: TextSelectio
 
 // Enter continues the line's structure: a list item starts the next item
 // ("- ", "+ ", "N. ", "- [ ] " with an empty box), a quote line the next quote
-// line, an indented line keeps its indent. Enter on an empty item ends the
-// list instead.
+// line, an indented line keeps its indent. Enter on an empty nested item
+// takes it out one level, an item of the list above it; Enter on an empty
+// item at the top level ends the list instead.
 const LINE_LEAD = /^(\s*)(?:([-*+])(\s\[[ xX]\])?|(\d{1,3})([.)])|(>))(\s+|$)/;
+
+/** The marker of the item after the one `lead` read. */
+function nextMarker(lead: RegExpExecArray): string {
+  return lead[2] ? `${lead[2]} ${lead[3] ? "[ ] " : ""}` : lead[6] ? "> " : `${Number(lead[4]) + 1}${lead[5]} `;
+}
+
+/** The list item a line indented by `indent` is nested in: the nearest line
+    above it, back from `lineStart`, that is an item indented less. Null when
+    a line indented less is no item, or there is none. */
+function parentItem(text: string, lineStart: number, indent: number): RegExpExecArray | null {
+  let end = lineStart - 1;
+  while (end > 0) {
+    const start = text.lastIndexOf("\n", end - 1) + 1;
+    const line = text.slice(start, end);
+    end = start - 1;
+    if (line.trim() === "") continue;
+    const own = /^\s*/.exec(line)![0].length;
+    if (own >= indent) continue;
+    return LINE_LEAD.exec(line);
+  }
+  return null;
+}
 
 export function newlineFor(text: string, caret: number): { insert: string; from: number } {
   const lineStart = text.lastIndexOf("\n", caret - 1) + 1;
@@ -261,15 +342,18 @@ export function newlineFor(text: string, caret: number): { insert: string; from:
     return { insert: `\n${indent.slice(0, Math.max(0, caret - lineStart))}`, from: caret };
   }
   if (line.slice(lead[0].length).trim() === "") {
-    // An empty item: the marker goes, the caret stays on a plain line.
-    return { insert: lead[1], from: lineStart };
+    // An empty nested item: an item of the list it is nested in, one level
+    // out, as the editor draws it and the note stores it.
+    const parent = lead[1] === "" ? null : parentItem(text, lineStart, lead[1].length);
+    if (parent) return { insert: `${parent[1]}${nextMarker(parent)}`, from: lineStart };
+    // An empty item at the top level: the marker goes, the caret stays on a
+    // plain line with no indent. A blank line comes first: in Markdown a
+    // line right under a quote or a list item is part of it, so the next
+    // words would save inside the quote or the last item.
+    const blank = lineStart > 0 && text[lineStart - 2] !== "\n" ? "\n" : "";
+    return { insert: blank, from: lineStart };
   }
-  const marker = lead[2]
-    ? `${lead[2]} ${lead[3] ? "[ ] " : ""}`
-    : lead[6]
-      ? "> "
-      : `${Number(lead[4]) + 1}${lead[5]} `;
-  return { insert: `\n${lead[1]}${marker}`, from: caret };
+  return { insert: `\n${lead[1]}${nextMarker(lead)}`, from: caret };
 }
 
 // "[ ] " or "[] " typed at the start of a line (after any list marker)
@@ -405,6 +489,7 @@ export function attachNoteEditable(
     text = next;
     paint(clamp(sel));
     push(clamp(sel), coalesce);
+    if (el.contains(document.activeElement) || document.activeElement === el) revealCaret(el);
     if (text !== before) opts.onChange(text);
   }
 
@@ -484,7 +569,9 @@ export function attachNoteEditable(
     const collapsed = sel.start === sel.end;
     let { insert, from } = plain || !collapsed ? { insert: "\n", from: Math.min(sel.start, sel.end) } : newlineFor(text, sel.start);
     let to = Math.max(sel.start, sel.end);
-    if (insert.startsWith("\n") && collapsed) {
+    // An empty item ending its list (from at the line's start) replaces the
+    // marker whole; only a break at the caret moves around a run's markers.
+    if (insert.startsWith("\n") && collapsed && from === sel.start) {
       const run = runAt(lines, from);
       if (run) {
         // Spaces beside the break would sit against a marker; markdown wants
@@ -833,7 +920,12 @@ export function attachNoteEditable(
       if (next === text && !selection) return;
       clearIntent();
       const focused = document.activeElement === el;
-      const keep = selection ?? (focused ? currentSelection() : null);
+      // Without a selection the caret keeps its place among the words: a
+      // text put together with words written elsewhere (a save that met
+      // another tab's or a collaborator's words) moves it with the words
+      // before it, never into the words that came in.
+      const at = focused && !selection ? currentSelection() : null;
+      const keep = selection ?? (at ? { start: keptOffset(text, next, at.start), end: keptOffset(text, next, at.end) } : null);
       text = next;
       paint(keep ? clamp(keep) : null);
       if (selection && !focused) el.focus({ preventScroll: true });

@@ -3,21 +3,21 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import type { AnnotationItem } from "@/lib/types";
-import { referenceContent } from "@/lib/annotation-reference";
+import { referenceContent, type AnnotationReference } from "@/lib/annotation-reference";
 import { ANNOTATION_KIND_KEY, annotationKindColor } from "@/lib/annotations/kind";
 import type { TKey } from "@/lib/i18n/dictionaries";
 import { markdownPreview } from "@/lib/markdown-preview";
 import { useGist } from "@/lib/gist-client";
 import { stripSimplifyMarkers } from "@/lib/sentences";
-import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
 import { ReplyThread } from "@/components/collab/reply-thread";
-import { ChevronDownIcon, ChevronRightIcon, ExpandIcon, LocateIcon } from "@/components/icons";
+import { ChevronDownIcon, ChevronRightIcon, ExpandIcon } from "@/components/icons";
 import { AnnotationKindIcon } from "@/components/annotation-kind-icon";
 import { useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { AnnotationGrip } from "@/components/outline/annotation-grip";
 import { NoteId } from "@/components/outline/note-id";
+import { WordLine } from "@/components/outline/word-line";
 import { useCardDropOpen } from "@/components/outline/use-card-drop";
 import type { CollapsedViewModel } from "@/components/use-collapsed-view";
 
@@ -105,12 +105,52 @@ export function GroupLabel({ icon, children }: { icon?: React.ReactNode; childre
   );
 }
 
+/** Whether the annotation has a mark to jump to in its document. */
+export function canJumpTo(a: AnnotationItem, documentId: string | null): documentId is string {
+  return Boolean(a.sourceId) && !a.orphaned && !a.resolved && documentId !== null;
+}
+
+/** Jump to the annotation's mark in the reader. From the reader itself (the
+    Annotations tab) the jump takes the place of the page in the history, so
+    Back leaves the document instead of walking back through the jumps; from
+    the annotations full page the reader is a new page, and Back returns. */
+export function jumpToAnnotation(router: ReturnType<typeof useRouter>, notebookId: string, documentId: string, sourceId: string) {
+  const href = `/n/${notebookId}?doc=${documentId}&src=${sourceId}`;
+  if (window.location.pathname === `/n/${notebookId}`) router.replace(href, { scroll: false });
+  else router.push(href);
+  // The ?src effect only re-runs when the param changes; the event covers a
+  // second jump to the same annotation.
+  window.dispatchEvent(new CustomEvent("dissect:flash-source", { detail: { sourceId } }));
+}
+
 /** The line a collapsed card shows until its gist arrives: the annotation's
     first words. */
 export function annotationSummary(a: AnnotationItem): string {
   if (a.kind === "highlight") return a.content;
   if (a.kind === "simplify") return markdownPreview(stripSimplifyMarkers(a.content));
   return markdownPreview(a.content);
+}
+
+/** The annotation as a note carries it (lib/annotation-reference.ts): what
+    its grip lifts onto a note, and what the menu's Add to a note lands —
+    the quote above the row, the text, the picture, or the conversation's
+    log under it. */
+export function annotationReferenceOf(
+  annotation: AnnotationItem,
+  documentId: string,
+  label: string,
+  words: string,
+): AnnotationReference {
+  return {
+    annotationId: annotation.id,
+    documentId,
+    sourceId: annotation.sourceId,
+    kind: annotation.kind,
+    label,
+    words,
+    ...(annotation.quotedText ? { quote: annotation.quotedText } : {}),
+    ...referenceContent(annotation.kind, annotation.content, annotation.quotedText, annotation.conversation.length),
+  };
 }
 
 export function AnnotationCard({
@@ -120,6 +160,7 @@ export function AnnotationCard({
   summary,
   menu,
   showKind = false,
+  jumpNotebookId,
   children,
 }: {
   annotation: AnnotationItem;
@@ -132,16 +173,20 @@ export function AnnotationCard({
   /** The kind's symbol and name in the header row: the annotations full
       page, where the cards are grouped by document, not by kind. */
   showKind?: boolean;
+  /** In the reader (the Annotations tab): a press on the collapsed card's
+      line opens the card and jumps to its mark in the text too. */
+  jumpNotebookId?: string;
   children: React.ReactNode;
 }) {
   const t = useT();
+  const router = useRouter();
   // Somewhere to drop: a note of the tray, or the floating card over the
   // article (SPEC.md §6). The grip shows only then — with no note to drop on,
   // the gesture goes nowhere.
   const droppable = useCardDropOpen();
   const collapsed = view.isCollapsed(annotation.id);
   const gist = useGist(annotation.id, annotation.gist, summary, collapsed);
-  const collapseLabel = collapsed ? t("outline.expandNote") : t("outline.collapseNote");
+  const collapseLabel = collapsed ? t("outline.expandAnnotation") : t("outline.collapseAnnotation");
   const { sourceId } = annotation;
   const toggle = view.toggle;
   const color = annotationKindColor(annotation.kind, annotation.color);
@@ -164,20 +209,7 @@ export function AnnotationCard({
       <div className="flex min-h-[18px] items-center gap-1.5">
         {droppable && documentId && (
           <div className="-ml-1 opacity-70 transition-opacity group-hover/annotation:opacity-100 focus-within:opacity-100">
-            <AnnotationGrip
-              reference={{
-                annotationId: annotation.id,
-                documentId,
-                sourceId,
-                kind: annotation.kind,
-                label: t(ANNOTATION_KIND_KEY[annotation.kind]),
-                words: gist,
-                // The quote lands above the row; the text, the picture, or
-                // the conversation's log under it (lib/annotation-reference.ts).
-                ...(annotation.quotedText ? { quote: annotation.quotedText } : {}),
-                ...referenceContent(annotation.kind, annotation.content, annotation.quotedText, annotation.conversation.length),
-              }}
-            />
+            <AnnotationGrip reference={annotationReferenceOf(annotation, documentId, t(ANNOTATION_KIND_KEY[annotation.kind]), gist)} />
           </div>
         )}
         <button
@@ -186,26 +218,33 @@ export function AnnotationCard({
           aria-expanded={!collapsed}
           aria-label={collapseLabel}
           title={collapseLabel}
-          className="-ml-0.5 flex size-[18px] shrink-0 items-center justify-center rounded-full text-sand-400 hover:bg-clay-100 hover:text-clay-800"
+          className="-ml-0.5 flex size-[18px] shrink-0 items-center justify-center rounded-full text-sand-400 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:-mx-[9px] pointer-coarse:-my-[9px] pointer-coarse:size-9"
         >
           {collapsed ? <ChevronRightIcon size={11} /> : <ChevronDownIcon size={11} />}
         </button>
         {annotation.kind === "highlight" && <ColorDot color={annotation.color} />}
-        {showKind && annotation.kind !== "highlight" && (
+        {showKind && (
           <span className={`${label} flex shrink-0 items-center gap-1`} style={{ color }}>
             <AnnotationKindIcon kind={annotation.kind} size={11} />
             {t(ANNOTATION_KIND_KEY[annotation.kind])}
           </span>
         )}
-        <NoteId id={annotation.id} />
+        <NoteId id={annotation.id} annotation />
         {collapsed && (
           <button
-            onClick={() => toggle(annotation.id)}
+            onClick={() => {
+              toggle(annotation.id);
+              if (jumpNotebookId && sourceId && canJumpTo(annotation, documentId)) {
+                jumpToAnnotation(router, jumpNotebookId, documentId, sourceId);
+              }
+            }}
             data-track="annotation-collapse"
-            title={t("outline.expandNote")}
-            className="min-w-0 flex-1 overflow-hidden text-left text-[13px] leading-[18px] whitespace-nowrap text-sand-800 hover:text-clay-800"
+            title={
+              jumpNotebookId && canJumpTo(annotation, documentId) ? t("panels.openAndJumpTitle") : t("outline.expandAnnotation")
+            }
+            className="min-w-0 flex-1 text-left text-[13px] leading-[18px] text-sand-800 hover:text-clay-800"
           >
-            {gist}
+            <WordLine text={gist} />
           </button>
         )}
         {collapsed && annotation.figureLabel && (
@@ -294,51 +333,18 @@ export function AnnotationBody({ annotation: a }: { annotation: AnnotationItem }
 
 export function AnnotationActions({
   annotation,
-  notebookId,
-  documentId,
-  onDelete,
   onExpand,
 }: {
   annotation: AnnotationItem;
-  notebookId: string;
-  documentId: string | null;
-  onDelete: (id: string) => Promise<void>;
   onExpand: (id: string) => void;
 }) {
-  const router = useRouter();
   const t = useT();
-  const { canEdit } = useCollab();
-  const canJump = Boolean(annotation.sourceId) && !annotation.orphaned && !annotation.resolved && documentId !== null;
 
-  function jump() {
-    router.push(`/n/${notebookId}?doc=${documentId}&src=${annotation.sourceId}`);
-    // The ?src effect only re-runs when the param changes; the event covers a
-    // second jump to the same annotation.
-    window.dispatchEvent(
-      new CustomEvent("dissect:flash-source", { detail: { sourceId: annotation.sourceId } }),
-    );
-  }
-
+  // Jump and Delete are in the header's ⋯ menu (annotation-menu.tsx), once.
   return (
     <>
     <div className="mt-2 flex items-center gap-2">
-      {canJump && (
-        <button
-          onClick={jump}
-          data-track="annotation-jump"
-          aria-label={t("panels.jumpToAnchor")}
-          data-tip={
-            annotation.figureLabel
-              ? `${t("panels.jumpToAnchor")}\n${t("panels.figureLabelTitle", { label: annotation.figureLabel })}`
-              : t("panels.jumpToAnchor")
-          }
-          className="inline-flex items-center gap-1.5 rounded-full bg-clay-100 px-2.5 py-1 text-[11px] font-semibold text-clay-800 hover:bg-clay-200"
-        >
-          <LocateIcon size={11} />
-          {annotation.figureLabel ?? ""}
-        </button>
-      )}
-      {!canJump && annotation.figureLabel && (
+      {annotation.figureLabel && (
         <span
           className="rounded-full bg-sand-200 px-2.5 py-1 text-[11px] font-semibold text-sand-600"
           data-tip={t("panels.figureLabelTitle", { label: annotation.figureLabel })}
@@ -364,16 +370,6 @@ export function AnnotationActions({
           </button>
         )}
         <AuthorChip createdById={annotation.createdById} nameless />
-        {canEdit && (
-          <button
-            onClick={() => void onDelete(annotation.id)}
-            data-track="annotation-delete"
-            data-tip={t("panels.deleteAnnotationTitle")}
-            className="text-xs text-red-500 hover:text-red-700"
-          >
-            {t("common.delete")}
-          </button>
-        )}
       </span>
     </div>
     <ReplyThread target={{ noteId: annotation.id }} replies={annotation.replies} />

@@ -93,10 +93,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ documentId: st
       );
     } catch (err) {
       console.error("[translate] DeepL failed:", err);
-      return NextResponse.json(
-        { error: t("api.translateFailed", { reason: err instanceof Error ? err.message : String(err) }) },
-        { status: 502 },
-      );
+      // The reader reads the plain line; DeepL's reason stays in the log.
+      return NextResponse.json({ error: t("api.translateFailed") }, { status: 502 });
     }
     // Stopped by the reader (SPEC.md §19): nothing is stored.
     if (req.signal.aborted) return new Response(null, { status: 499 });

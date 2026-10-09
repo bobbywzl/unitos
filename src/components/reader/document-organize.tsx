@@ -4,13 +4,16 @@ import { useCallback, useMemo, useState, useSyncExternalStore, type ReactNode } 
 import { CheckIcon, ChevronDownIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { Collapse } from "@/components/presence";
+import { useEscapeLayer } from "@/lib/escape-layers";
+import { focusMenuIfKey, menuButtonKeys, menuKeys } from "@/lib/menu-keys";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
 import { DOCUMENT_SORTS, type DocumentSort, type RowKind } from "@/lib/document-order";
 
 // Sort by, at the top of the document list (SPEC.md §6; lib/document-order.ts),
-// and the row a category draws in each list. One choice per browser, the
-// same in every project, as the notes tray keeps its grouping; which
-// categories are folded is kept too.
+// and the row a category draws in each list. One choice per project in this
+// browser, so a drag that turns one list to Custom order leaves the others
+// alone; a project with no choice of its own takes the browser's last
+// choice from before. Which categories are folded is kept too.
 
 const SORT_STORE = "unitos-documents-sort";
 const FOLDED_STORE = "unitos-documents-folded";
@@ -42,11 +45,19 @@ function subscribe(onChange: () => void) {
   };
 }
 
-/** The list's sort: Last edited unless the reader picked another. */
-export function useDocumentSort(): [DocumentSort, (s: DocumentSort) => void] {
-  const stored = useSyncExternalStore(subscribe, () => read(SORT_STORE), () => null);
-  const sort = DOCUMENT_SORTS.includes(stored as DocumentSort) ? (stored as DocumentSort) : "edited";
-  return [sort, useCallback((s: DocumentSort) => write(SORT_STORE, s), [])];
+/** The list's sort: Last edited unless the reader picked another. Week
+    added and Month added, two sorts until 2026-10-07, list by Added, which
+    draws the weeks. */
+export function useDocumentSort(projectId: string): [DocumentSort, (s: DocumentSort) => void] {
+  const own = `${SORT_STORE}:${projectId}`;
+  const stored = useSyncExternalStore(subscribe, () => read(own) ?? read(SORT_STORE), () => null);
+  const sort =
+    stored === "week" || stored === "month"
+      ? "added"
+      : DOCUMENT_SORTS.includes(stored as DocumentSort)
+        ? (stored as DocumentSort)
+        : "edited";
+  return [sort, useCallback((s: DocumentSort) => write(own, s), [own])];
 }
 
 /** The folded categories, by key, and the toggle. */
@@ -79,8 +90,6 @@ const SORT_KEY: Record<DocumentSort, TKey> = {
   added: "panes.documentsSortAdded",
   title: "panes.documentsSortTitle",
   kind: "panes.documentsSortKind",
-  week: "panes.documentsSortWeek",
-  month: "panes.documentsSortMonth",
 };
 
 const KIND_KEY: Record<RowKind, TKey> = {
@@ -88,7 +97,8 @@ const KIND_KEY: Record<RowKind, TKey> = {
   pdf: "panes.uploadItemPdf",
   page: "panes.uploadItemPage",
   word: "panes.uploadItemWord",
-  markdown: "panes.uploadItemMarkdown",
+  // The import line's name for a Markdown or text file (docs-editor.tsx).
+  markdown: "docsPage.importTextFile",
   slides: "panes.uploadItemSlides",
   sheets: "panes.uploadItemSheets",
   media: "panes.uploadItemMediaFile",
@@ -112,15 +122,22 @@ export function categoryLabels(t: TFunc) {
 export function DocumentsSort({ sort, onSort }: { sort: DocumentSort; onSort: (s: DocumentSort) => void }) {
   const t = useT();
   const [picking, setPicking] = useState(false);
+  // The sorts are a layer of their own: Escape closes them, not the list.
+  useEscapeLayer(picking, () => setPicking(false));
   return (
     <div className="flex flex-col">
       <div className="flex items-center px-3 pt-0.5 pb-1.5">
         <button
-          onClick={() => setPicking(!picking)}
+          onClick={(e) => {
+            if (!picking) focusMenuIfKey(e, "[data-sort-menu]");
+            setPicking(!picking);
+          }}
+          onKeyDown={(e) => menuButtonKeys(e, picking, "[data-sort-menu]")}
           data-track="documents-sort"
           aria-expanded={picking}
           data-tip={t("panes.documentsSortTip")}
-          className={`flex min-w-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[11.5px] ${
+          // A finger gets a 36 px target (NAV13-12).
+          className={`flex min-w-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[11.5px] pointer-coarse:py-2.5 ${
             picking ? "border-clay bg-clay-100 text-clay-800" : "border-line text-sand-600 hover:bg-clay-100 hover:text-clay-800"
           }`}
         >
@@ -134,7 +151,12 @@ export function DocumentsSort({ sort, onSort }: { sort: DocumentSort; onSort: (s
       </div>
       <Collapse open={picking}>
         {picking && (
-          <div className="flex flex-col border-y border-line bg-sand-50/60 py-1" role="listbox">
+          <div
+            className="flex flex-col border-y border-line bg-sand-50/60 py-1"
+            role="listbox"
+            data-sort-menu
+            onKeyDown={menuKeys}
+          >
             {DOCUMENT_SORTS.map((s) => (
               <button
                 key={s}

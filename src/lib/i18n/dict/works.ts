@@ -8,7 +8,11 @@ const en = {
   corpora: "Projects",
   newWork: "New project",
   untitledProject: "Untitled project",
-  deleteCorpusConfirm: "Delete this project and all its notes?",
+  deleteProjectTitle: "Delete “{title}”?",
+  deleteProjectNotes: "The project, its sections, and all its notes go. This cannot be undone.",
+  deleteProjectKeeps: "These documents are in this project only. They stay in the library, with their words; Add a document › Library puts one in a project again:",
+  deleteProjectKeepsNone: "Its documents stay in the library and in their other projects.",
+  deleteProject: "Delete project",
   corpusTitle: "Project title",
   renameCorpus: "Rename project",
   // Work card
@@ -27,6 +31,7 @@ const en = {
   savingOffline: "Saving for offline…",
   savingOfflinePages: "Saving pages…",
   savingOfflineFiles: "Saving images…",
+  progressCounting: "Counting…",
   offlineBadge: "Offline",
   offlineNeedsUltra: "Save for offline is Unitos Ultra.",
   offlineSaved: "Saved for offline. It opens without a connection.",
@@ -39,7 +44,7 @@ const en = {
   nudgeDocument: "Add more documents with +: a PDF, a web page, a video, or Google Drive.",
   nudgeSelect: "Select any passage of the text. A toolbar appears: the Assistant, Explain, Simplify, Comment, and colors.",
   nudgeRail:
-    "The side panel: Assistant, Graph, Notes, Annotations, Extract, Edit history. Open one and explore.",
+    "The side panel: Assistant, Graph, Notes, Annotations, Extract. Open one and explore.",
   nudgeTools:
     "Extract answers one question with quotes. Contents, top left, jumps to any part of the article.",
   nudgeMerge: "Hold a note over another note until the ring closes. The two join into one note.",
@@ -113,44 +118,62 @@ const en = {
   guidePanelNotesBody:
     "The open document's notes: the notes written in it and the notes that quote it, under your sections, with the pending queue on top. Hold a note to pick it up and drag it; a line says where it lands. Hold it over another note: a ring draws around that note, and at the full ring the two join into one note. Drop a note on the article to float it there. Select notes with the circle at their top right to merge, pin, or delete them together. The four arrows open the notes full page: every note of the project, and By document — the notes as a grid, one column per document, one row per section, to compare across documents.",
   guidePanelAssistantBody:
-    "Ask about this page or the whole project, and run checks (contradictions, gaps). Conversations, at the top, lists your conversations of the project; click one to open it. New conversation starts an empty one and keeps the old one. Right above the box: the scope, then Fast Thinking or Deep Thinking, and Web.",
+    "Ask about this page or the whole project, and run checks (contradictions, gaps). Conversations, at the top, lists your conversations of the project; click one to open it. New conversation starts an empty one and keeps the old one. Right above the box: the scope, then Fast Thinking or Deep Thinking, and Web. Layman summary and Professional summary are two of its suggestions: the whole document, in plain words or for an expert.",
   guidePanelDistillBody: "Every extraction of the open document; open one to read it.",
-  guidePanelSummary: "Summary",
-  guidePanelSummaryBody:
-    "The whole document summarized at the depth you pick: layman, intermediate, or professional. Each depth is kept once generated.",
   guidePanelAnnotations: "Annotations",
   guidePanelAnnotationsBody:
     "Highlights, comments, explanations, links; Jump scrolls to the source. Every kind carries one color everywhere — the mark in the text, the card, the tab: comment blue, explain red, simplify green, analyze teal, visualize magenta, assistant violet; a highlight keeps its own hue. Drag an annotation by its grip onto a note: the note gets the quote, a row that opens the annotation, and its text. The four arrows open the annotations full page: every annotation of the project, grouped by document.",
-  guidePanelEdits: "Edits",
-  guidePanelEditsBody: "The edit history.",
+  guidePanelEdits: "History",
+  guidePanelEditsBody: "Every edit and deletion in the project, from History at the top (More › History on a phone). This document narrows it to the open document's edits and deletions.",
+  guidePanelGraphBody: "The project's documents and links drawn as nodes and curves. Stitch runs across the documents you pick in it, or every document.",
+  guidePanelReaderViewBody: "Normal, Side by Side, or Top and Bottom: two documents at once.",
   // Collapse (SPEC.md §28) and Contents (SPEC.md §26): the article's own controls.
   guideCollapseHeader: "Collapse — every block to its core",
   guideCollapseBody:
     "The Collapse button at the top right of the article, beside Extract. Every paragraph, list, figure, table, and equation shows its core: what it really says, in plain words, at a tenth to a third of its length, written in the light of the whole article.",
   guideCollapseWholeBody:
-    "Click a collapsed block to read it whole; the chip under it folds it again. Press Collapse again to show the article whole. Contents, at the top left, lists the article's parts and stays there as you scroll.",
+    "The button to the right of a collapsed block reads it whole; the same button collapses it to its core again. Press Collapse again to show the article whole. Contents, at the top left, lists the article's parts and stays there as you scroll.",
   // The reading position and the left-off mark (SPEC.md §6).
   guideLeftOffHeader: "Where you left off",
+  // Keys (guide-dialog.tsx): every key the reader answers to.
+  guideKeysHeader: "Keys",
+  guideKeyEscape: "Close the open card, list, or dialog. In the graph, leave the Stitch box first; the typed command stays.",
+  guideKeyUndo: "Undo the last edit in the article.",
+  guideKeyRedo: "Redo it.",
+  guideKeyCopy: "Copy the selected passage while the toolbar is open.",
+  guideKeyEnter: "Send in the Assistant box and the Stitch box. Shift + Enter starts a new line.",
+  guideKeySaveNote: "Save the note you are editing.",
+  guideKeyIndent: "Indent or outdent the list lines of a note.",
+  guideKeyPick: "Pick a document in the graph for Stitch, or drop it from the pick.",
+  guideKeyPlay: "Play or pause a video or audio document.",
+  guideKeySeek: "Go back or forward 5 seconds.",
+  guideKeyFullscreen: "Show the video full screen.",
+  guideKeySelectAll: "Select the article's text and open the toolbar on it.",
+  guideKeyExtend: "Grow or shrink the selection; the toolbar opens on it.",
+  guideKeyQueueDecide: "In the pending queue: accept or reject the pending note.",
+  guideKeyQueueMove: "In the pending queue: go to the next or the previous pending note.",
+  guideKeyQueueEdit: "In the pending queue: edit the pending note.",
+  guideKeyQueueJump: "In the pending queue: jump to the pending note's quote in the article.",
+  guideKeyList: "In the document list: move between documents, or type a title's first letters to go to it. → opens a folder, ← leaves it. Alt + ↑ ↓ moves the row one place.",
   guideLeftOffBody:
     "A document opens where you left off, in any tab and on any device you sign in on. A small ribbon above the block marks the place, so you can find it again after you scroll away.",
   // The release notifications (SPEC.md §18, lib/releases.ts): one per release, on the dashboard.
   release20260924Title: "New: Collapse, the annotations full page, By document, Conversations",
   release20260924Body:
-    "- **Collapse** — the button at the top right of the article, beside Extract. Every block shows its core: what it really says, in plain words. Click a collapsed block to read it whole.\n- **Annotations full page** — the four arrows in the Annotations tab: every annotation of the project, grouped by document. Every kind of annotation now carries one color everywhere: comment blue, explain red, simplify green, analyze teal, visualize magenta, assistant violet.\n- **By document** — on the notes full page: the project's notes as a grid, one column per document, one row per section. The notes tray now shows the open document's notes only.\n- **Conversations** — at the top of the Assistant tab: your conversations of the project, one click to open each. New conversation keeps the old one. The scope and thinking rows sit right above the box.\n- **Drag an annotation onto a note** — the note gets the quote, a row that opens the annotation, and the annotation's text.\n- **Contents** stays at the top left as you scroll.\n\nThe controls that are new glow until you press them. Press ? at the top of the reader for the guide.",
+    "- **Collapse** — the button at the top right of the article, beside Extract. Every block shows its core: what it really says, in plain words. Click a collapsed block to read it whole.\n- **Annotations full page** — the four arrows in the Annotations tab: every annotation of the project, grouped by document. Every kind of annotation now carries one color everywhere: comment blue, explain red, simplify green, analyze teal, visualize magenta, assistant violet.\n- **By document** — on the notes full page: the project's notes as a grid, one column per document, one row per section. The notes tray now shows the open document's notes only.\n- **Conversations** — at the top of the Assistant tab: your conversations of the project, one click to open each. New conversation keeps the old one. The scope and thinking rows sit right above the box.\n- **Drag an annotation onto a note** — the note gets the quote, a row that opens the annotation, and the annotation's text.\n- **Contents** stays at the top left as you scroll.\n\nThe controls that are new glow until you press them. Open the guide with the ? at the top right of the reader, or More › Guide on a phone.",
   release20260925Title: "New: Define",
   release20260925Body:
-    "- **Define** — select one word in any document: an article, a PDF, a transcript, slides, a sheet, a blank document. Not on Chinese text. Define is the first row of the AI toolbar, under the highlight colors. It gives the meaning the word has in that sentence, in plain words, tuned to your background. A key term shows the glossary's definition at once. Nothing is saved.\n\nThe controls that are new glow until you press them. Press ? at the top of the reader for the guide.",
+    "- **Define** — select one word in any document: an article, a PDF, a transcript, slides, a sheet, a blank document. Not on Chinese text. Define is the first row of the AI toolbar, under the highlight colors. It gives the meaning the word has in that sentence, in plain words, tuned to your background. A key term shows the glossary's definition at once. Nothing is saved.\n\nThe controls that are new glow until you press them. Open the guide with the ? at the top right of the reader, or More › Guide on a phone.",
   release20260925bTitle: "New: the reader opens where you left off",
   release20260925bBody:
-    "- **Where you left off** — a document opens where you left off, in any tab and on any device you sign in on.\n- **The left-off mark** — a small ribbon above the block marks the place, so you can find it again after you scroll away.\n\nPress ? at the top of the reader for the guide.",
+    "- **Where you left off** — a document opens where you left off, in any tab and on any device you sign in on.\n- **The left-off mark** — a small ribbon above the block marks the place, so you can find it again after you scroll away.\n\nOpen the guide with the ? at the top right of the reader, or More › Guide on a phone.",
   // Feedback button
   feedback: "Feedback",
-  sendFeedback: "Send feedback",
   feedbackBug: "bug",
   feedbackIdea: "idea",
   feedbackOther: "other",
   feedbackPlaceholder: "What happened, or what would help?",
-  feedbackFailed: "Send failed. Try again.",
+  feedbackFailed: "Not sent. Try again.",
   feedbackSent: "Sent ✓",
   feedbackSending: "Sending…",
   feedbackSend: "Send",
@@ -174,6 +197,7 @@ const en = {
   shareAddNothing: "Nothing to add. Share a link or a PDF to Unitos from another app.",
   shareAddNoProjects: "No projects yet. Create one first.",
   shareAddGoHome: "Go to Projects",
+  shareAddFailed: "Not added. Try again.",
   // Shared with you shelf
   sharedWithYou: "Shared with you",
   byOwner: "by {name}",
@@ -183,6 +207,8 @@ const en = {
   dismiss: "Dismiss",
   dismissAll: "Dismiss all",
   notificationCount: "{n} of {total}",
+  // The not-found page under a project's URL (SPEC.md §12)
+  projectNotFoundBody: "This project was deleted, or it is no longer shared with you.",
 };
 
 const zh: Record<keyof typeof en, string> = {
@@ -190,7 +216,11 @@ const zh: Record<keyof typeof en, string> = {
   corpora: "全部项目",
   newWork: "新建项目",
   untitledProject: "未命名项目",
-  deleteCorpusConfirm: "删除该项目及其全部笔记？",
+  deleteProjectTitle: "删除“{title}”？",
+  deleteProjectNotes: "项目、其中的章节和全部笔记都会删除，无法撤销。",
+  deleteProjectKeeps: "以下文档只在此项目中。它们连同其中的文字留在文档库里；在“添加文档 › 文档库”中可再把它加入项目：",
+  deleteProjectKeepsNone: "其中的文档留在文档库和它们所在的其他项目中。",
+  deleteProject: "删除项目",
   corpusTitle: "项目标题",
   renameCorpus: "重命名项目",
   // Work card
@@ -209,6 +239,7 @@ const zh: Record<keyof typeof en, string> = {
   savingOffline: "正在离线保存…",
   savingOfflinePages: "正在保存页面…",
   savingOfflineFiles: "正在保存图片…",
+  progressCounting: "正在统计…",
   offlineBadge: "离线",
   offlineNeedsUltra: "离线保存是 Unitos Ultra 功能。",
   offlineSaved: "已离线保存。无网络时也能打开。",
@@ -219,7 +250,7 @@ const zh: Record<keyof typeof en, string> = {
   nudgeProject: "从这里开始：按“新建项目”。一个项目绑定文档和笔记。",
   nudgeDocument: "用 + 添加更多文档：PDF、网页、视频或 Google Drive。",
   nudgeSelect: "选中正文中的任意一段。工具栏随即出现：助手、解释、简化、评论和颜色。",
-  nudgeRail: "侧栏：助手、图谱、笔记、批注、提取、编辑记录。打开一个，开始探索。",
+  nudgeRail: "侧栏：助手、图谱、笔记、批注、提取。打开一个，开始探索。",
   nudgeTools: "提取用引文回答一个问题。左上角的目录可跳转到文章的任何部分。",
   nudgeMerge: "把一条笔记压在另一条上按住，直到合并环合拢。两条会合并成一条。",
   nudgeFloat: "按住一条笔记，拖到文章上。笔记会浮在文章上，边读边写。",
@@ -282,40 +313,58 @@ const zh: Record<keyof typeof en, string> = {
   guidePanelNotesBody:
     "当前文档的笔记：在它里面写下的笔记和引用它的笔记，按你的章节排列，待定队列在最上面。按住一条笔记即可拿起并拖动；落位线说明它会落在哪里。把它压在另一条笔记上按住：那条笔记周围会画出合并环，合拢时两条合并为一条。把笔记放到文章上即浮动。用笔记右上角的圆圈选中笔记，可一起合并、置顶或删除。四个箭头打开整页笔记：项目的每一条笔记，以及按文档——笔记排成网格，每个文档一列，每个章节一行，用来跨文档对比。",
   guidePanelAssistantBody:
-    "就此页面或整个项目提问，并运行检查（矛盾、疏漏）。顶部的对话列表列出你在此项目中的对话；点击一段即可打开。新对话会开始一段空对话，并保留当前对话。输入框正上方：范围，然后是快速思考或深度思考，以及联网。",
+    "就此页面或整个项目提问，并运行检查（矛盾、疏漏）。顶部的对话列表列出你在此项目中的对话；点击一段即可打开。新对话会开始一段空对话，并保留当前对话。输入框正上方：范围，然后是快速思考或深度思考，以及联网。通俗摘要和专业摘要是它的两条建议：整篇文档，用大白话或面向专业读者。",
   guidePanelDistillBody: "当前文档的每次提取；打开一条即可阅读。",
-  guidePanelSummary: "摘要",
-  guidePanelSummaryBody: "整篇文档按你选的深度摘要：通俗、进阶或专业。每个深度生成后即保留。",
   guidePanelAnnotations: "批注",
   guidePanelAnnotationsBody:
     "高亮、评论、解释、链接；“跳转”滚动到出处。每类批注在各处都用同一种颜色——文本中的标记、卡片、页签：评论蓝、解释红、简化绿、分析青、可视化品红、助手紫；高亮保留自己的色调。拖动批注的把手放到笔记上：笔记会得到引文、一条打开批注的批注链接和批注内容。四个箭头打开整页批注：项目里的每条批注，按文档分组。",
-  guidePanelEdits: "编辑记录",
-  guidePanelEditsBody: "编辑历史。",
+  guidePanelEdits: "历史",
+  guidePanelEditsBody: "此项目中的所有编辑与删除，从顶部的历史打开（手机上在“更多 › 历史”）。“此文档”只列出当前文档的编辑与删除。",
+  guidePanelGraphBody: "项目的文档和链接画成节点和曲线。缝合作用于你在图谱中选取的文档，未选取时作用于每个文档。",
+  guidePanelReaderViewBody: "普通、左右分屏或上下分屏：同时看两个文档。",
   guideCollapseHeader: "折叠——每个块折叠为核心",
   guideCollapseBody:
     "文章右上角、提取旁边的折叠按钮。每个段落、列表、插图、表格和公式都显示为它的核心：它真正要说的，用大白话，长度是原文的十分之一到三分之一，结合整篇文章写成。",
   guideCollapseWholeBody:
-    "点击折叠后的块可读全文；块下方的小标签把它重新折叠。再按一次折叠，文章恢复完整。左上角的目录列出文章的各个部分，滚动时一直停在原处。",
+    "折叠后的块右侧的按钮可读全文；同一个按钮把它重新折叠为核心。再按一次折叠，文章恢复完整。左上角的目录列出文章的各个部分，滚动时一直停在原处。",
   guideLeftOffHeader: "上次读到的位置",
+  guideKeysHeader: "按键",
+  guideKeyEscape: "关闭打开的卡片、列表或对话框。在图谱中先离开缝合框；输入的指令保留。",
+  guideKeyUndo: "撤销文章中的上一次编辑。",
+  guideKeyRedo: "重做。",
+  guideKeyCopy: "工具栏打开时，复制选中的片段。",
+  guideKeyEnter: "在助手框和缝合框中发送。Shift + Enter 换行。",
+  guideKeySaveNote: "保存正在编辑的笔记。",
+  guideKeyIndent: "缩进或取消缩进笔记中的列表行。",
+  guideKeyPick: "在图谱中为缝合选取文档，或取消选取。",
+  guideKeyPlay: "播放或暂停视频或音频文档。",
+  guideKeySeek: "后退或前进 5 秒。",
+  guideKeyFullscreen: "全屏显示视频。",
+  guideKeySelectAll: "选中文章的文字，并在其上打开工具栏。",
+  guideKeyExtend: "扩大或缩小选中内容；工具栏随之打开。",
+  guideKeyQueueDecide: "在待定队列中：接受或拒绝待定笔记。",
+  guideKeyQueueMove: "在待定队列中：转到下一条或上一条待定笔记。",
+  guideKeyQueueEdit: "在待定队列中：编辑待定笔记。",
+  guideKeyQueueJump: "在待定队列中：跳到待定笔记在文章中的引文。",
+  guideKeyList: "在文档列表中：在文档之间移动，或输入标题的开头几个字跳到它。→ 打开文件夹，← 离开。Alt + ↑ ↓ 把这一行移动一位。",
   guideLeftOffBody:
     "文档会在你上次读到的位置打开，无论在哪个标签页，还是在你登录的任何设备上。块上方的小书签标出这个位置，滚动离开后也能找回来。",
   release20260924Title: "新功能：折叠、整页批注、按文档、对话列表",
   release20260924Body:
-    "- **折叠**——文章右上角、提取旁边的按钮。每个块显示为它的核心：它真正要说的，用大白话。点击折叠后的块可读全文。\n- **整页批注**——批注页签里的四个箭头：项目里的每条批注，按文档分组。每类批注现在在各处都用同一种颜色：评论蓝、解释红、简化绿、分析青、可视化品红、助手紫。\n- **按文档**——整页笔记上：项目的笔记排成网格，每个文档一列，每个章节一行。笔记栏现在只显示当前文档的笔记。\n- **对话列表**——助手页签顶部：你在此项目中的对话，点击即可打开。新对话会保留当前对话。范围和思考两行就在输入框正上方。\n- **把批注拖到笔记上**——笔记会得到引文、一条打开批注的批注链接和批注内容。\n- **目录**在滚动时一直停在左上角。\n\n新功能的按钮会发光，直到你按下它。按阅读器顶部的 ? 打开指南。",
+    "- **折叠**——文章右上角、提取旁边的按钮。每个块显示为它的核心：它真正要说的，用大白话。点击折叠后的块可读全文。\n- **整页批注**——批注页签里的四个箭头：项目里的每条批注，按文档分组。每类批注现在在各处都用同一种颜色：评论蓝、解释红、简化绿、分析青、可视化品红、助手紫。\n- **按文档**——整页笔记上：项目的笔记排成网格，每个文档一列，每个章节一行。笔记栏现在只显示当前文档的笔记。\n- **对话列表**——助手页签顶部：你在此项目中的对话，点击即可打开。新对话会保留当前对话。范围和思考两行就在输入框正上方。\n- **把批注拖到笔记上**——笔记会得到引文、一条打开批注的批注链接和批注内容。\n- **目录**在滚动时一直停在左上角。\n\n新功能的按钮会发光，直到你按下它。点阅读器右上角的 ? 打开指南；手机上在“更多 › 指南”。",
   release20260925Title: "新功能：定义",
   release20260925Body:
-    "- **定义**——在任何文档里选中一个词：文章、PDF、逐字稿、幻灯片、工作表、空白文档。中文文本上不出现。定义是 AI 工具栏的第一行，在高亮颜色下方。它用大白话给出这个词在这句话里的意思，贴合你的背景。关键术语会立即显示术语表里的定义。不保存。\n\n新功能的按钮会发光，直到你按下它。按阅读器顶部的 ? 打开指南。",
+    "- **定义**——在任何文档里选中一个词：文章、PDF、逐字稿、幻灯片、工作表、空白文档。中文文本上不出现。定义是 AI 工具栏的第一行，在高亮颜色下方。它用大白话给出这个词在这句话里的意思，贴合你的背景。关键术语会立即显示术语表里的定义。不保存。\n\n新功能的按钮会发光，直到你按下它。点阅读器右上角的 ? 打开指南；手机上在“更多 › 指南”。",
   release20260925bTitle: "新功能：阅读器在你上次读到的位置打开",
   release20260925bBody:
-    "- **上次读到的位置**——文档会在你上次读到的位置打开，无论在哪个标签页，还是在你登录的任何设备上。\n- **阅读标记**——块上方的小书签标出这个位置，滚动离开后也能找回来。\n\n按阅读器顶部的 ? 打开指南。",
+    "- **上次读到的位置**——文档会在你上次读到的位置打开，无论在哪个标签页，还是在你登录的任何设备上。\n- **阅读标记**——块上方的小书签标出这个位置，滚动离开后也能找回来。\n\n点阅读器右上角的 ? 打开指南；手机上在“更多 › 指南”。",
   // Feedback button
   feedback: "反馈",
-  sendFeedback: "发送反馈",
   feedbackBug: "问题",
   feedbackIdea: "想法",
   feedbackOther: "其他",
   feedbackPlaceholder: "遇到了什么问题，或者希望有什么改进？",
-  feedbackFailed: "发送失败。请重试。",
+  feedbackFailed: "未发送。请重试。",
   feedbackSent: "已发送 ✓",
   feedbackSending: "发送中…",
   feedbackSend: "发送",
@@ -335,6 +384,7 @@ const zh: Record<keyof typeof en, string> = {
   shareAddNothing: "没有可添加的内容。从其他应用把链接或 PDF 分享给 Unitos。",
   shareAddNoProjects: "还没有项目。请先创建一个。",
   shareAddGoHome: "前往全部项目",
+  shareAddFailed: "未添加。请重试。",
   sharedWithYou: "与你共享",
   byOwner: "来自 {name}",
   sharedBadge: "已共享 · {n}",
@@ -343,6 +393,7 @@ const zh: Record<keyof typeof en, string> = {
   dismiss: "关闭",
   dismissAll: "全部关闭",
   notificationCount: "第 {n} 条，共 {total} 条",
+  projectNotFoundBody: "此项目已删除，或已不再与你共享。",
 };
 
 export const works = { en, zh } as const;

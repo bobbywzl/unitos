@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   attachmentKind,
   capFileName,
@@ -29,8 +30,10 @@ import {
   AnswerToolbar,
   CommentBox,
   CommentList,
+  deleteCommentWithUndo,
   QuoteChip,
   quoteMessage,
+  shownComments,
   SideChatChips,
   SideChatHeader,
   useAnswerSelection,
@@ -66,6 +69,11 @@ import { splitActionsFence } from "@/lib/assistant/fence";
 import { RatingButtons } from "@/components/rating-buttons";
 import { LoadingDots, ThinkingIndicator } from "@/components/thinking";
 import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
+import { deleteConversationWithUndo } from "@/components/assistant/conversation-delete";
+import { callFailure, callLine, failureLine, modelFetch, noReason } from "@/components/assistant/failure";
+import { SEND_CLASS } from "@/components/assistant/decision-classes";
+import { KeptTextarea } from "@/components/kept-field";
+import { AnswerMarkdown } from "@/components/assistant/answer-markdown";
 
 type Scope = "document" | "notebook";
 type Task = "contradictions" | "gaps" | "unsourced";
@@ -117,10 +125,22 @@ const withProposed = (turn: Turn): string => {
 // One side chat of this conversation (SPEC.md §7): the quote it was started
 // from and its own turns. noteId = the note it saves on, null until the
 // first answer lands; key holds it together before then.
-type SideChat = { key: string; noteId: string | null; quote: string; turns: Turn[] };
+// base: the note's updatedAt the turns were built on, and baseCount: how
+// many turns the note held then (saveConversationNow merges by them).
+type SideChat = {
+  key: string;
+  noteId: string | null;
+  quote: string;
+  turns: Turn[];
+  base?: string | null;
+  baseCount?: number;
+};
 type Thread = {
   turns: Turn[];
   conversationNoteId: string | null;
+  // The conversation note's copy the turns were built on (see SideChat).
+  base: string | null;
+  baseCount: number;
   sideChats: SideChat[];
   // The side chat on screen, by key; null = the conversation itself.
   openKey: string | null;
@@ -141,7 +161,8 @@ type StoredTurn = {
 type StoredConversation = {
   conversationNoteId?: string | null;
   turns?: StoredTurn[];
-  sideChats?: { id: string; quote: string; turns: StoredTurn[] }[];
+  updatedAt?: string | null;
+  sideChats?: { id: string; quote: string; turns: StoredTurn[]; updatedAt?: string }[];
 };
 const toTurns = (stored: StoredTurn[]): Turn[] =>
   stored.map((turn) => ({
@@ -151,21 +172,34 @@ const toTurns = (stored: StoredTurn[]): Turn[] =>
     files: turn.files,
   }));
 const toSideChats = (stored: NonNullable<StoredConversation["sideChats"]>): SideChat[] =>
-  stored.map((s) => ({ key: s.id, noteId: s.id, quote: s.quote, turns: toTurns(s.turns) }));
+  stored.map((s) => ({
+    key: s.id,
+    noteId: s.id,
+    quote: s.quote,
+    turns: toTurns(s.turns),
+    base: s.updatedAt ?? null,
+    baseCount: s.turns.length,
+  }));
 
 function formatWhen(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 // One message as it is sent: the text and the attachments read for it.
+// key: the message's own, for the queue and the held draft; question and
+// quote: the box's words and the quote chip as typed, so a failed message
+// goes back into the composer as it was.
 type OutgoingMessage = {
+  key: string;
   content: string;
+  question: string;
+  quote: string | null;
   images: { id: string; url: string; name: string }[];
   files: { name: string; text: string }[];
 };
 // A message queued while an answer runs (SPEC.md §7): it sends, in order,
 // once the answer lands. The key removes it from the queue.
-type QueuedMessage = OutgoingMessage & { key: string };
+type QueuedMessage = OutgoingMessage;
 
 // The conversation survives a tab switch, a document switch, and leaving the
 // page within the same tab (each remounts the panel, so the thread lives
@@ -180,6 +214,9 @@ type SharedThread = Thread & {
   listeners: Set<() => void>;
   // The saves in order, so the second never starts a second note.
   saving: Promise<void>;
+  // Counts the conversations shown (showConversation): a save started on
+  // one never lands on the next.
+  shown: number;
 };
 const threads = new Map<string, SharedThread>();
 function sharedThread(notebookId: string): SharedThread {
@@ -188,11 +225,14 @@ function sharedThread(notebookId: string): SharedThread {
     thread = {
       turns: [],
       conversationNoteId: null,
+      base: null,
+      baseCount: 0,
       sideChats: [],
       openKey: null,
       loaded: false,
       listeners: new Set(),
       saving: Promise.resolve(),
+      shown: 0,
     };
     threads.set(notebookId, thread);
   }
@@ -209,6 +249,119 @@ function sharedRef<K extends keyof Thread>(shared: SharedThread, key: K): { curr
       thread[key] = value;
     },
   };
+}
+
+// The composer's words (SPEC.md §7, CLAUDE.md rule zero 6), one draft per
+// project in localStorage: the words in the box, and each message sent or
+// queued that the server has not yet confirmed (held). A reload, a crash, a
+// tab or document switch, or New conversation keeps them; a failed answer
+// puts its message back in the box; only a saved answer clears it.
+const PANEL_DRAFT_PREFIX = "unitos-assistant-panel-draft:";
+type HeldMessage = { key: string; content: string };
+type PanelDraft = { text: string; held: HeldMessage[] };
+function readPanelDraft(notebookId: string): PanelDraft {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(PANEL_DRAFT_PREFIX + notebookId) ?? "null");
+    if (!parsed || typeof parsed !== "object") return { text: "", held: [] };
+    const d = parsed as { text?: unknown; held?: unknown };
+    const held = Array.isArray(d.held)
+      ? d.held.filter(
+          (h): h is HeldMessage =>
+            !!h &&
+            typeof h === "object" &&
+            typeof (h as HeldMessage).key === "string" &&
+            typeof (h as HeldMessage).content === "string",
+        )
+      : [];
+    return { text: typeof d.text === "string" ? d.text : "", held };
+  } catch {
+    return { text: "", held: [] };
+  }
+}
+function writePanelDraft(notebookId: string, draft: PanelDraft) {
+  try {
+    if (!draft.text.trim() && draft.held.length === 0) localStorage.removeItem(PANEL_DRAFT_PREFIX + notebookId);
+    else localStorage.setItem(PANEL_DRAFT_PREFIX + notebookId, JSON.stringify(draft));
+  } catch {
+    // Storage blocked or full: the box still holds the words on screen.
+  }
+}
+// Per project, for the page's life: the messages this tab sent and the
+// server has not confirmed. A panel that remounts mid-answer (a tab or a
+// document switch) finds them here and does not put them back in its box.
+const heldMessages = new Map<string, HeldMessage[]>();
+// The mounted panel's way to put a failed message back in its box; a
+// message that fails while no panel is mounted waits in pendingRestore.
+const liveRestore = new Map<string, (message: OutgoingMessage) => void>();
+const pendingRestore = new Map<string, OutgoingMessage[]>();
+// The words in the mounted panel's box, per project: what the draft writes.
+const boxText = new Map<string, string>();
+function writeDraftNow(notebookId: string) {
+  writePanelDraft(notebookId, { text: boxText.get(notebookId) ?? "", held: heldMessages.get(notebookId) ?? [] });
+}
+function holdMessage(notebookId: string, message: OutgoingMessage) {
+  const held = (heldMessages.get(notebookId) ?? []).filter((h) => h.key !== message.key);
+  heldMessages.set(notebookId, [...held, { key: message.key, content: message.content }]);
+  writeDraftNow(notebookId);
+}
+function releaseMessage(notebookId: string, key: string) {
+  heldMessages.set(notebookId, (heldMessages.get(notebookId) ?? []).filter((h) => h.key !== key));
+  writeDraftNow(notebookId);
+}
+// A message that did not land goes back into the box: the mounted panel's
+// now, else the next panel's when it mounts (it stays held until then).
+function putBack(notebookId: string, message: OutgoingMessage) {
+  const restore = liveRestore.get(notebookId);
+  if (!restore) {
+    pendingRestore.set(notebookId, [...(pendingRestore.get(notebookId) ?? []), message]);
+    return;
+  }
+  restore(message);
+  releaseMessage(notebookId, message.key);
+}
+// A side chat's box (SPEC.md §7): its own words, apart from the
+// conversation's, so Back never carries them into the conversation and the
+// side chat reopens with them. One record per project in localStorage, by
+// the side chat's note id (its key until its first answer is saved).
+const SIDE_DRAFT_PREFIX = "unitos-assistant-side-drafts:";
+function readSideDrafts(notebookId: string): Record<string, string> {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(SIDE_DRAFT_PREFIX + notebookId) ?? "{}");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed as Record<string, unknown>).filter((e): e is [string, string] => typeof e[1] === "string"),
+    );
+  } catch {
+    return {};
+  }
+}
+function writeSideDraft(notebookId: string, id: string, text: string, from?: string) {
+  try {
+    const all = readSideDrafts(notebookId);
+    if (from) delete all[from];
+    if (text.trim()) all[id] = text;
+    else delete all[id];
+    if (Object.keys(all).length === 0) localStorage.removeItem(SIDE_DRAFT_PREFIX + notebookId);
+    else localStorage.setItem(SIDE_DRAFT_PREFIX + notebookId, JSON.stringify(all));
+  } catch {
+    // Storage blocked or full: the box still holds the words on screen.
+  }
+}
+/** The slot a side chat's words are kept under. */
+const sideSlot = (side: { key: string; noteId: string | null }) => side.noteId ?? side.key;
+
+// The box's words when a panel mounts: this tab's, else the stored draft's,
+// with the messages a closed tab never had confirmed put back in front.
+function initialBoxText(notebookId: string): string {
+  if (typeof window === "undefined") return "";
+  const kept = boxText.get(notebookId);
+  if (kept !== undefined) return kept;
+  const draft = readPanelDraft(notebookId);
+  const text = [...draft.held.map((h) => h.content), draft.text].filter((s) => s.trim()).join("\n\n");
+  boxText.set(notebookId, text);
+  heldMessages.set(notebookId, []);
+  writeDraftNow(notebookId);
+  return text;
 }
 
 
@@ -256,9 +409,7 @@ async function attachToText(file: File, t: TFunc): Promise<string> {
     body: file,
   });
   const json = (await res.json().catch(() => null)) as { text?: string; error?: string } | null;
-  if (!res.ok || typeof json?.text !== "string") {
-    throw new Error(json?.error ?? t("assistant.requestFailedStatus", { status: res.status }));
-  }
+  if (!res.ok || typeof json?.text !== "string") throw callFailure(res, json, t("common.notLoaded"));
   return json.text;
 }
 
@@ -274,10 +425,7 @@ async function attachMediaToText(file: File, t: TFunc): Promise<string> {
       method: "POST",
       body: file.slice(sent, sent + UPLOAD_CHUNK_BYTES),
     });
-    if (!res.ok) {
-      const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-      throw new Error(detail?.error ?? t("assistant.requestFailedStatus", { status: res.status }));
-    }
+    if (!res.ok) throw callFailure(res, await res.json().catch(() => null), t("common.notLoaded"));
   }
   const res = await fetch("/api/assistant/attach-media", {
     method: "POST",
@@ -285,9 +433,7 @@ async function attachMediaToText(file: File, t: TFunc): Promise<string> {
     body: JSON.stringify({ uploadId, name: capFileName(file.name), mimeType: file.type || undefined }),
   });
   const json = (await res.json().catch(() => null)) as { text?: string; error?: string } | null;
-  if (!res.ok || typeof json?.text !== "string") {
-    throw new Error(json?.error ?? t("assistant.requestFailedStatus", { status: res.status }));
-  }
+  if (!res.ok || typeof json?.text !== "string") throw callFailure(res, json, t("common.notLoaded"));
   return json.text;
 }
 
@@ -305,9 +451,7 @@ async function attachDriveFile(file: DrivePickedFile, token: string, t: TFunc): 
     body: JSON.stringify({ fileId: file.id, name: file.name, mimeType: file.mimeType }),
   });
   const json = (await res.json().catch(() => null)) as (DriveAttached & { error?: string }) | null;
-  if (!res.ok || !json || (json.kind !== "file" && json.kind !== "image")) {
-    throw new Error(json?.error ?? t("assistant.requestFailedStatus", { status: res.status }));
-  }
+  if (!res.ok || !json || (json.kind !== "file" && json.kind !== "image")) throw callFailure(res, json, t("common.notLoaded"));
   return json;
 }
 
@@ -342,7 +486,8 @@ export function AssistantPanel({
   // Fast Thinking or Deep Thinking (SPEC.md §7): one choice for every
   // assistant surface, remembered in this browser.
   const thinking = useThinking();
-  const [question, setQuestion] = useState("");
+  // The box's words: kept as a draft (initialBoxText above).
+  const [question, setQuestion] = useState(() => initialBoxText(notebookId));
   // The conversation (SPEC.md §7, §21): the first question opens it; every
   // turn after continues it. Empty = the panel's first layout. The note it
   // is saved on, once a turn has persisted; null until then, and again once
@@ -369,6 +514,8 @@ export function AssistantPanel({
   const sideChatsRef = useMemo(() => sharedRef(shared, "sideChats"), [shared]);
   const openKeyRef = useMemo(() => sharedRef(shared, "openKey"), [shared]);
   const noteIdRef = useMemo(() => sharedRef(shared, "conversationNoteId"), [shared]);
+  const baseRef = useMemo(() => sharedRef(shared, "base"), [shared]);
+  const baseCountRef = useMemo(() => sharedRef(shared, "baseCount"), [shared]);
   // The refs changed: every panel open on this project draws them.
   function cacheThread() {
     shared.loaded = true;
@@ -394,7 +541,23 @@ export function AssistantPanel({
     setSideChatsState(sideChatsRef.current);
     cacheThread();
   }
+  // The box takes the words of the thread that opens; the words of the one
+  // that closes stay in its own slot (the conversation's draft, or the side
+  // chat's).
+  function switchBox(next: string | null) {
+    const before = openKeyRef.current;
+    if (before === next) return;
+    const words = boxRef.current?.value ?? question;
+    const closing = before ? sideChatsRef.current.find((s) => s.key === before) : null;
+    if (closing) writeSideDraft(notebookId, sideSlot(closing), words);
+    else if (!before) boxText.set(notebookId, words);
+    const opening = next ? sideChatsRef.current.find((s) => s.key === next) : null;
+    const text = next ? (opening ? (readSideDrafts(notebookId)[sideSlot(opening)] ?? "") : "") : (boxText.get(notebookId) ?? "");
+    openKeyRef.current = next;
+    setQuestion(text);
+  }
   function setOpenKey(key: string | null) {
+    switchBox(key);
     openKeyRef.current = key;
     setOpenKeyState(key);
     cacheThread();
@@ -413,6 +576,11 @@ export function AssistantPanel({
   // the quote a comment is being written on, and this thread's comments.
   const { selection, tintRects, hold: holdSelection, clear: clearSelection } = useAnswerSelection();
   const [quote, setQuote] = useState<string | null>(null);
+  // The quote as a message that comes back reads it (restoreMessage).
+  const quoteRef = useRef<string | null>(null);
+  useEffect(() => {
+    quoteRef.current = quote;
+  }, [quote]);
   const [commentQuote, setCommentQuote] = useState<string | null>(null);
   const [comments, setComments] = useState<AnswerComment[]>([]);
   const [commentPeople, setCommentPeople] = useState<Record<string, Person>>({});
@@ -446,7 +614,19 @@ export function AssistantPanel({
         const loadedSideChats = toSideChats(json.sideChats ?? []);
         turnsRef.current = loaded;
         sideChatsRef.current = loadedSideChats;
+        // Words of a side chat that was never answered, so never saved (its
+        // slot is still its key), are not thrown away: they join the box.
+        const orphans = Object.entries(readSideDrafts(notebookId)).filter(([id]) => id.startsWith("side-"));
+        if (orphans.length > 0) {
+          const box = boxText.get(notebookId) ?? "";
+          const joined = [box, ...orphans.map(([, words]) => words)].filter((w) => w.trim()).join("\n\n");
+          for (const [id] of orphans) writeSideDraft(notebookId, id, "");
+          boxText.set(notebookId, joined);
+          setQuestion(joined);
+        }
         noteIdRef.current = json.conversationNoteId ?? null;
+        baseRef.current = json.updatedAt ?? null;
+        baseCountRef.current = loaded.length;
         openKeyRef.current = null;
         cacheThread();
         setTurnsState(loaded);
@@ -477,6 +657,66 @@ export function AssistantPanel({
   // Whether a run is on, as the drain reads it: the state is stale inside
   // the run's own closure.
   const busyRef = useRef(false);
+  // The draft (PANEL_DRAFT_PREFIX above): written at most every 300 ms
+  // while the reader types, and at once when the page closes or the panel
+  // goes.
+  const draftTimer = useRef<number | null>(null);
+  useEffect(() => {
+    // A side chat's words go to its own slot, not the conversation's draft.
+    const open = openKeyRef.current ? sideChatsRef.current.find((s) => s.key === openKeyRef.current) : null;
+    if (open) {
+      writeSideDraft(notebookId, sideSlot(open), question);
+      return;
+    }
+    if (openKeyRef.current) return;
+    boxText.set(notebookId, question);
+    if (draftTimer.current !== null) return;
+    draftTimer.current = window.setTimeout(() => {
+      draftTimer.current = null;
+      writeDraftNow(notebookId);
+    }, 300);
+  }, [notebookId, question, openKeyRef, sideChatsRef]);
+  useEffect(() => {
+    const flush = () => writeDraftNow(notebookId);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      if (draftTimer.current !== null) window.clearTimeout(draftTimer.current);
+      draftTimer.current = null;
+      flush();
+    };
+  }, [notebookId]);
+  // A message that did not land comes back as it was typed: its words after
+  // whatever the box holds now, its quote chip when the box has none, its
+  // attachments.
+  function restoreMessage(m: OutgoingMessage) {
+    const current = boxRef.current?.value ?? boxText.get(notebookId) ?? "";
+    const plain = !current.trim() && !quoteRef.current;
+    const words = plain ? m.question : m.content;
+    const next = current.trim() ? (words.trim() ? `${current}\n\n${words}` : current) : words;
+    if (!openKeyRef.current) boxText.set(notebookId, next);
+    setQuestion(next);
+    if (plain && m.quote) setQuote(m.quote);
+    const back: Attachment[] = [
+      ...m.images.map((img) => ({ key: `${m.key}-${img.id}`, kind: "image" as const, name: img.name, id: img.id, url: img.url })),
+      ...m.files.map((f, i) => ({ key: `${m.key}-f${i}`, kind: "file" as const, name: f.name, text: f.text })),
+    ];
+    if (back.length > 0) setAttachments((list) => [...list, ...back]);
+  }
+  useEffect(() => {
+    liveRestore.set(notebookId, restoreMessage);
+    const waiting = pendingRestore.get(notebookId) ?? [];
+    pendingRestore.delete(notebookId);
+    for (const m of waiting) {
+      restoreMessage(m);
+      releaseMessage(notebookId, m.key);
+    }
+    return () => {
+      if (liveRestore.get(notebookId) === restoreMessage) liveRestore.delete(notebookId);
+    };
+    // One registration per mount: restoreMessage reads refs and setters only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notebookId]);
   const [issues, setIssues] = useState<Issue[] | null>(null);
   const [taskRun, setTaskRun] = useState<Task | null>(null);
   const [busy, setBusy] = useState(false);
@@ -511,10 +751,20 @@ export function AssistantPanel({
 
   // The thread takes a conversation's place: the one from the list, or none
   // (New conversation). What was on screen stays saved, in the list.
-  function showConversation(next: { noteId: string | null; turns: Turn[]; sideChats: SideChat[] }) {
+  function showConversation(next: {
+    noteId: string | null;
+    turns: Turn[];
+    sideChats: SideChat[];
+    base: string | null;
+    baseCount: number;
+  }) {
     stopRun();
     reset();
+    switchBox(null);
+    shared.shown += 1;
     turnsRef.current = next.turns;
+    baseRef.current = next.base;
+    baseCountRef.current = next.baseCount;
     sideChatsRef.current = next.sideChats;
     openKeyRef.current = null;
     noteIdRef.current = next.noteId;
@@ -527,16 +777,17 @@ export function AssistantPanel({
     setComments([]);
     clearSelection();
     cacheThread();
-    setAttachments([]);
+    // The box keeps its words and its attachments (one draft per project),
+    // and the messages queued for the thread on screen go back into it.
+    for (const m of queueRef.current) putBack(notebookId, m);
     setQueue(() => []);
-    setQuestion("");
     setListOpen(false);
   }
 
   // New conversation (SPEC.md §7): back to the first layout, an empty thread.
   // The conversation on screen is not deleted: it stays in the list.
   function newConversation() {
-    showConversation({ noteId: null, turns: [], sideChats: [] });
+    showConversation({ noteId: null, turns: [], sideChats: [], base: null, baseCount: 0 });
   }
 
   // The conversations list: read every time it opens, so it is current.
@@ -545,10 +796,10 @@ export function AssistantPanel({
     try {
       const res = await fetch(`/api/assistant/conversation?notebookId=${encodeURIComponent(notebookId)}&list=1`);
       const json = (await res.json().catch(() => null)) as { conversations?: ConversationEntry[]; error?: string } | null;
-      if (!res.ok || !json) throw new Error(json?.error ?? t("assistant.requestFailedStatus", { status: res.status }));
+      if (!res.ok || !json) throw callFailure(res, json, t("common.notLoaded"));
       setConversations(json.conversations ?? []);
     } catch (err) {
-      setListError(err instanceof Error ? err.message : t("common.requestFailed"));
+      setListError(callLine(err, t("common.notLoaded")));
     }
   }
   function openList() {
@@ -569,43 +820,57 @@ export function AssistantPanel({
         `/api/assistant/conversation?notebookId=${encodeURIComponent(notebookId)}&conversationNoteId=${encodeURIComponent(id)}`,
       );
       const json = (await res.json().catch(() => null)) as (StoredConversation & { error?: string }) | null;
-      if (!res.ok || !json?.conversationNoteId) {
-        throw new Error(json?.error ?? t("assistant.requestFailedStatus", { status: res.status }));
-      }
+      if (!res.ok || !json?.conversationNoteId) throw callFailure(res, json, t("common.notLoaded"));
       showConversation({
         noteId: json.conversationNoteId,
         turns: toTurns(json.turns ?? []),
         sideChats: toSideChats(json.sideChats ?? []),
+        base: json.updatedAt ?? null,
+        baseCount: json.turns?.length ?? 0,
       });
     } catch (err) {
-      setListError(err instanceof Error ? err.message : t("common.requestFailed"));
+      setListError(callLine(err, t("common.notLoaded")));
     }
   }
 
-  // Delete a conversation from the list: the note is gone, its side chats
-  // and comments with it. The open one deleted leaves an empty thread.
-  async function deleteConversation(id: string) {
-    if (!confirm(t("assistant.conversationDeleteConfirm"))) return;
+  // Delete a conversation from the list (SPEC.md §7): no ask; the notes'
+  // Undo pill offers Undo, and once it goes the note goes through
+  // DELETE /api/notes/:id, its side chats and comments with it, all kept for
+  // History's Restore. The open one deleted leaves an empty thread; Undo
+  // brings it back.
+  function deleteConversation(id: string) {
     setListError(null);
-    try {
-      const res = await fetch("/api/assistant/conversation", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notebookId, conversationNoteId: id }),
-      });
-      if (!res.ok) {
-        const json = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(json?.error ?? t("assistant.requestFailedStatus", { status: res.status }));
-      }
-    } catch (err) {
-      setListError(err instanceof Error ? err.message : t("common.requestFailed"));
-      return;
-    }
-    setConversations((list) => (list ? list.filter((c) => c.id !== id) : list));
-    if (id === conversationNoteId) {
-      showConversation({ noteId: null, turns: [], sideChats: [] });
-      setListOpen(true);
-    }
+    const wasOpen = id === conversationNoteId;
+    const shown = wasOpen
+      ? {
+          noteId: noteIdRef.current,
+          turns: turnsRef.current,
+          sideChats: sideChatsRef.current,
+          base: baseRef.current,
+          baseCount: baseCountRef.current,
+        }
+      : null;
+    deleteConversationWithUndo({
+      noteId: id,
+      message: t("outline.conversationDeleted"),
+      gone: () => {
+        setConversations((all) => (all ? all.filter((c) => c.id !== id) : all));
+        if (wasOpen) {
+          showConversation({ noteId: null, turns: [], sideChats: [], base: null, baseCount: 0 });
+          setListOpen(true);
+        }
+      },
+      // Undo: the list reads the server again (the note is still there), and
+      // the thread comes back when nothing took its place.
+      back: () => {
+        void loadConversations();
+        if (shown && noteIdRef.current === null && turnsRef.current.length === 0) {
+          showConversation(shown);
+          setListOpen(true);
+        }
+      },
+      failed: () => setListError(t("assistant.conversationDeleteFailed")),
+    });
   }
 
   // The comments under the open thread, reloaded when the thread changes.
@@ -623,7 +888,7 @@ export function AssistantPanel({
           people?: Record<string, Person>;
         } | null;
         if (cancelled || !res.ok || !json) return;
-        setComments(json.replies ?? []);
+        setComments(shownComments(json.replies ?? []));
         setCommentPeople(json.people ?? {});
       } catch {
         // Offline: the thread reads the same, with no comments under it.
@@ -651,6 +916,7 @@ export function AssistantPanel({
     setQuote(text);
     setCommentQuote(null);
     stickRef.current = true;
+    setFocusTick((n) => n + 1);
   }
   // Ask about this: the words ride into the next message of this thread.
   function askAboutThis() {
@@ -658,14 +924,38 @@ export function AssistantPanel({
     if (!text) return;
     setQuote(text);
     setCommentQuote(null);
+    setFocusTick((n) => n + 1);
   }
   function openComment() {
     const text = takeSelection();
     if (!text || !activeNoteId) return;
     setCommentQuote(text);
   }
+  // The words of a comment not yet posted (SPEC.md §6), one per conversation
+  // and quote, in localStorage: Escape, Cancel, a closed panel, or a reload
+  // keeps them, and only the server's confirmation clears them.
+  const commentDraftKey =
+    activeNoteId && commentQuote ? `unitos-answer-comment:${activeNoteId}:${commentQuote.slice(0, 200)}` : null;
+  function readCommentDraft(key: string | null): string {
+    if (!key) return "";
+    try {
+      return localStorage.getItem(key) ?? "";
+    } catch {
+      return "";
+    }
+  }
+  function writeCommentDraft(key: string | null, text: string) {
+    if (!key) return;
+    try {
+      if (text.trim()) localStorage.setItem(key, text);
+      else localStorage.removeItem(key);
+    } catch {
+      // Storage blocked: the box still holds the words while it is open.
+    }
+  }
   async function postComment(text: string) {
     if (!activeNoteId || commentBusy) return;
+    const draftKey = commentDraftKey;
     setCommentBusy(true);
     try {
       const res = await fetch("/api/replies", {
@@ -677,26 +967,28 @@ export function AssistantPanel({
         }),
       });
       const json = (await res.json().catch(() => null)) as (AnswerComment & { error?: string }) | null;
-      if (!res.ok || !json?.id) throw new Error(json?.error ?? t("assistant.commentFailed"));
+      if (!res.ok || !json?.id) throw callFailure(res, json, t("common.notSaved"));
       setComments((list) => [...list, json]);
+      writeCommentDraft(draftKey, "");
       setCommentQuote(null);
       clearSelection();
       // The Annotations tab lists the comment under the conversation.
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("assistant.commentFailed"));
+      setError(callLine(err, t("common.notSaved")));
     } finally {
       setCommentBusy(false);
     }
   }
-  async function deleteComment(id: string) {
-    setComments((list) => list.filter((c) => c.id !== id));
-    try {
-      await fetch(`/api/replies/${id}`, { method: "DELETE" });
-    } catch {
-      // Offline: the row is gone on screen and stays on the server; the next
-      // load of the thread shows it again.
-    }
+  // ✕ on a comment: no ask, the Undo pill, the DELETE once it goes.
+  function deleteComment(id: string) {
+    deleteCommentWithUndo({
+      list: comments,
+      id,
+      message: t("outline.commentDeleted"),
+      setList: setComments,
+      failed: () => setError(t("common.notSaved")),
+    });
   }
 
   // A completed turn saves (SPEC.md §21): the first one creates the note,
@@ -705,43 +997,110 @@ export function AssistantPanel({
   // stays on screen either way, from the threads cache above.
   // Saves run one after another on the shared thread: the first one's note
   // id is in place before the next one starts, so a conversation is one note.
-  function saveConversation(savedTurns: Turn[], sideChatKey: string | null) {
-    shared.saving = shared.saving.then(() => saveConversationNow(savedTurns, sideChatKey));
-    return shared.saving;
+  // build: the turns to save, read when the save runs (an earlier save may
+  // have merged the thread since). The answer says whether this save landed.
+  function saveConversation(build: () => Turn[], sideChatKey: string | null): Promise<boolean> {
+    const shownAt = shared.shown;
+    const run = shared.saving.then(() => saveConversationNow(build, sideChatKey, shownAt));
+    shared.saving = run.then(() => undefined);
+    return run;
   }
-  async function saveConversationNow(savedTurns: Turn[], sideChatKey: string | null) {
-    const side = sideChatKey ? sideChatsRef.current.find((s) => s.key === sideChatKey) : null;
-    if (sideChatKey && !side) return;
-    try {
-      const res = await fetch("/api/assistant/conversation", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          notebookId,
-          conversationNoteId: side ? side.noteId : noteIdRef.current,
-          // A side chat belongs to the conversation it was started from.
-          sideChatOf: side ? noteIdRef.current : undefined,
-          quote: side ? side.quote : undefined,
-          turns: savedTurns.map((turn) => ({
-            role: turn.role,
-            content: turn.content.slice(0, TURN_MAX_CHARS),
-            images: turn.images?.map((img) => ({ id: img.id, name: img.name })),
-            files: turn.files?.map((f) => ({ name: f.name })),
-          })),
-        }),
-      });
-      const json = (await res.json().catch(() => null)) as { conversationNoteId?: string } | null;
-      if (!res.ok || !json?.conversationNoteId) return;
-      if (side) {
-        const noteId = json.conversationNoteId;
-        setSideChats((list) => list.map((s) => (s.key === side.key ? { ...s, noteId } : s)));
-        return;
-      }
-      setNoteId(json.conversationNoteId);
-    } catch {
-      // Offline, or the request otherwise never landed — the thread is still
-      // right here on screen; the next completed turn tries again.
+  // The note moved since this tab read it (another tab, another device): the
+  // server's turns come first, then this tab's turns past what the base held,
+  // on screen and in the save; then the save runs again (SPEC.md §21).
+  function mergeThread(
+    sideChatKey: string | null,
+    server: Turn[],
+    base: string | null,
+    baseCount: number,
+  ) {
+    const after = (list: Turn[]) => [...server, ...list.slice(Math.min(baseCount, list.length))];
+    if (sideChatKey) {
+      setSideChats((list) =>
+        list.map((s) =>
+          s.key === sideChatKey ? { ...s, turns: after(s.turns), base, baseCount: server.length } : s,
+        ),
+      );
+      return;
     }
+    turnsRef.current = after(turnsRef.current);
+    baseRef.current = base;
+    baseCountRef.current = server.length;
+    setTurnsState(turnsRef.current);
+    cacheThread();
+  }
+  async function saveConversationNow(
+    build: () => Turn[],
+    sideChatKey: string | null,
+    shownAt: number,
+  ): Promise<boolean> {
+    // Another conversation took the screen since: these turns are not its.
+    const moved = () => !sideChatKey && shared.shown !== shownAt;
+    if (moved()) return false;
+    let turnsToSave = build();
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const side = sideChatKey ? sideChatsRef.current.find((s) => s.key === sideChatKey) : null;
+      if (sideChatKey && !side) return false;
+      const noteId = side ? side.noteId : noteIdRef.current;
+      const base = side ? (side.base ?? null) : baseRef.current;
+      const baseCount = side ? (side.baseCount ?? 0) : baseCountRef.current;
+      try {
+        const res = await fetch("/api/assistant/conversation", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            notebookId,
+            conversationNoteId: noteId,
+            base: noteId ? base : null,
+            // A side chat belongs to the conversation it was started from.
+            sideChatOf: side ? noteIdRef.current : undefined,
+            quote: side ? side.quote : undefined,
+            turns: turnsToSave.map((turn) => ({
+              role: turn.role,
+              content: turn.content.slice(0, TURN_MAX_CHARS),
+              images: turn.images?.map((img) => ({ id: img.id, name: img.name })),
+              files: turn.files?.map((f) => ({ name: f.name })),
+            })),
+          }),
+        });
+        const json = (await res.json().catch(() => null)) as {
+          conversationNoteId?: string;
+          updatedAt?: string;
+          turns?: StoredTurn[];
+        } | null;
+        if (moved()) return false;
+        if (res.status === 409 && json?.turns && json.updatedAt) {
+          const server = toTurns(json.turns);
+          turnsToSave = [...server, ...turnsToSave.slice(Math.min(baseCount, turnsToSave.length))];
+          mergeThread(sideChatKey, server, json.updatedAt, baseCount);
+          continue;
+        }
+        if (!res.ok || !json?.conversationNoteId) return false;
+        const savedId = json.conversationNoteId;
+        const savedBase = json.updatedAt ?? null;
+        const savedCount = turnsToSave.length;
+        if (side) {
+          if (!side.noteId) {
+            const words = readSideDrafts(notebookId)[side.key];
+            if (words !== undefined) writeSideDraft(notebookId, savedId, words, side.key);
+          }
+          setSideChats((list) =>
+            list.map((s) => (s.key === side.key ? { ...s, noteId: savedId, base: savedBase, baseCount: savedCount } : s)),
+          );
+          return true;
+        }
+        baseRef.current = savedBase;
+        baseCountRef.current = savedCount;
+        setNoteId(savedId);
+        return true;
+      } catch {
+        // Offline, or the request otherwise never landed — the thread is still
+        // right here on screen; the next completed turn tries again, and the
+        // message stays held in the draft until one lands.
+        return false;
+      }
+    }
+    return false;
   }
 
   // Recommended: open shows what exists; generating streams into the card.
@@ -761,15 +1120,15 @@ export function AssistantPanel({
     const controller = new AbortController();
     recAbortRef.current = controller;
     try {
-      const res = await fetch("/api/derive", {
+      const res = await modelFetch("/api/derive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
         body: JSON.stringify({ type: "SUMMARIZE", documentId, notebookId, depth }),
-      });
+      }, t);
       if (!res.ok || !res.body) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(detail?.error ?? t("assistant.requestFailedStatus", { status: res.status }));
+        throw new Error(detail?.error ?? noReason(res, t));
       }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -796,7 +1155,7 @@ export function AssistantPanel({
       });
       // Stopped, not failed: the card goes back to the stored summary, if any.
       if (controller.signal.aborted) return;
-      setRecError(err instanceof Error ? err.message : t("common.requestFailed"));
+      setRecError(failureLine(err, t));
     } finally {
       if (recAbortRef.current === controller) recAbortRef.current = null;
       setRecBusy(null);
@@ -884,7 +1243,7 @@ export function AssistantPanel({
       setAttachments((list) => list.map((a) => (a.key === key ? done : a)));
     } catch (err) {
       setAttachments((list) => list.filter((a) => a.key !== key));
-      setError(err instanceof Error ? err.message : t("common.requestFailed"));
+      setError(callLine(err, t("common.notLoaded")));
     }
   }
 
@@ -939,7 +1298,7 @@ export function AssistantPanel({
           setAttachments((list) => list.map((a) => (a.key === key ? chip : a)));
         } catch (err) {
           setAttachments((list) => list.filter((a) => a.key !== key));
-          setError(err instanceof Error ? err.message : t("common.requestFailed"));
+          setError(callLine(err, t("common.notLoaded")));
         }
       })();
     }
@@ -951,6 +1310,7 @@ export function AssistantPanel({
 
   function removeQueued(key: string) {
     setQueue((list) => list.filter((m) => m.key !== key));
+    releaseMessage(notebookId, key);
   }
 
   const reading = attachments.some((a) => a.pending);
@@ -970,25 +1330,39 @@ export function AssistantPanel({
   // answer runs. The composer clears either way.
   function ask() {
     if (!composed) return;
+    if (document.activeElement === boxRef.current) setFocusTick((n) => n + 1);
+    // The box keeps its own words while the reader types (kept-field.tsx).
+    const typed = boxRef.current?.value ?? question;
     const message: OutgoingMessage = {
-      content: quote ? quoteMessage(quote, question) : question.trim(),
+      key: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      content: quote ? quoteMessage(quote, typed) : typed.trim(),
+      question: typed.trim(),
+      quote,
       images: attachments.flatMap((a) =>
         a.kind === "image" ? [{ id: a.id, url: a.url, name: a.name }] : [],
       ),
       files: attachments.flatMap((a) => (a.kind === "file" ? [{ name: a.name, text: a.text }] : [])),
     };
+    // The words leave the box and stay in the draft, held, until the
+    // answer is saved.
+    if (!openKeyRef.current) boxText.set(notebookId, "");
+    holdMessage(notebookId, message);
     setQuestion("");
     if (quote) dropQuote();
     setAttachments([]);
     if (busy) {
-      setQueue((list) => [...list, { ...message, key: `${Date.now()}-${Math.random().toString(36).slice(2)}` }]);
+      setQueue((list) => [...list, message]);
       return;
     }
     void send(message);
   }
 
   async function send(message: OutgoingMessage) {
-    if (busyRef.current) return;
+    // A run already on: the message waits its turn in the queue.
+    if (busyRef.current) {
+      setQueue((list) => [...list, message]);
+      return;
+    }
     busyRef.current = true;
     const q = message.content;
     const { images, files } = message;
@@ -1015,9 +1389,41 @@ export function AssistantPanel({
     );
     const userTurn: Turn = { role: "user", content: q, images, files };
     setTurns((prev) => [...prev, userTurn, { role: "assistant", content: "" }]);
-    // The question saves now, so leaving the page or a reload before the
-    // answer lands never loses it; the answer saves over it when it lands.
-    void saveConversation([...threadTurns, userTurn], sideChatKey);
+    // The thread this message went to, as it is now: the side chat's turns,
+    // or the conversation's while it is still the one on screen.
+    const threadNow = () =>
+      sideChatKey
+        ? (sideChatsRef.current.find((s) => s.key === sideChatKey)?.turns ?? [])
+        : turnsRef.current;
+    // What a save of this answer writes: the thread up to this message as it
+    // is when the save runs (an earlier save may have merged it), then the
+    // answer.
+    const savedWith = (answer: string): Turn[] => {
+      const thread = threadNow();
+      const i = thread.indexOf(userTurn);
+      const before = i >= 0 ? thread.slice(0, i) : threadTurns;
+      return [...before, userTurn, { role: "assistant", content: answer }];
+    };
+    // A message that did not land leaves the thread and goes back into the
+    // box; one on a thread no longer on screen just goes back.
+    const takeBack = () => {
+      const drop = (prev: Turn[]) => {
+        const i = prev.indexOf(userTurn);
+        if (i < 0) return prev;
+        const after = prev[i + 1];
+        const skip = after && after.role === "assistant" && !after.content ? 2 : 1;
+        return [...prev.slice(0, i), ...prev.slice(i + skip)];
+      };
+      if (sideChatKey) {
+        setSideChats((list) => list.map((s) => (s.key === sideChatKey ? { ...s, turns: drop(s.turns) } : s)));
+      } else if (turnsRef.current.includes(userTurn)) {
+        turnsRef.current = drop(turnsRef.current);
+        setTurnsState(turnsRef.current);
+        cacheThread();
+      }
+      putBack(notebookId, message);
+    };
+    let soFar = "";
     const setAnswer = (content: string, plan?: Turn["plan"], suggest?: string) =>
       setTurns((prev) => {
         const last = prev[prev.length - 1];
@@ -1041,16 +1447,16 @@ export function AssistantPanel({
         // Where "here" is on the open page (SPEC.md §29).
         caretBlockId: scope === "document" && documentId ? caretBlockIn(documentId) : undefined,
       };
-      const res = await fetch("/api/assistant", {
+      const res = await modelFetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
         body: JSON.stringify(body),
-      });
+      }, t);
       if (!res.ok || !res.body) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
         throw new Error(
-          detail?.error ?? t("assistant.assistantFailedStatus", { status: res.status }),
+          detail?.error ?? noReason(res, t),
         );
       }
       const reader = res.body.getReader();
@@ -1060,7 +1466,8 @@ export function AssistantPanel({
         const { done, value } = await reader.read();
         if (done) break;
         streamed += decoder.decode(value, { stream: true });
-        setAnswer(splitStreamPlan(splitStreamError(streamed).text).text);
+        soFar = splitStreamPlan(splitStreamError(streamed).text).text;
+        setAnswer(soFar);
       }
       // A failure mid-stream arrives in-band; an empty stream is a failure too.
       const { text: answered, error: streamError } = splitStreamError(streamed);
@@ -1077,11 +1484,29 @@ export function AssistantPanel({
       const shown = plan ? { actions, warnings: plan.warnings } : undefined;
       setAnswer(text, shown, suggest && requestSuggestions(suggest, q, text, history));
       if (shown && actions.length > 0) proposePlan(shown);
-      void saveConversation([...threadTurns, userTurn, { role: "assistant", content: text }], sideChatKey);
+      void saveConversation(() => savedWith(text), sideChatKey).then(
+        (saved) => {
+          if (saved) releaseMessage(notebookId, message.key);
+        },
+      );
     } catch (err) {
-      // Stopped, not failed: whatever streamed in already stays on screen.
-      if (controller.signal.aborted) return;
-      setError(err instanceof Error ? err.message : t("assistant.assistantFailed"));
+      // Stopped, not failed: whatever streamed in already stays on screen
+      // and is saved with its question; a stop before the first words, or
+      // a switch to another conversation, puts the message back in the box.
+      if (controller.signal.aborted) {
+        if (soFar.trim() && threadNow().includes(userTurn)) {
+          void saveConversation(() => savedWith(soFar), sideChatKey).then(
+            (saved) => {
+              if (saved) releaseMessage(notebookId, message.key);
+            },
+          );
+        } else {
+          takeBack();
+        }
+        return;
+      }
+      takeBack();
+      setError(failureLine(err, t));
     } finally {
       if (runAbortRef.current === controller) runAbortRef.current = null;
       setBusy(false);
@@ -1111,22 +1536,22 @@ export function AssistantPanel({
     const controller = new AbortController();
     runAbortRef.current = controller;
     try {
-      const res = await fetch("/api/assistant", {
+      const res = await modelFetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
         body: JSON.stringify({ notebookId, scope: "notebook", task, thinking }),
-      });
+      }, t);
       const json = (await res.json().catch(() => null)) as
         | { issues?: Issue[]; error?: string }
         | null;
       if (!res.ok)
-        throw new Error(json?.error ?? t("assistant.taskFailedStatus", { status: res.status }));
+        throw new Error(json?.error ?? noReason(res, t));
       setIssues(json?.issues ?? []);
     } catch (err) {
       // Stopped, not failed: no cards, no error.
       if (controller.signal.aborted) return;
-      setError(err instanceof Error ? err.message : t("assistant.taskFailed"));
+      setError(failureLine(err, t));
     } finally {
       if (runAbortRef.current === controller) runAbortRef.current = null;
       setBusy(false);
@@ -1179,19 +1604,27 @@ export function AssistantPanel({
   const recommendedShown = recDepth ? (recTexts[recDepth] ?? summaries[recDepth] ?? "") : "";
   const recommendedRow = RECOMMENDED.find((r) => r.depth === recDepth);
   const recommendedLabel = recommendedRow ? t(recommendedRow.labelKey) : "";
-  const scopeChoice = SCOPES.find((s) => s.id === scope);
   // A side chat is open on top of a conversation: both are a conversation on
   // screen, so the first layout never returns while one is open.
   const inConversation = turns.length > 0 || openSideChat !== null;
 
-  // The composer's box grows with the message, up to six lines.
+  // The composer's box grows with the message, up to six lines: as the
+  // reader types, and when the box takes words (sent, put back, a draft).
   const boxRef = useRef<HTMLTextAreaElement>(null);
-  useLayoutEffect(() => {
+  const fitBox = () => {
     const el = boxRef.current;
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
-  }, [question]);
+  };
+  useLayoutEffect(fitBox, [question]);
+  // The box keeps the focus when the first message swaps the resting layout
+  // for the conversation's, and takes it after Start side chat and Ask about
+  // this: the next words typed land in it, never on the page.
+  const [focusTick, setFocusTick] = useState(0);
+  useEffect(() => {
+    if (focusTick) boxRef.current?.focus({ preventScroll: true });
+  }, [focusTick]);
 
   // The thread follows the newest turn while the reader is at its foot; a
   // reader who scrolled up to read stays where they are.
@@ -1208,10 +1641,19 @@ export function AssistantPanel({
   const conversationsNew = useNewFeature("conversations");
 
   // The panel's head (SPEC.md §7): Conversations opens the list of this
-  // reader's conversations of the project; New conversation starts an empty
-  // one and keeps the one on screen in the list.
-  const head = (
-    <div className="flex items-center gap-1.5">
+  // reader's conversations of the project; New conversation (+) starts an
+  // empty one and keeps the one on screen in the list. Both stand in the
+  // tray's head row, beside the title and ✕ (TOOL13-08), so nothing floats
+  // over the turns and the turns get the row; a panel outside the tray
+  // keeps them on a row of its own.
+  const [headSlot, setHeadSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    // The tray's head row is in the page before the panel mounts.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setHeadSlot(document.querySelector<HTMLElement>("[data-tray-head-slot]"));
+  }, []);
+  const headControls = (
+    <>
       <button
         onClick={() => {
           conversationsNew.seen();
@@ -1231,19 +1673,24 @@ export function AssistantPanel({
         <button
           onClick={newConversation}
           data-track="assistant-new-conversation"
+          aria-label={t("assistant.newConversation")}
           data-tip={t("assistant.newConversationTitle")}
-          className="ml-auto flex items-center gap-1 rounded-full bg-card px-3 py-1 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
+          className="flex size-7 shrink-0 items-center justify-center rounded-full bg-card text-sand-600 shadow-soft hover:text-clay-800 pointer-coarse:size-9"
         >
           <PlusIcon size={13} />
-          {t("assistant.newConversation")}
         </button>
       )}
-    </div>
+    </>
+  );
+  const head = headSlot ? (
+    createPortal(headControls, headSlot)
+  ) : (
+    <div className="flex items-center gap-1.5">{headControls}</div>
   );
 
-  // What the next message runs with, right above the composer (SPEC.md §7):
-  // the scope — This page or Project — on one row; how the assistant
-  // answers — Fast Thinking or Deep Thinking, and Web — on the row under it.
+  // What the next message runs with, on one row right above the composer
+  // (SPEC.md §7): the scope — This page or Project — then how the assistant
+  // answers — the thinking chip, and Web.
   const scopeRow = (
     <div className="flex flex-wrap items-center gap-1">
       {SCOPES.map((s) => (
@@ -1264,12 +1711,8 @@ export function AssistantPanel({
           {t(s.labelKey)}
         </button>
       ))}
-    </div>
-  );
-  const answerRow = (
-    <div className="flex flex-wrap items-center gap-1">
-      <ThinkingChips />
-      <WebChip className="ml-auto" />
+      <ThinkingChips className="ml-auto" />
+      <WebChip />
     </div>
   );
 
@@ -1340,12 +1783,17 @@ export function AssistantPanel({
           )}
         </div>
       )}
-      {quote && <QuoteChip quote={quote} onClear={dropQuote} className="mb-1.5" />}
-      <textarea
-        ref={boxRef}
+      {/* A side chat's header already shows the quote it started on. */}
+      {quote && quote !== openSideChat?.quote && <QuoteChip quote={quote} onClear={dropQuote} className="mb-1.5" />}
+      <KeptTextarea
+        fieldRef={boxRef}
         value={question}
         rows={1}
-        onChange={(e) => setQuestion(e.target.value)}
+        onCommit={(text) => {
+          if (!openKeyRef.current) boxText.set(notebookId, text);
+          setQuestion(text);
+        }}
+        onType={fitBox}
         {...ime.props}
         onKeyDown={(e) => {
           if (e.key !== "Enter" || e.shiftKey) return;
@@ -1408,7 +1856,7 @@ export function AssistantPanel({
             <DriveIcon size={15} />
           </button>
         )}
-        <VoiceTypingButton field={boxRef} track="assistant-voice-typing" className="size-8" size={15} />
+        <VoiceTypingButton field={boxRef} track="assistant-voice-typing" className="ml-auto size-8" size={14} />
         {/* While an answer runs the button is Stop, or Queue once a message
             is composed; the thinking row in the thread keeps its own Stop. */}
         <button
@@ -1420,15 +1868,12 @@ export function AssistantPanel({
             stopRun();
           }}
           disabled={!busy && !canSend}
-          data-tip={busy ? t(canQueue ? "assistant.queueTitle" : "assistant.stopAsk") : undefined}
+          data-tip={busy ? t(canQueue ? "assistant.queueTitle" : "assistant.stopAsk") : t("reader.sendTitle")}
           aria-label={busy && !canQueue ? t("assistant.stopAsk") : undefined}
-          className="ml-auto rounded-full bg-clay px-4 py-1.5 text-sm font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-40"
+          // The card's Send (reader-interactions.tsx): one size and color.
+          className={SEND_CLASS}
         >
-          {busy && !canQueue ? (
-            <StopIcon size={13} />
-          ) : (
-            t(canQueue ? "assistant.queue" : inConversation ? "assistant.send" : "assistant.ask")
-          )}
+          {busy && !canQueue ? <StopIcon size={11} /> : t(canQueue ? "assistant.queue" : "assistant.send")}
         </button>
       </div>
     </form>
@@ -1507,11 +1952,11 @@ export function AssistantPanel({
                       </span>
                     </button>
                     <button
-                      onClick={() => void deleteConversation(c.id)}
+                      onClick={() => deleteConversation(c.id)}
                       data-track="assistant-conversation-delete"
                       aria-label={t("assistant.conversationDelete")}
                       data-tip={t("assistant.conversationDelete")}
-                      className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-sand-400 opacity-0 transition-opacity group-hover/conversation:opacity-100 hover:bg-clay-200 hover:text-clay-800 focus-visible:opacity-100"
+                      className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-sand-400 opacity-0 transition-opacity group-hover/conversation:opacity-100 hover:bg-clay-200 hover:text-clay-800 focus-visible:opacity-100 pointer-coarse:size-9 pointer-coarse:opacity-100"
                     >
                       <TrashIcon size={12} />
                     </button>
@@ -1535,6 +1980,8 @@ export function AssistantPanel({
   }
 
   if (inConversation) {
+    // The newest answer keeps its rating row and Save as note in view.
+    const lastAnswer = activeTurns.findLastIndex((turn) => turn.role === "assistant");
     return (
       <div className="flex h-full flex-col gap-3">
         {head}
@@ -1582,7 +2029,13 @@ export function AssistantPanel({
                 )}
               </div>
             ) : (
-              <div key={i} className="rounded-2xl bg-card p-4 text-sm shadow-soft">
+              <div
+                key={i}
+                // An older answer shows its rating row on hover or focus; a
+                // tap focuses the answer on a touch screen.
+                tabIndex={-1}
+                className="group/answer rounded-2xl bg-card p-4 text-sm shadow-soft outline-none"
+              >
                 {turn.content ? (
                   <>
                     {/* Highlighting the answer offers the side chat, the
@@ -1590,7 +2043,7 @@ export function AssistantPanel({
                     <div {...{ [ANSWER_MARK]: "" }}>
                       {/* An older answer may still carry its actions block:
                           the reader never sees the JSON (SPEC.md §7). */}
-                      <Markdown>{splitActionsFence(turn.content).text}</Markdown>
+                      <AnswerMarkdown>{splitActionsFence(turn.content).text}</AnswerMarkdown>
                     </div>
                     {/* The plan the answer came with: the count, and the way
                         back to the plan card once it was closed. */}
@@ -1625,7 +2078,13 @@ export function AssistantPanel({
                         the answer, once the answer is whole; the
                         suggestions' row rates a turn that asked for them. */}
                     {!(busy && i === activeTurns.length - 1) && (
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <div
+                        className={`mt-2 flex flex-wrap items-center gap-2${
+                          i < lastAnswer
+                            ? " opacity-0 transition-opacity group-focus-within/answer:opacity-100 group-hover/answer:opacity-100"
+                            : ""
+                        }`}
+                      >
                         {!turn.suggest && (
                           <RatingButtons
                             tool="assistant"
@@ -1633,6 +2092,7 @@ export function AssistantPanel({
                             output={turn.content}
                             notebookId={notebookId}
                             documentId={documentId ?? undefined}
+                            inRow
                           />
                         )}
                         {/* Save as note (SPEC.md §7): the answer organized
@@ -1696,12 +2156,11 @@ export function AssistantPanel({
               ))}
             </div>
           )}
-          {error && <p className="text-sm text-red-600">{error}</p>}
           <CommentList
             comments={comments}
             people={{ ...people, ...commentPeople }}
             myId={myId}
-            onDelete={(id) => void deleteComment(id)}
+            onDelete={deleteComment}
           />
         </div>
         {openSideChat ? (
@@ -1711,8 +2170,11 @@ export function AssistantPanel({
         )}
         {commentQuote ? (
           <CommentBox
+            key={commentDraftKey ?? ""}
             quote={commentQuote}
             busy={commentBusy}
+            draft={readCommentDraft(commentDraftKey)}
+            onDraft={(text) => writeCommentDraft(commentDraftKey, text)}
             onCancel={() => {
               setCommentQuote(null);
               clearSelection();
@@ -1722,9 +2184,15 @@ export function AssistantPanel({
         ) : (
           <>
             {scopeRow}
-            {answerRow}
             {composer}
           </>
+        )}
+        {/* Why the last message (or comment) did not go, under the box that
+            sent it; its words are back in the box (SPEC.md §7). */}
+        {error && (
+          <p role="alert" className="-mt-1.5 px-1 text-[12px] font-medium text-red-600">
+            {error}
+          </p>
         )}
         <AnswerTint rects={tintRects} />
         {selection && (
@@ -1825,9 +2293,6 @@ export function AssistantPanel({
       </div>
 
       {scopeRow}
-      <p className="text-xs text-sand-500">{scopeChoice ? t(scopeChoice.hintKey) : null}</p>
-      {answerRow}
-
       {composer}
 
       {scope === "notebook" && (

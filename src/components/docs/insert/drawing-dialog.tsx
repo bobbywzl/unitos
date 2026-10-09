@@ -502,6 +502,7 @@ function DrawingDialog({ editor, open, onClose }: { editor: Editor; open: Open; 
       title={t(open.pos === null ? "docsInsert.drawing" : "docsInsert.editDrawing")}
       onClose={onClose}
       className="docs-drawing-dialog"
+      closeButton={false}
       actions={
         <>
           <DialogButton onClick={onClose}>{t("docs.cancel")}</DialogButton>

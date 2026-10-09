@@ -6,6 +6,8 @@ import { api } from "@/lib/api";
 import { isImeKey } from "@/lib/ime";
 import { splitNote } from "@/lib/note-title";
 import { quotesOf } from "@/lib/notes/quote-sources";
+import { failureLine } from "@/components/assistant/failure";
+import { ACCEPT_CLASS, REJECT_CLASS, SEND_CLASS } from "@/components/assistant/decision-classes";
 import { useThinking } from "@/components/assistant/thinking-chips";
 import { useWeb, WebChip } from "@/components/assistant/web-chip";
 import { SparkleIcon } from "@/components/icons";
@@ -24,15 +26,20 @@ import { useKeptChat, type KeptTurn } from "@/lib/kept-chat";
 // reads the note as the editor holds it, its document whole, and the
 // reader's other notes. A change comes back as the note as it should read,
 // shown under the reply with Apply and Discard. Apply puts it into the
-// editor's draft, which saves like any edit; Undo puts the draft back, and
-// Cancel on the note restores what it said before the editor opened. The
-// panel never writes to the note itself.
+// editor's draft, which saves like any edit; Undo puts the draft back while
+// the note still reads as the change left it (after that the row reads
+// Accepted alone), and Cancel on the note restores what it said before the
+// editor opened. The panel never writes to the note itself.
 //
-// Closed, the panel folds to one Assistant chip; the choice is remembered in
-// this browser. The words typed in the box are kept in this browser until
-// they are sent, so a reload never loses them. The conversation is kept for
-// the account per note (lib/kept-chat.ts): closing the note, leaving the
-// page, or a reload keeps it; Clear conversation removes it.
+// The panel starts folded to one Assistant chip, so the open note keeps its
+// room for the note; a press opens it, and the choice is remembered in this
+// browser. The words typed in the box are kept in this browser until they
+// are sent, so a reload never loses them, and a note with words waiting in
+// the box opens with the panel open. The hint under the head shows while
+// the box is empty and has the caret.
+// The conversation is kept for the account per note (lib/kept-chat.ts):
+// closing the note, leaving the page, or a reload keeps it; Clear
+// conversation removes it.
 const OPEN_KEY = "unitos-note-assistant";
 const DRAFT_KEY = "unitos-note-assistant-draft:";
 
@@ -42,16 +49,15 @@ type Turn = KeptTurn & { data?: { proposal?: Proposal } };
 
 function readOpen(): boolean {
   try {
-    return localStorage.getItem(OPEN_KEY) !== "closed";
+    return localStorage.getItem(OPEN_KEY) === "open";
   } catch {
-    return true;
+    return false;
   }
 }
 
 function writeOpen(open: boolean) {
   try {
-    if (open) localStorage.removeItem(OPEN_KEY);
-    else localStorage.setItem(OPEN_KEY, "closed");
+    localStorage.setItem(OPEN_KEY, open ? "open" : "closed");
   } catch {
     // A blocked store only loses the memory of the choice.
   }
@@ -75,6 +81,9 @@ function writeTyped(noteId: string, text: string) {
 }
 
 const normalize = (text: string) => text.replace(/\s+/g, " ").trim().toLowerCase();
+/** The note still reads as the change left it (spacing aside). */
+const readsAs = (draft: string, content: string) =>
+  draft.replace(/\s+/g, " ").trim() === content.replace(/\s+/g, " ").trim();
 
 /** How many of the note's quotes the change takes out. */
 function quotesLost(before: string, after: string): number {
@@ -100,7 +109,8 @@ export function NoteAssistant({
   const t = useT();
   const thinking = useThinking();
   const web = useWeb();
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [focused, setFocused] = useState(false);
   const kept = useKeptChat<Turn>(notebookId, `note:${noteId}`);
   const { turns, setTurns, busy } = kept;
   const [input, setInput] = useState("");
@@ -112,10 +122,19 @@ export function NoteAssistant({
   // The browser's memory after the first render, so the server's render and
   // the first client render agree.
   useEffect(() => {
+    const typed = readTyped(noteId);
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setOpen(readOpen());
-    setInput(readTyped(noteId));
+    setOpen(readOpen() || typed.trim().length > 0);
+    setInput(typed);
   }, [noteId]);
+
+  // Back online: the offline line goes, as the header's offline pill does.
+  useEffect(() => {
+    const offline = t("common.offlineAi");
+    const onOnline = () => setError((line) => (line === offline ? null : line));
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [t]);
 
   // The newest turn in view: the conversation scrolls to its end, and the
   // panel into the tray's view when the card runs past it.
@@ -151,7 +170,9 @@ export function NoteAssistant({
     // The document open in the reader (?doc=): the note's own document wins
     // on the server.
     const documentId = new URLSearchParams(window.location.search).get("doc") ?? undefined;
-    // The words leave the box only once the server has them.
+    // The box empties now; the browser's draft holds the words until the
+    // answer lands, and a failure puts them back in the box.
+    setInput("");
     const controller = kept.begin();
     try {
       const answer = await api<NoteAssistantAnswer>(
@@ -160,7 +181,8 @@ export function NoteAssistant({
         { message, draft, history, documentId, thinking, web },
         { signal: controller.signal },
       );
-      type("");
+      // Answered: the draft holds what the box holds now.
+      writeTyped(noteId, inputRef.current?.value ?? "");
       setTurns((prev) => [
         ...prev,
         {
@@ -173,9 +195,12 @@ export function NoteAssistant({
       ]);
       if (answer.content === null && answer.warnings.length > 0) setError(answer.warnings.join(" "));
     } catch (err) {
-      // The message stays in the box: nothing was answered.
+      // Nothing was answered: the message goes back into the box, after
+      // whatever was typed since.
       setTurns((prev) => (prev[prev.length - 1]?.content === message ? prev.slice(0, -1) : prev));
-      if (!controller.signal.aborted) setError(err instanceof Error ? err.message : String(err));
+      const now = inputRef.current?.value ?? "";
+      type(now.trim() ? `${now}\n\n${message}` : message);
+      if (!controller.signal.aborted) setError(failureLine(err, t));
     } finally {
       kept.end(controller);
     }
@@ -192,8 +217,13 @@ export function NoteAssistant({
       onApply(proposal.content);
       next = { ...proposal, state, before: draft };
     } else {
-      // Undo: the draft as it stood before Apply.
-      if (state === "open" && proposal.before !== undefined) onApply(proposal.before);
+      // Undo: the draft as it stood before Apply — only while the note still
+      // reads as the change left it, so Undo never takes out words written
+      // after the change (CLAUDE.md rule zero 1).
+      if (state === "open") {
+        if (!readsAs(draft, proposal.content)) return;
+        if (proposal.before !== undefined) onApply(proposal.before);
+      }
       next = { ...proposal, state, before: undefined };
     }
     setTurns((prev) =>
@@ -230,16 +260,16 @@ export function NoteAssistant({
       <div className="flex items-center gap-2 px-3 pt-2">
         <SparkleIcon size={16} className="text-[var(--kind-assistant)]" />
         <span className="sr-only">{t("assistant.noteAssistant")}</span>
-        {turns.length > 0 && !busy && (
-          <ClearConversation onClear={kept.clear} track="note-assistant-clear" className="ml-auto" />
-        )}
+        {/* Web sits in the head row, so the box takes the whole row under it. */}
+        <WebChip small className="ml-auto h-6 shrink-0 pointer-coarse:h-9" />
+        {turns.length > 0 && !busy && <ClearConversation onClear={kept.clear} track="note-assistant-clear" />}
         <button
           type="button"
           onClick={() => toggle(false)}
           data-track="note-assistant-close"
           aria-label={t("assistant.noteAssistantClose")}
           data-tip={t("assistant.noteAssistantClose")}
-          className={`${turns.length > 0 && !busy ? "" : "ml-auto "}rounded-full px-1.5 text-sm text-sand-500 hover:bg-clay-100 hover:text-clay-800`}
+          className="flex size-6 shrink-0 items-center justify-center rounded-full text-sm text-sand-500 hover:bg-clay-100 hover:text-clay-800 pointer-coarse:size-9"
         >
           ✕
         </button>
@@ -264,7 +294,7 @@ export function NoteAssistant({
                     lost={quotesLost(turn.data.proposal.before ?? draft, turn.data.proposal.content)}
                     onApply={() => settle(i, "applied")}
                     onDiscard={() => settle(i, "discarded")}
-                    onUndo={() => settle(i, "open")}
+                    onUndo={readsAs(draft, turn.data.proposal.content) ? () => settle(i, "open") : null}
                   />
                 )}
               </div>
@@ -273,18 +303,18 @@ export function NoteAssistant({
           {busy && <ThinkingIndicator className="text-xs" onStop={stop} />}
         </div>
       )}
-      {turns.length === 0 && !busy && (
+      {turns.length === 0 && !busy && focused && !input.trim() && (
         <p className="px-3.5 pt-0.5 pb-1 text-[11.5px] leading-snug text-sand-500">{t("assistant.noteAssistantEmpty")}</p>
       )}
-      {error && <p className="px-3.5 pb-1 text-[11.5px] text-red-500">{error}</p>}
 
       <div className="flex items-end gap-2 border-t border-line px-3 py-2">
-        <WebChip small className="mb-1 shrink-0" />
         <textarea
           ref={inputRef}
           value={input}
           rows={1}
           onChange={(e) => type(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           onKeyDown={(e) => {
             if (isImeKey(e)) return;
             // The note editor's own keys stay the note's: Enter sends here.
@@ -297,21 +327,26 @@ export function NoteAssistant({
           placeholder={t("assistant.noteAssistantPlaceholder")}
           className="max-h-32 min-h-[34px] flex-1 resize-none bg-transparent py-1.5 text-[13.5px] text-ink outline-none placeholder:text-sand-500 [field-sizing:content]"
         />
-        <VoiceTypingButton field={inputRef} track="note-assistant-voice-typing" className="mb-0.5 size-8" size={15} />
+        <VoiceTypingButton field={inputRef} track="note-assistant-voice-typing" className="mb-0.5 size-8" size={14} />
         <button
           type="button"
           onClick={() => void send()}
           disabled={!canSend}
           data-track="note-assistant-send"
-          aria-label={t("assistant.noteAssistantSend")}
-          data-tip={t("assistant.noteAssistantSend")}
-          className={`mb-0.5 flex size-8 shrink-0 items-center justify-center rounded-full text-base font-bold transition-colors ${
-            canSend ? "bg-[var(--kind-assistant)] text-white hover:opacity-90" : "bg-sand-100 text-sand-400"
-          }`}
+          data-tip={t("reader.sendTitle")}
+          // The card's Send (reader-interactions.tsx): one size and color.
+          className={`mb-1 shrink-0 ${SEND_CLASS}`}
         >
-          ↑
+          {t("assistant.send")}
         </button>
       </div>
+      {/* Why the message did not go, under the box that sent it; its words
+          are still in the box (SPEC.md §7). */}
+      {error && (
+        <p role="alert" className="-mt-1 px-3.5 pb-2 text-[12px] font-medium text-red-600">
+          {error}
+        </p>
+      )}
     </section>
   );
 }
@@ -327,7 +362,8 @@ function ProposalCard({
   lost: number;
   onApply: () => void;
   onDiscard: () => void;
-  onUndo: () => void;
+  /** Null once the note moved on from the change: the row reads Accepted alone. */
+  onUndo: (() => void) | null;
 }) {
   const t = useT();
   const shown = splitNote(proposal.content);
@@ -363,31 +399,33 @@ function ProposalCard({
               type="button"
               onClick={onApply}
               data-track="note-assistant-apply"
-              className="rounded-full bg-sage-600 px-3 py-1 text-xs font-semibold text-sage-fg hover:bg-sage-700"
+              className={ACCEPT_CLASS}
             >
-              {t("assistant.noteAssistantApply")}
+              {t("common.accept")}
             </button>
             <button
               type="button"
               onClick={onDiscard}
               data-track="note-assistant-discard"
-              className="rounded-full border border-line px-3 py-1 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+              className={REJECT_CLASS}
             >
-              {t("assistant.noteAssistantDiscard")}
+              {t("common.reject")}
             </button>
           </>
         )}
         {proposal.state === "applied" && (
           <>
             <span className="text-[11.5px] text-sage-700">{t("assistant.noteAssistantApplied")}</span>
-            <button
-              type="button"
-              onClick={onUndo}
-              data-track="note-assistant-undo"
-              className="ml-auto rounded-full border border-line px-2.5 py-0.5 text-xs text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-            >
-              {t("assistant.noteAssistantUndo")}
-            </button>
+            {onUndo && (
+              <button
+                type="button"
+                onClick={onUndo}
+                data-track="note-assistant-undo"
+                className={REJECT_CLASS}
+              >
+                {t("assistant.noteAssistantUndo")}
+              </button>
+            )}
           </>
         )}
       </div>

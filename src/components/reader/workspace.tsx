@@ -16,18 +16,20 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CommentIcon,
-  DistillIcon,
   EditsIcon,
   GraphIcon,
+  MoreIcon,
   NotesIcon,
   OfflineIcon,
   QuestionIcon,
+  QuoteIcon,
   SparkleIcon,
 } from "@/components/icons";
 import { ClickTracker } from "@/components/click-tracker";
 import { FunnelStepMark } from "@/components/funnel-step";
 import { CollabProvider, type CollabState } from "@/components/collab/collab-context";
-import { HistoryControl } from "@/components/collab/history-control";
+import { HistoryPanel } from "@/components/collab/history-control";
+import { FEEDBACK_OPEN_EVENT } from "@/components/feedback-button";
 import { ShareControl } from "@/components/collab/share-control";
 import { OfflineStatus } from "@/components/offline-status";
 import { useNotebookSync } from "@/components/collab/use-sync";
@@ -37,28 +39,32 @@ import { CorpusDistillPage } from "@/components/reader/corpus-distill-page";
 import { GuideDialog } from "@/components/guide-dialog";
 import { useT } from "@/components/lang-provider";
 import { NotebookTitle } from "@/components/notebook-title";
-import { ProgressBar } from "@/components/progress-bar";
+import { BOTTOM_STATUS, ProgressBar } from "@/components/progress-bar";
 import { LoadingDots } from "@/components/thinking";
 import { SaveIndicator } from "@/components/save-indicator";
 import { OpenDocumentProvider } from "@/components/reader/open-document-context";
 import {
   listSaved,
+  noSaves,
   offlineSupported,
   removeSaved,
-  saveProject,
+  runningSaves,
+  startSave,
+  subscribeRunning,
   subscribeSaved,
-  type SaveProgress,
 } from "@/lib/offline/saved";
 import { TierMark } from "@/components/tier-mark";
+import { escapeLayerOpen, focusWhenDrawn, useEscapeLayer } from "@/lib/escape-layers";
 import { FloatingNoteEditor } from "@/components/outline/floating-note-editor";
 import { readTrayFold, subscribeTrayFold } from "@/lib/assistant/side-chat-open";
 import { NotesTray } from "@/components/outline/notes-tray";
 import { useNoteScope } from "@/components/outline/note-groups";
 import { Presence } from "@/components/presence";
 import { flattenNotes, useOutline } from "@/components/outline/use-outline";
+import { MergeUndoBar } from "@/components/outline/merge-undo";
 import { DocumentBar, type AttachedDocument } from "@/components/reader/document-bar";
 import type { DocumentFolderView } from "@/components/reader/document-folders";
-import type { ReaderViewKind } from "@/components/reader/reader-panes";
+import { useDrawnView, type ReaderViewKind } from "@/components/reader/reader-panes";
 import type { DriveConfig } from "@/lib/drive/config";
 import type { TKey } from "@/lib/i18n/dictionaries";
 import {
@@ -69,7 +75,10 @@ import {
   trayStateKey,
 } from "@/lib/reading-position";
 
-type Tab = "notes" | "assistant" | "distill" | "annotations" | "edits";
+// History (SPEC.md §12) is a tab of the tray, opened from the header's
+// History button (below md, from the bar's More menu); it took in the rail's
+// Edits tab, whose rows are its This document.
+type Tab = "notes" | "assistant" | "distill" | "annotations" | "history";
 
 /** The back arrow, and three dots in a wave while the dashboard opens: the
     press answers at once, and the dashboard lands half a second later. */
@@ -83,12 +92,15 @@ const TAB_TITLES: Record<Tab, TKey> = {
   assistant: "panes.assistant",
   distill: "panes.distill",
   annotations: "panes.annotations",
-  edits: "panes.edits",
+  history: "panes.history",
 };
 
 const RAIL_BUTTON =
   "relative flex size-[38px] items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800";
 const RAIL_BUTTON_ON = "relative flex size-[38px] items-center justify-center rounded-full bg-clay-200 text-clay-800";
+// A row of the bar's More menu (below md).
+const MORE_ROW =
+  "flex items-center gap-2.5 rounded-full px-2.5 py-1.5 text-left text-[12px] text-sand-700 hover:bg-clay-100 hover:text-clay-800";
 // The strip's edge buttons (a split view): one scrolls to the tray, one back
 // to the documents. md+ only — below md the tray is a sheet, never a screen.
 const STRIP_BUTTON =
@@ -101,6 +113,9 @@ const STRIP_BUTTON =
 const SHEET_HEIGHT = "max-md:h-[min(max(60%,400px),calc(100%-150px))]";
 // md and up: the tray is the side column; below it, the sheet.
 const MD_QUERY = "(min-width: 768px)";
+// How long a jump to a tray card waits for the card to show: a note just
+// made arrives with the refresh, seconds on a slow network.
+const FLASH_WAIT_MS = 15_000;
 
 // Tray width bounds: the bar between the reader and the tray drags within
 // these, so it can never overextend — the tray keeps a readable minimum and
@@ -134,13 +149,14 @@ export function Workspace({
   assistant,
   distillPanel,
   annotationsPanel,
-  editsPanel,
   annotationCount,
   distillationCount,
   collab,
   rev,
   graph,
   history,
+  documentHistory,
+  liveBlockIds,
   corpusDistillations,
 }: {
   notebook: NotebookView;
@@ -160,7 +176,6 @@ export function Workspace({
   assistant: React.ReactNode;
   distillPanel: React.ReactNode;
   annotationsPanel: React.ReactNode;
-  editsPanel: React.ReactNode;
   annotationCount: number;
   distillationCount: number;
   collab: CollabState;
@@ -175,6 +190,10 @@ export function Workspace({
     linkScansLeft: number;
   };
   history: HistoryEntry[];
+  // History's This document: the open document's edits, and its blocks
+  // (an edit reverts while its block is there).
+  documentHistory: HistoryEntry[];
+  liveBlockIds: string[];
   corpusDistillations: CorpusDistillationView[];
 }) {
   const t = useT();
@@ -205,6 +224,20 @@ export function Workspace({
   // bottom bar; mobileTray tracks it. On md+ the md: overrides put the same
   // aside back in the side column, so the flag is inert there.
   const [mobileTray, setMobileTray] = useState(false);
+  // A phone's layout (below md): the rail is the bottom bar, and its More
+  // menu holds what the header and the bar have no room for.
+  const phone = useSyncExternalStore(subscribeNarrow, readNarrow, () => false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+  // Add to notes keeps a closed tray closed, by the tray's state, not the
+  // width: a phone's closed sheet, or a folded tray on md+ (EDGE13-08). The
+  // Notes button blooms once instead (notesBloom counts the adds, so each
+  // one replays it).
+  const quietAdd = useRef({ phone, sheetOpen: mobileTray, folded: collapsed });
+  useEffect(() => {
+    quietAdd.current = { phone, sheetOpen: mobileTray, folded: collapsed };
+  }, [phone, mobileTray, collapsed]);
+  const [notesBloom, setNotesBloom] = useState(0);
   // A jump opens the sheet below md, as the bottom bar does. On md+ the flag
   // stays as it is: the rail reads it to tell a second press on the open tab.
   const openSheet = useCallback(() => {
@@ -220,6 +253,10 @@ export function Workspace({
   // transition; the slide is for collapse and expand.
   const [resizing, setResizing] = useState(false);
   const [tab, setTab] = useState<Tab>("notes");
+  // The notes stay mounted, hidden, once shown: a return to Notes draws no
+  // card anew (NOTE14-06).
+  const [notesShown, setNotesShown] = useState(tab === "notes");
+  if (tab === "notes" && !notesShown) setNotesShown(true);
   // The tray per tab and per project: the reader's own open or fold and the
   // tab, saved when the reader makes them (the rail, a jump to a note or an
   // annotation, Show all comments), so a full page load (a new deploy turns
@@ -230,6 +267,9 @@ export function Workspace({
   // are never saved. The inline restore script (lib/reading-position.ts)
   // folds the tray before the first paint; these set the state after it.
   const trayStoreKey = trayStateKey(notebook.id);
+  // Back to Normal draws at the press (reader-panes.tsx): the tray takes its
+  // place in the same frame as the panes.
+  const drawnView = useDrawnView(readerView);
   const rememberTray = useCallback(
     (next: { collapsed: boolean; tab: Tab }) => {
       try {
@@ -250,8 +290,8 @@ export function Workspace({
   }, [trayStoreKey, canEdit]);
   useLayoutEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (!storedTray(trayStoreKey, canEdit)) setCollapsed(trayFoldsByDefault(readerView !== "normal"));
-  }, [trayStoreKey, canEdit, activeDocumentId, readerView]);
+    if (!storedTray(trayStoreKey, canEdit)) setCollapsed(trayFoldsByDefault(drawnView !== "normal"));
+  }, [trayStoreKey, canEdit, activeDocumentId, drawnView]);
   // The script's style rules leave once React owns the tray and the entrance
   // fades are past: the tray can then slide, and the fade cannot start late.
   useEffect(() => {
@@ -263,13 +303,37 @@ export function Workspace({
   // browser already holds a copy, a save under way, and the one-line result.
   // True once this browser is known to hold a cache: set after mount, so the
   // server render and the first client render agree (no window on the server).
-  const [offlineOn, setOfflineOn] = useState(false);
+  // Null until then: the header keeps the button's place, so History and the
+  // icons beside it do not move when it appears.
+  const [offlineOn, setOfflineOn] = useState<boolean | null>(null);
   const [offlineSaved, setOfflineSaved] = useState(false);
-  const [offlineSaving, setOfflineSaving] = useState(false);
-  const [offlineProgress, setOfflineProgress] = useState<SaveProgress | null>(null);
+  // The save under way for this project in this tab, started here or on the
+  // dashboard before the reader opened the project (lib/offline/saved.ts).
+  const offlineRun = useSyncExternalStore(subscribeRunning, runningSaves, noSaves).get(notebook.id);
+  const offlineSaving = offlineRun !== undefined;
+  const offlineProgress = offlineRun?.progress ?? null;
   const [offlineToast, setOfflineToast] = useState<{ text: string; plans: boolean } | null>(null);
+  // The save's result, whoever started it: the one-line toast.
+  const offlinePromise = offlineRun?.promise;
   useEffect(() => {
-    if (!offlineSupported()) return;
+    if (!offlinePromise) return;
+    offlinePromise.then(
+      () => setOfflineToast({ text: t("works.offlineSaved"), plans: false }),
+      (err: unknown) => {
+        const status = (err as { status?: number }).status;
+        setOfflineToast({
+          text: status === 403 ? t("works.offlineNeedsUltra") : t("works.offlineSaveFailed"),
+          plans: status === 403 && collab.billing,
+        });
+      },
+    );
+  }, [offlinePromise, t, collab.billing]);
+  useEffect(() => {
+    if (!offlineSupported()) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setOfflineOn(false);
+      return;
+    }
     const update = () =>
       void listSaved().then((rows) => {
         setOfflineSaved(rows.some((r) => r.id === notebook.id));
@@ -293,21 +357,8 @@ export function Workspace({
       setOfflineToast({ text: t("works.offlineNeedsUltra"), plans: collab.billing });
       return;
     }
-    setOfflineSaving(true);
-    setOfflineProgress({ stage: "pages", done: 0, total: 0 });
-    try {
-      await saveProject(notebook.id, setOfflineProgress);
-      setOfflineToast({ text: t("works.offlineSaved"), plans: false });
-    } catch (err) {
-      const status = (err as { status?: number }).status;
-      setOfflineToast({
-        text: status === 403 ? t("works.offlineNeedsUltra") : t("works.offlineSaveFailed"),
-        plans: status === 403 && collab.billing,
-      });
-    } finally {
-      setOfflineSaving(false);
-      setOfflineProgress(null);
-    }
+    // The toast comes from the effect on the running save.
+    await startSave(notebook.id).catch(() => undefined);
   }
   // The ? nudge for a new reader (the welcome flow points here): a pulsing
   // dot on the guide button until the guide is opened once on this browser.
@@ -345,7 +396,7 @@ export function Workspace({
   // two rests, the documents or the tray. Opening a tab scrolls to the tray;
   // the edge buttons and a sideways scroll move between the two; folding the
   // tray scrolls back to the documents first, then the column closes.
-  const split = readerView !== "normal";
+  const split = drawnView !== "normal";
   const stripRef = useRef<HTMLDivElement>(null);
   const trayColumnRef = useRef<HTMLDivElement>(null);
   // Which edge the strip rests at; the edge buttons show for the other one.
@@ -435,30 +486,43 @@ export function Workspace({
   // sheet), open the note if it is collapsed (the card listens for
   // dissect:open-note), scroll, flash.
   useEffect(() => {
-    // Scroll to the tray's card and flash it. Below md the sheet that holds
-    // it may still be opening: the flash waits for the card to show, a frame
-    // at a time, a second at most.
-    const flash = (selector: string, frames = 60) => {
+    // Scroll to the tray's card and flash it. The card may not be there
+    // yet, on every width: the sheet that holds it is opening (below md), a
+    // folded tray or section is unfolding, or the note was just made and
+    // comes with the refresh. The flash waits for the card to show, a frame
+    // at a time, FLASH_WAIT_MS at most; onFound runs first, the frame the
+    // card shows.
+    const flash = (selector: string, onFound?: () => void, until = Date.now() + FLASH_WAIT_MS) => {
       const el = trayRef.current?.querySelector<HTMLElement>(selector);
       if (el && el.getClientRects().length > 0) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-        el.classList.add("anchor-flash");
-        setTimeout(() => el.classList.remove("anchor-flash"), 2000);
-      } else if (frames > 0 && !window.matchMedia(MD_QUERY).matches) {
-        requestAnimationFrame(() => flash(selector, frames - 1));
+        onFound?.();
+        // The next frame: an opened card has its full height to center on.
+        requestAnimationFrame(() => {
+          const card = trayRef.current?.querySelector<HTMLElement>(selector) ?? el;
+          card.scrollIntoView({ behavior: "smooth", block: "center" });
+          card.classList.add("anchor-flash");
+          setTimeout(() => card.classList.remove("anchor-flash"), 2000);
+        });
+      } else if (Date.now() < until) {
+        requestAnimationFrame(() => flash(selector, onFound, until));
       }
     };
     const onShowNote = (e: Event) => {
-      const { noteId } = (e as CustomEvent<{ noteId: string }>).detail;
+      const { noteId, quiet } = (e as CustomEvent<{ noteId: string; quiet?: boolean }>).detail;
+      const closed = quietAdd.current.phone ? !quietAdd.current.sheetOpen : quietAdd.current.folded;
+      if (quiet === true && closed) {
+        setNotesBloom((n) => n + 1);
+        return;
+      }
       setCollapsed(false);
       setTab("notes");
       rememberTray({ collapsed: false, tab: "notes" });
       openSheet();
       revealTray();
       setTimeout(() => {
-        window.dispatchEvent(new CustomEvent("dissect:open-note", { detail: { noteId } }));
-        // The next frame: the opened card has its full height to center on.
-        requestAnimationFrame(() => flash(`[data-note-id="${noteId}"]`));
+        flash(`[data-note-id="${noteId}"]`, () =>
+          window.dispatchEvent(new CustomEvent("dissect:open-note", { detail: { noteId } })),
+        );
       }, 100);
     };
     // A mark the reader has no card for focuses its card in the Annotations
@@ -479,7 +543,7 @@ export function Workspace({
         reopening = sourceId;
         window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId } }));
         reopening = null;
-        requestAnimationFrame(() => flash(`[data-annotation-source-id="${sourceId}"]`));
+        flash(`[data-annotation-source-id="${sourceId}"]`);
       }, 150);
     };
     // The page editor's Show all comments opens the Annotations tab.
@@ -572,9 +636,96 @@ export function Workspace({
     setMobileTray(true);
     revealTray();
   }
+  // A tab is the open one: below md while the sheet shows it, on md+ while
+  // the tray is open on it. The bar's button for it reads pressed then only.
+  const isOpen = (which: Tab) => tab === which && (phone ? mobileTray : !collapsed);
+  // The header's History: opens the tray on History; a second press, History
+  // open, folds the tray as the rail's chevron does.
+  // Opened from the header, History is a layer: Escape folds it (closes
+  // the sheet on a phone) and the focus goes back to History. Opened by a
+  // key, the focus moves into the panel.
+  const [historyLayer, setHistoryLayer] = useState(false);
+  function toggleHistory(e: React.MouseEvent) {
+    if (!phone && isOpen("history")) {
+      setCollapsed(true);
+      rememberTray({ collapsed: true, tab });
+      return;
+    }
+    show("history");
+    setHistoryLayer(true);
+    if (e.detail === 0) focusWhenDrawn("[data-history-panel] :is(button, a[href], [tabindex='0'])");
+  }
+  useEscapeLayer(historyLayer && isOpen("history"), () => {
+    setHistoryLayer(false);
+    // The sheet's flag too: show() reads it as open and would close it.
+    setMobileTray(false);
+    if (!phone) {
+      setCollapsed(true);
+      rememberTray({ collapsed: true, tab });
+    }
+  });
+  // The rail's Notes and Annotations by a key, as History by a key: the
+  // focus moves into the panel, and Escape on a control there (with no menu
+  // or card open) gives it back to the rail's button. A press leaves the
+  // focus where it was.
+  const railOpener = useRef<HTMLElement | null>(null);
+  // first: where the focus goes when it is drawn (the pending note's
+  // Accept), else the panel's first control.
+  function intoPanel(e: React.MouseEvent<HTMLElement>, first?: string) {
+    if (e.detail !== 0) {
+      railOpener.current = null;
+      return;
+    }
+    railOpener.current = e.currentTarget;
+    const panel = "[data-track-surface='tray'] .panel-in :is(button, a[href], input, textarea, [tabindex='0'])";
+    focusWhenDrawn(first ? [first, panel] : panel);
+  }
+  function backToRail(e: React.KeyboardEvent) {
+    const opener = railOpener.current;
+    if (e.key !== "Escape" || e.defaultPrevented || !opener?.isConnected || escapeLayerOpen()) return;
+    const target = e.target as HTMLElement;
+    if (target.closest("input, textarea, select, [contenteditable='true'], [contenteditable='']")) return;
+    railOpener.current = null;
+    opener.focus();
+  }
+  // The Notes button with notes waiting for Accept: the tray opens on notes
+  // with the first pending note in view and flashed, as the header's
+  // pending count did; with the notes open, a press is the tab's own.
+  function showNotes(e: React.MouseEvent<HTMLElement>) {
+    if (pending.length > 0 && !isOpen("notes")) {
+      const noteId = actions.focusedPendingId ?? pending[0].id;
+      window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId } }));
+      // By a key, the focus goes to that note's Accept.
+      intoPanel(e, `[data-track-surface='tray'] [data-note-id="${CSS.escape(noteId)}"] [data-track="note-accept"]`);
+      return;
+    }
+    show("notes");
+    intoPanel(e);
+  }
+  // The More menu closes on a press outside it and on any row's press (the
+  // reader views are rows reader-panes.tsx puts in its slot, outside this
+  // component's tree, so a native listener hears them).
+  useEffect(() => {
+    if (!moreOpen) return;
+    const menu = moreRef.current;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!menu?.contains(e.target as Node)) setMoreOpen(false);
+    };
+    const onClick = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest("[data-more-row], [data-reader-view-slot] button")) setMoreOpen(false);
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    menu?.addEventListener("click", onClick);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      menu?.removeEventListener("click", onClick);
+    };
+  }, [moreOpen]);
+  useEscapeLayer(moreOpen, () => setMoreOpen(false));
 
-  // A note floats over the article (dragged out of the tray), or a side chat
-  // or version history is open in the reader (SPEC.md §7, §29): the tray
+  // A note floats over the article (dragged out of the tray), or version
+  // history is open in the reader (SPEC.md §7, §29); a side chat no longer
+  // folds it (it stays in its card's place): the tray
   // folds so they have the room, and unfolds when the card docks or closes
   // and they are gone. Docking opens the tray on notes on its own (onDock
   // below); this undoes only the fold it made, so a tray the reader had
@@ -638,7 +789,12 @@ export function Workspace({
         >
           <BackArrow />
         </Link>
-        <NotebookTitle id={notebook.id} title={notebook.title} />
+        {/* Below sm the document pill takes the title's room: a title cut
+            to two letters names nothing, and Rename stays on the
+            dashboard card's menu. */}
+        <div className="hidden min-w-0 sm:flex">
+          <NotebookTitle id={notebook.id} title={notebook.title} />
+        </div>
         <span aria-hidden className="hidden size-[5px] shrink-0 rounded-full bg-sand-400 sm:block" />
         {/* No overflow clipping here: the document list and the + menu drop
             below the header. The one pill truncates instead of scrolling. */}
@@ -657,11 +813,27 @@ export function Workspace({
         <OfflineStatus />
         <SaveIndicator />
         <ShareControl notebookId={notebook.id} presence={presence} />
-        <div className="hidden md:block">
-          <HistoryControl history={history} />
-        </div>
-        {/* Save for offline (SPEC.md §17, Unitos Ultra): the pill in the header.
-            Saved, it reads Offline and a press removes the copy. */}
+        {/* History (SPEC.md §12): opens the tray on History. Below md it
+            is a row of the bar's More menu. */}
+        <button
+          onClick={toggleHistory}
+          data-track="history"
+          aria-expanded={isOpen("history")}
+          aria-label={t("panes.history")}
+          data-tip={t("panes.historyTitle")}
+          className={`hidden size-[34px] shrink-0 items-center justify-center rounded-full border md:flex ${
+            isOpen("history")
+              ? "border-clay-300 bg-clay-200 text-clay-800"
+              : "border-line text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+          }`}
+        >
+          <EditsIcon size={16} />
+        </button>
+        {/* Save for offline (SPEC.md §17, Unitos Ultra): an icon in the
+            header, its name in the tooltip; saved, it is filled and a press
+            removes the copy. Below md it is a row of the bar's More menu.
+            Until the browser's copy is known, its place stands empty. */}
+        {offlineOn === null && <span aria-hidden className="hidden size-[34px] shrink-0 md:block" />}
         {offlineOn && (
           <button
             onClick={() => void toggleOffline()}
@@ -669,23 +841,19 @@ export function Workspace({
             data-track="offline-save"
             aria-label={t(offlineSaved ? "works.removeOffline" : "works.saveOffline")}
             data-tip={t(offlineSaved ? "works.removeOffline" : "works.saveOffline")}
-            className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40 ${
+            className={`relative hidden size-[34px] shrink-0 items-center justify-center rounded-full hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40 md:flex ${
               offlineSaved
                 ? "border border-sage-300 bg-sage-200 text-sage-800"
                 : "border border-dashed border-sand-400 text-sand-600"
             }`}
           >
-            <OfflineIcon size={14} />
-            <span className="hidden sm:inline">
-              {t(offlineSaved ? "works.offlineBadge" : "works.saveOffline")}
-            </span>
-            {!collab.ultra && !offlineSaved && <TierMark state="ultra" size={10} />}
+            <OfflineIcon size={15} />
+            {!collab.ultra && !offlineSaved && (
+              <span className="absolute -top-1 -right-1">
+                <TierMark state="ultra" size={10} />
+              </span>
+            )}
           </button>
-        )}
-        {pending.length > 0 && (
-          <span className="hidden shrink-0 rounded-full bg-clay-200 px-3.5 py-1.5 text-xs font-semibold text-clay-800 lg:inline">
-            {t("panes.pendingCount", { n: pending.length })}
-          </span>
         )}
         <button
           onClick={openGuide}
@@ -785,6 +953,7 @@ export function Workspace({
           </div>
           <aside
             ref={trayRef}
+            onKeyDown={backToRail}
             data-track-surface="tray"
             className={`${
               mobileTray
@@ -795,27 +964,32 @@ export function Workspace({
             {/* The rail's chevron collapses the tray; the header stays clean. */}
             <div className="flex items-center gap-2.5">
               <span className="font-display text-[18px]">{t(TAB_TITLES[tab])}</span>
-              {tab === "notes" && <span className="text-[13px] text-sand-600">{noteCount}</span>}
+              {tab === "notes" && noteCount > 0 && <span className="text-[13px] text-sand-600">{noteCount}</span>}
               {tab === "distill" && distillationCount > 0 && (
                 <span className="text-[13px] text-sand-600">{distillationCount}</span>
               )}
               {tab === "annotations" && annotationCount > 0 && (
                 <span className="text-[13px] text-sand-600">{annotationCount}</span>
               )}
+              {/* A panel's own head controls (the assistant's Conversations)
+                  stand here, in the tray's head row. */}
+              <span data-tray-head-slot className="ml-auto flex min-w-0 items-center gap-1.5" />
               <button
                 onClick={() => setMobileTray(false)}
                 data-track="close"
                 aria-label={t("common.close")}
                 data-tip={t("common.close")}
-                className="ml-auto rounded-full px-2 text-sand-500 hover:text-clay-800 md:hidden"
+                className="rounded-full px-2 text-sand-500 hover:text-clay-800 md:hidden"
               >
                 ✕
               </button>
             </div>
 
-            {/* Keyed by tab: switching remounts the panel, and it rises in. */}
-            <div key={tab} className="panel-in min-h-0 flex-1 overflow-y-auto">
-              {tab === "notes" && (
+            {notesShown && (
+              <div
+                hidden={tab !== "notes"}
+                className={tab === "notes" ? "panel-in min-h-0 flex-1 overflow-y-auto" : undefined}
+              >
                 <NotesTray
                   tree={tree}
                   pending={pending}
@@ -824,27 +998,29 @@ export function Workspace({
                   documents={notebook.documents}
                   scope={noteScope}
                   onScope={setNoteScope}
+                  visible={isOpen("notes")}
                 />
-              )}
+              </div>
+            )}
+            {/* Keyed by tab: switching remounts the panel, and it rises in. */}
+            <div key={tab} hidden={tab === "notes"} className="panel-in min-h-0 flex-1 overflow-y-auto">
               {tab === "assistant" && assistant}
               {tab === "distill" && distillPanel}
               {tab === "annotations" && annotationsPanel}
-              {tab === "edits" && editsPanel}
+              {tab === "history" && (
+                <HistoryPanel
+                  history={history}
+                  documentHistory={documentHistory}
+                  documentId={activeDocumentId}
+                  liveBlockIds={liveBlockIds}
+                />
+              )}
             </div>
 
-            {lastRejected && (
-              <div className="flex shrink-0 items-center gap-3 rounded-full bg-card px-4 py-2.5 shadow-soft">
-                <span className="text-[13px] text-sand-600">{t("panes.noteRejected")}</span>
-                <button
-                  onClick={() => void undoReject()}
-                  data-track="undo-reject"
-                  data-tip={t("outline.undoRejectTitle")}
-                  className="ml-auto rounded-full bg-clay px-3.5 py-1 text-xs font-semibold text-clay-fg hover:bg-clay-600"
-                >
-                  {t("panes.undo")}
-                </button>
-              </div>
-            )}
+            {/* One Undo pill on the body for a merge, a delete, and a
+                reject, the newest taking it: it shows with the tray open on
+                any tab or folded (SPEC.md §6). */}
+            <MergeUndoBar actions={actions} rejected={lastRejected} onUndoReject={() => void undoReject()} />
 
           </aside>
         </div>
@@ -902,32 +1078,36 @@ export function Workspace({
               data-track="assistant"
               aria-label={t("panes.assistant")}
               data-tip={t("panes.assistantTabTitle")}
-              aria-current={!collapsed && tab === "assistant"}
-              className={!collapsed && tab === "assistant" ? RAIL_BUTTON_ON : RAIL_BUTTON}
+              aria-current={isOpen("assistant")}
+              className={isOpen("assistant") ? RAIL_BUTTON_ON : RAIL_BUTTON}
             >
               <SparkleIcon />
             </button>
           )}
 
+          {/* Below md the graph is a row of the More menu. */}
           <button
             onClick={() => setGraphOpen(true)}
             data-track="graph"
             aria-label={t("panes.graph")}
             data-tip={t("panes.graphTitle")}
-            className={RAIL_BUTTON}
+            className={`max-md:hidden ${RAIL_BUTTON}`}
           >
             <GraphIcon />
           </button>
 
           <button
-            onClick={() => show("notes")}
+            onClick={showNotes}
             data-track="notes"
             aria-label={t("panes.notes")}
-            data-tip={t("panes.notesTabTitle")}
-            aria-current={!collapsed && tab === "notes"}
-            className={!collapsed && tab === "notes" ? RAIL_BUTTON_ON : RAIL_BUTTON}
+            data-tip={pending.length > 0 ? t("panes.pendingCountTitle") : t("panes.notesTabTitle")}
+            aria-current={isOpen("notes")}
+            className={isOpen("notes") ? RAIL_BUTTON_ON : RAIL_BUTTON}
           >
             <NotesIcon />
+            {notesBloom > 0 && (
+              <span key={notesBloom} aria-hidden className="note-absorb pointer-events-none absolute inset-0 rounded-full" />
+            )}
             {pending.length > 0 && (
               <span className="absolute -top-[3px] -right-[3px] flex size-4 items-center justify-center rounded-full bg-clay text-[10px] font-bold text-clay-fg">
                 {pending.length}
@@ -936,12 +1116,15 @@ export function Workspace({
           </button>
 
           <button
-            onClick={() => show("annotations")}
+            onClick={(e) => {
+              show("annotations");
+              intoPanel(e);
+            }}
             data-track="annotations"
             aria-label={t("panes.annotations")}
             data-tip={t("panes.annotationsTabTitle")}
-            aria-current={!collapsed && tab === "annotations"}
-            className={!collapsed && tab === "annotations" ? RAIL_BUTTON_ON : RAIL_BUTTON}
+            aria-current={isOpen("annotations")}
+            className={isOpen("annotations") ? RAIL_BUTTON_ON : RAIL_BUTTON}
           >
             <CommentIcon />
           </button>
@@ -951,23 +1134,84 @@ export function Workspace({
             data-track="distill"
             aria-label={t("panes.distill")}
             data-tip={t("panes.distillTabTitle")}
-            aria-current={!collapsed && tab === "distill"}
-            className={!collapsed && tab === "distill" ? RAIL_BUTTON_ON : RAIL_BUTTON}
+            aria-current={isOpen("distill")}
+            className={isOpen("distill") ? RAIL_BUTTON_ON : RAIL_BUTTON}
           >
-            <DistillIcon />
+            {/* The glyph the article's Extract button carries. */}
+            <QuoteIcon />
           </button>
 
-          <button
-            onClick={() => show("edits")}
-            data-track="edits"
-            aria-label={t("panes.editHistory")}
-            data-tip={t("panes.editsTabTitle")}
-            aria-current={!collapsed && tab === "edits"}
-            className={!collapsed && tab === "edits" ? RAIL_BUTTON_ON : RAIL_BUTTON}
-          >
-            <EditsIcon />
-          </button>
-
+          {/* Below md the bar's last button: More, a menu of what a phone
+              has no room for at rest — the reader views (reader-panes.tsx
+              puts them in the slot), the graph, History, Save for offline,
+              the guide, and Feedback. Rendered closed, so the slot is there
+              when the reader mounts. */}
+          <div ref={moreRef} className="relative md:hidden">
+            <button
+              onClick={() => setMoreOpen((v) => !v)}
+              data-track="more"
+              aria-label={t("panes.more")}
+              data-tip={t("panes.more")}
+              aria-expanded={moreOpen}
+              className={moreOpen || (isOpen("history") && mobileTray) ? RAIL_BUTTON_ON : RAIL_BUTTON}
+            >
+              <MoreIcon />
+              {guideNudge && (
+                <span aria-hidden className="absolute top-1 right-1 size-2 rounded-full bg-clay">
+                  <span className="absolute inset-0 motion-safe:animate-ping rounded-full bg-clay" />
+                </span>
+              )}
+            </button>
+            <div
+              className={`${moreOpen ? "menu-in flex" : "hidden"} absolute right-0 bottom-full z-40 mb-2.5 w-52 flex-col rounded-2xl bg-card p-1.5 shadow-float`}
+            >
+              <div data-reader-view-slot className="mb-1 flex flex-col border-b border-line pb-1 empty:hidden" />
+              <button data-more-row onClick={() => setGraphOpen(true)} data-track="more:graph" className={MORE_ROW}>
+                <GraphIcon size={15} />
+                {t("panes.graph")}
+              </button>
+              <button
+                data-more-row
+                onClick={() => {
+                  show("history");
+                  setHistoryLayer(true);
+                }}
+                data-track="more:history"
+                className={MORE_ROW}
+              >
+                <EditsIcon size={15} />
+                {t("panes.history")}
+              </button>
+              {offlineOn && (
+                <button
+                  data-more-row
+                  onClick={() => void toggleOffline()}
+                  disabled={offlineSaving}
+                  data-track="more:offline-save"
+                  className={`${MORE_ROW} disabled:opacity-40`}
+                >
+                  <OfflineIcon size={15} />
+                  {t(offlineSaved ? "works.removeOffline" : "works.saveOffline")}
+                  {!collab.ultra && !offlineSaved && <TierMark state="ultra" size={10} />}
+                </button>
+              )}
+              <button data-more-row onClick={openGuide} data-track="more:guide" className={MORE_ROW}>
+                <QuestionIcon size={15} />
+                {t("panes.guide")}
+              </button>
+              {/* A phone's reader has no floating Feedback pill, which would
+                  lie on the article's last lines (feedback-button.tsx). */}
+              <button
+                data-more-row
+                onClick={() => window.dispatchEvent(new Event(FEEDBACK_OPEN_EVENT))}
+                data-track="feedback-open"
+                className={MORE_ROW}
+              >
+                <CommentIcon size={15} />
+                {t("works.feedback")}
+              </button>
+            </div>
+          </div>
         </nav>
       </div>
 
@@ -980,7 +1224,7 @@ export function Workspace({
         />
       )}
       {offlineToast && !offlineSaving && (
-        <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full bg-ink/90 px-3 py-1.5 text-xs text-paper">
+        <div className={`${BOTTOM_STATUS} z-40 flex w-max max-w-[calc(100vw-32px)] items-center gap-2 rounded-full bg-ink/90 px-3 py-1.5 text-xs text-paper`}>
           {offlineToast.text}
           {offlineToast.plans && (
             <button
@@ -1038,15 +1282,32 @@ function storedTray(key: string, canEdit: boolean): { collapsed: boolean; tab: T
     const stored = raw ? (JSON.parse(raw) as { collapsed?: unknown; tab?: unknown }) : null;
     if (!stored || typeof stored.collapsed !== "boolean") return null;
     const tab =
-      typeof stored.tab === "string" && stored.tab in TAB_TITLES && (stored.tab !== "assistant" || canEdit)
-        ? (stored.tab as Tab)
-        : "notes";
+      // The Edits tab folded into History: a tray left on it opens on History.
+      stored.tab === "edits"
+        ? "history"
+        : typeof stored.tab === "string" && stored.tab in TAB_TITLES && (stored.tab !== "assistant" || canEdit)
+          ? (stored.tab as Tab)
+          : "notes";
     return { collapsed: stored.collapsed, tab };
   } catch {
     return null; // storage unavailable: the tray's default
   }
 }
 
+// Below md (Tailwind's md): a phone's layout, with the bottom bar.
+function subscribeNarrow(onChange: () => void) {
+  const query = window.matchMedia(MD_QUERY);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+function readNarrow() {
+  return !window.matchMedia(MD_QUERY).matches;
+}
+
 function countNotes(sections: NotebookView["sections"]): number {
-  return sections.reduce((sum, s) => sum + s.notes.length + countNotes(s.children), 0);
+  // Accepted notes only, as every other note count: pending notes have their own count on Notes.
+  return sections.reduce(
+    (sum, s) => sum + s.notes.filter((n) => n.status === "ACCEPTED").length + countNotes(s.children),
+    0,
+  );
 }

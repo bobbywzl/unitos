@@ -1,4 +1,5 @@
 import type { Editor } from "@tiptap/core";
+import type { DocsMode } from "@/components/docs/toolbar/mode";
 
 // The page editor's events (SPEC.md §29), raised on its text by keys,
 // commands, and other areas, so two page editors side by side never answer
@@ -15,6 +16,13 @@ export const DOCS_EVENT = {
   figureTools: "docs:figure-tools",
 } as const;
 
+/** What DOCS_EVENT.mode asks for: a mode the reader chose, a mode the
+    page passes into for the reader (the assistant's suggestions landing in
+    Viewing), which the document does not keep and which leaves the keys
+    where they are, or Viewing for Collapse (SPEC.md §28), which Collapse off
+    leaves for the mode it came from. */
+export type ModeRequest = DocsMode | { mode: DocsMode; passing: true } | { mode: "viewing"; collapse: true };
+
 /** The typing area's windows (areas/typing.tsx, word-count.tsx). */
 export const TYPING_EVENT = {
   findReplace: "docs:find-replace",
@@ -22,6 +30,7 @@ export const TYPING_EVENT = {
   shortcuts: "docs:shortcuts",
   voice: "docs:voice",
   spelling: "docs:spelling",
+  grammar: "docs:grammar",
   personalDictionary: "docs:personal-dictionary",
   wordCount: "docs:word-count",
 } as const;
@@ -29,3 +38,8 @@ export const TYPING_EVENT = {
 export function fireDocs(editor: Editor, name: string, detail?: unknown): void {
   editor.view.dom.dispatchEvent(new CustomEvent(name, { bubbles: true, detail }));
 }
+
+/** Asks the reader's pane to close its selection toolbar: the link box
+    (Ctrl+K) takes its place, so one box stands at the selection. The
+    reader's pane hears it as it bubbles (reader-interactions.tsx). */
+export const CLOSE_TOOLBAR_EVENT = "dissect:close-toolbar";

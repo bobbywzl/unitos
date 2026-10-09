@@ -1,11 +1,18 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { useT } from "@/components/lang-provider";
+import type { Imported } from "@/components/docs/docs-editor";
+import { importLineParts } from "@/components/docs/import-line";
 import { clipWords } from "@/lib/markdown-preview";
 import { Presence } from "@/components/presence";
 import type { TKey } from "@/lib/i18n/dictionaries";
+import { useJumpParamCleanup } from "@/components/reader/jump-param";
+import { useEscapeLayer } from "@/lib/escape-layers";
+import { api } from "@/lib/api";
+import { focusMenuIfKey, menuButtonKeys, menuKeys } from "@/lib/menu-keys";
 
 // Reader views: Normal shows one document; Side by Side and Top and Bottom
 // show two panes, each with the full tool set. The choice lives in the URL —
@@ -65,10 +72,37 @@ export function viewHref(
   return `/n/${notebookId}?${params.toString()}`;
 }
 
-// The pane header of a split view: one row at the top of the pane, above
-// its scroller, never over the text. The reader renders it — for a video
-// document too, through the video pane — and adds its article menu and
-// Extract to the row for an article. It follows the strip's cut like the
+// The view a press picked, until the URL brings it (one per tab). Normal
+// draws at once: the panes and the tray take their widths in the frame of
+// the press, where a layout move is the press's own answer, instead of
+// 0.6-1.8 s later when the server's page lands. A split waits for its
+// second pane from the server; only the menu's glyph and check answer at once.
+type ViewPick = { from: ReaderViewKind; to: ReaderViewKind };
+let viewPick: ViewPick | null = null;
+const viewPickListeners = new Set<() => void>();
+function subscribeViewPick(listener: () => void) {
+  viewPickListeners.add(listener);
+  return () => viewPickListeners.delete(listener);
+}
+const readViewPick = () => viewPick;
+function setViewPick(next: ViewPick | null) {
+  if (viewPick === next) return;
+  viewPick = next;
+  for (const l of viewPickListeners) l();
+}
+/** The view to draw for the server's `view`: Normal from the press that
+    picked it, else `view`. */
+export function useDrawnView(view: ReaderViewKind): ReaderViewKind {
+  const pick = useSyncExternalStore(subscribeViewPick, readViewPick, () => null);
+  return pick && pick.from === view && pick.to === "normal" ? "normal" : view;
+}
+
+// The pane header of a split view: one row at the top of the pane. The
+// reader renders it — for a video document too, through the video pane —
+// and adds its article menu and Extract to the row for an article; on an
+// article it stands over the scroller's top, in the place and height of
+// the page editor's title row or the block article's top padding, so a
+// view switch moves nothing up or down. It follows the strip's cut like the
 // column (globals.css .pane-header), so its controls stay in the visible
 // part of the pane.
 export const PANE_HEADER =
@@ -83,6 +117,7 @@ export function PaneDocumentSelect({
   paneOneId,
   paneTwoId,
   documents,
+  imported = null,
 }: {
   notebookId: string;
   view: ReaderViewKind;
@@ -90,8 +125,12 @@ export function PaneDocumentSelect({
   paneOneId: string;
   paneTwoId: string | null;
   documents: { id: string; title: string }[];
+  /** The pane's document, when it is an import: its import line goes in
+      the tooltip, since the pane hides the page editor's title row. */
+  imported?: Imported | null;
 }) {
   const t = useT();
+  const origin = imported ? importLineParts(imported, t).map((part) => part.text).join(" · ") : "";
   const router = useRouter();
   const value = pane === "one" ? paneOneId : (paneTwoId ?? paneOneId);
   return (
@@ -106,7 +145,7 @@ export function PaneDocumentSelect({
       }
       data-track={`pane-document:${pane}`}
       aria-label={t("panes.paneDocument")}
-      data-tip={t("panes.paneDocumentTitle")}
+      data-tip={origin ? `${t("panes.paneDocumentTitle")}\n${origin}` : t("panes.paneDocumentTitle")}
       className="min-w-0 max-w-[50%] shrink truncate rounded-full bg-sand-100 px-3 py-1.5 text-xs font-semibold text-sand-700 shadow-soft outline-none hover:text-clay-800"
     >
       {documents.map((d) => (
@@ -256,6 +295,7 @@ export function ReaderPanes({
   documents,
   paneOne,
   paneTwo,
+  missing = null,
 }: {
   notebookId: string;
   view: ReaderViewKind;
@@ -264,12 +304,65 @@ export function ReaderPanes({
   documents: { id: string; title: string }[];
   paneOne: React.ReactNode;
   paneTwo: React.ReactNode | null;
+  // The address named a document this project does not hold (page.tsx):
+  // its title and Add back when the project held it once, else the plain
+  // notice. The first document opens in its place.
+  missing?: { documentId: string; title: string | null; canAddBack: boolean } | null;
 }) {
   const t = useT();
   const router = useRouter();
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  // Below md the views are rows of the bottom bar's More menu
+  // (workspace.tsx, data-reader-view-slot): floating, the Reader view button
+  // stood on the article's bottom-left lines.
+  const phone = useSyncExternalStore(subscribePhone, readPhone, () => false);
+  // At md and up the button is the rail's last button, under Extract:
+  // floating at the pane's bottom left it lay on the first words of the last
+  // lines on a tablet and a landscape phone.
+  // Until the effect has looked for the rail and the bar, the button is not
+  // drawn: drawn floating first, it jumped from the pane's bottom left to
+  // the rail while the document loaded.
+  const [barSlot, setBarSlot] = useState<HTMLElement | null>(null);
+  const [rail, setRail] = useState<HTMLElement | null>(null);
+  const [placed, setPlaced] = useState(false);
+  useEffect(() => {
+    // The bar mounts with the reader, in the same commit.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setBarSlot(document.querySelector<HTMLElement>("[data-reader-view-slot]"));
+    setRail(document.querySelector<HTMLElement>('nav[data-nudge="rail"]'));
+    setPlaced(true);
+  }, []);
+  const inBar = phone && barSlot !== null;
+  const inRail = !phone && rail !== null;
+  const portalTo = inBar ? barSlot : inRail ? rail : null;
+  // A phone has no room for Side by Side (195 and 147 px columns): the menu
+  // offers Normal and Top and Bottom, and a Side by Side address opens as
+  // Top and Bottom.
+  const views: ReaderViewKind[] = phone ? ["normal", "stack"] : ["normal", "side", "stack"];
+  useEffect(() => {
+    if (!phone || view !== "side") return;
+    router.replace(viewHref(notebookId, "stack", paneOneId, paneTwoId));
+  }, [phone, view, router, notebookId, paneOneId, paneTwoId]);
+  const [missingClosed, setMissingClosed] = useState<string | null>(null);
+  const [addingBack, setAddingBack] = useState(false);
+  const [addBackError, setAddBackError] = useState<string | null>(null);
+  async function addBack(documentId: string) {
+    if (addingBack) return;
+    setAddingBack(true);
+    setAddBackError(null);
+    try {
+      await api(`/api/notebooks/${notebookId}/documents`, "POST", { documentId });
+      router.refresh();
+    } catch (err) {
+      setAddBackError(err instanceof Error ? err.message : t("common.requestFailed"));
+    } finally {
+      setAddingBack(false);
+    }
+  }
   const containerRef = useRef<HTMLDivElement>(null);
+  // A jump's ?src, ?block, ?link drop once the reader moves on (jump-param.ts).
+  useJumpParamCleanup(containerRef);
   const paneOneRef = useRef<HTMLDivElement>(null);
   const paneTwoRef = useRef<HTMLDivElement>(null);
   // The first pane's share of the reader. Post-hydration restore on purpose:
@@ -333,19 +426,28 @@ export function ReaderPanes({
     const onPointerDown = (e: PointerEvent) => {
       if (!menuRef.current?.contains(e.target as Node)) setMenu(false);
     };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenu(false);
-    };
     window.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("keydown", onKeyDown);
-    };
+    return () => window.removeEventListener("pointerdown", onPointerDown);
   }, [menu]);
+  // Escape closes the menu as one layer (lib/escape-layers.ts).
+  useEscapeLayer(menu, () => setMenu(false));
 
+  // The view a row picked, until the URL brings it: the glyph and the check
+  // answer the press at once, while the split loads; Normal draws at once
+  // (useDrawnView). The URL's arrival ends the pick.
+  const picked = useSyncExternalStore(subscribeViewPick, readViewPick, () => null);
+  const shownView = picked && picked.from === view ? picked.to : view;
+  const drawn = useDrawnView(view);
+  useEffect(() => {
+    if (picked && picked.to === view) setViewPick(null);
+  }, [picked, view]);
   function go(next: ReaderViewKind) {
     setMenu(false);
+    if (next === view) {
+      setViewPick(null);
+      return;
+    }
+    setViewPick({ from: view, to: next });
     router.push(
       viewHref(
         notebookId,
@@ -356,6 +458,81 @@ export function ReaderPanes({
     );
   }
 
+  // One row per view: the menu's rows, and below md the rows of the bar's
+  // More menu (workspace.tsx), which holds them in its slot.
+  const viewRows = views.map((kind) => (
+    <button
+      key={kind}
+      onClick={() => go(kind)}
+      data-track={`view:${kind}`}
+      className={`flex items-center gap-2.5 rounded-full px-2.5 py-1.5 text-left text-[12px] ${
+        shownView === kind ? "bg-clay-100 font-semibold text-clay-800" : "text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+      }`}
+    >
+      <ViewGlyph kind={kind} size={13} />
+      {t(VIEW_LABEL[kind])}
+    </button>
+  ));
+
+  // Bottom-left: clear of the article menu (top-left) and the sticky
+  // Extract controls (top-right). Below md with the sheet open
+  // (data-sheet-open, workspace.tsx), bottom-right: the sheet cuts the
+  // reader short, which brings its bottom-left up to the page editor's
+  // Show the outline at the canvas's top-left. While the menu is open it
+  // stands at z-40, the layer of the app's menus (docs/css/layer.css), over
+  // the page editor's header, which a short reader brings under the menu.
+  // Below md its rows stand in the bar's More menu instead (inBar).
+  const viewControl = (
+    <div
+      ref={menuRef}
+      className={
+        portalTo
+          ? "relative"
+          : `absolute bottom-4 left-4 max-md:in-data-sheet-open:right-4 max-md:in-data-sheet-open:left-auto print:hidden ${
+              menu ? "z-40" : "z-30"
+            }`
+      }
+    >
+      <button
+        onClick={(e) => {
+          if (!menu) focusMenuIfKey(e, "[data-view-menu]");
+          setMenu((v) => !v);
+        }}
+        onKeyDown={(e) => menuButtonKeys(e, menu, "[data-view-menu]")}
+        data-track="view"
+        aria-label={t("panes.readerView")}
+        data-tip={t("panes.readerView")}
+        aria-expanded={menu}
+        className={
+          portalTo
+            ? "flex size-[38px] items-center justify-center rounded-full text-sand-600 hover:bg-clay-100 hover:text-clay-800"
+            : "flex items-center justify-center rounded-full bg-sand-100 p-2 text-sand-600 shadow-soft hover:text-clay-800"
+        }
+      >
+        <ViewGlyph kind={shownView} />
+      </button>
+      <Presence show={menu} exit="menu">
+      {menu && (
+        <div
+          data-view-menu
+          onKeyDown={menuKeys}
+          className={`menu-in absolute z-40 flex w-44 flex-col rounded-2xl bg-card p-1.5 shadow-float ${
+            inBar
+              ? "right-0 bottom-full mb-2.5"
+              : inRail
+                ? "right-full bottom-0 mr-2"
+                : "bottom-full left-0 mb-1.5 max-md:in-data-sheet-open:right-0 max-md:in-data-sheet-open:left-auto"
+          }`}
+        >
+          {viewRows}
+          {/* Reader view holds only views. Feedback is in the guide's head
+              (?) at md and up, and a row of the bar's More menu below md. */}
+        </div>
+      )}
+      </Presence>
+    </div>
+  );
+
   return (
     <div
       ref={containerRef}
@@ -365,55 +542,52 @@ export function ReaderPanes({
       // .reader-column). Side by Side panes are narrower than the column, so
       // they keep their place and the first pane peeks from under the edge.
       style={
-        { "--reader-cut": view === "stack" ? "var(--strip-cut, 0px)" : "0px" } as React.CSSProperties
+        { "--reader-cut": drawn === "stack" ? "var(--strip-cut, 0px)" : "0px" } as React.CSSProperties
       }
-      className={`relative flex h-full min-h-0 min-w-0 ${view === "stack" ? "flex-col" : "flex-row"}`}
+      className={`relative flex h-full min-h-0 min-w-0 ${drawn === "stack" ? "flex-col" : "flex-row"}`}
     >
-      {/* Bottom-left: clear of the article menu (top-left) and the sticky
-          Extract controls (top-right). Below md with the sheet open
-          (data-sheet-open, workspace.tsx), bottom-right: the sheet cuts the
-          reader short, which brings its bottom-left up to the page editor's
-          Show tabs & outlines at the canvas's top-left. While the menu is
-          open it stands at z-40, the layer of the app's menus
-          (docs/css/layer.css), over the page editor's header, which a short
-          reader brings under the menu. */}
-      <div
-        ref={menuRef}
-        className={`absolute bottom-4 left-4 max-md:in-data-sheet-open:right-4 max-md:in-data-sheet-open:left-auto print:hidden ${
-          menu ? "z-40" : "z-30"
-        }`}
-      >
-        <button
-          onClick={() => setMenu((v) => !v)}
-          data-track="view"
-          aria-label={t("panes.readerView")}
-          data-tip={t("panes.readerView")}
-          className="flex items-center justify-center rounded-full bg-sand-100 p-2 text-sand-600 shadow-soft hover:text-clay-800"
+      {!placed
+        ? null
+        : inBar
+          ? createPortal(viewRows, barSlot)
+          : portalTo
+            ? createPortal(viewControl, portalTo)
+            : viewControl}
+
+      {missing && missingClosed !== missing.documentId && (
+        <div
+          role="status"
+          className="pointer-events-none absolute inset-x-0 bottom-6 z-[70] flex justify-center px-4 print:hidden"
         >
-          <ViewGlyph kind={view} />
-        </button>
-        <Presence show={menu} exit="menu">
-        {menu && (
-          <div className="menu-in absolute bottom-full left-0 mb-1.5 flex w-44 flex-col rounded-2xl bg-card p-1.5 shadow-float max-md:in-data-sheet-open:right-0 max-md:in-data-sheet-open:left-auto">
-            {(["normal", "side", "stack"] as const).map((kind) => (
+          <div className="pop-in pointer-events-auto flex max-w-lg flex-wrap items-center gap-2 rounded-2xl bg-card px-4 py-2.5 text-[13px] text-sand-700 shadow-float">
+            <span className="min-w-0">
+              {missing.title
+                ? t("panes.missingDocumentNamed", { title: missing.title })
+                : t("panes.missingDocument")}
+            </span>
+            {missing.canAddBack && (
               <button
-                key={kind}
-                onClick={() => go(kind)}
-                data-track={`view:${kind}`}
-                className={`flex items-center gap-2.5 rounded-full px-2.5 py-1.5 text-left text-[12px] ${
-                  view === kind
-                    ? "bg-clay-100 font-semibold text-clay-800"
-                    : "text-sand-700 hover:bg-clay-100 hover:text-clay-800"
-                }`}
+                type="button"
+                onClick={() => void addBack(missing.documentId)}
+                disabled={addingBack}
+                data-track="missing-add-back"
+                className="rounded-full bg-clay px-3 py-1 text-[12px] font-semibold text-clay-fg hover:bg-clay-600 disabled:opacity-60"
               >
-                <ViewGlyph kind={kind} size={13} />
-                {t(VIEW_LABEL[kind])}
+                {addingBack ? t("common.loading") : t("panes.historyAddBack")}
               </button>
-            ))}
+            )}
+            <button
+              type="button"
+              onClick={() => setMissingClosed(missing.documentId)}
+              aria-label={t("common.close")}
+              className="rounded-full px-1.5 text-sand-500 hover:text-clay-800"
+            >
+              ✕
+            </button>
+            {addBackError && <span className="w-full text-[11px] text-clay-700">{addBackError}</span>}
           </div>
-        )}
-        </Presence>
-      </div>
+        </div>
+      )}
 
       {/* Each pane is a column: the pane header (a split view) above the
           scroller. In a split view the first pane takes its share and the
@@ -422,19 +596,19 @@ export function ReaderPanes({
       <div
         ref={paneOneRef}
         className={`relative flex min-h-0 min-w-0 flex-col ${
-          view === "normal" ? "flex-1" : resizing ? "shrink-0" : "pane-split shrink-0"
+          drawn === "normal" ? "flex-1" : resizing ? "shrink-0" : "pane-split shrink-0"
         }`}
         style={
-          view === "side"
+          drawn === "side"
             ? { width: `${split * 100}%` }
-            : view === "stack"
+            : drawn === "stack"
               ? { height: `${split * 100}%` }
               : undefined
         }
       >
         {paneOne}
       </div>
-      {view !== "normal" && paneTwo && (
+      {drawn !== "normal" && paneTwo && (
         <>
           {/* The bar between the panes: drag to resize, arrow keys nudge,
               double-click resets. It floats over the divider line, so the
@@ -487,4 +661,15 @@ export function ReaderPanes({
       )}
     </div>
   );
+}
+
+// Below md (Tailwind's md, 48rem): a phone's layout, with the bottom bar.
+const PHONE_QUERY = "(width < 48rem)";
+function subscribePhone(onChange: () => void) {
+  const query = window.matchMedia(PHONE_QUERY);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+function readPhone() {
+  return window.matchMedia(PHONE_QUERY).matches;
 }

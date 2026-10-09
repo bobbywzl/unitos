@@ -62,20 +62,21 @@ async function run() {
   await page.waitForFunction((sel) => /\/api\/images\//.test(document.querySelector(sel)?.getAttribute("src") ?? ""), `${editor} img`, { timeout: 15000 });
   await img.click();
 
-  // The image toolbar's Assistant.
-  const button = page.locator(".docs-img-toolbar .docs-img-assistant");
+  // The figure tools a click on the image opens: the Assistant alone.
+  const button = page.locator('[data-selection-popover] [data-track="assistant"]');
   await button.waitFor({ timeout: 5000 });
-  check("the image toolbar shows the Assistant button", await button.isVisible());
+  check("the image's figure tools show the Assistant", await button.isVisible());
   await page.screenshot({ path: `${SHOT}/figure-words-toolbar.png` });
   await button.click();
   const bar = page.locator("[data-assistant-bar]");
   await bar.waitFor({ timeout: 5000 });
   const chips = await bar.locator('button[data-track^="assistant-figure:"]').allTextContents();
-  check("the bar on the image offers the image chips", chips.length === 4 && chips.includes("Put the text under the image"), chips.join(", "));
+  check("the bar on the image offers the two image chips", chips.length === 2 && chips.includes("The text") && chips.includes("The key points"), chips.join(", "));
   await page.screenshot({ path: `${SHOT}/figure-words-bar.png` });
 
-  // A chip that reads the image: an answer, nothing in the text.
-  await bar.locator("button", { hasText: "Extract the text" }).click();
+  // A typed question about the image: an answer, nothing in the text.
+  await bar.locator("input").fill("Extract the text");
+  await bar.locator("input").press("Enter");
   const answer = page.getByText("A study led by Jane Gillette (1999) tested college undergraduates on 24 video clips.", { exact: true }).first();
   await answer.waitFor({ timeout: 20000 });
   check("Extract the text answers in the chat card", await answer.isVisible());
@@ -86,7 +87,7 @@ async function run() {
   await img.click();
   await button.click();
   await bar.waitFor({ timeout: 5000 });
-  await bar.locator("button", { hasText: "Put the text under the image" }).click();
+  await bar.locator('button[data-track="assistant-figure:Text"]').click();
   const inserted = page.locator(`${editor} .docs-suggest-insert, ${editor} ins, ${editor} [data-suggestion]`, { hasText: "Jane Gillette" }).first();
   await inserted.waitFor({ timeout: 20000 }).catch(() => {});
   await page.screenshot({ path: `${SHOT}/figure-words-suggestion.png` });
@@ -109,7 +110,7 @@ async function run() {
   await img.click();
   await button.click();
   await bar.waitFor({ timeout: 5000 });
-  await bar.locator("button", { hasText: "Put the key points under the image" }).click();
+  await bar.locator('button[data-track="assistant-figure:KeyPoints"]').click();
   await page.locator(`${editor} li`, { hasText: "Verbs were harder than nouns" }).first().waitFor({ timeout: 20000 });
   check(
     "Put the key points under the image gives the list alone, not the text again",

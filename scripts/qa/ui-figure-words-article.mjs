@@ -92,7 +92,7 @@ async function run({ notebookId, documentId, figureId }) {
   await card.waitFor({ timeout: 20000 });
   check("the suggestion shows under the figure", await card.isVisible());
   check("the text chip's suggestion holds the text alone, no list", (await card.textContent())?.includes("Jane Gillette") && !(await card.textContent())?.includes("•"));
-  check("the plan card does not open for the words under the figure", (await page.getByText("Apply", { exact: false }).count()) === 0);
+  check("the plan card does not open for the words under the figure", (await page.getByText(/Accept \d+ action/).count()) === 0);
   await page.screenshot({ path: `${SHOT}/figure-words-article-suggestion.png` });
   await card.locator('button[data-track="figure-suggestion-reject"]').click();
   await card.waitFor({ state: "detached", timeout: 5000 });

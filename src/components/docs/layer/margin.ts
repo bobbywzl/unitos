@@ -12,6 +12,9 @@ const CARD_WIDTH = 282; // Google Docs' comment card
 const CARD_MIN = 260;
 const TOOLBAR_GAP = 8; // Google Docs' floating buttons sit 8 px out
 const TOOLBAR_EDGE = 6; // the toolbar to the end of its reach
+/** The room right of the text a card needs beside it: a pageless column
+    leaves it (page/geometry.ts pagelessWidth). */
+export const CARD_REACH = GAP + CARD_MIN + EDGE;
 
 export type PageGeometry = {
   cw: number;

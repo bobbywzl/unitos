@@ -1,7 +1,10 @@
+import { createHash } from "node:crypto";
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
+import { DuplicateDocumentError } from "@/lib/documents/duplicate-answer";
+import { assertNotDuplicate, duplicateAnswer } from "@/lib/documents/duplicates";
 import { bumpNotebook, notebookAccess } from "@/lib/collab";
 import { requestDriveToken } from "@/lib/drive/request-token";
 import { classifyDriveFile, type DriveAccess } from "@/lib/drive/types";
@@ -54,7 +57,16 @@ const bodySchema = z.object({
   pages: z.boolean().default(false),
   convert: z.boolean().default(true),
   pdfPages: pageRangesSchema.optional(),
+  // The reader said Add again to the ask a repeat add answers with
+  // (lib/documents/duplicates.ts): a media file's before its download (409),
+  // any other file's once its bytes are here (the stream's last line).
+  confirmDuplicate: z.boolean().default(false),
 });
+
+/** The hash a stored file keeps (Document.fileHash). */
+function hashOf(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
 
 export async function POST(req: Request) {
   const user = await currentUser();
@@ -89,6 +101,14 @@ export async function POST(req: Request) {
   // Video and audio: the same download-and-store path a direct media link
   // uses (SPEC.md §11), just with a bearer token on the request.
   if (kind === "media") {
+    const repeat = await duplicateAnswer(
+      access.user,
+      data.notebookId,
+      { url: driveDownloadUrl(data.fileId) },
+      data.confirmDuplicate,
+      t,
+    );
+    if (repeat) return repeat;
     const mediaName = name;
     return progressResponse(async (onProgress) => {
       const { document, deduped } = await ingestMediaUrl(driveDownloadUrl(data.fileId), t, onProgress, {
@@ -127,6 +147,10 @@ export async function POST(req: Request) {
   if (kind === "slides" || kind === "sheets" || kind === "slides-file" || kind === "sheets-file") {
     const fileName = name;
     const fileId = data.fileId;
+    // A file the account already has asks first (SPEC.md §15), once its
+    // bytes are here: Drive gives no key before the download.
+    const askFirst = (bytes: Uint8Array) =>
+      assertNotDuplicate(access.user, data.notebookId, { fileHash: hashOf(bytes) }, data.confirmDuplicate, t);
     return progressResponse(async (onProgress) => {
       onProgress("fetch");
       try {
@@ -135,6 +159,7 @@ export async function POST(req: Request) {
             kind === "slides"
               ? await fetchExported(fileId, token, grant, t, SLIDES_MIME_TYPE)
               : await fetchDriveFile(fileId, token, grant, t);
+          await askFirst(bytes);
           // The pictures are a bonus: a failed PDF export leaves the replicas.
           let picture: Uint8Array<ArrayBuffer> | undefined;
           if (kind === "slides") {
@@ -170,6 +195,7 @@ export async function POST(req: Request) {
           kind === "sheets"
             ? await fetchExported(fileId, token, grant, t, SHEETS_MIME_TYPE)
             : await fetchDriveFile(fileId, token, grant, t);
+        await askFirst(bytes);
         const { document, deduped } = await parse.ingestSheets(
           bytes,
           kind === "sheets" ? `${fileName}.xlsx` : fileName,
@@ -182,6 +208,7 @@ export async function POST(req: Request) {
         if (!deduped) after(() => refreshSkeleton(document.id, user?.id ?? null).catch(() => {}));
         return { id: document.id, title: document.title, deduped };
       } catch (err) {
+        if (err instanceof DuplicateDocumentError) throw err;
         console.error("Drive slides/sheets ingest failed:", err);
         throw new Error(describeIngestError(err, t, "file"));
       }
@@ -199,6 +226,7 @@ export async function POST(req: Request) {
     // Drive's PDF export below.
     if (kind === "docx" || kind === "docx-file") {
       const word = await driveWordFile(kind, data.fileId, token, grant, t, parse);
+      if (word) await assertNotDuplicate(access.user, data.notebookId, { fileHash: hashOf(word) }, data.confirmDuplicate, t);
       let ingested: Awaited<ReturnType<typeof parse.ingestDocx>> | null = null;
       if (word) {
         try {
@@ -224,6 +252,13 @@ export async function POST(req: Request) {
     // PDF bytes, ingested the one way this app reads a PDF.
     const bytes = kind === "pdf" ? await fetchDrivePdf(data.fileId, token, grant, t) : await fetchExportedPdf(data.fileId, token, grant, t);
     const filename = kind === "pdf" ? fileName : `${fileName}.pdf`;
+    await assertNotDuplicate(
+      access.user,
+      data.notebookId,
+      { fileHash: hashOf(bytes), pdfPages: kind === "pdf" ? data.pdfPages : undefined },
+      data.confirmDuplicate,
+      t,
+    );
     let ingested: Awaited<ReturnType<typeof parse.ingestPdf>>;
     try {
       ingested = await parse.ingestPdf(

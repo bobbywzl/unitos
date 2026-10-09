@@ -362,7 +362,7 @@ export function stepResult(view: EditorView, dir: 1 | -1): boolean {
   return wrapped;
 }
 
-/** Scroll the pane so `pos` shows below the sticky header. */
+/** Scroll the pane so `pos` shows below the sticky header and the docked find bar. */
 function revealPos(view: EditorView, pos: number): void {
   let coords: { top: number; bottom: number };
   try {
@@ -378,8 +378,12 @@ function revealPos(view: EditorView, pos: number): void {
   }
   const header = view.dom.closest("[data-docs-editor]")?.querySelector<HTMLElement>(".docs-header");
   const headerBottom = header ? header.getBoundingClientRect().bottom : 0;
+  // On a phone the find bar is docked under the header (find-ui.tsx): the
+  // result shows below it.
+  const docked = document.querySelector<HTMLElement>(".docs-findbar[data-docked]");
+  const dockedBottom = docked ? docked.getBoundingClientRect().bottom : 0;
   const box = scroller ? scroller.getBoundingClientRect() : { top: 0, bottom: window.innerHeight, height: window.innerHeight };
-  const top = Math.max(box.top, headerBottom) + 24;
+  const top = Math.max(box.top, headerBottom, dockedBottom) + 24;
   const bottom = box.bottom - 24;
   if (coords.top >= top && coords.bottom <= bottom) return;
   const delta = coords.top - (top + (bottom - top) / 3);

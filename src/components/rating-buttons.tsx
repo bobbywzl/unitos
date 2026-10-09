@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useT } from "@/components/lang-provider";
 import { ThumbsDownIcon, ThumbsUpIcon } from "@/components/icons";
 
@@ -9,7 +9,13 @@ import { ThumbsDownIcon, ThumbsUpIcon } from "@/components/icons";
 // line for what was wrong, optional. The row it writes (POST /api/ratings)
 // carries the input the tool ran on and the output it gave, so the tool
 // quality loop (scripts/eval) can read the poor answers back as eval cases.
+// A second press on the pressed thumb takes the rating back, and a press on
+// the other thumb changes it (PATCH, DELETE on the same row).
 // Fire-and-forget: a failed post changes nothing on screen.
+// The line takes the focus as it opens (TOOL13-06), so the reason typed
+// lands in it. In a foot row (`inRow`: the thumbs beside Save as note and
+// Continue) the line opens on its own row under the row, and nothing in the
+// row moves.
 export type RatingTool =
   | "define"
   | "simplify"
@@ -34,6 +40,7 @@ export function RatingButtons({
   documentId,
   noteId,
   className = "",
+  inRow = false,
 }: {
   tool: RatingTool;
   input: string;
@@ -42,6 +49,8 @@ export function RatingButtons({
   documentId?: string;
   noteId?: string | null;
   className?: string;
+  /** The thumbs are items of the caller's flex row. */
+  inRow?: boolean;
 }) {
   const t = useT();
   const [rated, setRated] = useState<"up" | "down" | null>(null);
@@ -49,9 +58,49 @@ export function RatingButtons({
   const [comment, setComment] = useState("");
   const [commentSent, setCommentSent] = useState(false);
 
+  const [posting, setPosting] = useState(false);
+  // A reason sent before the rating's row came back: it goes with the row.
+  const queuedComment = useRef<string | null>(null);
+
   async function rate(rating: "up" | "down") {
-    if (rated) return;
+    if (posting) return;
+    // The same thumb again: the rating is taken back.
+    if (rated === rating) {
+      setRated(null);
+      setComment("");
+      setCommentSent(false);
+      const id = rowId;
+      setRowId(null);
+      if (!id) return;
+      try {
+        await fetch("/api/ratings", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+      } catch {
+        // Never a toast for telemetry.
+      }
+      return;
+    }
+    // The other thumb: the same row changes its rating.
+    if (rated && rowId) {
+      setRated(rating);
+      setComment("");
+      setCommentSent(false);
+      try {
+        await fetch("/api/ratings", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: rowId, rating }),
+        });
+      } catch {
+        // Never a toast for telemetry.
+      }
+      return;
+    }
     setRated(rating);
+    setPosting(true);
     try {
       const res = await fetch("/api/ratings", {
         method: "POST",
@@ -59,36 +108,52 @@ export function RatingButtons({
         body: JSON.stringify({ tool, rating, input, output, notebookId, documentId, noteId: noteId ?? undefined }),
       });
       const json = (await res.json().catch(() => null)) as { id?: string } | null;
-      if (json?.id) setRowId(json.id);
+      if (json?.id) {
+        setRowId(json.id);
+        const queued = queuedComment.current;
+        queuedComment.current = null;
+        if (queued) void patchComment(json.id, queued);
+      }
     } catch {
       // The thumb stays; the row is lost. Never a toast for telemetry.
+    } finally {
+      setPosting(false);
     }
   }
 
-  async function sendComment() {
-    const text = comment.trim();
-    if (!text || !rowId || commentSent) return;
-    setCommentSent(true);
+  async function patchComment(id: string, text: string) {
     try {
       await fetch("/api/ratings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: rowId, comment: text }),
+        body: JSON.stringify({ id, comment: text }),
       });
     } catch {
       // Same as above: the reader's line is not worth an error.
     }
   }
 
+  async function sendComment() {
+    const text = comment.trim();
+    if (!text || commentSent) return;
+    setCommentSent(true);
+    if (!rowId) {
+      queuedComment.current = text;
+      return;
+    }
+    await patchComment(rowId, text);
+  }
+
   const button = (rating: "up" | "down") => (
     <button
       onClick={() => void rate(rating)}
-      disabled={rated !== null}
+      disabled={posting}
+      aria-pressed={rated === rating}
       data-track={`rate:${tool}:${rating}`}
-      aria-label={t(rating === "up" ? "common.rateUp" : "common.rateDown")}
-      data-tip={t(rating === "up" ? "common.rateUp" : "common.rateDown")}
-      className={`rounded-full transition-colors ${
-        rated === rating ? "text-clay-800" : rated ? "text-sand-300" : "text-sand-500 hover:text-clay-800"
+      aria-label={t(rated === rating ? "common.rateTakeBack" : rating === "up" ? "common.rateUp" : "common.rateDown")}
+      data-tip={t(rated === rating ? "common.rateTakeBack" : rating === "up" ? "common.rateUp" : "common.rateDown")}
+      className={`rounded-full transition-colors pointer-coarse:p-2.5 ${
+        rated === rating ? "text-clay-800" : rated ? "text-sand-300 hover:text-clay-800" : "text-sand-500 hover:text-clay-800"
       } disabled:cursor-default`}
     >
       {rating === "up" ? <ThumbsUpIcon size={13} /> : <ThumbsDownIcon size={13} />}
@@ -96,12 +161,13 @@ export function RatingButtons({
   );
 
   return (
-    <span className={`flex flex-wrap items-center gap-1 ${className}`} data-rating={tool}>
+    <span className={inRow ? "contents" : `flex flex-wrap items-center gap-1 ${className}`} data-rating={tool}>
       {button("up")}
       {button("down")}
       {rated === "down" && !commentSent && (
-        <span className="flex items-center gap-1">
+        <span className={`flex items-center gap-1 ${inRow ? "order-last basis-full" : ""}`}>
           <input
+            autoFocus
             value={comment}
             onChange={(e) => setComment(e.target.value)}
             onKeyDown={(e) => {
@@ -115,7 +181,7 @@ export function RatingButtons({
           />
           <button
             onClick={() => void sendComment()}
-            disabled={!comment.trim() || !rowId}
+            disabled={!comment.trim()}
             data-track={`rate:${tool}:comment`}
             className="rounded-full bg-clay-100 px-2 py-0.5 text-[10.5px] font-semibold text-clay-800 hover:bg-clay-200 disabled:opacity-40"
           >
@@ -124,7 +190,7 @@ export function RatingButtons({
         </span>
       )}
       {rated && (rated === "up" || commentSent) && (
-        <span className="text-[10.5px] text-sand-500">{t("common.rateThanks")}</span>
+        <span className={`text-[10.5px] text-sand-500 ${inRow ? "order-last basis-full" : ""}`}>{t("common.rateThanks")}</span>
       )}
     </span>
   );

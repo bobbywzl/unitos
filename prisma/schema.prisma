@@ -478,8 +478,9 @@ model Document {
   figureRenderError String?
   parserVersion Int                @default(0) // parse pipeline version; stale URL documents re-parse automatically
   sourceUrl     String?
-  // Dedupe re-uploads. Not unique: an edited import is never handed to
-  // another add, so the same file can be imported again beside it.
+  // The stored file's hash. Not unique: every add is its own document, and
+  // an add asks first when the account already has one with this hash
+  // (lib/documents/duplicates.ts).
   fileHash      String?
   fileData      Bytes? // original PDF bytes, kept for forced re-parse (SPEC.md §8 Phase 3)
   // The stored file's format when it is neither a PDF nor a Markdown file
@@ -531,6 +532,7 @@ model Document {
   video         VideoAsset? // set = video document; the reader renders the video pane (SPEC.md §11)
   images        ImageAsset[] // images the parse captured (chart animations)
   readingPositions ReadingPosition[]
+  kept             KeptDocument[]
   // A generated document (SPEC.md §22): Stitch wrote it from the project's
   // documents. generatedCommand is the command that made it; a document with
   // one is a generated document of the project it is attached to.
@@ -564,8 +566,8 @@ model Document {
   // The PDF's pages the reader chose at the add (SPEC.md §15), and the PDF's
   // page count: {ranges: [[45, 60]], count: 409}, each range 1-based,
   // sorted, apart. The document holds those pages alone, a re-parse reads
-  // them again, and dedupe tells the same file with other pages apart
-  // (lib/pdf-pages.ts). Null = every page.
+  // them again, and an add of the same file asks first only when it chose
+  // the same pages (lib/pdf-pages.ts). Null = every page.
   pdfPages      Json?
   figureMedia   FigureMedia[]
   createdAt     DateTime           @default(now())
@@ -626,6 +628,22 @@ model ReadingPosition {
   offset     Float
   height     Float
   at         DateTime
+
+  @@id([userId, documentId])
+  @@index([documentId])
+}
+
+// A document kept for an account after the project that held it was
+// deleted (SPEC.md §6): the deleting owner's claim on each document only that
+// project held, written in the delete's transaction, so the document stays in
+// the owner's Library while it is in no project. Only the owner gets one;
+// reading a document is no claim. userId is a soft reference like
+// Notebook.userId. Deleting the document deletes its rows.
+model KeptDocument {
+  userId     String
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  keptAt     DateTime @default(now())
 
   @@id([userId, documentId])
   @@index([documentId])
@@ -829,7 +847,7 @@ model VideoAsset {
   documentId          String           @unique
   document            Document         @relation(fields: [documentId], references: [id], onDelete: Cascade)
   kind                VideoKind        @default(UPLOAD)
-  youtubeId           String?          @unique // kind YOUTUBE only; dedupes re-adds
+  youtubeId           String? // kind YOUTUBE only; indexed, not unique: every add is its own document
   mimeType            String? // kind UPLOAD only
   size                Int? // kind UPLOAD only
   chunkSize           Int? // kind UPLOAD only
@@ -862,6 +880,8 @@ model VideoAsset {
   geminiFileExpiresAt DateTime?
   chunks              VideoChunk[]
   createdAt           DateTime         @default(now())
+
+  @@index([youtubeId])
 }
 
 enum VideoKind {

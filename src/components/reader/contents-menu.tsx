@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { ContentsEntry } from "@/lib/contents";
+import { useEscapeLayer } from "@/lib/escape-layers";
 import { useCollab } from "@/components/collab/collab-context";
 import { ContentsIcon, SparkleIcon, SpinnerIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
@@ -12,14 +13,15 @@ import { StopPill } from "@/components/thinking";
 // Contents (SPEC.md §26): the button at the top left of the article, in the
 // article menu's place, and the list it opens — the article's parts, each a
 // jump to the block it starts at. Two clicks make the contents: Contents
-// opens the list, and with none stored the list asks whether to generate
+// opens the list, and with none stored it shows the article's own headings
+// first and Generate contents as one row at the foot (what AI does and the
+// disclaimer in its tooltip); with no headings it asks whether to generate
 // them — one line on what AI writes, the Generate contents button, and the
-// disclaimer that AI-written parts may be off — and Generate contents runs
+// disclaimer that AI-written parts may be off. Generate contents runs
 // the one model call (POST /api/documents/[documentId]/contents
 // {generate: true}) and stores the parts. While it runs the button reads
 // Stop: a press ends the request and the model call, and nothing is
-// stored. Until then the list shows the article's own headings, when it
-// has any. Stored parts show at once, under
+// stored. Stored parts show at once, under
 // the disclaimer. A click on a part scrolls the reader to its block and
 // flashes it (dissect:flash-block). The button stays at the top left of the
 // pane as the article scrolls (reader-interactions.tsx articleMenu). The
@@ -35,6 +37,32 @@ const loaded = new Map<string, Loaded>();
 
 type Answer = { parts: ContentsEntry[]; fallback: boolean };
 const toLoaded = (answer: Answer): Loaded => ({ parts: answer.parts, generated: !answer.fallback });
+
+/** The article's own headings, read from the page (block-view.tsx draws a
+    HEADING block as h1–h6 with its id): what the read answers when nothing
+    is stored, so the list draws at the press instead of after the read. A
+    first heading that stands above every other heading is the title, as
+    lib/contents.ts reads it. */
+function headingsOnPage(documentId: string): ContentsEntry[] | null {
+  if (typeof document === "undefined") return null;
+  const root = document.querySelector(`[data-document-id="${CSS.escape(documentId)}"]`);
+  if (!root) return null;
+  const blocks = [...root.querySelectorAll<HTMLElement>("[data-block-id]")];
+  const depth = (el: HTMLElement) => (/^H([1-6])$/.exec(el.tagName) ? Number(el.tagName[1]) : null);
+  const headings = blocks.filter((el) => depth(el) !== null && (el.textContent ?? "").trim() !== "");
+  const top = blocks[0] && depth(blocks[0]) !== null ? blocks[0] : null;
+  const title = top && headings.slice(1).every((el) => depth(el)! > depth(top)!) ? top : null;
+  const out: ContentsEntry[] = [];
+  let hasTop = false;
+  for (const el of headings) {
+    if (el === title) continue;
+    const level: 1 | 2 = depth(el)! >= 3 && hasTop ? 2 : 1;
+    if (level === 1) hasTop = true;
+    out.push({ title: (el.textContent ?? "").trim().slice(0, 200), blockId: el.dataset.blockId ?? "", level });
+    if (out.length >= 80) break;
+  }
+  return out.length > 0 ? out : null;
+}
 
 /** A document's contents for this tab, read when `open` turns on, and
     Generate contents: the Contents menu's, and the page editor's tabs &
@@ -130,7 +158,16 @@ export function ContentsMenu({
 }) {
   const t = useT();
   const { canEdit } = useCollab();
-  const { state, reading, readError, generating, generateError, generate } = useContents(documentId, open);
+  const contents = useContents(documentId, open);
+  const { readError, generating, generateError, generate } = contents;
+  // Before the first read of this tab lands, the headings on the page stand
+  // in: the list draws at the press, with no Loading row.
+  const onPage = useMemo(
+    () => (open && !contents.state ? headingsOnPage(documentId) : null),
+    [open, contents.state, documentId],
+  );
+  const state = contents.state ?? (onPage ? { parts: onPage, generated: false } : null);
+  const reading = contents.reading && !onPage;
 
   // A click outside the list and the button (both carry data-contents)
   // closes the list.
@@ -141,16 +178,11 @@ export function ContentsMenu({
       if (target?.closest("[data-contents]")) return;
       onOpenChange(false);
     };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onOpenChange(false);
-    };
     window.addEventListener("mousedown", onMouseDown);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("mousedown", onMouseDown);
-      window.removeEventListener("keydown", onKey);
-    };
+    return () => window.removeEventListener("mousedown", onMouseDown);
   }, [open, onOpenChange]);
+  // Escape closes the list as one layer (lib/escape-layers.ts).
+  useEscapeLayer(open, () => onOpenChange(false));
 
   // A part lands on the core of a collapsed block (SPEC.md §28).
   function jump(blockId: string) {
@@ -204,7 +236,7 @@ export function ContentsMenu({
           <nav
             data-contents
             aria-label={t("reader.contents")}
-            className="pop-in pointer-events-auto flex w-full max-w-[400px] origin-top-left flex-col gap-2 rounded-[24px] bg-card/85 py-3 shadow-float backdrop-blur-md"
+            className="pop-in pointer-events-auto flex w-full max-w-[400px] origin-top-left flex-col gap-2 rounded-[24px] bg-card py-3 shadow-float"
           >
             {reading && (
               <p className={`flex items-center gap-2 ${note}`}>
@@ -222,41 +254,67 @@ export function ContentsMenu({
               </>
             )}
 
-            {/* Nothing stored: ask, the Generate contents button, the
-                disclaimer; the headings below, when the article has any. */}
-            {state && !state.generated && (
+            {/* Nothing stored, the article has headings: the headings
+                first, for the reader who came to jump, then Generate
+                contents as one row at the foot, what AI does and the
+                disclaimer in its tooltip (NAV13-07). */}
+            {state && !state.generated && state.parts.length > 0 && (
               <>
-                {canEdit ? (
-                  <>
-                    <p className={note}>{t("reader.contentsAsk")}</p>
-                    <div className="px-4">
-                      <button
-                        onClick={() => void generate()}
-                        data-track={generating ? "contents-stop" : "contents-generate"}
-                        data-tip={t(generating ? "reader.contentsStopTitle" : "reader.contentsGenerateTitle")}
-                        className="flex items-center gap-1.5 rounded-full bg-clay px-3.5 py-1.5 text-[12px] font-semibold text-clay-fg hover:bg-clay-600"
-                      >
-                        {generating ? <SpinnerIcon size={13} className="animate-spin" /> : <SparkleIcon size={13} />}
-                        {t(generating ? "reader.contentsBuilding" : "reader.contentsGenerate")}
-                        {generating && <StopPill />}
-                      </button>
-                    </div>
-                    {generateError && (
-                      <p className={`${note} text-red-600`}>{t("reader.contentsFailed", { reason: generateError })}</p>
-                    )}
-                    <p className={disclaimer}>{t("reader.contentsDisclaimer")}</p>
-                  </>
-                ) : (
-                  <p className={note}>{t("reader.contentsViewer")}</p>
-                )}
-                {state.parts.length > 0 && (
-                  <>
-                    <p className={`${disclaimer} mt-1 border-t border-line pt-2`}>{t("reader.contentsHeadingsNote")}</p>
-                    {list(state.parts)}
-                  </>
-                )}
+                {list(state.parts)}
+                <div className="border-t border-line px-2 pt-2">
+                  {canEdit ? (
+                    <button
+                      onClick={() => void generate()}
+                      data-track={generating ? "contents-stop" : "contents-generate"}
+                      data-tip={
+                        generating
+                          ? t("reader.contentsStopTitle")
+                          : `${t("reader.contentsGenerateTitle")} ${t("reader.contentsDisclaimer")}`
+                      }
+                      className="flex w-full items-center gap-1.5 rounded-full px-2 py-1.5 text-left text-[12px] font-semibold text-clay-800 hover:bg-clay-100/70"
+                    >
+                      {generating ? <SpinnerIcon size={13} className="animate-spin" /> : <SparkleIcon size={13} />}
+                      {t(generating ? "reader.contentsBuilding" : "reader.contentsGenerate")}
+                      {generating && <StopPill />}
+                    </button>
+                  ) : (
+                    <p className="px-2 text-[11px] leading-snug text-sand-500">{t("reader.contentsViewer")}</p>
+                  )}
+                  {generateError && (
+                    <p className="px-2 pt-1 text-[12px] leading-snug text-red-600">
+                      {t("reader.contentsFailed", { reason: generateError })}
+                    </p>
+                  )}
+                </div>
               </>
             )}
+
+            {/* Nothing stored, no headings: the ask, the Generate contents
+                button, the disclaimer. */}
+            {state && !state.generated && state.parts.length === 0 &&
+              (canEdit ? (
+                <>
+                  <p className={note}>{t("reader.contentsAsk")}</p>
+                  <div className="px-4">
+                    <button
+                      onClick={() => void generate()}
+                      data-track={generating ? "contents-stop" : "contents-generate"}
+                      data-tip={t(generating ? "reader.contentsStopTitle" : "reader.contentsGenerateTitle")}
+                      className="flex items-center gap-1.5 rounded-full bg-clay px-3.5 py-1.5 text-[12px] font-semibold text-clay-fg hover:bg-clay-600"
+                    >
+                      {generating ? <SpinnerIcon size={13} className="animate-spin" /> : <SparkleIcon size={13} />}
+                      {t(generating ? "reader.contentsBuilding" : "reader.contentsGenerate")}
+                      {generating && <StopPill />}
+                    </button>
+                  </div>
+                  {generateError && (
+                    <p className={`${note} text-red-600`}>{t("reader.contentsFailed", { reason: generateError })}</p>
+                  )}
+                  <p className={disclaimer}>{t("reader.contentsDisclaimer")}</p>
+                </>
+              ) : (
+                <p className={note}>{t("reader.contentsViewer")}</p>
+              ))}
           </nav>
         )}
       </Presence>

@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
 import type { NotebookView, SectionView } from "@/lib/types";
 import { ArrowLeftIcon } from "@/components/icons";
+import { FeedbackHeaderButton } from "@/components/feedback-button";
 import { AccountGuard } from "@/components/account-guard";
 import { ActiveTimeClock } from "@/components/active-time-clock";
 import { CollabProvider, type CollabState } from "@/components/collab/collab-context";
@@ -152,6 +153,7 @@ export default async function NotesPage(props: { params: Promise<{ notebookId: s
             {t("outline.reader")}
           </Link>
           <ExportMenu notebookId={notebook.id} />
+          <FeedbackHeaderButton />
         </div>
       </header>
       <CollabProvider value={collab}>

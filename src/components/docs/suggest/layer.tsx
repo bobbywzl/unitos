@@ -8,8 +8,9 @@ import type { DocsAreaProps } from "@/components/docs/areas/types";
 import { registerDocsCommands } from "@/components/docs/commands";
 import { focusSuggestion, readSuggestions, setSuggesting, settleSuggestions, suggestionAt } from "@/components/docs/ext/suggest";
 import { belowSlot, marginPlace, pageGeometry, paneReach, slotAt } from "@/components/docs/layer/margin";
+import { setCardsUnderWords } from "@/components/docs/suggest/under-words";
 import { applyAssistantOps, type Landing } from "@/components/docs/suggest/assistant";
-import { SuggestionCard } from "@/components/docs/suggest/card";
+import { SuggestionCard, focusSuggestionCard } from "@/components/docs/suggest/card";
 import { ReviewPanel } from "@/components/docs/suggest/review";
 import { DOCS_EVENT, fireDocs } from "@/components/docs/typing/events";
 import type { TKey } from "@/lib/i18n/dictionaries";
@@ -27,11 +28,15 @@ import type { SuggestCommand } from "@/lib/prompts/suggest";
 const REVIEW_EVENT = "docs:review-suggestions";
 /** The space between two cards. */
 const CARD_GAP = 8;
+/** How much of the open card stays level with its words, at least. */
+const LINE_PX = 20;
 /** The column's comment and suggestion cards. */
 const COLUMN_CARD = "[data-suggestion-card], [data-comment-card]";
-/** What stands in the column and stays where it is: the toolbar and the
-    tools' cards. */
-const FIXED = "[data-layer-toolbar], [data-side-card], [data-annotation-card]";
+/** What stands in the column and stays where it is: the tools' cards. The
+    selection toolbox is not one: it lives for one action and stands over
+    the cards (TOOLBOX_LAYER), so a card never jumps away from its words
+    when the reader selects beside it. */
+const FIXED = "[data-side-card], [data-annotation-card]";
 
 const settleable = (editor: Editor) => editor.isEditable && readSuggestions(editor.state.doc).length > 0;
 
@@ -136,6 +141,8 @@ function placeCards(editor: Editor, pane: HTMLElement, column: HTMLElement): boo
   if (!geo || !page) return false;
   const split = column.parentElement?.hasAttribute("data-split") ?? false;
   const slot = split ? null : slotAt(geo, 0);
+  // With no column the open card draws as one line (suggest/under-words.ts).
+  setCardsUnderWords(slot === null);
   const { left, width } = slot ?? belowSlot(geo, 0);
   const paneRect = pane.getBoundingClientRect();
   const paneTop = paneRect.top - pane.scrollTop;
@@ -203,8 +210,49 @@ function placeCards(editor: Editor, pane: HTMLElement, column: HTMLElement): boo
       tops[0] = pageTop;
       pushDown(0);
     }
+    // The open card stays in reach: pushed down past the pane's bottom by a
+    // card that stands where it is (an Explanation, the assistant's card),
+    // it goes above that card instead, inside the pane, and the cards
+    // around it make way.
+    const o = cards.findIndex((c) => c.open);
+    const shownTop = Math.max(paneRect.top, pane.querySelector(".docs-header")?.getBoundingClientRect().bottom ?? paneRect.top) - paneTop;
+    const shownBottom = paneRect.top + pane.clientHeight - paneTop - CARD_GAP;
+    if (o >= 0 && tops[o] + heights[o] > shownBottom && cards[o].top < shownBottom) {
+      const up = clear(Math.min(cards[o].top, shownBottom - heights[o]), heights[o], false);
+      if (up >= shownTop + CARD_GAP) {
+        tops[o] = up;
+        for (let i = o - 1; i >= 0; i--) {
+          tops[i] = clear(Math.min(cards[i].top, tops[i + 1] - CARD_GAP - heights[i]), heights[i], false);
+        }
+        for (let i = o + 1; i < cards.length; i++) {
+          tops[i] = clear(Math.max(cards[i].top, tops[i - 1] + heights[i - 1] + CARD_GAP), heights[i], true);
+        }
+      }
+    }
+    // The cards under the open card whose words are in view end inside the
+    // pane too: they and the open card go up together, while the open card
+    // still stands beside its words, under the toolbar, and on the page.
+    if (o >= 0) {
+      let last = o;
+      while (last + 1 < cards.length && cards[last + 1].top < shownBottom) last++;
+      const over = tops[last] + heights[last] - shownBottom;
+      if (last > o && over > 0) {
+        const lifted = tops.slice();
+        lifted[last] = clear(tops[last] - over, heights[last], false);
+        for (let i = last - 1; i >= 0; i--) {
+          lifted[i] = clear(Math.min(tops[i], lifted[i + 1] - CARD_GAP - heights[i]), heights[i], false);
+        }
+        const beside = lifted[o] + heights[o] >= cards[o].top + LINE_PX;
+        if (beside && lifted[o] >= shownTop + CARD_GAP && lifted[0] >= pageTop) lifted.forEach((top, i) => (tops[i] = top));
+      }
+    }
   }
-  cards.forEach(({ el }, i) => Object.assign(el.style, { left: `${left}px`, width: `${width}px`, top: `${tops[i]}px` }));
+  // A card shows once it has its place: never first drawn at the column's
+  // left edge (css/layer.css).
+  cards.forEach(({ el }, i) => {
+    Object.assign(el.style, { left: `${left}px`, width: `${width}px`, top: `${tops[i]}px` });
+    el.dataset.placed = "";
+  });
   const end = pane.querySelector<HTMLElement>("[data-docs-column-end]");
   if (end) end.style.top = `${Math.max(0, ...fixed.map((f) => f.bottom), ...cards.map((_, i) => tops[i] + heights[i])) + CARD_GAP}px`;
   // No room where the page stands, but room once it moves left: holding the
@@ -246,6 +294,10 @@ export function SuggestLayer({ editor, canEdit, editing, suggesting }: DocsAreaP
       setReview({ scope });
       const first = scope && readSuggestions(editor.state.doc).find((s) => scope.includes(s.id));
       if (first) focusSuggestion(editor, first.id);
+      // Every suggestion: the keys go to the card of the one at the caret,
+      // else the first, so one suggestion is accepted without a pointer.
+      const target = scope ? null : (suggestionAt(editor.state) ?? readSuggestions(editor.state.doc)[0]?.id ?? null);
+      if (target && editor.isEditable) focusSuggestionCard(editor, target);
     };
     dom.addEventListener(REVIEW_EVENT, open);
     return () => dom.removeEventListener(REVIEW_EVENT, open);

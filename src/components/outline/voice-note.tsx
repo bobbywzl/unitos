@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { MicIcon, StopIcon } from "@/components/icons";
+import { StopIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { ProgressBar } from "@/components/progress-bar";
 import { useOpenDocument } from "@/components/reader/open-document-context";
@@ -10,6 +10,8 @@ import { readThinking } from "@/lib/assistant/thinking";
 import { readNdjson } from "@/lib/ndjson";
 import type { VoiceEvent, VoiceStage } from "@/app/api/notes/voice/route";
 import { flushDocument } from "@/components/docs/layer/flush";
+import { isOffline } from "@/lib/offline/queue";
+import { failureLine, modelFetch, noReason } from "@/components/assistant/failure";
 
 // The voice command (SPEC.md §6): press to record, press again to stop. The
 // recording goes to /api/notes/voice with the section and the open document;
@@ -19,6 +21,9 @@ import { flushDocument } from "@/components/docs/layer/flush";
 // the reader to read over and accept. The route streams its three stages,
 // and the bottom progress bar shows them. Recording stops on its own at five
 // minutes; the low bitrate keeps five minutes under the request cap.
+// Offline, Command does not record: it says AI is off (SPEC.md §17). A send
+// that fails keeps the recording, and Send again sends it once more, so a
+// command is never spoken twice.
 const MAX_SECONDS = 300;
 const STAGES: VoiceStage[] = ["transcribe", "plan", "write"];
 const BITS_PER_SECOND = 32_000;
@@ -39,13 +44,30 @@ function recordingMime(): string | undefined {
   );
 }
 
+/** Command's own glyph: a microphone with the assistant's spark, so it never
+    reads as voice typing, whose plain microphone types what is said. */
+function CommandIcon({ size = 11 }: { size?: number }) {
+  return (
+    <svg aria-hidden width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z" />
+      <path d="M16 11a7 7 0 0 1-14 0" />
+      <path d="M9 18v3" />
+      <path d="M19 2v6M16 5h6" />
+    </svg>
+  );
+}
+
 export function VoiceNoteButton({
   sectionId,
   className,
+  compact = false,
   onError,
 }: {
   sectionId: string;
   className?: string;
+  /** The glyph alone, its name in the tooltip: every surface draws it so
+      (the tray, the notes full page, a board), beside the Note button. */
+  compact?: boolean;
   /** Where the reason shows when recording or transcription fails. */
   onError?: (message: string | null) => void;
 }) {
@@ -60,6 +82,8 @@ export function VoiceNoteButton({
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const supported = useSyncExternalStore(noop, canRecord, () => false);
+  // The recording whose send failed: Send again sends it.
+  const [failed, setFailed] = useState<Blob | null>(null);
 
   useEffect(() => {
     return () => {
@@ -78,6 +102,11 @@ export function VoiceNoteButton({
 
   async function start() {
     onError?.(null);
+    // The command needs a model: offline, nothing is recorded.
+    if (isOffline()) {
+      onError?.(t("common.offlineAi"));
+      return;
+    }
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -129,30 +158,42 @@ export function VoiceNoteButton({
   async function send(blob: Blob) {
     setState("sending");
     setStage("transcribe");
+    onError?.(null);
     try {
       if (blob.size === 0) throw new Error(t("outline.voiceNoteEmpty"));
+      if (isOffline()) {
+        setFailed(blob);
+        throw new Error(t("common.offlineAi"));
+      }
       const params = new URLSearchParams({ sectionId, thinking: readThinking() });
       if (documentId) {
         params.set("documentId", documentId);
         // A blank document's typing is saved before the command reads it.
         await flushDocument(documentId);
       }
-      const res = await fetch(`/api/notes/voice?${params}`, {
-        method: "POST",
-        headers: { "Content-Type": blob.type || "audio/webm" },
-        body: blob,
-      });
+      // A dropped connection or a server failure reads as the assistant's
+      // plain line, the technical text to the console (failure.ts).
+      const res = await modelFetch(
+        `/api/notes/voice?${params}`,
+        { method: "POST", headers: { "Content-Type": blob.type || "audio/webm" }, body: blob },
+        t,
+      );
       if (!res.ok) {
         const detail = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(detail?.error ?? t("common.requestFailedStatus", { status: res.status }));
+        throw new Error(detail?.error ?? noReason(res, t));
       }
       for await (const event of readNdjson<VoiceEvent>(res)) {
         if ("error" in event) throw new Error(event.error);
         if ("stage" in event) setStage(event.stage);
       }
+      setFailed(null);
       router.refresh();
     } catch (err) {
-      onError?.(err instanceof Error ? err.message : t("outline.voiceNoteFailed"));
+      // The recording stays for Send again: a lost connection, a server
+      // error, or an answer the route could not finish. An empty recording
+      // has nothing to send again.
+      if (blob.size > 0) setFailed(blob);
+      onError?.(failureLine(err, t));
     } finally {
       setState("idle");
     }
@@ -171,8 +212,8 @@ export function VoiceNoteButton({
     return (
       <>
         <span className={`${base} inline-flex items-center gap-1 text-sand-600 opacity-60`} data-tip={label}>
-          <MicIcon size={11} />
-          {t("outline.speakNote")}
+          <CommandIcon />
+          {!compact && t("outline.speakNote")}
         </span>
         <ProgressBar label={label} done={STAGES.indexOf(stage)} total={STAGES.length} />
       </>
@@ -195,17 +236,47 @@ export function VoiceNoteButton({
       </button>
     );
   }
+  if (failed) {
+    return (
+      <span className="inline-flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => void send(failed)}
+          data-track="voice-note-send-again"
+          aria-label={t("outline.sendCommandAgain")}
+          data-tip={t("outline.sendCommandAgainTitle")}
+          className={`${base} inline-flex items-center gap-1 pointer-coarse:min-h-9`}
+        >
+          <CommandIcon />
+          {t("outline.sendCommandAgain")}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setFailed(null);
+            onError?.(null);
+          }}
+          data-track="voice-note-discard"
+          aria-label={t("outline.discardCommand")}
+          data-tip={t("outline.discardCommand")}
+          className="inline-flex items-center justify-center px-1 text-[11px] text-sand-500 hover:text-clay-700 pointer-coarse:size-9 pointer-coarse:px-0"
+        >
+          ✕
+        </button>
+      </span>
+    );
+  }
   return (
     <button
       type="button"
       onClick={() => void start()}
       data-track="voice-note"
       aria-label={t("outline.speakNote")}
-      data-tip={t("outline.speakNoteTitle")}
-      className={`${base} inline-flex items-center gap-1`}
+      data-tip={compact ? `${t("outline.speakNote")}\n${t("outline.speakNoteTitle")}` : t("outline.speakNoteTitle")}
+      className={`${base} inline-flex items-center gap-1 pointer-coarse:min-h-9`}
     >
-      <MicIcon size={11} />
-      {t("outline.speakNote")}
+      <CommandIcon size={compact ? 13 : 11} />
+      {!compact && t("outline.speakNote")}
     </button>
   );
 }

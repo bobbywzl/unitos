@@ -12,7 +12,13 @@ export type InsertContext = {
   documentId: string;
   notebookId: string;
   documents: { id: string; title: string }[];
+  /** The document's saved page setup: a new image's width, a page break,
+      the words of its header and footer. */
   pageSetup: PageSetup;
+  /** The page is drawn pageless (the document is pageless, or its pages are
+      drawn pageless in this browser: page/reflow.tsx): what the page shows
+      and lets the reader do on it. */
+  drawnPageless: boolean;
   lang: Lang;
   t: TFunc;
   /** The page takes typing now. */

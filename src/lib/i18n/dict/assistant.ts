@@ -11,11 +11,11 @@ const en = {
   // Scope control (SPEC.md §7): This page, or Project
   scopeDocumentLabel: "This page",
   scopeDocumentHint:
-    "This page: the open document in full, plus every note, annotation, and distillation on it.",
+    "This page: the open document in full, plus every note, annotation, and extraction on it.",
   scopeDocumentNoDocument: "Open a document to ask about this page",
   scopeProjectLabel: "Project",
   scopeProjectHint:
-    "This project: every document in full, plus every note, annotation, and distillation.",
+    "This project: every document in full, plus every note, annotation, and extraction.",
   // Ask
   askPlaceholderDocument: "Ask about this page",
   askPlaceholderProject: "Ask about this project",
@@ -38,7 +38,7 @@ const en = {
   conversationOpenTitle: "Open this conversation",
   conversationCurrent: "open",
   conversationDelete: "Delete this conversation",
-  conversationDeleteConfirm: "Delete this conversation? Its side chats and comments go with it.",
+  conversationDeleteFailed: "Not deleted. The conversation is back; try again.",
   // Clear conversation (SPEC.md §21): the one way a kept conversation goes.
   clearConversation: "Clear",
   clearConversationTitle: "Clear this conversation. It is kept until you clear it.",
@@ -58,6 +58,8 @@ const en = {
   queue: "Queue",
   queueTitle: "Send this message after the answer lands. Queued messages go out in order.",
   queuePlaceholder: "Queue a message",
+  // The one placeholder of a card's box that talks to the assistant.
+  messagePlaceholder: "Message the assistant…",
   queued: "{n} queued",
   removeQueued: "Remove from the queue",
   // Highlighting an answer (SPEC.md §7): side chat, ask, comment
@@ -71,7 +73,6 @@ const en = {
   commentTitle: "Comment on these words. Collaborators read the comment under the answer.",
   commentPlaceholder: "Comment on this answer",
   commentDelete: "Delete this comment",
-  commentFailed: "The comment was not saved",
   comments: "Comments",
   quoteRemove: "Remove the quote",
   sideChat: "Side chat",
@@ -80,13 +81,17 @@ const en = {
   backToConversation: "Back",
   backToConversationTitle: "Back to the conversation this side chat came from.",
   sideChatOpened: "Side chat",
-  // Thinking control (SPEC.md §7): Fast Thinking, or Deep Thinking
+  // A tool's output continued into a conversation (SPEC.md §21): the pill on
+  // the card's foot row; its tooltip names it whole.
+  continue: "Continue",
+  // Thinking control (SPEC.md §7): one chip that names the choice, Fast
+  // Thinking or Deep Thinking; a click switches to the other.
   thinkingFast: "Fast Thinking",
   thinkingFastHint:
-    "Fast Thinking: the assistant reasons as little as it can before it answers. Quicker, and enough for a question the material answers directly.",
+    "Fast Thinking is on: the assistant reasons as little as it can before it answers. Quicker, and enough for a question the material answers directly. Click for Deep Thinking.",
   thinkingDeep: "Deep Thinking",
   thinkingDeepHint:
-    "Deep Thinking: the assistant reasons the question through before it answers. Slower, and better for a question that has to be worked out across the material.",
+    "Deep Thinking is on: the assistant reasons the question through before it answers. Slower, and better for a question that has to be worked out across the material. Click for Fast Thinking.",
   // Web access (SPEC.md §7)
   web: "Web",
   webOnTitle:
@@ -136,11 +141,8 @@ const en = {
   noteAssistantTitle: "Ask the assistant about this note, or describe a change to make to it",
   noteAssistantPlaceholder: "Describe any changes you want to make…",
   noteAssistantClose: "Close the assistant",
-  noteAssistantSend: "Send",
   noteAssistantStop: "Stop",
-  noteAssistantApply: "Apply to the note",
-  noteAssistantDiscard: "Discard",
-  noteAssistantApplied: "Applied. Cancel on the note brings back what it said before.",
+  noteAssistantApplied: "Accepted",
   noteAssistantUndo: "Undo",
   noteAssistantChange: "Proposed change",
   noteAssistantQuotesLost: "This change takes out {n} quote{s} of the note, and with it the link back to the document.",
@@ -159,7 +161,9 @@ const en = {
 
   // Errors
   emptyResponse: "The model returned an empty response. Try again.",
-  requestFailedStatus: "Request failed ({status})",
+  // One failure line (SPEC.md §7): what failed, then what to do.
+  failedConnection: "No answer: Unitos could not reach the server. Try again.",
+  failedServer: "No answer: the assistant had a problem. Try again.",
   assistantFailed: "Assistant failed",
   assistantFailedStatus: "Assistant failed ({status})",
   taskFailed: "Task failed",
@@ -173,10 +177,10 @@ const zh: Record<keyof typeof en, string> = {
   recProfessionalLabel: "专业摘要",
   recProfessionalHint: "用作者所在行业的措辞",
   scopeDocumentLabel: "此页面",
-  scopeDocumentHint: "此页面：当前文档的全文，以及它上面的每条笔记、批注和提炼。",
+  scopeDocumentHint: "此页面：当前文档的全文，以及它上面的每条笔记、批注和提取。",
   scopeDocumentNoDocument: "打开一篇文档后才能就此页面提问",
   scopeProjectLabel: "项目",
-  scopeProjectHint: "此项目：每篇文档的全文，以及每条笔记、批注和提炼。",
+  scopeProjectHint: "此项目：每篇文档的全文，以及每条笔记、批注和提取。",
   askPlaceholderDocument: "就此页面提问",
   askPlaceholderProject: "就此项目提问",
   ask: "提问",
@@ -195,7 +199,7 @@ const zh: Record<keyof typeof en, string> = {
   conversationOpenTitle: "打开这段对话",
   conversationCurrent: "当前",
   conversationDelete: "删除这段对话",
-  conversationDeleteConfirm: "删除这段对话？它的支线对话和评论会一起删除。",
+  conversationDeleteFailed: "没有删除。对话已恢复，请重试。",
   clearConversation: "清除",
   clearConversationTitle: "清除这段对话。对话会一直保留，直到你清除它。",
   clearConversationConfirm: "清除这段对话？清除后无法恢复。",
@@ -211,6 +215,7 @@ const zh: Record<keyof typeof en, string> = {
   queue: "排队",
   queueTitle: "等当前回答完成后再发送这条消息。排队的消息按顺序发出。",
   queuePlaceholder: "排队一条消息",
+  messagePlaceholder: "给助手发消息…",
   queued: "{n} 条排队中",
   removeQueued: "从队列中移除",
   startSideChat: "开启支线对话",
@@ -222,7 +227,6 @@ const zh: Record<keyof typeof en, string> = {
   commentTitle: "就这段话发表评论。协作者在回答下面读到它。",
   commentPlaceholder: "评论这个回答",
   commentDelete: "删除这条评论",
-  commentFailed: "评论未能保存",
   comments: "评论",
   quoteRemove: "移除引用",
   sideChat: "支线对话",
@@ -231,10 +235,11 @@ const zh: Record<keyof typeof en, string> = {
   backToConversation: "返回",
   backToConversationTitle: "返回这条支线对话所属的对话。",
   sideChatOpened: "支线对话",
+  continue: "继续",
   thinkingFast: "快速思考",
-  thinkingFastHint: "快速思考：助手作答前尽量少推理。更快，适合材料能直接回答的问题。",
+  thinkingFastHint: "快速思考已开启：助手作答前尽量少推理。更快，适合材料能直接回答的问题。点击改为深度思考。",
   thinkingDeep: "深度思考",
-  thinkingDeepHint: "深度思考：助手作答前把问题想透。更慢，适合需要在材料中推演的问题。",
+  thinkingDeepHint: "深度思考已开启：助手作答前把问题想透。更慢，适合需要在材料中推演的问题。点击改为快速思考。",
   web: "联网",
   webOnTitle: "联网已开启：助手会用网络核对答案，并注明所用的外部来源。点击后只根据项目作答。",
   webOffTitle: "联网已关闭：助手只根据项目作答。点击后允许它搜索网络并注明外部来源。",
@@ -277,11 +282,8 @@ const zh: Record<keyof typeof en, string> = {
   noteAssistantTitle: "向助手询问这条笔记，或说明要对它做的修改",
   noteAssistantPlaceholder: "描述你想做的修改…",
   noteAssistantClose: "关闭助手",
-  noteAssistantSend: "发送",
   noteAssistantStop: "停止",
-  noteAssistantApply: "应用到笔记",
-  noteAssistantDiscard: "放弃",
-  noteAssistantApplied: "已应用。笔记上的取消可恢复原来的内容。",
+  noteAssistantApplied: "已接受",
   noteAssistantUndo: "撤销",
   noteAssistantChange: "提议的修改",
   noteAssistantQuotesLost: "这项修改会删去笔记中的 {n} 处引用，以及它们指回文档的链接。",
@@ -297,7 +299,8 @@ const zh: Record<keyof typeof en, string> = {
   suggestNoPage: "文档没有打开。",
   barChatTitle: "在文字旁的卡片中打开这段对话",
   emptyResponse: "模型返回了空响应。请重试。",
-  requestFailedStatus: "请求失败（{status}）",
+  failedConnection: "没有回答：Unitos 无法连接服务器。请重试。",
+  failedServer: "没有回答：助手出了问题。请重试。",
   assistantFailed: "助手请求失败",
   assistantFailedStatus: "助手请求失败（{status}）",
   taskFailed: "任务失败",

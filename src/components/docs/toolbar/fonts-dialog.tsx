@@ -159,6 +159,7 @@ export function FontsDialog({ onClose }: { onClose: () => void }) {
       title={t("docs.fontsTitle")}
       onClose={onClose}
       className="docs-fonts-dialog"
+      closeButton={false}
       actions={
         <>
           <DialogButton onClick={onClose}>{t("docs.cancel")}</DialogButton>

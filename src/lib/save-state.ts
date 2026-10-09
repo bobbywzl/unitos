@@ -11,7 +11,14 @@ export type SaveState = "saving" | "saved" | "failed";
 let inflight = 0;
 const dirty = new Set<string>();
 let failed = false;
+// The failure is a write the offline queue took after the server answered
+// with an error (lib/api.ts): it reads Not saved until the queue drains.
+let failedQueued = false;
 let touched = false;
+// The paths whose last write failed and no write to them has landed since:
+// a note's save that failed stays Not saved until its retry lands, however
+// many other writes land meanwhile (the page editor's status reads it).
+const unconfirmed = new Set<string>();
 const listeners = new Set<() => void>();
 
 function notify() {
@@ -39,10 +46,38 @@ export function beginWrite(): void {
   notify();
 }
 
-export function endWrite(ok: boolean): void {
+export function endWrite(ok: boolean, path?: string, queued = false): void {
   inflight = Math.max(0, inflight - 1);
-  failed = !ok;
+  // A write that landed does not clear a queued failure: those words are
+  // still on their way.
+  failed = !ok || failedQueued;
+  if (queued) failedQueued = true;
+  if (path) {
+    if (ok) unconfirmed.delete(path);
+    else unconfirmed.add(path);
+  }
   notify();
+}
+
+/** The offline queue drained: the writes it took after a server error
+    landed, and the line stops reading Not saved. */
+export function settleQueuedWrites(): void {
+  if (!failedQueued) return;
+  failedQueued = false;
+  failed = false;
+  notify();
+}
+
+/** A failed write the reader took back (Undo of a queued delete): its path
+    waits for nothing now. */
+export function forgetFailedPath(path: string): void {
+  if (unconfirmed.delete(path)) notify();
+}
+
+/** True while a write that failed has not been confirmed by a later write to
+    the same path. */
+export function readUnconfirmed(): boolean {
+  return unconfirmed.size > 0;
 }
 
 /** A draft that differs from what the server holds, until its save starts. */

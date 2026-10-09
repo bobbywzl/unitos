@@ -75,6 +75,7 @@
 //   page start(导入的 PDF 某页开始处，页边显示页码) 页首 · import line(标题后说明导入来源的一行) 导入行 ·
 //   Pages(添加 PDF 时选择要导入的页，如 45–60) 页码 ·
 //   spelling suggestion(右键菜单给拼错的英文单词的替换词) 拼写建议 ·
+//   grammar suggestion(蓝色波浪线下的一处语法修改，不是建议模式的建议) 语法建议 ·
 //   reading position 阅读位置 · left-off mark(上次读到的块上方的小书签) 阅读标记
 // highlight 高亮 仅指高亮功能；表示选取文字一律用 选中。
 
@@ -100,6 +101,7 @@ const en = {
   rateDown: "Poor answer",
   rateWhatWasWrong: "What was wrong? (optional)",
   rateThanks: "Noted",
+  rateTakeBack: "Take the rating back",
   working: "Working…",
   loading: "Loading…",
   accept: "Accept",
@@ -120,7 +122,18 @@ const en = {
   tierTrial: "Unitos Premium · trial until {date}",
   tierExpired: "Unitos Premium · trial ended {date}",
   // Offline work (SPEC.md §17, Unitos Premium)
-  offline: "Offline. This change did not save.",
+  // The one failure line of a write (SPEC.md §17, lib/api.ts): "Not saved"
+  // and what the reader can do. A write that retries by itself shows no line.
+  notSaved: "Not saved. Try again.",
+  // A read that failed (a list, a conversation, an attachment): the same shape.
+  notLoaded: "Not loaded. Try again.",
+  // Clear on a kept conversation (SPEC.md §21): the turns leave at once,
+  // the Undo pill puts them back; the row goes when the pill goes.
+  conversationCleared: "Conversation cleared",
+  // A write refused because the account can no longer edit the project (a
+  // role changed, a share removed): the words stay in the browser's draft.
+  notSavedNoEdit: "Not saved: you can no longer edit this project. Your words are kept in this browser.",
+  offline: "Not saved. Try again when you are online.",
   offlineQueued: "Offline · AI is off · {n} saved for sync · Unitos Premium",
   offlinePremium: "Offline · AI is off · notes and edits save and sync later · Unitos Premium",
   offlineReadOnly: "Offline · AI is off · changes do not save. Unitos Premium saves offline work.",
@@ -128,7 +141,10 @@ const en = {
   // service worker's answer (public/sw.js)
   offlineAi:
     "AI is off while offline. Notes, highlights, comments, and edits save on this device and sync when you are back online.",
-  offlineSyncing: "Syncing {n} offline changes…",
+  offlineSyncingOne: "Syncing 1 change…",
+  offlineSyncing: "Syncing {n} changes…",
+  offlineShort: "Offline",
+  offlineShortQueued: "Offline · {n} to sync",
   // The offline page (SPEC.md §17, Unitos Ultra): what loads without a network
   offlineTitle: "Offline",
   offlinePageBody: "Only projects saved for offline are shown. Everything else needs a connection.",
@@ -140,7 +156,6 @@ const en = {
   signInToContinue: "Sign in to continue.",
   corpusNotFound: "Project not found",
   unauthorized: "Unauthorized",
-  modelCallFailed: "The model call failed.",
   // Stale tab: the browser signed out or switched accounts in another tab.
   accountChanged: "This tab was open with a different account. Reload the page.",
   accountChangedTitle: "Account changed",
@@ -161,6 +176,8 @@ const en = {
   resolveTitle: "Close this reply; it moves under Resolved",
   reopenTitle: "Reopen this reply",
   replyTitle: "Start a reply",
+  // The Undo pill after a reply's ×.
+  replyDeleted: "Reply deleted",
   resolvedCountOne: "1 resolved",
   resolvedCountMany: "{n} resolved",
   // Notifications (SPEC.md §18): the kind chip, on the admin pages and the
@@ -193,6 +210,7 @@ const zh: Record<keyof typeof en, string> = {
   rateDown: "回答不好",
   rateWhatWasWrong: "哪里不对？（可不填）",
   rateThanks: "已记录",
+  rateTakeBack: "撤回评价",
   working: "处理中…",
   loading: "加载中…",
   accept: "接受",
@@ -211,14 +229,21 @@ const zh: Record<keyof typeof en, string> = {
   tierTrial: "Unitos Premium · 试用至 {date}",
   tierExpired: "Unitos Premium · 试用已于 {date} 结束",
   // Offline work (SPEC.md §17, Unitos Premium)
-  offline: "已离线。此更改未保存。",
+  notSaved: "未保存。请重试。",
+  notLoaded: "未加载。请重试。",
+  conversationCleared: "对话已清除",
+  notSavedNoEdit: "未保存：你已不能编辑此项目。你的文字保留在此浏览器中。",
+  offline: "未保存。恢复联网后请重试。",
   offlineQueued: "离线 · AI 不可用 · 已保存 {n} 项待同步 · Unitos Premium",
   offlinePremium: "离线 · AI 不可用 · 笔记和编辑会保存并稍后同步 · Unitos Premium",
   offlineReadOnly: "离线 · AI 不可用 · 更改不会保存。Unitos Premium 可保存离线工作。",
   // A call that needs a model, offline (SPEC.md §17): the same words as the
   // service worker's answer (public/sw.js)
   offlineAi: "离线时 AI 不可用。笔记、高亮、评论和编辑会保存在此设备上，联网后同步。",
-  offlineSyncing: "正在同步 {n} 项离线更改…",
+  offlineSyncingOne: "正在同步 1 项更改…",
+  offlineSyncing: "正在同步 {n} 项更改…",
+  offlineShort: "离线",
+  offlineShortQueued: "离线 · {n} 项待同步",
   // The offline page (SPEC.md §17, Unitos Ultra): what loads without a network
   offlineTitle: "离线",
   offlinePageBody: "只显示已离线保存的项目。其他内容需要网络。",
@@ -229,7 +254,6 @@ const zh: Record<keyof typeof en, string> = {
   signInToContinue: "请登录后继续。",
   corpusNotFound: "未找到该项目",
   unauthorized: "未授权",
-  modelCallFailed: "模型调用失败。",
   accountChanged: "此标签页原先属于其他账户。请刷新页面。",
   accountChangedTitle: "账户已变更",
   accountSwitchedBody: "你在另一个标签页登录了 {name}。此标签页原先属于其他账户。",
@@ -246,6 +270,7 @@ const zh: Record<keyof typeof en, string> = {
   resolveTitle: "关闭此回复；它会移到“已解决”下",
   reopenTitle: "重新打开此回复",
   replyTitle: "开始回复",
+  replyDeleted: "回复已删除",
   resolvedCountOne: "1 条已解决",
   resolvedCountMany: "{n} 条已解决",
   // Notifications (SPEC.md §18): the kind chip, on the admin page and the dashboard.

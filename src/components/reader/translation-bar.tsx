@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { callFailure, callLine } from "@/components/assistant/failure";
 import { SpinnerIcon } from "@/components/icons";
 import { StopPill } from "@/components/thinking";
 import { useLang, useT } from "@/components/lang-provider";
@@ -127,9 +128,9 @@ export function TranslationBar({
       const body = (await res.json().catch(() => null)) as
         | { translations?: Record<string, string>; error?: string }
         | null;
-      if (!res.ok || !body?.translations) {
-        throw new Error(body?.error ?? t("common.requestFailedStatus", { status: res.status }));
-      }
+      // A refusal the route worded for the reader keeps its words; a failure
+      // reads the plain line, its status to the console.
+      if (!res.ok || !body?.translations) throw callFailure(res, body, t("common.notLoaded"));
       cache.current = body.translations;
       onTranslations(body.translations);
       setStatus("shown");
@@ -138,7 +139,7 @@ export function TranslationBar({
       setStatus("idle");
       // Stopped, not failed: no message.
       if (controller.signal.aborted) return;
-      setError(err instanceof Error ? err.message : t("panes.translateFailed"));
+      setError(callLine(err, t("common.notLoaded")));
     } finally {
       if (translateAbort.current === controller) translateAbort.current = null;
       setRunning(false);

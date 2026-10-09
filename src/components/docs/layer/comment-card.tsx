@@ -1,11 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useAuthor, useCollab } from "@/components/collab/collab-context";
+import { TrashIcon } from "@/components/icons";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { ReplyThread, replyTime } from "@/components/collab/reply-thread";
-import { CheckIcon, MoreVertIcon } from "@/components/docs/icons";
+import { CheckIcon, MoreHorizIcon } from "@/components/docs/icons";
 import { toast } from "@/components/docs/insert/context";
 import { pageEditorIn } from "@/components/docs/layer/anchor";
 import { DropdownPanel, MenuItem } from "@/components/docs/menu";
@@ -13,7 +14,7 @@ import { DialogButton } from "@/components/docs/toolbar/dialog";
 import { useLang, useT } from "@/components/lang-provider";
 import { Markdown } from "@/components/markdown";
 import { annotationKindColor } from "@/lib/annotations/kind";
-import { setCommentResolved } from "@/lib/annotations/resolve";
+import { resolveCommentWithUndo } from "@/lib/annotations/resolve";
 import { isImeKey } from "@/lib/ime";
 import { markdownStyleKey } from "@/lib/markdown-style";
 import type { ReplyView } from "@/lib/types";
@@ -21,11 +22,16 @@ import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 
 // A comment's card in the page editor's margin, as Google Docs draws it
 // (SPEC.md §29): the author's badge, name, and time, the comment, Resolve,
-// More options (Edit, Delete, Get link to this comment), and the replies
-// under it (SPEC.md §12). A comment is an annotation: Resolve hides it, its
+// Delete, More options (Edit, Get link to this comment), and the replies
+// under it (SPEC.md §12). The head is the reader's comment card's: Resolve,
+// then Delete, as icons. A click on the comment's words edits them. A comment is an annotation: Resolve hides it, its
 // mark and its card, until Reopen in the Annotations tab. On the focused
 // card, Google's keys: R reply, J the next comment, K the previous one, E
 // resolve, U back to the text. A press anywhere else closes the card.
+
+/** Each comment's author, time, and replies as last loaded: a card opened
+    again draws them at once, and the routes refresh them after. */
+const threads = new Map<string, { written: { at: string; by: string | null } | null; replies: ReplyView[] }>();
 
 export function CommentCard({
   noteId,
@@ -34,7 +40,6 @@ export function CommentCard({
   draft,
   saved,
   busy,
-  grip,
   className,
   style,
   onPointerDown,
@@ -50,8 +55,6 @@ export function CommentCard({
   draft: string;
   saved: string;
   busy: boolean;
-  /** The grip that drags the comment into a note. */
-  grip: ReactNode;
   className: string;
   style: CSSProperties;
   onPointerDown: (e: React.PointerEvent) => void;
@@ -69,8 +72,8 @@ export function CommentCard({
   const moreRef = useRef<HTMLButtonElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [written, setWritten] = useState<{ at: string; by: string | null } | null>(null);
-  const [replies, setReplies] = useState<ReplyView[]>([]);
+  const [written, setWritten] = useState<{ at: string; by: string | null } | null>(() => threads.get(noteId)?.written ?? null);
+  const [replies, setReplies] = useState<ReplyView[]>(() => threads.get(noteId)?.replies ?? []);
   const [loads, setLoads] = useState(0);
   // A saved edit leaves the field.
   const [shownSaved, setShownSaved] = useState(saved);
@@ -89,8 +92,14 @@ export function CommentCard({
     ])
       .then(([edits, thread]) => {
         if (cancelled) return;
-        if (edits) setWritten({ at: edits.createdAt, by: edits.createdById });
-        if (thread) setReplies(thread.replies);
+        const kept = threads.get(noteId);
+        const next = {
+          written: edits ? { at: edits.createdAt, by: edits.createdById } : (kept?.written ?? null),
+          replies: thread ? thread.replies : (kept?.replies ?? []),
+        };
+        threads.set(noteId, next);
+        setWritten(next.written);
+        setReplies(next.replies);
       })
       .catch(() => {
         // Offline: the card shows the comment alone.
@@ -127,16 +136,17 @@ export function CommentCard({
     if (editor) toast(text, editor);
   };
 
-  // The card goes with the mark, and the text takes the keys again; a failed
-  // request paints the mark again.
+  // The card goes with the mark, and the text takes the keys again; the
+  // pill's Undo reopens the comment, and a failed request paints the mark
+  // again.
   async function resolve() {
     if (!canEdit) return;
     exit();
     try {
-      await setCommentResolved(noteId, true);
+      await resolveCommentWithUndo(noteId, t("docsLayer.commentResolved"), () => router.refresh());
       router.refresh();
     } catch (err) {
-      say(err instanceof Error ? err.message : t("common.requestFailed"));
+      say(err instanceof Error ? err.message : t("common.notSaved"));
     }
   }
 
@@ -211,14 +221,28 @@ export function CommentCard({
       className={`docs-comment ${className}`}
       style={style}
     >
-      <div className="docs-comment-head">
+      {/* A hold on the head row lifts the comment onto a note (onPointerDown). */}
+      <div className="docs-comment-head" data-hold-head>
         {person && <PersonBadge person={person} size={32} />}
         <div className="docs-comment-who">
           {person && <div className="docs-comment-name">{person.name}</div>}
           {written && <div className="docs-comment-time">{replyTime(written.at, lang)}</div>}
         </div>
         <div className="docs-comment-buttons">
-          {grip}
+          {/* Delete first, away from ⋯: the head shape of the reader's highlight and comment cards. */}
+          {canEdit && (
+            <button
+              type="button"
+              onClick={onDelete}
+              disabled={busy}
+              data-track="comment-delete"
+              aria-label={t("common.delete")}
+              data-tip={t("reader.deleteCommentTitle")}
+              className="docs-comment-button docs-comment-delete"
+            >
+              <TrashIcon size={16} />
+            </button>
+          )}
           {canEdit && (
             <button
               type="button"
@@ -241,7 +265,7 @@ export function CommentCard({
             data-tip={t("docsLayer.moreOptions")}
             className="docs-comment-button"
           >
-            <MoreVertIcon size={20} />
+            <MoreHorizIcon size={20} />
           </button>
         </div>
       </div>
@@ -270,7 +294,16 @@ export function CommentCard({
           </div>
         </>
       ) : (
-        <div className="docs-comment-text">
+        <div
+          className="docs-comment-text"
+          data-editable={canEdit || undefined}
+          // A click on the words edits them, as in the block reader's card;
+          // a link in them, or words being selected, keeps its own press.
+          onClick={(e) => {
+            if (!canEdit || (e.target as Element).closest("a") || !window.getSelection()?.isCollapsed) return;
+            setEditing(true);
+          }}
+        >
           <Markdown breaks>{saved}</Markdown>
         </div>
       )}
@@ -285,11 +318,6 @@ export function CommentCard({
         {canEdit && (
           <MenuItem track="comment-edit" onSelect={choose(() => setEditing(true))}>
             {t("common.edit")}
-          </MenuItem>
-        )}
-        {canEdit && (
-          <MenuItem track="comment-delete" onSelect={choose(onDelete)}>
-            {t("common.delete")}
           </MenuItem>
         )}
         <MenuItem

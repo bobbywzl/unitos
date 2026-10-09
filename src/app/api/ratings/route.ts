@@ -66,19 +66,39 @@ export async function POST(req: Request) {
 }
 
 // A thumb down's comment, sent after the thumb: the reader types what was
-// wrong, and the row it rated takes it.
-const commentSchema = z.object({
-  id: z.string().min(1).max(64),
-  comment: z.string().min(1).max(2000),
-});
+// wrong, and the row it rated takes it. A press on the other thumb changes
+// the row's rating; a comment the reader wrote stays on the row.
+const patchSchema = z
+  .object({
+    id: z.string().min(1).max(64),
+    comment: z.string().min(1).max(2000).optional(),
+    rating: z.enum(["up", "down"]).optional(),
+  })
+  .refine((d) => d.comment !== undefined || d.rating !== undefined);
 
 export async function PATCH(req: Request) {
-  const { data, error } = await parseBody(req, commentSchema);
+  const { data, error } = await parseBody(req, patchSchema);
   if (error) return error;
   const user = await currentUser();
   const updated = await db.toolRating.updateMany({
     where: { id: data.id, userId: user?.id ?? null },
-    data: { comment: data.comment.trim() },
+    data:
+      data.rating !== undefined
+        ? { rating: data.rating, ...(data.comment?.trim() ? { comment: data.comment.trim() } : {}) }
+        : { comment: data.comment!.trim() },
   });
   return NextResponse.json({ ok: updated.count > 0 });
+}
+
+// A second press on the pressed thumb takes the rating back: the reader's
+// own row goes, and only theirs (the row is the thumb itself, nothing else
+// hangs on it).
+const deleteSchema = z.object({ id: z.string().min(1).max(64) });
+
+export async function DELETE(req: Request) {
+  const { data, error } = await parseBody(req, deleteSchema);
+  if (error) return error;
+  const user = await currentUser();
+  const removed = await db.toolRating.deleteMany({ where: { id: data.id, userId: user?.id ?? null } });
+  return NextResponse.json({ ok: removed.count > 0 });
 }

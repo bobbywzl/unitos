@@ -3,7 +3,7 @@ import { registerDocsCommands } from "@/components/docs/commands";
 import { insertContext } from "@/components/docs/insert/context";
 import { addPageNumbers } from "@/components/docs/page/header-footer";
 import { downloadDocument, type DownloadFormat } from "@/components/docs/page/download";
-import { PAGE_EVENT, findPageStore as store, type EditHeaderDetail, type HeaderArea } from "@/components/docs/page/store";
+import { PAGE_EVENT, drawnPageless, findPageStore as store, type EditHeaderDetail, type HeaderArea } from "@/components/docs/page/store";
 import { ZOOMS } from "@/components/docs/toolbar/zoom";
 import { fireDocs } from "@/components/docs/typing/events";
 import type { TKey } from "@/lib/i18n/dictionaries";
@@ -19,9 +19,29 @@ export function stepZoom(current: number, direction: 1 | -1): number {
   return [...ZOOMS].reverse().find((z) => z < pct) ?? ZOOMS[0];
 }
 
-/** The document can be edited and is in pages format. */
+/** The document can be edited and is in pages format (its saved setup):
+    what changes the format reads these. */
 const paged = (editor: Editor) => editor.isEditable && store(editor)?.get().setup.pageless === false;
 const pageless = (editor: Editor) => store(editor)?.get().setup.pageless === true;
+/** The same of the page as it is drawn: a document in pages drawn pageless
+    on a phone shows no header, footer, or page numbers to edit until Show
+    pages (page/reflow.tsx). What acts on a drawn page reads these. */
+const drawnPaged = (editor: Editor) => {
+  const s = store(editor);
+  return editor.isEditable && s !== null && !drawnPageless(s.get());
+};
+const drawnAsPageless = (editor: Editor) => {
+  const s = store(editor);
+  return s !== null && drawnPageless(s.get());
+};
+
+/** A page that may be read pageless (page/reflow.tsx), read pageless or in
+    its pages; null for every other page. */
+const reflowOf = (editor: Editor): "pageless" | "pages" | null => {
+  const shell = editor.view.dom.closest<HTMLElement>("[data-docs-editor]");
+  const reflow = shell?.dataset.reflow;
+  return reflow === "pageless" || reflow === "pages" ? reflow : null;
+};
 
 const editHeader = (area: HeaderArea) => (editor: Editor) => fireDocs(editor, PAGE_EVENT.editHeader, { area } satisfies EditHeaderDetail);
 
@@ -78,7 +98,7 @@ registerDocsCommands([
       const s = store(editor);
       if (s) s.set({ printLayout: !s.get().printLayout });
     },
-    enabled: (editor) => !pageless(editor),
+    enabled: (editor) => !drawnAsPageless(editor),
   },
   {
     // Google Docs' View > Full screen: the title row, the toolbar, and the
@@ -93,7 +113,7 @@ registerDocsCommands([
     id: "page:outline",
     label: "docsPage.showOutline",
     menu: "view",
-    keywords: ["outline", "headings", "tabs", "navigation"],
+    keywords: ["outline", "contents", "headings", "tabs", "navigation", "大纲"],
     run: (editor) => {
       const s = store(editor);
       if (s) s.set({ outlineOpen: !s.get().outlineOpen });
@@ -121,13 +141,32 @@ registerDocsCommands([
     },
     enabled: (editor) => editor.isEditable && pageless(editor),
   },
+  {
+    // A PDF import in Viewing, or any document in pages on a phone: its
+    // words wrapped to the pane, a view of this browser that the document
+    // never stores (page/reflow.tsx).
+    id: "page:read-pageless",
+    label: "docsPage.readPageless",
+    menu: "view",
+    keywords: ["pageless", "reflow", "wrap", "small pages", "phone"],
+    run: (editor) => fireDocs(editor, PAGE_EVENT.reflow, true),
+    enabled: (editor) => reflowOf(editor) === "pages",
+  },
+  {
+    id: "page:show-pages",
+    label: "docsPage.showPages",
+    menu: "view",
+    keywords: ["pages", "pageless", "reflow"],
+    run: (editor) => fireDocs(editor, PAGE_EVENT.reflow, false),
+    enabled: (editor) => reflowOf(editor) === "pageless",
+  },
   ...(["narrow", "medium", "wide", "full"] as const).map((width) => ({
     id: `page:text-width-${width}`,
     label: TEXT_WIDTH_LABELS[width],
     menu: "view" as const,
     keywords: ["pageless", "text width"],
     run: (editor: Editor) => store(editor)?.set({ textWidth: width }),
-    enabled: pageless,
+    enabled: drawnAsPageless,
   })),
   {
     id: "page:header",
@@ -136,7 +175,7 @@ registerDocsCommands([
     keywords: ["header", "headers & footers", "add a header", "page elements"],
     shortcut: "Mod+Alt+O H",
     run: editHeader("header"),
-    enabled: paged,
+    enabled: drawnPaged,
   },
   {
     id: "page:footer",
@@ -145,7 +184,7 @@ registerDocsCommands([
     keywords: ["footer", "headers & footers", "add a footer", "page elements"],
     shortcut: "Mod+Alt+O F",
     run: editHeader("footer"),
-    enabled: paged,
+    enabled: drawnPaged,
   },
   {
     id: "page:page-numbers",
@@ -153,7 +192,7 @@ registerDocsCommands([
     menu: "insert",
     keywords: ["page number", "numbering", "page elements"],
     run: (editor) => store(editor)?.set({ dialog: "pageNumbers" }),
-    enabled: paged,
+    enabled: drawnPaged,
   },
   {
     id: "page:page-count",
@@ -171,7 +210,7 @@ registerDocsCommands([
     menu: "insert",
     keywords: ["watermark", "draft", "confidential", "stamp", "background text", "background image", "page elements", "水印"],
     run: (editor) => store(editor)?.set({ dialog: "watermark" }),
-    enabled: paged,
+    enabled: drawnPaged,
   },
   ...NUMBER_PRESETS.map(([area, onFirst, label]) => ({
     id: `page:numbers-${area}-${onFirst ? "all" : "not-first"}`,
@@ -182,7 +221,7 @@ registerDocsCommands([
       const s = store(editor);
       if (s) void s.saveSetup(addPageNumbers(s.get().setup, area, onFirst));
     },
-    enabled: paged,
+    enabled: drawnPaged,
   })),
   {
     id: "page:zoom-in",
@@ -258,6 +297,6 @@ registerDocsCommands([
     menu: "tools",
     keywords: ["line numbers", "line numbering", "number lines", "suppress line numbers", "行号"],
     run: (editor) => store(editor)?.set({ dialog: "lineNumbers" }),
-    enabled: paged,
+    enabled: drawnPaged,
   },
 ]);
