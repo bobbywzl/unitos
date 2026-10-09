@@ -604,7 +604,7 @@ function readNlp(raw: string): NlpToken[] {
 }
 
 type Line = { start: number; end: number; text: string; speaker?: string };
-type Paragraphed = { lines: Line[]; paragraphs: { start: number; lines: number }[]; ms: number; modelLines: number; modelBatches: number; markupToModel: number };
+type Paragraphed = { lines: Line[]; paragraphs: { start: number; lines: number }[]; names: string[]; ms: number; modelLines: number; modelBatches: number; markupToModel: number };
 
 /** The code under test from segments to what the pane shows: the stored
     lines (transcriptLines: clip, order, group, clean), the voices (named
@@ -613,7 +613,7 @@ async function linesAndParagraphs(segments: Segment[]): Promise<Paragraphed> {
   const t0 = performance.now();
   const { lines } = await transcriptLines(segments, null, null);
   const diarized = lines.some((l) => l.speaker !== undefined);
-  const voices = diarized ? await nameSpeakers(lines, null) : { byLine: [] as (string | null)[] };
+  const voices = diarized ? await nameSpeakers(lines, null) : { speakers: [], byLine: [] as (string | null)[] };
   const shown = lines.map((l, i) => ({ id: String(i), text: l.text, startTime: l.start, endTime: l.end, speaker: voices.byLine[i] ?? null }));
   const paragraphs = transcriptParagraphs(shown).map((p) => ({ start: p[0].startTime, lines: p.length }));
   const ms = performance.now() - t0;
@@ -621,6 +621,7 @@ async function linesAndParagraphs(segments: Segment[]): Promise<Paragraphed> {
   return {
     lines,
     paragraphs,
+    names: voices.speakers.map((s) => s.name),
     ms,
     modelLines: lines.length,
     modelBatches: Math.ceil(lines.length / 150),
@@ -825,10 +826,25 @@ async function scoreCaptionLines(file: CorpusFile, raw: string, ref: BRef): Prom
   const notes: string[] = [];
   if (k.extra > 0) notes.push(`${k.extra} words stored that were not spoken (or not once)`);
   if (out.markupToModel > 0) notes.push(`${out.markupToModel} lines reach cleanup with markup in them`);
+  const parts = [k.kept, k.timeCover];
+  // Voices: a file whose cues name two voices or more (<v Name>) stores a
+  // roster, and each name the file gives is a name on it. A voice named by
+  // a bare number (<v 0>) is an id, not a name; one voice throughout stores
+  // no roster (SPEC.md §11).
+  const voices = new Set(ref.cues.map((c) => c.voice).filter((v): v is string => Boolean(v)));
+  const named = [...voices].filter((v) => /\p{L}/u.test(v));
+  const names: Record<string, number> = {};
+  if (voices.size >= 2 && named.length > 0) {
+    const kept = named.filter((n) => out.names.includes(n)).length;
+    parts.push(kept / named.length);
+    names.names = named.length;
+    names.namesKept = kept;
+    if (kept < named.length) notes.push(`${named.length - kept} of ${named.length} voice names not on the roster: ${named.filter((n) => !out.names.includes(n)).join(", ")}`);
+  }
   return {
     id: `${file.id}:lines`,
     section: "c",
-    score: mean([k.kept, k.timeCover]),
+    score: mean(parts),
     metrics: {
       lines: out.lines.length,
       paragraphs: out.paragraphs.length,
@@ -839,6 +855,7 @@ async function scoreCaptionLines(file: CorpusFile, raw: string, ref: BRef): Prom
       disorder: k.disorder,
       markupToModel: out.markupToModel,
       guard: round(guardCatches(out.lines)),
+      ...names,
     },
     ms: parseMs + out.ms,
     notes,

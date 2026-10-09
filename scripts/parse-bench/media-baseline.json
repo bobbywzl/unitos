@@ -2,8 +2,8 @@
  "total": {
   "a": 0.99,
   "b": 0.943,
-  "c": 0.907,
-  "all": 0.947
+  "c": 0.894,
+  "all": 0.942
  },
  "files": {
   "a-mutagen-silence-mp3": 1,
@@ -167,15 +167,15 @@
   "b-mediachrome-cc": 0.565,
   "b-mediachrome-cc:lines": 0.984,
   "b-able-wwa": 0.619,
-  "b-able-wwa:lines": 0.995,
+  "b-able-wwa:lines": 0.664,
   "b-able-paulallen": 1,
   "b-able-paulallen:lines": 1,
   "b-able-deadline": 0.412,
-  "b-able-deadline:lines": 0.952,
+  "b-able-deadline:lines": 0.635,
   "b-able-blocks4all": 0.583,
-  "b-able-blocks4all:lines": 0.988,
+  "b-able-blocks4all:lines": 0.658,
   "b-able-itaccess": 0.612,
-  "b-able-itaccess:lines": 0.992,
+  "b-able-itaccess:lines": 0.661,
   "b-able-wwa-chapters": 1,
   "c-e21-4386541-google": 0.848,
   "c-e21-4386541-amazon": 0.781,
