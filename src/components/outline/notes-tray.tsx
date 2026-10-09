@@ -127,7 +127,9 @@ export function NotesTray({
     const el = target instanceof Element ? target : null;
     // A note, a composer, or an open editor takes the quote itself.
     if (el?.closest("[data-note-id], [data-note-composer]")) return null;
-    const section = el?.closest<HTMLElement>("[data-tray-section]")?.dataset.traySection ?? lastSection;
+    const section = el?.closest("[data-tray-lead]")
+      ? lastSection
+      : (el?.closest<HTMLElement>("[data-tray-section]")?.dataset.traySection ?? lastSection);
     if (!section) return null;
     return { sectionId: section, top: Boolean(el?.closest("[data-drop-header]")) };
   }
@@ -222,6 +224,60 @@ export function NotesTray({
     void actions.mergeNotes(intoId, [id], "join");
   }
 
+  // The pending queue and the line under it. They stand inside the list that
+  // holds the Note and Command row — the first section, or the grouped list —
+  // above that row, so the row can stick to the foot of a phone's notes sheet
+  // (TOOL15-15): Note and Command stay in view while pending notes fill the
+  // sheet. A quote or a card let go on the queue lands where it did before,
+  // at the end of the last section.
+  const leadInList = grouping !== "section" || shown.length > 0;
+  const pendingLead =
+    shownPending.length > 0 || (pendingElsewhere > 0 && !needle) ? (
+      <div
+        data-tray-lead=""
+        data-note-drop-target={leadInList && canEdit && lastSection ? "tray-space" : undefined}
+        className={`flex flex-col gap-3.5 ${leadInList ? "pb-1.5" : ""}`}
+      >
+        {shownPending.length > 0 && (
+          <div data-pending-queue="" className="flex flex-col gap-2">
+            <div className="flex items-baseline gap-2">
+              <span className={`${label} text-clay-800`}>
+                {t("outline.pendingHeader", { n: shownPending.length })}
+              </span>
+              {/* Enter and Backspace still accept and reject the note the
+                  reader is on; their tooltips say so. */}
+              {canEdit && shownPending.length > 1 && (
+                <button
+                  onClick={() => {
+                    for (const note of shownPending) void actions.acceptNote(note.id);
+                  }}
+                  data-track="notes-accept-all"
+                  data-tip={t("outline.acceptAllTitle")}
+                  className={`ml-auto text-[11.5px] font-semibold text-sage-700 hover:text-sage-800 ${TOUCH_HIT}`}
+                >
+                  {t("outline.acceptAll")}
+                </button>
+              )}
+            </div>
+            {shownPending.map((note) => (
+              <NoteCard key={actions.noteKey(note.id)} note={note} actions={actions} variant="tray" search={query} />
+            ))}
+          </div>
+        )}
+
+        {pendingElsewhere > 0 && !needle && (
+          <Link
+            href={`/n/${actions.notebookId}/notes`}
+            data-track="notes-pending-elsewhere"
+            data-tip={t("outline.pendingElsewhereTitle")}
+            className="text-[12px] text-sand-600 hover:text-clay-800"
+          >
+            {t("outline.pendingElsewhere", { n: pendingElsewhere })}
+          </Link>
+        )}
+      </div>
+    ) : null;
+
   return (
     <CardDropShown.Provider value={visible}>
     <div
@@ -261,43 +317,7 @@ export function NotesTray({
         </div>
       )}
 
-      {shownPending.length > 0 && (
-        <div data-pending-queue="" className="flex flex-col gap-2">
-          <div className="flex items-baseline gap-2">
-            <span className={`${label} text-clay-800`}>
-              {t("outline.pendingHeader", { n: shownPending.length })}
-            </span>
-            {/* Enter and Backspace still accept and reject the note the
-                reader is on; their tooltips say so. */}
-            {canEdit && shownPending.length > 1 && (
-              <button
-                onClick={() => {
-                  for (const note of shownPending) void actions.acceptNote(note.id);
-                }}
-                data-track="notes-accept-all"
-                data-tip={t("outline.acceptAllTitle")}
-                className={`ml-auto text-[11.5px] font-semibold text-sage-700 hover:text-sage-800 ${TOUCH_HIT}`}
-              >
-                {t("outline.acceptAll")}
-              </button>
-            )}
-          </div>
-          {shownPending.map((note) => (
-            <NoteCard key={actions.noteKey(note.id)} note={note} actions={actions} variant="tray" search={query} />
-          ))}
-        </div>
-      )}
-
-      {pendingElsewhere > 0 && !needle && (
-        <Link
-          href={`/n/${actions.notebookId}/notes`}
-          data-track="notes-pending-elsewhere"
-          data-tip={t("outline.pendingElsewhereTitle")}
-          className="text-[12px] text-sand-600 hover:text-clay-800"
-        >
-          {t("outline.pendingElsewhere", { n: pendingElsewhere })}
-        </Link>
-      )}
+      {!leadInList && pendingLead}
 
       {/* One drag across the tray (SPEC.md §6): a hold anywhere on a note
           picks it up; a note dropped in another section moves there, a note
@@ -314,6 +334,7 @@ export function NotesTray({
           accepted
           onMerge={onMerge}
           onDropOutside={onDropOutside}
+          lead={pendingLead}
         />
       ) : (
         <SortableBoard
@@ -339,6 +360,7 @@ export function NotesTray({
                 labelClass={label}
                 search={query}
                 nudgeFirst={i === 0}
+                lead={i === 0 ? pendingLead : undefined}
                 reveal={reveal}
                 quoteAt={quoteAt}
                 onCardDrop={(sectionId, top, end) => void takeCardDrop(sectionId, top, end)}
@@ -381,6 +403,7 @@ function TraySection({
   labelClass,
   search,
   nudgeFirst,
+  lead,
   nested,
   reveal,
   quoteAt,
@@ -393,6 +416,9 @@ function TraySection({
   search: string;
   /** The first section of the tray: its first note is the onboarding nudge's target. */
   nudgeFirst?: boolean;
+  /** The pending queue, drawn above the first section's title row; the row
+      then sticks to the foot of a phone's notes sheet while it is below. */
+  lead?: React.ReactNode;
   nested?: boolean;
   /** A note the tray was asked to show: the section unfolds when it holds it. */
   reveal: string | null;
@@ -440,11 +466,14 @@ function TraySection({
         lit && !litTop ? "outline-2 outline-offset-4 outline-dashed outline-clay-400" : ""
       }`}
     >
+      {lead}
       <div
         data-drop-header={listId}
         data-drop-first={accepted[0]?.id ?? ""}
         data-note-drop-target={takesCards ? `section-top:${section.id}` : undefined}
         className={`-mx-1.5 flex items-baseline gap-2 rounded-full px-1.5 transition-colors ${
+          lead ? "max-md:sticky max-md:bottom-0 max-md:z-10 max-md:-my-1 max-md:bg-sand-100 max-md:py-1" : ""
+        } ${
           headerLit || litTop ? "bg-clay-100 ring-2 ring-clay-400" : ""
         }`}
       >

@@ -725,8 +725,6 @@ const NoteCardBody = memo(function NoteCardBody({
           ? t("outline.dropQuoteIntoNote")
           : undefined;
 
-  // The chips under the note: only the sources no quote in the body points
-  // back to (lib/notes/quote-sources.ts); a quote carries its own source.
   const collapseLabel = collapsed ? t("outline.expandNote") : t("outline.collapseNote");
   // Who wrote the note, on a shared project (SPEC.md §12): every note says
   // it, one's own included, so a collaborator reads the author at a glance.

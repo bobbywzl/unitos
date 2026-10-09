@@ -17,9 +17,6 @@ import { postUndoPill } from "@/lib/notes/undo-pill";
 import { flatSections, menuRowClass as item, NotePicker } from "@/components/reader/note-picker";
 import { annotationReferenceOf, annotationSummary, jumpToAnnotation } from "@/components/panels/annotation-card";
 
-/** The short id without its #: the words put the # before it. */
-const bareId = (id: string) => shortNoteId(id).slice(1);
-
 // The menu on every annotation card (SPEC.md §6): the three dots at the
 // right of the header open it, collapsed or not. It puts the annotation into
 // notes without a drag — New note makes a note of it, in a section the
@@ -109,7 +106,7 @@ export function AnnotationMenu({
   function newNote(sectionId: string, label: string) {
     void run(async () => {
       const note = await api<{ id?: string }>("/api/notes", "POST", { sectionId, fromAnnotationId: annotation.id });
-      return t("panels.annotationNoteMade", { id: note?.id ? bareId(note.id) : "", section: label });
+      return t("panels.annotationNoteMade", { id: note?.id ? shortNoteId(note.id) : "", section: label });
     });
   }
 
@@ -119,7 +116,7 @@ export function AnnotationMenu({
       Undo pill takes it back out. */
   function addTo(note: NoteView) {
     void run(async () => {
-      const message = t("panels.annotationNoteAdded", { id: bareId(note.id) });
+      const message = t("panels.annotationNoteAdded", { id: shortNoteId(note.id) });
       if (!documentId) {
         // Anchored in no document: no reference can point to it; its text joins.
         await api("/api/notes/merge", "POST", { targetId: note.id, sourceIds: [annotation.id], mode: "join" });
