@@ -553,8 +553,17 @@ export async function parsePdf(data: Uint8Array, opts: PdfParseOptions = {}): Pr
       if (isWrappedRowLine(l, lines)) continue;
       labelXs.push(bodyX);
     }
+    // A list of terms (a glossary, a list of symbols): term lines (a short
+    // first cell at the left edge, its meaning beside it) one right under
+    // another, most entries one line. It is a table of two columns, as the
+    // same list is on a page whose edge a page number moved (DTIC
+    // ADA033425's list of symbols, pp. 13 and 14). A timeline's entries
+    // carry a body under each label.
+    const term = (l: Line | undefined) => l !== undefined && l.cells.length === 2 && l.x <= pageMinX + 12 && l.cells[0].text.length <= 12;
+    const terms = lines.filter(term).length;
+    const listed = terms >= 6 && lines.filter((l, k) => term(l) && term(lines[k + 1])).length * 2 >= terms;
     let labelColumn: number | null = null;
-    if (labelXs.length >= 2) {
+    if (labelXs.length >= 2 && !listed) {
       labelColumn = median(labelXs);
       columnLeft = labelColumn;
     }

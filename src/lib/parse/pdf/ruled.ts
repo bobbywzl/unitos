@@ -11,7 +11,7 @@
 import type { Fill, PageDrawing, PathBox, Rule } from "@/lib/parse/pdf/drawing";
 import { geom, median } from "@/lib/parse/pdf/geometry";
 import { joinedRules, latticeGrids, ruleStacks, type Grid, type GridCell, type RuleStack } from "@/lib/parse/pdf/lattice";
-import { buildLines } from "@/lib/parse/pdf/lines";
+import { buildLines, forgetLines, withLineMemo } from "@/lib/parse/pdf/lines";
 import { resolveZones } from "@/lib/parse/pdf/math/zones";
 import {
   boldHeaderRows,
@@ -667,8 +667,13 @@ function checkboxes(drawing: PageDrawing, items: Item[]): { squares: PathBox[]; 
 }
 
 // The ruled tables of a page, from its rules and filled boxes: grids first,
-// then the regions of rule stacks outside them.
+// then the regions of rule stacks outside them. A stack's bands are read
+// twice (as a wider table's and as a table), and their lines are built once.
 export function ruledTables(all: Item[], page: PageDrawing, pageWidth: number, pageHeight: number, rotated: Item[] = []): TableRegion[] {
+  return withLineMemo(() => findRuledTables(all, page, pageWidth, pageHeight, rotated));
+}
+
+function findRuledTables(all: Item[], page: PageDrawing, pageWidth: number, pageHeight: number, rotated: Item[]): TableRegion[] {
   // Blank items (the spaces pdf.js reports between words) say nothing of
   // where text is: one in a sliver between two cells kept the sliver open.
   const words = all.filter((it) => it.str.trim().length > 0);
@@ -796,6 +801,7 @@ export function ruledTables(all: Item[], page: PageDrawing, pageWidth: number, p
     for (const r of own)
       for (const it of region.items)
         if (it.x >= r.x + r.w - 1 && it.x - (r.x + r.w) < r.size * 0.5 && it.y <= r.y + r.w + it.size && it.y >= r.y - it.size) it.spaced = true;
+    forgetLines();
     region.items.push(...own);
     region.lines = buildLines(region.items, 0);
   }
