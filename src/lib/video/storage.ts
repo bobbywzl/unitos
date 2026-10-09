@@ -12,14 +12,15 @@ export function sniffMedia(bytes: Uint8Array): string | null {
   const ascii = (from: number, to: number) => String.fromCharCode(...bytes.subarray(from, to));
   if (bytes.length >= 12 && ascii(4, 8) === "ftyp") {
     const brand = ascii(8, 12);
-    if (brand.startsWith("qt")) return "video/quicktime";
     // M4A/M4B brands mark an audio-only MPEG-4 container.
     if (brand.startsWith("M4A") || brand.startsWith("M4B")) return "audio/mp4";
-    // Other brands (isom, mp42, iso5, 3GPP) carry audio alone as often as
-    // video: the tracks decide when the moov box is in the bytes.
+    // Other brands (isom, mp42, iso5, 3GPP, QuickTime's qt) carry audio
+    // alone as often as video: the tracks decide when the moov box is in
+    // the bytes. Media bench finding: a QuickTime file of sound alone
+    // opened in the video player with no picture.
     const handlers = mp4Handlers(bytes);
     if (handlers && !handlers.includes("vide") && handlers.includes("soun")) return "audio/mp4";
-    return "video/mp4";
+    return brand.startsWith("qt") ? "video/quicktime" : "video/mp4";
   }
   if (
     bytes.length >= 4 &&

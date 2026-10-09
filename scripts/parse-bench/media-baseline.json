@@ -1,9 +1,9 @@
 {
  "total": {
-  "a": 0.979,
+  "a": 0.99,
   "b": 0.943,
   "c": 0.907,
-  "all": 0.943
+  "all": 0.947
  },
  "files": {
   "a-mutagen-silence-mp3": 1,
@@ -207,7 +207,7 @@
   "a-derived-moov-end-m4a": 0,
   "a-derived-moov-end-mp4": 1,
   "a-derived-3gp": 1,
-  "a-derived-audio-mov": 0,
+  "a-derived-audio-mov": 1,
   "a-derived-rf64-wav": 1,
   "a-derived-bwf-wav": 1,
   "a-derived-id3-aac": 1,
