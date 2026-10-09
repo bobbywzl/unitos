@@ -1057,14 +1057,33 @@ export function DocumentTree<
     for (let i = 0; at && gone.has(at) && i < 64; i++) at = gone.get(at) ?? null;
     return at;
   };
+  // Under Custom order a deleted folder's rows take the folder's place in
+  // the parent's list, in their own order (folder id → the parent's list
+  // and each row's new position). It stands while the folder is gone and
+  // the server's rows still hold it; once they drop it, their positions are
+  // the same order.
+  const [splices, setSplices] = useState<
+    ReadonlyMap<string, { parentId: string | null; order: ReadonlyMap<string, number> }>
+  >(new Map());
+  const splice = new Map<string, { parentId: string | null; position: number }>();
+  for (const [id, s] of splices) {
+    if (!gone.has(id) || !storedFolders.some((f) => f.id === id)) continue;
+    for (const [key, position] of s.order) splice.set(key, { parentId: s.parentId, position });
+  }
+  const splicedAt = (key: string, parentId: string | null): number | undefined => {
+    const s = splice.get(key);
+    return s && s.parentId === parentId ? s.position : undefined;
+  };
   const placedFolders = storedFolders
     .filter((f) => !gone.has(f.id))
     .map((f) => {
       const p = placement("folder", f.id);
       const parentId = p ? p.parentId : f.parentId;
       const lifted = lift(parentId);
-      if (lifted !== parentId) return { ...f, parentId: lifted, position: null };
-      return p ? { ...f, parentId: p.parentId, position: p.position } : f;
+      if (lifted !== parentId) return { ...f, parentId: lifted, position: splicedAt(`folder:${f.id}`, lifted) ?? null };
+      if (p) return { ...f, parentId: p.parentId, position: p.position };
+      const spliced = splicedAt(`folder:${f.id}`, parentId);
+      return spliced === undefined ? f : { ...f, position: spliced };
     });
   const folders =
     newFolders.length === 0
@@ -1079,7 +1098,12 @@ export function DocumentTree<
     return {
       id: d.id,
       folderId: folderId && known.has(folderId) ? folderId : null,
-      position: folderId !== placedIn ? null : p ? p.position : d.position,
+      position:
+        folderId !== placedIn
+          ? (splicedAt(`document:${d.id}`, folderId) ?? null)
+          : p
+            ? p.position
+            : (splicedAt(`document:${d.id}`, folderId) ?? d.position),
       title: d.title,
       kind: d.kind,
       addedAt: d.addedAt,
@@ -1536,18 +1560,43 @@ export function DocumentTree<
     // Undo; the route runs once the pill goes without Undo (its 12 s, ✕,
     // the next post, the page closing: keepalive). A refused delete puts
     // the folder back, with the error under the list.
+    // Under Custom order (a placed row in either list) the folder's rows
+    // take its place in the parent's list, in their own order; the route
+    // writes that order with the delete.
     deleteFolder: (folder) => {
       setMenu(null);
       setMoving(null);
       setError(null);
+      const parentId = folders.find((f) => f.id === folder.id)?.parentId ?? lift(folder.parentId);
+      const outer = sortByPosition(entriesOf(parentId));
+      const inner = sortByPosition(entriesOf(folder.id));
+      const order = [...outer, ...inner].some((e) => e.position !== null)
+        ? outer.flatMap((e) => (e.entry === "folder" && e.id === folder.id ? inner : [e])).map(itemOf)
+        : null;
       setOpenPath((path) => (path.includes(folder.id) ? path.slice(0, path.indexOf(folder.id)) : path));
       setGone((map) => new Map(map).set(folder.id, folder.parentId));
-      const back = () =>
+      if (order) {
+        setSplices((map) =>
+          new Map(map).set(folder.id, {
+            parentId,
+            order: new Map(order.map((e, position) => [`${e.kind}:${e.id}`, position])),
+          }),
+        );
+      }
+      const back = () => {
         setGone((map) => {
           const next = new Map(map);
           next.delete(folder.id);
           return next;
         });
+        setSplices((map) => {
+          if (!map.has(folder.id)) return map;
+          const next = new Map(map);
+          next.delete(folder.id);
+          return next;
+        });
+      };
+      const body = order ? JSON.stringify({ order }) : undefined;
       postUndoPill({
         message: t("panes.folderDeleted"),
         undo: back,
@@ -1556,8 +1605,14 @@ export function DocumentTree<
           try {
             const res = await fetch(`/api/notebooks/${notebookId}/folders/${folder.id}`, {
               method: "DELETE",
-              keepalive: true,
-              headers: account ? { [ACCOUNT_HEADER]: account } : undefined,
+              // A keepalive body is capped at 64 KB; a longer order goes
+              // without it.
+              keepalive: !body || body.length < 60000,
+              body,
+              headers: {
+                ...(account ? { [ACCOUNT_HEADER]: account } : {}),
+                ...(body ? { "Content-Type": "application/json" } : {}),
+              },
             });
             if (res.ok || res.status === 404) {
               router.refresh();
