@@ -478,6 +478,7 @@ export function NoteGatherDock({
   return (
     <div
       ref={ref}
+      id="graph-note-gather"
       data-graph-note-gather={gather.open && !compact ? "open" : "folded"}
       data-graph-note-gather-lift={lift > 0 ? lift : undefined}
       data-track-surface="graph-note-gather"
@@ -500,6 +501,16 @@ export function NoteGatherDock({
           aria-expanded={gather.open && !compact}
           data-tip={t(gather.open && !compact ? "graphCover.composerFold" : "graphCover.composerUnfold")}
           data-track="graph-note-gather-fold"
+          onKeyDown={(e) => {
+            // [style10] VIEW10-08: Shift+Tab goes back to the Note on this link
+            // that opened the note, as Tab from that press comes here: the
+            // panel's controls between are not walked twice.
+            if (e.key !== "Tab" || !e.shiftKey) return;
+            const opener = document.querySelector<HTMLElement>('[data-track="graph-link-note"][data-graph-link-note="in"]');
+            if (!opener) return;
+            e.preventDefault();
+            opener.focus();
+          }}
           className={`-ml-1 flex min-h-6 min-w-0 flex-1 items-center gap-2 rounded-full px-1 text-left hover:bg-clay-100 pointer-coarse:min-h-11 pointer-coarse:px-2 ${TEXT_BODY}`}
         >
           <NotesIcon size={13} className="shrink-0" />

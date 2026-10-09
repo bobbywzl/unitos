@@ -296,6 +296,17 @@ export function LinkPanel({
                   onClick={linkInNote ? undefined : noteOnLink}
                   aria-pressed={linkInNote}
                   aria-disabled={linkInNote || undefined}
+                  aria-flowto={linkInNote ? "graph-note-gather" : undefined}
+                  onKeyDown={(e) => {
+                    // [style10] VIEW10-08: Tab from the press goes to the note it
+                    // opened (the dock's fold press), not through the panel's
+                    // controls between; aria-flowto says so to a screen reader.
+                    if (!linkInNote || e.key !== "Tab" || e.shiftKey) return;
+                    const fold = document.querySelector<HTMLElement>('#graph-note-gather [data-track="graph-note-gather-fold"]');
+                    if (!fold) return;
+                    e.preventDefault();
+                    fold.focus();
+                  }}
                   data-track="graph-link-note"
                   data-graph-link-note={linkInNote ? "in" : "out"}
                   data-tip={t(linkInNote ? "graphNotes.noteOnLinkInNoteTitle" : "graphNotes.noteOnLinkTitle")}
