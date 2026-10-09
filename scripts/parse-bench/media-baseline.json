@@ -1,9 +1,9 @@
 {
  "total": {
   "a": 1,
-  "b": 0.911,
-  "c": 0.857,
-  "all": 0.923
+  "b": 0.914,
+  "c": 0.858,
+  "all": 0.924
  },
  "files": {
   "a-mutagen-silence-mp3": 1,
@@ -128,8 +128,8 @@
   "b-pysubs2-ttml2:lines": 0,
   "b-pysubs2-ttml-apple": 0,
   "b-pysubs2-ttml-apple:lines": 0,
-  "b-yta-timedtext": 0.808,
-  "b-yta-timedtext:lines": 0.975,
+  "b-yta-timedtext": 1,
+  "b-yta-timedtext:lines": 1,
   "b-dualsubs-asr-ko": 1,
   "b-dualsubs-asr-ko:lines": 1,
   "b-dualsubs-asr-zh": 1,

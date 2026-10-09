@@ -6,8 +6,8 @@ other code than the code under test:
              the length and the type.
   section b: pysubs2 for SRT and TTML; YouTube's json3, srv3, and legacy
              timedtext XML read here from the format's own structure (events
-             and segs, p and s, text). WebVTT is read in media.mts by vtt.js,
-             the parser Firefox and video.js use.
+             and segs, p and s, text). WebVTT is read in media.mts by the W3C
+             webvtt-parser (webvtt-parser on npm), which passes the WPT tests.
 
   python3 -I scripts/parse-bench/media-ref.py <corpus.json> <files dir> <refs dir>
 

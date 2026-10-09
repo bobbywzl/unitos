@@ -96,7 +96,9 @@ export function parseXml(body: string): TranscriptSegment[] | null {
   if (segments.length === 0) {
     for (const m of cues.matchAll(/<text\b([^>]*)>([\s\S]*?)<\/text>/g)) {
       const start = attrNumber(m[1], "start");
-      const text = plainText(m[2]);
+      // The legacy format escapes its text twice: read once, "&lt;i&gt;"
+      // is the tag <i> and "&amp;#39;" is the reference &#39;.
+      const text = plainText(decodeEntities(m[2]));
       if (start === null || text === "") continue;
       segments.push({ start, end: start + (attrNumber(m[1], "dur") ?? 2), text });
     }
