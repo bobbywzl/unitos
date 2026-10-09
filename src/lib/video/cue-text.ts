@@ -3,27 +3,52 @@
 //   WebVTT, by the standard's cue text rules: every "<...>" is a tag (a
 //   class, a voice, a language, a ruby, or a timestamp) and is not a word;
 //   "&amp;" and the other references are the characters they name. A voice
-//   tag keeps its name as the line's first words, "Name: ", since a pasted
-//   transcript has no other place for it.
+//   tag's name is not a word: it names who speaks the words after it
+//   (webVttCueParts), and the paste makes it the segment's speaker.
 //   SRT: the tags players draw (<i>, <b>, <u>, <s>, <font>) and the {\...}
 //   override blocks some files carry are not words.
 
-/** The text of a WebVTT cue, its lines joined by spaces. */
-export function webVttCueText(raw: string): string {
-  let out = "";
+/** One voice's words in a WebVTT cue: the name its <v> span gives, if any. */
+export type CuePart = { voice?: string; text: string };
+
+/** The words of a WebVTT cue, one part per voice in the order they speak.
+    A cue with no voice span is one part with no voice. A voice span opens a
+    new part when words came before it under another voice; words before the
+    first voice span, and words after a closing </v>, go with the voice
+    nearest them. */
+export function webVttCueParts(raw: string): CuePart[] {
+  const parts: CuePart[] = [{ text: "" }];
   let at = 0;
   while (at < raw.length) {
     const lt = raw.indexOf("<", at);
-    out += raw.slice(at, lt === -1 ? raw.length : lt);
+    parts[parts.length - 1].text += raw.slice(at, lt === -1 ? raw.length : lt);
     if (lt === -1) break;
     const gt = raw.indexOf(">", lt + 1);
     const tag = raw.slice(lt + 1, gt === -1 ? raw.length : gt);
     const voice = /^v(?:\.\S*)?[ \t\n\f]+([\s\S]*)$/.exec(tag);
-    if (voice && voice[1].trim() !== "") out += ` ${voice[1].trim()}: `;
+    const name = voice ? voice[1].replace(/\s+/g, " ").trim() : "";
+    const open = parts[parts.length - 1];
+    if (name !== "" && name !== open.voice) {
+      if (open.voice === undefined || open.text.trim() === "") open.voice = name;
+      else parts.push({ voice: name, text: "" });
+    }
     at = gt === -1 ? raw.length : gt + 1;
   }
-  // A NUL character is U+FFFD, as the standard reads it.
-  return decodeCharacterReferences(out.replaceAll("\0", "\ufffd")).replace(/\s+/g, " ").trim();
+  return parts
+    .map((part) => ({
+      ...part,
+      // A NUL character is U+FFFD, as the standard reads it.
+      text: decodeCharacterReferences(part.text.replaceAll("\0", "\ufffd")).replace(/\s+/g, " ").trim(),
+    }))
+    .filter((part) => part.text !== "");
+}
+
+/** The text of a WebVTT cue, its lines joined by spaces, its voices' names
+    left out. */
+export function webVttCueText(raw: string): string {
+  return webVttCueParts(raw)
+    .map((part) => part.text)
+    .join(" ");
 }
 
 const SRT_TAG = /<\/?(?:i|b|u|s|font)\b[^>]*>|\{\\[^}]*\}/gi;
