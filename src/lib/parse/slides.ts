@@ -1964,14 +1964,30 @@ function readingOrder(shapes: Placed[], ctx: Ctx): Placed[] {
   return readingOrderOf(shapes, ctx);
 }
 
+/** True when a slide's words are in a right-to-left script: Hebrew or
+    Arabic letters outnumber the others. */
+function readsRightToLeft(shapes: Placed[]): boolean {
+  let rtl = 0;
+  let all = 0;
+  for (const p of shapes) {
+    rtl += p.text?.match(/[\p{sc=Hebrew}\p{sc=Arabic}]/gu)?.length ?? 0;
+    all += p.text?.match(/\p{L}/gu)?.length ?? 0;
+  }
+  return rtl > all - rtl;
+}
+
+/** Shapes in reading order, as readingOrder says. A slide in Hebrew or
+    Arabic reads a row right to left. Slides benchmark finding: a Hebrew
+    slide read its left column before the right one it starts with. */
 function readingOrderOf(shapes: Placed[], ctx: Ctx): Placed[] {
   const band = ctx.slideH * 0.04;
+  const rtl = readsRightToLeft(shapes);
   const key = (a: Placed, b: Placed) => {
     if (a.title !== b.title) return a.title ? -1 : 1;
     const ay = Math.round(a.box.y / band);
     const by = Math.round(b.box.y / band);
     if (ay !== by) return ay - by;
-    return a.box.x - b.box.x;
+    return rtl ? b.box.x + b.box.w - (a.box.x + a.box.w) : a.box.x - b.box.x;
   };
   const sorted = [...shapes].sort(key);
   const n = sorted.length;
@@ -1986,8 +2002,8 @@ function readingOrderOf(shapes: Placed[], ctx: Ctx): Placed[] {
       const b = boxes[j];
       const overlap = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
       const above = a.y + a.h <= b.y;
-      const leftInRow = overlap > 0.5 * Math.min(a.h, b.h) && a.x + a.w <= b.x;
-      if (above || leftInRow) before[j].add(i);
+      const firstInRow = overlap > 0.5 * Math.min(a.h, b.h) && (rtl ? b.x + b.w <= a.x : a.x + a.w <= b.x);
+      if (above || firstInRow) before[j].add(i);
     }
   }
   // The first shape by the band order whose every predecessor is placed;
