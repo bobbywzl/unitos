@@ -42,7 +42,7 @@ BENCH = os.path.join(ROOT, ".bench", "markdown")
 FILES = os.path.join(BENCH, "files")
 REFS = os.path.join(BENCH, "refs")
 CORPUS = os.path.join(HERE, "markdown-corpus.json")
-REF_VERSION = 2
+REF_VERSION = 3
 
 
 # ── Fetch ────────────────────────────────────────────────────────────────────
@@ -189,6 +189,9 @@ class Walker(HTMLParser):
         unit = {"k": leaf["k"], "l": leaf["l"], "t": text, "br": br}
         if leaf["k"] == "li":
             unit["lt"] = "task" if self.task is not None else (self.lists[-1] if self.lists else "ul")
+        if leaf["k"] == "cell":
+            unit["row"] = leaf.get("row", 0)
+            unit["col"] = leaf.get("col", 0)
         self.units.append(unit)
 
     def ensure_leaf(self):
@@ -538,7 +541,7 @@ def main():
     os.makedirs(REFS, exist_ok=True)
     for spec in corpus["spec"]:
         dest = os.path.join(REFS, "spec-" + spec["id"] + ".json")
-        if os.path.exists(dest) and not force:
+        if current(dest) and not force:
             continue
         cases = spec_examples(os.path.join(FILES, "spec-" + spec["id"] + ".txt"), spec["id"] == "gfm")
         with open(dest, "w", encoding="utf-8") as f:
@@ -547,7 +550,7 @@ def main():
     by_id = {e["id"]: e for e in corpus["files"]}
     for entry in corpus["files"]:
         dest = os.path.join(REFS, entry["id"] + ".json")
-        if os.path.exists(dest) and not force:
+        if current(dest) and not force:
             continue
         path = file_path(entry)
         with open(path, "rb") as f:
@@ -568,6 +571,14 @@ def main():
         with open(dest, "w", encoding="utf-8") as f:
             json.dump(ref, f, ensure_ascii=False)
         print("ref", entry["id"], len(ref["units"]), "units", file=sys.stderr)
+
+
+def current(dest):
+    """A reference built by this version of the builder."""
+    if not os.path.exists(dest):
+        return False
+    with open(dest, encoding="utf-8") as f:
+        return json.load(f).get("version") == REF_VERSION
 
 
 if __name__ == "__main__":
