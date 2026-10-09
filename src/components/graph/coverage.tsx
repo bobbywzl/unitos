@@ -607,16 +607,25 @@ export function NodeCommentsLine({
           className={`inline-flex min-h-6 items-center gap-1 ${TEXT_META} font-semibold hover:underline pointer-coarse:min-h-10 ${noneOpen ? "text-sand-600" : "text-[var(--kind-comment)]"}`}
         >
           <CommentIcon size={11} />
-          {noneOpen
-            ? resolved === 1
-              ? t("graphCover.commentsResolvedOne")
-              : t("graphCover.commentsResolvedMany", { n: resolved })
-            : openOnes.length === 1
-              ? t("graphCover.commentsOpenOne")
-              : t("graphCover.commentsOpenMany", { n: openOnes.length })}
+          {/* [style9] On a phone the press takes the node chip's form, the
+              glyph and the count ("1 ?"), so the facts line and it share
+              one line of the bottom card (VIEW8-04); the words stay for a
+              screen reader. */}
+          <span className="max-md:sr-only">
+            {noneOpen
+              ? resolved === 1
+                ? t("graphCover.commentsResolvedOne")
+                : t("graphCover.commentsResolvedMany", { n: resolved })
+              : openOnes.length === 1
+                ? t("graphCover.commentsOpenOne")
+                : t("graphCover.commentsOpenMany", { n: openOnes.length })}
+          </span>
+          <span aria-hidden className="tabular-nums md:hidden">
+            {noneOpen ? resolved : openOnes.length}
+          </span>
           {openOnes.some(waits) && <WaitsMark />}
           {!noneOpen && resolved > 0 && (
-            <span className="font-normal text-sand-600">
+            <span className="font-normal text-sand-600 max-md:sr-only">
               · {resolved === 1 ? t("common.resolvedCountOne") : t("common.resolvedCountMany", { n: resolved })}
             </span>
           )}
