@@ -3272,6 +3272,14 @@ export function ReaderInteractions({
     let press: { x: number; y: number } | null = null;
     const onPress = (e: PointerEvent) => {
       press = { x: e.clientX, y: e.clientY };
+      // The page editor and the edit mode skip the click below: there a
+      // press outside the chooser closes it, a tap on a phone too.
+      if (
+        (editModeRef.current || richTextRef.current) &&
+        openLayersRef.current.includes("chooser") &&
+        !(e.target instanceof Element && e.target.closest("[data-stack-chooser]"))
+      )
+        setStackChooser(null);
     };
     const onClick = (e: MouseEvent) => {
       if (e.button !== 0 || editModeRef.current || richTextRef.current) return;
