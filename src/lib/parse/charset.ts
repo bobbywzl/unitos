@@ -291,5 +291,27 @@ export function textFileCharset(bytes: Uint8Array): string {
 /** A text file's text from its bytes, in the charset textFileCharset finds.
     The byte order mark is not text. */
 export function decodeTextFile(bytes: Uint8Array): string {
-  return decodeIn(textFileCharset(bytes), bytes);
+  const charset = textFileCharset(bytes);
+  const text = decodeIn(charset, bytes);
+  return charset === "euc-kr" ? composeFilledHangul(text) : text;
+}
+
+// EUC-KR writes a syllable outside its 2,350 as the Hangul filler (0xA4D4)
+// and three jamo: initial, medial, final (the filler again when the
+// syllable has no final). The WHATWG decoder leaves the four characters
+// apart, as "ㅤㅆㅠㅤ"; Python's euc_kr codec and Windows' code page 949
+// put the syllable together. A text file reads them together; a web page
+// keeps the WHATWG decode, as a browser shows it.
+const CHOSEONG = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ";
+const JONGSEONG = "\u3164ㄱㄲㄳㄴㄵㄶㄷㄹㄺㄻㄼㄽㄾㄿㅀㅁㅂㅄㅅㅆㅇㅈㅊㅋㅌㅍㅎ";
+const FILLED_HANGUL_RX = /\u3164([\u3131-\u314e])([\u314f-\u3163])([\u3131-\u314e\u3164])/g;
+
+function composeFilledHangul(text: string): string {
+  return text.replace(FILLED_HANGUL_RX, (whole, cho: string, jung: string, jong: string) => {
+    const c = CHOSEONG.indexOf(cho);
+    const f = JONGSEONG.indexOf(jong);
+    if (c < 0 || f < 0) return whole;
+    const v = jung.charCodeAt(0) - 0x314f;
+    return String.fromCharCode(0xac00 + (c * 21 + v) * 28 + f);
+  });
 }
