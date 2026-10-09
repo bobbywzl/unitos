@@ -229,8 +229,8 @@ const FLYOUT_FOOT = '[data-track="folder-new-file"], [data-track="folder-new"]';
 
 // A folder's list beside its row: a fixed panel in a portal (the root list
 // scrolls and would clip it), placed off the row's top and the panel's right
-// edge, or its left edge when the right has no room. It follows the panel's
-// scroll and the window's size.
+// edge, or, from the project's list only, its left edge when the right has
+// no room (roomBeside). It follows the panel's scroll and the window's size.
 // By keys: ← or Escape in a fly-out closes it and puts the focus back on
 // its folder's row, one level at a time.
 function Flyout({
@@ -312,10 +312,14 @@ function Flyout({
   );
 }
 
-/** Whether a fly-out fits beside the panel, on its right or its left. */
+/** Whether a fly-out fits beside the panel: on its right, or, for the
+    project's list only, on its left. A fly-out's own left holds the list it
+    opened from, so a list opened from a fly-out with no room on its right
+    opens under its row instead and never covers an earlier list. */
 function roomBeside(panelEl: HTMLElement): boolean {
   const panel = panelEl.getBoundingClientRect();
-  return panel.right + FLYOUT_WIDTH + 8 <= window.innerWidth || panel.left - FLYOUT_WIDTH - 8 >= 0;
+  if (panel.right + FLYOUT_WIDTH + 8 <= window.innerWidth) return true;
+  return !panelEl.closest("[data-document-flyout]") && panel.left - FLYOUT_WIDTH - 8 >= 0;
 }
 
 // The name box for a new folder or a rename. Enter keeps it, Escape drops
@@ -676,8 +680,16 @@ function FolderRow({
             // Under the row (a phone, a narrow panel) a click toggles.
             onClick={() => (flyout ? tree.openFolder(folder) : tree.toggleFolder(folder))}
             // By keys, a fly-out is a submenu: Enter, Space or → opens the
-            // folder's list and moves into it.
+            // folder's list and moves into it. A list under its row opens on
+            // → as well and takes the focus (Enter and Space toggle it).
             onKeyDown={(e) => {
+              if (!flyout && e.key === "ArrowRight") {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!open) tree.toggleFolder(folder);
+                focusWhenDrawn(`[data-tree-parent="${folder.id}"] :is(${LIST_ROWS}, ${FLYOUT_FOOT})`);
+                return;
+              }
               if (!flyout || (e.key !== "Enter" && e.key !== " " && e.key !== "ArrowRight")) return;
               e.preventDefault();
               e.stopPropagation();
@@ -1153,12 +1165,15 @@ export function DocumentTree<
   });
 
   // The screen crossed the width: the fly-outs close, or the open
-  // document's path opens under its rows. Adjust-during-render, the same
-  // pattern as presence.tsx.
-  const [wasFlyout, setWasFlyout] = useState(flyout);
-  if (wasFlyout !== flyout) {
-    setWasFlyout(flyout);
-    setOpenPath(flyout ? [] : activePath);
+  // document's path opens under its rows. The project's rows' own test
+  // decides (a fly-out where the list has room beside it), so wherever the
+  // lists open under their rows — a phone, or 820 px — the path opens on
+  // its own. Adjust-during-render, the same pattern as presence.tsx.
+  const beside = flyout && (!panelEl || roomBeside(panelEl));
+  const [wasBeside, setWasBeside] = useState(beside);
+  if (wasBeside !== beside) {
+    setWasBeside(beside);
+    setOpenPath(beside ? [] : activePath);
   }
 
   async function run(at: string, call: () => Promise<unknown>, after?: () => void, undo?: () => void) {
