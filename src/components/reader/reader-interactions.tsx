@@ -10238,13 +10238,15 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   // bar shows under its button. Top right of
   // the page in Normal view; the end of the pane header in a split view. A
   // transcript has none: the video pane has its own tools (SPEC.md §11).
+  // On a narrow screen Extract and Collapse draw tighter, so Extract (n) and
+  // Collapse NEW keep one row beside Contents on a 390 screen.
   const distillButton = (
         <>
         <div className="relative">
           <button
             onClick={() => openDistillPage(distillShownId)}
             data-track="distill-page"
-            className="flex items-center gap-1.5 rounded-full bg-sand-100 px-3.5 py-1.5 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
+            className="flex items-center gap-1.5 rounded-full bg-sand-100 px-3.5 max-sm:gap-1 max-sm:px-3 py-1.5 text-xs font-semibold text-sand-600 shadow-soft hover:text-clay-800"
             data-tip={t("reader.distillButtonTitle")}
           >
             <QuoteIcon size={13} />
@@ -10278,7 +10280,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       data-tip={t(
         collapseBusy ? "reader.collapseStopTitle" : collapseOn ? "reader.collapseOffTitle" : "reader.collapseTitle",
       )}
-      className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold shadow-soft disabled:opacity-60 ${
+      className={`flex items-center gap-1.5 rounded-full px-3.5 max-sm:gap-1 max-sm:px-3 py-1.5 text-xs font-semibold shadow-soft disabled:opacity-60 ${
         collapseOn ? "bg-ink text-paper" : "bg-sand-100 text-sand-600 hover:text-clay-800"
       }${collapseNew.isNew ? ` ${NEW_GLOW_CLASS}` : ""}`}
     >
@@ -10640,7 +10642,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       >
       <div className="absolute top-0 right-4 left-4 flex flex-col items-end gap-2">
       <div
-        className="pointer-events-auto flex max-w-[calc(100%-7rem)] flex-wrap-reverse items-center justify-end gap-2 rounded-full [&>*]:shrink-0"
+        className="pointer-events-auto flex max-w-[calc(100%-7rem)] flex-wrap-reverse items-center justify-end gap-2 rounded-full max-sm:gap-1.5 [&>*]:shrink-0"
         data-nudge={!split && !transcript ? "tools" : undefined}
       >
         {bandBanner && linkBanner}

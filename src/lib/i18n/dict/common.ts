@@ -153,7 +153,6 @@ const en = {
   signInToContinue: "Sign in to continue.",
   corpusNotFound: "Project not found",
   unauthorized: "Unauthorized",
-  modelCallFailed: "The model call failed.",
   // Stale tab: the browser signed out or switched accounts in another tab.
   accountChanged: "This tab was open with a different account. Reload the page.",
   accountChangedTitle: "Account changed",
@@ -251,7 +250,6 @@ const zh: Record<keyof typeof en, string> = {
   signInToContinue: "请登录后继续。",
   corpusNotFound: "未找到该项目",
   unauthorized: "未授权",
-  modelCallFailed: "模型调用失败。",
   accountChanged: "此标签页原先属于其他账户。请刷新页面。",
   accountChangedTitle: "账户已变更",
   accountSwitchedBody: "你在另一个标签页登录了 {name}。此标签页原先属于其他账户。",

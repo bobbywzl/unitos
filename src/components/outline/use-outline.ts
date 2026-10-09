@@ -208,6 +208,9 @@ export type OutlineActions = {
   focusedPendingId: string | null;
   /** Open a note's editor: the keyboard queue's `e`, or the floating card docking with its draft. */
   editRequest: { id: string; draft?: string } | null;
+  /** A card opened its editor on this request: it is done, so a card drawn
+      anew later (a new Group by) never opens it again on its old text. */
+  editTaken: (request: { id: string; draft?: string }) => void;
   // The ticker: accepted notes selected for a bulk delete, merge, or pin.
   selected: ReadonlySet<string>;
   toggleSelect: (id: string) => void;
@@ -547,7 +550,24 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
   // base is cleared when the note changed elsewhere since, as it always was.
   useEffect(() => {
     sweepStaleDrafts();
-    if (!canEdit) return;
+    if (!canEdit) {
+      // A viewer cannot save (an editor made a viewer while words waited):
+      // the words a local draft kept show on the card, marked Not saved, and
+      // stay in this browser until the account can edit again, when the load
+      // or the retry saves them. Showing a draft writes it again, so the
+      // sweep of old drafts never drops it.
+      const kept = new Map<string, { content: string; unsaved: boolean }>();
+      for (const note of flattenNotes(tree)) {
+        const draft = readNoteDraft(note.id);
+        if (!draft || !draftHoldsWords(draft) || draft.content.trim() === note.content.trim()) continue;
+        writeNoteDraft(note.id, draft.content, draft.base, draft.sent);
+        kept.set(note.id, { content: draft.content.trim(), unsaved: true });
+      }
+      if (kept.size === 0) return;
+      setLocalTexts((prev) => new Map([...prev, ...kept]));
+      setNotice(t("common.notSavedNoEdit"), true);
+      return;
+    }
     const replay: { id: string; content: string; base: string }[] = [];
     const inTree = new Set<string>();
     for (const note of flattenNotes(tree)) {
@@ -1624,6 +1644,9 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
     ]),
     focusedPendingId: focused?.id ?? null,
     editRequest,
+    editTaken(request) {
+      setEditRequest((r) => (r === request ? null : r));
+    },
     selected,
     toggleSelect(id) {
       setSelectedIds((prev) => {

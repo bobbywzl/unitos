@@ -16,6 +16,7 @@ import { SECTION_ACTION, SECTION_ADD_NOTE } from "@/components/outline/section-a
 import { SortableBoard, SortableGroup, SortableItem } from "@/components/sortable";
 import { VoiceNoteButton } from "@/components/outline/voice-note";
 import { useNoteCompose } from "@/components/outline/use-note-compose";
+import { carryNoteEditors } from "@/components/outline/use-note-draft";
 import { flattenNotes, noteMatches, type OutlineActions } from "@/components/outline/use-outline";
 
 // How the notes are grouped (SPEC.md §6), on the tray and on the notes full
@@ -54,18 +55,30 @@ function write(key: string, value: string) {
 }
 
 function subscribe(onChange: () => void) {
+  // Another tab's Group by draws the notes anew here too: an open editor
+  // goes on in its note's new card.
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === GROUPING_STORE) carryNoteEditors();
+    onChange();
+  };
   window.addEventListener(CHANGE_EVENT, onChange);
-  window.addEventListener("storage", onChange);
+  window.addEventListener("storage", onStorage);
   return () => {
     window.removeEventListener(CHANGE_EVENT, onChange);
-    window.removeEventListener("storage", onChange);
+    window.removeEventListener("storage", onStorage);
   };
 }
 
 export function useNoteGrouping(): [NoteGrouping, (g: NoteGrouping) => void] {
   const stored = useSyncExternalStore(subscribe, () => read(GROUPING_STORE), () => null);
   const grouping = NOTE_GROUPINGS.includes(stored as NoteGrouping) ? (stored as NoteGrouping) : "edited";
-  return [grouping, useCallback((g: NoteGrouping) => write(GROUPING_STORE, g), [])];
+  // A new Group by draws the notes anew: an open editor goes on in its
+  // note's new card (use-note-draft.ts carryNoteEditors).
+  const choose = useCallback((g: NoteGrouping) => {
+    if (g !== read(GROUPING_STORE)) carryNoteEditors();
+    write(GROUPING_STORE, g);
+  }, []);
+  return [grouping, choose];
 }
 
 /** The tray's scope. The project's every note unless the reader picked the
@@ -367,6 +380,9 @@ type NoteGroupsProps = {
   onMerge?: (id: string, intoId: string) => void;
   /** The tray: a note let go over the article floats there. */
   onDropOutside?: (itemId: string, at: { x: number; y: number; grab: { dx: number; dy: number } }) => void;
+  /** The tray: the pending queue, drawn above the Note and Command row; the
+      row then sticks to the foot of a phone's notes sheet while it is below. */
+  lead?: React.ReactNode;
 };
 
 /** The notes in every grouping but section: Last edited as one list, the
@@ -375,7 +391,7 @@ type NoteGroupsProps = {
     on the tray, floats it out over the article (SPEC.md §6). Note writes a
     new note in the first section, under every grouping. */
 export function NoteGroups(props: NoteGroupsProps) {
-  const { tree, actions, variant, search, accepted, onMerge, onDropOutside } = props;
+  const { tree, actions, variant, search, accepted, onMerge, onDropOutside, lead } = props;
   const { canEdit } = useCollab();
   const sections = allSections(tree);
   // The notes the composers own, by section: they stay out of the list while
@@ -397,6 +413,7 @@ export function NoteGroups(props: NoteGroupsProps) {
   const notesById = new Map(notes.map((n) => [n.id, n]));
   return (
     <div className="flex flex-col gap-2">
+      {lead}
       {/* Each section's composer is mounted, so a draft left open in any
           section reopens here as it does under Section. */}
       {sections.map((section, i) => (
@@ -407,6 +424,7 @@ export function NoteGroups(props: NoteGroupsProps) {
           variant={variant}
           canEdit={canEdit}
           withAdd={i === 0}
+          stick={i === 0 && Boolean(lead)}
           onOwned={onOwned}
         />
       ))}
@@ -475,13 +493,16 @@ function EditedNotes(props: ListProps) {
 }
 
 /** The Note button and Command for the first section, and each section's
-    composer while it is open, under the section's name. */
+    composer while it is open, under the section's name. Its lines are
+    children of the list's own column (a fragment), so the row can stick to
+    the foot of a phone's notes sheet across the pending queue above it. */
 function SectionComposer({
   section,
   actions,
   variant,
   canEdit,
   withAdd,
+  stick = false,
   onOwned,
 }: {
   section: SectionView;
@@ -489,6 +510,8 @@ function SectionComposer({
   variant: "tray" | "page";
   canEdit: boolean;
   withAdd: boolean;
+  /** The row sticks to the foot of a phone's notes sheet (TOOL15-15). */
+  stick?: boolean;
   onOwned: (sectionId: string, noteId: string | null) => void;
 }) {
   const t = useT();
@@ -500,9 +523,13 @@ function SectionComposer({
   useEffect(() => () => onOwned(section.id, null), [onOwned, section.id]);
   if (!(withAdd && canEdit) && !compose.composing) return null;
   return (
-    <div className="flex flex-col gap-2">
+    <>
       {withAdd && canEdit && !compose.composing && (
-        <div className="flex items-center gap-1.5">
+        <div
+          className={`flex items-center gap-1.5 ${
+            stick ? "max-md:sticky max-md:bottom-0 max-md:z-10 max-md:-my-1 max-md:bg-sand-100 max-md:py-1" : ""
+          }`}
+        >
           <button
             onClick={compose.open}
             data-track="edited-add-note"
@@ -533,7 +560,7 @@ function SectionComposer({
           />
         </>
       )}
-    </div>
+    </>
   );
 }
 

@@ -46,7 +46,16 @@ import type { SaveState } from "@/components/outline/save-state";
 // itself here, and the merge (use-outline.ts) flushes the drafts of the
 // notes it joins before it runs, then puts the merged text into the target's
 // editor, saved and ready to keep editing (SPEC.md §6).
+//
+// A new Group by draws the notes anew, and the card of a note being edited
+// with them (note-groups.tsx). The editor goes on in the new card: the old
+// editor hands over its text, the text its saves are made from, and its
+// saves still on their way, and the new one sends after them, made from the
+// text they leave (carryNoteEditors). Nothing is saved at the switch, so no
+// save is ever made from the tree's copy of the note, which may be older.
 type DraftHandle = {
+  /** The editor's text while it is open; null once it closed. */
+  text: () => string | null;
   /** Save the draft now, when it differs from what was saved last. */
   flush: () => Promise<void>;
   /** Put `content` into the editor as its saved draft. */
@@ -68,6 +77,56 @@ const handedOff = new Map<string, string>();
 // draft keeps words, and this keeps the space typed last too, which a draft
 // equal to the note's text but for spaces would not bring back.
 const handedText = new Map<string, string>();
+
+// The editors open when the notes were drawn anew, by note, with their text
+// then: the new card of each opens its editor on that text.
+const carrying = new Map<string, string>();
+// The editors the old cards handed over, by note, until a new card takes one.
+type Carried = {
+  /** The old editor's text when it handed over. */
+  text: string;
+  /** Its saves, one after another: the new editor's saves go after them. */
+  chain: Promise<unknown>;
+  /** Its refs as they stand now: a save on its way moves them. */
+  state: () => {
+    draft: string;
+    base: string;
+    lastSaved: string;
+    confirmed: string;
+    queued: string | null;
+    opened: string;
+    original: string;
+  };
+  /** Close it as Done would have, when no new card took it. */
+  close: () => void;
+};
+const carried = new Map<string, Carried>();
+
+/** The notes are about to be drawn anew (a new Group by): each open editor
+    goes on in its note's new card. An editor no new card takes closes and
+    saves as it would have. */
+export function carryNoteEditors() {
+  for (const [id, handle] of openDrafts) {
+    const text = handle.text();
+    if (text !== null) carrying.set(id, text);
+  }
+  if (carrying.size === 0) return;
+  // The new cards mount in the same commit as the old ones go: by the next
+  // task every editor was taken or is left.
+  setTimeout(() => {
+    carrying.clear();
+    for (const [id, left] of carried) {
+      carried.delete(id);
+      left.close();
+    }
+  }, 0);
+}
+
+/** The text a note's new card opens its editor on, while its old editor
+    hands over (carryNoteEditors); undefined otherwise. */
+export function carriedNoteText(noteId: string): string | undefined {
+  return carrying.get(noteId);
+}
 
 /** The editor of `from` gives way to the editor of `to` (use-outline.ts). */
 export function handOffNoteDraft(from: string, to: string) {
@@ -160,6 +219,45 @@ export function useNoteDraft({
     setFailed(null);
     setBoth(null);
     setQueued(null);
+    // The same note's editor in the card this one replaced (a new Group by):
+    // its text, the text its saves are made from, and its saves on their way.
+    const carry = canEdit ? carried.get(noteId) : undefined;
+    if (carry) {
+      // Taken; the note stays carrying until the switch is over, so an
+      // editor that mounts twice (React's strict mode) takes it again.
+      carried.delete(noteId);
+      const adopt = () => {
+        const was = carry.state();
+        lastSavedRef.current = was.lastSaved;
+        baseRef.current = was.base;
+        confirmedRef.current = was.confirmed;
+        queuedRef.current = was.queued;
+        openedRef.current = was.opened;
+        originalRef.current = was.original;
+        if (was.queued !== null && !isOffline()) setFailed(was.queued);
+        else {
+          setQueued(was.queued);
+          setConfirmed(was.base);
+        }
+      };
+      adopt();
+      draftRef.current = carry.text;
+      setDraft(carry.text);
+      // Once the old editor's saves answered: the text they left. A save
+      // that came back with the note changed elsewhere moved the old
+      // editor's text; the keys typed here since go on top of it.
+      chainRef.current = carry.chain.then(() => {
+        adopt();
+        const left = carry.state().draft.trim();
+        const handed = carry.text.trim();
+        if (left === handed) return;
+        const typed = draftRef.current.trim();
+        const next = typed === handed ? left : reconcileNoteText(handed, left, typed, conflictLabels()).text;
+        draftRef.current = next;
+        flushSync(() => setDraft(next));
+      });
+      return;
+    }
     // The editor of a gone note gave way to this one (handOffNoteDraft): the
     // same text, spaces and all, when it holds no word the note lacks.
     const handed = handedText.get(noteId);
@@ -304,7 +402,9 @@ export function useNoteDraft({
 
   useEffect(() => {
     if (!active || !canEdit) return;
+    let open = true;
     const handle: DraftHandle = {
+      text: () => (open ? draftRef.current : null),
       async flush() {
         const trimmed = draftRef.current.trim();
         if (!trimmed || trimmed === lastSavedRef.current) return;
@@ -333,6 +433,7 @@ export function useNoteDraft({
     };
     openDrafts.set(noteId, handle);
     return () => {
+      open = false;
       // A closed editor whose saves are still on their way stays the note's
       // one sender until they answer: the notes' retry leaves the note to
       // it, and a save asked for meanwhile goes after them.
@@ -412,6 +513,25 @@ export function useNoteDraft({
     return () => {
       window.removeEventListener("pagehide", flush);
       window.removeEventListener("beforeunload", flush);
+      // A new Group by: the note's new card takes this editor over, and
+      // closes it only when no new card does (carryNoteEditors).
+      if (carrying.has(noteId) && !carried.has(noteId)) {
+        carried.set(noteId, {
+          text: draftRef.current,
+          chain: chainRef.current,
+          state: () => ({
+            draft: draftRef.current,
+            base: baseRef.current,
+            lastSaved: lastSavedRef.current,
+            confirmed: confirmedRef.current,
+            queued: queuedRef.current,
+            opened: openedRef.current,
+            original: originalRef.current,
+          }),
+          close,
+        });
+        return;
+      }
       const to = handedOff.get(noteId);
       if (to !== undefined) {
         handedOff.delete(noteId);
