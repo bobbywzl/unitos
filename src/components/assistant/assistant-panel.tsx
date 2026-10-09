@@ -123,10 +123,22 @@ const withProposed = (turn: Turn): string => {
 // One side chat of this conversation (SPEC.md §7): the quote it was started
 // from and its own turns. noteId = the note it saves on, null until the
 // first answer lands; key holds it together before then.
-type SideChat = { key: string; noteId: string | null; quote: string; turns: Turn[] };
+// base: the note's updatedAt the turns were built on, and baseCount: how
+// many turns the note held then (saveConversationNow merges by them).
+type SideChat = {
+  key: string;
+  noteId: string | null;
+  quote: string;
+  turns: Turn[];
+  base?: string | null;
+  baseCount?: number;
+};
 type Thread = {
   turns: Turn[];
   conversationNoteId: string | null;
+  // The conversation note's copy the turns were built on (see SideChat).
+  base: string | null;
+  baseCount: number;
   sideChats: SideChat[];
   // The side chat on screen, by key; null = the conversation itself.
   openKey: string | null;
@@ -147,7 +159,8 @@ type StoredTurn = {
 type StoredConversation = {
   conversationNoteId?: string | null;
   turns?: StoredTurn[];
-  sideChats?: { id: string; quote: string; turns: StoredTurn[] }[];
+  updatedAt?: string | null;
+  sideChats?: { id: string; quote: string; turns: StoredTurn[]; updatedAt?: string }[];
 };
 const toTurns = (stored: StoredTurn[]): Turn[] =>
   stored.map((turn) => ({
@@ -157,7 +170,14 @@ const toTurns = (stored: StoredTurn[]): Turn[] =>
     files: turn.files,
   }));
 const toSideChats = (stored: NonNullable<StoredConversation["sideChats"]>): SideChat[] =>
-  stored.map((s) => ({ key: s.id, noteId: s.id, quote: s.quote, turns: toTurns(s.turns) }));
+  stored.map((s) => ({
+    key: s.id,
+    noteId: s.id,
+    quote: s.quote,
+    turns: toTurns(s.turns),
+    base: s.updatedAt ?? null,
+    baseCount: s.turns.length,
+  }));
 
 function formatWhen(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -192,6 +212,9 @@ type SharedThread = Thread & {
   listeners: Set<() => void>;
   // The saves in order, so the second never starts a second note.
   saving: Promise<void>;
+  // Counts the conversations shown (showConversation): a save started on
+  // one never lands on the next.
+  shown: number;
 };
 const threads = new Map<string, SharedThread>();
 function sharedThread(notebookId: string): SharedThread {
@@ -200,11 +223,14 @@ function sharedThread(notebookId: string): SharedThread {
     thread = {
       turns: [],
       conversationNoteId: null,
+      base: null,
+      baseCount: 0,
       sideChats: [],
       openKey: null,
       loaded: false,
       listeners: new Set(),
       saving: Promise.resolve(),
+      shown: 0,
     };
     threads.set(notebookId, thread);
   }
@@ -455,6 +481,8 @@ export function AssistantPanel({
   const sideChatsRef = useMemo(() => sharedRef(shared, "sideChats"), [shared]);
   const openKeyRef = useMemo(() => sharedRef(shared, "openKey"), [shared]);
   const noteIdRef = useMemo(() => sharedRef(shared, "conversationNoteId"), [shared]);
+  const baseRef = useMemo(() => sharedRef(shared, "base"), [shared]);
+  const baseCountRef = useMemo(() => sharedRef(shared, "baseCount"), [shared]);
   // The refs changed: every panel open on this project draws them.
   function cacheThread() {
     shared.loaded = true;
@@ -538,6 +566,8 @@ export function AssistantPanel({
         turnsRef.current = loaded;
         sideChatsRef.current = loadedSideChats;
         noteIdRef.current = json.conversationNoteId ?? null;
+        baseRef.current = json.updatedAt ?? null;
+        baseCountRef.current = loaded.length;
         openKeyRef.current = null;
         cacheThread();
         setTurnsState(loaded);
@@ -655,10 +685,19 @@ export function AssistantPanel({
 
   // The thread takes a conversation's place: the one from the list, or none
   // (New conversation). What was on screen stays saved, in the list.
-  function showConversation(next: { noteId: string | null; turns: Turn[]; sideChats: SideChat[] }) {
+  function showConversation(next: {
+    noteId: string | null;
+    turns: Turn[];
+    sideChats: SideChat[];
+    base: string | null;
+    baseCount: number;
+  }) {
     stopRun();
     reset();
+    shared.shown += 1;
     turnsRef.current = next.turns;
+    baseRef.current = next.base;
+    baseCountRef.current = next.baseCount;
     sideChatsRef.current = next.sideChats;
     openKeyRef.current = null;
     noteIdRef.current = next.noteId;
@@ -681,7 +720,7 @@ export function AssistantPanel({
   // New conversation (SPEC.md §7): back to the first layout, an empty thread.
   // The conversation on screen is not deleted: it stays in the list.
   function newConversation() {
-    showConversation({ noteId: null, turns: [], sideChats: [] });
+    showConversation({ noteId: null, turns: [], sideChats: [], base: null, baseCount: 0 });
   }
 
   // The conversations list: read every time it opens, so it is current.
@@ -719,6 +758,8 @@ export function AssistantPanel({
         noteId: json.conversationNoteId,
         turns: toTurns(json.turns ?? []),
         sideChats: toSideChats(json.sideChats ?? []),
+        base: json.updatedAt ?? null,
+        baseCount: json.turns?.length ?? 0,
       });
     } catch (err) {
       setListError(callLine(err, t("common.notLoaded")));
@@ -734,7 +775,13 @@ export function AssistantPanel({
     setListError(null);
     const wasOpen = id === conversationNoteId;
     const shown = wasOpen
-      ? { noteId: noteIdRef.current, turns: turnsRef.current, sideChats: sideChatsRef.current }
+      ? {
+          noteId: noteIdRef.current,
+          turns: turnsRef.current,
+          sideChats: sideChatsRef.current,
+          base: baseRef.current,
+          baseCount: baseCountRef.current,
+        }
       : null;
     deleteConversationWithUndo({
       noteId: id,
@@ -742,7 +789,7 @@ export function AssistantPanel({
       gone: () => {
         setConversations((all) => (all ? all.filter((c) => c.id !== id) : all));
         if (wasOpen) {
-          showConversation({ noteId: null, turns: [], sideChats: [] });
+          showConversation({ noteId: null, turns: [], sideChats: [], base: null, baseCount: 0 });
           setListOpen(true);
         }
       },
@@ -882,48 +929,106 @@ export function AssistantPanel({
   // stays on screen either way, from the threads cache above.
   // Saves run one after another on the shared thread: the first one's note
   // id is in place before the next one starts, so a conversation is one note.
-  // The answer says whether this save landed.
-  function saveConversation(savedTurns: Turn[], sideChatKey: string | null): Promise<boolean> {
-    const run = shared.saving.then(() => saveConversationNow(savedTurns, sideChatKey));
+  // build: the turns to save, read when the save runs (an earlier save may
+  // have merged the thread since). The answer says whether this save landed.
+  function saveConversation(build: () => Turn[], sideChatKey: string | null): Promise<boolean> {
+    const shownAt = shared.shown;
+    const run = shared.saving.then(() => saveConversationNow(build, sideChatKey, shownAt));
     shared.saving = run.then(() => undefined);
     return run;
   }
-  async function saveConversationNow(savedTurns: Turn[], sideChatKey: string | null): Promise<boolean> {
-    const side = sideChatKey ? sideChatsRef.current.find((s) => s.key === sideChatKey) : null;
-    if (sideChatKey && !side) return false;
-    try {
-      const res = await fetch("/api/assistant/conversation", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          notebookId,
-          conversationNoteId: side ? side.noteId : noteIdRef.current,
-          // A side chat belongs to the conversation it was started from.
-          sideChatOf: side ? noteIdRef.current : undefined,
-          quote: side ? side.quote : undefined,
-          turns: savedTurns.map((turn) => ({
-            role: turn.role,
-            content: turn.content.slice(0, TURN_MAX_CHARS),
-            images: turn.images?.map((img) => ({ id: img.id, name: img.name })),
-            files: turn.files?.map((f) => ({ name: f.name })),
-          })),
-        }),
-      });
-      const json = (await res.json().catch(() => null)) as { conversationNoteId?: string } | null;
-      if (!res.ok || !json?.conversationNoteId) return false;
-      if (side) {
-        const noteId = json.conversationNoteId;
-        setSideChats((list) => list.map((s) => (s.key === side.key ? { ...s, noteId } : s)));
-        return true;
-      }
-      setNoteId(json.conversationNoteId);
-      return true;
-    } catch {
-      // Offline, or the request otherwise never landed — the thread is still
-      // right here on screen; the next completed turn tries again, and the
-      // message stays held in the draft until one lands.
-      return false;
+  // The note moved since this tab read it (another tab, another device): the
+  // server's turns come first, then this tab's turns past what the base held,
+  // on screen and in the save; then the save runs again (SPEC.md §21).
+  function mergeThread(
+    sideChatKey: string | null,
+    server: Turn[],
+    base: string | null,
+    baseCount: number,
+  ) {
+    const after = (list: Turn[]) => [...server, ...list.slice(Math.min(baseCount, list.length))];
+    if (sideChatKey) {
+      setSideChats((list) =>
+        list.map((s) =>
+          s.key === sideChatKey ? { ...s, turns: after(s.turns), base, baseCount: server.length } : s,
+        ),
+      );
+      return;
     }
+    turnsRef.current = after(turnsRef.current);
+    baseRef.current = base;
+    baseCountRef.current = server.length;
+    setTurnsState(turnsRef.current);
+    cacheThread();
+  }
+  async function saveConversationNow(
+    build: () => Turn[],
+    sideChatKey: string | null,
+    shownAt: number,
+  ): Promise<boolean> {
+    // Another conversation took the screen since: these turns are not its.
+    const moved = () => !sideChatKey && shared.shown !== shownAt;
+    if (moved()) return false;
+    let turnsToSave = build();
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const side = sideChatKey ? sideChatsRef.current.find((s) => s.key === sideChatKey) : null;
+      if (sideChatKey && !side) return false;
+      const noteId = side ? side.noteId : noteIdRef.current;
+      const base = side ? (side.base ?? null) : baseRef.current;
+      const baseCount = side ? (side.baseCount ?? 0) : baseCountRef.current;
+      try {
+        const res = await fetch("/api/assistant/conversation", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            notebookId,
+            conversationNoteId: noteId,
+            base: noteId ? base : null,
+            // A side chat belongs to the conversation it was started from.
+            sideChatOf: side ? noteIdRef.current : undefined,
+            quote: side ? side.quote : undefined,
+            turns: turnsToSave.map((turn) => ({
+              role: turn.role,
+              content: turn.content.slice(0, TURN_MAX_CHARS),
+              images: turn.images?.map((img) => ({ id: img.id, name: img.name })),
+              files: turn.files?.map((f) => ({ name: f.name })),
+            })),
+          }),
+        });
+        const json = (await res.json().catch(() => null)) as {
+          conversationNoteId?: string;
+          updatedAt?: string;
+          turns?: StoredTurn[];
+        } | null;
+        if (moved()) return false;
+        if (res.status === 409 && json?.turns && json.updatedAt) {
+          const server = toTurns(json.turns);
+          turnsToSave = [...server, ...turnsToSave.slice(Math.min(baseCount, turnsToSave.length))];
+          mergeThread(sideChatKey, server, json.updatedAt, baseCount);
+          continue;
+        }
+        if (!res.ok || !json?.conversationNoteId) return false;
+        const savedId = json.conversationNoteId;
+        const savedBase = json.updatedAt ?? null;
+        const savedCount = turnsToSave.length;
+        if (side) {
+          setSideChats((list) =>
+            list.map((s) => (s.key === side.key ? { ...s, noteId: savedId, base: savedBase, baseCount: savedCount } : s)),
+          );
+          return true;
+        }
+        baseRef.current = savedBase;
+        baseCountRef.current = savedCount;
+        setNoteId(savedId);
+        return true;
+      } catch {
+        // Offline, or the request otherwise never landed — the thread is still
+        // right here on screen; the next completed turn tries again, and the
+        // message stays held in the draft until one lands.
+        return false;
+      }
+    }
+    return false;
   }
 
   // Recommended: open shows what exists; generating streams into the card.
@@ -1218,6 +1323,15 @@ export function AssistantPanel({
       sideChatKey
         ? (sideChatsRef.current.find((s) => s.key === sideChatKey)?.turns ?? [])
         : turnsRef.current;
+    // What a save of this answer writes: the thread up to this message as it
+    // is when the save runs (an earlier save may have merged it), then the
+    // answer.
+    const savedWith = (answer: string): Turn[] => {
+      const thread = threadNow();
+      const i = thread.indexOf(userTurn);
+      const before = i >= 0 ? thread.slice(0, i) : threadTurns;
+      return [...before, userTurn, { role: "assistant", content: answer }];
+    };
     // A message that did not land leaves the thread and goes back into the
     // box; one on a thread no longer on screen just goes back.
     const takeBack = () => {
@@ -1298,7 +1412,7 @@ export function AssistantPanel({
       const shown = plan ? { actions, warnings: plan.warnings } : undefined;
       setAnswer(text, shown, suggest && requestSuggestions(suggest, q, text, history));
       if (shown && actions.length > 0) proposePlan(shown);
-      void saveConversation([...threadTurns, userTurn, { role: "assistant", content: text }], sideChatKey).then(
+      void saveConversation(() => savedWith(text), sideChatKey).then(
         (saved) => {
           if (saved) releaseMessage(notebookId, message.key);
         },
@@ -1309,7 +1423,7 @@ export function AssistantPanel({
       // a switch to another conversation, puts the message back in the box.
       if (controller.signal.aborted) {
         if (soFar.trim() && threadNow().includes(userTurn)) {
-          void saveConversation([...threadTurns, userTurn, { role: "assistant", content: soFar }], sideChatKey).then(
+          void saveConversation(() => savedWith(soFar), sideChatKey).then(
             (saved) => {
               if (saved) releaseMessage(notebookId, message.key);
             },

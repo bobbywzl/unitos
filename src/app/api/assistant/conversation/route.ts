@@ -61,7 +61,7 @@ async function findConversationNote(notebookId: string, userId: string, id?: str
   return db.note.findFirst({
     where: { ...sidebarConversations(sectionId, userId), ...(id ? { id } : {}) },
     orderBy: { updatedAt: "desc" },
-    select: { id: true, content: true },
+    select: { id: true, content: true, updatedAt: true },
   });
 }
 
@@ -139,6 +139,8 @@ export async function GET(req: Request) {
   return NextResponse.json({
     conversationNoteId: note?.id ?? null,
     turns: note ? turnsToClient(note.content) : [],
+    // The copy the panel builds on: its save names it (`base`).
+    updatedAt: note?.updatedAt.toISOString() ?? null,
     sideChats: note ? await sideChatsOf(note.id) : [],
   });
 }
@@ -147,6 +149,12 @@ const saveSchema = z.object({
   notebookId: z.string().min(1),
   conversationNoteId: z.string().nullish(),
   turns: z.array(conversationTurnSchema).max(200),
+  // The note's updatedAt the turns were built on (as GET or the last save
+  // answered). A save of a note that changed since — another tab, another
+  // device — is refused (409) with the note's turns, so the panel puts its
+  // new turns after them and saves again: no save writes over turns it
+  // never saw.
+  base: z.iso.datetime().nullish(),
   // A side chat (SPEC.md §7): the conversation it was started from, and the
   // words it was started on. Set on the first save; the note carries them.
   sideChatOf: z.string().min(1).optional(),
@@ -174,17 +182,35 @@ export async function POST(req: Request) {
   );
 
   if (data.conversationNoteId) {
-    const updated = await db.note.updateMany({
-      where: {
-        id: data.conversationNoteId,
-        createdById: access.user.id,
-        section: { notebookId: data.notebookId },
-      },
-      data: { content: transcript },
-    });
-    if (updated.count > 0) {
-      await bumpNotebook(data.notebookId);
-      return NextResponse.json({ conversationNoteId: data.conversationNoteId });
+    const mine = {
+      id: data.conversationNoteId,
+      createdById: access.user.id,
+      section: { notebookId: data.notebookId },
+    };
+    const current = await db.note.findFirst({ where: mine, select: { content: true, updatedAt: true } });
+    if (current) {
+      const changed = (note: { content: string; updatedAt: Date }) =>
+        NextResponse.json(
+          { error: "changed", turns: turnsToClient(note.content), updatedAt: note.updatedAt.toISOString() },
+          { status: 409 },
+        );
+      // No base (a page from before bases) or another one: the note moved.
+      if (!data.base || current.updatedAt.toISOString() !== new Date(data.base).toISOString()) {
+        return changed(current);
+      }
+      // The stamp is set here, later than the base, so it names this write alone.
+      const stamp = new Date(Math.max(Date.now(), current.updatedAt.getTime() + 1));
+      const updated = await db.note.updateMany({
+        where: { ...mine, updatedAt: current.updatedAt },
+        data: { content: transcript, updatedAt: stamp },
+      });
+      if (updated.count === 0) {
+        const now = await db.note.findFirst({ where: mine, select: { content: true, updatedAt: true } });
+        if (now) return changed(now);
+      } else {
+        await bumpNotebook(data.notebookId);
+        return NextResponse.json({ conversationNoteId: data.conversationNoteId, updatedAt: stamp.toISOString() });
+      }
     }
     // The note was deleted from under it (New conversation, elsewhere) —
     // fall through and start a fresh one.
@@ -203,10 +229,10 @@ export async function POST(req: Request) {
       sideChatOfId: data.sideChatOf ?? null,
       sideChatQuote: data.sideChatOf ? (data.quote ?? "") : null,
     },
-    select: { id: true },
+    select: { id: true, updatedAt: true },
   });
   await bumpNotebook(data.notebookId);
-  return NextResponse.json({ conversationNoteId: note.id });
+  return NextResponse.json({ conversationNoteId: note.id, updatedAt: note.updatedAt.toISOString() });
 }
 
 const clearSchema = z.object({
