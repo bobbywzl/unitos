@@ -7,6 +7,7 @@ import { canJoin, canSplit, findWrapping, liftTarget } from "@tiptap/pm/transfor
 import type { EditorView } from "@tiptap/pm/view";
 import { isSuggesting } from "@/components/docs/ext/suggest";
 import { atMenuState } from "@/components/docs/insert/at-plugin";
+import { tabOpensToolbox } from "@/components/docs/layer/anchor";
 import { blockText, previousTextblock, runAutocorrect, runCodeFence } from "@/components/docs/typing/autocorrect";
 import { firstGraphemeLength, lastGraphemeLength, wordEndAfter, wordStartBefore } from "@/components/docs/typing/chars";
 import { sameFormat } from "@/components/docs/toolbar/lists";
@@ -558,13 +559,14 @@ function nest(view: EditorView, item: ItemAt, shift: boolean): true {
   return true;
 }
 
-/** Tab (and Shift+Tab), in Docs' order: table cells, several paragraphs,
-    list nesting, the first-line indent, then a tab character. Shift+Tab
-    never types a tab. */
+/** Tab (and Shift+Tab), in Docs' order: words selected inside one line
+    (the AI toolbar's), table cells, several paragraphs, list nesting, the
+    first-line indent, then a tab character. Shift+Tab never types a tab. */
 export function tab(editor: Editor, shift: boolean): boolean {
   const view = editor.view;
   const state = view.state;
   if (atMenuState(state).active) return false;
+  if (!shift && tabOpensToolbox(state)) return true;
   const sel = state.selection;
   if (inTable(sel.$from)) {
     if (shift) {

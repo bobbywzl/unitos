@@ -171,6 +171,8 @@ const en = {
   resolveTitle: "Close this reply; it moves under Resolved",
   reopenTitle: "Reopen this reply",
   replyTitle: "Start a reply",
+  // The Undo pill after a reply's ×.
+  replyDeleted: "Reply deleted",
   resolvedCountOne: "1 resolved",
   resolvedCountMany: "{n} resolved",
   // Notifications (SPEC.md §18): the kind chip, on the admin pages and the
@@ -262,6 +264,7 @@ const zh: Record<keyof typeof en, string> = {
   resolveTitle: "关闭此回复；它会移到“已解决”下",
   reopenTitle: "重新打开此回复",
   replyTitle: "开始回复",
+  replyDeleted: "回复已删除",
   resolvedCountOne: "1 条已解决",
   resolvedCountMany: "{n} 条已解决",
   // Notifications (SPEC.md §18): the kind chip, on the admin page and the dashboard.

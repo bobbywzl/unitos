@@ -102,6 +102,10 @@ const MENU_NAMES: Record<DocsMenu, TKey> = {
   tools: "docs.menuTools",
 };
 
+/** Insert and Format write into the document; the other menus open, show,
+    or switch something (Search the menus ranks them first on a tie). */
+const writesMenu = (menu: DocsMenu): boolean => menu === "insert" || menu === "format";
+
 /** Google Docs' Format submenu of the lists: the list menus and List options. */
 const BULLETS = "bullets & numbering";
 
@@ -447,6 +451,7 @@ export function DocsToolbar({
         id: c.id,
         label: t(c.label),
         where: t(MENU_NAMES[c.menu]),
+        writes: writesMenu(c.menu),
         keywords: c.keywords,
         shortcut: c.shortcut ? keys(c.shortcut) : undefined,
         enabled: !(off && (c.menu === "insert" || c.menu === "format")) && (c.enabled ? c.enabled(on) : true),
@@ -463,6 +468,8 @@ export function DocsToolbar({
       id: a.id,
       label: t(a.key),
       where: t(MENU_NAMES[a.where ?? "format"]),
+      // A row that opens a submenu writes nothing yet.
+      writes: !a.id.startsWith("open-") && writesMenu(a.where ?? "format"),
       keywords: a.words,
       shortcut: a.combo ? keys(a.combo) : undefined,
       icon: a.Icon && <a.Icon />,
@@ -470,7 +477,7 @@ export function DocsToolbar({
       run: a.run,
     }));
     const add = (id: string, label: string, where: DocsMenu, runIt: () => void, o: { enabled?: boolean; shortcut?: string; words?: string[]; note?: string } = {}) =>
-      list.push({ id, label, where: t(MENU_NAMES[where]), run: runIt, enabled: o.enabled ?? bodyOn, shortcut: o.shortcut && keys(o.shortcut), keywords: o.words, note: o.note });
+      list.push({ id, label, where: t(MENU_NAMES[where]), writes: writesMenu(where), run: runIt, enabled: o.enabled ?? bodyOn, shortcut: o.shortcut && keys(o.shortcut), keywords: o.words, note: o.note });
     // What the lock turns off says why, as the mode menu does.
     const unlocked = lock ? { enabled: false, note: t(lock) } : { enabled: true };
     add("zoom-fit", `${t("docs.zoom")}: ${t("docs.zoomFit")}`, "view", () => onZoom("fit"), { enabled: true });

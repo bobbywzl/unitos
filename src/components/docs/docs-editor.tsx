@@ -4,7 +4,7 @@ import "./docs.css";
 // After the page's styles, where Tiptap put its own sheet: its rules win a tie.
 import "./css/prosemirror.css";
 import type { JSONContent } from "@tiptap/core";
-import { TextSelection } from "@tiptap/pm/state";
+import { TextSelection, type Transaction } from "@tiptap/pm/state";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import { useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
@@ -94,16 +94,29 @@ export type DocsMedia = {
   pageLabels: string[] | null;
 };
 
-// An import opens in Viewing; the mode the reader picks is kept per
-// document in this browser.
+/** A step of the transaction replaced the whole document: a version restored,
+    or its undo. */
+function replacesWholeDoc(tr: Transaction): boolean {
+  if (!tr.docChanged) return false;
+  return tr.mapping.maps.some((map, i) => {
+    let whole = false;
+    map.forEach((from, to) => {
+      if (from === 0 && to === tr.docs[i].content.size) whole = true;
+    });
+    return whole;
+  });
+}
+
+// An import opens in Viewing and a blank document in Editing; the mode the
+// reader picks is kept per document in this browser, for both.
 const modeKey = (documentId: string) => `unitos-docs-mode:${documentId}`;
 
-function storedMode(documentId: string): DocsMode {
+function storedMode(documentId: string, fallback: DocsMode): DocsMode {
   try {
     const mode = localStorage.getItem(modeKey(documentId));
-    return mode === "editing" || mode === "suggesting" ? mode : "viewing";
+    return mode === "editing" || mode === "suggesting" || mode === "viewing" ? mode : fallback;
   } catch {
-    return "viewing";
+    return fallback;
   }
 }
 
@@ -518,9 +531,11 @@ export function DocsEditor({
   // change their import too, so Editing and Suggesting are off.
   const locked = imported?.shared === true;
   const writable = canEdit && !locked;
-  // A blank document opens in Editing; an import in Viewing, or in the mode
-  // the reader last chose for it here.
-  const [openedIn] = useState<DocsMode>(() => (!imported ? "editing" : writable ? storedMode(documentId) : "viewing"));
+  // A blank document opens in Editing, an import in Viewing; either opens
+  // in the mode the reader last chose for it here.
+  const [openedIn] = useState<DocsMode>(() =>
+    !writable ? (imported ? "viewing" : "editing") : storedMode(documentId, imported ? "viewing" : "editing"),
+  );
   const [chosenMode, setModeState] = useState<DocsMode>(openedIn);
   // An import that another account's project takes in while it is open
   // leaves Editing and Suggesting at once.
@@ -661,9 +676,9 @@ export function DocsEditor({
       } else if (!passing) collapseLeftRef.current = null;
       passingRef.current = passing;
       setModeState(next);
-      if (isImport && !passing) storeMode(documentId, next);
+      if (!passing) storeMode(documentId, next);
     },
-    [locked, editor, t, isImport, documentId],
+    [locked, editor, t, documentId],
   );
   // Collapse off: back to the mode Collapse left, the caret where it was.
   const collapseOn = collapse?.on ?? false;
@@ -800,6 +815,34 @@ export function DocsEditor({
     const meta: MarksMeta = { highlights: highlightsByBlock, t, editing: marksEditing };
     editor.view.dispatch(editor.state.tr.setMeta(annotationMarksKey, meta).setMeta("addToHistory", false));
   }, [editor, marksSignature, highlightsByBlock, t, matches, rev, saveState, marksEditing]);
+
+  // A whole-document replace (a version restored, or its undo) takes every
+  // mark with the old text: paint them again on the new text at once from
+  // the highlights held, and once more when the stored copy catches up.
+  const marksNowRef = useRef({ highlights: highlightsByBlock, editing: marksEditing });
+  useEffect(() => {
+    marksNowRef.current = { highlights: highlightsByBlock, editing: marksEditing };
+  });
+  useEffect(() => {
+    if (!editor) return;
+    let frame = 0;
+    const onTransaction = ({ transaction: tr }: { transaction: Transaction }) => {
+      if (!replacesWholeDoc(tr) || frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        if (editor.isDestroyed) return;
+        paintedRef.current = { ...paintedRef.current, signature: "" };
+        const { highlights, editing } = marksNowRef.current;
+        const meta: MarksMeta = { highlights, t, editing };
+        editor.view.dispatch(editor.state.tr.setMeta(annotationMarksKey, meta).setMeta("addToHistory", false));
+      });
+    };
+    editor.on("transaction", onTransaction);
+    return () => {
+      editor.off("transaction", onTransaction);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [editor, t]);
 
   // A switch to Editing or Suggesting gives the page the keys at its caret,
   // the selection kept and the pane where it is. A caret out of view (an

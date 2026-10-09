@@ -87,7 +87,6 @@ import { QueuedList, queuedKey, type QueuedText } from "@/components/assistant/q
 import { useLang, useT } from "@/components/lang-provider";
 import { clipWords, markdownPreview } from "@/lib/markdown-preview";
 import { noteTitle } from "@/lib/note-title";
-import { AnnotationGrip } from "@/components/outline/annotation-grip";
 import { useCardDropOpen } from "@/components/outline/use-card-drop";
 import {
   ChevronDownIcon,
@@ -155,9 +154,9 @@ import { ANNOTATION_KIND_KEY, annotationKindColor } from "@/lib/annotations/kind
 import { NEW_GLOW_CLASS, NewPill, useNewFeature } from "@/components/new-feature";
 import type { PageSetup, RichNode } from "@/lib/docs/schema";
 import type { DocsMedia, Imported } from "@/components/docs/docs-editor";
-import { pageCellSelection, pageEditorIn, pageSelectionOfRange, wordAtCaret } from "@/components/docs/layer/anchor";
+import { pageCellSelection, pageEditorIn, pageSelectionOfRange, tabOpensToolbox, wordAtCaret } from "@/components/docs/layer/anchor";
 import { CardColumn, CommentCard } from "@/components/docs/layer/comment-card";
-import { setCommentResolved } from "@/lib/annotations/resolve";
+import { resolveCommentWithUndo } from "@/lib/annotations/resolve";
 import { COMMENTS_EVENT, flashInPage, PAGE_EDITED_EVENT, type CommentsView } from "@/components/docs/layer/events";
 import { registerDocumentFlush } from "@/components/docs/layer/flush";
 import { CLOSE_TOOLBAR_EVENT, DOCS_EVENT, fireDocs, type ModeRequest } from "@/components/docs/typing/events";
@@ -1608,7 +1607,7 @@ export function ReaderInteractions({
     container.style.overflowAnchor = "none";
     const article = container.querySelector("article") ?? container;
     let held = true;
-    // The reader took over (a scroll, a touch, the timer): saves resume.
+    // The reader took over (a scroll, a touch, a key, the timer): saves resume.
     const release = () => {
       if (!held) return;
       held = false;
@@ -1620,6 +1619,7 @@ export function ReaderInteractions({
       container.removeEventListener("wheel", release);
       container.removeEventListener("touchmove", release);
       container.removeEventListener("pointerdown", release);
+      window.removeEventListener("keydown", release, true);
       clearTimeout(timer);
     };
     // The effect ends (a document switch, or a development re-run): the
@@ -1667,6 +1667,9 @@ export function ReaderInteractions({
     container.addEventListener("wheel", release, { passive: true });
     container.addEventListener("touchmove", release, { passive: true });
     container.addEventListener("pointerdown", release);
+    // A key is the reader acting too (Ctrl+F and its jump, Page Down), as in
+    // the page editor's own hold (docs/page/keep-place.ts).
+    window.addEventListener("keydown", release, true);
     let timer = setTimeout(release, placed ? POSITION_HOLD_MS : PAGE_WAIT_MS);
     return cleanup;
   }, [positionStoreKey, embedded, isTranscript, accountAtOpen]);
@@ -2043,13 +2046,8 @@ export function ReaderInteractions({
       ...referenceContent(input.kind, input.content, input.quote, input.turns ?? 0),
     };
   };
-  // The page editor's comment card keeps the grip; the cards over the
-  // article lift from their head row (dragCard). On a touch
-  // screen the grip takes the 36 px target the head's buttons have.
-  const annotationGrip = (reference: AnnotationReference | null) =>
-    dropOpen && reference ? (
-      <AnnotationGrip reference={reference} className="-ml-1 justify-center pointer-coarse:size-9" />
-    ) : null;
+  // Every card lifts its annotation from its head row (dragCard,
+  // data-hold-head), the page editor's comment card too; none has a grip.
   // A hold on the card's blank space, off its controls and off the head row
   // that moves the card (data-no-drag, dragCard), lifts the
   // annotation. A press on the card's text — where the pointer shows the
@@ -3206,9 +3204,10 @@ export function ReaderInteractions({
   // focus is on the page — the words, the page editor's text in Viewing —
   // Tab goes to its first row, before the marks and chips after the words;
   // Shift+Tab on its first row gives the focus back to the words, the
-  // selection kept. In Editing and Suggesting, Tab is the text's (indent,
-  // nest a list, the next cell). Alt+F10 or Shift+F10 go to the first row
-  // in every mode and every reader.
+  // selection kept. In Editing and Suggesting, Tab with a caret or over
+  // lines is the text's (indent, nest a list, the next cell); over words
+  // inside one line it goes to the toolbox. Alt+F10 or Shift+F10 go to the
+  // first row in every mode and every reader.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -3231,7 +3230,10 @@ export function ReaderInteractions({
         else (active as HTMLElement).blur();
         return;
       }
-      if (richTextRef.current && pageEditorIn(container)?.isEditable && active?.closest(".ProseMirror")) return;
+      // Editing and Suggesting: Tab is the text's, but words selected inside
+      // one line go to the toolbox too (tabOpensToolbox, keys.ts).
+      const pageEditor = richTextRef.current ? pageEditorIn(container) : null;
+      if (pageEditor?.isEditable && active?.closest(".ProseMirror") && !tabOpensToolbox(pageEditor.state)) return;
       const onPage =
         !active ||
         active === document.body ||
@@ -6839,7 +6841,7 @@ export function ReaderInteractions({
     if (!card || card.busy || !card.noteId) return;
     setCommentCard(null);
     try {
-      await setCommentResolved(card.noteId, true);
+      await resolveCommentWithUndo(card.noteId, t("docsLayer.commentResolved"), () => router.refresh());
       router.refresh();
     } catch (err) {
       showError(err instanceof Error ? err.message : t("common.requestFailed"));
@@ -11119,6 +11121,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         <div
           data-selection-popover
           data-layer-toolbar
+          aria-keyshortcuts="Alt+F10"
           data-track-surface="ai-toolbar"
           onMouseDown={(e) => {
             // Keep the text selection alive under the rail — but let fields
@@ -12027,7 +12030,6 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
           draft={commentCard.draft}
           saved={commentCard.saved}
           busy={commentCard.busy}
-          grip={annotationGrip(commentReference)}
           // Its place is the card column's (suggest/layer.tsx).
           className={`bubble-in absolute ${TOOL_LAYER}${underView}`}
           style={{ maxHeight: cardMaxHeight, borderColor: annotationKindColor("comment", null) }}

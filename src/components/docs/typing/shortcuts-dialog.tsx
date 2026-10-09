@@ -100,6 +100,8 @@ const SECTIONS: { title: TKey; rows: Row[] }[] = [
       { label: "docsTyping.scToggleCheckbox", pc: ["Mod+Alt+Enter"] },
       { label: "docsTyping.scNonPrinting", pc: ["Mod+Shift+P"] },
       { label: "docsInsert.askAssistant", pc: ["Mod+Alt+G"] },
+      // Tab with words selected inside one line; Alt+F10 with any selection.
+      { label: "docsTyping.scAiToolbar", pc: ["Tab", "Alt+F10"] },
     ],
   },
   {

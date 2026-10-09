@@ -26,7 +26,8 @@ import type { ContentsEntry } from "@/lib/contents";
 // there. On an import, the contents (SPEC.md §26) stand under the headings:
 // the stored parts, each a jump that flashes where the part starts, or the
 // ask to generate them; parts that are the headings again are not listed. While the panel is closed, a small button at the
-// canvas's top left opens it.
+// canvas's top left opens it. In a pane under 600 px (a phone) the panel
+// lies over the page, and a jump closes it.
 
 type OutlineItem = { pos: number; level: number; depth: number; text: string };
 
@@ -192,6 +193,7 @@ function OutlineContents({
   documentId,
   viewTop,
   headings,
+  onJumped,
 }: {
   editor: Editor;
   doc: PMNode;
@@ -199,6 +201,8 @@ function OutlineContents({
   viewTop: number;
   /** Where the headings listed above stand. */
   headings: ReadonlySet<number>;
+  /** A jump landed (a narrow pane closes the panel). */
+  onJumped?: () => void;
 }) {
   const t = useT();
   const { canEdit } = useCollab();
@@ -225,6 +229,7 @@ function OutlineContents({
               onPick={(item) => {
                 const dom = goTo(editor, item, viewTop);
                 if (dom) flashInPage(dom);
+                onJumped?.();
               }}
             />
           </>
@@ -293,6 +298,7 @@ export function OutlinePanel({
   left,
   height,
   viewTop,
+  over = false,
 }: {
   editor: Editor;
   store: PageStore;
@@ -300,6 +306,8 @@ export function OutlinePanel({
   height: number;
   /** The view's top below the header, client px. */
   viewTop: number;
+  /** A narrow pane: the panel lies over the page, and a jump closes it. */
+  over?: boolean;
 }) {
   const t = useT();
   const width = usePageState(store, (s) => s.outlineWidth);
@@ -337,6 +345,7 @@ export function OutlinePanel({
   return (
     <nav
       className="docs-outline"
+      data-over={over || undefined}
       style={{ left, width: shown, height }}
       aria-label={t("docsPage.tabsOutlines")}
       data-edit-control
@@ -360,10 +369,24 @@ export function OutlinePanel({
         {items.length === 0 ? (
           <p className="docs-outline-empty">{t("docsPage.outlineEmpty")}</p>
         ) : (
-          <OutlineList items={items} current={current} onPick={(item) => void goTo(editor, item, viewTop)} />
+          <OutlineList
+            items={items}
+            current={current}
+            onPick={(item) => {
+              goTo(editor, item, viewTop);
+              if (over) store.set({ outlineOpen: false });
+            }}
+          />
         )}
         {imported && (
-          <OutlineContents editor={editor} doc={doc} documentId={imported.documentId} viewTop={viewTop} headings={headingPlaces} />
+          <OutlineContents
+            editor={editor}
+            doc={doc}
+            documentId={imported.documentId}
+            viewTop={viewTop}
+            headings={headingPlaces}
+            onJumped={over ? () => store.set({ outlineOpen: false }) : undefined}
+          />
         )}
       </div>
       <div

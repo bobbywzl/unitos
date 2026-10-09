@@ -103,6 +103,7 @@ const en = {
   scVoice: "Start voice typing",
   scToggleCheckbox: "Toggle a checkbox",
   scNonPrinting: "Show non-printing characters",
+  scAiToolbar: "Go to the AI toolbar from selected words",
   // Format > Text > Capitalization
   caseLower: "Capitalization: lowercase",
   caseUpper: "Capitalization: UPPERCASE",
@@ -268,6 +269,7 @@ const zh: Record<keyof typeof en, string> = {
   scVoice: "开始语音输入",
   scToggleCheckbox: "勾选或取消勾选",
   scNonPrinting: "显示非打印字符",
+  scAiToolbar: "从选中的文字进入 AI 工具栏",
   caseLower: "大小写：小写",
   caseUpper: "大小写：大写",
   caseTitle: "大小写：首字母大写",
