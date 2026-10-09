@@ -3,7 +3,7 @@ import type { DocStyle } from "@/components/docs/extensions";
 import { firstFamily, fontStack } from "@/components/docs/fonts";
 import { levelMarker, lineLevel, listMarker } from "@/components/docs/toolbar/lists";
 import { readStyles, sizeInPt, type NamedStyle } from "@/components/docs/toolbar/styles";
-import type { RichMark, RichNode } from "@/lib/docs/schema";
+import { captionMathOf, type RichMark, type RichNode } from "@/lib/docs/schema";
 import type { ParsedBlock, TextFont } from "@/lib/parse/types";
 import { parseRegion, type Region } from "@/lib/video/types";
 import { splitTag } from "./math";
@@ -652,10 +652,14 @@ function bordersOf(attrs: Record<string, unknown> | undefined): { borders?: Side
   return sides.length > 0 ? { borders: sides } : {};
 }
 
-/** A figure's caption as spans: its words, and the styles its page gives
+/** A figure's caption as spans: its words, the styles its page gives
     them (the figure object's captionStyles, a JSON list of {start, end,
-    style}: a bold label). */
-function captionSpans(caption: string, stored: unknown): Span[] {
+    style}: a bold label), and its formulas (captionMath, a JSON list of
+    {start, end, latex}), each a formula span in place of its characters, as
+    the page editor draws it and as an inline formula of a paragraph reads.
+    Read without them, a caption's formulas counted as lost: the MML book's
+    "Figure 2.5 … AB and BA …" (p. 29) holds both in its captionMath. */
+function captionSpans(caption: string, stored: unknown, storedMath?: unknown): Span[] {
   let list: unknown = [];
   try {
     list = typeof stored === "string" ? JSON.parse(stored) : [];
@@ -667,9 +671,15 @@ function captionSpans(caption: string, stored: unknown): Span[] {
     const flag = FLAGS.find((f) => f === style);
     return typeof start === "number" && typeof end === "number" && flag ? [{ start, end, style: flag }] : [];
   });
-  const cuts = [...new Set([0, caption.length, ...styles.flatMap((x) => [x.start, x.end]).filter((at) => at > 0 && at < caption.length)])].sort((a, b) => a - b);
+  const formulas = captionMathOf(storedMath) ?? [];
+  const cuts = [...new Set([0, caption.length, ...[...styles, ...formulas].flatMap((x) => [x.start, x.end]).filter((at) => at > 0 && at < caption.length)])].sort((a, b) => a - b);
   const into = new Spans();
   for (let k = 0; k + 1 < cuts.length; k++) {
+    const formula = formulas.find((f) => f.start <= cuts[k] && f.end >= cuts[k + 1]);
+    if (formula) {
+      if (formula.start === cuts[k]) into.add({ text: "", latex: formula.latex });
+      continue;
+    }
     const span: Span = { text: caption.slice(cuts[k], cuts[k + 1]) };
     for (const x of styles) if (x.start <= cuts[k] && x.end >= cuts[k + 1]) span[x.style] = true;
     into.add(span);
@@ -951,7 +961,7 @@ class ImportReader {
         const at = region && typeof node.attrs?.page === "number" ? { at: { page: node.attrs.page, region } } : {};
         if (isMathText(caption)) return this.push({ kind: "figure", mathImage: caption.trim(), ...at });
         const font: Font = { shape: shapeOf(this.styles.normal.font ?? "Arial"), ...captionFont(this.media.get(String(node.attrs?.mediaId ?? ""))) };
-        return this.push(caption.trim() ? { kind: "figure", caption: captionSpans(caption, node.attrs?.captionStyles), font, ...at } : { kind: "figure", ...at });
+        return this.push(caption.trim() ? { kind: "figure", caption: captionSpans(caption, node.attrs?.captionStyles, node.attrs?.captionMath), font, ...at } : { kind: "figure", ...at });
       }
       case "image":
         if (this.here()) this.push({ kind: "figure" });

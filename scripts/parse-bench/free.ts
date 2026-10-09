@@ -1242,15 +1242,19 @@ function repeatedHeads(pdf: PdfText, cand: Flat): Line[] {
 
 /** Whether some of these runs of words hold a text's words in their order:
     half of its runs of three words (of two, for a shorter text) stand in
-    one of them. */
-function heldBy(sequences: string[][]): (text: string) => boolean {
+    one of them. A run of a formula's leaves alone holds nothing (leaves
+    marks them): single letters and digits in a row stand in any drawing's
+    labels. */
+function heldBy(sequences: string[][], leaves?: boolean[][]): (text: string) => boolean {
   const runs = new Set<string>();
-  for (const words of sequences) {
+  sequences.forEach((words, s) => {
     for (let i = 0; i < words.length; i++) {
-      runs.add(words.slice(i, i + 2).join(" "));
-      runs.add(words.slice(i, i + 3).join(" "));
+      for (const k of [2, 3]) {
+        if (leaves && leaves[s].slice(i, i + k).every(Boolean)) continue;
+        runs.add(words.slice(i, i + k).join(" "));
+      }
     }
-  }
+  });
   return (text) => {
     const words = wordsOf(text).map((w) => w.w);
     const k = words.length >= 3 ? 3 : Math.min(2, words.length);
@@ -1260,9 +1264,39 @@ function heldBy(sequences: string[][]): (text: string) => boolean {
   };
 }
 
-/** Whether the candidate's words hold a line's words in their order (heldBy its units). */
+/** Whether the candidate's words hold a line's words in their order (heldBy its units). A unit's inline
+    formulas stand among its words as they read (their text, else their LaTeX's leaves): a caption's
+    formulas are the caption's words to this test. Read without them, a caption set inside its figure's
+    region with formulas on a line lost the line to the figure's labels, and the caption's words counted
+    extra (parse bench finding: the RL textbook's p. 118, "Figure 9.2: Effective weights (γλ) on
+    step-offset-l TD errors in GAE, for γ = 0.99 and four values of λ", whose words all stand in the
+    candidate's caption). */
 function heldLines(cand: Flat): (text: string) => boolean {
-  return heldBy(cand.units.map((unit) => cand.toks.slice(unit.first, unit.end).map((t) => t.w)));
+  const formulas = new Map<string, string[]>();
+  for (const m of cand.math) {
+    if (m.display || m.unit < 0) continue;
+    const reading = m.text?.trim() ? m.text : m.latex !== undefined || m.mathml !== undefined ? mathLeaves(m, false).join(" ") : "";
+    const key = `${m.unit} ${m.at}`;
+    formulas.set(key, [...(formulas.get(key) ?? []), ...wordsOf(reading).map((w) => w.w)]);
+  }
+  const sequences = cand.units.map((unit, u) => {
+    const words: string[] = [];
+    const leaves: boolean[] = [];
+    for (let i = unit.first; i <= unit.end; i++) {
+      const formula = formulas.get(`${u} ${i}`) ?? [];
+      words.push(...formula);
+      leaves.push(...formula.map(() => true));
+      if (i < unit.end) {
+        words.push(cand.toks[i].w);
+        leaves.push(false);
+      }
+    }
+    return { words, leaves };
+  });
+  return heldBy(
+    sequences.map((x) => x.words),
+    sequences.map((x) => x.leaves),
+  );
 }
 
 /** Whether a text's words stand on the pages the text layer reads, running
