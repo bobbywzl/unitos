@@ -462,8 +462,25 @@ function scoreFile(e: Entry, ref: RefSheet[], parsed: ParsedSheet[], show: boole
       }
     }
     const key = (m: number[]) => m.join(",");
+    // The reference clips its merges to its grid — the rows and columns up
+    // to the last words, and the merges whose first cell has words — and
+    // leaves out a merge that the clip makes one cell (SheetsRef.java). A
+    // merge past the last words, such as an empty bordered box under a
+    // table, is the sheet's look and never in the reference: the parse's
+    // merges are clipped to the same grid, as frozen rows are below.
+    const refRows = rs.rows.length;
+    const refGridCols = Math.max(
+      rs.rows.reduce((m, row) => Math.max(m, row.length), 0),
+      ...rs.merges.map((m) => m[3] + 1),
+    );
+    const clipped = (m: number[]): number[] | null => {
+      if (m[0] >= refRows || m[1] >= refGridCols) return null;
+      const r1 = Math.min(m[2], refRows - 1);
+      const c1 = Math.min(m[3], refGridCols - 1);
+      return r1 === m[0] && c1 === m[1] ? null : [m[0], m[1], r1, c1];
+    };
     const refMerges = new Set(rs.merges.map(key));
-    const gotMerges = new Set(ps.merges.map(key));
+    const gotMerges = new Set(ps.merges.map(clipped).filter((m): m is number[] => m !== null).map(key));
     for (const m of refMerges) if (gotMerges.has(m)) mergeTp++;
     else mergeFn++;
     for (const m of gotMerges) if (!refMerges.has(m)) mergeFp++;
