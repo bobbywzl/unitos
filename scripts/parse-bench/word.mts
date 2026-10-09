@@ -8,9 +8,11 @@
 //
 // The set is the test files of open-source Word readers and writers (pandoc,
 // mammoth, docx2python, python-docx, Apache POI, LibreOffice), saved under
-// .bench/word/files, and .bench/word/manifest.json names each file's source
-// (the repository at a commit, or the npm package) and its license. They are
-// other people's files: never committed. With no set the run skips.
+// .bench/word/files by scripts/parse-bench/word-fetch.ts. word-corpus.json
+// names each file's source (the repository at a pinned commit, or the npm
+// package at a pinned version), its path there, its license, its sha256, and
+// what it holds. They are other people's files: never committed. With no set
+// the run skips.
 //
 // The reference is read from the file, not from the parse: every word of
 // the body, the notes, and the text boxes; each paragraph's heading level
@@ -892,6 +894,18 @@ if (detail) {
   for (const k of base) {
     const files = (key: string) => results.filter((r) => r.counts[key]).length;
     console.log(`  ${k.padEnd(22)} ${String(sum(k)).padStart(6)} (${String(files(k)).padStart(3)})    ${String(sum(`import.${k}`)).padStart(6)} (${String(files(`import.${k}`)).padStart(3)})`);
+  }
+  // The table counts this run's files alone. The baseline's total counts
+  // every file, a skipped file with its last counts: say both, so a run
+  // that skips the large files is not read as a count that fell.
+  if (skipped.length > 0 && existsSync(BASELINE)) {
+    const base = JSON.parse(readFileSync(BASELINE, "utf8")) as { files: Record<string, Counts> };
+    const rest: Counts = {};
+    for (const name of skipped) for (const [k, v] of Object.entries(base.files[name] ?? {})) rest[k] = (rest[k] ?? 0) + v;
+    const whole = (key: string) => sum(key) + (rest[key] ?? 0);
+    const keys = [...new Set([...classes, ...Object.keys(rest)])].sort();
+    console.log(`\nThe table counts the ${results.length} files run. The skipped files' last counts (word-baseline.json): ${Object.entries(rest).map(([k, v]) => `${k} ${v}`).join(", ") || "none"}.`);
+    console.log(`The whole set: ${keys.map((k) => `${k} ${whole(k)}`).join(", ")}.`);
   }
   const worst = [...results].sort((a, b) => Object.keys(b.counts).length - Object.keys(a.counts).length).slice(0, Number(value("--worst") ?? 10));
   console.log("\nFiles with the most classes of loss:");
