@@ -223,6 +223,19 @@ export const STITCH_MAX_OUTPUT_TOKENS = 32768; // a page of whole-block referenc
 // chars / 4, a CJK character 1), so a Chinese project reads what an English
 // project of the same token count reads, at the same cost.
 export const STITCH_WHOLE_THRESHOLD = 30_000; // under it the answer pass reads the documents whole
+// A holistic command — the main threads, an overview, what is still open
+// (lib/graph/intent.ts commandIntent) — reads the documents whole up to
+// this much rendering, with no reading pass (COST9-02, round 9): it needs
+// every block, the whole read's prefix caches from the second holistic
+// command on at about a fifth of the select and answer passes' price, and
+// judged on Linda's shape it was at least as right on every pair. Every
+// other command keeps STITCH_WHOLE_THRESHOLD.
+export const STITCH_HOLISTIC_WHOLE_THRESHOLD = 60_000;
+// The reader's notes and the replies on links (ANS9-04): read by the answer
+// pass only when the command is about them (lib/prompts/stitch.ts
+// asksAboutNotes), ranked against the command (lib/graph/rank.ts) and cut
+// to this many tokens. Read-only: nothing is written.
+export const STITCH_NOTES_BUDGET = 3_000;
 export const STITCH_SKELETON_BUDGET = 50_000; // skeleton one select call reads; past it the lines are read in groups
 // What the answer pass reads after selection, by what the command asks for
 // (commandKind, lib/graph/stitch.ts): an answer, links, or a page. A
