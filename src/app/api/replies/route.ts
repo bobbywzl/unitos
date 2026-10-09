@@ -10,9 +10,9 @@ import {
   noteAccess,
   peopleByIds,
 } from "@/lib/collab";
-import { REPLAY_HEADER } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { serverT } from "@/lib/i18n/server";
+import { replayedAt } from "@/lib/replay";
 import { parseBody } from "@/lib/validate";
 
 const createSchema = z
@@ -96,8 +96,10 @@ export async function POST(req: Request) {
     // removed meanwhile saves on the kept row, which Restore brings back
     // with its thread: a removed link does not make the words stale
     // (REV8-01, CLAUDE.md rule zero 6). Online the reader gets the 404 and
-    // keeps the draft.
-    const replayed = req.headers.get(REPLAY_HEADER) !== null;
+    // keeps the draft. The mark must be a whole number of ms, as the notes
+    // route asks (lib/replay.ts, REV9-07): a made-up header online is no
+    // replay.
+    const replayed = replayedAt(req) !== null;
     const access = await linkAccess(link, "editor", data.notebookId, { removed: replayed });
     if (access instanceof NextResponse) return access;
     // A link with no project shared across accounts: only its maker's
