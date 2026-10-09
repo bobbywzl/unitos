@@ -548,7 +548,10 @@ function hasHashHeading(node: Root | RootContent, lines: string[]): boolean {
 //    item "1.  Introduction"). Its number sets its level: one level under
 //    the Title for each part ("4" a level 2, "4.2" a level 3). A line with
 //    a wide gap (three spaces inside it: a page's header or footer, "RFC
-//    2616   HTTP/1.1   June 1999") is none. Before, an RFC's every
+//    2616   HTTP/1.1   June 1999") is none. A numbered line set in from
+//    the margin, standing alone, is a heading too when its number has two
+//    parts or more ("1.2.1  Error Logging") or its title is in capitals
+//    ("2.  LINK LAYER"): an older RFC indents its sections. Before, an RFC's every
 //    section heading read as a paragraph or a one-item list (Markdown
 //    benchmark finding: five RFCs, 3 to 260 headings each, none found).
 // 5. A line that stands alone and opens with a chapter's word and its
@@ -561,6 +564,7 @@ const CHAPTER_RX =
   /^(?:chapter|book|part|act|scene|canto|letter|volume|stave|chapitre|livre|partie|acte|kapitel|teil|buch|cap[ií]tulo|capitolo|libro|parte)\s+(?:\d+|[ivxlcdm]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|the\s+\w+)\b/iu;
 const TEXT_INDENTED_SHARE_MIN = 0.5;
 const TEXT_MARGIN_WORDS_MAX = 12;
+const INDENTED_SECTION_RX = /^(\d+(?:\.\d+)*)\.?\s+(\S.*)$/;
 const SECTION_NUMBER_RX = /^((?:\d+|[A-Z])(?:\.\d+)*)[.)]?\s+\S/;
 
 /** A short line in capitals (rule 2). */
@@ -621,6 +625,25 @@ function shapeTextOutline(root: Root, source: string) {
       if (words(text) > TEXT_MARGIN_WORDS_MAX || TEXT_SENTENCE_END_RX.test(text)) return;
       nodes[i] = { type: "heading", depth: marginDepth(text), children: [{ type: "text", value: `${marker} ` }, ...only.children], position: node.position };
       return;
+    }
+    // A numbered section line set in from the margin (an older RFC's
+    // "      1.2.1  Continuing Internet Evolution", which Markdown reads as
+    // code or a list): a heading, when its number has two parts or more or
+    // its title is in capitals.
+    if (indented && standsAlone(nodes, i) && node.position && node.position.start.line === node.position.end.line) {
+      const raw = (lines[node.position.start.line - 1] ?? "").trim();
+      const numbered = INDENTED_SECTION_RX.exec(raw);
+      if (
+        numbered &&
+        (node.type === "code" || node.type === "list" || node.type === "paragraph") &&
+        (numbered[1].includes(".") || isCapitalsLine(numbered[2])) &&
+        words(raw) <= TEXT_MARGIN_WORDS_MAX &&
+        !TEXT_SENTENCE_END_RX.test(raw) &&
+        !/\S {3,}\S|\.{4,}/.test(numbered[2])
+      ) {
+        nodes[i] = { type: "heading", depth: marginDepth(raw), children: [{ type: "text", value: raw }], position: node.position };
+        return;
+      }
     }
     if (node.type !== "paragraph") return;
     // A chapter's line, or a line in capitals that ends on a period ("SING
