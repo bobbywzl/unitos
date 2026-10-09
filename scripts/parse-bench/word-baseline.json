@@ -9,7 +9,6 @@
   "import.list.kind": 23,
   "import.mark.bold": 10,
   "mark.bold": 8,
-  "list.kind": 4,
   "import.list.depth": 2
  },
  "files": {
@@ -257,7 +256,6 @@
   },
   "poi-bug59058.docx": {},
   "poi-bug65649.docx": {
-   "list.kind": 4,
    "import.list.depth": 2
   },
   "poi-bug65738.docx": {},

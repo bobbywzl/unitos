@@ -611,7 +611,10 @@ function readParse(title: string | null, blocks: ParsedBlock[], titleFont?: Text
       for (const line of words.split("\n")) {
         const m = /^( *)(\S+)\s?(.*)$/.exec(line);
         if (!m) continue;
-        r.lists.push({ depth: m[1].length / 2, numbered: /[\p{L}\p{N}]/u.test(m[2]) && m[2].length <= 12, text: compact(line) });
+        // A counter: up to 12 characters, or a legal number of any depth
+        // ("3.2.2.5.1.4.1.").
+        const counter = /[\p{L}\p{N}]/u.test(m[2]) && (m[2].length <= 12 || /^(?:\d{1,3}\.){2,}\d{0,3}$/.test(m[2]));
+        r.lists.push({ depth: m[1].length / 2, numbered: counter, text: compact(line) });
       }
     }
     if (b.type === "TABLE") {
