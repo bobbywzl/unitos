@@ -1,31 +1,30 @@
 {
  "total": {
-  "image.missing": 2,
-  "link.missing": 2,
-  "list.kind": 4,
-  "list.missing": 3,
-  "lost:body": 2,
-  "lost:cell": 2,
-  "lost:label": 70,
-  "lost:note": 1,
-  "mark.bold": 17,
-  "mark.italic": 1,
-  "mark.strike": 2,
   "math.missing": 2,
-  "table.rows": 1,
-  "words": 234,
-  "import.caption.unjoined": 4,
-  "import.image.missing": 2,
-  "import.link.missing": 2,
-  "import.list.kind": 53,
-  "import.list.missing": 68,
-  "import.lost:cell": 2,
-  "import.lost:label": 70,
-  "import.mark.bold": 19,
-  "import.mark.strike": 2,
   "import.math.missing": 2,
-  "import.table.rows": 1,
-  "import.words": 240
+  "image.missing": 2,
+  "import.image.missing": 2,
+  "words": 234,
+  "lost:label": 70,
+  "import.words": 240,
+  "import.lost:label": 70,
+  "mark.bold": 17,
+  "import.list.kind": 53,
+  "import.mark.bold": 19,
+  "mark.strike": 2,
+  "import.mark.strike": 2,
+  "lost:body": 2,
+  "list.kind": 4,
+  "import.list.missing": 68,
+  "link.missing": 2,
+  "import.link.missing": 2,
+  "lost:note": 1,
+  "list.missing": 3,
+  "mark.italic": 1,
+  "lost:cell": 2,
+  "table.rows": 1,
+  "import.lost:cell": 2,
+  "import.table.rows": 1
  },
  "files": {
   "d2p-240-DOP-1013A_Lay_Down_Tubulars.docx": {},
@@ -87,9 +86,7 @@
   "lo-EquationAsScientificNumbering.docx": {},
   "lo-EquationWithAboveAndBelowCaption.docx": {},
   "lo-TOC_field_b.docx": {},
-  "lo-TableWithAboveCaptions.docx": {
-   "import.caption.unjoined": 1
-  },
+  "lo-TableWithAboveCaptions.docx": {},
   "lo-caption.docx": {},
   "lo-cjklist30.docx": {
    "import.list.kind": 20
@@ -214,12 +211,8 @@
   "pandoc-sdt_elements.docx": {},
   "pandoc-sdt_in_footnote.docx": {},
   "pandoc-special_punctuation.docx": {},
-  "pandoc-table_captions_no_field.docx": {
-   "import.caption.unjoined": 1
-  },
-  "pandoc-table_captions_with_field.docx": {
-   "import.caption.unjoined": 2
-  },
+  "pandoc-table_captions_no_field.docx": {},
+  "pandoc-table_captions_with_field.docx": {},
   "pandoc-table_gridbefore.docx": {},
   "pandoc-table_header_rowspan.docx": {},
   "pandoc-table_one_header_row.docx": {},

@@ -51,6 +51,7 @@
 // (numbers only). --baseline lists every file where a class rose and exits 1
 // when one did; --save-baseline writes the run.
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { unzipSync } from "fflate";
 import { join } from "node:path";
 import type { RichNode } from "@/lib/docs/schema";
 import type { ParsedBlock } from "@/lib/parse/types";
@@ -118,6 +119,9 @@ type Unit = {
   numId?: string;
   /** A caption beside a picture or a table. */
   nearFloat?: boolean;
+  /** …beside a table and no picture: the page editor has no table caption,
+      so an import keeps it a paragraph over the table. */
+  nearTable?: boolean;
   /** The paragraph holds a picture (a caption's neighbor). */
   picture?: boolean;
 };
@@ -509,8 +513,12 @@ function readReference(zip: OfficeZip): Reference {
   top.forEach((node, i) => {
     const own = ref.units.slice(unitsAt[i], unitsAt[i + 1]).filter((u) => u.kind === "caption");
     if (own.length === 0) return;
-    const float = (k: number) => k >= 0 && k < top.length && (top[k].localName === "tbl" || ref.units.slice(unitsAt[k], unitsAt[k + 1]).some((u) => u.picture && !u.text));
-    for (const u of own) u.nearFloat = float(i - 1) || float(i + 1) || Boolean(u.picture);
+    const table = (k: number) => k >= 0 && k < top.length && top[k].localName === "tbl";
+    const picture = (k: number) => k >= 0 && k < top.length && ref.units.slice(unitsAt[k], unitsAt[k + 1]).some((u) => u.picture && !u.text);
+    for (const u of own) {
+      u.nearFloat = table(i - 1) || table(i + 1) || picture(i - 1) || picture(i + 1) || Boolean(u.picture);
+      u.nearTable = !(picture(i - 1) || picture(i + 1) || u.picture) && (table(i - 1) || table(i + 1));
+    }
   });
   ref.units = ref.units.filter((u) => compact(u.text).length > 0);
   return ref;
@@ -677,7 +685,7 @@ const TYPED = /^\s*(?:[([]?(?:\d{1,3}(?:\.\d{1,3})*|[a-zA-Z]|[ivxlcdmIVXLCDM]{1,
 type Counts = Record<string, number>;
 type Findings = { counts: Counts; notes: string[] };
 
-function compare(ref: Reference, got: Reading): Findings {
+function compare(ref: Reference, got: Reading, side: "parse" | "import"): Findings {
   const counts: Counts = {};
   const notes: string[] = [];
   const bump = (key: string, why: string) => {
@@ -760,7 +768,9 @@ function compare(ref: Reference, got: Reading): Findings {
     const c = compact(l);
     if (c && all.includes(c) && !got.links.includes(c)) bump("link.missing", l);
   }
-  for (const u of ref.units) if (u.kind === "caption" && u.nearFloat && got.paragraphs.has(compact(u.text))) bump("caption.unjoined", u.text);
+  for (const u of ref.units) {
+    if (u.kind === "caption" && u.nearFloat && !(side === "import" && u.nearTable) && got.paragraphs.has(compact(u.text))) bump("caption.unjoined", u.text);
+  }
   for (const k of MARK_KINDS) {
     for (const words of ref.marks[k]) {
       const c = compact(words.replace(TYPED, ""));
@@ -780,8 +790,30 @@ else if (only) files = files.filter((f) => only.includes(f) || only.includes(f.r
 const results: FileResult[] = [];
 const quiet = console.warn;
 console.warn = () => undefined;
+// A file whose body part is past LARGE_BYTES (a 600-page specification)
+// takes minutes and gigabytes: it runs when named (--only, --detail) or
+// with --large, else it is listed and skipped.
+const LARGE_BYTES = 8_000_000;
+const skipped: string[] = [];
 for (const name of files) {
   const bytes = new Uint8Array(readFileSync(join(SET, name)));
+  if (!only && !detail && !flag("--large")) {
+    let size = 0;
+    try {
+      unzipSync(bytes, {
+        filter: (f) => {
+          if (/^word\/document\d*\.xml$/.test(f.name)) size = f.originalSize;
+          return false;
+        },
+      });
+    } catch {
+      // A broken zip: the reference skips it below.
+    }
+    if (size > LARGE_BYTES) {
+      skipped.push(name);
+      continue;
+    }
+  }
   const counts: Counts = {};
   const expected: Counts = {};
   const notes: string[] = [];
@@ -804,7 +836,7 @@ for (const name of files) {
   try {
     const parsed = await parseDocx(bytes, name, { storeImage: async () => "/api/images/bench" });
     const title = parsed.titleFromFile ? null : (parsed.title ?? null);
-    const p = compare(ref, readParse(title, parsed.blocks));
+    const p = compare(ref, readParse(title, parsed.blocks), "parse");
     Object.assign(counts, p.counts);
     notes.push(...p.notes);
     try {
@@ -821,7 +853,7 @@ for (const name of files) {
       });
       const reading = readImport(out.richText);
       if (!parsed.titleFromFile) reading.title = parsed.title ?? "";
-      const i = compare(ref, reading);
+      const i = compare(ref, reading, "import");
       for (const [k, v] of Object.entries(i.counts)) counts[`import.${k}`] = v;
       notes.push(...i.notes.map((n) => `import.${n}`));
     } catch (err) {
@@ -854,6 +886,7 @@ if (detail) {
   const expectedTotal: Counts = {};
   for (const r of results) for (const [k, v] of Object.entries(r.expected)) expectedTotal[k] = (expectedTotal[k] ?? 0) + v;
   console.log(`Word set: ${results.length} files. Expected: ${Object.entries(expectedTotal).map(([k, v]) => `${k} ${v}`).join(", ")}`);
+  if (skipped.length > 0) console.log(`Skipped as large (run with --large or --only): ${skipped.join(", ")}`);
   console.log("\nClass                     parse (files)    import (files)");
   const base = [...new Set(classes.map((k) => k.replace(/^import\./, "")))].sort();
   for (const k of base) {
@@ -872,7 +905,9 @@ type Baseline = { total: Counts; files: Record<string, Counts> };
 if (flag("--save-baseline") && !detail) {
   const prior: Baseline = existsSync(BASELINE) ? (JSON.parse(readFileSync(BASELINE, "utf8")) as Baseline) : { total, files: {} };
   for (const r of results) prior.files[r.name] = r.counts;
-  if (!only) prior.total = total;
+  // The total is every file's, a large file's last run with it.
+  prior.total = {};
+  for (const counts of Object.values(prior.files)) for (const [k, v] of Object.entries(counts)) prior.total[k] = (prior.total[k] ?? 0) + v;
   writeFileSync(BASELINE, JSON.stringify(prior, null, 1) + "\n");
   console.log(`Saved ${results.length} files to ${BASELINE}`);
 }
