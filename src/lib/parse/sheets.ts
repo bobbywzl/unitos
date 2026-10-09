@@ -283,7 +283,8 @@ const SNIFF_RECORDS = 20;
     The records are read with the quoting rules, so a delimiter inside a
     quoted field is not counted. Sheets benchmark finding: a header whose
     quoted names hold tabs and newlines was split on tabs, and a file whose
-    quoted fields hold semicolons on semicolons. */
+    quoted fields hold semicolons on semicolons. A file that opens with a
+    one-field title line was read as one column. */
 export function sniffDelimiter(text: string): Delimiter {
   const head = text.length > SNIFF_CHARS ? text.slice(0, SNIFF_CHARS) : text;
   let best: Delimiter = ",";
@@ -291,9 +292,19 @@ export function sniffDelimiter(text: string): Delimiter {
   for (const sep of ["\t", ",", ";"] as const) {
     const records = parseDelimitedText(head, sep, SNIFF_RECORDS).filter((r) => r.length > 1 || r[0] !== "");
     if (records.length === 0) continue;
-    const counts = records.map((r) => r.length - 1);
-    const consistent = counts.filter((c) => c > 0 && c === counts[0]).length;
-    const score = consistent * 10 + counts[0];
+    // The field count most records share, not the first record's: a file
+    // may open with a title line of one field.
+    const often = new Map<number, number>();
+    for (const r of records) if (r.length > 1) often.set(r.length - 1, (often.get(r.length - 1) ?? 0) + 1);
+    let mode = 0;
+    let consistent = 0;
+    for (const [count, times] of often) {
+      if (times > consistent || (times === consistent && count > mode)) {
+        mode = count;
+        consistent = times;
+      }
+    }
+    const score = consistent * 10 + mode;
     if (score > bestScore) {
       bestScore = score;
       best = sep;

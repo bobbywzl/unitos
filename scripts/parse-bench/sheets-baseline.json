@@ -1,14 +1,14 @@
 {
  "total": {
-  "score": 0.965,
+  "score": 0.968,
   "sheets": 0.981,
-  "text": 0.956,
-  "cells": 0.95,
+  "text": 0.958,
+  "cells": 0.957,
   "formats": 0.907,
   "merges": 1,
   "frozen": 1,
-  "lost": 77982,
-  "dom": 3,
+  "lost": 77695,
+  "dom": 4,
   "errors": 1
  },
  "files": {
@@ -1333,14 +1333,14 @@
    "dom": 0
   },
   "lo-fdo48621-broken-quotes": {
-   "score": 0.521,
-   "text": 0.55,
-   "cells": 0.013,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
    "formats": null,
    "merges": null,
    "frozen": null,
-   "lost": 287,
-   "dom": 0
+   "lost": 0,
+   "dom": 1
   },
   "lo-numberformat": {
    "score": 1,
