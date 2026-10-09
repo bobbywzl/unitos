@@ -173,3 +173,34 @@ export function usePostedUndo(onPost?: () => void) {
   }, [settle]);
   return { posted, undoPosted: undo, settlePosted: settle };
 }
+
+/** The notes this tab deleted and has not taken back (dissect:note-removed,
+    dissect:note-restored): a list hides their rows at once, as the reader
+    fades their marks, without waiting for the refresh. */
+export function useRemovedNotes(): ReadonlySet<string> {
+  const [removed, setRemoved] = useState<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    const idOf = (e: Event) => (e as CustomEvent<{ noteId?: unknown } | null>).detail?.noteId;
+    const onRemoved = (e: Event) => {
+      const id = idOf(e);
+      if (typeof id === "string") setRemoved((prev) => new Set(prev).add(id));
+    };
+    const onRestored = (e: Event) => {
+      const id = idOf(e);
+      if (typeof id !== "string") return;
+      setRemoved((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    };
+    window.addEventListener("dissect:note-removed", onRemoved);
+    window.addEventListener("dissect:note-restored", onRestored);
+    return () => {
+      window.removeEventListener("dissect:note-removed", onRemoved);
+      window.removeEventListener("dissect:note-restored", onRestored);
+    };
+  }, []);
+  return removed;
+}

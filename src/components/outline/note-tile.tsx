@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { NoteView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
@@ -11,6 +11,7 @@ import { useIsMergeTarget, type HandleProps } from "@/components/sortable";
 import { splitNote } from "@/lib/note-title";
 import { NoteId } from "@/components/outline/note-id";
 import { sourcesTip } from "@/components/outline/sources-tip";
+import { TOUCH_HIT } from "@/components/outline/touch-hit";
 import { NOTE_ABSORBED_EVENT, type OutlineActions } from "@/components/outline/use-outline";
 
 function AnchorIcon({ size = 11 }: { size?: number }) {
@@ -28,6 +29,20 @@ function TickIcon({ size = 10 }: { size?: number }) {
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
       <path d="M20 6 9 17l-5-5" />
     </svg>
+  );
+}
+
+/** A finger is the pointer: a tile's tip would show on the long press that
+    lifts it and cover the board while the finger carries it. */
+function useCoarsePointer(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      const media = window.matchMedia("(pointer: coarse)");
+      media.addEventListener("change", onChange);
+      return () => media.removeEventListener("change", onChange);
+    },
+    () => window.matchMedia("(pointer: coarse)").matches,
+    () => false,
   );
 }
 
@@ -64,6 +79,7 @@ export function NoteTile({
   const isSelected = actions.selected.has(note.id);
   const author = shared && note.createdById ? people[note.createdById] : undefined;
   const draggable = Boolean(handle) && canEdit;
+  const coarse = useCoarsePointer();
 
   // The body is cut: more of it than the tile shows. Only a cut body fades
   // out at the bottom; a body shown whole reads to its last line.
@@ -122,11 +138,36 @@ export function NoteTile({
       onDragStart={(e) => e.preventDefault()}
       style={{ touchAction: "pan-y" }}
       className={surface}
-      data-tip={isMergeTarget ? t("outline.holdToMerge") : draggable ? t("outline.holdToDragTile") : t("outline.openNoteTitle")}
+      data-tip={
+        coarse
+          ? undefined
+          : isMergeTarget
+            ? t("outline.holdToMerge")
+            : draggable
+              ? t("outline.holdToDragTile")
+              : t("outline.openNoteTitle")
+      }
     >
       <div className="flex shrink-0 items-center gap-1.5">
         <NoteId id={note.id} />
-        {pending && (
+        {/* A pending tile takes its Accept in one press, as the tray's card
+            does; the opened note keeps Accept and Reject. A viewer sees the
+            label. */}
+        {pending && canEdit && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              void actions.acceptNote(note.id);
+            }}
+            data-track="note-accept"
+            data-no-drag
+            data-tip={t("outline.acceptTitle")}
+            className={`rounded-full bg-sage-600 px-2 py-0.5 text-[10px] font-semibold text-sage-fg hover:bg-sage-700 ${TOUCH_HIT}`}
+          >
+            {t("common.accept")}
+          </button>
+        )}
+        {pending && !canEdit && (
           <span className="rounded-full bg-clay-200 px-2 py-0.5 text-[10px] font-semibold text-clay-800">
             {t("outline.pendingLabel")}
           </span>

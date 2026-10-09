@@ -226,6 +226,9 @@ export function HistoryPanel({
         // repaints its marks, and the tray shows it. A section: the
         // refresh brings it.
         const noteId = tellNoteBack(done);
+        // A merge's Restore brings back each note the merge took.
+        const more = (done as { notes?: unknown } | null)?.notes;
+        if (Array.isArray(more)) for (const back of more.slice(1)) tellNoteBack(back);
         if (noteId) window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId } }));
         else router.refresh();
       },
@@ -388,7 +391,13 @@ export function HistoryPanel({
           onClick={() => void restoreNote(entry)}
           disabled={working !== null}
           data-track="history-restore"
-          data-tip={t(entry.kind === "SECTION_REMOVE" ? "panes.historyRestoreSectionTitle" : "panes.historyRestoreTitle")}
+          data-tip={t(
+            entry.kind === "SECTION_REMOVE"
+              ? "panes.historyRestoreSectionTitle"
+              : entry.kind === "NOTE_MERGE"
+                ? "outline.historyRestoreMergeTitle"
+                : "panes.historyRestoreTitle",
+          )}
           className={actionButton}
         >
           {busy ? t("common.loading") : t("panes.historyRestore")}

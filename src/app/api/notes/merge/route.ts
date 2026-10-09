@@ -8,6 +8,7 @@ import { recordNoteEdit } from "@/lib/notes/edits";
 import { joinNoteContents } from "@/lib/notes/join";
 import { mergeNoteText } from "@/lib/notes/merge";
 import { NOTE_MERGE_KIND, type MergeSnapshot } from "@/lib/notes/merge-snapshot";
+import { keepNote } from "@/lib/notes/removed";
 import { normalizeNoteOrders } from "@/lib/order";
 import { parseBody } from "@/lib/validate";
 
@@ -136,6 +137,12 @@ export async function POST(req: Request) {
   // What the merge takes apart, before it does: the consumed notes' anchors
   // and replies by note, and the target's own anchors, so the copies the
   // merge adds can be told apart afterwards.
+  // Each consumed note is also kept whole, as a removal keeps it (its
+  // edits and side chats too, which go with the note): History's Restore
+  // brings it back after the Undo is gone (lib/notes/merge-restore.ts).
+  const keptWhole = new Map(
+    (await Promise.all(consumed.map((id) => keepNote(id)))).filter((k) => k !== null).map((k) => [k.id, k]),
+  );
   const [ownedAnchors, ownedReplies, targetAnchorsBefore, copiedSources] = await Promise.all([
     consumed.length > 0
       ? db.source.findMany({ where: { noteId: { in: consumed } }, select: { id: true, noteId: true } })
@@ -218,6 +225,8 @@ export async function POST(req: Request) {
       ...(n.log === null ? {} : { log: n.log }),
       sourceIds: ownedAnchors.filter((s) => s.noteId === n.id).map((s) => s.id),
       replyIds: ownedReplies.filter((r) => r.noteId === n.id).map((r) => r.id),
+      documentId: n.documentId,
+      ...(keptWhole.has(n.id) ? { kept: keptWhole.get(n.id) } : {}),
     })),
     copiedSourceIds,
   };

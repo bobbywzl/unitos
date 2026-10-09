@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { createContext, useEffect, useState, useSyncExternalStore } from "react";
 import {
   CARD_DRAG_END,
   CARD_DRAG_OVER,
@@ -9,6 +9,12 @@ import {
   type CardDragEndDetail,
   type CardDragOverDetail,
 } from "@/lib/card-drag";
+
+/** False inside a notes list the reader cannot see (the tray behind another
+    tab, folded, or a phone's closed sheet): its cards count for nothing in
+    useCardDropOpen, so no grip shows and no card head lifts while no note
+    is on screen. */
+export const CardDropShown = createContext(true);
 
 /** A drop target for the card drag (lib/card-drag.ts). The element that
     renders `data-note-drop-target={id}` takes the drop; this says whether a

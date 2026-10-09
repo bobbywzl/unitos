@@ -86,6 +86,7 @@ const en = {
   deleteFailed: "The note was not deleted and is back in its place: {reason}",
   // Words kept when their note went (SPEC.md §6, lib/notes/gone.ts).
   keptAsNewNote: "This note was deleted elsewhere. Your words are kept in a new note.",
+  historyRestoreMergeTitle: "Put the merged notes back beside the note they went into, with their sources and replies. The note keeps its text",
   // A quote whose place the document no longer has (SPEC.md §6).
   quoteSourceLost: "The quote is in the note. Its passage changed in the document, so it has no source.",
   // The merge's Undo, once the merged note changed (SPEC.md §6).
@@ -142,7 +143,7 @@ const en = {
   referenceYou: "You",
   referenceAssistant: "Assistant",
   annotationJump: "Jump to this annotation in the reader",
-  annotationLoadFailed: "Could not load the annotation",
+  annotationGone: "This annotation was deleted. History can restore it.",
   pin: "Pin",
   unpin: "Unpin",
   pinnedLabel: "Pinned",
@@ -345,6 +346,7 @@ const zh: Record<keyof typeof en, string> = {
   undoCancelTitle: "放回这次编辑里输入的文字",
   deleteFailed: "笔记没有删除，已放回原处：{reason}",
   keptAsNewNote: "这条笔记已在别处删除。你写的字已保存为一条新笔记。",
+  historyRestoreMergeTitle: "把合并掉的笔记放回它们并入的笔记旁边，连同出处和回复。那条笔记保留现在的文字",
   quoteSourceLost: "引文已加入笔记。文档中的这段文字已改动，所以引文没有出处。",
   mergeEditedSince: "合并后已修改",
   sendCommandAgain: "再次发送",
@@ -383,7 +385,7 @@ const zh: Record<keyof typeof en, string> = {
   referenceYou: "你",
   referenceAssistant: "助手",
   annotationJump: "跳到阅读器中的这条批注",
-  annotationLoadFailed: "无法加载这条批注",
+  annotationGone: "这条批注已删除。可以在历史中恢复。",
   pin: "置顶",
   unpin: "取消置顶",
   pinnedLabel: "已置顶",

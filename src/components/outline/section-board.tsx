@@ -7,7 +7,7 @@ import { useCollab } from "@/components/collab/collab-context";
 import { PlusIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
 import { SortableBoard, SortableGroup, SortableItem } from "@/components/sortable";
-import { AnnotationSideHost, useAnnotationSide } from "@/components/outline/annotation-side";
+import { AnnotationSideHost } from "@/components/outline/annotation-side";
 import { dropIndex, notesList, parseListId } from "@/components/outline/board-lists";
 import { MergeUndoBar } from "@/components/outline/merge-undo";
 import { NoteCard } from "@/components/outline/note-card";
@@ -92,9 +92,6 @@ export function SectionBoard({
   const notes = compose.visibleNotes;
   const notesById = new Map(notes.map((n) => [n.id, n]));
   const opened = open ? (notesById.get(open) ?? null) : null;
-  // An annotation reference clicked in the open note opens the annotation
-  // beside its card (annotation-side.tsx): the overlay widens for the two.
-  const sideOpen = Boolean(useAnnotationSide()?.side);
 
   // The tiles' grid and height limits (SPEC.md §6). Columns: as many
   // 220px tiles as the board's width holds, and no more than the notes, so
@@ -363,9 +360,12 @@ export function SectionBoard({
             tabIndex={-1}
           />
           <div
-            className={`content-in relative flex w-full flex-col items-start gap-6 lg:flex-row ${sideOpen ? "max-w-[1160px]" : "max-w-[760px]"}`}
+            className="content-in relative w-full max-w-[760px]"
           >
-            <div className="relative w-full min-w-0 max-w-[760px] flex-1">
+            {/* An annotation reference clicked in the open note opens the
+                annotation beside its card (annotation-side.tsx), in the
+                free room on its right: the card stays where it is. */}
+            <div className="relative w-full min-w-0">
               <button
                 onClick={() => setOpen(null)}
                 data-track="board-note-close"
@@ -375,7 +375,7 @@ export function SectionBoard({
               >
                 ✕
               </button>
-              <NoteCard note={opened} actions={actions} variant="page" />
+              <NoteCard note={opened} actions={actions} variant="page" opened />
             </div>
             <AnnotationSideHost />
           </div>
