@@ -7,6 +7,7 @@ import { renderChart } from "@/lib/parse/chart";
 import { fontListAttr } from "@/lib/office-fonts";
 import { JEV_MODEL, jevEnabled, systemOne, type JevQuestion } from "@/lib/jev";
 import type { SlideImageStore } from "@/lib/parse/slides";
+import { parseXmlStream, type XmlElement } from "@/lib/parse/xml-stream";
 import {
   attr,
   boolAttr,
@@ -24,6 +25,7 @@ import {
   parseTheme,
   parseXmlPart,
   partRels,
+  partText,
   relsOfType,
   resolveDrawingColor,
   rgbCss,
@@ -633,11 +635,23 @@ function descendantColor(fill: Element | null): Element | null {
   return null;
 }
 
+/** The shared strings in order: every <si>, read as the part streams
+    (lib/parse/xml-stream.ts), so a table of 100,000 strings never stands
+    as a tree. */
 function readSharedStrings(zip: OfficeZip, rels: Map<string, Relationship>): string[] {
   const rel = relsOfType(rels, "sharedStrings")[0];
-  const doc = parseXmlPart(zip, rel && !rel.external ? rel.target : "xl/sharedStrings.xml");
-  if (!doc) return [];
-  return descendants(doc, "si").map((si) => richText(si));
+  const text = partText(zip, rel && !rel.external ? rel.target : "xl/sharedStrings.xml");
+  if (text === null) return [];
+  const out: string[] = [];
+  const doc = parseXmlStream(text, (el) => {
+    if (el.localName !== "si") return false;
+    for (let up = el.parent; up; up = up.parent) if (up.localName === "si") return false;
+    // An <si> and any inside it, in document order.
+    out.push(richText(el));
+    for (const inner of el.getElementsByTagNameNS("*", "si")) out.push(richText(inner));
+    return true;
+  });
+  return doc ? out : [];
 }
 
 /** The text of a rich-text element: its own <t> or its runs' <t>, phonetic
@@ -645,10 +659,10 @@ function readSharedStrings(zip: OfficeZip, rels: Map<string, Relationship>): str
     (ECMA-376 Part 1, §22.9.2.19), and "_x005F_" is a literal "_": Excel
     writes a line break in a cell as "_x000D_" and LF. Sheets benchmark
     finding (lo-escape-unicode). */
-function richText(el: Element): string {
+function richText(el: XmlElement): string {
   let out = "";
-  for (const node of Array.from(el.children)) {
-    if (node.localName === "t") out += node.textContent ?? "";
+  for (let node = el.firstElementChild; node; node = node.nextElementSibling) {
+    if (node.localName === "t") out += node.textContent;
     else if (node.localName === "r") out += child(node, "t")?.textContent ?? "";
   }
   return cellText(out.replace(/_x([0-9A-Fa-f]{4})_/g, (_, hex: string) => String.fromCharCode(parseInt(hex, 16))));
@@ -813,7 +827,63 @@ function readSheet(
   styles: Styles,
   date1904: boolean,
 ): ReadSheet | null {
-  const doc = parseXmlPart(zip, path);
+  const xml = partText(zip, path);
+  if (xml === null) return null;
+
+  // The cells, row by row, as the part streams: a row is read when it
+  // closes and dropped from the tree (lib/parse/xml-stream.ts), so a sheet
+  // of 175,000 cells never stands as a tree. Rows and cells may omit their
+  // references: they then follow the last one.
+  const rows: Row[] = [];
+  const hiddenRows = new Set<number>();
+  // The 0-based row a row without its reference takes: the one after the
+  // last. It was the last row itself, so a sheet whose rows carry no "r"
+  // drew every row over row 1 and kept only the last. Sheets benchmark
+  // finding (POI 56278, 59746).
+  let rowCursor = 0;
+  // Formula cells stored with no number ("r:c").
+  const uncomputed = new Set<string>();
+  let cellCount = 0;
+  let totalRows = 0;
+  let cut = false;
+  const readRow = (rowEl: XmlElement) => {
+    const ref = intAttr(rowEl, "r");
+    const r = ref !== null ? ref - 1 : rowCursor;
+    rowCursor = r + 1;
+    totalRows = r + 1;
+    if (cut) return;
+    if (r >= SHEET_MAX_ROWS || cellCount >= SHEET_MAX_CELLS) {
+      cut = true;
+      return;
+    }
+    if (boolAttr(rowEl, "hidden")) hiddenRows.add(r);
+    const heightPt = boolAttr(rowEl, "customHeight") || attr(rowEl, "ht") ? Number(attr(rowEl, "ht") ?? "") || null : null;
+    const cells: Cell[] = [];
+    let colCursor = 0;
+    for (const c of children(rowEl, "c")) {
+      const ref = attr(c, "r");
+      const at = ref ? cellRef(ref) : null;
+      const col = at ? at.col : colCursor;
+      colCursor = col + 1;
+      if (col >= SHEET_MAX_COLS) continue;
+      const cell = readCell(c, shared, styles, date1904);
+      if (cell.formula && cell.kind === "empty" && (attr(c, "t") ?? "n") === "n") uncomputed.add(`${r}:${col}`);
+      cells[col] = cell;
+      cellCount++;
+    }
+    rows[r] = { cells, heightPt };
+  };
+  // The rows of the worksheet's first sheetData are the sheet's.
+  let sheetData: XmlElement | null = null;
+  const doc = parseXmlStream(xml, (el) => {
+    if (el.localName !== "row") return false;
+    const parent = el.parent;
+    if (!parent || parent.localName !== "sheetData" || !parent.parent || parent.parent.parent !== null) return false;
+    sheetData ??= child(parent.parent, "sheetData");
+    if (parent !== sheetData) return false;
+    readRow(el);
+    return true;
+  });
   if (!doc) return null;
   const rels = partRels(zip, path);
   const root = doc.documentElement;
@@ -845,7 +915,7 @@ function readSheet(
     }
   }
 
-  // Hyperlinks by cell.
+  // Hyperlinks by cell: the part lists them after the cells.
   const hrefByRef = new Map<string, string>();
   for (const link of descendants(child(root, "hyperlinks"), "hyperlink")) {
     const ref = attr(link, "ref");
@@ -854,50 +924,11 @@ function readSheet(
     const href = rel?.external ? rel.target : null;
     if (ref && href && /^(https?:\/\/|mailto:)/i.test(href)) hrefByRef.set(ref.split(":")[0].toUpperCase(), href);
   }
-
-  // The cells, row by row. Rows and cells may omit their references: they
-  // then follow the last one.
-  const rows: Row[] = [];
-  const hiddenRows = new Set<number>();
-  // The 0-based row a row without its reference takes: the one after the
-  // last. It was the last row itself, so a sheet whose rows carry no "r"
-  // drew every row over row 1 and kept only the last. Sheets benchmark
-  // finding (POI 56278, 59746).
-  let rowCursor = 0;
-  // Formula cells stored with no number ("r:c").
-  const uncomputed = new Set<string>();
-  let cellCount = 0;
-  let totalRows = 0;
-  let cut = false;
-  const sheetData = child(root, "sheetData");
-  for (const rowEl of children(sheetData, "row")) {
-    const ref = intAttr(rowEl, "r");
-    const r = ref !== null ? ref - 1 : rowCursor;
-    rowCursor = r + 1;
-    totalRows = r + 1;
-    if (cut) continue;
-    if (r >= SHEET_MAX_ROWS || cellCount >= SHEET_MAX_CELLS) {
-      cut = true;
-      continue;
-    }
-    if (boolAttr(rowEl, "hidden")) hiddenRows.add(r);
-    const heightPt = boolAttr(rowEl, "customHeight") || attr(rowEl, "ht") ? Number(attr(rowEl, "ht") ?? "") || null : null;
-    const cells: Cell[] = [];
-    let colCursor = 0;
-    for (const c of children(rowEl, "c")) {
-      const ref = attr(c, "r");
-      const at = ref ? cellRef(ref) : null;
-      const col = at ? at.col : colCursor;
-      colCursor = col + 1;
-      if (col >= SHEET_MAX_COLS) continue;
-      const cell = readCell(c, shared, styles, date1904);
-      const href = hrefByRef.get(`${columnLetter(col)}${r + 1}`);
-      if (href) cell.href = href;
-      if (cell.formula && cell.kind === "empty" && (attr(c, "t") ?? "n") === "n") uncomputed.add(`${r}:${col}`);
-      cells[col] = cell;
-      cellCount++;
-    }
-    rows[r] = { cells, heightPt };
+  for (const [ref, href] of hrefByRef) {
+    const at = cellRef(ref);
+    if (!at || `${columnLetter(at.col)}${at.row + 1}` !== ref) continue;
+    const cell = rows[at.row]?.cells[at.col];
+    if (cell) cell.href = href;
   }
   computeStoredEmpty(rows, uncomputed, styles, date1904);
 
@@ -932,7 +963,7 @@ function readSheet(
   return { sheet, rels, hiddenRows, hiddenCols };
 }
 
-function readCell(c: Element, shared: string[], styles: Styles, date1904: boolean): Cell {
+function readCell(c: XmlElement, shared: string[], styles: Styles, date1904: boolean): Cell {
   const type = attr(c, "t") ?? "n";
   const styleId = intAttr(c, "s");
   const v = child(c, "v")?.textContent ?? "";
