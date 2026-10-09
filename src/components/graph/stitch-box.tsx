@@ -162,12 +162,13 @@ export function StitchBox({
   };
   // [style9] REV8-05: the graph opened on kept turns: the box opens folded
   // to its two rest rows, the head row saying the last command's first
-  // words in place of the scope; the fold button and a send unfold the
+  // words in place of the scope while nothing is picked; a pick puts the
+  // scope back (the pick is what the reader is doing now, and its count is
+  // the answer to Pick these); the fold button and a send unfold the
   // conversation. A viewer's box keeps its turns in view (they are all it
   // shows), and a command on its way is never folded away.
   const [turnsFolded, setTurnsFolded] = useState(true);
   const folded = turnsFolded && canEdit && turns.length > 0 && !pending && !running;
-  const lastCommand = folded ? ([...turns].reverse().find((turn) => turn.role === "user")?.content ?? "") : "";
   const [passage, setPassage] = useState<{ blockId: string; citation: StitchCitation } | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -249,6 +250,10 @@ export function StitchBox({
   const stop = kept.stop;
 
   const picked = nodes.filter((n) => selectedIds.has(n.id));
+  // [style9] REV8-05 (folded, above): the head row says the last command
+  // only while nothing is picked.
+  const headSaysCommand = folded && picked.length === 0;
+  const lastCommand = headSaysCommand ? ([...turns].reverse().find((turn) => turn.role === "user")?.content ?? "") : "";
   const coarse = useCoarsePointer();
   const everyCount = STITCH_READS_GENERATED ? nodes.length : nodes.filter((n) => !generatedIds?.includes(n.id)).length;
   // Why Send is off, said under the text box: a command over the route's
@@ -442,10 +447,11 @@ export function StitchBox({
           <span className="sr-only">{`: ${t("stitch.stitchHint")}`}</span>
         </span>
         {/* The scope: which documents the command reads; [style9] REV8-05:
-            folded on kept turns, the last command's first words instead. */}
+            folded on kept turns with nothing picked, the last command's
+            first words instead. */}
         {canEdit && (
           <>
-            {folded ? (
+            {headSaysCommand ? (
               <span data-stitch-last-command data-tip={lastCommand} className="min-w-0 max-w-[50%] truncate text-sand-600">
                 {lastCommand}
               </span>

@@ -11,12 +11,13 @@
 - `src/components/graph/graph-view.tsx`: VIEW9-02 (curve tone from clay-600); VIEW9-01 (`waits` for CurveMarks from `useWaitsForReply`; the key's replies sample "2?"); VIEW9-07 (the Controls before the canvas in the DOM; hover-card rows not Tab stops).
 - `src/components/graph/graph-notes.tsx`: VIEW9-01 (CurveMarks `waits` prop draws "?"); VIEW9-07 (`tabStops` on NodeNotesRows, `tabIndex` on GraphNoteRow).
 - `src/components/graph/graph-find.tsx`: VIEW9-08 (focus border clay-600).
-- `src/components/graph/stitch-box.tsx`: REV8-05 (folded on kept turns; the last command's words in the head row; the fold button and a send unfold).
+- `src/components/graph/stitch-box.tsx`: REV8-05 (folded on kept turns; the last command's words in the head row while nothing is picked, the scope once something is; the fold button and a send unfold).
 - `src/components/assistant/clear-conversation.tsx`: REV8-04 (the touch floor), the audit's one-line diff.
 - `src/lib/graph/coverage-view.ts`: the three optional `GraphComment` fields the coordinator wrote (`newest`, `openReplies`, `createdAt`) for LISTS9 to fill; no rule changed.
 - `src/lib/i18n/dict/graphCover.ts`: `noReply`, `noReplyTitle`, `noReplyNone` removed; `waitingAllTitle` added (en, zh).
 - `src/lib/i18n/dict/graphNotes.ts`, `panes.ts`: the key's replies and far-zoom lines; the header's "{docs} document{ds}".
 - `scripts/qa/ui-graph-cover4.mjs`, `scripts/qa/panel6-check.ts`: the checks on the removed switch now check its absence and the head's words.
+- `scripts/qa/ui-graph-view.mjs`: its "no model call" check no longer counts `GET /api/assistant/kept` (PR #23's read of the kept turns, in the base; no model runs) as a model route.
 - `SPEC.md` §13 and §22: the wording for every change above; REV8-07 ("a question and the four commands above").
 
 **Decisions:**
@@ -27,6 +28,6 @@
 - The listing (rows / comments / waiting) is kept per project in a module map like the filter and the scroll, so Back from a link answered returns to the waiting list; a listing whose count fell to none gives the rows back (an effect in CoverageHead).
 - WALK9-08: Gaps only is disabled while a listing shows (the brief's first option), and the listing's own found line counts its rows.
 - WALK9-04 (b), opening the reader on the Annotations tab with the comment expanded, is in reader-interactions.tsx, not an owned file: left for the integrator, the row's address unchanged.
-- REV8-05: the fold button does double duty (folded: unfold; else: the pill); the box re-opens from the pill as it was left, and only a graph open starts folded. A viewer's box never folds its turns (they are all it shows).
+- REV8-05: the fold button does double duty (folded: unfold; else: the pill); the box re-opens from the pill as it was left, and only a graph open starts folded. A viewer's box never folds its turns (they are all it shows). A pick while folded puts the scope back in the head row and leaves the conversation folded (the view audit's Pick these check reads the count there; the first fold hid it when the project had kept turns).
 - Polish skipped: the link panel title wrapping (link-panel.tsx, not owned: suggest `${TEXT_NAME}` or a two-line clamp in RESULT.md); "1 pending" against the key's "2 •" (the words are clearer than a dot that carries its meaning by color alone).
 - `data-graph-coverage-noreply` kept on the waiting press (ui-graph-cover4 reads it); the Links list keeps `[data-graph-links-row]` and the asker's row.
