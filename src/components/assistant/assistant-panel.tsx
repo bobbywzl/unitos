@@ -319,6 +319,37 @@ function putBack(notebookId: string, message: OutgoingMessage) {
   restore(message);
   releaseMessage(notebookId, message.key);
 }
+// A side chat's box (SPEC.md §7): its own words, apart from the
+// conversation's, so Back never carries them into the conversation and the
+// side chat reopens with them. One record per project in localStorage, by
+// the side chat's note id (its key until its first answer is saved).
+const SIDE_DRAFT_PREFIX = "unitos-assistant-side-drafts:";
+function readSideDrafts(notebookId: string): Record<string, string> {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(SIDE_DRAFT_PREFIX + notebookId) ?? "{}");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed as Record<string, unknown>).filter((e): e is [string, string] => typeof e[1] === "string"),
+    );
+  } catch {
+    return {};
+  }
+}
+function writeSideDraft(notebookId: string, id: string, text: string, from?: string) {
+  try {
+    const all = readSideDrafts(notebookId);
+    if (from) delete all[from];
+    if (text.trim()) all[id] = text;
+    else delete all[id];
+    if (Object.keys(all).length === 0) localStorage.removeItem(SIDE_DRAFT_PREFIX + notebookId);
+    else localStorage.setItem(SIDE_DRAFT_PREFIX + notebookId, JSON.stringify(all));
+  } catch {
+    // Storage blocked or full: the box still holds the words on screen.
+  }
+}
+/** The slot a side chat's words are kept under. */
+const sideSlot = (side: { key: string; noteId: string | null }) => side.noteId ?? side.key;
+
 // The box's words when a panel mounts: this tab's, else the stored draft's,
 // with the messages a closed tab never had confirmed put back in front.
 function initialBoxText(notebookId: string): string {
@@ -510,7 +541,23 @@ export function AssistantPanel({
     setSideChatsState(sideChatsRef.current);
     cacheThread();
   }
+  // The box takes the words of the thread that opens; the words of the one
+  // that closes stay in its own slot (the conversation's draft, or the side
+  // chat's).
+  function switchBox(next: string | null) {
+    const before = openKeyRef.current;
+    if (before === next) return;
+    const words = boxRef.current?.value ?? question;
+    const closing = before ? sideChatsRef.current.find((s) => s.key === before) : null;
+    if (closing) writeSideDraft(notebookId, sideSlot(closing), words);
+    else if (!before) boxText.set(notebookId, words);
+    const opening = next ? sideChatsRef.current.find((s) => s.key === next) : null;
+    const text = next ? (opening ? (readSideDrafts(notebookId)[sideSlot(opening)] ?? "") : "") : (boxText.get(notebookId) ?? "");
+    openKeyRef.current = next;
+    setQuestion(text);
+  }
   function setOpenKey(key: string | null) {
+    switchBox(key);
     openKeyRef.current = key;
     setOpenKeyState(key);
     cacheThread();
@@ -567,6 +614,16 @@ export function AssistantPanel({
         const loadedSideChats = toSideChats(json.sideChats ?? []);
         turnsRef.current = loaded;
         sideChatsRef.current = loadedSideChats;
+        // Words of a side chat that was never answered, so never saved (its
+        // slot is still its key), are not thrown away: they join the box.
+        const orphans = Object.entries(readSideDrafts(notebookId)).filter(([id]) => id.startsWith("side-"));
+        if (orphans.length > 0) {
+          const box = boxText.get(notebookId) ?? "";
+          const joined = [box, ...orphans.map(([, words]) => words)].filter((w) => w.trim()).join("\n\n");
+          for (const [id] of orphans) writeSideDraft(notebookId, id, "");
+          boxText.set(notebookId, joined);
+          setQuestion(joined);
+        }
         noteIdRef.current = json.conversationNoteId ?? null;
         baseRef.current = json.updatedAt ?? null;
         baseCountRef.current = loaded.length;
@@ -605,13 +662,20 @@ export function AssistantPanel({
   // goes.
   const draftTimer = useRef<number | null>(null);
   useEffect(() => {
+    // A side chat's words go to its own slot, not the conversation's draft.
+    const open = openKeyRef.current ? sideChatsRef.current.find((s) => s.key === openKeyRef.current) : null;
+    if (open) {
+      writeSideDraft(notebookId, sideSlot(open), question);
+      return;
+    }
+    if (openKeyRef.current) return;
     boxText.set(notebookId, question);
     if (draftTimer.current !== null) return;
     draftTimer.current = window.setTimeout(() => {
       draftTimer.current = null;
       writeDraftNow(notebookId);
     }, 300);
-  }, [notebookId, question]);
+  }, [notebookId, question, openKeyRef, sideChatsRef]);
   useEffect(() => {
     const flush = () => writeDraftNow(notebookId);
     window.addEventListener("pagehide", flush);
@@ -630,7 +694,7 @@ export function AssistantPanel({
     const plain = !current.trim() && !quoteRef.current;
     const words = plain ? m.question : m.content;
     const next = current.trim() ? (words.trim() ? `${current}\n\n${words}` : current) : words;
-    boxText.set(notebookId, next);
+    if (!openKeyRef.current) boxText.set(notebookId, next);
     setQuestion(next);
     if (plain && m.quote) setQuote(m.quote);
     const back: Attachment[] = [
@@ -696,6 +760,7 @@ export function AssistantPanel({
   }) {
     stopRun();
     reset();
+    switchBox(null);
     shared.shown += 1;
     turnsRef.current = next.turns;
     baseRef.current = next.base;
@@ -1015,6 +1080,10 @@ export function AssistantPanel({
         const savedBase = json.updatedAt ?? null;
         const savedCount = turnsToSave.length;
         if (side) {
+          if (!side.noteId) {
+            const words = readSideDrafts(notebookId)[side.key];
+            if (words !== undefined) writeSideDraft(notebookId, savedId, words, side.key);
+          }
           setSideChats((list) =>
             list.map((s) => (s.key === side.key ? { ...s, noteId: savedId, base: savedBase, baseCount: savedCount } : s)),
           );
@@ -1276,7 +1345,7 @@ export function AssistantPanel({
     };
     // The words leave the box and stay in the draft, held, until the
     // answer is saved.
-    boxText.set(notebookId, "");
+    if (!openKeyRef.current) boxText.set(notebookId, "");
     holdMessage(notebookId, message);
     setQuestion("");
     if (quote) dropQuote();
@@ -1721,7 +1790,7 @@ export function AssistantPanel({
         value={question}
         rows={1}
         onCommit={(text) => {
-          boxText.set(notebookId, text);
+          if (!openKeyRef.current) boxText.set(notebookId, text);
           setQuestion(text);
         }}
         onType={fitBox}
