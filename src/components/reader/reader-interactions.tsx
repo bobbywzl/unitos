@@ -72,8 +72,10 @@ import {
   AnswerToolbar,
   CommentBox,
   CommentList,
+  deleteCommentWithUndo,
   QuoteChip,
   quoteMessage,
+  shownComments,
   SideChatChips,
   SideChatHeader,
   useAnswerSelection,
@@ -8246,7 +8248,7 @@ export function ReaderInteractions({
           people?: Record<string, Person>;
         } | null;
         if (cancelled || !res.ok || !json) return;
-        setChatComments(json.replies ?? []);
+        setChatComments(shownComments(json.replies ?? []));
         setChatCommentPeople(json.people ?? {});
       } catch {
         // Offline: the thread reads the same, with no comments under it.
@@ -8322,14 +8324,15 @@ export function ReaderInteractions({
       setChatCommentBusy(false);
     }
   }
-  async function deleteChatComment(id: string) {
-    setChatComments((list) => list.filter((c) => c.id !== id));
-    try {
-      await fetch(`/api/replies/${id}`, { method: "DELETE" });
-    } catch {
-      // Offline: the row is gone on screen and stays on the server; the next
-      // load of the thread shows it again.
-    }
+  // ✕ on a comment: no ask, the Undo pill, the DELETE once it goes.
+  function deleteChatComment(id: string) {
+    deleteCommentWithUndo({
+      list: chatComments,
+      id,
+      message: t("outline.commentDeleted"),
+      setList: setChatComments,
+      failed: () => showError(t("common.notSaved")),
+    });
   }
 
   // A message of the assistant card that did not go (a failed request, Stop,
@@ -9974,7 +9977,7 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
       comments={chatComments}
       people={{ ...people, ...chatCommentPeople }}
       myId={myId}
-      onDelete={(id) => void deleteChatComment(id)}
+      onDelete={deleteChatComment}
       className={chipsClassName}
     />
     {/* A side chat's header already shows the quote it started on. */}
@@ -10328,8 +10331,10 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
     >
       {collapseBusy ? <SpinnerIcon size={13} className="motion-safe:animate-spin" /> : <CollapseIcon size={13} />}
       {/* On a narrow screen the running button is the spinner and Stop, so
-          it keeps its place in the row beside Extract. */}
-      <span className={collapseBusy ? "max-sm:sr-only" : undefined}>
+          it keeps its place in the row beside Extract; under 380 px the
+          button at rest is its icon, the label for screen readers, so the
+          band keeps one row. */}
+      <span className={collapseBusy ? "max-sm:sr-only" : "max-[380px]:sr-only"}>
         {t(collapseBusy ? "reader.collapsing" : collapseOn ? "reader.collapsed" : "reader.collapse")}
       </span>
       {collapseBusy && <StopPill />}

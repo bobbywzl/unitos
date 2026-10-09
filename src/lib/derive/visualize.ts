@@ -104,10 +104,25 @@ export async function renderVisual(visual: Visual): Promise<{ svg: string } | { 
   }
   if (visual.kind === "simulation") {
     if (!visual.simulation) return { error: "The simulation has no law." };
-    return renderSimulation(visual.simulation);
+    return restAfterLoops(renderSimulation(visual.simulation));
   }
   if (!visual.svg) return { error: "The picture has no SVG." };
-  return sanitizeSvg(visual.svg);
+  return restAfterLoops(sanitizeSvg(visual.svg));
+}
+
+/** How many times a stored animation plays its loop before it rests. */
+const LOOPS = 3;
+
+/** An animation or a simulation plays its loop a few times and then rests on
+    its first frame, so it never moves for good beside the words a reader
+    reads (a note, the Annotations tab); opening it again plays it again. */
+function restAfterLoops(drawn: { svg: string } | { error: string }): { svg: string } | { error: string } {
+  if (!("svg" in drawn)) return drawn;
+  return {
+    svg: drawn.svg
+      .replace(/\brepeatCount=(["'])indefinite\1/g, `repeatCount="${LOOPS}"`)
+      .replace(/\srepeatDur=(["'])indefinite\1/g, ""),
+  };
 }
 
 // ── Text measurement ───────────────────────────────────────────────────────

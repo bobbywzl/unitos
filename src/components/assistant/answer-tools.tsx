@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { deleteWithUndo, resumeDeletes } from "@/lib/deferred-delete";
 import type { Person } from "@/lib/person";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { useT } from "@/components/lang-provider";
@@ -384,6 +385,58 @@ export type AnswerComment = {
   userId: string;
   createdAt: string;
 };
+
+// The comments on an answer whose delete a page before this one left
+// pending (lib/deferred-delete.ts): read once per page, hidden from every
+// list, their delete sent again.
+let resumedCommentDeletes: Set<string> | null = null;
+function commentDeletesLeft(): Set<string> {
+  resumedCommentDeletes ??= new Set(resumeDeletes((url) => url.startsWith("/api/replies/")));
+  return resumedCommentDeletes;
+}
+/** The comments as a list shows them: without the ones a delete is still taking. */
+export function shownComments(list: AnswerComment[]): AnswerComment[] {
+  const left = commentDeletesLeft();
+  return left.size > 0 ? list.filter((c) => !left.has(c.id)) : list;
+}
+
+/** Delete a comment on an answer with no ask (SPEC.md §7): it leaves the
+    list now, the Undo pill offers it back in its place, and the DELETE waits
+    for the pill to go (deleteWithUndo). failed: the delete did not land, the
+    comment is back. */
+export function deleteCommentWithUndo({
+  list,
+  id,
+  message,
+  setList,
+  failed,
+}: {
+  list: AnswerComment[];
+  id: string;
+  message: string;
+  setList: (update: (list: AnswerComment[]) => AnswerComment[]) => void;
+  failed: () => void;
+}) {
+  const index = list.findIndex((c) => c.id === id);
+  const comment = list[index];
+  if (!comment) return;
+  const putBack = () =>
+    setList((now) => {
+      if (now.some((c) => c.id === id)) return now;
+      const next = [...now];
+      next.splice(Math.min(index, next.length), 0, comment);
+      return next;
+    });
+  deleteWithUndo({
+    url: `/api/replies/${encodeURIComponent(id)}`,
+    method: "DELETE",
+    ids: [id],
+    message,
+    gone: () => setList((now) => now.filter((c) => c.id !== id)),
+    back: putBack,
+    failed,
+  });
+}
 
 /** The box a comment is written in: the quote it is on, then the words.
     `draft` and `onDraft` keep the words typed and not yet posted (SPEC.md

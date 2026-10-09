@@ -30,8 +30,10 @@ import {
   AnswerToolbar,
   CommentBox,
   CommentList,
+  deleteCommentWithUndo,
   QuoteChip,
   quoteMessage,
+  shownComments,
   SideChatChips,
   SideChatHeader,
   useAnswerSelection,
@@ -123,10 +125,22 @@ const withProposed = (turn: Turn): string => {
 // One side chat of this conversation (SPEC.md §7): the quote it was started
 // from and its own turns. noteId = the note it saves on, null until the
 // first answer lands; key holds it together before then.
-type SideChat = { key: string; noteId: string | null; quote: string; turns: Turn[] };
+// base: the note's updatedAt the turns were built on, and baseCount: how
+// many turns the note held then (saveConversationNow merges by them).
+type SideChat = {
+  key: string;
+  noteId: string | null;
+  quote: string;
+  turns: Turn[];
+  base?: string | null;
+  baseCount?: number;
+};
 type Thread = {
   turns: Turn[];
   conversationNoteId: string | null;
+  // The conversation note's copy the turns were built on (see SideChat).
+  base: string | null;
+  baseCount: number;
   sideChats: SideChat[];
   // The side chat on screen, by key; null = the conversation itself.
   openKey: string | null;
@@ -147,7 +161,8 @@ type StoredTurn = {
 type StoredConversation = {
   conversationNoteId?: string | null;
   turns?: StoredTurn[];
-  sideChats?: { id: string; quote: string; turns: StoredTurn[] }[];
+  updatedAt?: string | null;
+  sideChats?: { id: string; quote: string; turns: StoredTurn[]; updatedAt?: string }[];
 };
 const toTurns = (stored: StoredTurn[]): Turn[] =>
   stored.map((turn) => ({
@@ -157,7 +172,14 @@ const toTurns = (stored: StoredTurn[]): Turn[] =>
     files: turn.files,
   }));
 const toSideChats = (stored: NonNullable<StoredConversation["sideChats"]>): SideChat[] =>
-  stored.map((s) => ({ key: s.id, noteId: s.id, quote: s.quote, turns: toTurns(s.turns) }));
+  stored.map((s) => ({
+    key: s.id,
+    noteId: s.id,
+    quote: s.quote,
+    turns: toTurns(s.turns),
+    base: s.updatedAt ?? null,
+    baseCount: s.turns.length,
+  }));
 
 function formatWhen(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -192,6 +214,9 @@ type SharedThread = Thread & {
   listeners: Set<() => void>;
   // The saves in order, so the second never starts a second note.
   saving: Promise<void>;
+  // Counts the conversations shown (showConversation): a save started on
+  // one never lands on the next.
+  shown: number;
 };
 const threads = new Map<string, SharedThread>();
 function sharedThread(notebookId: string): SharedThread {
@@ -200,11 +225,14 @@ function sharedThread(notebookId: string): SharedThread {
     thread = {
       turns: [],
       conversationNoteId: null,
+      base: null,
+      baseCount: 0,
       sideChats: [],
       openKey: null,
       loaded: false,
       listeners: new Set(),
       saving: Promise.resolve(),
+      shown: 0,
     };
     threads.set(notebookId, thread);
   }
@@ -291,6 +319,37 @@ function putBack(notebookId: string, message: OutgoingMessage) {
   restore(message);
   releaseMessage(notebookId, message.key);
 }
+// A side chat's box (SPEC.md §7): its own words, apart from the
+// conversation's, so Back never carries them into the conversation and the
+// side chat reopens with them. One record per project in localStorage, by
+// the side chat's note id (its key until its first answer is saved).
+const SIDE_DRAFT_PREFIX = "unitos-assistant-side-drafts:";
+function readSideDrafts(notebookId: string): Record<string, string> {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(SIDE_DRAFT_PREFIX + notebookId) ?? "{}");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed as Record<string, unknown>).filter((e): e is [string, string] => typeof e[1] === "string"),
+    );
+  } catch {
+    return {};
+  }
+}
+function writeSideDraft(notebookId: string, id: string, text: string, from?: string) {
+  try {
+    const all = readSideDrafts(notebookId);
+    if (from) delete all[from];
+    if (text.trim()) all[id] = text;
+    else delete all[id];
+    if (Object.keys(all).length === 0) localStorage.removeItem(SIDE_DRAFT_PREFIX + notebookId);
+    else localStorage.setItem(SIDE_DRAFT_PREFIX + notebookId, JSON.stringify(all));
+  } catch {
+    // Storage blocked or full: the box still holds the words on screen.
+  }
+}
+/** The slot a side chat's words are kept under. */
+const sideSlot = (side: { key: string; noteId: string | null }) => side.noteId ?? side.key;
+
 // The box's words when a panel mounts: this tab's, else the stored draft's,
 // with the messages a closed tab never had confirmed put back in front.
 function initialBoxText(notebookId: string): string {
@@ -455,6 +514,8 @@ export function AssistantPanel({
   const sideChatsRef = useMemo(() => sharedRef(shared, "sideChats"), [shared]);
   const openKeyRef = useMemo(() => sharedRef(shared, "openKey"), [shared]);
   const noteIdRef = useMemo(() => sharedRef(shared, "conversationNoteId"), [shared]);
+  const baseRef = useMemo(() => sharedRef(shared, "base"), [shared]);
+  const baseCountRef = useMemo(() => sharedRef(shared, "baseCount"), [shared]);
   // The refs changed: every panel open on this project draws them.
   function cacheThread() {
     shared.loaded = true;
@@ -480,7 +541,23 @@ export function AssistantPanel({
     setSideChatsState(sideChatsRef.current);
     cacheThread();
   }
+  // The box takes the words of the thread that opens; the words of the one
+  // that closes stay in its own slot (the conversation's draft, or the side
+  // chat's).
+  function switchBox(next: string | null) {
+    const before = openKeyRef.current;
+    if (before === next) return;
+    const words = boxRef.current?.value ?? question;
+    const closing = before ? sideChatsRef.current.find((s) => s.key === before) : null;
+    if (closing) writeSideDraft(notebookId, sideSlot(closing), words);
+    else if (!before) boxText.set(notebookId, words);
+    const opening = next ? sideChatsRef.current.find((s) => s.key === next) : null;
+    const text = next ? (opening ? (readSideDrafts(notebookId)[sideSlot(opening)] ?? "") : "") : (boxText.get(notebookId) ?? "");
+    openKeyRef.current = next;
+    setQuestion(text);
+  }
   function setOpenKey(key: string | null) {
+    switchBox(key);
     openKeyRef.current = key;
     setOpenKeyState(key);
     cacheThread();
@@ -537,7 +614,19 @@ export function AssistantPanel({
         const loadedSideChats = toSideChats(json.sideChats ?? []);
         turnsRef.current = loaded;
         sideChatsRef.current = loadedSideChats;
+        // Words of a side chat that was never answered, so never saved (its
+        // slot is still its key), are not thrown away: they join the box.
+        const orphans = Object.entries(readSideDrafts(notebookId)).filter(([id]) => id.startsWith("side-"));
+        if (orphans.length > 0) {
+          const box = boxText.get(notebookId) ?? "";
+          const joined = [box, ...orphans.map(([, words]) => words)].filter((w) => w.trim()).join("\n\n");
+          for (const [id] of orphans) writeSideDraft(notebookId, id, "");
+          boxText.set(notebookId, joined);
+          setQuestion(joined);
+        }
         noteIdRef.current = json.conversationNoteId ?? null;
+        baseRef.current = json.updatedAt ?? null;
+        baseCountRef.current = loaded.length;
         openKeyRef.current = null;
         cacheThread();
         setTurnsState(loaded);
@@ -573,13 +662,20 @@ export function AssistantPanel({
   // goes.
   const draftTimer = useRef<number | null>(null);
   useEffect(() => {
+    // A side chat's words go to its own slot, not the conversation's draft.
+    const open = openKeyRef.current ? sideChatsRef.current.find((s) => s.key === openKeyRef.current) : null;
+    if (open) {
+      writeSideDraft(notebookId, sideSlot(open), question);
+      return;
+    }
+    if (openKeyRef.current) return;
     boxText.set(notebookId, question);
     if (draftTimer.current !== null) return;
     draftTimer.current = window.setTimeout(() => {
       draftTimer.current = null;
       writeDraftNow(notebookId);
     }, 300);
-  }, [notebookId, question]);
+  }, [notebookId, question, openKeyRef, sideChatsRef]);
   useEffect(() => {
     const flush = () => writeDraftNow(notebookId);
     window.addEventListener("pagehide", flush);
@@ -598,7 +694,7 @@ export function AssistantPanel({
     const plain = !current.trim() && !quoteRef.current;
     const words = plain ? m.question : m.content;
     const next = current.trim() ? (words.trim() ? `${current}\n\n${words}` : current) : words;
-    boxText.set(notebookId, next);
+    if (!openKeyRef.current) boxText.set(notebookId, next);
     setQuestion(next);
     if (plain && m.quote) setQuote(m.quote);
     const back: Attachment[] = [
@@ -655,10 +751,20 @@ export function AssistantPanel({
 
   // The thread takes a conversation's place: the one from the list, or none
   // (New conversation). What was on screen stays saved, in the list.
-  function showConversation(next: { noteId: string | null; turns: Turn[]; sideChats: SideChat[] }) {
+  function showConversation(next: {
+    noteId: string | null;
+    turns: Turn[];
+    sideChats: SideChat[];
+    base: string | null;
+    baseCount: number;
+  }) {
     stopRun();
     reset();
+    switchBox(null);
+    shared.shown += 1;
     turnsRef.current = next.turns;
+    baseRef.current = next.base;
+    baseCountRef.current = next.baseCount;
     sideChatsRef.current = next.sideChats;
     openKeyRef.current = null;
     noteIdRef.current = next.noteId;
@@ -681,7 +787,7 @@ export function AssistantPanel({
   // New conversation (SPEC.md §7): back to the first layout, an empty thread.
   // The conversation on screen is not deleted: it stays in the list.
   function newConversation() {
-    showConversation({ noteId: null, turns: [], sideChats: [] });
+    showConversation({ noteId: null, turns: [], sideChats: [], base: null, baseCount: 0 });
   }
 
   // The conversations list: read every time it opens, so it is current.
@@ -719,6 +825,8 @@ export function AssistantPanel({
         noteId: json.conversationNoteId,
         turns: toTurns(json.turns ?? []),
         sideChats: toSideChats(json.sideChats ?? []),
+        base: json.updatedAt ?? null,
+        baseCount: json.turns?.length ?? 0,
       });
     } catch (err) {
       setListError(callLine(err, t("common.notLoaded")));
@@ -734,7 +842,13 @@ export function AssistantPanel({
     setListError(null);
     const wasOpen = id === conversationNoteId;
     const shown = wasOpen
-      ? { noteId: noteIdRef.current, turns: turnsRef.current, sideChats: sideChatsRef.current }
+      ? {
+          noteId: noteIdRef.current,
+          turns: turnsRef.current,
+          sideChats: sideChatsRef.current,
+          base: baseRef.current,
+          baseCount: baseCountRef.current,
+        }
       : null;
     deleteConversationWithUndo({
       noteId: id,
@@ -742,7 +856,7 @@ export function AssistantPanel({
       gone: () => {
         setConversations((all) => (all ? all.filter((c) => c.id !== id) : all));
         if (wasOpen) {
-          showConversation({ noteId: null, turns: [], sideChats: [] });
+          showConversation({ noteId: null, turns: [], sideChats: [], base: null, baseCount: 0 });
           setListOpen(true);
         }
       },
@@ -774,7 +888,7 @@ export function AssistantPanel({
           people?: Record<string, Person>;
         } | null;
         if (cancelled || !res.ok || !json) return;
-        setComments(json.replies ?? []);
+        setComments(shownComments(json.replies ?? []));
         setCommentPeople(json.people ?? {});
       } catch {
         // Offline: the thread reads the same, with no comments under it.
@@ -866,14 +980,15 @@ export function AssistantPanel({
       setCommentBusy(false);
     }
   }
-  async function deleteComment(id: string) {
-    setComments((list) => list.filter((c) => c.id !== id));
-    try {
-      await fetch(`/api/replies/${id}`, { method: "DELETE" });
-    } catch {
-      // Offline: the row is gone on screen and stays on the server; the next
-      // load of the thread shows it again.
-    }
+  // ✕ on a comment: no ask, the Undo pill, the DELETE once it goes.
+  function deleteComment(id: string) {
+    deleteCommentWithUndo({
+      list: comments,
+      id,
+      message: t("outline.commentDeleted"),
+      setList: setComments,
+      failed: () => setError(t("common.notSaved")),
+    });
   }
 
   // A completed turn saves (SPEC.md §21): the first one creates the note,
@@ -882,48 +997,110 @@ export function AssistantPanel({
   // stays on screen either way, from the threads cache above.
   // Saves run one after another on the shared thread: the first one's note
   // id is in place before the next one starts, so a conversation is one note.
-  // The answer says whether this save landed.
-  function saveConversation(savedTurns: Turn[], sideChatKey: string | null): Promise<boolean> {
-    const run = shared.saving.then(() => saveConversationNow(savedTurns, sideChatKey));
+  // build: the turns to save, read when the save runs (an earlier save may
+  // have merged the thread since). The answer says whether this save landed.
+  function saveConversation(build: () => Turn[], sideChatKey: string | null): Promise<boolean> {
+    const shownAt = shared.shown;
+    const run = shared.saving.then(() => saveConversationNow(build, sideChatKey, shownAt));
     shared.saving = run.then(() => undefined);
     return run;
   }
-  async function saveConversationNow(savedTurns: Turn[], sideChatKey: string | null): Promise<boolean> {
-    const side = sideChatKey ? sideChatsRef.current.find((s) => s.key === sideChatKey) : null;
-    if (sideChatKey && !side) return false;
-    try {
-      const res = await fetch("/api/assistant/conversation", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          notebookId,
-          conversationNoteId: side ? side.noteId : noteIdRef.current,
-          // A side chat belongs to the conversation it was started from.
-          sideChatOf: side ? noteIdRef.current : undefined,
-          quote: side ? side.quote : undefined,
-          turns: savedTurns.map((turn) => ({
-            role: turn.role,
-            content: turn.content.slice(0, TURN_MAX_CHARS),
-            images: turn.images?.map((img) => ({ id: img.id, name: img.name })),
-            files: turn.files?.map((f) => ({ name: f.name })),
-          })),
-        }),
-      });
-      const json = (await res.json().catch(() => null)) as { conversationNoteId?: string } | null;
-      if (!res.ok || !json?.conversationNoteId) return false;
-      if (side) {
-        const noteId = json.conversationNoteId;
-        setSideChats((list) => list.map((s) => (s.key === side.key ? { ...s, noteId } : s)));
-        return true;
-      }
-      setNoteId(json.conversationNoteId);
-      return true;
-    } catch {
-      // Offline, or the request otherwise never landed — the thread is still
-      // right here on screen; the next completed turn tries again, and the
-      // message stays held in the draft until one lands.
-      return false;
+  // The note moved since this tab read it (another tab, another device): the
+  // server's turns come first, then this tab's turns past what the base held,
+  // on screen and in the save; then the save runs again (SPEC.md §21).
+  function mergeThread(
+    sideChatKey: string | null,
+    server: Turn[],
+    base: string | null,
+    baseCount: number,
+  ) {
+    const after = (list: Turn[]) => [...server, ...list.slice(Math.min(baseCount, list.length))];
+    if (sideChatKey) {
+      setSideChats((list) =>
+        list.map((s) =>
+          s.key === sideChatKey ? { ...s, turns: after(s.turns), base, baseCount: server.length } : s,
+        ),
+      );
+      return;
     }
+    turnsRef.current = after(turnsRef.current);
+    baseRef.current = base;
+    baseCountRef.current = server.length;
+    setTurnsState(turnsRef.current);
+    cacheThread();
+  }
+  async function saveConversationNow(
+    build: () => Turn[],
+    sideChatKey: string | null,
+    shownAt: number,
+  ): Promise<boolean> {
+    // Another conversation took the screen since: these turns are not its.
+    const moved = () => !sideChatKey && shared.shown !== shownAt;
+    if (moved()) return false;
+    let turnsToSave = build();
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const side = sideChatKey ? sideChatsRef.current.find((s) => s.key === sideChatKey) : null;
+      if (sideChatKey && !side) return false;
+      const noteId = side ? side.noteId : noteIdRef.current;
+      const base = side ? (side.base ?? null) : baseRef.current;
+      const baseCount = side ? (side.baseCount ?? 0) : baseCountRef.current;
+      try {
+        const res = await fetch("/api/assistant/conversation", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            notebookId,
+            conversationNoteId: noteId,
+            base: noteId ? base : null,
+            // A side chat belongs to the conversation it was started from.
+            sideChatOf: side ? noteIdRef.current : undefined,
+            quote: side ? side.quote : undefined,
+            turns: turnsToSave.map((turn) => ({
+              role: turn.role,
+              content: turn.content.slice(0, TURN_MAX_CHARS),
+              images: turn.images?.map((img) => ({ id: img.id, name: img.name })),
+              files: turn.files?.map((f) => ({ name: f.name })),
+            })),
+          }),
+        });
+        const json = (await res.json().catch(() => null)) as {
+          conversationNoteId?: string;
+          updatedAt?: string;
+          turns?: StoredTurn[];
+        } | null;
+        if (moved()) return false;
+        if (res.status === 409 && json?.turns && json.updatedAt) {
+          const server = toTurns(json.turns);
+          turnsToSave = [...server, ...turnsToSave.slice(Math.min(baseCount, turnsToSave.length))];
+          mergeThread(sideChatKey, server, json.updatedAt, baseCount);
+          continue;
+        }
+        if (!res.ok || !json?.conversationNoteId) return false;
+        const savedId = json.conversationNoteId;
+        const savedBase = json.updatedAt ?? null;
+        const savedCount = turnsToSave.length;
+        if (side) {
+          if (!side.noteId) {
+            const words = readSideDrafts(notebookId)[side.key];
+            if (words !== undefined) writeSideDraft(notebookId, savedId, words, side.key);
+          }
+          setSideChats((list) =>
+            list.map((s) => (s.key === side.key ? { ...s, noteId: savedId, base: savedBase, baseCount: savedCount } : s)),
+          );
+          return true;
+        }
+        baseRef.current = savedBase;
+        baseCountRef.current = savedCount;
+        setNoteId(savedId);
+        return true;
+      } catch {
+        // Offline, or the request otherwise never landed — the thread is still
+        // right here on screen; the next completed turn tries again, and the
+        // message stays held in the draft until one lands.
+        return false;
+      }
+    }
+    return false;
   }
 
   // Recommended: open shows what exists; generating streams into the card.
@@ -1168,7 +1345,7 @@ export function AssistantPanel({
     };
     // The words leave the box and stay in the draft, held, until the
     // answer is saved.
-    boxText.set(notebookId, "");
+    if (!openKeyRef.current) boxText.set(notebookId, "");
     holdMessage(notebookId, message);
     setQuestion("");
     if (quote) dropQuote();
@@ -1218,6 +1395,15 @@ export function AssistantPanel({
       sideChatKey
         ? (sideChatsRef.current.find((s) => s.key === sideChatKey)?.turns ?? [])
         : turnsRef.current;
+    // What a save of this answer writes: the thread up to this message as it
+    // is when the save runs (an earlier save may have merged it), then the
+    // answer.
+    const savedWith = (answer: string): Turn[] => {
+      const thread = threadNow();
+      const i = thread.indexOf(userTurn);
+      const before = i >= 0 ? thread.slice(0, i) : threadTurns;
+      return [...before, userTurn, { role: "assistant", content: answer }];
+    };
     // A message that did not land leaves the thread and goes back into the
     // box; one on a thread no longer on screen just goes back.
     const takeBack = () => {
@@ -1298,7 +1484,7 @@ export function AssistantPanel({
       const shown = plan ? { actions, warnings: plan.warnings } : undefined;
       setAnswer(text, shown, suggest && requestSuggestions(suggest, q, text, history));
       if (shown && actions.length > 0) proposePlan(shown);
-      void saveConversation([...threadTurns, userTurn, { role: "assistant", content: text }], sideChatKey).then(
+      void saveConversation(() => savedWith(text), sideChatKey).then(
         (saved) => {
           if (saved) releaseMessage(notebookId, message.key);
         },
@@ -1309,7 +1495,7 @@ export function AssistantPanel({
       // a switch to another conversation, puts the message back in the box.
       if (controller.signal.aborted) {
         if (soFar.trim() && threadNow().includes(userTurn)) {
-          void saveConversation([...threadTurns, userTurn, { role: "assistant", content: soFar }], sideChatKey).then(
+          void saveConversation(() => savedWith(soFar), sideChatKey).then(
             (saved) => {
               if (saved) releaseMessage(notebookId, message.key);
             },
@@ -1604,7 +1790,7 @@ export function AssistantPanel({
         value={question}
         rows={1}
         onCommit={(text) => {
-          boxText.set(notebookId, text);
+          if (!openKeyRef.current) boxText.set(notebookId, text);
           setQuestion(text);
         }}
         onType={fitBox}
@@ -1974,7 +2160,7 @@ export function AssistantPanel({
             comments={comments}
             people={{ ...people, ...commentPeople }}
             myId={myId}
-            onDelete={(id) => void deleteComment(id)}
+            onDelete={deleteComment}
           />
         </div>
         {openSideChat ? (
