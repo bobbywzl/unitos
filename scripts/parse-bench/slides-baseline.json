@@ -6,7 +6,7 @@
   "bullets": 1,
   "tables": 1,
   "notes": 0.999,
-  "chartValues": 0.997,
+  "chartValues": 1,
   "replica": 1,
   "lost": 0,
   "files": 232,
@@ -2468,13 +2468,13 @@
    "lost": 0
   },
   "sc-084-charts": {
-   "composite": 0.967,
-   "words": 0.962,
+   "composite": 1,
+   "words": 1,
    "order": 1,
    "bullets": 1,
    "tables": null,
    "notes": null,
-   "chartValues": 0.875,
+   "chartValues": 1,
    "replica": 1,
    "lost": 0
   },

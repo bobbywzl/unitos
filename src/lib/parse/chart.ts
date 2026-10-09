@@ -403,7 +403,12 @@ function dataRows(plots: Plot[]): string[][] {
   }
   if (categories.length > 0) {
     header([""]);
-    categories.forEach((cat, i) => rows.push([cat, ...series.map((s) => (s.vals[i] === null || s.vals[i] === undefined ? "" : dataValue(s.vals[i] as number, s.formatCode)))]));
+    // A value past the last category (an empty cell closing the category
+    // range) is drawn all the same, its label empty: its row keeps it.
+    // Slides benchmark finding: a bar chart of 6 values over 5 categories
+    // lost its last value in the words.
+    const count = Math.max(categories.length, ...series.map((s) => s.vals.length));
+    for (let i = 0; i < count; i++) rows.push([categories[i] ?? "", ...series.map((s) => (s.vals[i] === null || s.vals[i] === undefined ? "" : dataValue(s.vals[i] as number, s.formatCode)))]);
   } else {
     header([]);
     const longest = Math.max(...series.map((s) => s.vals.length));
