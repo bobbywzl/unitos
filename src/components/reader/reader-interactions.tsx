@@ -194,7 +194,7 @@ import {
   SuggestionRow,
   type SuggestRequest,
 } from "@/components/assistant/suggestion-row";
-import { FIGURE_ASSISTANT_EVENT, publishFigureSuggestion, splitFigureSuggestions } from "@/components/reader/figure-suggestion";
+import { publishFigureSuggestion, splitFigureSuggestions } from "@/components/reader/figure-suggestion";
 import {
   belowSlot,
   marginPlace,
@@ -6057,7 +6057,9 @@ export function ReaderInteractions({
       return;
     }
     const text = block.text;
-    if (!text.trim()) {
+    // In the page editor a figure with no words (an image) opens its tools
+    // with the Assistant alone (has); the block reader has nothing to offer.
+    if (!text.trim() && !richTextRef.current) {
       showToast(t("reader.figureNoCaption"));
       return;
     }
@@ -7757,26 +7759,26 @@ export function ReaderInteractions({
   const openBarRef = useRef(openBar);
   openBarRef.current = openBar;
 
-  // The image toolbar's Assistant (SPEC.md §7, words from a figure): the bar
-  // opens on the image. An image has no words, so its anchor quotes none and
-  // the request names the figure by its block id (assistantTurn). The page
-  // editor that sent it picks this reader in a split pane.
-  useEffect(() => {
-    const onOpen = (e: Event) => {
-      const detail = (e as CustomEvent<{ blockId: string; top: number; from: Element }>).detail;
-      const container = containerRef.current;
-      if (!detail || !container || !container.contains(detail.from)) return;
-      if (!canEditRef.current) return;
-      const text = blocksRef.current.find((b) => b.id === detail.blockId)?.text ?? "";
-      const rect = container.getBoundingClientRect();
-      openBarRef.current({
-        anchor: { blockId: detail.blockId, startOffset: 0, endOffset: text.length, quotedText: text, prefix: "", suffix: "" },
-        yTop: Math.max(8, detail.top - rect.top + container.scrollTop),
-      }, true);
-    };
-    window.addEventListener(FIGURE_ASSISTANT_EVENT, onOpen);
-    return () => window.removeEventListener(FIGURE_ASSISTANT_EVENT, onOpen);
-  }, []);
+  // A figure with no words (an image in the page editor): the figure tools'
+  // Assistant opens the bar under the image (SPEC.md §7, words from a
+  // figure). Its anchor quotes none, so the request names the figure by its
+  // block id (assistantTurn). The caret goes after a selected image, so the
+  // image's own toolbar does not cover the words the assistant puts under it.
+  function openFigureBar(anchor: Popover["anchor"]) {
+    const container = containerRef.current;
+    if (!container) return;
+    const figure = container.querySelector(`[data-block-id="${CSS.escape(anchor.blockId)}"]`);
+    const rect = container.getBoundingClientRect();
+    const bottom = (figure?.querySelector(".docs-img-box") ?? figure)?.getBoundingClientRect().bottom ?? rect.top;
+    const editor = pageEditorIn(container);
+    if (editor && !editor.isDestroyed && editor.isEditable) {
+      const { from, to } = editor.state.selection;
+      if (to === from + 1 && editor.state.doc.nodeAt(from)?.attrs.blockId === anchor.blockId) {
+        editor.commands.setTextSelection(to);
+      }
+    }
+    openBar({ anchor, yTop: Math.max(8, bottom - rect.top + container.scrollTop) }, true);
+  }
 
   // The bar's edit: its last command's suggestions.
   const barRunKey = (b: AssistantBar) => b.messages.findLast((m) => m.suggestKey)?.suggestKey ?? null;
@@ -9747,6 +9749,9 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
   const has = (tool: Tool) =>
     (canEdit || tool === "define") &&
     TOOLBARS[popoverKind].includes(tool) &&
+    // A figure with no words (an image) has nothing to anchor a mark to: the
+    // assistant, which reads the picture, is its one tool.
+    !(popover?.figure && !popover.anchor.quotedText && tool !== "assistant") &&
     !((inCore || pendingLink) && tool === "link") &&
     (tool !== "define" || (popover !== null && offersDefine(popover)));
   // The definition under the Define row: the open popover's own.
@@ -11464,7 +11469,13 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
 
           {has("assistant") && (
           <button
-            onClick={() => (barOffered ? openBar(popover) : setSubmenu(submenu === "ai" ? null : "ai"))}
+            onClick={() =>
+              barOffered
+                ? openBar(popover)
+                : popover.figure && !popover.anchor.quotedText
+                  ? openFigureBar(popover.anchor)
+                  : setSubmenu(submenu === "ai" ? null : "ai")
+            }
             data-track="assistant"
             aria-disabled={aiOff || undefined}
             aria-expanded={submenu === "ai"}

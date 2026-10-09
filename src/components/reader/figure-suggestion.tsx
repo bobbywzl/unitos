@@ -16,11 +16,6 @@ import type { AssistantAction } from "@/lib/types";
 // the plan publishes the suggestion here by the figure's block id; the
 // figure's row in the article reads it.
 
-/** The image toolbar's Assistant (components/docs/insert/image-controls.tsx):
-    the reader opens the assistant's bar on the image. Detail: the figure's
-    block id, the image's bottom edge on screen, and the page editor's DOM. */
-export const FIGURE_ASSISTANT_EVENT = "dissect:figure-assistant";
-
 type InsertAction = Extract<AssistantAction, { type: "insert_paragraph" }>;
 
 export type FigureSuggestion = {
