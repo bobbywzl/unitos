@@ -933,7 +933,9 @@ function readCell(c: Element, shared: string[], styles: Styles, date1904: boolea
   const base = { styleId, formula, ...(format !== undefined && format !== 0 && format !== "General" ? { format } : {}) };
   switch (type) {
     case "s": {
-      const text = shared[Number(v)] ?? "";
+      // An empty <v/> is an empty cell: Number("") is 0, which read the
+      // first shared string into it. Sheets benchmark finding (poi-64508).
+      const text = v.trim() === "" ? "" : shared[Number(v)] ?? "";
       return { ...base, text, kind: text === "" ? "empty" : "text" };
     }
     case "str":

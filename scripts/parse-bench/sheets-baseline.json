@@ -1,8 +1,8 @@
 {
  "total": {
-  "score": 0.994,
+  "score": 0.995,
   "sheets": 1,
-  "text": 0.99,
+  "text": 0.992,
   "cells": 0.99,
   "formats": 0.966,
   "merges": 1,
@@ -443,9 +443,9 @@
    "dom": 0
   },
   "poi-64508": {
-   "score": 0.93,
-   "text": 0.763,
-   "cells": 0.886,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
    "formats": 1,
    "merges": null,
    "frozen": 1,
