@@ -1,0 +1,1419 @@
+{
+ "files": [
+  {
+   "id": "poi-2411-Performance-Up",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/2411-Performance_Up.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "altcontent",
+    "field",
+    "hidden",
+    "hyperlink",
+    "levels",
+    "notes",
+    "table",
+    "long"
+   ]
+  },
+  {
+   "id": "poi-customGeo",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/customGeo.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "autonum",
+    "br",
+    "buchar",
+    "field",
+    "group",
+    "hyperlink",
+    "levels",
+    "merge",
+    "notes",
+    "smartart",
+    "table",
+    "vertical",
+    "long"
+   ]
+  },
+  {
+   "id": "poi-aascu-org-workarea-downloadasset-aspx-id",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/aascu.org_workarea_downloadasset.aspx_id=5864.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "autonum",
+    "br",
+    "buchar",
+    "chart",
+    "merge",
+    "notes",
+    "ole",
+    "table",
+    "long"
+   ]
+  },
+  {
+   "id": "poi-at-ecodesign-www-downloads-Vertiefungsvo",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/at.ecodesign.www_downloads_Vertiefungsvortrag_elektronik.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "br",
+    "buchar",
+    "group",
+    "notes",
+    "ole",
+    "long"
+   ]
+  },
+  {
+   "id": "poi-60810",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/60810.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "autonum",
+    "br",
+    "buchar",
+    "field",
+    "group",
+    "hidden",
+    "levels",
+    "notes",
+    "smartart",
+    "long"
+   ]
+  },
+  {
+   "id": "poi-ca-ubc-cs-people-emhill-presentations-Ho",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/ca.ubc.cs.people_~emhill_presentations_HowWeRefactor.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "br",
+    "field",
+    "group",
+    "levels",
+    "notes",
+    "table",
+    "long"
+   ]
+  },
+  {
+   "id": "poi-keyframes",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/keyframes.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "buchar",
+    "hyperlink",
+    "levels",
+    "notes",
+    "long"
+   ]
+  },
+  {
+   "id": "poi-au-asn-aes-www-conferences-2011-presenta",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/au.asn.aes.www_conferences_2011_presentations_Fri_20Room4Level4_20930_20Maloney.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "autonum",
+    "br",
+    "buchar",
+    "field",
+    "hyperlink",
+    "levels",
+    "notes",
+    "table",
+    "long"
+   ]
+  },
+  {
+   "id": "poi-ececapstonespring2012",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/ececapstonespring2012.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "buchar",
+    "levels",
+    "long"
+   ]
+  },
+  {
+   "id": "poi-alterman-security",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/alterman_security.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "autonum",
+    "br",
+    "field",
+    "group",
+    "hyperlink",
+    "levels",
+    "long"
+   ]
+  },
+  {
+   "id": "poi-bug62513",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/bug62513.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "altcontent",
+    "autonum",
+    "br",
+    "buchar",
+    "levels",
+    "notes",
+    "ole",
+    "table"
+   ]
+  },
+  {
+   "id": "poi-LIBRE-OFFICE-100610-0",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/LIBRE_OFFICE-100610-0.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "buchar",
+    "chart",
+    "merge",
+    "table"
+   ]
+  },
+  {
+   "id": "poi-aascu-org-hbcu-leadershipsummit-cooper",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/aascu.org_hbcu_leadershipsummit_cooper_.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "autonum",
+    "br",
+    "buchar",
+    "chart",
+    "field",
+    "levels",
+    "merge",
+    "notes",
+    "table"
+   ]
+  },
+  {
+   "id": "poi-tika-2605",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/tika-2605.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "altcontent",
+    "br",
+    "ole"
+   ]
+  },
+  {
+   "id": "poi-ae-ac-uaeu-faculty-nafaachbili-GeomLec1",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/ae.ac.uaeu.faculty_nafaachbili_GeomLec1.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "autonum",
+    "br",
+    "field",
+    "levels",
+    "smartart"
+   ]
+  },
+  {
+   "id": "poi-45541-Footer",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/45541_Footer.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "notes",
+    "ole"
+   ]
+  },
+  {
+   "id": "poi-layouts",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/layouts.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "buchar",
+    "field",
+    "levels",
+    "notes"
+   ]
+  },
+  {
+   "id": "poi-themes",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/themes.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "buchar"
+   ]
+  },
+  {
+   "id": "poi-aptia",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/aptia.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "autonum",
+    "br",
+    "buchar",
+    "field",
+    "levels",
+    "notes",
+    "table"
+   ]
+  },
+  {
+   "id": "poi-shapes",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/shapes.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "group",
+    "hyperlink",
+    "merge",
+    "table"
+   ]
+  },
+  {
+   "id": "poi-bar-chart",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/bar-chart.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "chart"
+   ]
+  },
+  {
+   "id": "poi-line-chart",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/line-chart.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "chart"
+   ]
+  },
+  {
+   "id": "poi-pie-chart",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/pie-chart.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "chart"
+   ]
+  },
+  {
+   "id": "poi-scatter-chart",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/scatter-chart.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "chart"
+   ]
+  },
+  {
+   "id": "poi-radar-chart",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/radar-chart.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "chart"
+   ]
+  },
+  {
+   "id": "poi-table-test",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/table_test.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "table"
+   ]
+  },
+  {
+   "id": "poi-table-test2",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/table_test2.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "br",
+    "merge",
+    "table",
+    "vertical"
+   ]
+  },
+  {
+   "id": "poi-with-japanese",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/with_japanese.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "br",
+    "buchar",
+    "cjk",
+    "hyperlink",
+    "table"
+   ]
+  },
+  {
+   "id": "poi-bug64693",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/bug64693.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "altcontent",
+    "buchar",
+    "cjk",
+    "ole"
+   ]
+  },
+  {
+   "id": "poi-bug65228",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/bug65228.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "field",
+    "math",
+    "notes"
+   ]
+  },
+  {
+   "id": "poi-sample-pptx-grouping-issues",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/sample_pptx_grouping_issues.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "group",
+    "notes",
+    "vertical"
+   ]
+  },
+  {
+   "id": "poi-SampleShow",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/SampleShow.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "notes"
+   ]
+  },
+  {
+   "id": "poi-WithMaster",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/WithMaster.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": []
+  },
+  {
+   "id": "poi-table-with-different-font-colors",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/table-with-different-font-colors.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "table"
+   ]
+  },
+  {
+   "id": "poi-table-with-theme",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/table-with-theme.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "table"
+   ]
+  },
+  {
+   "id": "poi-bug63290",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/bug63290.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": []
+  },
+  {
+   "id": "poi-ArtisticEffectSample",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/ArtisticEffectSample.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "buchar",
+    "notes"
+   ]
+  },
+  {
+   "id": "pp-cht-series",
+   "url": "https://raw.githubusercontent.com/scanny/python-pptx/278b47b1dedd5b46ee84c286e77cdfb0bf4594be/features/steps/test_files/cht-series.pptx",
+   "source": "python-pptx test files",
+   "license": "MIT",
+   "covers": [
+    "chart"
+   ]
+  },
+  {
+   "id": "pp-cht-chart-type",
+   "url": "https://raw.githubusercontent.com/scanny/python-pptx/278b47b1dedd5b46ee84c286e77cdfb0bf4594be/features/steps/test_files/cht-chart-type.pptx",
+   "source": "python-pptx test files",
+   "license": "MIT",
+   "covers": [
+    "chart"
+   ]
+  },
+  {
+   "id": "pp-cht-axis-props",
+   "url": "https://raw.githubusercontent.com/scanny/python-pptx/278b47b1dedd5b46ee84c286e77cdfb0bf4594be/features/steps/test_files/cht-axis-props.pptx",
+   "source": "python-pptx test files",
+   "license": "MIT",
+   "covers": [
+    "chart"
+   ]
+  },
+  {
+   "id": "pp-cht-datalabels",
+   "url": "https://raw.githubusercontent.com/scanny/python-pptx/278b47b1dedd5b46ee84c286e77cdfb0bf4594be/features/steps/test_files/cht-datalabels.pptx",
+   "source": "python-pptx test files",
+   "license": "MIT",
+   "covers": [
+    "chart"
+   ]
+  },
+  {
+   "id": "pp-cht-gridlines-props",
+   "url": "https://raw.githubusercontent.com/scanny/python-pptx/278b47b1dedd5b46ee84c286e77cdfb0bf4594be/features/steps/test_files/cht-gridlines-props.pptx",
+   "source": "python-pptx test files",
+   "license": "MIT",
+   "covers": [
+    "chart"
+   ]
+  },
+  {
+   "id": "pp-cht-category-access",
+   "url": "https://raw.githubusercontent.com/scanny/python-pptx/278b47b1dedd5b46ee84c286e77cdfb0bf4594be/features/steps/test_files/cht-category-access.pptx",
+   "source": "python-pptx test files",
+   "license": "MIT",
+   "covers": [
+    "chart"
+   ]
+  },
+  {
+   "id": "pp-cht-legend",
+   "url": "https://raw.githubusercontent.com/scanny/python-pptx/278b47b1dedd5b46ee84c286e77cdfb0bf4594be/features/steps/test_files/cht-legend.pptx",
+   "source": "python-pptx test files",
+   "license": "MIT",
+   "covers": [
+    "chart"
+   ]
+  },
+  {
+   "id": "pp-tbl-cell",
+   "url": "https://raw.githubusercontent.com/scanny/python-pptx/278b47b1dedd5b46ee84c286e77cdfb0bf4594be/features/steps/test_files/tbl-cell.pptx",
+   "source": "python-pptx test files",
+   "license": "MIT",
+   "covers": [
+    "merge",
+    "table"
+   ]
+  },
+  {
+   "id": "pp-txt-text",
+   "url": "https://raw.githubusercontent.com/scanny/python-pptx/278b47b1dedd5b46ee84c286e77cdfb0bf4594be/features/steps/test_files/txt-text.pptx",
+   "source": "python-pptx test files",
+   "license": "MIT",
+   "covers": [
+    "br",
+    "field",
+    "hyperlink",
+    "table"
+   ]
+  },
+  {
+   "id": "pp-txt-font-typeface",
+   "url": "https://raw.githubusercontent.com/scanny/python-pptx/278b47b1dedd5b46ee84c286e77cdfb0bf4594be/features/steps/test_files/txt-font-typeface.pptx",
+   "source": "python-pptx test files",
+   "license": "MIT",
+   "covers": [
+    "br",
+    "cjk"
+   ]
+  },
+  {
+   "id": "pp-txt-font-props",
+   "url": "https://raw.githubusercontent.com/scanny/python-pptx/278b47b1dedd5b46ee84c286e77cdfb0bf4594be/features/steps/test_files/txt-font-props.pptx",
+   "source": "python-pptx test files",
+   "license": "MIT",
+   "covers": [
+    "br"
+   ]
+  },
+  {
+   "id": "pp-ph-populated-placeholders",
+   "url": "https://raw.githubusercontent.com/scanny/python-pptx/278b47b1dedd5b46ee84c286e77cdfb0bf4594be/features/steps/test_files/ph-populated-placeholders.pptx",
+   "source": "python-pptx test files",
+   "license": "MIT",
+   "covers": [
+    "chart",
+    "smartart",
+    "table"
+   ]
+  },
+  {
+   "id": "pp-ph-inherit-props",
+   "url": "https://raw.githubusercontent.com/scanny/python-pptx/278b47b1dedd5b46ee84c286e77cdfb0bf4594be/features/steps/test_files/ph-inherit-props.pptx",
+   "source": "python-pptx test files",
+   "license": "MIT",
+   "covers": [
+    "notes"
+   ]
+  },
+  {
+   "id": "pp-shp-shapes",
+   "url": "https://raw.githubusercontent.com/scanny/python-pptx/278b47b1dedd5b46ee84c286e77cdfb0bf4594be/features/steps/test_files/shp-shapes.pptx",
+   "source": "python-pptx test files",
+   "license": "MIT",
+   "covers": [
+    "chart",
+    "group",
+    "smartart",
+    "table"
+   ]
+  },
+  {
+   "id": "pp-shp-groupshape",
+   "url": "https://raw.githubusercontent.com/scanny/python-pptx/278b47b1dedd5b46ee84c286e77cdfb0bf4594be/features/steps/test_files/shp-groupshape.pptx",
+   "source": "python-pptx test files",
+   "license": "MIT",
+   "covers": [
+    "group"
+   ]
+  },
+  {
+   "id": "pp-shp-common-props",
+   "url": "https://raw.githubusercontent.com/scanny/python-pptx/278b47b1dedd5b46ee84c286e77cdfb0bf4594be/features/steps/test_files/shp-common-props.pptx",
+   "source": "python-pptx test files",
+   "license": "MIT",
+   "covers": [
+    "chart",
+    "group",
+    "table"
+   ]
+  },
+  {
+   "id": "pp-sld-notes",
+   "url": "https://raw.githubusercontent.com/scanny/python-pptx/278b47b1dedd5b46ee84c286e77cdfb0bf4594be/features/steps/test_files/sld-notes.pptx",
+   "source": "python-pptx test files",
+   "license": "MIT",
+   "covers": [
+    "notes"
+   ]
+  },
+  {
+   "id": "pp-prs-notes",
+   "url": "https://raw.githubusercontent.com/scanny/python-pptx/278b47b1dedd5b46ee84c286e77cdfb0bf4594be/features/steps/test_files/prs-notes.pptx",
+   "source": "python-pptx test files",
+   "license": "MIT",
+   "covers": [
+    "notes"
+   ]
+  },
+  {
+   "id": "tika-testPPT-various",
+   "url": "https://raw.githubusercontent.com/apache/tika/2c946ccabd13df305560a260fd2d098409fd8ae5/tika-parsers/tika-parsers-standard/tika-parsers-standard-modules/tika-parser-microsoft-module/src/test/resources/test-documents/testPPT_various.pptx",
+   "source": "Apache Tika test documents",
+   "license": "Apache-2.0",
+   "covers": [
+    "br",
+    "buchar",
+    "cjk",
+    "hyperlink",
+    "notes",
+    "table"
+   ]
+  },
+  {
+   "id": "tika-testPPT-various2",
+   "url": "https://raw.githubusercontent.com/apache/tika/2c946ccabd13df305560a260fd2d098409fd8ae5/tika-parsers/tika-parsers-standard/tika-parsers-standard-modules/tika-parser-microsoft-module/src/test/resources/test-documents/testPPT_various2.pptx",
+   "source": "Apache Tika test documents",
+   "license": "Apache-2.0",
+   "covers": [
+    "altcontent",
+    "chart",
+    "field",
+    "hidden",
+    "hyperlink",
+    "ink",
+    "notes",
+    "ole",
+    "smartart",
+    "table"
+   ]
+  },
+  {
+   "id": "tika-testPPT-groups",
+   "url": "https://raw.githubusercontent.com/apache/tika/2c946ccabd13df305560a260fd2d098409fd8ae5/tika-parsers/tika-parsers-standard/tika-parsers-standard-modules/tika-parser-microsoft-module/src/test/resources/test-documents/testPPT_groups.pptx",
+   "source": "Apache Tika test documents",
+   "license": "Apache-2.0",
+   "covers": [
+    "group",
+    "hyperlink",
+    "smartart",
+    "table"
+   ]
+  },
+  {
+   "id": "tika-testPPT-embedded-two-slides",
+   "url": "https://raw.githubusercontent.com/apache/tika/2c946ccabd13df305560a260fd2d098409fd8ae5/tika-parsers/tika-parsers-standard/tika-parsers-standard-modules/tika-parser-microsoft-module/src/test/resources/test-documents/testPPT_embedded_two_slides.pptx",
+   "source": "Apache Tika test documents",
+   "license": "Apache-2.0",
+   "covers": [
+    "hyperlink",
+    "ole"
+   ]
+  },
+  {
+   "id": "tika-testPPT-oleWorkbook",
+   "url": "https://raw.githubusercontent.com/apache/tika/2c946ccabd13df305560a260fd2d098409fd8ae5/tika-parsers/tika-parsers-standard/tika-parsers-standard-modules/tika-parser-microsoft-module/src/test/resources/test-documents/testPPT_oleWorkbook.pptx",
+   "source": "Apache Tika test documents",
+   "license": "Apache-2.0",
+   "covers": [
+    "altcontent",
+    "ole"
+   ]
+  },
+  {
+   "id": "tika-testPPT-comment",
+   "url": "https://raw.githubusercontent.com/apache/tika/2c946ccabd13df305560a260fd2d098409fd8ae5/tika-parsers/tika-parsers-standard/tika-parsers-standard-modules/tika-parser-microsoft-module/src/test/resources/test-documents/testPPT_comment.pptx",
+   "source": "Apache Tika test documents",
+   "license": "Apache-2.0",
+   "covers": []
+  },
+  {
+   "id": "tika-testPPT-masterText",
+   "url": "https://raw.githubusercontent.com/apache/tika/2c946ccabd13df305560a260fd2d098409fd8ae5/tika-parsers/tika-parsers-standard/tika-parsers-standard-modules/tika-parser-microsoft-module/src/test/resources/test-documents/testPPT_masterText.pptx",
+   "source": "Apache Tika test documents",
+   "license": "Apache-2.0",
+   "covers": []
+  },
+  {
+   "id": "tika-testPPT-custom-props",
+   "url": "https://raw.githubusercontent.com/apache/tika/2c946ccabd13df305560a260fd2d098409fd8ae5/tika-parsers/tika-parsers-standard/tika-parsers-standard-modules/tika-parser-microsoft-module/src/test/resources/test-documents/testPPT_custom_props.pptx",
+   "source": "Apache Tika test documents",
+   "license": "Apache-2.0",
+   "covers": [
+    "br"
+   ]
+  },
+  {
+   "id": "ox-Bug571679-Brownbag",
+   "url": "https://raw.githubusercontent.com/dotnet/Open-XML-SDK/431ab05cf160248cc3885a4a766026d4f8243792/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/ForTestCase/Bug571679_Brownbag.pptx",
+   "source": "Open XML SDK test files",
+   "license": "MIT",
+   "covers": [
+    "hyperlink",
+    "levels",
+    "notes",
+    "smartart"
+   ]
+  },
+  {
+   "id": "ox-typical",
+   "url": "https://raw.githubusercontent.com/dotnet/Open-XML-SDK/431ab05cf160248cc3885a4a766026d4f8243792/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/ForTestCase/typical.pptx",
+   "source": "Open XML SDK test files",
+   "license": "MIT",
+   "covers": [
+    "br",
+    "buchar",
+    "group",
+    "hyperlink",
+    "levels",
+    "notes",
+    "ole",
+    "table"
+   ]
+  },
+  {
+   "id": "ox-O12Typical",
+   "url": "https://raw.githubusercontent.com/dotnet/Open-XML-SDK/431ab05cf160248cc3885a4a766026d4f8243792/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/bvt/O12Typical.pptx",
+   "source": "Open XML SDK test files",
+   "license": "MIT",
+   "covers": [
+    "chart",
+    "levels",
+    "smartart",
+    "table"
+   ]
+  },
+  {
+   "id": "ox-o09-Performance-typical",
+   "url": "https://raw.githubusercontent.com/dotnet/Open-XML-SDK/431ab05cf160248cc3885a4a766026d4f8243792/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestFiles/o09_Performance_typical.pptx",
+   "source": "Open XML SDK test files",
+   "license": "MIT",
+   "covers": [
+    "br",
+    "group",
+    "levels",
+    "notes",
+    "ole",
+    "table",
+    "vertical"
+   ]
+  },
+  {
+   "id": "ox-AllSlidesConverterSC",
+   "url": "https://raw.githubusercontent.com/dotnet/Open-XML-SDK/431ab05cf160248cc3885a4a766026d4f8243792/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/AllSlidesConverterSC.pptx",
+   "source": "Open XML SDK test files",
+   "license": "MIT",
+   "covers": [
+    "cjk",
+    "notes"
+   ]
+  },
+  {
+   "id": "ox-AllSlidesConverterTC",
+   "url": "https://raw.githubusercontent.com/dotnet/Open-XML-SDK/431ab05cf160248cc3885a4a766026d4f8243792/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/AllSlidesConverterTC.pptx",
+   "source": "Open XML SDK test files",
+   "license": "MIT",
+   "covers": [
+    "cjk",
+    "notes"
+   ]
+  },
+  {
+   "id": "ox-2D-Area-O12-PPT-Charts",
+   "url": "https://raw.githubusercontent.com/dotnet/Open-XML-SDK/431ab05cf160248cc3885a4a766026d4f8243792/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Graphics/2D%20Area-O12-PPT-Charts.pptx",
+   "source": "Open XML SDK test files",
+   "license": "MIT",
+   "covers": [
+    "chart",
+    "strict"
+   ]
+  },
+  {
+   "id": "ox-3D-Pie-O12-PPT-Charts",
+   "url": "https://raw.githubusercontent.com/dotnet/Open-XML-SDK/431ab05cf160248cc3885a4a766026d4f8243792/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Graphics/3D%20Pie-O12-PPT-Charts.pptx",
+   "source": "Open XML SDK test files",
+   "license": "MIT",
+   "covers": [
+    "chart",
+    "strict"
+   ]
+  },
+  {
+   "id": "ox-SmartArt-OrgChart1",
+   "url": "https://raw.githubusercontent.com/dotnet/Open-XML-SDK/431ab05cf160248cc3885a4a766026d4f8243792/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/SmartArt_OrgChart1.pptx",
+   "source": "Open XML SDK test files",
+   "license": "MIT",
+   "covers": [
+    "notes",
+    "smartart"
+   ]
+  },
+  {
+   "id": "ox-Table-Large",
+   "url": "https://raw.githubusercontent.com/dotnet/Open-XML-SDK/431ab05cf160248cc3885a4a766026d4f8243792/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Table_Large.pptx",
+   "source": "Open XML SDK test files",
+   "license": "MIT",
+   "covers": [
+    "notes",
+    "table"
+   ]
+  },
+  {
+   "id": "ox-Chart-2D",
+   "url": "https://raw.githubusercontent.com/dotnet/Open-XML-SDK/431ab05cf160248cc3885a4a766026d4f8243792/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Chart_2D.pptx",
+   "source": "Open XML SDK test files",
+   "license": "MIT",
+   "covers": [
+    "chart",
+    "notes"
+   ]
+  },
+  {
+   "id": "ox-Photo-Album3",
+   "url": "https://raw.githubusercontent.com/dotnet/Open-XML-SDK/431ab05cf160248cc3885a4a766026d4f8243792/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/Photo%20Album3.pptx",
+   "source": "Open XML SDK test files",
+   "license": "MIT",
+   "covers": [
+    "strict"
+   ]
+  },
+  {
+   "id": "ox-main-buautonum-type-romanUCParenBoth",
+   "url": "https://raw.githubusercontent.com/dotnet/Open-XML-SDK/431ab05cf160248cc3885a4a766026d4f8243792/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/main_buautonum_type_romanUCParenBoth.pptx",
+   "source": "Open XML SDK test files",
+   "license": "MIT",
+   "covers": [
+    "autonum",
+    "strict"
+   ]
+  },
+  {
+   "id": "ox-main-buautonum-type-ea1jpnkorperiod",
+   "url": "https://raw.githubusercontent.com/dotnet/Open-XML-SDK/431ab05cf160248cc3885a4a766026d4f8243792/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/main_buautonum_type_ea1jpnkorperiod.pptx",
+   "source": "Open XML SDK test files",
+   "license": "MIT",
+   "covers": [
+    "autonum",
+    "strict"
+   ]
+  },
+  {
+   "id": "ox-main-bufont-panose-10",
+   "url": "https://raw.githubusercontent.com/dotnet/Open-XML-SDK/431ab05cf160248cc3885a4a766026d4f8243792/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/main_bufont_panose_10.pptx",
+   "source": "Open XML SDK test files",
+   "license": "MIT",
+   "covers": [
+    "buchar",
+    "strict"
+   ]
+  },
+  {
+   "id": "ox-lvl8-mainLvl4prr-Level8",
+   "url": "https://raw.githubusercontent.com/dotnet/Open-XML-SDK/431ab05cf160248cc3885a4a766026d4f8243792/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/lvl8_mainLvl4prr_Level8.pptx",
+   "source": "Open XML SDK test files",
+   "license": "MIT",
+   "covers": [
+    "levels",
+    "strict"
+   ]
+  },
+  {
+   "id": "ox-wrapEAvert-bodyPrVert-VerticalTextEAvert",
+   "url": "https://raw.githubusercontent.com/dotnet/Open-XML-SDK/431ab05cf160248cc3885a4a766026d4f8243792/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/wrapEAvert_bodyPrVert_VerticalTextEAvert.pptx",
+   "source": "Open XML SDK test files",
+   "license": "MIT",
+   "covers": [
+    "vertical",
+    "strict"
+   ]
+  },
+  {
+   "id": "lo-smartart-org-chart",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/smartart-org-chart.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "smartart"
+   ]
+  },
+  {
+   "id": "lo-smartart-vertical-block-list",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/smartart-vertical-block-list.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "smartart"
+   ]
+  },
+  {
+   "id": "lo-smartart-cycle-matrix",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/smartart-cycle-matrix.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "smartart"
+   ]
+  },
+  {
+   "id": "lo-smartart-autoTxRot",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/smartart-autoTxRot.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "smartart"
+   ]
+  },
+  {
+   "id": "lo-smartart-bullet-list",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/smartart-bullet-list.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "smartart"
+   ]
+  },
+  {
+   "id": "lo-smartart-chevron",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/smartart-chevron.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "smartart"
+   ]
+  },
+  {
+   "id": "lo-smartart-pyramid-1child",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/smartart-pyramid-1child.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "smartart"
+   ]
+  },
+  {
+   "id": "lo-smartart-rightoleftblockdiagram",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/smartart-rightoleftblockdiagram.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "smartart"
+   ]
+  },
+  {
+   "id": "lo-smartart-recursion",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/smartart-recursion.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "smartart"
+   ]
+  },
+  {
+   "id": "lo-smartart-groupshape",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/oox/qa/unit/data/smartart-groupshape.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "group",
+    "smartart"
+   ]
+  },
+  {
+   "id": "lo-smartart-text",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/smartart-text.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "smartart"
+   ]
+  },
+  {
+   "id": "lo-tdf141058-1",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/tdf141058-1.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "group",
+    "smartart"
+   ]
+  },
+  {
+   "id": "lo-tdf145528-SmartArt-Matrix",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/tdf145528_SmartArt_Matrix.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "smartart"
+   ]
+  },
+  {
+   "id": "lo-tdf149551-SmartArt-Venn",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/tdf149551_SmartArt_Venn.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "smartart"
+   ]
+  },
+  {
+   "id": "lo-smartart-autofit-sync",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/smartart-autofit-sync.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "smartart"
+   ]
+  },
+  {
+   "id": "lo-import-characters",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/oox/qa/unit/data/import-characters.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "math"
+   ]
+  },
+  {
+   "id": "lo-import-mce",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/oox/qa/unit/data/import-mce.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "altcontent",
+    "math"
+   ]
+  },
+  {
+   "id": "lo-tdf128550",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/tdf128550.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "buchar",
+    "math"
+   ]
+  },
+  {
+   "id": "lo-tdf129372",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/tdf129372.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "altcontent",
+    "math"
+   ]
+  },
+  {
+   "id": "lo-rightToLeftParagraph",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/rightToLeftParagraph.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "buchar",
+    "rtl"
+   ]
+  },
+  {
+   "id": "lo-tdf134862",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/tdf134862.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "levels",
+    "rtl",
+    "rtlscript"
+   ]
+  },
+  {
+   "id": "lo-tdf62255",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/tdf62255.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "rtl",
+    "table"
+   ]
+  },
+  {
+   "id": "lo-tdf98603",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/tdf98603.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "rtlscript"
+   ]
+  },
+  {
+   "id": "lo-tdf125085-WordArtFontText",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/oox/qa/unit/data/tdf125085_WordArtFontText.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "rtl",
+    "rtlscript"
+   ]
+  },
+  {
+   "id": "lo-tdf113818-swivel",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/tdf113818-swivel.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "cjk"
+   ]
+  },
+  {
+   "id": "lo-tdf113822underline",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/tdf113822underline.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "cjk"
+   ]
+  },
+  {
+   "id": "lo-tdf100926",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/tdf100926.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "table",
+    "vertical"
+   ]
+  },
+  {
+   "id": "lo-tdf151008-eaVertAnchor",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/oox/qa/unit/data/tdf151008_eaVertAnchor.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "vertical"
+   ]
+  },
+  {
+   "id": "lo-bulletColor",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/bulletColor.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "buchar"
+   ]
+  },
+  {
+   "id": "lo-tdf126234",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/tdf126234.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "buchar"
+   ]
+  },
+  {
+   "id": "lo-n83889",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/n83889.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "autonum",
+    "buchar"
+   ]
+  },
+  {
+   "id": "lo-NumberedList-12ab-ab-34",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/NumberedList-12ab-ab-34.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "autonum",
+    "levels"
+   ]
+  },
+  {
+   "id": "lo-tdf173712",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/tdf173712.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "autonum",
+    "levels"
+   ]
+  },
+  {
+   "id": "lo-tdf173712-liststyle",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/tdf173712-liststyle.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "autonum",
+    "levels"
+   ]
+  },
+  {
+   "id": "lo-outliner-list-style",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/oox/qa/unit/data/outliner-list-style.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "altcontent",
+    "buchar",
+    "levels"
+   ]
+  },
+  {
+   "id": "lo-tdf103477",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/tdf103477.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "altcontent",
+    "buchar",
+    "group",
+    "levels",
+    "ole"
+   ]
+  },
+  {
+   "id": "lo-bulletMarginAndIndent",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/bulletMarginAndIndent.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "buchar"
+   ]
+  },
+  {
+   "id": "lo-tdf123090",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/tdf123090.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "buchar",
+    "merge",
+    "table"
+   ]
+  },
+  {
+   "id": "lo-tdf147586",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/tdf147586.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "chart",
+    "levels",
+    "notes"
+   ]
+  },
+  {
+   "id": "lo-table-list",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/table-list.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "smartart"
+   ]
+  },
+  {
+   "id": "lo-tcPr-vert-roundtrip",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/tcPr-vert-roundtrip.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "table",
+    "vertical"
+   ]
+  },
+  {
+   "id": "lo-group",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/group.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "buchar",
+    "group",
+    "levels"
+   ]
+  },
+  {
+   "id": "lo-camera-rotation-revolution-nonwps",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/oox/qa/unit/data/camera-rotation-revolution-nonwps.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": []
+  },
+  {
+   "id": "lo-TextDistancesInsets3",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/TextDistancesInsets3.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": []
+  },
+  {
+   "id": "lo-tdf114848",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/tdf114848.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "br",
+    "hyperlink"
+   ]
+  },
+  {
+   "id": "lo-shape-text-rotate",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/shape-text-rotate.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "vertical"
+   ]
+  },
+  {
+   "id": "lo-chart-theme-override",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/oox/qa/unit/data/chart-theme-override.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "chart"
+   ]
+  },
+  {
+   "id": "lo-tdf114821",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/tdf114821.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "chart"
+   ]
+  },
+  {
+   "id": "lo-forum-mso-de-138303",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/forum-mso-de-138303.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "chartex",
+    "ole",
+    "altcontent"
+   ]
+  },
+  {
+   "id": "ox-Of16-01",
+   "url": "https://raw.githubusercontent.com/dotnet/Open-XML-SDK/431ab05cf160248cc3885a4a766026d4f8243792/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestFiles/Of16-01.pptx",
+   "source": "Open XML SDK test files",
+   "license": "MIT",
+   "covers": [
+    "chartex"
+   ]
+  },
+  {
+   "id": "ox-Of16-02",
+   "url": "https://raw.githubusercontent.com/dotnet/Open-XML-SDK/431ab05cf160248cc3885a4a766026d4f8243792/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestFiles/Of16-02.pptx",
+   "source": "Open XML SDK test files",
+   "license": "MIT",
+   "covers": [
+    "chartex"
+   ]
+  },
+  {
+   "id": "ox-Of16-03",
+   "url": "https://raw.githubusercontent.com/dotnet/Open-XML-SDK/431ab05cf160248cc3885a4a766026d4f8243792/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestFiles/Of16-03.pptx",
+   "source": "Open XML SDK test files",
+   "license": "MIT",
+   "covers": [
+    "chartex"
+   ]
+  },
+  {
+   "id": "lo-tdf131553",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/tdf131553.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "smartart"
+   ]
+  },
+  {
+   "id": "lo-tdf112089",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/tdf112089.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "chart"
+   ]
+  },
+  {
+   "id": "poi-chart-picture-bg",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/chart-picture-bg.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "chart"
+   ]
+  }
+ ]
+}
