@@ -182,10 +182,17 @@ export type Delimiter = "," | "\t" | ";";
 export async function parseDelimited(text: string, filename: string, delimiter?: Delimiter): Promise<ParsedDocument> {
   const sep = delimiter ?? sniffDelimiter(text);
   const table = parseDelimitedText(text.replace(/^﻿/, ""), sep);
-  const rows: Row[] = table.map((cells) => ({
-    cells: cells.map((value) => ({ text: cellText(value), kind: valueKind(value), styleId: null })),
-    heightPt: null,
-  }));
+  // The caps a workbook's sheet has (SPEC.md §27): a delimited file had
+  // none, and a file of 161,568 records drew every one of them and
+  // overflowed the stack. Sheets benchmark finding.
+  const rows: Row[] = [];
+  let cellCount = 0;
+  for (const cells of table) {
+    if (rows.length >= SHEET_MAX_ROWS || cellCount >= SHEET_MAX_CELLS) break;
+    const kept = cells.length > SHEET_MAX_COLS ? cells.slice(0, SHEET_MAX_COLS) : cells;
+    cellCount += kept.length;
+    rows.push({ cells: kept.map((value) => ({ text: cellText(value), kind: valueKind(value), styleId: null })), heightPt: null });
+  }
   const title = sheetsTitle(filename);
   const sheet: Sheet = {
     name: title,
@@ -196,7 +203,7 @@ export async function parseDelimited(text: string, filename: string, delimiter?:
     frozenCols: 0,
     defaultRowHeightPt: DEFAULT_ROW_HEIGHT_PT,
     defaultColWidthChars: DEFAULT_COL_WIDTH_CHARS,
-    cutRows: null,
+    cutRows: rows.length < table.length ? table.length : null,
     drawings: [],
   };
   await repairSheet(sheet);
@@ -1149,7 +1156,7 @@ function rowHeightPx(pt: number | null, fallback: number): number {
 }
 
 function renderGrid(sheet: Sheet, workbook: Workbook): { text: string; html: string } {
-  const cols = Math.max(1, ...sheet.rows.map((r) => r.cells.length));
+  const cols = sheet.rows.reduce((most, r) => Math.max(most, r.cells.length), 1);
   const widths = Array.from({ length: cols }, (_, c) => colWidthPx(sheet.colWidths[c] ?? null, sheet.defaultColWidthChars));
   const heights = sheet.rows.map((r) => rowHeightPx(r.heightPt, sheet.defaultRowHeightPt));
 

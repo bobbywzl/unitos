@@ -1,15 +1,15 @@
 {
  "total": {
-  "score": 0.968,
-  "sheets": 0.981,
-  "text": 0.958,
-  "cells": 0.957,
+  "score": 0.974,
+  "sheets": 0.987,
+  "text": 0.965,
+  "cells": 0.963,
   "formats": 0.907,
   "merges": 1,
   "frozen": 1,
-  "lost": 77695,
+  "lost": 27695,
   "dom": 0,
-  "errors": 1
+  "errors": 0
  },
  "files": {
   "poi-SampleSS": {
@@ -1443,13 +1443,13 @@
    "dom": 0
   },
   "covid-countries-aggregated": {
-   "score": 0,
-   "text": 0,
-   "cells": 0,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
    "formats": null,
    "merges": null,
    "frozen": null,
-   "lost": 50000,
+   "lost": 0,
    "dom": 0
   },
   "unitos-book": {
