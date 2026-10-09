@@ -27,7 +27,9 @@
 //      implementation, `python3 -m pip install ttconv`) score the same way:
 //      what the document shows at each of its significant times (seq and
 //      par timing, timed spans, display, visibility), each word once at the
-//      time it first shows.
+//      time it first shows. Apple's lyrics TTML writes every time on the
+//      media's clock; its entry names ttconv-media-clock, and media-ref.py
+//      rewrites those times as nested times before ttconv reads the file.
 //   c. Transcript lines and paragraphs (segments.ts, tidy.ts transcriptLines,
 //      speakers.ts nameSpeakers, types.ts transcriptParagraphs): Earnings-21's
 //      word-timed, diarized ASR outputs taken through the Deepgram rung's

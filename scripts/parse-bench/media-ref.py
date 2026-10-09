@@ -201,12 +201,41 @@ def pysubs(path, fmt):
 DRAFT_NS = re.compile(r"http://www\.w3\.org/2006/(?:10|04)/ttaf1")
 
 
-def ttconv_states(path):
+def media_seconds(value):
+    """Seconds of a time as Apple's lyrics TTML writes it: "19.764",
+    "1:00.998", "0:01:00.998", with or without a trailing "s"."""
+    parts = value.strip().rstrip("s").split(":")
+    seconds = 0.0
+    for part in parts:
+        seconds = seconds * 60 + float(part)
+    return seconds
+
+
+def nest_media_times(root):
+    """Rewrite times written on the media's clock (Apple's lyrics TTML: every
+    p's begin equals its div's begin) into the standard's nested times, each
+    counting from the element around it, so ttconv reads them as the file
+    means them."""
+    def walk(el, parent_begin):
+        begin = media_seconds(el.get("begin")) if el.get("begin") is not None else parent_begin
+        for name in ("begin", "end"):
+            if el.get(name) is not None:
+                el.set(name, f"{media_seconds(el.get(name)) - parent_begin:.3f}s")
+        if el.get("dur") is not None:
+            el.set("dur", f"{media_seconds(el.get('dur')):.3f}s")
+        for child in el:
+            walk(child, begin)
+
+    for body in root.iter("{http://www.w3.org/ns/ttml}body"):
+        walk(body, 0.0)
+
+
+def ttconv_states(path, media_clock=False):
     """What a TTML document shows over time, by ttconv (the IMSC reference
     implementation): every intermediate synchronic document, its time and its
     visible text, one line per p and br. A display none element is not in
     the document at that time; a visibility hidden span is there but shows no
-    text."""
+    text. media_clock: the file writes every time on the media's clock."""
     import logging  # noqa: PLC0415
 
     import ttconv.isd as isd  # noqa: PLC0415
@@ -217,7 +246,10 @@ def ttconv_states(path):
     logging.disable(logging.CRITICAL)
     raw = open(path, encoding="utf-8-sig").read()
     raw = DRAFT_NS.sub("http://www.w3.org/ns/ttml", raw).lstrip()
-    doc = reader.to_model(ET.ElementTree(ET.fromstring(raw)))
+    root = ET.fromstring(raw)
+    if media_clock:
+        nest_media_times(root)
+    doc = reader.to_model(ET.ElementTree(root))
     if doc is None:
         raise ValueError("ttconv read no document")
 
@@ -259,8 +291,8 @@ def section_b(path, file):
         return {"cues": timedtext(raw)}
     if fmt == "srt":
         return {"cues": pysubs(path, "srt")}
-    if fmt == "ttml" and file.get("reader") == "ttconv":
-        return {"cues": [], "states": ttconv_states(path)}
+    if fmt == "ttml" and file.get("reader") in ("ttconv", "ttconv-media-clock"):
+        return {"cues": [], "states": ttconv_states(path, file.get("reader") == "ttconv-media-clock")}
     if fmt == "ttml":
         return {"cues": pysubs(path, "ttml")}
     return None

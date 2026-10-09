@@ -148,7 +148,7 @@
     { "id": "b-srt-ascii", "section": "b", "format": "srt", "source": "srt", "path": "ascii.srt", "exercises": "SRT" },
     { "id": "b-pysubs2-ttml", "section": "b", "format": "ttml", "source": "pysubs2", "path": "ttml_example.ttml", "exercises": "TTML" },
     { "id": "b-pysubs2-ttml2", "section": "b", "format": "ttml", "source": "pysubs2", "path": "ttml_example2.ttml", "exercises": "TTML with styles" },
-    { "id": "b-pysubs2-ttml-apple", "section": "b", "format": "ttml", "source": "pysubs2", "path": "ttml_example_apple.ttml", "exercises": "TTML as Apple writes it" },
+    { "id": "b-pysubs2-ttml-apple", "section": "b", "format": "ttml", "source": "pysubs2", "path": "ttml_example_apple.ttml", "reader": "ttconv-media-clock", "exercises": "TTML as Apple writes it: every time on the media's clock (each div begins with its first p and ends with its last), word-timed spans" },
     { "id": "b-yta-timedtext", "section": "b", "format": "timedtext", "source": "yta", "path": "transcript.xml.static", "exercises": "YouTube's legacy timedtext XML" },
     { "id": "b-dualsubs-asr-ko", "section": "b", "format": "json3", "source": "dualsubs", "path": "asr.ko.json", "exercises": "json3 auto captions, Korean" },
     { "id": "b-dualsubs-asr-zh", "section": "b", "format": "json3", "source": "dualsubs", "path": "asr.zh.json", "exercises": "json3 auto captions, Chinese" },
