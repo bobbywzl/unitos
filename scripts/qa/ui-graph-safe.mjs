@@ -292,10 +292,18 @@ if (after) {
   await page.click('[data-track="stitch-send"]');
   const save = page.locator('[data-track="assistant-save-note:stitch"]').last();
   await save.waitFor({ timeout: 90000 }).catch(() => {});
+  // [style9] REV8-05: the box keeps the earlier turns, and their saved lines;
+  // the counts before Save tell the new line and the new note from theirs.
+  const notesCount = `select count(*) from "Note" n join "Section" s on s.id=n."sectionId" where s."notebookId"='${NB}'`;
+  const shows = page.locator('[data-track="assistant-saved-note-show"]');
+  const showsBefore = await shows.count();
+  const beforeSave = Number(sql(notesCount));
   await save.click();
-  const show = page.locator('[data-track="assistant-saved-note-show"]').last();
-  await show.waitFor({ timeout: 60000 }).catch(() => {});
-  const before = sql(`select count(*) from "Note" n join "Section" s on s.id=n."sectionId" where s."notebookId"='${NB}'`);
+  for (let i = 0; i < 240 && (await shows.count()) <= showsBefore; i++) await page.waitForTimeout(250);
+  const show = shows.last();
+  await waitSql(notesCount, String(beforeSave + 1));
+  const before = sql(notesCount);
+  check(before === String(beforeSave + 1), "Save as note made one note", `${beforeSave} → ${before}`);
   await shot(page, "WALK2-10-saved");
   await show.click();
   // VIEW5-10: Show keeps the graph and opens the Notes list on the note.
@@ -313,9 +321,15 @@ if (after) {
   check(urlLeft, "Open in notes left no graph=1 in the URL", page.url());
   await shot(page, "WALK2-10-open-in-notes");
   await openGraph({ load: false });
+  // [style9] REV8-05: the graph opens on kept turns with the box folded; the
+  // saved line is in the turns, so the fold button opens them first.
+  if (await page.locator("[data-stitch-folded]").count()) {
+    await page.click('[data-track="stitch-collapse"]');
+    await page.waitForTimeout(600);
+  }
   check((await page.locator('[data-track="assistant-saved-note-show"]').count()) >= 1, "reopened: the saved line stays");
   check((await page.locator('[data-track="assistant-save-note:stitch"]').count()) === 0, "reopened: no second Save as note on that answer");
-  check(sql(`select count(*) from "Note" n join "Section" s on s.id=n."sectionId" where s."notebookId"='${NB}'`) === before, "no duplicate note");
+  check(sql(notesCount) === before, "no duplicate note", `${before} → ${sql(notesCount)}`);
   await shot(page, "WALK2-10-reopened");
 }
 

@@ -98,8 +98,16 @@ try {
   }
   check("online: the queue drops the refused note", left === 0, String(left));
   check("…and no note was saved", sql(`SELECT count(*) FROM "Note" WHERE content LIKE 'SAFE8 ${LINK}%'`) === "0");
-  const kept = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("graph-link-note:")).map((k) => localStorage.getItem(k)).join(" "));
-  check("the words are back in the box's draft", kept.includes(WORDS), kept.slice(0, 160));
+  // [lists9] WALK9-10, REV9-02: the words go to the link's draft, and the new
+  // note takes them up at once while the link is open (its draft then holds
+  // them, unitos-note-gather:…), else when the link opens again.
+  const kept = await page.evaluate(() =>
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith("graph-link-note:") || k.startsWith("unitos-note-gather:"))
+      .map((k) => localStorage.getItem(k))
+      .join(" "),
+  );
+  check("the words are kept in a draft (the link's, or the new note's while the link is open)", kept.includes(WORDS), kept.slice(0, 160));
   // C is an editor again and opens the link: the new note opens on the words, with the link's two ends.
   sql(`UPDATE "NotebookCollaborator" SET role='EDITOR' WHERE id='rev3-c1'`);
   await openPanel();
