@@ -220,6 +220,40 @@ function setSelection(el: HTMLElement, lines: NoteLine[], start: number, end: nu
   sel.addRange(range);
 }
 
+// The browser keeps the caret in view only for its own edits; the editor
+// paints every key itself, so after each one the caret's line is brought
+// into view in each box that scrolls it, the editor's own and the window
+// included, by no more than it takes.
+function revealCaret(el: HTMLElement) {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return;
+  const range = sel.getRangeAt(0);
+  let rect = range.getBoundingClientRect();
+  if (rect.height === 0) {
+    const node = range.startContainer;
+    const box = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
+    if (!box) return;
+    rect = box.getBoundingClientRect();
+  }
+  const pad = 8;
+  let top = rect.top;
+  let bottom = rect.bottom;
+  const shiftFor = (low: number, high: number) =>
+    bottom + pad > high ? Math.min(bottom + pad - high, top - low) : top - pad < low ? top - pad - low : 0;
+  for (let box: HTMLElement | null = el; box; box = box.parentElement) {
+    if (box.scrollHeight <= box.clientHeight || !/auto|scroll/.test(getComputedStyle(box).overflowY)) continue;
+    const frame = box.getBoundingClientRect();
+    const shift = shiftFor(frame.top, frame.bottom);
+    if (shift === 0) continue;
+    const was = box.scrollTop;
+    box.scrollTop += shift;
+    top -= box.scrollTop - was;
+    bottom -= box.scrollTop - was;
+  }
+  const shift = shiftFor(0, window.innerHeight);
+  if (shift !== 0) window.scrollBy(0, shift);
+}
+
 // Painting normalizes: the document reads back in the serializer's own form
 // ("1)" as "1.", a stray indent dropped), and the text follows the document,
 // so offsets read from the document always fit the text.
@@ -455,6 +489,7 @@ export function attachNoteEditable(
     text = next;
     paint(clamp(sel));
     push(clamp(sel), coalesce);
+    if (el.contains(document.activeElement) || document.activeElement === el) revealCaret(el);
     if (text !== before) opts.onChange(text);
   }
 
