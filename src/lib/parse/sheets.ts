@@ -1386,11 +1386,16 @@ function renderGrid(sheet: Sheet, workbook: Workbook): { text: string; html: str
       const cell = row.cells[c] ?? { text: "", kind: "empty" as const, styleId: null };
       const last = c === cols - 1;
       const sep = last ? (r === lastRow ? "" : textGap("\n")) : textGap("\t");
-      texts.push(cell.text);
+      // A merged-away cell shows nothing, as a spreadsheet shows it: its own
+      // words, which a file may keep, went into the block's text and not
+      // into the grid, so the grid's text was not the block's. Sheets
+      // benchmark finding (synth-merged-hidden-words).
       if (covered.has(`${r},${c}`)) {
+        texts.push("");
         pendingGaps += sep;
         continue;
       }
+      texts.push(cell.text);
       const span = spanAt.get(`${r},${c}`);
       const classes: string[] = [];
       if (cell.styleId !== null && workbook.styles[cell.styleId] && cellStyleCss(workbook.styles[cell.styleId])) classes.push(`x${cell.styleId}`);
