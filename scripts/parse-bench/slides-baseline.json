@@ -1,12 +1,12 @@
 {
  "total": {
-  "composite": 0.997,
-  "words": 0.995,
+  "composite": 0.999,
+  "words": 0.999,
   "order": 0.999,
   "bullets": 0.998,
   "tables": 1,
   "notes": 1,
-  "chartValues": 0.972,
+  "chartValues": 0.996,
   "replica": 1,
   "lost": 2,
   "files": 325,
@@ -2842,13 +2842,13 @@
    "lost": 0
   },
   "dnh-WhatIsdotNET-FR": {
-   "composite": 0.968,
-   "words": 0.994,
+   "composite": 1,
+   "words": 1,
    "order": 0.999,
    "bullets": 1,
    "tables": null,
    "notes": 1,
-   "chartValues": 0.815,
+   "chartValues": 1,
    "replica": 1,
    "lost": 0
   },
@@ -3117,24 +3117,24 @@
    "lost": 0
   },
   "lo-date-categories": {
-   "composite": 0.611,
-   "words": 0.334,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": null,
    "tables": null,
    "notes": null,
-   "chartValues": 0.5,
+   "chartValues": 1,
    "replica": 1,
    "lost": 0
   },
   "lo-bnc889755": {
-   "composite": 0.829,
-   "words": 0.6,
+   "composite": 1,
+   "words": 1,
    "order": 1,
    "bullets": 1,
    "tables": null,
    "notes": null,
-   "chartValues": 0.543,
+   "chartValues": 1,
    "replica": 1,
    "lost": 0
   },
@@ -3447,13 +3447,13 @@
    "lost": 0
   },
   "sc-charts-003-chart": {
-   "composite": 0.905,
-   "words": 0.914,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": null,
    "tables": null,
    "notes": null,
-   "chartValues": 0.8,
+   "chartValues": 1,
    "replica": 1,
    "lost": 0
   },
