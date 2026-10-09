@@ -1255,7 +1255,11 @@ function renderWorkbook(workbook: Workbook): ParsedBlock[] {
   const styleSheet = renderStyleSheet(workbook);
   for (const sheet of workbook.sheets) {
     blocks.push({ type: "HEADING", text: sheet.name, html: "<h2></h2>" });
-    if (sheet.rows.length === 0) {
+    // A sheet with no cells but a drawing — a chart sheet, or a worksheet
+    // holding only a chart or a picture — draws its grid with the drawing
+    // over it: it read "Empty sheet.", and the chart and its data were
+    // lost. Sheets benchmark finding (poi-chart_sheet, pd-chartsheet).
+    if (sheet.rows.length === 0 && sheet.drawings.length === 0) {
       blocks.push({ type: "PARAGRAPH", text: "Empty sheet." });
       continue;
     }
