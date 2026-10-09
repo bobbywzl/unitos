@@ -3,7 +3,7 @@
   "composite": 0.999,
   "words": 0.999,
   "order": 0.999,
-  "bullets": 0.998,
+  "bullets": 1,
   "tables": 1,
   "notes": 1,
   "chartValues": 0.996,
@@ -2600,10 +2600,10 @@
    "lost": 0
   },
   "dnc-Indexing-searching-NuGet": {
-   "composite": 0.916,
+   "composite": 1,
    "words": 1,
    "order": 1,
-   "bullets": 0.494,
+   "bullets": 1,
    "tables": 1,
    "notes": 1,
    "chartValues": null,
@@ -2820,10 +2820,10 @@
    "lost": 0
   },
   "dnc-Charbeneau-Responsive-Blazor": {
-   "composite": 0.986,
+   "composite": 1,
    "words": 1,
    "order": 1,
-   "bullets": 0.929,
+   "bullets": 1,
    "tables": null,
    "notes": 1,
    "chartValues": null,

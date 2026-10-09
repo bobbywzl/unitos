@@ -369,7 +369,9 @@ def label_of(paras):
             del counters[k]
         if not b or b[0] != "auto":
             counters.pop(lvl, None)
-            q["bullet"] = "" if not b or b[0] == "none" else shown_char(b[1], b[2])
+            shown = "" if not b or b[0] == "none" else shown_char(b[1], b[2])
+            # A bullet whose character is a space draws nothing.
+            q["bullet"] = "" if shown is not None and not shown.strip() else shown
             continue
         scheme, start = b[1], b[2] or 1
         last = counters.get(lvl)

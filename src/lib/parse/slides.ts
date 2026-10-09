@@ -744,7 +744,12 @@ function renderTextBody(txBody: Element | null, s: TextSettings): RenderedText {
     let bulletHtml = "";
     let bulletText = "";
     if (hasWords && bullet?.kind !== "auto") counters.delete(level);
-    if (bullet && bullet.kind !== "none" && hasWords) {
+    // A bullet whose character is a space draws nothing: no label in the
+    // words. Its place in the hanging indent stays, so the words start at
+    // the margin as PowerPoint sets them. Slides benchmark finding: a
+    // template's buChar " " wrote two spaces before every line of a deck.
+    const blank = bullet?.kind === "char" && bullet.char.trim() === "" && hasWords;
+    if (bullet && bullet.kind !== "none" && hasWords && !blank) {
       const glyph = bullet.kind === "char" ? bulletGlyph(bullet.char, bullet.font) : null;
       let label = glyph?.char ?? "";
       if (bullet.kind === "auto") {
@@ -762,8 +767,10 @@ function renderTextBody(txBody: Element | null, s: TextSettings): RenderedText {
       bulletHtml = `<span class="sb" style="font-size:${cqw(size, s.slideW)}${color ? `;color:${color}` : ""}${font ? `;font-family:${font}` : ""}">${escapeHtml(bulletText)}</span>`;
     }
     const algn = levelProp(s.chain, level, "algn", own);
-    const marL = levelProp(s.chain, level, "marL", own) ?? (bulletText ? 342900 * (level + 1) : 0);
-    const indent = levelProp(s.chain, level, "indent", own) ?? (bulletText ? -342900 : 0);
+    const bulleted = Boolean(bulletText) || blank;
+    const marL = levelProp(s.chain, level, "marL", own) ?? (bulleted ? 342900 * (level + 1) : 0);
+    const indent = levelProp(s.chain, level, "indent", own) ?? (bulleted ? -342900 : 0);
+    if (blank && indent < 0) bulletHtml = `<span class="sb" style="width:${cqw(-indent, s.slideW)}"></span>`;
     const lnPct = levelProp(s.chain, level, "lnSpcPct", own);
     const lnPts = levelProp(s.chain, level, "lnSpcPts", own);
     const spcBef = levelProp(s.chain, level, "spcBef", own);
