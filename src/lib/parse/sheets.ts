@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import * as ssf from "ssf";
 import type { ParsedBlock, ParsedDocument } from "@/lib/parse/types";
 import { decodeText } from "@/lib/parse/charset";
+import { computeFormula, type CellValue } from "@/lib/sheet-formulas";
 import { renderChart } from "@/lib/parse/chart";
 import { fontListAttr } from "@/lib/office-fonts";
 import { JEV_MODEL, jevEnabled, systemOne, type JevQuestion } from "@/lib/jev";
@@ -863,6 +864,8 @@ function readSheet(
   // drew every row over row 1 and kept only the last. Sheets benchmark
   // finding (POI 56278, 59746).
   let rowCursor = 0;
+  // Formula cells stored with no number ("r:c").
+  const uncomputed = new Set<string>();
   let cellCount = 0;
   let totalRows = 0;
   let cut = false;
@@ -890,11 +893,13 @@ function readSheet(
       const cell = readCell(c, shared, styles, date1904);
       const href = hrefByRef.get(`${columnLetter(col)}${r + 1}`);
       if (href) cell.href = href;
+      if (cell.formula && cell.kind === "empty" && (attr(c, "t") ?? "n") === "n") uncomputed.add(`${r}:${col}`);
       cells[col] = cell;
       cellCount++;
     }
     rows[r] = { cells, heightPt };
   }
+  computeStoredEmpty(rows, uncomputed, styles, date1904);
 
   // Merged ranges.
   const merges: Merge[] = [];
@@ -963,6 +968,58 @@ function readCell(c: Element, shared: string[], styles: Styles, date1904: boolea
       if (!Number.isFinite(n)) return { ...base, text: cleanText(v), kind: "text" };
       return { ...base, text: formatNumber(n, styleId, styles, date1904), kind: "number", number: n };
     }
+  }
+}
+
+/** A formula stored with no value (<v></v> or no <v>, as openpyxl and other
+    libraries write) shows what the formula computes, as Excel shows it on
+    open: lib/sheet-formulas.ts reads it over the sheet's cells, a formula
+    it reads computed first, a loop as empty. A formula the reading does not
+    cover (another sheet, a function it lacks) stays empty, as before.
+    Sheets benchmark finding (unitos-book, synth-long). */
+function computeStoredEmpty(rows: Row[], uncomputed: Set<string>, styles: Styles, date1904: boolean): void {
+  if (uncomputed.size === 0) return;
+  const busy = new Set<string>();
+  const valueAt = (r: number, c: number): CellValue => {
+    const key = `${r}:${c}`;
+    if (uncomputed.has(key)) compute(r, c);
+    const cell = rows[r]?.cells[c];
+    if (!cell) return null;
+    switch (cell.kind) {
+      case "number":
+        return cell.number ?? null;
+      case "bool":
+        return cell.text === "TRUE";
+      case "error":
+        return { error: cell.text };
+      case "empty":
+        return null;
+      default:
+        return cell.text;
+    }
+  };
+  const compute = (r: number, c: number) => {
+    const key = `${r}:${c}`;
+    if (busy.has(key)) return;
+    busy.add(key);
+    const cell = rows[r]?.cells[c];
+    const value = cell?.formula ? computeFormula(cell.formula, valueAt) : undefined;
+    uncomputed.delete(key);
+    if (!cell || value === undefined || value === null) return;
+    if (typeof value === "number") {
+      if (!Number.isFinite(value)) return;
+      Object.assign(cell, { text: formatNumber(value, cell.styleId, styles, date1904), kind: "number", number: value });
+    } else if (typeof value === "boolean") {
+      Object.assign(cell, { text: value ? "TRUE" : "FALSE", kind: "bool" });
+    } else if (typeof value === "string") {
+      if (value !== "") Object.assign(cell, { text: cellText(value), kind: "text" });
+    } else {
+      Object.assign(cell, { text: cleanText(value.error), kind: "error" });
+    }
+  };
+  for (const key of [...uncomputed]) {
+    const [r, c] = key.split(":").map(Number);
+    compute(r, c);
   }
 }
 

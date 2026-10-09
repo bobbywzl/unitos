@@ -1,13 +1,13 @@
 {
  "total": {
-  "score": 0.995,
+  "score": 0.996,
   "sheets": 1,
-  "text": 0.993,
-  "cells": 0.992,
-  "formats": 0.966,
+  "text": 0.994,
+  "cells": 0.994,
+  "formats": 0.974,
   "merges": 1,
   "frozen": 1,
-  "lost": 10641,
+  "lost": 633,
   "dom": 0,
   "errors": 0
  },
@@ -1453,13 +1453,13 @@
    "dom": 0
   },
   "unitos-book": {
-   "score": 0.905,
-   "text": 0.94,
-   "cells": 0.8,
-   "formats": 0.692,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
    "merges": 1,
    "frozen": 1,
-   "lost": 12,
+   "lost": 0,
    "dom": 0
   },
   "unitos-charts": {
@@ -1533,13 +1533,13 @@
    "dom": 0
   },
   "synth-long": {
-   "score": 0.974,
-   "text": 0.958,
-   "cells": 0.912,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
    "formats": 1,
    "merges": null,
    "frozen": 1,
-   "lost": 9992,
+   "lost": 0,
    "dom": 0
   },
   "synth-wide": {
@@ -1553,13 +1553,13 @@
    "dom": 0
   },
   "synth-frozen-merged": {
-   "score": 0.98,
-   "text": 0.966,
-   "cells": 0.915,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
    "formats": 1,
    "merges": 1,
    "frozen": 1,
-   "lost": 4,
+   "lost": 0,
    "dom": 0
   }
  }
