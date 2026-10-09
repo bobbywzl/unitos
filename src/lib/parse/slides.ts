@@ -933,6 +933,13 @@ function autoNumberLabel(scheme: string, n: number): string {
     }
     return out;
   };
+  // The East Asian schemes (ECMA-376 Part 1, 20.1.10.61): ideographic
+  // numbers (Chinese, Japanese, Korean), full-width digits, circled
+  // numbers; "Db" is a double-byte period. Slides benchmark finding: an
+  // ea1JpnKorPeriod list read "1." where PowerPoint draws "一.".
+  if (scheme.startsWith("ea1")) return hanNumber(n) + (scheme.endsWith("DbPeriod") ? "．" : scheme.endsWith("Period") ? "." : "");
+  if (scheme.startsWith("arabicDb")) return String(n).replace(/\d/g, (d) => String.fromCharCode(0xff10 + Number(d))) + (scheme.endsWith("Period") ? "．" : "");
+  if (scheme.startsWith("circleNum")) return circledNumber(n, scheme === "circleNumWdBlackPlain");
   let core: string;
   if (scheme.startsWith("alphaLc")) core = alpha(n);
   else if (scheme.startsWith("alphaUc")) core = alpha(n).toUpperCase();
@@ -943,6 +950,39 @@ function autoNumberLabel(scheme: string, n: number): string {
   if (scheme.endsWith("ParenR")) return `${core})`;
   if (scheme.endsWith("Period")) return `${core}.`;
   return core;
+}
+
+/** A count in ideographs: 一, 十, 十一, 二十, 一百零五, up to 9999. */
+function hanNumber(n: number): string {
+  const digits = "零一二三四五六七八九";
+  if (n <= 0 || n >= 10000) return String(n);
+  let out = "";
+  let left = n;
+  let zero = false;
+  for (const [unit, sym] of [[1000, "千"], [100, "百"], [10, "十"], [1, ""]] as const) {
+    const d = Math.floor(left / unit);
+    left %= unit;
+    if (d === 0) {
+      zero = out.length > 0;
+      continue;
+    }
+    if (zero) {
+      out += "零";
+      zero = false;
+    }
+    out += (unit === 10 && d === 1 && !out ? "" : digits[d]) + sym;
+  }
+  return out;
+}
+
+/** A circled number: ① to ㊿, or ❶ to ⓴ in the black set; past those, the
+    digits. */
+function circledNumber(n: number, black: boolean): string {
+  if (black) return n >= 1 && n <= 10 ? String.fromCodePoint(0x2776 + n - 1) : n >= 11 && n <= 20 ? String.fromCodePoint(0x24eb + n - 11) : String(n);
+  if (n >= 1 && n <= 20) return String.fromCodePoint(0x2460 + n - 1);
+  if (n >= 21 && n <= 35) return String.fromCodePoint(0x3251 + n - 21);
+  if (n >= 36 && n <= 50) return String.fromCodePoint(0x32b1 + n - 36);
+  return String(n);
 }
 
 /** The body's insets and vertical anchor as CSS on the text layer. */

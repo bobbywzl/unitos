@@ -3,7 +3,7 @@
   "composite": 1,
   "words": 1,
   "order": 1,
-  "bullets": 0.999,
+  "bullets": 1,
   "tables": 1,
   "notes": 1,
   "chartValues": 1,
@@ -851,10 +851,10 @@
    "lost": 0
   },
   "ox-main-buautonum-type-ea1jpnkorperiod": {
-   "composite": 0.938,
+   "composite": 1,
    "words": 1,
    "order": 1,
-   "bullets": 0.75,
+   "bullets": 1,
    "tables": null,
    "notes": null,
    "chartValues": null,
