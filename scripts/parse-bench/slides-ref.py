@@ -736,7 +736,13 @@ class SlideRef:
         rels = self.pkg.rels(self.part)
         if tbl is not None:
             rows = []
+            # The rows holding an equation: its notation (spaces, brackets,
+            # fraction bars) is the writer's, so the bench finds such a row
+            # by its letters and digits.
+            math_rows = []
             for tr in kids(tbl, "tr"):
+                if desc(tr, "oMath"):
+                    math_rows.append(len(rows))
                 row = []
                 for tc in kids(tr, "tc"):
                     if tc.get("hMerge") in ("1", "true") or tc.get("vMerge") in ("1", "true"):
@@ -750,7 +756,7 @@ class SlideRef:
                     row.append("\n".join(ps))
                 rows.append(row)
             if any(c.strip() for r in rows for c in r):
-                self.shapes.append({"kind": "table", "title": False, "box": box, "rows": rows})
+                self.shapes.append({"kind": "table", "title": False, "box": box, "rows": rows, "mathRows": math_rows})
             return
         ch = kid(data, "chart")
         if ch is not None:

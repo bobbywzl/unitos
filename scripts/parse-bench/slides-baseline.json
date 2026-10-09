@@ -1,10 +1,10 @@
 {
  "total": {
-  "composite": 0.999,
+  "composite": 1,
   "words": 0.999,
   "order": 0.999,
   "bullets": 1,
-  "tables": 0.99,
+  "tables": 1,
   "notes": 0.999,
   "chartValues": 0.997,
   "replica": 1,
@@ -1522,8 +1522,8 @@
    "lost": 0
   },
   "ais-05Framework-02AutoDiff-03-GradMode": {
-   "composite": 0.993,
-   "words": 0.964,
+   "composite": 0.998,
+   "words": 0.988,
    "order": 1,
    "bullets": 1,
    "tables": null,
@@ -1643,33 +1643,33 @@
    "lost": 0
   },
   "aii-01AICluster-04Performance-05Training": {
-   "composite": 0.986,
-   "words": 0.986,
+   "composite": 0.998,
+   "words": 0.99,
    "order": 1,
    "bullets": 1,
-   "tables": 0.929,
+   "tables": 1,
    "notes": null,
    "chartValues": 1,
    "replica": 1,
    "lost": 0
   },
   "aii-02StorComm-05StorforAI-05Challenge": {
-   "composite": 0.962,
+   "composite": 1,
    "words": 1,
    "order": 1,
    "bullets": 1,
-   "tables": 0.773,
+   "tables": 1,
    "notes": null,
    "chartValues": 1,
    "replica": 1,
    "lost": 0
   },
   "aii-01AICluster-04Performance-06Inferenc": {
-   "composite": 0.966,
-   "words": 0.995,
+   "composite": 1,
+   "words": 0.998,
    "order": 1,
    "bullets": 1,
-   "tables": 0.8,
+   "tables": 1,
    "notes": null,
    "chartValues": 1,
    "replica": 1,
@@ -1687,8 +1687,8 @@
    "lost": 0
   },
   "aii-05Infer-02InferSpeedUp-01KVCache": {
-   "composite": 0.999,
-   "words": 0.997,
+   "composite": 1,
+   "words": 1,
    "order": 1,
    "bullets": 1,
    "tables": 1,

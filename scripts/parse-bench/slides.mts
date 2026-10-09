@@ -138,7 +138,7 @@ else if (only) entries = entries.filter((e) => only.includes(e.id));
 type RefPara = { text: string; level: number; bullet: string | null; math: boolean };
 type RefShape =
   | { kind: "text"; title: boolean; box: number[] | null; paras: RefPara[] }
-  | { kind: "table"; title: boolean; box: number[] | null; rows: string[][] }
+  | { kind: "table"; title: boolean; box: number[] | null; rows: string[][]; mathRows?: number[] }
   | { kind: "chart"; title: boolean; box: number[] | null; titleText?: string; words: string[]; values: number[]; shown: string[] }
   | { kind: "smartart"; title: boolean; box: number[] | null; texts: string[] };
 type RefSlide = { n: number; hidden?: boolean; missing?: boolean; shapes: RefShape[]; notes: string };
@@ -168,7 +168,9 @@ if (stale.length > 0) {
 // compared in its compatibility form (NFKC): an equation's math italic 𝑎 is
 // the letter a, a full-width Ａ is A. A math letter (U+1D400–U+1D7FF) is
 // one variable, a token of its own: "𝜋𝑟²" is π, r, 2 on both sides, however
-// an equation's parts are spaced.
+// an equation's parts are spaced. An underscore joins the words of a name
+// (snake_case is one token) but is no word alone: a linear equation's
+// subscript mark ("𝑥_𝐾") is notation, as "^" is.
 const LABEL = /^\s*(?:[^\p{L}\p{N}\s]{1,2}|\(?(?:\d{1,3}|[a-zA-Z]|[ivxlcdmIVXLCDM]{1,6})[.)])\s+/u;
 function tokens(text: string): string[] {
   const lines = text.split("\n").map((l) => l.replace(LABEL, ""));
@@ -179,7 +181,7 @@ function tokens(text: string): string[] {
       .normalize("NFKC")
       .toLowerCase()
       .match(/[\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}]|(?:(?![\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}])[\p{L}\p{N}\p{M}_])+/gu) ?? []
-  );
+  ).filter((t) => !/^_+$/.test(t));
 }
 type Counts = { tp: number; fp: number; fn: number };
 function bag(ts: string[]): Map<string, number> {
@@ -202,6 +204,8 @@ function counts(ref: string[], got: string[]): Counts {
   }
   return { tp, fp, fn };
 }
+/** A text's letters and digits alone, in their compatibility form. */
+const letters = (text: string) => (text.normalize("NFKC").toLowerCase().match(/[\p{L}\p{N}]/gu) ?? []).join("");
 const add = (a: Counts, b: Counts): Counts => ({ tp: a.tp + b.tp, fp: a.fp + b.fp, fn: a.fn + b.fn });
 const f1 = ({ tp, fp, fn }: Counts) => (tp + fp + fn === 0 ? 1 : (2 * tp) / (2 * tp + fp + fn));
 /** Share of a piece's tokens the parse holds. */
@@ -439,18 +443,21 @@ function scoreFile(id: string, ref: Ref, blocks: ParsedBlock[], ms: number, deta
       say.push(`  bullet: want "${w.want ?? "a symbol"}" got "${prefix}" on "${w.first.slice(0, 60)}"`);
     }
 
-    // Tables: rows found whole.
+    // Tables: rows found whole. A row holding an equation is found by its
+    // letters and digits in order: an equation's notation (spaces,
+    // brackets, fraction bars: "5 𝑎𝑠 h" or "5(𝑎𝑠)/h") is the writer's.
+    const bodyLetters = letters(body);
     for (const s of slide.shapes) {
       if (s.kind !== "table") continue;
-      for (const row of s.rows) {
-        if (!row.some((c) => c.trim())) continue;
+      s.rows.forEach((row, r) => {
+        if (!row.some((c) => c.trim())) return;
         rowAll++;
         const cellNorm = (l: string) => l.split("\t").map(norm).join("\t");
         const want = row.map((c) => c.split("\n").map(cellNorm).join("\n")).join("\t");
         const bodyNorm = body.split("\n").map(cellNorm).join("\n");
-        if (bodyNorm.includes(want)) rowOk++;
+        if (bodyNorm.includes(want) || (s.mathRows?.includes(r) && bodyLetters.includes(letters(row.join(""))))) rowOk++;
         else say.push(`  table row: ${want.replace(/\t/g, " | ").replace(/\n/g, " / ").slice(0, 160)}`);
-      }
+      });
     }
 
     // Chart values: each value as a number in the slide's words.
