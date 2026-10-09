@@ -3172,8 +3172,8 @@
    "lost": 0
   },
   "lo-tdf137691-dataTable": {
-   "composite": 0.947,
-   "words": 0.988,
+   "composite": 0.95,
+   "words": 1,
    "order": null,
    "bullets": 1,
    "tables": null,
@@ -3392,8 +3392,8 @@
    "lost": 0
   },
   "sc-021": {
-   "composite": 0.998,
-   "words": 0.992,
+   "composite": 1,
+   "words": 0.999,
    "order": 1,
    "bullets": null,
    "tables": null,

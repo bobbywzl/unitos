@@ -28,6 +28,7 @@ import posixpath
 import re
 import sys
 import zipfile
+from decimal import ROUND_HALF_UP, Decimal
 
 from lxml import etree
 
@@ -516,6 +517,8 @@ def fmt_number(v, code):
         x *= 100
     m = re.search(r"\.([0#?]+)", code)
     decimals = len(m.group(1)) if m else 0
+    # Excel rounds a half away from zero: 541526.5 shows as 541,527.
+    x = float(Decimal(repr(x)).quantize(Decimal(1).scaleb(-decimals), rounding=ROUND_HALF_UP))
     s = ("{:,.%df}" if re.search(r"[0#],[0#]", code) else "{:.%df}") % decimals
     s = s.format(x)
     lit = re.findall(r'"([^"]*)"', code)
