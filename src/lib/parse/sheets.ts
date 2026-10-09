@@ -640,14 +640,17 @@ function readSharedStrings(zip: OfficeZip, rels: Map<string, Relationship>): str
 }
 
 /** The text of a rich-text element: its own <t> or its runs' <t>, phonetic
-    guides left out. */
+    guides left out. A character XML cannot hold is written _xHHHH_
+    (ECMA-376 Part 1, §22.9.2.19), and "_x005F_" is a literal "_": Excel
+    writes a line break in a cell as "_x000D_" and LF. Sheets benchmark
+    finding (lo-escape-unicode). */
 function richText(el: Element): string {
   let out = "";
   for (const node of Array.from(el.children)) {
     if (node.localName === "t") out += node.textContent ?? "";
     else if (node.localName === "r") out += child(node, "t")?.textContent ?? "";
   }
-  return cellText(out);
+  return cellText(out.replace(/_x([0-9A-Fa-f]{4})_/g, (_, hex: string) => String.fromCharCode(parseInt(hex, 16))));
 }
 
 type Styles = {
