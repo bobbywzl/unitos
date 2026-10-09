@@ -7,6 +7,8 @@
 // owns X = rev3-x, C's comment rev6-n-c is in P) with a sign-in-on dev
 // server on it.
 //   DB=dissect_r9safe9 BASE=http://localhost:3176 node scripts/qa/ui-queue-account.mjs
+// With OUT set it also pictures A's reader after the drain (the replayed
+// comment on the block) as OUT/<SHOT>-<LANG_UI>-<WIDTH>.png.
 // It refuses the shared database "dissect" and deletes only the rows it made.
 import { execFileSync } from "node:child_process";
 import { chromium } from "playwright-core";
@@ -27,9 +29,14 @@ const check = (name, ok, detail = "") => {
   if (!ok) failed++;
   console.log(`${ok ? "ok  " : "FAIL"} ${name}${detail ? ` | ${detail}` : ""}`);
 };
+const OUT = process.env.OUT ?? "";
+const LANG = process.env.LANG_UI ?? "en";
+const WIDTH = Number(process.env.WIDTH ?? 1440);
+const SHOT = process.env.SHOT ?? "REV9-01-after";
+const PHONE = WIDTH < 600;
 const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome", args: ["--disable-dev-shm-usage"] });
 try {
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const ctx = await browser.newContext({ viewport: { width: WIDTH, height: PHONE ? 844 : 900 }, hasTouch: PHONE, isMobile: PHONE });
   const page = await ctx.newPage();
   const warns = [];
   page.on("console", (m) => {
@@ -41,7 +48,7 @@ try {
     await ctx.addCookies([
       { name: "dissect-session", value: session, url: BASE },
       { name: "dissect-account", value: account, url: BASE },
-      { name: "dissect-lang", value: "en", url: BASE },
+      { name: "dissect-lang", value: LANG, url: BASE },
     ]);
   };
   await signIn("rev3-sb", "rev3-ub");
@@ -120,6 +127,12 @@ try {
   const by = q(`SELECT string_agg(DISTINCT "userId", ',') FROM "Reply" WHERE content LIKE '${TAG}%'`);
   check("the reply is A's", by === "rev3-ua", by);
   check("no record was dropped on the way", warns.length === 0, warns.join(" | "));
+  if (OUT) {
+    // A's reader on the block the replayed comment is on: the comment's mark shows.
+    await page.goto(`${BASE}/n/rev3-p?doc=rev3-d1`, { waitUntil: "networkidle", timeout: 300000 });
+    await page.waitForTimeout(1500);
+    await page.screenshot({ path: `${OUT}/${SHOT}-${LANG}-${WIDTH}.png` });
+  }
   await ctx.close();
 } finally {
   q(`DELETE FROM "Reply" WHERE content LIKE '${TAG}%'`);
