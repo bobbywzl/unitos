@@ -509,7 +509,10 @@ def chart_ref(pkg, path):
     words = []
     values = []
     shown = []
-    series = desc(chart, "ser")
+    # A series the chart filter hides (c15:filteredBarSeries,
+    # c15:filteredScatterSeries, ... in the plot's extLst) is not drawn and
+    # shows no words: PowerPoint keeps it only to bring it back.
+    series = [s for s in desc(chart, "ser") if not any(isinstance(a.tag, str) and local(a).startswith("filtered") for a in s.iterancestors())]
     have_cats = False
     for ser in series:
         name, _ = cache_pts(kid(ser, "tx"))
