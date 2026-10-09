@@ -727,15 +727,13 @@ function renderTextBody(txBody: Element | null, s: TextSettings): RenderedText {
     let bulletHtml = "";
     let bulletText = "";
     if (bullet && bullet.kind !== "none" && hasWords) {
-      const label =
-        bullet.kind === "char"
-          ? bullet.char
-          : autoNumberLabel(bullet.scheme, (counters.get(level) ?? bullet.startAt - 1) + 1);
+      const glyph = bullet.kind === "char" ? bulletGlyph(bullet.char, bullet.font) : null;
+      const label = glyph ? glyph.char : autoNumberLabel(bullet.scheme, (counters.get(level) ?? bullet.startAt - 1) + 1);
       if (bullet.kind === "auto") counters.set(level, (counters.get(level) ?? bullet.startAt - 1) + 1);
       bulletText = `${label} `;
       const size = runs.firstSize * (bullet.sizePct ?? 1);
       const color = (bullet.color ? colorCss(bullet.color, s.palette) : null) ?? runs.firstColor;
-      const bulletFont = bullet.kind === "char" && bullet.font && !bullet.font.startsWith("+") ? bullet.font : null;
+      const bulletFont = bullet.kind === "char" && !glyph?.symbol && bullet.font && !bullet.font.startsWith("+") ? bullet.font : null;
       if (bulletFont) s.fonts.add(bulletFont);
       const font = bulletFont ? fontFamilyCss(bulletFont) : "";
       bulletHtml = `<span class="sb" style="font-size:${cqw(size, s.slideW)}${color ? `;color:${color}` : ""}${font ? `;font-family:${font}` : ""}">${escapeHtml(bulletText)}</span>`;
@@ -842,6 +840,35 @@ function renderRuns(
     firstColor = end.color;
   }
   return { html: parts.join(""), text, firstSize, firstColor };
+}
+
+// A bullet set in a symbol font is a letter the font draws as a glyph:
+// Wingdings "l" is a round bullet, "§" a small square, "Ø" an arrowhead.
+// The words carry the glyph itself, so the text reads "■ Item" where the
+// slide shows ■, never "n Item". Slides benchmark finding: 6 files read
+// their bullets as stray letters (q, v, l, §, Ø, n).
+const WINGDINGS_BULLETS = new Map<number, string>([
+  [0x6c, "●"], [0x6d, "❍"], [0x6e, "■"], [0x6f, "□"], [0x70, "◻"], [0x71, "❑"], [0x72, "❒"], [0x73, "⬧"], [0x74, "⧫"], [0x75, "◆"],
+  [0x76, "❖"], [0x77, "⬥"], [0x9e, "·"], [0x9f, "•"], [0xa1, "○"], [0xa7, "▪"], [0xa8, "◻"], [0xd8, "➢"], [0xe0, "➔"], [0xe8, "➔"],
+  [0xf0, "⇨"], [0xfb, "✗"], [0xfc, "✓"], [0xfd, "☒"], [0xfe, "☑"],
+]);
+const SYMBOL_BULLETS = new Map<number, string>([
+  [0xb7, "•"], [0xa7, "♣"], [0xa8, "♦"], [0xa9, "♥"], [0xaa, "♠"], [0xae, "→"], [0xde, "⇒"], [0xe0, "◊"], [0x2d, "−"], [0x2a, "∗"],
+]);
+const SYMBOL_FONT = /^(?:symbol|wingdings|webdings|marlett|zapf ?dingbats|monotype sorts)/i;
+
+/** The glyph a bullet character draws in its bullet font, and whether the
+    font is a symbol font (its glyph then needs no font of its own). A
+    symbol-font letter with no known glyph, or a private-use code with no
+    font to draw it, shows as "•". */
+function bulletGlyph(char: string, font: string | null): { char: string; symbol: boolean } {
+  let code = char.codePointAt(0) ?? 0;
+  const privateUse = code >= 0xf000 && code <= 0xf0ff;
+  if (privateUse) code -= 0xf000;
+  if (!font || !SYMBOL_FONT.test(font)) return privateUse ? { char: "•", symbol: true } : { char, symbol: false };
+  const name = font.toLowerCase();
+  const table = name === "wingdings" ? WINGDINGS_BULLETS : name === "symbol" ? SYMBOL_BULLETS : null;
+  return { char: table?.get(code) ?? "•", symbol: true };
 }
 
 function hyperlinkOf(rPr: Element | null, s: TextSettings): string | null {

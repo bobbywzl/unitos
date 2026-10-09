@@ -1,10 +1,10 @@
 {
  "total": {
-  "composite": 0.964,
-  "words": 0.959,
+  "composite": 0.984,
+  "words": 0.973,
   "order": 0.97,
-  "bullets": 0.914,
-  "tables": 0.958,
+  "bullets": 0.992,
+  "tables": 0.997,
   "notes": 1,
   "chartValues": 1,
   "replica": 1,
@@ -37,10 +37,10 @@
    "lost": 0
   },
   "poi-aascu-org-workarea-downloadasset-aspx-id": {
-   "composite": 0.986,
-   "words": 0.974,
+   "composite": 0.99,
+   "words": 0.975,
    "order": 0.965,
-   "bullets": 0.979,
+   "bullets": 1,
    "tables": 1,
    "notes": null,
    "chartValues": 1,
@@ -48,10 +48,10 @@
    "lost": 0
   },
   "poi-at-ecodesign-www-downloads-Vertiefungsvo": {
-   "composite": 0.992,
+   "composite": 1,
    "words": 1,
    "order": 1,
-   "bullets": 0.96,
+   "bullets": 1,
    "tables": null,
    "notes": 1,
    "chartValues": null,
@@ -147,10 +147,10 @@
    "lost": 0
   },
   "poi-aascu-org-hbcu-leadershipsummit-cooper": {
-   "composite": 0.996,
+   "composite": 0.998,
    "words": 1,
    "order": 0.991,
-   "bullets": 0.987,
+   "bullets": 1,
    "tables": 1,
    "notes": null,
    "chartValues": 1,
@@ -180,10 +180,10 @@
    "lost": 0
   },
   "poi-45541-Footer": {
-   "composite": 0.873,
-   "words": 0.957,
+   "composite": 1,
+   "words": 1,
    "order": 1,
-   "bullets": 0.533,
+   "bullets": 1,
    "tables": null,
    "notes": null,
    "chartValues": null,
@@ -213,10 +213,10 @@
    "lost": 0
   },
   "poi-aptia": {
-   "composite": 0.95,
-   "words": 0.982,
+   "composite": 1,
+   "words": 1,
    "order": 1,
-   "bullets": 0.717,
+   "bullets": 1,
    "tables": 1,
    "notes": 1,
    "chartValues": null,
@@ -719,10 +719,10 @@
    "lost": 0
   },
   "ox-typical": {
-   "composite": 0.96,
-   "words": 0.98,
+   "composite": 0.994,
+   "words": 1,
    "order": 0.974,
-   "bullets": 0.806,
+   "bullets": 0.988,
    "tables": 1,
    "notes": 1,
    "chartValues": null,
@@ -741,10 +741,10 @@
    "lost": 0
   },
   "ox-o09-Performance-typical": {
-   "composite": 0.985,
-   "words": 0.99,
+   "composite": 0.996,
+   "words": 1,
    "order": 0.974,
-   "bullets": 0.949,
+   "bullets": 1,
    "tables": 1,
    "notes": 1,
    "chartValues": null,
@@ -862,10 +862,10 @@
    "lost": 0
   },
   "ox-main-bufont-panose-10": {
-   "composite": 0.768,
-   "words": 0.824,
+   "composite": 1,
+   "words": 1,
    "order": 1,
-   "bullets": 0.25,
+   "bullets": 1,
    "tables": null,
    "notes": null,
    "chartValues": null,
@@ -1104,10 +1104,10 @@
    "lost": 0
   },
   "lo-rightToLeftParagraph": {
-   "composite": 0.556,
-   "words": 0.667,
+   "composite": 1,
+   "words": 1,
    "order": null,
-   "bullets": 0,
+   "bullets": 1,
    "tables": null,
    "notes": null,
    "chartValues": null,
@@ -1203,10 +1203,10 @@
    "lost": 0
   },
   "lo-bulletColor": {
-   "composite": 0.667,
-   "words": 0.667,
+   "composite": 1,
+   "words": 1,
    "order": 1,
-   "bullets": 0,
+   "bullets": 1,
    "tables": null,
    "notes": null,
    "chartValues": null,
@@ -1214,10 +1214,10 @@
    "lost": 0
   },
   "lo-tdf126234": {
-   "composite": 0.63,
-   "words": 0.889,
+   "composite": 1,
+   "words": 1,
    "order": null,
-   "bullets": 0,
+   "bullets": 1,
    "tables": null,
    "notes": null,
    "chartValues": null,
@@ -1225,10 +1225,10 @@
    "lost": 0
   },
   "lo-n83889": {
-   "composite": 0.833,
+   "composite": 1,
    "words": 1,
    "order": 1,
-   "bullets": 0.333,
+   "bullets": 1,
    "tables": null,
    "notes": null,
    "chartValues": null,
@@ -1280,10 +1280,10 @@
    "lost": 0
   },
   "lo-bulletMarginAndIndent": {
-   "composite": 0.667,
-   "words": 0.667,
+   "composite": 1,
+   "words": 1,
    "order": 1,
-   "bullets": 0,
+   "bullets": 1,
    "tables": null,
    "notes": null,
    "chartValues": null,
@@ -1291,11 +1291,11 @@
    "lost": 0
   },
   "lo-tdf123090": {
-   "composite": 0.556,
-   "words": 0.667,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": null,
-   "tables": 0,
+   "tables": 1,
    "notes": null,
    "chartValues": null,
    "replica": 1,
