@@ -82,11 +82,30 @@ export async function deepgramTranscribe(
     const detail = (await res.json().catch(() => null)) as { err_msg?: string; error?: string } | null;
     throw new Error(detail?.err_msg ?? detail?.error ?? `request failed (${res.status})`);
   }
-  const parsed = responseSchema.safeParse(await res.json());
+  const body: unknown = await res.json();
+  const segments = deepgramSegments(body);
+  if (segments.length === 0) throw new Error("no speech found");
+
+  // Deepgram bills per second of audio; tokens do not apply.
+  const duration = responseSchema.safeParse(body).data?.metadata?.duration;
+  const seconds = duration ?? segments[segments.length - 1].end;
+  recordUsage(
+    { userId: opts.userId ?? null, feature: "transcribe", model: MODEL },
+    { inputTokens: Math.ceil(seconds) },
+    (seconds / 60) * USD_PER_MINUTE,
+  );
+  return segments;
+}
+
+/** The segments of a Deepgram answer: one per utterance, each with its
+    voice; with no utterances, the words in runs of one voice. Throws when
+    the answer is not a transcript. */
+export function deepgramSegments(body: unknown): TranscriptSegment[] {
+  const parsed = responseSchema.safeParse(body);
   if (!parsed.success) throw new Error("output was not a transcript");
 
   const utterances = parsed.data.results.utterances ?? [];
-  let segments: TranscriptSegment[] = utterances.map((u) => ({
+  const segments: TranscriptSegment[] = utterances.map((u) => ({
     start: u.start,
     end: u.end,
     text: u.transcript,
@@ -109,15 +128,5 @@ export async function deepgramTranscribe(
     }
     if (open) segments.push(open);
   }
-  segments = normalizeSegments(segments);
-  if (segments.length === 0) throw new Error("no speech found");
-
-  // Deepgram bills per second of audio; tokens do not apply.
-  const seconds = parsed.data.metadata?.duration ?? segments[segments.length - 1].end;
-  recordUsage(
-    { userId: opts.userId ?? null, feature: "transcribe", model: MODEL },
-    { inputTokens: Math.ceil(seconds) },
-    (seconds / 60) * USD_PER_MINUTE,
-  );
-  return segments;
+  return normalizeSegments(segments);
 }

@@ -5,18 +5,15 @@ import { cronSecret } from "@/lib/cron-auth";
 import { db } from "@/lib/db";
 import { parseSpeakers, parseTried, type Speaker } from "@/lib/video/types";
 import { parsePastedTranscript } from "@/lib/video/paste";
-import { tidyTranscript } from "@/lib/video/tidy";
+import { transcriptLines } from "@/lib/video/tidy";
 import { deepgramConfigured } from "@/lib/video/deepgram";
 import { geminiConfigured } from "@/lib/video/gemini";
 import { GEMINI_FILE_TTL_MS, geminiFileFresh, type GeminiFile } from "@/lib/video/gemini-files";
-import { clipSegments } from "@/lib/video/segments";
 import {
   geminiMediaPart,
   GEMINI_FILE_MAX_BYTES,
-  groupSegments,
   LadderExhausted,
   LadderOutOfTime,
-  normalizeSegments,
   type RungFailure,
   transcribe,
   TRANSCRIBE_MAX_BYTES,
@@ -282,20 +279,14 @@ async function storeTranscript(
 ): Promise<number> {
   // Cleanup before anything stores: fillers, stutters, and false starts out,
   // punctuation and casing fixed — the transcript reads like an article.
-  // Cleanup emptying every line means it misfired; the raw lines stand.
   // Only the imported part of the recording (SPEC.md §15): the range the
-  // reader picked in the upload box, when they picked one. Normalize before
-  // grouping: the ranges have to be in order and pulled apart before lines
-  // are cut out of them (lib/video/segments.ts).
+  // reader picked in the upload box, when they picked one.
   const clip = await db.videoAsset.findUnique({
     where: { id: assetId },
     select: { clipStart: true, clipEnd: true },
   });
-  const kept = clipSegments(segments, clip?.clipStart ?? null, clip?.clipEnd ?? null);
-  const grouped = groupSegments(normalizeSegments(kept));
-  const tidied = await tidyTranscript(grouped, userId);
-  const lines = tidied.lines.length > 0 ? tidied.lines : grouped;
-  console.log(`[transcribe] ${origin}, cleaned by ${tidied.provider}: ${lines.length} lines`);
+  const { lines, provider } = await transcriptLines(segments, clip, userId);
+  console.log(`[transcribe] ${origin}, cleaned by ${provider}: ${lines.length} lines`);
   // Who says each line (SPEC.md §11). Lines whose rung told the voices apart
   // (Deepgram) only need names, from the text. Any other transcript takes
   // the pass that reads the media again; it runs after the lines are
