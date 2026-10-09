@@ -4,9 +4,9 @@
   "import.math.missing": 2,
   "image.missing": 2,
   "import.image.missing": 2,
-  "words": 234,
+  "words": 226,
   "lost:label": 70,
-  "import.words": 240,
+  "import.words": 232,
   "import.lost:label": 70,
   "mark.bold": 17,
   "import.list.kind": 53,
@@ -20,11 +20,7 @@
   "import.link.missing": 2,
   "lost:note": 1,
   "list.missing": 3,
-  "mark.italic": 1,
-  "lost:cell": 2,
-  "table.rows": 1,
-  "import.lost:cell": 2,
-  "import.table.rows": 1
+  "mark.italic": 1
  },
  "files": {
   "d2p-240-DOP-1013A_Lay_Down_Tubulars.docx": {},
@@ -374,14 +370,7 @@
   "poi-table-alignment.docx": {},
   "poi-table_footnotes.docx": {},
   "poi-tika-3388.docx": {},
-  "poi-tika-3816.docx": {
-   "words": 8,
-   "lost:cell": 2,
-   "table.rows": 1,
-   "import.words": 8,
-   "import.lost:cell": 2,
-   "import.table.rows": 1
-  },
+  "poi-tika-3816.docx": {},
   "pydocx-blk-containing-table.docx": {},
   "pydocx-blk-inner-content.docx": {},
   "pydocx-blk-paras-and-tables.docx": {},

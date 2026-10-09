@@ -2089,7 +2089,7 @@ class DocxReader {
     const tblPr = child(tbl, "tblPr");
     const style = styleChain(this.styles, attr(child(tblPr, "tblStyle"), "val"));
     // A deleted row (a tracked change, accepted) is gone.
-    const rows = children(tbl, "tr").filter((tr) => !child(child(tr, "trPr"), "del"));
+    const rows = rowsOf(tbl).filter((tr) => !child(child(tr, "trPr"), "del"));
     const spanOf = (tc: Element) => Math.max(1, intAttr(child(child(tc, "tcPr"), "gridSpan"), "val") ?? 1);
     // A table of one cell a row is a box around paragraphs (a callout, a
     // framed note): its content reads as the document's own. One shaded cell
@@ -2249,7 +2249,7 @@ class DocxReader {
     const read = (container: Element) => {
       for (const node of container.children) {
         if (node.localName === "tbl") {
-          for (const tr of children(node, "tr")) for (const inner of cellsOf(tr)) read(inner);
+          for (const tr of rowsOf(node)) for (const inner of cellsOf(tr)) read(inner);
           continue;
         }
         if (node.localName === "sdt") read(child(node, "sdtContent") ?? node);
@@ -2300,6 +2300,19 @@ class DocxReader {
       .join("");
     return { html, text, colspan: 1, rowspan: 1, notes: marks, fill, borders };
   }
+}
+
+/** A table's rows, through the content controls and custom markup around
+    them: a form's repeating section wraps its rows in one (Word benchmark
+    finding: the row and its words were lost). */
+function rowsOf(tbl: Element): Element[] {
+  const out: Element[] = [];
+  for (const c of tbl.children) {
+    if (c.localName === "tr") out.push(c);
+    else if (c.localName === "sdt") out.push(...rowsOf(child(c, "sdtContent") ?? c));
+    else if (c.localName === "customXml") out.push(...rowsOf(c));
+  }
+  return out;
 }
 
 /** A row's cells, through the content controls and custom markup around them. */

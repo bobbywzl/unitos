@@ -84,6 +84,17 @@ function importLists(blocks: ParsedBlock[]): string[] {
   check("two lists at level 0 nest by their indents", text === "• Fruit\n  ◦ Apples\n  ◦ Pears\n• Bread", JSON.stringify(text));
 }
 
+// ── Tables: a row inside a content control is a row ─────────────────────────
+
+{
+  const cell = (text: string) => `<w:tc>${para(text)}</w:tc>`;
+  const row = (a: string, b: string) => `<w:tr>${cell(a)}${cell(b)}</w:tr>`;
+  const control = (inner: string) => `<w:sdt><w:sdtPr><w:id w:val="1"/></w:sdtPr><w:sdtContent>${inner}</w:sdtContent></w:sdt>`;
+  const table = `<w:tbl><w:tblGrid><w:gridCol w:w="4000"/><w:gridCol w:w="4000"/></w:tblGrid>${row("Item", "Price")}${control(row("Bread", "2.10"))}${row("Milk", "1.20")}</w:tbl>`;
+  const block = (await parse(docx(table))).find((b) => b.type === "TABLE");
+  check("a row inside a content control stays the table's row", block?.text === "Item\tPrice\nBread\t2.10\nMilk\t1.20", JSON.stringify(block?.text));
+}
+
 if (failed > 0) {
   console.log(`\n${failed} check(s) failed`);
   process.exit(1);
