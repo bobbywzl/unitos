@@ -56,7 +56,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { unzipSync } from "fflate";
 import { join } from "node:path";
 import type { RichNode } from "@/lib/docs/schema";
-import type { ParsedBlock } from "@/lib/parse/types";
+import type { ParsedBlock, TextFont } from "@/lib/parse/types";
 
 const ROOT = join(import.meta.dirname, "..", "..");
 const SET = join(ROOT, ".bench", "word", "files");
@@ -569,8 +569,12 @@ function htmlTable(html: string): { rows: number; cols: number; header: number }
 
 const MARK_TAGS: Record<MarkKind, string> = { bold: "strong", italic: "em", underline: "u", strike: "s", sup: "sup", sub: "sub" };
 
-function readParse(title: string | null, blocks: ParsedBlock[]): Reading {
+function readParse(title: string | null, blocks: ParsedBlock[], titleFont?: TextFont): Reading {
   const r: Reading = { text: "", headings: [], title: title ?? "", lists: [], tables: [], notes: 0, math: 0, links: "", images: 0, paragraphs: new Set(), marks: { bold: "", italic: "", underline: "", strike: "", sup: "", sub: "" } };
+  // The title's look (ParsedDocument.titleFont) is its words' marks: the
+  // import's Title style takes it.
+  if (title && titleFont?.bold) r.marks.bold += ` ${title}`;
+  if (title && titleFont?.italic) r.marks.italic += ` ${title}`;
   const texts: string[] = [title ?? ""];
   const links: string[] = [];
   for (const b of blocks) {
@@ -634,7 +638,32 @@ function readImport(doc: RichNode): Reading {
     if (row.type === "PARAGRAPH" && !row.cell) r.paragraphs.add(compact(row.text));
   }
   const links: string[] = [];
+  // A named style the import sets bold or italic (namedStyleTitle
+  // {"bold":true}: a Word title's own look) draws its paragraphs' words so,
+  // with no mark on them (components/docs/toolbar/styles.ts).
+  const styled = (style: string): Partial<Record<MarkKind, boolean>> => {
+    try {
+      const look = JSON.parse(String(doc.attrs?.[`namedStyle${style}`] ?? "{}")) as Record<string, unknown>;
+      return { bold: look.bold === true, italic: look.italic === true, underline: look.underline === true };
+    } catch {
+      return {};
+    }
+  };
+  const looks: Record<string, Partial<Record<MarkKind, boolean>>> = {};
+  for (const style of ["Normal", "Title", "Subtitle", "H1", "H2", "H3", "H4", "H5", "H6"]) looks[style] = styled(style);
+  const styleOf = (node: RichNode) =>
+    node.type === "heading" ? `H${Number(node.attrs?.level) || 1}` : node.attrs?.docStyle === "title" ? "Title" : node.attrs?.docStyle === "subtitle" ? "Subtitle" : "Normal";
   const walk = (node: RichNode, depth: number, ordered: boolean, inCell: boolean, inNote: boolean) => {
+    if (node.type === "paragraph" || node.type === "heading") {
+      const look = looks[styleOf(node)];
+      const words: string[] = [];
+      const collect = (n: RichNode) => {
+        if (n.type === "text") words.push(n.text ?? "");
+        for (const c of n.content ?? []) collect(c);
+      };
+      if (MARK_KINDS.some((k) => look[k])) collect(node);
+      for (const k of MARK_KINDS) if (look[k]) r.marks[k] += ` ${words.join("")}`;
+    }
     if (node.type === "footnote") r.notes++;
     if (node.type === "blockMath" || node.type === "inlineMath") r.math++;
     if (node.type === "image" || node.type === "figure") r.images++;
@@ -846,7 +875,7 @@ for (const name of files) {
   try {
     const parsed = await parseDocx(bytes, name, { storeImage: async () => "/api/images/bench" });
     const title = parsed.titleFromFile ? null : (parsed.title ?? null);
-    const p = compare(ref, readParse(title, parsed.blocks), "parse");
+    const p = compare(ref, readParse(title, parsed.blocks, parsed.titleFont), "parse");
     Object.assign(counts, p.counts);
     notes.push(...p.notes);
     try {

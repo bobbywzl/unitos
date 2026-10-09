@@ -6,10 +6,10 @@
   "lost:label": 59,
   "import.words": 194,
   "import.lost:label": 59,
-  "mark.bold": 13,
   "import.list.kind": 23,
-  "import.mark.bold": 15,
+  "import.mark.bold": 10,
   "lost:body": 2,
+  "mark.bold": 8,
   "list.kind": 4,
   "import.list.depth": 2,
   "lost:note": 1,
@@ -46,9 +46,7 @@
   },
   "d2p-invalid_tag_name.docx": {},
   "d2p-libreoffice_conversion.docx": {
-   "mark.bold": 1,
-   "import.list.kind": 2,
-   "import.mark.bold": 1
+   "import.list.kind": 2
   },
   "d2p-list_index_a.docx": {},
   "d2p-long_hyperlink.docx": {},
@@ -278,10 +276,7 @@
   "poi-checkboxes.docx": {},
   "poi-comment.docx": {},
   "poi-delins.docx": {},
-  "poi-drawing.docx": {
-   "mark.bold": 1,
-   "import.mark.bold": 1
-  },
+  "poi-drawing.docx": {},
   "poi-endnotes.docx": {},
   "poi-footnotes.docx": {},
   "poi-form_footnotes.docx": {},
@@ -298,18 +293,13 @@
    "lost:note": 1,
    "list.missing": 1
   },
-  "poi-stress005.docx": {
-   "mark.bold": 1,
-   "import.mark.bold": 1
-  },
+  "poi-stress005.docx": {},
   "poi-stress006.docx": {},
   "poi-stress007.docx": {
    "lost:body": 1
   },
   "poi-stress008.docx": {
-   "mark.bold": 1,
-   "mark.italic": 1,
-   "import.mark.bold": 1
+   "mark.italic": 1
   },
   "poi-stress009.docx": {},
   "poi-stress010.docx": {
@@ -329,10 +319,7 @@
   "poi-stress018.docx": {
    "list.missing": 2
   },
-  "poi-stress019.docx": {
-   "mark.bold": 1,
-   "import.mark.bold": 1
-  },
+  "poi-stress019.docx": {},
   "poi-stress023.docx": {},
   "poi-table-alignment.docx": {},
   "poi-table_footnotes.docx": {},
