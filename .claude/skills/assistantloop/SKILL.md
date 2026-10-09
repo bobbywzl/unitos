@@ -24,6 +24,7 @@ No API key is needed: agents answer the prompt files. The assistant runs on Gemi
 
 - At most 20 subagents run at once; batch 4 cases a model agent, 6 calls a calls agent, 4 cases a judge agent.
 - `run.ts prepare` never overwrites an answer: a new round is a new directory. To re-run one case, delete its `answer.md`.
+- A call under `calls/` is named by a hash of its prompt: a change to a pass's prompt (suggest, one pass, order, target, check) while a round's calls are pending makes new prompt files, and the answers already written stop matching. Change a pass's prompt between rounds, never during one; when it happens anyway, copy each answered call's answer to the new file of the same pass before scoring again.
 - The checks are the contract: a check that fails on a correct answer is a bug in the check or in the plan module, which the round fixes first.
 - `scripts/eval/assistant/blocks.ts` and `show.ts` print a fixture's blocks by number, for writing cases.
 - A recording's fixture names voices with `@Name` after the times; `lib.ts` reads them as the line's speaker.
