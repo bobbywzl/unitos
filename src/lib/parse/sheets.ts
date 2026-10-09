@@ -1119,6 +1119,36 @@ function ssfFallbackCode(code: string): string {
     .join("");
 }
 
+// 9999-12-31, the last day Excel shows.
+const MAX_DATE_SERIAL = 2958465;
+
+const timeSteps = new Map<string | number, number | null>();
+
+/** The steps in a day a value rounds to before a time format shows it:
+    Excel rounds a time to the second — or to the tenth, hundredth, or
+    thousandth after "ss.0" — before it shows the hours and minutes, and
+    the rounding carries into the minute, the hour, and the day, so
+    08:44:59.97 shows 08:45:00. ssf rounded the seconds without the carry
+    and showed 08:44:00, and 23:59:59.9 in "hh:mm" read 24:00. Null for a
+    format that shows no time (a number, or a date alone). */
+function timeStep(fmt: string | number): number | null {
+  const known = timeSteps.get(fmt);
+  if (known !== undefined) return known;
+  const code = typeof fmt === "string" ? fmt : (ssf.get_table()[fmt] ?? "");
+  // The format's own letters: quoted text, escapes, and colors and
+  // conditions in brackets left out; [h], [m], and [s] kept.
+  const plain = code
+    .replace(/"[^"]*"/g, "")
+    .replace(/\\./g, "")
+    .replace(/_.|\*./g, "")
+    .replace(/\[(?![hms]+\])[^\]]*\]/gi, "");
+  const decimals = Math.max(0, ...[...plain.matchAll(/s\.(0{1,3})/gi)].map((m) => m[1].length));
+  const shown = plain.replace(/s\.0{1,3}/gi, "s");
+  const step = /[hs]/i.test(shown) && !/[#?0]/.test(shown) && !/general/i.test(shown) ? 86400 * 10 ** decimals : null;
+  timeSteps.set(fmt, step);
+  return step;
+}
+
 /** A number as the cell's format shows it. General shows up to 11
     significant digits, as Excel does; a format ssf refuses is tried once
     more as ssfFallbackCode writes it, and else shows the number as
@@ -1141,6 +1171,8 @@ function formatNumber(value: number, styleId: number | null, styles: Styles, dat
       }
     }
   };
+  const steps = value >= 0 && value <= MAX_DATE_SERIAL ? timeStep(fmt) : null;
+  if (steps !== null) return shown(Math.round(value * steps) / steps);
   const plain = shown(value);
   // Only a number whose 15 significant digits end in 5 sits on a half.
   if (Number.isInteger(value) || !Number.isFinite(value) || !/5(?:e|$)/.test(String(Number(value.toPrecision(15))))) return plain;
