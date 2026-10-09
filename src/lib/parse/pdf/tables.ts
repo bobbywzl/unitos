@@ -636,7 +636,12 @@ function rowStartsOf(run: Line[], cellsOf: Cell[][], leading: number): number[] 
     // double-spaced with its wraps single-spaced (parse loop finding: the
     // DTIC Datcom's list of symbols, p. 13, read "a", "etab" and "Cc" as
     // one row, "airfoil chord chordwise length of trailing edge tab …").
-    const spaced = k > 0 && run[k - 1].y - line.y > pitch * 1.5;
+    // A letter alone set larger than the run's lines is a speck of the
+    // scan (a sideways label's letter), no symbol (parse loop finding: the
+    // DTIC Datcom p. 45, the "o" of "INCREASED ANGLE-OF-ATTACK" read down
+    // the margin opened a row over "(3) Stall Events" and split its cell).
+    const speck = cellsOf[k][0].text.trim().length === 1 && line.size > size * 1.3;
+    const spaced = k > 0 && run[k - 1].y - line.y > pitch * 1.5 && !speck;
     const continues = (firstOnly && !opens) || (/^[a-z]/.test(cellsOf[k][0].text) && !own && !spaced);
     const wrap =
       continues &&
