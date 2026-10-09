@@ -7,16 +7,16 @@
    "lost": 15
   },
   "md": {
-   "score": 0.971,
-   "parse": 0.967,
-   "words": 0.993,
-   "lost": 60
+   "score": 0.972,
+   "parse": 0.97,
+   "words": 0.995,
+   "lost": 66
   },
   "txt": {
-   "score": 0.954,
-   "parse": 0.954,
-   "words": 0.996,
-   "lost": 1216
+   "score": 0.931,
+   "parse": 0.931,
+   "words": 0.983,
+   "lost": 18955
   }
  },
  "files": {
@@ -3051,6 +3051,138 @@
   "vim-tutor": [
    0.991,
    0.991
+  ],
+  "react-learn-state": [
+   1,
+   1
+  ],
+  "docusaurus-admonitions": [
+   0.8,
+   0.8
+  ],
+  "docusaurus-tabs": [
+   1,
+   1
+  ],
+  "astro-markdown-content": [
+   0.987,
+   0.987
+  ],
+  "mkdocs-admonitions": [
+   0.998,
+   0.998
+  ],
+  "hugo-shortcodes": [
+   1,
+   1
+  ],
+  "art-of-command-line": [
+   0.988,
+   0.994
+  ],
+  "jupyter-book-math": [
+   0.989,
+   0.989
+  ],
+  "mystnb-text-notebooks": [
+   0.873,
+   0.873
+  ],
+  "mystnb-glue": [
+   0.997,
+   0.997
+  ],
+  "obsidian-tasks-dates": [
+   0.999,
+   0.999
+  ],
+  "obsidian-tasks-recurring": [
+   0.997,
+   0.997
+  ],
+  "fastcore-readme": [
+   1,
+   1
+  ],
+  "nbdev-readme": [
+   1,
+   1
+  ],
+  "jupytext-calysto": [
+   1,
+   1
+  ],
+  "asciidoctor-readme-adoc": [
+   1,
+   1
+  ],
+  "doom-getting-started-org": [
+   0.997,
+   0.997
+  ],
+  "emacs-news-29": [
+   0.999,
+   0.999
+  ],
+  "pep8-rst": [
+   0.999,
+   0.999
+  ],
+  "hamlet": [
+   0.776,
+   0.776
+  ],
+  "the-raven": [
+   0.867,
+   0.867
+  ],
+  "ancient-mariner": [
+   0.613,
+   0.613
+  ],
+  "christmas-carol": [
+   0.973,
+   0.973
+  ],
+  "elephants-dream-captions": [
+   0.999,
+   0.999
+  ],
+  "elephants-dream-descriptions": [
+   1,
+   1
+  ],
+  "country-codes-csv": [
+   0.5,
+   0.5
+  ],
+  "comma-survey-csv": [
+   1,
+   1
+  ],
+  "jquery-min": [
+   0.999,
+   0.999
+  ],
+  "utf8-demo": [
+   0.851,
+   0.851
+  ],
+  "emacs-tutorial-th": [
+   0.998,
+   0.998
+  ],
+  "emacs-tutorial-he": [
+   0.999,
+   0.999
+  ],
+  "emacs-tutorial-ja-iso2022": [
+   0.078,
+   0.078
+  ],
+  "pride-paragraph-lines": [
+   0.992,
+   0.992
   ]
  }
 }

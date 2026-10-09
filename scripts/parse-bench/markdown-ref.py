@@ -70,13 +70,20 @@ def derive(source_bytes, how, source_encoding):
         return b"\xfe\xff" + text.encode("utf-16-be")
     if how == "windows-1252":
         return text.encode("cp1252", errors="replace")
+    if how == "paragraph-lines":
+        # Each paragraph on one line, as an editor that wraps on screen
+        # saves it: a paragraph's lines joined with a space, the blank lines
+        # between paragraphs kept.
+        paragraphs = re.split(r"\n[ \t]*\n", text.replace("\r\n", "\n"))
+        joined = "\n\n".join(" ".join(line.strip() for line in p.split("\n") if line.strip()) for p in paragraphs)
+        return joined.encode("utf-8")
     raise ValueError(how)
 
 
 def encoding_of(entry, by_id):
     if "derive" in entry:
         how = entry["derive"]["as"]
-        return {"crlf-utf-8-bom": "utf-8-sig", "utf-16le-bom": "utf-16", "utf-16be-bom": "utf-16", "windows-1252": "cp1252"}[how]
+        return {"crlf-utf-8-bom": "utf-8-sig", "utf-16le-bom": "utf-16", "utf-16be-bom": "utf-16", "windows-1252": "cp1252", "paragraph-lines": "utf-8"}[how]
     return entry.get("encoding", "utf-8")
 
 

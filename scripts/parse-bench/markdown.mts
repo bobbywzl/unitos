@@ -13,11 +13,15 @@
 //   (tables, task lists, strikethrough, autolinks), each scored against the
 //   spec's expected HTML. An example's id is commonmark-<n> or gfm-<n>.
 // - md: Markdown files from public repositories (READMEs, docs, changelogs,
-//   CJK docs, math, front matter, raw HTML, very long files), scored against
-//   markdown-it's reading of the same file.
-// - txt: plain text files (Project Gutenberg books, RFCs, logs, licenses,
-//   build files, the Vim tutor in eleven legacy encodings, UTF-16 and
-//   Windows-1252 copies), scored against the file's own words decoded in the
+//   CJK docs, math, front matter, raw HTML, very long files, MDX-like docs
+//   with components, Jupyter notebook exports, Obsidian notes, MkDocs,
+//   Hugo, and MyST dialects), scored against markdown-it's reading of the
+//   same file.
+// - txt: plain text files (Project Gutenberg books, plays, and poems, RFCs,
+//   logs, licenses, build files, AsciiDoc, org-mode, and reST saved as
+//   .txt, subtitles, CSV, a one-line file, mixed scripts, the Vim tutor in
+//   eleven legacy encodings, ISO-2022-JP, UTF-16 and Windows-1252 copies, a
+//   paragraph-per-line copy), scored against the file's own words decoded in the
 //   encoding the corpus names, and, where there is one, the structure of
 //   the same book's HTML edition (Project Gutenberg's), an RFC's section
 //   headings, or a log's lines.
