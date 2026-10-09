@@ -539,7 +539,7 @@ function judgePrompt(c: AssistantCase, f: Fixture, r: CaseResult, before: Map<st
     "",
     `What a good turn does (from the case's author):\n${c.good}`,
     "",
-    "The assistant's answer (what the reader reads):",
+    "The assistant's answer (what the reader reads). In the app a [block <id>] tag renders as a ¶ chip that scrolls to the block and shows none of its words, and a [note <id>] tag as a ✎ chip: the words around a chip are all the reader reads of which block is meant.",
     "",
     r.answer || "(empty)",
     "",
