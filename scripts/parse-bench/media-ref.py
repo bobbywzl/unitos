@@ -235,7 +235,9 @@ def ttconv_states(path, media_clock=False):
     implementation): every intermediate synchronic document, its time and its
     visible text, one line per p and br. A display none element is not in
     the document at that time; a visibility hidden span is there but shows no
-    text. media_clock: the file writes every time on the media's clock."""
+    text. Each state also lists its p's, each with its id and text, so a
+    line is told from another p's line with the same words. media_clock: the
+    file writes every time on the media's clock."""
     import logging  # noqa: PLC0415
 
     import ttconv.isd as isd  # noqa: PLC0415
@@ -253,7 +255,19 @@ def ttconv_states(path, media_clock=False):
     if doc is None:
         raise ValueError("ttconv read no document")
 
-    def texts(el, out, hidden):
+    # Every p gets an id (the reader keeps none, and every state copies it),
+    # so a state can say which p each line belongs to.
+    def number(el, count):
+        if isinstance(el, model.P):
+            el.set_id(f"p{count[0]}")
+            count[0] += 1
+        for child in el:
+            number(child, count)
+
+    if doc.get_body() is not None:
+        number(doc.get_body(), [0])
+
+    def texts(el, out, hidden, ps):
         vis = el.get_style(sp.StyleProperties.Visibility)
         if vis is not None:
             hidden = vis == sp.VisibilityType.hidden
@@ -264,19 +278,27 @@ def ttconv_states(path, media_clock=False):
         if isinstance(el, model.Br):
             out.append("\n")
             return
-        for child in el:
-            texts(child, out, hidden)
         if isinstance(el, model.P):
+            own = []
+            for child in el:
+                texts(child, own, hidden, ps)
+            lines = [clean(x) for x in "".join(own).split("\n")]
+            ps.append([el.get_id(), "\n".join(x for x in lines if x)])
+            out.extend(own)
             out.append("\n")
+            return
+        for child in el:
+            texts(child, out, hidden, ps)
 
     states = []
     for t, state in isd.ISD.generate_isd_sequence(doc):
         out = []
+        ps = []
         for region in state.iter_regions():
             for body in region:
-                texts(body, out, False)
+                texts(body, out, False, ps)
         lines = [clean(x) for x in "".join(out).split("\n")]
-        states.append([round(float(t), 3), "\n".join(x for x in lines if x)])
+        states.append([round(float(t), 3), "\n".join(x for x in lines if x), [x for x in ps if x[1]]])
     return states
 
 

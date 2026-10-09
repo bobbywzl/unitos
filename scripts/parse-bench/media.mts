@@ -440,29 +440,42 @@ function datCases(raw: string): { data: string; expected: string }[] {
 }
 
 /** A TTML document read by ttconv as what it shows over time: each word
-    once, at the time it first shows. The words of a state that the state
-    before it did not show (aligned in order) are new at that state's time;
-    a word that stays on screen across states is one word. */
-function shownWords(states: [number, string][]): [number, string][] {
+    once, at the time it first shows. Each state lists its p's by id. A p
+    the state before showed keeps the words it showed then; a p new to the
+    screen keeps the words of a p that just left when it holds every one of
+    them in order (paint-on captions, a cue split in two), and is all new
+    otherwise, though it shares words with the p it replaced. Within a p,
+    a line shown before, word for word, adds no words; the other lines'
+    words are aligned in order against the lines left over, and the words
+    left unaligned are new at the state's time. */
+function shownWords(states: [number, string, [string, string][]][]): [number, string][] {
   const words: [number, string][] = [];
-  let before: string[] = [];
-  for (const [t, text] of states) {
-    const lines = text.split("\n").filter((line) => line.trim() !== "");
-    // A line the state before showed, word for word, adds no words; the
-    // other lines align against the lines left over (a line that grew).
-    const left = [...before];
-    const fresh: string[] = [];
-    for (const line of lines) {
-      const i = left.indexOf(line);
-      if (i >= 0) left.splice(i, 1);
-      else fresh.push(line);
+  const linesOf = (text: string) => text.split("\n").filter((line) => line.trim() !== "");
+  let before = new Map<string, string[]>();
+  for (const [t, , ps] of states) {
+    const now = new Map(ps.map(([id, text]): [string, string[]] => [id, linesOf(text)]));
+    const left = [...before].filter(([id]) => !now.has(id)).map(([, lines]) => lines);
+    for (const [id, lines] of now) {
+      let prev = before.get(id);
+      if (!prev) {
+        const all = tokens(lines.join(" ")).map(norm);
+        const i = left.findIndex((old) => align(tokens(old.join(" ")).map(norm), all).every((j) => j >= 0));
+        if (i >= 0) prev = left.splice(i, 1)[0];
+      }
+      const rest = [...(prev ?? [])];
+      const fresh = lines.filter((line) => {
+        const i = rest.indexOf(line);
+        if (i < 0) return true;
+        rest.splice(i, 1);
+        return false;
+      });
+      const shown = fresh.flatMap((line) => tokens(line));
+      const map = align(shown.map(norm), rest.flatMap((line) => tokens(line)).map(norm));
+      shown.forEach((w, i) => {
+        if (map[i] < 0) words.push([t, w]);
+      });
     }
-    const now = fresh.flatMap((line) => tokens(line));
-    const map = align(now.map(norm), left.flatMap((line) => tokens(line)).map(norm));
-    now.forEach((w, i) => {
-      if (map[i] < 0) words.push([t, w]);
-    });
-    before = lines;
+    before = now;
   }
   return words;
 }
@@ -478,7 +491,7 @@ function bReference(file: CorpusFile, raw: string): BRef | null {
   }
   const path = join(REFS, `${file.id}.json`);
   if (!existsSync(path)) return null;
-  const ref = JSON.parse(readFileSync(path, "utf8")) as BRef & { states?: [number, string][]; error?: string };
+  const ref = JSON.parse(readFileSync(path, "utf8")) as BRef & { states?: [number, string, [string, string][]][]; error?: string };
   if (ref.error) throw new Error(`reference: ${ref.error}`);
   if (ref.states) return { cues: [], rolling: true, ...{ words: shownWords(ref.states) } } as BRef & { words: [number, string][] };
   return ref;
