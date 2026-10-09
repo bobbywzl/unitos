@@ -832,7 +832,7 @@ for (const s of sets) {
 }
 
 const json = value("--json");
-if (json) writeFileSync(json, JSON.stringify(results.map((r) => ({ ...r, parse: { ...r.parse, missed: undefined, wrongKind: undefined, strays: undefined, badBreaks: undefined }, import: { ...r.import, missed: undefined, wrongKind: undefined, strays: undefined, badBreaks: undefined } })), null, 1));
+if (json) writeFileSync(json, JSON.stringify(results.map((r) => ({ ...r, parse: { ...r.parse, missed: undefined, wrongKind: undefined, strays: undefined, badBreaks: undefined }, import: { ...r.import, missed: r.import.missed.slice(0, 10), wrongKind: r.import.wrongKind.slice(0, 10), strays: r.import.strays.slice(0, 10), badBreaks: r.import.badBreaks.slice(0, 10) } })), null, 1));
 
 type Baseline = { total: Record<string, { score: number; parse: number; words: number; lost: number }>; files: Record<string, [number, number]> };
 const round = (x: number) => Math.round(x * 1000) / 1000;

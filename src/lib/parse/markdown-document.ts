@@ -652,7 +652,13 @@ function shapeTextOutline(root: Root, source: string) {
     }
     const text = standingLine(nodes, i);
     if (text === null) return;
-    const title = i === 0 && text.length <= TEXT_TITLE_CHARS_MAX && words(text) <= TEXT_TITLE_WORDS_MAX;
+    // A first line written with Markdown's own marks (a link in brackets,
+    // an escape, an entity, inline code, emphasis in asterisks) is
+    // Markdown, which writes its title with "#": it stays a paragraph.
+    // Before, a note that opens on "[Intro](#intro)" or "&#42; foo" read
+    // it as the Title (Markdown benchmark finding: 35 spec examples).
+    const marked = i === 0 && (MARKDOWN_MARKS_RX.test(lines[(node.position?.start.line ?? 1) - 1] ?? "") || hasMarkdownMarks(node.children, source));
+    const title = i === 0 && !marked && text.length <= TEXT_TITLE_CHARS_MAX && words(text) <= TEXT_TITLE_WORDS_MAX;
     const capitals = isCapitalsLine(text);
     const margin = indented && !title && words(text) <= TEXT_MARGIN_WORDS_MAX && atMargin(node);
     if (title || capitals || margin) {
