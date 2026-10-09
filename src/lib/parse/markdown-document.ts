@@ -84,6 +84,38 @@ export function setAsideMath(source: string): { text: string; spans: TexSpan[] }
   return { text: out.join("\n"), spans };
 }
 
+// A text file's "#" lines as comments. In Markdown, "# Words" is a heading,
+// and a heading mostly stands apart, a blank line before it and after it
+// (the benchmark's Markdown in .txt files: pandoc's manual, 0 of 255
+// headings between two written lines). A .txt file of code or settings (a
+// CMakeLists.txt, a shell script, an org file's source blocks) writes its
+// comments with "#", on the lines next to the code they comment on (json's
+// CMakeLists.txt: 30 of 43). When half a .txt file's "#" lines or more
+// have a written line right before and right after, its "#" lines are
+// comments: each is escaped, and reads as the line it is. A .md file is
+// Markdown by its name, and keeps its headings however tight (public-apis'
+// README: 48 of 59 between written lines).
+const ATX_LINE_RX = /^( {0,3})(#{1,6}(?:[ \t]|$))/;
+const HASH_COMMENTS_SHARE_MIN = 0.5;
+
+function hashLinesAsComments(source: string, filename: string): string {
+  if (!/\.txt$/i.test(filename)) return source;
+  const lines = source.split("\n");
+  const hashes: number[] = [];
+  let fence: string | null = null;
+  lines.forEach((line, i) => {
+    const open = FENCE_RX.exec(line);
+    if (fence === null && open) fence = open[1];
+    else if (fence !== null) {
+      if (open && open[1][0] === fence[0] && open[1].length >= fence.length) fence = null;
+    } else if (ATX_LINE_RX.test(line)) hashes.push(i);
+  });
+  const between = hashes.filter((i) => lines[i - 1]?.trim() && lines[i + 1]?.trim()).length;
+  if (hashes.length === 0 || between < hashes.length * HASH_COMMENTS_SHARE_MIN) return source;
+  for (const i of hashes) lines[i] = lines[i].replace(ATX_LINE_RX, "$1\\$2");
+  return lines.join("\n");
+}
+
 /** Text with each placeholder put back as words: an inline formula as its
     readable characters (inlineTexText), display math as its TeX (an
     EQUATION block's words), TeX KaTeX cannot draw as written. For text that
@@ -596,7 +628,7 @@ function withLineBreaks(nodes: PhrasingContent[]): PhrasingContent[] {
   });
 }
 
-function keepTextLines(root: Root, source: string) {
+function keepTextLines(root: Root, source: string, comments: boolean) {
   const lines = source.split("\n");
   const linesOf = (node: RootContent) =>
     node.position ? lines.slice(node.position.start.line - 1, node.position.end.line).map((l) => l.trim()) : [];
@@ -619,7 +651,9 @@ function keepTextLines(root: Root, source: string) {
     const shapes = new Map<string, number>();
     for (const line of own) shapes.set(openingShape(line), (shapes.get(openingShape(line)) ?? 0) + 1);
     const alike = Math.max(...shapes.values()) >= own.length * TEXT_SAME_OPENING_MIN || isDelimited(own);
-    const marks = own.some((line) => MARKDOWN_MARKS_RX.test(line)) || hasMarkdownMarks(node.children, source);
+    // A comment's escaped "#" (hashLinesAsComments) is the file's own mark, not Markdown's.
+    const marks =
+      own.some((line) => MARKDOWN_MARKS_RX.test(comments ? line.replace(/^\\#/, "#") : line)) || hasMarkdownMarks(node.children, source);
     if (marks && !(alike && own.length >= TEXT_ALIKE_OVER_MARKS_MIN)) continue;
     const keep =
       own.length === 2
@@ -748,13 +782,13 @@ function setInWordsAsParagraphs(root: Root, lines: string[]) {
   });
 }
 
-function shapeTextOutline(root: Root, source: string) {
+function shapeTextOutline(root: Root, source: string, comments: boolean) {
   const lines = source.split("\n");
   // The lines rule runs in a file with no "#" heading: an underlined
   // heading does not make a text file Markdown.
   if (!hasHashHeading(root, lines)) {
     setInWordsAsParagraphs(root, lines);
-    keepTextLines(root, source);
+    keepTextLines(root, source, comments);
   }
   if (hasHeading(root)) return;
   const nodes = root.children;
@@ -835,9 +869,10 @@ export function markdownToHtml(
 ): { html: string; title: string; titleFromFile: boolean } {
   const source = markdown.replace(/^﻿/, "").replace(/\r\n?/g, "\n");
   const { body, title: frontTitle } = splitFrontMatter(source);
-  const { text, spans } = setAsideMath(body);
+  const commented = hashLinesAsComments(body, filename);
+  const { text, spans } = setAsideMath(commented);
   const tree = unified().use(remarkParse).use(remarkGfm).use(remarkTablesOneByOne).parse(text) as Root;
-  if (body === source) shapeTextOutline(tree, text);
+  if (body === source) shapeTextOutline(tree, text, commented !== body);
   const closed = new Set([...text.matchAll(CLOSING_TAG_RX)].map((m) => m[1].toLowerCase()));
   const renderer = new Renderer(spans, closed);
   const article = renderer.render(tree);
