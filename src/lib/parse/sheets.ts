@@ -25,6 +25,7 @@ import {
   relsOfType,
   resolveDrawingColor,
   rgbCss,
+  sniffOfficeFile,
   textGap,
   themeAccents,
   unzipOffice,
@@ -131,6 +132,16 @@ export type SheetsParseOptions = {
   // store = pictures are left out.
   storeImage?: SlideImageStore;
 };
+
+// ── Entry: a sheets file's bytes ─────────────────────────────────────────────
+
+/** A sheets file as the add reads it (lib/parse/ingest.ts): a zip that is a
+    workbook parses as one; anything else is delimited text, tabs for a .tsv
+    and the delimiter sniffed otherwise. */
+export async function parseSheetsFile(bytes: Uint8Array, filename: string, opts: SheetsParseOptions = {}): Promise<ParsedDocument> {
+  if (sniffOfficeFile(bytes) === "xlsx") return parseSheets(bytes, filename, opts);
+  return parseDelimited(new TextDecoder("utf-8").decode(bytes), filename, /\.tsv$/i.test(filename) ? "\t" : undefined);
+}
 
 // ── Entry: .xlsx ─────────────────────────────────────────────────────────────
 
