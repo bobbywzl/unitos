@@ -508,6 +508,19 @@ function isDelimited(lines: string[]): boolean {
   });
 }
 
+// A verse's lines each open with a capital letter (after a quote mark or
+// a dash): a stanza of four lines or more whose every line does is verse,
+// though its lines are full and end on no stop ("Eagerly I wished the
+// morrow;--vainly I had sought to borrow"). Wrapped prose opens most of
+// its lines on a small letter. Markdown benchmark finding: half the
+// Raven's stanzas read as one run of words.
+const VERSE_LINES_MIN = 4;
+const CAPITAL_OPENING_RX = /^[\p{P}\s]*\p{Lu}/u;
+
+function verseCapitals(lines: string[]): boolean {
+  return lines.length >= VERSE_LINES_MIN && lines.every((line) => CAPITAL_OPENING_RX.test(line));
+}
+
 /** A line's first word's shape: each letter as "a", each digit as "0". */
 function openingShape(line: string): string {
   return (/^\S+/.exec(line)?.[0] ?? "").replace(/\p{L}/gu, "a").replace(/\p{N}/gu, "0");
@@ -555,7 +568,7 @@ function keepTextLines(root: Root, source: string) {
     const keep =
       own.length === 2
         ? full === 0 && stops === 1
-        : full <= (own.length - 1) * TEXT_FULL_LINES_MAX || stops >= (own.length - 1) * TEXT_STOP_LINES_MIN || alike;
+        : full <= (own.length - 1) * TEXT_FULL_LINES_MAX || stops >= (own.length - 1) * TEXT_STOP_LINES_MIN || alike || verseCapitals(own);
     if (keep) node.children = withLineBreaks(node.children);
   }
 }
