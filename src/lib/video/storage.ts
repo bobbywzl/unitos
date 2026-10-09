@@ -62,7 +62,10 @@ export function sniffMedia(bytes: Uint8Array): string | null {
     // MPEG audio frame sync. Layer bits 00 mean ADTS AAC; anything else is MP3.
     return ((bytes[1] >> 1) & 0x03) === 0 ? "audio/aac" : "audio/mpeg";
   }
-  if (bytes.length >= 12 && ascii(0, 4) === "RIFF" && ascii(8, 12) === "WAVE") return "audio/wav";
+  // RIFF, and RF64 (EBU Tech 3306: the WAV a field recorder writes when the
+  // file may pass 4 GB; FFmpeg reads both as WAV). Media bench finding: an
+  // RF64 file was refused as not media.
+  if (bytes.length >= 12 && (ascii(0, 4) === "RIFF" || ascii(0, 4) === "RF64") && ascii(8, 12) === "WAVE") return "audio/wav";
   if (bytes.length >= 4 && ascii(0, 4) === "fLaC") return "audio/flac";
   return null;
 }
