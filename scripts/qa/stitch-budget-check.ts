@@ -3,7 +3,7 @@
 // tags as aliases, the reply's citations, and the skeleton's parts without
 // a contents call. No model, no database rows.
 // Run: npx tsx scripts/qa/stitch-budget-check.ts
-import { STITCH_HISTORY_FIRST_MIN, STITCH_NOTES_BUDGET, STITCH_READ_HISTORY, STITCH_SELECTED_BLOCKS, STITCH_SELECTED_BUDGET } from "../../src/lib/derive/config";
+import { STITCH_HISTORY_FIRST_MIN, STITCH_HOLISTIC_WHOLE_THRESHOLD, STITCH_NOTES_BUDGET, STITCH_READ_HISTORY, STITCH_SELECTED_BLOCKS, STITCH_SELECTED_BUDGET, STITCH_WHOLE_THRESHOLD } from "../../src/lib/derive/config";
 import { translatorFor } from "../../src/lib/i18n/dictionaries";
 import { parseMarkdown } from "../../src/lib/parse/markdown";
 import { currentSkeleton, partsFor, type Skeleton } from "../../src/lib/graph/skeleton";
@@ -1239,4 +1239,19 @@ void (async () => {
   const wrong9 = guard9.filter(([c, want]) => route9(c) !== want);
   check("follow-up guard: 0 of the round 9 follow-ups go the wrong way (ANS9-06)", wrong9.length === 0, wrong9.map(([c, want]) => `${c} → ${route9(c)}, want ${want}`).join(" | "));
   check("asksMore: a why-question about the last answer does not count its contradiction word; with 'other' it does", !asksMore("Why is the first one a contradiction?") && asksMore("Why is the first one a contradiction? Does any other document say so?") && asksMore("Does any other document disagree with the second point?"));
+  // The back selection's title check drops the back reference's ordinal
+  // phrase (R9-13f: "the first one" is no word of "Thus Spake Zarathustra — First Part").
+  const blkZ = (alias: string, documentId: string) => ({ id: alias.toLowerCase(), alias, type: "PARAGRAPH", text: "Pity is the practice of nihilism.", documentId });
+  const docsZ = ["Friedrich Nietzsche", "How Zarathustra came into being", "Arthur Schopenhauer", "The Antichrist", "Nietzsche combined notes", "Thus Spake Zarathustra — First Part"].map((title, i) => ({ doc: { id: `d${i}`, title } }));
+  const bbZ = new Map<string, ReturnType<typeof blkZ>>();
+  for (const [a, d] of [["F24", "d3"], ["F25", "d3"], ["G15", "d4"]]) {
+    bbZ.set(a, blkZ(a, d));
+    bbZ.set(a.toLowerCase(), blkZ(a, d));
+  }
+  const histZ = [{ role: "user" as const, content: "Where do the documents contradict each other on pity?" }, { role: "assistant" as const, content: "1. Pity multiplies suffering [block F24] [block F25]. 2. The notes say otherwise [block G15]." }];
+  const back9 = (c: string) => backSelection(c, histZ, bbZ, [], "question", docsZ) !== null;
+  check("backSelection: 'the first one', 'the second passage', 第二点 are no title words; 'First Part' and 'Zarathustra' still are", back9("Why is the first one a contradiction?") && back9("Quote the second passage in full.") && back9("第二点的原文是什么？") && !back9("Is the first point in the First Part?") && !back9("Is the first point in Zarathustra?"));
+  // The holistic whole read (COST9-02): the threshold and the class.
+  check("config: STITCH_HOLISTIC_WHOLE_THRESHOLD is above the whole threshold, under the skeleton budget", STITCH_HOLISTIC_WHOLE_THRESHOLD > STITCH_WHOLE_THRESHOLD && STITCH_HOLISTIC_WHOLE_THRESHOLD <= 60_000);
+  check("commandIntent: the main threads, 主要线索, what is left unanswered are holistic; what one document adds, a date question are not", commandIntent("What are the main threads across these documents?", false, "question") === "holistic" && commandIntent("这些文档之间的主要线索是什么？", false, "question") === "holistic" && commandIntent("What question do the documents raise but leave unanswered?", false, "question") === "holistic" && commandIntent("When was The Antichrist printed?", false, "question") === "fact" && commandIntent("Where do my notes disagree with the documents?", false, "question") === "fact");
 }

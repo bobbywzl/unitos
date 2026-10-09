@@ -14,6 +14,7 @@ import {
   STITCH_GROUPED_MAX,
   STITCH_HISTORY_FIRST_MIN,
   STITCH_HISTORY_MAX,
+  STITCH_HOLISTIC_WHOLE_THRESHOLD,
   STITCH_INDEX,
   STITCH_INDEX_NOMATCH_CAP,
   STITCH_INDEX_PREFILTER_BLOCKS,
@@ -141,6 +142,12 @@ const NOT_SHOWN_NAMED = 8; // documents the "No block shown" line names past SHO
 const MAX_CITED = 40; // blocks of the earlier answers the reading passes are told of
 const CITED_TEXT = 600; // chars of a cited block's text in the result
 const BACK_BUDGET = 6_000; // tokens of cited blocks a follow-up reads with no select pass (backSelection)
+// A back reference's ordinal phrase ("the first one", "the second link",
+// 第二点) names a point of the last answer, not a document: it drops before
+// the back selection's title check, where "first" would match the title
+// "Thus Spake Zarathustra — First Part" and run the select pass (ANS9-06).
+const ORDINAL_REF =
+  /\b(?:the |that |this )?(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|last|\d+(?:st|nd|rd|th))\s+(?:one|ones|link|links|point|points|passage|passages|quote|quotes|sentence|sentences|thread|threads|difference|differences|contradiction|contradictions|paragraph|paragraphs|item|items|claim|claims|pair|pairs)\b|第[一二三四五六七八九十\d]+[个条点处段句对]?/gi;
 
 // The answer's limits cut what runs over instead of failing it: one field
 // over its limit would otherwise fail validation and re-run the whole
@@ -1558,6 +1565,9 @@ export function checkReplyQuotes(
   reply: string,
   blockByRef: Map<string, DocBlock>,
   titles: Set<string>,
+  // The reader's notes and replies read for the command (notesSection):
+  // a quote of one keeps its marks, as a block's does (ANS9-04).
+  extra: string[] = [],
 ): { reply: string; unquoted: string[] } {
   const unquoted: string[] = [];
   const textOf = (alias: string) => blockByRef.get(alias.toUpperCase())?.text ?? "";
@@ -1592,6 +1602,7 @@ export function checkReplyQuotes(
         if (holds(joined) || holds(trimmed)) return span;
       }
       if (every.some((b) => holds(b.text))) return span;
+      if (extra.some(holds)) return span;
       unquoted.push(inner);
       return `${lead}${inner}`;
     }),
@@ -2269,7 +2280,9 @@ export function backSelection(
   }
   const citedDocs = new Set(cited.map((a) => blockByRef.get(a)?.documentId));
   const cjk = /[㐀-鿿]/.test(command);
-  for (const word of new Set(tokenize([command, ...(cjk ? words : [])].join("\n")))) {
+  // The ordinal phrase of the back reference drops before the title check
+  // (ORDINAL_REF): it names a point of the last answer, not a document.
+  for (const word of new Set(tokenize([command.replace(ORDINAL_REF, " "), ...(cjk ? words : [])].join("\n")))) {
     const titled = titleMatches(docs, word);
     if (titled.length > 0 && !titled.some((d) => citedDocs.has(d.doc.id))) return null;
   }
@@ -2323,6 +2336,12 @@ export async function stitch(input: {
   const profile = await loadProfile(input.notebookId);
   const history = await stitchHistory(input.history, reading, input.notebookId);
   const kind = commandKind(input.command);
+  // A holistic command (the main threads, an overview, what is still open:
+  // commandIntent) reads the documents whole up to
+  // STITCH_HOLISTIC_WHOLE_THRESHOLD, with no reading pass (COST9-02): it
+  // needs every block, and the whole read's prefix caches from the second
+  // holistic command on. Every other command keeps the whole threshold.
+  const wholeThreshold = commandIntent(input.command, history.length > 0, kind) === "holistic" ? STITCH_HOLISTIC_WHOLE_THRESHOLD : STITCH_WHOLE_THRESHOLD;
   const lang = replyLanguage(input.command, input.lang);
   // The stitch feature's model answers (lib/feature-models.ts); the
   // stitch-select feature's model reads the skeletons in the route and
@@ -2337,7 +2356,7 @@ export async function stitch(input: {
   // word with them: its expansion's words stand in (ANS8-02), for the
   // rare names, the back selection's title and name checks, and the
   // ranked cut, which reuses them.
-  if (reading.tokens > STITCH_WHOLE_THRESHOLD && cjkExpansion(input.command, read.map((r) => r.doc.title))) {
+  if (reading.tokens > wholeThreshold && cjkExpansion(input.command, read.map((r) => r.doc.title))) {
     reading.words = await expandWords({
       command: input.command,
       earlier: history.filter((m) => m.role === "user").map(textOf).filter((t) => t.trim()).slice(-STITCH_READ_HISTORY),
@@ -2349,8 +2368,8 @@ export async function stitch(input: {
   }
   // The command's rare names (nameHits), for the back selection and the
   // answer pass.
-  const names = reading.tokens > STITCH_WHOLE_THRESHOLD ? nameHits(input.command, read.flatMap((r) => r.blocks), read.map((r) => r.doc.title), reading.words) : undefined;
-  if (reading.tokens > STITCH_WHOLE_THRESHOLD) {
+  const names = reading.tokens > wholeThreshold ? nameHits(input.command, read.flatMap((r) => r.blocks), read.map((r) => r.doc.title), reading.words) : undefined;
+  if (reading.tokens > wholeThreshold) {
     // A command about the last answers reads the blocks they cited and
     // stored, with no select pass (ANS6-03). Only when the last answer came
     // back with its record: without it the history names no stored link or
@@ -2361,7 +2380,7 @@ export async function stitch(input: {
     if (lastAnswer?.record) selected = backSelection(input.command, history, blockByRef, own, kind, read, reading.words);
   }
   const back = selected !== null;
-  if (reading.tokens > STITCH_WHOLE_THRESHOLD && !selected) {
+  if (reading.tokens > wholeThreshold && !selected) {
     selected = await pickBlocks({
       reading,
       command: input.command,
@@ -2570,7 +2589,7 @@ export async function stitch(input: {
   }
 
   if (linkCount > 0 || document) await bumpNotebook(input.notebookId);
-  const checked = checkReplyQuotes(result.data.reply.trim(), blockByRef, titles);
+  const checked = checkReplyQuotes(result.data.reply.trim(), blockByRef, titles, notes ?? []);
   if (checked.unquoted.length > 0) console.warn(`[stitch] ${checked.unquoted.length} quote(s) in the reply not in the blocks cited; shown without quote marks`);
   // The reply says how many of the links it proposed were already in the
   // project, one line per state (WALK5-03), so its count and the links
