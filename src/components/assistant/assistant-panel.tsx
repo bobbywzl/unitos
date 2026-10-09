@@ -30,8 +30,10 @@ import {
   AnswerToolbar,
   CommentBox,
   CommentList,
+  deleteCommentWithUndo,
   QuoteChip,
   quoteMessage,
+  shownComments,
   SideChatChips,
   SideChatHeader,
   useAnswerSelection,
@@ -821,7 +823,7 @@ export function AssistantPanel({
           people?: Record<string, Person>;
         } | null;
         if (cancelled || !res.ok || !json) return;
-        setComments(json.replies ?? []);
+        setComments(shownComments(json.replies ?? []));
         setCommentPeople(json.people ?? {});
       } catch {
         // Offline: the thread reads the same, with no comments under it.
@@ -913,14 +915,15 @@ export function AssistantPanel({
       setCommentBusy(false);
     }
   }
-  async function deleteComment(id: string) {
-    setComments((list) => list.filter((c) => c.id !== id));
-    try {
-      await fetch(`/api/replies/${id}`, { method: "DELETE" });
-    } catch {
-      // Offline: the row is gone on screen and stays on the server; the next
-      // load of the thread shows it again.
-    }
+  // ✕ on a comment: no ask, the Undo pill, the DELETE once it goes.
+  function deleteComment(id: string) {
+    deleteCommentWithUndo({
+      list: comments,
+      id,
+      message: t("outline.commentDeleted"),
+      setList: setComments,
+      failed: () => setError(t("common.notSaved")),
+    });
   }
 
   // A completed turn saves (SPEC.md §21): the first one creates the note,
@@ -2088,7 +2091,7 @@ export function AssistantPanel({
             comments={comments}
             people={{ ...people, ...commentPeople }}
             myId={myId}
-            onDelete={(id) => void deleteComment(id)}
+            onDelete={deleteComment}
           />
         </div>
         {openSideChat ? (
