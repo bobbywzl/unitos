@@ -12,9 +12,11 @@ import { MARK_SWEPT_EVENT, type MarkSweptDetail } from "@/lib/mark-sweep";
 import {
   ACCOUNT_SAVE_MAX_MS,
   ACCOUNT_SAVE_SETTLE_MS,
+  ACCOUNT_SAVE_SHOWN_MS,
   applyReadingPosition,
   atReadingPosition,
   chooseReadingPosition,
+  firstBlockShown,
   LEFT_OFF_MIN_SHARE,
   parseReadingPosition,
   POSITION_HOLD_MS,
@@ -1335,6 +1337,31 @@ export function ReaderInteractions({
     const onVisibility = () => {
       if (document.visibilityState === "hidden") saveAccount(true);
     };
+    // [lists9] Shown for ACCOUNT_SAVE_SHOWN_MS with its first block in view,
+    // the document counts as opened (WALK9-05): the account's copy saves
+    // once, where the pane stands, so the graph marks the document opened
+    // for a reader who read its first screen and never scrolled. Only while
+    // the account has no copy. A hidden tab, a page over the article, or the
+    // hold restarts the clock; a pane scrolled off the first block saves by
+    // the scroll. The tab's copy does not change, and a position at the top
+    // of a document opens it at the top, as before.
+    let shownTimer: ReturnType<typeof setTimeout> | null = null;
+    const shown = () => {
+      shownTimer = null;
+      if (
+        document.visibilityState !== "visible" ||
+        positionHeld.current ||
+        distillOpenRef.current ||
+        conversationViewRef.current
+      ) {
+        shownTimer = setTimeout(shown, ACCOUNT_SAVE_SHOWN_MS);
+        return;
+      }
+      if (!firstBlockShown(container)) return;
+      const position = readPosition();
+      if (position && "blockId" in position) saveAccountPosition(documentId, { ...position, at: Date.now() }, false);
+    };
+    if (keepsAccountCopy && accountAtOpen === null) shownTimer = setTimeout(shown, ACCOUNT_SAVE_SHOWN_MS);
     container.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("pagehide", onPageHide);
     document.addEventListener("visibilitychange", onVisibility);
@@ -1343,10 +1370,11 @@ export function ReaderInteractions({
       window.removeEventListener("pagehide", onPageHide);
       document.removeEventListener("visibilitychange", onVisibility);
       if (raf) cancelAnimationFrame(raf);
+      if (shownTimer) clearTimeout(shownTimer);
       save();
       saveAccount(true);
     };
-  }, [positionStoreKey, embedded, keepsAccountCopy, documentId]);
+  }, [positionStoreKey, embedded, keepsAccountCopy, documentId, accountAtOpen]);
   const [distillShownId, setDistillShownId] = useState<string | null>(null);
   const [distillRun, setDistillRun] = useState<{ question: string } | null>(null);
   const [distillError, setDistillError] = useState<string | null>(null);
