@@ -251,7 +251,17 @@ type FileScore = {
   error?: string;
 };
 
-function bodyAndNotes(text: string): { body: string; notes: string | null } {
+/** The slide's words and its notes apart. The replica's notes strip says
+    where the notes start: their own words may hold the line "Speaker
+    notes:" (a deck whose notes open with it), so the label's last line is
+    no boundary. Without the strip, the label's last line is. */
+function bodyAndNotes(text: string, html: string | undefined): { body: string; notes: string | null } {
+  const strip = html && html.includes('class="slide-notes-body"') ? JSDOM.fragment(html).querySelector(".slide-notes-body") : null;
+  if (strip) {
+    const notes = domText(strip.outerHTML);
+    const tail = `${SLIDE_NOTES_LABEL}\n${notes}`;
+    if (text.endsWith(tail)) return { body: text.slice(0, text.length - tail.length).replace(/\n$/, ""), notes };
+  }
   const lines = text.split("\n");
   const at = lines.lastIndexOf(SLIDE_NOTES_LABEL);
   if (at < 0) return { body: text, notes: null };
@@ -316,7 +326,7 @@ function scoreFile(id: string, ref: Ref, blocks: ParsedBlock[], ms: number, deta
     const say: string[] = [];
     const text = block?.text ?? "";
     if (!block) lose("slide");
-    const { body, notes } = bodyAndNotes(text);
+    const { body, notes } = bodyAndNotes(text, block?.html);
     const got = tokens(body);
     const gotBag = bag(got);
     const pieces = piecesOf(slide);
