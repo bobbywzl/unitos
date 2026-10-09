@@ -1536,6 +1536,13 @@
    "license": "generated",
    "ext": "xlsx",
    "exercises": "a timetable whose merged headers keep words in the cells they cover"
+  },
+  {
+   "id": "synth-time-rounding",
+   "synth": "synth-time-rounding",
+   "license": "generated",
+   "ext": "xlsx",
+   "exercises": "a shift log whose times sit a fraction of a second under a minute, an hour, or a day"
   }
  ]
 }

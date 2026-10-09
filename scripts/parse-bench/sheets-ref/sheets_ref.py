@@ -169,6 +169,25 @@ def synth(id, out):
         # cover, as files written by libraries keep them (openpyxl drops
         # them on merge, so the parts are written as they are).
         return merged_hidden_words(out)
+    elif id == "synth-time-rounding":
+        # A shift log whose times sit a fraction of a second under a
+        # minute, an hour, or a day, as times summed or read off a clock
+        # are stored.
+        ws.title = "Shifts"
+        ws.append(["Entry", "Time", "Format"])
+        for label, value, fmt in [
+            ("Start", 0.3645833, "hh:mm:ss"),
+            ("Clock in", 0.36458, "hh:mm"),
+            ("End of day", 0.999999, "hh:mm"),
+            ("Last second", 0.999999, "hh:mm:ss"),
+            ("Two days", 1.9999999, "[h]:mm:ss"),
+            ("Stamp", 44197.9999999, "yyyy-mm-dd hh:mm:ss"),
+            ("Break", 0.0208333, "h:mm:ss AM/PM"),
+            ("Noon", 0.5, "h:mm AM/PM"),
+            ("Shift", 1 / 3, "h:mm:ss"),
+        ]:
+            ws.append([label, value, fmt])
+            ws.cell(ws.max_row, 2).number_format = fmt
     else:
         raise SystemExit(f"unknown synth id {id}")
     wb.save(out)
