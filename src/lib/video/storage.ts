@@ -36,11 +36,12 @@ export function sniffMedia(bytes: Uint8Array): string | null {
     return "video/webm";
   }
   if (bytes.length >= 4 && ascii(0, 4) === "OggS") {
-    // The first Ogg page names the codec: Theora is video; Vorbis, Opus, and
-    // FLAC are audio. An unrecognized codec keeps the old video answer.
+    // The first Ogg page names the codec: Theora is video; Vorbis, Opus,
+    // FLAC, and Speex are audio. An unrecognized codec keeps the old video
+    // answer.
     const head = ascii(0, Math.min(bytes.length, 512));
     if (head.includes("theora")) return "video/ogg";
-    if (head.includes("vorbis") || head.includes("OpusHead") || head.includes("FLAC")) {
+    if (head.includes("vorbis") || head.includes("OpusHead") || head.includes("FLAC") || head.includes("Speex   ")) {
       return "audio/ogg";
     }
     return "video/ogg";

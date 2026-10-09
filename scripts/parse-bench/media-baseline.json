@@ -1,9 +1,9 @@
 {
  "total": {
-  "a": 0.968,
+  "a": 0.993,
   "b": 0.657,
   "c": 0.793,
-  "all": 0.806
+  "all": 0.814
  },
  "files": {
   "a-mutagen-silence-mp3": 1,
@@ -25,7 +25,7 @@
   "a-mutagen-truncated-mp4": 1,
   "a-mutagen-opus": 1,
   "a-mutagen-vorbis-ogg": 1,
-  "a-mutagen-speex": 0,
+  "a-mutagen-speex": 1,
   "a-mutagen-oggflac": 1,
   "a-mutagen-theora": 1,
   "a-mutagen-flac": 1,
@@ -54,7 +54,7 @@
   "a-tinytag-mp3-m4a": 1,
   "a-tinytag-opus": 1,
   "a-tinytag-flac-oga": 1,
-  "a-tinytag-speex": 0,
+  "a-tinytag-speex": 1,
   "a-tinytag-multi-ogv": 1,
   "a-tinytag-wav": 1,
   "a-tinytag-adpcm-wav": 1,
