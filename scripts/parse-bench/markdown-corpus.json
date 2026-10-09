@@ -906,12 +906,12 @@
   {
    "id": "hamlet",
    "kind": "txt",
-   "name": "1524.txt",
+   "name": "1524-0.txt",
    "encoding": "utf-8",
-   "url": "https://raw.githubusercontent.com/GITenberg/Hamlet-Prince-of-Denmark_1524/a22cf334eff1f3d8920cd11a0979a649a38a02d1/1524.txt",
+   "url": "https://raw.githubusercontent.com/GITenberg/Hamlet-Prince-of-Denmark_1524/a22cf334eff1f3d8920cd11a0979a649a38a02d1/1524-0.txt",
    "twin": "https://raw.githubusercontent.com/GITenberg/Hamlet-Prince-of-Denmark_1524/a22cf334eff1f3d8920cd11a0979a649a38a02d1/1524-h/1524-h.htm",
    "license": "Public domain (Project Gutenberg)",
-   "exercises": "a play: speakers' names, indented verse lines, stage directions, act and scene headings"
+   "exercises": "a play (the edition its HTML twin is made from): SPEAKER. lines, verse rewrapped as prose, stage directions set in a space, act and scene headings"
   },
   {
    "id": "the-raven",
