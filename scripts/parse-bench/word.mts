@@ -97,13 +97,18 @@ function bag(text: string): Map<string, number> {
   for (const t of tokenize(text)) out.set(t, (out.get(t) ?? 0) + 1);
   return out;
 }
-/** Words of `want` that `have` lacks, counted. */
-function missingWords(want: string, have: string): number {
+/** Words of `want` that `have` lacks: how many, and which. */
+function missingWords(want: string, have: string): { n: number; words: string[] } {
   const a = bag(want);
   const b = bag(have);
   let n = 0;
-  for (const [t, k] of a) n += Math.max(0, k - (b.get(t) ?? 0));
-  return n;
+  const words: string[] = [];
+  for (const [t, k] of a) {
+    const lost = Math.max(0, k - (b.get(t) ?? 0));
+    n += lost;
+    if (lost > 0) words.push(lost > 1 ? `${t}×${lost}` : t);
+  }
+  return { n, words };
 }
 
 // ── The reference: the file's own structure ─────────────────────────────────
@@ -697,8 +702,11 @@ function compare(ref: Reference, got: Reading, side: "parse" | "import"): Findin
   const all = compact(got.text);
   // A typed marker an import's list draws is no word lost (lost:<kind> too).
   const want = ref.units.map((u) => u.text.replace(TYPED, "")).join("\n");
-  const lostWords = missingWords(want, got.text);
-  if (lostWords > 0) counts.words = lostWords;
+  const lost = missingWords(want, got.text);
+  if (lost.n > 0) {
+    counts.words = lost.n;
+    notes.push(`words: ${lost.words.join(" ").slice(0, 300)}`);
+  }
   for (const u of ref.units) {
     const c = compact(u.text);
     // A marker typed before the words ("1.1", "(a)", "•") an import's list
