@@ -66,7 +66,8 @@ export function imageFigureHtml(src: string, alt: string): string {
 /** Store one dropped image and get its URL back. Throws with the server's
     plain reason — too large, not an image, or Unitos Premium — or, when the
     server gave none (a server error, no network), the one failure line
-    "Not saved. Try again."; the status and the error go to the console. */
+    "Not saved. Try again." (offline: "Not saved. Try again when you are
+    online."); the status and the error go to the console. */
 export async function uploadImage(file: File): Promise<{ id: string; url: string }> {
   let res: Response;
   try {
@@ -88,8 +89,11 @@ export async function uploadImage(file: File): Promise<{ id: string; url: string
   return (await res.json()) as { id: string; url: string };
 }
 
-/** "Not saved. Try again." in the page's language (the lang cookie). */
+/** "Not saved. Try again." in the page's language (the lang cookie); offline,
+    "Not saved. Try again when you are online.", the line of every write
+    (`src/lib/api.ts`). */
 function notSavedLine(): string {
   const value = typeof document === "undefined" ? null : document.cookie.match(new RegExp(`(?:^|; )${LANG_COOKIE}=([^;]+)`))?.[1];
-  return translate(isLang(value) ? value : DEFAULT_LANG, "common.notSaved");
+  const offline = typeof navigator !== "undefined" && !navigator.onLine;
+  return translate(isLang(value) ? value : DEFAULT_LANG, offline ? "common.offline" : "common.notSaved");
 }
