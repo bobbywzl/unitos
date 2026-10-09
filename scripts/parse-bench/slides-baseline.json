@@ -279,8 +279,8 @@
    "lost": 0
   },
   "poi-radar-chart": {
-   "composite": 0.982,
-   "words": 0.927,
+   "composite": 0.994,
+   "words": 0.976,
    "order": null,
    "bullets": 1,
    "tables": null,
@@ -422,8 +422,8 @@
    "lost": 0
   },
   "pp-cht-series": {
-   "composite": 0.989,
-   "words": 0.967,
+   "composite": 0.994,
+   "words": 0.983,
    "order": null,
    "bullets": null,
    "tables": null,
@@ -433,8 +433,8 @@
    "lost": 0
   },
   "pp-cht-chart-type": {
-   "composite": 0.983,
-   "words": 0.948,
+   "composite": 0.989,
+   "words": 0.966,
    "order": null,
    "bullets": null,
    "tables": null,

@@ -1,3 +1,4 @@
+import * as ssf from "ssf";
 import type { ParsedBlock, ParsedDocument } from "@/lib/parse/types";
 import { renderChart as drawChart } from "@/lib/parse/chart";
 import { ommlText } from "@/lib/parse/docx-math";
@@ -1609,7 +1610,11 @@ function renderChartTable(doc: XMLDocument): RenderedText | null {
   for (const ser of descendants(chart, "ser")) {
     const name = cleanText(descendants(child(ser, "tx"), "v")[0]?.textContent ?? descendants(child(ser, "tx"), "t").map((t) => t.textContent ?? "").join("")).trim();
     const cats = descendants(child(ser, "cat"), "pt").map((pt) => cleanText(child(pt, "v")?.textContent ?? ""));
-    const vals = descendants(child(ser, "val"), "pt").map((pt) => cleanText(child(pt, "v")?.textContent ?? ""));
+    // A value shows in its number format, General when it names none, as
+    // the chart's own labels show it: the cache's 8.200000000000001 reads
+    // 8.2. Slides benchmark finding (a radar chart's data table).
+    const code = descendants(child(ser, "val"), "formatCode")[0]?.textContent?.trim() || "General";
+    const vals = descendants(child(ser, "val"), "pt").map((pt) => shownNumber(cleanText(child(pt, "v")?.textContent ?? ""), code));
     series.push({ name, cats, vals });
   }
   const rows: string[][] = [];
@@ -1627,6 +1632,18 @@ function renderChartTable(doc: XMLDocument): RenderedText | null {
   if (rows.length > 0) pieces.push(dataTable(rows));
   if (pieces.length === 0) return null;
   return { html: pieces.map((p) => p.html).join(textGap("\n")), text: pieces.map((p) => p.text).join("\n") };
+}
+
+/** A cached chart value as its number format shows it; anything that is
+    not a number, or a format ssf cannot read, stays as the cache has it. */
+function shownNumber(value: string, code: string): string {
+  const n = Number(value);
+  if (value.trim() === "" || !Number.isFinite(n)) return value;
+  try {
+    return cleanText(ssf.format(code, n));
+  } catch {
+    return value;
+  }
 }
 
 // ── The slide ────────────────────────────────────────────────────────────────
