@@ -249,7 +249,7 @@ export function ReplyThread({
                   disabled={inFlight.has(reply.id)}
                   data-track="reply-resolve"
                   data-tip={isResolved ? t("common.reopenTitle") : t("common.resolveTitle")}
-                  className="inline-flex min-h-6 items-center px-1 text-[10px] font-semibold text-sand-500 hover:text-sage-700 pointer-coarse:min-h-10 pointer-coarse:px-1.5"
+                  className="inline-flex min-h-6 items-center px-1 text-[10px] font-semibold text-sand-500 hover:text-sage-700 pointer-coarse:min-h-10 pointer-coarse:px-2.5"
                 >
                   {isResolved ? t("common.reopen") : t("common.resolve")}
                 </button>

@@ -58,6 +58,8 @@ const en = {
   // Find across the project (graph-find.tsx)
   findLabel: "Find across the project",
   findPlaceholder: "Find a word across the documents…",
+  // [style10] VIEW10-09: the box is 104 px wide under 768 px.
+  findPlaceholderShort: "Find",
   findClear: "Clear the find",
   findSummary: "Found in {n} of {total} document{ts} · {p} passage{ps}",
   findNone: "No passage has these words.",
@@ -124,6 +126,7 @@ const zh: Record<keyof typeof en, string> = {
   fromLastAnswer: "来自上一次缝合回答",
   findLabel: "在项目中查找",
   findPlaceholder: "在所有文档中查找词语…",
+  findPlaceholderShort: "查找",
   findClear: "清除查找",
   findSummary: "在 {total} 个文档中的 {n} 个找到 · {p} 个片段",
   findNone: "没有片段包含这些词。",

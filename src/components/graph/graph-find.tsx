@@ -11,7 +11,7 @@
 
 import { CLOSE, DOC_CHIP, LEAD, LEAD_PRIMARY, TEXT_BODY, TEXT_HIT, TEXT_META } from "./graph-ui";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { GraphNode } from "@/lib/types";
 import type { FindDocument, FindPassage } from "@/lib/graph/find";
 import { FIND_MORE, FIND_SNIPPETS } from "@/lib/graph/find";
@@ -20,25 +20,42 @@ import { useT } from "@/components/lang-provider";
 import { useGraphContent, type FindState } from "@/components/graph/graph-content";
 import { AddToNote } from "@/components/graph/note-gather"; // [cover4]
 
+// [style10] VIEW10-09: under 768 px the box is 104 px wide and the long
+// placeholder was cut at "Find a wor": the short one there.
+const NARROW = "(max-width: 767px)";
+function subscribeNarrow(listener: () => void): () => void {
+  const query = window.matchMedia?.(NARROW);
+  query?.addEventListener("change", listener);
+  return () => query?.removeEventListener("change", listener);
+}
+function useNarrow(): boolean {
+  return useSyncExternalStore(
+    subscribeNarrow,
+    () => window.matchMedia?.(NARROW).matches ?? false,
+    () => false,
+  );
+}
+
 export function FindBox({ find }: { find: FindState }) {
   const t = useT();
+  const narrow = useNarrow();
   return (
     <label
       data-graph-find
-      className={`flex h-[34px] min-w-0 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-3 ${TEXT_BODY} text-sand-600 focus-within:border-clay-600 max-[900px]:w-[220px] max-md:w-[104px] max-md:focus-within:w-[200px] min-[901px]:w-[200px] min-[901px]:max-[1099px]:w-[170px] min-[1600px]:w-[260px]`}
+      className={`flex h-[34px] min-w-0 shrink-0 items-center gap-1.5 rounded-full border border-line bg-card px-3 ${TEXT_BODY} text-sand-600 focus-within:border-clay-600 max-[900px]:w-[220px] max-md:w-[104px] max-md:focus-within:w-[200px] min-[901px]:w-[200px] min-[901px]:max-[1099px]:w-[170px] min-[1600px]:w-[260px] pointer-coarse:h-10`}
     >
       <SearchIcon size={13} />
       <input
         type="search"
         value={find.query}
         onChange={(e) => find.setQuery(e.target.value)}
-        placeholder={t("graphView.findPlaceholder")}
+        placeholder={t(narrow ? "graphView.findPlaceholderShort" : "graphView.findPlaceholder")}
         aria-label={t("graphView.findLabel")}
         maxLength={100}
         data-track="graph-find"
         // The box draws the focus (its border); the global ring would draw a second one inside it.
         style={{ outline: "none" }}
-        className="min-w-0 flex-1 bg-transparent text-ink outline-none placeholder:text-sand-500 [&::-webkit-search-cancel-button]:hidden"
+        className="min-w-0 flex-1 bg-transparent text-ink outline-none placeholder:text-sand-500 [&::-webkit-search-cancel-button]:hidden pointer-coarse:self-stretch"
       />
       {find.query && (
         <button

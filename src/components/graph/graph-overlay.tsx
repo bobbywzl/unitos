@@ -681,7 +681,7 @@ export function GraphOverlay({
           aria-expanded={list === "documents"}
           aria-controls={sideListId("documents")}
           data-tip={t("panes.graphDocumentsToggleTitle")}
-          className={`shrink-0 rounded-full border px-3.5 py-1.5 ${TEXT_BODY} whitespace-nowrap hover:bg-clay-100 hover:text-clay-800 disabled:pointer-events-none max-md:px-2.5 ${
+          className={`shrink-0 rounded-full border px-3.5 py-1.5 ${TEXT_BODY} whitespace-nowrap hover:bg-clay-100 hover:text-clay-800 disabled:pointer-events-none max-md:px-2.5 pointer-coarse:min-h-10 ${
             /* [style7] VIEW7-06: drawn as the pill it is, like Notes and Links beside it. */
             list === "documents" ? "border-line bg-clay-100 text-clay-800" : "border-line text-sand-600"
           }`}
@@ -723,7 +723,7 @@ export function GraphOverlay({
             aria-expanded={linksOpen}
             aria-controls={sideListId("links")}
             data-tip={t("panes.graphLinksDesc") /* [chrome6] WALK6-08: the list's intro, here */}
-            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 ${TEXT_BODY} hover:bg-clay-100 hover:text-clay-800 max-md:gap-1 max-md:px-2 ${
+            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 ${TEXT_BODY} hover:bg-clay-100 hover:text-clay-800 max-md:gap-1 max-md:px-2 pointer-coarse:min-h-10 ${
               linksOpen ? "border-line bg-clay-100 text-clay-800" : "border-line text-sand-600"
             }`}
           >
@@ -743,7 +743,7 @@ export function GraphOverlay({
             aria-expanded={listOpen}
             aria-controls={sideListId("recommended")}
             data-tip={`${t("panes.recommendedLinks")}: ${t("panes.recommendedLinksDesc")}${canEdit && nodes.length >= 2 ? ` ${t("panes.recommendedLinksScanHere")}` : ""}`}
-            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 ${TEXT_BODY} hover:bg-clay-100 hover:text-clay-800 max-[1399px]:px-2.5 max-md:gap-1 max-md:px-2 ${
+            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 ${TEXT_BODY} hover:bg-clay-100 hover:text-clay-800 max-[1399px]:px-2.5 max-md:gap-1 max-md:px-2 pointer-coarse:min-h-10 ${
               listOpen
                 ? "border-line bg-clay-100 text-clay-800"
                 : recommended.length > 0
@@ -770,7 +770,7 @@ export function GraphOverlay({
             aria-expanded={list === "generated"}
             aria-controls={sideListId("generated")}
             data-tip={`${t("stitch.generated")}: ${t("stitch.generatedDesc")}`}
-            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 ${TEXT_BODY} hover:bg-clay-100 hover:text-clay-800 max-[1399px]:px-2.5 max-md:gap-1 max-md:px-2 ${
+            className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 ${TEXT_BODY} hover:bg-clay-100 hover:text-clay-800 max-[1399px]:px-2.5 max-md:gap-1 max-md:px-2 pointer-coarse:min-h-10 ${
               list === "generated" ? "border-line bg-clay-100 text-clay-800" : "border-line text-sand-600"
             }`}
           >
@@ -788,7 +788,7 @@ export function GraphOverlay({
           data-track="graph-close"
           aria-label={t("common.close")}
           data-tip={t("common.close")}
-          className="flex size-8 shrink-0 items-center max-[900px]:ml-auto justify-center rounded-full text-sand-500 hover:bg-clay-100 hover:text-clay-700"
+          className={`max-[900px]:ml-auto ${CLOSE} /* [style10] VIEW10-09: 40 px under a finger, as every ✕ */`}
         >
           ✕
         </button>
@@ -1199,7 +1199,7 @@ export function RecommendedLinkList({
               data-track="graph-link-expand"
               data-tip={t(open ? "panes.linkCollapse" : "panes.linkExpand")}
               aria-expanded={open}
-              className="block min-w-0 flex-1 rounded-lg text-left hover:bg-clay-100/60"
+              className="block min-w-0 flex-1 rounded-lg text-left hover:bg-clay-100/60 pointer-coarse:min-h-10"
             >
               <span className={`block ${TEXT_BODY} leading-snug font-semibold`}>{l.reason ?? t("panes.linkNoReason")}</span>
             </button>
