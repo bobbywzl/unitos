@@ -323,6 +323,14 @@ function scoreFile(id: string, ref: Ref, blocks: ParsedBlock[], ms: number, deta
       });
       for (const l of extra.slice(0, 12)) say.push(`  extra line: ${norm(l).slice(0, 160)}`);
     }
+    if ((c.fp > 0 || c.fn > 0) && details) {
+      // The words apart, each with how many more one side has.
+      const refBag = bag(refTokens);
+      const diff = (a: Map<string, number>, b: Map<string, number>) =>
+        [...a].filter(([t, n]) => n > (b.get(t) ?? 0)).map(([t, n]) => `${t}×${n - (b.get(t) ?? 0)}`).slice(0, 20).join(" ");
+      if (c.fn > 0) say.push(`  words missing: ${diff(refBag, gotBag)}`);
+      if (c.fp > 0) say.push(`  words extra: ${diff(gotBag, refBag)}`);
+    }
 
     // Notes.
     if (slide.notes.trim()) {

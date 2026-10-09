@@ -354,12 +354,38 @@ def auto_label(scheme, n):
 # ── Charts ──────────────────────────────────────────────────────────────────
 
 
+DATE_CODE = re.compile(r"^(?:\[[^\]]*\])*[dmy/.\- ,]+$", re.I)
+
+
+def fmt_date(x, code):
+    """An Excel date serial (1900 system) in a code of d, m, y parts and
+    separators: m/d/yy shows 37261 as 1/5/02."""
+    import datetime
+
+    day = datetime.date(1899, 12, 30) + datetime.timedelta(days=int(x))
+    code = re.sub(r"^(?:\[[^\]]*\])*", "", code)
+    out = ""
+    for tok in re.findall(r"y+|m+|d+|[^ymd]+", code, re.I):
+        t = tok.lower()
+        if t[0] == "y":
+            out += str(day.year) if len(t) > 2 else "%02d" % (day.year % 100)
+        elif t[0] == "m":
+            out += [str(day.month), "%02d" % day.month, day.strftime("%b"), day.strftime("%B")][min(len(t), 4) - 1]
+        elif t[0] == "d":
+            out += [str(day.day), "%02d" % day.day, day.strftime("%a"), day.strftime("%A")][min(len(t), 4) - 1]
+        else:
+            out += tok
+    return out
+
+
 def fmt_number(v, code):
     try:
         x = float(v)
     except (TypeError, ValueError):
         return v or ""
     code = (code or "General").split(";")[0]
+    if DATE_CODE.match(code) and re.search(r"[dmy]", code, re.I):
+        return fmt_date(x, code)
     if code == "General" or not re.search(r"[0#?]", code):
         if x == int(x) and abs(x) < 1e15:
             return str(int(x))
@@ -496,7 +522,11 @@ def chart_ref(pkg, path):
             if info and info[1]:
                 for c in cats:
                     if c not in (None, "") and re.match(r"^-?[\d.eE+-]+$", c):
-                        values.append(float(c))
+                        # A date category shows as its date: words, no
+                        # number to find.
+                        is_date = bool(info[0] and DATE_CODE.match(info[0]) and re.search(r"[dmy]", info[0], re.I))
+                        if not is_date:
+                            values.append(float(c))
                         shown.append(fmt_number(c, info[0]))
             else:
                 words.extend(c for c in cats if c)
