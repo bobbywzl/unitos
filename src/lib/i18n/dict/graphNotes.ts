@@ -38,6 +38,7 @@ const en = {
   noteOnLink: "Note on this link",
   // [lists9] WALK9-10: the press puts both ends into the new note (note-gather.tsx).
   noteOnLinkTitle: "Put both passages of this link into the new note",
+  noteOnLinkInNoteTitle: "Both passages are in the new note. In the note on a passage takes it out; Discard drops the note.",
   // [ui5] WALK5-13: unsent words on a link
   linkDraftTitle: "Draft: words on this link not sent yet, a reply or a note",
 
@@ -104,6 +105,7 @@ const zh: Record<keyof typeof en, string> = {
 
   noteOnLink: "就此链接写笔记",
   noteOnLinkTitle: "把这个链接的两段都放进新笔记",
+  noteOnLinkInNoteTitle: "两段都已在新笔记中。按某一段的“已在笔记中”可将它移出；按“舍弃”则放弃这条笔记。",
   // [ui5] WALK5-13
   linkDraftTitle: "草稿：这个链接上有还没发送的文字，一条回复或一条笔记",
 

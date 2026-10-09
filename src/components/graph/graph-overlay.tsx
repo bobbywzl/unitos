@@ -788,7 +788,8 @@ export function GraphOverlay({
           data-track="graph-close"
           aria-label={t("common.close")}
           data-tip={t("common.close")}
-          className={`max-[900px]:ml-auto ${CLOSE} /* [style10] VIEW10-09: 40 px under a finger, as every ✕ */`}
+          // [style10] VIEW10-09: 40 px under a finger, as every ✕ (CLOSE).
+          className={`max-[900px]:ml-auto ${CLOSE}`}
         >
           ✕
         </button>
