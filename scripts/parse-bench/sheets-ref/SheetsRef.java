@@ -73,12 +73,17 @@ public class SheetsRef {
     return out.append("]}").toString();
   }
 
-  /** Formulas stored without a value get the value POI computes. */
+  /** Formulas stored without a value, or with an empty number (<v></v>
+      without t="str", as openpyxl writes), get the value POI computes: Excel
+      computes them on open. Read as stored, POI takes an empty number for
+      0. An empty string result (t="str") is a value Excel stored. */
   static void computeUncached(Sheet sheet, FormulaEvaluator evaluator) {
     for (Row row : sheet) {
       if (row.getRowNum() >= MAX_ROWS) break;
       for (Cell cell : row) {
-        if (cell.getCellType() != CellType.FORMULA || !(cell instanceof XSSFCell x) || x.getCTCell().isSetV()) continue;
+        if (cell.getCellType() != CellType.FORMULA || !(cell instanceof XSSFCell x)) continue;
+        var ct = x.getCTCell();
+        if (ct.isSetV() && (!ct.getV().isEmpty() || ct.getT() == org.openxmlformats.schemas.spreadsheetml.x2006.main.STCellType.STR)) continue;
         try {
           evaluator.evaluateFormulaCell(cell);
         } catch (Throwable e) {

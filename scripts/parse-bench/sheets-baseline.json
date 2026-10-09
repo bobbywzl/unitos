@@ -7,7 +7,7 @@
   "formats": 0.966,
   "merges": 1,
   "frozen": 1,
-  "lost": 10635,
+  "lost": 10641,
   "dom": 0,
   "errors": 0
  },
@@ -1459,7 +1459,7 @@
    "formats": 0.692,
    "merges": 1,
    "frozen": 1,
-   "lost": 11,
+   "lost": 12,
    "dom": 0
   },
   "unitos-charts": {
@@ -1539,7 +1539,7 @@
    "formats": 1,
    "merges": null,
    "frozen": 1,
-   "lost": 9987,
+   "lost": 9992,
    "dom": 0
   },
   "synth-wide": {
