@@ -618,6 +618,8 @@ type Level = {
   left: number | null;
   first: number | null;
   suffix: string;
+  /** The level draws a picture bullet (w:lvlPicBulletId). */
+  picture: boolean;
 };
 
 function readLevel(lvl: Element): Level {
@@ -632,6 +634,7 @@ function readLevel(lvl: Element): Level {
     first: firstOf(child(child(lvl, "pPr"), "ind")),
     font: attr(rFonts, "ascii") ?? attr(rFonts, "hAnsi") ?? "",
     suffix: attr(child(lvl, "suff"), "val") ?? "tab",
+    picture: child(lvl, "lvlPicBulletId") !== null,
   };
 }
 
@@ -698,10 +701,13 @@ function formatNumber(fmt: string, n: number): string {
     "o" — Word's hollow second-level bullet — as the hollow bullet ◦, any
     other character as it is. A bullet with no character we can name is the
     default dot, so the line stays a list line (the converter draws the
-    LIST text's bullets, lib/docs/import.ts). */
+    LIST text's bullets, lib/docs/import.ts). A picture bullet
+    (w:lvlPicBulletId) draws its picture, not its character: the default
+    dot too. Word benchmark finding: a Chinese manual's picture bullets
+    (Symbol's U+F06C) read as "λ", a letter where Word draws a dot. */
 function bulletChar(level: Level): string {
   const text = level.text.trim();
-  if (!text) return "•";
+  if (!text || level.picture) return "•";
   if (text === "o") return "◦";
   const drawn = [...text].map((ch) => symbolChar(level.font, ch) ?? (/[\uf000-\uf0ff]/.test(ch) ? (symbolChar("Symbol", ch) ?? "") : ch)).join("");
   return drawn || "•";

@@ -199,6 +199,17 @@ function importLists(blocks: ParsedBlock[]): string[] {
   check("a w:pict out of any paragraph is a figure between its neighbors", kinds === "PARAGRAPH,FIGURE,PARAGRAPH", kinds);
 }
 
+// ── A picture bullet draws its picture, not its character ───────────────────
+
+{
+  const symbol = '<w:rPr><w:rFonts w:ascii="Symbol" w:hAnsi="Symbol"/></w:rPr>';
+  const lvl = (picture: boolean) =>
+    `<w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="${String.fromCharCode(0xf06c)}"/>${picture ? '<w:lvlPicBulletId w:val="0"/>' : ""}<w:pPr><w:ind w:left="420" w:hanging="420"/></w:pPr>${symbol}</w:lvl>`;
+  const numbering = `<w:abstractNum w:abstractNumId="0">${lvl(true)}</w:abstractNum><w:abstractNum w:abstractNumId="1">${lvl(false)}</w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num>`;
+  const texts = (await parse(docx(item("Pictured", 1, 0) + para("Between") + item("Lettered", 2, 0), numbering))).filter((b) => b.type === "LIST").map((b) => b.text);
+  check("a picture bullet is the default dot; Symbol's U+F06C without a picture is λ", texts.join("|") === "• Pictured|λ Lettered", JSON.stringify(texts));
+}
+
 if (failed > 0) {
   console.log(`\n${failed} check(s) failed`);
   process.exit(1);

@@ -18,7 +18,6 @@
   "link.missing": 1,
   "image.missing": 3,
   "import.image.missing": 3,
-  "list.kind": 1,
   "lost:body": 1,
   "import.lost:body": 1
  },
@@ -438,9 +437,7 @@
   "lo-tdf130314.docx": {},
   "lo-tdf138779.docx": {},
   "lo-tdf142407.docx": {},
-  "lo-tdf149089.docx": {
-   "list.kind": 1
-  },
+  "lo-tdf149089.docx": {},
   "lo-tdf155707.docx": {},
   "lo-tdf163575.docx": {
    "lost:body": 1,
