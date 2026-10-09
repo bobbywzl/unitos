@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { startTransition, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { isImeKey } from "@/lib/ime";
 import type { SectionView } from "@/lib/types";
 import { useCollab } from "@/components/collab/collab-context";
@@ -53,9 +53,8 @@ function parentOf(tree: SectionView[], id: string): SectionView | null {
   return null;
 }
 
-/** How many tiles a board draws as it opens, and how many each frame after. */
+/** How many tiles a board draws as it opens; each step after doubles it. */
 const FIRST_TILES = 12;
-const TILES_A_FRAME = 12;
 
 export function SectionBoard({
   tree,
@@ -143,12 +142,15 @@ export function SectionBoard({
     return () => observer.disconnect();
   }, [noteCount, composing]);
   // The tiles in view first: the board opens with the first tiles drawn,
-  // and the rest follow a frame at a time (a board of 50 notes took 0.3 to
-  // 0.4 s to open in one long task).
+  // and the rest follow (a board of 50 notes took 0.3 to 0.4 s to open in
+  // one long task). Every step draws the tiles drawn before it again (the
+  // drag's list grows), so each step doubles what is drawn: a board of 200
+  // notes takes five steps, not seventeen. The steps are transitions, so a
+  // wheel or a press between them goes first.
   const [drawn, setDrawn] = useState(FIRST_TILES);
   useEffect(() => {
     if (drawn >= noteCount) return;
-    const frame = requestAnimationFrame(() => setDrawn((n) => n + TILES_A_FRAME));
+    const frame = requestAnimationFrame(() => startTransition(() => setDrawn((n) => n * 2)));
     return () => cancelAnimationFrame(frame);
   }, [drawn, noteCount]);
   const shownNotes = drawn >= noteCount ? notes : notes.slice(0, drawn);
