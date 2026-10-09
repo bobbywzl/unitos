@@ -1178,12 +1178,27 @@ function timeStep(fmt: string | number): number | null {
   return step;
 }
 
+/** A fraction format as ssf reads it. A whole part and a numerator
+    written with "#" ("# #/#####", or with the space escaped, "#\ #/##")
+    split the digits in ssf: it read them as one improper fraction and put
+    the space among its digits (-pi showed "-31268 9/99532" for
+    "-3 14093/99532"). An escaped space is a space (ECMA-376 Part 1,
+    §18.8.31), and a numerator of "?" is read whole: the "#" becomes "?".
+    Sheets benchmark finding (lo-tdf81939). */
+function fractionCode(code: string): string {
+  if (!code.includes("/")) return code;
+  return code.replace(/("[^"]*"|\[[^\]]*\])|([#0?])(?:\\ | )(#+)(?= ?\/ ?[#0?\d])/g, (all: string, kept: string | undefined, whole: string, numerator: string) =>
+    kept ? all : `${whole} ${"?".repeat(numerator.length)}`,
+  );
+}
+
 /** A number as the cell's format shows it. General shows up to 11
     significant digits, as Excel does; a format ssf refuses is tried once
     more as ssfFallbackCode writes it, and else shows the number as
     General. */
 function formatNumber(value: number, styleId: number | null, styles: Styles, date1904: boolean): string {
-  const fmt = styleId !== null ? styles.numFmts[styleId] ?? 0 : 0;
+  const stored = styleId !== null ? styles.numFmts[styleId] ?? 0 : 0;
+  const fmt = typeof stored === "string" ? fractionCode(stored) : stored;
   const shown = (n: number): string => {
     try {
       return cleanText(ssf.format(fmt, n, { date1904 }));
