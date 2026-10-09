@@ -14,8 +14,11 @@ import { sniffImage, type ImageMime } from "@/lib/handwritten/image";
 // Pixel for pixel up to here (a Retina screenshot is about 5 MP); a larger
 // image stores as JPEG — a photo, most likely, where JPEG is the right size.
 const LOSSLESS_MAX_PIXELS = 6_000_000;
-// The canvas path draws a huge image smaller: the page renders at 1400px
-// wide (pages.ts), so pixels past this only cost memory.
+// A huge image draws smaller: the page renders at 1400px wide (pages.ts),
+// so pixels past this only cost memory. A JPEG past it takes the canvas
+// path too, so the stored image is no larger. Images benchmark finding: a
+// 108 MP phone photo embedded as it was took every render of its page
+// (the page image, conversion, Circle & ask) to 1.9 GB and 11 s.
 const MAX_PIXELS = 24_000_000;
 const JPEG_QUALITY = 92;
 // The page fits inside Letter and never upscales: the page size sets the
@@ -75,6 +78,7 @@ function embedJpeg(bytes: Uint8Array): PdfImage | null {
   if (!header) return null;
   if (!EMBEDDABLE_SOF.has(header.sof) || header.precision !== 8) return null;
   if (header.components !== 1 && header.components !== 3) return null;
+  if (header.width * header.height > MAX_PIXELS) return null;
   return {
     width: header.width,
     height: header.height,
