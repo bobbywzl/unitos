@@ -15,6 +15,8 @@ import {
   STITCH_HISTORY_FIRST_MIN,
   STITCH_HISTORY_MAX,
   STITCH_INDEX,
+  STITCH_CUT_NAMED_DOCS,
+  STITCH_CUT_NAMED_MAX,
   STITCH_INDEX_NOMATCH_CAP,
   STITCH_INDEX_PREFILTER_BLOCKS,
   STITCH_INDEX_TOP,
@@ -45,7 +47,7 @@ import { ensureSkeleton, readSkeleton, type Skeleton } from "@/lib/graph/skeleto
 import { projectLinks } from "@/lib/link-scope";
 import { jevRouteParts, jevSelectLines } from "@/lib/graph/stitch-jev";
 import { jevEnabled, mapLimit } from "@/lib/jev";
-import { fuseRanks, rank, tokenize } from "@/lib/graph/rank";
+import { fuseRanks, rank, tokenize, YEAR_TERM } from "@/lib/graph/rank";
 import { searchBlocks } from "@/lib/graph/search";
 import { commandIntent } from "@/lib/graph/intent";
 import {
@@ -257,6 +259,18 @@ export function asksContradictions(command: string): boolean {
   return /\b(contradict\w*|disagree\w*|inconsisten\w*)\b|\bconflict\w* between\b/.test(c) || /矛盾|冲突|分歧|不一致|不符|意见不同|看法不同|相反/.test(c);
 }
 
+/** True when the command asks about dates (ANS9-01): a date, a year, a
+    timeline, "when did", or a year written out. A cut then keeps the lines
+    that carry a year (YEAR_TERM), as it does for a contradictions command:
+    the notes' date errors are the contradictions a reader plants. */
+export function asksDates(command: string): boolean {
+  const c = command.toLowerCase();
+  return (
+    /\b(?:dates?|dated|years?|chronolog\w*|timeline)\b|\bwhen\s+(?:did|was|were|is|are|does|do|had|has|will|would)\b|\b(?:1[0-9]{3}|20[0-9]{2})\b/.test(c) ||
+    /哪一年|哪年|何时|日期|年份|什么时候|时间线|年代/.test(command)
+  );
+}
+
 // Words of a command that are never a name, though capitalised.
 const NAME_STOP = new Set(
   "what which who whom whose when where why how does did do is are was were has have had the a an and or of in on to for from with about i my me we our you your he his she her they their it its this that these those quote list compare gather collect write make find show tell give please can could would will should".split(" "),
@@ -349,7 +363,7 @@ export function nameHits(
     name's blocks (nameHits). */
 export function textMatches(blocks: { id: string; alias: string; text: string }[], query: string, top: number, candidates: Set<string> | null = null): string[] {
   const pool = candidates ? blocks.filter((b) => candidates.has(b.id)) : blocks;
-  return rank(pool, (b) => b.text, query)
+  return rank(pool, (b) => b.text, query, { stop: true })
     .filter((r) => r.score > 0)
     .slice(0, top)
     .map((r) => r.item.alias);
@@ -1127,6 +1141,25 @@ export type CutOptions = {
   // STITCH_INDEX: the most skeleton read, in tokens, when no line matches
   // even then; without it every line is read (COST9-01).
   cap?: number;
+  // STITCH_INDEX (ANS9-05): the query's function words are dropped before
+  // the lines are ranked (lib/graph/rank.ts STOP_WORDS): at 200 documents
+  // "the, are, these, what" ranked 19% of the cut.
+  stop?: boolean;
+  // STITCH_INDEX (ANS9-05): past each document's share, only the routed
+  // documents' lines fill the rest of the budget; a document the route
+  // pass left out keeps its share. At 200 documents the 144 documents the
+  // route pass left out took 79% of the cut.
+  withinRouted?: boolean;
+  // STITCH_INDEX (ANS9-01): terms added to the query: YEAR_TERM for a
+  // contradictions or date command, so the lines that carry a year rank
+  // though no command says one (36 documents: 6 of 27 dated lines reached
+  // the cut; the two date contradictions were in the 21 left out).
+  terms?: string[];
+  // STITCH_INDEX (ANS9-01): the letters of the documents the command names
+  // by title (titleMatches): each keeps its lines, best first, up to
+  // STITCH_CUT_NAMED_MAX tokens, a quarter of the budget together, so a
+  // small named document reads whole.
+  named?: Set<string>;
 };
 
 export async function cutLines(
@@ -1149,13 +1182,14 @@ export async function cutLines(
   if (total <= budget) return new Set(candidates.map((c) => c.l.alias));
 
   const lineText = (c: { v: SkeletonView; l: SkeletonLineView }) => `${c.l.text} ${c.v.parts.find((p) => p.alias === c.l.partAlias && !p.opening)?.title ?? ""}`;
-  let ranked = rank(candidates, lineText, await query());
+  const rankOptions = { stop: options.stop, extra: options.terms };
+  let ranked = rank(candidates, lineText, await query(), rankOptions);
   // No line shares a word with the query (a Chinese command over English
   // lines whose expansion failed or came back in Chinese): with
   // STITCH_INDEX the expansion is asked for once more first.
   if (ranked.length > 0 && ranked[0].score === 0 && options.retry) {
     console.warn("[stitch] no skeleton line matches the command; asking for the expansion again");
-    ranked = rank(candidates, lineText, await options.retry());
+    ranked = rank(candidates, lineText, await options.retry(), rankOptions);
   }
   // Still no line: a cut by score would be a cut by position, the first
   // documents kept and the last lost. Read every line instead, in groups,
@@ -1202,6 +1236,25 @@ export async function cutLines(
       used += cost;
     }
   }
+  // The documents the command names by title (ANS9-01): their lines, best
+  // first, up to STITCH_CUT_NAMED_MAX tokens each and a quarter of the
+  // budget together, so a small named document reads whole.
+  if (options.named && options.named.size > 0) {
+    const namedBudget = Math.floor(budget / 4);
+    const perNamed = new Map<string, number>();
+    let namedUsed = 0;
+    for (const { item } of ranked) {
+      const letter = item.v.r.letter;
+      if (!options.named.has(letter) || shown.has(item.l.alias)) continue;
+      const cost = lineCost(item.l);
+      const spent = perNamed.get(letter) ?? 0;
+      if (spent + cost > STITCH_CUT_NAMED_MAX || namedUsed + cost > namedBudget || used + cost > budget) continue;
+      perNamed.set(letter, spent + cost);
+      namedUsed += cost;
+      shown.add(item.l.alias);
+      used += cost;
+    }
+  }
   // Every document's top lines first, up to a share of the budget.
   const share = Math.floor(budget / (4 * Math.max(1, views.length)));
   const perDoc = new Map<string, number>();
@@ -1215,9 +1268,12 @@ export async function cutLines(
     shown.add(item.l.alias);
     used += cost;
   }
-  // Then the rest of the budget, most relevant first.
+  // Then the rest of the budget, most relevant first; with withinRouted
+  // (ANS9-05) the routed documents' lines only, when the route pass named
+  // parts: a document it left out has had its share.
   for (const { item } of ranked) {
     if (shown.has(item.l.alias)) continue;
+    if (options.withinRouted && routed && !covered.has(item.v.r.letter)) continue;
     const cost = lineCost(item.l);
     if (used + cost > budget) continue;
     shown.add(item.l.alias);
@@ -1926,8 +1982,29 @@ export async function pickBlocks(input: {
     await findMatches(q);
     return q;
   };
-  const cutOptions = async (budget: number): Promise<CutOptions> =>
-    targeted ? { matches: await findMatches(await rankQuery()), retry: retryQuery, cap: STITCH_INDEX_NOMATCH_CAP * budget } : {};
+  // The cut's options: with STITCH_INDEX the query's function words are
+  // dropped, the fill past the shares stays within the routed documents,
+  // a contradictions or date command ranks the dated lines (YEAR_TERM),
+  // and a document the command names by title reads whole (ANS9-01,
+  // ANS9-05); the targeted path adds the text matches, the retry and the
+  // cap. STITCH_INDEX=0: today's cut.
+  const namedLetters = (): Set<string> => {
+    const named = titleMatches(read, input.command, undefined, input.reading.words);
+    return new Set(named.length <= STITCH_CUT_NAMED_DOCS ? named.map((r) => r.letter) : []);
+  };
+  const cutOptions = async (budget: number): Promise<CutOptions> => {
+    if (!STITCH_INDEX) return {};
+    // The targeted path's expansion runs first: a CJK command's titleMatches
+    // reads its words. A holistic command pays no call here.
+    const matches = targeted ? await findMatches(await rankQuery()) : [];
+    return {
+      stop: true,
+      withinRouted: true,
+      terms: asksContradictions(input.command) || asksDates(input.command) ? [YEAR_TERM] : [],
+      named: namedLetters(),
+      ...(targeted ? { matches, retry: retryQuery, cap: STITCH_INDEX_NOMATCH_CAP * budget } : {}),
+    };
+  };
 
   // Every document's skeleton: stored, patched for small edits, or built
   // now, SKELETON_BUILD_CONCURRENCY at a time. A build that fails reads

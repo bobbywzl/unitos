@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 import {
   answerMessages,
   asksContradictions,
+  asksDates,
   assignSources,
   byDocument,
   cjkExpansion,
@@ -55,7 +56,7 @@ import {
   titleMatches,
   type SkeletonView,
 } from "../../src/lib/graph/stitch";
-import { fuseRanks } from "../../src/lib/graph/rank";
+import { fuseRanks, rank, YEAR_TERM } from "../../src/lib/graph/rank";
 import { searchQuery } from "../../src/lib/graph/search";
 import { commandIntent } from "../../src/lib/graph/intent";
 import { asksEvery, asksMore, asksWhere, firstReadParagraph, refersBack, stitchExpandPrompt, stitchPrompt, stitchRules, stitchSelectPrompt } from "../../src/lib/prompts/stitch";
@@ -1150,6 +1151,70 @@ void (async () => {
   check("cutLines: without a cap every line is read, as before", (await cutLines(views, null, async () => "尼采说的末人是什么", 20_000, { retry: async () => "尼采" })).size === total);
   const fusedCut = await cutLines(views, null, async () => "line 5 words", 20_000, { matches: ["DA100", "A99"] });
   check("cutLines: the text matches' lines are kept in the cut", fusedCut.has("DA100") && fusedCut.has("A99") && !match.has("DA100") && fusedCut.size <= match.size + 2, `${fusedCut.size} of ${total}`);
+  check("cutLines: empty options cut as no options (STITCH_INDEX=0: today's cut)", [...(await cutLines(views, null, async () => "line 5 words", 20_000, {}))].join(",") === [...match].join(","));
+
+  // Round 9 (ANS9-05): the query's function words, and the fill within the routed documents.
+  const lines5 = [
+    { alias: "A1", text: "the will is blind" },
+    { alias: "A2", text: "these are the reasons" },
+    { alias: "A3", text: "pity is nihilism" },
+  ];
+  const r5 = rank(lines5, (l) => l.text, "what are these about pity");
+  const r5s = rank(lines5, (l) => l.text, "what are these about pity", { stop: true });
+  check(
+    "rank: with stop the function words rank nothing; without, 'these are' outranks 'pity' as before",
+    r5[0].item.alias === "A2" && r5s[0].item.alias === "A3" && r5s.find((r) => r.item.alias === "A2")!.score === 0,
+    `${r5.map((r) => r.item.alias).join(",")} / ${r5s.map((r) => `${r.item.alias}:${r.score.toFixed(2)}`).join(",")}`,
+  );
+  check("rank: 'when' and 'not' stay in the query", rank(lines5.concat([{ alias: "A4", text: "when not blind" }]), (l) => l.text, "when is it not", { stop: true })[0].item.alias === "A4");
+  const routedViews = Array.from({ length: 10 }, (_, i) => {
+    const letter = String.fromCharCode(65 + i);
+    const v = view(letter, 100);
+    v.parts.push({ alias: `${letter}1`, title: "", summary: "", opening: false } as unknown as SkeletonView["parts"][number]);
+    for (const l of v.lines) {
+      l.partAlias = `${letter}1`;
+      if (i >= 5) l.text = `${l.text} bonus`;
+    }
+    return v;
+  });
+  const routed5 = new Set(["A1", "B1", "C1", "D1", "E1"]);
+  const unrouted = (set: Set<string>) => [...set].filter((a) => a.charCodeAt(0) >= 70).length;
+  const fillOff = await cutLines(routedViews, routed5, async () => "line 5 words bonus", 4_000);
+  const fillOn = await cutLines(routedViews, routed5, async () => "line 5 words bonus", 4_000, { withinRouted: true });
+  check(
+    "cutLines: withinRouted → past the shares the routed documents' lines fill the budget; a document the route pass left out keeps its share",
+    unrouted(fillOn) < unrouted(fillOff) && fillOn.size - unrouted(fillOn) > fillOff.size - unrouted(fillOff) && ["F", "G", "H", "I", "J"].every((l) => [...fillOn].some((a) => a.startsWith(l))),
+    `unrouted lines ${unrouted(fillOff)} → ${unrouted(fillOn)}, routed ${fillOff.size - unrouted(fillOff)} → ${fillOn.size - unrouted(fillOn)}`,
+  );
+  check("cutLines: without withinRouted the fill is as before", unrouted(await cutLines(routedViews, null, async () => "line 5 words bonus", 4_000, { withinRouted: true })) === unrouted(await cutLines(routedViews, null, async () => "line 5 words bonus", 4_000)));
+
+  // Round 9 (ANS9-01): the dated lines of a contradictions or date command, and the named document whole.
+  const dated = [
+    { alias: "A1", text: "Published in 1895, after the collapse." },
+    { alias: "A2", text: "Printed early, he said." },
+  ];
+  const r1 = rank(dated, (l) => l.text, "when was it printed", { stop: true });
+  const r1y = rank(dated, (l) => l.text, "when was it printed", { stop: true, extra: [YEAR_TERM] });
+  check("rank: YEAR_TERM matches a line that carries a year; without it the line scores 0", r1.find((r) => r.item.alias === "A1")!.score === 0 && r1y.find((r) => r.item.alias === "A1")!.score > 0 && r1y.find((r) => r.item.alias === "A2")!.score > 0);
+  check(
+    "asksDates: a date, a year, 'when was', a year written, 哪一年; not a question about pity",
+    asksDates("Do the documents agree on the dates?") && asksDates("When was The Antichrist printed?") && asksDates("What happened in 1883?") && asksDates("尼采哪一年写了《查拉图斯特拉》？") && !asksDates("What does pity do to natural selection?") && !asksDates("What does he mean when he says God is dead?"),
+  );
+  // The dated line costs as much as the others, so it is not a small line
+  // that fits the budget's slack.
+  const datedViews = views.map((v) => ({ ...v, lines: v.lines.map((l) => ({ ...l })) })) as SkeletonView[];
+  datedViews[datedViews.length - 1].lines[50].text = "in 1883 he wrote it, and nothing else is said of it ".repeat(3);
+  const datedAlias = datedViews[datedViews.length - 1].lines[50].alias;
+  const cutPlain = await cutLines(datedViews, null, async () => "line 5 words", 20_000, { stop: true });
+  const cutYears = await cutLines(datedViews, null, async () => "line 5 words", 20_000, { stop: true, terms: [YEAR_TERM] });
+  check("cutLines: terms [YEAR_TERM] → the dated line is in the cut though it shares no word with the command", !cutPlain.has(datedAlias) && cutYears.has(datedAlias), `${datedAlias}`);
+  // A named document of 40 lines (about 1,400 tokens) reads whole; the
+  // same document unnamed had its share.
+  const namedViews = [...views.slice(0, -1), view("DA", 40)];
+  const daLines = (set: Set<string>) => [...set].filter((a) => /^DA\d+$/.test(a)).length;
+  const unnamedCut = await cutLines(namedViews, null, async () => "line 5 words", 20_000);
+  const namedCut = await cutLines(namedViews, null, async () => "line 5 words", 20_000, { named: new Set(["DA"]) });
+  check("cutLines: a named document under STITCH_CUT_NAMED_MAX reads whole; unnamed it had its share", daLines(namedCut) === 40 && daLines(unnamedCut) < 40 && namedCut.size <= unnamedCut.size + 40, `DA lines ${daLines(unnamedCut)} → ${daLines(namedCut)}`);
   console.log(failed === 0 ? "\nall checks pass" : `\n${failed} check(s) failed`);
   process.exit(failed === 0 ? 0 : 1);
 })();

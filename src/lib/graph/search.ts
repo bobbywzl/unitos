@@ -12,17 +12,16 @@
 
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { tokenize } from "@/lib/graph/rank";
+import { STOP_WORDS, tokenize } from "@/lib/graph/rank";
 
 const CJK = /[぀-ヿ㐀-䶿一-鿿가-힯]/u;
 
 // The command's function words: every block shares them, so OR'ed into the
 // query they make every block a candidate (at 200 documents 19,000 of
 // 24,500 blocks, 300–500 ms) and say nothing of what it is about. The
-// ranker's idf drops them in effect; the index drops them here.
-const STOP = new Set(
-  "what which who whom whose when where why how does do did is are was were has have had be been the a an and or of in on to for from with about at by as into than then i my me we our you your he his she her they their it its this that these those can could would will should say says said".split(" "),
-);
+// ranker drops the same words from its query (STOP_WORDS, RankOptions.stop)
+// and keeps "when" for the dated lines; here "when" is in every block too.
+const STOP = new Set([...STOP_WORDS, "when"]);
 
 /** The tsquery for a command (and its earlier commands and expansion
     words): the ranker's tokens, Latin words as lexemes OR'ed (function

@@ -280,6 +280,12 @@ export const STITCH_INDEX_TOP = 25;
 // 12–65 ms against 480–535 ms). Measured in round 9 on the QA projects.
 export const STITCH_INDEX_PREFILTER_BLOCKS = 5_000;
 export const STITCH_INDEX_NOMATCH_CAP = 3;
+// A cut keeps whole every document the command names by title (ANS9-01:
+// "Where do my notes disagree with the documents?" read 9 of the notes'
+// 19 lines), up to this many tokens of it, when the command names at most
+// STITCH_CUT_NAMED_DOCS documents; more is a word common to the project.
+export const STITCH_CUT_NAMED_MAX = 2_000;
+export const STITCH_CUT_NAMED_DOCS = 3;
 // A generated document of the project is read with every document when
 // nothing is picked. False leaves generated documents out of that default
 // read (a picked generated document is always read). Owner's call (pending;

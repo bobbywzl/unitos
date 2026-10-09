@@ -16,13 +16,13 @@
 //   the needed groups in the lines shown and the tokens shown (out/ab.json).
 import { PrismaClient, Prisma } from "@prisma/client";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { rank, tokenize } from "../../src/lib/graph/rank";
+import { rank, STOP_WORDS, tokenize, YEAR_TERM } from "../../src/lib/graph/rank";
 import { readSkeleton, type Skeleton } from "../../src/lib/graph/skeleton";
 import { estTokens } from "../../src/lib/tokens";
 import { searchQuery } from "../../src/lib/graph/search";
 import { commandIntent } from "../../src/lib/graph/intent";
-import { commandKind, cutLines, textMatches, type SkeletonView } from "../../src/lib/graph/stitch";
-import { STITCH_INDEX_TOP, STITCH_LINKS_SKELETON, STITCH_QUESTION_SKELETON } from "../../src/lib/derive/config";
+import { asksContradictions, asksDates, commandKind, cutLines, textMatches, titleMatches, type SkeletonView } from "../../src/lib/graph/stitch";
+import { STITCH_CUT_NAMED_DOCS, STITCH_INDEX_TOP, STITCH_LINKS_SKELETON, STITCH_QUESTION_SKELETON } from "../../src/lib/derive/config";
 
 type Group = { ids: string[]; source: string };
 type Needed = {
@@ -30,6 +30,7 @@ type Needed = {
   pick: number[] | null; kind: string; intent: string; none: boolean; run: string; path: string;
   docsRead: string[]; needed: Group[]; also: Group[]; shownIds: string[]; shownAliases: string[];
   tokens: Record<string, number>; calls: Record<string, number>;
+  route?: string[]; // the parts the route pass named (aliases), when it ran: the A/B cut reads the routed parts' lines
 };
 type Block = { id: string; text: string; documentId: string; order: number };
 type Line = { blockId: string; text: string; partTitle: string };
@@ -68,14 +69,14 @@ const windowCost = (text: string) => estTokens(text.slice(0, WINDOW_CHARS)) + 10
 
 // The reading of a command: its documents' readable blocks in reading order
 // and their skeleton lines (with the part title, as cutLines ranks them).
-type Reading = { blocks: Block[]; lines: Line[]; lineOf: Map<string, Line>; tokens: Map<string, Set<string>>; df: Map<string, number>; skeletons: Map<string, Skeleton> };
+type Reading = { blocks: Block[]; lines: Line[]; lineOf: Map<string, Line>; tokens: Map<string, Set<string>>; df: Map<string, number>; skeletons: Map<string, Skeleton>; titles: Map<string, string> };
 const readings = new Map<string, Reading>();
 async function reading(project: string, docIds: string[]): Promise<Reading> {
   const key = `${project}:${docIds.join(",")}`;
   const cached = readings.get(key);
   if (cached) return cached;
   const db = client(dbOf(project));
-  const docs = await db.document.findMany({ where: { id: { in: docIds } }, select: { id: true, skeleton: true } });
+  const docs = await db.document.findMany({ where: { id: { in: docIds } }, select: { id: true, title: true, skeleton: true } });
   const rows = await db.block.findMany({
     where: { documentId: { in: docIds }, type: { notIn: ["VIDEO", "PAGE"] } },
     orderBy: [{ documentId: "asc" }, { order: "asc" }],
@@ -104,23 +105,31 @@ async function reading(project: string, docIds: string[]): Promise<Reading> {
   const tokens = new Map(blocks.map((b) => [b.id, new Set(tokenize(b.text))]));
   const df = new Map<string, number>();
   for (const set of tokens.values()) for (const t of set) df.set(t, (df.get(t) ?? 0) + 1);
-  const out = { blocks, lines, lineOf: new Map(lines.map((l) => [l.blockId, l])), tokens, df, skeletons };
+  const out = { blocks, lines, lineOf: new Map(lines.map((l) => [l.blockId, l])), tokens, df, skeletons, titles: new Map(docs.map((d) => [d.id, d.title])) };
   readings.set(key, out);
   return out;
 }
 
 // ── The A/B of the real cut (--ab): STITCH_INDEX=0 against STITCH_INDEX ──
-type AbArm = { recall: number; lines: number; tokens: number };
-type AbRow = { budget: number; off: AbArm; on: AbArm; matches: number; matchesNeeded: number };
-const docLetter = (i: number) => (i < 26 ? String.fromCharCode(65 + i) : `${String.fromCharCode(65 + (i % 26))}${String.fromCharCode(65 + Math.floor(i / 26) - 1)}`);
+type AbArm = {
+  recall: number; lines: number; tokens: number;
+  missing: string[]; // one alias per needed group the cut left out
+  unroutedTokens: number; // the tokens of lines in documents the route pass left out (0 without a route)
+  emptyLines: number; emptyTokens: number; // lines that share no topic term with the query (function words only, or nothing)
+};
+type AbRow = { budget: number; off: AbArm; on: AbArm; matches: number; matchesNeeded: number; terms: string[]; named: string[]; routed: number };
+const docLetter = (i: number) => (i < 26 ? String.fromCharCode(65 + i) : `${String.fromCharCode(65 + Math.floor(i / 26) - 1)}${String.fromCharCode(65 + (i % 26))}`);
 const lineCost = (alias: string, text: string) => estTokens(text) + Math.ceil((alias.length + 9) / 4);
 
 /** The reading as pickBlocks sees it (aliases per document in reading
-    order, the skeleton lines under them), cut by the real cutLines with
-    and without the text-match channel, at the kind's budget and at the
-    stress budget. No route pass: at 200 documents production routes
-    first, so the cut there reads the routed parts' lines. */
-async function abCut(n: Needed, r: Reading, query: string): Promise<AbRow[]> {
+    order, the skeleton lines under them), cut by the real cutLines as
+    STITCH_INDEX=0 reads (no options) and as STITCH_INDEX reads (the text
+    matches, the function words dropped, the fill within the routed
+    documents, YEAR_TERM for a contradictions or date command, the named
+    documents whole), at the kind's budget and at the stress budget. With
+    `route` the cut reads the routed parts' lines, as production does at 200
+    documents. */
+async function abCut(n: Needed, r: Reading, query: string, words: string[]): Promise<AbRow[]> {
   const aliasOf = new Map<string, string>();
   const aliased: { id: string; alias: string; text: string }[] = [];
   n.docsRead.forEach((d, i) => {
@@ -133,36 +142,54 @@ async function abCut(n: Needed, r: Reading, query: string): Promise<AbRow[]> {
     }
   });
   const textOf = new Map<string, string>();
+  const partTitleOf = new Map<string, string>();
   const views = n.docsRead.flatMap((d, i) => {
     const sk = r.skeletons.get(d);
     if (!sk) return [];
     const parts = sk.parts.flatMap((p) => {
       const alias = aliasOf.get(p.blockId);
-      return alias ? [{ alias, title: p.title, summary: "" }] : [];
+      return alias ? [{ alias, title: /^Blocks \d+/.test(p.title) ? "" : p.title, summary: "", opening: /^Blocks \d+/.test(p.title) }] : [];
     });
-    const partStarts = new Set(parts.map((p) => p.alias));
+    const partStarts = new Map(parts.map((p) => [p.alias, p.title]));
     let partAlias: string | null = null;
     const lines = sk.lines.flatMap((l) => {
       const alias = aliasOf.get(l.blockId);
       if (!alias) return [];
       if (partStarts.has(alias)) partAlias = alias;
       textOf.set(alias, l.text);
+      partTitleOf.set(alias, partAlias ? (partStarts.get(partAlias) ?? "") : "");
       return [{ alias, text: l.text, partAlias }];
     });
-    return [{ r: { letter: docLetter(i) }, gist: "", parts, lines } as unknown as SkeletonView];
+    return [{ r: { letter: docLetter(i), doc: { id: d, title: r.titles.get(d) ?? "" } }, gist: "", parts, lines } as unknown as SkeletonView];
   });
   const matches = textMatches(aliased, query, STITCH_INDEX_TOP);
+  const routed = n.route && n.route.length > 0 ? new Set(n.route) : null;
+  const routedLetters = new Set([...(routed ?? [])].map((a) => a.replace(/\d+$/, "")));
+  const terms = asksContradictions(n.command) || asksDates(n.command) ? [YEAR_TERM] : [];
+  const namedDocs = titleMatches(views.map((v) => ({ doc: (v as unknown as { r: { doc: { id: string; title: string } } }).r.doc, letter: v.r.letter })), n.command, undefined, words);
+  const named = new Set(namedDocs.length <= STITCH_CUT_NAMED_DOCS ? namedDocs.map((d) => d.letter) : []);
   const neededAliases = new Set(n.needed.flatMap((g) => g.ids.map((id) => aliasOf.get(id) ?? "")));
-  const arm = (shown: Set<string>): AbArm => ({
-    recall: n.needed.length === 0 ? 1 : n.needed.filter((g) => g.ids.some((id) => shown.has(aliasOf.get(id) ?? ""))).length / n.needed.length,
-    lines: shown.size,
-    tokens: [...shown].reduce((s, a) => s + lineCost(a, textOf.get(a) ?? ""), 0),
-  });
+  const topic = new Set(tokenize(query).filter((t) => !STOP_WORDS.has(t)));
+  const arm = (shown: Set<string>): AbArm => {
+    let unroutedTokens = 0; let emptyLines = 0; let emptyTokens = 0; let tokens = 0;
+    for (const a of shown) {
+      const cost = lineCost(a, textOf.get(a) ?? "");
+      tokens += cost;
+      if (routed && !routedLetters.has(a.replace(/\d+$/, ""))) unroutedTokens += cost;
+      if (!tokenize(`${textOf.get(a) ?? ""} ${partTitleOf.get(a) ?? ""}`).some((t) => topic.has(t))) { emptyLines++; emptyTokens += cost; }
+    }
+    return {
+      recall: n.needed.length === 0 ? 1 : n.needed.filter((g) => g.ids.some((id) => shown.has(aliasOf.get(id) ?? ""))).length / n.needed.length,
+      lines: shown.size, tokens,
+      missing: n.needed.filter((g) => !g.ids.some((id) => shown.has(aliasOf.get(id) ?? ""))).map((g) => aliasOf.get(g.ids[0]) ?? g.ids[0]),
+      unroutedTokens, emptyLines, emptyTokens,
+    };
+  };
   const rows: AbRow[] = [];
   for (const budget of [n.kind === "links" ? STITCH_LINKS_SKELETON : STITCH_QUESTION_SKELETON, AB_STRESS]) {
-    const off = await cutLines(views, null, async () => query, budget);
-    const on = await cutLines(views, null, async () => query, budget, { matches });
-    rows.push({ budget, off: arm(off), on: arm(on), matches: matches.length, matchesNeeded: matches.filter((a) => neededAliases.has(a)).length });
+    const off = await cutLines(views, routed, async () => query, budget);
+    const on = await cutLines(views, routed, async () => query, budget, { matches, stop: true, withinRouted: true, terms, named });
+    rows.push({ budget, off: arm(off), on: arm(on), matches: matches.length, matchesNeeded: matches.filter((a) => neededAliases.has(a)).length, terms, named: [...named], routed: routed?.size ?? 0 });
   }
   return rows;
 }
@@ -314,7 +341,7 @@ async function main() {
       termInText, termInLine, rareTerms: rare.length,
       classified: commandIntent(n.command, n.continued, commandKind(n.command) as "question" | "links" | "page"),
     };
-    if (AB && n.path === "select") res.ab = await abCut(n, r, xQuery);
+    if (AB && n.path === "select") res.ab = await abCut(n, r, xQuery, words);
     for (const [name, l] of Object.entries(lists)) {
       const first = n.needed.length > 0 ? Math.min(...groupRanks(l.ids, n.needed).map((x) => (x === -1 ? Infinity : x))) : null;
       res.retrievers[name] = {
