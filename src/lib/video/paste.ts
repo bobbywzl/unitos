@@ -1,4 +1,5 @@
 import { normalizeSegments, type TranscriptSegment } from "@/lib/video/segments";
+import { srtCueLine, webVttCueText } from "@/lib/video/cue-text";
 import { parseTimeInput } from "@/lib/video/types";
 
 // A pasted transcript (SPEC.md §11): the last rung, and the one that never
@@ -26,7 +27,9 @@ function seconds(raw: string): number | null {
   return parseTimeInput(raw.replace(",", "."));
 }
 
-type Open = { start: number; end: number | null; text: string[] };
+// cue: opened by a "-->" range line (an SRT or WebVTT cue), so its lines are
+// cue text with markup.
+type Open = { start: number; end: number | null; text: string[]; cue?: boolean };
 
 /** Timed segments out of pasted text. Throws with a plain reason when the
     text is empty, too long, or carries no times. */
@@ -71,7 +74,7 @@ function looseCues(text: string): Open[] {
       const end = seconds(range[2]);
       if (start === null) continue;
       close();
-      open = { start, end: end !== null && end > start ? end : null, text: [] };
+      open = { start, end: end !== null && end > start ? end : null, text: [], cue: true };
       continue;
     }
     const alone = TIME_ONLY.exec(line);
@@ -91,7 +94,10 @@ function looseCues(text: string): Open[] {
         continue;
       }
     }
-    if (open) open.text.push(line);
+    if (open) {
+      const words = open.cue ? srtCueLine(line) : line;
+      if (words !== "") open.text.push(words);
+    }
   }
   close();
   return opens;
@@ -132,7 +138,8 @@ function webVttCues(text: string): Open[] {
       if (line === "") break;
       buffer.push(line.trim());
     }
-    if (cue) cues.push({ ...cue, text: buffer.filter((l) => l !== "") });
+    const words = cue ? webVttCueText(buffer.join("\n")) : "";
+    if (cue) cues.push({ ...cue, text: words === "" ? [] : [words] });
   };
   if (at < lines.length && lines[at] !== "") block(true);
   while (at < lines.length) {
