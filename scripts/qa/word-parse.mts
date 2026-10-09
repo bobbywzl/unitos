@@ -307,6 +307,18 @@ const words = (text: string) => `<w:r><w:t xml:space="preserve">${text}</w:t></w
   check("an icon on a line of its own is a figure", alone === "FIGURE", alone);
 }
 
+// ── A picture inline in a sentence follows the sentence ────────────────────
+
+{
+  const big = 952500; // 1 inch: no icon
+  const blocks = await parse(withPicture(`<w:p>${words("This picture ")}${picture(big)}${words(" is an identicon.")}</w:p>`));
+  const lines = blocks.map((b) => `${b.type}:${b.text}`).join("|");
+  check("a picture inline in a sentence follows the sentence, which stays one paragraph", lines === "PARAGRAPH:This picture is an identicon.|FIGURE:", JSON.stringify(lines));
+  const own = await parse(withPicture(`<w:p>${words("Before")}<w:r><w:br/></w:r>${picture(big)}<w:r><w:br/></w:r>${words("After")}</w:p>`));
+  const ownLines = own.map((b) => `${b.type}:${b.text}`).join("|");
+  check("a picture on a line of its own between words stays where it stands", /^PARAGRAPH:Before\s*\|FIGURE:\|PARAGRAPH:\s*After$/.test(ownLines), JSON.stringify(ownLines));
+}
+
 if (failed > 0) {
   console.log(`\n${failed} check(s) failed`);
   process.exit(1);

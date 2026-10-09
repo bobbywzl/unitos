@@ -1802,6 +1802,28 @@ class DocxReader {
       before: breaks.some((b) => !wordsIn(pieces.slice(0, b.piece)) && !textOf(b.piece).slice(0, b.at).trim()),
       after: breaks.some((b) => !wordsIn(pieces.slice(b.piece + 1)) && !textOf(b.piece).slice(b.at).trim()),
     };
+    // A picture inline in a sentence, words on both sides of it in the one
+    // line, follows the sentence: the page editor draws no picture inside a
+    // line, and a cut would make the sentence two paragraphs (Word benchmark
+    // finding: pandoc-inline_images' "This picture", a picture, "is an
+    // identicon."). A picture on a line of its own stays where it stands.
+    const joined: Piece[] = [];
+    let held: Piece[] = [];
+    const tail = () => {
+      const last = joined.at(-1);
+      return last?.kind === "words" && !last.line.empty && !/\n\s*$/.test(last.line.text) ? last.line : null;
+    };
+    for (const piece of pieces) {
+      const line = tail();
+      if (piece.kind === "figure" && !piece.icon && line) held.push(piece);
+      else if (piece.kind === "words" && held.length > 0 && line && !/^\s*\n/.test(piece.line.text)) line.append(piece.line);
+      else {
+        joined.push(...held, piece);
+        held = [];
+      }
+    }
+    joined.push(...held);
+    pieces.splice(0, pieces.length, ...joined);
     if (sink.floating.length > 0) pieces.push({ kind: "figure", pictures: sink.floating, icon: false });
     const words = pieces.some((piece) => piece.kind === "words" && !piece.line.empty);
     return pieces.filter((piece) => (piece.kind === "words" ? !piece.line.empty || piece.line.bookmarks.length > 0 || pieces.length === 1 : !(piece.kind === "figure" && piece.icon && words)));
