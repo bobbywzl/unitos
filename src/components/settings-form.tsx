@@ -478,6 +478,7 @@ export function SettingsForm({
     { label: "settings.dataDocuments", value: String(data.documents), desc: "settings.dataDocumentsDesc" },
     { label: "settings.dataNotes", value: String(data.notes) },
     { label: "settings.dataDigests", value: String(data.digests), desc: "settings.dataDigestsDesc" },
+    { label: "settings.dataKeptChats", value: String(data.keptChats), desc: "settings.dataKeptChatsDesc" },
     { label: "settings.dataPositions", value: String(data.positions), desc: "settings.dataPositionsDesc" },
     { label: "settings.dataClicks", value: String(data.clicks), desc: "settings.dataClicksDesc" },
     { label: "settings.dataUsage", value: String(data.usage), desc: "settings.dataUsageDesc" },
