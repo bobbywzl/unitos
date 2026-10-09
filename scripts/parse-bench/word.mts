@@ -7,7 +7,10 @@
 //     [--baseline] [--save-baseline] [--json out.json]
 //
 // The set is the test files of open-source Word readers and writers (pandoc,
-// mammoth, docx2python, python-docx, Apache POI, LibreOffice), saved under
+// mammoth, docx2python, python-docx, Apache POI, LibreOffice, docling,
+// MarkItDown, Apache Tika, docx4j) and documents people write in Word: a
+// thesis, legal agreements, a government guide, manuals, a Google Docs
+// handbook, forms, edited reports, Chinese, Arabic, and Hebrew files. Saved under
 // .bench/word/files by scripts/parse-bench/word-fetch.ts. word-corpus.json
 // names each file's source (the repository at a pinned commit, or the npm
 // package at a pinned version), its path there, its license, its sha256, and
