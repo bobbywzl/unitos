@@ -367,11 +367,14 @@ export function NoteGatherDock({
     const sentQuotes = gather.quotes;
     const sentContent = gather.content;
     const words = sentContent.trim();
-    // [lists9] WALK9-10: one link's two ends alone, with words — Note on this
+    // [lists9] WALK9-10: one link's ends alone, with words — Note on this
     // link — send the link (fromLinkId): the server quotes the link's own
     // anchors, as before. Any other note sends its quotes, re-found by text.
+    // [style10] REV10-08: a document-level link has one end (toBlockId null),
+    // so its one quote sends the link too; the note then copies the link's
+    // own source instead of re-finding it by text.
     const linkId =
-      words && sentQuotes.length === 2 && sentQuotes[0].linkId && sentQuotes.every((q) => q.linkId === sentQuotes[0].linkId)
+      words && sentQuotes.length >= 1 && sentQuotes[0].linkId && sentQuotes.every((q) => q.linkId === sentQuotes[0].linkId)
         ? sentQuotes[0].linkId
         : null;
     try {
