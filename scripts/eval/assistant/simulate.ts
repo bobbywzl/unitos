@@ -30,10 +30,20 @@ export type Simulation = {
 
 const TYPE_OF_KIND: Record<BlockKind, string> = { paragraph: "PARAGRAPH", h1: "HEADING", h2: "HEADING", h3: "HEADING", list: "LIST", numbered: "LIST" };
 
-/** The plan's actions over the blocks. */
-export function simulate(start: PlanContext["blocks"], actions: AssistantAction[], speakers: { id: string; name: string }[] = []): Simulation {
+/** The plan's actions over the blocks. sections: the project's sections
+    (id and title), so a note lands under its section's title, and a note
+    whose sectionTitle names no section makes that section, as the plan
+    card's executor does. */
+export function simulate(
+  start: PlanContext["blocks"],
+  actions: AssistantAction[],
+  speakers: { id: string; name: string }[] = [],
+  sections: { id: string; title: string }[] = [],
+): Simulation {
   const blocks: SimBlock[] = start.map((b) => ({ ...b, styles: [], links: [] }));
   const sim: Simulation = { blocks, annotations: [], notes: [], sections: [], documents: [], speakers: speakers.map((s) => ({ ...s })), failed: [] };
+  const titleById = new Map(sections.map((s) => [s.id, s.title]));
+  const known = new Set(sections.map((s) => s.title.toLowerCase()));
   const at = (id: string) => blocks.findIndex((b) => b.id === id);
   const lastInserted = new Map<string, string>();
   let fresh = 0;
@@ -124,10 +134,17 @@ export function simulate(start: PlanContext["blocks"], actions: AssistantAction[
         break;
       case "add_section":
         sim.sections.push(a.title);
+        known.add(a.title.toLowerCase());
         break;
-      case "add_note":
-        sim.notes.push({ section: a.sectionTitle ?? a.sectionId ?? "", content: a.content, sourced: Boolean(a.source), quote: a.source?.quotedText });
+      case "add_note": {
+        const title = a.sectionId ? (titleById.get(a.sectionId) ?? a.sectionId) : (a.sectionTitle ?? "");
+        if (!a.sectionId && title && !known.has(title.toLowerCase())) {
+          sim.sections.push(title);
+          known.add(title.toLowerCase());
+        }
+        sim.notes.push({ section: title, content: a.content, sourced: Boolean(a.source), quote: a.source?.quotedText });
         break;
+      }
       case "join_lines": {
         const i = at(a.blockId);
         const j = at(a.nextBlockId);

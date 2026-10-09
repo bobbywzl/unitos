@@ -260,7 +260,7 @@ function checkCase(c: AssistantCase, f: Fixture, ctx: PlanContext, read: ReadAct
     if (fresh.length > 0 && !insertExpected) faults.push(`${fresh.length} blocks added`);
     checks.push({ name: "untouched blocks keep words and place", ok: faults.length === 0, detail: faults.slice(0, 4).join("; ") });
   }
-  if (e.after || e.order || e.removed || e.kept) {
+  if (e.after || e.order || e.removed || e.kept || e.exists) {
     const faults: string[] = [];
     for (const x of e.after ?? []) {
       const b = after.get(idOf(x.block));
@@ -271,6 +271,16 @@ function checkCase(c: AssistantCase, f: Fixture, ctx: PlanContext, read: ReadAct
       for (const part of x.includes ?? []) if (!has(b.text, part)) faults.push(`block ${x.block} lacks "${part}"`);
       for (const part of x.excludes ?? []) if (has(b.text, part)) faults.push(`block ${x.block} still holds "${part}"`);
       if (x.kind && (b.kind ?? blockKind(b.type, b.html, b.text)) !== x.kind) faults.push(`block ${x.block} is not ${x.kind}`);
+      if (x.maxSentenceWords !== undefined) {
+        const longest = Math.max(0, ...b.text.split(/(?<=[.!?])\s+/).map((sentence) => wordCount(sentence)));
+        if (longest > x.maxSentenceWords) faults.push(`block ${x.block} has a sentence of ${longest} words`);
+      }
+    }
+    for (const x of e.exists ?? []) {
+      const found = sim.blocks.some(
+        (b) => (x.kind === undefined || (b.kind ?? blockKind(b.type, b.html, b.text)) === x.kind) && (x.includes ?? []).every((part) => has(b.text, part)),
+      );
+      if (!found) faults.push(`no block ${x.kind ? `of kind ${x.kind} ` : ""}holding ${(x.includes ?? []).map((part) => `"${part}"`).join(", ")}`);
     }
     const at = (n: number) => sim.blocks.findIndex((b) => b.id === idOf(n));
     for (const [a, b] of e.order ?? []) if (!(at(a) >= 0 && at(b) >= 0 && at(a) < at(b))) faults.push(`block ${a} is not before block ${b}`);
@@ -435,7 +445,7 @@ async function score(): Promise<void> {
       warnings.push(...revised.warnings);
     }
     const pending = pendingCalls(dir);
-    const sim = simulate(ctx.blocks, actions, ctx.transcript?.speakers ?? []);
+    const sim = simulate(ctx.blocks, actions, ctx.transcript?.speakers ?? [], fixtureSections(notes));
     const checks = checkCase(c, f, ctx, read, fence, text, actions, warnings, sim, pending);
     const before = new Map(ctx.blocks.map((b) => [b.id, b]));
     const afterById = new Map(sim.blocks.map((b) => [b.id, b]));
