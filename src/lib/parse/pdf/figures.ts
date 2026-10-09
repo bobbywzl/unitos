@@ -1453,6 +1453,45 @@ export function attachFigureRegions(
     const table = tableSegment(tableRows, 0, rows[0].page, { box, lineSize: size, mathShare: 0 }, { size, columns: [px1 - x1, x2 - px2] });
     return { table, rows };
   };
+  // A caption's lines, or a panel's caption's, that words level with them
+  // (another panel's caption, a drawing's labels) cut into pieces go on
+  // with it: a piece set at its left edge, in its size, a line's step under
+  // it, with only words outside its width read between them (parse loop
+  // finding: the MML book p. 334, the captions under two plots side by side
+  // read a line of each in turn, "(a) Distances … for some x̃ = z1b ∈",
+  // "(b) The vector x̃ that minimizes the distance", "U = span[b]; see panel
+  // (b) …", each a paragraph of its own).
+  for (let c = 0; c < withMath.length; c++) {
+    const cap = withMath[c];
+    if (consumed.has(cap) || cap.type !== "PARAGRAPH" || !cap.box || cap.lineSize === undefined) continue;
+    if (!(isCaption(cap.text, cap.runs) || isOcrCaption(cap.text, ctx) || isSubCaption(cap.text))) continue;
+    let between = 0;
+    for (let k = c + 1; k < withMath.length && between <= 12; k++) {
+      const s = withMath[k];
+      const capBox = cap.box;
+      if (consumed.has(s) || s.page !== cap.page || !s.box) continue;
+      if (s.box.x2 <= capBox.x1 || s.box.x1 >= capBox.x2) {
+        between++;
+        continue;
+      }
+      if (
+        between === 0 ||
+        s.type !== "PARAGRAPH" ||
+        s.lineSize === undefined ||
+        Math.abs(s.box.x1 - capBox.x1) > 1 ||
+        Math.abs(s.lineSize - cap.lineSize) >= 0.3 ||
+        capBox.y1 - s.box.y2 < -1 ||
+        capBox.y1 - s.box.y2 > cap.lineSize * ctx.leading * 0.9
+      )
+        break;
+      consumed.add(s);
+      const joined: { text: string; runs?: Run[] } = { text: cap.text, runs: cap.runs };
+      const offset = joinWrapped(joined, s.text);
+      cap.text = joined.text;
+      cap.runs = [...(joined.runs ?? []), ...(s.runs ?? []).map((r) => ({ ...r, start: r.start + offset, end: r.end + offset }))];
+      cap.box = unionBox(capBox, s.box);
+    }
+  }
   for (let c = 0; c < withMath.length; c++) {
     const cap = withMath[c];
     if (consumed.has(cap)) continue;
