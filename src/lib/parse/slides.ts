@@ -1136,6 +1136,14 @@ function inheritanceOf(scope: SlideScope, ph: { type: string; idx: string | null
   return chain;
 }
 
+// A shape with no xfrm, on it or on the placeholders it inherits from, has
+// no place of its own; its words still show. It takes the slide's frame, so
+// they start at the top left. Slides benchmark finding: such a shape or
+// table frame was dropped with its words.
+function slideFrame(ctx: Ctx): Box {
+  return { x: 0, y: 0, w: ctx.slideW, h: ctx.slideH, rot: 0, flipH: false, flipV: false };
+}
+
 function shapeBox(sp: Element, inherited: Element[], transform: Transform): Box | null {
   const candidates = [sp, ...inherited];
   for (const el of candidates) {
@@ -1152,8 +1160,7 @@ async function placeShape(scope: SlideScope, sp: Element, transform: Transform, 
   // not a shape the slide shows.
   if (ph && scope.decoration) return;
   const inherited = inheritanceOf(scope, ph);
-  const box = shapeBox(sp, inherited, transform);
-  if (!box) return;
+  const box = shapeBox(sp, inherited, transform) ?? slideFrame(ctx);
   const spPr = child(sp, "spPr");
   const style = child(sp, "style");
   const stylePalette = { ...palette };
@@ -1414,8 +1421,7 @@ async function placePicture(scope: SlideScope, pic: Element, transform: Transfor
 
 async function placeGraphicFrame(scope: SlideScope, frame: Element, transform: Transform, out: Placed[]): Promise<void> {
   const box = parseXfrm(child(frame, "xfrm"));
-  if (!box) return;
-  const placed = applyTransform(box, transform);
+  const placed = box ? applyTransform(box, transform) : slideFrame(scope.ctx);
   const data = child(frame, "graphic", "graphicData");
   const tbl = child(data, "tbl");
   if (tbl) {
