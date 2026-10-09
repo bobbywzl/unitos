@@ -6572,7 +6572,8 @@ export function ReaderInteractions({
   async function deleteWithPill(noteId: string, message: string) {
     try {
       await deleteNoteWithUndo(noteId, message, () => router.refresh());
-      router.refresh();
+      // Offline the delete is queued: a refresh would load the page anew.
+      refreshWhenOnline(router);
     } catch (err) {
       showError(err instanceof Error ? err.message : t("reader.deleteFailed"));
     }

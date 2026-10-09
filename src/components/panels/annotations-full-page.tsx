@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { AnnotationItem, SectionView } from "@/lib/types";
 import { deleteNoteWithUndo, deletedKey } from "@/lib/notes/undo-pill";
+import { refreshWhenOnline } from "@/lib/offline/queue";
 import { TOOL_KINDS, type ToolKind } from "@/lib/conversation";
 import { stripSimplifyMarkers } from "@/lib/sentences";
 import { CollapsedViewToggle } from "@/components/collapsed-view-toggle";
@@ -82,7 +83,8 @@ export function AnnotationsFullPage({
       // The pill below offers Undo (lib/notes/undo-pill.ts).
       const kind = every.find((a) => a.id === id)?.kind ?? "";
       await deleteNoteWithUndo(id, t(deletedKey(kind)), () => router.refresh());
-      router.refresh();
+      // Offline the delete is queued: a refresh would load the page anew.
+      refreshWhenOnline(router);
     } catch (err) {
       setErrorText(err instanceof Error ? err.message : t("common.requestFailed"));
     }

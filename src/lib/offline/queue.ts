@@ -4,7 +4,7 @@ import { ACCOUNT_HEADER } from "@/lib/constants";
 import { duplicateOf, type DuplicateMatch } from "@/lib/documents/duplicate-answer";
 import { confirmNoteDraft, holdNoteDraft, setHeldNoteDrafts } from "@/lib/note-drafts";
 import { openDb, tx, UPLOADS, WRITES } from "@/lib/offline/db";
-import { settleQueuedWrites } from "@/lib/save-state";
+import { forgetFailedPath, settleQueuedWrites } from "@/lib/save-state";
 import { readAccountCookie, tabAccount } from "@/lib/tab-account";
 import { MEDIA_EXTENSIONS, UPLOAD_CHUNK_BYTES } from "@/lib/video/types";
 
@@ -494,6 +494,10 @@ export async function dropQueuedWrite(path: string, method: QueuedWrite["method"
     });
     if (taken) {
       await holdQueuedNoteDrafts();
+      // Nothing it failed for is on its way any more: the header stops
+      // reading Not saved once no other write waits.
+      forgetFailedPath(path);
+      if ((await queuedCount()) === 0) settleQueuedWrites();
       notify();
     }
     return taken;
