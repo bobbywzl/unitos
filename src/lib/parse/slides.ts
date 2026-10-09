@@ -19,8 +19,10 @@ import {
   num,
   officeDocumentPath,
   parseTheme,
+  parseXml,
   parseXmlPart,
   partRels,
+  partText,
   relsOfType,
   resolveDrawingColor,
   rgbCss,
@@ -249,8 +251,16 @@ function presentationTitle(zip: OfficeZip): string | null {
   return title ? cleanText(title) : null;
 }
 
+// A custom shape's connection sites (a:cxnLst) are where connectors
+// attach: nothing draws or reads them, and in a deck of drawn shapes they
+// are a third of the elements. The part's text drops them before the DOM
+// is built, the slow step of a large deck's parse.
+const CONNECTION_SITES = /<a:cxnLst\b[^>]*\/>|<a:cxnLst\b[^>]*>[\s\S]*?<\/a:cxnLst>/g;
+
 function loadPart(zip: OfficeZip, path: string): Part | null {
-  const doc = parseXmlPart(zip, path);
+  const text = partText(zip, path);
+  if (text === null) return null;
+  const doc = parseXml(text.includes("<a:cxnLst") ? text.replace(CONNECTION_SITES, "") : text);
   if (!doc) return null;
   return { path, doc, rels: partRels(zip, path) };
 }
