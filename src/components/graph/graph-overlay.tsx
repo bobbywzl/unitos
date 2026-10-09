@@ -596,7 +596,6 @@ export function GraphOverlay({
   // Links accepted here count at once, before the refetch shows them (WALK4-15).
   const acceptedNow = useAcceptedNow();
   const acceptedHere = acceptedNow.size === 0 ? 0 : edges.reduce((sum, e) => sum + e.links.filter((l) => l.recommended && acceptedNow.has(l.id)).length, 0);
-  const acceptedLinks = edges.reduce((sum, e) => sum + e.accepted, 0) + acceptedHere;
   const generatedCount = nodes.filter((n) => n.kind === "generated").length;
   const ownDocs = nodes.length - generatedCount;
   const generatedNodeIds = useMemo(() => nodes.filter((n) => n.kind === "generated").map((n) => n.id), [nodes]);
@@ -678,12 +677,8 @@ export function GraphOverlay({
             list === "documents" ? "border-line bg-clay-100 text-clay-800" : "border-line text-sand-600"
           }`}
         >
-          {t("panes.graphCounts", {
-            docs: ownDocs,
-            ds: ownDocs === 1 ? "" : "s",
-            links: acceptedLinks,
-            ls: acceptedLinks === 1 ? "" : "s",
-          })}
+          {/* [style9] VIEW9-03: the documents alone; the links count is the Links pill's. */}
+          {t("panes.graphCounts", { docs: ownDocs, ds: ownDocs === 1 ? "" : "s" })}
           {/* Below 1500px the header keeps one short line, so the pills fit
               beside it: Generated content counts them. */}
           {generatedCount > 0 && (
@@ -709,6 +704,10 @@ export function GraphOverlay({
               their count; the full name is in the tooltip and read by a
               screen reader (WALK4-12). */}
           <NotesListToggle open={list === "notes"} onToggle={(e) => togglePill("notes", e)} controls={sideListId("notes")} />
+          {/* [style9] VIEW9-06: no Links or Recommended links pill before the
+              first document (an empty project showed four pills of zeros). */}
+          {nodes.length > 0 && (
+          <>
           <button
             onClick={(e) => togglePill("links", e)}
             data-track="graph-links"
@@ -722,9 +721,12 @@ export function GraphOverlay({
             <LinkIcon size={13} />
             {/* [chrome6] VIEW6-08: on a phone, the mark and the count. */}
             <span className="max-md:sr-only">{t("panes.graphLinks")}</span>
-            <span className={`rounded-full bg-sand-200 px-1.5 ${TEXT_META} font-semibold tabular-nums text-sand-700`}>
-              {allLinks}
-            </span>
+            {/* [style9] VIEW9-03: no count until the graph's data lands (it said 0). */}
+            {!loading && (
+              <span className={`rounded-full bg-sand-200 px-1.5 ${TEXT_META} font-semibold tabular-nums text-sand-700`}>
+                {allLinks}
+              </span>
+            )}
           </button>
           <button
             onClick={(e) => togglePill("recommended", e)}
@@ -743,10 +745,14 @@ export function GraphOverlay({
             <UnlinkIcon size={13} />
             <span className="max-[1399px]:sr-only">{t("panes.recommendedLinks")}</span>
             <span aria-hidden className="max-md:hidden min-[1400px]:hidden">{t("panes.recommendedLinksShort")}</span>
-            <span className={`rounded-full bg-sand-200 px-1.5 ${TEXT_META} font-semibold tabular-nums text-sand-700`}>
-              {recommended.length}
-            </span>
+            {!loading && (
+              <span className={`rounded-full bg-sand-200 px-1.5 ${TEXT_META} font-semibold tabular-nums text-sand-700`}>
+                {recommended.length}
+              </span>
+            )}
           </button>
+          </>
+          )}
           {/* [chrome6] VIEW6-03: no pill for an empty list. */}
           {generated.length > 0 && (
           <button
@@ -798,7 +804,12 @@ export function GraphOverlay({
         </p>
       )}
       <div className="relative min-h-0 flex-1">
-        {loading ? null : loadFailed ? (
+        {loading ? (
+          // [style9] VIEW9-03: the first open says it is loading, not a blank canvas.
+          <p role="status" data-graph-loading className={`flex h-full items-center justify-center px-8 text-center ${TEXT_BODY} text-sand-500`}>
+            {t("graphView.cardLoading")}
+          </p>
+        ) : loadFailed ? (
           // [view2] The graph's data did not arrive (offline with no copy, or a failed call).
           <div className={`flex h-full flex-col items-center justify-center gap-3 px-8 text-center ${TEXT_BODY} text-sand-600`}>
             <p>{t("graphView.loadFailed")}</p>

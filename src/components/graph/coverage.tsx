@@ -341,7 +341,13 @@ export function PartDot({ documentId, blockId }: { documentId: string; blockId: 
 export function CoverageRing({ documentId, size }: { documentId: string; size: number }) {
   const t = useT();
   const c = useDocumentCoverage(documentId);
+  // [style9] VIEW9-01: a comment waiting on this account marks the ring
+  // (data-waits): zoomed out, where the comments chip hides, globals.css
+  // draws the ring in the comment color, so every waiting node is marked at
+  // rest, at 40 documents and on a phone too.
+  const waits = useCommentWaits();
   if (!c || (c.parts.length === 0 && c.notes === 0)) return null;
+  const waiting = openComments(c).some(waits);
   const share = notedShare(c);
   const box = size + 11;
   const noted = c.parts.filter((p) => p.noted > 0).length;
@@ -357,6 +363,7 @@ export function CoverageRing({ documentId, size }: { documentId: string; size: n
     <svg
       data-graph-coverage-ring={documentId}
       data-share={share.toFixed(2)}
+      data-waits={waiting ? "" : undefined}
       role="img"
       aria-label={label}
       width={box}

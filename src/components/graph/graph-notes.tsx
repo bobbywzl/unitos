@@ -510,6 +510,7 @@ export function CurveMarks({
   links,
   count,
   at,
+  waits = false,
   onEnter,
   onLeave,
   onClick,
@@ -520,6 +521,10 @@ export function CurveMarks({
   count: number;
   /** Where the marks sit until the canvas has placed them. */
   at: Point;
+  /** [style9] VIEW9-01: one of the pair's links waits on this account
+      (useWaitsForReply, the rule the head and the Links list keep): the
+      replies mark ends with "?", as a node's comments chip does. */
+  waits?: boolean;
   onEnter?: () => void;
   onLeave?: () => void;
   onClick?: () => void;
@@ -562,6 +567,11 @@ export function CurveMarks({
             >
               <CommentIcon size={11} />
               <span data-n>{open}</span>
+              {waits && (
+                <span data-graph-curve-waits aria-label={t("graphCover.commentWaitsTitle")} className="-ml-0.5">
+                  ?
+                </span>
+              )}
               {/* [layer5] A reply another person wrote since this account last opened the link. */}
               {fresh && (
                 <span data-graph-curve-new aria-label={t("graphCover.newRepliesTitle")} className="size-1.5 rounded-full bg-[var(--kind-comment)]" />

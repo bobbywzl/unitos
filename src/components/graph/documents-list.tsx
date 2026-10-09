@@ -471,16 +471,19 @@ function DocumentRow({
     gapsOn
       ? gapReasonLines(t, coverage)
       : [
-          coverage && coverage.parts.length > 0 && !whole
-            ? t("graphCover.partsNoted", { n: notedParts, m: coverage.parts.length })
-            : parts.length > 0
-              ? t("panes.graphDocumentsParts", { n: parts.length, s: s(parts.length) })
-              : null,
-          coverage && !coverage.opened ? t("graphCover.notOpened") : null,
+          // [style9] VIEW9-04: the open comments first, so a cut line never
+          // drops their "?"; the parts last, in the head's short form
+          // ("1/2 parts noted"), so fewer lines cut at all.
           // [layer5] the open comments, with a "?" when one waits on you
           openList.length === 0
             ? null
             : `${openList.length === 1 ? t("graphCover.commentsOpenOne") : t("graphCover.commentsOpenMany", { n: openList.length })}${openList.some(waits) ? " ?" : ""}`,
+          coverage && !coverage.opened ? t("graphCover.notOpened") : null,
+          coverage && coverage.parts.length > 0 && !whole
+            ? t("graphCover.headParts", { n: notedParts, m: coverage.parts.length })
+            : parts.length > 0
+              ? t("panes.graphDocumentsParts", { n: parts.length, s: s(parts.length) })
+              : null,
           // [lists8] WALK8-03: the links and notes counts went to the opened row, which lists both.
         ]
   ).filter((c): c is string => c !== null);
