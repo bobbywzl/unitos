@@ -795,20 +795,23 @@ function renderRuns(
   let text = "";
   let firstSize: number | null = null;
   let firstColor: string | null = null;
-  const inherited = (rPr: Element | null): { size: number; color: string | null; css: string } => {
+  const inherited = (rPr: Element | null): { size: number; color: string | null; css: string; symbolFont: string | null } => {
     const runProps = rPr ? parseRunProps(rPr) : {};
     const sz = runProps.sz ?? levelProp(s.chain, level, "sz", own) ?? DEFAULT_FONT_PT * 100;
     const size = (sz / 100) * EMU_PER_PT * s.fontScale;
     const bold = runProps.bold ?? levelProp(s.chain, level, "bold", own) ?? false;
     const italic = runProps.italic ?? levelProp(s.chain, level, "italic", own) ?? false;
     const font = themeFont(runProps.font ?? levelProp(s.chain, level, "font", own) ?? s.defaultFont ?? undefined, s);
+    // Text set in Symbol or Wingdings carries the glyphs the font draws
+    // (symbolText), so it needs no symbol font to read.
+    const symbolFont = font && /^(?:symbol|wingdings)$/i.test(font) ? font : null;
     const runColor = runProps.color ? colorCss(runProps.color, s.palette) : null;
     const levelColor = levelProp(s.chain, level, "color", own);
     const color = s.forceColor ?? runColor ?? (levelColor ? colorCss(levelColor, s.palette) : null) ?? s.defaultColor;
     const styles = [`font-size:${cqw(size, s.slideW)}`];
     if (bold) styles.push("font-weight:700");
     if (italic) styles.push("font-style:italic");
-    if (font) {
+    if (font && !symbolFont) {
       styles.push(`font-family:${fontFamilyCss(font)}`);
       s.fonts.add(font);
     }
@@ -822,7 +825,7 @@ function renderRuns(
     else if (baseline && baseline < 0) styles.push("vertical-align:sub;font-size:0.65em");
     const highlight = rPr ? colorCss(colorElementIn(child(rPr, "highlight")), s.palette) : null;
     if (highlight) styles.push(`background-color:${highlight}`);
-    return { size, color, css: styles.join(";") };
+    return { size, color, css: styles.join(";"), symbolFont };
   };
   // The paragraph's runs, an mc:AlternateContent read through its Choice.
   const nodes: Element[] = [];
@@ -849,9 +852,11 @@ function renderRuns(
       text += t;
     } else if (node.localName === "r" || node.localName === "fld") {
       const rPr = child(node, "rPr");
-      const t = cleanText(child(node, "t")?.textContent ?? "");
-      if (t.length === 0) continue;
+      const raw = cleanText(child(node, "t")?.textContent ?? "");
+      if (raw.length === 0) continue;
       const run = inherited(rPr);
+      const sym = attr(child(rPr, "sym"), "typeface");
+      const t = run.symbolFont ? symbolText(raw, run.symbolFont, true) : sym ? symbolText(raw, sym, false) : raw;
       if (firstSize === null) {
         firstSize = run.size;
         firstColor = run.color;
@@ -904,6 +909,51 @@ function bulletGlyph(char: string, font: string | null): { char: string; symbol:
   const name = font.toLowerCase();
   const table = name === "wingdings" ? WINGDINGS_BULLETS : name === "symbol" ? SYMBOL_BULLETS : null;
   return { char: table?.get(code) ?? "•", symbol: true };
+}
+
+// What a symbol font draws for each code 0x20-0xFF: a letter typed in the
+// font, or the private-use code U+F020-U+F0FF PowerPoint writes for a symbol
+// inserted from it (a:sym names the font). Symbol is the Adobe encoding
+// (Greek, math); Wingdings is as Unicode maps it, with the common glyph of
+// the same shape where the bullets use one. "\0" = no glyph known. Slides
+// benchmark finding: 59 runs in 14 files read as private-use codes, a box
+// where the slide shows ☺, ➔ or ⇒.
+const SYMBOL_GLYPHS = Array.from(
+  " !∀#∃%&∋()∗+,−./0123456789:;<=>?" +
+    "≅ΑΒΧΔΕΦΓΗΙϑΚΛΜΝΟΠΘΡΣΤΥςΩΞΨΖ[∴]⊥_" +
+    "‾αβχδεφγηιϕκλμνοπθρστυϖωξψζ{|}∼\0" +
+    "\0".repeat(32) +
+    "€ϒ′≤⁄∞ƒ♣♦♥♠↔←↑→↓°±″≥×∝∂•÷≠≡≈…⏐⎯↵" +
+    "ℵℑℜ℘⊗⊕∅∩∪⊃⊇⊄⊂⊆∈∉∠∇®©™∏√⋅¬∧∨⇔⇐⇑⇒⇓" +
+    "◊〈®©™∑⎛⎜⎝⎡⎢⎣⎧⎨⎩⎪\0〉∫⌠⎮⌡⎞⎟⎠⎤⎥⎦⎫⎬⎭\0",
+);
+const WINGDINGS_GLYPHS = Array.from(
+  " ✏✂✁👓🕭🕮🕯🕿✆🖂🖃📪📫📬📭📁📂📄🗏🗐🗄⌛🖮🖰🖲🖳🖴🖫🖬✇✍" +
+    "🖎✌👌👍👎☜☞☝☟🖐☺😐☹💣☠🏳🏱✈☼💧❄🕆✞🕈✠✡☪☯ॐ☸♈♉" +
+    "♊♋♌♍♎♏♐♑♒♓🙰🙵●🔾■□🞐❑❒⬧⧫◆❖⬥⌧⮹⌘🏵🏶🙶🙷\0" +
+    "⓪①②③④⑤⑥⑦⑧⑨⑩⓿❶❷❸❹❺❻❼❽❾❿🙢🙠🙡🙣🙞🙜🙝🙟·•" +
+    "▪⚪🞆🞈◉◎🔿▪◻🟂✦★✶✴✹✵⯐⌖⟡⌑⯑✪✰🕐🕑🕒🕓🕔🕕🕖🕗🕘" +
+    "🕙🕚🕛⮰⮱⮲⮳⮴⮵⮶⮷🙪🙫🙕🙔🙗🙖🙐🙑🙒🙓⌫⌦⮘⮚⮙⮛⮈⮊⮉⮋🡨" +
+    "🡪🡩🡫🡬🡭🡯🡮🡸🡺🡹🡻🡼🡽🡿🡾⇦⇨⇧⇩⬄⇳⬀⬁⬃⬂▭▫✗✓☒☑\0",
+);
+for (const [code, glyph] of [[0x6d, "❍"], [0x70, "◻"], [0xa1, "○"], [0xa8, "◻"], [0xd8, "➢"], [0xe0, "➔"], [0xe8, "➔"]] as const) {
+  WINGDINGS_GLYPHS[code - 0x20] = glyph;
+}
+
+/** A run's text as a symbol font draws it: every character when the run is
+    set in the font (whole), else only the private-use codes U+F020-U+F0FF. */
+function symbolText(text: string, font: string, whole: boolean): string {
+  const name = font.toLowerCase();
+  const table = name === "symbol" ? SYMBOL_GLYPHS : name === "wingdings" ? WINGDINGS_GLYPHS : null;
+  if (!table) return text;
+  let out = "";
+  for (const ch of text) {
+    const c = ch.codePointAt(0) ?? 0;
+    const code = c >= 0xf020 && c <= 0xf0ff ? c - 0xf000 : whole && c >= 0x20 && c <= 0xff ? c : null;
+    const glyph = code !== null ? table[code - 0x20] : "\0";
+    out += glyph === "\0" ? ch : glyph;
+  }
+  return out;
 }
 
 function hyperlinkOf(rPr: Element | null, s: TextSettings): string | null {
