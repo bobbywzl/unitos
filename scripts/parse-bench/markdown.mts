@@ -13,11 +13,15 @@
 //   (tables, task lists, strikethrough, autolinks), each scored against the
 //   spec's expected HTML. An example's id is commonmark-<n> or gfm-<n>.
 // - md: Markdown files from public repositories (READMEs, docs, changelogs,
-//   CJK docs, math, front matter, raw HTML, very long files), scored against
-//   markdown-it's reading of the same file.
-// - txt: plain text files (Project Gutenberg books, RFCs, logs, licenses,
-//   build files, the Vim tutor in eleven legacy encodings, UTF-16 and
-//   Windows-1252 copies), scored against the file's own words decoded in the
+//   CJK docs, math, front matter, raw HTML, very long files, MDX-like docs
+//   with components, Jupyter notebook exports, Obsidian notes, MkDocs,
+//   Hugo, and MyST dialects), scored against markdown-it's reading of the
+//   same file.
+// - txt: plain text files (Project Gutenberg books, plays, and poems, RFCs,
+//   logs, licenses, build files, AsciiDoc, org-mode, and reST saved as
+//   .txt, subtitles, CSV, a one-line file, mixed scripts, the Vim tutor in
+//   eleven legacy encodings, ISO-2022-JP, UTF-16 and Windows-1252 copies, a
+//   paragraph-per-line copy), scored against the file's own words decoded in the
 //   encoding the corpus names, and, where there is one, the structure of
 //   the same book's HTML edition (Project Gutenberg's), an RFC's section
 //   headings, or a log's lines.
@@ -552,8 +556,27 @@ function score(ref: Ref, ours: Ours, mode: "md" | "txt", refWords: string[], opt
   // the heading's words.
   let links: number | null = null;
   if (mode === "md") {
+    // An address compares as the URL it names: the parse resolves each
+    // link's address (a bare origin gains its "/", the scheme reads in
+    // small letters, a character the spec writes percent-encoded, "%5C",
+    // stays as written, "\"), and the spec writes it as typed. Before, the
+    // same address written two ways counted as a wrong link
+    // (<http://foo.bar.baz> read "http://foo.bar.baz/").
+    const address = (h: string) => {
+      if (h.startsWith("#")) return h;
+      try {
+        const href = new URL(h).href;
+        try {
+          return decodeURI(href);
+        } catch {
+          return href;
+        }
+      } catch {
+        return h;
+      }
+    };
     const norm = (pairsIn: [string, string][]) =>
-      pairsIn.filter(([, h]) => /^(https?:|mailto:|#)/i.test(h)).map(([t, h]) => `${key(t)}\u0000${h.trim()}`);
+      pairsIn.filter(([, h]) => /^(https?:|mailto:|#)/i.test(h)).map(([t, h]) => `${key(t)}\u0000${address(h.trim())}`);
     const slugText = new Map<string, string>();
     const seen = new Map<string, number>();
     for (const u of ref.units) {
@@ -743,6 +766,11 @@ if (detail) {
     console.log(`\nTitle: ${run.title}${run.blockDocument ? "  (stays a block document: past the size guard)" : ""}`);
     console.log(`Blocks (${run.blocks.length}):`);
     for (const b of run.blocks.slice(0, 60)) console.log(`  ${b.type.padEnd(9)} ${JSON.stringify(b.text.slice(0, 140))}`);
+    if (ref?.links.length || run.import.links.length) {
+      console.log(`Links: the reference's ${ref?.links.length ?? 0}, the import's ${run.import.links.length}`);
+      for (const [t, h] of (ref?.links ?? []).slice(0, 15)) console.log(`  ref     ${JSON.stringify(t.slice(0, 60))} → ${h}`);
+      for (const [t, h] of run.import.links.slice(0, 15)) console.log(`  import  ${JSON.stringify(t.slice(0, 60))} → ${h}`);
+    }
   }
   process.exit(0);
 }
@@ -795,12 +823,16 @@ for (const s of sets) {
   allTotals[s] = t;
   console.log(
     `${s.padEnd(4)} score ${fmt(t.score)} (parse ${fmt(t.parseScore)})  words ${fmt(t.words)}  structure ${fmt(t.structure)}  order ${fmt(t.order)}  breaks ${fmt(t.breaks)}  links ${fmt(t.links)}  lost ${t.lost}  extra ${t.extra}  ` +
-      `files ${rs.length}  errors ${rs.filter((r) => r.error).length}  time ${(t.ms / 1000).toFixed(1)} s`,
+      // An error on a file that shows nothing (an empty fence, one HTML
+      // comment, a lone link definition) loses nothing: the add says the
+      // file has no content, and the file is counted as empty, not as an
+      // error.
+      `files ${rs.length}  errors ${rs.filter((r) => r.error && r.import.score < 1).length}  empty ${rs.filter((r) => r.error && r.import.score === 1).length}  time ${(t.ms / 1000).toFixed(1)} s`,
   );
 }
 
 const json = value("--json");
-if (json) writeFileSync(json, JSON.stringify(results.map((r) => ({ ...r, parse: { ...r.parse, missed: undefined, wrongKind: undefined, strays: undefined, badBreaks: undefined }, import: { ...r.import, missed: undefined, wrongKind: undefined, strays: undefined, badBreaks: undefined } })), null, 1));
+if (json) writeFileSync(json, JSON.stringify(results.map((r) => ({ ...r, parse: { ...r.parse, missed: undefined, wrongKind: undefined, strays: undefined, badBreaks: undefined }, import: { ...r.import, missed: r.import.missed.slice(0, 10), wrongKind: r.import.wrongKind.slice(0, 10), strays: r.import.strays.slice(0, 10), badBreaks: r.import.badBreaks.slice(0, 10) } })), null, 1));
 
 type Baseline = { total: Record<string, { score: number; parse: number; words: number; lost: number }>; files: Record<string, [number, number]> };
 const round = (x: number) => Math.round(x * 1000) / 1000;

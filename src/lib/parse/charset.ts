@@ -65,17 +65,33 @@ export function pageCharsets(bytes: Uint8Array, contentType?: string | null): st
   return out;
 }
 
+// Windows-1252's characters at 0x80–0x9F (a hole reads as its C1 code point,
+// as the WHATWG decoder reads it). Node's TextDecoder("windows-1252") reads
+// these bytes as Latin-1's C1 controls (Node 22): a curly apostrophe, a
+// dash, an euro sign read as nothing. A page that declares iso-8859-1 or
+// windows-1252 decodes through it too: before, its dashes and curly quotes
+// read as controls (web benchmark finding: 9 of 1,217 pages, "Ich bin Du –
+// und Du schaust zu" read "Ich bin Du  und Du schaust zu").
+const WINDOWS_1252_HIGH =
+  "€\u0081‚ƒ„…†‡ˆ‰Š‹Œ\u008DŽ\u008F\u0090‘’“”•–—˜™š›œ\u009DžŸ";
+
+function decodeIn(label: string, bytes: Uint8Array, fatal = false): string {
+  const text = new TextDecoder(label, { fatal }).decode(bytes);
+  if (label !== "windows-1252") return text;
+  return text.replace(/[\u0080-\u009f]/g, (c) => WINDOWS_1252_HIGH[c.charCodeAt(0) - 0x80]);
+}
+
 /** The page's text from its bytes. */
 export function decodePage(bytes: Uint8Array, contentType?: string | null): string {
   const charsets = pageCharsets(bytes, contentType);
   for (const charset of charsets) {
     try {
-      return new TextDecoder(charset, { fatal: true }).decode(bytes);
+      return decodeIn(charset, bytes, true);
     } catch {
       // The bytes are not in this charset: the next declared one may read them.
     }
   }
-  return new TextDecoder(charsets[0]).decode(bytes);
+  return decodeIn(charsets[0], bytes);
 }
 
 // ── A text file's charset ───────────────────────────────────────────────────
@@ -204,18 +220,6 @@ function readingScore(text: string): number {
   return score;
 }
 
-// Windows-1252's characters at 0x80–0x9F (a hole reads as its C1 code point,
-// as the WHATWG decoder reads it). Node's TextDecoder("windows-1252") reads
-// these bytes as Latin-1's C1 controls (Node 22): a curly apostrophe, a
-// dash, an euro sign read as nothing.
-const WINDOWS_1252_HIGH =
-  "€\u0081‚ƒ„…†‡ˆ‰Š‹Œ\u008DŽ\u008F\u0090‘’“”•–—˜™š›œ\u009DžŸ";
-
-function decodeIn(label: string, bytes: Uint8Array): string {
-  if (label !== "windows-1252") return new TextDecoder(label).decode(bytes);
-  return new TextDecoder("windows-1252").decode(bytes).replace(/[\u0080-\u009f]/g, (c) => WINDOWS_1252_HIGH[c.charCodeAt(0) - 0x80]);
-}
-
 /** UTF-16 with no byte order mark: a NUL beside most characters of the
     start, on the even bytes (big-endian) or the odd ones (little-endian). */
 function utf16Shape(bytes: Uint8Array): "utf-16le" | "utf-16be" | null {
@@ -233,12 +237,31 @@ function utf16Shape(bytes: Uint8Array): "utf-16le" | "utf-16be" | null {
   return null;
 }
 
+/** ISO-2022-JP: 7-bit bytes only, and an escape that switches to a JIS
+    set (ESC $ B, ESC $ @, ESC ( J, ESC ( I). Every byte of such a file
+    reads as UTF-8, so the UTF-8 test alone took it as ASCII with escapes
+    (Markdown benchmark finding: the Emacs tutorial in Japanese, the
+    charset of Japanese mail, lost 92% of its words). */
+function isIso2022Jp(bytes: Uint8Array): boolean {
+  let escapes = 0;
+  for (let i = 0; i < bytes.length; i++) {
+    const b = bytes[i];
+    if (b >= 0x80) return false;
+    if (b !== 0x1b) continue;
+    const a = bytes[i + 1];
+    const c = bytes[i + 2];
+    if ((a === 0x24 && (c === 0x42 || c === 0x40)) || (a === 0x28 && (c === 0x4a || c === 0x49))) escapes++;
+  }
+  return escapes > 0;
+}
+
 /** The charset a text file is in (see above). */
 export function textFileCharset(bytes: Uint8Array): string {
   const bom = bomCharset(bytes);
   if (bom) return bom;
   const wide = utf16Shape(bytes);
   if (wide) return wide;
+  if (isIso2022Jp(bytes)) return "iso-2022-jp";
   try {
     new TextDecoder("utf-8", { fatal: true }).decode(bytes);
     return "utf-8";
@@ -268,5 +291,27 @@ export function textFileCharset(bytes: Uint8Array): string {
 /** A text file's text from its bytes, in the charset textFileCharset finds.
     The byte order mark is not text. */
 export function decodeTextFile(bytes: Uint8Array): string {
-  return decodeIn(textFileCharset(bytes), bytes);
+  const charset = textFileCharset(bytes);
+  const text = decodeIn(charset, bytes);
+  return charset === "euc-kr" ? composeFilledHangul(text) : text;
+}
+
+// EUC-KR writes a syllable outside its 2,350 as the Hangul filler (0xA4D4)
+// and three jamo: initial, medial, final (the filler again when the
+// syllable has no final). The WHATWG decoder leaves the four characters
+// apart, as "ㅤㅆㅠㅤ"; Python's euc_kr codec and Windows' code page 949
+// put the syllable together. A text file reads them together; a web page
+// keeps the WHATWG decode, as a browser shows it.
+const CHOSEONG = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ";
+const JONGSEONG = "\u3164ㄱㄲㄳㄴㄵㄶㄷㄹㄺㄻㄼㄽㄾㄿㅀㅁㅂㅄㅅㅆㅇㅈㅊㅋㅌㅍㅎ";
+const FILLED_HANGUL_RX = /\u3164([\u3131-\u314e])([\u314f-\u3163])([\u3131-\u314e\u3164])/g;
+
+function composeFilledHangul(text: string): string {
+  return text.replace(FILLED_HANGUL_RX, (whole, cho: string, jung: string, jong: string) => {
+    const c = CHOSEONG.indexOf(cho);
+    const f = JONGSEONG.indexOf(jong);
+    if (c < 0 || f < 0) return whole;
+    const v = jung.charCodeAt(0) - 0x314f;
+    return String.fromCharCode(0xac00 + (c * 21 + v) * 28 + f);
+  });
 }

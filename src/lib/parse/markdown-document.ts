@@ -10,7 +10,7 @@ import type {
 } from "mdast";
 import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
-import { unified } from "unified";
+import { type Plugin, unified } from "unified";
 import { MARKDOWN_EXTENSIONS } from "@/lib/markdown-file";
 import { decodeTextFile } from "@/lib/parse/charset";
 import type { ParsedDocument } from "@/lib/parse/types";
@@ -84,6 +84,38 @@ export function setAsideMath(source: string): { text: string; spans: TexSpan[] }
   return { text: out.join("\n"), spans };
 }
 
+// A text file's "#" lines as comments. In Markdown, "# Words" is a heading,
+// and a heading mostly stands apart, a blank line before it and after it
+// (the benchmark's Markdown in .txt files: pandoc's manual, 0 of 255
+// headings between two written lines). A .txt file of code or settings (a
+// CMakeLists.txt, a shell script, an org file's source blocks) writes its
+// comments with "#", on the lines next to the code they comment on (json's
+// CMakeLists.txt: 30 of 43). When half a .txt file's "#" lines or more
+// have a written line right before and right after, its "#" lines are
+// comments: each is escaped, and reads as the line it is. A .md file is
+// Markdown by its name, and keeps its headings however tight (public-apis'
+// README: 48 of 59 between written lines).
+const ATX_LINE_RX = /^( {0,3})(#{1,6}(?:[ \t]|$))/;
+const HASH_COMMENTS_SHARE_MIN = 0.5;
+
+function hashLinesAsComments(source: string, filename: string): string {
+  if (!/\.txt$/i.test(filename)) return source;
+  const lines = source.split("\n");
+  const hashes: number[] = [];
+  let fence: string | null = null;
+  lines.forEach((line, i) => {
+    const open = FENCE_RX.exec(line);
+    if (fence === null && open) fence = open[1];
+    else if (fence !== null) {
+      if (open && open[1][0] === fence[0] && open[1].length >= fence.length) fence = null;
+    } else if (ATX_LINE_RX.test(line)) hashes.push(i);
+  });
+  const between = hashes.filter((i) => lines[i - 1]?.trim() && lines[i + 1]?.trim()).length;
+  if (hashes.length === 0 || between < hashes.length * HASH_COMMENTS_SHARE_MIN) return source;
+  for (const i of hashes) lines[i] = lines[i].replace(ATX_LINE_RX, "$1\\$2");
+  return lines.join("\n");
+}
+
 /** Text with each placeholder put back as words: an inline formula as its
     readable characters (inlineTexText), display math as its TeX (an
     EQUATION block's words), TeX KaTeX cannot draw as written. For text that
@@ -104,10 +136,26 @@ export function mathAsWritten(value: string, spans: TexSpan[]): string {
   return value.replace(PLACEHOLDER_RX, (_, index: string) => spans[Number(index)]?.source ?? "");
 }
 
-// Front matter: the title line, when there is one; the rest drops.
+// Front matter: the title line, when there is one; the rest drops. Front
+// matter is YAML's keys: each of its lines a key ("title: Intro"), a line
+// set in under one, a list's "- " item, or a "#" comment. Lines of words
+// between two "---" lines are no front matter: the first is a thematic
+// break, the words a heading over the second ("---\nFoo\n---\nBar"). Before,
+// those words dropped (Markdown benchmark finding: CommonMark example 96).
+const FRONT_MATTER_KEY_RX = /^[\w$][\w$ .-]*:(?:\s|$)/;
+const FRONT_MATTER_MORE_RX = /^(?:\s|-(?:\s|$)|#)/;
+
+function isFrontMatter(block: string): boolean {
+  const lines = block.split("\n").filter((line) => line.trim());
+  return (
+    lines.some((line) => FRONT_MATTER_KEY_RX.test(line)) &&
+    lines.every((line) => FRONT_MATTER_KEY_RX.test(line) || FRONT_MATTER_MORE_RX.test(line))
+  );
+}
+
 function splitFrontMatter(source: string): { body: string; title: string | null } {
   const m = /^---\n([\s\S]*?)\n---\n?/.exec(source);
-  if (!m) return { body: source, title: null };
+  if (!m || !isFrontMatter(m[1])) return { body: source, title: null };
   const line = /^title:\s*(.+)$/m.exec(m[1]);
   const title = line ? line[1].trim().replace(/^["']|["']$/g, "").trim() : null;
   return { body: source.slice(m[0].length), title: title || null };
@@ -174,6 +222,70 @@ const HTML_ELEMENTS = new Set(
     "math mi mo mn ms mtext mrow mfrac msqrt mroot msub msup msubsup munder mover munderover mtable mtr mtd mspace semantics annotation"
   ).split(" "),
 );
+// An element whose words HTML reads as raw text up to its closing tag:
+// opened and never closed, it takes the rest of the file. A note's "Put
+// CSS in a <style> element." kept "Put CSS in a" and lost every word
+// after it; "<textarea>" and "<title>" turned the rest of the file into
+// one paragraph of tags. An opening tag of one inside a paragraph, that
+// the file never closes, is words, as GFM's tag filter writes it.
+const RAW_TEXT_ELEMENTS = new Set(["script", "style", "textarea", "title", "iframe", "noembed", "noframes", "xmp", "plaintext"]);
+
+// GFM tables, resolved one table at a time. micromark-extension-gfm-table
+// resolves every table of a file in one pass whose edit list it searches
+// from the start on each edit: the time grows with the square of the
+// file's table cells (Markdown benchmark finding: public-apis' README, 2,100
+// table rows, took 6.3 s in the table pass alone). Each table's events are
+// handed to the same resolver on their own, from the table's head to its
+// last row; the resolver keeps no state from one table to the next, so the
+// tree is the same.
+type MicromarkEvent = [string, { type: string }, unknown];
+type MicromarkContext = { events: MicromarkEvent[] };
+type TableResolver = (events: MicromarkEvent[], context: MicromarkContext) => MicromarkEvent[];
+type FlowConstruct = { name?: string; resolveAll?: TableResolver };
+
+function tablesOneByOne(resolve: TableResolver): TableResolver {
+  return (events, context) => {
+    if (events !== context.events) return resolve(events, context);
+    const spans: Array<[number, number]> = [];
+    events.forEach(([side, token], i) => {
+      if (side === "enter" && token.type === "tableHead") spans.push([i, i]);
+      else if (side === "exit" && spans.length > 0 && /^table(Head|Row|DelimiterRow)$/.test(token.type)) {
+        spans[spans.length - 1][1] = i;
+      }
+    });
+    if (spans.length < 2) return resolve(events, context);
+    const out: MicromarkEvent[] = [];
+    let at = 0;
+    for (const [start, end] of spans) {
+      for (let i = at; i < start; i++) out.push(events[i]);
+      const own: MicromarkContext = Object.create(context);
+      own.events = events.slice(start, end + 1);
+      resolve(own.events, own);
+      for (const event of own.events) out.push(event[2] === own ? [event[0], event[1], context] : event);
+      at = end + 1;
+    }
+    for (let i = at; i < events.length; i++) out.push(events[i]);
+    events.length = 0;
+    for (const event of out) events.push(event);
+    return events;
+  };
+}
+
+const remarkTablesOneByOne: Plugin<[], Root> = function () {
+  const data = this.data() as { micromarkExtensions?: unknown[] };
+  const extensions = (data.micromarkExtensions ?? []) as Array<{ flow?: Record<string, FlowConstruct | FlowConstruct[]> }>;
+  for (const extension of extensions) {
+    const flow = extension.flow;
+    if (!flow) continue;
+    for (const [code, constructs] of Object.entries(flow)) {
+      flow[code] = (Array.isArray(constructs) ? constructs : [constructs]).map((construct) =>
+        construct.name === "table" && construct.resolveAll
+          ? { ...construct, resolveAll: tablesOneByOne(construct.resolveAll) }
+          : construct,
+      );
+    }
+  }
+};
 
 // The mdast tree as HTML for the walk.
 class Renderer {
@@ -317,7 +429,7 @@ class Renderer {
       case "break":
         return "<br>";
       case "html":
-        return this.html(node.value);
+        return this.html(node.value, true);
       case "link":
         return this.link(node.url, node.children);
       case "linkReference": {
@@ -362,10 +474,14 @@ class Renderer {
 
   // Raw HTML, with the math set aside put back as text puts it back, and a
   // bare tag of no element's name that the file never closes as its words.
-  private html(value: string): string {
+  // Inside a paragraph, a raw-text element's tag the file never closes is
+  // words too; an HTML block that opens on one ("<style\n type=...>") is
+  // markup, as CommonMark reads it.
+  private html(value: string, inline = false): string {
     return value
       .replace(TAG_RX, (tag: string, name: string) => {
         const lower = name.toLowerCase();
+        if (inline && RAW_TEXT_ELEMENTS.has(lower) && !tag.startsWith("</") && !this.closed.has(lower)) return escapeHtml(tag);
         return BARE_TAG_RX.test(tag) && !HTML_ELEMENTS.has(lower) && !this.closed.has(lower) ? escapeHtml(tag) : tag;
       })
       .replace(PLACEHOLDER_RX, (_, index: string) => this.math(Number(index)));
@@ -391,10 +507,14 @@ class Renderer {
 // rules read it. Each reads a line that stands alone: one line, a blank line
 // under it, and a blank line above it past the file's first line.
 //   1. The file's first line, when short, is the Title ("Imports audit 5").
-//   2. A short line in capitals is a heading ("THE REPLAY WINDOW").
+//   2. A short line in capitals is a heading ("THE REPLAY WINDOW"), unless
+//      the same line stands alone three times or more: a play's speaker
+//      ("JOCRISSE", 69 times in Le Dîner interrompu), not a part of the
+//      outline, which names each part once.
 // A line that ends a sentence (a period, a comma, a colon, a semicolon) is
 // neither. A file with a heading of its own, or with front matter, is
 // Markdown as written, and neither rule runs.
+const TEXT_SPEAKER_LINES_MIN = 3;
 const TEXT_TITLE_CHARS_MAX = 80;
 const TEXT_TITLE_WORDS_MAX = 12;
 const TEXT_HEADING_CHARS_MAX = 60;
@@ -478,6 +598,49 @@ function hasMarkdownMarks(nodes: PhrasingContent[], source: string): boolean {
   });
 }
 
+// A table of values saved as text (a .csv or .tsv file named .txt): every
+// line holds the same count of field separators, two or more, outside
+// double quotes. Its lines are its rows, and stay lines, however long
+// (Markdown benchmark finding: a CSV of 250 rows read as one paragraph).
+const FIELD_SEPARATORS = [",", "\t", ";"];
+const DELIMITED_SHARE_MIN = 0.9;
+
+function fieldSeparators(line: string, separator: string): number {
+  let n = 0;
+  let quoted = false;
+  for (const c of line) {
+    if (c === '"') quoted = !quoted;
+    else if (c === separator && !quoted) n++;
+  }
+  return n;
+}
+
+function isDelimited(lines: string[]): boolean {
+  if (lines.length < 3) return false;
+  return FIELD_SEPARATORS.some((separator) => {
+    const counts = new Map<number, number>();
+    for (const line of lines) {
+      const n = fieldSeparators(line, separator);
+      counts.set(n, (counts.get(n) ?? 0) + 1);
+    }
+    const [n, count] = [...counts].sort((a, b) => b[1] - a[1])[0];
+    return n >= 2 && count >= lines.length * DELIMITED_SHARE_MIN;
+  });
+}
+
+// A verse's lines each open with a capital letter (after a quote mark or
+// a dash): a stanza of four lines or more whose every line does is verse,
+// though its lines are full and end on no stop ("Eagerly I wished the
+// morrow;--vainly I had sought to borrow"). Wrapped prose opens most of
+// its lines on a small letter. Markdown benchmark finding: half the
+// Raven's stanzas read as one run of words.
+const VERSE_LINES_MIN = 4;
+const CAPITAL_OPENING_RX = /^[\p{P}\s]*\p{Lu}/u;
+
+function verseCapitals(lines: string[]): boolean {
+  return lines.length >= VERSE_LINES_MIN && lines.every((line) => CAPITAL_OPENING_RX.test(line));
+}
+
 /** A line's first word's shape: each letter as "a", each digit as "0". */
 function openingShape(line: string): string {
   return (/^\S+/.exec(line)?.[0] ?? "").replace(/\p{L}/gu, "a").replace(/\p{N}/gu, "0");
@@ -497,7 +660,7 @@ function withLineBreaks(nodes: PhrasingContent[]): PhrasingContent[] {
   });
 }
 
-function keepTextLines(root: Root, source: string) {
+function keepTextLines(root: Root, source: string, comments: boolean) {
   const lines = source.split("\n");
   const linesOf = (node: RootContent) =>
     node.position ? lines.slice(node.position.start.line - 1, node.position.end.line).map((l) => l.trim()) : [];
@@ -519,13 +682,15 @@ function keepTextLines(root: Root, source: string) {
     const stops = own.slice(0, -1).filter((line) => TEXT_STOP_RX.test(line)).length;
     const shapes = new Map<string, number>();
     for (const line of own) shapes.set(openingShape(line), (shapes.get(openingShape(line)) ?? 0) + 1);
-    const alike = Math.max(...shapes.values()) >= own.length * TEXT_SAME_OPENING_MIN;
-    const marks = own.some((line) => MARKDOWN_MARKS_RX.test(line)) || hasMarkdownMarks(node.children, source);
+    const alike = Math.max(...shapes.values()) >= own.length * TEXT_SAME_OPENING_MIN || isDelimited(own);
+    // A comment's escaped "#" (hashLinesAsComments) is the file's own mark, not Markdown's.
+    const marks =
+      own.some((line) => MARKDOWN_MARKS_RX.test(comments ? line.replace(/^\\#/, "#") : line)) || hasMarkdownMarks(node.children, source);
     if (marks && !(alike && own.length >= TEXT_ALIKE_OVER_MARKS_MIN)) continue;
     const keep =
       own.length === 2
         ? full === 0 && stops === 1
-        : full <= (own.length - 1) * TEXT_FULL_LINES_MAX || stops >= (own.length - 1) * TEXT_STOP_LINES_MIN || alike;
+        : full <= (own.length - 1) * TEXT_FULL_LINES_MAX || stops >= (own.length - 1) * TEXT_STOP_LINES_MIN || alike || verseCapitals(own);
     if (keep) node.children = withLineBreaks(node.children);
   }
 }
@@ -554,12 +719,13 @@ function hasHashHeading(node: Root | RootContent, lines: string[]): boolean {
 //    benchmark finding: five RFCs, 3 to 260 headings each, none found).
 // 5. A line that stands alone and opens with a chapter's word and its
 //    number ("CHAPTER II. The Pool of Tears", "Letter 4", "BOOK I",
-//    "Chapitre XII") is a heading at level 2, though it ends on a period.
+//    "Chapitre XII", "SCÈNE 2e": a French ordinal's ending is the number's)
+//    is a heading at level 2, though it ends on a period.
 //    Before, a novel's chapters read as paragraphs: the capitals rule
 //    takes no small letter, and no line ending on a period (Markdown
 //    benchmark finding: every Gutenberg novel of the set).
 const CHAPTER_RX =
-  /^(?:chapter|book|part|act|scene|canto|letter|volume|stave|chapitre|livre|partie|acte|kapitel|teil|buch|cap[ií]tulo|capitolo|libro|parte)\s+(?:\d+|[ivxlcdm]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|the\s+\w+)\b/iu;
+  /^(?:chapter|book|part|act|scene|canto|letter|volume|stave|chapitre|livre|partie|acte|scène|kapitel|teil|buch|cap[ií]tulo|capitolo|libro|parte)\s+(?:\d+(?:e|er|re|ère|ème)?|[ivxlcdm]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|the\s+\w+)\b/iu;
 const TEXT_INDENTED_SHARE_MIN = 0.5;
 const TEXT_MARGIN_WORDS_MAX = 12;
 const INDENTED_SECTION_RX = /^(\d+(?:\.\d+)*)\.?\s+(\S.*)$/;
@@ -593,11 +759,70 @@ function marginDepth(text: string): Heading["depth"] {
   return Math.min(6, parts + 1) as Heading["depth"];
 }
 
-function shapeTextOutline(root: Root, source: string) {
+// 6. Words set in four spaces or more (a poem's stanzas, an old RFC's
+//    sections, a letter or a quote set in) are Markdown's indented code,
+//    but a text file's words: in a file with no "#" heading and no fenced
+//    code, an indented code block whose lines are words is the file's
+//    paragraphs, one per run of lines between blank lines, and the lines
+//    rule reads each (a stanza keeps its lines, wrapped prose joins). A
+//    line of words holds no sign code writes ({ } = < > | \ ` ^ $ ~), no
+//    gap of three spaces (a table's columns, a contents line's leaders), and
+//    letters for most of its characters; nine lines in ten are such lines,
+//    and one has six words or more. Before, a poem indented five spaces read
+//    as one code block, and an RFC's indented sections as code with their
+//    headings inside (Markdown benchmark finding: the Rime of the Ancient
+//    Mariner, RFC 1122).
+const CODE_SIGN_RX = /[{}=<>|\\`^$~]/;
+const COLUMN_GAP_RX = /\S {3,}\S/;
+const WORDS_LINES_SHARE_MIN = 0.9;
+const WORDS_LINE_LETTERS_MIN = 0.6;
+const PROSE_LINE_WORDS_MIN = 6;
+
+function isWordsLine(line: string): boolean {
+  const text = line.trim();
+  if (CODE_SIGN_RX.test(text) || COLUMN_GAP_RX.test(text)) return false;
+  const letters = text.match(/\p{L}/gu)?.length ?? 0;
+  return letters >= text.replace(/\s/g, "").length * WORDS_LINE_LETTERS_MIN;
+}
+
+function setInWordsAsParagraphs(root: Root, lines: string[]) {
+  if (lines.some((line) => FENCE_RX.test(line))) return;
+  root.children = root.children.flatMap((node): RootContent[] => {
+    if (node.type !== "code" || node.lang || !node.position) return [node];
+    const from = node.position.start.line;
+    const own = lines.slice(from - 1, node.position.end.line);
+    const filled = own.filter((line) => line.trim());
+    if (filled.length === 0) return [node];
+    if (filled.filter(isWordsLine).length < filled.length * WORDS_LINES_SHARE_MIN) return [node];
+    if (!filled.some((line) => line.trim().split(/\s+/).length >= PROSE_LINE_WORDS_MIN)) return [node];
+    // One paragraph per run of lines between blank lines.
+    const out: RootContent[] = [];
+    let start = -1;
+    own.forEach((line, i) => {
+      const blank = !line.trim();
+      if (!blank && start < 0) start = i;
+      if (start >= 0 && (blank || i === own.length - 1)) {
+        const end = blank ? i - 1 : i;
+        out.push({
+          type: "paragraph",
+          children: [{ type: "text", value: own.slice(start, end + 1).map((l) => l.trim()).join("\n") }],
+          position: { start: { line: from + start, column: 1 }, end: { line: from + end, column: own[end].length + 1 } },
+        });
+        start = -1;
+      }
+    });
+    return out;
+  });
+}
+
+function shapeTextOutline(root: Root, source: string, comments: boolean) {
   const lines = source.split("\n");
   // The lines rule runs in a file with no "#" heading: an underlined
   // heading does not make a text file Markdown.
-  if (!hasHashHeading(root, lines)) keepTextLines(root, source);
+  if (!hasHashHeading(root, lines)) {
+    setInWordsAsParagraphs(root, lines);
+    keepTextLines(root, source, comments);
+  }
   if (hasHeading(root)) return;
   const nodes = root.children;
   const words = (text: string) => text.split(/\s+/).filter(Boolean).length;
@@ -611,6 +836,11 @@ function shapeTextOutline(root: Root, source: string) {
     const line = node.position ? (lines[node.position.start.line - 1] ?? "") : "";
     return line.length > 0 && !/^\s/.test(line) && !/\S {3,}\S/.test(line.trim());
   };
+  const standing = new Map<string, number>();
+  nodes.forEach((_, i) => {
+    const text = standingLine(nodes, i);
+    if (text !== null) standing.set(text, (standing.get(text) ?? 0) + 1);
+  });
   nodes.forEach((node, i) => {
     // An ordered list's one item at the margin, standing alone: a numbered
     // heading ("1.  Introduction").
@@ -652,8 +882,14 @@ function shapeTextOutline(root: Root, source: string) {
     }
     const text = standingLine(nodes, i);
     if (text === null) return;
-    const title = i === 0 && text.length <= TEXT_TITLE_CHARS_MAX && words(text) <= TEXT_TITLE_WORDS_MAX;
-    const capitals = isCapitalsLine(text);
+    // A first line written with Markdown's own marks (a link in brackets,
+    // an escape, an entity, inline code, emphasis in asterisks) is
+    // Markdown, which writes its title with "#": it stays a paragraph.
+    // Before, a note that opens on "[Intro](#intro)" or "&#42; foo" read
+    // it as the Title (Markdown benchmark finding: 35 spec examples).
+    const marked = i === 0 && (MARKDOWN_MARKS_RX.test(lines[(node.position?.start.line ?? 1) - 1] ?? "") || hasMarkdownMarks(node.children, source));
+    const title = i === 0 && !marked && text.length <= TEXT_TITLE_CHARS_MAX && words(text) <= TEXT_TITLE_WORDS_MAX;
+    const capitals = isCapitalsLine(text) && (standing.get(text) ?? 0) < TEXT_SPEAKER_LINES_MIN;
     const margin = indented && !title && words(text) <= TEXT_MARGIN_WORDS_MAX && atMargin(node);
     if (title || capitals || margin) {
       const depth = title ? 1 : margin ? marginDepth(text) : 2;
@@ -671,9 +907,10 @@ export function markdownToHtml(
 ): { html: string; title: string; titleFromFile: boolean } {
   const source = markdown.replace(/^﻿/, "").replace(/\r\n?/g, "\n");
   const { body, title: frontTitle } = splitFrontMatter(source);
-  const { text, spans } = setAsideMath(body);
-  const tree = unified().use(remarkParse).use(remarkGfm).parse(text) as Root;
-  if (body === source) shapeTextOutline(tree, text);
+  const commented = hashLinesAsComments(body, filename);
+  const { text, spans } = setAsideMath(commented);
+  const tree = unified().use(remarkParse).use(remarkGfm).use(remarkTablesOneByOne).parse(text) as Root;
+  if (body === source) shapeTextOutline(tree, text, commented !== body);
   const closed = new Set([...text.matchAll(CLOSING_TAG_RX)].map((m) => m[1].toLowerCase()));
   const renderer = new Renderer(spans, closed);
   const article = renderer.render(tree);
