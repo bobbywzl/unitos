@@ -1,6 +1,7 @@
 import type {
   Definition,
   FootnoteDefinition,
+  Heading,
   ListItem,
   PhrasingContent,
   Root,
@@ -532,14 +533,69 @@ function hasHashHeading(node: Root | RootContent, lines: string[]): boolean {
   return "children" in node && (node.children as RootContent[]).some((n) => hasHashHeading(n, lines));
 }
 
+// 4. A file whose words are indented (an RFC: half its paragraphs' lines
+//    open with a space) sets its headings at the margin: a line that stands alone at
+//    the margin, of twelve words or fewer, ending no sentence, is a
+//    heading ("Abstract", "4.2 Message Headers", an ordered list's one
+//    item "1.  Introduction"). Its number sets its level: one level under
+//    the Title for each part ("4" a level 2, "4.2" a level 3). A line with
+//    a wide gap (three spaces inside it: a page's header or footer, "RFC
+//    2616   HTTP/1.1   June 1999") is none. Before, an RFC's every
+//    section heading read as a paragraph or a one-item list (Markdown
+//    benchmark finding: five RFCs, 3 to 260 headings each, none found).
+const TEXT_INDENTED_SHARE_MIN = 0.5;
+const TEXT_MARGIN_WORDS_MAX = 12;
+const SECTION_NUMBER_RX = /^((?:\d+|[A-Z])(?:\.\d+)*)[.)]?\s+\S/;
+
+/** A top-level node whose lines have a blank line above and under them. */
+function standsAlone(nodes: RootContent[], i: number): boolean {
+  const node = nodes[i];
+  const prev = nodes[i - 1];
+  const next = nodes[i + 1];
+  if (!node.position) return false;
+  if (prev?.position && prev.position.end.line >= node.position.start.line - 1) return false;
+  return !next?.position || next.position.start.line > node.position.end.line + 1;
+}
+
+/** A margin heading's level: one level under the Title for each part of
+    its number, else level 2. */
+function marginDepth(text: string): Heading["depth"] {
+  const number = SECTION_NUMBER_RX.exec(text)?.[1];
+  const parts = number ? number.split(".").length : 1;
+  return Math.min(6, parts + 1) as Heading["depth"];
+}
+
 function shapeTextOutline(root: Root, source: string) {
+  const lines = source.split("\n");
   // The lines rule runs in a file with no "#" heading: an underlined
   // heading does not make a text file Markdown.
-  if (!hasHashHeading(root, source.split("\n"))) keepTextLines(root, source);
+  if (!hasHashHeading(root, lines)) keepTextLines(root, source);
   if (hasHeading(root)) return;
   const nodes = root.children;
   const words = (text: string) => text.split(/\s+/).filter(Boolean).length;
+  // The paragraphs' lines: a code block is indented in every file.
+  const filled = nodes
+    .filter((n) => n.type === "paragraph" && n.position)
+    .flatMap((n) => lines.slice((n.position?.start.line ?? 1) - 1, n.position?.end.line ?? 0))
+    .filter((line) => line.trim());
+  const indented = filled.length > 0 && filled.filter((line) => /^\s/.test(line)).length >= filled.length * TEXT_INDENTED_SHARE_MIN;
+  const atMargin = (node: RootContent) => {
+    const line = node.position ? (lines[node.position.start.line - 1] ?? "") : "";
+    return line.length > 0 && !/^\s/.test(line) && !/\S {3,}\S/.test(line.trim());
+  };
   nodes.forEach((node, i) => {
+    // An ordered list's one item at the margin, standing alone: a numbered
+    // heading ("1.  Introduction").
+    if (indented && node.type === "list" && node.ordered && node.children.length === 1 && atMargin(node) && standsAlone(nodes, i)) {
+      const item = node.children[0];
+      const only = item.children.length === 1 ? item.children[0] : null;
+      if (!only || only.type !== "paragraph" || !node.position || node.position.start.line !== node.position.end.line) return;
+      const marker = /^\s*(\d+[.)])/.exec(lines[node.position.start.line - 1] ?? "")?.[1] ?? `${node.start ?? 1}.`;
+      const text = `${marker} ${plainText(only.children)}`;
+      if (words(text) > TEXT_MARGIN_WORDS_MAX || TEXT_SENTENCE_END_RX.test(text)) return;
+      nodes[i] = { type: "heading", depth: marginDepth(text), children: [{ type: "text", value: `${marker} ` }, ...only.children], position: node.position };
+      return;
+    }
     if (node.type !== "paragraph") return;
     const text = standingLine(nodes, i);
     if (text === null) return;
@@ -549,7 +605,11 @@ function shapeTextOutline(root: Root, source: string) {
       words(text) <= TEXT_HEADING_WORDS_MAX &&
       (text.match(/\p{Lu}/gu) ?? []).length >= 2 &&
       !/\p{Ll}/u.test(text);
-    if (title || capitals) nodes[i] = { type: "heading", depth: title ? 1 : 2, children: node.children, position: node.position };
+    const margin = indented && !title && words(text) <= TEXT_MARGIN_WORDS_MAX && atMargin(node);
+    if (title || capitals || margin) {
+      const depth = title ? 1 : margin ? marginDepth(text) : 2;
+      nodes[i] = { type: "heading", depth, children: node.children, position: node.position };
+    }
   });
 }
 
