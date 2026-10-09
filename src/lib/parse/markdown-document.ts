@@ -222,6 +222,13 @@ const HTML_ELEMENTS = new Set(
     "math mi mo mn ms mtext mrow mfrac msqrt mroot msub msup msubsup munder mover munderover mtable mtr mtd mspace semantics annotation"
   ).split(" "),
 );
+// An element whose words HTML reads as raw text up to its closing tag:
+// opened and never closed, it takes the rest of the file. A note's "Put
+// CSS in a <style> element." kept "Put CSS in a" and lost every word
+// after it; "<textarea>" and "<title>" turned the rest of the file into
+// one paragraph of tags. An opening tag of one inside a paragraph, that
+// the file never closes, is words, as GFM's tag filter writes it.
+const RAW_TEXT_ELEMENTS = new Set(["script", "style", "textarea", "title", "iframe", "noembed", "noframes", "xmp", "plaintext"]);
 
 // GFM tables, resolved one table at a time. micromark-extension-gfm-table
 // resolves every table of a file in one pass whose edit list it searches
@@ -421,7 +428,7 @@ class Renderer {
       case "break":
         return "<br>";
       case "html":
-        return this.html(node.value);
+        return this.html(node.value, true);
       case "link":
         return this.link(node.url, node.children);
       case "linkReference": {
@@ -466,10 +473,14 @@ class Renderer {
 
   // Raw HTML, with the math set aside put back as text puts it back, and a
   // bare tag of no element's name that the file never closes as its words.
-  private html(value: string): string {
+  // Inside a paragraph, a raw-text element's tag the file never closes is
+  // words too; an HTML block that opens on one ("<style\n type=...>") is
+  // markup, as CommonMark reads it.
+  private html(value: string, inline = false): string {
     return value
       .replace(TAG_RX, (tag: string, name: string) => {
         const lower = name.toLowerCase();
+        if (inline && RAW_TEXT_ELEMENTS.has(lower) && !tag.startsWith("</") && !this.closed.has(lower)) return escapeHtml(tag);
         return BARE_TAG_RX.test(tag) && !HTML_ELEMENTS.has(lower) && !this.closed.has(lower) ? escapeHtml(tag) : tag;
       })
       .replace(PLACEHOLDER_RX, (_, index: string) => this.math(Number(index)));
