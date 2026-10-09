@@ -5,7 +5,7 @@ description: The assistant quality loop (SPEC.md §7, §25). Subagents stand in 
 
 # assistantloop
 
-What the loop improves: the sidebar assistant at This page scope — the answer prompt (`src/lib/prompts/synthesis.ts`), the action lines and the plan's validation (`src/lib/assistant/plan.ts`), the edit passes (`src/lib/assistant/revise.ts`, `one-pass.ts`, `reorder-run.ts`, `target.ts`, `src/lib/derive/suggest.ts`, their prompts under `src/lib/prompts/`), and what the reader sees of a plan (the plan card in `components/reader/reader-interactions.tsx`, the suggestions row). The families: answer (from the source), edit (an article's blocks), suggest (a document with rich text), section (notes, sections, documents), annotate (marks on the passages), transcript (a recording's lines and voices), confirm (a change carried through a conversation), scope (where a change runs).
+What the loop improves: the sidebar assistant at This page scope and the selection chat — the answer prompt (`src/lib/prompts/synthesis.ts`), the action lines and the plan's validation (`src/lib/assistant/plan.ts`), the edit passes (`src/lib/assistant/revise.ts`, `one-pass.ts`, `reorder-run.ts`, `target.ts`, `src/lib/derive/suggest.ts`, their prompts under `src/lib/prompts/`), and what the reader sees of a plan (the plan card in `components/reader/reader-interactions.tsx`, the suggestions row). The families: answer (from the source), edit (an article's blocks), suggest (a document with rich text), section (notes, sections, documents), annotate (marks on the passages), transcript (a recording's lines and voices), confirm (a change carried through a conversation), scope (where a change runs).
 
 No API key is needed: agents answer the prompt files. The assistant runs on Gemini 3.8 Flash in production and the edit passes on Claude Sonnet 5; a Sonnet agent stands in for both, at the agent's own effort. Each case's directory is the whole world of one turn.
 
@@ -27,6 +27,8 @@ No API key is needed: agents answer the prompt files. The assistant runs on Gemi
 - The checks are the contract: a check that fails on a correct answer is a bug in the check or in the plan module, which the round fixes first.
 - `scripts/eval/assistant/blocks.ts` and `show.ts` print a fixture's blocks by number, for writing cases.
 - A recording's fixture names voices with `@Name` after the times; `lib.ts` reads them as the line's speaker.
+- A case with `edits: "suggestions"` reads the fixture as the page holds it: one row per paragraph, heading, and list line (`richtext.ts`); `rows.ts <fixture>` prints the rows a case's `block: n` counts. Its suggest action runs for real at score time (`suggest-run.ts`: the words scope for a selection, else windows, the one pass when the scope fits, the order pass beside it; each pass a call under `calls/`, the suggest check included), its ops land on the simulated blocks, and the judge prompt lists what landed and what was skipped.
+- The act family is the selection chat (`/api/assistant/act`): `chat: "selection"` and `selection: { block, text? }` build the act route's own prompt (the document prefix as the system message, the act prompt as the user message, the conversation inside it); the answer is its JSON (`reply`, `actions`). The model agent writes that JSON to `answer.md`.
 
 ## Model agent prompt
 
