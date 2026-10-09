@@ -1,14 +1,14 @@
 {
  "total": {
-  "composite": 0.984,
-  "words": 0.973,
+  "composite": 0.992,
+  "words": 0.988,
   "order": 0.97,
   "bullets": 0.992,
   "tables": 0.997,
   "notes": 1,
   "chartValues": 1,
   "replica": 1,
-  "lost": 2,
+  "lost": 0,
   "files": 127,
   "slides": 700,
   "errors": 0
@@ -1060,26 +1060,26 @@
    "lost": 0
   },
   "lo-import-characters": {
-   "composite": 0.5,
-   "words": 0,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": null,
    "tables": null,
    "notes": null,
    "chartValues": null,
    "replica": 1,
-   "lost": 1
+   "lost": 0
   },
   "lo-import-mce": {
-   "composite": 0.5,
-   "words": 0,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": null,
    "tables": null,
    "notes": null,
    "chartValues": null,
    "replica": 1,
-   "lost": 1
+   "lost": 0
   },
   "lo-tdf128550": {
    "composite": 1,
@@ -1096,7 +1096,7 @@
    "composite": 1,
    "words": 1,
    "order": null,
-   "bullets": null,
+   "bullets": 1,
    "tables": null,
    "notes": null,
    "chartValues": null,

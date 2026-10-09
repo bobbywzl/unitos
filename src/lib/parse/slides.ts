@@ -1,5 +1,6 @@
 import type { ParsedBlock, ParsedDocument } from "@/lib/parse/types";
 import { renderChart as drawChart } from "@/lib/parse/chart";
+import { ommlText } from "@/lib/parse/docx-math";
 import { fontListAttr } from "@/lib/office-fonts";
 import {
   attr,
@@ -811,8 +812,30 @@ function renderRuns(
     if (highlight) styles.push(`background-color:${highlight}`);
     return { size, color, css: styles.join(";") };
   };
-  for (const node of Array.from(p.children)) {
-    if (node.localName === "r" || node.localName === "fld") {
+  // The paragraph's runs, an mc:AlternateContent read through its Choice.
+  const nodes: Element[] = [];
+  const gather = (list: Element[]) => {
+    for (const n of list) {
+      if (n.localName === "AlternateContent") gather(Array.from((child(n, "Choice") ?? child(n, "Fallback"))?.children ?? []));
+      else nodes.push(n);
+    }
+  };
+  gather(Array.from(p.children));
+  for (const node of nodes) {
+    if (node.localName === "m") {
+      // An equation (a14:m, OMML) reads as its readable characters
+      // (lib/parse/docx-math.ts), set in its first run's look. Slides
+      // benchmark finding: equations were dropped whole.
+      const t = cleanText(descendants(node, "oMath").map(ommlText).filter(Boolean).join(" "));
+      if (t.length === 0) continue;
+      const run = inherited(descendants(node, "rPr")[0] ?? null);
+      if (firstSize === null) {
+        firstSize = run.size;
+        firstColor = run.color;
+      }
+      parts.push(`<span style="${run.css}">${escapeHtml(t)}</span>`);
+      text += t;
+    } else if (node.localName === "r" || node.localName === "fld") {
       const rPr = child(node, "rPr");
       const t = cleanText(child(node, "t")?.textContent ?? "");
       if (t.length === 0) continue;
