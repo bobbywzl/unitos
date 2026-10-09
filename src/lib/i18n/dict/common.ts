@@ -17,7 +17,8 @@
 //   salient 要点 · link 链接 · edit 编辑 · reader 阅读器 · glossary 术语表 ·
 //   sign in 登录 · sign out 退出登录 · settings 设置 · admin 管理 ·
 //   feedback 反馈 · depths: layman 通俗 / intermediate 进阶 /
-//   professional 专业 · share 共享 · collaborator 协作者 · role 角色 ·
+//   professional 专业 · share 共享 · collaborator 协作者 ·
+//   former collaborator(账户已删除或已移出项目的作者) 前协作者 · role 角色 ·
 //   owner 所有者 · editor 编辑者 · viewer 查看者 · profile 个人资料 ·
 //   symbol 符号 · background 背景 · reply 回复 · resolve 解决 ·
 //   recommended link 推荐链接 · graph 图谱 · history 历史 ·
@@ -129,6 +130,15 @@ const en = {
   offlineAi:
     "AI is off while offline. Notes, highlights, comments, and edits save on this device and sync when you are back online.",
   offlineSyncing: "Syncing {n} offline changes…",
+  offlineQuoteKeptOne: "Note synced. 1 quote is no longer in its document: kept as text",
+  offlineQuotesKept: "Notes synced. {n} quotes are no longer in their documents: kept as text",
+  // Writes the queue dropped on replay (REV9-03): the server refused them,
+  // and their words wait in the pill until the reader copies them.
+  offlineNotSavedOne: "1 offline change could not be saved · Copy its words",
+  offlineNotSaved: "{n} offline changes could not be saved · Copy their words",
+  offlineNotSavedTip:
+    "The server refused these changes when they synced: your role changed, or what they changed is gone. Copy puts their words on the clipboard.",
+  offlineNotSavedCopied: "Copied",
   // The offline page (SPEC.md §17, Unitos Ultra): what loads without a network
   offlineTitle: "Offline",
   offlinePageBody: "Only projects saved for offline are shown. Everything else needs a connection.",
@@ -156,6 +166,7 @@ const en = {
   // Replies: the discussion under a note, an edit, or a link.
   reply: "Reply",
   replyPlaceholder: "Reply…",
+  replySending: "Sending…",
   resolve: "Resolve",
   reopen: "Reopen",
   resolveTitle: "Close this reply; it moves under Resolved",
@@ -163,6 +174,8 @@ const en = {
   replyTitle: "Start a reply",
   resolvedCountOne: "1 resolved",
   resolvedCountMany: "{n} resolved",
+  // [lists9] WALK9-09: the author of a reply or an edit whose account is gone.
+  formerCollaborator: "Former collaborator",
   // Notifications (SPEC.md §18): the kind chip, on the admin pages and the
   // dashboard. "Feedback" marks a reply to feedback the account sent.
   notificationUpdate: "Update",
@@ -219,6 +232,12 @@ const zh: Record<keyof typeof en, string> = {
   // service worker's answer (public/sw.js)
   offlineAi: "离线时 AI 不可用。笔记、高亮、评论和编辑会保存在此设备上，联网后同步。",
   offlineSyncing: "正在同步 {n} 项离线更改…",
+  offlineQuoteKeptOne: "笔记已同步。1 条引文已不在其文档中，以文字保留",
+  offlineQuotesKept: "笔记已同步。{n} 条引文已不在其文档中，以文字保留",
+  offlineNotSavedOne: "1 项离线更改无法保存 · 复制其文字",
+  offlineNotSaved: "{n} 项离线更改无法保存 · 复制其文字",
+  offlineNotSavedTip: "同步时服务器拒绝了这些更改：你的角色已更改，或更改的对象已不存在。复制会把其文字放到剪贴板。",
+  offlineNotSavedCopied: "已复制",
   // The offline page (SPEC.md §17, Unitos Ultra): what loads without a network
   offlineTitle: "离线",
   offlinePageBody: "只显示已离线保存的项目。其他内容需要网络。",
@@ -241,6 +260,7 @@ const zh: Record<keyof typeof en, string> = {
   notFoundHome: "返回全部项目",
   reply: "回复",
   replyPlaceholder: "回复…",
+  replySending: "发送中…",
   resolve: "解决",
   reopen: "重新打开",
   resolveTitle: "关闭此回复；它会移到“已解决”下",
@@ -248,6 +268,7 @@ const zh: Record<keyof typeof en, string> = {
   replyTitle: "开始回复",
   resolvedCountOne: "1 条已解决",
   resolvedCountMany: "{n} 条已解决",
+  formerCollaborator: "前协作者",
   // Notifications (SPEC.md §18): the kind chip, on the admin page and the dashboard.
   notificationUpdate: "更新",
   newFeature: "新功能",

@@ -9,6 +9,21 @@
 // DocumentFolder.position). Read only: nothing here writes a document, a
 // folder, or an order.
 
+import type { Prisma } from "@prisma/client";
+
+// Attach order: a project's documents oldest first, the id breaking a tie
+// of two documents added in one millisecond, so every read lists them in
+// one fixed order whatever plan the database picks (REV7-07). The newest
+// first order is its reverse.
+export const ATTACH_ORDER = [
+  { document: { createdAt: "asc" } },
+  { documentId: "asc" },
+] satisfies Prisma.NotebookDocumentOrderByWithRelationInput[];
+export const ATTACH_ORDER_NEWEST = [
+  { document: { createdAt: "desc" } },
+  { documentId: "desc" },
+] satisfies Prisma.NotebookDocumentOrderByWithRelationInput[];
+
 // What a document is, by what it was made from.
 export type DocumentKind =
   | "pdf"

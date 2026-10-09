@@ -1,15 +1,11 @@
 "use client";
 
 import Link, { useLinkStatus } from "next/link";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type {
   CorpusDistillationView,
-  GraphEdge,
-  GraphNode,
   HistoryEntry,
-  GeneratedDocumentView,
   NotebookView,
-  RecommendedLinkView,
 } from "@/lib/types";
 import {
   ArrowLeftIcon,
@@ -31,7 +27,10 @@ import { HistoryControl } from "@/components/collab/history-control";
 import { ShareControl } from "@/components/collab/share-control";
 import { OfflineStatus } from "@/components/offline-status";
 import { useNotebookSync } from "@/components/collab/use-sync";
-import { GraphOverlay } from "@/components/graph/graph-overlay";
+import { GraphOverlayLoader } from "@/components/graph/graph-data";
+import { preloadGraphView } from "@/components/graph/graph-overlay";
+import { withoutGraphParams } from "@/components/graph/graph-content";
+import { GRAPH_FROM_PARAM, GRAPH_NOTE_PARAM, OPEN_GRAPH_EVENT, type GraphFocus } from "@/components/graph/graph-keep";
 import { VisualizationViewer } from "@/components/reader/visualization-viewer";
 import { CorpusDistillPage } from "@/components/reader/corpus-distill-page";
 import { GuideDialog } from "@/components/guide-dialog";
@@ -57,6 +56,7 @@ import { useNoteScope } from "@/components/outline/note-groups";
 import { Presence } from "@/components/presence";
 import { flattenNotes, useOutline } from "@/components/outline/use-outline";
 import { DocumentBar, type AttachedDocument } from "@/components/reader/document-bar";
+import { withDocumentDefaults, type AttachedDocumentRow } from "@/lib/attached-document";
 import type { DocumentFolderView } from "@/components/reader/document-folders";
 import type { ReaderViewKind } from "@/components/reader/reader-panes";
 import type { DriveConfig } from "@/lib/drive/config";
@@ -123,7 +123,7 @@ function clampTrayWidth(width: number): number {
 // notes and the assistant are always one click away.
 export function Workspace({
   notebook,
-  documents,
+  documents: documentRows,
   folders,
   readerView,
   activeDocumentId,
@@ -139,12 +139,12 @@ export function Workspace({
   distillationCount,
   collab,
   rev,
-  graph,
   history,
   corpusDistillations,
 }: {
   notebook: NotebookView;
-  documents: AttachedDocument[];
+  // The page's one document list, default fields left out (COST6-08).
+  documents: AttachedDocumentRow[];
   // The project's folders (SPEC.md §6): the document list draws them.
   folders: DocumentFolderView[];
   // The reader view (reader-panes.tsx): a split view puts the reader and the
@@ -165,19 +165,11 @@ export function Workspace({
   distillationCount: number;
   collab: CollabState;
   rev: number;
-  graph: {
-    nodes: GraphNode[];
-    edges: GraphEdge[];
-    recommended: RecommendedLinkView[];
-    // The pages Stitch wrote for the project (SPEC.md §22).
-    generated: GeneratedDocumentView[];
-    // Runs of Recommend links this account has left this month (SPEC.md §13).
-    linkScansLeft: number;
-  };
   history: HistoryEntry[];
   corpusDistillations: CorpusDistillationView[];
 }) {
   const t = useT();
+  const documents = useMemo<AttachedDocument[]>(() => documentRows.map(withDocumentDefaults), [documentRows]);
   const canEdit = collab.canEdit;
   // The tray's notes: every note of the project, or the open document's
   // alone, as the reader picked (note-groups.tsx, SPEC.md §6).
@@ -187,6 +179,17 @@ export function Workspace({
     canEdit,
     activeDocumentId,
     noteScope === "document",
+  );
+  // The notes on the graph (SPEC.md §13): the whole project's outline, and
+  // the tray's own section choices and Accept / Reject.
+  const graphNotes = useMemo(
+    () => ({
+      sections: notebook.sections,
+      sectionChoices: actions.sectionChoices,
+      acceptNote: actions.acceptNote,
+      rejectNote: actions.rejectNote,
+    }),
+    [notebook.sections, actions.sectionChoices, actions.acceptNote, actions.rejectNote],
   );
   // Live sync: poll the corpus's rev, refresh when another account changes it,
   // and learn who else is here (SPEC.md gained this with sharing).
@@ -332,7 +335,124 @@ export function Workspace({
       // storage unavailable: the nudge returns next visit
     }
   }
+  // The graph lives in the URL (`graph=1`, SPEC.md §13): Back from a document
+  // opened from the graph reopens the graph, and Back while it is open
+  // closes it. Opening pushes the entry; ✕ or Escape goes back off it (or
+  // drops the parameter when the page loaded with it).
   const [graphOpen, setGraphOpen] = useState(false);
+  const graphPushed = useRef(false);
+  const graphInUrl = () => new URLSearchParams(window.location.search).get("graph") === "1";
+  // What the graph opens on (VIEW3-04, VIEW3-09): a note shown from the tray
+  // or the notes full page, a link card's Show on graph, or, from the rail,
+  // the link the reader arrived through (?link=). Null: the graph restores
+  // where the reader was (Back from a document; graph-keep.ts).
+  const [graphFocus, setGraphFocus] = useState<GraphFocus | null>(null);
+  const openGraph = useCallback((focus?: GraphFocus) => {
+    preloadGraphView(); // the canvas's chunk beside the data (COST4-06)
+    const arrivedLink = new URLSearchParams(window.location.search).get("link");
+    setGraphFocus(focus ?? (arrivedLink ? { linkId: arrivedLink } : null));
+    setGraphOpen(true);
+    if (graphInUrl()) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("graph", "1");
+    window.history.pushState(null, "", url);
+    graphPushed.current = true;
+  }, []);
+  // The graph came from the notes full page (graphFrom=notes): closing it
+  // goes back there, the entry before this one (WALK4-06).
+  const graphFromNotes = useRef(false);
+  const closeGraph = useCallback(() => {
+    setGraphOpen(false);
+    if (graphFromNotes.current) {
+      graphFromNotes.current = false;
+      graphPushed.current = false;
+      window.history.back();
+      return;
+    }
+    if (!graphInUrl()) return;
+    if (graphPushed.current) {
+      graphPushed.current = false;
+      window.history.back();
+      return;
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.delete("graph");
+    window.history.replaceState(null, "", withoutGraphParams(url)); // [view2]
+  }, []);
+  // A graph opened from the URL or Back: the chunk in the same tick as the
+  // loader's data fetch.
+  useEffect(() => {
+    if (graphOpen) preloadGraphView();
+  }, [graphOpen]);
+  // M (map) opens the graph from anywhere in the workspace (WALK3-06): the
+  // rail's Graph is the last stop of a long tab order. Never while typing (a
+  // text box, a note, the page editor), never with a modifier, so no browser
+  // key is taken; G, J, K and E belong to the pending queue (use-outline.ts).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "m" && e.key !== "M") return;
+      if (e.defaultPrevented || e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || graphOpen) return;
+      const target = e.target;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && (target.isContentEditable || target.closest("[role=dialog], video, audio")))
+      )
+        return;
+      e.preventDefault();
+      openGraph();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [graphOpen, openGraph]);
+  // A document opened from the graph: the URL already moved on, and the
+  // graph's entry stays behind it for Back.
+  const leaveGraph = useCallback(() => {
+    graphPushed.current = false;
+    graphFromNotes.current = false;
+    setGraphOpen(false);
+  }, []);
+  useEffect(() => {
+    // Post-hydration on purpose: the server never renders the graph.
+    if (graphInUrl()) {
+      // The notes full page's Show on graph lands here with graphNote=<id>:
+      // the graph opens on that note, and the parameter leaves the URL.
+      const url = new URL(window.location.href);
+      const noteId = url.searchParams.get(GRAPH_NOTE_PARAM);
+      if (noteId) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setGraphFocus({ noteId });
+        url.searchParams.delete(GRAPH_NOTE_PARAM);
+        // Only a page this tab came from: a reload or a shared link has no
+        // notes full page behind it.
+        graphFromNotes.current = url.searchParams.get(GRAPH_FROM_PARAM) === "notes" && window.history.length > 1;
+        url.searchParams.delete(GRAPH_FROM_PARAM);
+        window.history.replaceState(window.history.state, "", url);
+      }
+      setGraphOpen(true);
+    }
+    const onPop = () => {
+      graphPushed.current = false;
+      graphFromNotes.current = false;
+      setGraphFocus(null);
+      setGraphOpen(graphInUrl());
+    };
+    // Show on graph from a note card in the tray or a link card in the
+    // Annotations tab. Handled here: the notes full page has no graph, and
+    // goes to the reader's graph when nobody handles it (note-card.tsx).
+    const onOpenGraph = (e: Event) => {
+      const detail = (e as CustomEvent<GraphFocus>).detail;
+      e.preventDefault();
+      openGraph(detail);
+    };
+    window.addEventListener("popstate", onPop);
+    window.addEventListener(OPEN_GRAPH_EVENT, onOpenGraph);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      window.removeEventListener(OPEN_GRAPH_EVENT, onOpenGraph);
+    };
+  }, [openGraph]);
   // The corpus distilled page: null = closed; { shownId } open (null = ask view).
   const [corpusDistill, setCorpusDistill] = useState<{ shownId: string | null } | null>(null);
 
@@ -482,6 +602,27 @@ export function Workspace({
         requestAnimationFrame(() => flash(`[data-annotation-source-id="${sourceId}"]`));
       }, 150);
     };
+    // Arriving at a link (?link=, VIEW3-02): the Annotations tab, on the
+    // link's card, so its replies read with no click. Only the tab turns: a
+    // folded tray stays folded, the sheet on a phone stays shut, and the
+    // strip of a split view stays on the documents.
+    const onFocusLink = (e: Event) => {
+      const { linkId } = (e as CustomEvent<{ linkId: string }>).detail;
+      setTab("annotations");
+      let frames = 60;
+      const find = () => {
+        const el = trayRef.current?.querySelector<HTMLElement>(`[data-annotation-link-id="${CSS.escape(linkId)}"]`);
+        const box = el?.getBoundingClientRect();
+        if (el && box && box.width > 0 && box.right > 0 && box.left < window.innerWidth) {
+          el.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+          el.classList.add("anchor-flash");
+          setTimeout(() => el.classList.remove("anchor-flash"), 2000);
+        } else if (frames-- > 0) {
+          requestAnimationFrame(find);
+        }
+      };
+      setTimeout(find, 150);
+    };
     // The page editor's Show all comments opens the Annotations tab.
     const onShowAnnotations = () => {
       setCollapsed(false);
@@ -498,11 +639,13 @@ export function Workspace({
     window.addEventListener("dissect:show-note", onShowNote);
     window.addEventListener("dissect:focus-annotation", onFocusAnnotation);
     window.addEventListener("dissect:show-annotations", onShowAnnotations);
+    window.addEventListener("dissect:focus-link", onFocusLink);
     window.addEventListener("dissect:open-corpus-distillation", onOpenCorpusDistillation);
     return () => {
       window.removeEventListener("dissect:show-note", onShowNote);
       window.removeEventListener("dissect:focus-annotation", onFocusAnnotation);
       window.removeEventListener("dissect:show-annotations", onShowAnnotations);
+      window.removeEventListener("dissect:focus-link", onFocusLink);
       window.removeEventListener("dissect:open-corpus-distillation", onOpenCorpusDistillation);
     };
   }, [revealTray, rememberTray, openSheet]);
@@ -642,7 +785,7 @@ export function Workspace({
         <span aria-hidden className="hidden size-[5px] shrink-0 rounded-full bg-sand-400 sm:block" />
         {/* No overflow clipping here: the document list and the + menu drop
             below the header. The one pill truncates instead of scrolling. */}
-        <div className="mr-auto flex min-w-0">
+        <div className="mr-auto flex min-w-0 max-sm:min-w-38">
           <DocumentBar
             notebookId={notebook.id}
             title={notebook.title}
@@ -658,7 +801,7 @@ export function Workspace({
         <SaveIndicator />
         <ShareControl notebookId={notebook.id} presence={presence} />
         <div className="hidden md:block">
-          <HistoryControl history={history} />
+          <HistoryControl notebookId={notebook.id} history={history} />
         </div>
         {/* Save for offline (SPEC.md §17, Unitos Ultra): the pill in the header.
             Saved, it reads Offline and a press removes the copy. */}
@@ -669,7 +812,7 @@ export function Workspace({
             data-track="offline-save"
             aria-label={t(offlineSaved ? "works.removeOffline" : "works.saveOffline")}
             data-tip={t(offlineSaved ? "works.removeOffline" : "works.saveOffline")}
-            className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40 ${
+            className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] hover:bg-clay-100 hover:text-clay-800 disabled:opacity-40 max-sm:px-2.5 ${
               offlineSaved
                 ? "border border-sage-300 bg-sage-200 text-sage-800"
                 : "border border-dashed border-sand-400 text-sand-600"
@@ -910,9 +1053,12 @@ export function Workspace({
           )}
 
           <button
-            onClick={() => setGraphOpen(true)}
+            onClick={() => openGraph()}
+            onPointerEnter={preloadGraphView}
+            onFocus={preloadGraphView}
             data-track="graph"
             aria-label={t("panes.graph")}
+            aria-keyshortcuts="M"
             data-tip={t("panes.graphTitle")}
             className={RAIL_BUTTON}
           >
@@ -1008,15 +1154,16 @@ export function Workspace({
       <VisualizationViewer />
       <Presence show={graphOpen} exit="fade">
       {graphOpen && (
-        <GraphOverlay
+        // [view2] GR-18: the graph's data loads when it opens (graph-data.tsx).
+        <GraphOverlayLoader
           notebookId={notebook.id}
           activeDocumentId={activeDocumentId}
-          nodes={graph.nodes}
-          edges={graph.edges}
-          recommended={graph.recommended}
-          generated={graph.generated}
-          linkScansLeft={graph.linkScansLeft}
-          onClose={() => setGraphOpen(false)}
+          rev={rev}
+          documents={documents}
+          notes={graphNotes}
+          focus={graphFocus}
+          onClose={closeGraph}
+          onNavigate={leaveGraph}
         />
       )}
       </Presence>

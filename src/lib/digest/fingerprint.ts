@@ -15,7 +15,7 @@ export const DIGEST_VERSION = "v2";
 export async function contentFingerprints(notebookIds?: string[]): Promise<Map<string, string>> {
   const ids = notebookIds && notebookIds.length > 0 ? notebookIds : null;
 
-  const [notebooks, sections, notes, sources, layers, attachments, docs, blocks, edits, links, videos] =
+  const [notebooks, sections, notes, sources, layers, attachments, docs, blocks, edits, links, videos, hidden] =
     await Promise.all([
       db.$queryRaw<{ id: string; title: string; updatedat: Date; profile: string }[]>(Prisma.sql`
         SELECT id, title, "updatedAt" AS updatedat, md5(coalesce(profile::text, '')) AS profile
@@ -75,6 +75,12 @@ export async function contentFingerprints(notebookIds?: string[]): Promise<Map<s
                kind::text || ':' || coalesce("youtubeId", '') || ':' || coalesce(duration::text, '')
                  || ':' || "transcriptStatus"::text AS v
         FROM "VideoAsset"`),
+      // Links removed from a project while their rows stay (DocLinkHidden).
+      db.$queryRaw<{ nid: string; c: number; m: Date | null }[]>(Prisma.sql`
+        SELECT "notebookId" AS nid, count(*)::int AS c, max("createdAt") AS m
+        FROM "DocLinkHidden"
+        ${ids ? Prisma.sql`WHERE "notebookId" IN (${Prisma.join(ids)})` : Prisma.empty}
+        GROUP BY 1`),
     ]);
 
   const sectionAgg = new Map(sections.map((r) => [r.nid, r.agg]));
@@ -86,6 +92,7 @@ export async function contentFingerprints(notebookIds?: string[]): Promise<Map<s
   const editAgg = new Map(edits.map((r) => [r.did, `${r.c}:${r.m?.toISOString() ?? ""}`]));
   const linkAgg = new Map(links.map((r) => [r.did, `${r.c}:${r.m?.toISOString() ?? ""}:${r.o}`]));
   const videoAgg = new Map(videos.map((r) => [r.did, r.v]));
+  const hiddenAgg = new Map(hidden.map((r) => [r.nid, `${r.c}:${r.m?.toISOString() ?? ""}`]));
 
   const docsByNotebook = new Map<string, string[]>();
   for (const a of attachments) {
@@ -110,6 +117,10 @@ export async function contentFingerprints(notebookIds?: string[]): Promise<Map<s
         layerAgg.get(nb.id) ?? "-",
       ].join("\n"),
     );
+    // Only a project with a removed link hashes the line, so every other
+    // project's fingerprint stays as it was.
+    const hiddenLine = hiddenAgg.get(nb.id);
+    if (hiddenLine) hash.update(`\nhidden:${hiddenLine}`);
     for (const did of docsByNotebook.get(nb.id) ?? []) {
       hash.update(
         [

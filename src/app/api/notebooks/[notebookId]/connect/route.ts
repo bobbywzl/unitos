@@ -8,7 +8,7 @@ import { kimiConfigured } from "@/lib/kimi";
 // Two passes over whole documents, for several documents (lib/connect.ts).
 export const maxDuration = 300;
 
-// Recommend links (SPEC.md §13): the project scan the reader asks for from
+// Scan for links (SPEC.md §13): the project scan the reader asks for from
 // the graph. Nothing scans on its own — the scan reads whole documents
 // against whole documents — so this route is the only way links are
 // proposed, and an account gets LINK_SCAN_RUNS_PER_MONTH runs a calendar

@@ -212,6 +212,8 @@ async function run() {
   // ── Recommend links ──
   const runsBefore = await db.linkScanRun.count();
   await page.locator('[data-track-surface="sidebar"] [data-track="graph"]').first().click();
+  // [chrome6] VIEW6-02: Scan for links heads the Recommended links list.
+  await page.locator('[data-track="graph-recommended-links"]').click({ timeout: 20000 });
   const scan = page.locator('[data-track="graph-recommend-links"]');
   await scan.waitFor({ timeout: 20000 });
   await stopRun(

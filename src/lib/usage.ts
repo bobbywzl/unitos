@@ -91,11 +91,26 @@ export function priceFor(model: string): Price {
   return price(3, 15); // unknown model — count it at a mid tier, never $0
 }
 
+/** Rows from this time keep the uncached input alone in inputTokens
+    (sdkTokens, COST8-02); rows before hold every prompt token there, the
+    cached ones too, with the cache columns filled as well. The admin usage
+    page adds the cached tokens of rows since this time back into its input
+    and token sums, so Input tokens and Tokens count every prompt token on
+    every row (REV9-06); no row is rewritten. The time is the deploy of the
+    fix: a row between it and the deploy would count its cache twice on the
+    page, on the page alone. */
+export const CACHE_COUNTED_APART_SINCE = new Date("2026-10-08T00:00:00Z");
+
 export type TokenCounts = {
+  // The input tokens billed at the full price: the cached ones are
+  // cacheReadTokens and cacheWriteTokens, never counted here too (COST8-02).
   inputTokens?: number;
-  outputTokens?: number;
+  outputTokens?: number; // every output token billed, the reasoning included
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
+  // Of outputTokens, the reasoning (thinking) tokens, when the provider
+  // reports them (COST5-03): stored, never priced twice.
+  reasoningTokens?: number;
 };
 
 export function computeCostUsd(model: string, t: TokenCounts): number {
@@ -108,17 +123,27 @@ export function computeCostUsd(model: string, t: TokenCounts): number {
   );
 }
 
-/** The AI SDK's usage shape → plain token counts. */
+/** The AI SDK's usage shape → plain token counts. The SDK's inputTokens is
+    every prompt token, the cached ones included (COST8-02): the row keeps
+    the uncached count, the provider's noCacheTokens, else the total less
+    the cache read and the cache write, so computeCostUsd prices each token
+    once. Rows written before this fix hold the total there and overstate
+    the cost of a cached call. */
 export function sdkTokens(usage: {
   inputTokens?: number;
   outputTokens?: number;
-  inputTokenDetails?: { cacheReadTokens?: number | null; cacheWriteTokens?: number | null };
+  inputTokenDetails?: { noCacheTokens?: number | null; cacheReadTokens?: number | null; cacheWriteTokens?: number | null };
+  outputTokenDetails?: { reasoningTokens?: number | null };
 }): TokenCounts {
+  const reasoning = usage.outputTokenDetails?.reasoningTokens;
+  const cacheRead = usage.inputTokenDetails?.cacheReadTokens ?? 0;
+  const cacheWrite = usage.inputTokenDetails?.cacheWriteTokens ?? 0;
   return {
-    inputTokens: usage.inputTokens ?? 0,
+    inputTokens: usage.inputTokenDetails?.noCacheTokens ?? Math.max(0, (usage.inputTokens ?? 0) - cacheRead - cacheWrite),
     outputTokens: usage.outputTokens ?? 0,
-    cacheReadTokens: usage.inputTokenDetails?.cacheReadTokens ?? 0,
-    cacheWriteTokens: usage.inputTokenDetails?.cacheWriteTokens ?? 0,
+    cacheReadTokens: cacheRead,
+    cacheWriteTokens: cacheWrite,
+    ...(typeof reasoning === "number" ? { reasoningTokens: reasoning } : {}),
   };
 }
 
@@ -129,6 +154,9 @@ export function addTokens(a: TokenCounts, b: TokenCounts): TokenCounts {
     outputTokens: (a.outputTokens ?? 0) + (b.outputTokens ?? 0),
     cacheReadTokens: (a.cacheReadTokens ?? 0) + (b.cacheReadTokens ?? 0),
     cacheWriteTokens: (a.cacheWriteTokens ?? 0) + (b.cacheWriteTokens ?? 0),
+    ...(a.reasoningTokens !== undefined || b.reasoningTokens !== undefined
+      ? { reasoningTokens: (a.reasoningTokens ?? 0) + (b.reasoningTokens ?? 0) }
+      : {}),
   };
 }
 
@@ -136,7 +164,12 @@ export type UsageMeta = {
   userId: string | null;
   feature: string; // explain | simplify | … | assistant | act | glossary | contents | skeleton | transcribe | describe | voice | gist | merge | stitch
   model: string;
+  // Which pass of a feature of several passes the call is (COST5-03):
+  // Stitch's route, select, expand, and answer passes, and the skeleton.
+  pass?: UsagePass;
 };
+
+export type UsagePass = "route" | "select" | "expand" | "answer" | "skeleton";
 
 // Who serves each model. Ordered; first match wins. A model no rule names
 // is filed under "other", never guessed into a provider: a row under the
@@ -186,6 +219,8 @@ export function recordUsage(meta: UsageMeta, tokens: TokenCounts, costUsd?: numb
         outputTokens: tokens.outputTokens ?? 0,
         cacheReadTokens: tokens.cacheReadTokens ?? 0,
         cacheWriteTokens: tokens.cacheWriteTokens ?? 0,
+        reasoningTokens: tokens.reasoningTokens ?? null,
+        pass: meta.pass ?? null,
         costUsd: costUsd ?? computeCostUsd(meta.model, tokens),
       },
     })

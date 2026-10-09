@@ -63,6 +63,13 @@ export const LEFT_OFF_MIN_SHARE = 1 / 3;
 // current before then.
 export const ACCOUNT_SAVE_SETTLE_MS = 3_000;
 export const ACCOUNT_SAVE_MAX_MS = 15_000;
+// [lists9] A document shown this long with its first block in view counts as
+// opened (WALK9-05): the account's copy saves once, at the top of the
+// document, so the graph's Documents list marks it opened for a reader who
+// read its first screen and never scrolled — a document that fits one screen
+// never scrolls. Only while the account has no copy of the document: a copy
+// it has stands until a scroll.
+export const ACCOUNT_SAVE_SHOWN_MS = 5_000;
 
 // A block position, or a pixel count an earlier version stored. line: where
 // the offset is measured from, px under the pane's top edge (0 before the
@@ -99,6 +106,15 @@ function blockElement(container: HTMLElement, blockId: string): HTMLElement | nu
   const blocks = Array.from(container.querySelectorAll<HTMLElement>(BLOCK_SELECTOR));
   for (let i = blocks.indexOf(el) - 1; i >= 0; i--) if (blocks[i].getClientRects().length > 0) return blocks[i];
   return el;
+}
+
+/** True while the document's first block is in the pane's view (WALK9-05). */
+export function firstBlockShown(container: HTMLElement): boolean {
+  const first = container.querySelector<HTMLElement>(BLOCK_SELECTOR);
+  if (!first) return false;
+  const pane = container.getBoundingClientRect();
+  const rect = first.getBoundingClientRect();
+  return rect.bottom > pane.top && rect.top < pane.bottom;
 }
 
 /** The block at the reading line and the offset from the line to its top. */

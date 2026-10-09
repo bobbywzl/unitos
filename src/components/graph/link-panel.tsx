@@ -1,0 +1,327 @@
+"use client";
+
+import { ACTION, ACTION_ACCEPT, ACTION_DANGER, ACTION_NOTE, CLOSE, SECTION_HEAD, TEXT_BODY, TEXT_META, TEXT_TITLE } from "./graph-ui";
+import { useParams, useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import type { GraphEdgeLink } from "@/lib/types";
+import { api } from "@/lib/api";
+import { markAccepted } from "@/components/graph/accepted-now";
+import { linkPath } from "@/lib/link-scope";
+import { useCollab } from "@/components/collab/collab-context";
+import { confirmLinkRemoval, linkRemovable } from "@/components/collab/confirm-link-removal";
+import { ArrowLeftIcon, CommentIcon, NotesIcon } from "@/components/icons";
+import { useT } from "@/components/lang-provider";
+import { LinkDetail } from "@/components/graph/link-detail";
+import { useNoteOnLink } from "@/components/graph/link-note-composer";
+import { LinkReplies } from "@/components/graph/link-replies";
+import { LinkNotes } from "@/components/graph/graph-notes";
+
+// An expanded link, in the side panel at full height (SPEC.md §13; WALK2-05):
+// the two documents, why the link was made, each end's passage with Open in
+// reader, the link's replies, the notes on the link (WALK3-03), and Note on
+// this link. A click on a link in a
+// curve's list or in the Links list opens it here; the curve stays pinned
+// and lit on the canvas, and nothing covers its two ends. A recommended link
+// keeps Accept and Dismiss.
+//
+// [panel6] What the reader writes comes first (WALK6-05): under Why this
+// link, one row holds Reply, Note on this link and, for an accepted link,
+// Remove (WALK6-03); each box opens under the row, then the replies and the
+// notes, then the two passages, each folded to about four lines. Remove is
+// the reader's Remove: the link is hidden in the project, the panel keeps a
+// line "Link removed. History can restore it · Undo" for 10 seconds, and
+// History's Restore brings it back later.
+
+// The action row's buttons: 24 px tall under a mouse, 44 under a finger (WALK6-09).
+// [style7] The shared row action (graph-ui.ts): one look for Reply, Note on
+// this link and Remove here and for Add to note, Open in reader, Dismiss
+// across the graph.
+const rowButton = ACTION;
+
+export function LinkPanel({
+  link,
+  onBack,
+  backLabel,
+  onClose,
+  onOpenDocument,
+  onRemoved,
+  curveLinks,
+  onStep,
+}: {
+  link: GraphEdgeLink;
+  /** [lists8] WALK8-05: the links of the open link's curve, in the curve
+      list's order. Two or more: the head reads "1 of 2" with ‹ ›. */
+  curveLinks?: GraphEdgeLink[];
+  onStep?: (link: GraphEdgeLink) => void;
+  /** Back to the list the link was opened from: Links, the Notes list, the node card, or Documents. */
+  onBack?: () => void;
+  /** The back arrow's label; default "Back to Links". */
+  backLabel?: string;
+  onClose: () => void;
+  /** The reader opened a document from the panel (the URL already moved). */
+  onOpenDocument: () => void;
+  /** [panel6] Remove hid the link: the overlay keeps the panel up on this
+      copy of it, for the Undo line. null: Undo brought it back. */
+  onRemoved?: (link: GraphEdgeLink | null) => void;
+}) {
+  const t = useT();
+  const router = useRouter();
+  const { canEdit, authOn, myId, people } = useCollab();
+  const { notebookId } = useParams<{ notebookId?: string }>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [decided, setDecided] = useState<"accepted" | "dismissed" | null>(null);
+  const loop = link.fromDocumentId === link.toDocumentId;
+  // [panel6] The action row's Reply opens its box; [lists9] Note on this
+  // link puts the link's ends into the new note (WALK9-10).
+  const [replyRequest, setReplyRequest] = useState(0);
+  const noteOnLink = useNoteOnLink(link);
+  // As ReplyThread: with sign-in off, Reply shows only on a thread that has replies.
+  const canReply = canEdit && !link.crossAccount?.outside && (authOn || (link.replies?.length ?? 0) > 0);
+  const accepted = !link.recommended || decided === "accepted";
+  const canRemove = canEdit && accepted && !link.provenance && linkRemovable(link.crossAccount);
+  // Remove (WALK6-03): "removed" while Undo is offered, "gone" after.
+  const [removed, setRemoved] = useState<"undo" | "gone" | null>(null);
+  const removeEdit = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (removed !== "undo") return;
+    const timer = setTimeout(() => setRemoved("gone"), 10_000);
+    return () => clearTimeout(timer);
+  }, [removed]);
+
+  async function remove() {
+    if (busy) return;
+    const replies = link.replies ?? [];
+    const madeBy = link.createdById && link.createdById !== myId ? people[link.createdById]?.name : undefined;
+    // The reader's own link with only their own replies goes at once: Undo is there (WALK6-08).
+    const othersReplied = replies.some((r) => r.userId !== myId);
+    if (!confirmLinkRemoval(t, replies.length, "remove", madeBy, othersReplied)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      // Offline the removal waits in the queue: Undo comes once the server has hidden the link.
+      const result = await api<{ queued?: true; editId?: string }>(linkPath(link.id, notebookId), "DELETE");
+      removeEdit.current = result.editId;
+      setRemoved(result.queued ? "gone" : "undo");
+      onRemoved?.(link);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("common.requestFailed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function undoRemove() {
+    if (busy || !notebookId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      // Undo names its Remove: another editor's later removal stays (REV7-06).
+      const edit = removeEdit.current ? `&edit=${encodeURIComponent(removeEdit.current)}` : "";
+      await api(`/api/links/${encodeURIComponent(link.id)}/hidden?notebookId=${encodeURIComponent(notebookId)}${edit}`, "DELETE");
+      setRemoved(null);
+      onRemoved?.(null);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("common.requestFailed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function decide(accept: boolean) {
+    if (busy) return;
+    if (!accept && !confirmLinkRemoval(t, link.replies?.length ?? 0, "dismiss")) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (accept) {
+        await api(linkPath(link.id, notebookId), "PATCH", { accept: true });
+        markAccepted(link.id); // the header counts it at once (WALK4-15)
+      } else await api(linkPath(link.id, notebookId), "DELETE");
+      setDecided(accept ? "accepted" : "dismissed");
+      router.refresh();
+      if (!accept) onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("common.requestFailed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // [lists8] WALK8-05: where the link sits among its curve's links; the step wraps.
+  const at = curveLinks && onStep && curveLinks.length > 1 ? curveLinks.findIndex((l) => l.id === link.id) : -1;
+  const step = (by: number) => {
+    if (!curveLinks || !onStep || at < 0) return;
+    onStep(curveLinks[(at + by + curveLinks.length) % curveLinks.length]);
+  };
+
+  // [lists7] WALK7-03: as tall as what it holds, like the node card.
+  return (
+    <aside
+      data-track-surface="graph-link-panel"
+      data-graph-side-list="link"
+      data-graph-link-panel={link.id}
+      id="graph-list-link"
+      tabIndex={-1}
+      aria-label={t("panes.graphLinkPanel")}
+      className="menu-in absolute top-3 right-3 z-10 flex max-h-[calc(100%-24px)] w-[400px] max-w-[calc(100vw-24px)] flex-col gap-2.5 overflow-y-auto rounded-[20px] border border-line bg-card/95 p-4 shadow-float outline-none backdrop-blur-md max-[999px]:max-h-[calc(100%-76px)]"
+    >
+      <div className="flex items-start gap-2">
+        {onBack && (
+          <button
+            onClick={onBack}
+            data-track="graph-link-panel-back"
+            aria-label={backLabel ?? t("panes.graphLinksBack")}
+            data-tip={backLabel ?? t("panes.graphLinksBack")}
+            className={`-mt-1 -ml-1 ${CLOSE}`}
+          >
+            <ArrowLeftIcon size={15} />
+          </button>
+        )}
+        {/* [style7] VIEW7-04: the panel's title, as the node card's (same place, same size). */}
+        <h2 className={`min-w-0 flex-1 ${TEXT_TITLE} leading-snug font-semibold text-ink`}>
+          {loop
+            ? t("panes.graphLinksLoopTitle", { title: link.fromTitle })
+            : t("panes.graphLinksPairTitle", { a: link.fromTitle, b: link.toTitle })}
+        </h2>
+        {at >= 0 && curveLinks && (
+          <span data-graph-link-step={`${at + 1}/${curveLinks.length}`} className={`-mt-1 flex shrink-0 items-center ${TEXT_META} text-sand-600 tabular-nums`}>
+            <button
+              onClick={() => step(-1)}
+              data-track="graph-link-prev"
+              aria-label={t("panes.graphLinkStepPrev")}
+              data-tip={t("panes.graphLinkStepPrev")}
+              className={CLOSE}
+            >
+              ‹
+            </button>
+            {t("panes.graphLinkStep", { i: at + 1, n: curveLinks.length })}
+            <button
+              onClick={() => step(1)}
+              data-track="graph-link-next"
+              aria-label={t("panes.graphLinkStepNext")}
+              data-tip={t("panes.graphLinkStepNext")}
+              className={CLOSE}
+            >
+              ›
+            </button>
+          </span>
+        )}
+        <button
+          onClick={onClose}
+          data-track="graph-link-panel-close"
+          aria-label={t("common.close")}
+          data-tip={t("common.close")}
+          className={`-mt-1 -mr-1 ${CLOSE}`}
+        >
+          ✕
+        </button>
+      </div>
+      {link.recommended && decided !== "accepted" && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className={`rounded-full border border-dashed border-clay-300 px-2 ${TEXT_META} font-semibold text-clay-700`}>
+            {t("panes.graphLinkRecommended")}
+          </span>
+          {canEdit && !link.crossAccount?.outside && (
+            <span className="ml-auto flex items-center gap-1.5">
+              <button
+                onClick={() => void decide(true)}
+                data-track="link-accept"
+                disabled={busy}
+                data-tip={t("panes.acceptLinkTitle")}
+                className={ACTION_ACCEPT}
+              >
+                {t("panes.acceptLink")}
+              </button>
+              {linkRemovable(link.crossAccount) && (
+                <button
+                  onClick={() => void decide(false)}
+                  data-track="link-dismiss"
+                  disabled={busy}
+                  data-tip={t("panes.dismissLinkTitle")}
+                  className={ACTION}
+                >
+                  {t("panes.dismissLink")}
+                </button>
+              )}
+            </span>
+          )}
+        </div>
+      )}
+      {error && <p className={`${TEXT_BODY} text-red-600`}>{error}</p>}
+      {removed ? (
+        <p role="status" data-link-removed={link.id} className={`${TEXT_BODY} text-sand-700`}>
+          {t("panels.linkRemoved")}
+          {removed === "undo" && (
+            <>
+              {" "}
+              <button
+                onClick={() => void undoRemove()}
+                disabled={busy}
+                data-track="graph-link-remove-undo"
+                className={`${ACTION} align-middle`}
+              >
+                {t("panels.linkRemovedUndo")}
+              </button>
+            </>
+          )}
+        </p>
+      ) : (
+        <>
+          <div>
+            <p className={SECTION_HEAD}>{t("panes.linkWhy")}</p>
+            <p className={`mt-0.5 ${TEXT_BODY} leading-snug text-ink`}>{link.reason ?? t("panes.linkNoReason")}</p>
+          </div>
+          {(canReply || canEdit) && (
+            <div data-graph-link-actions className="flex flex-wrap items-center gap-1.5">
+              {canReply && (
+                <button
+                  onClick={() => setReplyRequest((n) => n + 1)}
+                  data-track="reply"
+                  data-tip={t("common.replyTitle")}
+                  className={rowButton}
+                >
+                  <CommentIcon size={11} />
+                  {t("common.reply")}
+                </button>
+              )}
+              {noteOnLink && (
+                <button
+                  onClick={noteOnLink}
+                  data-track="graph-link-note"
+                  data-tip={t("graphNotes.noteOnLinkTitle")}
+                  className={ACTION_NOTE}
+                >
+                  <NotesIcon size={11} />
+                  {t("graphNotes.noteOnLink")}
+                </button>
+              )}
+              {canRemove && (
+                <button
+                  onClick={() => void remove()}
+                  disabled={busy}
+                  data-track="graph-link-remove"
+                  data-tip={t("panels.removeLinkTitle")}
+                  className={`${ACTION_DANGER} ml-auto`}
+                >
+                  {t("common.remove")}
+                </button>
+              )}
+            </div>
+          )}
+          <LinkReplies link={link} openRequest={canReply ? replyRequest : undefined} />
+          <LinkNotes link={link} />
+          <LinkDetail
+            link={link}
+            showReason={false}
+            onOpen={(documentId) => {
+              router.push(`/n/${notebookId}?doc=${documentId}&link=${link.id}`);
+              onOpenDocument();
+            }}
+          />
+        </>
+      )}
+    </aside>
+  );
+}

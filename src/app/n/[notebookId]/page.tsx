@@ -5,7 +5,8 @@ import { authEnabled, currentUser } from "@/lib/auth";
 import { browserConfigured } from "@/lib/browser";
 import { driveConfig } from "@/lib/drive/config";
 import { currentLang, serverT } from "@/lib/i18n/server";
-import { peopleByIds, roleOf } from "@/lib/collab";
+import { crossAccountLinks, peopleByIds, roleOf, withoutOtherProjectLinkEdits } from "@/lib/collab";
+import { projectLinks } from "@/lib/link-scope";
 import { matchInText } from "@/lib/anchors/match";
 import { conversationTurns } from "@/lib/conversation";
 import { editedRanges } from "@/lib/diff";
@@ -18,7 +19,8 @@ import { resolveDocumentSources } from "@/lib/anchors/resolve";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { trivialEdits } from "@/lib/history/trivial";
-import { documentsGraph, listGenerated } from "@/lib/graph/view";
+import { isProvenanceLink } from "@/lib/graph/provenance";
+import { withReaderLinkNotes } from "@/lib/graph/reader-link-notes";
 import {
   corpusDistillationList,
   distillationList,
@@ -48,6 +50,7 @@ import type { ConversionInfo } from "@/components/reader/conversion-strip";
 import { GlossaryLanguage } from "@/components/reader/glossary-language";
 import type { PageMark } from "@/components/reader/page-block";
 import { ReaderInteractions } from "@/components/reader/reader-interactions";
+import { compactDocument } from "@/lib/attached-document";
 import { ensureBlockIds, isOlderBlankDocument, richTextFromBlocks } from "@/lib/docs/blocks";
 import { readPageSetup, type RichNode } from "@/lib/docs/schema";
 import { figureMedia, importShared } from "@/lib/docs/server";
@@ -68,12 +71,11 @@ import {
 } from "@/lib/video/types";
 import { billingLinks } from "@/lib/billing/switch";
 import { accountTier } from "@/lib/tiers";
-import { linkScanRunsLeft } from "@/lib/connect";
 import { isTextStyle, type TextStyle } from "@/lib/text-style";
 import { coreBlocks } from "@/lib/anchors/layer";
 import { READING_LINE_PX, type BlockPosition } from "@/lib/reading-position";
 import { storedPdfPages } from "@/lib/pdf-pages";
-import { documentEditedAt, type DocumentKind } from "@/lib/document-order";
+import { ATTACH_ORDER, documentEditedAt, type DocumentKind } from "@/lib/document-order";
 
 export const dynamic = "force-dynamic";
 
@@ -108,7 +110,7 @@ export default async function NotebookPage(props: {
       documents: {
         // Attach order. Without it the rows come back in scan order, and the
         // first row picks the document a bare project URL opens.
-        orderBy: { document: { createdAt: "asc" } },
+        orderBy: ATTACH_ORDER,
         include: {
           document: {
             select: {
@@ -202,7 +204,10 @@ export default async function NotebookPage(props: {
       }
     }
   }
-  const attached = notebook.documents.map((nd) => ({
+  // One list per page (COST6-08): every prop below that lists the documents
+  // gets this one array, rows with their default fields left out
+  // (lib/attached-document.ts), so the payload carries it once.
+  const attached = notebook.documents.map((nd) => compactDocument({
     id: nd.document.id,
     title: nd.document.title,
     sourceUrl: nd.document.sourceUrl,
@@ -624,13 +629,15 @@ export default async function NotebookPage(props: {
         href: string;
         title: string;
         reason: string | null; // what the link is about, shown in the mark's tip
+        replies: number; // open replies on the link: a count on its chain icon
+        notes?: number; // the notes on the link: counted in its chain icon's tip (WALK4-05)
       }[]
     > = {};
     const linksOut: LinkOut[] = [];
     const linksIn: LinkIn[] = [];
     const [outgoing, incoming] = await Promise.all([
       db.docLink.findMany({
-        where: { fromDocumentId: document.id },
+        where: { fromDocumentId: document.id, ...projectLinks(notebookId) },
         orderBy: { createdAt: "desc" },
         include: {
           toDocument: { select: { title: true } },
@@ -638,14 +645,21 @@ export default async function NotebookPage(props: {
         },
       }),
       db.docLink.findMany({
-        where: { toDocumentId: document.id },
+        where: { toDocumentId: document.id, ...projectLinks(notebookId) },
         orderBy: { createdAt: "desc" },
         include: {
-          fromDocument: { select: { title: true } },
+          fromDocument: { select: { title: true, generatedCommand: true } },
           replies: { orderBy: { createdAt: "asc" } },
         },
       }),
     ]);
+    // A link with no project shared across accounts: the panel hides the
+    // changes this viewer may not make (SPEC.md §13).
+    const crossAccount = await crossAccountLinks([...outgoing, ...incoming], user);
+    const crossAccountOf = (id: string) => {
+      const rule = crossAccount.get(id);
+      return rule ? { crossAccount: { outside: rule.outside, removable: rule.removable } } : {};
+    };
     for (const link of outgoing) {
       // Same ladder as resolveDocumentSources: stored offsets, re-find in the
       // stored block, re-find across all blocks (re-parse gives new block ids).
@@ -683,6 +697,9 @@ export default async function NotebookPage(props: {
         reason: link.reason,
         createdById: link.createdById,
         replies: toReplyViews(link.replies),
+        ...crossAccountOf(link.id),
+        // [cover4] On a generated page, its provenance links fold (WALK4-03).
+        ...(isProvenanceLink(link, document.generatedCommand !== null) ? { provenance: true } : {}),
       });
       if (!resolved) {
         // Orphan flags write back, so both ends report honestly (SPEC.md §5).
@@ -721,6 +738,7 @@ export default async function NotebookPage(props: {
           : `/n/${notebookId}?doc=${link.toDocumentId}`,
         title: link.toDocument.title,
         reason: link.reason,
+        replies: link.replies.filter((r) => r.resolvedById === null).length,
       });
       linksByBlock[resolved.blockId] = list;
     }
@@ -772,6 +790,9 @@ export default async function NotebookPage(props: {
           reason: link.reason,
           createdById: link.createdById,
           replies: toReplyViews(link.replies),
+          ...crossAccountOf(link.id),
+          // [cover4] A generated document's provenance link folds (WALK4-03).
+          ...(isProvenanceLink(link, link.fromDocument.generatedCommand !== null) ? { provenance: true } : {}),
         });
       }
       if (!twoEnded) continue;
@@ -798,7 +819,10 @@ export default async function NotebookPage(props: {
           },
         });
       }
-      if (link.recommended) continue;
+      // A generated document's provenance link paints on the generated page
+      // only: the source's text keeps the reader's own marks (SPEC.md §22).
+      // It still lists in the Annotations tab.
+      if (link.recommended || isProvenanceLink(link, link.fromDocument.generatedCommand !== null)) continue;
       const list = linksByBlock[resolved.blockId] ?? [];
       list.push({
         linkId: link.id,
@@ -807,6 +831,7 @@ export default async function NotebookPage(props: {
         href: `/n/${notebookId}?doc=${link.fromDocumentId}&link=${link.id}`,
         title: link.fromDocument.title,
         reason: link.reason,
+        replies: link.replies.filter((r) => r.resolvedById === null).length,
       });
       linksByBlock[resolved.blockId] = list;
     }
@@ -1092,8 +1117,12 @@ export default async function NotebookPage(props: {
     id: notebook.id,
     title: notebook.title,
     sections: top,
-    documents: attached.map((d) => ({ id: d.id, title: d.title })),
+    documents: attached,
   };
+  // [cover4] The notes on each link of the open documents (WALK4-05).
+  for (const pane of new Set([paneOne, paneTwo])) {
+    if (pane) withReaderLinkNotes(pane, view.sections, attached.map((d) => d.id));
+  }
 
   const sectionChoices = top.flatMap((s) => [
     { id: s.id, label: s.title },
@@ -1114,21 +1143,21 @@ export default async function NotebookPage(props: {
   const [
     editRows,
     corpusQuoteDocs,
-    graph,
     events,
     allEdits,
-    generated,
     positionRows,
   ] =
     await Promise.all([
       // Edit history for the open document, newest first.
       paneOne
-        ? db.blockEdit.findMany({
-            where: { documentId: paneOne.document.id },
-            orderBy: { createdAt: "desc" },
-            take: 100,
-            include: { replies: { orderBy: { createdAt: "asc" } } },
-          })
+        ? db.blockEdit
+            .findMany({
+              where: { documentId: paneOne.document.id },
+              orderBy: { createdAt: "desc" },
+              take: 100,
+              include: { replies: { orderBy: { createdAt: "asc" } } },
+            })
+            .then((rows) => withoutOtherProjectLinkEdits(rows, notebookId))
         : [],
       corpusQuoteDocIds.length > 0
         ? db.document.findMany({
@@ -1140,26 +1169,19 @@ export default async function NotebookPage(props: {
             },
           })
         : [],
-      // The graph (SPEC.md §13): attached documents as nodes; links between
-      // them as undirected weighted edges — thicker with more links, dashed
-      // while only recommended ones connect a pair — and the recommended
-      // links, both ends with their passages, the AI's reason, and the
-      // replies. Accept and Dismiss live in the graph.
-      documentsGraph(attached.map((d) => ({ id: d.id, title: d.title, hasVideo: d.hasVideo }))),
       db.notebookEvent.findMany({
         where: { notebookId },
         orderBy: { createdAt: "desc" },
         take: 80,
       }),
-      db.blockEdit.findMany({
-        where: { documentId: { in: attachedIdList } },
-        orderBy: { createdAt: "desc" },
-        take: 80,
-        include: { document: { select: { title: true } } },
-      }),
-      // The pages Stitch wrote for the project (SPEC.md §22): the graph's
-      // Generated content list.
-      listGenerated(notebookId),
+      db.blockEdit
+        .findMany({
+          where: { documentId: { in: attachedIdList } },
+          orderBy: { createdAt: "desc" },
+          take: 80,
+          include: { document: { select: { title: true } } },
+        })
+        .then((rows) => withoutOtherProjectLinkEdits(rows, notebookId)),
       // The account's copy of each open article's reading position. A preview
       // build reads the production database before its migration runs: with
       // no table, nothing resumes.
@@ -1221,14 +1243,48 @@ export default async function NotebookPage(props: {
     }),
   }));
 
-  const graphNodes = graph.nodes;
-  const graphEdges = graph.edges;
-  const recommendedLinks = graph.recommended;
+  // The graph's data (SPEC.md §13) is not on the page: the graph reads it
+  // when it opens, from GET /api/notebooks/<id>/graph (GR-18).
 
   // The History panel (SPEC.md §12): corpus events (deletions, detachments)
   // merged with every attached document's edits, newest first, attributed.
   // Small edits are marked (lib/history/trivial.ts) so the panel folds them.
   const trivial = await trivialEdits(allEdits);
+  // A removed link still hidden in this project: its newest LINK_REMOVE
+  // entry gets Restore, for an editor or the owner (WALK5-01, WALK5-08).
+  const linkMeta = (meta: unknown) =>
+    (meta && typeof meta === "object" && !Array.isArray(meta) ? meta : {}) as { linkId?: unknown; restored?: unknown; dismissed?: unknown };
+  const removedLinkIds = [
+    ...new Set(
+      allEdits.flatMap((e) => {
+        const id = linkMeta(e.meta).linkId;
+        return e.kind === "LINK_REMOVE" && typeof id === "string" ? [id] : [];
+      }),
+    ),
+  ];
+  const stillHidden = new Set(
+    myRole !== "viewer" && removedLinkIds.length > 0
+      ? (
+          await db.docLinkHidden.findMany({
+            where: { notebookId, docLinkId: { in: removedLinkIds } },
+            select: { docLinkId: true },
+          })
+        ).map((h) => h.docLinkId)
+      : [],
+  );
+  const restoreOffered = new Set<string>();
+  const restoreLinkOf = (e: (typeof allEdits)[number]): string | undefined => {
+    const id = linkMeta(e.meta).linkId;
+    if (e.kind !== "LINK_REMOVE" || typeof id !== "string" || !stillHidden.has(id) || restoreOffered.has(id)) return undefined;
+    restoreOffered.add(id); // allEdits is newest first: the newest removal
+    return id;
+  };
+  const linkEnds = (e: (typeof allEdits)[number]): string => {
+    const to = (e.meta as { toTitle?: unknown } | null)?.toTitle;
+    return (e.kind === "LINK_ADD" || e.kind === "LINK_REMOVE") && typeof to === "string" && to !== ""
+      ? `${e.document.title} → ${to}`
+      : e.document.title;
+  };
   const history: HistoryEntry[] = [
     ...events.map(
       (e): HistoryEntry => ({
@@ -1240,8 +1296,9 @@ export default async function NotebookPage(props: {
         createdAt: e.createdAt.toISOString(),
       }),
     ),
-    ...allEdits.map(
-      (e): HistoryEntry => ({
+    ...allEdits.map((e): HistoryEntry => {
+      const restoreLinkId = restoreLinkOf(e);
+      return {
         id: e.id,
         userId: e.userId,
         kind: e.kind as HistoryEntry["kind"],
@@ -1253,11 +1310,15 @@ export default async function NotebookPage(props: {
               : ((e.meta as { quotedText?: string; to?: string } | null)?.quotedText ??
                 (e.meta as { to?: string } | null)?.to ??
                 ""),
-        documentTitle: e.document.title,
+        // [panel6] A link's row names both ends (WALK6-11): "BOOK TWO → Extra notes".
+        documentTitle: linkEnds(e),
         createdAt: e.createdAt.toISOString(),
         trivial: trivial.get(e.id) ?? false,
-      }),
-    ),
+        ...(restoreLinkId ? { restoreLinkId } : {}),
+        ...(e.kind === "LINK_ADD" && linkMeta(e.meta).restored === true ? { restored: true } : {}),
+        ...(e.kind === "LINK_REMOVE" && linkMeta(e.meta).dismissed === true ? { dismissed: true } : {}),
+      };
+    }),
   ]
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, 100);
@@ -1277,10 +1338,6 @@ export default async function NotebookPage(props: {
     for (const r of e.replies) authorIds.add(r.userId);
   }
   for (const entry of history) if (entry.userId) authorIds.add(entry.userId);
-  for (const link of recommendedLinks) {
-    if (link.createdById) authorIds.add(link.createdById);
-    for (const r of link.replies) authorIds.add(r.userId);
-  }
   for (const d of corpusDistillations) if (d.createdById) authorIds.add(d.createdById);
   for (const pane of [paneOne, paneTwo]) {
     for (const d of pane?.distillations ?? []) if (d.createdById) authorIds.add(d.createdById);
@@ -1359,7 +1416,7 @@ export default async function NotebookPage(props: {
         pane={role}
         paneOneId={paneOne?.document.id ?? pane.document.id}
         paneTwoId={paneTwo?.document.id ?? null}
-        documents={attached.map((d) => ({ id: d.id, title: d.title }))}
+        documents={attached}
       />
     ) : null;
     const articlePane = role === "one" ? articleOne : articleTwo;
@@ -1448,13 +1505,6 @@ export default async function NotebookPage(props: {
       browserConfigured={browserConfigured()}
       collab={collab}
       rev={notebook.rev}
-      graph={{
-        nodes: graphNodes,
-        edges: graphEdges,
-        recommended: recommendedLinks,
-        generated,
-        linkScansLeft: await linkScanRunsLeft(user?.id ?? null),
-      }}
       history={history}
       corpusDistillations={corpusDistillations}
       assistant={
@@ -1498,8 +1548,9 @@ export default async function NotebookPage(props: {
       }
       annotationCount={
         (paneOne?.annotations.length ?? 0) +
-        (paneOne?.linksOut.filter((l) => !l.recommended).length ?? 0) +
-        (paneOne?.linksIn.filter((l) => !l.recommended).length ?? 0)
+        // [cover4] Provenance links are the generated document's, not the reader's (WALK4-03).
+        (paneOne?.linksOut.filter((l) => !l.recommended && !l.provenance).length ?? 0) +
+        (paneOne?.linksIn.filter((l) => !l.recommended && !l.provenance).length ?? 0)
       }
       distillationCount={
         (paneOne?.distillations.length ?? 0) +
@@ -1515,7 +1566,7 @@ export default async function NotebookPage(props: {
             view={readerView}
             paneOneId={paneOne.document.id}
             paneTwoId={paneTwo?.document.id ?? null}
-            documents={attached.map((d) => ({ id: d.id, title: d.title }))}
+            documents={attached}
             paneOne={paneNode(paneOne, `one:${paneOne.document.id}`, "one")}
             paneTwo={paneTwo ? paneNode(paneTwo, `two:${paneTwo.document.id}`, "two") : null}
           />

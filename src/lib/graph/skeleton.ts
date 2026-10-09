@@ -3,18 +3,28 @@ import type { ModelMessage } from "ai";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { buildContents, contentsEntries, headingContents, type ContentsEntry } from "@/lib/contents";
+import { contentsEntries, headingContents, type ContentsEntry } from "@/lib/contents";
 import {
+  ASSISTANT_WHOLE_THRESHOLD,
+  SKELETON_BUILD_CONCURRENCY,
   SKELETON_EFFORT,
   SKELETON_MAX_OUTPUT_TOKENS,
+  SKELETON_QUIET_MS,
   SKELETON_STALE_FRACTION,
+  SKELETON_HEARTBEAT_MS,
   SKELETON_STALE_MS,
+  SKELETON_WAIT_MS,
   SKELETON_WINDOW_CHARS,
+  SKELETON_WINDOW_CONCURRENCY,
+  SKELETON_WINDOWS_IN_FLIGHT,
+  STITCH_READS_GENERATED,
+  STITCH_WHOLE_THRESHOLD,
 } from "@/lib/derive/config";
 import { documentPrefix, pageNames } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
 import { featureCall, featureConfigured } from "@/lib/feature-models";
-import { skeletonPrompt } from "@/lib/prompts/skeleton";
+import { mapLimit } from "@/lib/jev";
+import { SKELETON_KEYED, skeletonPrompt } from "@/lib/prompts/skeleton";
 import type { UsageMeta } from "@/lib/usage";
 
 // The skeleton of a document (SPEC.md §22): the document collapsed for
@@ -28,14 +38,17 @@ import type { UsageMeta } from "@/lib/usage";
 // reads as its own first words until the skeleton is rebuilt, and a
 // document more than a tenth changed is rebuilt — in the background after
 // an edit or an add (refreshSkeleton), and at once when Stitch needs it
-// (ensureSkeleton). Built one call per window of SKELETON_WINDOW_CHARS,
-// the windows at once, each under its own cached prefix.
+// (ensureSkeleton), but at most once per SKELETON_QUIET_MS either way. Built one call per window of SKELETON_WINDOW_CHARS,
+// SKELETON_WINDOW_CONCURRENCY windows at a time under a process-wide
+// SKELETON_WINDOWS_IN_FLIGHT, each under its own cached prefix.
 
 export const SKELETON_VERSION = 1;
-const LINE_MAX = 400;
+const LINE_MAX = 4_000; // a line of a 4,000-word block: one word in ten, cut past it rather than failing the window
 const SUMMARY_MAX = 800;
 const GIST_MAX = 400;
 const FALLBACK_LINE = 200; // chars of a block's own text that stand in for a missing line
+const CHANGED_LINE = 600; // chars of an edited or new block's own text that stand in for its line, beside a stored skeleton (ANS7-02)
+const CHANGED_LINES_MAX = 8_000; // chars, about 2k tokens, of such lines per document; past it a changed block gets FALLBACK_LINE
 
 export type SkeletonLine = { blockId: string; hash: string; text: string };
 export type SkeletonPart = { blockId: string; title: string; summary: string };
@@ -45,16 +58,68 @@ export type Skeleton = {
   parts: SkeletonPart[];
   lines: SkeletonLine[];
   chars: number; // the readable text's length when built
+  built?: number; // when it was built (ms since epoch); absent on skeletons built before it was kept
 };
 
 /** The document as the skeleton reads it: the block rows Stitch loads. */
 export type SkeletonBlock = { id: string; type: string; text: string; startTime?: number | null; endTime?: number | null };
 
-const windowSchema = z.object({
-  gist: z.string().max(GIST_MAX).default(""),
-  parts: z.array(z.object({ blockId: z.string().min(1), summary: z.string().trim().min(1).max(SUMMARY_MAX) })).max(200),
-  lines: z.array(z.object({ blockId: z.string().min(1), text: z.string().trim().min(1).max(LINE_MAX) })).max(4000),
+const PART_EVERY = 25; // readable blocks per part of a document with no headings
+
+// The window's blocks are numbered 1..n for the model (SkeletonCtx): a
+// number is a token or two where a stored id is a dozen, written once per
+// line. The number maps back to the stored id below.
+// The answer keys each line and summary by its number ({"12": "…"},
+// COST4-08); a list of {blockId, text} / {blockId, summary}, the older
+// form, parses the same.
+const blockNumber = z.union([z.string(), z.number()]).transform((v) => String(v).replace(/[^0-9]/g, ""));
+const lineText = z.string().trim().min(1).transform((t) => t.slice(0, LINE_MAX));
+const summaryText = z.string().trim().min(1).transform((t) => t.slice(0, SUMMARY_MAX));
+const byNumber = (n: string) => n.replace(/[^0-9]/g, "");
+const linesSchema = z.union([
+  z.array(z.object({ blockId: blockNumber, text: lineText })).max(4000),
+  z
+    .record(z.string(), lineText)
+    .refine((r) => Object.keys(r).length <= 4000)
+    .transform((r) => Object.entries(r).map(([n, text]) => ({ blockId: byNumber(n), text }))),
+]);
+const partsSchema = z.union([
+  z.array(z.object({ blockId: blockNumber, summary: summaryText })).max(200),
+  z
+    .record(z.string(), summaryText)
+    .refine((r) => Object.keys(r).length <= 200)
+    .transform((r) => Object.entries(r).map(([n, summary]) => ({ blockId: byNumber(n), summary }))),
+]);
+export const windowSchema = z.object({
+  gist: z.string().transform((t) => t.slice(0, GIST_MAX)).default(""),
+  parts: partsSchema,
+  lines: linesSchema,
 });
+
+// The first builds of the process log their coverage (SKELETON_KEYED is
+// on, ANS5): per window, the blocks the model wrote a line for against the
+// blocks in the window. One line per build:
+//   [skeleton] coverage keyed build 3/50 doc=<id>: 118/120 lines (98.3%); windows 40/40 38/40 40/40
+// A block with no line reads as its first words. Judge the keyed form by
+// the build's percentage against the list form's on the same documents
+// (set SKELETON_KEYED false and rebuild): off again when it is more than 2
+// points under.
+const COVERAGE_LOG_BUILDS = 50;
+let coverageBuilds = 0;
+function logSkeletonCoverage(documentId: string, windows: { id: string }[][], results: { lines: { blockId: string }[] }[]): void {
+  if (coverageBuilds >= COVERAGE_LOG_BUILDS) return;
+  coverageBuilds++;
+  const per = windows.map((blocks, i) => {
+    const inWindow = new Set(blocks.map((b) => b.id));
+    const named = new Set((results[i]?.lines ?? []).map((l) => l.blockId).filter((id) => inWindow.has(id)));
+    return { named: named.size, expected: blocks.length };
+  });
+  const named = per.reduce((n, w) => n + w.named, 0);
+  const expected = per.reduce((n, w) => n + w.expected, 0);
+  console.log(
+    `[skeleton] coverage ${SKELETON_KEYED ? "keyed" : "list"} build ${coverageBuilds}/${COVERAGE_LOG_BUILDS} doc=${documentId}: ${named}/${expected} lines (${expected > 0 ? ((100 * named) / expected).toFixed(1) : "100.0"}%); windows ${per.map((w) => `${w.named}/${w.expected}`).join(" ")}`,
+  );
+}
 
 /** The hash of a block's text: what tells a stored line its block changed. */
 export function blockHash(text: string): string {
@@ -95,6 +160,7 @@ export function readSkeleton(value: unknown): Skeleton | null {
     parts,
     lines,
     chars: typeof row.chars === "number" ? row.chars : 0,
+    ...(typeof row.built === "number" ? { built: row.built } : {}),
   };
 }
 
@@ -130,27 +196,53 @@ export function skeletonStale(skeleton: Skeleton | null, blocks: SkeletonBlock[]
 // A block's own first words, cut at a sentence end when one falls in the
 // first FALLBACK_LINE characters, else at a word: the line for a block the
 // skeleton has no current line for.
-function fallbackLine(text: string): string {
+function fallbackLine(text: string, max = FALLBACK_LINE): string {
   const t = text.replace(/\s+/g, " ").trim();
-  if (t.length <= FALLBACK_LINE) return t;
-  const head = t.slice(0, FALLBACK_LINE);
+  if (t.length <= max) return t;
+  const head = t.slice(0, max);
   const sentence = Math.max(head.lastIndexOf(". "), head.lastIndexOf("。"), head.lastIndexOf("! "), head.lastIndexOf("? "));
-  if (sentence > FALLBACK_LINE / 2) return head.slice(0, sentence + 1);
+  if (sentence > max / 2) return head.slice(0, sentence + 1);
   const word = head.lastIndexOf(" ");
-  return word > FALLBACK_LINE / 2 ? head.slice(0, word) : head;
+  return word > max / 2 ? head.slice(0, word) : head;
+}
+
+/** The line of a block edited beside a stored skeleton (ANS7-02): its
+    text to CHANGED_LINE characters; a longer block's first half of that
+    and its last, joined by " … " (round 8): an edit at the end of a
+    long paragraph, where a correction usually goes, stays in its line. */
+function changedLine(text: string): string {
+  const t = text.replace(/\s+/g, " ").trim();
+  if (t.length <= CHANGED_LINE) return t;
+  const half = CHANGED_LINE / 2;
+  const head = fallbackLine(t, half);
+  const end = t.slice(-half);
+  // The tail opens at a sentence start when one falls in its first half, else at a word.
+  const sentence = Math.min(...[". ", "。", "! ", "? "].map((m) => end.indexOf(m)).filter((i) => i >= 0 && i < half / 2).concat(Infinity));
+  const tail = sentence !== Infinity ? end.slice(sentence + 1).trim() : end.slice(Math.max(0, end.indexOf(" ") + 1));
+  return `${head} … ${tail}`;
 }
 
 /** The skeleton as Stitch reads it now: one line per current readable
     block, in the document's order — the stored line where the block is
     unchanged, the block's own first words where it is new or changed or
-    the skeleton is missing — and the parts whose block still exists. */
+    the skeleton is missing — and the parts whose block still exists.
+    Beside a stored skeleton, a new or changed block's words run to
+    CHANGED_LINE characters, a longer block's opening and its end
+    (changedLine), up to CHANGED_LINES_MAX per document (ANS7-02): an edit
+    late in a long paragraph stays in its line until the skeleton is
+    rebuilt. */
 export function currentSkeleton(skeleton: Skeleton | null, blocks: SkeletonBlock[]): Skeleton {
   const readable = skeletonBlocks(blocks);
   const stored = new Map(skeleton?.lines.map((l) => [l.blockId, l]) ?? []);
+  let changedChars = 0;
   const lines: SkeletonLine[] = readable.map((b) => {
     const hash = blockHash(b.text);
     const line = stored.get(b.id);
-    return line && line.hash === hash ? line : { blockId: b.id, hash, text: fallbackLine(b.text) };
+    if (line && line.hash === hash) return line;
+    const long = skeleton ? changedLine(b.text) : "";
+    const text = long && changedChars + long.length <= CHANGED_LINES_MAX ? long : fallbackLine(b.text);
+    if (text === long) changedChars += long.length;
+    return { blockId: b.id, hash, text };
   });
   const ids = new Set(readable.map((b) => b.id));
   return {
@@ -162,27 +254,49 @@ export function currentSkeleton(skeleton: Skeleton | null, blocks: SkeletonBlock
   };
 }
 
-// The document's parts for the skeleton's summaries: the stored contents,
-// else built now, else the headings; none for a document too short to have
-// parts (the whole document is then one part).
-async function partsFor(
-  documentId: string,
-  userId: string | null,
+/** The document's parts for the skeleton's summaries: the stored contents,
+    else the headings, else — a document with no headings — a part every
+    PART_EVERY readable blocks, titled with its blocks' numbers; none for a
+    document too short to have parts (the whole document is then one
+    part). Contents are built when the reader asks for them (SPEC.md §26),
+    never here: the skeleton's parts live in the skeleton only. */
+export function partsFor(
   contents: unknown,
   blocks: (SkeletonBlock & { order: number; html: string | null })[],
-): Promise<ContentsEntry[]> {
+): ContentsEntry[] {
   const stored = contentsEntries(contents);
   if (stored.length > 0) return stored;
-  try {
-    const built = await buildContents(documentId, userId);
-    if (built.length > 0) return built;
-  } catch (err) {
-    console.warn("[skeleton] contents failed, using headings:", err);
+  const headings = headingContents(blocks);
+  if (headings.length > 0) return headings;
+  const readable = skeletonBlocks(blocks);
+  if (readable.length <= PART_EVERY) return [];
+  const parts: ContentsEntry[] = [];
+  for (let i = 0; i < readable.length; i += PART_EVERY) {
+    // The run's place, not its first words cut mid-sentence; the part
+    // starts at its first block that is not a footnote.
+    const end = Math.min(i + PART_EVERY, readable.length);
+    const first = readable.slice(i, end).find((b) => !/^\s*\[Footnote/i.test(b.text)) ?? readable[i];
+    parts.push({ title: `Blocks ${i + 1}–${end}`, blockId: first.id, level: 1 });
   }
-  return headingContents(blocks);
+  return parts;
 }
 
-/** Build the skeleton now: one call per window, the windows at once, and
+// The process's skeleton windows in flight, across every build.
+let windowsInFlight = 0;
+const windowQueue: (() => void)[] = [];
+async function inFlight<T>(run: () => Promise<T>): Promise<T> {
+  if (windowsInFlight >= SKELETON_WINDOWS_IN_FLIGHT) await new Promise<void>((resolve) => windowQueue.push(resolve));
+  else windowsInFlight++;
+  try {
+    return await run();
+  } finally {
+    const next = windowQueue.shift();
+    if (next) next(); // the slot passes on
+    else windowsInFlight--;
+  }
+}
+
+/** Build the skeleton now: one call per window, SKELETON_WINDOW_CONCURRENCY at a time, and
     store it. Returns the skeleton, or null when the document has nothing
     to read or no model is configured. Throws on a failed model call. */
 export async function buildSkeleton(
@@ -208,7 +322,7 @@ export async function buildSkeleton(
   if (!document) return null;
   const readable = skeletonBlocks(document.blocks);
   if (readable.length === 0) return null;
-  const parts = await partsFor(documentId, userId, document.contents, document.blocks);
+  const parts = partsFor(document.contents, document.blocks);
   const partAt = new Map(parts.map((p) => [p.blockId, p]));
 
   // Windows: readable blocks in order, cut at a block boundary past the
@@ -229,23 +343,34 @@ export async function buildSkeleton(
 
   const skeletonCall = await featureCall("skeleton", SKELETON_EFFORT);
   const model = skeletonCall.model;
-  const usage = { userId, feature: "skeleton", model: skeletonCall.modelId } satisfies UsageMeta;
-  const results = await Promise.all(
-    windows.map(async (blocks, i) => {
-      const windowParts = blocks.filter((b) => partAt.has(b.id)).map((b) => partAt.get(b.id)!);
-      const messages: ModelMessage[] = [
-        { role: "system", content: documentPrefix(document.title, blocks, i === 0 ? document.references : undefined, pageNames(document)) },
-        {
-          role: "user",
-          content: skeletonPrompt({
-            parts: windowParts.map((p) => ({ blockId: p.blockId, title: p.title })),
-            window: i + 1,
-            windows: windows.length,
-            blockCount: blocks.length,
-          }),
-        },
-      ];
-      const result = await callForJson({
+  const usage = { userId, feature: "skeleton", model: skeletonCall.modelId, pass: "skeleton" } satisfies UsageMeta;
+  // A document's windows SKELETON_WINDOW_CONCURRENCY at a time, every
+  // build's under the process's SKELETON_WINDOWS_IN_FLIGHT (COST4-08); a
+  // failed window stops the windows not yet sent.
+  let failed = false;
+  const results = await mapLimit(windows, SKELETON_WINDOW_CONCURRENCY, async (blocks, i) => {
+    if (failed) throw new Error("an earlier window failed");
+    const numberOf = new Map(blocks.map((b, n) => [b.id, String(n + 1)]));
+    const numbered = blocks.map((b, n) => ({ ...b, id: String(n + 1) }));
+    const windowParts = blocks.filter((b) => partAt.has(b.id)).map((b) => partAt.get(b.id)!);
+    const messages: ModelMessage[] = [
+      {
+        role: "system",
+        content: documentPrefix(document.title, numbered, i === 0 ? document.references : undefined, pageNames(document)),
+        providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
+      },
+      {
+        role: "user",
+        content: skeletonPrompt({
+          parts: windowParts.map((p) => ({ blockId: numberOf.get(p.blockId) ?? "", title: p.title })),
+          window: i + 1,
+          windows: windows.length,
+          blockCount: blocks.length,
+        }),
+      },
+    ];
+    const result = await inFlight(() =>
+      callForJson({
         model,
         messages,
         maxOutputTokens: SKELETON_MAX_OUTPUT_TOKENS,
@@ -254,12 +379,26 @@ export async function buildSkeleton(
         label: windows.length > 1 ? `SKELETON ${i + 1}/${windows.length}` : "SKELETON",
         usage,
         abortSignal: signal,
-      });
-      if (!result.ok) throw new Error(result.error);
-      return result.data;
-    }),
-  );
+      }),
+    ).catch((err: unknown) => {
+      failed = true;
+      throw err;
+    });
+    if (!result.ok) {
+      failed = true;
+      throw new Error(result.error);
+    }
+    // The window's numbers back to the stored ids; a number that names
+    // no block of the window drops.
+    const idOf = (n: string) => blocks[Number(n) - 1]?.id ?? "";
+    return {
+      gist: result.data.gist,
+      parts: result.data.parts.map((p) => ({ ...p, blockId: idOf(p.blockId) })).filter((p) => p.blockId),
+      lines: result.data.lines.map((l) => ({ ...l, blockId: idOf(l.blockId) })).filter((l) => l.blockId),
+    };
+  });
 
+  logSkeletonCoverage(documentId, windows, results);
   // Every line against the stored blocks: the model's line where it named
   // the block, the block's own first words where it did not.
   const lineFor = new Map<string, string>();
@@ -276,28 +415,211 @@ export async function buildSkeleton(
     parts: parts.map((p) => ({ blockId: p.blockId, title: p.title, summary: summaryFor.get(p.blockId) ?? "" })),
     lines: readable.map((b) => ({ blockId: b.id, hash: blockHash(b.text), text: lineFor.get(b.id) ?? fallbackLine(b.text) })),
     chars: readable.reduce((sum, b) => sum + b.text.length, 0),
+    built: Date.now(),
   };
+  // The build lock (skeletonStartedAt) is its holder's to clear
+  // (buildLocked), never a build's: another run may hold it.
   await db.document.update({
     where: { id: documentId },
-    data: { skeleton: skeleton as unknown as Prisma.InputJsonValue, skeletonStartedAt: null },
+    data: { skeleton: skeleton as unknown as Prisma.InputJsonValue },
   });
   return skeleton;
 }
 
+// One build per document at a time (REV3-07). In this process, a running
+// build is shared: a command that needs the skeleton the graph's warm is
+// building waits for that build instead of starting a second. Across
+// processes, Document.skeletonStartedAt is the lock: set by a conditional
+// update, so two runs never both take it, refreshed by its holder every
+// SKELETON_HEARTBEAT_MS, cleared only by the run that holds it, and taken
+// over once it was not refreshed for SKELETON_STALE_MS (a dead run's;
+// REV4-03).
+type Running = {
+  build: Promise<Skeleton | null>;
+  /** Stops the model calls once no one waits for the build any more. */
+  stop: AbortController;
+  /** Waiters that hold no signal (a warm, an edit's refresh): the build
+      runs on for them whatever Stop does. */
+  unstoppable: number;
+  /** Waiters with a signal not yet aborted. */
+  live: number;
+};
+const running = new Map<string, Running>();
+const WAIT_POLL_MS = 1_000;
+
+async function claimBuild(documentId: string): Promise<Date | null> {
+  const stamp = new Date();
+  const { count } = await db.document.updateMany({
+    where: {
+      id: documentId,
+      OR: [{ skeletonStartedAt: null }, { skeletonStartedAt: { lt: new Date(stamp.getTime() - SKELETON_STALE_MS) } }],
+    },
+    data: { skeletonStartedAt: stamp },
+  });
+  return count === 1 ? stamp : null;
+}
+
+/** The lock held while the build runs: refreshed every
+    SKELETON_HEARTBEAT_MS, cleared at the end, both only while it is still
+    this run's stamp. */
+function holdLock(documentId: string, first: Date): { release: () => Promise<void> } {
+  let stamp = first;
+  const beat = setInterval(() => {
+    const next = new Date();
+    db.document
+      .updateMany({ where: { id: documentId, skeletonStartedAt: stamp }, data: { skeletonStartedAt: next } })
+      .then(({ count }) => {
+        if (count === 1) stamp = next;
+        else clearInterval(beat); // taken over: no longer ours to refresh
+      })
+      .catch(() => {});
+  }, SKELETON_HEARTBEAT_MS);
+  return {
+    release: async () => {
+      clearInterval(beat);
+      await db.document.updateMany({ where: { id: documentId, skeletonStartedAt: stamp }, data: { skeletonStartedAt: null } });
+    },
+  };
+}
+
+// A promise the signal stops waiting for.
+function untilAborted<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(new Error("aborted"));
+  return new Promise<T>((resolve, reject) => {
+    const stop = () => reject(new Error("aborted"));
+    signal.addEventListener("abort", stop, { once: true });
+    promise.then(
+      (v) => {
+        signal.removeEventListener("abort", stop);
+        resolve(v);
+      },
+      (e: unknown) => {
+        signal.removeEventListener("abort", stop);
+        reject(e instanceof Error ? e : new Error(String(e)));
+      },
+    );
+  });
+}
+
+// One more waiter on a running build. A waiter without a signal keeps it
+// running to the end, and it stores its skeleton for the next command. When
+// every waiter had a signal and each was aborted (Stop), the build's model
+// calls stop too.
+function join(run: Running, signal?: AbortSignal): Promise<Skeleton | null> {
+  if (!signal) {
+    run.unstoppable++;
+    return run.build;
+  }
+  run.live++;
+  const leave = () => {
+    run.live--;
+    if (run.live === 0 && run.unstoppable === 0) run.stop.abort();
+  };
+  if (signal.aborted) leave();
+  else signal.addEventListener("abort", leave, { once: true });
+  return untilAborted(run.build, signal);
+}
+
+/** The skeleton built under the lock: the build of this document already
+    running in this process; else the lock taken, the skeleton built, and
+    the lock cleared. "held": another process holds the lock. */
+async function buildLocked(documentId: string, userId: string | null, signal?: AbortSignal): Promise<Skeleton | null | "held"> {
+  const own = running.get(documentId);
+  if (own) return join(own, signal);
+  const stamp = await claimBuild(documentId);
+  if (!stamp) return "held";
+  const lock = holdLock(documentId, stamp);
+  const stop = new AbortController();
+  const build = buildSkeleton(documentId, userId, stop.signal).finally(async () => {
+    running.delete(documentId);
+    await lock.release().catch(() => {});
+  });
+  const run: Running = { build, stop, unstoppable: 0, live: 0 };
+  running.set(documentId, run);
+  return join(run, signal);
+}
+
+/** Another process's build of the document, waited for briefly: the stored
+    skeleton once its lock clears, polled every WAIT_POLL_MS up to
+    SKELETON_WAIT_MS. When the lock is a dead run's, this run takes it over
+    and builds. Null when the build does not end in time: the command reads
+    without it rather than blocking. */
+async function waitForBuild(documentId: string, userId: string | null, signal?: AbortSignal): Promise<Skeleton | null> {
+  const until = Date.now() + SKELETON_WAIT_MS;
+  while (Date.now() < until) {
+    await untilAborted(new Promise((resolve) => setTimeout(resolve, WAIT_POLL_MS)), signal);
+    const row = await db.document.findUnique({ where: { id: documentId }, select: { skeleton: true, skeletonStartedAt: true } });
+    if (!row) return null;
+    if (!row.skeletonStartedAt) return readSkeleton(row.skeleton);
+    if (Date.now() - row.skeletonStartedAt.getTime() >= SKELETON_STALE_MS) {
+      const built = await buildLocked(documentId, userId, signal);
+      return built === "held" ? null : built;
+    }
+  }
+  return null;
+}
+
+/** What a command does with a document's stored skeleton (COST5-08):
+    "read" it when under a tenth of the document changed; "defer" when more
+    changed but it was built under SKELETON_QUIET_MS ago — the document is
+    being written, and a rebuild every command would read it again and
+    again, so the command reads the stored skeleton and the next command or
+    graph open past the quiet period rebuilds; "build" it now when stale
+    past the quiet period, missing, or of a skeleton that does not say when
+    it was built. */
+export function skeletonAction(stored: Skeleton | null, blocks: SkeletonBlock[], now = Date.now()): "read" | "defer" | "build" {
+  if (!skeletonStale(stored, blocks)) return "read";
+  if (stored?.built !== undefined && now - stored.built < SKELETON_QUIET_MS) return "defer";
+  return "build";
+}
+
+/** A build of the document already running — in this process, or under
+    another process's fresh lock — waited for up to SKELETON_WAIT_MS
+    (REV6-03): it reads the edit the command is about. Null when none runs
+    or it does not end in time; the waiter does not keep it running. */
+async function runningBuild(documentId: string, userId: string | null, signal?: AbortSignal): Promise<Skeleton | null> {
+  const own = running.get(documentId);
+  if (own) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), SKELETON_WAIT_MS);
+    });
+    try {
+      return await untilAborted(Promise.race([own.build.catch(() => null), late]), signal);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  const row = await db.document.findUnique({ where: { id: documentId }, select: { skeletonStartedAt: true } });
+  if (!row?.skeletonStartedAt || Date.now() - row.skeletonStartedAt.getTime() >= SKELETON_STALE_MS) return null;
+  return waitForBuild(documentId, userId, signal);
+}
+
 /** The skeleton Stitch reads for a document it has loaded: the stored one
     when under a tenth of the document changed, with the changed blocks as
-    their own first words; built now when stale or missing. A failed build
-    answers the current lines — every block as its own first words — so a
-    command still runs. */
+    their own first words; the stored one too, the same way, while it is
+    under SKELETON_QUIET_MS old (skeletonAction), unless a build of it is
+    running, which is waited for up to SKELETON_WAIT_MS; built now when
+    stale past that or missing. A failed build answers the current lines —
+    every block as its own first words — so a command still runs. */
 export async function ensureSkeleton(
   document: { id: string; skeleton: unknown; blocks: SkeletonBlock[] },
   userId: string | null,
   signal?: AbortSignal,
 ): Promise<Skeleton> {
   const stored = readSkeleton(document.skeleton);
-  if (!skeletonStale(stored, document.blocks)) return currentSkeleton(stored, document.blocks);
+  const action = skeletonAction(stored, document.blocks);
+  if (action === "read") return currentSkeleton(stored, document.blocks);
   try {
-    const built = await buildSkeleton(document.id, userId, signal);
+    if (action === "defer") {
+      const built = await runningBuild(document.id, userId, signal);
+      return currentSkeleton(built ?? stored, document.blocks);
+    }
+    // A build already running (the graph's warm, an edit's refresh) is
+    // waited for, not run twice.
+    const locked = await buildLocked(document.id, userId, signal);
+    const built = locked === "held" ? await waitForBuild(document.id, userId, signal) : locked;
     if (built) return currentSkeleton(built, document.blocks);
   } catch (err) {
     if (signal?.aborted) throw err;
@@ -306,28 +628,184 @@ export async function ensureSkeleton(
   return currentSkeleton(stored, document.blocks);
 }
 
+/** Whether a project of the document reads skeletons: past
+    STITCH_WHOLE_THRESHOLD estimated tokens (Stitch's reading passes) or
+    ASSISTANT_WHOLE_THRESHOLD chars (the assistant at Project scope). One
+    aggregate query; the tokens are estimated as lib/tokens.ts does, a CJK
+    character (3 bytes in UTF-8) at 1 and the rest at chars / 4. A
+    document in no project reads none. by: the document, or a project. */
+export async function skeletonNeeded(by: { documentId: string } | { notebookId: string }): Promise<boolean> {
+  return (await projectText(by)).some(readsSkeletons);
+}
+
+// The text of the projects of a document, or of one project: its chars,
+// its CJK chars, and its blocks.
+async function projectText(by: { documentId: string } | { notebookId: string }) {
+  return db.$queryRaw<{ chars: bigint | null; cjk: bigint | null; blocks: bigint | null }[]>(
+    "documentId" in by
+      ? Prisma.sql`SELECT sum(length(b.text)) AS chars, sum(octet_length(b.text) - length(b.text)) / 2 AS cjk, count(*) AS blocks
+          FROM "NotebookDocument" nd
+          JOIN "NotebookDocument" nd2 ON nd2."notebookId" = nd."notebookId"
+          JOIN "Block" b ON b."documentId" = nd2."documentId"
+          WHERE nd."documentId" = ${by.documentId}
+          GROUP BY nd."notebookId"`
+      : Prisma.sql`SELECT sum(length(b.text)) AS chars, sum(octet_length(b.text) - length(b.text)) / 2 AS cjk, count(*) AS blocks
+          FROM "NotebookDocument" nd
+          JOIN "Block" b ON b."documentId" = nd."documentId"
+          WHERE nd."notebookId" = ${by.notebookId}`,
+  );
+}
+
+function readsSkeletons(r: { chars: bigint | null; cjk: bigint | null }): boolean {
+  const chars = Number(r.chars ?? 0);
+  const cjk = Math.min(chars, Number(r.cjk ?? 0));
+  // A tenth of headroom: Stitch counts the rendering, tags included.
+  return cjk + (chars - cjk) / 4 > STITCH_WHOLE_THRESHOLD * 0.9 || chars > ASSISTANT_WHOLE_THRESHOLD;
+}
+
 /** The background refresh, after an add or an edit: builds the skeleton
     when the document has none or more than a tenth of it changed, and
-    leaves it alone otherwise. One build at a time per document: a build
-    started under SKELETON_STALE_MS ago is running, and this one yields. */
-export async function refreshSkeleton(documentId: string, userId: string | null): Promise<void> {
+    leaves it alone otherwise. It builds only when a project of the
+    document reads skeletons (skeletonNeeded), and while the document is
+    being written at most once per SKELETON_QUIET_MS (a stored skeleton
+    built under that ago waits, at the graph's warm too). needed: the
+    caller checked that the project reads skeletons (warmSkeletons). force:
+    build now whatever the quiet period (a check that starts a build). A
+    skeleton not built here is built at once when Stitch or the assistant
+    needs it (ensureSkeleton). One build at a time per document
+    (buildLocked): a build running in this process, or holding the lock
+    from another, and this one yields. A page Stitch generated gets no
+    skeleton here while the every-document read skips generated pages
+    (STITCH_READS_GENERATED): a picked one is built when Stitch reads it.
+    sqlStale: the caller ran the SQL drift already (warmSkeletons). */
+export async function refreshSkeleton(
+  documentId: string,
+  userId: string | null,
+  options: { force?: boolean; needed?: boolean; sqlStale?: boolean } = {},
+): Promise<void> {
   if (!(await featureConfigured("skeleton"))) return;
+  if (running.has(documentId)) return;
+  // The cheap checks first, from one small row (COST4-04): an edit saves
+  // every few seconds, and inside the quiet period nothing is read.
+  const [head] = await db.$queryRaw<{ v: number | null; built: number | null; startedAt: Date | null; generated: boolean }[]>`
+    SELECT CASE WHEN jsonb_typeof(d.skeleton->'v') = 'number' THEN (d.skeleton->>'v')::float8 END AS v,
+      CASE WHEN jsonb_typeof(d.skeleton->'built') = 'number' THEN (d.skeleton->>'built')::float8 END AS built,
+      d."skeletonStartedAt" AS "startedAt", d."generatedCommand" IS NOT NULL AS generated
+    FROM "Document" d WHERE d.id = ${documentId}`;
+  if (!head) return;
+  if (head.generated && !STITCH_READS_GENERATED) return;
+  if (head.startedAt && Date.now() - head.startedAt.getTime() < SKELETON_STALE_MS) return;
+  const built = head.v === SKELETON_VERSION ? head.built : null;
+  if (!options.force && built !== null && Date.now() - built < SKELETON_QUIET_MS) return;
+  // Then the drift in SQL, no text read; the blocks load only when it says
+  // stale, for the exact check.
+  if (!options.sqlStale && !(await staleSkeletonDocument(documentId))) return;
   const document = await db.document.findUnique({
     where: { id: documentId },
-    select: {
-      skeleton: true,
-      skeletonStartedAt: true,
-      blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true } },
-    },
+    select: { skeleton: true, blocks: { orderBy: { order: "asc" }, select: { id: true, type: true, text: true } } },
   });
   if (!document) return;
   if (!skeletonStale(readSkeleton(document.skeleton), document.blocks)) return;
-  if (document.skeletonStartedAt && Date.now() - document.skeletonStartedAt.getTime() < SKELETON_STALE_MS) return;
-  await db.document.update({ where: { id: documentId }, data: { skeletonStartedAt: new Date() } });
+  if (!options.force && !options.needed && !(await skeletonNeeded({ documentId }))) return;
   try {
-    await buildSkeleton(documentId, userId);
+    await buildLocked(documentId, userId);
   } catch (err) {
     console.error(`[skeleton] refresh of ${documentId} failed:`, err);
-    await db.document.update({ where: { id: documentId }, data: { skeletonStartedAt: null } }).catch(() => {});
   }
+}
+
+/** The documents of a project whose skeleton may be stale: skeletonDrift
+    worked out in SQL, from each readable block's length and the hash of its
+    text against the stored lines' hashes, so a graph open reads no block
+    text into the server (COST3-07). A document with no skeleton, or one of
+    an older version, is stale. Generated pages are left out while the
+    every-document read skips them. The SQL's readable blocks are the text
+    blocks with a non-space character: a block JS trims to nothing counts
+    here as changed, which only sends it to refreshSkeleton, whose check
+    is exact. */
+export async function staleSkeletonDocuments(notebookId: string): Promise<string[]> {
+  return staleIn(Prisma.sql`
+    SELECT d.id, d.skeleton FROM "NotebookDocument" nd JOIN "Document" d ON d.id = nd."documentId"
+    WHERE nd."notebookId" = ${notebookId} AND (${STITCH_READS_GENERATED} OR d."generatedCommand" IS NULL)`);
+}
+
+/** staleSkeletonDocuments for one document (COST4-04): whether its
+    skeleton may be stale, in SQL, with no block text read into the
+    server. True may be a block JS trims to nothing; refreshSkeleton then
+    loads the blocks for the exact check. */
+export async function staleSkeletonDocument(documentId: string): Promise<boolean> {
+  const stale = await staleIn(Prisma.sql`
+    SELECT d.id, d.skeleton FROM "Document" d
+    WHERE d.id = ${documentId} AND (${STITCH_READS_GENERATED} OR d."generatedCommand" IS NULL)`);
+  return stale.length > 0;
+}
+
+// skeletonDrift in SQL for the documents `docs` selects (id, skeleton).
+async function staleIn(docs: Prisma.Sql): Promise<string[]> {
+  const rows = await db.$queryRaw<{ id: string; v: number | null; total: bigint | null; changed: bigint | null; removed: bigint | null; lines: number | null }[]>`
+    WITH docs AS (${docs}),
+    lines AS MATERIALIZED (
+      SELECT docs.id AS doc, l."blockId" AS "blockId", l.hash, length(l.text) AS len
+      FROM docs, jsonb_to_recordset(CASE WHEN jsonb_typeof(docs.skeleton->'lines') = 'array' THEN docs.skeleton->'lines' ELSE '[]'::jsonb END)
+        AS l("blockId" text, hash text, text text)
+    ),
+    blocks AS MATERIALIZED (
+      SELECT b."documentId" AS doc, b.id, left(md5(b.text), 12) AS hash, length(b.text) AS len
+      FROM "Block" b JOIN docs ON docs.id = b."documentId"
+      WHERE b.type NOT IN ('VIDEO', 'PAGE') AND b.text ~ '[^[:space:]]'
+    ),
+    bl AS (
+      SELECT b.doc, sum(b.len) AS total, sum(CASE WHEN l.hash IS NULL OR l.hash <> b.hash THEN b.len ELSE 0 END) AS changed
+      FROM blocks b LEFT JOIN lines l ON l.doc = b.doc AND l."blockId" = b.id
+      GROUP BY b.doc
+    ),
+    lr AS (
+      SELECT l.doc, count(*)::int AS lines, sum(CASE WHEN b.id IS NULL THEN l.len ELSE 0 END) * 10 AS removed
+      FROM lines l LEFT JOIN blocks b ON b.doc = l.doc AND b.id = l."blockId"
+      GROUP BY l.doc
+    )
+    SELECT docs.id,
+      CASE WHEN jsonb_typeof(docs.skeleton->'v') = 'number' THEN (docs.skeleton->>'v')::int END AS v,
+      bl.total, bl.changed, lr.removed, lr.lines
+    FROM docs LEFT JOIN bl ON bl.doc = docs.id LEFT JOIN lr ON lr.doc = docs.id`;
+  return rows
+    .filter((r) => {
+      const total = Number(r.total ?? 0);
+      if (r.v !== SKELETON_VERSION) return total > 0;
+      if (total === 0) return (r.lines ?? 0) > 0;
+      return Math.min(1, (Number(r.changed ?? 0) + Number(r.removed ?? 0)) / total) > SKELETON_STALE_FRACTION;
+    })
+    .map((r) => r.id);
+}
+
+const warmed = new Map<string, { rev: number | null; key: string; at: number }>();
+
+/** The graph opened: every document of a project that reads skeletons gets
+    its missing or stale skeleton built now, so the first command does not
+    wait for them; one built under SKELETON_QUIET_MS ago waits, as at an
+    edit (COST6-06): an open no longer rebuilds a document being written.
+    Under the threshold nothing is built. Only the documents
+    the SQL finds stale are loaded (staleSkeletonDocuments); a build
+    already running is not started again (buildLocked). */
+export async function warmSkeletons(notebookId: string, userId: string | null): Promise<void> {
+  if (!(await featureConfigured("skeleton"))) return;
+  // The project's rev first (COST9-07): a project at the rev it was warmed
+  // at under SKELETON_QUIET_MS ago has no new edit to build for, so the
+  // sum over every block's text below (10M characters, 64 ms at 200
+  // documents) is not run on every open. An edit that reaches the blocks
+  // without a rev move builds at the command (ensureSkeleton).
+  const last = warmed.get(notebookId);
+  const rev = (await db.notebook.findUnique({ where: { id: notebookId }, select: { rev: true } }))?.rev ?? null;
+  if (last && rev !== null && last.rev === rev && Date.now() - last.at < SKELETON_QUIET_MS) return;
+  const [text] = await projectText({ notebookId });
+  if (!text || !readsSkeletons(text)) return;
+  // The same project text warmed under SKELETON_QUIET_MS ago is not
+  // checked again: a graph opened twice reads no block twice. An edit that
+  // keeps the length builds at the command (ensureSkeleton).
+  const key = `${text.chars ?? 0}:${text.cjk ?? 0}:${text.blocks ?? 0}`;
+  if (last && last.key === key && Date.now() - last.at < SKELETON_QUIET_MS) return;
+  if (warmed.size > 500) warmed.clear();
+  warmed.set(notebookId, { rev, key, at: Date.now() });
+  const stale = await staleSkeletonDocuments(notebookId);
+  await mapLimit(stale, SKELETON_BUILD_CONCURRENCY, (id) => refreshSkeleton(id, userId, { needed: true, sqlStale: true }).catch(() => {}));
 }

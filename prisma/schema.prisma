@@ -164,6 +164,7 @@ model Notebook {
   presence      NotebookPresence[]
   events        NotebookEvent[]
   linkScanRuns  LinkScanRun[]
+  links         DocLink[]
   createdAt     DateTime               @default(now())
   updatedAt     DateTime               @updatedAt
 
@@ -659,7 +660,18 @@ model DocLink {
   recommended    Boolean  @default(false)
   reason         String?
   createdById    String? // account that made the link, or triggered the scan
+  // The project the link belongs to: it shows, and is changed, only there.
+  // Null = a link made before links carried a project: it shows in every
+  // project that holds both documents, as before.
+  notebookId     String?
+  notebook       Notebook? @relation(fields: [notebookId], references: [id], onDelete: SetNull)
+  // The project the link belonged to, set by a trigger when that project is
+  // deleted: the row and its replies are kept, and no project reads them.
+  formerNotebookId String?
   replies        Reply[]
+  // Projects the link was removed from while its row had to stay: another
+  // account's reply is on it, or another account's project shows it.
+  hiddenIn       DocLinkHidden[]
   fromDocumentId String
   fromDocument   Document @relation("DocLinkFrom", fields: [fromDocumentId], references: [id], onDelete: Cascade)
   fromBlockId    String
@@ -685,6 +697,24 @@ model DocLink {
 
   @@index([fromDocumentId])
   @@index([toDocumentId])
+  @@index([notebookId])
+  @@index([formerNotebookId])
+}
+
+// A link removed from one project while its row stays (SPEC.md §13):
+// another account replied on it, or another account's project shows it.
+// The project reads it no more; the row and every reply are kept, and every
+// other project reads it as before. notebookId has no foreign key: a hide
+// survives a project delete and its restore.
+model DocLinkHidden {
+  docLinkId  String
+  docLink    DocLink  @relation(fields: [docLinkId], references: [id], onDelete: Cascade)
+  notebookId String
+  userId     String // account that removed it
+  createdAt  DateTime @default(now())
+
+  @@id([docLinkId, notebookId])
+  @@index([notebookId])
 }
 
 model NotebookDocument {
@@ -771,6 +801,10 @@ model Block {
   // Semantic search vector (text-embedding-3-small, 1024 dims). Null = not
   // embedded yet; the search route backfills lazily, a text edit clears it.
   embedding    Unsupported("vector(1024)")?
+  // Stitch's targeted path (STITCH_INDEX, SPEC.md §22): the full-text index
+  // of text, a generated column with a GIN index (migration block_search).
+  // Postgres writes it with the row; Prisma never reads or writes it.
+  search       Unsupported("tsvector")?
   // PAGE blocks: the page rendered once and kept (SPEC.md §16).
   pageImage    PageImage?
 
@@ -914,6 +948,12 @@ model UsageEvent {
   outputTokens     Int      @default(0)
   cacheReadTokens  Int      @default(0)
   cacheWriteTokens Int      @default(0)
+  // Of outputTokens, the reasoning tokens, when the provider reports them;
+  // null on rows written before it was kept (COST5-03).
+  reasoningTokens  Int?
+  // The pass of a feature of several passes: route | select | expand |
+  // answer (Stitch) | skeleton; null for the rest and on older rows.
+  pass             String?
   costUsd          Float
   createdAt        DateTime @default(now())
 

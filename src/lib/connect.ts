@@ -7,13 +7,15 @@ import { CONNECT_EFFORT } from "@/lib/derive/config";
 import { featureCall, featureConfigured } from "@/lib/feature-models";
 import { loadProfile, pageNames, renderBlockLines } from "@/lib/derive/context";
 import { callForJson } from "@/lib/derive/json-call";
+import { projectLinks } from "@/lib/link-scope";
 import type { Lang } from "@/lib/i18n/config";
 import { currentLang } from "@/lib/i18n/server";
 import { connectPrompt, connectVerifyPrompt } from "@/lib/prompts/connect";
+import { ATTACH_ORDER } from "@/lib/document-order";
 
 // Recommended links (SPEC.md §13): the connections between a project's
 // documents, stored as DocLink rows with recommended: true. The reader asks
-// for them — Recommend links in the graph runs scanProject below — and
+// for them — Scan for links in the graph runs scanProject below — and
 // nothing runs on its own: the scan reads whole documents against whole
 // documents, which is the most expensive thing the app can do to a project,
 // and a document joining a project is not a request for it.
@@ -218,7 +220,7 @@ export async function buildConnections(
   // resolve; drop repeats of links that already exist between the same spans.
   const blockById = new Map(document.blocks.map((b) => [b.id, b]));
   const existing = await db.docLink.findMany({
-    where: { fromDocumentId: documentId },
+    where: { fromDocumentId: documentId, ...projectLinks(notebookId, { withHidden: true }) },
     select: { fromBlockId: true, quotedText: true, toDocumentId: true },
   });
   const seen = new Set(existing.map((l) => `${l.fromBlockId}|${l.quotedText}|${l.toDocumentId}`));
@@ -309,6 +311,7 @@ export async function buildConnections(
         recommended: true,
         reason: link.reason,
         createdById: userId,
+        notebookId,
         fromDocumentId: documentId,
         fromBlockId: from.blockId,
         startOffset: from.startOffset,
@@ -360,7 +363,7 @@ export async function linkScanRunsLeft(userId: string | null): Promise<number> {
   return Math.max(0, LINK_SCAN_RUNS_PER_MONTH - used);
 }
 
-/** One press of Recommend links: every document of the project scanned
+/** One press of Scan for links: every document of the project scanned
     against the others, oldest attachment first, until the run's documents or
     its clock run out. Returns the links proposed and how many documents were
     read. The caller records the run against the quota. */
@@ -374,7 +377,7 @@ export async function scanProject(
   // documents rather than whatever the database returned first.
   const attachments = await db.notebookDocument.findMany({
     where: { notebookId },
-    orderBy: { document: { createdAt: "asc" } },
+    orderBy: ATTACH_ORDER,
     select: { documentId: true },
   });
   if (attachments.length < 2) {

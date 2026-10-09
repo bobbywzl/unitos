@@ -6,9 +6,12 @@ import { db } from "@/lib/db";
 import { sourceInputSchema } from "@/lib/anchors/input";
 import { MAX_SEGMENTS, passageSources, resolvePassage } from "@/lib/anchors/passage";
 import { layerBlocks } from "@/lib/anchors/layer";
+import { MAX_NOTE_QUOTES, noteQuoteSchema, resolveNoteQuotes, resolveNoteQuotesKeeping } from "@/lib/anchors/note-quotes";
+import { QUOTES_KEPT_HEADER, REPLAY_HEADER } from "@/lib/constants";
 import type { ResolvedAnchor } from "@/lib/anchors/resolve";
 import { serverT } from "@/lib/i18n/server";
 import { normalizeNoteOrders } from "@/lib/order";
+import { replayTime } from "@/lib/replay";
 import { videoAnchorFor } from "@/lib/video/anchor";
 import { timeRangeSchema } from "@/lib/video/types";
 import { parseBody } from "@/lib/validate";
@@ -21,6 +24,15 @@ const createSchema = z
     // anchors are copied into the new note, and the annotation stays where
     // it is, still painted in the article. content is then not sent.
     fromAnnotationId: z.string().min(1).optional(),
+    // A note on a link, written in the graph (SPEC.md §13): the reader's own
+    // words (content), with the link's two ends copied in as its sources — one
+    // for a document-level end. It lands accepted, the project's note.
+    fromLinkId: z.string().min(1).optional(),
+    // A note gathered on the graph (SPEC.md §13, Add to note): quotes from
+    // one or more documents of the section's project, each a source. Each
+    // resolves through the ladder (lib/anchors/note-quotes.ts); the note's
+    // text is the reader's words (content, optional) and then each quote.
+    quotes: z.array(noteQuoteSchema).min(1).max(MAX_NOTE_QUOTES).optional(),
     source: sourceInputSchema.optional(),
     // A selection over several blocks of the source's document
     // (lib/anchors/passage.ts): one anchor per block, the first being
@@ -50,8 +62,14 @@ const createSchema = z
     documentId: z.string().min(1).optional(),
   })
   .refine((d) => !(d.source && d.video), { message: "Provide source or video, not both" })
-  .refine((d) => Boolean(d.content) !== Boolean(d.fromAnnotationId), {
+  .refine((d) => (d.quotes ? !d.fromAnnotationId : Boolean(d.content) !== Boolean(d.fromAnnotationId)), {
     message: "Provide content or fromAnnotationId, not both",
+  })
+  .refine((d) => !d.quotes || !(d.source || d.segments || d.video || d.fromLinkId || d.origin || d.pending), {
+    message: "A gathered note takes quotes and content alone",
+  })
+  .refine((d) => !d.fromLinkId || !(d.source || d.video || d.fromAnnotationId || d.origin), {
+    message: "A note on a link takes content alone",
   });
 
 // Manual notes, with an optional anchor (manual extract). Derived notes are created by /api/derive.
@@ -165,13 +183,123 @@ export async function POST(req: Request) {
           ],
     );
   }
+  let quotesKept = 0;
+  const replayedAt = replayTime(req.headers.get(REPLAY_HEADER));
+  if (data.fromLinkId) {
+    const link = await db.docLink.findUnique({
+      where: { id: data.fromLinkId },
+      include: { hiddenIn: { where: { notebookId: section.notebookId }, select: { notebookId: true } } },
+    });
+    // The link must belong to this project (or to none: a link made before
+    // links had a project; a deleted project's link, or one removed from
+    // this project, is not found), and both ends must be documents of it.
+    const attachedEnds = link
+      ? await db.notebookDocument.count({
+          where: { notebookId: section.notebookId, documentId: { in: [link.fromDocumentId, link.toDocumentId] } },
+        })
+      : 0;
+    const shown =
+      !!link &&
+      !(link.notebookId !== null && link.notebookId !== section.notebookId) &&
+      !(link.notebookId === null && link.formerNotebookId !== null) &&
+      attachedEnds >= new Set([link.fromDocumentId, link.toDocumentId]).size;
+    const removed = !!link && link.hiddenIn.length > 0;
+    if ((!shown || removed) && replayedAt === null) {
+      return NextResponse.json({ error: t("api.linkNotFound") }, { status: 404 });
+    }
+    // A note on a link replayed from the offline queue, where another
+    // editor removed the link meanwhile (REV8-01): a 4xx would drop the
+    // queued words. A removed link keeps its row, so the note keeps the
+    // link's two quotes as sources. A link of this project whose documents
+    // left it keeps its quotes as plain quoted text (as REV5-06); a link
+    // that is gone or of another project saves the words alone.
+    if (link && !shown && (link.notebookId === section.notebookId || removed)) {
+      const quotes = [link.quotedText, ...(link.toQuotedText !== null ? [link.toQuotedText] : [])];
+      quotesKept = quotes.length;
+      content = [content.trim(), ...quotes.map(quoteLines)].filter(Boolean).join("\n\n");
+    }
+    const end = { layer: null, startTime: null, endTime: null };
+    copiedSources = !link || !shown ? [] : [
+      {
+        documentId: link.fromDocumentId,
+        blockId: link.fromBlockId,
+        startOffset: link.startOffset,
+        endOffset: link.endOffset,
+        quotedText: link.quotedText,
+        prefix: link.prefix,
+        suffix: link.suffix,
+        orphaned: link.fromOrphaned,
+        ...end,
+      },
+      ...(link.toBlockId !== null &&
+      link.toStartOffset !== null &&
+      link.toEndOffset !== null &&
+      link.toQuotedText !== null
+        ? [
+            {
+              documentId: link.toDocumentId,
+              blockId: link.toBlockId,
+              startOffset: link.toStartOffset,
+              endOffset: link.toEndOffset,
+              quotedText: link.toQuotedText,
+              prefix: link.toPrefix ?? "",
+              suffix: link.toSuffix ?? "",
+              orphaned: link.toOrphaned,
+              ...end,
+            },
+          ]
+        : []),
+    ];
+  }
+  // A gathered note replayed from the offline queue (REV5-06): the reader
+  // is not there to remove a quote that no longer resolves, and a 4xx drops
+  // the queued write with the reader's words. Such a quote keeps its words
+  // as plain quoted text with no source, the note saves, and the answer says
+  // how many were kept so (QUOTES_KEPT_HEADER). Online the reader still gets
+  // the error and fixes the quote. The header carries the time the record
+  // was queued: any whole number of ms takes this path, however old or
+  // however fast the clock that wrote it (REV7-02: a window only dropped
+  // real records; a forged header saves only the caller's own words), and
+  // a note this account saved in the section since then (a minute earlier
+  // for a fast clock) with the same words is that record's earlier send,
+  // answered as saved (REV6-06).
+  if (data.quotes && replayedAt !== null) {
+    const gathered = await resolveNoteQuotesKeeping(section.notebookId, data.quotes);
+    quotesKept = gathered.kept;
+    sources = gathered.items.flatMap((item) => ("source" in item ? [item.source] : []));
+    content = [
+      content.trim(),
+      ...gathered.items.map((item) => quoteLines("source" in item ? item.source.quotedText : item.text)),
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+    const saved = await db.note.findFirst({
+      where: { sectionId: data.sectionId, createdById: access.user.id, content, createdAt: { gte: replayedAt } },
+      include: { sources: true },
+    });
+    if (saved) return NextResponse.json(saved, { status: 201 });
+  } else if (data.quotes) {
+    const gathered = await resolveNoteQuotes(section.notebookId, data.quotes);
+    if ("notInProject" in gathered) return NextResponse.json({ error: t("api.quoteNotInProject") }, { status: 400 });
+    if ("unresolved" in gathered) {
+      return NextResponse.json(
+        { error: t("api.quoteNotResolved", { n: gathered.unresolved + 1 }), quoteIndex: gathered.unresolved },
+        { status: 400 },
+      );
+    }
+    sources = gathered.sources;
+    content = [content.trim(), ...gathered.sources.map((s) => quoteLines(s.quotedText))].filter(Boolean).join("\n\n");
+  }
   if (!content.trim()) return NextResponse.json({ error: t("api.validationFailed") }, { status: 400 });
 
   // The document the note belongs to (SPEC.md §6): the passage's, the video's,
   // the annotation's first anchor's, else the one the composer named — when
   // it is attached to this project; a document that is not is nobody's.
-  let documentId: string | null =
-    sources[0]?.documentId ?? videoSource?.documentId ?? copiedSources[0]?.documentId ?? data.documentId ?? null;
+  // A note on a link belongs to the project: it quotes two documents.
+  // A gathered note over several documents belongs to the project, as one on a link.
+  let documentId: string | null = data.fromLinkId || (data.quotes && new Set(sources.map((s) => s.documentId)).size > 1)
+    ? null
+    : (sources[0]?.documentId ?? videoSource?.documentId ?? copiedSources[0]?.documentId ?? data.documentId ?? null);
   if (documentId) {
     const attached = await db.notebookDocument.findUnique({
       where: { notebookId_documentId: { notebookId: section.notebookId, documentId } },
@@ -216,5 +344,17 @@ export async function POST(req: Request) {
   });
   if (data.top) await normalizeNoteOrders(data.sectionId);
   await bumpNotebook(section.notebookId);
-  return NextResponse.json(note, { status: 201 });
+  return NextResponse.json(note, {
+    status: 201,
+    ...(quotesKept > 0 ? { headers: { [QUOTES_KEPT_HEADER]: String(quotesKept) } } : {}),
+  });
+}
+
+// A quote as the note's text shows it: blockquote lines, the boxed
+// quotation on the note card (as a passage added from the reader).
+function quoteLines(text: string): string {
+  return text
+    .split("\n")
+    .map((line) => (line ? `> ${line}` : ">"))
+    .join("\n");
 }

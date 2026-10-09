@@ -344,6 +344,7 @@ type MarkdownData = {
   notebookId?: string;
   onToggleTask?: (line: number, checked: boolean) => void;
   onAnnotationReference?: (ref: ParsedAnnotationReference & { label: string }) => void;
+  renderBlockCitation?: (blockId: string) => React.ReactNode;
 };
 const MarkdownData = createContext<MarkdownData>({ text: "" });
 
@@ -503,7 +504,7 @@ async function showCitedNote(noteId: string, go: (href: string) => void): Promis
 }
 
 function Link({ node, href, children: linkChildren, ...props }: Override<"a">) {
-  const { onAnnotationReference } = useContext(MarkdownData);
+  const { onAnnotationReference, renderBlockCitation } = useContext(MarkdownData);
   const t = useT();
   const router = useRouter();
   // One link carries every style over its run, innermost last.
@@ -529,6 +530,8 @@ function Link({ node, href, children: linkChildren, ...props }: Override<"a">) {
     );
   }
   const blockId = href?.startsWith("#dissect-block-") ? href.slice("#dissect-block-".length) : null;
+  const citation = blockId ? renderBlockCitation?.(blockId) : null;
+  if (citation) return <>{citation}</>;
   if (blockId) {
     return (
       <button
@@ -597,7 +600,10 @@ const components: Components = { blockquote: QuoteBlock, li: ListItem, input: Ta
     source's points back to the reader (SPEC.md §6) — a click jumps to the
     source, and the line under the words names the document.
     onAnnotationReference: a click on an annotation reference opens the
-    annotation here (the notes full page); unset, it opens the reader. */
+    annotation here (the notes full page); unset, it opens the reader.
+    renderBlockCitation: draws a [block <id>] citation in place of the ¶
+    chip (Stitch's chip names the document); unset, or null for a block,
+    the ¶ chip flashes the block in the open document. */
 export function Markdown({
   children,
   breaks = false,
@@ -606,6 +612,7 @@ export function Markdown({
   sources,
   notebookId,
   onAnnotationReference,
+  renderBlockCitation,
 }: {
   children: string;
   breaks?: boolean;
@@ -614,6 +621,7 @@ export function Markdown({
   sources?: SourceChip[];
   notebookId?: string;
   onAnnotationReference?: (ref: ParsedAnnotationReference & { label: string }) => void;
+  renderBlockCitation?: (blockId: string) => React.ReactNode;
 }) {
   // Lists line up first: hardBreaks reads the lines as they will be nested.
   // Both keep every line, so a line counted here is the same line in children.
@@ -624,8 +632,8 @@ export function Markdown({
     [needle],
   );
   const data = useMemo<MarkdownData>(
-    () => ({ text, sources, notebookId, onToggleTask, onAnnotationReference }),
-    [text, sources, notebookId, onToggleTask, onAnnotationReference],
+    () => ({ text, sources, notebookId, onToggleTask, onAnnotationReference, renderBlockCitation }),
+    [text, sources, notebookId, onToggleTask, onAnnotationReference, renderBlockCitation],
   );
   return (
     <div className="prose prose-sm max-w-none prose-p:my-1.5 prose-headings:my-2 prose-ul:my-1.5 prose-ol:my-1.5">

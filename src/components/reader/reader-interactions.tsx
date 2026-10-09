@@ -5,15 +5,18 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { api } from "@/lib/api";
+import { linkPath } from "@/lib/link-scope";
 import { formatKind, type BlockKind, type FormatKind } from "@/lib/block-kind";
 import { definable, defineKey } from "@/lib/define";
 import { MARK_SWEPT_EVENT, type MarkSweptDetail } from "@/lib/mark-sweep";
 import {
   ACCOUNT_SAVE_MAX_MS,
   ACCOUNT_SAVE_SETTLE_MS,
+  ACCOUNT_SAVE_SHOWN_MS,
   applyReadingPosition,
   atReadingPosition,
   chooseReadingPosition,
+  firstBlockShown,
   LEFT_OFF_MIN_SHARE,
   parseReadingPosition,
   POSITION_HOLD_MS,
@@ -160,6 +163,7 @@ import {
   type SuggestResult,
 } from "@/lib/docs/assistant-suggestions";
 import type { SuggestCommand } from "@/lib/prompts/suggest";
+import { sourceMarkSelector } from "@/lib/source-mark";
 import { readNdjson } from "@/lib/ndjson";
 import {
   publishSuggestRun,
@@ -996,6 +1000,8 @@ export function ReaderInteractions({
       href: string;
       title: string;
       reason: string | null; // what the link is about, typed after Close link
+      replies?: number; // open replies on the link: a count on its chain icon
+      notes?: number; // the notes on the link: in its chain icon's tip (WALK4-05)
     }[]
   >;
   editedByBlock: Record<string, { start: number; end: number }[]>;
@@ -1331,6 +1337,31 @@ export function ReaderInteractions({
     const onVisibility = () => {
       if (document.visibilityState === "hidden") saveAccount(true);
     };
+    // [lists9] Shown for ACCOUNT_SAVE_SHOWN_MS with its first block in view,
+    // the document counts as opened (WALK9-05): the account's copy saves
+    // once, where the pane stands, so the graph marks the document opened
+    // for a reader who read its first screen and never scrolled. Only while
+    // the account has no copy. A hidden tab, a page over the article, or the
+    // hold restarts the clock; a pane scrolled off the first block saves by
+    // the scroll. The tab's copy does not change, and a position at the top
+    // of a document opens it at the top, as before.
+    let shownTimer: ReturnType<typeof setTimeout> | null = null;
+    const shown = () => {
+      shownTimer = null;
+      if (
+        document.visibilityState !== "visible" ||
+        positionHeld.current ||
+        distillOpenRef.current ||
+        conversationViewRef.current
+      ) {
+        shownTimer = setTimeout(shown, ACCOUNT_SAVE_SHOWN_MS);
+        return;
+      }
+      if (!firstBlockShown(container)) return;
+      const position = readPosition();
+      if (position && "blockId" in position) saveAccountPosition(documentId, { ...position, at: Date.now() }, false);
+    };
+    if (keepsAccountCopy && accountAtOpen === null) shownTimer = setTimeout(shown, ACCOUNT_SAVE_SHOWN_MS);
     container.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("pagehide", onPageHide);
     document.addEventListener("visibilitychange", onVisibility);
@@ -1339,10 +1370,11 @@ export function ReaderInteractions({
       window.removeEventListener("pagehide", onPageHide);
       document.removeEventListener("visibilitychange", onVisibility);
       if (raf) cancelAnimationFrame(raf);
+      if (shownTimer) clearTimeout(shownTimer);
       save();
       saveAccount(true);
     };
-  }, [positionStoreKey, embedded, keepsAccountCopy, documentId]);
+  }, [positionStoreKey, embedded, keepsAccountCopy, documentId, accountAtOpen]);
   const [distillShownId, setDistillShownId] = useState<string | null>(null);
   const [distillRun, setDistillRun] = useState<{ question: string } | null>(null);
   const [distillError, setDistillError] = useState<string | null>(null);
@@ -3051,7 +3083,7 @@ export function ReaderInteractions({
           rows ??= unitRows(pane, unit, richTextRef.current !== null);
           found = (rows ?? []).flatMap((row) => wordsOf(pane, row) ?? []);
         } else if (!wordsHidden(pane, keys.filter((key) => !isCoreKey(key)), readWholeRef.current)) {
-          const el = pane.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
+          const el = pane.querySelector<HTMLElement>(sourceMarkSelector(sourceId));
           if (el) found = [el];
         }
       }
@@ -3090,6 +3122,9 @@ export function ReaderInteractions({
   // painted: the bubble, the on-mark card, or the card in the Annotations tab.
   const src = searchParams.get("src");
   const annotationParam = searchParams.get(ANNOTATION_PARAM);
+  // [lists9] The kind rides along (lib/annotation-reference.ts): a comment
+  // opens in the Annotations tab (WALK9-04).
+  const commentParam = searchParams.get("kind") === "comment";
   // A jump in this pane flashes its mark at once (dissect:flash-source) and
   // puts ?src= in the address too: when the address lands, the pane moves
   // no more (a press made meanwhile would scroll away). A page opened with
@@ -3104,7 +3139,15 @@ export function ReaderInteractions({
     let attempts = 0;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const tryOpen = () => {
-      const el = containerRef.current?.querySelector<HTMLElement>(`[data-source-id="${src}"]`);
+      // A comment: the Annotations tab, its card expanded, where its replies
+      // read and Reply is one press away — the path ?link= takes
+      // (workspace.tsx onFocusAnnotation). The mark's own card shows the
+      // comment alone.
+      if (commentParam) {
+        window.dispatchEvent(new CustomEvent("dissect:focus-annotation", { detail: { sourceId: src } }));
+        return;
+      }
+      const el = containerRef.current?.querySelector<HTMLElement>(sourceMarkSelector(src));
       // Drawn: a mark in a collapsed unit waits for the unit read whole.
       if (el && el.getClientRects().length > 0) {
         window.dispatchEvent(new CustomEvent("dissect:open-annotation", { detail: { sourceId: src } }));
@@ -3112,14 +3155,19 @@ export function ReaderInteractions({
         timer = setTimeout(tryOpen, 200);
       }
     };
-    tryOpen();
+    // The first try waits a tick: on a page opened at this address the
+    // listeners that answer (this pane's open-annotation below, the
+    // workspace's focus-annotation) register in effects that run after this
+    // one, and an event sent now reaches none of them.
+    timer = setTimeout(tryOpen, 0);
     return () => {
       if (timer) clearTimeout(timer);
     };
-  }, [src, annotationParam, flashSource]);
+  }, [src, annotationParam, commentParam, flashSource]);
 
-  // Arriving through a link's other end: ?link=<id> flashes the mark here;
-  // a mark in a collapsed unit reads the unit whole first.
+  // Arriving through a link's other end: ?link=<id> flashes the mark here,
+  // and the tray turns to the Annotations tab on the link's card; a mark in
+  // a collapsed unit reads the unit whole first.
   const linkParam = searchParams.get("link");
   const linksRef = useRef(linksByBlock);
   linksRef.current = linksByBlock;
@@ -3137,6 +3185,8 @@ export function ReaderInteractions({
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
         flashElement(el);
+        // The tray shows the link's card, with its replies (VIEW3-02; workspace.tsx).
+        window.dispatchEvent(new CustomEvent("dissect:focus-link", { detail: { linkId: linkParam } }));
       } else if (attempts++ < PAGE_WAIT_MS / 200) {
         setTimeout(tryScroll, 200);
       }
@@ -3166,7 +3216,7 @@ export function ReaderInteractions({
   const markTop = useCallback((sourceId: string) => {
     const container = containerRef.current;
     if (!container) return 80;
-    const markEl = container.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
+    const markEl = container.querySelector<HTMLElement>(sourceMarkSelector(sourceId));
     return markEl
       ? markEl.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop
       : 80;
@@ -3348,12 +3398,12 @@ export function ReaderInteractions({
       const { sourceId } = (e as CustomEvent<{ sourceId: string }>).detail;
       const container = containerRef.current;
       // Another pane owns marks this pane does not paint.
-      if (!container?.querySelector(`[data-source-id="${sourceId}"]`)) return;
+      if (!container?.querySelector(sourceMarkSelector(sourceId))) return;
       const stored = annotationBubblesRef.current[sourceId];
       if (!stored) {
         // Highlight or comment: the on-mark card, right below the mark.
         const summary = annotationsBySourceRef.current[sourceId];
-        const markEl = container.querySelector<HTMLElement>(`[data-source-id="${sourceId}"]`);
+        const markEl = container.querySelector<HTMLElement>(sourceMarkSelector(sourceId));
         if (!summary || !markEl) {
           window.dispatchEvent(
             new CustomEvent("dissect:focus-annotation", { detail: { sourceId } }),
@@ -4777,7 +4827,7 @@ export function ReaderInteractions({
     }
     setLinkCard({ ...card, busy: true });
     try {
-      await api(`/api/links/${card.linkId}`, "PATCH", { reason });
+      await api(linkPath(card.linkId, notebookId), "PATCH", { reason });
       setLinkReasons((prev) => ({ ...prev, [card.linkId]: reason }));
       setLinkCard(null);
       router.refresh();
@@ -5302,6 +5352,7 @@ export function ReaderInteractions({
     try {
       await flushLiveBlock(to.blockId);
       const created = await api<{ id: string }>("/api/links", "POST", {
+        notebookId,
         fromDocumentId: pending.fromDocumentId,
         toDocumentId: documentId,
         anchor: from,
@@ -6336,11 +6387,12 @@ export function ReaderInteractions({
               break;
             }
             const link = await api<{ id: string }>("/api/links", "POST", {
+              notebookId,
               fromDocumentId: documentId,
               toDocumentId: action.toDocumentId,
               anchor: action.anchor,
             });
-            undo.push({ description: action.description, run: () => api(`/api/links/${link.id}`, "DELETE") });
+            undo.push({ description: action.description, run: () => api(linkPath(link.id, notebookId), "DELETE") });
             break;
           }
           case "format_block": {
@@ -6943,6 +6995,8 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
         linkTitle: l.title,
         linkId: l.linkId,
         linkReason: linkReasons[l.linkId] ?? l.reason,
+        linkReplies: l.replies ?? 0,
+        linkNotes: l.notes ?? 0,
       })),
     ];
   }

@@ -1,10 +1,14 @@
 "use client";
 
+import { ACTION, ACTION_DANGER } from "@/components/graph/graph-ui"; // [style7] VIEW7-05: the graph's link actions
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AnnotationItem, LinkIn, LinkOut, SectionView } from "@/lib/types";
 import { api } from "@/lib/api";
+import { linkPath } from "@/lib/link-scope";
+import { confirmLinkRemoval, linkRemovable } from "@/components/collab/confirm-link-removal";
+import { requestGraph } from "@/components/graph/graph-keep";
 import { LINK_KIND_VAR } from "@/lib/annotations/kind";
 import { useCollab } from "@/components/collab/collab-context";
 import { AuthorChip } from "@/components/collab/person-badge";
@@ -32,6 +36,8 @@ import {
 import { useCollapsedView } from "@/components/use-collapsed-view";
 import { inLayer, LayerSwitch, useAnnotationLayer } from "@/components/panels/layer-switch";
 import { stripSimplifyMarkers } from "@/lib/sentences";
+import { LinkCardNotes, ProvenanceRows } from "@/components/panels/link-card-extras"; // [cover4]
+import { LinkDraftTag } from "@/components/graph/link-draft-tag"; // [ui5]
 
 // A link's card carries the link kind color (lib/annotations/kind.ts).
 const card = "rounded-2xl border bg-card p-3.5 shadow-soft";
@@ -45,14 +51,18 @@ function LinkAbout({
   reason,
   busy,
   onSave,
+  locked,
 }: {
   linkId: string;
   reason: string | null;
   busy: boolean;
   onSave: (id: string, reason: string) => Promise<void>;
+  /** A link of another account's project (SPEC.md §13): the reason reads only. */
+  locked?: boolean;
 }) {
   const t = useT();
-  const { canEdit } = useCollab();
+  const { canEdit: canEditProject } = useCollab();
+  const canEdit = canEditProject && !locked;
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(reason ?? "");
   // The stored text changed under the box (a refresh): the box follows.
@@ -160,7 +170,7 @@ export function AnnotationsPanel({
 }) {
   const router = useRouter();
   const t = useT();
-  const { canEdit } = useCollab();
+  const { canEdit, myId, people } = useCollab();
   const view = useCollapsedView(`${ANNOTATIONS_VIEW_STORE}:${notebookId}`);
   // The New glow (SPEC.md §18) on the four arrows until they are pressed.
   const fullPageNew = useNewFeature("annotationsFullPage");
@@ -178,8 +188,10 @@ export function AnnotationsPanel({
   const highlights = annotations.filter((a) => a.kind === "highlight");
   // Recommended links list in the graph (SPEC.md §13); only accepted ones
   // here, with the whole text's annotations: a link joins the texts.
-  const acceptedOut = layer === "whole" ? linksOut.filter((l) => !l.recommended) : [];
-  const acceptedIn = layer === "whole" ? linksIn.filter((l) => !l.recommended) : [];
+  // [cover4] Provenance links fold into ProvenanceRows (WALK4-03).
+  const acceptedOut = layer === "whole" ? linksOut.filter((l) => !l.recommended && !l.provenance) : [];
+  const acceptedIn = layer === "whole" ? linksIn.filter((l) => !l.recommended && !l.provenance) : [];
+  const provenanceShown = layer === "whole" && [...linksOut, ...linksIn].some((l) => l.provenance && !l.recommended);
   const comments = annotations.filter((a) => a.kind === "comment" && !a.resolved);
   const resolved = annotations.filter((a) => a.resolved);
   const explanations = annotations.filter((a) => a.kind === "explain");
@@ -216,17 +228,61 @@ export function AnnotationsPanel({
     });
   }
 
-  async function removeLink(id: string) {
-    await mutate(id, () => api(`/api/links/${id}`, "DELETE"));
+  // Remove asks only when the link is not the reader's alone (SPEC.md §13):
+  // another person replied on it, or made it, named (WALK5-08, WALK6-08).
+  // Remove hides the link and keeps its row (WALK5-01): Link removed · Undo
+  // shows for 10 seconds, and History's Restore does the same later.
+  const [removed, setRemoved] = useState<string | null>(null);
+  const removeEdit = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!removed) return;
+    const timer = setTimeout(() => setRemoved(null), 10_000);
+    return () => clearTimeout(timer);
+  }, [removed]);
+  async function removeLink(id: string, replies: { userId: string }[], createdById: string | null) {
+    const madeBy = createdById && createdById !== myId ? people[createdById]?.name : undefined;
+    // No confirm for the reader's own link with only their own replies: Undo is there (WALK6-08).
+    const othersReplied = replies.some((r) => r.userId !== myId);
+    if (!confirmLinkRemoval(t, replies.length, "remove", madeBy, othersReplied)) return;
+    let done = false;
+    await mutate(id, async () => {
+      // Offline the removal waits in the queue: Undo comes only once the
+      // server has hidden the link.
+      const result = await api<{ queued?: true; editId?: string }>(linkPath(id, notebookId), "DELETE");
+      removeEdit.current = result.editId;
+      done = !result.queued;
+    });
+    if (done) setRemoved(id);
+  }
+  async function undoRemove(id: string) {
+    await mutate(id, async () => {
+      // Undo names its Remove: another editor's later removal stays (REV7-06).
+      const edit = removeEdit.current ? `&edit=${encodeURIComponent(removeEdit.current)}` : "";
+      await api(`/api/links/${encodeURIComponent(id)}/hidden?notebookId=${encodeURIComponent(notebookId)}${edit}`, "DELETE");
+      setRemoved(null);
+    });
   }
 
   // What a link is about: typed after Close link, or here. Save stores it as
   // the link's reason; an empty box clears it.
   async function describeLink(id: string, reason: string) {
-    await mutate(id, () => api(`/api/links/${id}`, "PATCH", { reason }));
+    await mutate(id, () => api(linkPath(id, notebookId), "PATCH", { reason }));
   }
 
-  const empty = annotations.length === 0 && acceptedOut.length === 0 && acceptedIn.length === 0;
+  // Show on graph on a link card (VIEW3-02): the graph opens on the link's
+  // panel, with its passages and replies.
+  const showOnGraph = (linkId: string) => (
+    <button
+      onClick={() => requestGraph({ linkId })}
+      data-track="link-show-on-graph"
+      data-tip={t("graphNotes.showLinkOnGraphTitle")}
+      className={ACTION}
+    >
+      {t("graphNotes.showOnGraph")}
+    </button>
+  );
+
+  const empty = annotations.length === 0 && acceptedOut.length === 0 && acceptedIn.length === 0 && !provenanceShown;
 
   // The three-dots menu at the right of every card's header: New note, Add
   // to a note, Jump, Delete — in reach while the card is collapsed too.
@@ -316,6 +372,19 @@ export function AnnotationsPanel({
     <div className="flex flex-col gap-3.5">
       {conversationOverlay}
       {errorText && <p className="text-[13px] text-red-600">{errorText}</p>}
+      {removed && !errorText && (
+        <p role="status" data-link-removed={removed} className="text-[13px] text-sand-700">
+          {t("panels.linkRemoved")}{" "}
+          <button
+            onClick={() => void undoRemove(removed)}
+            disabled={busyId !== null}
+            data-track="link-remove-undo"
+            className={`${ACTION} align-middle`}
+          >
+            {t("panels.linkRemovedUndo")}
+          </button>
+        </p>
+      )}
       <div className="flex items-center justify-end gap-1.5">
         {(counts.core > 0 || layer === "core") && (
           <div className="mr-auto">
@@ -355,15 +424,21 @@ export function AnnotationsPanel({
         <div className="flex flex-col gap-2">
           <GroupLabel icon={<LinkIcon size={12} />}>{t("panels.links")}</GroupLabel>
           {acceptedOut.map((l) => (
-            <div key={l.id} className={card} style={{ borderColor: LINK_KIND_VAR }}>
+            <div key={l.id} data-annotation-link-id={l.id} className={card} style={{ borderColor: LINK_KIND_VAR }}>
               <p className="line-clamp-2 text-[13px]">{l.quotedText}</p>
               {l.targetQuotedText && (
                 <p className="mt-1.5 line-clamp-2 border-l-2 border-sand-300 pl-2 text-xs text-sand-500">
                   {l.targetQuotedText}
                 </p>
               )}
-              <LinkAbout linkId={l.id} reason={l.reason} busy={busyId === l.id} onSave={describeLink} />
-              <div className="mt-2 flex flex-wrap items-center gap-3">
+              <LinkAbout
+                linkId={l.id}
+                reason={l.reason}
+                busy={busyId === l.id}
+                onSave={describeLink}
+                locked={l.crossAccount?.outside}
+              />
+              <div className="mt-2 flex flex-wrap items-center gap-2">
                 {l.detached ? (
                   <span className="rounded-full bg-sand-200 px-2.5 py-0.5 text-[11px] font-semibold text-sand-600">
                     ⇄ {l.toTitle} · {t("panels.notAttached")}
@@ -386,31 +461,40 @@ export function AnnotationsPanel({
                     {t("panels.otherEndUnresolved")}
                   </span>
                 )}
+                <LinkDraftTag linkId={l.id} /* [ui5] WALK5-13 */ />
                 <AuthorChip createdById={l.createdById} nameless />
-                {canEdit && (
+                {!l.detached && showOnGraph(l.id)}
+                {canEdit && linkRemovable(l.crossAccount) && (
                   <button
-                    onClick={() => void removeLink(l.id)}
+                    onClick={() => void removeLink(l.id, l.replies, l.createdById)}
                     data-track="link-remove"
                     data-tip={t("panels.removeLinkTitle")}
-                    className="text-xs text-red-500 hover:text-red-700"
+                    className={ACTION_DANGER}
                   >
                     {t("common.remove")}
                   </button>
                 )}
               </div>
-              <ReplyThread target={{ docLinkId: l.id }} replies={l.replies} />
+              <ReplyThread target={{ docLinkId: l.id, notebookId }} replies={l.replies} crossAccount={l.crossAccount} />
+              <LinkCardNotes noteIds={l.noteIds} sections={sections} /* [cover4] WALK4-05 */ />
             </div>
           ))}
           {acceptedIn.map((l) => (
-            <div key={l.id} className={card} style={{ borderColor: LINK_KIND_VAR }}>
+            <div key={l.id} data-annotation-link-id={l.id} className={card} style={{ borderColor: LINK_KIND_VAR }}>
               <p className="line-clamp-2 text-[13px]">{l.hereQuotedText ?? l.quotedText}</p>
               {l.hereQuotedText && (
                 <p className="mt-1.5 line-clamp-2 border-l-2 border-sand-300 pl-2 text-xs text-sand-500">
                   {l.quotedText}
                 </p>
               )}
-              <LinkAbout linkId={l.id} reason={l.reason} busy={busyId === l.id} onSave={describeLink} />
-              <div className="mt-2 flex flex-wrap items-center gap-3">
+              <LinkAbout
+                linkId={l.id}
+                reason={l.reason}
+                busy={busyId === l.id}
+                onSave={describeLink}
+                locked={l.crossAccount?.outside}
+              />
+              <div className="mt-2 flex flex-wrap items-center gap-2">
                 <Link href={`/n/${notebookId}?doc=${l.fromDocumentId}&link=${l.id}`} className={chip}>
                   ⇄ {l.fromTitle}
                 </Link>
@@ -424,21 +508,31 @@ export function AnnotationsPanel({
                     {t("panels.otherEndUnresolved")}
                   </span>
                 )}
+                <LinkDraftTag linkId={l.id} /* [ui5] WALK5-13 */ />
                 <AuthorChip createdById={l.createdById} nameless />
-                {canEdit && (
+                {showOnGraph(l.id)}
+                {canEdit && linkRemovable(l.crossAccount) && (
                   <button
-                    onClick={() => void removeLink(l.id)}
+                    onClick={() => void removeLink(l.id, l.replies, l.createdById)}
                     data-track="link-remove"
                     data-tip={t("panels.removeLinkTitle")}
-                    className="text-xs text-red-500 hover:text-red-700"
+                    className={ACTION_DANGER}
                   >
                     {t("common.remove")}
                   </button>
                 )}
               </div>
-              <ReplyThread target={{ docLinkId: l.id }} replies={l.replies} />
+              <ReplyThread target={{ docLinkId: l.id, notebookId }} replies={l.replies} crossAccount={l.crossAccount} />
+              <LinkCardNotes noteIds={l.noteIds} sections={sections} /* [cover4] WALK4-05 */ />
             </div>
           ))}
+        </div>
+      )}
+      {/* [cover4] A generated document's provenance links, one row per document (WALK4-03). */}
+      {provenanceShown && (
+        <div className="flex flex-col gap-2">
+          <GroupLabel icon={<LinkIcon size={12} />}>{t("stitch.generated")}</GroupLabel>
+          <ProvenanceRows notebookId={notebookId} linksOut={linksOut} linksIn={linksIn} card={card} />
         </div>
       )}
     </div>

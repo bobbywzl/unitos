@@ -5,13 +5,17 @@ import { useState } from "react";
 import { api } from "@/lib/api";
 import { NotesIcon, SpinnerIcon } from "@/components/icons";
 import { useT } from "@/components/lang-provider";
+import { announceSavedLine } from "@/components/graph/saved-line"; // [ui5]
 
 // Save as note (SPEC.md §7): under every answer of the assistant and every
 // tool's output, the answer organized into one note of the project — a
 // title, the key points with their reasoning, and under each the document's
 // words as quotes (`POST /api/notes/organize`). The note lands pending in
 // the section the reader last wrote in; Show opens it in the notes tray.
-// The answer stays as it is.
+// The answer stays as it is. onShow replaces Show's event where the tray
+// sits behind the surface (the graph closes first, then the tray opens).
+// saved/onSaved: a surface that keeps its answers (Stitch) keeps the saved
+// line with the answer, so a second press cannot save the note twice.
 export type SaveOrigin = "assistant" | "explain" | "simplify" | "analyze" | "ask" | "act" | "stitch";
 
 export function SaveAsNote({
@@ -22,6 +26,9 @@ export function SaveAsNote({
   selection = "",
   answer,
   className = "",
+  onShow,
+  saved: savedBefore,
+  onSaved,
 }: {
   notebookId: string;
   documentId?: string;
@@ -30,12 +37,15 @@ export function SaveAsNote({
   selection?: string;
   answer: string;
   className?: string;
+  onShow?: (noteId: string) => void;
+  saved?: { noteId: string; section: string };
+  onSaved?: (saved: { noteId: string; section: string }) => void;
 }) {
   const t = useT();
   const router = useRouter();
   const [state, setState] = useState<
     { kind: "idle" } | { kind: "busy" } | { kind: "saved"; noteId: string; section: string } | { kind: "error"; message: string }
-  >({ kind: "idle" });
+  >(() => (savedBefore ? { kind: "saved", ...savedBefore } : { kind: "idle" }));
 
   async function save() {
     if (state.kind === "busy" || !answer.trim()) return;
@@ -50,6 +60,8 @@ export function SaveAsNote({
         answer: answer.slice(0, 60_000),
       });
       setState({ kind: "saved", noteId: saved.noteId, section: saved.sectionTitle });
+      onSaved?.({ noteId: saved.noteId, section: saved.sectionTitle });
+      if (origin === "stitch") announceSavedLine("stitch"); // [ui5] WALK5-14
       // The tray reads the new note from the refreshed page.
       router.refresh();
     } catch (err) {
@@ -64,9 +76,13 @@ export function SaveAsNote({
         {t("assistant.savedAsNote", { section: state.section })}
         <button
           type="button"
-          onClick={() => window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: state.noteId } }))}
+          onClick={() =>
+            onShow
+              ? onShow(state.noteId)
+              : window.dispatchEvent(new CustomEvent("dissect:show-note", { detail: { noteId: state.noteId } }))
+          }
           data-track="assistant-saved-note-show"
-          className="rounded-full bg-sage-100 px-2 py-0.5 font-semibold text-sage-800 hover:bg-sage-200"
+          className="rounded-full bg-sage-100 px-2 py-0.5 font-semibold text-sage-800 hover:bg-sage-200 min-h-6 pointer-coarse:min-h-11 pointer-coarse:px-3.5"
         >
           {t("assistant.showSavedNote")}
         </button>
@@ -81,7 +97,7 @@ export function SaveAsNote({
         disabled={state.kind === "busy"}
         data-track={`assistant-save-note:${origin}`}
         data-tip={t("assistant.saveAsNoteTitle")}
-        className="flex items-center gap-1.5 rounded-full border border-line px-2.5 py-0.5 text-[11.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-60"
+        className="flex items-center gap-1.5 rounded-full border border-line px-2.5 py-0.5 text-[11.5px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800 disabled:opacity-60 min-h-6 pointer-coarse:min-h-11 pointer-coarse:px-3.5"
       >
         {state.kind === "busy" ? <SpinnerIcon size={12} className="animate-spin" /> : <NotesIcon size={12} />}
         {state.kind === "busy" ? t("assistant.savingAsNote") : t("assistant.saveAsNote")}

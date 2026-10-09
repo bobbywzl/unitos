@@ -1897,13 +1897,87 @@ ellipse.anchor-flash {
 /* First open: nodes scatter, then glide into place; edges wait offstage and
    fade in once the nodes land. */
 .graph-settling .react-flow__node {
-  transition: transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition:
+    transform 900ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.3s ease;
 }
 .corpus-graph .react-flow__edge {
   transition: opacity 500ms ease;
 }
-.graph-settling .react-flow__edge {
+.graph-settling .react-flow__edge,
+.graph-settling .graph-curve-marks {
   opacity: 0;
+}
+/* A curve's marks (graph-notes.tsx CurveMarks) draw above the nodes, in
+   reactflow's label layer, and take the pointer (VIEW3-01). */
+.corpus-graph .react-flow__edgelabel-renderer {
+  z-index: 5;
+}
+.corpus-graph .graph-curve-marks {
+  pointer-events: all;
+  transition: opacity 0.25s ease;
+}
+.corpus-graph[data-large] .graph-curve-marks {
+  transition: none;
+}
+.corpus-graph[data-spot]:not([data-large]) .graph-curve-marks {
+  opacity: 0.15;
+}
+.corpus-graph[data-spot] .graph-curve-marks[data-lit] {
+  opacity: 1;
+}
+/* A Chinese label breaks its lines evenly, never one character alone on the
+   second line (WALK3-17). */
+.corpus-graph .graph-node-label {
+  text-wrap: balance;
+}
+/* The graph's header pills: a fade at the right edge while more pills
+   scroll beyond it (graph-overlay.tsx, WALK3-07). */
+.graph-pill-row[data-more] {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
+}
+/* Add to note's new note docks at the foot of the side list (note-gather.tsx,
+   VIEW4-03): while it shows, a side list ends above it. A side list is as
+   tall as what it holds from top-3 (WALK7-03), so its cap shrinks; a phone
+   sheet stands on the note instead. */
+.graph-overlay[data-gather] [data-graph-side-list],
+.graph-overlay[data-gather] aside[data-graph-node-card] {
+  max-height: calc(100% - var(--graph-gather-h, 0px) - 32px);
+}
+@media (max-width: 999px) {
+  .graph-overlay[data-gather] [data-graph-side-list],
+  .graph-overlay[data-gather] aside[data-graph-node-card] {
+    max-height: calc(100% - var(--graph-gather-h, 0px) - 84px);
+  }
+}
+@media (max-width: 639px) {
+  .graph-overlay[data-gather] [data-graph-sheet] {
+    bottom: calc(var(--graph-gather-h, 0px) + 72px);
+  }
+}
+/* On a wide screen the Stitch box stands left of the new note, as it does
+   left of an open side list (graph-overlay.tsx), so neither covers the
+   other (WALK5-12). Under 1000 px the note sits above the box instead.
+   Only `translate` is undone (the slot's -translate-x-1/2 sets it, never
+   `transform`): beside `transform: none` the minifier folds both into one
+   `transform` and drops `translate: none`, which put the box 340 px off the
+   left edge in a production build (WALK6-01). */
+@media (min-width: 1000px) {
+  .graph-overlay[data-gather] [data-stitch-slot] {
+    left: max(16px, calc((100% - 412px - 680px) / 2));
+    width: min(680px, calc(100% - 412px - 32px));
+    max-width: none;
+    translate: none;
+  }
+}
+/* Under 1000 px the new note sits right above the Stitch box, where the
+   suggestions would show: they stay hidden while the note is up, so they
+   never cover its header (stitch-box.tsx). */
+@media (max-width: 999px) {
+  .graph-overlay[data-gather] [data-stitch-suggestions] {
+    display: none;
+  }
 }
 
 /* Documents whose recommended links await acceptance breathe on their own
@@ -1950,6 +2024,218 @@ ellipse.anchor-flash {
 }
 .corpus-graph .react-flow__controls-button svg {
   fill: currentColor;
+}
+.corpus-graph .react-flow__controls-button svg.graph-stroke-icon {
+  fill: none;
+  max-width: 15px;
+  max-height: 15px;
+}
+
+/* Labels and count pills keep a readable size on screen when the view zooms
+   out: graph-view.tsx sets --graph-label-scale from the zoom (1 at zoom 1
+   and closer, up to 1.7). The label's width grows less, so neighbors never
+   overlap. */
+.corpus-graph .graph-node-label {
+  width: calc(144px * var(--graph-label-width-scale, 1));
+  font-size: calc(11px * var(--graph-label-scale, 1));
+}
+.corpus-graph .graph-edge-pill {
+  transform: scale(var(--graph-label-scale, 1));
+}
+.corpus-graph .react-flow__node:focus-visible {
+  outline: 2px solid var(--clay);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+/* [layer5] The coverage ring around a node's dot (coverage.tsx
+   CoverageRing; VIEW5-08): 3.5px off the dot and a 2px stroke near zoom
+   1; at a far zoom both keep their size on screen (3px off the dot, a
+   1px track and a 2px sage arc), so the ring reads at 40 and 200 documents. --ring-dot is
+   the dot's radius; graph-view.tsx sets --graph-zoom. */
+.corpus-graph .graph-coverage-ring circle {
+  r: calc(var(--ring-dot, 7px) + max(3.5px, calc(3px / var(--graph-zoom, 1))));
+  stroke-width: max(2px, calc(1px / var(--graph-zoom, 1)));
+}
+/* [style9] VIEW9-01: zoomed out, the comments chip hides (below), so a node
+   with a comment waiting on this account draws its ring in the comment
+   color instead: the track lighter, the noted arc full, both at the arc's
+   width. The ring keeps its size on screen, so every waiting node is marked
+   at 7 and at 40 documents, on a phone too, with no chip to overlap. */
+.corpus-graph[data-far] .graph-coverage-ring[data-waits] circle {
+  stroke: color-mix(in srgb, var(--kind-comment) 45%, transparent);
+  stroke-width: max(2px, calc(2px / var(--graph-zoom, 1)));
+}
+.corpus-graph[data-far] .graph-coverage-ring[data-waits] circle[data-arc] {
+  stroke: var(--kind-comment);
+}
+.corpus-graph .graph-coverage-ring circle[data-arc] {
+  stroke-width: max(2px, calc(2px / var(--graph-zoom, 1)));
+}
+
+/* A curve is a thin target under a finger: a hit path about 32px wide on
+   screen at any zoom, and a node at least 44px tall (REV2-12, WALK2-06).
+   graph-view.tsx sets --graph-zoom. */
+@media (pointer: coarse) {
+  .corpus-graph .graph-edge-hit {
+    stroke-width: calc(32px / var(--graph-zoom, 1));
+  }
+  .corpus-graph .react-flow__node::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, calc(44px / var(--graph-zoom, 1)));
+    height: max(100%, calc(44px / var(--graph-zoom, 1)));
+    transform: translate(-50%, -50%);
+  }
+}
+
+/* The spotlight's resting state (graph-view.tsx SpotlightStyle dims and
+   lights by id over it): curves at their weight, a recommended-only pair
+   lighter, a generated document faded until the reader shows the
+   provenance (WALK2-02). */
+.corpus-graph .react-flow__node {
+  transition: opacity 0.3s ease;
+}
+.corpus-graph [data-graph-dot] {
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+.corpus-graph .graph-curve {
+  opacity: 0.7;
+  transition: opacity 0.25s ease;
+}
+.corpus-graph .graph-curve[data-rec] {
+  opacity: 0.45;
+}
+.corpus-graph .graph-curve-stroke {
+  stroke-width: var(--w);
+  transition: stroke-width 0.25s ease;
+}
+.corpus-graph .graph-note-curve {
+  opacity: 0.8;
+  transition: opacity 0.25s ease;
+}
+.corpus-graph .graph-note-stroke {
+  stroke-width: 2.2px;
+}
+.corpus-graph .graph-prov-curve {
+  opacity: 0.75;
+}
+.corpus-graph:not([data-provenance]) .react-flow__node.graph-generated {
+  opacity: 0.35;
+}
+/* [chrome6] VIEW6-03: a page Stitch wrote in this visit draws bright. */
+.corpus-graph:not([data-provenance]) .react-flow__node.graph-generated.graph-written {
+  opacity: 1;
+}
+/* The spotlight (graph-view.tsx useSpotlightAttributes): while anything is
+   lit the canvas carries data-spot, and each lit node and curve data-lit.
+   A large project does not dim the rest — repainting hundreds of faded
+   elements on every hover is what made it slow (REV2-09) — its curves rest
+   light instead, and a lit curve stands out from them. */
+.corpus-graph[data-spot]:not([data-large]) .react-flow__node {
+  opacity: 0.15;
+}
+.corpus-graph[data-spot]:not([data-large]) .react-flow__edge .graph-curve {
+  opacity: 0.07;
+}
+.corpus-graph[data-spot]:not([data-large]) .react-flow__edge .graph-note-curve,
+.corpus-graph[data-spot]:not([data-large]) .react-flow__edge .graph-prov-curve {
+  opacity: 0.1;
+}
+.corpus-graph[data-large] .graph-curve,
+.corpus-graph[data-large] .graph-curve[data-rec] {
+  opacity: 0.35;
+}
+.corpus-graph[data-spot] .react-flow__node[data-lit] {
+  opacity: 1;
+}
+.corpus-graph[data-spot] .react-flow__node[data-lit] [data-graph-dot] {
+  transform: scale(1.1);
+}
+.corpus-graph[data-spot] .react-flow__node[data-lit] .graph-node-label {
+  display: -webkit-box;
+}
+.corpus-graph[data-spot] .react-flow__edge[data-lit] .graph-curve {
+  opacity: 0.95;
+}
+.corpus-graph[data-spot] .react-flow__edge[data-lit] .graph-curve-stroke {
+  stroke-width: calc(var(--w) + 0.8px);
+}
+.corpus-graph[data-spot] .react-flow__edge[data-lit] .graph-note-curve,
+.corpus-graph[data-spot] .react-flow__edge[data-lit] .graph-prov-curve {
+  opacity: 1;
+}
+.corpus-graph[data-spot] .react-flow__edge[data-lit] .graph-note-stroke {
+  stroke-width: 3px;
+}
+/* A large project (REV2-09): no transitions, and at a far zoom only the
+   kept labels (data-lod; a lit label still draws). */
+.corpus-graph[data-large] .react-flow__node,
+.corpus-graph[data-large] .react-flow__edge,
+.corpus-graph[data-large] .graph-curve,
+.corpus-graph[data-large] .graph-curve-stroke,
+.corpus-graph[data-large] .graph-note-curve,
+.corpus-graph[data-large] [data-graph-dot] {
+  transition: none;
+}
+.corpus-graph[data-lod] .graph-node-label:not([data-keep-label]) {
+  display: none;
+}
+/* A quiet canvas at a far zoom (VIEW4-06): no notes chip on a node, and a
+   curve's link count and notes pill only while the curve is lit (hovered,
+   pinned, or its link open); the replies mark always draws. graph-view.tsx
+   sets data-far below zoom 0.7. */
+.corpus-graph[data-far] [data-graph-node-notes],
+.corpus-graph[data-far] [data-graph-node-comments],
+.corpus-graph[data-far] [data-curve-marks]:not([data-lit]) [data-graph-curve-mark="count"],
+.corpus-graph[data-far] [data-curve-marks]:not([data-lit]) [data-graph-curve-mark="notes"] {
+  display: none;
+}
+/* A curve reached by keyboard (] and [) shows where it runs. */
+.corpus-graph .react-flow__edge:focus {
+  outline: none;
+}
+.corpus-graph .react-flow__edge:focus-visible .graph-edge-hit {
+  stroke: color-mix(in srgb, var(--clay) 28%, transparent);
+}
+.corpus-graph .react-flow__controls-button.graph-control-on {
+  background: var(--clay-100);
+  color: var(--clay-800);
+}
+/* The dialog's title takes focus on open as a starting point, not as a
+   control: no ring (REV2-11). */
+/* The graph is a full-screen dialog with its own Escape: Feedback hides while
+   it is open, so it never covers a side list (graph-overlay.tsx, WALK4-19). */
+body:has(.graph-overlay) [data-feedback-button] {
+  display: none;
+}
+
+.graph-overlay [data-graph-title]:focus-visible {
+  outline: none;
+}
+
+/* The link lists and node cards float over the canvas at their place: an
+   entrance in opacity only, so it never overrides the position. */
+@keyframes graph-float-in {
+  from {
+    opacity: 0;
+  }
+}
+.graph-float-in {
+  animation: graph-float-in 0.14s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .graph-settling .react-flow__node {
+    transition: none;
+  }
+  .graph-breathe,
+  .graph-dash-march,
+  .graph-float-in {
+    animation: none;
+  }
 }
 
 /* ── Motion for opening, closing, and folding ──────────────────────────────
@@ -3525,4 +3811,17 @@ li[data-checked] > .note-box::before {
   .voice-typing-on {
     animation: none;
   }
+}
+
+/* Row icons (components/icons.tsx, COST4-05): a <use> of the sprite's
+   symbol, stroked as every line icon is. */
+.row-icon {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.row-icon-bold {
+  stroke-width: 4;
 }

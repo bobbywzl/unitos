@@ -17,6 +17,7 @@ import { assistantAuthor, type ResolvedOp } from "@/lib/docs/assistant-suggestio
 import { suggestionAuthor } from "@/lib/docs/schema";
 import { personColor } from "@/lib/person";
 import type { SuggestCommand } from "@/lib/prompts/suggest";
+import { sourceMarkSelector } from "@/lib/source-mark";
 
 // Suggesting mode in the page editor (SPEC.md §29): the authors' colors,
 // every suggestion's card, and Review suggested edits, of a person's
@@ -117,7 +118,7 @@ function fitColumn(pane: HTMLElement, column: HTMLElement): void {
 function wordsAt(editor: Editor, card: HTMLElement, from: Map<string, number>): number | null {
   const id = card.dataset.suggestionCard;
   if (id !== undefined) return from.get(id) ?? null;
-  const mark = editor.view.dom.querySelector(`[data-source-id="${CSS.escape(card.dataset.commentCard ?? "")}"]`);
+  const mark = editor.view.dom.querySelector(sourceMarkSelector(card.dataset.commentCard ?? ""));
   return mark ? editor.view.posAtDOM(mark, 0) : null;
 }
 

@@ -1,11 +1,17 @@
 "use client";
 
+import { ACTION, SECTION_HEAD, TEXT_BODY } from "./graph-ui";
+import { useParams } from "next/navigation";
+import { useState } from "react";
 import { useT } from "@/components/lang-provider";
+import { useLinkPassages } from "@/components/graph/link-passages";
+import { AddToNote } from "@/components/graph/note-gather"; // [cover4]
 
 // An expanded link (SPEC.md §13): why the link was made, then each end — the
 // document's title, the passage the quote sits in with the quote lit, and a
 // button that opens the reader there. The curve's list and the Recommended
-// links list both expand a link this way.
+// links list both expand a link this way. The passages load when the link
+// opens (link-passages.ts); each quote shows at once.
 
 export type LinkDetailLink = {
   id: string;
@@ -15,13 +21,15 @@ export type LinkDetailLink = {
   toTitle: string;
   quotedText: string;
   toQuotedText: string | null;
-  fromBlockText: string | null;
-  toBlockText: string | null;
+  fromBlockText?: string | null;
+  toBlockText?: string | null;
   reason: string | null;
 };
 
-// How much of the block shows on each side of the quote.
-const CONTEXT_CHARS = 260;
+// How much of the block shows on each side of the quote while the passage
+// is folded (WALK6-05): about four lines with the quote in the middle. A
+// click on the passage shows the block whole.
+const CONTEXT_CHARS = 90;
 
 function clipStart(text: string): string {
   const line = text.replace(/\s+/g, " ");
@@ -40,32 +48,56 @@ function clipEnd(text: string): string {
 }
 
 /** The passage around a quote: the block's words before and after it, the
-    quote lit between them. The quote alone when the block is gone or does
-    not hold it. */
+    quote lit between them, folded to about four lines; a click reads the
+    block whole, and another folds it. The quote alone when the block is gone
+    or does not hold it. */
 function Passage({ quote, blockText }: { quote: string; blockText: string | null }) {
+  const t = useT();
+  const [whole, setWhole] = useState(false);
   const at = blockText ? blockText.indexOf(quote) : -1;
   if (!blockText || at < 0) {
     return (
-      <p className="text-[12.5px] leading-relaxed text-sand-700">
+      <p className={`${TEXT_BODY} leading-relaxed text-sand-700`}>
         <mark className="link-detail-quote">{quote}</mark>
       </p>
     );
   }
-  return (
-    <p className="text-[12.5px] leading-relaxed text-sand-700">
-      {clipStart(blockText.slice(0, at))}
+  const before = blockText.slice(0, at);
+  const after = blockText.slice(at + quote.length);
+  const folds = before.trim().length > CONTEXT_CHARS || after.trim().length > CONTEXT_CHARS || quote.length > 220;
+  const text = (
+    <>
+      {whole ? before : clipStart(before)}
       <mark className="link-detail-quote">{quote}</mark>
-      {clipEnd(blockText.slice(at + quote.length))}
-    </p>
+      {whole ? after : clipEnd(after)}
+    </>
+  );
+  if (!folds) return <p className={`${TEXT_BODY} leading-relaxed text-sand-700`}>{text}</p>;
+  return (
+    <button
+      type="button"
+      onClick={() => setWhole(!whole)}
+      aria-expanded={whole}
+      data-track="graph-link-passage"
+      data-link-passage={whole ? "whole" : "folded"}
+      data-tip={whole ? t("panes.linkPassageFold") : t("panes.linkPassageWhole")}
+      className={`w-full rounded-md text-left ${TEXT_BODY} leading-relaxed text-sand-700 hover:bg-clay-100/40 ${
+        whole ? "block whitespace-pre-wrap" : "line-clamp-4"
+      }`}
+    >
+      {text}
+    </button>
   );
 }
 
 function LinkEnd({
+  documentId,
   title,
   quote,
   blockText,
   onOpen,
 }: {
+  documentId: string;
   title: string;
   quote: string | null;
   blockText: string | null;
@@ -75,12 +107,13 @@ function LinkEnd({
   return (
     <div className="rounded-xl border border-line bg-sand-50/60 p-2.5">
       <div className="flex items-center gap-2">
-        <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-ink">{title}</span>
+        <span className={`min-w-0 flex-1 truncate ${TEXT_BODY} font-semibold text-ink`}>{title}</span>
+        {quote && <AddToNote quote={{ documentId, text: quote }} /* [cover4] */ />}
         <button
           onClick={onOpen}
           data-track="graph-link-open"
           data-tip={t("panes.openLinkEnd", { title })}
-          className="shrink-0 rounded-full border border-line px-2.5 py-0.5 text-[11px] font-semibold text-sand-700 hover:bg-clay-100 hover:text-clay-800"
+          className={ACTION}
         >
           {t("panes.linkOpenEnd")}
         </button>
@@ -89,7 +122,7 @@ function LinkEnd({
         {quote ? (
           <Passage quote={quote} blockText={blockText} />
         ) : (
-          <p className="text-[12px] text-sand-500">{t("panes.linkEndWholeDocument")}</p>
+          <p className={`${TEXT_BODY} text-sand-500`}>{t("panes.linkEndWholeDocument")}</p>
         )}
       </div>
     </div>
@@ -99,28 +132,37 @@ function LinkEnd({
 export function LinkDetail({
   link,
   onOpen,
+  showReason = true,
 }: {
   link: LinkDetailLink;
   /** Open the reader on this link, in the document of one end. */
   onOpen: (documentId: string) => void;
+  /** False where the row above already shows the reason in full. */
+  showReason?: boolean;
 }) {
   const t = useT();
+  const { notebookId } = useParams<{ notebookId?: string }>();
+  const passages = useLinkPassages(notebookId, link);
   return (
-    <div className="flex flex-col gap-2" data-track-surface="link-detail">
-      <div>
-        <p className="text-[10.5px] font-bold tracking-[0.06em] text-sand-500 uppercase">{t("panes.linkWhy")}</p>
-        <p className="mt-0.5 text-[12.5px] leading-snug text-ink">{link.reason ?? t("panes.linkNoReason")}</p>
-      </div>
+    <div className="flex flex-col gap-2" data-track-surface="link-detail" data-link-passages={passages ? "" : undefined}>
+      {showReason && (
+        <div>
+          <p className={SECTION_HEAD}>{t("panes.linkWhy")}</p>
+          <p className={`mt-0.5 ${TEXT_BODY} leading-snug text-ink`}>{link.reason ?? t("panes.linkNoReason")}</p>
+        </div>
+      )}
       <LinkEnd
+        documentId={link.fromDocumentId}
         title={link.fromTitle}
         quote={link.quotedText}
-        blockText={link.fromBlockText}
+        blockText={passages?.from ?? null}
         onOpen={() => onOpen(link.fromDocumentId)}
       />
       <LinkEnd
+        documentId={link.toDocumentId}
         title={link.toTitle}
         quote={link.toQuotedText}
-        blockText={link.toBlockText}
+        blockText={passages?.to ?? null}
         onOpen={() => onOpen(link.toDocumentId)}
       />
     </div>

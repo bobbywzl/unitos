@@ -3,6 +3,7 @@ import type { ChatTurn } from "@/lib/conversation";
 import type { SuggestResult } from "@/lib/docs/assistant-suggestions";
 import type { BlockKind } from "@/lib/block-kind";
 import type { ToggleStyle } from "@/lib/text-style";
+import type { DocumentKind } from "@/lib/document-order";
 
 /** One reply in the discussion under a note, an edit, or a link. */
 export type ReplyView = {
@@ -234,6 +235,15 @@ export type AnnotationItem = {
   conversation: ChatTurn[];
 };
 
+/** Set on a link with no project whose documents sit in projects of more
+    than one account (SPEC.md §13): no one deletes another account's reply on
+    it. outside = the viewer is not in a project of the link's maker: it
+    reads the link and changes only its own replies. removable = the viewer
+    made the link: only the maker removes or dismisses it, and the removal
+    hides it in the maker's projects only. Absent = a link of one project,
+    or of one account. */
+export type CrossAccountView = { outside: boolean; removable: boolean };
+
 export type LinkOut = {
   id: string;
   toDocumentId: string;
@@ -247,6 +257,12 @@ export type LinkOut = {
   reason: string | null; // why the AI connected the two passages
   createdById: string | null;
   replies: ReplyView[];
+  crossAccount?: CrossAccountView;
+  // A generated document's provenance link (lib/graph/provenance.ts): the
+  // Annotations tab folds these into one row per document (WALK4-03).
+  provenance?: boolean;
+  // The notes on the link (lib/graph/reader-link-notes.ts, WALK4-05).
+  noteIds?: string[];
 };
 export type LinkIn = {
   id: string;
@@ -260,6 +276,11 @@ export type LinkIn = {
   reason: string | null;
   createdById: string | null;
   replies: ReplyView[];
+  crossAccount?: CrossAccountView;
+  // A generated document's provenance link: folded, as on LinkOut (WALK4-03).
+  provenance?: boolean;
+  // The notes on the link (WALK4-05).
+  noteIds?: string[];
 };
 
 // ── History (SPEC.md §12): every edit and deletion in the corpus, attributed ──
@@ -296,6 +317,14 @@ export type HistoryEntry = {
   content: string;
   documentTitle: string | null; // BlockEdit entries: the document it happened in
   createdAt: string; // ISO
+  // LINK_REMOVE: the removed link, while it is still hidden in this project
+  // and this is its newest removal; Restore brings it back (WALK5-01).
+  restoreLinkId?: string;
+  // LINK_ADD: the link came back by Undo or Restore (meta.restored).
+  restored?: boolean;
+  // LINK_REMOVE: a recommended link dismissed and hidden, not deleted
+  // (meta.dismissed; REV6-02).
+  dismissed?: boolean;
 };
 
 // ── Stitch (SPEC.md §22): the assistant over the project's documents, from the graph ──
@@ -324,6 +353,10 @@ export type StitchDocument = {
   status: "read" | "empty";
   blocks: number;
   total: number;
+  // After selection: how many of its blocks the answer pass read whole
+  // (the rest were judged off the command). Null on the whole read, and
+  // for a document not read.
+  shown: number | null;
   reason:
     | "transcriptPending"
     | "transcriptStale"
@@ -347,7 +380,53 @@ export type StitchResult = {
   linkCount: number;
   document: { id: string; title: string } | null;
   documents: StitchDocument[];
+  // Every stored block id the reply cites as [block <id>]: its document's
+  // id and title, and the block's text cut to 600 chars, so a chip can say
+  // where it points and open it. {} when the reply cites nothing.
+  cited: Record<string, { documentId: string; title: string; text: string }>;
+  // The ids of the recommended links this run made, for the graph to light
+  // in place (SPEC.md §22). Absent on a result stored before it existed.
+  linkIds?: string[];
+  // Links the answer proposed that were already in the graph (the same two
+  // blocks, an overlapping end), not stored again; the reply says so.
+  linksExisting?: number;
+  // The ids of the links already in the project this answer is about (ANS5-05):
+  // the ones it proposed again, the ones a links command was told of, and
+  // the ones the reply cites both blocks of. Lit with linkIds. A link removed
+  // from the project is not drawn, so it is not listed.
+  existingLinkIds?: string[];
+  // What this answer stored, for the next command's history (ANS4-02): the
+  // box sends it back with the reply as the turn's record.
+  record?: StitchRecord;
+  // The documents of the project the pick left out (ANS6-02): "Read 2 of 2
+  // picked · 5 not picked". Absent when nothing was picked.
+  notPicked?: number;
 };
+
+/** What one Stitch answer stored, as the box sends it back with the turn
+    (the route's history `record`): each link's id and its two ends'
+    document titles, in the order the answer proposed them, and the
+    generated document. The route reads the links and the page again by id
+    inside the project; the titles name a link that is gone. */
+export type StitchRecord = {
+  // Every link the answer proposed, in its order (ANS5-02): a stored one by
+  // its id; one already in the project ("existing", "removed") by that
+  // link's id; one that did not resolve ("unstored") with no id (""). A
+  // record kept before status existed lists only stored links.
+  links: { id: string; from: string; to: string; status?: StitchRecordLinkStatus }[];
+  document: { id: string; title: string } | null;
+};
+
+/** Why a proposed link of a record was not stored: already in the graph
+    (accepted or waiting under Recommended links), removed from the
+    project before, not resolved to two blocks of two documents, or a
+    passage and its word-for-word copy (ANS6-07). */
+export type StitchRecordLinkStatus = "existing" | "removed" | "unstored" | "copy";
+
+/** What a Stitch command asks for (lib/graph/stitch.ts commandKind): an
+    answer, links, or a page. It sets what the answer pass reads after
+    selection (STITCH_SELECTED_BUDGET). */
+export type StitchCommandKind = "question" | "links" | "page";
 
 // ── Graph view (SPEC.md §13): documents as nodes, links as weighted edges ──
 
@@ -355,6 +434,10 @@ export type GraphNode = {
   id: string; // document id
   title: string;
   hasVideo: boolean;
+  // The node's card and dot (SPEC.md §13): what the document is, and its
+  // length in blocks (the dot grows with it).
+  kind?: DocumentKind;
+  blockCount?: number;
 };
 
 /** One link of a pair, listed when the pair's curve is hovered or pinned
@@ -370,11 +453,25 @@ export type GraphEdgeLink = {
   toQuotedText: string | null; // the to end; null = document-level
   // The block each end's quote sits in, whole: the passage the expanded link
   // shows around the quote. Null when the block is gone or the end is
-  // document-level.
-  fromBlockText: string | null;
-  toBlockText: string | null;
+  // document-level. Absent on the graph's data: the link panel reads it
+  // when the link opens (GET .../graph/passages, link-passages.ts).
+  fromBlockText?: string | null;
+  toBlockText?: string | null;
   reason: string | null;
   recommended: boolean;
+  // A generated document's provenance link (lib/graph/provenance.ts): drawn
+  // only while the graph shows where generated documents come from.
+  provenance?: boolean;
+  // The discussion on the link, oldest first, and who made it (SPEC.md §13):
+  // the curve's list shows the replies under the expanded link. Filled by
+  // withLinkReplies in lib/graph/view.ts; absent = none read.
+  replies?: ReplyView[];
+  createdById?: string | null;
+  // [lists9] When the link was made, ISO: a link another person made since
+  // this account's last visit draws the curve's new dot (WALK9-06,
+  // link-replies.tsx). Filled by lib/graph/view.ts; absent on an older answer.
+  createdAt?: string;
+  crossAccount?: CrossAccountView;
 };
 
 /** One undirected pair of documents. Edge width and clay depth scale with
@@ -383,8 +480,9 @@ export type GraphEdgeLink = {
 export type GraphEdge = {
   a: string; // document id
   b: string; // document id; equal to a for a loop
-  accepted: number;
+  accepted: number; // the reader's accepted links; provenance links not counted
   recommended: number;
+  provenance?: number; // a generated document's provenance links (SPEC.md §22)
   links: GraphEdgeLink[]; // accepted first, oldest first
 };
 
@@ -399,11 +497,12 @@ export type RecommendedLinkView = {
   toTitle: string;
   quotedText: string; // the from end
   toQuotedText: string | null; // the to end; null = document-level
-  fromBlockText: string | null; // the block around each end's quote, as on GraphEdgeLink
-  toBlockText: string | null;
+  fromBlockText?: string | null; // the block around each end's quote, as on GraphEdgeLink
+  toBlockText?: string | null;
   reason: string | null;
   createdById: string | null;
   replies: ReplyView[];
+  crossAccount?: CrossAccountView;
 };
 
 // ── The assistant as an actor ──────────────────────────────────────────────

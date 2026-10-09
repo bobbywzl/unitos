@@ -202,12 +202,13 @@ export const CONNECT_EFFORT: KimiEffort = DEFAULT_EFFORT;
 // graph. The documents are read through their skeletons (SKELETON_* below):
 // a select pass reads every skeleton and names the blocks the command needs
 // — ids only, at "low": a reading, not a problem to reason through. Past
-// STITCH_SKELETON_BUDGET of skeleton text a route pass at "low" reads the
+// STITCH_GROUPED_MAX of skeleton a route pass at "low" reads the
 // gists and part summaries first and names the parts, and the select pass
 // reads only those parts' lines, ranked against the command when they
 // still run past the budget (lib/graph/rank.ts). The answer pass reads the
-// selected blocks' real text at the reader's effort and answers with links,
-// a generated document, or both. Documents under STITCH_WHOLE_THRESHOLD
+// selected blocks' real text at the reader's effort, up to the budget of
+// the command's kind, and answers in the reply, with links, a generated
+// document, or a mix. Documents under STITCH_WHOLE_THRESHOLD
 // together skip every pass but the answer: the answer pass reads them
 // whole. Not a DerivationType — it runs through
 // /api/notebooks/[notebookId]/stitch.
@@ -218,16 +219,119 @@ export const STITCH_SELECT_EFFORT: KimiEffort = "low";
 export const STITCH_SELECT_MAX_OUTPUT_TOKENS = 16384; // a list of ids, with the short reasoning before it
 export const STITCH_EFFORT: KimiEffort = "high";
 export const STITCH_MAX_OUTPUT_TOKENS = 32768; // a page of whole-block references and the model's own writing
-export const STITCH_WHOLE_THRESHOLD = 120_000; // chars of document text; under it the answer pass reads the documents whole
-export const STITCH_SKELETON_BUDGET = 200_000; // chars of skeleton text one select call reads; past it the route pass runs first
-export const STITCH_SELECTED_BUDGET = 200_000; // chars of real block text the answer pass reads
+// Every Stitch budget below is in estimated tokens (lib/tokens.ts: Latin
+// chars / 4, a CJK character 1), so a Chinese project reads what an English
+// project of the same token count reads, at the same cost.
+export const STITCH_WHOLE_THRESHOLD = 30_000; // under it the answer pass reads the documents whole
+// A holistic command — the main threads, an overview, what is still open
+// (lib/graph/intent.ts commandIntent) — reads the documents whole up to
+// this much rendering, with no reading pass (COST9-02, round 9): it needs
+// every block, the whole read's prefix caches from the second holistic
+// command on at about a fifth of the select and answer passes' price, and
+// judged on Linda's shape it was at least as right on every pair. Every
+// other command keeps STITCH_WHOLE_THRESHOLD.
+export const STITCH_HOLISTIC_WHOLE_THRESHOLD = 60_000;
+// The reader's notes and the replies on links (ANS9-04): read by the answer
+// pass only when the command is about them (lib/prompts/stitch.ts
+// asksAboutNotes), ranked against the command (lib/graph/rank.ts) and cut
+// to this many tokens. Read-only: nothing is written.
+export const STITCH_NOTES_BUDGET = 3_000;
+export const STITCH_SKELETON_BUDGET = 50_000; // skeleton one select call reads; past it the lines are read in groups
+// What the answer pass reads after selection, by what the command asks for
+// (commandKind, lib/graph/stitch.ts): an answer, links, or a page. A
+// question's budget stays under the whole threshold, so the reading passes
+// pay for themselves; a page keeps the breadth a gather needs.
+// The question budget is held at 15,000 until UsageEvent.reasoningTokens
+// says what a question's answer pass costs in all (COST5-03); one constant.
+export const STITCH_QUESTION_BUDGET = 15_000;
+export const STITCH_SELECTED_BUDGET = { question: STITCH_QUESTION_BUDGET, links: 30_000, page: 50_000 } as const;
+export const STITCH_SELECTED_BLOCKS = { question: 150, links: 300, page: 400 } as const;
 // Past STITCH_SKELETON_BUDGET the select pass reads every line in groups of
-// this many chars of skeleton, the groups at once, so no line goes unread
-// and no call reads more than a few documents' worth; the route pass runs
-// first only past STITCH_GROUPED_MAX of skeleton (about 300 articles).
-export const STITCH_SKELETON_GROUP = 60_000;
-export const STITCH_GROUPED_MAX = 1_200_000;
+// this much skeleton, the groups at once, so no line goes unread and no
+// call reads more than a few documents' worth; the route pass runs first
+// only past STITCH_GROUPED_MAX of skeleton (about 300 articles). A question
+// or a links command reads the groups up to STITCH_CUT_OVER of skeleton:
+// the groups' prefixes cache from the second command on, at about a fifth
+// of the price, which beats an uncached cut of a third of their size. Past
+// it, a question reads the lines ranked against it and the words of its
+// expansion (lib/graph/rank.ts, STITCH_EXPAND_*), cut to
+// STITCH_QUESTION_SKELETON, links to twice that: one call, not one per group.
+export const STITCH_SKELETON_GROUP = 15_000;
+export const STITCH_GROUPED_MAX = 300_000;
+export const STITCH_CUT_OVER = 100_000;
+export const STITCH_QUESTION_SKELETON = 20_000;
+export const STITCH_LINKS_SKELETON = 40_000;
+// The expansion (SPEC.md §22): one cheap call on the stitch-select model
+// writes the words a passage that answers would use — synonyms, the
+// translator's word, names, the field's terms — so the ranked cut finds a
+// line that shares no word with the command. A failed call ranks against
+// the command alone.
+export const STITCH_EXPAND_EFFORT: KimiEffort = "low";
+export const STITCH_EXPAND_MAX_OUTPUT_TOKENS = 2048;
+export const STITCH_EXPAND_WORDS = 15;
+// The targeted path (SPEC.md §22; round 9 RETRIEVAL9): on, unless the
+// server runs with STITCH_INDEX=0, which gives the round 8 reading exactly
+// (the same prompts, byte for byte). On, a question, a links command or a
+// page ranks the blocks' full text against the command, its earlier
+// commands and its expansion (lib/graph/rank.ts, in memory; past
+// STITCH_INDEX_PREFILTER_BLOCKS the index Block.search names the
+// candidates first when the column exists, lib/graph/search.ts), and:
+//   - a cut keeps the top STITCH_INDEX_TOP text matches' lines and orders
+//     the lines by the fused rank of the lines and the text (fuseRanks);
+//   - the select pass is told which blocks match in their full text though
+//     their skeleton line may not (the matches line, like the names line);
+//   - a cut whose expansion failed retries it once, then reads every
+//     document's opening lines up to STITCH_INDEX_NOMATCH_CAP times the
+//     cut budget, in place of every line (COST9-01: 6–9× the cut).
+// An overview, a command about the last answers, and one about the links
+// or replies keep today's reading unchanged (lib/graph/intent.ts).
+export const STITCH_INDEX = process.env.STITCH_INDEX !== "0";
+export const STITCH_INDEX_TOP = 25;
+// Under this many blocks the full text is ranked in memory (7 documents,
+// 500 blocks: 20–40 ms); past it the index names the candidates first
+// (36 documents: 4–13 ms against 120–280 ms in memory; 200 documents:
+// 12–65 ms against 480–535 ms). Measured in round 9 on the QA projects.
+export const STITCH_INDEX_PREFILTER_BLOCKS = 5_000;
+export const STITCH_INDEX_NOMATCH_CAP = 3;
+// A cut keeps whole every document the command names by title (ANS9-01:
+// "Where do my notes disagree with the documents?" read 9 of the notes'
+// 19 lines), up to this many tokens of it, when the command names at most
+// STITCH_CUT_NAMED_DOCS documents; more is a word common to the project.
+export const STITCH_CUT_NAMED_MAX = 2_000;
+export const STITCH_CUT_NAMED_DOCS = 3;
+// A generated document of the project is read with every document when
+// nothing is picked. False leaves generated documents out of that default
+// read (a picked generated document is always read). Owner's call (pending;
+// the recommended option is false).
+export const STITCH_READS_GENERATED = false;
+// The language Stitch replies in (SPEC.md §22): "ui", the reader's interface
+// language (the cookie, else Accept-Language); or "command", the command's
+// language when it is plainly in one (a Chinese question gets a Chinese
+// reply under an English interface), else the interface's. Quotes keep
+// the documents' words either way. Owner's call (pending); "ui" until then.
+export const STITCH_REPLY_LANGUAGE: "ui" | "command" = "ui";
 export const STITCH_GROUP_CONCURRENCY = 6;
+// The route's limits: a command over STITCH_COMMAND_MAX chars is refused
+// with a message that says so; a history turn is cut to
+// STITCH_HISTORY_TURN_MAX chars and the history to its last
+// STITCH_HISTORY_MAX turns, never refused. The reading passes read the
+// last STITCH_READ_HISTORY commands of the reader, not the replies.
+export const STITCH_COMMAND_MAX = 4_000;
+export const STITCH_HISTORY_TURN_MAX = 8_000;
+export const STITCH_HISTORY_MAX = 20;
+export const STITCH_READ_HISTORY = 6; // a bare "make that a page" at turn 9 still has its topic (ANS4-09)
+// The answer pass's layout after a pick: under STITCH_HISTORY_FIRST_MIN
+// tokens of conversation, the picked blocks in the system message and the
+// conversation after them (nothing of the conversation caches, since the
+// blocks change every command); past it, the conversation first and the
+// blocks in the last message, so each turn reads the turns before it from
+// the cache (COST4-01). Off (Infinity): judged blind on four turns of a
+// 10-turn conversation, history-first lost 3 of 4 and was terser, as in
+// round 3; and a 10-turn conversation of Linda's shape holds ~2.2k tokens
+// of history, under a 3k line. On at 3_000 it would save 5–7% of a 10-turn
+// conversation of long English replies, ~15% in Chinese (round 4 cost
+// audit). Engine4 RESULT.md.
+export const STITCH_HISTORY_FIRST_MIN = Infinity;
 // The model passes together get this long; the route's limit (300 s) keeps
 // the rest for storing the answer. Past it the run stops and the reader is
 // told to narrow the command instead of reading a stream that ended empty.
@@ -235,7 +339,7 @@ export const STITCH_DEADLINE_MS = 270_000;
 // The assistant at Project scope (SPEC.md §7, lib/assistant/project-reading.ts):
 // a project with more document text than this is read the way Stitch reads
 // it, through the skeletons, for each message; under it the digest goes whole.
-export const ASSISTANT_WHOLE_THRESHOLD = STITCH_WHOLE_THRESHOLD;
+export const ASSISTANT_WHOLE_THRESHOLD = 120_000; // chars of document text (project-reading.ts counts chars)
 
 // The skeleton of a document (SPEC.md §22): the document collapsed for
 // Stitch — a gist, one summary per part of the contents, one line per
@@ -250,7 +354,32 @@ export const SKELETON_EFFORT: KimiEffort = "low";
 export const SKELETON_MAX_OUTPUT_TOKENS = 32768; // a line per block of the window, with the short reasoning before them
 export const SKELETON_WINDOW_CHARS = 100_000;
 export const SKELETON_STALE_FRACTION = 0.1;
-export const SKELETON_STALE_MS = 10 * 60_000; // a build older than this is a dead run
+// The build lock (Document.skeletonStartedAt): its holder refreshes it every
+// SKELETON_HEARTBEAT_MS while it builds, so a lock not refreshed for
+// SKELETON_STALE_MS is a dead run's (a deploy restart, a killed warm, a
+// crash) and the next run takes it over. A command waits for another
+// process's build at most SKELETON_WAIT_MS, then reads the stored skeleton
+// (its changed blocks as their own first words), or first words alone
+// (REV4-03).
+export const SKELETON_HEARTBEAT_MS = 10_000;
+export const SKELETON_STALE_MS = 45_000;
+export const SKELETON_WAIT_MS = 5_000;
+// A skeleton builds only when it can be read: a project of the document past
+// STITCH_WHOLE_THRESHOLD tokens or ASSISTANT_WHOLE_THRESHOLD chars. While a
+// document is being written it rebuilds at most once per SKELETON_QUIET_MS:
+// an edit or a graph opening (warmSkeletons) under that since the last build
+// builds nothing (COST6-06); a Stitch command under it reads the stored
+// skeleton, changed blocks as their first words, or waits up to
+// SKELETON_WAIT_MS for a build already running (COST5-08, REV6-03); past it
+// the next edit, graph opening, or command builds.
+export const SKELETON_QUIET_MS = 10 * 60_000;
+export const SKELETON_BUILD_CONCURRENCY = 12; // documents ensureSkeleton builds at once
+// Windows in flight (COST4-08): a document's windows go out SKELETON_WINDOW_CONCURRENCY
+// at a time, and every build in the process shares SKELETON_WINDOWS_IN_FLIGHT,
+// so a project of large imports never sends a burst of calls that a rate
+// limit turns into failed builds.
+export const SKELETON_WINDOW_CONCURRENCY = 4;
+export const SKELETON_WINDOWS_IN_FLIGHT = 12;
 
 // The contents of a document (SPEC.md §26): the parts the reader jumps
 // between, each with the block it starts at. One call over the whole

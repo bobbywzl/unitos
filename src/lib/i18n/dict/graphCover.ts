@@ -1,0 +1,176 @@
+// UI strings of what the notes cover on the graph and of Add to note
+// (SPEC.md §13; components/graph/coverage.tsx, note-gather.tsx): the parts
+// noted, Not opened, Gaps only, "N waiting on you", and the note composer
+// that collects quotes from the graph. zh glossary: dict/common.ts — part 部分 ·
+// note 笔记 · quote 引文 · section 章节 · link 链接 · reply 回复 ·
+// document 文档 · passage 片段.
+
+const en = {
+  // Coverage (coverage.tsx)
+  partsNoted: "{n} of {m} parts noted",
+  notOpened: "Not opened",
+  notOpenedTitle: "You have not opened this document",
+  partNotedOne: "1 note quotes this part",
+  partNotedMany: "{n} notes quote this part",
+  partEmpty: "No note quotes this part",
+  partAnnotationsOne: "1 annotation",
+  partAnnotationsMany: "{n} annotations",
+  wholeNoted: "A note quotes this document",
+  // [layer5] A document with no parts is one part, the whole document (WALK5-06).
+  wholeEmpty: "No note quotes this document",
+  wholeNotedOne: "1 note quotes this document",
+  wholeNotedMany: "{n} notes quote this document",
+  headPartsTitle: "A document with no parts counts as one part, the whole document",
+  gapParts: "No note in {n} of {m} parts",
+  // [panel6] The head reads as one line of text (VIEW6-07).
+  headParts: "{n}/{m} parts noted",
+  headUnopened: "{n} not opened",
+  headUnopenedTitle: "{n} of {m} documents not opened",
+  // [lists8] WALK8-01, REV8-06: links and comments, by one rule; a remark is not called a question.
+  // [lists9] WALK9-01: the newest reply decides, resolved or not.
+  headNoReplyOne: "1 waiting on you",
+  headNoReply: "{n} waiting on you",
+  headNoReplyTitle: "Links and comments whose newest words are another person's and not resolved: {l} links, {c} comments",
+  gapsOnly: "Gaps only",
+  gapsOnlyTitle: "Keep the documents you have not opened and the parts no note quotes. Each row says why it is kept.",
+  gapsNone: "No gaps: every part is noted and every document is opened.",
+  // [style9] VIEW9-05, WALK9-03: the head's "N waiting on you", a press (the Links list's Waiting on you switch is gone).
+  waitingAllTitle: "List every link and comment waiting on you, under its document, newest first. Press again for the documents.",
+
+  // [layer5] The reader's comments on the graph (coverage.tsx; VIEW5-01/02).
+  commentsOpenOne: "1 open comment",
+  commentsOpenMany: "{n} open comments",
+  commentsShowTitle: "Show the comments",
+  commentOpenTitle: "Open this comment in the reader",
+  commentResolved: "Resolved",
+  commentWaitsTitle: "Waiting on you: the newest words are another person's and not resolved",
+  keyComments: "Open comments on a document; ? when one waits on you",
+  // [lists8] WALK8-02: the Documents head's open comments, pressed.
+  commentsAllTitle: "List every open comment, under its document. Press again for the documents.",
+  // [lists8] WALK8-11: a card whose comments are all resolved.
+  commentsResolvedOne: "1 resolved comment",
+  commentsResolvedMany: "{n} resolved comments",
+  // [layer5] Replies another person wrote since this account last opened the link (WALK5-07).
+  newRepliesOne: "1 new",
+  newRepliesMany: "{n} new",
+  newRepliesTitle: "A reply since you last opened this link",
+  // [lists9] What is new since this account's last visit (WALK9-06): a link another person made, a comment or a reply another person wrote.
+  newLinkTitle: "A link made since your last visit",
+  newCommentTitle: "A comment or a reply since your last visit",
+  newSinceVisitOne: "1 new",
+  newSinceVisitMany: "{n} new",
+  newSinceVisitTitle: "Links, comments, and replies another person made since your last visit: {n}",
+
+  // Add to note (note-gather.tsx)
+  addToNote: "Add to note",
+  addToNoteTitle: "Add this passage to the new note as a quote",
+  addedToNote: "In the note",
+  addedToNoteTitle: "Remove this quote from the new note",
+  composerTitle: "New note",
+  composerQuotes: "{n} quote{s} · {d} document{ds}",
+  composerSection: "Section",
+  composerNoSection: "Add a section in the notes tray first.",
+  composerPlaceholder: "Your own words (optional)",
+  composerRemove: "Remove this quote",
+  composerSave: "Save note",
+  composerSaving: "Saving…",
+  composerDiscard: "Discard",
+  composerDiscardConfirm: "Discard this note's words and quotes?",
+  composerFold: "Fold the new note",
+  composerUnfold: "Open the new note",
+  composerFull: "A note holds at most {n} quotes.",
+  composerSaved: "Saved in {section}.",
+  composerQueued: "Saved offline. It lands in {section} once you are back online.",
+  composerShow: "Show",
+  composerOpenQuote: "Open this passage in the reader",
+  // Write a page from these (note-gather.tsx, VIEW5-05).
+  composerWritePage: "Write a page from these",
+  composerWritePageTitle: "Adds the quotes' documents to the pick and puts a command in the Stitch box. Nothing is sent until you press Send.",
+  composerWritePageCommand: "Write one page from these passages, in this order, and keep each as a quote:",
+
+  // The reader's Annotations tab (link-card-extras.tsx)
+  provenanceUsedBy: "Used by {title}",
+  provenanceFrom: "From {title}",
+  provenancePassages: "{n} passage{s}",
+  provenanceTitle: "Stitch wrote this generated document from passages of this one. Open it",
+  linkNoteShow: "Show this note in the notes tray",
+};
+
+const zh: Record<keyof typeof en, string> = {
+  partsNoted: "{m} 个部分中 {n} 个有笔记",
+  notOpened: "未打开",
+  notOpenedTitle: "你还没有打开这个文档",
+  partNotedOne: "1 条笔记引用了这个部分",
+  partNotedMany: "{n} 条笔记引用了这个部分",
+  partEmpty: "没有笔记引用这个部分",
+  partAnnotationsOne: "1 条批注",
+  partAnnotationsMany: "{n} 条批注",
+  wholeNoted: "有笔记引用了这个文档",
+  wholeEmpty: "没有笔记引用这个文档",
+  wholeNotedOne: "1 条笔记引用了这个文档",
+  wholeNotedMany: "{n} 条笔记引用了这个文档",
+  headPartsTitle: "没有部分的文档算作一个部分，即整个文档",
+  gapParts: "{m} 个部分中 {n} 个没有笔记",
+  headParts: "{n}/{m} 个部分有笔记",
+  headUnopened: "{n} 个未打开",
+  headUnopenedTitle: "{m} 个文档中 {n} 个未打开",
+  headNoReplyOne: "1 条待你回复",
+  headNoReply: "{n} 条待你回复",
+  headNoReplyTitle: "最新一段话是别人写的且未解决的链接和评论：{l} 条链接，{c} 条评论",
+  gapsOnly: "只看空缺",
+  gapsOnlyTitle: "只留下你未打开的文档和没有笔记引用的部分。每行写明留下的原因。",
+  gapsNone: "没有空缺：每个部分都有笔记，每个文档都已打开。",
+  waitingAllTitle: "按文档列出每条待你回复的链接和评论，最新的在前。再按一次回到文档。",
+
+  commentsOpenOne: "1 条未解决的评论",
+  commentsOpenMany: "{n} 条未解决的评论",
+  commentsShowTitle: "显示评论",
+  commentOpenTitle: "在阅读器中打开这条评论",
+  commentResolved: "已解决",
+  commentWaitsTitle: "待你回复：最新一段话是别人写的且未解决",
+  keyComments: "文档上未解决的评论；有评论待你回复时显示 ?",
+  commentsAllTitle: "按文档列出每条未解决的评论。再按一次回到文档。",
+  commentsResolvedOne: "1 条已解决的评论",
+  commentsResolvedMany: "{n} 条已解决的评论",
+  newRepliesOne: "1 条新回复",
+  newRepliesMany: "{n} 条新回复",
+  newRepliesTitle: "你上次打开这条链接之后的回复",
+  newLinkTitle: "你上次来之后别人新加的链接",
+  newCommentTitle: "你上次来之后别人新写的评论或回复",
+  newSinceVisitOne: "1 项新内容",
+  newSinceVisitMany: "{n} 项新内容",
+  newSinceVisitTitle: "你上次来之后别人新加的链接、评论和回复：{n} 项",
+
+  addToNote: "加入笔记",
+  addToNoteTitle: "把这个片段作为引文加入新笔记",
+  addedToNote: "已在笔记中",
+  addedToNoteTitle: "从新笔记中移除这条引文",
+  composerTitle: "新笔记",
+  composerQuotes: "{n} 条引文 · {d} 个文档",
+  composerSection: "章节",
+  composerNoSection: "请先在笔记栏中添加一个章节。",
+  composerPlaceholder: "你自己的话（可不填）",
+  composerRemove: "移除这条引文",
+  composerSave: "保存笔记",
+  composerSaving: "正在保存…",
+  composerDiscard: "舍弃",
+  composerDiscardConfirm: "舍弃这条笔记的文字和引文？",
+  composerFold: "收起新笔记",
+  composerUnfold: "展开新笔记",
+  composerFull: "一条笔记最多 {n} 条引文。",
+  composerSaved: "已保存到 {section}。",
+  composerQueued: "已离线保存。恢复联网后会存入 {section}。",
+  composerShow: "查看",
+  composerOpenQuote: "在阅读器中打开这个片段",
+  composerWritePage: "用这些写一页",
+  composerWritePageTitle: "把引文所在的文档加入选取，并在缝合框中写好命令。按发送之前不会发出任何内容。",
+  composerWritePageCommand: "按这个顺序，用下面这些片段写一页，每段都作为引文保留：",
+
+  provenanceUsedBy: "被 {title} 使用",
+  provenanceFrom: "来自 {title}",
+  provenancePassages: "{n} 个片段",
+  provenanceTitle: "缝合用这个文档的片段写出了这个生成文档。打开它",
+  linkNoteShow: "在笔记栏中显示这条笔记",
+};
+
+export const graphCover = { en, zh } as const;
