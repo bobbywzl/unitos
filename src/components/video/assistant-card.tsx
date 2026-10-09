@@ -19,8 +19,10 @@ import { runFormalize } from "@/lib/video/formalize-client";
 import { formatTimeRange, type Region } from "@/lib/video/types";
 import type { AssistantPlan, FormalizedArticle, FormalizeFormat } from "@/lib/types";
 import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
-import { useChatDraft, useKeptChat, writeChatDraft } from "@/lib/kept-chat";
+import { readChatDraft, useChatDraft, useKeptChat, writeChatDraft } from "@/lib/kept-chat";
 import { ClearConversation } from "@/components/assistant/clear-conversation";
+import { failureLine, modelFetch } from "@/components/assistant/failure";
+import { isOffline } from "@/lib/offline/queue";
 
 // The assistant on the media pane (SPEC.md §11): a chat card under the tool
 // bar, document scope — the model reads the whole timed transcript. Facing
@@ -30,8 +32,11 @@ import { ClearConversation } from "@/components/assistant/clear-conversation";
 // sources). Typed commands go to /api/assistant/act like the reader's chat.
 // The conversation is kept for the account per document (lib/kept-chat.ts):
 // closing the card, leaving the page, or a reload keeps it; Clear
-// conversation removes it. The words typed in the box are kept in this
-// browser until they are sent.
+// conversation removes it. The words typed in the box, and the messages
+// queued behind a running answer, are kept in this browser until they are
+// sent. A send that fails stores nothing: its message goes back into the
+// box, the one failure line shows under it, and the queue waits until the
+// next send.
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
@@ -76,7 +81,32 @@ export function MediaAssistant({
     writeChatDraft(draftKey, text);
   }
   // Messages sent while an answer runs (SPEC.md §7): they go out in order.
-  const [queue, setQueue] = useState<QueuedText[]>([]);
+  // Kept in this browser with the box's words, so a reload or the card
+  // closed and opened again sends them still.
+  const [queue, setQueueState] = useState<QueuedText[]>([]);
+  const queueKey = `media-queue:${notebookId}:${documentId}`;
+  function setQueue(update: (list: QueuedText[]) => QueuedText[]) {
+    setQueueState((list) => {
+      const next = update(list);
+      writeChatDraft(queueKey, next.length > 0 ? JSON.stringify(next.map((q) => q.content)) : "");
+      return next;
+    });
+  }
+  useEffect(() => {
+    try {
+      const kept = JSON.parse(readChatDraft(queueKey) || "[]") as unknown;
+      if (Array.isArray(kept) && kept.length > 0) {
+        const list = kept.filter((c): c is string => typeof c === "string" && c.trim() !== "");
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setQueueState(list.map((content) => ({ key: queuedKey(), content })));
+      }
+    } catch {
+      // Nothing kept.
+    }
+  }, [queueKey]);
+  // A failed send holds the queue until the reader sends again.
+  const [held, setHeld] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   // The running send() or skill lives with the kept conversation, so Stop
@@ -104,15 +134,27 @@ export function MediaAssistant({
   function push(message: ChatMessage) {
     setTurns((m) => [...m, message]);
   }
+  /** Take a sent message back out: its answer failed, nothing is stored. */
+  function unpush(content: string) {
+    setTurns((m) => {
+      for (let i = m.length - 1; i >= 0; i--) {
+        if (m[i].role === "user" && m[i].content === content) return [...m.slice(0, i), ...m.slice(i + 1)];
+      }
+      return m;
+    });
+  }
+  /** The one failure line (SPEC.md §7); the technical reason goes to the console. */
+  function fail(err: unknown) {
+    setError(isOffline() ? t("common.offlineAi") : failureLine(err, t));
+  }
 
   // One skill run: the chip label lands as the reader's turn, the outcome as
   // the assistant's, and the pane refreshes to show what was made.
   async function runSkill(format: FormalizeFormat) {
     if (busy || !hasTranscript) return;
-    push({
-      role: "user",
-      content: t(format === "article" ? "video.skillArticle" : "video.skillNotes"),
-    });
+    setError(null);
+    const label = t(format === "article" ? "video.skillArticle" : "video.skillNotes");
+    push({ role: "user", content: label });
     const controller = kept.begin();
     try {
       const result = await runFormalize(
@@ -141,10 +183,9 @@ export function MediaAssistant({
     } catch (err) {
       // Stopped, not failed: the skill line stays, no outcome lands.
       if (controller.signal.aborted) return;
-      push({
-        role: "assistant",
-        content: err instanceof Error ? err.message : t("video.assistantFailed"),
-      });
+      // Failed: the skill line goes, the failure line shows.
+      unpush(label);
+      fail(err);
     } finally {
       kept.end(controller);
     }
@@ -162,7 +203,11 @@ export function MediaAssistant({
     if (busy) return;
     const history = messages.slice(-12);
     if (queued) setQueue((list) => list.filter((q) => q.key !== queued.key));
-    else setInput("");
+    else {
+      setInput("");
+      setHeld(false);
+    }
+    setError(null);
     push({ role: "user", content: command });
     const controller = kept.begin();
     try {
@@ -177,17 +222,21 @@ export function MediaAssistant({
           frame,
         };
       }
-      const res = await fetch("/api/assistant/act", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify({ notebookId, documentId, command, history, video, thinking, web }),
-      });
+      const res = await modelFetch(
+        "/api/assistant/act",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
+          body: JSON.stringify({ notebookId, documentId, command, history, video, thinking, web }),
+        },
+        t,
+      );
       const plan = (await res.json().catch(() => null)) as
         | (AssistantPlan & { error?: string })
         | null;
       if (!res.ok || !plan || plan.error) {
-        throw new Error(plan?.error ?? t("video.requestFailedStatus", { status: res.status }));
+        throw new Error(plan?.error ?? t("assistant.failedServer"));
       }
       const reply = plan.reply ?? t("video.assistantNoReply");
       // The media pane executes no plan actions yet; the reply still answers.
@@ -196,10 +245,13 @@ export function MediaAssistant({
     } catch (err) {
       // Stopped, not failed: the sent message stays, no reply lands.
       if (controller.signal.aborted) return;
-      push({
-        role: "assistant",
-        content: err instanceof Error ? err.message : t("video.assistantFailed"),
-      });
+      // Failed: nothing is stored. The message goes back into the box (before
+      // any words typed since), and the queue waits for the next send.
+      unpush(command);
+      const typed = inputRef.current?.value.trim() ?? "";
+      setInput(typed ? `${command} ${typed}` : command);
+      setHeld(true);
+      fail(err);
     } finally {
       kept.end(controller);
       inputRef.current?.focus();
@@ -208,7 +260,7 @@ export function MediaAssistant({
 
   // The queue drains one message per finished answer, in order — after a
   // Stop too: a queued message was sent to go out next (SPEC.md §7).
-  const queueHead = !busy ? (queue[0] ?? null) : null;
+  const queueHead = !busy && !held ? (queue[0] ?? null) : null;
   useEffect(() => {
     if (!queueHead) return;
     // Sent from a task of its own, so the effect settles before the send.
@@ -362,6 +414,7 @@ export function MediaAssistant({
           {busy ? (input.trim() ? t("assistant.queue") : <StopIcon size={12} />) : t("video.assistantSend")}
         </button>
       </form>
+      {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
     </div>
   );
 }
