@@ -1,14 +1,14 @@
 {
  "total": {
-  "score": 0.993,
+  "score": 1,
   "sheets": 1,
-  "text": 0.994,
-  "cells": 0.994,
-  "formats": 0.965,
-  "merges": 0.92,
-  "frozen": 0.996,
-  "lost": 772,
-  "dom": 1,
+  "text": 1,
+  "cells": 1,
+  "formats": 0.999,
+  "merges": 1,
+  "frozen": 1,
+  "lost": 31,
+  "dom": 0,
   "errors": 0
  },
  "files": {
@@ -593,13 +593,13 @@
    "dom": 0
   },
   "lo-tdf81939": {
-   "score": 0.627,
-   "text": 0.333,
-   "cells": 0.4,
-   "formats": 0.4,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
    "merges": null,
    "frozen": 1,
-   "lost": 3,
+   "lost": 0,
    "dom": 0
   },
   "lo-too-many-cols-rows": {
@@ -743,13 +743,13 @@
    "dom": 0
   },
   "lo-tdf76115": {
-   "score": 0.921,
-   "text": 0.889,
-   "cells": 0.883,
-   "formats": 0.833,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
    "merges": null,
    "frozen": 1,
-   "lost": 596,
+   "lost": 0,
    "dom": 0
   },
   "lo-tdf131575": {
@@ -893,13 +893,13 @@
    "dom": 0
   },
   "pd-testdateoverflow": {
-   "score": 0.886,
-   "text": 0.889,
-   "cells": 0.875,
-   "formats": 0.667,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
    "merges": null,
    "frozen": 1,
-   "lost": 1,
+   "lost": 0,
    "dom": 0
   },
   "pd-test_decimal": {
@@ -1563,13 +1563,13 @@
    "dom": 0
   },
   "umya-issue_216": {
-   "score": 0.862,
-   "text": 0.999,
-   "cells": 0.997,
-   "formats": 0.818,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
    "merges": 1,
-   "frozen": 0.357,
-   "lost": 133,
+   "frozen": 1,
+   "lost": 0,
    "dom": 0
   },
   "umya-issue_188_3": {
@@ -1593,11 +1593,11 @@
    "dom": 0
   },
   "umya-issue_206": {
-   "score": 0.944,
+   "score": 1,
    "text": 1,
    "cells": 1,
    "formats": 1,
-   "merges": 0.667,
+   "merges": 1,
    "frozen": 1,
    "lost": 0,
    "dom": 0
@@ -1643,23 +1643,23 @@
    "dom": 0
   },
   "umya-libre2": {
-   "score": 0.8,
+   "score": 1,
    "text": 1,
    "cells": 1,
    "formats": null,
-   "merges": 0,
+   "merges": null,
    "frozen": 1,
    "lost": 0,
    "dom": 0
   },
   "umya-libre": {
-   "score": 0.912,
-   "text": 0.986,
-   "cells": 0.985,
-   "formats": 0.5,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
    "merges": 1,
    "frozen": 1,
-   "lost": 1,
+   "lost": 0,
    "dom": 0
   },
   "umya-issue_232": {
@@ -1693,11 +1693,11 @@
    "dom": 0
   },
   "umya-issue_188_2": {
-   "score": 0.8,
+   "score": 1,
    "text": 1,
    "cells": 1,
    "formats": null,
-   "merges": 0,
+   "merges": null,
    "frozen": 1,
    "lost": 0,
    "dom": 0
@@ -1813,13 +1813,13 @@
    "dom": 0
   },
   "excelize-Book1": {
-   "score": 0.982,
-   "text": 0.978,
-   "cells": 0.951,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
    "formats": null,
    "merges": null,
    "frozen": 1,
-   "lost": 2,
+   "lost": 0,
    "dom": 0
   },
   "excelize-MergeCell": {
@@ -1853,14 +1853,24 @@
    "dom": 0
   },
   "synth-merged-hidden-words": {
-   "score": 0.934,
-   "text": 0.877,
-   "cells": 0.792,
+   "score": 1,
+   "text": 1,
+   "cells": 1,
    "formats": null,
    "merges": 1,
    "frozen": 1,
-   "lost": 5,
-   "dom": 1
+   "lost": 0,
+   "dom": 0
+  },
+  "synth-time-rounding": {
+   "score": 1,
+   "text": 1,
+   "cells": 1,
+   "formats": 1,
+   "merges": null,
+   "frozen": 1,
+   "lost": 0,
+   "dom": 0
   }
  }
 }
