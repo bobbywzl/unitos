@@ -2072,6 +2072,24 @@ export function attachFigureRegions(
       figure.region = toRegion(figure.box);
     }
   }
+  // Figures in a row, their captions level, read left to right: a scan's
+  // tilt sets the right one's caption a few points higher (parse loop
+  // finding: NACA Report 515 p. 9, Figures 11, 12, 13 side by side read
+  // 13, 12, 11).
+  const levelCaption = (a: Segment, b: Segment) =>
+    a.type === "FIGURE" &&
+    b.type === "FIGURE" &&
+    a.page === b.page &&
+    a.captionBox !== undefined &&
+    b.captionBox !== undefined &&
+    Math.min(a.captionBox.y2, b.captionBox.y2) - Math.max(a.captionBox.y1, b.captionBox.y1) >
+      Math.min(a.captionBox.y2 - a.captionBox.y1, b.captionBox.y2 - b.captionBox.y1) * 0.5;
+  for (let i = 0; i < kept.length; i++) {
+    let j = i;
+    while (j + 1 < kept.length && levelCaption(kept[i], kept[j + 1])) j++;
+    if (j > i) kept.splice(i, j - i + 1, ...kept.slice(i, j + 1).sort((a, b) => a.captionBox!.x1 - b.captionBox!.x1));
+    i = j;
+  }
   return kept;
 }
 
