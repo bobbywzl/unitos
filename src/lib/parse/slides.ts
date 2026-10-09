@@ -2017,7 +2017,11 @@ function readingOrderOf(shapes: Placed[], ctx: Ctx): Placed[] {
     }
   }
   // The first shape by the band order whose every predecessor is placed;
-  // when none is free (a staircase of rows), the first by the band order.
+  // when none is free (a loop: a staircase of rows, a diagram's labels),
+  // the one with the fewest predecessors still to place, the first by the
+  // band order among equals. Slides benchmark finding: the first by the
+  // band order alone jumped to the far column of a diagram (MSIX before
+  // WinForms) when one small label closed a loop.
   const out: Placed[] = [];
   const done = new Set<number>();
   while (out.length < n) {
@@ -2025,7 +2029,18 @@ function readingOrderOf(shapes: Placed[], ctx: Ctx): Placed[] {
     for (let i = 0; i < n && pick < 0; i++) {
       if (!done.has(i) && [...before[i]].every((k) => done.has(k))) pick = i;
     }
-    if (pick < 0) for (let i = 0; i < n && pick < 0; i++) if (!done.has(i)) pick = i;
+    if (pick < 0) {
+      let fewest = Infinity;
+      for (let i = 0; i < n; i++) {
+        if (done.has(i)) continue;
+        let ahead = 0;
+        for (const k of before[i]) if (!done.has(k)) ahead++;
+        if (ahead < fewest) {
+          fewest = ahead;
+          pick = i;
+        }
+      }
+    }
     done.add(pick);
     out.push(sorted[pick]);
   }

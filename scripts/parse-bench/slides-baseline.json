@@ -1502,7 +1502,7 @@
   "ais-04Inference-01Inference-07MindIEIntr": {
    "composite": 1,
    "words": 1,
-   "order": 0.999,
+   "order": 1,
    "bullets": 1,
    "tables": null,
    "notes": 1,
@@ -1907,9 +1907,9 @@
    "lost": 0
   },
   "wl-learning-computer-vision-DeepLearning": {
-   "composite": 1,
+   "composite": 0.999,
    "words": 1,
-   "order": 1,
+   "order": 0.995,
    "bullets": 1,
    "tables": null,
    "notes": 1,
@@ -1929,9 +1929,9 @@
    "lost": 0
   },
   "wth-016-AppMigration-03-ContainerizingAn": {
-   "composite": 0.999,
+   "composite": 1,
    "words": 1,
-   "order": 0.994,
+   "order": 0.997,
    "bullets": 1,
    "tables": 1,
    "notes": 1,
@@ -2171,9 +2171,9 @@
    "lost": 0
   },
   "wth-001-IntroToKubernetes": {
-   "composite": 0.998,
+   "composite": 0.999,
    "words": 1,
-   "order": 0.988,
+   "order": 0.994,
    "bullets": 1,
    "tables": 1,
    "notes": 1,
@@ -2349,7 +2349,7 @@
   "uns-science-exploration-369p": {
    "composite": 0.999,
    "words": 1,
-   "order": 0.995,
+   "order": 0.994,
    "bullets": 1,
    "tables": 1,
    "notes": null,
@@ -2391,9 +2391,9 @@
    "lost": 0
   },
   "docling-docling-arch": {
-   "composite": 0.995,
+   "composite": 0.994,
    "words": 1,
-   "order": 0.981,
+   "order": 0.975,
    "bullets": 1,
    "tables": null,
    "notes": null,
@@ -2523,9 +2523,9 @@
    "lost": 0
   },
   "awsjp-studio-IaC-case01-case01-architect": {
-   "composite": 0.995,
+   "composite": 0.992,
    "words": 1,
-   "order": 0.978,
+   "order": 0.967,
    "bullets": 1,
    "tables": null,
    "notes": null,
@@ -2589,9 +2589,9 @@
    "lost": 0
   },
   "dnc-Tour-XAML-tools-VS2019": {
-   "composite": 0.995,
+   "composite": 0.997,
    "words": 1,
-   "order": 0.975,
+   "order": 0.986,
    "bullets": 1,
    "tables": 1,
    "notes": null,
@@ -2622,9 +2622,9 @@
    "lost": 0
   },
   "dnc-Beyond-REST-and-RPC": {
-   "composite": 0.998,
+   "composite": 0.999,
    "words": 1,
-   "order": 0.994,
+   "order": 0.998,
    "bullets": 1,
    "tables": null,
    "notes": null,
@@ -2853,9 +2853,9 @@
    "lost": 0
   },
   "aii-01AICluster-01Roadmap-06Challenge": {
-   "composite": 0.998,
+   "composite": 0.999,
    "words": 1,
-   "order": 0.992,
+   "order": 0.995,
    "bullets": 1,
    "tables": null,
    "notes": 1,
@@ -2864,9 +2864,9 @@
    "lost": 0
   },
   "aii-01AICluster-01Roadmap-07Architecture": {
-   "composite": 0.998,
+   "composite": 0.999,
    "words": 1,
-   "order": 0.99,
+   "order": 0.994,
    "bullets": 1,
    "tables": 1,
    "notes": 1,
