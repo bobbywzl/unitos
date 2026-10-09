@@ -6,7 +6,7 @@
   "bullets": 1,
   "tables": 1,
   "notes": 1,
-  "chartValues": 0.994,
+  "chartValues": 1,
   "replica": 1,
   "lost": 2,
   "files": 133,
@@ -1423,13 +1423,13 @@
    "lost": 0
   },
   "lo-forum-mso-de-138303": {
-   "composite": 0.936,
-   "words": 0.974,
+   "composite": 1,
+   "words": 1,
    "order": null,
    "bullets": null,
    "tables": null,
    "notes": null,
-   "chartValues": 0.833,
+   "chartValues": 1,
    "replica": 1,
    "lost": 0
   },

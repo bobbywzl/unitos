@@ -1702,8 +1702,13 @@ function renderChartExTable(doc: XMLDocument): RenderedText | null {
 function shownNumber(value: string, code: string): string {
   const n = Number(value);
   if (value.trim() === "" || !Number.isFinite(n)) return value;
+  // A code of letters alone that is no date or time ("Standard", the German
+  // file's name for General) is General in the file's language; ssf reads
+  // it as nothing and wrote -5 as "". Slides benchmark finding.
+  const general = /^\p{L}+$/u.test(code) && !/^[dmyhsDMYHS]+$/.test(code) ? "General" : code;
   try {
-    return cleanText(ssf.format(code, n));
+    const shown = cleanText(ssf.format(general, n));
+    return shown === "" ? value : shown;
   } catch {
     return value;
   }
