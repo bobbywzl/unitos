@@ -10969,8 +10969,19 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
             >
               {annotationCard.kind === "highlight" ? t("reader.highlight") : t("reader.comment")}
             </span>
-            {/* One head for every card a mark opens (SPEC.md §6): the kind,
-                then Link across texts (a highlight), Delete, and ✕. */}
+            {/* One head for every card a mark opens (SPEC.md §6): the kind
+                and Delete, away from ✕; then Link across texts (a
+                highlight) and ✕. */}
+            <button
+              onClick={() => void deleteAnnotation()}
+              data-track="annotation-delete"
+              aria-label={t("common.delete")}
+              data-tip={annotationCard.kind === "highlight" ? t("reader.deleteHighlightTitle") : t("reader.deleteCommentTitle")}
+              disabled={annotationCard.busy}
+              className={`ml-1 flex ${cardIcon} items-center justify-center rounded-full text-sand-600 hover:bg-red-50 hover:text-red-600 disabled:opacity-40`}
+            >
+              <TrashIcon size={coarse ? 15 : 13} />
+            </button>
             <span className="ml-auto flex items-center gap-0.5">
               {/* A link across texts starts from the highlight: the next
                   words the reader selects, here or in another text, close it. */}
@@ -10992,16 +11003,6 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   <UnlinkIcon size={coarse ? 15 : 13} />
                 </button>
               )}
-              <button
-                onClick={() => void deleteAnnotation()}
-                data-track="annotation-delete"
-                aria-label={t("common.delete")}
-                data-tip={annotationCard.kind === "highlight" ? t("reader.deleteHighlightTitle") : t("reader.deleteCommentTitle")}
-                disabled={annotationCard.busy}
-                className={`flex ${cardIcon} items-center justify-center rounded-full text-sand-600 hover:bg-red-50 hover:text-red-600 disabled:opacity-40`}
-              >
-                <TrashIcon size={coarse ? 15 : 13} />
-              </button>
               <button
                 onClick={() => setAnnotationCard(null)}
                 data-track="annotation-close"
@@ -12141,8 +12142,20 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
               <CommentIcon size={12} />
               {t("reader.comment")}
             </span>
-            {/* The page editor's comment card's shape: its icons at the
-                head's right — Resolve, then Delete — and the field under it. */}
+            {/* One head for every card a mark opens (SPEC.md §6): the kind
+                and Delete, away from ✕; then Resolve and ✕. */}
+            {commentCard.noteId && (
+              <button
+                onClick={() => void deleteCommentCard()}
+                data-track="comment-card-delete"
+                aria-label={t("common.delete")}
+                data-tip={t("reader.deleteCommentTitle")}
+                disabled={commentCard.busy}
+                className={`ml-1 flex ${cardIcon} items-center justify-center rounded-full text-sand-600 hover:bg-red-50 hover:text-red-600 disabled:opacity-40`}
+              >
+                <TrashIcon size={coarse ? 15 : 13} />
+              </button>
+            )}
             <span className="ml-auto flex items-center gap-0.5">
               {commentCard.noteId && canEdit && (
                 <button
@@ -12153,18 +12166,6 @@ function blockFormatKind(block: { type: string; html: string | null; text: strin
                   className={`flex ${cardIcon} items-center justify-center rounded-full text-sand-600 hover:bg-sage-100 hover:text-sage-700`}
                 >
                   <CheckIcon size={coarse ? 16 : 14} />
-                </button>
-              )}
-              {commentCard.noteId && (
-                <button
-                  onClick={() => void deleteCommentCard()}
-                  data-track="comment-card-delete"
-                  aria-label={t("common.delete")}
-                  data-tip={t("reader.deleteCommentTitle")}
-                  disabled={commentCard.busy}
-                  className={`flex ${cardIcon} items-center justify-center rounded-full text-sand-600 hover:bg-red-50 hover:text-red-600 disabled:opacity-40`}
-                >
-                  <TrashIcon size={coarse ? 15 : 13} />
                 </button>
               )}
               <button
