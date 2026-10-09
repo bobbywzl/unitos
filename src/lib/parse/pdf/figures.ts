@@ -532,9 +532,21 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
   // A chart's ticks: three numbers or more in a row, or right-aligned in a
   // column, on the box or within a line of it. A minus may stand a space
   // before its digits (parse loop finding: a Tufte textbook's plot of ψ(x)
-  // reads its ticks "− 4", "− 2", "2", "4", and was no figure).
+  // reads its ticks "− 4", "− 2", "2", "4", and was no figure). A tick
+  // drawn a glyph at a time reads as its glyphs put together (parse loop
+  // finding: the MML book p. 334, matplotlib's "2", ".", "5" made "2 . 5",
+  // no number, and Figure 10.8's two plots were no figure).
   const ticked = (box: Box) => {
-    const numbers = runs.filter((r) => shareInside(r.box, grow(box, textSize)) >= 0.7 && /^[-−–+]?\s?\d[\d.,]*%?$/.test(textOf(r).trim()));
+    const numbers = runs.filter(
+      (r) =>
+        shareInside(r.box, grow(box, textSize)) >= 0.7 &&
+        /^[-−–+]?\s?\d[\d.,]*%?$/.test(
+          r.items
+            .map((i) => i.str)
+            .join("")
+            .trim(),
+        ),
+    );
     const lined = (at: (r: TextRun) => number, by: number) => numbers.some((a) => numbers.filter((b) => Math.abs(at(a) - at(b)) <= by).length >= 3);
     return lined((r) => r.box.y1, 1) || lined((r) => r.box.x2, 2);
   };
@@ -621,7 +633,10 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
     // two line charts read as their ticks and their legends' words). A
     // drawing with no text over it at all, ten shapes or more, just under or
     // over a float's label, is that float's whatever its size (IEEE Access
-    // 3721067: Table 5, its words outlines between double rules).
+    // 3721067: Table 5, its words outlines between double rules). A chart
+    // with its ticks needs a figure's size only (parse loop finding: the
+    // MML book p. 334, two plots side by side, each 2.9% of the page: their
+    // ticks read into the margin caption's lines beside them).
     const ink = inside.reduce((n, r) => n + r.items.reduce((m, i) => m + i.w * i.size, 0), 0);
     const shapes = paths.filter((m) => !m.thin).length;
     const sized = area(box) >= pageArea * 0.03 || (w >= pageWidth * 0.5 && h >= textSize * 2);
@@ -662,7 +677,7 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
       ink < area(box) * 0.12 &&
       !inside.some(isPageText);
     const drawn =
-      (paths.length >= 10 && (shapes > paths.length * 0.5 || (shapes >= 2 && ticked(box))) && sized && ink < area(box) * 0.12) ||
+      (paths.length >= 10 && (shapes > paths.length * 0.5 || (shapes >= 2 && ticked(box))) && (sized || (figureSized(box) && ticked(box))) && ink < area(box) * 0.12) ||
       sparse ||
       margin ||
       (shapes >= 10 && images.length === 0 && !meetsText(box) && nearLabel(box));
