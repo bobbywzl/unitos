@@ -37,8 +37,8 @@
    "lost": 0
   },
   "poi-aascu-org-workarea-downloadasset-aspx-id": {
-   "composite": 0.996,
-   "words": 0.985,
+   "composite": 0.999,
+   "words": 1,
    "order": 0.991,
    "bullets": 1,
    "tables": 1,
@@ -1918,8 +1918,8 @@
    "lost": 0
   },
   "wth-016-AppMigration-04-ServerlessComput": {
-   "composite": 0.997,
-   "words": 0.99,
+   "composite": 0.999,
+   "words": 1,
    "order": 0.994,
    "bullets": 1,
    "tables": null,

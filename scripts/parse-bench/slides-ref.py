@@ -379,6 +379,28 @@ def fmt_date(x, code):
     return out
 
 
+def fmt_general(x):
+    """A number in the General format: at most 11 characters, the leading
+    zero and the decimal point among them (the sign not), as Excel and the
+    charts it draws show it: 1/3 reads 0.333333333, 9 significant digits,
+    and 4.2073549240 reads 4.207354924, 10. ECMA-376 Part 1, 18.8.30
+    (numFmt, General); Microsoft's Open XML SDK NumberingFormat notes say
+    the same. A number past 11 digits shows in scientific notation."""
+    a = abs(x)
+    sign = "-" if x < 0 else ""
+    if a == int(a) and a < 1e11:
+        return sign + str(int(a))
+    if a >= 1e11 or a < 1e-9:
+        mant, exp = ("%.5E" % a).split("E")
+        mant = mant.rstrip("0").rstrip(".")
+        return "%s%sE%s%02d" % (sign, mant, exp[0], int(exp[1:]))
+    for d in range(10, -1, -1):
+        s = ("%.*f" % (d, a)).rstrip("0").rstrip(".") if d else "%.0f" % a
+        if len(s) <= 11:
+            return sign + s
+    return sign + "%.0f" % a
+
+
 def fmt_number(v, code):
     try:
         x = float(v)
@@ -388,9 +410,7 @@ def fmt_number(v, code):
     if DATE_CODE.match(code) and re.search(r"[dmy]", code, re.I):
         return fmt_date(x, code)
     if code == "General" or not re.search(r"[0#?]", code):
-        if x == int(x) and abs(x) < 1e15:
-            return str(int(x))
-        return ("%.10g" % x)
+        return fmt_general(x)
     pctm = "%" in code
     if pctm:
         x *= 100
