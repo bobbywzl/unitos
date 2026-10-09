@@ -1205,6 +1205,16 @@
    ]
   },
   {
+   "id": "lo-tdf173712-liststyle",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/tdf173712-liststyle.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "autonum",
+    "levels"
+   ]
+  },
+  {
    "id": "lo-outliner-list-style",
    "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/oox/qa/unit/data/outliner-list-style.pptx",
    "source": "LibreOffice test documents",

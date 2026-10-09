@@ -287,23 +287,29 @@ def text_paras(tx_body, chains):
 
 def label_of(paras):
     """The bullet text PowerPoint shows per paragraph: a char (mapped from a
-    symbol font), a number label, or ''. None = a symbol glyph not mapped."""
+    symbol font), a number label, or ''. None = a symbol glyph not mapped.
+
+    Numbering as PowerPoint counts it (the numbers LibreOffice's test
+    testTdf173712 records from PowerPoint): a numbered paragraph continues
+    its level's count while the scheme and the start stay the same; a
+    paragraph of that level with words and no number, a new scheme, or a
+    new start begins again at the start; a shallower paragraph ends the
+    deeper counts, and a deeper one leaves the count alone."""
     counters = {}
     for q in paras:
         b = q.pop("bullet")
         lvl = q["level"]
         for k in [k for k in counters if k > lvl]:
             del counters[k]
-        if not b or b[0] == "none":
-            q["bullet"] = ""
-            if lvl in counters:
-                del counters[lvl]
-        elif b[0] == "char":
-            q["bullet"] = shown_char(b[1], b[2])
-        else:
-            n = counters.get(lvl, b[2] - 1) + 1
-            counters[lvl] = n
-            q["bullet"] = auto_label(b[1], n)
+        if not b or b[0] != "auto":
+            counters.pop(lvl, None)
+            q["bullet"] = "" if not b or b[0] == "none" else shown_char(b[1], b[2])
+            continue
+        scheme, start = b[1], b[2] or 1
+        last = counters.get(lvl)
+        n = last[0] + 1 if last and last[1] == scheme and last[2] == start else start
+        counters[lvl] = (n, scheme, start)
+        q["bullet"] = auto_label(scheme, n)
     return paras
 
 
