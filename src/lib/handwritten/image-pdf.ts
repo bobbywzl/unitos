@@ -1,5 +1,5 @@
 import { deflateSync } from "node:zlib";
-import { sniffImage } from "@/lib/handwritten/image";
+import { sniffImage, type ImageMime } from "@/lib/handwritten/image";
 
 // An image becomes a one-page PDF before ingest (SPEC.md §16), so it takes
 // the handwritten path exactly as a scanned page does: the stored bytes are a
@@ -41,7 +41,7 @@ type PdfImage = {
 export async function imageToPdf(bytes: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
   const mime = sniffImage(bytes);
   if (!mime) throw new Error("Not an image");
-  const image = (mime === "image/jpeg" ? embedJpeg(bytes) : null) ?? (await decodeWithCanvas(bytes));
+  const image = (mime === "image/jpeg" ? embedJpeg(bytes) : null) ?? (await decodeWithCanvas(bytes, mime));
   return wrapInPdf(image);
 }
 
@@ -130,34 +130,36 @@ function readJpegHeader(bytes: Uint8Array): JpegHeader | null {
   return { width, height, components, precision, sof, orientation };
 }
 
+const EXIF_HEADER = [0x45, 0x78, 0x69, 0x66, 0x00, 0x00]; // "Exif\0\0"
+const startsWithExif = (data: Uint8Array) => data.length >= 6 && EXIF_HEADER.every((b, i) => data[i] === b);
+
 /** The Orientation tag (0x0112) of an APP1 EXIF segment, or null. */
 function exifOrientation(segment: Uint8Array): number | null {
-  // "Exif\0\0", then the TIFF header: byte order, 42, the offset of IFD0.
-  const exif = [0x45, 0x78, 0x69, 0x66, 0x00, 0x00];
-  if (segment.length < 14 || exif.some((b, i) => segment[i] !== b)) return null;
-  const tiff = 6;
-  const little = segment[tiff] === 0x49 && segment[tiff + 1] === 0x49;
-  const big = segment[tiff] === 0x4d && segment[tiff + 1] === 0x4d;
+  return startsWithExif(segment) ? tiffOrientation(segment.subarray(6)) : null;
+}
+
+/** The Orientation tag (0x0112) of EXIF data that starts at its TIFF header
+    (byte order, 42, the offset of IFD0), or null. */
+function tiffOrientation(tiff: Uint8Array): number | null {
+  if (tiff.length < 8) return null;
+  const little = tiff[0] === 0x49 && tiff[1] === 0x49;
+  const big = tiff[0] === 0x4d && tiff[1] === 0x4d;
   if (!little && !big) return null;
   const u16 = (o: number) =>
-    o + 2 <= segment.length
-      ? little
-        ? segment[o] | (segment[o + 1] << 8)
-        : (segment[o] << 8) | segment[o + 1]
-      : -1;
+    o + 2 <= tiff.length ? (little ? tiff[o] | (tiff[o + 1] << 8) : (tiff[o] << 8) | tiff[o + 1]) : -1;
   const u32 = (o: number) =>
-    o + 4 <= segment.length
+    o + 4 <= tiff.length
       ? little
-        ? (segment[o] | (segment[o + 1] << 8) | (segment[o + 2] << 16) | (segment[o + 3] << 24)) >>> 0
-        : ((segment[o] << 24) | (segment[o + 1] << 16) | (segment[o + 2] << 8) | segment[o + 3]) >>> 0
+        ? (tiff[o] | (tiff[o + 1] << 8) | (tiff[o + 2] << 16) | (tiff[o + 3] << 24)) >>> 0
+        : ((tiff[o] << 24) | (tiff[o + 1] << 16) | (tiff[o + 2] << 8) | tiff[o + 3]) >>> 0
       : -1;
-  if (u16(tiff + 2) !== 0x2a) return null;
-  const ifd = tiff + u32(tiff + 4);
+  if (u16(2) !== 0x2a) return null;
+  const ifd = u32(4);
   const count = u16(ifd);
   if (count < 0) return null;
   for (let n = 0; n < count; n++) {
     const entry = ifd + 2 + n * 12;
-    if (entry + 12 > segment.length) return null;
+    if (entry + 12 > tiff.length) return null;
     if (u16(entry) === 0x0112) {
       // A SHORT sits in the first two bytes of the value field.
       const value = u16(entry + 8);
@@ -167,11 +169,47 @@ function exifOrientation(segment: Uint8Array): number | null {
   return null;
 }
 
+/** The EXIF orientation a PNG (its eXIf chunk) or a WebP (its EXIF chunk)
+    carries, or 1. The canvas decodes these two as stored and leaves the
+    orientation to the caller; a JPEG it turns upright itself. Images
+    benchmark finding: a WebP or PNG picture with an orientation tag showed
+    on its side or upside down. */
+function containerOrientation(bytes: Uint8Array, mime: ImageMime): number {
+  const fourcc = (at: number) => String.fromCharCode(bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]);
+  let exif: Uint8Array | null = null;
+  if (mime === "image/png") {
+    // Chunks after the 8-byte signature: length, type, data, CRC. eXIf
+    // stands before the image data.
+    for (let at = 8; at + 8 <= bytes.length; ) {
+      const length = ((bytes[at] << 24) | (bytes[at + 1] << 16) | (bytes[at + 2] << 8) | bytes[at + 3]) >>> 0;
+      const type = fourcc(at + 4);
+      if (type === "eXIf") exif = bytes.subarray(at + 8, Math.min(bytes.length, at + 8 + length));
+      if (type === "eXIf" || type === "IDAT" || type === "IEND") break;
+      at += 12 + length;
+    }
+  } else if (mime === "image/webp") {
+    // RIFF chunks after "RIFF", the size, "WEBP": type, little-endian size,
+    // data padded to an even length.
+    for (let at = 12; at + 8 <= bytes.length; ) {
+      const size = (bytes[at + 4] | (bytes[at + 5] << 8) | (bytes[at + 6] << 16) | (bytes[at + 7] << 24)) >>> 0;
+      if (fourcc(at) === "EXIF") {
+        exif = bytes.subarray(at + 8, Math.min(bytes.length, at + 8 + size));
+        break;
+      }
+      at += 8 + size + (size & 1);
+    }
+  }
+  if (!exif) return 1;
+  // Some writers keep the JPEG's "Exif\0\0" before the TIFF header.
+  return tiffOrientation(startsWithExif(exif) ? exif.subarray(6) : exif) ?? 1;
+}
+
 // ── Everything else through the canvas ──────────────────────────────────────
 
-async function decodeWithCanvas(bytes: Uint8Array): Promise<PdfImage> {
+async function decodeWithCanvas(bytes: Uint8Array, mime: ImageMime): Promise<PdfImage> {
   const { createCanvas, loadImage } = await import("@napi-rs/canvas");
   const img = await loadImage(Buffer.from(bytes));
+  const orientation = containerOrientation(bytes, mime);
   const sourceWidth = img.width;
   const sourceHeight = img.height;
   if (!(sourceWidth > 0 && sourceHeight > 0)) throw new Error("Image has no pixels");
@@ -199,7 +237,7 @@ async function decodeWithCanvas(bytes: Uint8Array): Promise<PdfImage> {
       colorSpace: "/DeviceRGB",
       filter: "/FlateDecode",
       data: new Uint8Array(deflateSync(rgb)),
-      orientation: 1,
+      orientation,
     };
   }
   return {
@@ -208,7 +246,7 @@ async function decodeWithCanvas(bytes: Uint8Array): Promise<PdfImage> {
     colorSpace: "/DeviceRGB",
     filter: "/DCTDecode",
     data: new Uint8Array(canvas.toBuffer("image/jpeg", JPEG_QUALITY)),
-    orientation: 1,
+    orientation,
   };
 }
 
