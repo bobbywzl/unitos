@@ -210,6 +210,21 @@ function importLists(blocks: ParsedBlock[]): string[] {
   check("a picture bullet is the default dot; Symbol's U+F06C without a picture is λ", texts.join("|") === "• Pictured|λ Lettered", JSON.stringify(texts));
 }
 
+// ── A CJK counter stays the page's words in a list that draws no marker ─────
+
+{
+  // The page editor counts in Latin digits, letters, and roman numerals
+  // alone: "第%0条" would print "第9条" where Word prints "第九条".
+  const numbering = `<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="9"/><w:numFmt w:val="chineseCounting"/><w:lvlText w:val="第%1条"/><w:pPr><w:ind w:left="420" w:hanging="420"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>`;
+  const blocks = await parse(docx(item("合同双方履行义务。", 1, 0) + item("不得擅自变更合同。", 1, 0), numbering));
+  check("a chineseCounting list counts 九, 十", listText(blocks) === "第九条 合同双方履行义务。\n第十条 不得擅自变更合同。", JSON.stringify(listText(blocks)));
+  const { richText } = richTextFromImport({ kind: "docx", title: "Check", titleFromOriginal: false, blocks });
+  const found = (richText.content ?? []).find((n) => n.type === "bulletList" || n.type === "orderedList");
+  const levels = found ? (JSON.parse(String(found.attrs?.listLevels ?? "[]")) as { bullet?: string }[]) : [];
+  const first = found?.content?.[0]?.content?.[0]?.content?.[0]?.text ?? "";
+  check("the import keeps 第九条 as words in a list that draws no marker", levels.length === 9 && levels.every((l) => l.bullet === "") && first === "第九条 合同双方履行义务。", JSON.stringify({ levels: found?.attrs?.listLevels, first }));
+}
+
 if (failed > 0) {
   console.log(`\n${failed} check(s) failed`);
   process.exit(1);

@@ -6,7 +6,6 @@
   "lost:label": 59,
   "import.words": 188,
   "import.lost:label": 59,
-  "import.list.kind": 65,
   "import.mark.bold": 213,
   "mark.bold": 98,
   "import.list.depth": 2,
@@ -50,9 +49,7 @@
    "import.lost:label": 28
   },
   "d2p-invalid_tag_name.docx": {},
-  "d2p-libreoffice_conversion.docx": {
-   "import.list.kind": 2
-  },
+  "d2p-libreoffice_conversion.docx": {},
   "d2p-list_index_a.docx": {},
   "d2p-long_hyperlink.docx": {},
   "d2p-merged_cells.docx": {},
@@ -78,9 +75,7 @@
   "lo-TOC_field_b.docx": {},
   "lo-TableWithAboveCaptions.docx": {},
   "lo-caption.docx": {},
-  "lo-cjklist30.docx": {
-   "import.list.kind": 20
-  },
+  "lo-cjklist30.docx": {},
   "lo-cjklist31.docx": {},
   "lo-cjklist34.docx": {},
   "lo-cjklist44.docx": {},
@@ -245,9 +240,7 @@
   "poi-HeaderFooterUnicode.docx": {},
   "poi-IllustrativeCases.docx": {},
   "poi-MultipleBodyBug.docx": {},
-  "poi-Numbering.docx": {
-   "import.list.kind": 1
-  },
+  "poi-Numbering.docx": {},
   "poi-NumberingWOverrides.docx": {},
   "poi-SampleDoc.docx": {},
   "poi-Styles.docx": {},
@@ -396,7 +389,6 @@
    "import.mark.underline": 1
   },
   "d4j-OpenDoPE_Specification.docx": {
-   "import.list.kind": 27,
    "import.list.missing": 11,
    "import.mark.bold": 84
   },
@@ -416,9 +408,7 @@
   "dl-content_control_with_picture.docx": {},
   "dl-docx_checkboxes.docx": {},
   "dl-docx_comments.docx": {},
-  "dl-docx_list_east_asian_num_fmt.docx": {
-   "import.list.kind": 15
-  },
+  "dl-docx_list_east_asian_num_fmt.docx": {},
   "dl-docx_sdt_table_cells.docx": {},
   "dl-equations.docx": {},
   "dl-omml_multi_equation_paragraph.docx": {},

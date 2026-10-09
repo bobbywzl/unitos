@@ -582,7 +582,15 @@ function htmlTable(html: string): { rows: number; cols: number; header: number }
   return { rows: rows.length, cols, header };
 }
 
-const MARK_TAGS: Record<MarkKind, string> = { bold: "strong", italic: "em", underline: "u", strike: "s", sup: "sup", sub: "sub" };
+/** A line that opens with a counter: a first token of letters or digits,
+    up to 12 characters ("第九条", "（一）", "①", "NOTE"), or a legal number
+    of any depth ("3.2.2.5.1.4.1."). */
+function opensWithCounter(line: string): boolean {
+  const token = /^\s*(\S+)/.exec(line)?.[1] ?? "";
+  return /[\p{L}\p{N}]/u.test(token) && (token.length <= 12 || /^(?:\d{1,3}\.){2,}\d{0,3}$/.test(token));
+}
+
+const MARK_TAGS: Record<MarkKind, string> ={ bold: "strong", italic: "em", underline: "u", strike: "s", sup: "sup", sub: "sub" };
 
 function readParse(title: string | null, blocks: ParsedBlock[], titleFont?: TextFont): Reading {
   const r: Reading = { text: "", headings: [], title: title ?? "", lists: [], tables: [], notes: 0, math: 0, links: "", images: 0, paragraphs: new Set(), marks: { bold: "", italic: "", underline: "", strike: "", sup: "", sub: "" } };
@@ -614,10 +622,7 @@ function readParse(title: string | null, blocks: ParsedBlock[], titleFont?: Text
       for (const line of words.split("\n")) {
         const m = /^( *)(\S+)\s?(.*)$/.exec(line);
         if (!m) continue;
-        // A counter: up to 12 characters, or a legal number of any depth
-        // ("3.2.2.5.1.4.1.").
-        const counter = /[\p{L}\p{N}]/u.test(m[2]) && (m[2].length <= 12 || /^(?:\d{1,3}\.){2,}\d{0,3}$/.test(m[2]));
-        r.lists.push({ depth: m[1].length / 2, numbered: counter, text: compact(line) });
+        r.lists.push({ depth: m[1].length / 2, numbered: opensWithCounter(line), text: compact(line) });
       }
     }
     if (b.type === "TABLE") {
@@ -686,7 +691,20 @@ function readImport(doc: RichNode): Reading {
   for (const style of ["Normal", "Title", "Subtitle", "H1", "H2", "H3", "H4", "H5", "H6"]) looks[style] = styled(style);
   const styleOf = (node: RichNode) =>
     node.type === "heading" ? `H${Number(node.attrs?.level) || 1}` : node.attrs?.docStyle === "title" ? "Title" : node.attrs?.docStyle === "subtitle" ? "Subtitle" : "Normal";
-  const walk = (node: RichNode, depth: number, ordered: boolean, inCell: boolean, inNote: boolean) => {
+  // A list level that draws no marker (a bullet of ""): its line keeps
+  // its counter as words where the page editor has no counter that draws it
+  // ("第九条", "（一）", "NEW-1-FORMAT"), so the line reads as the page
+  // prints it, numbered when its words open with a counter, as the parse
+  // reading reads a LIST line.
+  const levelsOf = (node: RichNode): { bullet?: string }[] | null => {
+    try {
+      const levels = JSON.parse(String(node.attrs?.listLevels ?? "null")) as unknown;
+      return Array.isArray(levels) ? (levels as { bullet?: string }[]) : null;
+    } catch {
+      return null;
+    }
+  };
+  const walk = (node: RichNode, depth: number, ordered: boolean, inCell: boolean, inNote: boolean, levels: { bullet?: string }[] | null = null) => {
     if (node.type === "paragraph" || node.type === "heading") {
       const look = looks[styleOf(node)];
       const words: string[] = [];
@@ -737,9 +755,11 @@ function readImport(doc: RichNode): Reading {
         for (const c of n.content ?? []) collect(c);
       };
       collect(node);
-      r.lists.push({ depth: depth - 1, numbered: ordered, text: compact(words.join("")) });
+      const markerless = !ordered && levels?.[Math.min(depth - 1, 8)]?.bullet === "";
+      r.lists.push({ depth: depth - 1, numbered: markerless ? opensWithCounter(words.join("")) : ordered, text: compact(words.join("")) });
     }
-    for (const c of node.content ?? []) walk(c, list ? depth + 1 : depth, list ? node.type === "orderedList" : ordered, inCell || node.type === "tableCell" || node.type === "tableHeader", inNote || node.type === "footnote");
+    const own = list ? levelsOf(node) : null;
+    for (const c of node.content ?? []) walk(c, list ? depth + 1 : depth, list ? node.type === "orderedList" : ordered, inCell || node.type === "tableCell" || node.type === "tableHeader", inNote || node.type === "footnote", own ?? levels);
   };
   walk(doc, 0, false, false, false);
   r.links = compact(links.join(" | "));
