@@ -479,10 +479,14 @@ class Renderer {
 // rules read it. Each reads a line that stands alone: one line, a blank line
 // under it, and a blank line above it past the file's first line.
 //   1. The file's first line, when short, is the Title ("Imports audit 5").
-//   2. A short line in capitals is a heading ("THE REPLAY WINDOW").
+//   2. A short line in capitals is a heading ("THE REPLAY WINDOW"), unless
+//      the same line stands alone three times or more: a play's speaker
+//      ("JOCRISSE", 69 times in Le Dîner interrompu), not a part of the
+//      outline, which names each part once.
 // A line that ends a sentence (a period, a comma, a colon, a semicolon) is
 // neither. A file with a heading of its own, or with front matter, is
 // Markdown as written, and neither rule runs.
+const TEXT_SPEAKER_LINES_MIN = 3;
 const TEXT_TITLE_CHARS_MAX = 80;
 const TEXT_TITLE_WORDS_MAX = 12;
 const TEXT_HEADING_CHARS_MAX = 60;
@@ -804,6 +808,11 @@ function shapeTextOutline(root: Root, source: string, comments: boolean) {
     const line = node.position ? (lines[node.position.start.line - 1] ?? "") : "";
     return line.length > 0 && !/^\s/.test(line) && !/\S {3,}\S/.test(line.trim());
   };
+  const standing = new Map<string, number>();
+  nodes.forEach((_, i) => {
+    const text = standingLine(nodes, i);
+    if (text !== null) standing.set(text, (standing.get(text) ?? 0) + 1);
+  });
   nodes.forEach((node, i) => {
     // An ordered list's one item at the margin, standing alone: a numbered
     // heading ("1.  Introduction").
@@ -852,7 +861,7 @@ function shapeTextOutline(root: Root, source: string, comments: boolean) {
     // it as the Title (Markdown benchmark finding: 35 spec examples).
     const marked = i === 0 && (MARKDOWN_MARKS_RX.test(lines[(node.position?.start.line ?? 1) - 1] ?? "") || hasMarkdownMarks(node.children, source));
     const title = i === 0 && !marked && text.length <= TEXT_TITLE_CHARS_MAX && words(text) <= TEXT_TITLE_WORDS_MAX;
-    const capitals = isCapitalsLine(text);
+    const capitals = isCapitalsLine(text) && (standing.get(text) ?? 0) < TEXT_SPEAKER_LINES_MIN;
     const margin = indented && !title && words(text) <= TEXT_MARGIN_WORDS_MAX && atMargin(node);
     if (title || capitals || margin) {
       const depth = title ? 1 : margin ? marginDepth(text) : 2;
