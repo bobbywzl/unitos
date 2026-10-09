@@ -121,7 +121,7 @@ export async function POST(req: Request) {
     if (!comment || replayedAt(req) === null) {
       return NextResponse.json({ error: t("api.anchorNotResolvedInDocument") }, { status: 400 });
     }
-    return createOrphanedComment(data.notebookId, data.documentId, data.anchor, layer, comment, data.color ?? null, access.user.id);
+    return createOrphanedComment(data.notebookId, data.documentId, data.anchor, layer, comment, data.color ?? null, access.user.id, t);
   }
 
   const section = await annotationsSection(data.notebookId);
@@ -182,11 +182,18 @@ async function createOrphanedComment(
   comment: string,
   color: "clay" | "sage" | "gold" | "plum" | null,
   createdById: string,
+  t: TFunc,
 ) {
+  // The block id comes from the body unchecked (REV10-09): a block that is
+  // not this document's (gone since, or another project's) is not stored.
+  // The document's first block stands in; the words are kept either way.
+  const own = await db.block.findFirst({ where: { id: anchor.blockId, documentId }, select: { id: true } });
+  const blockId = own?.id ?? (await db.block.findFirst({ where: { documentId }, orderBy: { order: "asc" }, select: { id: true } }))?.id;
+  if (!blockId) return NextResponse.json({ error: t("api.blockNotInDocument") }, { status: 404 });
   const section = await annotationsSection(notebookId);
   const source = {
     documentId,
-    blockId: anchor.blockId,
+    blockId,
     startOffset: anchor.startOffset,
     endOffset: anchor.endOffset,
     quotedText: anchor.quotedText,
