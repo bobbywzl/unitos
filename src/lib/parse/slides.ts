@@ -19,8 +19,10 @@ import {
   num,
   officeDocumentPath,
   parseTheme,
+  parseXml,
   parseXmlPart,
   partRels,
+  partText,
   relsOfType,
   resolveDrawingColor,
   rgbCss,
@@ -249,8 +251,16 @@ function presentationTitle(zip: OfficeZip): string | null {
   return title ? cleanText(title) : null;
 }
 
+// A custom shape's connection sites (a:cxnLst) are where connectors
+// attach: nothing draws or reads them, and in a deck of drawn shapes they
+// are a third of the elements. The part's text drops them before the DOM
+// is built, the slow step of a large deck's parse.
+const CONNECTION_SITES = /<a:cxnLst\b[^>]*\/>|<a:cxnLst\b[^>]*>[\s\S]*?<\/a:cxnLst>/g;
+
 function loadPart(zip: OfficeZip, path: string): Part | null {
-  const doc = parseXmlPart(zip, path);
+  const text = partText(zip, path);
+  if (text === null) return null;
+  const doc = parseXml(text.includes("<a:cxnLst") ? text.replace(CONNECTION_SITES, "") : text);
   if (!doc) return null;
   return { path, doc, rels: partRels(zip, path) };
 }
@@ -795,20 +805,23 @@ function renderRuns(
   let text = "";
   let firstSize: number | null = null;
   let firstColor: string | null = null;
-  const inherited = (rPr: Element | null): { size: number; color: string | null; css: string } => {
+  const inherited = (rPr: Element | null): { size: number; color: string | null; css: string; symbolFont: string | null } => {
     const runProps = rPr ? parseRunProps(rPr) : {};
     const sz = runProps.sz ?? levelProp(s.chain, level, "sz", own) ?? DEFAULT_FONT_PT * 100;
     const size = (sz / 100) * EMU_PER_PT * s.fontScale;
     const bold = runProps.bold ?? levelProp(s.chain, level, "bold", own) ?? false;
     const italic = runProps.italic ?? levelProp(s.chain, level, "italic", own) ?? false;
     const font = themeFont(runProps.font ?? levelProp(s.chain, level, "font", own) ?? s.defaultFont ?? undefined, s);
+    // Text set in Symbol or Wingdings carries the glyphs the font draws
+    // (symbolText), so it needs no symbol font to read.
+    const symbolFont = font && /^(?:symbol|wingdings)$/i.test(font) ? font : null;
     const runColor = runProps.color ? colorCss(runProps.color, s.palette) : null;
     const levelColor = levelProp(s.chain, level, "color", own);
     const color = s.forceColor ?? runColor ?? (levelColor ? colorCss(levelColor, s.palette) : null) ?? s.defaultColor;
     const styles = [`font-size:${cqw(size, s.slideW)}`];
     if (bold) styles.push("font-weight:700");
     if (italic) styles.push("font-style:italic");
-    if (font) {
+    if (font && !symbolFont) {
       styles.push(`font-family:${fontFamilyCss(font)}`);
       s.fonts.add(font);
     }
@@ -822,7 +835,7 @@ function renderRuns(
     else if (baseline && baseline < 0) styles.push("vertical-align:sub;font-size:0.65em");
     const highlight = rPr ? colorCss(colorElementIn(child(rPr, "highlight")), s.palette) : null;
     if (highlight) styles.push(`background-color:${highlight}`);
-    return { size, color, css: styles.join(";") };
+    return { size, color, css: styles.join(";"), symbolFont };
   };
   // The paragraph's runs, an mc:AlternateContent read through its Choice.
   const nodes: Element[] = [];
@@ -849,9 +862,11 @@ function renderRuns(
       text += t;
     } else if (node.localName === "r" || node.localName === "fld") {
       const rPr = child(node, "rPr");
-      const t = cleanText(child(node, "t")?.textContent ?? "");
-      if (t.length === 0) continue;
+      const raw = cleanText(child(node, "t")?.textContent ?? "");
+      if (raw.length === 0) continue;
       const run = inherited(rPr);
+      const sym = attr(child(rPr, "sym"), "typeface");
+      const t = run.symbolFont ? symbolText(raw, run.symbolFont, true) : sym ? symbolText(raw, sym, false) : raw;
       if (firstSize === null) {
         firstSize = run.size;
         firstColor = run.color;
@@ -906,6 +921,51 @@ function bulletGlyph(char: string, font: string | null): { char: string; symbol:
   return { char: table?.get(code) ?? "•", symbol: true };
 }
 
+// What a symbol font draws for each code 0x20-0xFF: a letter typed in the
+// font, or the private-use code U+F020-U+F0FF PowerPoint writes for a symbol
+// inserted from it (a:sym names the font). Symbol is the Adobe encoding
+// (Greek, math); Wingdings is as Unicode maps it, with the common glyph of
+// the same shape where the bullets use one. "\0" = no glyph known. Slides
+// benchmark finding: 59 runs in 14 files read as private-use codes, a box
+// where the slide shows ☺, ➔ or ⇒.
+const SYMBOL_GLYPHS = Array.from(
+  " !∀#∃%&∋()∗+,−./0123456789:;<=>?" +
+    "≅ΑΒΧΔΕΦΓΗΙϑΚΛΜΝΟΠΘΡΣΤΥςΩΞΨΖ[∴]⊥_" +
+    "‾αβχδεφγηιϕκλμνοπθρστυϖωξψζ{|}∼\0" +
+    "\0".repeat(32) +
+    "€ϒ′≤⁄∞ƒ♣♦♥♠↔←↑→↓°±″≥×∝∂•÷≠≡≈…⏐⎯↵" +
+    "ℵℑℜ℘⊗⊕∅∩∪⊃⊇⊄⊂⊆∈∉∠∇®©™∏√⋅¬∧∨⇔⇐⇑⇒⇓" +
+    "◊〈®©™∑⎛⎜⎝⎡⎢⎣⎧⎨⎩⎪\0〉∫⌠⎮⌡⎞⎟⎠⎤⎥⎦⎫⎬⎭\0",
+);
+const WINGDINGS_GLYPHS = Array.from(
+  " ✏✂✁👓🕭🕮🕯🕿✆🖂🖃📪📫📬📭📁📂📄🗏🗐🗄⌛🖮🖰🖲🖳🖴🖫🖬✇✍" +
+    "🖎✌👌👍👎☜☞☝☟🖐☺😐☹💣☠🏳🏱✈☼💧❄🕆✞🕈✠✡☪☯ॐ☸♈♉" +
+    "♊♋♌♍♎♏♐♑♒♓🙰🙵●🔾■□🞐❑❒⬧⧫◆❖⬥⌧⮹⌘🏵🏶🙶🙷\0" +
+    "⓪①②③④⑤⑥⑦⑧⑨⑩⓿❶❷❸❹❺❻❼❽❾❿🙢🙠🙡🙣🙞🙜🙝🙟·•" +
+    "▪⚪🞆🞈◉◎🔿▪◻🟂✦★✶✴✹✵⯐⌖⟡⌑⯑✪✰🕐🕑🕒🕓🕔🕕🕖🕗🕘" +
+    "🕙🕚🕛⮰⮱⮲⮳⮴⮵⮶⮷🙪🙫🙕🙔🙗🙖🙐🙑🙒🙓⌫⌦⮘⮚⮙⮛⮈⮊⮉⮋🡨" +
+    "🡪🡩🡫🡬🡭🡯🡮🡸🡺🡹🡻🡼🡽🡿🡾⇦⇨⇧⇩⬄⇳⬀⬁⬃⬂▭▫✗✓☒☑\0",
+);
+for (const [code, glyph] of [[0x6d, "❍"], [0x70, "◻"], [0xa1, "○"], [0xa8, "◻"], [0xd8, "➢"], [0xe0, "➔"], [0xe8, "➔"]] as const) {
+  WINGDINGS_GLYPHS[code - 0x20] = glyph;
+}
+
+/** A run's text as a symbol font draws it: every character when the run is
+    set in the font (whole), else only the private-use codes U+F020-U+F0FF. */
+function symbolText(text: string, font: string, whole: boolean): string {
+  const name = font.toLowerCase();
+  const table = name === "symbol" ? SYMBOL_GLYPHS : name === "wingdings" ? WINGDINGS_GLYPHS : null;
+  if (!table) return text;
+  let out = "";
+  for (const ch of text) {
+    const c = ch.codePointAt(0) ?? 0;
+    const code = c >= 0xf020 && c <= 0xf0ff ? c - 0xf000 : whole && c >= 0x20 && c <= 0xff ? c : null;
+    const glyph = code !== null ? table[code - 0x20] : "\0";
+    out += glyph === "\0" ? ch : glyph;
+  }
+  return out;
+}
+
 function hyperlinkOf(rPr: Element | null, s: TextSettings): string | null {
   const link = child(rPr, "hlinkClick");
   const rid = link ? attr(link, "id") : null;
@@ -933,6 +993,13 @@ function autoNumberLabel(scheme: string, n: number): string {
     }
     return out;
   };
+  // The East Asian schemes (ECMA-376 Part 1, 20.1.10.61): ideographic
+  // numbers (Chinese, Japanese, Korean), full-width digits, circled
+  // numbers; "Db" is a double-byte period. Slides benchmark finding: an
+  // ea1JpnKorPeriod list read "1." where PowerPoint draws "一.".
+  if (scheme.startsWith("ea1")) return hanNumber(n) + (scheme.endsWith("DbPeriod") ? "．" : scheme.endsWith("Period") ? "." : "");
+  if (scheme.startsWith("arabicDb")) return String(n).replace(/\d/g, (d) => String.fromCharCode(0xff10 + Number(d))) + (scheme.endsWith("Period") ? "．" : "");
+  if (scheme.startsWith("circleNum")) return circledNumber(n, scheme === "circleNumWdBlackPlain");
   let core: string;
   if (scheme.startsWith("alphaLc")) core = alpha(n);
   else if (scheme.startsWith("alphaUc")) core = alpha(n).toUpperCase();
@@ -943,6 +1010,39 @@ function autoNumberLabel(scheme: string, n: number): string {
   if (scheme.endsWith("ParenR")) return `${core})`;
   if (scheme.endsWith("Period")) return `${core}.`;
   return core;
+}
+
+/** A count in ideographs: 一, 十, 十一, 二十, 一百零五, up to 9999. */
+function hanNumber(n: number): string {
+  const digits = "零一二三四五六七八九";
+  if (n <= 0 || n >= 10000) return String(n);
+  let out = "";
+  let left = n;
+  let zero = false;
+  for (const [unit, sym] of [[1000, "千"], [100, "百"], [10, "十"], [1, ""]] as const) {
+    const d = Math.floor(left / unit);
+    left %= unit;
+    if (d === 0) {
+      zero = out.length > 0;
+      continue;
+    }
+    if (zero) {
+      out += "零";
+      zero = false;
+    }
+    out += (unit === 10 && d === 1 && !out ? "" : digits[d]) + sym;
+  }
+  return out;
+}
+
+/** A circled number: ① to ㊿, or ❶ to ⓴ in the black set; past those, the
+    digits. */
+function circledNumber(n: number, black: boolean): string {
+  if (black) return n >= 1 && n <= 10 ? String.fromCodePoint(0x2776 + n - 1) : n >= 11 && n <= 20 ? String.fromCodePoint(0x24eb + n - 11) : String(n);
+  if (n >= 1 && n <= 20) return String.fromCodePoint(0x2460 + n - 1);
+  if (n >= 21 && n <= 35) return String.fromCodePoint(0x3251 + n - 21);
+  if (n >= 36 && n <= 50) return String.fromCodePoint(0x32b1 + n - 36);
+  return String(n);
 }
 
 /** The body's insets and vertical anchor as CSS on the text layer. */
@@ -1046,6 +1146,14 @@ function inheritanceOf(scope: SlideScope, ph: { type: string; idx: string | null
   return chain;
 }
 
+// A shape with no xfrm, on it or on the placeholders it inherits from, has
+// no place of its own; its words still show. It takes the slide's frame, so
+// they start at the top left. Slides benchmark finding: such a shape or
+// table frame was dropped with its words.
+function slideFrame(ctx: Ctx): Box {
+  return { x: 0, y: 0, w: ctx.slideW, h: ctx.slideH, rot: 0, flipH: false, flipV: false };
+}
+
 function shapeBox(sp: Element, inherited: Element[], transform: Transform): Box | null {
   const candidates = [sp, ...inherited];
   for (const el of candidates) {
@@ -1062,8 +1170,7 @@ async function placeShape(scope: SlideScope, sp: Element, transform: Transform, 
   // not a shape the slide shows.
   if (ph && scope.decoration) return;
   const inherited = inheritanceOf(scope, ph);
-  const box = shapeBox(sp, inherited, transform);
-  if (!box) return;
+  const box = shapeBox(sp, inherited, transform) ?? slideFrame(ctx);
   const spPr = child(sp, "spPr");
   const style = child(sp, "style");
   const stylePalette = { ...palette };
@@ -1324,8 +1431,7 @@ async function placePicture(scope: SlideScope, pic: Element, transform: Transfor
 
 async function placeGraphicFrame(scope: SlideScope, frame: Element, transform: Transform, out: Placed[]): Promise<void> {
   const box = parseXfrm(child(frame, "xfrm"));
-  if (!box) return;
-  const placed = applyTransform(box, transform);
+  const placed = box ? applyTransform(box, transform) : slideFrame(scope.ctx);
   const data = child(frame, "graphic", "graphicData");
   const tbl = child(data, "tbl");
   if (tbl) {
@@ -1837,6 +1943,18 @@ async function parseSlide(ctx: Ctx, slide: Part, n: number, picture: boolean): P
     right then left) and read a left column's boxes in turn with the tall
     box beside them (Level 1, the text of all levels, Level 2, ...). */
 function readingOrder(shapes: Placed[], ctx: Ctx): Placed[] {
+  // Shapes without words (pictures, lines, empty boxes) have no place in
+  // the reading; their z-index keeps their stacking. They follow the
+  // words, so they never tie the order of the shapes that have them.
+  // Slides benchmark finding: a picture right of a box and above a label
+  // left of the box closed a loop (box, picture, label, box) and the
+  // slide read its columns interleaved.
+  const worded = shapes.filter((p) => p.text);
+  if (worded.length < shapes.length) return [...readingOrderOf(worded, ctx), ...shapes.filter((p) => !p.text)];
+  return readingOrderOf(shapes, ctx);
+}
+
+function readingOrderOf(shapes: Placed[], ctx: Ctx): Placed[] {
   const band = ctx.slideH * 0.04;
   const key = (a: Placed, b: Placed) => {
     if (a.title !== b.title) return a.title ? -1 : 1;

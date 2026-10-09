@@ -40,6 +40,7 @@ type Series = {
   cats: string[];
   vals: (number | null)[];
   xs: (number | null)[]; // scatter only
+  xFormatCode: string | null; // scatter only: the x values' number format
   color: string | null;
   pointColors: Map<number, string>;
   marker: boolean;
@@ -151,12 +152,15 @@ function readSeries(ser: Element, index: number, kind: Kind, palette: ChartPalet
   const dLbls = child(ser, "dLbls");
   const markerEl = child(ser, "marker");
   const markerSymbol = attr(child(markerEl, "symbol"), "val");
+  // An unnamed series shows as "Series1", "Series2" in the legend, no
+  // space, as Excel and PowerPoint name it.
   return {
-    name: name || `Series ${index + 1}`,
+    name: name || `Series${index + 1}`,
     named: name !== "",
     cats: cat.text,
     vals: val.numbers,
     xs: kind === "scatter" ? cat.numbers : [],
+    xFormatCode: kind === "scatter" ? cat.formatCode : null,
     color: (kind === "line" || kind === "scatter" ? line ?? fill : fill ?? line) ?? null,
     pointColors,
     marker: markerSymbol !== "none",
@@ -303,7 +307,7 @@ export function renderChart(doc: XMLDocument, size: { width: number; height: num
   // A title element without words is the automatic title: the one series'
   // name, else "Chart Title" (one series the file names not, or several:
   // PowerPoint's own thumbnails of lo chart-theme-override and lo
-  // tdf112089). Slides benchmark finding: the legend's stand-in "Series 1"
+  // tdf112089). Slides benchmark finding: the legend's stand-in "Series1"
   // read as the title, and a chart of several series lost its title.
   const only = allSeries.length === 1 ? allSeries[0] : null;
   const title = explicitTitle || (!autoTitleDeleted && child(chart, "title") && allSeries.length > 0 ? (only?.named ? only.name : "Chart Title") : "");
@@ -380,7 +384,7 @@ function dataRows(plots: Plot[]): string[][] {
   const series = plots.flatMap((p) => p.series);
   const rows: string[][] = [];
   // The header names the series the file names; with none named, no header
-  // (an unnamed series' "Series 1" is the legend's stand-in, not the file's
+  // (an unnamed series' "Series1" is the legend's stand-in, not the file's
   // words).
   const header = (lead: string[]) => {
     if (series.some((s) => s.named)) rows.push([...lead, ...series.map((s) => (s.named ? s.name : ""))]);
@@ -392,12 +396,21 @@ function dataRows(plots: Plot[]): string[][] {
     const longest = Math.max(...series.map((s) => s.vals.length));
     // An x value that is text (a scatter chart over named points) keeps
     // its name: the chart places it by its position, the data says which.
-    for (let i = 0; i < longest; i++) rows.push([series[0].xs[i] !== null && series[0].xs[i] !== undefined ? String(series[0].xs[i]) : (series[0].cats[i] ?? ""), ...series.map((s) => (s.vals[i] === null || s.vals[i] === undefined ? "" : dataValue(s.vals[i] as number, s.formatCode)))]);
+    // A number x shows in its format, General as a cell writes it: the
+    // cache's 5.550000000000001 reads 5.55. Slides benchmark finding (a
+    // scatter chart's 71 x values).
+    const x = series[0];
+    for (let i = 0; i < longest; i++) rows.push([x.xs[i] !== null && x.xs[i] !== undefined ? dataValue(x.xs[i] as number, x.xFormatCode) : (x.cats[i] ?? ""), ...series.map((s) => (s.vals[i] === null || s.vals[i] === undefined ? "" : dataValue(s.vals[i] as number, s.formatCode)))]);
     return rows;
   }
   if (categories.length > 0) {
     header([""]);
-    categories.forEach((cat, i) => rows.push([cat, ...series.map((s) => (s.vals[i] === null || s.vals[i] === undefined ? "" : dataValue(s.vals[i] as number, s.formatCode)))]));
+    // A value past the last category (an empty cell closing the category
+    // range) is drawn all the same, its label empty: its row keeps it.
+    // Slides benchmark finding: a bar chart of 6 values over 5 categories
+    // lost its last value in the words.
+    const count = Math.max(categories.length, ...series.map((s) => s.vals.length));
+    for (let i = 0; i < count; i++) rows.push([categories[i] ?? "", ...series.map((s) => (s.vals[i] === null || s.vals[i] === undefined ? "" : dataValue(s.vals[i] as number, s.formatCode)))]);
   } else {
     header([]);
     const longest = Math.max(...series.map((s) => s.vals.length));

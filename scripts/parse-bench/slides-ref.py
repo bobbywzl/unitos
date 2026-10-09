@@ -4,7 +4,8 @@
 For every slide in the presentation's order (p:sldIdLst), what PowerPoint
 shows as the slide's own words:
 
-- every shape of the slide's shape tree, groups walked with their transform,
+- every shape of the slide's shape tree, groups walked with their transform
+  (a rotated or flipped group turns and flips its children about its center),
   mc:AlternateContent read through its first Choice, a hidden shape
   (cNvPr hidden="1") left out, and the furniture placeholders (slide number,
   footer, date, header) left out, as SPEC.md section 27 skips them;
@@ -230,6 +231,14 @@ def math_text(el):
         name = local(c)
         if name == "r":
             out.append("".join(t.text or "" for t in kids(c, "t")))
+        elif name == "acc":
+            # An accent the slide draws over its base (m:chr, a combining
+            # mark: the dot of ẏ, the arrow of x⃗) is part of the letter.
+            ch = kid(c, "accPr", "chr")
+            mark = lattr(ch, "val") or "\u0302"
+            base = math_text(kid(c, "e")) if kid(c, "e") is not None else ""
+            combining = re.fullmatch(r"[\u0300-\u036f\u20d0-\u20ff]", mark)
+            out.append(" " + base.strip() + (mark if combining else "") + " ")
         elif not name.endswith("Pr"):
             out.append(" " + math_text(c) + " ")
     return "".join(out)
@@ -239,6 +248,63 @@ def clean(s):
     return re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", s or "")
 
 
+# What a symbol font draws for each code 0x20-0xFF (a letter typed in the
+# font, or the private-use code U+F020-U+F0FF PowerPoint writes for a symbol
+# inserted from it): the Symbol font's Adobe encoding (Greek, math), and
+# Wingdings as Unicode maps it. "\0" = no glyph known.
+SYMBOL_FONT = (
+    " !∀#∃%&∋()∗+,−./0123456789:;<=>?"
+    "≅ΑΒΧΔΕΦΓΗΙϑΚΛΜΝΟΠΘΡΣΤΥςΩΞΨΖ[∴]⊥_"
+    "‾αβχδεφγηιϕκλμνοπθρστυϖωξψζ{|}∼\0"
+    + "\0" * 32
+    + "€ϒ′≤⁄∞ƒ♣♦♥♠↔←↑→↓°±″≥×∝∂•÷≠≡≈…⏐⎯↵"
+    "ℵℑℜ℘⊗⊕∅∩∪⊃⊇⊄⊂⊆∈∉∠∇®©™∏√⋅¬∧∨⇔⇐⇑⇒⇓"
+    "◊〈®©™∑⎛⎜⎝⎡⎢⎣⎧⎨⎩⎪\0〉∫⌠⎮⌡⎞⎟⎠⎤⎥⎦⎫⎬⎭\0"
+)
+WINGDINGS_FONT = list(
+    " ✏✂✁👓🕭🕮🕯🕿✆🖂🖃📪📫📬📭📁📂📄🗏🗐🗄⌛🖮🖰🖲🖳🖴🖫🖬✇✍"
+    "🖎✌👌👍👎☜☞☝☟🖐☺😐☹💣☠🏳🏱✈☼💧❄🕆✞🕈✠✡☪☯ॐ☸♈♉"
+    "♊♋♌♍♎♏♐♑♒♓🙰🙵●🔾■□🞐❑❒⬧⧫◆❖⬥⌧⮹⌘🏵🏶🙶🙷\0"
+    "⓪①②③④⑤⑥⑦⑧⑨⑩⓿❶❷❸❹❺❻❼❽❾❿🙢🙠🙡🙣🙞🙜🙝🙟·•"
+    "▪⚪🞆🞈◉◎🔿▪◻🟂✦★✶✴✹✵⯐⌖⟡⌑⯑✪✰🕐🕑🕒🕓🕔🕕🕖🕗🕘"
+    "🕙🕚🕛⮰⮱⮲⮳⮴⮵⮶⮷🙪🙫🙕🙔🙗🙖🙐🙑🙒🙓⌫⌦⮘⮚⮙⮛⮈⮊⮉⮋🡨"
+    "🡪🡩🡫🡬🡭🡯🡮🡸🡺🡹🡻🡼🡽🡿🡾⇦⇨⇧⇩⬄⇳⬀⬁⬃⬂▭▫✗✓☒☑\0"
+)
+assert len(SYMBOL_FONT) == 224 and len(WINGDINGS_FONT) == 224
+# The parse draws a few Wingdings codes with the common glyph of the same
+# shape (its bullets do too): a font without the newer arrows and shapes
+# still draws them.
+for code, glyph in {0x6D: "❍", 0x70: "◻", 0xA1: "○", 0xA8: "◻", 0xD8: "➢", 0xE0: "➔", 0xE8: "➔"}.items():
+    WINGDINGS_FONT[code - 0x20] = glyph
+
+
+def symbol_text(text, font, whole):
+    """A run's text as a symbol font draws it: every character when the run
+    is set in the font (whole), else only the private-use codes U+F020-F0FF
+    (a:sym, the font for symbols)."""
+    f = (font or "").lower()
+    table = SYMBOL_FONT if f == "symbol" else WINGDINGS_FONT if f == "wingdings" else None
+    if table is None:
+        return text
+    out = []
+    for ch in text:
+        c = ord(ch)
+        code = c - 0xF000 if 0xF020 <= c <= 0xF0FF else c if whole and 0x20 <= c <= 0xFF else None
+        g = table[code - 0x20] if code is not None else "\0"
+        out.append(ch if g == "\0" else g)
+    return "".join(out)
+
+
+def run_text(r):
+    t = clean(kid(r, "t").text if kid(r, "t") is not None else "")
+    rpr = kid(r, "rPr")
+    latin = lattr(kid(rpr, "latin"), "typeface")
+    sym = lattr(kid(rpr, "sym"), "typeface")
+    if latin and latin.lower() in ("symbol", "wingdings"):
+        return symbol_text(t, latin, True)
+    return symbol_text(t, sym, False) if sym else t
+
+
 def para_text(p):
     out = []
     for node in p:
@@ -246,7 +312,7 @@ def para_text(p):
             continue
         name = local(node)
         if name in ("r", "fld"):
-            out.append(clean(kid(node, "t").text if kid(node, "t") is not None else ""))
+            out.append(run_text(node))
         elif name == "br":
             out.append("\n")
         elif name == "m":
@@ -258,7 +324,7 @@ def para_text(p):
                     if isinstance(c.tag, str) and local(c) == "m":
                         out.append(math_text(c))
                     elif isinstance(c.tag, str) and local(c) == "r":
-                        out.append(clean(kid(c, "t").text if kid(c, "t") is not None else ""))
+                        out.append(run_text(c))
     return "".join(out)
 
 
@@ -330,6 +396,38 @@ def auto_label(scheme, n):
             v //= 26
         return out
 
+    def han(v):
+        # 1 一, 10 十, 11 十一, 20 二十, 105 一百零五: the ideographic count.
+        digits = "零一二三四五六七八九"
+        if v <= 0 or v >= 10000:
+            return str(v)
+        out = ""
+        zero = False
+        for unit, sym in ((1000, "千"), (100, "百"), (10, "十"), (1, "")):
+            d = v // unit
+            v %= unit
+            if d == 0:
+                zero = bool(out)
+                continue
+            if zero:
+                out += "零"
+                zero = False
+            out += ("" if (unit == 10 and d == 1 and not out) else digits[d]) + sym
+        return out
+
+    # The East Asian schemes (ECMA-376 Part 1, 20.1.10.61): ideographic
+    # numbers (Simplified and Traditional Chinese, Japanese and Korean),
+    # full-width digits, and circled numbers; "Db" is a double-byte period.
+    if scheme.startswith("ea1"):
+        core = han(n)
+        return core + ("．" if scheme.endswith("DbPeriod") else "." if scheme.endswith("Period") else "")
+    if scheme.startswith("arabicDb"):
+        core = "".join(chr(0xFF10 + int(c)) for c in str(n))
+        return core + ("．" if scheme.endswith("Period") else "")
+    if scheme.startswith("circleNum"):
+        if scheme == "circleNumWdBlackPlain":
+            return chr(0x2776 + n - 1) if 1 <= n <= 10 else chr(0x24EB + n - 11) if n <= 20 else str(n)
+        return chr(0x2460 + n - 1) if 1 <= n <= 20 else chr(0x3251 + n - 21) if n <= 35 else chr(0x32B1 + n - 36) if n <= 50 else str(n)
     if scheme.startswith("alphaLc"):
         core = alpha(n)
     elif scheme.startswith("alphaUc"):
@@ -378,6 +476,28 @@ def fmt_date(x, code):
     return out
 
 
+def fmt_general(x):
+    """A number in the General format: at most 11 characters, the leading
+    zero and the decimal point among them (the sign not), as Excel and the
+    charts it draws show it: 1/3 reads 0.333333333, 9 significant digits,
+    and 4.2073549240 reads 4.207354924, 10. ECMA-376 Part 1, 18.8.30
+    (numFmt, General); Microsoft's Open XML SDK NumberingFormat notes say
+    the same. A number past 11 digits shows in scientific notation."""
+    a = abs(x)
+    sign = "-" if x < 0 else ""
+    if a == int(a) and a < 1e11:
+        return sign + str(int(a))
+    if a >= 1e11 or a < 1e-9:
+        mant, exp = ("%.5E" % a).split("E")
+        mant = mant.rstrip("0").rstrip(".")
+        return "%s%sE%s%02d" % (sign, mant, exp[0], int(exp[1:]))
+    for d in range(10, -1, -1):
+        s = ("%.*f" % (d, a)).rstrip("0").rstrip(".") if d else "%.0f" % a
+        if len(s) <= 11:
+            return sign + s
+    return sign + "%.0f" % a
+
+
 def fmt_number(v, code):
     try:
         x = float(v)
@@ -387,9 +507,7 @@ def fmt_number(v, code):
     if DATE_CODE.match(code) and re.search(r"[dmy]", code, re.I):
         return fmt_date(x, code)
     if code == "General" or not re.search(r"[0#?]", code):
-        if x == int(x) and abs(x) < 1e15:
-            return str(int(x))
-        return ("%.10g" % x)
+        return fmt_general(x)
     pctm = "%" in code
     if pctm:
         x *= 100
@@ -508,7 +626,10 @@ def chart_ref(pkg, path):
     words = []
     values = []
     shown = []
-    series = desc(chart, "ser")
+    # A series the chart filter hides (c15:filteredBarSeries,
+    # c15:filteredScatterSeries, ... in the plot's extLst) is not drawn and
+    # shows no words: PowerPoint keeps it only to bring it back.
+    series = [s for s in desc(chart, "ser") if not any(isinstance(a.tag, str) and local(a).startswith("filtered") for a in s.iterancestors())]
     have_cats = False
     for ser in series:
         name, _ = cache_pts(kid(ser, "tx"))
@@ -576,37 +697,73 @@ def smartart_ref(pkg, data_path):
 # ── Shapes ──────────────────────────────────────────────────────────────────
 
 
-def xfrm_box(xfrm):
+def xfrm_raw(xfrm):
+    """An xfrm as [x, y, w, h, rotation in degrees, flipH, flipV], or None."""
     if xfrm is None:
         return None
     off, ext = kid(xfrm, "off"), kid(xfrm, "ext")
     if off is None or ext is None:
         return None
-    x, y, w, h = iattr(off, "x", 0), iattr(off, "y", 0), iattr(ext, "cx", 0), iattr(ext, "cy", 0)
-    # A rotated shape covers its rotated box: the reading order sees that.
-    rot = math.radians((iattr(xfrm, "rot", 0) or 0) / 60000)
-    if rot:
-        rw = abs(w * math.cos(rot)) + abs(h * math.sin(rot))
-        rh = abs(w * math.sin(rot)) + abs(h * math.cos(rot))
+    return [iattr(off, "x", 0), iattr(off, "y", 0), iattr(ext, "cx", 0), iattr(ext, "cy", 0),
+            (iattr(xfrm, "rot", 0) or 0) / 60000, xfrm.get("flipH") in ("1", "true"), xfrm.get("flipV") in ("1", "true")]
+
+
+def covered(x, y, w, h, rot):
+    """A rotated shape covers its rotated box: the reading order sees that."""
+    r = math.radians(rot)
+    if r:
+        rw = abs(w * math.cos(r)) + abs(h * math.sin(r))
+        rh = abs(w * math.sin(r)) + abs(h * math.cos(r))
         x, y, w, h = x + (w - rw) / 2, y + (h - rh) / 2, rw, rh
     return [x, y, w, h]
 
 
+# A group's transform maps its children's coordinates onto the slide: the
+# child space scaled into the group's box, then flipped and turned about the
+# box's center, as PowerPoint draws a rotated or flipped group (a child turns
+# with it). t = (a, b, c, d, e, f, rot, mirror, sx, sy): the affine map
+# x' = a x + c y + e, y' = b x + d y + f; the turn and the mirror a child
+# takes on; the scale of a child's width and height.
+IDENTITY = (1, 0, 0, 1, 0, 0, 0, False, 1, 1)
+
+
 def apply(box, t):
-    ox, oy, sx, sy, cx, cy = t
-    return [ox + (box[0] - cx) * sx, oy + (box[1] - cy) * sy, box[2] * sx, box[3] * sy]
+    """A child's raw box mapped by the group transform: the box it covers."""
+    a, b, c, d, e, f, rot, mirror, sx, sy = t
+    x, y, w, h, r = box[:5]
+    cx, cy = x + w / 2, y + h / 2
+    mx, my = a * cx + c * cy + e, b * cx + d * cy + f
+    w2, h2 = w * sx, h * sy
+    return covered(mx - w2 / 2, my - h2 / 2, w2, h2, rot + (-r if mirror else r))
 
 
 def group_t(grp, t):
     xfrm = kid(grp, "grpSpPr", "xfrm")
-    box = xfrm_box(xfrm)
+    box = xfrm_raw(xfrm)
     choff, chext = kid(xfrm, "chOff"), kid(xfrm, "chExt")
     if box is None or choff is None or chext is None:
         return t
-    outer = apply(box, t)
-    cw = iattr(chext, "cx", 0) or box[2] or 1
-    ch = iattr(chext, "cy", 0) or box[3] or 1
-    return (outer[0], outer[1], outer[2] / cw, outer[3] / ch, iattr(choff, "x", 0), iattr(choff, "y", 0))
+    x, y, w, h, gr, fh, fv = box
+    cw = iattr(chext, "cx", 0) or w or 1
+    ch = iattr(chext, "cy", 0) or h or 1
+    kx, ky = w / cw, h / ch
+    ox, oy = iattr(choff, "x", 0), iattr(choff, "y", 0)
+    gx, gy = x + w / 2, y + h / 2
+    # Local map: scale into the box, flip and turn about its center.
+    th = math.radians(gr)
+    cos, sin = math.cos(th), math.sin(th)
+    fx, fy = (-1 if fh else 1), (-1 if fv else 1)
+    # p -> (x + (px - ox) kx, ...) -> g + R F (q - g)
+    la, lb, lc, ld = cos * fx * kx, sin * fx * kx, -sin * fy * ky, cos * fy * ky
+    qx0, qy0 = x - ox * kx - gx, y - oy * ky - gy  # q - g at child (0, 0)
+    le = gx + cos * fx * qx0 - sin * fy * qy0
+    lf = gy + sin * fx * qx0 + cos * fy * qy0
+    a, b, c, d, e, f, rot, mirror, sx, sy = t
+    na, nb = a * la + c * lb, b * la + d * lb
+    nc, nd = a * lc + c * ld, b * lc + d * ld
+    ne, nf = a * le + c * lf + e, b * le + d * lf + f
+    lrot, lmirror = (gr + 180, False) if fh and fv else (gr + 180, True) if fv else (gr, fh)
+    return (na, nb, nc, nd, ne, nf, rot + (-lrot if mirror else lrot), mirror != lmirror, sx * kx, sy * ky)
 
 
 def hidden(shape):
@@ -676,9 +833,9 @@ class SlideRef:
         inh = self.inherited(ph)
         box = None
         for el in [sp] + inh:
-            b = xfrm_box(kid(el, "spPr", "xfrm"))
+            b = xfrm_raw(kid(el, "spPr", "xfrm"))
             if b is not None:
-                box = apply(b, t) if el is sp else b
+                box = apply(b, t) if el is sp else covered(*b[:5])
                 break
         chains = [kid(el, "txBody", "lstStyle") for el in [sp] + inh]
         if ph is None:
@@ -692,14 +849,20 @@ class SlideRef:
             self.shapes.append({"kind": "text", "title": bool(ph and ph["type"] == "title"), "box": box, "paras": paras})
 
     def frame(self, fr, t):
-        b = xfrm_box(kid(fr, "xfrm"))
+        b = xfrm_raw(kid(fr, "xfrm"))
         box = apply(b, t) if b else None
         data = kid(fr, "graphic", "graphicData")
         tbl = kid(data, "tbl")
         rels = self.pkg.rels(self.part)
         if tbl is not None:
             rows = []
+            # The rows holding an equation: its notation (spaces, brackets,
+            # fraction bars) is the writer's, so the bench finds such a row
+            # by its letters and digits.
+            math_rows = []
             for tr in kids(tbl, "tr"):
+                if desc(tr, "oMath"):
+                    math_rows.append(len(rows))
                 row = []
                 for tc in kids(tr, "tc"):
                     if tc.get("hMerge") in ("1", "true") or tc.get("vMerge") in ("1", "true"):
@@ -713,7 +876,7 @@ class SlideRef:
                     row.append("\n".join(ps))
                 rows.append(row)
             if any(c.strip() for r in rows for c in r):
-                self.shapes.append({"kind": "table", "title": False, "box": box, "rows": rows})
+                self.shapes.append({"kind": "table", "title": False, "box": box, "rows": rows, "mathRows": math_rows})
             return
         ch = kid(data, "chart")
         if ch is not None:
@@ -795,7 +958,7 @@ def reference(path):
         ref = SlideRef(pkg, part)
         tree = desc(kid(doc, "cSld"), "spTree")
         if tree:
-            ref.walk(tree[0], (0, 0, 1, 1, 0, 0))
+            ref.walk(tree[0], IDENTITY)
         out["slides"].append({
             "n": i + 1,
             "hidden": doc.get("show") in ("0", "false"),

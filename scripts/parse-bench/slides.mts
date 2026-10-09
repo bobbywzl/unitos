@@ -7,10 +7,15 @@
 //     [--save-baseline] [--worst n] [--detail id] [--dir path] [--json out.json]
 //
 // The corpus is slides-corpus.json: each file's source URL (pinned to a
-// commit), its license, and what it exercises. The files are other people's
-// and are never committed: the first run downloads them into
-// .bench/slides/files/. --dir scores every .pptx under a folder instead (ids
-// are the paths), to look for new fixtures.
+// commit), its license, and what it exercises. Two kinds of files: decks
+// from public test suites (Apache POI, LibreOffice, Open XML SDK,
+// python-pptx, Tika) and real-world decks committed to permissively licensed
+// repositories (course and workshop decks, talk decks, Chinese, Japanese and
+// Korean decks, decks of 100 and more slides, Google Slides and LibreOffice
+// exports). The files are other people's and are never committed: the first
+// run downloads them into .bench/slides/files/ from the corpus alone. --dir
+// scores every .pptx under a folder instead (ids are the paths), to look for
+// new fixtures.
 //
 // What a reader would notice, per file (slides matched by number):
 //
@@ -104,7 +109,13 @@ async function corpusEntries(): Promise<Entry[]> {
     const path = join(FILES, `${f.id}.pptx`);
     if (!existsSync(path)) {
       try {
-        const res = await outboundFetch(f.url, { signal: AbortSignal.timeout(120_000) });
+        // GitHub's raw host answers 429 to a burst of downloads: wait and
+        // ask again.
+        let res = await outboundFetch(f.url, { signal: AbortSignal.timeout(120_000) });
+        for (let attempt = 1; attempt <= 5 && (res.status === 429 || res.status >= 500); attempt++) {
+          await new Promise((r) => setTimeout(r, 15_000 * attempt));
+          res = await outboundFetch(f.url, { signal: AbortSignal.timeout(120_000) });
+        }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         writeFileSync(path, new Uint8Array(await res.arrayBuffer()));
         console.log(`fetched  ${f.id}`);
@@ -127,7 +138,7 @@ else if (only) entries = entries.filter((e) => only.includes(e.id));
 type RefPara = { text: string; level: number; bullet: string | null; math: boolean };
 type RefShape =
   | { kind: "text"; title: boolean; box: number[] | null; paras: RefPara[] }
-  | { kind: "table"; title: boolean; box: number[] | null; rows: string[][] }
+  | { kind: "table"; title: boolean; box: number[] | null; rows: string[][]; mathRows?: number[] }
   | { kind: "chart"; title: boolean; box: number[] | null; titleText?: string; words: string[]; values: number[]; shown: string[] }
   | { kind: "smartart"; title: boolean; box: number[] | null; texts: string[] };
 type RefSlide = { n: number; hidden?: boolean; missing?: boolean; shapes: RefShape[]; notes: string };
@@ -152,23 +163,31 @@ if (stale.length > 0) {
 
 // ── Text measures ───────────────────────────────────────────────────────────
 
-// A list label at a line's start — a bullet glyph, "1.", "(a)", "iv)" — is
-// the list's drawing, not a word: dropped on both sides alike. Text is
+// A list label at a line's start — a bullet glyph, "1.", "(a)", "iv)",
+// an East Asian number ("一.", "１．", "①") — is the list's drawing, not a
+// word: dropped on both sides alike. Text is
 // compared in its compatibility form (NFKC): an equation's math italic 𝑎 is
 // the letter a, a full-width Ａ is A. A math letter (U+1D400–U+1D7FF) is
 // one variable, a token of its own: "𝜋𝑟²" is π, r, 2 on both sides, however
-// an equation's parts are spaced.
-const LABEL = /^\s*(?:[^\p{L}\p{N}\s]{1,2}|\(?(?:\d{1,3}|[a-zA-Z]|[ivxlcdmIVXLCDM]{1,6})[.)])\s+/u;
+// an equation's parts are spaced; an accent drawn over it (x⃗) stays with
+// it. An underscore joins the words of a name (snake_case is one token) but
+// is no word's edge: a linear equation's subscript mark ("𝑥_𝐾", "ẏ_𝑗") is
+// notation, as "^" is. A private-use character
+// (U+E000-U+F8FF) is a token of its own: a symbol font's code the reader
+// has no font for, a box where the slide shows ☺ or ⇒.
+const LABEL = /^\s*(?:[^\p{L}\p{N}\s]{1,2}|\(?(?:\d{1,3}|[a-zA-Z]|[ivxlcdmIVXLCDM]{1,6})[.)]|\p{sc=Han}{1,5}[.．]|[０-９]{1,3}．?|[\u2460-\u2473\u2776-\u277F\u24EB-\u24F4\u3251-\u325F\u32B1-\u32BF])\s+/u;
 function tokens(text: string): string[] {
   const lines = text.split("\n").map((l) => l.replace(LABEL, ""));
   return (
     lines
       .join("\n")
-      .replace(/[\u{1D400}-\u{1D7FF}]/gu, " $& ")
+      .replace(/[\u{1D400}-\u{1D7FF}]\p{M}*/gu, " $& ")
       .normalize("NFKC")
       .toLowerCase()
-      .match(/[\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}]|(?:(?![\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}])[\p{L}\p{N}\p{M}_])+/gu) ?? []
-  );
+      .match(/[\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}\u{E000}-\u{F8FF}]|(?:(?![\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}])[\p{L}\p{N}\p{M}_])+/gu) ?? []
+  )
+    .map((t) => t.replace(/^_+|_+$/g, ""))
+    .filter((t) => t.length > 0);
 }
 type Counts = { tp: number; fp: number; fn: number };
 function bag(ts: string[]): Map<string, number> {
@@ -191,6 +210,8 @@ function counts(ref: string[], got: string[]): Counts {
   }
   return { tp, fp, fn };
 }
+/** A text's letters and digits alone, in their compatibility form. */
+const letters = (text: string) => (text.normalize("NFKC").toLowerCase().match(/[\p{L}\p{N}]/gu) ?? []).join("");
 const add = (a: Counts, b: Counts): Counts => ({ tp: a.tp + b.tp, fp: a.fp + b.fp, fn: a.fn + b.fn });
 const f1 = ({ tp, fp, fn }: Counts) => (tp + fp + fn === 0 ? 1 : (2 * tp) / (2 * tp + fp + fn));
 /** Share of a piece's tokens the parse holds. */
@@ -236,7 +257,17 @@ type FileScore = {
   error?: string;
 };
 
-function bodyAndNotes(text: string): { body: string; notes: string | null } {
+/** The slide's words and its notes apart. The replica's notes strip says
+    where the notes start: their own words may hold the line "Speaker
+    notes:" (a deck whose notes open with it), so the label's last line is
+    no boundary. Without the strip, the label's last line is. */
+function bodyAndNotes(text: string, html: string | undefined): { body: string; notes: string | null } {
+  const strip = html && html.includes('class="slide-notes-body"') ? JSDOM.fragment(html).querySelector(".slide-notes-body") : null;
+  if (strip) {
+    const notes = domText(strip.outerHTML);
+    const tail = `${SLIDE_NOTES_LABEL}\n${notes}`;
+    if (text.endsWith(tail)) return { body: text.slice(0, text.length - tail.length).replace(/\n$/, ""), notes };
+  }
   const lines = text.split("\n");
   const at = lines.lastIndexOf(SLIDE_NOTES_LABEL);
   if (at < 0) return { body: text, notes: null };
@@ -301,7 +332,7 @@ function scoreFile(id: string, ref: Ref, blocks: ParsedBlock[], ms: number, deta
     const say: string[] = [];
     const text = block?.text ?? "";
     if (!block) lose("slide");
-    const { body, notes } = bodyAndNotes(text);
+    const { body, notes } = bodyAndNotes(text, block?.html);
     const got = tokens(body);
     const gotBag = bag(got);
     const pieces = piecesOf(slide);
@@ -428,18 +459,21 @@ function scoreFile(id: string, ref: Ref, blocks: ParsedBlock[], ms: number, deta
       say.push(`  bullet: want "${w.want ?? "a symbol"}" got "${prefix}" on "${w.first.slice(0, 60)}"`);
     }
 
-    // Tables: rows found whole.
+    // Tables: rows found whole. A row holding an equation is found by its
+    // letters and digits in order: an equation's notation (spaces,
+    // brackets, fraction bars: "5 𝑎𝑠 h" or "5(𝑎𝑠)/h") is the writer's.
+    const bodyLetters = letters(body);
     for (const s of slide.shapes) {
       if (s.kind !== "table") continue;
-      for (const row of s.rows) {
-        if (!row.some((c) => c.trim())) continue;
+      s.rows.forEach((row, r) => {
+        if (!row.some((c) => c.trim())) return;
         rowAll++;
         const cellNorm = (l: string) => l.split("\t").map(norm).join("\t");
         const want = row.map((c) => c.split("\n").map(cellNorm).join("\n")).join("\t");
         const bodyNorm = body.split("\n").map(cellNorm).join("\n");
-        if (bodyNorm.includes(want)) rowOk++;
+        if (bodyNorm.includes(want) || (s.mathRows?.includes(r) && bodyLetters.includes(letters(row.join(""))))) rowOk++;
         else say.push(`  table row: ${want.replace(/\t/g, " | ").replace(/\n/g, " / ").slice(0, 160)}`);
-      }
+      });
     }
 
     // Chart values: each value as a number in the slide's words.
