@@ -538,10 +538,11 @@ def chart_ref(pkg, path):
                 values.append(float(v))
                 shown.append(fmt_number(v, code))
     # A title element without words is the automatic title: the series'
-    # name when the chart has one series, else "Chart Title".
+    # name when the chart has one named series, else "Chart Title" (one
+    # unnamed series too: PowerPoint's thumbnail of chart-theme-override).
     if title_el is not None and not title:
         first, _ = cache_pts(kid(series[0], "tx")) if len(series) == 1 else ([], None)
-        title = (first[0] if first and first[0] else "") if len(series) == 1 else "Chart Title"
+        title = first[0] if len(series) == 1 and first and first[0] else "Chart Title"
     seen = words
     return {"titleText": title, "words": seen, "values": values, "shown": shown}
 
