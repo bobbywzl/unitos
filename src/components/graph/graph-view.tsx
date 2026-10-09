@@ -126,7 +126,12 @@ const labelScale = (zoom: number) => Math.min(LABEL_SCALE_MAX, Math.max(1, 1 / z
 // Below this zoom the canvas is quiet (VIEW4-06): no notes chip on a node,
 // and a curve's link count and notes pill only while it is lit; the replies
 // mark always draws. The counts stay in the cards.
-const FAR_ZOOM = 0.7;
+// [style10] VIEW10-05: a band, not one threshold: far turns on under
+// FAR_ZOOM_ON and off over FAR_ZOOM_OFF; between them the last state holds,
+// so a pinch across 0.70 does not pop the chips in and out or flip the
+// waiting rings between sage and comment blue.
+const FAR_ZOOM_ON = 0.68;
+const FAR_ZOOM_OFF = 0.73;
 
 /** A node's extent in flow units around its dot's center, label included,
     at a zoom: what the fit frames and what a pinned card keeps in view. */
@@ -302,7 +307,8 @@ function DocumentNode({ id, data }: NodeProps<DocumentNodeData>) {
       </span>
       {/* [graph-notes] The notes chip sits right of the dot, clear of the
           label under it. */}
-      <span className="absolute top-1/2 -translate-y-1/2" style={{ left: `calc(50% + ${size / 2 + 4}px)` }}>
+      {/* [style10] VIEW10-05: the chips clear the ring, which grows in flow units as the view zooms out (--graph-ring-grow, globals.css). */}
+      <span className="absolute top-1/2 -translate-y-1/2" style={{ left: `calc(50% + ${size / 2 + 4}px + var(--graph-ring-grow, 0px))` }}>
         <span className="flex items-center gap-1">
           <NodeNotes documentId={id} />
           {/* [layer5] The reader's open comments (VIEW5-01). */}
@@ -1023,6 +1029,7 @@ function saveLayout(notebookId: string, aspect: number, layout: Map<string, Poin
 // variables and an attribute on the canvas, so a zoom re-renders no node.
 function LabelScale({ target, lodZoom }: { target: RefObject<HTMLDivElement | null>; lodZoom: number }) {
   const zoom = useStore((s) => s.transform[2]);
+  const far = useRef(false); // [style10] VIEW10-05: the last state, kept inside the band
   useEffect(() => {
     const el = target.current;
     if (!el) return;
@@ -1035,7 +1042,8 @@ function LabelScale({ target, lodZoom }: { target: RefObject<HTMLDivElement | nu
     el.style.setProperty("--graph-zoom", zoom.toFixed(3));
     if (lod) el.setAttribute("data-lod", "");
     else el.removeAttribute("data-lod");
-    if (zoom < FAR_ZOOM) el.setAttribute("data-far", "");
+    far.current = zoom < FAR_ZOOM_ON || (zoom <= FAR_ZOOM_OFF && far.current);
+    if (far.current) el.setAttribute("data-far", "");
     else el.removeAttribute("data-far");
   }, [zoom, target, lodZoom]);
   return null;
