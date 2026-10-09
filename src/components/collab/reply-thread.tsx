@@ -17,12 +17,25 @@ import { VoiceTypingButton } from "@/components/voice/voice-typing-button";
 
 /** When a reply, or the comment it answers, was written, as the thread prints it. */
 export function replyTime(iso: string, lang: string): string {
-  return new Date(iso).toLocaleString(lang === "zh" ? "zh-CN" : undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? date.toLocaleString() : replyFormat(lang).format(date);
+}
+
+// One formatter per language: building one costs about a millisecond, and a
+// card draws its time on every key typed into its suggestion.
+const replyFormats = new Map<string, Intl.DateTimeFormat>();
+function replyFormat(lang: string): Intl.DateTimeFormat {
+  let format = replyFormats.get(lang);
+  if (!format) {
+    format = new Intl.DateTimeFormat(lang === "zh" ? "zh-CN" : undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    replyFormats.set(lang, format);
+  }
+  return format;
 }
 
 type Target = { noteId: string } | { blockEditId: string } | { docLinkId: string };

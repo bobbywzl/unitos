@@ -17,7 +17,7 @@ import { useLang, useT } from "@/components/lang-provider";
 import { askerOf, isAssistantAuthor } from "@/lib/docs/assistant-suggestions";
 import { suggestionAuthor, suggestionTime, type RichMark } from "@/lib/docs/schema";
 import type { TFunc, TKey } from "@/lib/i18n/dictionaries";
-import { personColor } from "@/lib/person";
+import { personColor, type Person } from "@/lib/person";
 
 // A suggestion's card (SPEC.md §29): the comment card's look.
 
@@ -196,6 +196,80 @@ export function focusSuggestionCard(editor: Editor, id: string): void {
   );
 }
 
+/** Settle one suggestion from its card. Settled from the keys (Enter or
+    Space on Accept or Reject): the next suggestion's Accept takes the
+    focus, or the page when none is left. */
+function settleCard(editor: Editor, id: string, accept: boolean, e?: React.MouseEvent) {
+  const order = readSuggestions(editor.state.doc).map((s) => s.id);
+  settleSuggestions(editor, accept, id);
+  if (e?.detail !== 0) return;
+  const left = new Set(readSuggestions(editor.state.doc).map((s) => s.id));
+  const next = [...order.slice(order.indexOf(id) + 1), ...order].find((other) => left.has(other));
+  if (next) focusSuggestionCard(editor, next);
+  else editor.view.focus();
+}
+
+const samePerson = (a: Person | undefined, b: Person | undefined) =>
+  a === b ||
+  (!!a && !!b && a.id === b.id && a.name === b.name && a.symbol === b.symbol && a.color === b.color && a.picture === b.picture && a.tier === b.tier);
+
+/** The open card's head: the badge, the name, the time, who asked, Accept
+    and Reject. It draws again only when one of those changes, not on every
+    key typed into the suggestion. */
+const CardHead = memo(
+  function CardHead({
+    editor,
+    id,
+    person,
+    asker,
+    canSettle,
+  }: {
+    editor: Editor;
+    id: string;
+    person: Person | undefined;
+    asker: string | undefined;
+    canSettle: boolean;
+  }) {
+    const t = useT();
+    const lang = useLang();
+    return (
+      <div className="docs-comment-head">
+        {person && <PersonBadge person={person} size={32} />}
+        <div className="docs-comment-who">
+          {person && <div className="docs-comment-name">{person.name}</div>}
+          <div className="docs-comment-time">{replyTime(new Date(suggestionTime(id)).toISOString(), lang)}</div>
+          {asker && <div className="docs-comment-time">{t("docsSuggest.askedBy", { name: asker })}</div>}
+        </div>
+        {canSettle && (
+          <div className="docs-comment-buttons">
+            <button
+              type="button"
+              onClick={(e) => settleCard(editor, id, true, e)}
+              data-track="suggestion-accept"
+              aria-label={t("docsSuggest.acceptSuggestion")}
+              data-tip={t("docsSuggest.acceptSuggestion")}
+              className="docs-comment-button docs-comment-resolve"
+            >
+              <CheckIcon size={20} />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => settleCard(editor, id, false, e)}
+              data-track="suggestion-reject"
+              aria-label={t("docsSuggest.rejectSuggestion")}
+              data-tip={t("docsSuggest.rejectSuggestion")}
+              className="docs-comment-button docs-comment-resolve"
+            >
+              <CloseIcon size={20} />
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  },
+  (a, b) => a.editor === b.editor && a.id === b.id && samePerson(a.person, b.person) && a.asker === b.asker && a.canSettle === b.canSettle,
+);
+
 /** One suggestion's card in the margin: the one the caret stands in shows
     whole, with Accept and Reject for an editor; the others show one line,
     and a press opens them. With no card column (a narrow pane, a split
@@ -234,17 +308,7 @@ export const SuggestionCard = memo(function SuggestionCard({
   const asker = shared && isAssistantAuthor(author) ? authorOf(askerOf(author)) : undefined;
   const why = whyOf(id);
   const lines = describe(suggestion, t);
-  // Settled from the keys (Enter or Space on Accept or Reject): the next
-  // suggestion's Accept takes the focus, or the page when none is left.
-  const settle = (accept: boolean, e?: React.MouseEvent) => {
-    const order = readSuggestions(editor.state.doc).map((s) => s.id);
-    settleSuggestions(editor, accept, id);
-    if (e?.detail !== 0) return;
-    const left = new Set(readSuggestions(editor.state.doc).map((s) => s.id));
-    const next = [...order.slice(order.indexOf(id) + 1), ...order].find((other) => left.has(other));
-    if (next) focusSuggestionCard(editor, next);
-    else editor.view.focus();
-  };
+  const settle = (accept: boolean, e?: React.MouseEvent) => settleCard(editor, id, accept, e);
   // Escape on the card's buttons: back to the caret.
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key !== "Escape" || !(e.target instanceof HTMLButtonElement)) return;
@@ -313,38 +377,7 @@ export const SuggestionCard = memo(function SuggestionCard({
       className="docs-comment docs-suggest-card bubble-in absolute z-40"
       style={style}
     >
-      <div className="docs-comment-head">
-        {person && <PersonBadge person={person} size={32} />}
-        <div className="docs-comment-who">
-          {person && <div className="docs-comment-name">{person.name}</div>}
-          <div className="docs-comment-time">{replyTime(new Date(suggestionTime(id)).toISOString(), lang)}</div>
-          {asker && <div className="docs-comment-time">{t("docsSuggest.askedBy", { name: asker.name })}</div>}
-        </div>
-        {canSettle && (
-          <div className="docs-comment-buttons">
-            <button
-              type="button"
-              onClick={(e) => settle(true, e)}
-              data-track="suggestion-accept"
-              aria-label={t("docsSuggest.acceptSuggestion")}
-              data-tip={t("docsSuggest.acceptSuggestion")}
-              className="docs-comment-button docs-comment-resolve"
-            >
-              <CheckIcon size={20} />
-            </button>
-            <button
-              type="button"
-              onClick={(e) => settle(false, e)}
-              data-track="suggestion-reject"
-              aria-label={t("docsSuggest.rejectSuggestion")}
-              data-tip={t("docsSuggest.rejectSuggestion")}
-              className="docs-comment-button docs-comment-resolve"
-            >
-              <CloseIcon size={20} />
-            </button>
-          </div>
-        )}
-      </div>
+      <CardHead editor={editor} id={id} person={person} asker={asker?.name} canSettle={canSettle} />
       {lines.map((line, i) => (
         <p key={i} className="docs-suggest-what">
           {line}
