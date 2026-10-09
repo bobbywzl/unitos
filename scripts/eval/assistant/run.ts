@@ -271,7 +271,7 @@ function describe(e: ActionExpect): string {
 function checkCase(c: AssistantCase, f: Fixture, ctx: PlanContext, read: ReadActions | null, fence: string | null, answer: string, actions: AssistantAction[], warnings: string[], sim: Simulation, pending: string[]): Check[] {
   const e = c.expect;
   const checks: Check[] = [];
-  const idOf = (n: number) => (n === 0 ? videoBlockId(f) : c.edits === "suggestions" ? ctx.blocks[n - 1].id : f.blocks[n - 1].id);
+  const idOf = (n: number) => (n === 0 ? videoBlockId(f) : c.edits === "suggestions" || c.edits === "none" ? ctx.blocks[n - 1].id : f.blocks[n - 1].id);
   const original = new Map(ctx.blocks.map((b) => [b.id, b]));
   const after = new Map(sim.blocks.map((b) => [b.id, b]));
 

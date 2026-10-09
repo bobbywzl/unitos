@@ -42,11 +42,11 @@ export function planBlocks(f: Fixture): PlanContext["blocks"] {
   return isRecording(f) ? [{ id: videoBlockId(f), type: "VIDEO", text: f.title, html: null, startTime: null, endTime: null, speaker: null }, ...lines] : lines;
 }
 
-/** The blocks a case reads: a document with rich text (edits "suggestions")
-    as the page indexes it, one row per paragraph, heading, and list line
+/** The blocks a case reads: a document with rich text (edits "suggestions",
+    or "none" for an import another account's project holds) as the page indexes it, one row per paragraph, heading, and list line
     (richtext.ts); any other as the plan reads it. */
 export function caseBlocks(c: { edits?: string; fixture: string }, f: Fixture): PlanContext["blocks"] {
-  return c.edits === "suggestions" ? suggestionRows(f) : planBlocks(f);
+  return c.edits === "suggestions" || c.edits === "none" ? suggestionRows(f) : planBlocks(f);
 }
 
 /** The voices of a recording by name, each with the id the app gives it
