@@ -23,7 +23,7 @@
 //   b. Images (lib/handwritten/image.ts sniffImage, image-pdf.ts
 //      imageToPdf): each file is sniffed and wrapped into the one-page PDF
 //      the add stores, then drawn as the page image the reader sees
-//      (pdfPageSizes, renderPdfPagesJpeg at PAGE_IMAGE_WIDTH). Against
+//      (pdfPageSizes, renderPdfPagesJpeg at pageImageWidth). Against
 //      Pillow's reading (images-ref.py): nothing Pillow opens in a format the
 //      add takes is refused; the page is upright (EXIF applied: the render
 //      matches the upright picture better than any turn or mirror of it), at
@@ -130,7 +130,7 @@ type Result = { id: string; section: "a" | "b"; score: number; metrics: Record<s
 
 const { parsePdf } = await import("@/lib/parse/pdf");
 const { textLayerVerdict, classifySamplePages, pdfShape } = await import("@/lib/handwritten/classify");
-const { CLASSIFY_IMAGE_WIDTH, PAGE_IMAGE_WIDTH, pdfPageCount, pdfPageSizes, renderPdfPage, renderPdfPagesJpeg } = await import(
+const { CLASSIFY_IMAGE_WIDTH, pageImageWidth, pdfPageCount, pdfPageSizes, renderPdfPage, renderPdfPagesJpeg } = await import(
   "@/lib/handwritten/pages"
 );
 const { sniffImage } = await import("@/lib/handwritten/image");
@@ -305,7 +305,7 @@ async function checkRenders(
   bytes: Uint8Array,
   ref: PdfRef,
   pages: number[],
-  width: number,
+  width: Parameters<typeof renderPdfPagesJpeg>[2],
   jpeg: boolean,
   what: string,
 ): Promise<PageCheck> {
@@ -417,7 +417,7 @@ async function scoreA(file: CorpusFile, bytes: Uint8Array, ref: PdfRef): Promise
     renderMs += check.ms;
   }
   if (want !== "article") {
-    const check = await checkRenders(bytes, ref, samples, PAGE_IMAGE_WIDTH, true, "page image");
+    const check = await checkRenders(bytes, ref, samples, pageImageWidth, true, "page image");
     parts.push({ w: 1, s: check.ok });
     metrics.pageImages = round(check.ok);
     notes.push(...check.notes);
@@ -492,9 +492,9 @@ async function scoreB(file: CorpusFile, bytes: Uint8Array, ref: ImageRef): Promi
   metrics.pdfBytes = pdf.length;
   metrics.sourceBytes = bytes.length;
   const t1 = performance.now();
-  const [size] = await quiet(() => pdfPageSizes(pdf!));
+  const [size] = await quiet(() => pdfPageSizes(pdf!, pageImageWidth));
   let image: Uint8Array | null = null;
-  await quiet(() => renderPdfPagesJpeg(pdf!, [1], PAGE_IMAGE_WIDTH, async (_p, jpeg) => void (image = jpeg)));
+  await quiet(() => renderPdfPagesJpeg(pdf!, [1], pageImageWidth, async (_p, jpeg) => void (image = jpeg)));
   const renderMs = performance.now() - t1;
   metrics.renderMs = Math.round(renderMs);
   if (!image || !size || (!ref.thumb && !ref.headerOnly) || !ref.uprightWidth || !ref.uprightHeight) {

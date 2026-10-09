@@ -1,8 +1,8 @@
 {
  "total": {
   "a": 0.956,
-  "b": 0.988,
-  "all": 0.972
+  "b": 1,
+  "all": 0.978
  },
  "files": {
   "a-tracemonkey": 1,
@@ -113,8 +113,8 @@
   "b-png-tiny": 1,
   "b-png-small": 1,
   "b-png-huge": 1,
-  "b-png-long-screenshot": 0.979,
-  "b-jpeg-panorama": 0.845,
+  "b-png-long-screenshot": 1,
+  "b-jpeg-panorama": 1,
   "b-gif-hopper": 1,
   "b-gif-animated": 1,
   "b-gif-dispose": 1,
@@ -164,7 +164,7 @@
   "b-scan-form": 1,
   "b-screenshot-terminal": 1,
   "b-screenshot-markdown": 1,
-  "b-png-endless-screenshot": 0,
+  "b-png-endless-screenshot": 0.995,
   "b-png-bomb": 1,
   "b-tiff-phototest": 1,
   "b-tiff-eurotext": 1

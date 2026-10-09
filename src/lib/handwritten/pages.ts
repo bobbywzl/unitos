@@ -118,12 +118,13 @@ async function openForRender(bytes: Uint8Array): Promise<RenderDocument> {
 }
 
 /** One page drawn on a node canvas at width. page is 1-based. */
-async function drawPage(pdf: RenderDocument, n: number, width: number) {
+async function drawPage(pdf: RenderDocument, n: number, renderWidth: RenderWidth) {
   const { createCanvas } = await import("@napi-rs/canvas");
   const page = await pdf.getPage(n);
   fixRgbPaint(page.objs);
   try {
     const base = page.getViewport({ scale: 1 });
+    const width = widthFor(renderWidth, base.width, base.height, n);
     const size = pageSizeAt(base.width, base.height, width);
     const viewport = page.getViewport({ scale: width / Math.max(1, base.width) });
     const canvas = createCanvas(size.width, size.height);
@@ -158,6 +159,37 @@ export const PAGE_IMAGE_QUALITY = 85;
 
 export type PageSize = { width: number; height: number };
 
+// A new document's page image (pageImageWidth): a page more than twice as
+// wide as tall keeps PAGE_IMAGE_SHORT_SIDE px of height; no page draws more
+// than PAGE_IMAGE_MAX_PIXELS, the picture an image add keeps
+// (lib/handwritten/image-pdf.ts), nor more than JPEG_MAX_SIDE px a side (JPEG
+// stops at 65535).
+const PAGE_IMAGE_SHORT_SIDE = 700;
+const PAGE_IMAGE_MAX_PIXELS = 24_000_000;
+const JPEG_MAX_SIDE = 65_000;
+
+/** The width a new document's page image draws at, from the page's size in
+    points: PAGE_IMAGE_WIDTH, wider for a wide page, narrower for a page so
+    tall it would pass the pixel cap. A stored page image keeps the width it
+    was drawn at (PageImage.width, lib/handwritten/page-images.ts): an old
+    document draws at PAGE_IMAGE_WIDTH as it always did. Images benchmark
+    finding: a 9000 x 1000 panorama drew 1400 x 156, its words a few pixels
+    high, and a 1170 x 16000 screenshot drew 1400 x 19144, 27 megapixels. */
+export function pageImageWidth(pageWidth: number, pageHeight: number): number {
+  const aspect = Math.max(1, pageWidth) / Math.max(1, pageHeight);
+  const wanted = aspect > PAGE_IMAGE_WIDTH / PAGE_IMAGE_SHORT_SIDE ? PAGE_IMAGE_SHORT_SIDE * aspect : PAGE_IMAGE_WIDTH;
+  const capped = Math.min(wanted, Math.sqrt(PAGE_IMAGE_MAX_PIXELS * aspect), JPEG_MAX_SIDE, JPEG_MAX_SIDE * aspect);
+  return Math.max(1, Math.floor(capped));
+}
+
+/** A render's width: one width for every page, or one per page from its
+    size in points and its number (1-based). */
+export type RenderWidth = number | ((pageWidth: number, pageHeight: number, page: number) => number);
+
+function widthFor(width: RenderWidth, pageWidth: number, pageHeight: number, page: number): number {
+  return typeof width === "number" ? width : width(pageWidth, pageHeight, page);
+}
+
 /** The PDF's page count, from a copy of the bytes (pdf.js detaches its buffer). */
 export async function pdfPageCount(bytes: Uint8Array): Promise<number> {
   const { getDocumentProxy } = await import("unpdf");
@@ -169,7 +201,7 @@ export async function pdfPageCount(bytes: Uint8Array): Promise<number> {
 export async function renderPdfPage(
   bytes: Uint8Array,
   page: number,
-  width: number = PAGE_IMAGE_WIDTH,
+  width: RenderWidth = PAGE_IMAGE_WIDTH,
 ): Promise<Uint8Array<ArrayBuffer>> {
   const pdf = await openForRender(bytes);
   try {
@@ -184,7 +216,7 @@ export async function renderPdfPage(
     (index 0 = page 1). Reads the page boxes only — no render. */
 export async function pdfPageSizes(
   bytes: Uint8Array,
-  width: number = PAGE_IMAGE_WIDTH,
+  width: RenderWidth = PAGE_IMAGE_WIDTH,
 ): Promise<PageSize[]> {
   const { getDocumentProxy } = await import("unpdf");
   const pdf = await getDocumentProxy(new Uint8Array(bytes), PDF_CMAPS);
@@ -193,7 +225,7 @@ export async function pdfPageSizes(
     for (let n = 1; n <= pdf.numPages; n++) {
       const page = await pdf.getPage(n);
       const viewport = page.getViewport({ scale: 1 });
-      sizes.push(pageSizeAt(viewport.width, viewport.height, width));
+      sizes.push(pageSizeAt(viewport.width, viewport.height, widthFor(width, viewport.width, viewport.height, n)));
       page.cleanup();
     }
     return sizes;
@@ -214,7 +246,7 @@ function pageSizeAt(pageWidth: number, pageHeight: number, width: number): PageS
 export async function renderPdfPagesJpeg(
   bytes: Uint8Array,
   pages: number[],
-  width: number,
+  width: RenderWidth,
   onPage: (page: number, image: Uint8Array<ArrayBuffer>, size: PageSize) => Promise<boolean | void>,
 ): Promise<void> {
   const pdf = await openForRender(bytes);
