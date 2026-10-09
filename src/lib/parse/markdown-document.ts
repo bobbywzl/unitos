@@ -10,7 +10,7 @@ import type {
 } from "mdast";
 import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
-import { unified } from "unified";
+import { type Plugin, unified } from "unified";
 import { MARKDOWN_EXTENSIONS } from "@/lib/markdown-file";
 import { decodeTextFile } from "@/lib/parse/charset";
 import type { ParsedDocument } from "@/lib/parse/types";
@@ -271,8 +271,9 @@ function tablesOneByOne(resolve: TableResolver): TableResolver {
   };
 }
 
-function remarkTablesOneByOne(this: { data: () => Record<string, unknown> }) {
-  const extensions = (this.data().micromarkExtensions ?? []) as Array<{ flow?: Record<string, FlowConstruct | FlowConstruct[]> }>;
+const remarkTablesOneByOne: Plugin<[], Root> = function () {
+  const data = this.data() as { micromarkExtensions?: unknown[] };
+  const extensions = (data.micromarkExtensions ?? []) as Array<{ flow?: Record<string, FlowConstruct | FlowConstruct[]> }>;
   for (const extension of extensions) {
     const flow = extension.flow;
     if (!flow) continue;
@@ -284,7 +285,7 @@ function remarkTablesOneByOne(this: { data: () => Record<string, unknown> }) {
       );
     }
   }
-}
+};
 
 // The mdast tree as HTML for the walk.
 class Renderer {
