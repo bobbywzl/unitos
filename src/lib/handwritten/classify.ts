@@ -43,6 +43,14 @@ export function junkTextLayer(blocks: ParsedBlock[]): boolean {
   return total > 0 && junk / total >= JUNK_SHARE;
 }
 
+/** The characters the blocks hold, less the tabs and line breaks a table's
+    cells and a block's lines are joined with: separators, not text. Images
+    benchmark finding: a pencil sketch's OCR specks, set as two tables of
+    tabs, read as 493 characters a page; 92 without the separators. */
+export function blockChars(blocks: ParsedBlock[]): number {
+  return blocks.reduce((n, b) => n + b.text.replace(/[\t\n]/g, "").length, 0);
+}
+
 const classifyOutputSchema = z.object({ kind: z.enum(["article", "scan", "handwritten"]) });
 
 /** The text layer holds next to no text, or junk: a parse of it is an empty
@@ -68,9 +76,9 @@ export function textLayerVerdict(
   pageCount: number,
   layerChars = 0,
 ): { kind: "article" | null; fallback: PdfKind; perPage: number; junk: boolean; textChars: number } {
-  const blockChars = blocks.reduce((n, b) => n + b.text.length, 0);
-  const textChars = Math.max(blockChars, layerChars);
-  const perPage = blockChars / Math.max(1, pageCount);
+  const parsedChars = blockChars(blocks);
+  const textChars = Math.max(parsedChars, layerChars);
+  const perPage = parsedChars / Math.max(1, pageCount);
   const layerPerPage = textChars / Math.max(1, pageCount);
   const junk = junkTextLayer(blocks);
   const fallback: PdfKind =

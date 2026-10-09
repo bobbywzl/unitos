@@ -1,8 +1,8 @@
 {
  "total": {
-  "a": 0.948,
+  "a": 0.956,
   "b": 0.988,
-  "all": 0.968
+  "all": 0.972
  },
  "files": {
   "a-tracemonkey": 1,
@@ -143,7 +143,7 @@
   "a-cad-simple": 1,
   "a-vector-drawing": 1,
   "a-drawing-tutorial": 1,
-  "a-sketch-junk-ocr": 0.25,
+  "a-sketch-junk-ocr": 0.8,
   "a-glyph-names": 1,
   "a-ocr-ccitt": 1,
   "a-ocr-francais": 1,
