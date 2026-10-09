@@ -521,15 +521,21 @@ export type GlyphScores = {
 const NEGATED = "(negated relation)";
 const MAPSTO = "↦";
 
-/** A figure's caption that is a caption ("Figure 3.", "Table 2"), not the words of its picture. */
+/** A figure's caption that is a caption ("Figure 3.", "Table 2"), not the words of its picture: its label opens
+    it, or a panel's label does ("(a) …"): a panel's caption, or panels' captions the parse sets before the
+    float's caption ("(a) Original image A. … Figure 4.12 Image reconstruction …"). Read as its picture's words,
+    such a caption's symbols counted from the figure's region alone, which leaves out a caption beside it: the MML
+    book's p. 137, "Â(k) = ∑ki=1 σiAi" in Figure 4.12's margin caption, counted as a ∑ the candidate never
+    printed, though its caption prints it. */
 const OWN_CAPTION_RE = /^\s*(?:fig(?:ure)?\.?|table|tab\.|abbildung|abb\.|tabelle)\s*[\dIVXLivxl]+/i;
+const ownCaption = (text: string) => OWN_CAPTION_RE.test(text.trim()) || /^\s*\([a-z]\)\s+\S/.test(text);
 
 /** The words a figure's caption holds that are its picture's own labels (a
     diagram read with its labels as its caption, no "Figure N"): the region
     shows them, so they count once, with the region's glyphs. */
 function pictureWords(block: Extract<Doc["blocks"][number], { kind: "figure" }>): string {
   const caption = (block.caption ?? []).map((s) => s.text).join("");
-  return block.mathImage ?? (OWN_CAPTION_RE.test(caption.trim()) ? "" : caption);
+  return block.mathImage ?? (ownCaption(caption) ? "" : caption);
 }
 
 /** Every character a candidate prints: its words, its list markers, its
@@ -561,7 +567,7 @@ function printedText(doc: Doc): string {
         // A crop's glyphs are counted from its region (glyphScores), and so
         // are a figure's whose caption is its picture's own words.
         if (b.mathImage && !b.at) parts.push(b.mathImage);
-        if (!b.at || b.mathImage !== undefined || OWN_CAPTION_RE.test((b.caption ?? []).map((s) => s.text).join("").trim())) spans(b.caption);
+        if (!b.at || b.mathImage !== undefined || ownCaption((b.caption ?? []).map((s) => s.text).join(""))) spans(b.caption);
         break;
       case "code":
         parts.push(b.text);
@@ -726,7 +732,7 @@ export function glyphScores(pages: PageGlyphs[], doc: Doc, range: [number, numbe
       // equations shown as pictures, as their labels are set in TeX's math
       // fonts; the count penalized the right reading of a diagram as a
       // figure, and would have rewarded cutting one into an equation.
-      const captioned = OWN_CAPTION_RE.test((block.caption ?? []).map((s) => s.text).join("").trim());
+      const captioned = ownCaption((block.caption ?? []).map((s) => s.text).join(""));
       const drawnDiagram = shapesIn(page, block.at.region).length > 0;
       if (!captioned && !drawnDiagram && glyphs.length > 0 && glyphs.every((g) => g.family !== null) && glyphs.some((g) => MATH.has(g.family ?? ""))) mathImages++;
       continue;
