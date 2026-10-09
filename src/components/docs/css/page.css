@@ -124,6 +124,12 @@
   height: 1px;
 }
 
+/* The text before the first pagination pass (ext/page.ts): unseen but
+   still focusable, so the first words drawn stand at the reading position. */
+.ProseMirror[data-docs-paging] {
+  opacity: 0;
+}
+
 /* The sheets behind the flow of text (each sheet: frame.css). */
 .docs-sheets {
   position: absolute;
