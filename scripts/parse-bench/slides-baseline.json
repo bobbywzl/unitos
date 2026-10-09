@@ -1,9 +1,9 @@
 {
  "total": {
-  "composite": 0.996,
+  "composite": 0.998,
   "words": 0.995,
   "order": 1,
-  "bullets": 0.984,
+  "bullets": 0.996,
   "tables": 0.997,
   "notes": 1,
   "chartValues": 1,
@@ -851,10 +851,10 @@
    "lost": 0
   },
   "ox-main-buautonum-type-ea1jpnkorperiod": {
-   "composite": 0.875,
+   "composite": 1,
    "words": 1,
    "order": 1,
-   "bullets": 0.5,
+   "bullets": 1,
    "tables": null,
    "notes": null,
    "chartValues": null,
@@ -1236,10 +1236,10 @@
    "lost": 0
   },
   "lo-NumberedList-12ab-ab-34": {
-   "composite": 0.944,
+   "composite": 1,
    "words": 1,
    "order": 1,
-   "bullets": 0.778,
+   "bullets": 1,
    "tables": null,
    "notes": null,
    "chartValues": null,
@@ -1247,10 +1247,10 @@
    "lost": 0
   },
   "lo-tdf173712": {
-   "composite": 0.954,
+   "composite": 1,
    "words": 1,
    "order": 1,
-   "bullets": 0.817,
+   "bullets": 1,
    "tables": null,
    "notes": null,
    "chartValues": null,
@@ -1412,10 +1412,10 @@
    "lost": 0
   },
   "lo-tdf173712-liststyle": {
-   "composite": 0.981,
+   "composite": 1,
    "words": 1,
    "order": 1,
-   "bullets": 0.923,
+   "bullets": 1,
    "tables": null,
    "notes": null,
    "chartValues": null,

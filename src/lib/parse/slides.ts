@@ -713,24 +713,35 @@ function themeFont(name: string | undefined, s: TextSettings): string | null {
 function renderTextBody(txBody: Element | null, s: TextSettings): RenderedText {
   if (!txBody) return { html: "", text: "" };
   const paragraphs = children(txBody, "p");
-  const counters = new Map<number, number>();
+  const counters = new Map<number, { n: number; scheme: string; startAt: number }>();
   const rows: RenderedText[] = [];
   for (const p of paragraphs) {
     const pPr = child(p, "pPr");
     const own = parseParagraphProps(pPr);
     const level = Math.max(0, Math.min(8, intAttr(pPr, "lvl") ?? 0));
-    // A numbered paragraph counts on from the last at its level; a paragraph
-    // at a shallower level restarts the deeper counters.
+    // Numbering as PowerPoint counts it: a numbered paragraph counts on
+    // from the last of its level while the scheme and the start stay the
+    // same; a paragraph of its level with words and no number, a new
+    // scheme, or a new start begins again at the start; a shallower
+    // paragraph ends the deeper counts. Slides benchmark finding (the
+    // numbers LibreOffice's testTdf173712 records from PowerPoint): lists
+    // counted on through a bulleted line, a new start, or a new scheme.
     for (const key of [...counters.keys()]) if (key > level) counters.delete(key);
     const runs = renderRuns(p, own, level, s);
     const bullet = levelProp(s.chain, level, "bullet", own);
     const hasWords = runs.text.trim().length > 0;
     let bulletHtml = "";
     let bulletText = "";
+    if (hasWords && bullet?.kind !== "auto") counters.delete(level);
     if (bullet && bullet.kind !== "none" && hasWords) {
       const glyph = bullet.kind === "char" ? bulletGlyph(bullet.char, bullet.font) : null;
-      const label = glyph ? glyph.char : autoNumberLabel(bullet.scheme, (counters.get(level) ?? bullet.startAt - 1) + 1);
-      if (bullet.kind === "auto") counters.set(level, (counters.get(level) ?? bullet.startAt - 1) + 1);
+      let label = glyph?.char ?? "";
+      if (bullet.kind === "auto") {
+        const last = counters.get(level);
+        const n = last && last.scheme === bullet.scheme && last.startAt === bullet.startAt ? last.n + 1 : bullet.startAt;
+        counters.set(level, { n, scheme: bullet.scheme, startAt: bullet.startAt });
+        label = autoNumberLabel(bullet.scheme, n);
+      }
       bulletText = `${label} `;
       const size = runs.firstSize * (bullet.sizePct ?? 1);
       const color = (bullet.color ? colorCss(bullet.color, s.palette) : null) ?? runs.firstColor;
