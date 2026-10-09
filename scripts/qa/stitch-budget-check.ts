@@ -3,7 +3,7 @@
 // tags as aliases, the reply's citations, and the skeleton's parts without
 // a contents call. No model, no database rows.
 // Run: npx tsx scripts/qa/stitch-budget-check.ts
-import { STITCH_HISTORY_FIRST_MIN, STITCH_HOLISTIC_WHOLE_THRESHOLD, STITCH_NOTES_BUDGET, STITCH_READ_HISTORY, STITCH_SELECTED_BLOCKS, STITCH_SELECTED_BUDGET, STITCH_WHOLE_THRESHOLD } from "../../src/lib/derive/config";
+import { STITCH_HISTORY_FIRST_MIN, STITCH_HOLISTIC_WHOLE_THRESHOLD, STITCH_INDEX, STITCH_INDEX_TEXT_CHARS, STITCH_INDEX_TEXTS, STITCH_INDEX_TOP, STITCH_NOTES_BUDGET, STITCH_READ_HISTORY, STITCH_SELECTED_BLOCKS, STITCH_SELECTED_BUDGET, STITCH_WHOLE_THRESHOLD } from "../../src/lib/derive/config";
 import { translatorFor } from "../../src/lib/i18n/dictionaries";
 import { parseMarkdown } from "../../src/lib/parse/markdown";
 import { currentSkeleton, partsFor, type Skeleton } from "../../src/lib/graph/skeleton";
@@ -44,6 +44,7 @@ import {
   historyWithAliases,
   interleave,
   liveLinks,
+  matchTexts,
   quoteBlocks,
   nameHits,
   ownNotesQuestion,
@@ -1341,4 +1342,66 @@ void (async () => {
   // The holistic whole read (COST9-02): the threshold and the class.
   check("config: STITCH_HOLISTIC_WHOLE_THRESHOLD is above the whole threshold, under the skeleton budget", STITCH_HOLISTIC_WHOLE_THRESHOLD > STITCH_WHOLE_THRESHOLD && STITCH_HOLISTIC_WHOLE_THRESHOLD <= 60_000);
   check("commandIntent: the main threads, 主要线索, what is left unanswered are holistic; what one document adds, a date question are not", commandIntent("What are the main threads across these documents?", false, "question") === "holistic" && commandIntent("这些文档之间的主要线索是什么？", false, "question") === "holistic" && commandIntent("What question do the documents raise but leave unanswered?", false, "question") === "holistic" && commandIntent("When was The Antichrist printed?", false, "question") === "fact" && commandIntent("Where do my notes disagree with the documents?", false, "question") === "fact");
+}
+
+// [retrieval10] Round 10 (RETRIEVAL10): the text matches' text beside a cut
+// (COST10-01), the index query's cap (REV10-07), asksDates on "when X was
+// printed" (ANS10-07), the footnote lines in a dates cut (ANS10-08).
+// Synchronous: these run before the async block above prints the tally.
+{
+  const prof10 = null as unknown as Parameters<typeof answerMessages>[0]["profile"];
+  const mk10 = (id: string, title: string, n: number) => ({
+    id, title, generatedCommand: null, skeleton: null, handwritten: false, importRev: null, pageLabels: null, conversionStatus: "NONE", conversionError: null, video: null,
+    blocks: Array.from({ length: n }, (_, i) => ({ id: `${id}${i + 1}`, type: "PARAGRAPH", text: `paragraph ${i + 1} of ${title}`, startTime: null, endTime: null, cell: null, page: null })),
+  });
+  const r10 = readingOf([mk10("p", "Pity", 6), mk10("q", "Will", 4)] as unknown as Parameters<typeof readingOf>[0]);
+  const skel10 = (id: string, n: number, gist: string) =>
+    ({ v: 1, gist, chars: 0, built: 0, parts: [{ blockId: `${id}3`, title: "Part two", summary: "the second part" }], lines: Array.from({ length: n }, (_, i) => ({ blockId: `${id}${i + 1}`, hash: "", text: `line ${i + 1}` })) }) as unknown as Parameters<typeof skeletonView>[1];
+  const views10 = [skeletonView(r10.read[0], skel10("p", 6, "On pity.")), skeletonView(r10.read[1], skel10("q", 4, "On the will."))];
+  const rd10 = r10.rendered.filter((r) => r.letter === "A" || r.letter === "B");
+  const shown10 = new Set(["A1", "A5", "B2"]);
+  const textOf10 = (alias: string) => r10.blockByRef.get(alias)?.text;
+  const matches10 = ["A5", "B2", "A3"];
+  const texts10 = matchTexts(shown10, true, matches10, textOf10);
+  check("config: 20 texts of 600 characters beside a cut, never more texts than matches", STITCH_INDEX_TEXTS === 20 && STITCH_INDEX_TEXT_CHARS === 600 && STITCH_INDEX_TEXTS <= STITCH_INDEX_TOP);
+  check("matchTexts: beside a cut a targeted command reads the matches' text, best first", texts10.map((t) => `${t.alias}:${t.text}`).join("|") === "A5:paragraph 5 of Pity|B2:paragraph 2 of Will|A3:paragraph 3 of Pity");
+  check("matchTexts: nothing when every line is read (under STITCH_CUT_OVER), nothing for a holistic, follow-up or meta command", matchTexts(null, true, matches10, textOf10).length === 0 && matchTexts(shown10, false, matches10, textOf10).length === 0);
+  // STITCH_INDEX=0: no targeted intent (pickBlocks), so no texts; the budget
+  // check runs with the flag off too.
+  const intent10 = STITCH_INDEX ? commandIntent("What does pity do to natural selection?", false, "question") : null;
+  const targeted10 = intent10 === "fact" || intent10 === "links" || intent10 === "page";
+  check(`matchTexts: STITCH_INDEX=${STITCH_INDEX ? "1" : "0"} → ${STITCH_INDEX ? "the texts beside the cut" : "no texts (the round 8 reading)"}`, matchTexts(shown10, targeted10, matches10, textOf10).length === (STITCH_INDEX ? 3 : 0));
+  const long10 = matchTexts(shown10, true, ["L1"], () => "word ".repeat(300))[0].text;
+  check("matchTexts: a block cut to its first 600 characters, ending in …; a short block whole", long10.length === 601 && long10.endsWith("…") && long10.startsWith("word word") && matchTexts(shown10, true, ["A1"], textOf10)[0].text === "paragraph 1 of Pity");
+  check("matchTexts: at most 20 of the 25 matches", matchTexts(shown10, true, Array.from({ length: 25 }, (_, i) => `X${i}`), (a) => `text of ${a}`).length === 20);
+  check("matchTexts: whitespace runs as one space; a block with no text left out", matchTexts(shown10, true, ["W", "E"], (a) => (a === "W" ? "a\n\n  b\tc " : undefined)).map((t) => t.text).join("|") === "a b c");
+  const sysCut10 = skeletonSystem(views10, rd10, shown10, prof10, null, texts10);
+  const sysPlain10 = skeletonSystem(views10, rd10, shown10, prof10);
+  check(
+    "skeletonSystem: the texts section after the shown lines, the uncached tail; the heads and lines before it are the same bytes",
+    sysCut10.startsWith(sysPlain10) && sysCut10.slice(sysPlain10.length) === "\n\nThe first 600 characters of the 3 blocks whose words match the command best, best first (their skeleton lines above may not show the match):\n[block A5] paragraph 5 of Pity\n[block B2] paragraph 2 of Will\n[block A3] paragraph 3 of Pity",
+    sysCut10.slice(sysPlain10.length),
+  );
+  check("skeletonSystem: without texts the prompt is as before (STITCH_INDEX=0, under the threshold, a holistic command)", skeletonSystem(views10, rd10, shown10, prof10, null, []) === sysPlain10 && skeletonSystem(views10, rd10, null, prof10, null, []) === skeletonSystem(views10, rd10, null, prof10));
+  // REV10-07: the index query takes the last 200 tokens, so the command and
+  // its expansion (last in the ranker's query) outlive a long paste.
+  const q10 = searchQuery(`${Array.from({ length: 1000 }, (_, i) => `w${i}`).join(" ")}\nNietzsche pity`) ?? "";
+  check("searchQuery: the last 200 tokens only; the command's and the expansion's words kept, the paste's first words dropped (REV10-07)", q10.split(" | ").length <= 200 && q10.endsWith("'nietzsche' | 'pity'") && !q10.includes("'w0'"), `${q10.split(" | ").length} lexemes`);
+  check("searchQuery: a short query is as before", searchQuery("Why did Nietzsche break with Wagner?") === "'nietzsche' | 'break' | 'wagner'");
+  // ANS10-07: "when X was printed" is a date question; "when he says this" is not.
+  check(
+    "asksDates: 'when … printed/published/written', 何年, 什么时候…印刷; not 'when he says this' (ANS10-07)",
+    asksDates("Do Ludovici's Notes and Mencken agree on when The Antichrist was printed?") && asksDates("Do they agree on when it was published?") && asksDates("《敌基督》是何年印刷的？") && asksDates("路德维奇的注释和门肯对《敌基督》什么时候印刷的说法一致吗？") && !asksDates("What does he mean when he says this?") && !asksDates("What did Nietzsche think when he broke with Wagner?"),
+  );
+  // ANS10-08: a footnote line's year is the translator's, not the document's.
+  const fn10 = [
+    { a: "K39", t: "[Footnote 1: _Translator's Note_.--Matthias Claudius (1740-1815), a popular poet, and friend of" },
+    { a: "AC80", t: "[5] David Friedrich Strauss (1808-74), author of \"Das Leben Jesu\" (1835-6), a very famous" },
+    { a: "AD36", t: "In the autumn of 1883 my brother left the Engadine for Germany and stayed there a few weeks." },
+    { a: "X7", t: "February, 1896" },
+  ];
+  const rf10 = rank(fn10, (i) => i.t, "Which dates do the documents disagree on?", { stop: true, extra: [YEAR_TERM] });
+  const sc10 = (a: string) => rf10.find((r) => r.item.a === a)!.score;
+  check("rank: a footnote line ([Footnote …, [5] …) holds no YEAR_TERM; a body line with a year does (ANS10-08)", sc10("K39") === 0 && sc10("AC80") === 0 && sc10("AD36") > 0 && sc10("X7") > 0);
+  check("rank: a footnote line still ranks by its own words", rank(fn10, (i) => i.t, "Strauss", { stop: true, extra: [YEAR_TERM] })[0].item.a === "AC80");
 }
