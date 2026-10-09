@@ -396,7 +396,9 @@ function checkCase(c: AssistantCase, f: Fixture, ctx: PlanContext, read: ReadAct
   const share = cjkShare(answer);
   checks.push({ name: "answer language", ok: c.lang === "zh" ? share > 0.3 : share < 0.2, detail: `CJK share ${share.toFixed(2)}` });
   if (e.change && actions.length > 0) {
-    const long = actions.filter((a) => !a.description || wordCount(a.description) > 40);
+    // One sentence: 40 words, or 90 characters of Chinese (wordCount counts
+    // each CJK character as a word).
+    const long = actions.filter((a) => !a.description || (cjkShare(a.description) > 0.3 ? a.description.length > 90 : wordCount(a.description) > 40));
     checks.push({ name: "descriptions are one sentence", ok: long.length === 0, detail: long.length > 0 ? `${long.length} too long or missing` : "" });
   }
   return checks;
