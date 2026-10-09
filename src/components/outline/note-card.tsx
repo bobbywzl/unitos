@@ -495,7 +495,7 @@ const NoteCardBody = memo(function NoteCardBody({
     }
   }
   const dropShown = useContext(CardDropShown);
-  const cardDrop = useCardDropTarget(note.id, (end) => void takeDrop(end), takesDrop && dropShown);
+  const cardDrop = useCardDropTarget(note.id, (end) => void takeDrop(end), takesDrop, dropShown);
   const [wasMerging, setWasMerging] = useState(false);
   const [merged, setMerged] = useState(false);
   if (merging !== wasMerging) {
