@@ -1,9 +1,9 @@
 {
  "total": {
-  "a": 0.963,
+  "a": 0.969,
   "b": 0.943,
   "c": 0.907,
-  "all": 0.938
+  "all": 0.94
  },
  "files": {
   "a-mutagen-silence-mp3": 1,
@@ -210,7 +210,7 @@
   "a-derived-audio-mov": 0,
   "a-derived-rf64-wav": 0,
   "a-derived-bwf-wav": 1,
-  "a-derived-id3-aac": 0.5,
+  "a-derived-id3-aac": 1,
   "a-derived-big-cover-mp3": 1,
   "b-imsc-basictimecontainment001": 1,
   "b-imsc-basictimecontainment002": 0.932,
