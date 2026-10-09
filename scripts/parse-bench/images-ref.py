@@ -134,13 +134,29 @@ def derive(f, out):
     elif op == "long-screenshot":
         im = Image.open(srcs[0]).convert("RGB")
         w = 1170
+        h = d.get("height", 16000)
         part = im.resize((w, round(im.height * w / im.width)), Image.LANCZOS)
-        canvas = Image.new("RGB", (w, 16000), "white")
+        canvas = Image.new("RGB", (w, h), "white")
         y = 0
-        while y < 16000:
+        while y < h:
             canvas.paste(part, (0, y))
             y += part.height
         canvas.save(out, "PNG")
+    elif op == "join-pages":
+        import pymupdf
+
+        doc = pymupdf.open()
+        for index, first, last in d["pages"]:
+            doc.insert_pdf(pymupdf.open(srcs[index]), from_page=first - 1, to_page=last - 1)
+        doc.save(out)
+    elif op == "jbig2-giant":
+        w, h = d["size"]
+        with open(out, "wb") as fh:
+            fh.write(jbig2_page(srcs[0], w, h))
+    elif op == "png-bomb":
+        w, h = d["size"]
+        with open(out, "wb") as fh:
+            fh.write(white_png(w, h))
     elif op == "panorama":
         im = Image.open(srcs[0]).convert("RGB")
         band = im.crop((0, im.height // 3, im.width, im.height // 3 + im.width // 9))
@@ -154,6 +170,74 @@ def derive(f, out):
         Image.open(srcs[0]).save(out, "WEBP", lossless=True)
     else:
         raise ValueError(f"unknown op {op}")
+
+
+def one_image_pdf(image_dict, data, pw, ph):
+    """A one-page PDF drawing one image XObject over the whole page."""
+    content = f"q {pw:.2f} 0 0 {ph:.2f} 0 0 cm /Im0 Do Q".encode()
+    objs = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {pw:.2f} {ph:.2f}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>".encode(),
+        f"<< {image_dict} /Length {len(data)} >>\nstream\n".encode() + data + b"\nendstream",
+        f"<< /Length {len(content)} >>\nstream\n".encode() + content + b"\nendstream",
+    ]
+    pdf = bytearray(b"%PDF-1.5\n%\xe2\xe3\xcf\xd3\n")
+    offsets = []
+    for i, body in enumerate(objs):
+        offsets.append(len(pdf))
+        pdf += f"{i + 1} 0 obj\n".encode() + body + b"\nendobj\n"
+    xref = len(pdf)
+    pdf += f"xref\n0 {len(objs) + 1}\n0000000000 65535 f \n".encode()
+    for o in offsets:
+        pdf += f"{o:010d} 00000 n \n".encode()
+    pdf += f"trailer\n<< /Size {len(objs) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    return bytes(pdf)
+
+
+def jbig2_page(src, w, h):
+    """A photo thresholded to one bit, scaled to w x h, coded as JBIG2: one
+    immediate lossless generic region in MMR (T.6) coding, as a large-format
+    scanner's 1-bit page. 300 dpi sets the page size."""
+    import struct
+
+    from PIL import TiffImagePlugin
+
+    im = Image.open(src).convert("L").point(lambda v: 0 if v > 150 else 255).convert("1")
+    im = im.resize((w, h), Image.NEAREST)
+    # One strip, so the T.6 data is one stream.
+    TiffImagePlugin.STRIP_SIZE = 2**31 - 1
+    buf = io.BytesIO()
+    im.save(buf, "TIFF", compression="group4")
+    tif = Image.open(io.BytesIO(buf.getvalue()))
+    start, length = tif.tag_v2[273][0], tif.tag_v2[279][0]
+    mmr = buf.getvalue()[start : start + length]
+
+    def segment(number, kind, payload):
+        # Segment number, type, no referred segments, page 1, data length.
+        return struct.pack(">IBBBI", number, kind, 0, 1, len(payload)) + payload
+
+    page_info = struct.pack(">IIIIBH", w, h, 300, 300, 0, 0)
+    region = struct.pack(">IIIIB", w, h, 0, 0, 0) + bytes([1]) + mmr
+    stream = segment(0, 48, page_info) + segment(1, 39, region) + segment(2, 49, b"")
+    image = f"/Type /XObject /Subtype /Image /Width {w} /Height {h} /ColorSpace /DeviceGray /BitsPerComponent 1 /Filter /JBIG2Decode"
+    return one_image_pdf(image, stream, w * 72 / 300, h * 72 / 300)
+
+
+def white_png(w, h):
+    """A white 8-bit gray PNG of w x h, written row by row: a small file that
+    decodes to w * h bytes and more."""
+    import struct
+    import zlib
+
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+
+    z = zlib.compressobj(9)
+    row = b"\x00" + b"\xff" * w
+    parts = [z.compress(row) for _ in range(h)]
+    parts.append(z.flush())
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 0, 0, 0, 0)) + chunk(b"IDAT", b"".join(parts)) + chunk(b"IEND", b"")
 
 
 def thumb_rgb(im):
@@ -173,12 +257,16 @@ def thumb_rgb(im):
     return {"w": t.width, "h": t.height, "rgb": base64.b64encode(t.tobytes()).decode()}
 
 
-def image_ref(path):
+def image_ref(path, header_only=False):
     ref = {"opens": False}
     try:
         im = Image.open(path)
         ref.update(format=im.format, mode=im.mode, width=im.width, height=im.height, frames=getattr(im, "n_frames", 1))
         ref["orientation"] = im.getexif().get(0x0112)
+        if header_only:
+            # A picture too large to decode here: the header is the reference.
+            ref.update(uprightWidth=im.width, uprightHeight=im.height, opens=True, headerOnly=True)
+            return ref
         im.seek(0)
         try:
             ImageFile.LOAD_TRUNCATED_IMAGES = False
@@ -245,7 +333,7 @@ for f in sorted(corpus["files"], key=lambda f: "derived" in f):
         continue
     ref_path = os.path.join(REFS, f["id"] + ".json")
     if force or not os.path.exists(ref_path):
-        ref = pdf_ref(out) if f["section"] == "a" else image_ref(out)
+        ref = pdf_ref(out) if f["section"] == "a" else image_ref(out, f.get("headerOnly", False))
         with open(ref_path, "w") as fh:
             json.dump(ref, fh)
 
