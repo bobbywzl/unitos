@@ -6,7 +6,7 @@ import { SaxesParser } from "saxes";
 // runs (saxes, with jsdom's options and its doctype entities), so a part
 // reads the same and a part jsdom refuses is refused here too, and builds
 // small elements with the few DOM members lib/parse/office.ts's helpers
-// read (localName, the element siblings, attributes, textContent). A
+// read (localName, children, attributes, textContent). A
 // caller may take an element when it closes and drop it from the tree
 // (`take`): a worksheet's rows are read one at a time and never held
 // together. Sheets benchmark finding.
@@ -17,10 +17,8 @@ export class XmlElement {
   readonly localName: string;
   readonly parent: XmlElement | null;
   readonly attributes: XmlAttribute[];
-  firstElementChild: XmlElement | null = null;
-  lastElementChild: XmlElement | null = null;
-  nextElementSibling: XmlElement | null = null;
-  previousElementSibling: XmlElement | null = null;
+  // The child elements, in order: a plain array, read in linear time.
+  readonly children: XmlElement[] = [];
   // Text and elements in document order: text as strings.
   readonly nodes: (XmlElement | string)[] = [];
 
@@ -28,12 +26,6 @@ export class XmlElement {
     this.localName = localName;
     this.parent = parent;
     this.attributes = attributes;
-  }
-
-  get children(): XmlElement[] {
-    const out: XmlElement[] = [];
-    for (let c = this.firstElementChild; c; c = c.nextElementSibling) out.push(c);
-    return out;
   }
 
   /** The attribute with this qualified name (prefix:local), as the DOM's
@@ -56,7 +48,7 @@ export class XmlElement {
   getElementsByTagNameNS(_ns: string, localName: string): XmlElement[] {
     const out: XmlElement[] = [];
     const walk = (el: XmlElement) => {
-      for (let c = el.firstElementChild; c; c = c.nextElementSibling) {
+      for (const c of el.children) {
         if (c.localName === localName) out.push(c);
         walk(c);
       }
@@ -74,10 +66,7 @@ export class XmlElement {
       return;
     }
     this.nodes.push(child);
-    child.previousElementSibling = this.lastElementChild;
-    if (this.lastElementChild) this.lastElementChild.nextElementSibling = child;
-    else this.firstElementChild = child;
-    this.lastElementChild = child;
+    this.children.push(child);
   }
 }
 
@@ -130,10 +119,7 @@ export function parseXmlStream(text: string, take?: (el: XmlElement) => boolean)
       const parent = el.parent;
       // The element taken is its parent's last child: drop it.
       parent.nodes.pop();
-      const prev = el.previousElementSibling;
-      if (prev) prev.nextElementSibling = null;
-      else parent.firstElementChild = null;
-      parent.lastElementChild = prev;
+      parent.children.pop();
     }
   });
   // Text outside the root is not part of the tree.

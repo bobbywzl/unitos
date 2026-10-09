@@ -226,7 +226,10 @@ type Look = {
   bold: boolean;
   italic: boolean;
   underline: boolean;
+  /** Struck once (w:strike) and struck twice (w:dstrike): two properties
+      a style and a run set apart; either strikes the words. */
   strike: boolean;
+  doubleStrike: boolean;
   smallCaps: boolean;
   vert: "sup" | "sub" | null;
   hidden: boolean;
@@ -248,6 +251,7 @@ const PLAIN_LOOK: Look = {
   italic: false,
   underline: false,
   strike: false,
+  doubleStrike: false,
   smallCaps: false,
   vert: null,
   hidden: false,
@@ -295,8 +299,10 @@ function applyRPr(look: Look, rPr: Element | null, styles: Styles): Look {
         out.underline = flag(el) ?? out.underline;
         break;
       case "strike":
-      case "dstrike":
         out.strike = flag(el) ?? out.strike;
+        break;
+      case "dstrike":
+        out.doubleStrike = flag(el) ?? out.doubleStrike;
         break;
       case "color":
         out.color = hexColor(attr(el, "val"));
@@ -833,6 +839,8 @@ class Line {
   readonly sizes = new Map<number, number>();
   /** Every run with words is code (Look.code). */
   mono = true;
+  /** A run with words is set in a named face that is not monospace. */
+  proportional = false;
 
   /** No words, and no underlined tab (a line to fill in). */
   get empty(): boolean {
@@ -854,13 +862,14 @@ class Line {
       this.size = Math.max(this.size, look.size);
       this.sizes.set(look.size, (this.sizes.get(look.size) ?? 0) + words);
       if (!look.code) this.mono = false;
+      if (look.font !== "" && !MONO_FONT.test(look.font)) this.proportional = true;
     }
     const marks: Mark[] = [];
     if (look.bold) marks.push("bold");
     if (look.italic) marks.push("italic");
     // A link's underline and color are the link's look, not the words'.
     if (look.underline && !link) marks.push("underline");
-    if (look.strike) marks.push("strike");
+    if (look.strike || look.doubleStrike) marks.push("strike");
     if (look.smallCaps) marks.push("smallCaps");
     if (look.vert) marks.push(look.vert);
     if (look.code) marks.push("code");
@@ -895,6 +904,7 @@ class Line {
     this.bookmarks.push(...other.bookmarks);
     this.size = Math.max(this.size, other.size);
     this.mono = this.mono && other.mono;
+    this.proportional ||= other.proportional;
   }
 
   /** The raw characters from `from` to `to` alone (a typed marker cut from
@@ -1146,7 +1156,51 @@ type ListLine = {
   align: ParaProps["align"];
   /** The line's paragraph's tab stops. */
   tabs?: TabStop[];
+  /** The Word list (numId) and its level (ilvl) that number the line;
+      none for a marker typed before a tab. */
+  numbering?: { list: string; level: number };
 };
+/** Each list line's depth, and each depth's indent step in twips. A line's
+    depth is its indent's rank among the list's indents, as the page shows
+    the nesting: Word's second-level list styles (List Bullet 2) are a list
+    of their own at level 0, drawn one step in. Lines of one Word list at
+    one step but at different levels nest by their levels, deepest last:
+    a legal list sets "1.", "1.1", and "1.1.1" at one indent, and a level
+    may stand under a tenth of an inch in from the level above it (Word
+    benchmark finding: the levels read as one, and the import drew "1.1"
+    as a paragraph). The step's indent stays each such depth's. */
+function listDepths(lines: ListLine[]): { depths: number[]; steps: number[] } {
+  const stepIndents: number[] = [];
+  for (const indent of [...new Set(lines.map((l) => l.indent))].sort((a, b) => a - b)) {
+    if (stepIndents.length === 0 || indent - (stepIndents.at(-1) ?? 0) >= INDENT_SAME_TWIPS) stepIndents.push(indent);
+  }
+  const stepOf = (indent: number) => Math.max(0, stepIndents.findLastIndex((s) => s <= indent));
+  // At each step, each Word list's levels there, in order.
+  const levels = stepIndents.map(() => new Map<string, number[]>());
+  for (const line of lines) {
+    if (!line.numbering) continue;
+    const at = levels[stepOf(line.indent)];
+    const own = at.get(line.numbering.list) ?? [];
+    if (!own.includes(line.numbering.level)) own.push(line.numbering.level);
+    at.set(line.numbering.list, own);
+  }
+  for (const at of levels) for (const own of at.values()) own.sort((a, b) => a - b);
+  // A step holds as many depths as the most levels one list sets there.
+  const steps: number[] = [];
+  const first: number[] = [];
+  stepIndents.forEach((indent, s) => {
+    first.push(steps.length);
+    const n = Math.max(1, ...[...levels[s].values()].map((own) => own.length));
+    for (let k = 0; k < n; k++) steps.push(indent);
+  });
+  const depths = lines.map((line) => {
+    const s = stepOf(line.indent);
+    const sub = line.numbering ? Math.max(0, levels[s].get(line.numbering.list)?.indexOf(line.numbering.level) ?? 0) : 0;
+    return first[s] + sub;
+  });
+  return { depths, steps };
+}
+
 /** A list being read: its lines, whether it is a contents list, the notes
     its lines cite, its first line's paragraph (the space above the list),
     and the gap running on from its last line. */
@@ -1332,19 +1386,12 @@ class DocxReader {
     const list = this.list;
     this.list = null;
     if (!list || list.lines.length === 0) return;
-    // A line's depth is its indent's rank among the list's indents, as the
-    // page shows the nesting: Word's second-level list styles (List Bullet
-    // 2) are a list of their own at level 0, drawn one step in.
-    const steps: number[] = [];
-    for (const indent of [...new Set(list.lines.map((l) => l.indent))].sort((a, b) => a - b)) {
-      if (steps.length === 0 || indent - (steps.at(-1) ?? 0) >= INDENT_SAME_TWIPS) steps.push(indent);
-    }
-    const depthOf = (indent: number) => Math.max(0, steps.findLastIndex((s) => s <= indent));
+    const { depths, steps } = listDepths(list.lines);
     const joined = new Joined();
     const entries: Span[] = [];
     list.lines.forEach((line, i) => {
       if (i > 0) joined.add("\n");
-      joined.add("  ".repeat(depthOf(line.indent)));
+      joined.add("  ".repeat(depths[i]));
       if (line.marker) joined.add(`${line.marker} `);
       entries.push({ start: joined.text.length, end: joined.text.length + line.words.text.length });
       joined.add(line.words);
@@ -1365,7 +1412,7 @@ class DocxReader {
     // Each depth's indent as Word sets it: its first line's words and marker.
     if (!list.contents) {
       const indents = steps.map((step, d) => {
-        const line = list.lines.find((l) => depthOf(l.indent) === d);
+        const line = list.lines.find((_, k) => depths[k] === d);
         const left = Math.max(0, Math.min(100_000, line?.indent ?? step));
         return { left: points(left), first: points(Math.max(-left, Math.min(100_000, line?.first ?? 0))) };
       });
@@ -1428,6 +1475,14 @@ class DocxReader {
           break;
         case "AlternateContent":
           this.body(child(node, "Choice") ?? child(node, "Fallback") ?? node, table);
+          break;
+        // A picture straight in the body, out of any paragraph (a file a
+        // tool wrote; Word benchmark finding: d2p-has_pict's one picture):
+        // a figure of its own, as in a paragraph of its own.
+        case "pict":
+        case "drawing":
+          this.close();
+          this.loosePicture(node);
           break;
         case "bookmarkStart": {
           const name = attr(node, "name");
@@ -1533,6 +1588,7 @@ class DocxReader {
           gap: this.listGap(props),
           align: props.align,
           tabs: props.tabs,
+          ...(numbered && props.numId ? { numbering: { list: props.numId, level: props.ilvl } } : {}),
         });
         this.list.first ??= props;
         this.list.trail = { props, blank: 0 };
@@ -1542,14 +1598,18 @@ class DocxReader {
     }
 
     // Code: a paragraph in a code style, or every run of it monospace. A
-    // blank line inside code is the code's own.
+    // blank line inside code is the code's own. A code style's paragraph
+    // whose words are set in a face that is not monospace is prose, as Word
+    // draws it (Word benchmark finding: Russian filings in "HTML
+    // Preformatted" with every run in Times New Roman read as code and
+    // lost their bold and their links).
     const blank = pieces.every((piece) => piece.kind === "words" && piece.line.empty);
     if (this.code && blank) {
       this.code.push("");
       return;
     }
     // A line of underlined tabs alone (a line to fill in) holds no words: no code.
-    if (only && props.heading === null && props.role !== "title" && (props.role === "code" || (only.mono && only.text.trim() !== ""))) {
+    if (only && props.heading === null && props.role !== "title" && ((props.role === "code" && !only.proportional) || (only.mono && only.text.trim() !== ""))) {
       this.closeList();
       (this.code ??= []).push(only.finish(true).text.replace(/\s+$/, ""));
       return;
@@ -1681,6 +1741,22 @@ class DocxReader {
     if (gap) gap.pageEnd = true;
   }
 
+  /** A drawing out of any paragraph: its pictures as a figure, its rule a
+      separator, its text boxes read after it. */
+  private loosePicture(el: Element) {
+    const pictures: Picture[] = [];
+    const sink: Sink = {
+      line: () => new Line(),
+      cut: (piece) => {
+        if (piece.kind === "figure") pictures.push(...piece.pictures);
+        else if (piece.kind === "rule") this.push({ type: "SEPARATOR", text: "---" });
+      },
+      floating: pictures,
+    };
+    this.drawing(el, sink);
+    if (pictures.length > 0) this.push(this.figureBlock(pictures));
+  }
+
   /** Pictures as a figure: each at its width in the text column. */
   private figureBlock(pictures: Picture[]): ParsedBlock {
     const images = pictures.map((pic) => {
@@ -1774,7 +1850,7 @@ class DocxReader {
   /** A display equation: an EQUATION of its own. KaTeX's check keeps a
       wrong formula out: one it cannot draw stays its readable characters. */
   private displayMath(math: Element, sink: Sink) {
-    const latex = ommlLatex(math);
+    const latex = linearTex(math) ?? ommlLatex(math);
     const text = ommlText(math);
     if (latex && texError(latex) === null) sink.cut({ kind: "math", latex, text });
     else sink.line().add(text, PLAIN_LOOK, null);
@@ -1783,7 +1859,7 @@ class DocxReader {
   /** An inline equation: its readable characters in the words, its LaTeX a
       math span over them. */
   private inlineMath(math: Element, line: Line) {
-    const latex = ommlLatex(math);
+    const latex = linearTex(math) ?? ommlLatex(math);
     const text = ommlText(math);
     if (!text) return;
     const start = line.text.length;
@@ -1873,7 +1949,7 @@ class DocxReader {
         case "t": {
           if (!shown) break;
           const at = line.text.length;
-          line.add(this.symbolText(cleanText(node.textContent ?? ""), look), look, target);
+          line.add(this.symbolText(cleanText(node.textContent ?? "").replace(LINE_SEPARATORS, "\n"), look), look, target);
           this.claimCustomMark(line, at);
           break;
         }
@@ -2014,10 +2090,10 @@ class DocxReader {
       sink.cut({ kind: "rule" });
       return;
     }
-    // A group or a canvas of shapes is a diagram: its words are labels, not
-    // the document's text. A text box on its own holds text.
-    const diagram = ["wgp", "wpc", "group"].some((name) => descendants(el, name).length > 0);
-    if (!diagram) for (const box of descendants(el, "txbxContent")) if (!inside(box, new Set(["txbxContent", "Fallback"]))) this.boxes.push(box);
+    // A diagram's words are labels, not the document's text. A text box on
+    // its own, or in a group that only places a few boxes, holds text.
+    const boxes = descendants(el, "txbxContent").filter((box) => !inside(box, BOX_HOSTS));
+    if (!isDiagram(el, boxes.length)) this.boxes.push(...boxes);
     const frame = child(el, "inline") ?? child(el, "anchor");
     const extent = child(frame, "extent");
     const widthEmu = intAttr(extent, "cx") ?? 0;
@@ -2051,7 +2127,7 @@ class DocxReader {
     const tblPr = child(tbl, "tblPr");
     const style = styleChain(this.styles, attr(child(tblPr, "tblStyle"), "val"));
     // A deleted row (a tracked change, accepted) is gone.
-    const rows = children(tbl, "tr").filter((tr) => !child(child(tr, "trPr"), "del"));
+    const rows = rowsOf(tbl).filter((tr) => !child(child(tr, "trPr"), "del"));
     const spanOf = (tc: Element) => Math.max(1, intAttr(child(child(tc, "tcPr"), "gridSpan"), "val") ?? 1);
     // A table of one cell a row is a box around paragraphs (a callout, a
     // framed note): its content reads as the document's own. One shaded cell
@@ -2211,7 +2287,7 @@ class DocxReader {
     const read = (container: Element) => {
       for (const node of container.children) {
         if (node.localName === "tbl") {
-          for (const tr of children(node, "tr")) for (const inner of cellsOf(tr)) read(inner);
+          for (const tr of rowsOf(node)) for (const inner of cellsOf(tr)) read(inner);
           continue;
         }
         if (node.localName === "sdt") read(child(node, "sdtContent") ?? node);
@@ -2262,6 +2338,19 @@ class DocxReader {
       .join("");
     return { html, text, colspan: 1, rowspan: 1, notes: marks, fill, borders };
   }
+}
+
+/** A table's rows, through the content controls and custom markup around
+    them: a form's repeating section wraps its rows in one (Word benchmark
+    finding: the row and its words were lost). */
+function rowsOf(tbl: Element): Element[] {
+  const out: Element[] = [];
+  for (const c of tbl.children) {
+    if (c.localName === "tr") out.push(c);
+    else if (c.localName === "sdt") out.push(...rowsOf(child(c, "sdtContent") ?? c));
+    else if (c.localName === "customXml") out.push(...rowsOf(c));
+  }
+  return out;
 }
 
 /** A row's cells, through the content controls and custom markup around them. */
@@ -2396,6 +2485,54 @@ function coreTitle(zip: OfficeZip): string | null {
   const core = parseXmlPart(zip, "docProps/core.xml");
   const title = core ? descendants(core, "title")[0]?.textContent?.trim() : "";
   return title ? cleanText(title) : null;
+}
+
+/** Unicode's line and paragraph separators (U+2028, U+2029) typed in a
+    run's text: a line break, as w:br is (Word benchmark finding:
+    poi-stress018's "escalas" and "territoriales" stood joined by one, and
+    the list line it was in read as no line). */
+const LINE_SEPARATORS = new RegExp("[\\u2028\\u2029]", "g");
+
+/** A text box inside one of these is read with it, or not at all. */
+const BOX_HOSTS = new Set(["txbxContent", "Fallback"]);
+
+/** Most text boxes a group may place and still be layout, not a diagram. */
+const LAYOUT_BOXES = 3;
+
+/** A group or a canvas of shapes is a diagram when it links its shapes (a
+    connector, a line, an arrowhead) or labels more than LAYOUT_BOXES boxes:
+    an org chart, a flow chart. A group of a few boxes and no links lays
+    out the page (a résumé's name beside its contact lines, a letterhead's
+    name beside its emblem), and its words are the document's own (Word
+    benchmark finding: poi-60316, poi-stress015, poi-shapes-with-text lost
+    that text; poi-stress010's org chart has 26 connectors). */
+function isDiagram(el: Element, boxes: number): boolean {
+  if (!["wgp", "wpc", "group"].some((name) => descendants(el, name).length > 0)) return false;
+  if (boxes > LAYOUT_BOXES) return true;
+  if (["cNvCnPr", "cxnSp", "line", "polyline", "arc", "curve"].some((name) => descendants(el, name).length > 0)) return true;
+  if (descendants(el, "prstGeom").some((g) => /^line$|Connector/.test(attr(g, "prst") ?? ""))) return true;
+  if (descendants(el, "headEnd").concat(descendants(el, "tailEnd")).some((end) => (attr(end, "type") ?? "none") !== "none")) return true;
+  // VML: a connector shape (o:connectortype), a stroke with an arrowhead.
+  return descendants(el, "*").some((n) => attr(n, "connectortype") !== null || ["startarrow", "endarrow"].some((a) => (attr(n, a) ?? "none") !== "none"));
+}
+
+/** What an equation in Word's linear format holds beside its runs. */
+const LINEAR_EXTRAS = new Set(["ctrlPr", "argPr", "oMathParaPr", "bookmarkStart", "bookmarkEnd", "proofErr"]);
+
+/** An equation Word keeps in its linear format, typed as LaTeX: runs of
+    characters alone, no built structure, with a LaTeX command among them
+    ("\int_{0}^{1}x"). Its characters are the formula's LaTeX when KaTeX
+    draws them (Word benchmark finding: d2p-equations' linear format stayed
+    its source characters); else null, and the runs read one by one. */
+function linearTex(math: Element): string | null {
+  const kids = [...math.children];
+  if (kids.length === 0 || !kids.every((k) => k.localName === "r" || LINEAR_EXTRAS.has(k.localName))) return null;
+  const tex = kids
+    .filter((k) => k.localName === "r")
+    .flatMap((r) => children(r, "t").map((t) => t.textContent ?? ""))
+    .join("")
+    .trim();
+  return /\\[A-Za-z]{2,}/.test(tex) && texError(tex) === null ? tex : null;
 }
 
 const HIDDEN_PARTS = new Set(["del", "moveFrom", "Fallback"]);

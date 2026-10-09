@@ -1,5 +1,5 @@
 import { inflateSync, strFromU8, unzipSync } from "fflate";
-import { JSDOM } from "jsdom";
+import { SaxesParser } from "saxes";
 import { fontFamilyDeclaration } from "@/lib/office-fonts";
 
 // Office Open XML files (SPEC.md §27): the zip and XML reading the slides
@@ -190,12 +190,144 @@ export function partText(zip: OfficeZip, path: string): string | null {
   }
 }
 
-// One DOM parser for every part: a JSDOM window per part would be the slow
-// part of a 200-slide parse.
-let parser: DOMParser | null = null;
-function domParser(): DOMParser {
-  if (!parser) parser = new new JSDOM("").window.DOMParser();
-  return parser;
+// ── A lean XML tree ──────────────────────────────────────────────────────────
+// A part is read into plain objects, not a browser DOM. jsdom's DOMParser
+// built a full DOM: an 18 MB word/document.xml took a minute and gigabytes,
+// most of it jsdom's live collections behind every `children` read (Word
+// benchmark finding: d2p-imagedata_without_rid, poi-bug65649). The tree is
+// built from the same XML reader jsdom parses with (saxes, namespaces on,
+// every file read as XML 1.0), so a part parses, or fails, exactly as it
+// did; and it answers the DOM calls the Office parsers make (children,
+// localName, attributes, getAttribute, textContent, parentElement,
+// documentElement, getElementsByTagNameNS) with the same values.
+
+class XmlAttr {
+  constructor(
+    readonly name: string,
+    readonly localName: string,
+    readonly prefix: string | null,
+    readonly namespaceURI: string | null,
+    readonly value: string,
+  ) {}
+}
+
+const NO_ELEMENTS: readonly XmlElement[] = Object.freeze([]);
+
+class XmlElement {
+  children: XmlElement[] = NO_ELEMENTS as XmlElement[];
+  /** The text inside, in order among the children: pairs of the number of
+      children before a piece and the piece; null when there is none. */
+  texts: (number | string)[] | null = null;
+  constructor(
+    readonly localName: string,
+    readonly prefix: string | null,
+    readonly namespaceURI: string | null,
+    readonly attributes: XmlAttr[],
+    readonly parentElement: XmlElement | null,
+  ) {}
+
+  get tagName(): string {
+    return this.prefix ? `${this.prefix}:${this.localName}` : this.localName;
+  }
+
+  getAttribute(name: string): string | null {
+    for (const a of this.attributes) if (a.name === name) return a.value;
+    return null;
+  }
+
+  get textContent(): string {
+    const out: string[] = [];
+    this.collectText(out);
+    return out.join("");
+  }
+
+  private collectText(out: string[]) {
+    const texts = this.texts;
+    let t = 0;
+    for (let k = 0; k <= this.children.length; k++) {
+      while (texts && t < texts.length && texts[t] === k) {
+        out.push(texts[t + 1] as string);
+        t += 2;
+      }
+      if (k < this.children.length) this.children[k].collectText(out);
+    }
+  }
+
+  getElementsByTagNameNS(namespace: string | null, localName: string): XmlElement[] {
+    const out: XmlElement[] = [];
+    const walk = (el: XmlElement) => {
+      for (const c of el.children) {
+        if ((localName === "*" || c.localName === localName) && (namespace === "*" || c.namespaceURI === namespace)) out.push(c);
+        walk(c);
+      }
+    };
+    walk(this);
+    return out;
+  }
+}
+
+class XmlDocumentTree {
+  readonly textContent = null;
+  constructor(readonly documentElement: XmlElement) {}
+
+  get children(): XmlElement[] {
+    return [this.documentElement];
+  }
+
+  getElementsByTagNameNS(namespace: string | null, localName: string): XmlElement[] {
+    const root = this.documentElement;
+    const own = (localName === "*" || root.localName === localName) && (namespace === "*" || root.namespaceURI === namespace);
+    return [...(own ? [root] : []), ...root.getElementsByTagNameNS(namespace, localName)];
+  }
+}
+
+/** XML text as a lean tree; throws where jsdom's DOMParser reports a parse
+    failure (saxes' first error). */
+function buildXml(text: string): XmlDocumentTree {
+  const parser = new SaxesParser({ xmlns: true, defaultXMLVersion: "1.0", forceXMLVersion: true });
+  let root: XmlElement | null = null;
+  let open: XmlElement | null = null;
+  // An element named parsererror is how jsdom reports a failure: a part
+  // that holds one was read as failed, and still is.
+  let failed = false;
+  parser.on("opentag", (tag) => {
+    const attributes: XmlAttr[] = [];
+    for (const key of Object.keys(tag.attributes)) {
+      const a = tag.attributes[key];
+      attributes.push(new XmlAttr(a.name, a.local, a.prefix === "" ? null : a.prefix, a.uri === "" ? null : a.uri, a.value));
+    }
+    const el = new XmlElement(tag.local, tag.prefix === "" ? null : tag.prefix, tag.uri === "" ? null : tag.uri, attributes, open);
+    if (el.tagName === "parsererror") failed = true;
+    if (open) {
+      if (open.children === NO_ELEMENTS) open.children = [];
+      open.children.push(el);
+    } else root ??= el;
+    open = el;
+  });
+  parser.on("closetag", () => {
+    open = open?.parentElement ?? null;
+  });
+  // Text outside the root is no node of the tree; CDATA is text.
+  const addText = (data: string) => {
+    if (!open || !data) return;
+    (open.texts ??= []).push(open.children.length, data);
+  };
+  parser.on("text", addText);
+  parser.on("cdata", addText);
+  parser.on("doctype", (dt) => {
+    const entityMatcher = /<!ENTITY ([^ ]+) "([^"]+)">/g;
+    let result;
+    while ((result = entityMatcher.exec(dt))) {
+      const [, name, value] = result;
+      if (!(name in parser.ENTITIES)) parser.ENTITIES[name] = value;
+    }
+  });
+  parser.on("error", (err) => {
+    throw err;
+  });
+  parser.write(text).close();
+  if (!root || failed) throw new Error("no document element");
+  return new XmlDocumentTree(root);
 }
 
 /** An XML part parsed to a DOM, or null when the part is missing or does
@@ -208,27 +340,24 @@ export function parseXmlPart(zip: OfficeZip, path: string): XMLDocument | null {
 
 export function parseXml(text: string): XMLDocument | null {
   try {
-    const doc = domParser().parseFromString(text, "application/xml");
-    // jsdom reports a parse failure as a parsererror document.
-    if (doc.getElementsByTagName("parsererror").length > 0) return null;
-    return doc;
+    // The tree answers every DOM call the Office parsers make (above).
+    return buildXml(text) as unknown as XMLDocument;
   } catch {
     return null;
   }
 }
 
-// The children are walked by sibling links, never through el.children: an
-// indexed read of jsdom's HTMLCollection looks up named items each time, so a
-// walk over a row of 10,000 cells was quadratic. Sheets benchmark finding: a
-// 2 MB worksheet with no cells took 57 s; walked by siblings it reads in a
-// second.
+// The children are read from the lean tree's own array (above): a plain
+// array, so a walk over a row of 10,000 cells is linear. jsdom's
+// HTMLCollection looked up named items on each indexed read, and that walk
+// was quadratic (sheets benchmark finding: a 2 MB worksheet with no cells
+// took 57 s).
 
-/** What these helpers read of an element: a DOM Element, or a light one
-    read by lib/parse/xml-stream.ts (a worksheet's cells). */
+/** What these helpers read of an element: one of the lean tree's (above),
+    or one read by lib/parse/xml-stream.ts (a worksheet's rows, streamed). */
 export interface XmlElementLike {
   readonly localName: string;
-  readonly firstElementChild: XmlElementLike | null;
-  readonly nextElementSibling: XmlElementLike | null;
+  readonly children: ArrayLike<XmlElementLike>;
   readonly attributes: ArrayLike<{ readonly localName: string; readonly value: string }>;
   getAttribute(name: string): string | null;
 }
@@ -237,7 +366,8 @@ export interface XmlElementLike {
 export function children<E extends XmlElementLike>(el: E | null | undefined, localName: string): E[] {
   if (!el) return [];
   const out: E[] = [];
-  for (let c = el.firstElementChild as E | null; c; c = c.nextElementSibling as E | null) if (c.localName === localName) out.push(c);
+  const all = el.children as ArrayLike<E>;
+  for (let k = 0; k < all.length; k++) if (all[k].localName === localName) out.push(all[k]);
   return out;
 }
 
@@ -246,8 +376,14 @@ export function child<E extends XmlElementLike>(el: E | null | undefined, ...pat
   let at: E | null = el ?? null;
   for (const name of path) {
     if (!at) return null;
-    let next = at.firstElementChild as E | null;
-    while (next && next.localName !== name) next = next.nextElementSibling as E | null;
+    let next: E | null = null;
+    const all = at.children as ArrayLike<E>;
+    for (let k = 0; k < all.length; k++) {
+      if (all[k].localName === name) {
+        next = all[k];
+        break;
+      }
+    }
     at = next;
   }
   return at;

@@ -661,7 +661,7 @@ function readSharedStrings(zip: OfficeZip, rels: Map<string, Relationship>): str
     finding (lo-escape-unicode). */
 function richText(el: XmlElement): string {
   let out = "";
-  for (let node = el.firstElementChild; node; node = node.nextElementSibling) {
+  for (const node of el.children) {
     if (node.localName === "t") out += node.textContent;
     else if (node.localName === "r") out += child(node, "t")?.textContent ?? "";
   }
