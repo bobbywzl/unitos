@@ -91,7 +91,10 @@ type CellStyle = {
 // A formula's cell keeps its number format (a code or a built-in id): the
 // reader's sheet computes the formula again and shows its value in it
 // (lib/replica.ts, lib/sheet-formulas.ts).
-type Cell = { text: string; kind: CellKind; styleId: number | null; href?: string; formula?: string; format?: string | number; number?: number };
+// hashes: a date format given a number no date has, which Excel shows as
+// a row of "#" across the cell (the row's width is set once the columns
+// are read).
+type Cell = { text: string; kind: CellKind; styleId: number | null; href?: string; formula?: string; format?: string | number; number?: number; hashes?: true };
 
 type Row = { cells: Cell[]; heightPt: number | null };
 
@@ -932,6 +935,15 @@ function readSheet(
     }
   }
 
+  // A number no date has, in a date format: "#" for each character the
+  // column holds, as Excel fills the cell. Sheets benchmark finding
+  // (pd-testdateoverflow: 1E+20 as a date showed nothing).
+  for (const row of rows) {
+    row?.cells.forEach((cell, c) => {
+      if (cell?.hashes) cell.text = "#".repeat(Math.max(1, Math.floor(colWidths[c] ?? defaultColWidthChars)));
+    });
+  }
+
   // Hyperlinks by cell: the part lists them after the cells.
   const hrefByRef = new Map<string, string>();
   for (const link of descendants(child(root, "hyperlinks"), "hyperlink")) {
@@ -1013,6 +1025,7 @@ function readCell(c: XmlElement, shared: string[], styles: Styles, date1904: boo
       if (v === "") return { ...base, text: "", kind: "empty" };
       const n = Number(v);
       if (!Number.isFinite(n)) return { ...base, text: cleanText(v), kind: "text" };
+      if (noDate(n, styleId, styles, date1904)) return { ...base, text: "#", kind: "number", number: n, hashes: true };
       return { ...base, text: formatNumber(n, styleId, styles, date1904), kind: "number", number: n };
     }
   }
@@ -1121,6 +1134,22 @@ function ssfFallbackCode(code: string): string {
 
 // 9999-12-31, the last day Excel shows.
 const MAX_DATE_SERIAL = 2958465;
+
+/** Is the number one a date format cannot show: Excel shows a date or a
+    time below 0 or past 9999-12-31 as "#####" (in the 1904 date system a
+    negative one shows with its sign). ssf showed it as nothing, or as a
+    year past 9999. */
+function noDate(value: number, styleId: number | null, styles: Styles, date1904: boolean): boolean {
+  const fmt = styleId !== null ? styles.numFmts[styleId] ?? 0 : 0;
+  const max = date1904 ? MAX_DATE_SERIAL - 1462 : MAX_DATE_SERIAL;
+  if (value <= max && (value >= 0 || date1904)) return false;
+  const code = typeof fmt === "string" ? fmt : (ssf.get_table()[fmt] ?? "");
+  try {
+    return ssf.is_date(code);
+  } catch {
+    return false;
+  }
+}
 
 const timeSteps = new Map<string | number, number | null>();
 
