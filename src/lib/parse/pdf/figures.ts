@@ -1699,10 +1699,19 @@ export function attachFigureRegions(
       let end: number | undefined;
       // The note is the caption's words, and the band stops over it.
       let note: Segment | undefined;
+      const labelUnder = (b: Box) => {
+        const own = drawingIn(drawing, b.y1, cap.box!.y1, x1, x2);
+        return own !== null && b.y2 >= own.y1 - ctx.bodySize * 0.5;
+      };
       while (m < next.length && isFigureDebris(next[m], ctx)) {
         const s = next[m];
         if (onDrawing && s.box && floor - s.box.y2 > rowGap * 1.5) break;
-        if (marginal && s.box && !overlapsDrawing(s.box, drawing, cap.box)) break;
+        // A label set right under its drawing, within half an em of the
+        // drawing between it and the caption, is the drawing's (parse loop
+        // finding: the MML book p. 77, "c ≤ a + b" under the triangle of
+        // Figure 3.2 stopped the walk, and the crop was a sliver of the
+        // triangle's top).
+        if (marginal && s.box && !overlapsDrawing(s.box, drawing, cap.box) && !labelUnder(s.box)) break;
         m++;
         if (s.box && s.box.y1 < floor) {
           floor = s.box.y1;
@@ -1759,7 +1768,9 @@ export function attachFigureRegions(
         // words it took. It never reaches the line the page dropped under it
         // (with none, 6% of the page). arXiv 2506.08209 p. 12: the band ran
         // to 6% of the page, and the crop showed half the page number.
-        if (open) {
+        // In a margin the next words may stand far under it (a margin note):
+        // the figure's foot is its own there too.
+        if (open || marginal) {
           const capFoot = cap.box.y1;
           const own = [drawnBelow, ...graphics.filter((g) => centeredIn(g.box, bottom, capFoot)).map(graphicExtent), ...next.slice(0, m).map((s) => s.box)];
           const feet = own.flatMap((b) => (b ? [b.y1] : []));
