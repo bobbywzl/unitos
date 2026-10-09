@@ -815,6 +815,12 @@ export function pageGraphics(drawing: PageDrawing, items: Item[], pageWidth: num
       // the notes read into the lines beside them).
       if (EQUATION_NUMBER_RE.test(textOf(r).trim())) return false;
       if (inEdgeLine(r)) return false;
+      // A line of a block of text is no tick: a run right over or under it,
+      // a line's step off, starts where it starts and is longer than a tick
+      // (parse loop finding: the MML book p. 179, the margin caption's lines
+      // "probability", "variables and" beside the mind map read as its
+      // y-axis's ticks, and the crop took the caption's lines).
+      if (runs.some((o) => o !== r && o.chars > 12 && Math.abs(o.box.x1 - r.box.x1) < 1 && Math.abs(o.size - r.size) < 0.5 && Math.max(o.box.y1 - r.box.y2, r.box.y1 - o.box.y2) < r.size * 0.6)) return false;
       const reach = Math.max(r.size, textSize) * 1.7;
       const cx = (r.box.x1 + r.box.x2) / 2;
       const cy = (r.box.y1 + r.box.y2) / 2;
