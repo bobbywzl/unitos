@@ -531,7 +531,7 @@ export function CurveMarks({
   const fresh = useAnyNewReplies(links); // [layer5] WALK5-07
   const notes = ctx?.view.byPair.get(pair)?.length ?? 0;
   const showCount = count > 1;
-  if (!showCount && open === 0 && notes === 0) return null;
+  if (!showCount && open === 0 && notes === 0 && !fresh) return null;
   const p = places.get(pair) ?? at;
   const pill = `flex h-[18px] items-center gap-1 rounded-full px-1.5 ${TEXT_META} font-semibold tabular-nums`;
   return (
@@ -566,6 +566,12 @@ export function CurveMarks({
               {fresh && (
                 <span data-graph-curve-new aria-label={t("graphCover.newRepliesTitle")} className="size-1.5 rounded-full bg-[var(--kind-comment)]" />
               )}
+            </span>
+          )}
+          {/* [lists9] A link another person made since this account's last visit, no reply on it yet (WALK9-06): the same dot, on its own. */}
+          {open === 0 && fresh && (
+            <span data-graph-curve-mark="new" className={`${pill} border-[1.5px] border-[var(--kind-comment)] bg-card`}>
+              <span data-graph-curve-new aria-label={t("graphCover.newLinkTitle")} className="size-1.5 rounded-full bg-[var(--kind-comment)]" />
             </span>
           )}
           {notes > 0 && (

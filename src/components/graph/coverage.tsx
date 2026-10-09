@@ -40,6 +40,7 @@ import { useCollab } from "@/components/collab/collab-context";
 import { PersonBadge } from "@/components/collab/person-badge";
 import { useT } from "@/components/lang-provider";
 import { useGraphNotes } from "@/components/graph/graph-notes";
+import { useNewComments } from "@/components/graph/link-replies"; // [lists9] WALK9-06
 
 type CoverageValue = {
   coverage: ProjectCoverage | null;
@@ -430,6 +431,7 @@ export function useProjectCoverage(): ProjectCoverage | null {
 export function NodeComments({ documentId }: { documentId: string }) {
   const t = useT();
   const waits = useCommentWaits();
+  const isNew = useNewComments();
   const open = useDocumentComments(documentId).filter((c) => c.open);
   if (open.length === 0) return null;
   const label = open.length === 1 ? t("graphCover.commentsOpenOne") : t("graphCover.commentsOpenMany", { n: open.length });
@@ -443,6 +445,8 @@ export function NodeComments({ documentId }: { documentId: string }) {
       <CommentIcon size={10} />
       {open.length}
       {open.some(waits) && "?"}
+      {/* [lists9] A comment or a reply another person wrote since this account's last visit (WALK9-06): the curve's dot. */}
+      {open.some(isNew) && <span data-graph-node-new aria-label={t("graphCover.newCommentTitle")} className="ml-px size-1.5 rounded-full bg-[var(--kind-comment)]" />}
     </span>
   );
 }

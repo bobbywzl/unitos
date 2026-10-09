@@ -123,6 +123,7 @@ export async function documentsGraph(
       toQuotedText: link.toQuotedText,
       reason: link.reason,
       recommended: link.recommended,
+      createdAt: link.createdAt.toISOString(),
       ...(provenance ? { provenance: true } : {}),
       ...crossAccountOf(link.id),
     });
