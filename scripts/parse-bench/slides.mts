@@ -7,10 +7,15 @@
 //     [--save-baseline] [--worst n] [--detail id] [--dir path] [--json out.json]
 //
 // The corpus is slides-corpus.json: each file's source URL (pinned to a
-// commit), its license, and what it exercises. The files are other people's
-// and are never committed: the first run downloads them into
-// .bench/slides/files/. --dir scores every .pptx under a folder instead (ids
-// are the paths), to look for new fixtures.
+// commit), its license, and what it exercises. Two kinds of files: decks
+// from public test suites (Apache POI, LibreOffice, Open XML SDK,
+// python-pptx, Tika) and real-world decks committed to permissively licensed
+// repositories (course and workshop decks, talk decks, Chinese, Japanese and
+// Korean decks, decks of 100 and more slides, Google Slides and LibreOffice
+// exports). The files are other people's and are never committed: the first
+// run downloads them into .bench/slides/files/ from the corpus alone. --dir
+// scores every .pptx under a folder instead (ids are the paths), to look for
+// new fixtures.
 //
 // What a reader would notice, per file (slides matched by number):
 //
@@ -104,7 +109,13 @@ async function corpusEntries(): Promise<Entry[]> {
     const path = join(FILES, `${f.id}.pptx`);
     if (!existsSync(path)) {
       try {
-        const res = await outboundFetch(f.url, { signal: AbortSignal.timeout(120_000) });
+        // GitHub's raw host answers 429 to a burst of downloads: wait and
+        // ask again.
+        let res = await outboundFetch(f.url, { signal: AbortSignal.timeout(120_000) });
+        for (let attempt = 1; attempt <= 5 && (res.status === 429 || res.status >= 500); attempt++) {
+          await new Promise((r) => setTimeout(r, 15_000 * attempt));
+          res = await outboundFetch(f.url, { signal: AbortSignal.timeout(120_000) });
+        }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         writeFileSync(path, new Uint8Array(await res.arrayBuffer()));
         console.log(`fetched  ${f.id}`);
