@@ -39,7 +39,8 @@ const en = {
   stitchPickHint: "Click nodes to pick them",
   stitchPickHintTouch: "Tap nodes to pick them",
   stitchPickTitleTouch: "Tap nodes in the graph to pick the documents Stitch reads.",
-  stitchPickClear: "Clear",
+  // [style10] WALK10-08: named by what it does, so it is not a second "Clear" beside the conversation's.
+  stitchPickClear: "Read every document",
   stitchPickClearTitle: "Read every document again",
   stitchUnpick: "Remove {title} from the pick",
   // A chip's label, and the template it fills: the cursor lands at {topic}.
@@ -92,7 +93,7 @@ const en = {
   stitchNothingStored: "Nothing was stored.",
   stitchRetry: "Retry",
   stitchTooLong: "The command is {n} characters. Stitch takes {max} at most.",
-  stitchPickOneMore: "Pick one more document, or Clear to read every document.",
+  stitchPickOneMore: "Pick one more document, or press Read every document.",
   // A citation in a reply (stitch-passage-card.tsx).
   stitchCitationTitle: "{title}: open the passage",
   stitchPassage: "Cited passage",
@@ -154,7 +155,7 @@ const zh: Record<keyof typeof en, string> = {
   stitchPickHint: "点击节点即可选取",
   stitchPickHintTouch: "轻点节点即可选取",
   stitchPickTitleTouch: "轻点图谱中的节点，选取缝合要读的文档。",
-  stitchPickClear: "清除",
+  stitchPickClear: "阅读全部文档",
   stitchPickClearTitle: "重新阅读全部文档",
   stitchUnpick: "从选取中移除 {title}",
   stitchSuggestAsk: "这些文档关于……怎么说？",
@@ -198,7 +199,7 @@ const zh: Record<keyof typeof en, string> = {
   stitchNothingStored: "没有存储任何内容。",
   stitchRetry: "重试",
   stitchTooLong: "指令有 {n} 个字符。缝合最多接受 {max} 个。",
-  stitchPickOneMore: "再选取一篇文档，或点击清除以阅读全部文档。",
+  stitchPickOneMore: "再选取一篇文档，或按“阅读全部文档”。",
   stitchCitationTitle: "{title}：打开片段",
   stitchPassage: "引用的片段",
   stitchPassageFrom: "引自",
