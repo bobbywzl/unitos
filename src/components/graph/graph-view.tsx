@@ -795,7 +795,10 @@ function NodeCard({
       <p className={`mt-0.5 ${TEXT_META} text-sand-500`}>
         {t(picking ? "panes.graphCardPick" : clickSelects ? "graphView.cardHintSelect" : "graphView.cardHintOpen")}
       </p>
-      {!picking && <NodeNotesRows documentId={node.id} />}
+      {/* [style9] VIEW9-07: the rows are not Tab stops here: the card opens
+          220 ms after a node takes the focus, and Tab was landing on a row of
+          a card it had not drawn yet; the pinned card lists the same rows. */}
+      {!picking && <NodeNotesRows documentId={node.id} tabStops={false} />}
     </div>,
     floatHost,
   );
@@ -2255,6 +2258,53 @@ function GraphCanvas({
       </p>
       <SpotlightContext.Provider value={spotlight}>
       <MarkPlacesContext.Provider value={markPlaces}>
+      {/* [style9] VIEW9-07: the zoom stack comes before the canvas in the
+          DOM, so Tab meets it where it is drawn (top left, before the
+          nodes), not after the focused node. It is a reactflow Panel: the
+          store comes from ReactFlowProvider, and its place on screen is the
+          same (absolute in the wrapper). */}
+      {/* Top left, clear of the Stitch box at the foot of the canvas. The
+          zoom buttons carry the UI language's names (WALK2-17). */}
+      <Controls position="top-left" showInteractive={false} showFitView={false} showZoom={false}>
+        <ControlButton onClick={() => flowRef.current.zoomIn({ duration: 200 })} data-tip={t("panes.graphZoomIn")} aria-label={t("panes.graphZoomIn")} data-track="graph-zoom-in">
+          <PlusIcon size={14} className="graph-stroke-icon" />
+        </ControlButton>
+        <ControlButton onClick={() => flowRef.current.zoomOut({ duration: 200 })} data-tip={t("panes.graphZoomOut")} aria-label={t("panes.graphZoomOut")} data-track="graph-zoom-out">
+          <MinusGlyph size={14} />
+        </ControlButton>
+        <ControlButton
+          onClick={() => {
+            userMoved.current = false;
+            fitNow(400);
+          }}
+          data-tip={t("panes.graphFit")}
+          aria-label={t("panes.graphFit")}
+          data-track="graph-fit"
+        >
+          <MaximizeIcon size={13} className="graph-stroke-icon" />
+        </ControlButton>
+        {generatedIds.size > 0 && (
+          <ControlButton
+            onClick={() => setShowProvenance(!showProvenance)}
+            data-tip={t(showProvenance ? "panes.graphProvenanceHide" : "panes.graphProvenanceShow")}
+            aria-label={t("panes.graphProvenanceShow")}
+            aria-pressed={showProvenance}
+            data-track="graph-provenance"
+            className={showProvenance ? "graph-control-on" : undefined}
+          >
+            <PageIcon size={13} className="graph-stroke-icon" />
+          </ControlButton>
+        )}
+        <ControlButton
+          onClick={() => setKeyOpen((v) => !v)}
+          data-tip={t("panes.graphKeyTitle")}
+          aria-label={t("panes.graphKeyTitle")}
+          aria-expanded={keyOpen}
+          data-track="graph-key"
+        >
+          <QuestionIcon size={15} className="graph-stroke-icon" />
+        </ControlButton>
+      </Controls>
       <ReactFlow
         nodes={flowNodes}
         edges={flowEdges}
@@ -2298,48 +2348,6 @@ function GraphCanvas({
         <LabelScale target={wrapRef} lodZoom={lodZoom} />
         <LabelEdges target={wrapRef} />
         <Background gap={26} size={1.5} color="var(--sand-300)" />
-        {/* Top left, clear of the Stitch box at the foot of the canvas. The
-            zoom buttons carry the UI language's names (WALK2-17). */}
-        <Controls position="top-left" showInteractive={false} showFitView={false} showZoom={false}>
-          <ControlButton onClick={() => flowRef.current.zoomIn({ duration: 200 })} data-tip={t("panes.graphZoomIn")} aria-label={t("panes.graphZoomIn")} data-track="graph-zoom-in">
-            <PlusIcon size={14} className="graph-stroke-icon" />
-          </ControlButton>
-          <ControlButton onClick={() => flowRef.current.zoomOut({ duration: 200 })} data-tip={t("panes.graphZoomOut")} aria-label={t("panes.graphZoomOut")} data-track="graph-zoom-out">
-            <MinusGlyph size={14} />
-          </ControlButton>
-          <ControlButton
-            onClick={() => {
-              userMoved.current = false;
-              fitNow(400);
-            }}
-            data-tip={t("panes.graphFit")}
-            aria-label={t("panes.graphFit")}
-            data-track="graph-fit"
-          >
-            <MaximizeIcon size={13} className="graph-stroke-icon" />
-          </ControlButton>
-          {generatedIds.size > 0 && (
-            <ControlButton
-              onClick={() => setShowProvenance(!showProvenance)}
-              data-tip={t(showProvenance ? "panes.graphProvenanceHide" : "panes.graphProvenanceShow")}
-              aria-label={t("panes.graphProvenanceShow")}
-              aria-pressed={showProvenance}
-              data-track="graph-provenance"
-              className={showProvenance ? "graph-control-on" : undefined}
-            >
-              <PageIcon size={13} className="graph-stroke-icon" />
-            </ControlButton>
-          )}
-          <ControlButton
-            onClick={() => setKeyOpen((v) => !v)}
-            data-tip={t("panes.graphKeyTitle")}
-            aria-label={t("panes.graphKeyTitle")}
-            aria-expanded={keyOpen}
-            data-track="graph-key"
-          >
-            <QuestionIcon size={15} className="graph-stroke-icon" />
-          </ControlButton>
-        </Controls>
       </ReactFlow>
       </MarkPlacesContext.Provider>
       {hoveredNodeId && hoveredNodeId !== focusedId /* [view2] its card is pinned */ && !dragging && (

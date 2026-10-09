@@ -351,7 +351,15 @@ export function NodeNotes({ documentId }: { documentId: string }) {
 
 /** The node card's notes (graph-view.tsx NodeCard): the newest five notes
     that belong to the document, each a row that shows it in the tray. */
-export function NodeNotesRows({ documentId }: { documentId: string }) {
+export function NodeNotesRows({
+  documentId,
+  tabStops = true,
+}: {
+  documentId: string;
+  /** [style9] VIEW9-07: false in the hover card, whose rows are not Tab
+      stops (the pinned card, opened with Enter, lists the same rows). */
+  tabStops?: boolean;
+}) {
   const ctx = useGraphNotes();
   const t = useT();
   const notes = ctx?.view.byDocument.get(documentId)?.notes;
@@ -363,7 +371,7 @@ export function NodeNotesRows({ documentId }: { documentId: string }) {
         {notes.length === 1 ? t("graphNotes.nodeNotesOne") : t("graphNotes.nodeNotesMany", { n: notes.length })}
       </p>
       {shown.map((g) => (
-        <GraphNoteRow key={g.note.id} note={g} hereId={documentId} />
+        <GraphNoteRow key={g.note.id} note={g} hereId={documentId} tabIndex={tabStops ? undefined : -1} />
       ))}
       {notes.length > CARD_ROWS && (
         <p className={`px-2 pt-0.5 ${TEXT_META} text-sand-500`}>
@@ -377,7 +385,7 @@ export function NodeNotesRows({ documentId }: { documentId: string }) {
 /** One note in a list on the graph: its line, its section, and the other
     documents it quotes as chips. A click shows it in the tray; hovering a
     chip lights that document too. */
-export function GraphNoteRow({ note: g, hereId }: { note: GraphNote; hereId: string | null }) {
+export function GraphNoteRow({ note: g, hereId, tabIndex }: { note: GraphNote; hereId: string | null; tabIndex?: -1 }) {
   const ctx = useGraphNotes();
   const t = useT();
   if (!ctx) return null;
@@ -395,6 +403,7 @@ export function GraphNoteRow({ note: g, hereId }: { note: GraphNote; hereId: str
     >
       <button
         onClick={() => ctx.showNote(g.note.id)}
+        tabIndex={tabIndex}
         data-track="graph-note-show"
         data-tip={t("graphNotes.showNote")}
         className="flex min-h-6 items-start gap-1.5 text-left pointer-coarse:min-h-10"
