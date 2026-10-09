@@ -229,18 +229,7 @@ export function CommentCard({
           {written && <div className="docs-comment-time">{replyTime(written.at, lang)}</div>}
         </div>
         <div className="docs-comment-buttons">
-          {canEdit && (
-            <button
-              type="button"
-              onClick={() => void resolve()}
-              data-track="comment-resolve"
-              aria-label={t("common.resolve")}
-              data-tip={t("docsLayer.resolveTitle")}
-              className="docs-comment-button docs-comment-resolve"
-            >
-              <CheckIcon size={20} />
-            </button>
-          )}
+          {/* Delete first, away from ⋯: the head shape of the reader's highlight and comment cards. */}
           {canEdit && (
             <button
               type="button"
@@ -252,6 +241,18 @@ export function CommentCard({
               className="docs-comment-button docs-comment-delete"
             >
               <TrashIcon size={16} />
+            </button>
+          )}
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => void resolve()}
+              data-track="comment-resolve"
+              aria-label={t("common.resolve")}
+              data-tip={t("docsLayer.resolveTitle")}
+              className="docs-comment-button docs-comment-resolve"
+            >
+              <CheckIcon size={20} />
             </button>
           )}
           <button
