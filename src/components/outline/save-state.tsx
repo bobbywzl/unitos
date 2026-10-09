@@ -16,7 +16,8 @@ export type SaveState = "saving" | "saved" | "failed" | "both" | "offline";
 
 // compact: a collapsed row's one line has no room for the words; the state
 // shows as its icon, the words in its tooltip (Waiting to sync, Not saved).
-export function SaveStateLabel({ state, compact = false }: { state: SaveState | null; compact?: boolean }) {
+// tip: a longer tooltip for the state (a viewer's kept words say why).
+export function SaveStateLabel({ state, compact = false, tip: why }: { state: SaveState | null; compact?: boolean; tip?: string }) {
   const t = useT();
   if (!state) return null;
   const key =
@@ -30,7 +31,7 @@ export function SaveStateLabel({ state, compact = false }: { state: SaveState | 
             ? "outline.waitingSync"
             : "outline.saveFailed";
   if (compact && (state === "offline" || state === "failed")) {
-    const tip = state === "offline" ? `${t(key)} · ${t("outline.savedOffline")}` : t(key);
+    const tip = state === "offline" ? `${t(key)} · ${t("outline.savedOffline")}` : (why ?? t(key));
     return (
       <span
         role="status"
@@ -48,7 +49,7 @@ export function SaveStateLabel({ state, compact = false }: { state: SaveState | 
       role="status"
       aria-live="polite"
       data-save-state={state}
-      data-tip={state === "offline" ? t("outline.savedOffline") : undefined}
+      data-tip={state === "offline" ? t("outline.savedOffline") : why}
       className={`shrink-0 text-[11px] ${state === "failed" ? "text-red-500" : state === "both" ? "text-clay-600" : "text-sand-500"}`}
     >
       {t(key)}

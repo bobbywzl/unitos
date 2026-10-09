@@ -893,7 +893,9 @@ const NoteCardBody = memo(function NoteCardBody({
         {/* Saved offline, waiting for the queue (lib/offline/queued-notes.ts). */}
         {!editing && note.queued && <SaveStateLabel state="offline" compact={collapsed} />}
         {/* Words a local draft keeps that no save has landed (use-outline.ts). */}
-        {!editing && !note.queued && note.unsaved && <SaveStateLabel state="failed" compact={collapsed} />}
+        {!editing && !note.queued && note.unsaved && (
+          <SaveStateLabel state="failed" compact={collapsed} tip={canEdit ? undefined : t("common.notSavedNoEdit")} />
+        )}
         {canEdit && !editing && !merging && (
           <button
             onClick={openEditor}

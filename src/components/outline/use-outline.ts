@@ -547,7 +547,24 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
   // base is cleared when the note changed elsewhere since, as it always was.
   useEffect(() => {
     sweepStaleDrafts();
-    if (!canEdit) return;
+    if (!canEdit) {
+      // A viewer cannot save (an editor made a viewer while words waited):
+      // the words a local draft kept show on the card, marked Not saved, and
+      // stay in this browser until the account can edit again, when the load
+      // or the retry saves them. Showing a draft writes it again, so the
+      // sweep of old drafts never drops it.
+      const kept = new Map<string, { content: string; unsaved: boolean }>();
+      for (const note of flattenNotes(tree)) {
+        const draft = readNoteDraft(note.id);
+        if (!draft || !draftHoldsWords(draft) || draft.content.trim() === note.content.trim()) continue;
+        writeNoteDraft(note.id, draft.content, draft.base, draft.sent);
+        kept.set(note.id, { content: draft.content.trim(), unsaved: true });
+      }
+      if (kept.size === 0) return;
+      setLocalTexts((prev) => new Map([...prev, ...kept]));
+      setNotice(t("common.notSavedNoEdit"), true);
+      return;
+    }
     const replay: { id: string; content: string; base: string }[] = [];
     const inTree = new Set<string>();
     for (const note of flattenNotes(tree)) {
