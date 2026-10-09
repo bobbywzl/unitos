@@ -243,6 +243,19 @@ function formatValue(v: number, formatCode: string | null): string {
   return String(Math.round(v * 1000) / 1000);
 }
 
+/** A value in the chart's data rows: in its format code, and General in
+    full as a sheet's cell writes it (0.70870299), not the axis's short form
+    (0.709, 1.23e+6). Slides benchmark finding: a chart of ratios lost every
+    digit past the third. */
+function dataValue(v: number, formatCode: string | null): string {
+  if (formatCode && formatCode !== "General") return formatValue(v, formatCode);
+  try {
+    return cleanText(ssf.format("General", v)) || String(v);
+  } catch {
+    return String(v);
+  }
+}
+
 /** Nice axis bounds and step: 4 to 7 steps of 1, 2, 2.5, or 5 × 10^k. */
 function niceScale(min: number, max: number, fixedMin: number | null, fixedMax: number | null): { min: number; max: number; step: number } {
   let lo = fixedMin ?? Math.min(0, min);
@@ -378,16 +391,16 @@ function dataRows(plots: Plot[]): string[][] {
     const longest = Math.max(...series.map((s) => s.vals.length));
     // An x value that is text (a scatter chart over named points) keeps
     // its name: the chart places it by its position, the data says which.
-    for (let i = 0; i < longest; i++) rows.push([series[0].xs[i] !== null && series[0].xs[i] !== undefined ? String(series[0].xs[i]) : (series[0].cats[i] ?? ""), ...series.map((s) => (s.vals[i] === null || s.vals[i] === undefined ? "" : formatValue(s.vals[i] as number, s.formatCode)))]);
+    for (let i = 0; i < longest; i++) rows.push([series[0].xs[i] !== null && series[0].xs[i] !== undefined ? String(series[0].xs[i]) : (series[0].cats[i] ?? ""), ...series.map((s) => (s.vals[i] === null || s.vals[i] === undefined ? "" : dataValue(s.vals[i] as number, s.formatCode)))]);
     return rows;
   }
   if (categories.length > 0) {
     header([""]);
-    categories.forEach((cat, i) => rows.push([cat, ...series.map((s) => (s.vals[i] === null || s.vals[i] === undefined ? "" : formatValue(s.vals[i] as number, s.formatCode)))]));
+    categories.forEach((cat, i) => rows.push([cat, ...series.map((s) => (s.vals[i] === null || s.vals[i] === undefined ? "" : dataValue(s.vals[i] as number, s.formatCode)))]));
   } else {
     header([]);
     const longest = Math.max(...series.map((s) => s.vals.length));
-    for (let i = 0; i < longest; i++) rows.push(series.map((s) => (s.vals[i] === null || s.vals[i] === undefined ? "" : formatValue(s.vals[i] as number, s.formatCode))));
+    for (let i = 0; i < longest; i++) rows.push(series.map((s) => (s.vals[i] === null || s.vals[i] === undefined ? "" : dataValue(s.vals[i] as number, s.formatCode))));
   }
   return rows;
 }
