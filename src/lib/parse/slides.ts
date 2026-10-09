@@ -1204,14 +1204,17 @@ async function placeShape(scope: SlideScope, sp: Element, transform: Transform, 
   const prstGeom = child(spPr, "prstGeom");
   const custGeom = child(spPr, "custGeom");
   const geometry = attr(prstGeom, "prst") ?? "rect";
-  if (LINE_GEOMETRIES.has(geometry)) {
-    out.push({ html: lineHtml(box, line, ctx), text: null, box, z: out.length + scope.zBase, title: false });
-    return;
-  }
+  // A line draws on its own; words set on it still show, in a text layer
+  // over the line's box. Slides benchmark finding: a bent or curved
+  // connector shape with words lost them.
+  const isLine = LINE_GEOMETRIES.has(geometry);
+  if (isLine) out.push({ html: lineHtml(box, line, ctx), text: null, box, z: out.length + scope.zBase, title: false });
   // A custom geometry draws as an SVG path in the shape's box; a preset
   // one as a styled div.
   let fillLayer: string;
-  if (custGeom) {
+  if (isLine) {
+    fillLayer = "";
+  } else if (custGeom) {
     fillLayer = customGeometrySvg(custGeom, box, fill, line);
   } else {
     const fillStyles = [fill && fill !== "none" ? fill : "", line && line !== "none" ? `border:${line}` : "", geometryStyle(prstGeom, box, ctx)]
