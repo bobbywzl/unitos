@@ -29,7 +29,7 @@ import { appendToBody } from "@/lib/note-title";
 import type { NotebookView, NoteView, SectionView } from "@/lib/types";
 import { useT } from "@/components/lang-provider";
 import { useCollapsedView, type CollapsedView } from "@/components/use-collapsed-view";
-import { flushNoteDrafts, handOffNoteDraft, openDraftSave, replaceNoteDraft } from "@/components/outline/use-note-draft";
+import { afterNoteClose, flushNoteDrafts, handOffNoteDraft, openDraftSave, replaceNoteDraft } from "@/components/outline/use-note-draft";
 
 // The floating card: one note taken out of the tray, over the article
 // (floating-note-editor.tsx). It opens in its draggable mode; the pencil
@@ -196,10 +196,10 @@ export type OutlineActions = {
   /** The pill's ✕: the merge stays, a canceled edit and a reject stay, and
       a delete waiting on Undo runs now. */
   dismissMerge: () => void;
-  /** An editor's Cancel put a note back to its text when the editor opened:
-      the pill offers the typed words back (SPEC.md §6). */
-  editCanceled: (noteId: string, typed: string) => void;
-  lastCancel: { noteId: string; content: string } | null;
+  /** An editor's Cancel took the words typed in it out of a note (back:
+      the text Cancel left): the pill offers the typed words back (SPEC.md §6). */
+  editCanceled: (noteId: string, typed: string, back: string) => void;
+  lastCancel: { noteId: string; content: string; back: string } | null;
   undoCancel: () => void;
   setPinned: (id: string, pinned: boolean) => Promise<void>;
   acceptNote: (id: string) => Promise<void>;
@@ -811,7 +811,7 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
     return () => clearTimeout(timer);
   }, [lastSectionDelete]);
   // The words an editor's Cancel took out of a note, while Undo can put them back.
-  const [lastCancel, setLastCancel] = useState<{ noteId: string; content: string } | null>(null);
+  const [lastCancel, setLastCancel] = useState<{ noteId: string; content: string; back: string } | null>(null);
   useEffect(() => {
     if (!lastCancel) return;
     const timer = setTimeout(() => setLastCancel(null), MERGE_UNDO_MS);
@@ -1604,20 +1604,20 @@ export function useOutline(notebook: NotebookView, canEdit = true, documentId: s
       commitDelete();
       settlePosted();
     },
-    editCanceled(noteId, typed) {
-      setLastCancel({ noteId, content: typed });
+    editCanceled(noteId, typed, back) {
+      setLastCancel({ noteId, content: typed, back });
     },
     lastCancel,
     undoCancel() {
       const canceled = lastCancel;
       if (!canceled) return;
       setLastCancel(null);
-      // The typed words go back into the note. The local draft holds them
-      // until the server has them, as for any save.
-      const before = placeOf(treeRef.current, canceled.noteId)?.note.content;
-      writeNoteDraft(canceled.noteId, canceled.content, before ?? canceled.content);
-      void actions
-        .saveNote(canceled.noteId, canceled.content)
+      // The typed words go back into the note, made from the text Cancel
+      // left, after Cancel's write: words another writer added since stay.
+      // The local draft holds them until the server has them, as for any save.
+      writeNoteDraft(canceled.noteId, canceled.content, canceled.back);
+      void afterNoteClose(canceled.noteId)
+        .then(() => actions.saveNote(canceled.noteId, canceled.content, canceled.back))
         .then(() => confirmNoteDraft(canceled.noteId, canceled.content), failure);
     },
     async setPinned(id, pinned) {

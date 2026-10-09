@@ -21,10 +21,12 @@ import type { SaveState } from "@/components/outline/save-state";
 // content, and replayed on the next load when it is not (use-outline.ts). A
 // save that waits in the offline queue is not confirmed: the draft keeps the
 // words, made from the text the server has, until the queue's write lands.
-// Cancel restores the content from before this edit: the flush sees the
-// reverted draft and writes it back over the auto-saved state. The tray card
-// and the floating card share this hook; the draft moves between them as
-// `initial`.
+// Cancel takes out the words typed in this editor: the editor goes back to
+// the text it opened on, with every change another writer made meanwhile
+// put back on it (another tab, a device, a collaborator, a merge into the
+// note), and the close writes that text, made from the text the last save
+// left, so words that landed since stay too. The tray card and the floating
+// card share this hook; the draft moves between them as `initial`.
 //
 // Every save names the text it was made from (lib/notes/save-text.ts): the
 // note's text when the editor opened, then the text each save left. The
@@ -96,11 +98,27 @@ type Carried = {
     queued: string | null;
     opened: string;
     original: string;
+    others: OtherChange[];
   };
   /** Close it as Done would have, when no new card took it. */
   close: () => void;
 };
 const carried = new Map<string, Carried>();
+
+// The close write of each editor that closed and whose write has not
+// answered yet, by note: a save that must land after it (Undo on the Edit
+// canceled pill) waits for it.
+const closing = new Map<string, Promise<unknown>>();
+
+/** Resolves once the note's closed editor has written its last words. */
+export function afterNoteClose(noteId: string): Promise<void> {
+  return (closing.get(noteId) ?? Promise.resolve()).then(() => {});
+}
+
+/** A change to the note's text that the editor did not type: from the text
+    one of its saves sent to the text the save came back with, or from the
+    note's text to the text a merge into it left. */
+type OtherChange = { from: string; to: string };
 
 /** The notes are about to be drawn anew (a new Group by): each open editor
     goes on in its note's new card. An editor no new card takes closes and
@@ -204,6 +222,13 @@ export function useNoteDraft({
   // editor as it opens: until the editor shows them, no keystroke writes
   // the local draft, so the kept words are never written over.
   const adoptingRef = useRef<string | null>(null);
+  // The changes other writers made to the note while the editor was open,
+  // in order: Cancel puts them back on the text the editor opened on, so
+  // it takes out only the words typed here (SPEC.md §6).
+  const othersRef = useRef<OtherChange[]>([]);
+  // Cancel was pressed: the close writes the text Cancel left, as its own
+  // History entry, and keeps the sources until it names which go.
+  const canceledRef = useRef(false);
 
   useEffect(() => {
     if (!active) return;
@@ -214,6 +239,8 @@ export function useNoteDraft({
     queuedRef.current = null;
     openedRef.current = original.trim();
     adoptingRef.current = null;
+    othersRef.current = [];
+    canceledRef.current = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setConfirmed(original.trim());
     setFailed(null);
@@ -234,6 +261,7 @@ export function useNoteDraft({
         queuedRef.current = was.queued;
         openedRef.current = was.opened;
         originalRef.current = was.original;
+        othersRef.current = [...was.others];
         if (was.queued !== null && !isOffline()) setFailed(was.queued);
         else {
           setQueued(was.queued);
@@ -341,6 +369,7 @@ export function useNoteDraft({
             // with what the reader typed since put on top of it — painted
             // now, before another key reaches the editor, so the next save is
             // made from it.
+            othersRef.current.push({ from: trimmed, to: saved.content });
             const typed = draftRef.current;
             const next =
               typed.trim() === trimmed ? saved.content : reconcileNoteText(trimmed, saved.content, typed.trim(), conflictLabels()).text;
@@ -419,6 +448,8 @@ export function useNoteDraft({
         }
       },
       replace(content) {
+        // A merge into the note: not typed here, so Cancel keeps it.
+        if (content.trim() !== baseRef.current) othersRef.current.push({ from: baseRef.current, to: content.trim() });
         draftRef.current = content;
         lastSavedRef.current = content.trim();
         baseRef.current = content.trim();
@@ -436,10 +467,13 @@ export function useNoteDraft({
       open = false;
       // A closed editor whose saves are still on their way stays the note's
       // one sender until they answer: the notes' retry leaves the note to
-      // it, and a save asked for meanwhile goes after them.
-      void chainRef.current.then(() => {
-        if (openDrafts.get(noteId) === handle) openDrafts.delete(noteId);
-      });
+      // it, and a save asked for meanwhile goes after them. Read after this
+      // commit's other cleanups, so the close write counts among them.
+      void Promise.resolve()
+        .then(() => chainRef.current)
+        .then(() => {
+          if (openDrafts.get(noteId) === handle) openDrafts.delete(noteId);
+        });
     };
   }, [active, canEdit, noteId, save]);
 
@@ -488,24 +522,42 @@ export function useNoteDraft({
     // The editor closes: the last words save after the saves before them,
     // and the sources of the quotes the sitting removed go with them. The
     // words sent are the ones the editor holds once those saves answered:
-    // the text they brought back, with the reader's words on top.
+    // the text they brought back, with the reader's words on top. After
+    // Cancel, the words are the text Cancel left: made from the text the
+    // last save left, so the route keeps words that landed since, and the
+    // sources stay but those of quotes the opened text had and the note no
+    // longer has. Its History entry is its own, so the text before Cancel
+    // stays a version.
     const close = () => {
       const trimmed = draftRef.current.trim();
       const typed = Boolean(trimmed) && trimmed !== lastSavedRef.current;
       if (typed) lastSavedRef.current = trimmed;
       else if (lastSavedRef.current.trim() === openedRef.current) return;
       const opened = openedRef.current;
-      void chainRef.current.then(() => {
+      const canceled = canceledRef.current;
+      const write = chainRef.current.then(() => {
         const words = draftRef.current.trim() || trimmed;
         if (typed) lastSavedRef.current = words;
         const changed = typed && words !== baseRef.current;
         if (!changed && lastSavedRef.current.trim() === opened) return;
         return send(
           changed
-            ? { content: words, baseContent: baseRef.current, onConflict: "keep", pruneSourcesFrom: opened }
+            ? {
+                content: words,
+                baseContent: baseRef.current,
+                onConflict: "keep",
+                pruneSourcesFrom: opened,
+                ...(canceled ? { keepSources: true, newEdit: true } : {}),
+              }
             : { pruneSourcesFrom: opened },
           changed ? words : null,
         );
+      });
+      const done = write.catch(() => {});
+      chainRef.current = done;
+      closing.set(noteId, done);
+      void done.then(() => {
+        if (closing.get(noteId) === done) closing.delete(noteId);
       });
     };
     window.addEventListener("pagehide", flush);
@@ -527,6 +579,7 @@ export function useNoteDraft({
             queued: queuedRef.current,
             opened: openedRef.current,
             original: originalRef.current,
+            others: othersRef.current,
           }),
           close,
         });
@@ -548,15 +601,22 @@ export function useNoteDraft({
     };
   }, [active, canEdit, noteId]);
 
-  /** Cancel: the draft goes back to the original; the flush writes it back. */
-  function cancel() {
-    draftRef.current = originalRef.current;
-    setDraft(originalRef.current);
+  /** Cancel: the draft goes back to the text the editor opened on, with
+      every other writer's change since put back on it; the close writes it.
+      Returns that text. */
+  function cancel(): string {
+    let back = originalRef.current;
+    for (const { from, to } of othersRef.current) back = reconcileNoteText(from, to, back.trim(), conflictLabels()).text;
+    canceledRef.current = true;
+    draftRef.current = back;
+    setDraft(back);
     // The user gave the edit up: the local draft must not replay it.
     clearNoteDraft(noteId);
-    // The server may still hold the auto-saved edit until the flush lands;
-    // until then the local draft holds the original, so a lost flush replays it.
-    if (lastSavedRef.current !== originalRef.current.trim()) writeNoteDraft(noteId, originalRef.current, baseRef.current);
+    // Offline the close cannot land now: the local draft holds the text
+    // Cancel left until it does. Online the close lands at once; a draft
+    // replayed after it would be made from a text the note no longer has.
+    if (isOffline() && lastSavedRef.current !== back.trim()) writeNoteDraft(noteId, back, baseRef.current);
+    return back;
   }
 
   /** Save: the caller writes `content` itself, so the flush must not write the draft again. */

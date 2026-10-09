@@ -638,12 +638,13 @@ const NoteCardBody = memo(function NoteCardBody({
   // Cancel takes the quote's words back out, so it gives them up too.
   const sitting = useRef<string[]>([]);
 
-  // Cancel puts the note back to its text when the editor opened; the pill
-  // offers the typed words back (SPEC.md §6).
+  // Cancel takes the words typed in this editor out of the note; words
+  // another writer added meanwhile stay. The pill offers the typed words
+  // back (SPEC.md §6).
   function cancel() {
     const typed = draft.trim();
-    if (typed && typed !== getOriginal().trim()) commands.editCanceled(note.id, typed);
-    cancelDraft();
+    const back = cancelDraft();
+    if (typed && typed !== back.trim()) commands.editCanceled(note.id, typed, back);
     refocus.current = true;
     setEditing(false);
     const ids = sitting.current;
