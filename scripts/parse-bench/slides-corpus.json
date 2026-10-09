@@ -1396,6 +1396,24 @@
    "covers": [
     "smartart"
    ]
+  },
+  {
+   "id": "lo-tdf112089",
+   "url": "https://raw.githubusercontent.com/LibreOffice/core/29baf2f2a596670cd30238ec1041dcc53d28b56f/sd/qa/unit/data/pptx/tdf112089.pptx",
+   "source": "LibreOffice test documents",
+   "license": "MPL-2.0",
+   "covers": [
+    "chart"
+   ]
+  },
+  {
+   "id": "poi-chart-picture-bg",
+   "url": "https://raw.githubusercontent.com/apache/poi/ae62bb5116b9aee19ebd5834e3a82066132c9f7f/test-data/slideshow/chart-picture-bg.pptx",
+   "source": "Apache POI test data",
+   "license": "Apache-2.0",
+   "covers": [
+    "chart"
+   ]
   }
  ]
 }
