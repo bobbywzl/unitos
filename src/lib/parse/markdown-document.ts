@@ -422,6 +422,12 @@ export function markdownToHtml(
   return { html, title, titleFromFile: ownTitle === null };
 }
 
+/** A Markdown or text file's bytes as text: the add and the re-parse read
+    the file the same way (scripts/parse-bench/markdown.mts measures it). */
+export function markdownFileText(bytes: Uint8Array): string {
+  return new TextDecoder("utf-8").decode(bytes);
+}
+
 /** A Markdown file's blocks: the same walk a web page takes, no model pass,
     with every block of the file kept (no furniture rule drops one). */
 export async function parseMarkdownDocument(

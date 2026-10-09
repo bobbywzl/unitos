@@ -1,0 +1,3056 @@
+{
+ "total": {
+  "spec": {
+   "score": 0.856,
+   "parse": 0.859,
+   "words": 0.9,
+   "lost": 15
+  },
+  "md": {
+   "score": 0.761,
+   "parse": 0.753,
+   "words": 0.963,
+   "lost": 1234
+  },
+  "txt": {
+   "score": 0.56,
+   "parse": 0.56,
+   "words": 0.701,
+   "lost": 157437
+  }
+ },
+ "files": {
+  "commonmark-1": [
+   1,
+   1
+  ],
+  "commonmark-2": [
+   1,
+   1
+  ],
+  "commonmark-3": [
+   1,
+   1
+  ],
+  "commonmark-4": [
+   0.5,
+   0.5
+  ],
+  "commonmark-5": [
+   0.5,
+   0.5
+  ],
+  "commonmark-6": [
+   1,
+   1
+  ],
+  "commonmark-7": [
+   0.5,
+   0.5
+  ],
+  "commonmark-8": [
+   1,
+   1
+  ],
+  "commonmark-9": [
+   1,
+   1
+  ],
+  "commonmark-10": [
+   0,
+   0
+  ],
+  "commonmark-11": [
+   0,
+   0
+  ],
+  "commonmark-12": [
+   1,
+   1
+  ],
+  "commonmark-13": [
+   1,
+   1
+  ],
+  "commonmark-14": [
+   1,
+   1
+  ],
+  "commonmark-15": [
+   1,
+   1
+  ],
+  "commonmark-16": [
+   0.75,
+   0.75
+  ],
+  "commonmark-17": [
+   1,
+   1
+  ],
+  "commonmark-18": [
+   1,
+   1
+  ],
+  "commonmark-19": [
+   1,
+   1
+  ],
+  "commonmark-20": [
+   0.75,
+   0.75
+  ],
+  "commonmark-21": [
+   1,
+   1
+  ],
+  "commonmark-22": [
+   1,
+   1
+  ],
+  "commonmark-23": [
+   0,
+   0
+  ],
+  "commonmark-24": [
+   1,
+   1
+  ],
+  "commonmark-25": [
+   1,
+   1
+  ],
+  "commonmark-26": [
+   1,
+   1
+  ],
+  "commonmark-27": [
+   1,
+   1
+  ],
+  "commonmark-28": [
+   1,
+   1
+  ],
+  "commonmark-29": [
+   1,
+   1
+  ],
+  "commonmark-30": [
+   1,
+   1
+  ],
+  "commonmark-31": [
+   1,
+   1
+  ],
+  "commonmark-32": [
+   1,
+   1
+  ],
+  "commonmark-33": [
+   0,
+   0
+  ],
+  "commonmark-34": [
+   1,
+   1
+  ],
+  "commonmark-35": [
+   1,
+   1
+  ],
+  "commonmark-36": [
+   1,
+   1
+  ],
+  "commonmark-37": [
+   1,
+   1
+  ],
+  "commonmark-38": [
+   0.833,
+   0.833
+  ],
+  "commonmark-39": [
+   1,
+   1
+  ],
+  "commonmark-40": [
+   1,
+   1
+  ],
+  "commonmark-41": [
+   1,
+   1
+  ],
+  "commonmark-42": [
+   1,
+   1
+  ],
+  "commonmark-43": [
+   0,
+   0
+  ],
+  "commonmark-44": [
+   1,
+   1
+  ],
+  "commonmark-45": [
+   1,
+   1
+  ],
+  "commonmark-46": [
+   1,
+   1
+  ],
+  "commonmark-47": [
+   0,
+   0
+  ],
+  "commonmark-48": [
+   1,
+   1
+  ],
+  "commonmark-49": [
+   1,
+   1
+  ],
+  "commonmark-50": [
+   0,
+   0
+  ],
+  "commonmark-51": [
+   0,
+   0
+  ],
+  "commonmark-52": [
+   0,
+   0
+  ],
+  "commonmark-53": [
+   0,
+   0
+  ],
+  "commonmark-54": [
+   0,
+   0
+  ],
+  "commonmark-55": [
+   0.889,
+   0.889
+  ],
+  "commonmark-56": [
+   1,
+   1
+  ],
+  "commonmark-57": [
+   1,
+   1
+  ],
+  "commonmark-58": [
+   1,
+   1
+  ],
+  "commonmark-59": [
+   1,
+   1
+  ],
+  "commonmark-60": [
+   1,
+   1
+  ],
+  "commonmark-61": [
+   0.889,
+   0.889
+  ],
+  "commonmark-62": [
+   0.758,
+   0.889
+  ],
+  "commonmark-63": [
+   1,
+   1
+  ],
+  "commonmark-64": [
+   0.833,
+   0.833
+  ],
+  "commonmark-65": [
+   1,
+   1
+  ],
+  "commonmark-66": [
+   0,
+   0
+  ],
+  "commonmark-67": [
+   0,
+   0
+  ],
+  "commonmark-68": [
+   0.733,
+   0.733
+  ],
+  "commonmark-69": [
+   1,
+   1
+  ],
+  "commonmark-70": [
+   1,
+   1
+  ],
+  "commonmark-71": [
+   1,
+   1
+  ],
+  "commonmark-72": [
+   0.556,
+   1
+  ],
+  "commonmark-73": [
+   1,
+   1
+  ],
+  "commonmark-74": [
+   1,
+   1
+  ],
+  "commonmark-75": [
+   0,
+   0
+  ],
+  "commonmark-76": [
+   0.733,
+   0.733
+  ],
+  "commonmark-77": [
+   0.833,
+   0.833
+  ],
+  "commonmark-78": [
+   1,
+   1
+  ],
+  "commonmark-79": [
+   1,
+   1
+  ],
+  "commonmark-80": [
+   0.556,
+   1
+  ],
+  "commonmark-81": [
+   0,
+   0
+  ],
+  "commonmark-82": [
+   0,
+   0
+  ],
+  "commonmark-83": [
+   0.556,
+   0.556
+  ],
+  "commonmark-84": [
+   0.733,
+   0.733
+  ],
+  "commonmark-85": [
+   0.917,
+   0.917
+  ],
+  "commonmark-86": [
+   1,
+   1
+  ],
+  "commonmark-87": [
+   1,
+   1
+  ],
+  "commonmark-88": [
+   0.933,
+   0.933
+  ],
+  "commonmark-89": [
+   1,
+   1
+  ],
+  "commonmark-90": [
+   1,
+   1
+  ],
+  "commonmark-91": [
+   1,
+   1
+  ],
+  "commonmark-92": [
+   0.889,
+   0.889
+  ],
+  "commonmark-93": [
+   1,
+   1
+  ],
+  "commonmark-94": [
+   0.889,
+   0.889
+  ],
+  "commonmark-95": [
+   1,
+   1
+  ],
+  "commonmark-96": [
+   0.711,
+   0.711
+  ],
+  "commonmark-97": [
+   1,
+   1
+  ],
+  "commonmark-98": [
+   0,
+   0
+  ],
+  "commonmark-99": [
+   0.889,
+   0.889
+  ],
+  "commonmark-100": [
+   0.917,
+   0.917
+  ],
+  "commonmark-101": [
+   0.889,
+   0.889
+  ],
+  "commonmark-102": [
+   1,
+   1
+  ],
+  "commonmark-103": [
+   1,
+   1
+  ],
+  "commonmark-104": [
+   1,
+   1
+  ],
+  "commonmark-105": [
+   1,
+   1
+  ],
+  "commonmark-106": [
+   1,
+   1
+  ],
+  "commonmark-107": [
+   1,
+   1
+  ],
+  "commonmark-108": [
+   0.5,
+   0.5
+  ],
+  "commonmark-109": [
+   1,
+   1
+  ],
+  "commonmark-110": [
+   1,
+   1
+  ],
+  "commonmark-111": [
+   1,
+   1
+  ],
+  "commonmark-112": [
+   1,
+   1
+  ],
+  "commonmark-113": [
+   1,
+   1
+  ],
+  "commonmark-114": [
+   1,
+   1
+  ],
+  "commonmark-115": [
+   0.839,
+   0.972
+  ],
+  "commonmark-116": [
+   1,
+   1
+  ],
+  "commonmark-117": [
+   1,
+   1
+  ],
+  "commonmark-118": [
+   1,
+   1
+  ],
+  "commonmark-119": [
+   1,
+   1
+  ],
+  "commonmark-120": [
+   1,
+   1
+  ],
+  "commonmark-121": [
+   1,
+   1
+  ],
+  "commonmark-122": [
+   1,
+   1
+  ],
+  "commonmark-123": [
+   1,
+   1
+  ],
+  "commonmark-124": [
+   1,
+   1
+  ],
+  "commonmark-125": [
+   1,
+   1
+  ],
+  "commonmark-126": [
+   1,
+   1
+  ],
+  "commonmark-127": [
+   1,
+   1
+  ],
+  "commonmark-128": [
+   1,
+   1
+  ],
+  "commonmark-129": [
+   1,
+   1
+  ],
+  "commonmark-130": [
+   1,
+   1
+  ],
+  "commonmark-131": [
+   1,
+   1
+  ],
+  "commonmark-132": [
+   1,
+   1
+  ],
+  "commonmark-133": [
+   1,
+   1
+  ],
+  "commonmark-134": [
+   1,
+   1
+  ],
+  "commonmark-135": [
+   1,
+   1
+  ],
+  "commonmark-136": [
+   1,
+   1
+  ],
+  "commonmark-137": [
+   1,
+   1
+  ],
+  "commonmark-138": [
+   1,
+   1
+  ],
+  "commonmark-139": [
+   1,
+   1
+  ],
+  "commonmark-140": [
+   1,
+   1
+  ],
+  "commonmark-141": [
+   0.917,
+   0.917
+  ],
+  "commonmark-142": [
+   1,
+   1
+  ],
+  "commonmark-143": [
+   1,
+   1
+  ],
+  "commonmark-144": [
+   1,
+   1
+  ],
+  "commonmark-145": [
+   1,
+   1
+  ],
+  "commonmark-146": [
+   1,
+   1
+  ],
+  "commonmark-147": [
+   1,
+   1
+  ],
+  "commonmark-148": [
+   1,
+   1
+  ],
+  "commonmark-149": [
+   0.833,
+   0.833
+  ],
+  "commonmark-150": [
+   1,
+   1
+  ],
+  "commonmark-151": [
+   1,
+   1
+  ],
+  "commonmark-152": [
+   1,
+   1
+  ],
+  "commonmark-153": [
+   1,
+   1
+  ],
+  "commonmark-154": [
+   1,
+   1
+  ],
+  "commonmark-155": [
+   1,
+   1
+  ],
+  "commonmark-156": [
+   1,
+   1
+  ],
+  "commonmark-157": [
+   1,
+   1
+  ],
+  "commonmark-158": [
+   1,
+   1
+  ],
+  "commonmark-159": [
+   1,
+   1
+  ],
+  "commonmark-160": [
+   0.667,
+   0.667
+  ],
+  "commonmark-161": [
+   1,
+   1
+  ],
+  "commonmark-162": [
+   1,
+   1
+  ],
+  "commonmark-163": [
+   1,
+   1
+  ],
+  "commonmark-164": [
+   1,
+   1
+  ],
+  "commonmark-165": [
+   1,
+   1
+  ],
+  "commonmark-166": [
+   1,
+   1
+  ],
+  "commonmark-167": [
+   1,
+   1
+  ],
+  "commonmark-168": [
+   1,
+   1
+  ],
+  "commonmark-169": [
+   1,
+   1
+  ],
+  "commonmark-170": [
+   1,
+   1
+  ],
+  "commonmark-171": [
+   1,
+   1
+  ],
+  "commonmark-172": [
+   1,
+   1
+  ],
+  "commonmark-173": [
+   1,
+   1
+  ],
+  "commonmark-174": [
+   1,
+   1
+  ],
+  "commonmark-175": [
+   1,
+   1
+  ],
+  "commonmark-176": [
+   1,
+   1
+  ],
+  "commonmark-177": [
+   1,
+   1
+  ],
+  "commonmark-178": [
+   1,
+   1
+  ],
+  "commonmark-179": [
+   1,
+   1
+  ],
+  "commonmark-180": [
+   1,
+   1
+  ],
+  "commonmark-181": [
+   1,
+   1
+  ],
+  "commonmark-182": [
+   1,
+   1
+  ],
+  "commonmark-183": [
+   1,
+   1
+  ],
+  "commonmark-184": [
+   1,
+   1
+  ],
+  "commonmark-185": [
+   1,
+   1
+  ],
+  "commonmark-186": [
+   0.5,
+   0.5
+  ],
+  "commonmark-187": [
+   1,
+   1
+  ],
+  "commonmark-188": [
+   1,
+   1
+  ],
+  "commonmark-189": [
+   1,
+   1
+  ],
+  "commonmark-190": [
+   0.667,
+   0.667
+  ],
+  "commonmark-191": [
+   1,
+   1
+  ],
+  "commonmark-192": [
+   1,
+   1
+  ],
+  "commonmark-193": [
+   1,
+   1
+  ],
+  "commonmark-194": [
+   1,
+   1
+  ],
+  "commonmark-195": [
+   1,
+   1
+  ],
+  "commonmark-196": [
+   1,
+   1
+  ],
+  "commonmark-197": [
+   0.889,
+   0.889
+  ],
+  "commonmark-198": [
+   1,
+   1
+  ],
+  "commonmark-199": [
+   1,
+   1
+  ],
+  "commonmark-200": [
+   1,
+   1
+  ],
+  "commonmark-201": [
+   0.833,
+   0.833
+  ],
+  "commonmark-202": [
+   1,
+   1
+  ],
+  "commonmark-203": [
+   0,
+   0
+  ],
+  "commonmark-204": [
+   0,
+   0
+  ],
+  "commonmark-205": [
+   1,
+   1
+  ],
+  "commonmark-206": [
+   1,
+   1
+  ],
+  "commonmark-207": [
+   1,
+   1
+  ],
+  "commonmark-208": [
+   1,
+   1
+  ],
+  "commonmark-209": [
+   1,
+   1
+  ],
+  "commonmark-210": [
+   1,
+   1
+  ],
+  "commonmark-211": [
+   1,
+   1
+  ],
+  "commonmark-212": [
+   1,
+   1
+  ],
+  "commonmark-213": [
+   1,
+   1
+  ],
+  "commonmark-214": [
+   1,
+   1
+  ],
+  "commonmark-215": [
+   1,
+   1
+  ],
+  "commonmark-216": [
+   1,
+   1
+  ],
+  "commonmark-217": [
+   1,
+   1
+  ],
+  "commonmark-218": [
+   0,
+   0
+  ],
+  "commonmark-219": [
+   0.833,
+   0.833
+  ],
+  "commonmark-220": [
+   1,
+   1
+  ],
+  "commonmark-221": [
+   0.833,
+   0.833
+  ],
+  "commonmark-222": [
+   1,
+   1
+  ],
+  "commonmark-223": [
+   1,
+   1
+  ],
+  "commonmark-224": [
+   1,
+   1
+  ],
+  "commonmark-225": [
+   1,
+   1
+  ],
+  "commonmark-226": [
+   0.75,
+   0.75
+  ],
+  "commonmark-227": [
+   1,
+   1
+  ],
+  "commonmark-228": [
+   0.822,
+   0.822
+  ],
+  "commonmark-229": [
+   0.822,
+   0.822
+  ],
+  "commonmark-230": [
+   0.822,
+   0.822
+  ],
+  "commonmark-231": [
+   1,
+   1
+  ],
+  "commonmark-232": [
+   0.822,
+   0.822
+  ],
+  "commonmark-233": [
+   1,
+   1
+  ],
+  "commonmark-234": [
+   0.889,
+   0.889
+  ],
+  "commonmark-235": [
+   1,
+   1
+  ],
+  "commonmark-236": [
+   1,
+   1
+  ],
+  "commonmark-237": [
+   1,
+   1
+  ],
+  "commonmark-238": [
+   1,
+   1
+  ],
+  "commonmark-239": [
+   1,
+   1
+  ],
+  "commonmark-240": [
+   1,
+   1
+  ],
+  "commonmark-241": [
+   1,
+   1
+  ],
+  "commonmark-242": [
+   1,
+   1
+  ],
+  "commonmark-243": [
+   1,
+   1
+  ],
+  "commonmark-244": [
+   1,
+   1
+  ],
+  "commonmark-245": [
+   1,
+   1
+  ],
+  "commonmark-246": [
+   1,
+   1
+  ],
+  "commonmark-247": [
+   1,
+   1
+  ],
+  "commonmark-248": [
+   1,
+   1
+  ],
+  "commonmark-249": [
+   1,
+   1
+  ],
+  "commonmark-250": [
+   1,
+   1
+  ],
+  "commonmark-251": [
+   1,
+   1
+  ],
+  "commonmark-252": [
+   1,
+   1
+  ],
+  "commonmark-253": [
+   1,
+   1
+  ],
+  "commonmark-254": [
+   0.5,
+   0.5
+  ],
+  "commonmark-255": [
+   1,
+   1
+  ],
+  "commonmark-256": [
+   0.5,
+   0.5
+  ],
+  "commonmark-257": [
+   1,
+   1
+  ],
+  "commonmark-258": [
+   0.5,
+   0.5
+  ],
+  "commonmark-259": [
+   0.5,
+   0.5
+  ],
+  "commonmark-260": [
+   1,
+   1
+  ],
+  "commonmark-261": [
+   0.833,
+   0.833
+  ],
+  "commonmark-262": [
+   0.5,
+   0.5
+  ],
+  "commonmark-263": [
+   0.5,
+   0.5
+  ],
+  "commonmark-264": [
+   0.5,
+   0.5
+  ],
+  "commonmark-265": [
+   0.333,
+   1
+  ],
+  "commonmark-266": [
+   1,
+   1
+  ],
+  "commonmark-267": [
+   1,
+   1
+  ],
+  "commonmark-268": [
+   1,
+   1
+  ],
+  "commonmark-269": [
+   1,
+   1
+  ],
+  "commonmark-270": [
+   0.5,
+   0.5
+  ],
+  "commonmark-271": [
+   0.5,
+   0.5
+  ],
+  "commonmark-272": [
+   1,
+   1
+  ],
+  "commonmark-273": [
+   0.5,
+   0.5
+  ],
+  "commonmark-274": [
+   0.5,
+   0.5
+  ],
+  "commonmark-275": [
+   0.833,
+   0.833
+  ],
+  "commonmark-276": [
+   1,
+   1
+  ],
+  "commonmark-277": [
+   0.5,
+   0.5
+  ],
+  "commonmark-278": [
+   0.778,
+   0.778
+  ],
+  "commonmark-279": [
+   1,
+   1
+  ],
+  "commonmark-280": [
+   1,
+   1
+  ],
+  "commonmark-281": [
+   1,
+   1
+  ],
+  "commonmark-282": [
+   1,
+   1
+  ],
+  "commonmark-283": [
+   1,
+   1
+  ],
+  "commonmark-284": [
+   1,
+   1
+  ],
+  "commonmark-285": [
+   1,
+   1
+  ],
+  "commonmark-286": [
+   0.5,
+   0.5
+  ],
+  "commonmark-287": [
+   0.5,
+   0.5
+  ],
+  "commonmark-288": [
+   0.5,
+   0.5
+  ],
+  "commonmark-289": [
+   1,
+   1
+  ],
+  "commonmark-290": [
+   0.5,
+   0.5
+  ],
+  "commonmark-291": [
+   1,
+   1
+  ],
+  "commonmark-292": [
+   1,
+   1
+  ],
+  "commonmark-293": [
+   1,
+   1
+  ],
+  "commonmark-294": [
+   1,
+   1
+  ],
+  "commonmark-295": [
+   1,
+   1
+  ],
+  "commonmark-296": [
+   1,
+   1
+  ],
+  "commonmark-297": [
+   1,
+   1
+  ],
+  "commonmark-298": [
+   0.667,
+   1
+  ],
+  "commonmark-299": [
+   0.667,
+   1
+  ],
+  "commonmark-300": [
+   0.667,
+   0.667
+  ],
+  "commonmark-301": [
+   1,
+   1
+  ],
+  "commonmark-302": [
+   1,
+   1
+  ],
+  "commonmark-303": [
+   1,
+   1
+  ],
+  "commonmark-304": [
+   1,
+   1
+  ],
+  "commonmark-305": [
+   1,
+   1
+  ],
+  "commonmark-306": [
+   1,
+   1
+  ],
+  "commonmark-307": [
+   0.857,
+   0.857
+  ],
+  "commonmark-308": [
+   1,
+   1
+  ],
+  "commonmark-309": [
+   0.893,
+   0.893
+  ],
+  "commonmark-310": [
+   1,
+   1
+  ],
+  "commonmark-311": [
+   1,
+   1
+  ],
+  "commonmark-312": [
+   1,
+   1
+  ],
+  "commonmark-313": [
+   1,
+   1
+  ],
+  "commonmark-314": [
+   1,
+   1
+  ],
+  "commonmark-315": [
+   1,
+   1
+  ],
+  "commonmark-316": [
+   0.857,
+   0.857
+  ],
+  "commonmark-317": [
+   1,
+   1
+  ],
+  "commonmark-318": [
+   0.889,
+   0.889
+  ],
+  "commonmark-319": [
+   0.857,
+   0.857
+  ],
+  "commonmark-320": [
+   0.8,
+   0.8
+  ],
+  "commonmark-321": [
+   0.778,
+   0.778
+  ],
+  "commonmark-322": [
+   1,
+   1
+  ],
+  "commonmark-323": [
+   1,
+   1
+  ],
+  "commonmark-324": [
+   0.5,
+   0.5
+  ],
+  "commonmark-325": [
+   0.8,
+   0.8
+  ],
+  "commonmark-326": [
+   1,
+   1
+  ],
+  "commonmark-327": [
+   1,
+   1
+  ],
+  "commonmark-328": [
+   1,
+   1
+  ],
+  "commonmark-329": [
+   1,
+   1
+  ],
+  "commonmark-330": [
+   1,
+   1
+  ],
+  "commonmark-331": [
+   1,
+   1
+  ],
+  "commonmark-332": [
+   1,
+   1
+  ],
+  "commonmark-333": [
+   1,
+   1
+  ],
+  "commonmark-334": [
+   1,
+   1
+  ],
+  "commonmark-335": [
+   1,
+   1
+  ],
+  "commonmark-336": [
+   1,
+   1
+  ],
+  "commonmark-337": [
+   1,
+   1
+  ],
+  "commonmark-338": [
+   1,
+   1
+  ],
+  "commonmark-339": [
+   1,
+   1
+  ],
+  "commonmark-340": [
+   1,
+   1
+  ],
+  "commonmark-341": [
+   1,
+   1
+  ],
+  "commonmark-342": [
+   1,
+   1
+  ],
+  "commonmark-343": [
+   1,
+   1
+  ],
+  "commonmark-344": [
+   1,
+   1
+  ],
+  "commonmark-345": [
+   1,
+   1
+  ],
+  "commonmark-346": [
+   0.75,
+   0.75
+  ],
+  "commonmark-347": [
+   1,
+   1
+  ],
+  "commonmark-348": [
+   1,
+   1
+  ],
+  "commonmark-349": [
+   1,
+   1
+  ],
+  "commonmark-350": [
+   1,
+   1
+  ],
+  "commonmark-351": [
+   1,
+   1
+  ],
+  "commonmark-352": [
+   1,
+   1
+  ],
+  "commonmark-353": [
+   1,
+   1
+  ],
+  "commonmark-354": [
+   1,
+   1
+  ],
+  "commonmark-355": [
+   1,
+   1
+  ],
+  "commonmark-356": [
+   1,
+   1
+  ],
+  "commonmark-357": [
+   1,
+   1
+  ],
+  "commonmark-358": [
+   1,
+   1
+  ],
+  "commonmark-359": [
+   1,
+   1
+  ],
+  "commonmark-360": [
+   1,
+   1
+  ],
+  "commonmark-361": [
+   1,
+   1
+  ],
+  "commonmark-362": [
+   1,
+   1
+  ],
+  "commonmark-363": [
+   1,
+   1
+  ],
+  "commonmark-364": [
+   1,
+   1
+  ],
+  "commonmark-365": [
+   1,
+   1
+  ],
+  "commonmark-366": [
+   1,
+   1
+  ],
+  "commonmark-367": [
+   1,
+   1
+  ],
+  "commonmark-368": [
+   1,
+   1
+  ],
+  "commonmark-369": [
+   1,
+   1
+  ],
+  "commonmark-370": [
+   1,
+   1
+  ],
+  "commonmark-371": [
+   1,
+   1
+  ],
+  "commonmark-372": [
+   1,
+   1
+  ],
+  "commonmark-373": [
+   1,
+   1
+  ],
+  "commonmark-374": [
+   1,
+   1
+  ],
+  "commonmark-375": [
+   1,
+   1
+  ],
+  "commonmark-376": [
+   1,
+   1
+  ],
+  "commonmark-377": [
+   1,
+   1
+  ],
+  "commonmark-378": [
+   1,
+   1
+  ],
+  "commonmark-379": [
+   1,
+   1
+  ],
+  "commonmark-380": [
+   1,
+   1
+  ],
+  "commonmark-381": [
+   1,
+   1
+  ],
+  "commonmark-382": [
+   1,
+   1
+  ],
+  "commonmark-383": [
+   1,
+   1
+  ],
+  "commonmark-384": [
+   1,
+   1
+  ],
+  "commonmark-385": [
+   1,
+   1
+  ],
+  "commonmark-386": [
+   1,
+   1
+  ],
+  "commonmark-387": [
+   1,
+   1
+  ],
+  "commonmark-388": [
+   1,
+   1
+  ],
+  "commonmark-389": [
+   1,
+   1
+  ],
+  "commonmark-390": [
+   1,
+   1
+  ],
+  "commonmark-391": [
+   1,
+   1
+  ],
+  "commonmark-392": [
+   1,
+   1
+  ],
+  "commonmark-393": [
+   1,
+   1
+  ],
+  "commonmark-394": [
+   1,
+   1
+  ],
+  "commonmark-395": [
+   1,
+   1
+  ],
+  "commonmark-396": [
+   1,
+   1
+  ],
+  "commonmark-397": [
+   1,
+   1
+  ],
+  "commonmark-398": [
+   1,
+   1
+  ],
+  "commonmark-399": [
+   1,
+   1
+  ],
+  "commonmark-400": [
+   1,
+   1
+  ],
+  "commonmark-401": [
+   1,
+   1
+  ],
+  "commonmark-402": [
+   1,
+   1
+  ],
+  "commonmark-403": [
+   1,
+   1
+  ],
+  "commonmark-404": [
+   1,
+   1
+  ],
+  "commonmark-405": [
+   1,
+   1
+  ],
+  "commonmark-406": [
+   1,
+   1
+  ],
+  "commonmark-407": [
+   1,
+   1
+  ],
+  "commonmark-408": [
+   1,
+   1
+  ],
+  "commonmark-409": [
+   1,
+   1
+  ],
+  "commonmark-410": [
+   1,
+   1
+  ],
+  "commonmark-411": [
+   1,
+   1
+  ],
+  "commonmark-412": [
+   1,
+   1
+  ],
+  "commonmark-413": [
+   1,
+   1
+  ],
+  "commonmark-414": [
+   1,
+   1
+  ],
+  "commonmark-415": [
+   1,
+   1
+  ],
+  "commonmark-416": [
+   1,
+   1
+  ],
+  "commonmark-417": [
+   1,
+   1
+  ],
+  "commonmark-418": [
+   1,
+   1
+  ],
+  "commonmark-419": [
+   1,
+   1
+  ],
+  "commonmark-420": [
+   1,
+   1
+  ],
+  "commonmark-421": [
+   1,
+   1
+  ],
+  "commonmark-422": [
+   1,
+   1
+  ],
+  "commonmark-423": [
+   1,
+   1
+  ],
+  "commonmark-424": [
+   1,
+   1
+  ],
+  "commonmark-425": [
+   1,
+   1
+  ],
+  "commonmark-426": [
+   1,
+   1
+  ],
+  "commonmark-427": [
+   1,
+   1
+  ],
+  "commonmark-428": [
+   1,
+   1
+  ],
+  "commonmark-429": [
+   1,
+   1
+  ],
+  "commonmark-430": [
+   1,
+   1
+  ],
+  "commonmark-431": [
+   1,
+   1
+  ],
+  "commonmark-432": [
+   1,
+   1
+  ],
+  "commonmark-433": [
+   1,
+   1
+  ],
+  "commonmark-434": [
+   1,
+   1
+  ],
+  "commonmark-435": [
+   1,
+   1
+  ],
+  "commonmark-436": [
+   1,
+   1
+  ],
+  "commonmark-437": [
+   1,
+   1
+  ],
+  "commonmark-438": [
+   1,
+   1
+  ],
+  "commonmark-439": [
+   1,
+   1
+  ],
+  "commonmark-440": [
+   1,
+   1
+  ],
+  "commonmark-441": [
+   1,
+   1
+  ],
+  "commonmark-442": [
+   1,
+   1
+  ],
+  "commonmark-443": [
+   1,
+   1
+  ],
+  "commonmark-444": [
+   1,
+   1
+  ],
+  "commonmark-445": [
+   1,
+   1
+  ],
+  "commonmark-446": [
+   1,
+   1
+  ],
+  "commonmark-447": [
+   1,
+   1
+  ],
+  "commonmark-448": [
+   1,
+   1
+  ],
+  "commonmark-449": [
+   1,
+   1
+  ],
+  "commonmark-450": [
+   1,
+   1
+  ],
+  "commonmark-451": [
+   1,
+   1
+  ],
+  "commonmark-452": [
+   1,
+   1
+  ],
+  "commonmark-453": [
+   1,
+   1
+  ],
+  "commonmark-454": [
+   1,
+   1
+  ],
+  "commonmark-455": [
+   1,
+   1
+  ],
+  "commonmark-456": [
+   1,
+   1
+  ],
+  "commonmark-457": [
+   1,
+   1
+  ],
+  "commonmark-458": [
+   1,
+   1
+  ],
+  "commonmark-459": [
+   1,
+   1
+  ],
+  "commonmark-460": [
+   1,
+   1
+  ],
+  "commonmark-461": [
+   1,
+   1
+  ],
+  "commonmark-462": [
+   1,
+   1
+  ],
+  "commonmark-463": [
+   1,
+   1
+  ],
+  "commonmark-464": [
+   1,
+   1
+  ],
+  "commonmark-465": [
+   1,
+   1
+  ],
+  "commonmark-466": [
+   1,
+   1
+  ],
+  "commonmark-467": [
+   1,
+   1
+  ],
+  "commonmark-468": [
+   1,
+   1
+  ],
+  "commonmark-469": [
+   1,
+   1
+  ],
+  "commonmark-470": [
+   1,
+   1
+  ],
+  "commonmark-471": [
+   1,
+   1
+  ],
+  "commonmark-472": [
+   1,
+   1
+  ],
+  "commonmark-473": [
+   1,
+   1
+  ],
+  "commonmark-474": [
+   1,
+   1
+  ],
+  "commonmark-475": [
+   1,
+   1
+  ],
+  "commonmark-476": [
+   1,
+   1
+  ],
+  "commonmark-477": [
+   1,
+   1
+  ],
+  "commonmark-478": [
+   1,
+   1
+  ],
+  "commonmark-479": [
+   1,
+   1
+  ],
+  "commonmark-480": [
+   0.75,
+   0.75
+  ],
+  "commonmark-481": [
+   0.75,
+   0.75
+  ],
+  "commonmark-482": [
+   1,
+   1
+  ],
+  "commonmark-483": [
+   1,
+   1
+  ],
+  "commonmark-484": [
+   1,
+   1
+  ],
+  "commonmark-485": [
+   1,
+   1
+  ],
+  "commonmark-486": [
+   1,
+   1
+  ],
+  "commonmark-487": [
+   1,
+   1
+  ],
+  "commonmark-488": [
+   1,
+   1
+  ],
+  "commonmark-489": [
+   1,
+   1
+  ],
+  "commonmark-490": [
+   1,
+   1
+  ],
+  "commonmark-491": [
+   1,
+   1
+  ],
+  "commonmark-492": [
+   1,
+   1
+  ],
+  "commonmark-493": [
+   1,
+   1
+  ],
+  "commonmark-494": [
+   1,
+   1
+  ],
+  "commonmark-495": [
+   1,
+   1
+  ],
+  "commonmark-496": [
+   1,
+   1
+  ],
+  "commonmark-497": [
+   1,
+   1
+  ],
+  "commonmark-498": [
+   1,
+   1
+  ],
+  "commonmark-499": [
+   1,
+   1
+  ],
+  "commonmark-500": [
+   1,
+   1
+  ],
+  "commonmark-501": [
+   0.667,
+   0.667
+  ],
+  "commonmark-502": [
+   1,
+   1
+  ],
+  "commonmark-503": [
+   1,
+   1
+  ],
+  "commonmark-504": [
+   1,
+   1
+  ],
+  "commonmark-505": [
+   1,
+   1
+  ],
+  "commonmark-506": [
+   1,
+   1
+  ],
+  "commonmark-507": [
+   1,
+   1
+  ],
+  "commonmark-508": [
+   1,
+   1
+  ],
+  "commonmark-509": [
+   1,
+   1
+  ],
+  "commonmark-510": [
+   1,
+   1
+  ],
+  "commonmark-511": [
+   1,
+   1
+  ],
+  "commonmark-512": [
+   1,
+   1
+  ],
+  "commonmark-513": [
+   1,
+   1
+  ],
+  "commonmark-514": [
+   1,
+   1
+  ],
+  "commonmark-515": [
+   1,
+   1
+  ],
+  "commonmark-516": [
+   1,
+   1
+  ],
+  "commonmark-517": [
+   0,
+   0
+  ],
+  "commonmark-518": [
+   1,
+   1
+  ],
+  "commonmark-519": [
+   1,
+   1
+  ],
+  "commonmark-520": [
+   0,
+   0
+  ],
+  "commonmark-521": [
+   1,
+   1
+  ],
+  "commonmark-522": [
+   1,
+   1
+  ],
+  "commonmark-523": [
+   1,
+   1
+  ],
+  "commonmark-524": [
+   1,
+   1
+  ],
+  "commonmark-525": [
+   1,
+   1
+  ],
+  "commonmark-526": [
+   0.75,
+   0.75
+  ],
+  "commonmark-527": [
+   0,
+   0
+  ],
+  "commonmark-528": [
+   0,
+   0
+  ],
+  "commonmark-529": [
+   0,
+   0
+  ],
+  "commonmark-530": [
+   0,
+   0
+  ],
+  "commonmark-531": [
+   1,
+   1
+  ],
+  "commonmark-532": [
+   0,
+   0
+  ],
+  "commonmark-533": [
+   0,
+   0
+  ],
+  "commonmark-534": [
+   0,
+   0
+  ],
+  "commonmark-535": [
+   0,
+   0
+  ],
+  "commonmark-536": [
+   0,
+   0
+  ],
+  "commonmark-537": [
+   0,
+   0
+  ],
+  "commonmark-538": [
+   0,
+   0
+  ],
+  "commonmark-539": [
+   0,
+   0
+  ],
+  "commonmark-540": [
+   0,
+   0
+  ],
+  "commonmark-541": [
+   1,
+   1
+  ],
+  "commonmark-542": [
+   0,
+   0
+  ],
+  "commonmark-543": [
+   1,
+   1
+  ],
+  "commonmark-544": [
+   1,
+   1
+  ],
+  "commonmark-545": [
+   0,
+   0
+  ],
+  "commonmark-546": [
+   0.833,
+   0.833
+  ],
+  "commonmark-547": [
+   0.833,
+   0.833
+  ],
+  "commonmark-548": [
+   0.833,
+   0.833
+  ],
+  "commonmark-549": [
+   0,
+   0
+  ],
+  "commonmark-550": [
+   1,
+   1
+  ],
+  "commonmark-551": [
+   1,
+   1
+  ],
+  "commonmark-552": [
+   1,
+   1
+  ],
+  "commonmark-553": [
+   0,
+   0
+  ],
+  "commonmark-554": [
+   0,
+   0
+  ],
+  "commonmark-555": [
+   0,
+   0
+  ],
+  "commonmark-556": [
+   1,
+   1
+  ],
+  "commonmark-557": [
+   0,
+   0
+  ],
+  "commonmark-558": [
+   0,
+   0
+  ],
+  "commonmark-559": [
+   0,
+   0
+  ],
+  "commonmark-560": [
+   0,
+   0
+  ],
+  "commonmark-561": [
+   0,
+   0
+  ],
+  "commonmark-562": [
+   0,
+   0
+  ],
+  "commonmark-563": [
+   0,
+   0
+  ],
+  "commonmark-564": [
+   1,
+   1
+  ],
+  "commonmark-565": [
+   0,
+   0
+  ],
+  "commonmark-566": [
+   0,
+   0
+  ],
+  "commonmark-567": [
+   0,
+   0
+  ],
+  "commonmark-568": [
+   0,
+   0
+  ],
+  "commonmark-569": [
+   0,
+   0
+  ],
+  "commonmark-570": [
+   0,
+   0
+  ],
+  "commonmark-571": [
+   0,
+   0
+  ],
+  "commonmark-572": [
+   0,
+   0
+  ],
+  "commonmark-573": [
+   1,
+   1
+  ],
+  "commonmark-574": [
+   0,
+   0
+  ],
+  "commonmark-575": [
+   0,
+   0
+  ],
+  "commonmark-576": [
+   1,
+   1
+  ],
+  "commonmark-577": [
+   1,
+   1
+  ],
+  "commonmark-578": [
+   0,
+   0
+  ],
+  "commonmark-579": [
+   0.25,
+   0.25
+  ],
+  "commonmark-580": [
+   0,
+   0
+  ],
+  "commonmark-581": [
+   1,
+   1
+  ],
+  "commonmark-582": [
+   1,
+   1
+  ],
+  "commonmark-583": [
+   1,
+   1
+  ],
+  "commonmark-584": [
+   1,
+   1
+  ],
+  "commonmark-585": [
+   1,
+   1
+  ],
+  "commonmark-586": [
+   1,
+   1
+  ],
+  "commonmark-587": [
+   0,
+   0
+  ],
+  "commonmark-588": [
+   1,
+   1
+  ],
+  "commonmark-589": [
+   1,
+   1
+  ],
+  "commonmark-590": [
+   0.833,
+   0.833
+  ],
+  "commonmark-591": [
+   1,
+   1
+  ],
+  "commonmark-592": [
+   0,
+   0
+  ],
+  "commonmark-593": [
+   0,
+   0
+  ],
+  "commonmark-594": [
+   0.75,
+   0.75
+  ],
+  "commonmark-595": [
+   0.75,
+   0.75
+  ],
+  "commonmark-596": [
+   1,
+   1
+  ],
+  "commonmark-597": [
+   0.75,
+   0.75
+  ],
+  "commonmark-598": [
+   1,
+   1
+  ],
+  "commonmark-599": [
+   1,
+   1
+  ],
+  "commonmark-600": [
+   0.75,
+   0.75
+  ],
+  "commonmark-601": [
+   1,
+   1
+  ],
+  "commonmark-602": [
+   1,
+   1
+  ],
+  "commonmark-603": [
+   0.75,
+   0.75
+  ],
+  "commonmark-604": [
+   0.75,
+   0.75
+  ],
+  "commonmark-605": [
+   0.75,
+   0.75
+  ],
+  "commonmark-606": [
+   1,
+   1
+  ],
+  "commonmark-607": [
+   1,
+   1
+  ],
+  "commonmark-608": [
+   1,
+   1
+  ],
+  "commonmark-609": [
+   1,
+   1
+  ],
+  "commonmark-610": [
+   1,
+   1
+  ],
+  "commonmark-611": [
+   1,
+   1
+  ],
+  "commonmark-612": [
+   1,
+   1
+  ],
+  "commonmark-613": [
+   1,
+   1
+  ],
+  "commonmark-614": [
+   1,
+   1
+  ],
+  "commonmark-615": [
+   1,
+   1
+  ],
+  "commonmark-616": [
+   1,
+   1
+  ],
+  "commonmark-617": [
+   1,
+   1
+  ],
+  "commonmark-618": [
+   1,
+   1
+  ],
+  "commonmark-619": [
+   1,
+   1
+  ],
+  "commonmark-620": [
+   1,
+   1
+  ],
+  "commonmark-621": [
+   1,
+   1
+  ],
+  "commonmark-622": [
+   1,
+   1
+  ],
+  "commonmark-623": [
+   1,
+   1
+  ],
+  "commonmark-624": [
+   1,
+   1
+  ],
+  "commonmark-625": [
+   1,
+   1
+  ],
+  "commonmark-626": [
+   0.556,
+   0.556
+  ],
+  "commonmark-627": [
+   1,
+   1
+  ],
+  "commonmark-628": [
+   1,
+   1
+  ],
+  "commonmark-629": [
+   1,
+   1
+  ],
+  "commonmark-630": [
+   1,
+   1
+  ],
+  "commonmark-631": [
+   1,
+   1
+  ],
+  "commonmark-632": [
+   1,
+   1
+  ],
+  "commonmark-633": [
+   0.75,
+   0.75
+  ],
+  "commonmark-634": [
+   0.75,
+   0.75
+  ],
+  "commonmark-635": [
+   0.75,
+   0.75
+  ],
+  "commonmark-636": [
+   0.75,
+   0.75
+  ],
+  "commonmark-637": [
+   0.75,
+   0.75
+  ],
+  "commonmark-638": [
+   0.75,
+   0.75
+  ],
+  "commonmark-639": [
+   0.75,
+   0.75
+  ],
+  "commonmark-640": [
+   1,
+   1
+  ],
+  "commonmark-641": [
+   1,
+   1
+  ],
+  "commonmark-642": [
+   1,
+   1
+  ],
+  "commonmark-643": [
+   1,
+   1
+  ],
+  "commonmark-644": [
+   1,
+   1
+  ],
+  "commonmark-645": [
+   1,
+   1
+  ],
+  "commonmark-646": [
+   1,
+   1
+  ],
+  "commonmark-647": [
+   1,
+   1
+  ],
+  "commonmark-648": [
+   1,
+   1
+  ],
+  "commonmark-649": [
+   1,
+   1
+  ],
+  "commonmark-650": [
+   1,
+   1
+  ],
+  "commonmark-651": [
+   1,
+   1
+  ],
+  "commonmark-652": [
+   1,
+   1
+  ],
+  "gfm-198": [
+   0.667,
+   0.667
+  ],
+  "gfm-199": [
+   0.667,
+   0.667
+  ],
+  "gfm-200": [
+   0.667,
+   0.667
+  ],
+  "gfm-201": [
+   0.733,
+   0.733
+  ],
+  "gfm-202": [
+   0.722,
+   0.722
+  ],
+  "gfm-203": [
+   1,
+   1
+  ],
+  "gfm-204": [
+   0.636,
+   0.636
+  ],
+  "gfm-205": [
+   0.667,
+   0.667
+  ],
+  "gfm-279": [
+   1,
+   1
+  ],
+  "gfm-280": [
+   1,
+   1
+  ],
+  "gfm-491": [
+   1,
+   1
+  ],
+  "gfm-492": [
+   0.833,
+   0.833
+  ],
+  "gfm-621": [
+   0.75,
+   0.75
+  ],
+  "gfm-622": [
+   0.75,
+   0.75
+  ],
+  "gfm-623": [
+   0.75,
+   0.75
+  ],
+  "gfm-624": [
+   0.688,
+   0.688
+  ],
+  "gfm-625": [
+   0.75,
+   0.75
+  ],
+  "gfm-626": [
+   0.625,
+   0.625
+  ],
+  "gfm-627": [
+   0.75,
+   0.75
+  ],
+  "gfm-628": [
+   0.667,
+   0.667
+  ],
+  "gfm-629": [
+   0.75,
+   0.75
+  ],
+  "gfm-630": [
+   0.75,
+   0.75
+  ],
+  "gfm-631": [
+   0.688,
+   0.688
+  ],
+  "gfm-652": [
+   0.333,
+   0.333
+  ],
+  "react-readme": [
+   0.828,
+   0.828
+  ],
+  "vscode-readme": [
+   0.8,
+   0.8
+  ],
+  "rust-readme": [
+   0.793,
+   0.793
+  ],
+  "kubernetes-readme": [
+   0.833,
+   0.833
+  ],
+  "tensorflow-readme": [
+   0.831,
+   0.77
+  ],
+  "ohmyzsh-readme": [
+   0.767,
+   0.793
+  ],
+  "awesome-readme": [
+   0.692,
+   0.7
+  ],
+  "public-apis-readme": [
+   0.41,
+   0.41
+  ],
+  "vue-changelog": [
+   0.75,
+   0.75
+  ],
+  "node-fs-doc": [
+   0.785,
+   0.785
+  ],
+  "mermaid-flowchart": [
+   0.733,
+   0.733
+  ],
+  "github-math": [
+   0.743,
+   0.743
+  ],
+  "github-formatting": [
+   0.711,
+   0.711
+  ],
+  "katex-supported": [
+   0.604,
+   0.414
+  ],
+  "d2l-linear-regression": [
+   0.793,
+   0.793
+  ],
+  "jekyll-front-matter": [
+   0.744,
+   0.733
+  ],
+  "mdn-js-intro": [
+   0.774,
+   0.774
+  ],
+  "rust-book-ownership": [
+   1,
+   1
+  ],
+  "pandoc-manual": [
+   0.796,
+   0.796
+  ],
+  "javaguide-readme": [
+   0.8,
+   0.8
+  ],
+  "es6-let": [
+   0.8,
+   0.8
+  ],
+  "vue-docs-ja": [
+   0.832,
+   0.832
+  ],
+  "react-ko-learn": [
+   0.8,
+   0.8
+  ],
+  "node-pr-template": [
+   1,
+   1
+  ],
+  "redis-readme": [
+   0.808,
+   0.825
+  ],
+  "ollama-api": [
+   0.77,
+   0.775
+  ],
+  "whisper-readme": [
+   0.75,
+   0.75
+  ],
+  "excalidraw-readme": [
+   0.726,
+   0.726
+  ],
+  "llamacpp-readme": [
+   0.779,
+   0.721
+  ],
+  "markdown-test-file": [
+   0.79,
+   0.79
+  ],
+  "markdown-syntax": [
+   0.786,
+   0.8
+  ],
+  "markdown-basics": [
+   1,
+   1
+  ],
+  "react-readme-crlf-bom": [
+   0.828,
+   0.828
+  ],
+  "whisper-readme-utf16": [
+   0.004,
+   0.004
+  ],
+  "pride-and-prejudice": [
+   0.984,
+   0.984
+  ],
+  "alice": [
+   0.934,
+   0.934
+  ],
+  "frankenstein": [
+   0.898,
+   0.898
+  ],
+  "leaves-of-grass": [
+   0.665,
+   0.665
+  ],
+  "nursery-rhymes": [
+   0.787,
+   0.787
+  ],
+  "theatrical-makeup": [
+   0.779,
+   0.779
+  ],
+  "diner-interrompu": [
+   0.788,
+   0.788
+  ],
+  "blanc-et-noir": [
+   0.999,
+   0.999
+  ],
+  "afrique-aux-noirs": [
+   0.883,
+   0.883
+  ],
+  "alice-utf16le": [
+   0.012,
+   0.012
+  ],
+  "frankenstein-utf16be": [
+   0.011,
+   0.011
+  ],
+  "afrique-cp1252": [
+   0.764,
+   0.764
+  ],
+  "rfc2616": [
+   0.679,
+   0.679
+  ],
+  "rfc1149": [
+   0.667,
+   0.667
+  ],
+  "rfc3819": [
+   0.666,
+   0.666
+  ],
+  "rfc2460": [
+   0.667,
+   0.667
+  ],
+  "rfc1122": [
+   0.685,
+   0.685
+  ],
+  "cjk-shift-jis": [
+   0.035,
+   0.035
+  ],
+  "cjk-euc-jp": [
+   0.059,
+   0.059
+  ],
+  "cjk-gb2312": [
+   0.011,
+   0.011
+  ],
+  "cjk-gb18030": [
+   0.082,
+   0.082
+  ],
+  "cjk-big5": [
+   0.161,
+   0.161
+  ],
+  "cjk-euc-kr": [
+   0.009,
+   0.009
+  ],
+  "log-apache": [
+   0.5,
+   0.5
+  ],
+  "log-hdfs": [
+   0.5,
+   0.5
+  ],
+  "log-linux": [
+   0.5,
+   0.5
+  ],
+  "log-android": [
+   0.5,
+   0.5
+  ],
+  "log-openssh": [
+   0.5,
+   0.5
+  ],
+  "gpl-2": [
+   0.998,
+   0.998
+  ],
+  "python-license": [
+   0.995,
+   0.995
+  ],
+  "linux-maintainers": [
+   0.667,
+   0.667
+  ],
+  "vim-intro": [
+   0.987,
+   0.987
+  ],
+  "vim-usr01": [
+   0.998,
+   0.998
+  ],
+  "transformers-requirements": [
+   0.5,
+   0.5
+  ],
+  "json-cmakelists": [
+   0.675,
+   0.675
+  ],
+  "linux-readme": [
+   1,
+   1
+  ],
+  "vim-tutor-fr": [
+   0.822,
+   0.822
+  ],
+  "vim-tutor-de": [
+   0.881,
+   0.881
+  ],
+  "vim-tutor-ja-sjis": [
+   0.121,
+   0.121
+  ],
+  "vim-tutor-ja-euc": [
+   0.129,
+   0.129
+  ],
+  "vim-tutor-ko-euc": [
+   0.185,
+   0.185
+  ],
+  "vim-tutor-zh-euc": [
+   0.171,
+   0.171
+  ],
+  "vim-tutor-pl": [
+   0.691,
+   0.691
+  ],
+  "vim-tutor-ru": [
+   0.277,
+   0.277
+  ],
+  "vim-tutor-ru-cp1251": [
+   0.278,
+   0.278
+  ],
+  "vim-tutor-el": [
+   0.34,
+   0.34
+  ],
+  "vim-tutor-cs": [
+   0.468,
+   0.468
+  ],
+  "vim-tutor": [
+   0.989,
+   0.989
+  ]
+ }
+}
