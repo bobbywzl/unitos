@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import * as ssf from "ssf";
 import type { ParsedBlock, ParsedDocument } from "@/lib/parse/types";
 import { decodeTextFile } from "@/lib/parse/charset";
-import { computeFormula, type CellValue } from "@/lib/sheet-formulas";
+import { computeFormula, sharedFormula, type CellValue } from "@/lib/sheet-formulas";
 import { renderChart } from "@/lib/parse/chart";
 import { fontListAttr } from "@/lib/office-fonts";
 import { JEV_MODEL, jevEnabled, systemOne, type JevQuestion } from "@/lib/jev";
@@ -846,6 +846,23 @@ function readSheet(
   let cellCount = 0;
   let totalRows = 0;
   let cut = false;
+  // A shared formula's first cell holds its text; the cells that share it
+  // hold its index alone (ECMA-376 Part 1, §18.3.1.40) and read it moved by
+  // their distance from that cell. They had no formula, so a value the file
+  // left out stayed empty and no formula rode on them.
+  const sharedFormulas = new Map<string, { formula: string; r: number; c: number }>();
+  const cellFormula = (c: XmlElement, r: number, col: number): string | undefined => {
+    const f = child(c, "f");
+    const text = f?.textContent.trim() || undefined;
+    const si = attr(f, "si");
+    if (!f || attr(f, "t") !== "shared" || si === null) return text;
+    if (text) {
+      sharedFormulas.set(si, { formula: text, r, c: col });
+      return text;
+    }
+    const first = sharedFormulas.get(si);
+    return first ? (sharedFormula(first.formula, r - first.r, col - first.c) ?? undefined) : undefined;
+  };
   const readRow = (rowEl: XmlElement) => {
     const ref = intAttr(rowEl, "r");
     const r = ref !== null ? ref - 1 : rowCursor;
@@ -866,7 +883,7 @@ function readSheet(
       const col = at ? at.col : colCursor;
       colCursor = col + 1;
       if (col >= SHEET_MAX_COLS) continue;
-      const cell = readCell(c, shared, styles, date1904);
+      const cell = readCell(c, shared, styles, date1904, cellFormula(c, r, col));
       if (cell.formula && cell.kind === "empty" && (attr(c, "t") ?? "n") === "n") uncomputed.add(`${r}:${col}`);
       cells[col] = cell;
       cellCount++;
@@ -963,11 +980,10 @@ function readSheet(
   return { sheet, rels, hiddenRows, hiddenCols };
 }
 
-function readCell(c: XmlElement, shared: string[], styles: Styles, date1904: boolean): Cell {
+function readCell(c: XmlElement, shared: string[], styles: Styles, date1904: boolean, formula: string | undefined): Cell {
   const type = attr(c, "t") ?? "n";
   const styleId = intAttr(c, "s");
   const v = child(c, "v")?.textContent ?? "";
-  const formula = child(c, "f")?.textContent?.trim() || undefined;
   const format = formula && styleId !== null ? styles.numFmts[styleId] : undefined;
   const base = { styleId, formula, ...(format !== undefined && format !== 0 && format !== "General" ? { format } : {}) };
   switch (type) {
