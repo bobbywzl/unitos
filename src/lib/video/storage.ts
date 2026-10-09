@@ -28,6 +28,11 @@ export function sniffMedia(bytes: Uint8Array): string | null {
     bytes[2] === 0xdf &&
     bytes[3] === 0xa3
   ) {
+    // The Tracks element decides, when it is in the bytes: no video track
+    // and an audio track is audio/webm (a voice recording, a WebM or MKA
+    // audio file).
+    const types = ebmlTrackTypes(bytes);
+    if (types && !types.includes(1) && types.includes(2)) return "audio/webm";
     return "video/webm";
   }
   if (bytes.length >= 4 && ascii(0, 4) === "OggS") {
@@ -87,6 +92,64 @@ function mp4Handlers(bytes: Uint8Array): string[] | null {
     if (hdlr && hdlr[1] + 12 <= hdlr[2]) handlers.push(ascii(hdlr[1] + 8));
   }
   return handlers;
+}
+
+// The TrackType of every track in a WebM or Matroska file (Segment/Tracks/
+// TrackEntry/TrackType): 1 video, 2 audio, 17 subtitle, ... Null when the
+// Tracks element is not whole in the bytes.
+const EBML_SEGMENT = 0x18538067;
+const EBML_TRACKS = 0x1654ae6b;
+const EBML_TRACK_ENTRY = 0xae;
+const EBML_TRACK_TYPE = 0x83;
+const EBML_CLUSTER = 0x1f43b675;
+
+function ebmlTrackTypes(bytes: Uint8Array): number[] | null {
+  // A variable-length integer at `at`: its value (the marker bit kept for an
+  // ID, dropped for a size), its length, and whether a size is "unknown".
+  const vint = (at: number, keepMarker: boolean) => {
+    const first = bytes[at];
+    if (first === undefined || first === 0) return null;
+    const length = Math.clz32(first) - 23;
+    if (at + length > bytes.length) return null;
+    let value = keepMarker ? first : first & (0xff >> length);
+    let allOnes = value === (0xff >> length);
+    for (let i = 1; i < length; i++) {
+      value = value * 256 + bytes[at + i];
+      if (bytes[at + i] !== 0xff) allOnes = false;
+    }
+    return { value, length, unknown: !keepMarker && allOnes };
+  };
+  // The child elements of [from, to): [id, body start, body end].
+  const elements = function* (from: number, to: number): Generator<[number, number, number]> {
+    let at = from;
+    while (at < to) {
+      const id = vint(at, true);
+      const size = id && vint(at + id.length, false);
+      if (!id || !size) return;
+      const start = at + id.length + size.length;
+      const end = size.unknown ? to : start + size.value;
+      yield [id.value, start, end];
+      if (size.unknown) return;
+      at = end;
+    }
+  };
+  for (const [id, start, end] of elements(0, bytes.length)) {
+    if (id !== EBML_SEGMENT) continue;
+    for (const [child, from, to] of elements(start, Math.min(end, bytes.length))) {
+      if (child === EBML_CLUSTER) return null;
+      if (child !== EBML_TRACKS) continue;
+      if (to > bytes.length) return null;
+      const types: number[] = [];
+      for (const [entry, entryFrom, entryTo] of elements(from, to)) {
+        if (entry !== EBML_TRACK_ENTRY) continue;
+        for (const [field, fieldFrom, fieldTo] of elements(entryFrom, entryTo)) {
+          if (field === EBML_TRACK_TYPE && fieldTo - fieldFrom === 1) types.push(bytes[fieldFrom]);
+        }
+      }
+      return types;
+    }
+  }
+  return null;
 }
 
 export type ByteRange =
