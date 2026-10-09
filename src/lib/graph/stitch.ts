@@ -1268,16 +1268,27 @@ export async function cutLines(
     shown.add(item.l.alias);
     used += cost;
   }
-  // Then the rest of the budget, most relevant first; with withinRouted
-  // (ANS9-05) the routed documents' lines only, when the route pass named
-  // parts: a document it left out has had its share.
-  for (const { item } of ranked) {
-    if (shown.has(item.l.alias)) continue;
-    if (options.withinRouted && routed && !covered.has(item.v.r.letter)) continue;
-    const cost = lineCost(item.l);
-    if (used + cost > budget) continue;
-    shown.add(item.l.alias);
-    used += cost;
+  // Then the rest of the budget, most relevant first. With withinRouted
+  // (ANS9-05), when the route pass named parts: the routed documents'
+  // lines that share a word with the query first, then the other
+  // documents' lines that share one, then the routed documents' lines that
+  // share none; a line that shares none in a document the route pass left
+  // out is never read past its share.
+  const fill = (takes: (letter: string, score: number) => boolean) => {
+    for (const { item, score } of ranked) {
+      if (shown.has(item.l.alias) || !takes(item.v.r.letter, score)) continue;
+      const cost = lineCost(item.l);
+      if (used + cost > budget) continue;
+      shown.add(item.l.alias);
+      used += cost;
+    }
+  };
+  if (options.withinRouted && routed) {
+    fill((letter, score) => covered.has(letter) && score > 0);
+    fill((_, score) => score > 0);
+    fill((letter) => covered.has(letter));
+  } else {
+    fill(() => true);
   }
   return shown;
 }

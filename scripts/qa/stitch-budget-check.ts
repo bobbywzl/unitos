@@ -1187,6 +1187,28 @@ void (async () => {
     `unrouted lines ${unrouted(fillOff)} → ${unrouted(fillOn)}, routed ${fillOff.size - unrouted(fillOff)} → ${fillOn.size - unrouted(fillOn)}`,
   );
   check("cutLines: without withinRouted the fill is as before", unrouted(await cutLines(routedViews, null, async () => "line 5 words bonus", 4_000, { withinRouted: true })) === unrouted(await cutLines(routedViews, null, async () => "line 5 words bonus", 4_000)));
+  // The fill's order: the routed documents' lines that share a word, then
+  // the other documents' lines that share one, then the routed documents'
+  // lines that share none.
+  const orderViews = Array.from({ length: 10 }, (_, i) => {
+    const letter = String.fromCharCode(65 + i);
+    const v = view(letter, 100);
+    v.parts.push({ alias: `${letter}1`, title: "", summary: "", opening: false } as unknown as SkeletonView["parts"][number]);
+    v.lines.forEach((l, j) => {
+      l.partAlias = `${letter}1`;
+      if (i < 5 && j % 10 !== 0) l.text = "nothing here at all, said no one ".repeat(4);
+      if (i >= 5) l.text = `${l.text} bonus`;
+    });
+    return v;
+  });
+  const ordered = await cutLines(orderViews, routed5, async () => "line 5 words", 4_000, { withinRouted: true });
+  const routedShown = [...ordered].filter((a) => a.charCodeAt(0) < 70);
+  const routedZero = routedShown.filter((a) => (Number(a.slice(1)) - 1) % 10 !== 0).length;
+  check(
+    "cutLines: withinRouted → every routed line that shares a word, then the other documents' lines that share one, before a routed line that shares none",
+    routedShown.length - routedZero === 50 && routedZero === 0 && unrouted(ordered) > 10,
+    `routed lines sharing a word ${routedShown.length - routedZero} of 50, sharing none ${routedZero}, unrouted lines ${unrouted(ordered)}`,
+  );
 
   // Round 9 (ANS9-01): the dated lines of a contradictions or date command, and the named document whole.
   const dated = [
