@@ -356,12 +356,12 @@
   {
    "id": "diner-interrompu",
    "kind": "txt",
-   "name": "13070.txt",
-   "encoding": "utf-8",
-   "url": "https://raw.githubusercontent.com/GITenberg/Le-d-ner-interrompu_13070/3fe5890e065675542e96b318f4a9661d2d4cd87b/13070.txt",
+   "name": "13070-8.txt",
+   "encoding": "iso-8859-1",
+   "url": "https://raw.githubusercontent.com/GITenberg/Le-d-ner-interrompu_13070/3fe5890e065675542e96b318f4a9661d2d4cd87b/13070-8.txt",
    "twin": "https://raw.githubusercontent.com/GITenberg/Le-d-ner-interrompu_13070/3fe5890e065675542e96b318f4a9661d2d4cd87b/13070-h/13070-h.htm",
    "license": "Public domain (Project Gutenberg)",
-   "exercises": "French in ASCII (the mirror's copy): accented letters, a play's speaker lines"
+   "exercises": "French in Latin-1, the edition of its HTML twin (the ASCII 13070.txt drops the accents the twin has, so no unit of the twin matched): a play's speaker lines"
   },
   {
    "id": "blanc-et-noir",
