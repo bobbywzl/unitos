@@ -23,7 +23,7 @@ export type CorpusFile = {
   path?: string;
   format?: string;
   reference?: string;
-  derived?: { from: string; args: string[]; how: string };
+  derived?: { from: string; args: string[]; output?: string; how: string };
   exercises: string;
 };
 type Source = { from: string; root?: string; license: string; home: string };
@@ -88,8 +88,9 @@ export function fetchAll(force = false) {
   for (const f of failed) console.log(`  not fetched: ${f}`);
 }
 
-// A derived file: ffmpeg's DASH muxer writes one indexed fragmented MP4 (init,
-// sidx, then moof+mdat segments); the corpus names the muxer's options.
+// A derived file, made by ffmpeg with the options the corpus names: by
+// default the DASH muxer's one indexed fragmented MP4 (init, sidx, then
+// moof+mdat segments), else the file the corpus's output names.
 function derive(file: CorpusFile, out: string) {
   const from = fileOf(file.derived!.from);
   if (!existsSync(from)) throw new Error(`${file.derived!.from} is not fetched`);
@@ -98,10 +99,11 @@ function derive(file: CorpusFile, out: string) {
   mkdirSync(dir, { recursive: true });
   execFileSync(
     "ffmpeg",
-    ["-loglevel", "error", "-i", from, ...file.derived!.args, join(dir, "out.mpd")],
+    ["-loglevel", "error", "-i", from, ...file.derived!.args, join(dir, file.derived!.output ?? "out.mpd")],
     { stdio: "inherit" },
   );
-  const made = execFileSync("ls", [dir], { encoding: "utf8" }).split("\n").find((n) => n.endsWith(".mp4") || n.endsWith(".m4s"));
+  const made = file.derived!.output ??
+    execFileSync("ls", [dir], { encoding: "utf8" }).split("\n").find((n) => n.endsWith(".mp4") || n.endsWith(".m4s"));
   if (!made) throw new Error("ffmpeg wrote no stream");
   renameSync(join(dir, made), out);
   writeFileSync(join(MEDIA_ROOT, "derive.log"), `${file.id} from ${made}\n`);

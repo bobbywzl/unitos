@@ -1,9 +1,9 @@
 {
  "total": {
-  "a": 0.953,
+  "a": 0.919,
   "b": 0.657,
   "c": 0.793,
-  "all": 0.801
+  "all": 0.79
  },
  "files": {
   "a-mutagen-silence-mp3": 1,
@@ -192,6 +192,11 @@
   "c-e21-4366522-google": 0.868,
   "c-e21-4366522-amazon": 0.767,
   "c-e21-4389907-google": 0.837,
-  "c-e21-4389907-amazon": 0.728
+  "c-e21-4389907-amazon": 0.728,
+  "a-derived-recorder-webm": 0,
+  "a-derived-vorbis-webm": 0,
+  "a-derived-mp3-mka": 0,
+  "a-derived-audio-first-webm": 1,
+  "a-derived-movie-mkv": 1
  }
 }
