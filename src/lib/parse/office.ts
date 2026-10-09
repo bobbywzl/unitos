@@ -91,11 +91,17 @@ export function parseXml(text: string): XMLDocument | null {
   }
 }
 
+// The children are walked by sibling links, never through el.children: an
+// indexed read of jsdom's HTMLCollection looks up named items each time, so a
+// walk over a row of 10,000 cells was quadratic. Sheets benchmark finding: a
+// 2 MB worksheet with no cells took 57 s; walked by siblings it reads in a
+// second.
+
 /** The direct children with this local name, in order. */
 export function children(el: Element | null | undefined, localName: string): Element[] {
   if (!el) return [];
   const out: Element[] = [];
-  for (const child of el.children) if (child.localName === localName) out.push(child);
+  for (let c = el.firstElementChild; c; c = c.nextElementSibling) if (c.localName === localName) out.push(c);
   return out;
 }
 
@@ -104,13 +110,8 @@ export function child(el: Element | null | undefined, ...path: string[]): Elemen
   let at: Element | null = el ?? null;
   for (const name of path) {
     if (!at) return null;
-    let next: Element | null = null;
-    for (const c of at.children) {
-      if (c.localName === name) {
-        next = c;
-        break;
-      }
-    }
+    let next: Element | null = at.firstElementChild;
+    while (next && next.localName !== name) next = next.nextElementSibling;
     at = next;
   }
   return at;
