@@ -381,8 +381,115 @@ function standingLine(nodes: RootContent[], i: number): string | null {
   return text;
 }
 
-function shapeTextOutline(root: Root) {
+// 3. A paragraph's lines stay lines when the paragraph is not prose
+//    wrapped to a width: a poem's stanza, an address, a log, a list of
+//    requirements. Prose wrapped to a width, by a program or by hand, has
+//    each line nearly full: the line, a space, and the next line's first
+//    word pass four fifths of the width (the file's long lines: the 90th
+//    percentile of its paragraph lines' lengths, in columns, a CJK
+//    character two). A file whose width is under 40 columns has no prose
+//    wrapped to it (a requirements file's short lines). A paragraph of three
+//    lines or more keeps its line ends as line breaks when at most half of
+//    its lines are full, when most of its lines end on a stop (a verse's
+//    lines end on a comma, a period; wrapped prose ends there by chance,
+//    one line in four or five), or when its lines open alike (a log's
+//    lines: the first word's shape, letters and digits as their kind, the
+//    same on four lines in five). A paragraph of two lines keeps them when
+//    its first line is not full and ends on a stop. A paragraph with
+//    Markdown's own marks (a backslash escape, an entity, a link or image
+//    in brackets, inline code, raw HTML, emphasis in asterisks) is
+//    Markdown, and its line ends are soft breaks ("aaa" then "bbb" reads
+//    "aaa bbb"), unless it has five lines or more that open alike (a log
+//    with a <tag> in a line).
+// Before, every paragraph of a text file read as one run of words: a
+// log's 2,000 lines as one line (Markdown benchmark finding).
+const TEXT_LINES_MIN = 2;
+const TEXT_STOP_LINES_MIN = 0.6;
+const TEXT_STOP_RX = /[.,;:!?)\]"'”’»。，；：！？）]$/;
+const TEXT_FULL_SHARE = 0.8;
+const TEXT_FULL_LINES_MAX = 0.5;
+const TEXT_SAME_OPENING_MIN = 0.8;
+const TEXT_ALIKE_OVER_MARKS_MIN = 5;
+const TEXT_WRAP_COLUMNS_MIN = 40;
+const WIDE_RX = /[\u1100-\u115f\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6]/u;
+
+/** A line's width in columns: a CJK character is two. */
+function columns(line: string): number {
+  let n = 0;
+  for (const c of line) n += WIDE_RX.test(c) ? 2 : 1;
+  return n;
+}
+const MARKDOWN_MARKS_RX = /\\[!-/:-@[-`{-~]|\]\(|&(?:#\d+|#x[0-9a-f]+|[a-z][a-z0-9]+);/i;
+const MARKDOWN_NODES = new Set(["html", "inlineCode", "linkReference", "imageReference", "footnoteReference", "delete"]);
+
+/** A paragraph's inline Markdown: a node only Markdown writes, or a link,
+    image, or emphasis written with Markdown's marks (a bare address and
+    _words_ are a text file's too). */
+function hasMarkdownMarks(nodes: PhrasingContent[], source: string): boolean {
+  return nodes.some((node) => {
+    if (MARKDOWN_NODES.has(node.type)) return true;
+    const first = node.position ? source[node.position.start.offset ?? -1] : undefined;
+    if ((node.type === "link" || node.type === "image") && (first === "[" || first === "!" || first === "<")) return true;
+    if ((node.type === "emphasis" || node.type === "strong") && first === "*") return true;
+    return "children" in node && hasMarkdownMarks(node.children as PhrasingContent[], source);
+  });
+}
+
+/** A line's first word's shape: each letter as "a", each digit as "0". */
+function openingShape(line: string): string {
+  return (/^\S+/.exec(line)?.[0] ?? "").replace(/\p{L}/gu, "a").replace(/\p{N}/gu, "0");
+}
+
+/** The phrasing nodes with each line end as a break. */
+function withLineBreaks(nodes: PhrasingContent[]): PhrasingContent[] {
+  return nodes.flatMap((node): PhrasingContent[] => {
+    if (node.type === "text") {
+      return node.value.split("\n").flatMap((part, i): PhrasingContent[] => [
+        ...(i > 0 ? [{ type: "break" } as PhrasingContent] : []),
+        ...(part ? [{ type: "text", value: part } as PhrasingContent] : []),
+      ]);
+    }
+    if ("children" in node) return [{ ...node, children: withLineBreaks(node.children as PhrasingContent[]) } as PhrasingContent];
+    return [node];
+  });
+}
+
+function keepTextLines(root: Root, source: string) {
+  const lines = source.split("\n");
+  const linesOf = (node: RootContent) =>
+    node.position ? lines.slice(node.position.start.line - 1, node.position.end.line).map((l) => l.trim()) : [];
+  const paragraphs = root.children.filter(
+    (n) => n.type === "paragraph" && n.position && n.position.end.line - n.position.start.line + 1 >= TEXT_LINES_MIN,
+  );
+  const lengths = paragraphs.flatMap((n) => linesOf(n).map(columns)).sort((a, b) => a - b);
+  if (lengths.length === 0) return;
+  const p90 = lengths[Math.floor((lengths.length - 1) * 0.9)];
+  const width = p90 < TEXT_WRAP_COLUMNS_MIN ? Infinity : p90;
+  for (const node of paragraphs) {
+    if (node.type !== "paragraph") continue;
+    const own = linesOf(node);
+    let full = 0;
+    for (let i = 0; i < own.length - 1; i++) {
+      const next = /^\S+/.exec(own[i + 1])?.[0] ?? "";
+      if (columns(own[i]) + 1 + columns(next) > width * TEXT_FULL_SHARE) full++;
+    }
+    const stops = own.slice(0, -1).filter((line) => TEXT_STOP_RX.test(line)).length;
+    const shapes = new Map<string, number>();
+    for (const line of own) shapes.set(openingShape(line), (shapes.get(openingShape(line)) ?? 0) + 1);
+    const alike = Math.max(...shapes.values()) >= own.length * TEXT_SAME_OPENING_MIN;
+    const marks = own.some((line) => MARKDOWN_MARKS_RX.test(line)) || hasMarkdownMarks(node.children, source);
+    if (marks && !(alike && own.length >= TEXT_ALIKE_OVER_MARKS_MIN)) continue;
+    const keep =
+      own.length === 2
+        ? full === 0 && stops === 1
+        : full <= (own.length - 1) * TEXT_FULL_LINES_MAX || stops >= (own.length - 1) * TEXT_STOP_LINES_MIN || alike;
+    if (keep) node.children = withLineBreaks(node.children);
+  }
+}
+
+function shapeTextOutline(root: Root, source: string) {
   if (hasHeading(root)) return;
+  keepTextLines(root, source);
   const nodes = root.children;
   const words = (text: string) => text.split(/\s+/).filter(Boolean).length;
   nodes.forEach((node, i) => {
@@ -410,7 +517,7 @@ export function markdownToHtml(
   const { body, title: frontTitle } = splitFrontMatter(source);
   const { text, spans } = setAsideMath(body);
   const tree = unified().use(remarkParse).use(remarkGfm).parse(text) as Root;
-  if (body === source) shapeTextOutline(tree);
+  if (body === source) shapeTextOutline(tree, text);
   const renderer = new Renderer(spans);
   const article = renderer.render(tree);
   const ownTitle = frontTitle ?? renderer.firstHeading;
