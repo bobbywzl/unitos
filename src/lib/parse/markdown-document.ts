@@ -140,12 +140,12 @@ function slugOf(text: string, seen: Map<string, number>): string {
   return n === 0 ? base : `${base}-${n}`;
 }
 
-function plainText(nodes: PhrasingContent[]): string {
+function plainText(nodes: PhrasingContent[], alts = true): string {
   let out = "";
   for (const node of nodes) {
     if (node.type === "text" || node.type === "inlineCode") out += node.value;
-    else if (node.type === "image" || node.type === "imageReference") out += node.alt ?? "";
-    else if ("children" in node) out += plainText(node.children as PhrasingContent[]);
+    else if (node.type === "image" || node.type === "imageReference") out += alts ? (node.alt ?? "") : " ";
+    else if ("children" in node) out += plainText(node.children as PhrasingContent[], alts);
   }
   return out.replace(/\s+/g, " ").trim();
 }
@@ -196,7 +196,13 @@ class Renderer {
     };
     collect(root);
     const first = root.children.find((n) => n.type !== "definition" && n.type !== "footnoteDefinition" && n.type !== "html");
-    if (first && first.type === "heading" && first.depth === 1) this.firstHeading = this.words(plainText(first.children)) || null;
+    // The title is the heading's words; its images' alt words (a README's
+    // badges: "GitHub license", "npm version") only when it has no words
+    // but them. Before, a README's title read "React · GitHub license npm
+    // version (Runtime) Build and Test ..." (Markdown benchmark finding).
+    if (first && first.type === "heading" && first.depth === 1) {
+      this.firstHeading = this.words(plainText(first.children, false)) || this.words(plainText(first.children)) || null;
+    }
     let html = root.children.map((node) => this.block(node)).join("\n");
     if (this.footnoteOrder.length > 0) {
       const items = this.footnoteOrder.map((id, i) => {
