@@ -1270,7 +1270,11 @@ export function attachFigureRegions(
       return !lines.some((l) => l.y >= g.box.y1 && l.y <= g.box.y2 && l.x < b && l.xEnd > a);
     };
     return graphics.find((g) => {
-      if (g.caption.length > 0) return false;
+      // A panel's caption under the graphic is no caption of the float's:
+      // the caption beside it holds the panels (parse loop finding: the
+      // MML book p. 136, "(d) A3, σ3 ≈ 26, 125. …" under the second row
+      // of Figure 4.11 kept the caption in the margin from its pictures).
+      if (g.caption.length > 0 && !isSubCaption(captions.get(g)?.text ?? "")) return false;
       // Beside the caption's column, level with the graphic; or, where the
       // graphic reaches into the column, beside the caption itself and its
       // middle within the graphic's height (a caption under a picture's
@@ -2028,6 +2032,7 @@ export function attachFigureRegions(
         mathShare: 0,
       };
       if (side?.box || caption) figure.captionBox = side?.box ?? caption?.box;
+      if (side && caption && isSubCaption(caption.text)) addPanel(figure, caption);
       own.add(figure);
       placed = [...placed];
       placed.splice(placeOf(placed, graphic, own), 0, figure);
@@ -2101,6 +2106,16 @@ export function attachFigureRegions(
     while (j + 1 < kept.length && levelCaption(kept[i], kept[j + 1])) j++;
     if (j > i) kept.splice(i, j - i + 1, ...kept.slice(i, j + 1).sort((a, b) => a.captionBox!.x1 - b.captionBox!.x1));
     i = j;
+  }
+  // Two figures one over the other in a column read from the top: a
+  // caption beside the lower one, set from the top of the margin, placed
+  // it first (parse loop finding: the MML book p. 136, Figure 4.11's
+  // second row of pictures read before its first).
+  for (let i = 0; i + 1 < kept.length; i++) {
+    const [a, b] = [kept[i].box, kept[i + 1].box];
+    if (kept[i].type !== "FIGURE" || kept[i + 1].type !== "FIGURE" || kept[i].page !== kept[i + 1].page || !a || !b) continue;
+    const across = Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1);
+    if (across >= Math.min(a.x2 - a.x1, b.x2 - b.x1) * 0.8 && a.y2 <= b.y1) kept.splice(i, 2, kept[i + 1], kept[i]);
   }
   return kept;
 }
